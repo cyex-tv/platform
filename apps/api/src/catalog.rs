@@ -248,6 +248,12 @@ pub(crate) async fn publish_member_event(
     name: Option<&str>,
 ) -> ApiResult<()> {
     let topics = set_topics(conn, set).await?;
+    // ADR 0005: clients watch personal sets through `personal.updated`.
+    let event_type = if set.kind == SetKind::Personal {
+        EventType::PersonalUpdated
+    } else {
+        event_type
+    };
     outbox::publish(
         conn,
         &outbox::NewEvent {

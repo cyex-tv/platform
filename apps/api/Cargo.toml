@@ -28,6 +28,7 @@ bytes.workspace = true
 chrono.workspace = true
 cyex-tv-auth.workspace = true
 cyex-tv-db.workspace = true
+cyex-tv-hub.workspace = true
 cyex-tv-media.workspace = true
 cyex-tv-shared = { workspace = true, features = ["graphql"] }
 cyex-tv-storage.workspace = true
@@ -44,10 +45,12 @@ utoipa-axum.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+futures-util = { workspace = true, features = ["sink"] }
 http-body-util.workspace = true
 image = { workspace = true, features = ["gif", "png", "webp"] }
 png = "0.18"
 tower.workspace = true
+tokio-tungstenite.workspace = true
 url.workspace = true
 
 [lints]

@@ -3,6 +3,7 @@ use std::sync::Arc;
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use cyex_tv_auth::{Auth, Caller};
+use cyex_tv_hub::Hub;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_storage::Store;
 use sqlx::PgPool;
@@ -19,6 +20,8 @@ pub struct AppState {
     pub cdn_url: Arc<str>,
     /// Where uploads' originals go. `None`: uploads answer 503.
     pub store: Option<Store>,
+    /// Live updates for GraphQL subscriptions. `main` runs its feeder.
+    pub hub: Hub,
 }
 
 impl AppState {
@@ -28,6 +31,7 @@ impl AppState {
             auth,
             cdn_url: DEFAULT_CDN_URL.into(),
             store: None,
+            hub: Hub::new(),
         }
     }
 
