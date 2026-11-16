@@ -13,6 +13,7 @@ pub mod files;
 pub mod ids;
 pub mod oauth_states;
 pub mod outbox;
+pub mod reads;
 pub mod roles;
 pub mod sessions;
 pub mod sets;
