@@ -1,6 +1,6 @@
 [package]
 name = "cyex-tv-media"
-description = "Image checks for cyex.tv uploads: format, decoding under limits, dHash"
+description = "Image checks and encoding for cyex.tv: format, decoding under limits, dHash, WebP and AVIF variants"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -10,7 +10,9 @@ publish.workspace = true
 
 [dependencies]
 image.workspace = true
+ravif.workspace = true
 thiserror.workspace = true
+webp-animation.workspace = true
 
 [dev-dependencies]
 png = "0.18"

@@ -32,6 +32,7 @@ hmac = "0.12"
 http-body-util = "0.1"
 # Decoding only here; encoders come with the transcoder.
 image = { version = "0.25", default-features = false, features = ["gif", "png", "webp"] }
+ravif = { version = "0.13", default-features = false, features = ["threading"] }
 reqwest = { version = "0.13", default-features = false, features = ["form", "http2", "json", "query", "rustls-no-provider"] }
 # The ring provider, not aws-lc: aws-lc-sys carries the OpenSSL licence, which ADR 0007 doesn't allow.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
@@ -50,6 +51,7 @@ url = "2"
 utoipa = "5"
 utoipa-axum = "0.2"
 uuid = "1"
+webp-animation = "0.10"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -46,6 +46,10 @@ pub fn media_error(err: MediaError) -> ApiError {
         MediaError::TooLarge(message) => {
             ApiError::new(StatusCode::PAYLOAD_TOO_LARGE, "too_large", message)
         }
+        MediaError::Encode(message) => {
+            tracing::error!(%message, "encoder failed during an upload check");
+            ApiError::internal()
+        }
         MediaError::Invalid(message) => ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
             "invalid_image",
