@@ -6,7 +6,18 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 
 Paused on 2026/11/16 until work moves to a machine where commands can run (owner's call). Resumed on the new machine on 2026/11/16. Rust, `git` and `gh` are set up there; Docker isn't installed yet (the owner installs it), so the database tests ran in CI first.
 
-### PR 3: channels, sets, editors and the chat-client reads (branch `phase-2/sets`)
+### PR 4: roles, permissions, the owner and the audit log (branch `phase-2/roles`)
+- [x] `crates/auth/src/rbac.rs`: the ADR 0010 rules as plain functions. No escalation (grant only what you hold), only roles below your highest `position`, the owner can't be demoted by others, and no change may leave nobody but the owner holding `roles.manage`.
+- [x] The owner: `CYEX_TV_OWNER_IDS` takes `twitch:<id>`, `kick:<id>` or account IDs. Platform IDs are what's known before the first sign-in; ADR 0010 said account IDs, and both work. The owner holds every permission without a role. The owner's real IDs are in the owner's local `.env`, not in this public repo.
+- [x] GraphQL: `roles`, `accountRoles`, `auditLog` (new, `audit.view`, paged by entry ID), `createRole`, `updateRole`, `deleteRole`, `assignRole`, `unassignRole`. Each change writes `audit_log` with before and after in the same transaction.
+- [x] Role changes take one advisory lock, so two admins demoting each other at once can't both pass the lock-out check.
+- [x] Every permission check (`require`, set rules, `me.permissions`) goes through the caller, so the owner rule applies everywhere.
+
+#### Tests
+- Unit (`rbac`): owner list parsing, the owner passing every rule, escalation, below-your-highest, owner protection, lock-out.
+- `apps/api/tests/roles_flow.rs` against Postgres: the owner holds everything, no escalation (permissions and positions, also through `updateRole` and `assignRole`), the owner can't be demoted by others, the last manager stays (unassign, delete, update), every change audited with before and after, paging and filters, `accountRoles` access.
+
+### PR 3: channels, sets, editors and the chat-client reads (branch `phase-2/sets`, merged 2026/11/16 as PR 6)
 - [x] `apps/api/src/catalog.rs`: the rules, shared by GraphQL and REST. The global set needs `global_set.edit`; other sets take their owner and editors, and anyone else needs `sets.edit_any`. Deleting a set and managing editors is owner-only (or `sets.edit_any`). A channel's active set can't be deleted (`set_in_use`).
 - [x] Pending emotes are shown to their owner, the set's owner and editors, and `emotes.review` holders; everyone else, chat clients included, sees approved emotes only (`apps/api/src/views.rs`).
 - [x] Batch reads (`crates/db/src/reads.rs`): a set's members with emotes and files, tags, and account summaries in a few queries, however big the set is.
@@ -21,6 +32,14 @@ Paused on 2026/11/16 until work moves to a machine where commands can run (owner
 - Unit: name and capacity rules, error codes, time format, file variants, hex.
 - `apps/api/tests/catalog_flow.rs` against Postgres: pending emotes in sets and the public read hiding them, ETag round trip and change, active set rules and channel reads, `set_in_use`, member rules (`not_approved`, `emote_private`, `emote_unavailable`, `already_in_set`, `bad_name`), events and their topics, editors (grant, limits, leaving, audit), personal sets (one per account, approved only, capacity 5, the lookup and its limit), the global set with `global_set.edit`, capacity with `sets.edit_any` and its audit, who sees pending emotes.
 - `auth_flow.rs`: sign-in makes the channel; unlinking removes it.
+
+#### GitHub write log
+```
+git push -u origin phase-2/sets
+gh pr create -R cyex-tv/platform --base main --head phase-2/sets --title "Phase 2 PR 3: channels, sets, editors and reads" --body-file <file>
+gh pr merge 6 -R cyex-tv/platform --merge --subject "Merge pull request #6 from cyex-tv/phase-2/sets"
+```
+Merged after all 6 checks passed on the first run, with `catalog_flow` (7), `auth_flow` (13) and `queries` (20) seen running against Postgres.
 
 ### PR 2: sign-in and sessions (branch `phase-2/auth`, merged 2026/11/16 as PR 5)
 - [x] `crates/auth`: Twitch and Kick OAuth (authorization code flow). `state` is bound to a short-lived host-only pre-login cookie (`cyex_tv_oauth`, `Path=/v1/auth`, 10 minutes) and to a stored row that is taken on first use. PKCE S256 for Kick (required there); Twitch gets `state` only, since it doesn't document PKCE.
