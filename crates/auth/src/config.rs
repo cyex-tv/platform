@@ -6,6 +6,7 @@ use cyex_tv_shared::config::ConfigError;
 use url::Url;
 
 use crate::providers::Endpoints;
+use crate::rbac::Owners;
 
 /// An OAuth client registered with a platform. `Debug` hides the secret.
 #[derive(Clone)]
@@ -42,6 +43,8 @@ pub struct AuthConfig {
     /// `None` when the platform's client isn't configured: its sign-in answers 503.
     pub twitch: Option<ProviderConfig>,
     pub kick: Option<ProviderConfig>,
+    /// `CYEX_TV_OWNER_IDS` (ADR 0010).
+    pub owners: Owners,
 }
 
 impl AuthConfig {
@@ -67,7 +70,10 @@ impl AuthConfig {
             }
         };
 
+        let owners = Owners::parse(&get("CYEX_TV_OWNER_IDS").unwrap_or_default())?;
+
         Ok(Self {
+            owners,
             twitch: creds(
                 &get,
                 "CYEX_TV_TWITCH_CLIENT_ID",
@@ -208,6 +214,14 @@ mod tests {
             load(&[("CYEX_TV_KICK_CLIENT_SECRET", "x")]).unwrap_err(),
             ConfigError::Missing("CYEX_TV_KICK_CLIENT_ID")
         );
+    }
+
+    #[test]
+    fn owners_are_read() {
+        let cfg = load(&[("CYEX_TV_OWNER_IDS", "twitch:12345678,kick:7654321")]).unwrap();
+        assert_eq!(cfg.owners.identities, ["twitch:12345678", "kick:7654321"]);
+        assert!(load(&[]).unwrap().owners.is_empty());
+        assert!(load(&[("CYEX_TV_OWNER_IDS", "twitch:x")]).is_err());
     }
 
     #[test]

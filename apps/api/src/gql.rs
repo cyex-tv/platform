@@ -1,6 +1,6 @@
 //! The GraphQL API at `/v1/gql` (ADR 0008). Resolvers answer `not_implemented` until their phase
 //! builds them:
-//! - Phase 2: accounts, channels, sets and editors (built), roles
+//! - Phase 2: accounts, channels, sets, editors, roles and the audit log (built)
 //! - Phase 3: emotes and moderation
 //! - Phase 5: the `events` subscription
 //! - Phase 6: search
@@ -19,7 +19,7 @@ use cyex_tv_auth::{AuthError, Caller};
 use cyex_tv_db::{DbError, accounts, channels, ids};
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::model::{
-    AddSetEmote, Channel, CreateRole, CreateSet, Emote, EmoteSet, Event, Identity, Me,
+    AddSetEmote, AuditEntry, Channel, CreateRole, CreateSet, Emote, EmoteSet, Event, Identity, Me,
     PersonalSetEntry, Platform, ReviewQueue, Role, SearchResults, SetEmote, UpdateChannelSettings,
     UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote,
 };
@@ -27,8 +27,8 @@ use cyex_tv_shared::permissions;
 use futures_util::stream::Empty;
 use sqlx::Connection;
 
-use crate::catalog;
 use crate::state::AppState;
+use crate::{admin, catalog};
 
 pub type ApiSchema = Schema<Query, Mutation, Subscription>;
 
@@ -103,7 +103,7 @@ fn caller<'a>(ctx: &Context<'a>) -> Result<&'a Caller> {
 async fn require<'a>(ctx: &Context<'a>, permission: &'static str) -> Result<&'a Caller> {
     let caller = caller(ctx)?;
     let mut conn = state(ctx).db.acquire().await.map_err(internal)?;
-    let held = catalog::permissions_of(&mut conn, caller.account_id)
+    let held = catalog::permissions_of(&mut conn, caller)
         .await
         .map_err(api_error)?;
     if held.iter().any(|p| p == permission) {
@@ -132,7 +132,7 @@ async fn me_of(ctx: &Context<'_>, caller: &Caller) -> Result<Me> {
             avatar: i.avatar,
         })
         .collect();
-    let permissions = catalog::permissions_of(&mut conn, account.id)
+    let permissions = catalog::permissions_of(&mut conn, caller)
         .await
         .map_err(api_error)?;
     Ok(Me {
@@ -261,10 +261,41 @@ impl Query {
         Err(not_implemented())
     }
 
+    /// An account's roles. Yours, or anyone's with `roles.manage` or `users.view`.
+    async fn account_roles(&self, ctx: &Context<'_>, account_id: String) -> Result<Vec<Role>> {
+        let caller = caller(ctx)?;
+        admin::account_roles(state(ctx), caller, &account_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Audited changes, newest first. Needs `audit.view`. Page back with `before` (an entry ID);
+    /// `limit` is 1 to 100, default 50.
+    async fn audit_log(
+        &self,
+        ctx: &Context<'_>,
+        target_kind: Option<String>,
+        target_id: Option<String>,
+        before: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<Vec<AuditEntry>> {
+        let caller = caller(ctx)?;
+        admin::audit_log(
+            state(ctx),
+            caller,
+            target_kind.as_deref(),
+            target_id.as_deref(),
+            before.as_deref(),
+            limit,
+        )
+        .await
+        .map_err(api_error)
+    }
+
     /// All roles. Needs `roles.manage`.
     async fn roles(&self, ctx: &Context<'_>) -> Result<Vec<Role>> {
-        require(ctx, permissions::ROLES_MANAGE).await?;
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        admin::list(state(ctx), caller).await.map_err(api_error)
     }
 }
 
@@ -441,20 +472,26 @@ impl Mutation {
 
     /// Create a role. You can only grant permissions you hold. Needs `roles.manage`. Audited.
     async fn create_role(&self, ctx: &Context<'_>, input: CreateRole) -> Result<Role> {
-        require(ctx, permissions::ROLES_MANAGE).await?;
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        admin::create(state(ctx), caller, &input)
+            .await
+            .map_err(api_error)
     }
 
     /// Change a role below your own highest one. Needs `roles.manage`. Audited.
     async fn update_role(&self, ctx: &Context<'_>, id: String, input: UpdateRole) -> Result<Role> {
-        require(ctx, permissions::ROLES_MANAGE).await?;
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        admin::update(state(ctx), caller, &id, &input)
+            .await
+            .map_err(api_error)
     }
 
     /// Delete a role below your own highest one. Needs `roles.manage`. Audited.
     async fn delete_role(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
-        require(ctx, permissions::ROLES_MANAGE).await?;
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        admin::delete(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
     }
 
     /// Give an account a role. Needs `roles.manage`. Audited.
@@ -464,8 +501,10 @@ impl Mutation {
         account_id: String,
         role_id: String,
     ) -> Result<bool> {
-        require(ctx, permissions::ROLES_MANAGE).await?;
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        admin::assign(state(ctx), caller, &account_id, &role_id)
+            .await
+            .map_err(api_error)
     }
 
     /// Take a role from an account. The owner and the last `roles.manage` holder are protected.
@@ -476,8 +515,10 @@ impl Mutation {
         account_id: String,
         role_id: String,
     ) -> Result<bool> {
-        require(ctx, permissions::ROLES_MANAGE).await?;
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        admin::unassign(state(ctx), caller, &account_id, &role_id)
+            .await
+            .map_err(api_error)
     }
 }
 

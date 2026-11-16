@@ -22,6 +22,8 @@ pub enum Via {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Caller {
     pub account_id: Uuid,
+    /// Named by `CYEX_TV_OWNER_IDS`: holds every permission (ADR 0010).
+    pub owner: bool,
     pub token_hash: TokenHash,
     pub kind: SessionKind,
     pub via: Via,
@@ -87,12 +89,30 @@ impl Auth {
         {
             tracing::warn!(error = %err, "session touch failed");
         }
+        let owner = self.is_owner(&mut conn, session.account_id).await?;
         Ok(Some(Caller {
             account_id: session.account_id,
+            owner,
             token_hash: hash,
             kind,
             via,
         }))
+    }
+
+    /// Whether the account is one of the owners in `CYEX_TV_OWNER_IDS`.
+    pub async fn is_owner(
+        &self,
+        conn: &mut sqlx::PgConnection,
+        account_id: Uuid,
+    ) -> Result<bool, AuthError> {
+        let owners = &self.config().owners;
+        if owners.is_empty() {
+            return Ok(false);
+        }
+        Ok(
+            cyex_tv_db::accounts::is_any_of(conn, account_id, &owners.identities, &owners.accounts)
+                .await?,
+        )
     }
 
     /// Ends the caller's session. Returns the `Set-Cookie` that clears the cookie, which is sent

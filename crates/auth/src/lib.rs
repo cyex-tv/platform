@@ -14,6 +14,7 @@ mod error;
 pub mod flow;
 pub mod origin;
 pub mod providers;
+pub mod rbac;
 pub mod return_to;
 pub mod session;
 pub mod tokens;
