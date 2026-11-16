@@ -11,6 +11,7 @@ pub mod emotes;
 mod error;
 pub mod files;
 pub mod ids;
+pub mod oauth_states;
 pub mod outbox;
 pub mod roles;
 pub mod sessions;
