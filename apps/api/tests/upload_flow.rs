@@ -465,8 +465,13 @@ async fn blocked_images_and_near_copies_are_refused() {
         (r.status, r.body["error"].as_str()),
         (StatusCode::UNPROCESSABLE_ENTITY, Some("blocked"))
     );
-    // Something else entirely goes through.
-    let r = w.upload(&alice, "fine", &gif(30, 30, 2)).await;
+    // Something else entirely goes through: the mirror image, whose dHash is far away.
+    let mut other = picture(100, 100, 200);
+    image::imageops::flip_horizontal_in_place(&mut other);
+    assert!(cyex_tv_media::distance(cyex_tv_media::dhash(&other), hash) > 20);
+    let r = w
+        .upload(&alice, "fine", &encode(&other, ImageFormat::Png))
+        .await;
     assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
     w.db.close().await;
 }
