@@ -1,5 +1,6 @@
-//! HTTP tests against the real router. They need no database, except
-//! `ready_with_database`, which runs when `CYEX_TV_TEST_DATABASE_URL` is set (CI sets it).
+//! HTTP tests against the real router: REST, GraphQL and the generated descriptions. They need no
+//! database, except `ready_with_database`, which runs when `CYEX_TV_TEST_DATABASE_URL` is set (CI
+//! sets it).
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 
@@ -9,6 +10,7 @@ use cyex_tv_api::state::AppState;
 use cyex_tv_shared::config::Config;
 use cyex_tv_shared::error::ErrorBody;
 use http_body_util::BodyExt;
+use serde_json::{Value, json};
 use tower::ServiceExt;
 
 const BIND: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 0);
@@ -34,11 +36,8 @@ fn offline_state() -> AppState {
     }
 }
 
-async fn get(state: AppState, uri: &str) -> (StatusCode, Vec<u8>) {
-    let response = cyex_tv_api::app(state)
-        .oneshot(Request::get(uri).body(Body::empty()).unwrap())
-        .await
-        .unwrap();
+async fn send(state: AppState, request: Request<Body>) -> (StatusCode, Vec<u8>) {
+    let response = cyex_tv_api::app(state).oneshot(request).await.unwrap();
     let status = response.status();
     let body = response
         .into_body()
@@ -48,6 +47,27 @@ async fn get(state: AppState, uri: &str) -> (StatusCode, Vec<u8>) {
         .to_bytes()
         .to_vec();
     (status, body)
+}
+
+async fn get(state: AppState, uri: &str) -> (StatusCode, Vec<u8>) {
+    send(state, Request::get(uri).body(Body::empty()).unwrap()).await
+}
+
+/// Runs a GraphQL query and returns the JSON response.
+async fn gql(query: &str) -> Value {
+    let request = Request::post("/v1/gql")
+        .header("content-type", "application/json")
+        .body(Body::from(json!({ "query": query }).to_string()))
+        .unwrap();
+    let (status, body) = send(offline_state(), request).await;
+    assert_eq!(status, StatusCode::OK, "{query}");
+    serde_json::from_slice(&body).unwrap()
+}
+
+fn error_code(response: &Value) -> &str {
+    response["errors"][0]["extensions"]["code"]
+        .as_str()
+        .unwrap_or_default()
 }
 
 #[tokio::test]
@@ -66,12 +86,12 @@ async fn ready_is_503_without_a_database() {
 }
 
 #[tokio::test]
-async fn stubs_answer_not_implemented() {
+async fn rest_stubs_answer_not_implemented() {
     for uri in [
-        "/v1/me",
         "/v1/sets/global",
+        "/v1/sets/abc",
         "/v1/channels/twitch/123",
-        "/v1/search/emotes?q=x",
+        "/v1/emotes/abc",
     ] {
         let (status, body) = get(offline_state(), uri).await;
         assert_eq!(status, StatusCode::NOT_IMPLEMENTED, "{uri}");
@@ -86,23 +106,83 @@ async fn unknown_paths_are_404() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
+#[tokio::test]
+async fn graphql_stubs_answer_not_implemented() {
+    let response = gql("{ globalSet { id name } }").await;
+    assert_eq!(error_code(&response), "not_implemented");
+}
+
+#[tokio::test]
+async fn graphql_admin_fields_need_a_permission() {
+    for query in [
+        "{ reviewQueue { total } }",
+        "{ roles { id } }",
+        r#"mutation { approveEmote(id: "e1") { id } }"#,
+        r#"mutation { createRole(input: { name: "mods", position: 1, permissions: [] }) { id } }"#,
+    ] {
+        let response = gql(query).await;
+        assert_eq!(error_code(&response), "signed_out", "{query}");
+    }
+}
+
+#[tokio::test]
+async fn graphql_permission_names_are_public() {
+    let response = gql("{ permissions }").await;
+    let names = response["data"]["permissions"].as_array().unwrap();
+    assert!(names.iter().any(|n| n == "emotes.review"));
+    assert!(names.iter().any(|n| n == "roles.manage"));
+}
+
+#[tokio::test]
+async fn graphql_introspection_is_on() {
+    let response = gql("{ __schema { queryType { name } } }").await;
+    assert_eq!(response["data"]["__schema"]["queryType"]["name"], "Query");
+}
+
+#[tokio::test]
+async fn graphiql_opens_in_a_browser() {
+    let (status, body) = get(offline_state(), "/v1/gql").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(String::from_utf8_lossy(&body).contains("graphiql"));
+}
+
 #[test]
-fn spec_lists_the_contract() {
+fn openapi_lists_only_the_rest_part() {
     let spec = cyex_tv_api::openapi();
     for path in [
         "/health",
-        "/v1/me",
+        "/v1/auth/{platform}/login",
+        "/v1/emotes",
+        "/v1/channels/{platform}/{id}",
         "/v1/sets/{id}",
-        "/v1/sets/{id}/emotes/{emote_id}",
+        "/v1/sets/global",
         "/v1/personal-sets/lookup",
-        "/v1/roles",
-        "/v1/events",
     ] {
         assert!(spec.paths.paths.contains_key(path), "missing {path}");
     }
-    let json = spec.to_pretty_json().unwrap();
-    for schema in ["\"Emote\"", "\"EmoteSet\"", "\"ErrorBody\"", "\"Platform\""] {
-        assert!(json.contains(schema), "missing schema {schema}");
+    for graphql_only in ["/v1/me", "/v1/roles", "/v1/search/emotes"] {
+        assert!(
+            !spec.paths.paths.contains_key(graphql_only),
+            "{graphql_only} belongs in GraphQL"
+        );
+    }
+}
+
+#[test]
+fn sdl_lists_the_contract() {
+    let sdl = cyex_tv_api::gql::sdl();
+    for needle in [
+        "type Query",
+        "type Mutation",
+        "type Subscription",
+        "reviewQueue",
+        "searchEmotes",
+        "createRole",
+        "addSetEmote",
+        "events(topics: [String!]!)",
+        "enum Platform",
+    ] {
+        assert!(sdl.contains(needle), "missing {needle}");
     }
 }
 

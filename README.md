@@ -4,13 +4,14 @@ The backend and website for cyex.tv, an emote platform for Twitch and Kick.
 
 | Path | What |
 |---|---|
-| `apps/api` | HTTP API at `api.cyex.tv/v1` (Rust, axum) |
-| `apps/events` | Live updates over SSE (Rust) |
+| `apps/api` | The API at `api.cyex.tv/v1`: GraphQL at `/v1/gql` (and subscriptions at `/v1/gql/ws`), plus a small REST part (Rust, axum, async-graphql) |
+| `apps/events` | The event WebSocket at `/v1/events` (Rust) |
 | `apps/worker` | Image processing (Rust) |
 | `apps/web` | The cyex.tv website (SvelteKit, from Phase 6) |
 | `crates/shared` | Config, errors, logging, permissions, API types |
 | `crates/db` | Postgres pool and migrations |
-| `openapi/openapi.json` | The API contract, generated from the code |
+| `schema/schema.graphql` | The GraphQL schema, generated from the code |
+| `openapi/openapi.json` | The REST part, generated from the code |
 
 Status: Phase 1 (scaffold). See [PLAN.md](PLAN.md), [PROGRESS.md](PROGRESS.md) and the decisions in [docs/adr](docs/adr).
 
@@ -40,6 +41,8 @@ cargo run -p cyex-tv-api
 curl localhost:8080/health/ready
 ```
 
+Open `http://localhost:8080/v1/gql` in a browser for GraphiQL.
+
 The checks CI runs:
 
 ```bash
@@ -58,7 +61,11 @@ cargo test --workspace
 cargo deny check
 ```
 
-After changing an endpoint, regenerate the spec and commit it:
+After changing the API, regenerate both descriptions and commit them (CI checks they match):
+
+```bash
+cargo run -q -p cyex-tv-api --bin schema > schema/schema.graphql
+```
 
 ```bash
 cargo run -q -p cyex-tv-api --bin openapi > openapi/openapi.json

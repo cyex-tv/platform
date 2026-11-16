@@ -73,28 +73,31 @@ jobs:
           name: cargo-lock
           path: Cargo.lock
 
-  openapi:
+  contract:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Generate the spec
+      - name: Generate the GraphQL SDL and the OpenAPI spec
         run: |
-          mkdir -p openapi
+          mkdir -p schema openapi
+          cargo run -q -p cyex-tv-api --bin schema > schema/schema.graphql
           cargo run -q -p cyex-tv-api --bin openapi > openapi/openapi.json
-      - name: The committed spec must match the code
+      - name: The committed descriptions must match the code
         run: |
-          if [ -n "$(git status --porcelain openapi/)" ]; then
-            echo "::error::openapi/openapi.json is out of date. Run: cargo run -q -p cyex-tv-api --bin openapi > openapi/openapi.json"
-            git diff --stat openapi/ || true
+          if [ -n "$(git status --porcelain schema/ openapi/)" ]; then
+            echo "::error::schema/schema.graphql or openapi/openapi.json is out of date. Regenerate with the schema and openapi binaries (see README)."
+            git status --short schema/ openapi/
             exit 1
           fi
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: openapi
-          path: openapi/openapi.json
+          name: contract
+          path: |
+            schema/schema.graphql
+            openapi/openapi.json
 
   deny:
     runs-on: ubuntu-latest

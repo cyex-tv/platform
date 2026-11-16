@@ -12,18 +12,25 @@ The code was written on a machine where nothing may be run without asking, and t
 - [x] 1. Cargo workspace (`apps/api`, `apps/events`, `apps/worker`, `crates/shared`, `crates/db`), with `rustfmt.toml`, `rust-toolchain.toml`, workspace lints, `deny.toml` (AGPL-compatible licence allowlist), and `.gitattributes` (LF).
 - [x] 2. `dev/docker-compose.yaml`: Postgres 17 and MinIO, both on 127.0.0.1 only, plus `.env.example`.
 - [x] 3. `.github/workflows/ci.yml`: fmt, clippy `-D warnings`, test (with a Postgres service), release build, OpenAPI drift check, cargo-deny.
-- [x] 4. The v1 contract is drafted as `utoipa` stubs in `apps/api/src/routes/v1.rs`, covering auth, accounts, channels, sets, personal sets, emotes, search, moderation, roles and events. Every stub answers `501 not_implemented`. The API types are in `crates/shared/src/model.rs`.
+- [x] 4. The v1 contract, reworked after the owner's review (2026/11/16) to be GraphQL-first:
+  - GraphQL schema draft in `apps/api/src/gql.rs`: queries, mutations and the `events` subscription. Admin and moderation fields check a permission first and answer `signed_out` for now. `permissions` is public, and introspection is on.
+  - REST, only for auth, upload and the cacheable chat-client reads, in `apps/api/src/routes/v1.rs`.
+  - The API types are in `crates/shared/src/model.rs`, with the GraphQL derives behind the `graphql` feature.
+  - Every stub answers `not_implemented`.
+- [x] Live updates reworked to the event WebSocket plus GraphQL subscriptions, with no SSE (ADR 0005). The protocol is written down. The events service still only serves `/health` until Phase 5.
 - [x] 5. `/health` and `/health/ready` (checks the DB). Config comes from `CYEX_TV_*` env (the DB URL is never logged), with JSON or pretty logs, graceful shutdown, a DB pool limit and a statement timeout set on every connection.
 
 ### Not done yet
-- [ ] The first CI run is green.
-- [ ] `openapi/openapi.json` is committed. It has to be generated first (`cargo run -q -p cyex-tv-api --bin openapi > openapi/openapi.json`), or taken from CI's `openapi` artifact. The drift check fails until it's committed.
-- [ ] `Cargo.lock` is committed, from the first build or CI's `cargo-lock` artifact.
+- [ ] CI is green. The first run passed build, clippy and tests, and fmt, deny and the spec check were fixed after it. The GraphQL rework needs another run.
+- [ ] `schema/schema.graphql` and the updated `openapi/openapi.json` are committed, taken from CI's `contract` artifact. The drift check fails until they are.
+- [ ] `Cargo.lock` is updated for async-graphql, from CI's `cargo-lock` artifact.
 - [ ] `docker compose up` is checked by hand, including the MinIO image tag.
 - [ ] The owner reviews the API contract before Phase 2 handlers are written.
 
 ### Changes from the plan
-- The spec is `openapi/openapi.json`, not `.yaml`. The YAML output needs `serde_yaml`, which is unmaintained (ADR 0008 updated).
+- The owner asked for GraphQL-first and WebSockets (ADR 0005 and 0008 revised, D7 and D7b in the plan).
+- The REST spec is `openapi/openapi.json`, not `.yaml`. The YAML output needs `serde_yaml`, which is unmaintained.
+- `deny.toml` allows RUSTSEC-2024-0436 (`paste`, unmaintained, only through utoipa-axum).
 - `crates/auth` is created in Phase 2, where its code lands, instead of as an empty crate now.
 - `apps/web` starts in Phase 6. CI gets the web build and lint then.
 
@@ -32,12 +39,17 @@ The code was written on a machine where nothing may be run without asking, and t
   - config defaults, the required DB URL, named errors for bad values, `Debug` hiding the DB URL;
   - permission names unique and namespaced;
   - platform parsing and JSON round trip.
+- `crates/shared`: event types serialize with their dotted names.
 - `apps/api/tests/http.rs`:
   - `/health` is 200;
   - `/health/ready` is 503 without a DB and 200 with one (CI only);
-  - stubs answer 501 `not_implemented`;
+  - REST and GraphQL stubs answer `not_implemented`;
+  - admin GraphQL fields answer `signed_out`;
+  - `permissions` is public;
+  - introspection works;
+  - GraphiQL opens;
   - unknown paths are 404;
-  - the spec lists the contract's paths and schemas.
+  - the OpenAPI spec holds only the REST part, and the SDL lists the contract.
 
 ## Phase 0: Setup and decisions (done, except the owner steps below)
 

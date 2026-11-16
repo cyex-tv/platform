@@ -1,5 +1,6 @@
 //! The shapes of the public API (ADR 0008). They live in this crate so client code (the deck, a
-//! future SDK) can reuse them. This is the Phase 1 draft; later phases fill in what is missing.
+//! future SDK) can reuse them. The GraphQL derives sit behind the `graphql` feature; REST and the
+//! event WebSocket use the serde form (snake_case). This is the Phase 1 draft.
 //!
 //! IDs are ULIDs as text. Times are RFC 3339 strings in UTC.
 
@@ -11,6 +12,7 @@ use utoipa::{IntoParams, ToSchema};
 
 /// A streaming platform.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
 #[serde(rename_all = "lowercase")]
 pub enum Platform {
     Twitch,
@@ -58,6 +60,7 @@ pub struct Health {
 
 /// A Twitch or Kick account linked to a cyex.tv account.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct Identity {
     pub platform: Platform,
     /// The platform's numeric user ID, as text.
@@ -69,6 +72,7 @@ pub struct Identity {
 
 /// The signed-in account.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct Me {
     pub id: String,
     pub identities: Vec<Identity>,
@@ -79,6 +83,7 @@ pub struct Me {
 
 /// A short reference to an account, for owners and editors.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct AccountSummary {
     pub id: String,
     pub display_name: String,
@@ -88,6 +93,7 @@ pub struct AccountSummary {
 // Channels
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct Channel {
     pub platform: Platform,
     /// Twitch: the broadcaster's user ID. Kick: `broadcaster_user_id`.
@@ -99,7 +105,9 @@ pub struct Channel {
     pub allow_personal_emotes: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
+#[cfg_attr(feature = "graphql", graphql(name = "UpdateChannelSettingsInput"))]
 pub struct UpdateChannelSettings {
     pub active_set_id: Option<String>,
     pub allow_personal_emotes: Option<bool>,
@@ -108,6 +116,7 @@ pub struct UpdateChannelSettings {
 // Emotes
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
 #[serde(rename_all = "snake_case")]
 pub enum EmoteState {
     Pending,
@@ -117,6 +126,7 @@ pub enum EmoteState {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct EmoteFlags {
     pub zero_width: bool,
     /// Only its owner can add it to sets.
@@ -125,6 +135,7 @@ pub struct EmoteFlags {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
 #[serde(rename_all = "lowercase")]
 pub enum ImageFormat {
     Webp,
@@ -133,6 +144,7 @@ pub enum ImageFormat {
 
 /// One file of an emote, served at `{host}/{name}`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct EmoteFile {
     /// For example `2x.webp` or `1x_static.avif`.
     pub name: String,
@@ -148,6 +160,7 @@ pub struct EmoteFile {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct Emote {
     pub id: String,
     pub name: String,
@@ -162,7 +175,7 @@ pub struct Emote {
     pub created_at: String,
 }
 
-/// Multipart upload: the image file and its name.
+/// Multipart upload (REST only): the image file and its name.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct UploadEmote {
     pub name: String,
@@ -172,7 +185,9 @@ pub struct UploadEmote {
     pub file: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
+#[cfg_attr(feature = "graphql", graphql(name = "UpdateEmoteInput"))]
 pub struct UpdateEmote {
     pub name: Option<String>,
     pub tags: Option<Vec<String>>,
@@ -181,14 +196,10 @@ pub struct UpdateEmote {
     pub nsfw: Option<bool>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
-pub struct RejectEmote {
-    pub reason: String,
-}
-
 // Sets
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
 #[serde(rename_all = "lowercase")]
 pub enum SetKind {
     Channel,
@@ -198,6 +209,7 @@ pub enum SetKind {
 
 /// An emote as it sits in a set: the name it is typed as there, and who added it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct SetEmote {
     /// The name in this set. Differs from `emote.name` when the set renamed it.
     pub name: String,
@@ -208,6 +220,7 @@ pub struct SetEmote {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct EmoteSet {
     pub id: String,
     pub name: String,
@@ -217,28 +230,36 @@ pub struct EmoteSet {
     pub emotes: Vec<SetEmote>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
+#[cfg_attr(feature = "graphql", graphql(name = "CreateSetInput"))]
 pub struct CreateSet {
     pub name: String,
-    /// `channel` or `personal`. The global set exists already.
+    /// `CHANNEL` or `PERSONAL`. The global set exists already.
     pub kind: SetKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
+#[cfg_attr(feature = "graphql", graphql(name = "UpdateSetInput"))]
 pub struct UpdateSet {
     pub name: Option<String>,
     /// Needs `sets.edit_any` to raise above the default.
     pub capacity: Option<u32>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
+#[cfg_attr(feature = "graphql", graphql(name = "AddSetEmoteInput"))]
 pub struct AddSetEmote {
     /// Rename it in this set. Defaults to the emote's own name.
     pub name: Option<String>,
     pub zero_width: Option<bool>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
+#[cfg_attr(feature = "graphql", graphql(name = "UpdateSetEmoteInput"))]
 pub struct UpdateSetEmote {
     pub name: Option<String>,
     pub zero_width: Option<bool>,
@@ -246,6 +267,7 @@ pub struct UpdateSetEmote {
 
 // Personal sets
 
+/// `POST /v1/personal-sets/lookup`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct PersonalLookup {
     pub platform: Platform,
@@ -254,6 +276,7 @@ pub struct PersonalLookup {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct PersonalSetEntry {
     pub platform_user_id: String,
     pub set: EmoteSet,
@@ -267,21 +290,8 @@ pub struct PersonalLookupResult {
 
 // Search
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, IntoParams)]
-#[into_params(parameter_in = Query)]
-pub struct SearchQuery {
-    /// Name or tag to look for.
-    pub q: String,
-    pub animated: Option<bool>,
-    /// Only emotes owned by this account ID.
-    pub owner: Option<String>,
-    /// From 1.
-    pub page: Option<u32>,
-    /// 1 to 100, default 50.
-    pub per_page: Option<u32>,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct SearchResults {
     pub items: Vec<Emote>,
     pub total: u64,
@@ -292,12 +302,14 @@ pub struct SearchResults {
 // Moderation and roles
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct ReviewQueue {
     pub items: Vec<Emote>,
     pub total: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct Role {
     pub id: String,
     pub name: String,
@@ -307,7 +319,9 @@ pub struct Role {
     pub permissions: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
+#[cfg_attr(feature = "graphql", graphql(name = "CreateRoleInput"))]
 pub struct CreateRole {
     pub name: String,
     pub description: Option<String>,
@@ -315,7 +329,9 @@ pub struct CreateRole {
     pub permissions: Vec<String>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
+#[cfg_attr(feature = "graphql", graphql(name = "UpdateRoleInput"))]
 pub struct UpdateRole {
     pub name: Option<String>,
     pub description: Option<String>,
@@ -323,7 +339,47 @@ pub struct UpdateRole {
     pub permissions: Option<Vec<String>>,
 }
 
-// Auth and events
+// Live updates (ADR 0005)
+
+/// What changed. On the event WebSocket these are written `set.emote_added` and so on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+pub enum EventType {
+    #[serde(rename = "set.emote_added")]
+    SetEmoteAdded,
+    #[serde(rename = "set.emote_removed")]
+    SetEmoteRemoved,
+    #[serde(rename = "set.emote_renamed")]
+    SetEmoteRenamed,
+    #[serde(rename = "channel.active_set_changed")]
+    ChannelActiveSetChanged,
+    #[serde(rename = "personal.updated")]
+    PersonalUpdated,
+    #[serde(rename = "emote.updated")]
+    EmoteUpdated,
+    /// Too much was missed: refetch what you show.
+    #[serde(rename = "resync")]
+    Resync,
+}
+
+/// One change, as delivered on both sockets.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct Event {
+    /// Increases with every event. Send the last one you saw to resume.
+    pub id: String,
+    #[serde(rename = "type")]
+    pub event_type: EventType,
+    /// The topic it was delivered for, for example `channel:twitch:123`.
+    pub topic: String,
+    pub set_id: Option<String>,
+    pub emote_id: Option<String>,
+    /// The emote's name in the set, for added and renamed.
+    pub name: Option<String>,
+    pub created_at: String,
+}
+
+// REST query strings
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
@@ -340,13 +396,6 @@ pub struct CallbackQuery {
     pub code: Option<String>,
     pub state: Option<String>,
     pub error: Option<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, IntoParams)]
-#[into_params(parameter_in = Query)]
-pub struct EventsQuery {
-    /// Repeatable, up to 100: `channel:twitch:<id>`, `channel:kick:<id>` or `set:<id>`.
-    pub sub: Vec<String>,
 }
 
 #[cfg(test)]
@@ -370,5 +419,24 @@ mod tests {
             serde_json::to_string(&EmoteState::TakenDown).unwrap(),
             "\"taken_down\""
         );
+    }
+
+    #[test]
+    fn event_types_use_dotted_names() {
+        assert_eq!(
+            serde_json::to_string(&EventType::ChannelActiveSetChanged).unwrap(),
+            "\"channel.active_set_changed\""
+        );
+        let event = Event {
+            id: "1".to_owned(),
+            event_type: EventType::SetEmoteAdded,
+            topic: "set:abc".to_owned(),
+            set_id: Some("abc".to_owned()),
+            emote_id: Some("e1".to_owned()),
+            name: Some("wave".to_owned()),
+            created_at: "2026-11-16T12:00:00Z".to_owned(),
+        };
+        let json = serde_json::to_value(&event).unwrap();
+        assert_eq!(json["type"], "set.emote_added");
     }
 }
