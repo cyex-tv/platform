@@ -109,6 +109,7 @@ pub struct Channel {
 #[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
 #[cfg_attr(feature = "graphql", graphql(name = "UpdateChannelSettingsInput"))]
 pub struct UpdateChannelSettings {
+    /// One of the owner's channel sets. An empty string clears it.
     pub active_set_id: Option<String>,
     pub allow_personal_emotes: Option<bool>,
 }
