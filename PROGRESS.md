@@ -24,6 +24,14 @@ Paused on 2026/11/16 until work moves to a machine where commands can run (owner
 7. **Outbox IDs are a bigint sequence**, so clients resume from a number. A sequence can commit out of order under concurrent writes; the Phase 5 readers have to allow for that.
 8. The text-valued columns (platform, kind, state) are `text` with a CHECK, not Postgres enums, so adding a value is a plain forward migration.
 
+#### GitHub write log
+2026/11/16, account `sery-yx`, under the owner's standing OK for Phase 2 branches:
+```
+git push -u origin phase-2/db
+gh pr create -R cyex-tv/platform --base main --head phase-2/db --title "Phase 2 PR 1: migrations and db queries" --body-file <file>
+```
+The result is PR 4.
+
 #### Tests
 - Unit: ULID text round trip and ordering; topic and event type names; the text forms of the enums match serde.
 - Integration (`crates/db/tests/queries.rs`), one fresh migrated database per test:
