@@ -5,7 +5,7 @@ members = ["apps/api", "apps/events", "apps/worker", "crates/db", "crates/shared
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.89"
 license = "AGPL-3.0-only"
 repository = "https://github.com/cyex-tv/platform"
 publish = false
@@ -14,8 +14,10 @@ publish = false
 cyex-tv-db = { path = "crates/db" }
 cyex-tv-shared = { path = "crates/shared" }
 
-async-graphql = "7"
-async-graphql-axum = "7"
+# Keep both at the same minor: async-graphql-derive declares no rust-version, so a lower one
+# can pair an old async-graphql with a new derive crate.
+async-graphql = "7.2"
+async-graphql-axum = "7.2"
 axum = "0.8"
 dotenvy = "0.15"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }

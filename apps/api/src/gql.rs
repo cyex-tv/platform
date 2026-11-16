@@ -47,8 +47,7 @@ pub async fn graphiql() -> Html<String> {
 }
 
 fn coded(code: &'static str, message: &'static str) -> async_graphql::Error {
-    async_graphql::Error::new(message)
-        .extend_with(|_, e| e.set("code", code))
+    async_graphql::Error::new(message).extend_with(|_, e| e.set("code", code))
 }
 
 fn not_implemented() -> async_graphql::Error {
