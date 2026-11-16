@@ -12,6 +12,21 @@ Started 2026/11/16, in an overnight run the owner asked for (work on, merge gree
 3. The streamed upload: limits, decoding to validate, hashing, the blocklist, duplicates.
 4. Transcoding (WebP and AVIF at 1x-4x, static first frames), after benchmarking the encoders as the plan asks.
 
+### PR 4: transcoding (branch `phase-3/transcode`)
+- [x] ADR 0012 (image encoding), after a benchmark: WebP through libwebp (`webp-animation`, still and animated, quality 90), AVIF through `ravif` (quality 80, speed 8) for still images and first frames. No animated AVIF yet: `ravif` can't write it, and libavif needs CMake and a C AV1 encoder (the owner's call, see questions).
+- [x] `crates/media::encode`: sizes 32, 64, 96 and 128 px tall, aspect kept up to 4:1, never scaled up; Lanczos3. The original is decoded frame by frame and each frame goes straight into four streaming WebP encoders, so an animation is never held in memory whole. Frames under 20 ms show for 100 ms, as browsers do.
+- [x] The `emote.transcode` job in the worker: reads the original, writes `emotes/{sha256}/{name}` with `Cache-Control: public, max-age=31536000, immutable` and the right type, records the WebP files first (the emote is usable), then the AVIF files. A missing or broken original fails the job for good; missing storage retries.
+- [x] Owner steps for the CDN (`docs/setup/owner-steps.md`, Phase 3): the custom domain, a WAF rule so only `emotes/` is served, the cache rule, CORS, and the R2 token for the env.
+
+#### Tests
+- Unit (`crates/media`): the size rules, an animated WebP upload read, a still image's eight files (each WebP decoded back at the right size, each AVIF checked), animations from GIF, APNG and animated WebP staying animated (frame count decoded back) with their static WebP and AVIF first frames, the limits holding while transcoding.
+- `apps/worker/tests/transcode.rs` against Postgres: a still upload's eight files with type, size and cache header, an animated one's twelve, a missing original and a broken one failing for good, a missing store retrying.
+
+### Phase 3 status against "Done when"
+- A fixture upload gives 1x-4x WebP, AVIF and static files under `emotes/{sha256}/`: yes, in the tests with the in-memory store and the S3 client against a real S3 server. On the real CDN: after the owner's R2 steps.
+- Every rejection case has a test: yes (SVG, video, AVIF for now, corrupt, oversized, too wide, pixel bomb, too many frames, too much work, blocklisted exact and near copy, rate limit, restricted, signed out).
+- Pending emotes stay out of public reads: yes (sets, `GET /v1/emotes/{id}`, GraphQL).
+
 ### PR 3: the upload (branch `phase-3/upload`)
 - [x] `crates/media`: the format by magic bytes; full decoding under the limits (5 MB, 1000×1000 px, 1000 frames, and 100 million pixels over all frames), with the canvas size checked from the header before anything is decoded; the 64-bit dHash. PNG, APNG, GIF and WebP (still and animated). AVIF is recognised and refused for now (decoding it needs dav1d, a C library); SVG and video are refused.
 - [x] Migration `20261118000003_blocklist.sql` (additive): `blocked_images` (exact sha256, or a dHash within 4 bits), and an index for the upload rate limit.

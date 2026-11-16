@@ -30,6 +30,8 @@ allow = [
     "ISC",
     "MIT",
     "MPL-2.0",
+    # LLVM's old licence (libfuzzer-sys, via rav1e for AVIF). Permissive, GPL-compatible; ADR 0007.
+    "NCSA",
     "Unicode-3.0",
     "Zlib",
 ]

@@ -66,6 +66,9 @@ pub enum MediaError {
     /// Says it is an image but doesn't decode.
     #[error("the image doesn't decode: {0}")]
     Invalid(String),
+    /// Decoded, but an encoder failed (ours to fix, not the uploader's).
+    #[error("encoding failed: {0}")]
+    Encode(String),
 }
 
 /// What a valid image is.
@@ -121,16 +124,27 @@ fn decoder_limits() -> image::Limits {
     l
 }
 
+/// An image's canvas, read from its header.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Canvas {
+    pub format: Format,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Called with each decoded frame (full canvas, RGBA) and how long it shows, in milliseconds
+/// (0 for a still image).
+pub type OnFrame<'f> = dyn FnMut(&Canvas, RgbaImage, u32) -> Result<(), MediaError> + 'f;
+
 /// Walks the frames, stopping as soon as a limit is passed.
-fn frames<'a>(
+fn walk<'a>(
     iter: impl Iterator<Item = image::ImageResult<Frame>> + 'a,
-    width: u32,
-    height: u32,
+    canvas: &Canvas,
     limits: &Limits,
-) -> Result<(u32, RgbaImage), MediaError> {
-    let per_frame = u64::from(width) * u64::from(height);
+    on_frame: &mut OnFrame<'_>,
+) -> Result<u32, MediaError> {
+    let per_frame = u64::from(canvas.width) * u64::from(canvas.height);
     let mut count: u32 = 0;
-    let mut first: Option<RgbaImage> = None;
     for frame in iter {
         let frame = frame.map_err(invalid)?;
         count += 1;
@@ -145,42 +159,33 @@ fn frames<'a>(
                 "the animation is too big to process (frames × pixels)".into(),
             ));
         }
-        if first.is_none() {
-            first = Some(frame.into_buffer());
-        }
+        let (numer, denom) = frame.delay().numer_denom_ms();
+        let delay = numer.checked_div(denom).unwrap_or(0);
+        on_frame(canvas, frame.into_buffer(), delay)?;
     }
-    let first = first.ok_or_else(|| MediaError::Invalid("the animation has no frames".into()))?;
-    Ok((count, first))
+    if count == 0 {
+        return Err(MediaError::Invalid("the animation has no frames".into()));
+    }
+    Ok(count)
 }
 
-fn still(decoder: impl ImageDecoder, format: Format, limits: &Limits) -> Result<Probe, MediaError> {
-    let (width, height) = decoder.dimensions();
-    check_side(width, height, limits)?;
+fn still(
+    decoder: impl ImageDecoder,
+    canvas: &Canvas,
+    on_frame: &mut OnFrame<'_>,
+) -> Result<u32, MediaError> {
     let image = DynamicImage::from_decoder(decoder).map_err(invalid)?;
-    Ok(Probe {
-        format,
-        width,
-        height,
-        frames: 1,
-        animated: false,
-        first_frame: image.to_rgba8(),
-    })
+    on_frame(canvas, image.to_rgba8(), 0)?;
+    Ok(1)
 }
 
-fn animated(format: Format, width: u32, height: u32, (frames, first): (u32, RgbaImage)) -> Probe {
-    Probe {
-        format,
-        width,
-        height,
-        frames,
-        // A one-frame "animation" is a still image.
-        animated: frames > 1,
-        first_frame: first,
-    }
-}
-
-/// Validates an upload by decoding all of it under `limits`.
-pub fn probe(bytes: &[u8], limits: &Limits) -> Result<Probe, MediaError> {
+/// Decodes all of an image under `limits`, frame by frame, without keeping the frames: each goes
+/// to `on_frame` and is dropped. Returns the canvas and the number of frames.
+pub fn decode_frames(
+    bytes: &[u8],
+    limits: &Limits,
+    on_frame: &mut OnFrame<'_>,
+) -> Result<(Canvas, u32), MediaError> {
     if bytes.len() > limits.max_bytes {
         return Err(MediaError::TooLarge(format!(
             "the file is over {} MB",
@@ -190,6 +195,11 @@ pub fn probe(bytes: &[u8], limits: &Limits) -> Result<Probe, MediaError> {
     let format = sniff(bytes).ok_or(MediaError::Unsupported(
         "Upload PNG, APNG, GIF or WebP. SVG and video aren't supported.",
     ))?;
+    let canvas = |width, height| Canvas {
+        format,
+        width,
+        height,
+    };
     match format {
         Format::Avif => Err(MediaError::Unsupported(
             "AVIF uploads aren't supported yet. Upload PNG, APNG, GIF or WebP.",
@@ -199,35 +209,59 @@ pub fn probe(bytes: &[u8], limits: &Limits) -> Result<Probe, MediaError> {
             decoder.set_limits(decoder_limits()).map_err(invalid)?;
             let (width, height) = decoder.dimensions();
             check_side(width, height, limits)?;
-            if decoder.is_apng().map_err(invalid)? {
+            let c = canvas(width, height);
+            let count = if decoder.is_apng().map_err(invalid)? {
                 let apng = decoder.apng().map_err(invalid)?;
-                let found = frames(apng.into_frames(), width, height, limits)?;
-                Ok(animated(format, width, height, found))
+                walk(apng.into_frames(), &c, limits, on_frame)?
             } else {
-                still(decoder, format, limits)
-            }
+                still(decoder, &c, on_frame)?
+            };
+            Ok((c, count))
         }
         Format::Gif => {
             let mut decoder = GifDecoder::new(Cursor::new(bytes)).map_err(invalid)?;
             decoder.set_limits(decoder_limits()).map_err(invalid)?;
             let (width, height) = decoder.dimensions();
             check_side(width, height, limits)?;
-            let found = frames(decoder.into_frames(), width, height, limits)?;
-            Ok(animated(format, width, height, found))
+            let c = canvas(width, height);
+            let count = walk(decoder.into_frames(), &c, limits, on_frame)?;
+            Ok((c, count))
         }
         Format::Webp => {
             let mut decoder = WebPDecoder::new(Cursor::new(bytes)).map_err(invalid)?;
             decoder.set_limits(decoder_limits()).map_err(invalid)?;
             let (width, height) = decoder.dimensions();
             check_side(width, height, limits)?;
-            if decoder.has_animation() {
-                let found = frames(decoder.into_frames(), width, height, limits)?;
-                Ok(animated(format, width, height, found))
+            let c = canvas(width, height);
+            let count = if decoder.has_animation() {
+                walk(decoder.into_frames(), &c, limits, on_frame)?
             } else {
-                still(decoder, format, limits)
-            }
+                still(decoder, &c, on_frame)?
+            };
+            Ok((c, count))
         }
     }
+}
+
+/// Validates an upload by decoding all of it under `limits`. Keeps only the first frame.
+pub fn probe(bytes: &[u8], limits: &Limits) -> Result<Probe, MediaError> {
+    let mut first: Option<RgbaImage> = None;
+    let (canvas, frames) = decode_frames(bytes, limits, &mut |_, frame, _| {
+        if first.is_none() {
+            first = Some(frame);
+        }
+        Ok(())
+    })?;
+    let first_frame = first.ok_or_else(|| MediaError::Invalid("no frames".into()))?;
+    Ok(Probe {
+        format: canvas.format,
+        width: canvas.width,
+        height: canvas.height,
+        frames,
+        // A one-frame "animation" is a still image.
+        animated: frames > 1,
+        first_frame,
+    })
 }
 
 /// The 64-bit difference hash of an image: shrink to 9×8 grey, then one bit per neighbour pair
@@ -251,6 +285,8 @@ pub fn dhash(image: &RgbaImage) -> u64 {
 pub fn distance(a: u64, b: u64) -> u32 {
     (a ^ b).count_ones()
 }
+
+pub mod encode;
 
 #[cfg(test)]
 mod tests;

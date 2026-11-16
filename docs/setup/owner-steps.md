@@ -49,3 +49,48 @@ Please **read Kick's Developer Terms** on that page. Their text isn't public, so
 
 ## 5. When done
 Mark which of 1-4 are done, and record them in `PROGRESS.md`. Don't paste any secrets into the chat.
+
+# Owner steps for Phase 3: the CDN
+
+The worker writes emote files to the R2 bucket `cyex-tv-cdn` (ADR 0003, ADR 0012). These steps make them public at `cdn.cyex.tv`. Nothing here touches cyex.app.
+
+## 1. The bucket's custom domain
+In Cloudflare → R2 → `cyex-tv-cdn` → Settings → Custom Domains, connect `cdn.cyex.tv` (if it isn't yet). Keep public access through `r2.dev` **off**.
+
+## 2. What may be served
+Only `emotes/` is public. `originals/` must never be. In R2 there is no per-prefix public switch, so add a WAF custom rule on `cdn.cyex.tv`:
+- Name: `cyex.tv: block originals`
+- Expression: `(http.host eq "cdn.cyex.tv" and not starts_with(http.request.uri.path, "/emotes/"))`
+- Action: Block
+
+(`cosmetics/` joins the allowed prefixes in the cosmetics phase.)
+
+## 3. Caching
+The files carry `Cache-Control: public, max-age=31536000, immutable`, and their keys never change. Add a Cache Rule on `cdn.cyex.tv`:
+- When: hostname equals `cdn.cyex.tv`
+- Cache eligibility: eligible for cache
+- Edge TTL: use the cache-control header from the origin
+- Browser TTL: respect origin
+
+## 4. CORS
+Chat clients and the extension fetch the files from other origins. In R2 → `cyex-tv-cdn` → Settings → CORS policy:
+```json
+[
+  {
+    "AllowedOrigins": ["*"],
+    "AllowedMethods": ["GET", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "MaxAgeSeconds": 86400
+  }
+]
+```
+
+## 5. Keys for the worker and the api
+In R2 → Manage API tokens, create one token with **Object Read & Write** on `cyex-tv-cdn` only. Put its values in the server's `.env` (never the repo or a chat):
+```
+CYEX_TV_S3_ENDPOINT=https://<account id>.r2.cloudflarestorage.com
+CYEX_TV_S3_BUCKET=cyex-tv-cdn
+CYEX_TV_S3_ACCESS_KEY_ID=<from the token>
+CYEX_TV_S3_SECRET_ACCESS_KEY=<from the token>
+CYEX_TV_S3_REGION=auto
+```
