@@ -121,6 +121,30 @@ pub async fn delete_older_than(conn: &mut PgConnection, cutoff: DateTime<Utc>) -
     Ok(done.rows_affected())
 }
 
+/// Every event after `after_id`, oldest first, whatever its topics. The live feeder reads this.
+pub async fn after(conn: &mut PgConnection, after_id: i64, limit: i64) -> DbResult<Vec<Event>> {
+    Ok(sqlx::query_as(
+        "SELECT id, type, topics, set_id, payload, created_at
+         FROM events_outbox
+         WHERE id > $1
+         ORDER BY id
+         LIMIT $2",
+    )
+    .bind(after_id)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// The newest event ID, or 0 when there is none. Where a fresh feeder starts.
+pub async fn latest_id(conn: &mut PgConnection) -> DbResult<i64> {
+    Ok(
+        sqlx::query_scalar("SELECT coalesce(max(id), 0) FROM events_outbox")
+            .fetch_one(conn)
+            .await?,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

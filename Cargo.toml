@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["apps/api", "apps/events", "apps/worker", "crates/auth", "crates/db", "crates/media", "crates/shared", "crates/storage"]
+members = ["apps/api", "apps/events", "apps/worker", "crates/auth", "crates/db", "crates/hub", "crates/media", "crates/shared", "crates/storage"]
 
 [workspace.package]
 version = "0.1.0"
@@ -13,6 +13,7 @@ publish = false
 [workspace.dependencies]
 cyex-tv-auth = { path = "crates/auth" }
 cyex-tv-db = { path = "crates/db" }
+cyex-tv-hub = { path = "crates/hub" }
 cyex-tv-media = { path = "crates/media" }
 cyex-tv-shared = { path = "crates/shared" }
 cyex-tv-storage = { path = "crates/storage" }
@@ -21,7 +22,7 @@ cyex-tv-storage = { path = "crates/storage" }
 # can pair an old async-graphql with a new derive crate.
 async-graphql = "7.2"
 async-graphql-axum = "7.2"
-axum = { version = "0.8", features = ["multipart"] }
+axum = { version = "0.8", features = ["multipart", "ws"] }
 base64 = "0.22"
 bytes = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
@@ -41,7 +42,8 @@ serde_json = "1"
 sha2 = "0.10"
 sqlx = { version = "0.8", default-features = false, features = ["chrono", "json", "macros", "migrate", "postgres", "runtime-tokio", "uuid"] }
 thiserror = "2"
-tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-tungstenite = "0.29"
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["trace"] }
 tracing = "0.1"
