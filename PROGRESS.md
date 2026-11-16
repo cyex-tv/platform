@@ -2,6 +2,17 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Phase 6: Search and the website (in progress)
+
+### PR 1: search (branch `phase-6/search`)
+- [x] `crates/db::search` behind the `EmoteSearch` trait (ADR 0004), on Postgres: names by substring and `pg_trgm` similarity, tags by prefix; only approved, listed (not private), not deleted emotes, and NSFW only with `nsfw: true` (new, additive). Ranked: exact name, name prefix, similarity, popularity. `%` and `_` are taken literally.
+- [x] Migration `20261118000005_popularity.sql` (additive): `emotes.popularity`, the number of channels whose active set holds the emote, refreshed in the worker's hourly run; indexes for searchable emotes and tag prefixes.
+- [x] `searchEmotes(query, animated, owner, nsfw, page, perPage)`: 1 to 100 per page, default 50. With that, every GraphQL field in the contract is built.
+
+#### Tests
+- Unit: LIKE escaping.
+- `apps/api/tests/search_flow.rs` against Postgres: rank order (exact, prefixes, tag-only last), pending, private, deleted and unasked NSFW emotes never found, the animated and owner filters, an empty query by popularity, paging and the page-size cap, literal wildcards; popularity counted from active sets, and a second refresh changing nothing.
+
 ## Phase 5: Live updates (in progress)
 
 Taken before Phase 4 in the overnight run: Phase 4 (the deck, in `cyex-app/cyex-deck`) can't meet its "Done when" until the owner's CDN and OAuth steps are done, and its step 2 waits for Phase 5 anyway. See the run's questions.
