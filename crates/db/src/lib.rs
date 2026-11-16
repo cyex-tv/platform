@@ -6,6 +6,7 @@
 
 pub mod accounts;
 pub mod audit;
+pub mod blocklist;
 pub mod channels;
 pub mod emotes;
 mod error;
