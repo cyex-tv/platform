@@ -2,11 +2,34 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
-## Phase 2: Data model, auth, roles (in progress)
+## Phase 3: Upload pipeline, CDN, approval gate (in progress)
+
+Started 2026/11/16, in an overnight run the owner asked for (work on, merge green PRs, questions at the end).
+
+### How Phase 3 is split
+1. Emote reads, edits, deletion and the review API (no image code).
+2. The job queue (Postgres, `FOR UPDATE SKIP LOCKED`), the storage layer (S3 API: R2 in production, MinIO locally) and the worker loop.
+3. The streamed upload: limits, decoding to validate, hashing, the blocklist, duplicates.
+4. Transcoding (WebP and AVIF at 1x-4x, static first frames), after benchmarking the encoders as the plan asks.
+
+### PR 1: emotes and the review gate (branch `phase-3/review`)
+- [x] Migration `20261118000001_emote_review.sql` (additive): `reviewed_by`, `reviewed_at`, `review_reason` on `emotes`.
+- [x] An emote that isn't approved is visible to its owner and `emotes.review` holders only; `GET /v1/emotes/{id}` serves approved emotes, with `ETag` and `Cache-Control`.
+- [x] `reviewQueue` (paged, `page` and `perPage` added), `approveEmote`, `rejectEmote` (reason required, 1 to 500 characters). Only pending emotes can be reviewed (`not_pending`), so two moderators can't both decide. Both are audited, and every set holding the emote gets `emote.updated`.
+- [x] `updateEmote`: the owner, or `emotes.edit_any` (audited with before and after). Tags are lowercased and deduplicated, at most 10 of 1 to 32 letters, digits, `-` or `_`.
+- [x] `deleteEmote`: the owner only. The emote leaves every set at once, with a `set.emote_removed` event for each.
+
+#### Tests
+- Unit: tag cleaning, reasons.
+- `apps/api/tests/moderation_flow.rs` against Postgres: who sees pending emotes (GraphQL and REST), the queue and its paging, approve and reject (permissions, `not_pending`, `bad_reason`, audit with the reason, the stored reason, the event, the public read afterwards), owner edits and their checks, an audited moderator edit, deletion leaving its sets.
+
+## Phase 2: Data model, auth, roles (done, merged 2026/11/16 as PRs 4 to 7)
+
+Everything is merged and tested against Postgres in CI. Still open, and the owner's: signing in end to end with real Twitch and Kick test accounts (needs the OAuth apps), and the review choices listed under each PR.
 
 Paused on 2026/11/16 until work moves to a machine where commands can run (owner's call). Resumed on the new machine on 2026/11/16. Rust, `git` and `gh` are set up there; Docker isn't installed yet (the owner installs it), so the database tests ran in CI first.
 
-### PR 4: roles, permissions, the owner and the audit log (branch `phase-2/roles`)
+### PR 4: roles, permissions, the owner and the audit log (branch `phase-2/roles`, merged 2026/11/16 as PR 7)
 - [x] `crates/auth/src/rbac.rs`: the ADR 0010 rules as plain functions. No escalation (grant only what you hold), only roles below your highest `position`, the owner can't be demoted by others, and no change may leave nobody but the owner holding `roles.manage`.
 - [x] The owner: `CYEX_TV_OWNER_IDS` takes `twitch:<id>`, `kick:<id>` or account IDs. Platform IDs are what's known before the first sign-in; ADR 0010 said account IDs, and both work. The owner holds every permission without a role. The owner's real IDs are in the owner's local `.env`, not in this public repo.
 - [x] GraphQL: `roles`, `accountRoles`, `auditLog` (new, `audit.view`, paged by entry ID), `createRole`, `updateRole`, `deleteRole`, `assignRole`, `unassignRole`. Each change writes `audit_log` with before and after in the same transaction.
@@ -15,6 +38,7 @@ Paused on 2026/11/16 until work moves to a machine where commands can run (owner
 
 #### Tests
 - Unit (`rbac`): owner list parsing, the owner passing every rule, escalation, below-your-highest, owner protection, lock-out.
+- GitHub: `git push -u origin phase-2/roles`, `gh pr create ... --title "Phase 2 PR 4: roles, permissions and audit"`, `gh pr merge 7 -R cyex-tv/platform --merge --subject "Merge pull request #7 from cyex-tv/phase-2/roles"`, after all 6 checks passed with `roles_flow` (5) running against Postgres.
 - `apps/api/tests/roles_flow.rs` against Postgres: the owner holds everything, no escalation (permissions and positions, also through `updateRole` and `assignRole`), the owner can't be demoted by others, the last manager stays (unassign, delete, update), every change audited with before and after, paging and filters, `accountRoles` access.
 
 ### PR 3: channels, sets, editors and the chat-client reads (branch `phase-2/sets`, merged 2026/11/16 as PR 6)
