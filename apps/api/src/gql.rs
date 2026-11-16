@@ -1,12 +1,13 @@
 //! The GraphQL API at `/v1/gql` (ADR 0008). Resolvers answer `not_implemented` until their phase
 //! builds them:
 //! - Phase 2: accounts, channels, sets, editors, roles and the audit log (built)
-//! - Phase 3: emotes and moderation
+//! - Phase 3: emotes and moderation (reads, edits and review built; upload is REST)
 //! - Phase 5: the `events` subscription
 //! - Phase 6: search
 //!
-//! Admin and moderation fields check a permission first, through [`require`]. Introspection stays
-//! on, so the private parts are visible in the schema but closed to anyone without the permission.
+//! Admin and moderation fields check their permission in `catalog`, `admin` and `moderation`,
+//! each naming the one it needs. Introspection stays on, so the private parts are visible in the
+//! schema but closed to anyone without the permission.
 
 // The stubs take the arguments the real resolvers will use; they go away as each one lands.
 #![allow(unused_variables)]
@@ -28,7 +29,7 @@ use futures_util::stream::Empty;
 use sqlx::Connection;
 
 use crate::state::AppState;
-use crate::{admin, catalog};
+use crate::{admin, catalog, moderation};
 
 pub type ApiSchema = Schema<Query, Mutation, Subscription>;
 
@@ -96,21 +97,6 @@ fn caller<'a>(ctx: &Context<'a>) -> Result<&'a Caller> {
     ctx.data_opt::<Option<Caller>>()
         .and_then(Option::as_ref)
         .ok_or_else(|| coded("signed_out", "Sign in to use this."))
-}
-
-/// Checks that the caller holds `permission` through their roles (ADR 0010). The owner rule and
-/// the escalation guards come with the role mutations (Phase 2 PR 4).
-async fn require<'a>(ctx: &Context<'a>, permission: &'static str) -> Result<&'a Caller> {
-    let caller = caller(ctx)?;
-    let mut conn = state(ctx).db.acquire().await.map_err(internal)?;
-    let held = catalog::permissions_of(&mut conn, caller)
-        .await
-        .map_err(api_error)?;
-    if held.iter().any(|p| p == permission) {
-        Ok(caller)
-    } else {
-        Err(coded("forbidden", "You don't have permission to do this."))
-    }
 }
 
 /// The account behind `caller`, as `Me`.
@@ -194,8 +180,10 @@ impl Query {
     }
 
     /// An emote. Pending ones are visible to their owner and to moderators only.
-    async fn emote(&self, id: String) -> Result<Option<Emote>> {
-        Err(not_implemented())
+    async fn emote(&self, ctx: &Context<'_>, id: String) -> Result<Option<Emote>> {
+        moderation::emote(state(ctx), caller_opt(ctx), &id)
+            .await
+            .map_err(api_error)
     }
 
     /// Approved, listed emotes by name and tag. `perPage` is 1 to 100, default 50.
@@ -255,10 +243,17 @@ impl Query {
         permissions::ALL.iter().map(|p| (*p).to_owned()).collect()
     }
 
-    /// Pending emotes, oldest first. Needs `emotes.review`.
-    async fn review_queue(&self, ctx: &Context<'_>) -> Result<ReviewQueue> {
-        require(ctx, permissions::EMOTES_REVIEW).await?;
-        Err(not_implemented())
+    /// Pending emotes, oldest first. Needs `emotes.review`. `perPage` is 1 to 100, default 50.
+    async fn review_queue(
+        &self,
+        ctx: &Context<'_>,
+        page: Option<u32>,
+        per_page: Option<u32>,
+    ) -> Result<ReviewQueue> {
+        let caller = caller(ctx)?;
+        moderation::review_queue(state(ctx), caller, page, per_page)
+            .await
+            .map_err(api_error)
     }
 
     /// An account's roles. Yours, or anyone's with `roles.manage` or `users.view`.
@@ -450,24 +445,34 @@ impl Mutation {
         id: String,
         input: UpdateEmote,
     ) -> Result<Emote> {
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        moderation::update(state(ctx), caller, &id, &input)
+            .await
+            .map_err(api_error)
     }
 
     /// Delete your emote. It is removed from every set.
     async fn delete_emote(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        moderation::delete(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
     }
 
     /// Approve a pending emote. Needs `emotes.review`. Audited.
     async fn approve_emote(&self, ctx: &Context<'_>, id: String) -> Result<Emote> {
-        require(ctx, permissions::EMOTES_REVIEW).await?;
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        moderation::approve(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
     }
 
     /// Reject a pending emote with a reason. Needs `emotes.review`. Audited.
     async fn reject_emote(&self, ctx: &Context<'_>, id: String, reason: String) -> Result<Emote> {
-        require(ctx, permissions::EMOTES_REVIEW).await?;
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        moderation::reject(state(ctx), caller, &id, &reason)
+            .await
+            .map_err(api_error)
     }
 
     /// Create a role. You can only grant permissions you hold. Needs `roles.manage`. Audited.

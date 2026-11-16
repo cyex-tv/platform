@@ -222,7 +222,7 @@ async fn write_audit(
 
 /// The topics a change to `set` is published on: the set, the channels showing it, and for a
 /// personal set its owner's identities.
-async fn set_topics(conn: &mut PgConnection, set: &Set) -> ApiResult<Vec<String>> {
+pub(crate) async fn set_topics(conn: &mut PgConnection, set: &Set) -> ApiResult<Vec<String>> {
     let mut topics = vec![outbox::set_topic(set.id)];
     for ch in channels::using_set(conn, set.id).await.map_err(db_error)? {
         topics.push(outbox::channel_topic(ch.platform, &ch.platform_channel_id));
@@ -240,7 +240,7 @@ async fn set_topics(conn: &mut PgConnection, set: &Set) -> ApiResult<Vec<String>
     Ok(topics)
 }
 
-async fn publish_member_event(
+pub(crate) async fn publish_member_event(
     conn: &mut PgConnection,
     set: &Set,
     event_type: EventType,
@@ -279,7 +279,7 @@ fn set_name(raw: &str) -> ApiResult<String> {
 }
 
 /// Names emotes are typed as in a set: 1 to 100 characters, no spaces.
-fn member_name(raw: &str) -> ApiResult<&str> {
+pub(crate) fn member_name(raw: &str) -> ApiResult<&str> {
     let len = raw.chars().count();
     if len == 0 || len > 100 || raw.chars().any(|c| c.is_whitespace() || c.is_control()) {
         return Err(bad(
@@ -441,7 +441,7 @@ pub async fn my_channels(state: &AppState, caller: &Caller) -> ApiResult<Vec<Cha
 
 // Writes
 
-async fn load_set(conn: &mut PgConnection, id: Uuid) -> ApiResult<Set> {
+pub(crate) async fn load_set(conn: &mut PgConnection, id: Uuid) -> ApiResult<Set> {
     sets::get(conn, id)
         .await
         .map_err(db_error)?

@@ -965,8 +965,8 @@ async fn permissions_come_from_roles() {
         h.me(&s).await["data"]["me"]["permissions"],
         json!(["emotes.review"])
     );
-    // The permission passes; the field itself is Phase 3.
+    // The permission passes, and the (empty) queue comes back.
     let reply = h.gql("{ reviewQueue { total } }", Some(&s)).await;
-    assert_eq!(gql_code(&reply), "not_implemented");
+    assert_eq!(reply["data"]["reviewQueue"]["total"], 0, "{reply}");
     h.db.close().await;
 }

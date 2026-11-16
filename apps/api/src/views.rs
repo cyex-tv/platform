@@ -7,7 +7,7 @@
 use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, SecondsFormat, Utc};
-use cyex_tv_db::reads::{self, MemberRow, Summary};
+use cyex_tv_db::reads::{self, EmoteRow, MemberRow, Summary};
 use cyex_tv_db::sets::Set;
 use cyex_tv_db::{DbResult, channels, ids, sets};
 use cyex_tv_shared::model::{
@@ -62,31 +62,52 @@ fn files(variants: Option<&serde_json::Value>) -> Vec<EmoteFile> {
 }
 
 fn emote(
-    row: &MemberRow,
+    row: &EmoteRow,
     tags: &HashMap<Uuid, Vec<String>>,
     summaries: &HashMap<Uuid, Summary>,
     cdn_url: &str,
 ) -> Emote {
     Emote {
-        id: ids::to_text(row.emote_id),
-        name: row.emote_name.clone(),
-        owner: summary(summaries, row.emote_owner),
+        id: ids::to_text(row.id),
+        name: row.name.clone(),
+        owner: summary(summaries, row.owner),
         state: row.state,
         flags: EmoteFlags {
-            zero_width: row.emote_zero_width,
+            zero_width: row.zero_width,
             private: row.private,
             nsfw: row.nsfw,
         },
         animated: row.animated,
-        tags: tags.get(&row.emote_id).cloned().unwrap_or_default(),
+        tags: tags.get(&row.id).cloned().unwrap_or_default(),
         host: row
             .sha256
             .as_deref()
             .map(|sha| format!("{cdn_url}/emotes/{}", hex(sha)))
             .unwrap_or_default(),
         files: files(row.variants.as_ref()),
-        created_at: time(row.emote_created_at),
+        created_at: time(row.created_at),
     }
+}
+
+/// Builds emotes in the order given, with their tags and owners.
+pub async fn emotes(
+    conn: &mut PgConnection,
+    rows: &[EmoteRow],
+    cdn_url: &str,
+) -> DbResult<Vec<Emote>> {
+    let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+    let tags = reads::tags(conn, &ids).await?;
+    let owners: Vec<Uuid> = rows
+        .iter()
+        .filter_map(|r| r.owner)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    let summaries = reads::summaries(conn, &owners).await?;
+    Ok(rows
+        .iter()
+        .map(|row| emote(row, &tags, &summaries, cdn_url))
+        .collect())
 }
 
 /// Whether `viewer` may see this member. `edits` holds the sets the viewer owns or edits.
@@ -131,7 +152,7 @@ fn set_emote(
         zero_width: row.zero_width,
         added_by: row.added_by.map(ids::to_text),
         added_at: time(row.added_at),
-        emote: emote(row, tags, summaries, cdn_url),
+        emote: emote(&row.emote(), tags, summaries, cdn_url),
     }
 }
 

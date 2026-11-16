@@ -92,13 +92,12 @@ async fn ready_is_503_without_a_database() {
 
 #[tokio::test]
 async fn rest_stubs_answer_not_implemented() {
-    // Sign-in, channels and sets are built; emotes are Phase 3.
-    for uri in ["/v1/emotes/abc"] {
-        let (status, body) = get(offline_state(), uri).await;
-        assert_eq!(status, StatusCode::NOT_IMPLEMENTED, "{uri}");
-        let error: ErrorBody = serde_json::from_slice(&body).unwrap();
-        assert_eq!(error.error, "not_implemented", "{uri}");
-    }
+    // Only the upload is left (Phase 3).
+    let request = Request::post("/v1/emotes").body(Body::empty()).unwrap();
+    let (status, body) = send(offline_state(), request).await;
+    assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+    let error: ErrorBody = serde_json::from_slice(&body).unwrap();
+    assert_eq!(error.error, "not_implemented");
 }
 
 #[tokio::test]
@@ -183,7 +182,7 @@ async fn unknown_paths_are_404() {
 
 #[tokio::test]
 async fn graphql_stubs_answer_not_implemented() {
-    let response = gql(r#"{ emote(id: "e1") { id } }"#).await;
+    let response = gql(r#"{ searchEmotes(query: "pog") { total } }"#).await;
     assert_eq!(error_code(&response), "not_implemented");
 }
 

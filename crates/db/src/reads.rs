@@ -34,6 +34,80 @@ pub struct MemberRow {
     pub variants: Option<Value>,
 }
 
+/// An emote with its file, as the API shows it.
+#[derive(Clone, Debug, PartialEq, FromRow)]
+pub struct EmoteRow {
+    pub id: Uuid,
+    pub owner: Option<Uuid>,
+    pub name: String,
+    pub zero_width: bool,
+    pub private: bool,
+    pub nsfw: bool,
+    pub animated: bool,
+    pub state: EmoteState,
+    pub created_at: DateTime<Utc>,
+    pub sha256: Option<Vec<u8>>,
+    pub variants: Option<Value>,
+}
+
+impl MemberRow {
+    /// The emote part of the row.
+    pub fn emote(&self) -> EmoteRow {
+        EmoteRow {
+            id: self.emote_id,
+            owner: self.emote_owner,
+            name: self.emote_name.clone(),
+            zero_width: self.emote_zero_width,
+            private: self.private,
+            nsfw: self.nsfw,
+            animated: self.animated,
+            state: self.state,
+            created_at: self.emote_created_at,
+            sha256: self.sha256.clone(),
+            variants: self.variants.clone(),
+        }
+    }
+}
+
+const EMOTE_ROW: &str = "SELECT e.id, e.owner_account_id AS owner, e.name, e.zero_width, e.private,
+            e.nsfw, e.animated, e.state, e.created_at, f.sha256, f.variants
+     FROM emotes e
+     LEFT JOIN files f ON f.id = e.file_id";
+
+/// Emotes by ID, in no particular order. Deleted ones are left out.
+pub async fn emotes(conn: &mut PgConnection, ids: &[Uuid]) -> DbResult<Vec<EmoteRow>> {
+    Ok(sqlx::query_as(&format!(
+        "{EMOTE_ROW} WHERE e.id = ANY($1) AND e.deleted_at IS NULL"
+    ))
+    .bind(ids)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// Emotes in `state`, oldest first (the review queue), and how many there are.
+pub async fn emotes_in_state(
+    conn: &mut PgConnection,
+    state: EmoteState,
+    limit: i64,
+    offset: i64,
+) -> DbResult<(Vec<EmoteRow>, i64)> {
+    let items = sqlx::query_as(&format!(
+        "{EMOTE_ROW} WHERE e.state = $1 AND e.deleted_at IS NULL
+         ORDER BY e.created_at, e.id LIMIT $2 OFFSET $3"
+    ))
+    .bind(state)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&mut *conn)
+    .await?;
+    let total =
+        sqlx::query_scalar("SELECT count(*) FROM emotes WHERE state = $1 AND deleted_at IS NULL")
+            .bind(state)
+            .fetch_one(conn)
+            .await?;
+    Ok((items, total))
+}
+
 const MEMBER_ROW: &str =
     "SELECT m.set_id, m.emote_id, m.name, m.zero_width, m.added_by, m.added_at,
                 e.owner_account_id AS emote_owner, e.name AS emote_name,

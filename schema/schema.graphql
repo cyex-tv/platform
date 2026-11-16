@@ -347,9 +347,9 @@ type Query {
 	"""
 	permissions: [String!]!
 	"""
-	Pending emotes, oldest first. Needs `emotes.review`.
+	Pending emotes, oldest first. Needs `emotes.review`. `perPage` is 1 to 100, default 50.
 	"""
-	reviewQueue: ReviewQueue!
+	reviewQueue(page: Int, perPage: Int): ReviewQueue!
 	"""
 	An account's roles. Yours, or anyone's with `roles.manage` or `users.view`.
 	"""
