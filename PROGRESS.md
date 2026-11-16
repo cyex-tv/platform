@@ -8,9 +8,22 @@ Started 2026/11/16, in an overnight run the owner asked for (work on, merge gree
 
 ### How Phase 3 is split
 1. Emote reads, edits, deletion and the review API (no image code).
-2. The job queue (Postgres, `FOR UPDATE SKIP LOCKED`), the storage layer (S3 API: R2 in production, MinIO locally) and the worker loop.
+2. The job queue (Postgres, `FOR UPDATE SKIP LOCKED`), the storage layer (S3 API: R2 in production, Versity Gateway locally) and the worker loop.
 3. The streamed upload: limits, decoding to validate, hashing, the blocklist, duplicates.
 4. Transcoding (WebP and AVIF at 1x-4x, static first frames), after benchmarking the encoders as the plan asks.
+
+### PR 2: job queue, storage and the worker (branch `phase-3/queue`)
+- [x] Migration `20261118000002_jobs.sql` (additive): `jobs` with state, attempts, `run_after` and a lease (`locked_until`); inserting one sends `NOTIFY cyex_tv_jobs`.
+- [x] `crates/db/src/jobs.rs`: enqueue, claim (`FOR UPDATE SKIP LOCKED`, leased; an expired lease can be claimed again), complete, fail (retry with backoff, or for good), cleanup.
+- [x] `apps/worker`: a library with the loop (drain due jobs, then wait for `NOTIFY`, a poll, or shutdown), a time limit per attempt, backoff 10 s doubling to an hour, and an hourly clean-up of expired sessions, unfinished sign-ins, outbox events older than 48 h (ADR 0005) and finished jobs after 7 days. Job kinds come with the pipeline (PR 3 and 4).
+- [x] `crates/storage`: an S3 client with Signature V4 for R2 and MinIO (put, get, head, delete, bucket setup), and an in-memory store for tests. `object_store` would have pulled in aws-lc (OpenSSL licence, ADR 0007), so the client is small and written here. Keys per ADR 0003; `Cache-Control: public, max-age=31536000, immutable` for emote files.
+- [x] `cyex_tv_db::testing::TestDb` (feature `testing`) for other crates' integration tests.
+- [x] CI starts an S3 server (Versity Gateway, the dev compose tag) next to Postgres for the S3 tests. MinIO no longer publishes images, so the dev compose uses Versity Gateway too.
+
+#### Tests
+- Unit: SigV4 against AWS's published GET Object example signature, path encoding, secrets out of `Debug`, the memory store, S3 config, backoff, handler kinds.
+- `apps/worker/tests/jobs.rs` against Postgres: run, retry with backoff, permanent failure, time limit, unhandled kinds left alone, an expired lease claimed again, 6 workers on 40 jobs with none run twice, `NOTIFY` on insert and the full loop until shutdown, the clean-up.
+- `crates/storage/tests/s3.rs` against the S3 server: bucket setup (twice), put with content type and cache control, get, head, delete (twice), a wrong secret refused.
 
 ### PR 1: emotes and the review gate (branch `phase-3/review`)
 - [x] Migration `20261118000001_emote_review.sql` (additive): `reviewed_by`, `reviewed_at`, `review_reason` on `emotes`.
@@ -153,7 +166,7 @@ Four PRs, in this order. The owner merges each before the next one starts:
 - Rust (rustup; `rust-toolchain.toml` picks stable), Docker, `git`, and `gh` logged in as the owner.
 - `gh repo clone cyex-tv/platform` (and `extension` and `infra` when their phases start).
 - `docker compose -f dev/docker-compose.yaml up -d`, `cp .env.example .env`, then `cargo test --workspace`.
-- Check the MinIO image tag in `dev/docker-compose.yaml` on first `up` (an open item from Phase 1).
+- The MinIO image is gone from Docker Hub (found 2026/11/16); dev and CI use Versity Gateway `v1.10.0` instead. Check it on first `up`.
 
 ## Phase 1: Monorepo scaffold, CI, API contract (done, merged 2026/11/16 as PR 2)
 

@@ -19,20 +19,20 @@ services:
       timeout: 5s
       retries: 10
 
-  # S3-compatible stand-in for Cloudflare R2 (ADR 0003). Used from Phase 3 on.
-  # Pinned to a release that still ships an image; check the tag on first use.
-  minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-    command: server /data --console-address ":9001"
+  # S3-compatible stand-in for Cloudflare R2 (ADR 0003). MinIO stopped publishing images in
+  # 2026, so this is Versity Gateway on a plain directory. S3 API on 127.0.0.1:9000.
+  s3:
+    image: versity/versitygw:v1.10.0
     environment:
-      MINIO_ROOT_USER: cyextv
-      MINIO_ROOT_PASSWORD: cyextv-dev-only
+      ROOT_ACCESS_KEY: cyextv
+      ROOT_SECRET_KEY: cyextv-dev-only
+      VGW_BACKEND: posix
+      VGW_BACKEND_ARG: /data
     ports:
-      - "127.0.0.1:9000:9000"
-      - "127.0.0.1:9001:9001"
+      - "127.0.0.1:9000:7070"
     volumes:
-      - minio-data:/data
+      - s3-data:/data
 
 volumes:
   pg-data:
-  minio-data:
+  s3-data:

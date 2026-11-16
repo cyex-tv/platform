@@ -14,7 +14,7 @@ Emote files are small, immutable once processed, and read far more often than wr
   - `cosmetics/` reserved for the later cosmetics phase.
 - Content-addressed by the hash of the original, so a duplicate upload reuses the files and URLs never change.
 - `Cache-Control: public, max-age=31536000, immutable` on derivatives. A takedown deletes the objects and purges the URLs.
-- Local dev uses MinIO with the same S3 API.
+- Local dev uses an S3-compatible server with the same API (MinIO first; Versity Gateway since MinIO stopped publishing images, 2026/11/16).
 - The worker holds the only write credential. The API gets pre-signed reads only where needed (originals for moderators).
 
 ## Consequences

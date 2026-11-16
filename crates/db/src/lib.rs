@@ -11,12 +11,15 @@ pub mod emotes;
 mod error;
 pub mod files;
 pub mod ids;
+pub mod jobs;
 pub mod oauth_states;
 pub mod outbox;
 pub mod reads;
 pub mod roles;
 pub mod sessions;
 pub mod sets;
+#[cfg(feature = "testing")]
+pub mod testing;
 
 pub use error::{DbError, DbResult};
 

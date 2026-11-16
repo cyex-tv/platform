@@ -526,10 +526,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "cyex-tv-storage"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+ "chrono",
+ "cyex-tv-shared",
+ "hmac",
+ "reqwest",
+ "rustls",
+ "sha2",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "cyex-tv-worker"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "cyex-tv-db",
  "cyex-tv-shared",
+ "cyex-tv-storage",
+ "serde_json",
+ "sqlx",
+ "thiserror",
  "tokio",
  "tracing",
 ]
