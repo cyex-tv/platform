@@ -21,6 +21,8 @@ use cyex_tv_storage::Store;
 use sqlx::PgPool;
 use sqlx::postgres::PgListener;
 
+pub mod transcode;
+
 /// How a job failed.
 #[derive(Debug, thiserror::Error)]
 pub enum JobError {

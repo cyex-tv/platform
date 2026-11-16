@@ -1,5 +1,5 @@
-//! The image worker. Job kinds arrive with the Phase 3 pipeline; until then it runs the hourly
-//! clean-up and waits for jobs.
+//! The image worker: turns uploads into emote files (`emote.transcode`) and runs the hourly
+//! clean-up.
 
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -23,7 +23,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             None
         }
     };
-    let handlers = Handlers::default();
+    let handlers = Handlers::default().on(
+        cyex_tv_worker::transcode::KIND,
+        cyex_tv_worker::transcode::run,
+    );
     tracing::info!(kinds = ?handlers.kinds(), "worker started");
     cyex_tv_worker::run(
         Ctx { db, store },
