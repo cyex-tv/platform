@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["apps/api", "apps/events", "apps/worker", "crates/auth", "crates/db", "crates/shared", "crates/storage"]
+members = ["apps/api", "apps/events", "apps/worker", "crates/auth", "crates/db", "crates/media", "crates/shared", "crates/storage"]
 
 [workspace.package]
 version = "0.1.0"
@@ -13,6 +13,7 @@ publish = false
 [workspace.dependencies]
 cyex-tv-auth = { path = "crates/auth" }
 cyex-tv-db = { path = "crates/db" }
+cyex-tv-media = { path = "crates/media" }
 cyex-tv-shared = { path = "crates/shared" }
 cyex-tv-storage = { path = "crates/storage" }
 
@@ -20,7 +21,7 @@ cyex-tv-storage = { path = "crates/storage" }
 # can pair an old async-graphql with a new derive crate.
 async-graphql = "7.2"
 async-graphql-axum = "7.2"
-axum = "0.8"
+axum = { version = "0.8", features = ["multipart"] }
 base64 = "0.22"
 bytes = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
@@ -29,6 +30,8 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 getrandom = "0.3"
 hmac = "0.12"
 http-body-util = "0.1"
+# Decoding only here; encoders come with the transcoder.
+image = { version = "0.25", default-features = false, features = ["gif", "png", "webp"] }
 reqwest = { version = "0.13", default-features = false, features = ["form", "http2", "json", "query", "rustls-no-provider"] }
 # The ring provider, not aws-lc: aws-lc-sys carries the OpenSSL licence, which ADR 0007 doesn't allow.
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }

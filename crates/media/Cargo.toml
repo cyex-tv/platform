@@ -1,0 +1,19 @@
+[package]
+name = "cyex-tv-media"
+description = "Image checks for cyex.tv uploads: format, decoding under limits, dHash"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+image.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+png = "0.18"
+
+[lints]
+workspace = true
