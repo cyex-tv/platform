@@ -7,3 +7,5 @@ pub mod logging;
 pub mod model;
 pub mod permissions;
 pub mod shutdown;
+#[cfg(feature = "sqlx")]
+mod sql;

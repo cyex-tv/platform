@@ -11,6 +11,8 @@ publish.workspace = true
 [features]
 # GraphQL derives on the API types. The api service turns it on; plain clients can leave it off.
 graphql = ["dep:async-graphql"]
+# Postgres mappings for the text-valued enums. The db crate turns it on.
+sqlx = ["dep:sqlx"]
 
 [dependencies]
 async-graphql = { workspace = true, optional = true }
@@ -18,6 +20,7 @@ axum.workspace = true
 dotenvy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sqlx = { workspace = true, optional = true }
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
