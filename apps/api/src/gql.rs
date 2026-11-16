@@ -1,6 +1,6 @@
 //! The GraphQL API at `/v1/gql` (ADR 0008). Resolvers answer `not_implemented` until their phase
 //! builds them:
-//! - Phase 2: accounts (`me`, `unlinkIdentity`: built), channels, sets, roles
+//! - Phase 2: accounts, channels, sets and editors (built), roles
 //! - Phase 3: emotes and moderation
 //! - Phase 5: the `events` subscription
 //! - Phase 6: search
@@ -16,7 +16,8 @@ use async_graphql::{Context, ErrorExtensions, Object, Result, Schema, SchemaBuil
 use axum::response::Html;
 use chrono::SecondsFormat;
 use cyex_tv_auth::{AuthError, Caller};
-use cyex_tv_db::{DbError, accounts, ids, roles};
+use cyex_tv_db::{DbError, accounts, channels, ids};
+use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::model::{
     AddSetEmote, Channel, CreateRole, CreateSet, Emote, EmoteSet, Event, Identity, Me,
     PersonalSetEntry, Platform, ReviewQueue, Role, SearchResults, SetEmote, UpdateChannelSettings,
@@ -24,7 +25,9 @@ use cyex_tv_shared::model::{
 };
 use cyex_tv_shared::permissions;
 use futures_util::stream::Empty;
+use sqlx::Connection;
 
+use crate::catalog;
 use crate::state::AppState;
 
 pub type ApiSchema = Schema<Query, Mutation, Subscription>;
@@ -67,6 +70,15 @@ fn internal(err: impl std::fmt::Display) -> async_graphql::Error {
     coded("internal", "Something went wrong on our side.")
 }
 
+/// An API error as a GraphQL error, keeping its code.
+fn api_error(err: ApiError) -> async_graphql::Error {
+    async_graphql::Error::new(err.message).extend_with(move |_, e| e.set("code", err.code))
+}
+
+fn caller_opt<'a>(ctx: &Context<'a>) -> Option<&'a Caller> {
+    ctx.data_opt::<Option<Caller>>().and_then(Option::as_ref)
+}
+
 fn auth_error(err: AuthError) -> async_graphql::Error {
     if let AuthError::Db(inner) = &err {
         return internal(inner);
@@ -91,9 +103,9 @@ fn caller<'a>(ctx: &Context<'a>) -> Result<&'a Caller> {
 async fn require<'a>(ctx: &Context<'a>, permission: &'static str) -> Result<&'a Caller> {
     let caller = caller(ctx)?;
     let mut conn = state(ctx).db.acquire().await.map_err(internal)?;
-    let held = roles::permissions_of(&mut conn, caller.account_id)
+    let held = catalog::permissions_of(&mut conn, caller.account_id)
         .await
-        .map_err(internal)?;
+        .map_err(api_error)?;
     if held.iter().any(|p| p == permission) {
         Ok(caller)
     } else {
@@ -120,9 +132,9 @@ async fn me_of(ctx: &Context<'_>, caller: &Caller) -> Result<Me> {
             avatar: i.avatar,
         })
         .collect();
-    let permissions = roles::permissions_of(&mut conn, account.id)
+    let permissions = catalog::permissions_of(&mut conn, account.id)
         .await
-        .map_err(internal)?;
+        .map_err(api_error)?;
     Ok(Me {
         id: ids::to_text(account.id),
         identities,
@@ -144,23 +156,41 @@ impl Query {
     }
 
     /// A channel by its platform ID.
-    async fn channel(&self, platform: Platform, id: String) -> Result<Option<Channel>> {
-        Err(not_implemented())
+    async fn channel(
+        &self,
+        ctx: &Context<'_>,
+        platform: Platform,
+        id: String,
+    ) -> Result<Option<Channel>> {
+        catalog::channel(state(ctx), platform, &id)
+            .await
+            .map_err(api_error)
     }
 
     /// A channel by its login or slug. Logins change; store the ID, not the login.
-    async fn channel_by_login(&self, platform: Platform, login: String) -> Result<Option<Channel>> {
-        Err(not_implemented())
+    async fn channel_by_login(
+        &self,
+        ctx: &Context<'_>,
+        platform: Platform,
+        login: String,
+    ) -> Result<Option<Channel>> {
+        catalog::channel_by_login(state(ctx), platform, &login)
+            .await
+            .map_err(api_error)
     }
 
     /// A set with its emotes.
-    async fn set(&self, id: String) -> Result<Option<EmoteSet>> {
-        Err(not_implemented())
+    async fn set(&self, ctx: &Context<'_>, id: String) -> Result<Option<EmoteSet>> {
+        catalog::set(state(ctx), caller_opt(ctx), &id)
+            .await
+            .map_err(api_error)
     }
 
     /// The cyex.tv global set, shown in every channel.
-    async fn global_set(&self) -> Result<EmoteSet> {
-        Err(not_implemented())
+    async fn global_set(&self, ctx: &Context<'_>) -> Result<EmoteSet> {
+        catalog::global_set(state(ctx), caller_opt(ctx))
+            .await
+            .map_err(api_error)
     }
 
     /// An emote. Pending ones are visible to their owner and to moderators only.
@@ -181,17 +211,43 @@ impl Query {
     }
 
     /// One user's personal set.
-    async fn personal_set(&self, platform: Platform, id: String) -> Result<Option<EmoteSet>> {
-        Err(not_implemented())
+    async fn personal_set(
+        &self,
+        ctx: &Context<'_>,
+        platform: Platform,
+        id: String,
+    ) -> Result<Option<EmoteSet>> {
+        catalog::personal_set(state(ctx), platform, &id)
+            .await
+            .map_err(api_error)
     }
 
     /// Personal sets for up to 100 chatters at once.
     async fn personal_sets(
         &self,
+        ctx: &Context<'_>,
         platform: Platform,
         user_ids: Vec<String>,
     ) -> Result<Vec<PersonalSetEntry>> {
-        Err(not_implemented())
+        catalog::personal_sets(state(ctx), platform, &user_ids)
+            .await
+            .map_err(api_error)
+    }
+
+    /// The sets you own, then the ones you edit. Pending emotes included.
+    async fn my_sets(&self, ctx: &Context<'_>) -> Result<Vec<EmoteSet>> {
+        let caller = caller(ctx)?;
+        catalog::my_sets(state(ctx), caller)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Your channels: one per linked platform you have signed in with.
+    async fn my_channels(&self, ctx: &Context<'_>) -> Result<Vec<Channel>> {
+        let caller = caller(ctx)?;
+        catalog::my_channels(state(ctx), caller)
+            .await
+            .map_err(api_error)
     }
 
     /// Every permission name a role can hold.
@@ -220,7 +276,8 @@ impl Mutation {
     async fn unlink_identity(&self, ctx: &Context<'_>, platform: Platform) -> Result<Me> {
         let caller = caller(ctx)?;
         let mut conn = state(ctx).db.acquire().await.map_err(internal)?;
-        match accounts::unlink(&mut conn, caller.account_id, platform).await {
+        let mut tx = conn.begin().await.map_err(internal)?;
+        match accounts::unlink(&mut tx, caller.account_id, platform).await {
             Ok(_) => {}
             Err(DbError::NotFound) => {
                 return Err(coded(
@@ -230,6 +287,11 @@ impl Mutation {
             }
             Err(err) => return Err(auth_error(err.into())),
         }
+        // The account no longer proves it owns that platform's channel.
+        channels::delete_for(&mut tx, caller.account_id, platform)
+            .await
+            .map_err(internal)?;
+        tx.commit().await.map_err(internal)?;
         drop(conn);
         me_of(ctx, caller).await
     }
@@ -242,12 +304,18 @@ impl Mutation {
         id: String,
         input: UpdateChannelSettings,
     ) -> Result<Channel> {
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        catalog::update_channel_settings(state(ctx), caller, platform, &id, &input)
+            .await
+            .map_err(api_error)
     }
 
     /// Create a channel set, or your personal set (one per account).
     async fn create_set(&self, ctx: &Context<'_>, input: CreateSet) -> Result<EmoteSet> {
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        catalog::create_set(state(ctx), caller, &input)
+            .await
+            .map_err(api_error)
     }
 
     /// Rename a set or change its capacity. Owner or editor; capacity needs `sets.edit_any`.
@@ -257,12 +325,18 @@ impl Mutation {
         id: String,
         input: UpdateSet,
     ) -> Result<EmoteSet> {
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        catalog::update_set(state(ctx), caller, &id, &input)
+            .await
+            .map_err(api_error)
     }
 
     /// Delete a set. Owner only. A channel's active set can't be deleted.
     async fn delete_set(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        catalog::delete_set(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
     }
 
     /// Add an emote to a set. Personal sets take approved emotes only.
@@ -273,7 +347,16 @@ impl Mutation {
         emote_id: String,
         input: Option<AddSetEmote>,
     ) -> Result<SetEmote> {
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        catalog::add_set_emote(
+            state(ctx),
+            caller,
+            &set_id,
+            &emote_id,
+            &input.unwrap_or_default(),
+        )
+        .await
+        .map_err(api_error)
     }
 
     /// Rename an emote in a set, or change its zero-width flag there.
@@ -284,7 +367,10 @@ impl Mutation {
         emote_id: String,
         input: UpdateSetEmote,
     ) -> Result<SetEmote> {
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        catalog::update_set_emote(state(ctx), caller, &set_id, &emote_id, &input)
+            .await
+            .map_err(api_error)
     }
 
     /// Remove an emote from a set.
@@ -294,7 +380,10 @@ impl Mutation {
         set_id: String,
         emote_id: String,
     ) -> Result<bool> {
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        catalog::remove_set_emote(state(ctx), caller, &set_id, &emote_id)
+            .await
+            .map_err(api_error)
     }
 
     /// Make someone an editor of a set. Owner only.
@@ -304,7 +393,10 @@ impl Mutation {
         set_id: String,
         account_id: String,
     ) -> Result<bool> {
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        catalog::add_set_editor(state(ctx), caller, &set_id, &account_id)
+            .await
+            .map_err(api_error)
     }
 
     /// Remove an editor. Owner, or the editor themselves.
@@ -314,7 +406,10 @@ impl Mutation {
         set_id: String,
         account_id: String,
     ) -> Result<bool> {
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        catalog::remove_set_editor(state(ctx), caller, &set_id, &account_id)
+            .await
+            .map_err(api_error)
     }
 
     /// Change an emote's name, tags or flags. Owner, or `emotes.edit_any`.

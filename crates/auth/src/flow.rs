@@ -11,6 +11,7 @@ use std::sync::Arc;
 
 use chrono::Duration;
 use cyex_tv_db::accounts::{self, Profile};
+use cyex_tv_db::channels;
 use cyex_tv_db::oauth_states::{self, NewOAuthState};
 use cyex_tv_db::sessions::{self, SessionKind};
 use cyex_tv_shared::model::Platform;
@@ -226,6 +227,10 @@ impl Auth {
                 (signed_in.account.id, signed_in.created, false)
             }
         };
+
+        // Every identity is a channel on its platform (a Twitch broadcaster's channel ID is
+        // their user ID; Kick's `broadcaster_user_id` equals `user_id`).
+        channels::upsert(&mut conn, account_id, platform, &user.id, &user.login).await?;
 
         // A fresh session on every sign-in and link, so a token planted before sign-in is
         // worth nothing after it.

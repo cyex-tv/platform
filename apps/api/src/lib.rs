@@ -2,9 +2,11 @@
 //! The REST router and its OpenAPI document come from the same handlers, and the GraphQL SDL from
 //! the schema itself, so neither committed description can drift from the code.
 
+pub mod catalog;
 pub mod gql;
 pub mod routes;
 pub mod state;
+pub mod views;
 
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
 use axum::Router;

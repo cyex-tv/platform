@@ -38,10 +38,7 @@ fn auth() -> Arc<Auth> {
 /// A pool pointing at a port nothing listens on.
 fn offline_state() -> AppState {
     let cfg = config("postgres://nobody:nothing@127.0.0.1:1/none");
-    AppState {
-        db: cyex_tv_db::connect_lazy(&cfg).unwrap(),
-        auth: auth(),
-    }
+    AppState::new(cyex_tv_db::connect_lazy(&cfg).unwrap(), auth())
 }
 
 async fn send(state: AppState, request: Request<Body>) -> (StatusCode, Vec<u8>) {
@@ -95,13 +92,8 @@ async fn ready_is_503_without_a_database() {
 
 #[tokio::test]
 async fn rest_stubs_answer_not_implemented() {
-    // The sign-in routes are built (see `sign_in_checks_come_before_the_database`).
-    for uri in [
-        "/v1/sets/global",
-        "/v1/sets/abc",
-        "/v1/channels/twitch/123",
-        "/v1/emotes/abc",
-    ] {
+    // Sign-in, channels and sets are built; emotes are Phase 3.
+    for uri in ["/v1/emotes/abc"] {
         let (status, body) = get(offline_state(), uri).await;
         assert_eq!(status, StatusCode::NOT_IMPLEMENTED, "{uri}");
         let error: ErrorBody = serde_json::from_slice(&body).unwrap();
@@ -191,7 +183,7 @@ async fn unknown_paths_are_404() {
 
 #[tokio::test]
 async fn graphql_stubs_answer_not_implemented() {
-    let response = gql("{ globalSet { id name } }").await;
+    let response = gql(r#"{ emote(id: "e1") { id } }"#).await;
     assert_eq!(error_code(&response), "not_implemented");
 }
 
@@ -278,6 +270,6 @@ async fn ready_with_database() {
     let cfg = config(&url);
     let db = cyex_tv_db::connect(&cfg).await.unwrap();
     cyex_tv_db::MIGRATOR.run(&db).await.unwrap();
-    let (status, _) = get(AppState { db, auth: auth() }, "/health/ready").await;
+    let (status, _) = get(AppState::new(db, auth()), "/health/ready").await;
     assert_eq!(status, StatusCode::OK);
 }

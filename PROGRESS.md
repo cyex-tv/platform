@@ -6,7 +6,23 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 
 Paused on 2026/11/16 until work moves to a machine where commands can run (owner's call). Resumed on the new machine on 2026/11/16. Rust, `git` and `gh` are set up there; Docker isn't installed yet (the owner installs it), so the database tests ran in CI first.
 
-### PR 2: sign-in and sessions (branch `phase-2/auth`)
+### PR 3: channels, sets, editors and the chat-client reads (branch `phase-2/sets`)
+- [x] `apps/api/src/catalog.rs`: the rules, shared by GraphQL and REST. The global set needs `global_set.edit`; other sets take their owner and editors, and anyone else needs `sets.edit_any`. Deleting a set and managing editors is owner-only (or `sets.edit_any`). A channel's active set can't be deleted (`set_in_use`).
+- [x] Pending emotes are shown to their owner, the set's owner and editors, and `emotes.review` holders; everyone else, chat clients included, sees approved emotes only (`apps/api/src/views.rs`).
+- [x] Batch reads (`crates/db/src/reads.rs`): a set's members with emotes and files, tags, and account summaries in a few queries, however big the set is.
+- [x] Every set change publishes its outbox event in the same transaction (`set.emote_added`, `set.emote_renamed`, `set.emote_removed`, `channel.active_set_changed`), on the set's topic, the topics of channels showing it, and for personal sets the owner's user topics.
+- [x] Audit rows: editor grants and removals always; set changes when they rely on a permission rather than ownership.
+- [x] Channels are made at sign-in for every identity and removed when it is unlinked. The active set must be one of the channel owner's channel sets; an empty `activeSetId` clears it.
+- [x] GraphQL: `channel`, `channelByLogin`, `set`, `globalSet`, `personalSet`, `personalSets`, and the new `mySets` and `myChannels`; mutations `updateChannelSettings`, `createSet`, `updateSet`, `deleteSet`, `addSetEmote`, `updateSetEmote`, `removeSetEmote`, `addSetEditor`, `removeSetEditor`.
+- [x] REST: `GET /v1/channels/{platform}/{id}`, `GET /v1/sets/{id}`, `GET /v1/sets/global` with a strong `ETag`, `304` on `If-None-Match`, and `Cache-Control: public, max-age=30, stale-while-revalidate=60`; `POST /v1/personal-sets/lookup` (up to 100 chatters; empty and missing sets left out).
+- [x] `CYEX_TV_CDN_URL` (default `https://cdn.cyex.tv`) is where emote `host`s point.
+
+#### Tests
+- Unit: name and capacity rules, error codes, time format, file variants, hex.
+- `apps/api/tests/catalog_flow.rs` against Postgres: pending emotes in sets and the public read hiding them, ETag round trip and change, active set rules and channel reads, `set_in_use`, member rules (`not_approved`, `emote_private`, `emote_unavailable`, `already_in_set`, `bad_name`), events and their topics, editors (grant, limits, leaving, audit), personal sets (one per account, approved only, capacity 5, the lookup and its limit), the global set with `global_set.edit`, capacity with `sets.edit_any` and its audit, who sees pending emotes.
+- `auth_flow.rs`: sign-in makes the channel; unlinking removes it.
+
+### PR 2: sign-in and sessions (branch `phase-2/auth`, merged 2026/11/16 as PR 5)
 - [x] `crates/auth`: Twitch and Kick OAuth (authorization code flow). `state` is bound to a short-lived host-only pre-login cookie (`cyex_tv_oauth`, `Path=/v1/auth`, 10 minutes) and to a stored row that is taken on first use. PKCE S256 for Kick (required there); Twitch gets `state` only, since it doesn't document PKCE.
 - [x] Migration `20261117000002_oauth_states.sql` (additive): the sign-in in progress, holding the `state` hash, the PKCE verifier (it never reaches the browser), `return_to` and the account being linked.
 - [x] Platform access tokens are used once to read the user, then revoked (best effort) and dropped. Kick's `email` is never read into the model.
@@ -18,6 +34,17 @@ Paused on 2026/11/16 until work moves to a machine where commands can run (owner
 - [x] GraphQL: `me` and `unlinkIdentity` (never the last identity) are built; `require` checks the caller's role permissions (`forbidden` without one). The owner rule comes with PR 4.
 - [x] Config: `CYEX_TV_PUBLIC_URL`, `CYEX_TV_SITE_URL`, `CYEX_TV_COOKIE_DOMAIN`, `CYEX_TV_COOKIE_SECURE`, `CYEX_TV_TWITCH_CLIENT_ID`/`_SECRET`, `CYEX_TV_KICK_CLIENT_ID`/`_SECRET` (see `.env.example`). Without a client, that platform answers 503.
 - [ ] End to end with real test accounts (needs the owner's OAuth apps).
+- Fixes found by CI: same-millisecond IDs now strictly increase (a PR 1 audit test was flaky); `cargo deny` allows `CDLA-Permissive-2.0` for CA certificate data (ADR 0007); TLS uses ring instead of aws-lc.
+
+#### GitHub write log
+2026/11/16, account `sery-yx`, under the owner's OK to merge green PRs:
+```
+git push -u origin phase-2/auth
+gh pr create -R cyex-tv/platform --base main --head phase-2/auth --title "Phase 2 PR 2: sign-in and sessions" --body-file <file>
+git push   (three fix commits after CI)
+gh pr merge 5 -R cyex-tv/platform --merge --subject "Merge pull request #5 from cyex-tv/phase-2/auth"
+```
+Merged after all 6 checks passed, with `auth_flow` (13) and `queries` (20) seen running against Postgres in the CI log.
 
 #### Tests
 - Unit (`crates/auth`): config defaults and validation, cookie strings against ADR 0009, cookie parsing, `return_to` (open-redirect cases), Origin check, PKCE and hashing, authorize URLs per platform, user checks.

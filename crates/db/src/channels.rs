@@ -133,3 +133,28 @@ pub async fn set_allow_personal_emotes(
     .await?
     .ok_or(DbError::NotFound)
 }
+
+/// The channels showing a set as their active one.
+pub async fn using_set(conn: &mut PgConnection, set_id: Uuid) -> DbResult<Vec<Channel>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {CHANNEL} FROM channels WHERE active_set_id = $1 ORDER BY id"
+    ))
+    .bind(set_id)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// Removes the account's channel on `platform`, when that identity is unlinked. True if there
+/// was one.
+pub async fn delete_for(
+    conn: &mut PgConnection,
+    account_id: Uuid,
+    platform: Platform,
+) -> DbResult<bool> {
+    let done = sqlx::query("DELETE FROM channels WHERE account_id = $1 AND platform = $2")
+        .bind(account_id)
+        .bind(platform)
+        .execute(conn)
+        .await?;
+    Ok(done.rows_affected() > 0)
+}
