@@ -240,3 +240,24 @@ pub async fn set_restricted(
     .await?
     .ok_or(DbError::NotFound)
 }
+
+/// Whether the account is one of `account_ids`, or has one of `identity_keys`
+/// (`platform:platform_user_id`). Used for the owner list.
+pub async fn is_any_of(
+    conn: &mut PgConnection,
+    account_id: Uuid,
+    identity_keys: &[String],
+    account_ids: &[Uuid],
+) -> DbResult<bool> {
+    Ok(sqlx::query_scalar(
+        "SELECT $1 = ANY($3) OR EXISTS (
+             SELECT 1 FROM identities
+             WHERE account_id = $1 AND (platform || ':' || platform_user_id) = ANY($2)
+         )",
+    )
+    .bind(account_id)
+    .bind(identity_keys)
+    .bind(account_ids)
+    .fetch_one(conn)
+    .await?)
+}
