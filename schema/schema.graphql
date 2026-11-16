@@ -312,6 +312,14 @@ type Query {
 	"""
 	personalSets(platform: Platform!, userIds: [String!]!): [PersonalSetEntry!]!
 	"""
+	The sets you own, then the ones you edit. Pending emotes included.
+	"""
+	mySets: [EmoteSet!]!
+	"""
+	Your channels: one per linked platform you have signed in with.
+	"""
+	myChannels: [Channel!]!
+	"""
 	Every permission name a role can hold.
 	"""
 	permissions: [String!]!
@@ -377,6 +385,9 @@ type Subscription {
 }
 
 input UpdateChannelSettingsInput {
+	"""
+	One of the owner's channel sets. An empty string clears it.
+	"""
 	activeSetId: String
 	allowPersonalEmotes: Boolean
 }

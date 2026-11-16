@@ -441,6 +441,16 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "`too_many`: more than 100 user IDs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }

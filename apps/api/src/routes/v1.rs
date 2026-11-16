@@ -1,13 +1,14 @@
 //! The REST part of v1 (ADR 0008). Everything else is GraphQL at `/v1/gql`. REST covers only:
 //! - sign-in redirects (Phase 2, built);
 //! - the streamed upload (Phase 3);
-//! - the small, cacheable reads chat clients poll (Phase 2).
+//! - the small, cacheable reads chat clients poll (Phase 2, built; `GET /v1/emotes/{id}` is
+//!   Phase 3).
 //!
 //! The others answer `501 not_implemented` until their phase builds them.
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use axum::http::header::{CACHE_CONTROL, LOCATION, SET_COOKIE};
+use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, ETAG, IF_NONE_MATCH, LOCATION, SET_COOKIE};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use cyex_tv_auth::AuthError;
@@ -18,9 +19,12 @@ use cyex_tv_shared::model::{
     CallbackQuery, Channel, Emote, EmoteSet, LoginQuery, PersonalLookup, PersonalLookupResult,
     Platform, UploadEmote,
 };
+use serde::Serialize;
+use sha2::{Digest, Sha256};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
+use crate::catalog;
 use crate::state::{AppState, MaybeCaller};
 
 pub fn router() -> OpenApiRouter<AppState> {
@@ -196,6 +200,44 @@ async fn upload_emote() -> ApiResult<Json<Emote>> {
 
 // Chat-client reads: public, no auth, `ETag` and `Cache-Control`.
 
+/// How long clients and the CDN may keep a read before asking again (`If-None-Match` then gets a
+/// cheap 304). Live updates (Phase 5) push changes sooner.
+const READ_MAX_AGE: u32 = 30;
+
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// Answers JSON with a strong `ETag` (a hash of the body), or `304` when `If-None-Match` has it.
+fn cached<T: Serialize>(headers: &HeaderMap, value: &T, max_age: u32) -> ApiResult<Response> {
+    let body = serde_json::to_vec(value).map_err(|_| ApiError::internal())?;
+    let etag = format!("\"{}\"", hex(&Sha256::digest(&body)[..16]));
+    let cache = format!("public, max-age={max_age}, stale-while-revalidate=60");
+    let fresh = headers
+        .get(IF_NONE_MATCH)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| {
+            v.split(',')
+                .map(str::trim)
+                .any(|t| t == "*" || t == etag || t.strip_prefix("W/") == Some(etag.as_str()))
+        });
+    let mut response = if fresh {
+        StatusCode::NOT_MODIFIED.into_response()
+    } else {
+        ([(CONTENT_TYPE, "application/json")], body).into_response()
+    };
+    let out = response.headers_mut();
+    out.insert(
+        ETAG,
+        HeaderValue::from_str(&etag).map_err(|_| ApiError::internal())?,
+    );
+    out.insert(
+        CACHE_CONTROL,
+        HeaderValue::from_str(&cache).map_err(|_| ApiError::internal())?,
+    );
+    Ok(response)
+}
+
 /// A channel and its active set ID. Poll this, then fetch the set.
 #[utoipa::path(
     get,
@@ -211,8 +253,16 @@ async fn upload_emote() -> ApiResult<Json<Emote>> {
         (status = 404, description = "`not_found`: no cyex.tv account has this channel.", body = ErrorBody)
     )
 )]
-async fn get_channel() -> ApiResult<Json<Channel>> {
-    Err(ApiError::not_implemented())
+async fn get_channel(
+    State(state): State<AppState>,
+    Path((raw, id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> ApiResult<Response> {
+    let platform = platform(&raw)?;
+    let channel = catalog::channel(&state, platform, &id)
+        .await?
+        .ok_or_else(catalog::not_found)?;
+    cached(&headers, &channel, READ_MAX_AGE)
 }
 
 /// A set with its emotes.
@@ -227,8 +277,15 @@ async fn get_channel() -> ApiResult<Json<Channel>> {
         (status = 404, body = ErrorBody)
     )
 )]
-async fn get_set() -> ApiResult<Json<EmoteSet>> {
-    Err(ApiError::not_implemented())
+async fn get_set(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> ApiResult<Response> {
+    let set = catalog::set(&state, None, &id)
+        .await?
+        .ok_or_else(catalog::not_found)?;
+    cached(&headers, &set, READ_MAX_AGE)
 }
 
 /// The cyex.tv global set, shown in every channel.
@@ -238,8 +295,9 @@ async fn get_set() -> ApiResult<Json<EmoteSet>> {
     tag = "reads",
     responses((status = 200, body = EmoteSet), (status = 304, description = "Not modified."))
 )]
-async fn get_global_set() -> ApiResult<Json<EmoteSet>> {
-    Err(ApiError::not_implemented())
+async fn get_global_set(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Response> {
+    let set = catalog::global_set(&state, None).await?;
+    cached(&headers, &set, READ_MAX_AGE)
 }
 
 /// An approved emote.
@@ -260,8 +318,15 @@ async fn get_emote() -> ApiResult<Json<Emote>> {
     path = "/v1/personal-sets/lookup",
     tag = "reads",
     request_body = PersonalLookup,
-    responses((status = 200, body = PersonalLookupResult))
+    responses(
+        (status = 200, body = PersonalLookupResult),
+        (status = 400, description = "`too_many`: more than 100 user IDs.", body = ErrorBody)
+    )
 )]
-async fn lookup_personal_sets() -> ApiResult<Json<PersonalLookupResult>> {
-    Err(ApiError::not_implemented())
+async fn lookup_personal_sets(
+    State(state): State<AppState>,
+    Json(lookup): Json<PersonalLookup>,
+) -> ApiResult<Json<PersonalLookupResult>> {
+    let sets = catalog::personal_sets(&state, lookup.platform, &lookup.user_ids).await?;
+    Ok(Json(PersonalLookupResult { sets }))
 }

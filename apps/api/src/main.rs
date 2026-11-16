@@ -27,7 +27,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = cyex_tv_db::connect(&cfg).await?;
     cyex_tv_db::MIGRATOR.run(&db).await?;
 
-    let app = cyex_tv_api::app(AppState { db, auth });
+    let mut state = AppState::new(db, auth);
+    if let Ok(cdn) = std::env::var("CYEX_TV_CDN_URL") {
+        state = state.with_cdn_url(&cdn);
+    }
+    let app = cyex_tv_api::app(state);
     let listener = tokio::net::TcpListener::bind(cfg.bind).await?;
     tracing::info!(addr = %cfg.bind, "api listening");
     axum::serve(listener, app)

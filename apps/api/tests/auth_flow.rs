@@ -231,10 +231,7 @@ impl Harness {
         };
         cfg.twitch = Some(client("twitch-id", "twitch-secret", Platform::Twitch));
         cfg.kick = Some(client("kick-id", "kick-secret", Platform::Kick));
-        let state = AppState {
-            db: db.pool.clone(),
-            auth: Arc::new(Auth::new(cfg).unwrap()),
-        };
+        let state = AppState::new(db.pool.clone(), Arc::new(Auth::new(cfg).unwrap()));
         Some(Self {
             app: cyex_tv_api::app(state),
             db,
@@ -476,6 +473,18 @@ async fn twitch_sign_in_end_to_end() {
             .unwrap();
     assert_eq!(raw, None);
     drop(conn);
+
+    // Signing in made the user's channel.
+    let channels = h
+        .gql(
+            "{ myChannels { platform platformChannelId login } }",
+            Some(&session),
+        )
+        .await;
+    assert_eq!(
+        channels["data"]["myChannels"],
+        json!([{ "platform": "TWITCH", "platformChannelId": "141981764", "login": "twitch141981764" }])
+    );
 
     // Signing in again reuses the account.
     let again = h.sign_in(Platform::Twitch, "141981764", None, false).await;
@@ -872,6 +881,12 @@ async fn unlinking_keeps_the_last_identity() {
         )
         .await;
     assert_eq!(gql_code(&reply), "not_found");
+    // The Kick channel went with the Kick identity.
+    let channels = h.gql("{ myChannels { platform } }", Some(&s)).await;
+    assert_eq!(
+        channels["data"]["myChannels"],
+        json!([{ "platform": "TWITCH" }])
+    );
     let reply = h
         .gql(
             "mutation { unlinkIdentity(platform: TWITCH) { id } }",
