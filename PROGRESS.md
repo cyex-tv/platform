@@ -2,7 +2,30 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
-## Phase 1: Monorepo scaffold, CI, API contract (in progress)
+## Phase 2: Data model, auth, roles (not started)
+
+Paused on 2026/11/16 until work moves to a machine where commands can run (owner's call). That way the phase gets built and tested locally, not through CI round trips.
+
+### How Phase 2 is split (owner's call)
+Four PRs, in this order. The owner merges each before the next one starts:
+1. Migrations and db queries (`crates/db`): accounts, identities, sessions, channels, sets, set members, editors, emotes, files, roles, audit log, events outbox.
+2. Sign-in and sessions (`crates/auth`, the REST auth routes): Twitch and Kick OAuth with PKCE and `state`, site cookie sessions, linking and unlinking.
+3. Channels, sets, set editors and the REST chat-client reads, as GraphQL resolvers and REST handlers.
+4. Roles, permissions and the audit log: the escalation and lock-out rules (ADR 0010), and the admin mutations.
+
+### Before PR 2 can be tested end to end (owner)
+- [ ] The Twitch and Kick OAuth apps are registered (`docs/setup/owner-steps.md`), with the client IDs and secrets in a local `.env`, never in the repo or a chat.
+- [ ] There is a test account on Twitch and one on Kick.
+- [ ] The owner account (`CYEX_TV_OWNER_IDS`) is named.
+- [ ] Kick's Developer Terms are read, and anything relevant is noted.
+
+### Setup on the new machine
+- Rust (rustup; `rust-toolchain.toml` picks stable), Docker, `git`, and `gh` logged in as the owner.
+- `gh repo clone cyex-tv/platform` (and `extension` and `infra` when their phases start).
+- `docker compose -f dev/docker-compose.yaml up -d`, `cp .env.example .env`, then `cargo test --workspace`.
+- Check the MinIO image tag in `dev/docker-compose.yaml` on first `up` (an open item from Phase 1).
+
+## Phase 1: Monorepo scaffold, CI, API contract (done, merged 2026/11/16 as PR 2)
 
 Branch `phase-1/scaffold`, one PR for the whole phase (owner's call). There is one commit per task.
 
