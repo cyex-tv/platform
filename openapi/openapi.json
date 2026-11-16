@@ -401,8 +401,11 @@
               }
             }
           },
+          "304": {
+            "description": "Not modified."
+          },
           "404": {
-            "description": "",
+            "description": "`not_found`: no such approved emote.",
             "content": {
               "application/json": {
                 "schema": {

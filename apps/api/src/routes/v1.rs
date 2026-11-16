@@ -1,8 +1,7 @@
 //! The REST part of v1 (ADR 0008). Everything else is GraphQL at `/v1/gql`. REST covers only:
 //! - sign-in redirects (Phase 2, built);
 //! - the streamed upload (Phase 3);
-//! - the small, cacheable reads chat clients poll (Phase 2, built; `GET /v1/emotes/{id}` is
-//!   Phase 3).
+//! - the small, cacheable reads chat clients poll (built).
 //!
 //! The others answer `501 not_implemented` until their phase builds them.
 
@@ -24,8 +23,8 @@ use sha2::{Digest, Sha256};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use crate::catalog;
 use crate::state::{AppState, MaybeCaller};
+use crate::{catalog, moderation};
 
 pub fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
@@ -306,10 +305,21 @@ async fn get_global_set(State(state): State<AppState>, headers: HeaderMap) -> Ap
     path = "/v1/emotes/{id}",
     tag = "reads",
     params(("id" = String, Path, description = "Emote ID.")),
-    responses((status = 200, body = Emote), (status = 404, body = ErrorBody))
+    responses(
+        (status = 200, body = Emote),
+        (status = 304, description = "Not modified."),
+        (status = 404, description = "`not_found`: no such approved emote.", body = ErrorBody)
+    )
 )]
-async fn get_emote() -> ApiResult<Json<Emote>> {
-    Err(ApiError::not_implemented())
+async fn get_emote(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    headers: HeaderMap,
+) -> ApiResult<Response> {
+    let emote = moderation::emote(&state, None, &id)
+        .await?
+        .ok_or_else(catalog::not_found)?;
+    cached(&headers, &emote, READ_MAX_AGE)
 }
 
 /// Personal sets for up to 100 chatters at once, for clients rendering a chat.

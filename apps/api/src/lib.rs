@@ -5,6 +5,7 @@
 pub mod admin;
 pub mod catalog;
 pub mod gql;
+pub mod moderation;
 pub mod routes;
 pub mod state;
 pub mod views;
