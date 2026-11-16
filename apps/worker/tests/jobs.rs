@@ -301,7 +301,7 @@ async fn clean_up_removes_what_expired() {
         .await
         .unwrap();
     }
-    sqlx::query("UPDATE sessions SET expires_at = now() - interval '1 second' WHERE id_hash = $1")
+    sqlx::query("UPDATE sessions SET created_at = now() - interval '2 days', last_seen_at = now() - interval '2 days', expires_at = now() - interval '1 second' WHERE id_hash = $1")
         .bind(&[1u8; 32][..])
         .execute(&mut *conn)
         .await
