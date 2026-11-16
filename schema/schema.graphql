@@ -1,4 +1,19 @@
 """
+What an account may do (`users.restrict`).
+"""
+type AccountStatus {
+	id: String!
+	"""
+	No uploads.
+	"""
+	uploadsBlocked: Boolean!
+	"""
+	No sign-in, no sessions.
+	"""
+	blocked: Boolean!
+}
+
+"""
 A short reference to an account, for owners and editors.
 """
 type AccountSummary {
@@ -262,6 +277,29 @@ type Mutation {
 	"""
 	rejectEmote(id: String!, reason: String!): Emote!
 	"""
+	Report an emote you can see, with a reason. At most 10 an hour, one open report per emote.
+	"""
+	reportEmote(id: String!, reason: String!): Report!
+	"""
+	Dismiss a report, or take its emote down (`emotes.takedown`). Needs `emotes.review` or
+	`emotes.takedown`. Audited.
+	"""
+	resolveReport(id: String!, action: ReportAction!, note: String): Report!
+	"""
+	Take an emote's image down everywhere: out of every set, its file blocked and deleted,
+	its owners told. Needs `emotes.takedown`. Audited.
+	"""
+	takedownEmote(id: String!, reason: String!): Emote!
+	"""
+	Block an account's uploads, or the whole account. Needs `users.restrict`; the owner is
+	protected. Audited.
+	"""
+	restrictAccount(accountId: String!, uploadsBlocked: Boolean, blocked: Boolean): AccountStatus!
+	"""
+	Mark all your notifications read. Returns how many were unread.
+	"""
+	markNotificationsRead: Int!
+	"""
 	Create a role. You can only grant permissions you hold. Needs `roles.manage`. Audited.
 	"""
 	createRole(input: CreateRoleInput!): Role!
@@ -282,6 +320,23 @@ type Mutation {
 	Needs `roles.manage`. Audited.
 	"""
 	unassignRole(accountId: String!, roleId: String!): Boolean!
+}
+
+"""
+Something the platform tells you, such as a takedown of your emote.
+"""
+type Notification {
+	id: String!
+	"""
+	For example `emote.taken_down`.
+	"""
+	kind: String!
+	"""
+	JSON, as text.
+	"""
+	payload: String!
+	createdAt: String!
+	read: Boolean!
 }
 
 type PersonalSetEntry {
@@ -361,9 +416,56 @@ type Query {
 	"""
 	auditLog(targetKind: String, targetId: String, before: String, limit: Int): [AuditEntry!]!
 	"""
+	Open reports, oldest first. Needs `emotes.review` or `emotes.takedown`.
+	"""
+	reportQueue(page: Int, perPage: Int): ReportQueue!
+	"""
+	Your notifications, newest first (the latest 100).
+	"""
+	myNotifications(unreadOnly: Boolean): [Notification!]!
+	"""
 	All roles. Needs `roles.manage`.
 	"""
 	roles: [Role!]!
+}
+
+type Report {
+	id: String!
+	"""
+	The reported emote, as moderators see it. Empty if it was deleted since.
+	"""
+	emote: Emote
+	reporterId: String
+	reason: String!
+	state: ReportState!
+	resolution: String
+	createdAt: String!
+	resolvedAt: String
+}
+
+"""
+What a moderator does with a report.
+"""
+enum ReportAction {
+	DISMISS
+	"""
+	Take the emote down (needs `emotes.takedown`).
+	"""
+	TAKE_DOWN
+}
+
+type ReportQueue {
+	items: [Report!]!
+	total: Int!
+}
+
+enum ReportState {
+	OPEN
+	DISMISSED
+	"""
+	The emote was taken down.
+	"""
+	ACTIONED
 }
 
 type ReviewQueue {

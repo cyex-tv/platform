@@ -50,6 +50,7 @@ async fn jobs_run_retry_and_fail() {
     let ctx = Ctx {
         db: db.pool.clone(),
         store: None,
+        purge: None,
     };
     let calls = Arc::new(AtomicU32::new(0));
     let seen = calls.clone();
@@ -191,6 +192,7 @@ async fn parallel_workers_never_share_a_job() {
     let ctx = Ctx {
         db: db.pool.clone(),
         store: None,
+        purge: None,
     };
     let mut workers = Vec::new();
     for _ in 0..6 {
@@ -238,6 +240,7 @@ async fn new_jobs_notify_and_the_loop_runs_them() {
     let ctx = Ctx {
         db: db.pool.clone(),
         store: None,
+        purge: None,
     };
     let worker = tokio::spawn(cyex_tv_worker::run(
         ctx,

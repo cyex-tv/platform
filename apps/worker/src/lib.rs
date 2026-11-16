@@ -21,6 +21,7 @@ use cyex_tv_storage::Store;
 use sqlx::PgPool;
 use sqlx::postgres::PgListener;
 
+pub mod purge;
 pub mod transcode;
 
 /// How a job failed.
@@ -38,8 +39,10 @@ pub enum JobError {
 #[derive(Clone)]
 pub struct Ctx {
     pub db: PgPool,
-    /// `None` when storage isn't configured; handlers that need it fail for good.
+    /// `None` when storage isn't configured; handlers that need it wait for it.
     pub store: Option<Store>,
+    /// Cloudflare cache purging for takedowns; `None` without a token.
+    pub purge: Option<purge::Purge>,
 }
 
 pub type JobFuture = Pin<Box<dyn Future<Output = Result<(), JobError>> + Send>>;

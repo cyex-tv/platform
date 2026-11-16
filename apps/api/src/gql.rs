@@ -18,16 +18,17 @@ use cyex_tv_hub::Message as HubMessage;
 use cyex_tv_hub::topics as hub_topics;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::model::{
-    AddSetEmote, AuditEntry, Channel, CreateRole, CreateSet, Emote, EmoteSet, Event, Identity, Me,
-    PersonalSetEntry, Platform, ReviewQueue, Role, SearchResults, SetEmote, UpdateChannelSettings,
-    UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote,
+    AccountStatus, AddSetEmote, AuditEntry, Channel, CreateRole, CreateSet, Emote, EmoteSet, Event,
+    Identity, Me, Notification, PersonalSetEntry, Platform, Report, ReportAction, ReportQueue,
+    ReviewQueue, Role, SearchResults, SetEmote, UpdateChannelSettings, UpdateEmote, UpdateRole,
+    UpdateSet, UpdateSetEmote,
 };
 use cyex_tv_shared::permissions;
 use futures_util::Stream;
 use sqlx::Connection;
 
 use crate::state::AppState;
-use crate::{admin, catalog, moderation, search};
+use crate::{abuse, admin, catalog, moderation, search};
 
 pub type ApiSchema = Schema<Query, Mutation, Subscription>;
 
@@ -294,6 +295,31 @@ impl Query {
         .map_err(api_error)
     }
 
+    /// Open reports, oldest first. Needs `emotes.review` or `emotes.takedown`.
+    async fn report_queue(
+        &self,
+        ctx: &Context<'_>,
+        page: Option<u32>,
+        per_page: Option<u32>,
+    ) -> Result<ReportQueue> {
+        let caller = caller(ctx)?;
+        abuse::queue(state(ctx), caller, page, per_page)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Your notifications, newest first (the latest 100).
+    async fn my_notifications(
+        &self,
+        ctx: &Context<'_>,
+        unread_only: Option<bool>,
+    ) -> Result<Vec<Notification>> {
+        let caller = caller(ctx)?;
+        abuse::my_notifications(state(ctx), caller, unread_only.unwrap_or(false))
+            .await
+            .map_err(api_error)
+    }
+
     /// All roles. Needs `roles.manage`.
     async fn roles(&self, ctx: &Context<'_>) -> Result<Vec<Role>> {
         let caller = caller(ctx)?;
@@ -478,6 +504,61 @@ impl Mutation {
     async fn reject_emote(&self, ctx: &Context<'_>, id: String, reason: String) -> Result<Emote> {
         let caller = caller(ctx)?;
         moderation::reject(state(ctx), caller, &id, &reason)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Report an emote you can see, with a reason. At most 10 an hour, one open report per emote.
+    async fn report_emote(&self, ctx: &Context<'_>, id: String, reason: String) -> Result<Report> {
+        let caller = caller(ctx)?;
+        abuse::report(state(ctx), caller, &id, &reason)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Dismiss a report, or take its emote down (`emotes.takedown`). Needs `emotes.review` or
+    /// `emotes.takedown`. Audited.
+    async fn resolve_report(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        action: ReportAction,
+        note: Option<String>,
+    ) -> Result<Report> {
+        let caller = caller(ctx)?;
+        abuse::resolve(state(ctx), caller, &id, action, note.as_deref())
+            .await
+            .map_err(api_error)
+    }
+
+    /// Take an emote's image down everywhere: out of every set, its file blocked and deleted,
+    /// its owners told. Needs `emotes.takedown`. Audited.
+    async fn takedown_emote(&self, ctx: &Context<'_>, id: String, reason: String) -> Result<Emote> {
+        let caller = caller(ctx)?;
+        abuse::takedown(state(ctx), caller, &id, &reason)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Block an account's uploads, or the whole account. Needs `users.restrict`; the owner is
+    /// protected. Audited.
+    async fn restrict_account(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+        uploads_blocked: Option<bool>,
+        blocked: Option<bool>,
+    ) -> Result<AccountStatus> {
+        let caller = caller(ctx)?;
+        abuse::restrict(state(ctx), caller, &account_id, uploads_blocked, blocked)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Mark all your notifications read. Returns how many were unread.
+    async fn mark_notifications_read(&self, ctx: &Context<'_>) -> Result<u64> {
+        let caller = caller(ctx)?;
+        abuse::mark_read(state(ctx), caller)
             .await
             .map_err(api_error)
     }

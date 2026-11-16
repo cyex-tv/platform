@@ -1,5 +1,5 @@
-//! The image worker: turns uploads into emote files (`emote.transcode`) and runs the hourly
-//! clean-up.
+//! The worker: turns uploads into emote files (`emote.transcode`), deletes taken-down files and
+//! purges the CDN (`files.delete`), and runs the hourly clean-up.
 
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -23,13 +23,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             None
         }
     };
-    let handlers = Handlers::default().on(
-        cyex_tv_worker::transcode::KIND,
-        cyex_tv_worker::transcode::run,
-    );
+    let handlers = Handlers::default()
+        .on(
+            cyex_tv_worker::transcode::KIND,
+            cyex_tv_worker::transcode::run,
+        )
+        .on(cyex_tv_worker::purge::KIND, cyex_tv_worker::purge::run);
+    let purge = cyex_tv_worker::purge::Purge::from_env(|name| std::env::var(name).ok())?;
+    if purge.is_none() {
+        tracing::warn!("CYEX_TV_CLOUDFLARE_PURGE_TOKEN not set; takedowns won't purge the CDN");
+    }
     tracing::info!(kinds = ?handlers.kinds(), "worker started");
     cyex_tv_worker::run(
-        Ctx { db, store },
+        Ctx { db, store, purge },
         handlers,
         Limits::default(),
         Duration::from_secs(3600),
