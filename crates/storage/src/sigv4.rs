@@ -1,4 +1,4 @@
-//! AWS Signature Version 4 for S3 requests (also what R2 and MinIO take).
+//! AWS Signature Version 4 for S3 requests (also what R2 and other S3 servers take).
 //! Reference: "Authenticating Requests: Using the Authorization Header (AWS Signature Version 4)".
 
 use chrono::{DateTime, Utc};

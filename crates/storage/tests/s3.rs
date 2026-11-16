@@ -1,4 +1,4 @@
-//! The S3 client against a real S3 server (MinIO in CI, standing in for R2). Runs when
+//! The S3 client against a real S3 server (Versity Gateway in CI, standing in for R2). Runs when
 //! `CYEX_TV_TEST_S3_ENDPOINT`, `CYEX_TV_TEST_S3_ACCESS_KEY_ID` and
 //! `CYEX_TV_TEST_S3_SECRET_ACCESS_KEY` are set, and skips otherwise.
 

@@ -53,23 +53,24 @@ jobs:
           --health-retries 10
     env:
       CYEX_TV_TEST_DATABASE_URL: postgres://cyextv:ci-only@localhost:5432/cyextv
-      # MinIO, the S3 stand-in for R2 (ADR 0003). Same tag as dev/docker-compose.yaml.
+      # Versity Gateway, the S3 stand-in for R2 (ADR 0003). Same tag as dev/docker-compose.yaml.
       CYEX_TV_TEST_S3_ENDPOINT: http://127.0.0.1:9000
       CYEX_TV_TEST_S3_ACCESS_KEY_ID: cyextv
       CYEX_TV_TEST_S3_SECRET_ACCESS_KEY: ci-only-secret
     steps:
       - uses: actions/checkout@v7
-      # Service containers can't take a command, and MinIO needs `server /data`.
-      - name: Start MinIO
+      # Started by hand: it needs its backend set, and the job's services can't take a command.
+      - name: Start the S3 server
         run: |
-          docker run -d --name minio -p 127.0.0.1:9000:9000 \
-            -e MINIO_ROOT_USER=cyextv -e MINIO_ROOT_PASSWORD=ci-only-secret \
-            minio/minio:RELEASE.2025-04-22T22-12-26Z server /data
+          docker run -d --name s3 -p 127.0.0.1:9000:7070 \
+            -e ROOT_ACCESS_KEY=cyextv -e ROOT_SECRET_KEY=ci-only-secret \
+            -e VGW_BACKEND=posix -e VGW_BACKEND_ARG=/tmp \
+            versity/versitygw:v1.10.0
           for i in $(seq 1 30); do
-            curl -fs http://127.0.0.1:9000/minio/health/live && exit 0
+            curl -s -o /dev/null http://127.0.0.1:9000/ && exit 0
             sleep 1
           done
-          docker logs minio
+          docker logs s3
           exit 1
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2

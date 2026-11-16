@@ -1,4 +1,4 @@
-//! Object storage (ADR 0003): Cloudflare R2 in production, MinIO locally, both through the S3 API;
+//! Object storage (ADR 0003): Cloudflare R2 in production, an S3 server locally (Versity Gateway in dev and CI), all through the S3 API;
 //! an in-memory store for tests.
 //!
 //! Key layout:
@@ -133,7 +133,7 @@ fn lock(
 /// S3 settings from `CYEX_TV_S3_*`.
 #[derive(Clone, Debug)]
 pub struct S3Config {
-    /// `https://<account>.r2.cloudflarestorage.com`, or `http://127.0.0.1:9000` for MinIO.
+    /// `https://<account>.r2.cloudflarestorage.com`, or `http://127.0.0.1:9000` for the dev S3 server.
     pub endpoint: Url,
     pub bucket: String,
     pub credentials: Credentials,
@@ -161,7 +161,7 @@ impl S3Config {
             credentials: Credentials {
                 access_key_id: need("CYEX_TV_S3_ACCESS_KEY_ID")?,
                 secret_access_key: need("CYEX_TV_S3_SECRET_ACCESS_KEY")?,
-                // R2 takes `auto`; MinIO takes anything.
+                // R2 takes `auto`; the dev server takes anything.
                 region: get("CYEX_TV_S3_REGION").unwrap_or_else(|| "auto".to_owned()),
             },
         }))
