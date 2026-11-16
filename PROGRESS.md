@@ -12,6 +12,19 @@ Started 2026/11/16, in an overnight run the owner asked for (work on, merge gree
 3. The streamed upload: limits, decoding to validate, hashing, the blocklist, duplicates.
 4. Transcoding (WebP and AVIF at 1x-4x, static first frames), after benchmarking the encoders as the plan asks.
 
+### PR 2: job queue, storage and the worker (branch `phase-3/queue`)
+- [x] Migration `20261118000002_jobs.sql` (additive): `jobs` with state, attempts, `run_after` and a lease (`locked_until`); inserting one sends `NOTIFY cyex_tv_jobs`.
+- [x] `crates/db/src/jobs.rs`: enqueue, claim (`FOR UPDATE SKIP LOCKED`, leased; an expired lease can be claimed again), complete, fail (retry with backoff, or for good), cleanup.
+- [x] `apps/worker`: a library with the loop (drain due jobs, then wait for `NOTIFY`, a poll, or shutdown), a time limit per attempt, backoff 10 s doubling to an hour, and an hourly clean-up of expired sessions, unfinished sign-ins, outbox events older than 48 h (ADR 0005) and finished jobs after 7 days. Job kinds come with the pipeline (PR 3 and 4).
+- [x] `crates/storage`: an S3 client with Signature V4 for R2 and MinIO (put, get, head, delete, bucket setup), and an in-memory store for tests. `object_store` would have pulled in aws-lc (OpenSSL licence, ADR 0007), so the client is small and written here. Keys per ADR 0003; `Cache-Control: public, max-age=31536000, immutable` for emote files.
+- [x] `cyex_tv_db::testing::TestDb` (feature `testing`) for other crates' integration tests.
+- [x] CI starts MinIO (the dev compose tag) next to Postgres for the S3 tests.
+
+#### Tests
+- Unit: SigV4 against AWS's published GET Object example signature, path encoding, secrets out of `Debug`, the memory store, S3 config, backoff, handler kinds.
+- `apps/worker/tests/jobs.rs` against Postgres: run, retry with backoff, permanent failure, time limit, unhandled kinds left alone, an expired lease claimed again, 6 workers on 40 jobs with none run twice, `NOTIFY` on insert and the full loop until shutdown, the clean-up.
+- `crates/storage/tests/s3.rs` against MinIO: bucket setup (twice), put with content type and cache control, get, head, delete (twice), a wrong secret refused.
+
 ### PR 1: emotes and the review gate (branch `phase-3/review`)
 - [x] Migration `20261118000001_emote_review.sql` (additive): `reviewed_by`, `reviewed_at`, `review_reason` on `emotes`.
 - [x] An emote that isn't approved is visible to its owner and `emotes.review` holders only; `GET /v1/emotes/{id}` serves approved emotes, with `ETag` and `Cache-Control`.
