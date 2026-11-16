@@ -127,6 +127,9 @@ async fn files_are_deleted_and_purged() {
     let Some(db) = TestDb::new().await else {
         return;
     };
+    // The workspace builds reqwest without a crypto provider; `Purge::from_env` installs ring,
+    // and so does this test.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let seen = Shared::default();
     let api = fake_cloudflare(seen.clone()).await;
     let store = Store::memory();
