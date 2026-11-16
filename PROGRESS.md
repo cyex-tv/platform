@@ -17,6 +17,14 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 
 Taken before Phase 4 in the overnight run: Phase 4 (the deck, in `cyex-app/cyex-deck`) can't meet its "Done when" until the owner's CDN and OAuth steps are done, and its step 2 waits for Phase 5 anyway. See the run's questions.
 
+### PR 3: the load test (branch `phase-5/load`)
+- [x] `apps/events/tests/load.rs`, run by CI's `load` job in a release build (`cargo test --release -p cyex-tv-events --test load -- --ignored --nocapture`).
+- Result, CI run on 2026/11/17 (GitHub `ubuntu-latest`, client and server in one process, Postgres in a service container):
+  - 5000 of 5000 connections subscribed, ten topics each over 1000 topics, in 12.3 s; 0 failed.
+  - 300 events written at 30 a second; 15000 of 15000 deliveries arrived.
+  - Write to delivery: **p50 1.6 ms, p95 2.5 ms, p99 6.6 ms, max 85.3 ms** (target: p95 under 1 s).
+- [ ] The same load on the GraphQL socket. It runs the same hub and feeder, so it is expected to match; a second run is still owed.
+
 ### PR 2: the GraphQL subscription (branch `phase-5/gql`)
 - [x] `subscription { events(topics) }` on `/v1/gql/ws` (`graphql-transport-ws`), fed by its own hub and feeder in the api, so it gets the same events as `/v1/events` from the same outbox. Topics are checked (`invalid_topic`, `too_many_topics`, 500 at most). A lagging subscriber gets a `RESYNC` event.
 - [x] Changes to personal sets go out as `personal.updated` (ADR 0005), on the set's topic and the owner's `user:` topics.
