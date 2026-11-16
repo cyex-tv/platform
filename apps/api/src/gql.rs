@@ -2,7 +2,7 @@
 //! builds them:
 //! - Phase 2: accounts, channels, sets, editors, roles and the audit log (built)
 //! - Phase 3: emotes and moderation (reads, edits and review built; upload is REST)
-//! - Phase 5: the `events` subscription
+//! - Phase 5: the `events` subscription (built)
 //! - Phase 6: search
 //!
 //! Admin and moderation fields check their permission in `catalog`, `admin` and `moderation`,
@@ -18,6 +18,8 @@ use axum::response::Html;
 use chrono::SecondsFormat;
 use cyex_tv_auth::{AuthError, Caller};
 use cyex_tv_db::{DbError, accounts, channels, ids};
+use cyex_tv_hub::Message as HubMessage;
+use cyex_tv_hub::topics as hub_topics;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::model::{
     AddSetEmote, AuditEntry, Channel, CreateRole, CreateSet, Emote, EmoteSet, Event, Identity, Me,
@@ -25,7 +27,7 @@ use cyex_tv_shared::model::{
     UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote,
 };
 use cyex_tv_shared::permissions;
-use futures_util::stream::Empty;
+use futures_util::Stream;
 use sqlx::Connection;
 
 use crate::state::AppState;
@@ -533,7 +535,28 @@ pub struct Subscription;
 impl Subscription {
     /// Live updates for up to 500 topics: `channel:<platform>:<id>`, `set:<id>`,
     /// `user:<platform>:<id>` (ADR 0005). The same events as the event WebSocket.
-    async fn events(&self, topics: Vec<String>) -> Result<Empty<Event>> {
-        Err(not_implemented())
+    async fn events(
+        &self,
+        ctx: &Context<'_>,
+        topics: Vec<String>,
+    ) -> Result<impl Stream<Item = Event> + use<>> {
+        if topics.len() > hub_topics::MAX_TOPICS {
+            return Err(coded("too_many_topics", "At most 500 topics."));
+        }
+        if let Some(bad) = topics.iter().find(|t| !hub_topics::is_valid(t)) {
+            return Err(
+                async_graphql::Error::new(format!("{bad:?} is not a topic."))
+                    .extend_with(|_, e| e.set("code", "invalid_topic")),
+            );
+        }
+        let sub = state(ctx).hub.subscriber();
+        sub.subscribe(topics.iter().map(String::as_str));
+        Ok(futures_util::stream::unfold(sub, |mut sub| async move {
+            let event = match sub.recv().await? {
+                HubMessage::Event(d) => cyex_tv_hub::model_event(&d.event, &d.topic),
+                HubMessage::Lagged => cyex_tv_hub::resync(""),
+            };
+            Some((event, sub))
+        }))
     }
 }

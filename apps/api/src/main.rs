@@ -35,11 +35,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(s3) => state = state.with_store(cyex_tv_storage::Store::s3(s3)?),
         None => tracing::warn!("CYEX_TV_S3_ENDPOINT not set; uploads answer 503"),
     }
+    // The GraphQL `events` subscription reads the outbox through its own feeder.
+    let (stop_tx, mut stop_rx) = tokio::sync::watch::channel(false);
+    let feeder = tokio::spawn(cyex_tv_hub::feeder::run(
+        state.db.clone(),
+        state.hub.clone(),
+        async move {
+            let _ = stop_rx.wait_for(|stopping| *stopping).await;
+        },
+    ));
     let app = cyex_tv_api::app(state);
     let listener = tokio::net::TcpListener::bind(cfg.bind).await?;
     tracing::info!(addr = %cfg.bind, "api listening");
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown::signal())
         .await?;
+    let _ = stop_tx.send(true);
+    feeder.await??;
     Ok(())
 }
