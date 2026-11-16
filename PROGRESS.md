@@ -6,12 +6,12 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 
 Branch `phase-1/scaffold`, one PR for the whole phase (owner's call). There is one commit per task.
 
-The code was written on a machine where nothing may be run without asking, and the owner chose "write code only". So **nothing has been compiled or run locally yet**, and CI on the PR does the first build.
+The code was written on a machine where nothing may be run without asking, and the owner chose "write code only". So nothing was compiled or run locally, and **CI on the PR is the verification**. Every check passed on 2026/11/16 (run 43884331989 on `2332969`): fmt, clippy, test (with Postgres), build, contract, deny.
 
 ### Tasks
 - [x] 1. Cargo workspace (`apps/api`, `apps/events`, `apps/worker`, `crates/shared`, `crates/db`), with `rustfmt.toml`, `rust-toolchain.toml`, workspace lints, `deny.toml` (AGPL-compatible licence allowlist), and `.gitattributes` (LF).
 - [x] 2. `dev/docker-compose.yaml`: Postgres 17 and MinIO, both on 127.0.0.1 only, plus `.env.example`.
-- [x] 3. `.github/workflows/ci.yml`: fmt, clippy `-D warnings`, test (with a Postgres service), release build, OpenAPI drift check, cargo-deny.
+- [x] 3. `.github/workflows/ci.yml`: fmt, clippy `-D warnings`, test (with a Postgres service), release build, the drift check for the GraphQL SDL and OpenAPI, cargo-deny.
 - [x] 4. The v1 contract, reworked after the owner's review (2026/11/16) to be GraphQL-first:
   - GraphQL schema draft in `apps/api/src/gql.rs`: queries, mutations and the `events` subscription. Admin and moderation fields check a permission first and answer `signed_out` for now. `permissions` is public, and introspection is on.
   - REST, only for auth, upload and the cacheable chat-client reads, in `apps/api/src/routes/v1.rs`.
@@ -20,17 +20,30 @@ The code was written on a machine where nothing may be run without asking, and t
 - [x] Live updates reworked to the event WebSocket plus GraphQL subscriptions, with no SSE (ADR 0005). The protocol is written down. The events service still only serves `/health` until Phase 5.
 - [x] 5. `/health` and `/health/ready` (checks the DB). Config comes from `CYEX_TV_*` env (the DB URL is never logged), with JSON or pretty logs, graceful shutdown, a DB pool limit and a statement timeout set on every connection.
 
+- [x] CI is green on all six checks.
+- [x] `schema/schema.graphql`, `openapi/openapi.json` and `Cargo.lock` are committed, taken from CI's artifacts.
+- [x] CI actions moved off Node 20: `actions/checkout` and `actions/upload-artifact` v4 → v7.
+
+### CI history on PR 2
+1. First build: build, clippy and tests passed. Three things failed:
+   - fmt: hand formatting;
+   - deny: `paste` is unmaintained;
+   - the spec check: nothing committed yet.
+   
+   All three were fixed.
+2. After the GraphQL rework, async-graphql didn't compile. With `rust-version = "1.85"` the resolver paired async-graphql 7.0 with async-graphql-derive 7.2. The fix was `rust-version = "1.89"` and requiring 7.2 for both.
+3. Only the drift check failed. The generated files were committed.
+4. All green.
+
 ### Not done yet
-- [ ] CI is green. The first run passed build, clippy and tests, and fmt, deny and the spec check were fixed after it. The GraphQL rework needs another run.
-- [ ] `schema/schema.graphql` and the updated `openapi/openapi.json` are committed, taken from CI's `contract` artifact. The drift check fails until they are.
-- [ ] `Cargo.lock` is updated for async-graphql, from CI's `cargo-lock` artifact.
-- [ ] `docker compose up` is checked by hand, including the MinIO image tag.
-- [ ] The owner reviews the API contract before Phase 2 handlers are written.
+- [ ] `docker compose up` is checked by hand, including the MinIO image tag. This needs a machine where commands may run.
+- [ ] The owner reviews the API contract before Phase 2 handlers are written: the GraphQL schema, the event WebSocket protocol, the REST reads.
 
 ### Changes from the plan
 - The owner asked for GraphQL-first and WebSockets (ADR 0005 and 0008 revised, D7 and D7b in the plan).
 - The REST spec is `openapi/openapi.json`, not `.yaml`. The YAML output needs `serde_yaml`, which is unmaintained.
 - `deny.toml` allows RUSTSEC-2024-0436 (`paste`, unmaintained, only through utoipa-axum).
+- The minimum Rust version is 1.89, not 1.85 (see CI history).
 - `crates/auth` is created in Phase 2, where its code lands, instead of as an empty crate now.
 - `apps/web` starts in Phase 6. CI gets the web build and lint then.
 
