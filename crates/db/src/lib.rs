@@ -18,6 +18,7 @@ pub mod oauth_states;
 pub mod outbox;
 pub mod reads;
 pub mod roles;
+pub mod search;
 pub mod sessions;
 pub mod sets;
 #[cfg(feature = "testing")]

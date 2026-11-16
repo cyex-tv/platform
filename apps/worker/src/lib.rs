@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use chrono::Utc;
 use cyex_tv_db::jobs::{self, Job};
-use cyex_tv_db::{event_sessions, oauth_states, outbox, sessions};
+use cyex_tv_db::{event_sessions, oauth_states, outbox, search, sessions};
 use cyex_tv_storage::Store;
 use sqlx::PgPool;
 use sqlx::postgres::PgListener;
@@ -170,6 +170,7 @@ pub async fn run_one(
 
 /// Removes what has expired: sessions, sign-ins never finished, outbox events past the replay
 /// window (48 h, ADR 0005), event socket sessions after 24 h, and finished jobs after a week.
+/// Also refreshes the search ranking.
 pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
     let mut conn = db.acquire().await?;
     let sessions = sessions::delete_expired(&mut conn).await?;
@@ -180,7 +181,17 @@ pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
     let sockets =
         event_sessions::delete_older_than(&mut conn, Utc::now() - chrono::Duration::hours(24))
             .await?;
-    tracing::info!(sessions, states, events, done, sockets, "cleaned up");
+    // Search ranking (ADR 0004): channels showing each emote.
+    let ranked = search::refresh_popularity(&mut conn).await?;
+    tracing::info!(
+        sessions,
+        states,
+        events,
+        done,
+        sockets,
+        ranked,
+        "cleaned up"
+    );
     Ok(())
 }
 

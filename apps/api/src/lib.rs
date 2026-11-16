@@ -7,6 +7,7 @@ pub mod catalog;
 pub mod gql;
 pub mod moderation;
 pub mod routes;
+pub mod search;
 pub mod state;
 pub mod upload;
 pub mod views;
