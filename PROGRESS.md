@@ -4,6 +4,20 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 
 ## Phase 7: Moderation, abuse and limits (in progress)
 
+### PR 2: reports, takedowns and restrictions (branch `phase-7/moderation`)
+- [x] Migration `20261118000006_moderation.sql` (additive): `reports` (one open report per emote and reporter), `notifications`, and `accounts.blocked_at`.
+- [x] Reports: `reportEmote(id, reason)` for any emote the caller can see, at most 10 an hour per account. `reportQueue` and `resolveReport(id, DISMISS | TAKE_DOWN, note)` for `emotes.review` or `emotes.takedown`; taking down needs `emotes.takedown`. Audited.
+- [x] Takedown (`takedownEmote` or a report's `TAKE_DOWN`), in one transaction: every emote made from the same file is taken down and leaves every set (`emote.updated`, then `set.emote_removed`, to the sets' channels and users), the sha256 and dHash go on the blocklist, owners get a notification with the reason, open reports on them close as actioned, and a `files.delete` job is queued. Audited.
+- [x] The worker's `files.delete`: deletes the variants and the original from storage, then purges their CDN URLs through Cloudflare's API (`CYEX_TV_CLOUDFLARE_ZONE_ID`, `CYEX_TV_CLOUDFLARE_PURGE_TOKEN`) in batches of 30; a refused purge retries. Without a token it deletes and warns.
+- [x] Restrictions: `restrictAccount(accountId, uploadsBlocked, blocked)` with `users.restrict`; a block ends the account's sessions and refuses sign-in (`account_blocked`); the owner is protected. Audited.
+- [x] `myNotifications(unreadOnly)` and `markNotificationsRead`.
+- [x] `docs/takedown.md`: the process, the public contact, what a takedown does.
+
+#### Tests
+- Unit: reasons, report states.
+- `apps/api/tests/abuse_flow.rs` against Postgres: report and dismiss (duplicates, empty reasons, unseen pending emotes, the queue's permission, dismiss vs take-down permission, the audit row); the hourly report limit; a takedown through a report removing both uploads of the image from their sets, **reaching a live subscriber within a second** (`emote.updated` and `set.emote_removed`), blocking the image (a re-upload is `blocked`), queueing the file deletion, notifying both owners, and refusing a second takedown; restricting uploads, blocking an account (signed out at once), the owner protected.
+- `apps/worker/tests/purge.rs` with a fake Cloudflare API: objects deleted and the right URLs purged with the token; a refused purge retries without forgetting the files; no token still deletes.
+
 ### PR 1: rate limits (branch `phase-7/limits`)
 - [x] `cyex_tv_shared::ratelimit`: a token bucket per key, in memory (per instance; v1 runs one of each service), swept when it grows. The client IP is the peer address, or `CF-Connecting-IP` when `CYEX_TV_TRUST_CLOUDFLARE=true` (never trusted otherwise, since anyone can send it).
 - [x] The api, per IP: sign-in 30 a minute, GraphQL 300 a minute, uploads 30 an hour, public reads 1200 a minute, opening the GraphQL socket 60 a minute; per signed-in account: GraphQL 600 a minute (plus the 20 uploads an hour from Phase 3). Health checks are never limited.
