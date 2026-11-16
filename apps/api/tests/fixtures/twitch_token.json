@@ -1,0 +1,7 @@
+{
+  "access_token": "twitch-access-token",
+  "expires_in": 14124,
+  "refresh_token": "twitch-refresh-token",
+  "scope": [],
+  "token_type": "bearer"
+}

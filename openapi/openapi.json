@@ -73,10 +73,21 @@
           "auth"
         ],
         "summary": "Sign out and end the session.",
+        "description": "With the cookie, the request must come from `https://cyex.tv` (`Origin`).",
         "operationId": "logout",
         "responses": {
           "204": {
-            "description": "Signed out."
+            "description": "Signed out. The session cookie is cleared."
+          },
+          "403": {
+            "description": "`bad_origin`: the cookie was sent from another site.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
           }
         }
       }
@@ -87,7 +98,7 @@
           "auth"
         ],
         "summary": "Where the platform sends the browser back to.",
-        "description": "Sets the session cookie and redirects to `return_to`.",
+        "description": "Checks `state` against the cookie set at login, signs in (or links), sets the session cookie\nand redirects to `return_to`.",
         "operationId": "callback",
         "parameters": [
           {
@@ -129,7 +140,17 @@
             "description": "Signed in. Redirect to `return_to`."
           },
           "400": {
-            "description": "Bad or expired `state`, or the user declined.",
+            "description": "`bad_state` (bad, expired or used `state`) or `declined` (the user cancelled).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`account_deleted`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -139,7 +160,17 @@
             }
           },
           "409": {
-            "description": "`identity_taken`: linked to another account.",
+            "description": "`identity_taken`: linked to another account; `platform_already_linked`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`platform_error`: the platform didn't answer as expected.",
             "content": {
               "application/json": {
                 "schema": {
@@ -157,7 +188,7 @@
           "auth"
         ],
         "summary": "Start signing in with Twitch or Kick.",
-        "description": "Redirects to the platform's consent page. With `link=true` and a signed-in session, the\nidentity is linked to the current account instead.",
+        "description": "Redirects to the platform's consent page and sets a short-lived cookie holding `state`. With\n`link=true` and a signed-in session, the identity is linked to the current account instead.",
         "operationId": "login",
         "parameters": [
           {
@@ -193,7 +224,27 @@
             "description": "Redirect to the platform's sign-in page."
           },
           "400": {
-            "description": "Unknown platform or bad `return_to`.",
+            "description": "`unknown_platform` or `bad_return_to`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`signed_out`: `link=true` without a session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: sign-in with this platform isn't set up.",
             "content": {
               "application/json": {
                 "schema": {

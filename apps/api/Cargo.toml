@@ -24,6 +24,8 @@ path = "src/bin/schema.rs"
 async-graphql.workspace = true
 async-graphql-axum.workspace = true
 axum.workspace = true
+chrono.workspace = true
+cyex-tv-auth.workspace = true
 cyex-tv-db.workspace = true
 cyex-tv-shared = { workspace = true, features = ["graphql"] }
 futures-util.workspace = true
@@ -38,6 +40,7 @@ utoipa-axum.workspace = true
 [dev-dependencies]
 http-body-util.workspace = true
 tower.workspace = true
+url.workspace = true
 
 [lints]
 workspace = true

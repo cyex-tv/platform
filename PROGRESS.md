@@ -6,13 +6,34 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 
 Paused on 2026/11/16 until work moves to a machine where commands can run (owner's call). Resumed on the new machine on 2026/11/16. Rust, `git` and `gh` are set up there; Docker isn't installed yet (the owner installs it), so the database tests ran in CI first.
 
-### PR 1: migrations and db queries (branch `phase-2/db`, in review)
+### PR 2: sign-in and sessions (branch `phase-2/auth`)
+- [x] `crates/auth`: Twitch and Kick OAuth (authorization code flow). `state` is bound to a short-lived host-only pre-login cookie (`cyex_tv_oauth`, `Path=/v1/auth`, 10 minutes) and to a stored row that is taken on first use. PKCE S256 for Kick (required there); Twitch gets `state` only, since it doesn't document PKCE.
+- [x] Migration `20261117000002_oauth_states.sql` (additive): the sign-in in progress, holding the `state` hash, the PKCE verifier (it never reaches the browser), `return_to` and the account being linked.
+- [x] Platform access tokens are used once to read the user, then revoked (best effort) and dropped. Kick's `email` is never read into the model.
+- [x] Site sessions: 256-bit random token, sha256 stored, cookie `cyex_tv_session` with `Domain=cyex.tv; Path=/; Secure; HttpOnly; SameSite=Lax`, 30 days sliding (written back at most hourly). A new session on every sign-in and link; the old one is deleted.
+- [x] App sessions: `Authorization: Bearer`, kind `app`, 90 days. Accepted, not yet issued (D19).
+- [x] CSRF by Origin: a cookie caller's writes (any method but GET, HEAD, OPTIONS, so every GraphQL POST) need `Origin: https://cyex.tv`, or fail with `bad_origin`. Bearer callers are exempt.
+- [x] `return_to` must be on the site (paths or full `https://cyex.tv` URLs); anything else is `bad_return_to`.
+- [x] REST: `GET /v1/auth/{platform}/login` (`?return_to`, `?link=true`), `GET /v1/auth/{platform}/callback`, `POST /v1/auth/logout`. Errors: `unknown_platform`, `bad_return_to`, `signed_out`, `bad_state`, `declined`, `identity_taken`, `platform_already_linked`, `account_deleted`, `platform_error`, `unavailable` (client not configured).
+- [x] GraphQL: `me` and `unlinkIdentity` (never the last identity) are built; `require` checks the caller's role permissions (`forbidden` without one). The owner rule comes with PR 4.
+- [x] Config: `CYEX_TV_PUBLIC_URL`, `CYEX_TV_SITE_URL`, `CYEX_TV_COOKIE_DOMAIN`, `CYEX_TV_COOKIE_SECURE`, `CYEX_TV_TWITCH_CLIENT_ID`/`_SECRET`, `CYEX_TV_KICK_CLIENT_ID`/`_SECRET` (see `.env.example`). Without a client, that platform answers 503.
+- [ ] End to end with real test accounts (needs the owner's OAuth apps).
+
+#### Tests
+- Unit (`crates/auth`): config defaults and validation, cookie strings against ADR 0009, cookie parsing, `return_to` (open-redirect cases), Origin check, PKCE and hashing, authorize URLs per platform, user checks.
+- HTTP without a database (`apps/api/tests/http.rs`): unknown or unconfigured platform, `me` signed out, logout clearing the cookie, cookie writes refused without the site Origin.
+- OAuth flows (`apps/api/tests/auth_flow.rs`) against fake Twitch and Kick servers answering with `tests/fixtures` (shaped after the docs; to be replaced with recordings): Twitch end to end, Kick with PKCE checked against the verifier, linking both platforms and session rotation, `identity_taken`, `platform_already_linked`, links needing their own session, `state` bound to the cookie and single-use, wrong platform, expiry, declined, platform errors, `return_to`, logout by Origin, Bearer app sessions, unlinking, deleted accounts, permissions from roles.
+
+### Merging (owner's call, 2026/11/16)
+The owner allowed the agent to merge its own PRs into `main` once it is sure they work. Each task still gets a branch and a PR, because CI is the gate; the agent merges with `gh pr merge --merge` after every check is green and the database tests are seen to run, and logs it here. Never a direct push to `main`, never a force push.
+
+### PR 1: migrations and db queries (branch `phase-2/db`, merged 2026/11/16 as PR 4)
 - [x] Migration `20261117000001_core.sql`: every Phase 2 table from PLAN.md, with the indexes it lists (`(platform, platform_user_id)`, `(platform, platform_channel_id)`, `lower(name)` and a `pg_trgm` index on emote names, set owner, emote state), plus indexes for logins, sessions, editors, roles, audit and the outbox.
 - [x] The outbox insert trigger sends `NOTIFY cyex_tv_events, '<id>'` (ADR 0005).
 - [x] Query modules in `crates/db`: `accounts`, `sessions`, `channels`, `emotes`, `files`, `sets`, `roles`, `audit`, `outbox`, `ids`. Each takes `&mut PgConnection`, so the api can put a change, its audit row and its event in one transaction.
 - [x] Rule violations are named errors (`DbError`): `identity_taken`, `last_identity`, `set_full`, `name_taken`, `not_approved` and others.
 - [x] `crates/shared`: text forms for `EmoteState` and `SetKind`, and Postgres mappings for the enums behind a `sqlx` feature.
-- [ ] Owner: review the schema choices below.
+- [x] Merged by the owner on 2026/11/16. The choices below are still open for the owner's review.
 
 #### Choices in this PR (for the owner's review)
 1. **Runtime-checked queries, not compile-time ones.** ADR 0002 says "checked queries". The `query!` macros need a live database or a committed `.sqlx` cache on every build, CI's fmt, clippy and build jobs included. The queries are plain `sqlx::query_as` instead, and every query runs in the integration tests against a real Postgres. Switching to the macros later is a mechanical change. If the owner prefers the macros now, ADR 0002 stays as it is and the `.sqlx` cache gets committed. If not, ADR 0002 gets a line saying the tests do the checking.

@@ -1,13 +1,18 @@
 //! The REST part of v1 (ADR 0008). Everything else is GraphQL at `/v1/gql`. REST covers only:
-//! - sign-in redirects (Phase 2);
+//! - sign-in redirects (Phase 2, built);
 //! - the streamed upload (Phase 3);
 //! - the small, cacheable reads chat clients poll (Phase 2).
 //!
-//! Every handler here answers `501 not_implemented` until its phase builds it.
+//! The others answer `501 not_implemented` until their phase builds them.
 
 use axum::Json;
-use axum::http::StatusCode;
-use axum::response::Redirect;
+use axum::extract::{Path, Query, State};
+use axum::http::header::{CACHE_CONTROL, LOCATION, SET_COOKIE};
+use axum::http::{HeaderMap, HeaderValue, StatusCode};
+use axum::response::{IntoResponse, Response};
+use cyex_tv_auth::AuthError;
+use cyex_tv_auth::cookies;
+use cyex_tv_auth::flow::Callback;
 use cyex_tv_shared::error::{ApiError, ApiResult, ErrorBody};
 use cyex_tv_shared::model::{
     CallbackQuery, Channel, Emote, EmoteSet, LoginQuery, PersonalLookup, PersonalLookupResult,
@@ -16,7 +21,7 @@ use cyex_tv_shared::model::{
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
-use crate::state::AppState;
+use crate::state::{AppState, MaybeCaller};
 
 pub fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
@@ -33,10 +38,33 @@ pub fn router() -> OpenApiRouter<AppState> {
 
 // Auth
 
+fn platform(raw: &str) -> ApiResult<Platform> {
+    raw.parse()
+        .map_err(|_| ApiError::from(AuthError::UnknownPlatform))
+}
+
+/// A `302 Found` that sets cookies and is never cached.
+fn found(location: &str, cookies: &[String]) -> ApiResult<Response> {
+    let mut response = StatusCode::FOUND.into_response();
+    let headers = response.headers_mut();
+    headers.insert(
+        LOCATION,
+        HeaderValue::from_str(location).map_err(|_| ApiError::internal())?,
+    );
+    headers.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    for cookie in cookies {
+        headers.append(
+            SET_COOKIE,
+            HeaderValue::from_str(cookie).map_err(|_| ApiError::internal())?,
+        );
+    }
+    Ok(response)
+}
+
 /// Start signing in with Twitch or Kick.
 ///
-/// Redirects to the platform's consent page. With `link=true` and a signed-in session, the
-/// identity is linked to the current account instead.
+/// Redirects to the platform's consent page and sets a short-lived cookie holding `state`. With
+/// `link=true` and a signed-in session, the identity is linked to the current account instead.
 #[utoipa::path(
     get,
     path = "/v1/auth/{platform}/login",
@@ -44,16 +72,35 @@ pub fn router() -> OpenApiRouter<AppState> {
     params(("platform" = Platform, Path, description = "`twitch` or `kick`."), LoginQuery),
     responses(
         (status = 302, description = "Redirect to the platform's sign-in page."),
-        (status = 400, description = "Unknown platform or bad `return_to`.", body = ErrorBody)
+        (status = 400, description = "`unknown_platform` or `bad_return_to`.", body = ErrorBody),
+        (status = 401, description = "`signed_out`: `link=true` without a session.", body = ErrorBody),
+        (status = 503, description = "`unavailable`: sign-in with this platform isn't set up.", body = ErrorBody)
     )
 )]
-async fn login() -> ApiResult<Redirect> {
-    Err(ApiError::not_implemented())
+async fn login(
+    State(state): State<AppState>,
+    Path(raw): Path<String>,
+    Query(query): Query<LoginQuery>,
+    MaybeCaller(caller): MaybeCaller,
+) -> ApiResult<Response> {
+    let platform = platform(&raw)?;
+    let started = state
+        .auth
+        .start(
+            &state.db,
+            platform,
+            query.return_to.as_deref(),
+            query.link.unwrap_or(false),
+            caller.as_ref(),
+        )
+        .await?;
+    found(&started.location, &[started.set_cookie])
 }
 
 /// Where the platform sends the browser back to.
 ///
-/// Sets the session cookie and redirects to `return_to`.
+/// Checks `state` against the cookie set at login, signs in (or links), sets the session cookie
+/// and redirects to `return_to`.
 #[utoipa::path(
     get,
     path = "/v1/auth/{platform}/callback",
@@ -61,23 +108,68 @@ async fn login() -> ApiResult<Redirect> {
     params(("platform" = Platform, Path, description = "`twitch` or `kick`."), CallbackQuery),
     responses(
         (status = 302, description = "Signed in. Redirect to `return_to`."),
-        (status = 400, description = "Bad or expired `state`, or the user declined.", body = ErrorBody),
-        (status = 409, description = "`identity_taken`: linked to another account.", body = ErrorBody)
+        (status = 400, description = "`bad_state` (bad, expired or used `state`) or `declined` (the user cancelled).", body = ErrorBody),
+        (status = 403, description = "`account_deleted`.", body = ErrorBody),
+        (status = 409, description = "`identity_taken`: linked to another account; `platform_already_linked`.", body = ErrorBody),
+        (status = 502, description = "`platform_error`: the platform didn't answer as expected.", body = ErrorBody)
     )
 )]
-async fn callback() -> ApiResult<Redirect> {
-    Err(ApiError::not_implemented())
+async fn callback(
+    State(state): State<AppState>,
+    Path(raw): Path<String>,
+    Query(query): Query<CallbackQuery>,
+    headers: HeaderMap,
+    MaybeCaller(caller): MaybeCaller,
+) -> ApiResult<Response> {
+    let platform = platform(&raw)?;
+    let cookie_state = cookies::read(&headers, cookies::STATE);
+    let finished = state
+        .auth
+        .finish(
+            &state.db,
+            platform,
+            &Callback {
+                code: query.code.as_deref(),
+                state: query.state.as_deref(),
+                error: query.error.as_deref(),
+            },
+            cookie_state.as_deref(),
+            caller.as_ref(),
+        )
+        .await?;
+    tracing::info!(
+        account = %cyex_tv_db::ids::to_text(finished.account_id),
+        %platform,
+        created = finished.created,
+        linked = finished.linked,
+        "signed in"
+    );
+    found(&finished.location, &finished.set_cookies)
 }
 
 /// Sign out and end the session.
+///
+/// With the cookie, the request must come from `https://cyex.tv` (`Origin`).
 #[utoipa::path(
     post,
     path = "/v1/auth/logout",
     tag = "auth",
-    responses((status = 204, description = "Signed out."))
+    responses(
+        (status = 204, description = "Signed out. The session cookie is cleared."),
+        (status = 403, description = "`bad_origin`: the cookie was sent from another site.", body = ErrorBody)
+    )
 )]
-async fn logout() -> ApiResult<StatusCode> {
-    Err(ApiError::not_implemented())
+async fn logout(
+    State(state): State<AppState>,
+    MaybeCaller(caller): MaybeCaller,
+) -> ApiResult<Response> {
+    let clear = state.auth.sign_out(&state.db, caller.as_ref()).await?;
+    let mut response = StatusCode::NO_CONTENT.into_response();
+    response.headers_mut().insert(
+        SET_COOKIE,
+        HeaderValue::from_str(&clear).map_err(|_| ApiError::internal())?,
+    );
+    Ok(response)
 }
 
 // Upload

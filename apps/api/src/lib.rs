@@ -6,14 +6,16 @@ pub mod gql;
 pub mod routes;
 pub mod state;
 
-use async_graphql_axum::{GraphQL, GraphQLSubscription};
+use async_graphql_axum::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
 use axum::Router;
+use axum::extract::Extension;
 use axum::routing::get;
 use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
 use utoipa_axum::router::OpenApiRouter;
 
-use crate::state::AppState;
+use crate::gql::ApiSchema;
+use crate::state::{AppState, MaybeCaller};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -43,14 +45,27 @@ pub fn router() -> OpenApiRouter<AppState> {
 /// subscriptions (`/v1/gql/ws`).
 pub fn app(state: AppState) -> Router {
     let schema = gql::builder().data(state.clone()).finish();
-    let graphql = GraphQL::new(schema.clone());
-    let subscriptions = GraphQLSubscription::new(schema);
+    let subscriptions = GraphQLSubscription::new(schema.clone());
     let (rest_router, _spec) = router().split_for_parts();
     rest_router
-        .route("/v1/gql", get(gql::graphiql).post_service(graphql))
+        .route("/v1/gql", get(gql::graphiql).post(graphql))
         .route_service("/v1/gql/ws", subscriptions)
+        .layer(Extension(schema))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+/// `POST /v1/gql`, run as the caller. A cookie caller must send the site's `Origin`, since every
+/// POST counts as a write (`bad_origin` otherwise).
+async fn graphql(
+    Extension(schema): Extension<ApiSchema>,
+    MaybeCaller(caller): MaybeCaller,
+    request: GraphQLRequest,
+) -> GraphQLResponse {
+    schema
+        .execute(request.into_inner().data(caller))
+        .await
+        .into()
 }
 
 /// The OpenAPI document, as committed in `openapi/openapi.json`.

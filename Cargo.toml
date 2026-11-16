@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["apps/api", "apps/events", "apps/worker", "crates/db", "crates/shared"]
+members = ["apps/api", "apps/events", "apps/worker", "crates/auth", "crates/db", "crates/shared"]
 
 [workspace.package]
 version = "0.1.0"
@@ -11,6 +11,7 @@ repository = "https://github.com/cyex-tv/platform"
 publish = false
 
 [workspace.dependencies]
+cyex-tv-auth = { path = "crates/auth" }
 cyex-tv-db = { path = "crates/db" }
 cyex-tv-shared = { path = "crates/shared" }
 
@@ -19,12 +20,18 @@ cyex-tv-shared = { path = "crates/shared" }
 async-graphql = "7.2"
 async-graphql-axum = "7.2"
 axum = "0.8"
+base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 dotenvy = "0.15"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
+getrandom = "0.3"
 http-body-util = "0.1"
+reqwest = { version = "0.13", default-features = false, features = ["form", "http2", "json", "query", "rustls-no-provider"] }
+# The ring provider, not aws-lc: aws-lc-sys carries the OpenSSL licence, which ADR 0007 doesn't allow.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha2 = "0.10"
 sqlx = { version = "0.8", default-features = false, features = ["chrono", "json", "macros", "migrate", "postgres", "runtime-tokio", "uuid"] }
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
@@ -33,6 +40,7 @@ tower-http = { version = "0.6", features = ["trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "json"] }
 ulid = { version = "1", features = ["uuid"] }
+url = "2"
 utoipa = "5"
 utoipa-axum = "0.2"
 uuid = "1"
