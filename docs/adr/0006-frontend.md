@@ -18,7 +18,7 @@ The first draft of the plan chose Vue "to match 7TV", but 7TV's current site is 
   - home page: `cyex-web`
   - search, emote pages, my sets, upload, admin: `cyex-app` at web-tool density
   - API docs: `cyex-docs`
-- The API client is generated from `openapi.yaml` (0008). No hand-written fetch calls for endpoints in the spec.
+- The API client is generated from `openapi.json` (0008). No hand-written fetch calls for endpoints in the spec.
 - Server-side rendering for public pages (emote and channel pages are shared as links). Signed-in and admin pages can be client-rendered.
 
 ## Consequences

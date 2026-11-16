@@ -156,7 +156,7 @@ platform/
     db/             sqlx migrations and queries
     auth/           Twitch and Kick OAuth, sessions, account + roles
   openapi/
-    openapi.yaml    generated from the code (utoipa), checked in CI
+    openapi.json    generated from the code (utoipa), checked in CI
   dev/
     docker-compose.yaml   local postgres, minio (R2 stand-in)
   docs/adr/
@@ -169,7 +169,7 @@ Tasks
 1. Cargo workspace, rustfmt, clippy with `-D warnings`, `cargo deny` (licences and advisories).
 2. Dev compose with Postgres and MinIO.
 3. GitHub Actions: fmt, clippy, test, build, `cargo deny`, the OpenAPI drift check, and the web build and lint.
-4. Draft the API in code with utoipa stubs and generate `openapi.yaml`. It covers:
+4. Draft the API in code with utoipa stubs and generate `openapi.json`. It covers:
    - auth
    - accounts (`/me`, identities)
    - channels
