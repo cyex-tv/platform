@@ -1,0 +1,28 @@
+[package]
+name = "cyex-tv-shared"
+description = "Config, errors, logging, permissions and API types shared by the cyex.tv services"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+# GraphQL derives on the API types. The api service turns it on; plain clients can leave it off.
+graphql = ["dep:async-graphql"]
+
+[dependencies]
+async-graphql = { workspace = true, optional = true }
+axum.workspace = true
+dotenvy.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+utoipa.workspace = true
+
+[lints]
+workspace = true

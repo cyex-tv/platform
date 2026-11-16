@@ -1,0 +1,424 @@
+"""
+A short reference to an account, for owners and editors.
+"""
+type AccountSummary {
+	id: String!
+	displayName: String!
+	avatar: String
+}
+
+input AddSetEmoteInput {
+	"""
+	Rename it in this set. Defaults to the emote's own name.
+	"""
+	name: String
+	zeroWidth: Boolean
+}
+
+type Channel {
+	platform: Platform!
+	"""
+	Twitch: the broadcaster's user ID. Kick: `broadcaster_user_id`.
+	"""
+	platformChannelId: String!
+	login: String!
+	account: AccountSummary!
+	activeSetId: String
+	"""
+	Whether other people's personal emotes show in this channel.
+	"""
+	allowPersonalEmotes: Boolean!
+}
+
+input CreateRoleInput {
+	name: String!
+	description: String
+	position: Int!
+	permissions: [String!]!
+}
+
+input CreateSetInput {
+	name: String!
+	"""
+	`CHANNEL` or `PERSONAL`. The global set exists already.
+	"""
+	kind: SetKind!
+}
+
+type Emote {
+	id: String!
+	name: String!
+	owner: AccountSummary
+	state: EmoteState!
+	flags: EmoteFlags!
+	animated: Boolean!
+	tags: [String!]!
+	"""
+	For example `https://cdn.cyex.tv/emotes/<sha256>`.
+	"""
+	host: String!
+	files: [EmoteFile!]!
+	createdAt: String!
+}
+
+"""
+One file of an emote, served at `{host}/{name}`.
+"""
+type EmoteFile {
+	"""
+	For example `2x.webp` or `1x_static.avif`.
+	"""
+	name: String!
+	format: ImageFormat!
+	"""
+	1 to 4.
+	"""
+	scale: Int!
+	width: Int!
+	height: Int!
+	"""
+	Bytes.
+	"""
+	size: Int!
+	"""
+	The first frame of an animated emote.
+	"""
+	isStatic: Boolean!
+}
+
+type EmoteFlags {
+	zeroWidth: Boolean!
+	"""
+	Only its owner can add it to sets.
+	"""
+	private: Boolean!
+	nsfw: Boolean!
+}
+
+type EmoteSet {
+	id: String!
+	name: String!
+	kind: SetKind!
+	owner: AccountSummary
+	capacity: Int!
+	emotes: [SetEmote!]!
+}
+
+enum EmoteState {
+	PENDING
+	APPROVED
+	REJECTED
+	TAKEN_DOWN
+}
+
+"""
+One change, as delivered on both sockets.
+"""
+type Event {
+	"""
+	Increases with every event. Send the last one you saw to resume.
+	"""
+	id: String!
+	eventType: EventType!
+	"""
+	The topic it was delivered for, for example `channel:twitch:123`.
+	"""
+	topic: String!
+	setId: String
+	emoteId: String
+	"""
+	The emote's name in the set, for added and renamed.
+	"""
+	name: String
+	createdAt: String!
+}
+
+"""
+What changed. On the event WebSocket these are written `set.emote_added` and so on.
+"""
+enum EventType {
+	SET_EMOTE_ADDED
+	SET_EMOTE_REMOVED
+	SET_EMOTE_RENAMED
+	CHANNEL_ACTIVE_SET_CHANGED
+	PERSONAL_UPDATED
+	EMOTE_UPDATED
+	"""
+	Too much was missed: refetch what you show.
+	"""
+	RESYNC
+}
+
+"""
+A Twitch or Kick account linked to a cyex.tv account.
+"""
+type Identity {
+	platform: Platform!
+	"""
+	The platform's numeric user ID, as text.
+	"""
+	platformUserId: String!
+	login: String!
+	displayName: String!
+	avatar: String
+}
+
+enum ImageFormat {
+	WEBP
+	AVIF
+}
+
+"""
+The signed-in account.
+"""
+type Me {
+	id: String!
+	identities: [Identity!]!
+	"""
+	Permission names from the account's roles (ADR 0010).
+	"""
+	permissions: [String!]!
+	createdAt: String!
+}
+
+type Mutation {
+	"""
+	Unlink a platform from your account. The last identity can't be removed.
+	"""
+	unlinkIdentity(platform: Platform!): Me!
+	"""
+	Change a channel's active set and settings. Only the channel's owner.
+	"""
+	updateChannelSettings(platform: Platform!, id: String!, input: UpdateChannelSettingsInput!): Channel!
+	"""
+	Create a channel set, or your personal set (one per account).
+	"""
+	createSet(input: CreateSetInput!): EmoteSet!
+	"""
+	Rename a set or change its capacity. Owner or editor; capacity needs `sets.edit_any`.
+	"""
+	updateSet(id: String!, input: UpdateSetInput!): EmoteSet!
+	"""
+	Delete a set. Owner only. A channel's active set can't be deleted.
+	"""
+	deleteSet(id: String!): Boolean!
+	"""
+	Add an emote to a set. Personal sets take approved emotes only.
+	"""
+	addSetEmote(setId: String!, emoteId: String!, input: AddSetEmoteInput): SetEmote!
+	"""
+	Rename an emote in a set, or change its zero-width flag there.
+	"""
+	updateSetEmote(setId: String!, emoteId: String!, input: UpdateSetEmoteInput!): SetEmote!
+	"""
+	Remove an emote from a set.
+	"""
+	removeSetEmote(setId: String!, emoteId: String!): Boolean!
+	"""
+	Make someone an editor of a set. Owner only.
+	"""
+	addSetEditor(setId: String!, accountId: String!): Boolean!
+	"""
+	Remove an editor. Owner, or the editor themselves.
+	"""
+	removeSetEditor(setId: String!, accountId: String!): Boolean!
+	"""
+	Change an emote's name, tags or flags. Owner, or `emotes.edit_any`.
+	"""
+	updateEmote(id: String!, input: UpdateEmoteInput!): Emote!
+	"""
+	Delete your emote. It is removed from every set.
+	"""
+	deleteEmote(id: String!): Boolean!
+	"""
+	Approve a pending emote. Needs `emotes.review`. Audited.
+	"""
+	approveEmote(id: String!): Emote!
+	"""
+	Reject a pending emote with a reason. Needs `emotes.review`. Audited.
+	"""
+	rejectEmote(id: String!, reason: String!): Emote!
+	"""
+	Create a role. You can only grant permissions you hold. Needs `roles.manage`. Audited.
+	"""
+	createRole(input: CreateRoleInput!): Role!
+	"""
+	Change a role below your own highest one. Needs `roles.manage`. Audited.
+	"""
+	updateRole(id: String!, input: UpdateRoleInput!): Role!
+	"""
+	Delete a role below your own highest one. Needs `roles.manage`. Audited.
+	"""
+	deleteRole(id: String!): Boolean!
+	"""
+	Give an account a role. Needs `roles.manage`. Audited.
+	"""
+	assignRole(accountId: String!, roleId: String!): Boolean!
+	"""
+	Take a role from an account. The owner and the last `roles.manage` holder are protected.
+	Needs `roles.manage`. Audited.
+	"""
+	unassignRole(accountId: String!, roleId: String!): Boolean!
+}
+
+type PersonalSetEntry {
+	platformUserId: String!
+	set: EmoteSet!
+}
+
+"""
+A streaming platform.
+"""
+enum Platform {
+	TWITCH
+	KICK
+}
+
+type Query {
+	"""
+	The signed-in account.
+	"""
+	me: Me!
+	"""
+	A channel by its platform ID.
+	"""
+	channel(platform: Platform!, id: String!): Channel
+	"""
+	A channel by its login or slug. Logins change; store the ID, not the login.
+	"""
+	channelByLogin(platform: Platform!, login: String!): Channel
+	"""
+	A set with its emotes.
+	"""
+	set(id: String!): EmoteSet
+	"""
+	The cyex.tv global set, shown in every channel.
+	"""
+	globalSet: EmoteSet!
+	"""
+	An emote. Pending ones are visible to their owner and to moderators only.
+	"""
+	emote(id: String!): Emote
+	"""
+	Approved, listed emotes by name and tag. `perPage` is 1 to 100, default 50.
+	"""
+	searchEmotes(query: String!, animated: Boolean, owner: String, page: Int, perPage: Int): SearchResults!
+	"""
+	One user's personal set.
+	"""
+	personalSet(platform: Platform!, id: String!): EmoteSet
+	"""
+	Personal sets for up to 100 chatters at once.
+	"""
+	personalSets(platform: Platform!, userIds: [String!]!): [PersonalSetEntry!]!
+	"""
+	Every permission name a role can hold.
+	"""
+	permissions: [String!]!
+	"""
+	Pending emotes, oldest first. Needs `emotes.review`.
+	"""
+	reviewQueue: ReviewQueue!
+	"""
+	All roles. Needs `roles.manage`.
+	"""
+	roles: [Role!]!
+}
+
+type ReviewQueue {
+	items: [Emote!]!
+	total: Int!
+}
+
+type Role {
+	id: String!
+	name: String!
+	description: String
+	"""
+	Higher means more senior. You can only manage roles below your own highest one.
+	"""
+	position: Int!
+	permissions: [String!]!
+}
+
+type SearchResults {
+	items: [Emote!]!
+	total: Int!
+	page: Int!
+	perPage: Int!
+}
+
+"""
+An emote as it sits in a set: the name it is typed as there, and who added it.
+"""
+type SetEmote {
+	"""
+	The name in this set. Differs from `emote.name` when the set renamed it.
+	"""
+	name: String!
+	zeroWidth: Boolean!
+	addedBy: String
+	addedAt: String!
+	emote: Emote!
+}
+
+enum SetKind {
+	CHANNEL
+	PERSONAL
+	GLOBAL
+}
+
+type Subscription {
+	"""
+	Live updates for up to 500 topics: `channel:<platform>:<id>`, `set:<id>`,
+	`user:<platform>:<id>` (ADR 0005). The same events as the event WebSocket.
+	"""
+	events(topics: [String!]!): Event!
+}
+
+input UpdateChannelSettingsInput {
+	activeSetId: String
+	allowPersonalEmotes: Boolean
+}
+
+input UpdateEmoteInput {
+	name: String
+	tags: [String!]
+	zeroWidth: Boolean
+	private: Boolean
+	nsfw: Boolean
+}
+
+input UpdateRoleInput {
+	name: String
+	description: String
+	position: Int
+	permissions: [String!]
+}
+
+input UpdateSetEmoteInput {
+	name: String
+	zeroWidth: Boolean
+}
+
+input UpdateSetInput {
+	name: String
+	"""
+	Needs `sets.edit_any` to raise above the default.
+	"""
+	capacity: Int
+}
+
+"""
+Directs the executor to include this field or fragment only when the `if` argument is true.
+"""
+directive @include(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+"""
+Directs the executor to skip this field or fragment when the `if` argument is true.
+"""
+directive @skip(if: Boolean!) on FIELD | FRAGMENT_SPREAD | INLINE_FRAGMENT
+schema {
+	query: Query
+	mutation: Mutation
+	subscription: Subscription
+}

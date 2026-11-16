@@ -1,0 +1,881 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "cyex.tv REST API",
+    "description": "The REST part of the cyex.tv API: sign-in, uploads and the cacheable reads chat clients poll. Everything else is GraphQL at /v1/gql.",
+    "license": {
+      "name": "AGPL-3.0-only"
+    },
+    "version": "0.1.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.cyex.tv",
+      "description": "Production"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "The process is up.",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "The service is running.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "The service can reach its database.",
+        "operationId": "ready",
+        "responses": {
+          "200": {
+            "description": "Ready to serve.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database isn't reachable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Sign out and end the session.",
+        "operationId": "logout",
+        "responses": {
+          "204": {
+            "description": "Signed out."
+          }
+        }
+      }
+    },
+    "/v1/auth/{platform}/callback": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Where the platform sends the browser back to.",
+        "description": "Sets the session cookie and redirects to `return_to`.",
+        "operationId": "callback",
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "description": "`twitch` or `kick`.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Platform"
+            }
+          },
+          {
+            "name": "code",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "error",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Signed in. Redirect to `return_to`."
+          },
+          "400": {
+            "description": "Bad or expired `state`, or the user declined.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`identity_taken`: linked to another account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/{platform}/login": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Start signing in with Twitch or Kick.",
+        "description": "Redirects to the platform's consent page. With `link=true` and a signed-in session, the\nidentity is linked to the current account instead.",
+        "operationId": "login",
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "description": "`twitch` or `kick`.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Platform"
+            }
+          },
+          {
+            "name": "return_to",
+            "in": "query",
+            "description": "Where to send the browser afterwards. Must be a cyex.tv URL.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "link",
+            "in": "query",
+            "description": "Link this platform to the signed-in account instead of signing in.",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to the platform's sign-in page."
+          },
+          "400": {
+            "description": "Unknown platform or bad `return_to`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/channels/{platform}/{id}": {
+      "get": {
+        "tags": [
+          "reads"
+        ],
+        "summary": "A channel and its active set ID. Poll this, then fetch the set.",
+        "operationId": "get_channel",
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "description": "`twitch` or `kick`.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Platform"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The broadcaster's platform user ID.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Channel"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified."
+          },
+          "404": {
+            "description": "`not_found`: no cyex.tv account has this channel.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/emotes": {
+      "post": {
+        "tags": [
+          "emotes"
+        ],
+        "summary": "Upload an emote. It starts `pending`: usable in your own sets, hidden from everyone else until a\nmoderator approves it. Manage it afterwards through GraphQL.",
+        "description": "PNG, APNG, GIF, WebP or AVIF; at most 5 MB, 1000×1000 px and 1000 frames.",
+        "operationId": "upload_emote",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadEmote"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted; processing.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Emote"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_format`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_image` or `blocked`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/emotes/{id}": {
+      "get": {
+        "tags": [
+          "reads"
+        ],
+        "summary": "An approved emote.",
+        "operationId": "get_emote",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Emote ID.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Emote"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/personal-sets/lookup": {
+      "post": {
+        "tags": [
+          "reads"
+        ],
+        "summary": "Personal sets for up to 100 chatters at once, for clients rendering a chat.",
+        "operationId": "lookup_personal_sets",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonalLookup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PersonalLookupResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sets/global": {
+      "get": {
+        "tags": [
+          "reads"
+        ],
+        "summary": "The cyex.tv global set, shown in every channel.",
+        "operationId": "get_global_set",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmoteSet"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified."
+          }
+        }
+      }
+    },
+    "/v1/sets/{id}": {
+      "get": {
+        "tags": [
+          "reads"
+        ],
+        "summary": "A set with its emotes.",
+        "operationId": "get_set",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Set ID.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmoteSet"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified."
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccountSummary": {
+        "type": "object",
+        "description": "A short reference to an account, for owners and editors.",
+        "required": [
+          "id",
+          "display_name"
+        ],
+        "properties": {
+          "avatar": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
+      "Channel": {
+        "type": "object",
+        "required": [
+          "platform",
+          "platform_channel_id",
+          "login",
+          "account",
+          "allow_personal_emotes"
+        ],
+        "properties": {
+          "account": {
+            "$ref": "#/components/schemas/AccountSummary"
+          },
+          "active_set_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "allow_personal_emotes": {
+            "type": "boolean",
+            "description": "Whether other people's personal emotes show in this channel."
+          },
+          "login": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "platform_channel_id": {
+            "type": "string",
+            "description": "Twitch: the broadcaster's user ID. Kick: `broadcaster_user_id`."
+          }
+        }
+      },
+      "Emote": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "state",
+          "flags",
+          "animated",
+          "tags",
+          "host",
+          "files",
+          "created_at"
+        ],
+        "properties": {
+          "animated": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmoteFile"
+            }
+          },
+          "flags": {
+            "$ref": "#/components/schemas/EmoteFlags"
+          },
+          "host": {
+            "type": "string",
+            "description": "For example `https://cdn.cyex.tv/emotes/<sha256>`."
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AccountSummary"
+              }
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/EmoteState"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "EmoteFile": {
+        "type": "object",
+        "description": "One file of an emote, served at `{host}/{name}`.",
+        "required": [
+          "name",
+          "format",
+          "scale",
+          "width",
+          "height",
+          "size",
+          "is_static"
+        ],
+        "properties": {
+          "format": {
+            "$ref": "#/components/schemas/ImageFormat"
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "is_static": {
+            "type": "boolean",
+            "description": "The first frame of an animated emote."
+          },
+          "name": {
+            "type": "string",
+            "description": "For example `2x.webp` or `1x_static.avif`."
+          },
+          "scale": {
+            "type": "integer",
+            "format": "int32",
+            "description": "1 to 4.",
+            "minimum": 0
+          },
+          "size": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Bytes.",
+            "minimum": 0
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "EmoteFlags": {
+        "type": "object",
+        "required": [
+          "zero_width",
+          "private",
+          "nsfw"
+        ],
+        "properties": {
+          "nsfw": {
+            "type": "boolean"
+          },
+          "private": {
+            "type": "boolean",
+            "description": "Only its owner can add it to sets."
+          },
+          "zero_width": {
+            "type": "boolean"
+          }
+        }
+      },
+      "EmoteSet": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "capacity",
+          "emotes"
+        ],
+        "properties": {
+          "capacity": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "emotes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SetEmote"
+            }
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SetKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AccountSummary"
+              }
+            ]
+          }
+        }
+      },
+      "EmoteState": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "approved",
+          "rejected",
+          "taken_down"
+        ]
+      },
+      "ErrorBody": {
+        "type": "object",
+        "description": "An error answer. `error` is a stable code clients can match on; `message` is for people.",
+        "required": [
+          "error",
+          "message"
+        ],
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "Health": {
+        "type": "object",
+        "description": "`GET /health` and `GET /health/ready`.",
+        "required": [
+          "status"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "ImageFormat": {
+        "type": "string",
+        "enum": [
+          "webp",
+          "avif"
+        ]
+      },
+      "PersonalLookup": {
+        "type": "object",
+        "description": "`POST /v1/personal-sets/lookup`.",
+        "required": [
+          "platform",
+          "user_ids"
+        ],
+        "properties": {
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          },
+          "user_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Up to 100 platform user IDs, for example the people seen in chat."
+          }
+        }
+      },
+      "PersonalLookupResult": {
+        "type": "object",
+        "description": "Only users with a non-empty personal set are listed.",
+        "required": [
+          "sets"
+        ],
+        "properties": {
+          "sets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PersonalSetEntry"
+            }
+          }
+        }
+      },
+      "PersonalSetEntry": {
+        "type": "object",
+        "required": [
+          "platform_user_id",
+          "set"
+        ],
+        "properties": {
+          "platform_user_id": {
+            "type": "string"
+          },
+          "set": {
+            "$ref": "#/components/schemas/EmoteSet"
+          }
+        }
+      },
+      "Platform": {
+        "type": "string",
+        "description": "A streaming platform.",
+        "enum": [
+          "twitch",
+          "kick"
+        ]
+      },
+      "SetEmote": {
+        "type": "object",
+        "description": "An emote as it sits in a set: the name it is typed as there, and who added it.",
+        "required": [
+          "name",
+          "zero_width",
+          "added_at",
+          "emote"
+        ],
+        "properties": {
+          "added_at": {
+            "type": "string"
+          },
+          "added_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "emote": {
+            "$ref": "#/components/schemas/Emote"
+          },
+          "name": {
+            "type": "string",
+            "description": "The name in this set. Differs from `emote.name` when the set renamed it."
+          },
+          "zero_width": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SetKind": {
+        "type": "string",
+        "enum": [
+          "channel",
+          "personal",
+          "global"
+        ]
+      },
+      "UploadEmote": {
+        "type": "object",
+        "description": "Multipart upload (REST only): the image file and its name.",
+        "required": [
+          "name",
+          "file"
+        ],
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tags": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Comma-separated."
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "system",
+      "description": "Health checks."
+    },
+    {
+      "name": "auth",
+      "description": "Signing in with Twitch or Kick."
+    },
+    {
+      "name": "emotes",
+      "description": "Uploading emotes."
+    },
+    {
+      "name": "reads",
+      "description": "Public, cacheable reads for chat clients."
+    }
+  ]
+}

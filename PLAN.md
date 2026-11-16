@@ -22,7 +22,8 @@ Version 3, 2026/11/16:
 | D4 | **Database:** its own Postgres 17 database and container (`tv-db`) with its own credentials, backups and network. It may run on the same host as cyex-api, but shares nothing with `deck-db`. |
 | D5 | **Storage:** Cloudflare R2, served through `cdn.cyex.tv`. |
 | D6 | **Search:** Postgres `pg_trgm` + full-text search in v1. Meilisearch or Typesense later, only when load needs it. |
-| D7 | **Live updates:** SSE with many subscriptions per connection, and resume. |
+| D7 | **Live updates:** a WebSocket event protocol (`/v1/events`) for chat clients, and GraphQL subscriptions (`/v1/gql/ws`) for GraphQL clients. One event model and outbox behind both. Many subscriptions per connection, changeable without reconnecting, with resume. No SSE (revised 2026/11/16, ADR 0005). |
+| D7b | **API shape:** GraphQL-first at `/v1/gql` for reads, writes, moderation and admin. Admin parts need a session and a permission, and introspection stays on. REST only for OAuth, uploads, health and a small, cacheable chat-client read API (revised 2026/11/16, ADR 0008). |
 | D8 | **Web:** SvelteKit + TypeScript, inside the platform monorepo. Styling uses the cyex token CSS (`cyex-design` + `cyex-app`, `cyex-web` for the landing page, `cyex-docs` for API docs). No Tailwind. |
 | D9 | **Platforms:** Twitch **and** Kick in v1. A cyex.tv account has one or more linked identities, `(platform, platform_user_id)`, and never uses logins as keys. |
 | D10 | **Uploads:** anyone signed in can upload. A new emote is **unlisted until approved**. It works in the uploader's own channel right away, but is not in search or other people's pickers. |
@@ -91,10 +92,10 @@ Goal: tools, repos, external accounts and open decisions settled before any code
    - 0002 Database: its own Postgres, migrations with sqlx, pool limits, backups (D4).
    - 0003 Storage: R2 + `cdn.cyex.tv`, key layout, cache rules (D5).
    - 0004 Search: Postgres first, and the trigger for moving to a search engine (D6).
-   - 0005 Live updates: SSE, multi-subscribe, resume window, heartbeat (D7).
+   - 0005 Live updates: the event WebSocket and GraphQL subscriptions, one event model, resume window, heartbeat (D7).
    - 0006 Frontend: SvelteKit + cyex tokens (D8).
    - 0007 Licence: AGPL-3.0 (D18), plus the borrowed-code rule (D16) and `cargo deny` / licence checks in CI (dependencies must be AGPL-compatible).
-   - 0008 API contract: code-first OpenAPI with `utoipa`, the committed spec checked in CI, the TS client generated with `openapi-typescript`.
+   - 0008 API contract: GraphQL-first with `async-graphql` plus a small REST part with `utoipa`; the SDL and the OpenAPI spec are both generated, committed and checked in CI.
    - 0009 Accounts and identities: one cyex.tv account with linked Twitch and Kick identities, sign-in, linking and unlinking, sessions (site cookie, app Bearer).
    - 0010 Roles and permissions: the RBAC model (see Phase 2).
    - 0011 Cosmetics boundary: cyex deck badges vs cyex.tv cosmetics (D17), and the namespaces and IDs that keep them apart in clients.
@@ -148,15 +149,17 @@ Repo layout (`cyex-tv/platform`):
 platform/
   apps/
     api/            Rust, axum: HTTP API at api.cyex.tv/v1
-    events/         Rust: SSE live updates
+    events/         Rust: the event WebSocket
     worker/         Rust: image pipeline jobs
     web/            SvelteKit: cyex.tv, the website and admin pages
   crates/
     shared/         models, error types, config, permission names
     db/             sqlx migrations and queries
     auth/           Twitch and Kick OAuth, sessions, account + roles
+  schema/
+    schema.graphql  the GraphQL SDL, generated from the code, checked in CI
   openapi/
-    openapi.yaml    generated from the code (utoipa), checked in CI
+    openapi.json    the REST part, generated from the code (utoipa), checked in CI
   dev/
     docker-compose.yaml   local postgres, minio (R2 stand-in)
   docs/adr/
@@ -168,8 +171,8 @@ platform/
 Tasks
 1. Cargo workspace, rustfmt, clippy with `-D warnings`, `cargo deny` (licences and advisories).
 2. Dev compose with Postgres and MinIO.
-3. GitHub Actions: fmt, clippy, test, build, `cargo deny`, the OpenAPI drift check, and the web build and lint.
-4. Draft the API in code with utoipa stubs and generate `openapi.yaml`. It covers:
+3. GitHub Actions: fmt, clippy, test, build, `cargo deny`, the drift checks for the GraphQL SDL and the OpenAPI spec, and later the web build and lint.
+4. Draft the API in code: a GraphQL schema with stub resolvers, plus the REST part as utoipa stubs. Generate `schema.graphql` and `openapi.json`. It covers:
    - auth
    - accounts (`/me`, identities)
    - channels
@@ -187,7 +190,7 @@ Tasks
 Done when:
 - `docker compose up` works;
 - CI is green;
-- the OpenAPI draft is reviewed and committed;
+- the GraphQL and REST drafts are reviewed and committed;
 - health returns 200.
 
 PAUSE. Compact before Phase 2.
@@ -269,7 +272,7 @@ Done when:
 - sign-in works end to end with a test Twitch account and a test Kick account;
 - linking both to one account works;
 - the permission tests pass;
-- OpenAPI matches, as checked by CI.
+- the GraphQL SDL and OpenAPI match the code, as checked by CI.
 
 PAUSE. Compact before Phase 3.
 
@@ -357,8 +360,9 @@ PAUSE. Compact before Phase 5.
 Goal: when a set changes, every connected client sees it within a second.
 
 Tasks
-1. `apps/events`: `GET api.cyex.tv/v1/events` over SSE, with **many subscriptions on one connection**.
-   - Subscriptions go in the query, by channel (`platform:id`) and by set ID.
+1. `apps/events`: the event WebSocket at `wss://api.cyex.tv/v1/events` (protocol in ADR 0005), with **many subscriptions on one connection**, changeable without reconnecting.
+   - Topics: `channel:<platform>:<id>`, `set:<id>`, `user:<platform>:<id>`.
+   - Also `subscription { events(topics) }` on the api's GraphQL socket `/v1/gql/ws`, fed by the same outbox.
    - Event types:
      - `set.emote_added`
      - `set.emote_removed`
@@ -368,8 +372,8 @@ Tasks
      - `emote.updated` (approved, taken down, renamed)
    - The `cosmetic.*` namespace is reserved.
 2. Source of events: the `events_outbox` table plus `LISTEN/NOTIFY` as a wake-up. There is no direct coupling from the API to the events service.
-3. Resume with `Last-Event-ID` from the outbox. Keep a replay window (proposal: 24 h). Send a heartbeat every 20 s. Older gaps get a "resync" event.
-4. Load test: 5.000 open connections, each with 10 subscriptions; p95 under 1 s from write to delivery.
+3. Resume with `resume` (session ID + last event ID) from the outbox, within a 24 h replay window. Send a heartbeat every 20 s. Older gaps get a `resync` event.
+4. Load test on both sockets: 5.000 open connections, each with 10 subscriptions; p95 under 1 s from write to delivery.
 5. The deck switches from polling to events.
 
 Done when:
@@ -411,7 +415,7 @@ Tasks
    - **roles**: create a role, choose its permissions, assign it to people, see who has what
    - the audit log
    - the global set editor
-6. A generated API client from the OpenAPI spec. Never hand-write fetch calls for endpoints in the spec.
+6. GraphQL for the website, with types generated from `schema.graphql` (GraphQL Code Generator). Never hand-write types for what the schema describes.
 7. Playwright e2e tests:
    - sign in with Twitch and with Kick (test apps)
    - link both

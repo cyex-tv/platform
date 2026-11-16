@@ -1,0 +1,43 @@
+[package]
+name = "cyex-tv-api"
+description = "The cyex.tv HTTP API at api.cyex.tv/v1"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "cyex-tv-api"
+path = "src/main.rs"
+
+[[bin]]
+name = "openapi"
+path = "src/bin/openapi.rs"
+
+[[bin]]
+name = "schema"
+path = "src/bin/schema.rs"
+
+[dependencies]
+async-graphql.workspace = true
+async-graphql-axum.workspace = true
+axum.workspace = true
+cyex-tv-db.workspace = true
+cyex-tv-shared = { workspace = true, features = ["graphql"] }
+futures-util.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+tokio.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+utoipa.workspace = true
+utoipa-axum.workspace = true
+
+[dev-dependencies]
+http-body-util.workspace = true
+tower.workspace = true
+
+[lints]
+workspace = true

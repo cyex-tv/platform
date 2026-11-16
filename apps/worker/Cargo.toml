@@ -1,0 +1,17 @@
+[package]
+name = "cyex-tv-worker"
+description = "Image processing jobs for cyex.tv"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+cyex-tv-shared.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true
