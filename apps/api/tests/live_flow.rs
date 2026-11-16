@@ -91,7 +91,7 @@ impl Live {
                 "id": "1",
                 "type": "subscribe",
                 "payload": {
-                    "query": "subscription($t: [String!]!) { events(topics: $t) { id type topic setId emoteId name } }",
+                    "query": "subscription($t: [String!]!) { events(topics: $t) { id eventType topic setId emoteId name } }",
                     "variables": { "t": topics }
                 }
             }),
@@ -210,7 +210,7 @@ async fn a_mutation_reaches_a_graphql_subscriber() {
     let took = start.elapsed();
     assert_eq!(msg["type"], "next", "{msg}");
     let event = &msg["payload"]["data"]["events"];
-    assert_eq!(event["type"], "SET_EMOTE_ADDED");
+    assert_eq!(event["eventType"], "SET_EMOTE_ADDED");
     assert_eq!(event["topic"], set_topic.as_str());
     assert_eq!(event["setId"], ids::to_text(set.id).as_str());
     assert_eq!(event["emoteId"], ids::to_text(emote.id).as_str());
@@ -253,7 +253,7 @@ async fn personal_sets_send_personal_updated() {
     .await;
     let msg = next(&mut ws).await;
     assert_eq!(
-        msg["payload"]["data"]["events"]["type"], "PERSONAL_UPDATED",
+        msg["payload"]["data"]["events"]["eventType"], "PERSONAL_UPDATED",
         "{msg}"
     );
     assert_eq!(msg["payload"]["data"]["events"]["topic"], "user:twitch:66");
