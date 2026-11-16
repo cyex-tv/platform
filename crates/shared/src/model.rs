@@ -376,6 +376,73 @@ pub struct Role {
     pub permissions: Vec<String>,
 }
 
+// Reports and takedowns (Phase 7)
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "snake_case")]
+pub enum ReportState {
+    Open,
+    Dismissed,
+    /// The emote was taken down.
+    Actioned,
+}
+
+/// What a moderator does with a report.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "snake_case")]
+pub enum ReportAction {
+    Dismiss,
+    /// Take the emote down (needs `emotes.takedown`).
+    TakeDown,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct Report {
+    pub id: String,
+    /// The reported emote, as moderators see it. Empty if it was deleted since.
+    pub emote: Option<Emote>,
+    pub reporter_id: Option<String>,
+    pub reason: String,
+    pub state: ReportState,
+    pub resolution: Option<String>,
+    pub created_at: String,
+    pub resolved_at: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct ReportQueue {
+    pub items: Vec<Report>,
+    pub total: u64,
+}
+
+/// Something the platform tells you, such as a takedown of your emote.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct Notification {
+    pub id: String,
+    /// For example `emote.taken_down`.
+    pub kind: String,
+    /// JSON, as text.
+    pub payload: String,
+    pub created_at: String,
+    pub read: bool,
+}
+
+/// What an account may do (`users.restrict`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct AccountStatus {
+    pub id: String,
+    /// No uploads.
+    pub uploads_blocked: bool,
+    /// No sign-in, no sessions.
+    pub blocked: bool,
+}
+
 /// One audited change (ADR 0010). `before` and `after` are JSON, as text.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
