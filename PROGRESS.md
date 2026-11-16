@@ -6,7 +6,14 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 
 Taken before Phase 4 in the overnight run: Phase 4 (the deck, in `cyex-app/cyex-deck`) can't meet its "Done when" until the owner's CDN and OAuth steps are done, and its step 2 waits for Phase 5 anyway. See the run's questions.
 
-### PR 1: the hub and the event WebSocket (branch `phase-5/events`)
+### PR 2: the GraphQL subscription (branch `phase-5/gql`)
+- [x] `subscription { events(topics) }` on `/v1/gql/ws` (`graphql-transport-ws`), fed by its own hub and feeder in the api, so it gets the same events as `/v1/events` from the same outbox. Topics are checked (`invalid_topic`, `too_many_topics`, 500 at most). A lagging subscriber gets a `RESYNC` event.
+- [x] Changes to personal sets go out as `personal.updated` (ADR 0005), on the set's topic and the owner's `user:` topics.
+
+#### Tests
+- `apps/api/tests/live_flow.rs` with a real server, a `graphql-transport-ws` client and Postgres: an `addSetEmote` mutation reaches a subscriber on another connection in under a second (measured), a personal set change arrives as `PERSONAL_UPDATED` on the user topic, a bad topic is refused.
+
+### PR 1: the hub and the event WebSocket (branch `phase-5/events`, merged 2026/11/16 as PR 12)
 - [x] `crates/hub`: topics and subscribers, each event handed to a subscriber once even when it matches several of its topics. A subscriber whose queue (1024) fills is marked lagged and gets `resync`, so a slow client never holds up the rest.
 - [x] The feeder reads `events_outbox` on `NOTIFY cyex_tv_events` and every second. It keeps a watermark, so an event whose transaction commits after a higher ID is visible is still delivered; a missing ID (a rolled-back transaction) holds it back for at most 5 s.
 - [x] `apps/events`: `/v1/events` with the ADR 0005 protocol: `hello`, `subscribe` and `unsubscribe` with `ack` (refused topics listed with their code), `dispatch`, `heartbeat` both ways (closed after 60 s of silence), `resume` with replay from the outbox or `resync` (gap over 24 h, older than the outbox keeps, or over 5000 events), `reconnect` on shutdown, `error` and close on a broken limit (500 topics, 10 frames a second, 16 KB a frame).
@@ -17,7 +24,7 @@ Taken before Phase 4 in the overnight run: Phase 4 (the deck, in `cyex-app/cyex-
 - `crates/hub/tests/feeder.rs` against Postgres: a commit out of ID order is delivered once the lower ID commits, and a rolled-back ID is passed after the wait.
 - `apps/events/tests/socket.rs` with real servers and a real WebSocket client: subscribe with refusals and delivery in under a second (measured and printed), other topics and unsubscribed ones not delivered, resume replaying exactly the missed events once and then live ones, an unknown session, a gap too old (`resync`), resume on a fresh instance after `reconnect` and a restart, the topic, rate, format and size limits.
 
-## Phase 3: Upload pipeline, CDN, approval gate (in progress)
+## Phase 3: Upload pipeline, CDN, approval gate (done, merged 2026/11/16 as PRs 8 to 11; the CDN itself waits for the owner's R2 steps)
 
 Started 2026/11/16, in an overnight run the owner asked for (work on, merge green PRs, questions at the end).
 
@@ -26,6 +33,9 @@ Started 2026/11/16, in an overnight run the owner asked for (work on, merge gree
 2. The job queue (Postgres, `FOR UPDATE SKIP LOCKED`), the storage layer (S3 API: R2 in production, Versity Gateway locally) and the worker loop.
 3. The streamed upload: limits, decoding to validate, hashing, the blocklist, duplicates.
 4. Transcoding (WebP and AVIF at 1x-4x, static first frames), after benchmarking the encoders as the plan asks.
+
+### Merges (agent, under the owner's OK)
+`gh pr merge <n> -R cyex-tv/platform --merge --subject "Merge pull request #<n> from cyex-tv/<branch>"` for PR 8 (`phase-3/review`), PR 9 (`phase-3/queue`), PR 10 (`phase-3/upload`) and PR 11 (`phase-3/transcode`), each after all 6 checks passed with its new database suites seen running in the CI log. Fixes CI found on the way: a stale `not_implemented` expectation, the MinIO image being gone (now Versity Gateway), a schema check on a test session, a fixture whose dHash really was close to the blocked one, and the `NCSA` licence for `libfuzzer-sys`.
 
 ### PR 4: transcoding (branch `phase-3/transcode`)
 - [x] ADR 0012 (image encoding), after a benchmark: WebP through libwebp (`webp-animation`, still and animated, quality 90), AVIF through `ravif` (quality 80, speed 8) for still images and first frames. No animated AVIF yet: `ravif` can't write it, and libavif needs CMake and a C AV1 encoder (the owner's call, see questions).
