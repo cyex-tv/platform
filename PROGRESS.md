@@ -12,6 +12,17 @@ Started 2026/11/16, in an overnight run the owner asked for (work on, merge gree
 3. The streamed upload: limits, decoding to validate, hashing, the blocklist, duplicates.
 4. Transcoding (WebP and AVIF at 1x-4x, static first frames), after benchmarking the encoders as the plan asks.
 
+### PR 3: the upload (branch `phase-3/upload`)
+- [x] `crates/media`: the format by magic bytes; full decoding under the limits (5 MB, 1000×1000 px, 1000 frames, and 100 million pixels over all frames), with the canvas size checked from the header before anything is decoded; the 64-bit dHash. PNG, APNG, GIF and WebP (still and animated). AVIF is recognised and refused for now (decoding it needs dav1d, a C library); SVG and video are refused.
+- [x] Migration `20261118000003_blocklist.sql` (additive): `blocked_images` (exact sha256, or a dHash within 4 bits), and an index for the upload rate limit.
+- [x] `POST /v1/emotes` (multipart: `name`, `tags` comma-separated, `file`): signed in, not restricted, at most 20 uploads an hour (the owner is exempt). The body is capped just over 5 MB and the file stops being read at 5 MB. Decoding runs off the request threads. A blocked image is `blocked`; a file seen before is reused (same object, same URLs, no second job).
+- [x] In one transaction: the file row, the original in storage (`originals/{sha256}`, no public cache header), the `emote.transcode` job, and the `pending` emote with its tags. If storage fails, nothing is kept.
+- [x] The api reads `CYEX_TV_S3_*` too; without storage, uploads answer 503.
+
+#### Tests
+- Unit (`crates/media`, with every fixture made in code): sniffing, a static PNG, an APNG, animated and still GIFs, a static WebP, SVG, video and AVIF refused, corrupt PNG, GIF and WebP, the file-size, side, frame and total-pixel limits, a 50000×50000 pixel bomb with a valid header checksum, dHash on near copies.
+- `apps/api/tests/upload_flow.rs` against Postgres: a PNG becomes a pending emote with its original stored and one job; APNG, GIF and WebP; a duplicate reuses the file; SVG, video, corrupt, oversized and too-wide files refused with nothing kept; bad forms, signed out, restricted; exact and near-copy blocklist hits; the hourly limit per account; no storage.
+
 ### PR 2: job queue, storage and the worker (branch `phase-3/queue`)
 - [x] Migration `20261118000002_jobs.sql` (additive): `jobs` with state, attempts, `run_after` and a lease (`locked_until`); inserting one sends `NOTIFY cyex_tv_jobs`.
 - [x] `crates/db/src/jobs.rs`: enqueue, claim (`FOR UPDATE SKIP LOCKED`, leased; an expired lease can be claimed again), complete, fail (retry with backoff, or for good), cleanup.
