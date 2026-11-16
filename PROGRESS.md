@@ -2,9 +2,22 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Phase 7: Moderation, abuse and limits (in progress)
+
+### PR 1: rate limits (branch `phase-7/limits`)
+- [x] `cyex_tv_shared::ratelimit`: a token bucket per key, in memory (per instance; v1 runs one of each service), swept when it grows. The client IP is the peer address, or `CF-Connecting-IP` when `CYEX_TV_TRUST_CLOUDFLARE=true` (never trusted otherwise, since anyone can send it).
+- [x] The api, per IP: sign-in 30 a minute, GraphQL 300 a minute, uploads 30 an hour, public reads 1200 a minute, opening the GraphQL socket 60 a minute; per signed-in account: GraphQL 600 a minute (plus the 20 uploads an hour from Phase 3). Health checks are never limited.
+- [x] The events service: 60 new connections a minute per IP.
+- [x] Over a limit: `429 rate_limited` with `Retry-After`.
+
+#### Tests
+- Unit: the bucket (burst, refill, separate keys), the client IP with and without trusting Cloudflare, which route falls under which limit, `Retry-After`.
+- `apps/api/tests/http.rs` (no database): the sign-in limit hit and its `Retry-After`, health never limited, Cloudflare's header ignored unless trusted, and per-client buckets behind Cloudflare.
+- `apps/events/tests/socket.rs`: the third connection in a minute from one IP refused with 429 at the handshake.
+
 ## Phase 6: Search and the website (in progress)
 
-### PR 1: search (branch `phase-6/search`)
+### PR 1: search (branch `phase-6/search`, merged 2026/11/17 as PR 15)
 - [x] `crates/db::search` behind the `EmoteSearch` trait (ADR 0004), on Postgres: names by substring and `pg_trgm` similarity, tags by prefix; only approved, listed (not private), not deleted emotes, and NSFW only with `nsfw: true` (new, additive). Ranked: exact name, name prefix, similarity, popularity. `%` and `_` are taken literally.
 - [x] Migration `20261118000005_popularity.sql` (additive): `emotes.popularity`, the number of channels whose active set holds the emote, refreshed in the worker's hourly run; indexes for searchable emotes and tag prefixes.
 - [x] `searchEmotes(query, animated, owner, nsfw, page, perPage)`: 1 to 100 per page, default 50. With that, every GraphQL field in the contract is built.
@@ -13,7 +26,7 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 - Unit: LIKE escaping.
 - `apps/api/tests/search_flow.rs` against Postgres: rank order (exact, prefixes, tag-only last), pending, private, deleted and unasked NSFW emotes never found, the animated and owner filters, an empty query by popularity, paging and the page-size cap, literal wildcards; popularity counted from active sets, and a second refresh changing nothing.
 
-## Phase 5: Live updates (in progress)
+## Phase 5: Live updates (done, merged 2026/11/17 as PRs 12 to 14; the GraphQL socket's own load run is still owed)
 
 Taken before Phase 4 in the overnight run: Phase 4 (the deck, in `cyex-app/cyex-deck`) can't meet its "Done when" until the owner's CDN and OAuth steps are done, and its step 2 waits for Phase 5 anyway. See the run's questions.
 

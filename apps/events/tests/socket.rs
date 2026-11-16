@@ -42,11 +42,7 @@ impl Server {
         });
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        let app = router(EventsState {
-            db: db.pool.clone(),
-            hub,
-            stopping,
-        });
+        let app = router(EventsState::new(db.pool.clone(), hub, stopping));
         let mut serve_stop = stop.subscribe();
         let server = tokio::spawn(async move {
             axum::serve(listener, app)
@@ -274,6 +270,40 @@ async fn resume_works_across_a_restart() {
     let after = publish(&db, EventType::SetEmoteAdded, CHANNEL, "after").await;
     assert_eq!(next(&mut ws).await["d"]["id"], after.to_string());
     second.stop().await;
+    db.close().await;
+}
+
+#[tokio::test]
+async fn new_connections_are_limited_per_ip() {
+    let Some(db) = TestDb::new().await else {
+        return;
+    };
+    let (_stop, stopping) = watch::channel(false);
+    let app = router(
+        EventsState::new(db.pool.clone(), Hub::new(), stopping)
+            .with_connect_rate(cyex_tv_shared::ratelimit::Rate::per_minute(2)),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .unwrap();
+    });
+    let url = format!("ws://{addr}/v1/events");
+    let _a = tokio_tungstenite::connect_async(&url).await.unwrap();
+    let _b = tokio_tungstenite::connect_async(&url).await.unwrap();
+    let refused = tokio_tungstenite::connect_async(&url).await;
+    match refused {
+        Err(tokio_tungstenite::tungstenite::Error::Http(response)) => {
+            assert_eq!(response.status(), 429);
+            assert!(response.headers().contains_key("retry-after"));
+        }
+        other => panic!("expected 429, got {other:?}"),
+    }
     db.close().await;
 }
 

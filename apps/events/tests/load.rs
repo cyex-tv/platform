@@ -73,11 +73,11 @@ async fn many_connections_get_their_events_fast() {
     ));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let app = router(EventsState {
-        db: db.pool.clone(),
-        hub: hub.clone(),
-        stopping,
-    });
+    // Every client comes from 127.0.0.1, so the per-IP connect limit is lifted here.
+    let app = router(
+        EventsState::new(db.pool.clone(), hub.clone(), stopping)
+            .with_connect_rate(cyex_tv_shared::ratelimit::Rate::per_minute(1_000_000)),
+    );
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     tokio::time::sleep(Duration::from_millis(300)).await;
 

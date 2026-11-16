@@ -27,7 +27,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = cyex_tv_db::connect(&cfg).await?;
     cyex_tv_db::MIGRATOR.run(&db).await?;
 
-    let mut state = AppState::new(db, auth);
+    let trust_cloudflare = matches!(
+        std::env::var("CYEX_TV_TRUST_CLOUDFLARE").as_deref(),
+        Ok("true" | "1")
+    );
+    let mut state = AppState::new(db, auth).with_limits(cyex_tv_api::limits::Limits::new(
+        cyex_tv_api::limits::Rates::default(),
+        trust_cloudflare,
+    ));
     if let Ok(cdn) = std::env::var("CYEX_TV_CDN_URL") {
         state = state.with_cdn_url(&cdn);
     }
@@ -47,9 +54,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = cyex_tv_api::app(state);
     let listener = tokio::net::TcpListener::bind(cfg.bind).await?;
     tracing::info!(addr = %cfg.bind, "api listening");
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown::signal())
-        .await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown::signal())
+    .await?;
     let _ = stop_tx.send(true);
     feeder.await??;
     Ok(())
