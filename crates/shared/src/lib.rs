@@ -6,6 +6,7 @@ pub mod error;
 pub mod logging;
 pub mod model;
 pub mod permissions;
+pub mod ratelimit;
 pub mod shutdown;
 #[cfg(feature = "sqlx")]
 mod sql;
