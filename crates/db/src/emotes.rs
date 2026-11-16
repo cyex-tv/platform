@@ -208,3 +208,51 @@ pub async fn set_tags(conn: &mut PgConnection, id: Uuid, tags: &[String]) -> DbR
     tx.commit().await?;
     Ok(())
 }
+
+/// Approves or rejects a pending emote. `None` if it isn't pending (or doesn't exist), so two
+/// moderators reviewing at once can't both win.
+pub async fn review(
+    conn: &mut PgConnection,
+    id: Uuid,
+    state: EmoteState,
+    reviewer: Uuid,
+    reason: Option<&str>,
+) -> DbResult<Option<Emote>> {
+    Ok(sqlx::query_as(&format!(
+        "UPDATE emotes
+         SET state = $2, reviewed_by = $3, reviewed_at = now(), review_reason = $4,
+             updated_at = now()
+         WHERE id = $1 AND deleted_at IS NULL AND state = 'pending'
+         RETURNING {EMOTE}"
+    ))
+    .bind(id)
+    .bind(state)
+    .bind(reviewer)
+    .bind(reason)
+    .fetch_optional(conn)
+    .await?)
+}
+
+/// The sets an emote is in.
+pub async fn sets_containing(conn: &mut PgConnection, id: Uuid) -> DbResult<Vec<Uuid>> {
+    Ok(sqlx::query_scalar(
+        "SELECT set_id FROM emote_set_members WHERE emote_id = $1 ORDER BY set_id",
+    )
+    .bind(id)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// Takes an emote out of every set (when it is deleted). Returns the sets it was in, with the
+/// name it had there.
+pub async fn remove_from_all_sets(
+    conn: &mut PgConnection,
+    id: Uuid,
+) -> DbResult<Vec<(Uuid, String)>> {
+    Ok(
+        sqlx::query_as("DELETE FROM emote_set_members WHERE emote_id = $1 RETURNING set_id, name")
+            .bind(id)
+            .fetch_all(conn)
+            .await?,
+    )
+}
