@@ -1,12 +1,23 @@
 //! IDs are ULIDs (ADR 0002): sortable by time, stored as `uuid`, written as 26-character text in
 //! the API.
 
-use ulid::Ulid;
+use std::sync::Mutex;
+
+use ulid::{Generator, Ulid};
 use uuid::Uuid;
+
+/// IDs made in this process strictly increase, even within one millisecond, so "newest first"
+/// by ID (the audit log and its paging) matches the order things happened in.
+static GENERATOR: Mutex<Generator> = Mutex::new(Generator::new());
 
 /// A new ID for any table except the outbox.
 pub fn new_id() -> Uuid {
-    Ulid::new().into()
+    let next = GENERATOR
+        .lock()
+        .ok()
+        .and_then(|mut generator| generator.generate().ok());
+    // `generate` fails only after 2^80 IDs in one millisecond; a plain ULID is fine then.
+    next.unwrap_or_else(Ulid::new).into()
 }
 
 /// The API's text form.
@@ -22,6 +33,12 @@ pub fn from_text(text: &str) -> Option<Uuid> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ids_increase_within_a_millisecond() {
+        let ids: Vec<Uuid> = (0..1000).map(|_| new_id()).collect();
+        assert!(ids.windows(2).all(|w| w[0] < w[1]));
+    }
 
     #[test]
     fn text_round_trips() {

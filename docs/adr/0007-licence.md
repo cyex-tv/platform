@@ -16,6 +16,7 @@ FFZ's client is Apache-2.0.
 - Clients that only call the public API (Chatterino, other extensions, bots) are not affected.
 - **No code is copied from 7TV or BTTV.** Their public protocols and response shapes may be studied and supported. FFZ code may be reused with its Apache-2.0 notice kept.
 - `cargo deny` in CI allows only licences compatible with AGPL-3.0, and fails on unknown licences and on advisories. The web and extension use a licence checker with the same allowlist.
+- Data licences: `CDLA-Permissive-2.0` is allowed (added 2026/11/16) for bundled CA certificate data (`webpki-root-certs`, pulled in by the TLS verifier). It is permissive, asks only that the licence text travel with the data, and doesn't bind the code around it.
 - No CLA for now. Outside contributions are under AGPL-3.0 (inbound = outbound).
 
 ## Consequences
