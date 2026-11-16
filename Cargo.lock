@@ -676,9 +676,31 @@ name = "cyex-tv-events"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "chrono",
+ "cyex-tv-db",
+ "cyex-tv-hub",
  "cyex-tv-shared",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "sqlx",
  "tokio",
+ "tokio-tungstenite",
  "tower-http",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "cyex-tv-hub"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "cyex-tv-db",
+ "cyex-tv-shared",
+ "serde_json",
+ "sqlx",
+ "tokio",
  "tracing",
 ]
 
