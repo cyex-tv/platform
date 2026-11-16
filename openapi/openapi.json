@@ -316,7 +316,7 @@
           "emotes"
         ],
         "summary": "Upload an emote. It starts `pending`: usable in your own sets, hidden from everyone else until a\nmoderator approves it. Manage it afterwards through GraphQL.",
-        "description": "PNG, APNG, GIF, WebP or AVIF; at most 5 MB, 1000×1000 px and 1000 frames.",
+        "description": "PNG, APNG, GIF or WebP; at most 5 MB, 1000×1000 px and 1000 frames. Sign in first (with the\ncookie, from `https://cyex.tv`). At most 20 uploads an hour.",
         "operationId": "upload_emote",
         "requestBody": {
           "content": {
@@ -330,7 +330,7 @@
         },
         "responses": {
           "202": {
-            "description": "Accepted; processing.",
+            "description": "Accepted; the files are being made. The emote is `pending`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -339,8 +339,38 @@
               }
             }
           },
+          "400": {
+            "description": "`bad_name`, `bad_tag`, `too_many_tags` or `bad_form`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`signed_out`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`restricted`, or `bad_origin` for a cookie from another site.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "413": {
-            "description": "`too_large`.",
+            "description": "`too_large`: over 5 MB, 1000×1000 px or 1000 frames.",
             "content": {
               "application/json": {
                 "schema": {
@@ -350,7 +380,7 @@
             }
           },
           "415": {
-            "description": "`unsupported_format`.",
+            "description": "`unsupported_format`: not PNG, APNG, GIF or WebP.",
             "content": {
               "application/json": {
                 "schema": {
@@ -360,7 +390,27 @@
             }
           },
           "422": {
-            "description": "`invalid_image` or `blocked`.",
+            "description": "`invalid_image` (doesn't decode) or `blocked`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: storage isn't reachable.",
             "content": {
               "application/json": {
                 "schema": {

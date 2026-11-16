@@ -24,10 +24,13 @@ path = "src/bin/schema.rs"
 async-graphql.workspace = true
 async-graphql-axum.workspace = true
 axum.workspace = true
+bytes.workspace = true
 chrono.workspace = true
 cyex-tv-auth.workspace = true
 cyex-tv-db.workspace = true
+cyex-tv-media.workspace = true
 cyex-tv-shared = { workspace = true, features = ["graphql"] }
+cyex-tv-storage.workspace = true
 futures-util.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -42,6 +45,8 @@ uuid.workspace = true
 
 [dev-dependencies]
 http-body-util.workspace = true
+image = { workspace = true, features = ["gif", "png", "webp"] }
+png = "0.18"
 tower.workspace = true
 url.workspace = true
 

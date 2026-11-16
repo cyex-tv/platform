@@ -8,6 +8,7 @@ pub mod gql;
 pub mod moderation;
 pub mod routes;
 pub mod state;
+pub mod upload;
 pub mod views;
 
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
