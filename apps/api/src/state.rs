@@ -4,6 +4,7 @@ use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use cyex_tv_auth::{Auth, Caller};
 use cyex_tv_shared::error::ApiError;
+use cyex_tv_storage::Store;
 use sqlx::PgPool;
 
 /// Where emote files are served, unless `CYEX_TV_CDN_URL` says otherwise.
@@ -16,6 +17,8 @@ pub struct AppState {
     pub auth: Arc<Auth>,
     /// The CDN origin emote `host`s are built on, without a trailing slash.
     pub cdn_url: Arc<str>,
+    /// Where uploads' originals go. `None`: uploads answer 503.
+    pub store: Option<Store>,
 }
 
 impl AppState {
@@ -24,7 +27,13 @@ impl AppState {
             db,
             auth,
             cdn_url: DEFAULT_CDN_URL.into(),
+            store: None,
         }
+    }
+
+    pub fn with_store(mut self, store: Store) -> Self {
+        self.store = Some(store);
+        self
     }
 
     pub fn with_cdn_url(mut self, url: &str) -> Self {

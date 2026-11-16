@@ -256,3 +256,19 @@ pub async fn remove_from_all_sets(
             .await?,
     )
 }
+
+/// How many emotes an account has made since `since`, deleted ones included (for the upload rate
+/// limit, so deleting doesn't refill it).
+pub async fn count_since(
+    conn: &mut PgConnection,
+    owner: Uuid,
+    since: DateTime<Utc>,
+) -> DbResult<i64> {
+    Ok(sqlx::query_scalar(
+        "SELECT count(*) FROM emotes WHERE owner_account_id = $1 AND created_at >= $2",
+    )
+    .bind(owner)
+    .bind(since)
+    .fetch_one(conn)
+    .await?)
+}

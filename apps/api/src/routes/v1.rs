@@ -1,12 +1,12 @@
 //! The REST part of v1 (ADR 0008). Everything else is GraphQL at `/v1/gql`. REST covers only:
 //! - sign-in redirects (Phase 2, built);
-//! - the streamed upload (Phase 3);
+//! - the upload (Phase 3, built; transcoding is the worker's);
 //! - the small, cacheable reads chat clients poll (built).
 //!
 //! The others answer `501 not_implemented` until their phase builds them.
 
 use axum::Json;
-use axum::extract::{Path, Query, State};
+use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, ETAG, IF_NONE_MATCH, LOCATION, SET_COOKIE};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -24,14 +24,21 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 use crate::state::{AppState, MaybeCaller};
-use crate::{catalog, moderation};
+use crate::{catalog, moderation, upload};
+
+/// The upload body may be a little over the 5 MB file limit (multipart framing, the name and
+/// tags); anything beyond this is cut off before it is read.
+const UPLOAD_BODY_LIMIT: usize = 5 * 1024 * 1024 + 64 * 1024;
 
 pub fn router() -> OpenApiRouter<AppState> {
+    let upload = OpenApiRouter::new()
+        .routes(routes!(upload_emote))
+        .layer(DefaultBodyLimit::max(UPLOAD_BODY_LIMIT));
     OpenApiRouter::new()
+        .merge(upload)
         .routes(routes!(login))
         .routes(routes!(callback))
         .routes(routes!(logout))
-        .routes(routes!(upload_emote))
         .routes(routes!(get_channel))
         .routes(routes!(get_set))
         .routes(routes!(get_global_set))
@@ -180,21 +187,88 @@ async fn logout(
 /// Upload an emote. It starts `pending`: usable in your own sets, hidden from everyone else until a
 /// moderator approves it. Manage it afterwards through GraphQL.
 ///
-/// PNG, APNG, GIF, WebP or AVIF; at most 5 MB, 1000×1000 px and 1000 frames.
+/// PNG, APNG, GIF or WebP; at most 5 MB, 1000×1000 px and 1000 frames. Sign in first (with the
+/// cookie, from `https://cyex.tv`). At most 20 uploads an hour.
 #[utoipa::path(
     post,
     path = "/v1/emotes",
     tag = "emotes",
     request_body(content = UploadEmote, content_type = "multipart/form-data"),
     responses(
-        (status = 202, description = "Accepted; processing.", body = Emote),
-        (status = 413, description = "`too_large`.", body = ErrorBody),
-        (status = 415, description = "`unsupported_format`.", body = ErrorBody),
-        (status = 422, description = "`invalid_image` or `blocked`.", body = ErrorBody)
+        (status = 202, description = "Accepted; the files are being made. The emote is `pending`.", body = Emote),
+        (status = 400, description = "`bad_name`, `bad_tag`, `too_many_tags` or `bad_form`.", body = ErrorBody),
+        (status = 401, description = "`signed_out`.", body = ErrorBody),
+        (status = 403, description = "`restricted`, or `bad_origin` for a cookie from another site.", body = ErrorBody),
+        (status = 413, description = "`too_large`: over 5 MB, 1000×1000 px or 1000 frames.", body = ErrorBody),
+        (status = 415, description = "`unsupported_format`: not PNG, APNG, GIF or WebP.", body = ErrorBody),
+        (status = 422, description = "`invalid_image` (doesn't decode) or `blocked`.", body = ErrorBody),
+        (status = 429, description = "`rate_limited`.", body = ErrorBody),
+        (status = 503, description = "`unavailable`: storage isn't reachable.", body = ErrorBody)
     )
 )]
-async fn upload_emote() -> ApiResult<Json<Emote>> {
-    Err(ApiError::not_implemented())
+async fn upload_emote(
+    State(state): State<AppState>,
+    MaybeCaller(caller): MaybeCaller,
+    mut form: Multipart,
+) -> ApiResult<(StatusCode, Json<Emote>)> {
+    let caller = caller.ok_or_else(|| ApiError::from(AuthError::SignedOut))?;
+    let bad_form = |message: &str| ApiError::new(StatusCode::BAD_REQUEST, "bad_form", message);
+    let mut name = None;
+    let mut tags = None;
+    let mut file: Option<Vec<u8>> = None;
+    while let Some(mut field) = form
+        .next_field()
+        .await
+        .map_err(|_| bad_form("The form couldn't be read."))?
+    {
+        match field.name() {
+            Some("file") => {
+                let mut bytes = Vec::new();
+                while let Some(chunk) = field.chunk().await.map_err(|err| {
+                    if err.status() == StatusCode::PAYLOAD_TOO_LARGE {
+                        upload::too_large()
+                    } else {
+                        bad_form("The file couldn't be read.")
+                    }
+                })? {
+                    if bytes.len() + chunk.len() > cyex_tv_media::Limits::default().max_bytes {
+                        return Err(upload::too_large());
+                    }
+                    bytes.extend_from_slice(&chunk);
+                }
+                file = Some(bytes);
+            }
+            Some(key @ ("name" | "tags")) => {
+                let key = key.to_owned();
+                let text = field
+                    .text()
+                    .await
+                    .map_err(|_| bad_form("A form field couldn't be read."))?;
+                if text.len() > 1000 {
+                    return Err(bad_form("A form field is too long."));
+                }
+                if key == "name" {
+                    name = Some(text);
+                } else {
+                    tags = Some(text);
+                }
+            }
+            _ => return Err(bad_form("Unknown form field. Send name, tags and file.")),
+        }
+    }
+    let name = name.ok_or_else(|| bad_form("Give the emote a name."))?;
+    let file = file.ok_or_else(|| bad_form("Attach the image as `file`."))?;
+    let emote = upload::upload(
+        &state,
+        &caller,
+        upload::Upload {
+            name,
+            tags: upload::split_tags(tags.as_deref()),
+            file: file.into(),
+        },
+    )
+    .await?;
+    Ok((StatusCode::ACCEPTED, Json(emote)))
 }
 
 // Chat-client reads: public, no auth, `ETag` and `Cache-Control`.

@@ -91,13 +91,24 @@ async fn ready_is_503_without_a_database() {
 }
 
 #[tokio::test]
-async fn rest_stubs_answer_not_implemented() {
-    // Only the upload is left (Phase 3).
-    let request = Request::post("/v1/emotes").body(Body::empty()).unwrap();
+async fn upload_needs_a_session() {
+    // Every REST route is built now; an upload without a session is refused before anything
+    // is read or stored.
+    let boundary = "b0undary";
+    let body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"name\"\r\n\r\nx\r\n--{boundary}--\r\n"
+    );
+    let request = Request::post("/v1/emotes")
+        .header(
+            "content-type",
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .body(Body::from(body))
+        .unwrap();
     let (status, body) = send(offline_state(), request).await;
-    assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
     let error: ErrorBody = serde_json::from_slice(&body).unwrap();
-    assert_eq!(error.error, "not_implemented");
+    assert_eq!(error.error, "signed_out");
 }
 
 #[tokio::test]

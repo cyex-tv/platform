@@ -31,6 +31,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Ok(cdn) = std::env::var("CYEX_TV_CDN_URL") {
         state = state.with_cdn_url(&cdn);
     }
+    match cyex_tv_storage::S3Config::from_source(|name| std::env::var(name).ok())? {
+        Some(s3) => state = state.with_store(cyex_tv_storage::Store::s3(s3)?),
+        None => tracing::warn!("CYEX_TV_S3_ENDPOINT not set; uploads answer 503"),
+    }
     let app = cyex_tv_api::app(state);
     let listener = tokio::net::TcpListener::bind(cfg.bind).await?;
     tracing::info!(addr = %cfg.bind, "api listening");
