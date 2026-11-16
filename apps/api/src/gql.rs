@@ -1,9 +1,5 @@
-//! The GraphQL API at `/v1/gql` (ADR 0008). Resolvers answer `not_implemented` until their phase
-//! builds them:
-//! - Phase 2: accounts, channels, sets, editors, roles and the audit log (built)
-//! - Phase 3: emotes and moderation (reads, edits and review built; upload is REST)
-//! - Phase 5: the `events` subscription (built)
-//! - Phase 6: search
+//! The GraphQL API at `/v1/gql` (ADR 0008): accounts, channels, sets and editors, emotes and the
+//! review gate, roles and the audit log, search, and the `events` subscription. Uploads are REST.
 //!
 //! Admin and moderation fields check their permission in `catalog`, `admin` and `moderation`,
 //! each naming the one it needs. Introspection stays on, so the private parts are visible in the
@@ -31,7 +27,7 @@ use futures_util::Stream;
 use sqlx::Connection;
 
 use crate::state::AppState;
-use crate::{admin, catalog, moderation};
+use crate::{admin, catalog, moderation, search};
 
 pub type ApiSchema = Schema<Query, Mutation, Subscription>;
 
@@ -59,13 +55,6 @@ pub async fn graphiql() -> Html<String> {
 
 fn coded(code: &'static str, message: &'static str) -> async_graphql::Error {
     async_graphql::Error::new(message).extend_with(|_, e| e.set("code", code))
-}
-
-fn not_implemented() -> async_graphql::Error {
-    coded(
-        "not_implemented",
-        "This field is part of the v1 API but isn't built yet.",
-    )
 }
 
 fn internal(err: impl std::fmt::Display) -> async_graphql::Error {
@@ -188,16 +177,32 @@ impl Query {
             .map_err(api_error)
     }
 
-    /// Approved, listed emotes by name and tag. `perPage` is 1 to 100, default 50.
+    /// Approved, listed emotes by name and tag, best match first, then the most used.
+    /// `perPage` is 1 to 100, default 50. NSFW emotes only with `nsfw: true`.
+    #[allow(clippy::too_many_arguments)]
     async fn search_emotes(
         &self,
+        ctx: &Context<'_>,
         query: String,
         animated: Option<bool>,
         owner: Option<String>,
+        nsfw: Option<bool>,
         page: Option<u32>,
         per_page: Option<u32>,
     ) -> Result<SearchResults> {
-        Err(not_implemented())
+        search::search(
+            state(ctx),
+            &search::Params {
+                text: &query,
+                animated,
+                owner: owner.as_deref(),
+                nsfw: nsfw.unwrap_or(false),
+                page,
+                per_page,
+            },
+        )
+        .await
+        .map_err(api_error)
     }
 
     /// One user's personal set.

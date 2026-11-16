@@ -192,12 +192,6 @@ async fn unknown_paths_are_404() {
 }
 
 #[tokio::test]
-async fn graphql_stubs_answer_not_implemented() {
-    let response = gql(r#"{ searchEmotes(query: "pog") { total } }"#).await;
-    assert_eq!(error_code(&response), "not_implemented");
-}
-
-#[tokio::test]
 async fn graphql_admin_fields_need_a_permission() {
     for query in [
         "{ reviewQueue { total } }",

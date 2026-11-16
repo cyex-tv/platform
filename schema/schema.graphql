@@ -323,9 +323,10 @@ type Query {
 	"""
 	emote(id: String!): Emote
 	"""
-	Approved, listed emotes by name and tag. `perPage` is 1 to 100, default 50.
+	Approved, listed emotes by name and tag, best match first, then the most used.
+	`perPage` is 1 to 100, default 50. NSFW emotes only with `nsfw: true`.
 	"""
-	searchEmotes(query: String!, animated: Boolean, owner: String, page: Int, perPage: Int): SearchResults!
+	searchEmotes(query: String!, animated: Boolean, owner: String, nsfw: Boolean, page: Int, perPage: Int): SearchResults!
 	"""
 	One user's personal set.
 	"""
