@@ -1,0 +1,1172 @@
+//! The query modules against a real Postgres. Each test gets its own migrated database.
+
+mod common;
+
+use chrono::{Duration, Utc};
+use common::TestDb;
+use cyex_tv_db::accounts::{self, Profile};
+use cyex_tv_db::emotes::{self, EmotePatch, NewEmote};
+use cyex_tv_db::sessions::{self, SessionKind};
+use cyex_tv_db::sets::{self, NewMember};
+use cyex_tv_db::{DbError, audit, channels, files, outbox, roles};
+use cyex_tv_shared::model::{EmoteState, EventType, Platform, SetKind};
+use cyex_tv_shared::permissions;
+use serde_json::json;
+use sqlx::PgConnection;
+use sqlx::postgres::PgListener;
+use uuid::Uuid;
+
+macro_rules! db {
+    () => {
+        match TestDb::new().await {
+            Some(db) => db,
+            None => return,
+        }
+    };
+}
+
+fn twitch<'a>(id: &'a str, login: &'a str) -> Profile<'a> {
+    Profile {
+        platform: Platform::Twitch,
+        platform_user_id: id,
+        login,
+        display_name: login,
+        avatar: None,
+    }
+}
+
+fn kick<'a>(id: &'a str, login: &'a str) -> Profile<'a> {
+    Profile {
+        platform: Platform::Kick,
+        ..twitch(id, login)
+    }
+}
+
+async fn account(conn: &mut PgConnection, twitch_id: &str) -> Uuid {
+    accounts::sign_in(conn, twitch(twitch_id, &format!("user{twitch_id}")))
+        .await
+        .unwrap()
+        .account
+        .id
+}
+
+async fn emote(conn: &mut PgConnection, owner: Uuid, name: &str, state: EmoteState) -> Uuid {
+    let emote = emotes::create(
+        conn,
+        &NewEmote {
+            owner_account_id: owner,
+            name,
+            ..NewEmote::default()
+        },
+    )
+    .await
+    .unwrap();
+    if state != EmoteState::Pending {
+        emotes::set_state(conn, emote.id, state).await.unwrap();
+    }
+    emote.id
+}
+
+fn member(emote_id: Uuid) -> NewMember<'static> {
+    NewMember {
+        emote_id,
+        name: None,
+        zero_width: None,
+        added_by: None,
+    }
+}
+
+// Accounts and identities
+
+#[tokio::test]
+async fn sign_in_creates_then_reuses_the_account() {
+    let db = db!();
+    let mut c = db.conn().await;
+
+    let first = accounts::sign_in(&mut c, twitch("100", "alice"))
+        .await
+        .unwrap();
+    assert!(first.created);
+    assert_eq!(first.identity.login, "alice");
+
+    let mut renamed = twitch("100", "alice_2");
+    renamed.avatar = Some("https://example.com/a.png");
+    let second = accounts::sign_in(&mut c, renamed).await.unwrap();
+    assert!(!second.created);
+    assert_eq!(second.account.id, first.account.id);
+    assert_eq!(second.identity.login, "alice_2");
+    assert_eq!(
+        second.identity.avatar.as_deref(),
+        Some("https://example.com/a.png")
+    );
+    assert!(second.identity.refreshed_at >= first.identity.refreshed_at);
+
+    // The same numeric ID on another platform is a different person.
+    let other = accounts::sign_in(&mut c, kick("100", "alice"))
+        .await
+        .unwrap();
+    assert!(other.created);
+    assert_ne!(other.account.id, first.account.id);
+
+    drop(c);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn concurrent_first_sign_ins_share_one_account() {
+    let db = db!();
+    let mut tasks = Vec::new();
+    for _ in 0..6 {
+        let pool = db.pool.clone();
+        tasks.push(tokio::spawn(async move {
+            let mut c = pool.acquire().await.unwrap();
+            accounts::sign_in(&mut c, twitch("777", "racer"))
+                .await
+                .unwrap()
+        }));
+    }
+    let mut ids = Vec::new();
+    for task in tasks {
+        ids.push(task.await.unwrap().account.id);
+    }
+    ids.dedup();
+    assert_eq!(ids.len(), 1);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn linking_and_unlinking_identities() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let alice = account(&mut c, "1").await;
+    let bob = account(&mut c, "2").await;
+
+    let linked = accounts::link(&mut c, alice, kick("10", "alice_k"))
+        .await
+        .unwrap();
+    assert_eq!(linked.account_id, alice);
+    assert_eq!(accounts::identities(&mut c, alice).await.unwrap().len(), 2);
+
+    // Linking again is a refresh.
+    let again = accounts::link(&mut c, alice, kick("10", "alice_k2"))
+        .await
+        .unwrap();
+    assert_eq!(again.login, "alice_k2");
+
+    // Already on another account.
+    assert!(matches!(
+        accounts::link(&mut c, bob, kick("10", "alice_k")).await,
+        Err(DbError::IdentityTaken)
+    ));
+    // A second Twitch identity on the same account.
+    assert!(matches!(
+        accounts::link(&mut c, alice, twitch("3", "alt")).await,
+        Err(DbError::PlatformAlreadyLinked)
+    ));
+
+    let removed = accounts::unlink(&mut c, alice, Platform::Twitch)
+        .await
+        .unwrap();
+    assert_eq!(removed.platform_user_id, "1");
+    assert!(matches!(
+        accounts::unlink(&mut c, alice, Platform::Twitch).await,
+        Err(DbError::NotFound)
+    ));
+    assert!(matches!(
+        accounts::unlink(&mut c, alice, Platform::Kick).await,
+        Err(DbError::LastIdentity)
+    ));
+
+    // The unlinked identity can sign in again, as a new account.
+    let back = accounts::sign_in(&mut c, twitch("1", "alice"))
+        .await
+        .unwrap();
+    assert!(back.created);
+
+    drop(c);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn restricting_an_account() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let id = account(&mut c, "1").await;
+
+    let restricted = accounts::set_restricted(&mut c, id, true).await.unwrap();
+    let at = restricted.restricted_at.unwrap();
+    // Restricting twice keeps the first time.
+    let again = accounts::set_restricted(&mut c, id, true).await.unwrap();
+    assert_eq!(again.restricted_at, Some(at));
+    let lifted = accounts::set_restricted(&mut c, id, false).await.unwrap();
+    assert_eq!(lifted.restricted_at, None);
+    assert!(matches!(
+        accounts::set_restricted(&mut c, Uuid::nil(), true).await,
+        Err(DbError::NotFound)
+    ));
+
+    drop(c);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn the_schema_rejects_bad_rows() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let id = account(&mut c, "1").await;
+
+    // Logins are not IDs.
+    let bad_id = accounts::link(&mut c, id, kick("not-a-number", "x")).await;
+    assert!(matches!(bad_id, Err(DbError::Sqlx(_))));
+    // Whitespace in emote names.
+    let bad_name = emotes::create(
+        &mut c,
+        &NewEmote {
+            owner_account_id: id,
+            name: "two words",
+            ..NewEmote::default()
+        },
+    )
+    .await;
+    assert!(bad_name.is_err());
+    // A global set always has no owner.
+    let owned_global = sqlx::query(
+        "INSERT INTO emote_sets (id, owner_account_id, name, kind, capacity)
+         VALUES ($1, $2, 'x', 'global', 10)",
+    )
+    .bind(cyex_tv_db::ids::new_id())
+    .bind(id)
+    .execute(&mut *c)
+    .await;
+    assert!(owned_global.is_err());
+
+    drop(c);
+    db.close().await;
+}
+
+// Sessions
+
+#[tokio::test]
+async fn sessions_expire_slide_and_sign_out() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let id = account(&mut c, "1").await;
+    let a = [1u8; 32];
+    let b = [2u8; 32];
+    let c_hash = [3u8; 32];
+
+    let session = sessions::create(&mut c, &a, id, SessionKind::Site, Duration::days(30))
+        .await
+        .unwrap();
+    assert_eq!(session.kind, SessionKind::Site);
+    assert!(session.expires_at > Utc::now() + Duration::days(29));
+    sessions::create(&mut c, &b, id, SessionKind::App, Duration::days(90))
+        .await
+        .unwrap();
+    sessions::create(&mut c, &c_hash, id, SessionKind::Site, Duration::days(30))
+        .await
+        .unwrap();
+
+    assert!(sessions::find_active(&mut c, &a).await.unwrap().is_some());
+    assert!(
+        sessions::find_active(&mut c, &[9u8; 32])
+            .await
+            .unwrap()
+            .is_none()
+    );
+
+    // Touch never shortens: the app session keeps its 90 days.
+    let touched = sessions::touch(&mut c, &b, Duration::days(30))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(touched.expires_at > Utc::now() + Duration::days(89));
+
+    // Expired sessions are invisible and get cleaned up.
+    sqlx::query("UPDATE sessions SET created_at = now() - interval '2 days', expires_at = now() - interval '1 day' WHERE id_hash = $1")
+        .bind(&a[..])
+        .execute(&mut *c)
+        .await
+        .unwrap();
+    assert!(sessions::find_active(&mut c, &a).await.unwrap().is_none());
+    assert!(
+        sessions::touch(&mut c, &a, Duration::days(30))
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(sessions::delete_expired(&mut c).await.unwrap(), 1);
+
+    // Sign out everywhere but here.
+    assert_eq!(
+        sessions::delete_for_account(&mut c, id, Some(&b))
+            .await
+            .unwrap(),
+        1
+    );
+    assert!(sessions::find_active(&mut c, &b).await.unwrap().is_some());
+    assert!(sessions::delete(&mut c, &b).await.unwrap());
+    assert!(!sessions::delete(&mut c, &b).await.unwrap());
+
+    drop(c);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn sessions_of_deleted_accounts_are_inactive() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let id = account(&mut c, "1").await;
+    let hash = [7u8; 32];
+    sessions::create(&mut c, &hash, id, SessionKind::Site, Duration::days(30))
+        .await
+        .unwrap();
+    sqlx::query("UPDATE accounts SET deleted_at = now() WHERE id = $1")
+        .bind(id)
+        .execute(&mut *c)
+        .await
+        .unwrap();
+    assert!(
+        sessions::find_active(&mut c, &hash)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    drop(c);
+    db.close().await;
+}
+
+// Channels
+
+#[tokio::test]
+async fn channels_upsert_and_look_up() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let owner = account(&mut c, "1").await;
+
+    let ch = channels::upsert(&mut c, owner, Platform::Twitch, "1", "Streamer")
+        .await
+        .unwrap();
+    assert!(ch.allow_personal_emotes);
+    assert_eq!(ch.active_set_id, None);
+
+    let again = channels::upsert(&mut c, owner, Platform::Twitch, "1", "streamer_new")
+        .await
+        .unwrap();
+    assert_eq!(again.id, ch.id);
+    assert_eq!(again.login, "streamer_new");
+
+    let by_login = channels::find_by_login(&mut c, Platform::Twitch, "STREAMER_NEW")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(by_login.id, ch.id);
+    assert!(
+        channels::find_by_login(&mut c, Platform::Kick, "streamer_new")
+            .await
+            .unwrap()
+            .is_none()
+    );
+
+    let set = sets::create(&mut c, owner, "main", SetKind::Channel)
+        .await
+        .unwrap();
+    let active = channels::set_active_set(&mut c, ch.id, Some(set.id))
+        .await
+        .unwrap();
+    assert_eq!(active.active_set_id, Some(set.id));
+    let off = channels::set_allow_personal_emotes(&mut c, ch.id, false)
+        .await
+        .unwrap();
+    assert!(!off.allow_personal_emotes);
+
+    // Deleting the active set clears it on the channel.
+    assert!(sets::delete(&mut c, set.id).await.unwrap());
+    let cleared = channels::find(&mut c, Platform::Twitch, "1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(cleared.active_set_id, None);
+    assert_eq!(
+        channels::list_for_account(&mut c, owner)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+
+    drop(c);
+    db.close().await;
+}
+
+// Emotes and files
+
+#[tokio::test]
+async fn emotes_states_patches_and_tags() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let owner = account(&mut c, "1").await;
+    let id = emote(&mut c, owner, "wave", EmoteState::Pending).await;
+
+    let row = emotes::get(&mut c, id).await.unwrap().unwrap();
+    assert_eq!(row.state, EmoteState::Pending);
+
+    let patched = emotes::update(
+        &mut c,
+        id,
+        &EmotePatch {
+            name: Some("waving"),
+            zero_width: Some(true),
+            ..EmotePatch::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(patched.name, "waving");
+    assert!(patched.zero_width);
+    assert!(!patched.nsfw);
+
+    emotes::set_tags(&mut c, id, &["hello".into(), "hand".into(), "hello".into()])
+        .await
+        .unwrap();
+    assert_eq!(emotes::tags(&mut c, id).await.unwrap(), ["hand", "hello"]);
+    emotes::set_tags(&mut c, id, &[]).await.unwrap();
+    assert!(emotes::tags(&mut c, id).await.unwrap().is_empty());
+
+    let other = emote(&mut c, owner, "nod", EmoteState::Pending).await;
+    emotes::set_state(&mut c, other, EmoteState::Approved)
+        .await
+        .unwrap();
+    let (pending, total) = emotes::list_by_state(&mut c, EmoteState::Pending, 10, 0)
+        .await
+        .unwrap();
+    assert_eq!(total, 1);
+    assert_eq!(pending[0].id, id);
+    assert_eq!(
+        emotes::list_by_owner(&mut c, owner, 10, 0)
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
+
+    assert!(emotes::delete(&mut c, id).await.unwrap());
+    assert!(!emotes::delete(&mut c, id).await.unwrap());
+    assert!(emotes::get(&mut c, id).await.unwrap().is_none());
+    assert!(matches!(
+        emotes::set_state(&mut c, id, EmoteState::Approved).await,
+        Err(DbError::NotFound)
+    ));
+
+    drop(c);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn files_are_shared_by_hash() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let sha = [5u8; 32];
+    let new = files::NewFile {
+        sha256: &sha,
+        dhash: Some(-42),
+        mime: "image/png",
+        width: 112,
+        height: 112,
+        frame_count: 1,
+        storage_key: "emotes/0505",
+    };
+    let (file, created) = files::insert_or_get(&mut c, &new).await.unwrap();
+    assert!(created);
+    let (same, created) = files::insert_or_get(&mut c, &new).await.unwrap();
+    assert!(!created);
+    assert_eq!(same.id, file.id);
+    assert_eq!(same.dhash, Some(-42));
+
+    let variants = json!([{ "name": "1x.webp" }]);
+    assert!(
+        files::set_variants(&mut c, file.id, &variants)
+            .await
+            .unwrap()
+    );
+    let found = files::find_by_sha256(&mut c, &sha).await.unwrap().unwrap();
+    assert_eq!(found.variants, variants);
+
+    drop(c);
+    db.close().await;
+}
+
+// Sets
+
+#[tokio::test]
+async fn set_kinds_and_the_global_set() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let owner = account(&mut c, "1").await;
+
+    let channel = sets::create(&mut c, owner, "main", SetKind::Channel)
+        .await
+        .unwrap();
+    assert_eq!(channel.capacity, sets::CHANNEL_CAPACITY);
+    let personal = sets::create(&mut c, owner, "mine", SetKind::Personal)
+        .await
+        .unwrap();
+    assert_eq!(personal.capacity, sets::PERSONAL_CAPACITY);
+    assert!(matches!(
+        sets::create(&mut c, owner, "again", SetKind::Personal).await,
+        Err(DbError::PersonalSetExists)
+    ));
+    assert!(matches!(
+        sets::create(&mut c, owner, "g", SetKind::Global).await,
+        Err(DbError::InvalidSetKind)
+    ));
+
+    let global = sets::ensure_global(&mut c).await.unwrap();
+    assert_eq!(global.kind, SetKind::Global);
+    assert_eq!(global.owner_account_id, None);
+    assert_eq!(sets::ensure_global(&mut c).await.unwrap().id, global.id);
+    assert!(!sets::delete(&mut c, global.id).await.unwrap());
+
+    assert_eq!(sets::list_for_owner(&mut c, owner).await.unwrap().len(), 2);
+    assert_eq!(
+        sets::personal_for(&mut c, owner).await.unwrap().unwrap().id,
+        personal.id
+    );
+    let renamed = sets::rename(&mut c, channel.id, "main 2").await.unwrap();
+    assert_eq!(renamed.name, "main 2");
+
+    drop(c);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn set_membership_rules() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let alice = account(&mut c, "1").await;
+    let bob = account(&mut c, "2").await;
+    let alice_set = sets::create(&mut c, alice, "a", SetKind::Channel)
+        .await
+        .unwrap();
+    let bob_set = sets::create(&mut c, bob, "b", SetKind::Channel)
+        .await
+        .unwrap();
+    let alice_personal = sets::create(&mut c, alice, "p", SetKind::Personal)
+        .await
+        .unwrap();
+
+    let approved = emote(&mut c, bob, "approved", EmoteState::Approved).await;
+    let pending = emote(&mut c, alice, "pending", EmoteState::Pending).await;
+    let rejected = emote(&mut c, alice, "rejected", EmoteState::Rejected).await;
+    let taken = emote(&mut c, bob, "taken", EmoteState::TakenDown).await;
+
+    // Approved emotes go anywhere.
+    let m = sets::add_member(&mut c, alice_set.id, member(approved))
+        .await
+        .unwrap();
+    assert_eq!(m.name, "approved");
+    sets::add_member(&mut c, alice_personal.id, member(approved))
+        .await
+        .unwrap();
+
+    // Pending: only in the owner's own channel sets (D10, D21).
+    sets::add_member(&mut c, alice_set.id, member(pending))
+        .await
+        .unwrap();
+    assert!(matches!(
+        sets::add_member(&mut c, bob_set.id, member(pending)).await,
+        Err(DbError::NotApproved)
+    ));
+    assert!(matches!(
+        sets::add_member(&mut c, alice_personal.id, member(pending)).await,
+        Err(DbError::NotApproved)
+    ));
+    let global = sets::ensure_global(&mut c).await.unwrap();
+    assert!(matches!(
+        sets::add_member(&mut c, global.id, member(pending)).await,
+        Err(DbError::NotApproved)
+    ));
+
+    for gone in [rejected, taken, Uuid::nil()] {
+        assert!(matches!(
+            sets::add_member(&mut c, alice_set.id, member(gone)).await,
+            Err(DbError::EmoteUnavailable)
+        ));
+    }
+    assert!(matches!(
+        sets::add_member(&mut c, Uuid::nil(), member(approved)).await,
+        Err(DbError::NotFound)
+    ));
+
+    // Duplicates and name clashes.
+    assert!(matches!(
+        sets::add_member(&mut c, alice_set.id, member(approved)).await,
+        Err(DbError::AlreadyInSet)
+    ));
+    let other = emote(&mut c, bob, "other", EmoteState::Approved).await;
+    let clash = NewMember {
+        name: Some("approved"),
+        ..member(other)
+    };
+    assert!(matches!(
+        sets::add_member(&mut c, alice_set.id, clash).await,
+        Err(DbError::NameTaken)
+    ));
+    let renamed_in = NewMember {
+        name: Some("other2"),
+        zero_width: Some(true),
+        added_by: Some(alice),
+        ..member(other)
+    };
+    let added = sets::add_member(&mut c, alice_set.id, renamed_in)
+        .await
+        .unwrap();
+    assert_eq!(added.name, "other2");
+    assert!(added.zero_width);
+    assert_eq!(added.added_by, Some(alice));
+
+    // Rename inside the set.
+    assert!(matches!(
+        sets::update_member(&mut c, alice_set.id, other, Some("pending"), None).await,
+        Err(DbError::NameTaken)
+    ));
+    let moved = sets::update_member(&mut c, alice_set.id, other, Some("other3"), Some(false))
+        .await
+        .unwrap();
+    assert_eq!(moved.name, "other3");
+    assert!(!moved.zero_width);
+
+    let names: Vec<_> = sets::members(&mut c, alice_set.id)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|m| m.name)
+        .collect();
+    assert_eq!(names, ["approved", "pending", "other3"]);
+
+    sets::remove_member(&mut c, alice_set.id, other)
+        .await
+        .unwrap();
+    assert!(matches!(
+        sets::remove_member(&mut c, alice_set.id, other).await,
+        Err(DbError::NotFound)
+    ));
+
+    drop(c);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn set_capacity_is_enforced() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let owner = account(&mut c, "1").await;
+    let personal = sets::create(&mut c, owner, "p", SetKind::Personal)
+        .await
+        .unwrap();
+
+    for i in 0..sets::PERSONAL_CAPACITY {
+        let id = emote(&mut c, owner, &format!("e{i}"), EmoteState::Approved).await;
+        sets::add_member(&mut c, personal.id, member(id))
+            .await
+            .unwrap();
+    }
+    let extra = emote(&mut c, owner, "extra", EmoteState::Approved).await;
+    assert!(matches!(
+        sets::add_member(&mut c, personal.id, member(extra)).await,
+        Err(DbError::SetFull)
+    ));
+    assert!(matches!(
+        sets::set_capacity(&mut c, personal.id, 4).await,
+        Err(DbError::CapacityTooLow)
+    ));
+    sets::set_capacity(&mut c, personal.id, 6).await.unwrap();
+    sets::add_member(&mut c, personal.id, member(extra))
+        .await
+        .unwrap();
+    assert_eq!(sets::count(&mut c, personal.id).await.unwrap(), 6);
+
+    drop(c);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn concurrent_adds_respect_capacity() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let owner = account(&mut c, "1").await;
+    let set = sets::create(&mut c, owner, "p", SetKind::Personal)
+        .await
+        .unwrap();
+    let mut ids = Vec::new();
+    for i in 0..12 {
+        ids.push(emote(&mut c, owner, &format!("e{i}"), EmoteState::Approved).await);
+    }
+    drop(c);
+
+    let mut tasks = Vec::new();
+    for id in ids {
+        let pool = db.pool.clone();
+        tasks.push(tokio::spawn(async move {
+            let mut c = pool.acquire().await.unwrap();
+            sets::add_member(&mut c, set.id, member(id)).await.is_ok()
+        }));
+    }
+    let mut ok = 0;
+    for task in tasks {
+        ok += i32::from(task.await.unwrap());
+    }
+    assert_eq!(ok, sets::PERSONAL_CAPACITY);
+    let mut c = db.conn().await;
+    assert_eq!(
+        sets::count(&mut c, set.id).await.unwrap(),
+        i64::from(sets::PERSONAL_CAPACITY)
+    );
+    drop(c);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn set_editors_and_can_edit() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let owner = account(&mut c, "1").await;
+    let editor = account(&mut c, "2").await;
+    let stranger = account(&mut c, "3").await;
+    let set = sets::create(&mut c, owner, "main", SetKind::Channel)
+        .await
+        .unwrap();
+
+    assert!(sets::can_edit(&mut c, owner, set.id).await.unwrap());
+    assert!(!sets::can_edit(&mut c, editor, set.id).await.unwrap());
+
+    assert!(
+        sets::add_editor(&mut c, set.id, editor, Some(owner))
+            .await
+            .unwrap()
+    );
+    assert!(
+        !sets::add_editor(&mut c, set.id, editor, Some(owner))
+            .await
+            .unwrap()
+    );
+    assert!(sets::can_edit(&mut c, editor, set.id).await.unwrap());
+    assert!(!sets::can_edit(&mut c, stranger, set.id).await.unwrap());
+
+    let list = sets::editors(&mut c, set.id).await.unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].granted_by, Some(owner));
+    assert_eq!(
+        sets::list_editable(&mut c, editor).await.unwrap()[0].id,
+        set.id
+    );
+
+    assert!(sets::remove_editor(&mut c, set.id, editor).await.unwrap());
+    assert!(!sets::can_edit(&mut c, editor, set.id).await.unwrap());
+
+    drop(c);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn personal_sets_for_chatters() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let with = account(&mut c, "11").await;
+    let empty = account(&mut c, "12").await;
+    let _none = account(&mut c, "13").await;
+
+    let set = sets::create(&mut c, with, "p", SetKind::Personal)
+        .await
+        .unwrap();
+    sets::create(&mut c, empty, "p", SetKind::Personal)
+        .await
+        .unwrap();
+    let id = emote(&mut c, with, "hi", EmoteState::Approved).await;
+    sets::add_member(&mut c, set.id, member(id)).await.unwrap();
+
+    let users = ["11", "12", "13", "99"].map(String::from);
+    let found = sets::personal_for_users(&mut c, Platform::Twitch, &users)
+        .await
+        .unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].platform_user_id, "11");
+    assert_eq!(found[0].set.id, set.id);
+    // Same IDs on Kick are other people.
+    assert!(
+        sets::personal_for_users(&mut c, Platform::Kick, &users)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    drop(c);
+    db.close().await;
+}
+
+// Roles
+
+#[tokio::test]
+async fn roles_and_their_permissions() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let admin = account(&mut c, "1").await;
+    let modr = account(&mut c, "2").await;
+
+    let moderator = roles::create(
+        &mut c,
+        &roles::NewRole {
+            name: "Moderator",
+            description: Some("reviews uploads"),
+            position: 10,
+            permissions: &[permissions::EMOTES_REVIEW, permissions::EMOTES_TAKEDOWN],
+            created_by: Some(admin),
+        },
+    )
+    .await
+    .unwrap();
+    let staff = roles::create(
+        &mut c,
+        &roles::NewRole {
+            name: "Staff",
+            description: None,
+            position: 50,
+            permissions: &[permissions::ROLES_MANAGE, permissions::EMOTES_REVIEW],
+            created_by: Some(admin),
+        },
+    )
+    .await
+    .unwrap();
+
+    let dup = roles::NewRole {
+        name: "MODERATOR",
+        description: None,
+        position: 1,
+        permissions: &[],
+        created_by: None,
+    };
+    assert!(matches!(
+        roles::create(&mut c, &dup).await,
+        Err(DbError::RoleNameTaken)
+    ));
+    let unknown = roles::NewRole {
+        name: "x",
+        permissions: &["emotes.everything"],
+        ..dup
+    };
+    assert!(matches!(
+        roles::create(&mut c, &unknown).await,
+        Err(DbError::UnknownPermission(p)) if p == "emotes.everything"
+    ));
+
+    assert!(
+        roles::assign(&mut c, modr, moderator.id, Some(admin))
+            .await
+            .unwrap()
+    );
+    assert!(
+        !roles::assign(&mut c, modr, moderator.id, Some(admin))
+            .await
+            .unwrap()
+    );
+    roles::assign(&mut c, admin, staff.id, None).await.unwrap();
+    roles::assign(&mut c, admin, moderator.id, None)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        roles::permissions_of(&mut c, admin).await.unwrap(),
+        ["emotes.review", "emotes.takedown", "roles.manage"]
+    );
+    assert_eq!(
+        roles::highest_position(&mut c, admin).await.unwrap(),
+        Some(50)
+    );
+    assert_eq!(
+        roles::highest_position(&mut c, modr).await.unwrap(),
+        Some(10)
+    );
+    let nobody = account(&mut c, "3").await;
+    assert_eq!(roles::highest_position(&mut c, nobody).await.unwrap(), None);
+    assert!(
+        roles::permissions_of(&mut c, nobody)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    let mut reviewers = vec![admin, modr];
+    reviewers.sort();
+    assert_eq!(
+        roles::holders_of(&mut c, permissions::EMOTES_REVIEW)
+            .await
+            .unwrap(),
+        reviewers
+    );
+    assert_eq!(
+        roles::holders_of(&mut c, permissions::ROLES_MANAGE)
+            .await
+            .unwrap(),
+        [admin]
+    );
+
+    let names: Vec<_> = roles::list(&mut c)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|r| r.name)
+        .collect();
+    assert_eq!(names, ["Staff", "Moderator"]);
+    assert_eq!(
+        roles::roles_of(&mut c, admin).await.unwrap()[0].id,
+        staff.id
+    );
+
+    // Edit, then replace the permissions.
+    let edited = roles::update(
+        &mut c,
+        moderator.id,
+        &roles::RolePatch {
+            description: Some(None),
+            position: Some(20),
+            ..roles::RolePatch::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(edited.description, None);
+    assert_eq!(edited.position, 20);
+    assert_eq!(edited.name, "Moderator");
+    assert!(matches!(
+        roles::update(
+            &mut c,
+            moderator.id,
+            &roles::RolePatch {
+                name: Some("staff"),
+                ..roles::RolePatch::default()
+            }
+        )
+        .await,
+        Err(DbError::RoleNameTaken)
+    ));
+
+    roles::set_permissions(&mut c, moderator.id, &[permissions::AUDIT_VIEW])
+        .await
+        .unwrap();
+    assert_eq!(
+        roles::permissions(&mut c, moderator.id).await.unwrap(),
+        ["audit.view"]
+    );
+    assert!(matches!(
+        roles::set_permissions(&mut c, Uuid::nil(), &[]).await,
+        Err(DbError::NotFound)
+    ));
+    assert!(matches!(
+        roles::set_permissions(&mut c, moderator.id, &["nope.nope"]).await,
+        Err(DbError::UnknownPermission(_))
+    ));
+
+    assert_eq!(roles::members(&mut c, moderator.id).await.unwrap().len(), 2);
+    assert!(roles::unassign(&mut c, modr, moderator.id).await.unwrap());
+    assert!(!roles::unassign(&mut c, modr, moderator.id).await.unwrap());
+    assert!(roles::delete(&mut c, staff.id).await.unwrap());
+    assert!(
+        roles::holders_of(&mut c, permissions::ROLES_MANAGE)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    drop(c);
+    db.close().await;
+}
+
+// Audit
+
+#[tokio::test]
+async fn audit_entries_page_newest_first() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let actor = account(&mut c, "1").await;
+
+    let mut ids = Vec::new();
+    for i in 0..5 {
+        let target = format!("r{i}");
+        ids.push(
+            audit::write(
+                &mut c,
+                &audit::NewEntry {
+                    actor: Some(actor),
+                    action: "roles.create",
+                    target_kind: "role",
+                    target_id: &target,
+                    before: None,
+                    after: Some(json!({ "n": i })),
+                },
+            )
+            .await
+            .unwrap(),
+        );
+    }
+    audit::write(
+        &mut c,
+        &audit::NewEntry {
+            actor: None,
+            action: "emotes.approve",
+            target_kind: "emote",
+            target_id: "e1",
+            before: Some(json!({ "state": "pending" })),
+            after: Some(json!({ "state": "approved" })),
+        },
+    )
+    .await
+    .unwrap();
+
+    let roles_only = audit::Filter {
+        target_kind: Some("role"),
+        ..audit::Filter::default()
+    };
+    let page = audit::list(&mut c, &roles_only, 2).await.unwrap();
+    assert_eq!(page.len(), 2);
+    assert_eq!(page[0].id, ids[4]);
+    let next = audit::Filter {
+        before_id: Some(page[1].id),
+        ..roles_only.clone()
+    };
+    let page2 = audit::list(&mut c, &next, 10).await.unwrap();
+    assert_eq!(
+        page2.iter().map(|e| e.id).collect::<Vec<_>>(),
+        [ids[2], ids[1], ids[0]]
+    );
+
+    let by_actor = audit::Filter {
+        actor: Some(actor),
+        ..audit::Filter::default()
+    };
+    assert_eq!(audit::list(&mut c, &by_actor, 100).await.unwrap().len(), 5);
+    let one = audit::Filter {
+        target_kind: Some("emote"),
+        target_id: Some("e1"),
+        ..audit::Filter::default()
+    };
+    let entry = &audit::list(&mut c, &one, 10).await.unwrap()[0];
+    assert_eq!(entry.actor_account_id, None);
+    assert_eq!(entry.after_json, Some(json!({ "state": "approved" })));
+
+    drop(c);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn audit_rolls_back_with_the_change() {
+    let db = db!();
+    let mut c = db.conn().await;
+    {
+        use sqlx::Connection;
+        let mut tx = c.begin().await.unwrap();
+        audit::write(
+            &mut tx,
+            &audit::NewEntry {
+                actor: None,
+                action: "roles.delete",
+                target_kind: "role",
+                target_id: "x",
+                before: None,
+                after: None,
+            },
+        )
+        .await
+        .unwrap();
+        tx.rollback().await.unwrap();
+    }
+    assert!(
+        audit::list(&mut c, &audit::Filter::default(), 10)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    drop(c);
+    db.close().await;
+}
+
+// Outbox
+
+#[tokio::test]
+async fn outbox_ids_topics_and_notify() {
+    let db = db!();
+    let mut listener = PgListener::connect_with(&db.pool).await.unwrap();
+    listener.listen(outbox::NOTIFY_CHANNEL).await.unwrap();
+
+    let mut c = db.conn().await;
+    let set_id = cyex_tv_db::ids::new_id();
+    let twitch_topic = outbox::channel_topic(Platform::Twitch, "1");
+    let first = outbox::publish(
+        &mut c,
+        &outbox::NewEvent {
+            event_type: EventType::SetEmoteAdded,
+            topics: vec![twitch_topic.clone(), outbox::set_topic(set_id)],
+            set_id: Some(set_id),
+            payload: json!({ "name": "wave" }),
+        },
+    )
+    .await
+    .unwrap();
+    let second = outbox::publish(
+        &mut c,
+        &outbox::NewEvent {
+            event_type: EventType::PersonalUpdated,
+            topics: vec![outbox::user_topic(Platform::Kick, "5")],
+            set_id: None,
+            payload: json!({}),
+        },
+    )
+    .await
+    .unwrap();
+    assert!(second > first);
+
+    let note = tokio::time::timeout(std::time::Duration::from_secs(5), listener.recv())
+        .await
+        .expect("a notification")
+        .unwrap();
+    assert_eq!(note.payload(), first.to_string());
+
+    let replay = outbox::since(&mut c, 0, std::slice::from_ref(&twitch_topic), 10)
+        .await
+        .unwrap();
+    assert_eq!(replay.len(), 1);
+    assert_eq!(replay[0].event_type, "set.emote_added");
+    assert_eq!(replay[0].set_id, Some(set_id));
+    assert!(
+        outbox::since(&mut c, first, &[twitch_topic], 10)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(outbox::oldest_id(&mut c).await.unwrap(), Some(first));
+    assert!(outbox::get(&mut c, second).await.unwrap().is_some());
+
+    // Empty topic lists are refused by the schema.
+    let none = outbox::publish(
+        &mut c,
+        &outbox::NewEvent {
+            event_type: EventType::Resync,
+            topics: vec![],
+            set_id: None,
+            payload: json!({}),
+        },
+    )
+    .await;
+    assert!(none.is_err());
+
+    assert_eq!(
+        outbox::delete_older_than(&mut c, Utc::now() + Duration::seconds(1))
+            .await
+            .unwrap(),
+        2
+    );
+    assert_eq!(outbox::oldest_id(&mut c).await.unwrap(), None);
+
+    drop(c);
+    drop(listener);
+    db.close().await;
+}
