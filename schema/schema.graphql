@@ -15,6 +15,29 @@ input AddSetEmoteInput {
 	zeroWidth: Boolean
 }
 
+"""
+One audited change (ADR 0010). `before` and `after` are JSON, as text.
+"""
+type AuditEntry {
+	id: String!
+	"""
+	The account that made the change; empty for changes the system made.
+	"""
+	actorId: String
+	"""
+	For example `role.created` or `set.editor_added`.
+	"""
+	action: String!
+	"""
+	For example `role`, `account` or `set`.
+	"""
+	targetKind: String!
+	targetId: String!
+	before: String
+	after: String
+	createdAt: String!
+}
+
 type Channel {
 	platform: Platform!
 	"""
@@ -328,6 +351,15 @@ type Query {
 	"""
 	reviewQueue: ReviewQueue!
 	"""
+	An account's roles. Yours, or anyone's with `roles.manage` or `users.view`.
+	"""
+	accountRoles(accountId: String!): [Role!]!
+	"""
+	Audited changes, newest first. Needs `audit.view`. Page back with `before` (an entry ID);
+	`limit` is 1 to 100, default 50.
+	"""
+	auditLog(targetKind: String, targetId: String, before: String, limit: Int): [AuditEntry!]!
+	"""
 	All roles. Needs `roles.manage`.
 	"""
 	roles: [Role!]!
@@ -402,6 +434,9 @@ input UpdateEmoteInput {
 
 input UpdateRoleInput {
 	name: String
+	"""
+	An empty string clears it.
+	"""
 	description: String
 	position: Int
 	permissions: [String!]

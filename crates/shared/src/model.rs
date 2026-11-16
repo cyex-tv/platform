@@ -376,6 +376,23 @@ pub struct Role {
     pub permissions: Vec<String>,
 }
 
+/// One audited change (ADR 0010). `before` and `after` are JSON, as text.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct AuditEntry {
+    pub id: String,
+    /// The account that made the change; empty for changes the system made.
+    pub actor_id: Option<String>,
+    /// For example `role.created` or `set.editor_added`.
+    pub action: String,
+    /// For example `role`, `account` or `set`.
+    pub target_kind: String,
+    pub target_id: String,
+    pub before: Option<String>,
+    pub after: Option<String>,
+    pub created_at: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
 #[cfg_attr(feature = "graphql", graphql(name = "CreateRoleInput"))]
@@ -391,6 +408,7 @@ pub struct CreateRole {
 #[cfg_attr(feature = "graphql", graphql(name = "UpdateRoleInput"))]
 pub struct UpdateRole {
     pub name: Option<String>,
+    /// An empty string clears it.
     pub description: Option<String>,
     pub position: Option<i32>,
     pub permissions: Option<Vec<String>>,

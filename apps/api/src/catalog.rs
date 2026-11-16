@@ -11,7 +11,7 @@
 use std::collections::HashSet;
 
 use axum::http::StatusCode;
-use cyex_tv_auth::{AuthError, Caller};
+use cyex_tv_auth::{AuthError, Caller, rbac};
 use cyex_tv_db::sets::{self, NewMember, Set};
 use cyex_tv_db::{DbError, accounts, audit, channels, emotes, ids, outbox, roles};
 use cyex_tv_shared::error::{ApiError, ApiResult};
@@ -98,15 +98,19 @@ pub fn parse_id(raw: &str) -> ApiResult<Uuid> {
 
 // Permissions
 
-/// The permissions an account holds. PR 4 adds the owner, who holds every one.
-pub async fn permissions_of(conn: &mut PgConnection, account_id: Uuid) -> ApiResult<Vec<String>> {
-    roles::permissions_of(conn, account_id)
+/// The permissions the caller holds: every one for the owner (ADR 0010), otherwise the union of
+/// their roles'.
+pub async fn permissions_of(conn: &mut PgConnection, caller: &Caller) -> ApiResult<Vec<String>> {
+    if caller.owner {
+        return Ok(rbac::all_permissions());
+    }
+    roles::permissions_of(conn, caller.account_id)
         .await
         .map_err(db_error)
 }
 
-pub async fn holds(conn: &mut PgConnection, account_id: Uuid, permission: &str) -> ApiResult<bool> {
-    Ok(permissions_of(conn, account_id)
+pub async fn holds(conn: &mut PgConnection, caller: &Caller, permission: &str) -> ApiResult<bool> {
+    Ok(permissions_of(conn, caller)
         .await?
         .iter()
         .any(|p| p == permission))
@@ -119,7 +123,7 @@ pub async fn viewer(conn: &mut PgConnection, caller: Option<&Caller>) -> ApiResu
     };
     Ok(Viewer {
         account_id: Some(caller.account_id),
-        reviewer: holds(conn, caller.account_id, permissions::EMOTES_REVIEW).await?,
+        reviewer: holds(conn, caller, permissions::EMOTES_REVIEW).await?,
     })
 }
 
@@ -136,7 +140,7 @@ enum Grant {
 async fn edit_grant(conn: &mut PgConnection, caller: &Caller, set: &Set) -> ApiResult<Grant> {
     let account = caller.account_id;
     if set.kind == SetKind::Global {
-        return if holds(conn, account, permissions::GLOBAL_SET_EDIT).await? {
+        return if holds(conn, caller, permissions::GLOBAL_SET_EDIT).await? {
             Ok(Grant::Permission(permissions::GLOBAL_SET_EDIT))
         } else {
             Err(forbidden("Changing the global set needs global_set.edit."))
@@ -151,7 +155,7 @@ async fn edit_grant(conn: &mut PgConnection, caller: &Caller, set: &Set) -> ApiR
     {
         return Ok(Grant::Editor);
     }
-    if holds(conn, account, permissions::SETS_EDIT_ANY).await? {
+    if holds(conn, caller, permissions::SETS_EDIT_ANY).await? {
         return Ok(Grant::Permission(permissions::SETS_EDIT_ANY));
     }
     Err(forbidden("Only the set's owner and editors can change it."))
@@ -495,7 +499,7 @@ pub async fn update_set(
             i32::try_from(capacity).map_err(|_| bad("bad_capacity", "Capacity is 1 to 100000."))?;
         let mut grant_used = grant;
         if capacity > default_capacity(set.kind) && set.kind != SetKind::Global {
-            if !holds(&mut tx, caller.account_id, permissions::SETS_EDIT_ANY).await? {
+            if !holds(&mut tx, caller, permissions::SETS_EDIT_ANY).await? {
                 return Err(forbidden(
                     "Raising a set above its default capacity needs sets.edit_any.",
                 ));
