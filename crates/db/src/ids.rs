@@ -16,8 +16,12 @@ pub fn new_id() -> Uuid {
         .lock()
         .ok()
         .and_then(|mut generator| generator.generate().ok());
-    // `generate` fails only after 2^80 IDs in one millisecond; a plain ULID is fine then.
-    next.unwrap_or_else(Ulid::new).into()
+    match next {
+        Some(id) => id.into(),
+        // `generate` fails only after 2^80 IDs in one millisecond; a fresh ULID is fine then.
+        // (Not `unwrap_or_default`: `Ulid::default()` is not a fresh ID.)
+        None => Ulid::new().into(),
+    }
 }
 
 /// The API's text form.
