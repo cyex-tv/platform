@@ -1,6 +1,8 @@
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use cyex_tv_api::state::AppState;
+use cyex_tv_auth::{Auth, AuthConfig};
 use cyex_tv_shared::config::Config;
 use cyex_tv_shared::{logging, shutdown};
 
@@ -8,11 +10,24 @@ use cyex_tv_shared::{logging, shutdown};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cfg = Config::from_env(SocketAddr::from(([0, 0, 0, 0], 8080)))?;
     logging::init(&cfg.log_filter, cfg.log_format);
+    let auth_cfg = AuthConfig::from_source(|name| std::env::var(name).ok())?;
+    for (platform, configured) in [
+        ("twitch", auth_cfg.twitch.is_some()),
+        ("kick", auth_cfg.kick.is_some()),
+    ] {
+        if !configured {
+            tracing::warn!(
+                platform,
+                "no OAuth client configured; its sign-in answers 503"
+            );
+        }
+    }
+    let auth = Arc::new(Auth::new(auth_cfg)?);
 
     let db = cyex_tv_db::connect(&cfg).await?;
     cyex_tv_db::MIGRATOR.run(&db).await?;
 
-    let app = cyex_tv_api::app(AppState { db });
+    let app = cyex_tv_api::app(AppState { db, auth });
     let listener = tokio::net::TcpListener::bind(cfg.bind).await?;
     tracing::info!(addr = %cfg.bind, "api listening");
     axum::serve(listener, app)

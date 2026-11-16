@@ -1,0 +1,11 @@
+{
+  "data": [
+    {
+      "email": "fixture@example.com",
+      "name": "FixtureKick",
+      "profile_picture": "https://files.kick.com/images/user/fixture/profile_image/conversion/fixture-fullsize.webp",
+      "user_id": 4377088
+    }
+  ],
+  "message": "OK"
+}

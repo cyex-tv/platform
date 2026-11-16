@@ -3,10 +3,12 @@
 //! sets it).
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::sync::Arc;
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use cyex_tv_api::state::AppState;
+use cyex_tv_auth::{Auth, AuthConfig};
 use cyex_tv_shared::config::Config;
 use cyex_tv_shared::error::ErrorBody;
 use http_body_util::BodyExt;
@@ -28,11 +30,17 @@ fn config(database_url: &str) -> Config {
     .unwrap()
 }
 
+/// Sign-in config with no platform clients: both platforms answer 503.
+fn auth() -> Arc<Auth> {
+    Arc::new(Auth::new(AuthConfig::from_source(|_| None).unwrap()).unwrap())
+}
+
 /// A pool pointing at a port nothing listens on.
 fn offline_state() -> AppState {
     let cfg = config("postgres://nobody:nothing@127.0.0.1:1/none");
     AppState {
         db: cyex_tv_db::connect_lazy(&cfg).unwrap(),
+        auth: auth(),
     }
 }
 
@@ -87,6 +95,7 @@ async fn ready_is_503_without_a_database() {
 
 #[tokio::test]
 async fn rest_stubs_answer_not_implemented() {
+    // The sign-in routes are built (see `sign_in_checks_come_before_the_database`).
     for uri in [
         "/v1/sets/global",
         "/v1/sets/abc",
@@ -97,6 +106,80 @@ async fn rest_stubs_answer_not_implemented() {
         assert_eq!(status, StatusCode::NOT_IMPLEMENTED, "{uri}");
         let error: ErrorBody = serde_json::from_slice(&body).unwrap();
         assert_eq!(error.error, "not_implemented", "{uri}");
+    }
+}
+
+#[tokio::test]
+async fn sign_in_checks_come_before_the_database() {
+    for (uri, status, code) in [
+        (
+            "/v1/auth/youtube/login",
+            StatusCode::BAD_REQUEST,
+            "unknown_platform",
+        ),
+        (
+            "/v1/auth/twitch/login",
+            StatusCode::SERVICE_UNAVAILABLE,
+            "unavailable",
+        ),
+        (
+            "/v1/auth/kick/callback?code=c&state=s",
+            StatusCode::SERVICE_UNAVAILABLE,
+            "unavailable",
+        ),
+    ] {
+        let (got, body) = get(offline_state(), uri).await;
+        assert_eq!(got, status, "{uri}");
+        let error: ErrorBody = serde_json::from_slice(&body).unwrap();
+        assert_eq!(error.error, code, "{uri}");
+    }
+}
+
+#[tokio::test]
+async fn me_is_signed_out_without_a_session() {
+    let response = gql("{ me { id } }").await;
+    assert_eq!(error_code(&response), "signed_out");
+    let response = gql(r#"mutation { unlinkIdentity(platform: KICK) { id } }"#).await;
+    assert_eq!(error_code(&response), "signed_out");
+}
+
+#[tokio::test]
+async fn logout_without_a_session_clears_the_cookie() {
+    let request = Request::post("/v1/auth/logout")
+        .body(Body::empty())
+        .unwrap();
+    let response = cyex_tv_api::app(offline_state())
+        .oneshot(request)
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    let cookie = response.headers()["set-cookie"].to_str().unwrap();
+    assert!(cookie.starts_with("cyex_tv_session=;"), "{cookie}");
+    assert!(cookie.contains("Max-Age=0"), "{cookie}");
+}
+
+#[tokio::test]
+async fn cookie_writes_need_the_site_origin() {
+    // The Origin check runs before the session lookup, so it needs no database.
+    let cookie = format!("cyex_tv_session={}", "a".repeat(43));
+    for origin in [
+        None,
+        Some("https://evil.example"),
+        Some("https://api.cyex.tv"),
+    ] {
+        let mut request = Request::post("/v1/gql")
+            .header("content-type", "application/json")
+            .header("cookie", &cookie);
+        if let Some(origin) = origin {
+            request = request.header("origin", origin);
+        }
+        let request = request
+            .body(Body::from(json!({ "query": "{ me { id } }" }).to_string()))
+            .unwrap();
+        let (status, body) = send(offline_state(), request).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{origin:?}");
+        let error: ErrorBody = serde_json::from_slice(&body).unwrap();
+        assert_eq!(error.error, "bad_origin");
     }
 }
 
@@ -195,6 +278,6 @@ async fn ready_with_database() {
     let cfg = config(&url);
     let db = cyex_tv_db::connect(&cfg).await.unwrap();
     cyex_tv_db::MIGRATOR.run(&db).await.unwrap();
-    let (status, _) = get(AppState { db }, "/health/ready").await;
+    let (status, _) = get(AppState { db, auth: auth() }, "/health/ready").await;
     assert_eq!(status, StatusCode::OK);
 }

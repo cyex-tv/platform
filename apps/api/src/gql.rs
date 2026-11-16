@@ -1,6 +1,6 @@
-//! The GraphQL API at `/v1/gql` (ADR 0008), drafted in Phase 1 for review. Resolvers answer
-//! `not_implemented` until their phase builds them:
-//! - Phase 2: accounts, channels, sets, roles
+//! The GraphQL API at `/v1/gql` (ADR 0008). Resolvers answer `not_implemented` until their phase
+//! builds them:
+//! - Phase 2: accounts (`me`, `unlinkIdentity`: built), channels, sets, roles
 //! - Phase 3: emotes and moderation
 //! - Phase 5: the `events` subscription
 //! - Phase 6: search
@@ -14,13 +14,18 @@
 use async_graphql::http::GraphiQLSource;
 use async_graphql::{Context, ErrorExtensions, Object, Result, Schema, SchemaBuilder};
 use axum::response::Html;
+use chrono::SecondsFormat;
+use cyex_tv_auth::{AuthError, Caller};
+use cyex_tv_db::{DbError, accounts, ids, roles};
 use cyex_tv_shared::model::{
-    AddSetEmote, Channel, CreateRole, CreateSet, Emote, EmoteSet, Event, Me, PersonalSetEntry,
-    Platform, ReviewQueue, Role, SearchResults, SetEmote, UpdateChannelSettings, UpdateEmote,
-    UpdateRole, UpdateSet, UpdateSetEmote,
+    AddSetEmote, Channel, CreateRole, CreateSet, Emote, EmoteSet, Event, Identity, Me,
+    PersonalSetEntry, Platform, ReviewQueue, Role, SearchResults, SetEmote, UpdateChannelSettings,
+    UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote,
 };
 use cyex_tv_shared::permissions;
 use futures_util::stream::Empty;
+
+use crate::state::AppState;
 
 pub type ApiSchema = Schema<Query, Mutation, Subscription>;
 
@@ -57,10 +62,75 @@ fn not_implemented() -> async_graphql::Error {
     )
 }
 
-/// Checks that the caller holds `permission` (ADR 0010). There are no sessions before Phase 2,
-/// so for now nobody does.
-fn require(ctx: &Context<'_>, permission: &'static str) -> Result<()> {
-    Err(coded("signed_out", "Sign in to use this."))
+fn internal(err: impl std::fmt::Display) -> async_graphql::Error {
+    tracing::error!(error = %err, "graphql resolver failed");
+    coded("internal", "Something went wrong on our side.")
+}
+
+fn auth_error(err: AuthError) -> async_graphql::Error {
+    if let AuthError::Db(inner) = &err {
+        return internal(inner);
+    }
+    async_graphql::Error::new(err.message()).extend_with(|_, e| e.set("code", err.code()))
+}
+
+fn state<'a>(ctx: &Context<'a>) -> &'a AppState {
+    // `app()` puts the state into the schema; a schema without it is a wiring bug.
+    ctx.data_unchecked::<AppState>()
+}
+
+/// The signed-in caller, or `signed_out`.
+fn caller<'a>(ctx: &Context<'a>) -> Result<&'a Caller> {
+    ctx.data_opt::<Option<Caller>>()
+        .and_then(Option::as_ref)
+        .ok_or_else(|| coded("signed_out", "Sign in to use this."))
+}
+
+/// Checks that the caller holds `permission` through their roles (ADR 0010). The owner rule and
+/// the escalation guards come with the role mutations (Phase 2 PR 4).
+async fn require<'a>(ctx: &Context<'a>, permission: &'static str) -> Result<&'a Caller> {
+    let caller = caller(ctx)?;
+    let mut conn = state(ctx).db.acquire().await.map_err(internal)?;
+    let held = roles::permissions_of(&mut conn, caller.account_id)
+        .await
+        .map_err(internal)?;
+    if held.iter().any(|p| p == permission) {
+        Ok(caller)
+    } else {
+        Err(coded("forbidden", "You don't have permission to do this."))
+    }
+}
+
+/// The account behind `caller`, as `Me`.
+async fn me_of(ctx: &Context<'_>, caller: &Caller) -> Result<Me> {
+    let mut conn = state(ctx).db.acquire().await.map_err(internal)?;
+    let account = accounts::get(&mut conn, caller.account_id)
+        .await
+        .map_err(internal)?
+        .ok_or_else(|| coded("signed_out", "Sign in to use this."))?;
+    let identities = accounts::identities(&mut conn, account.id)
+        .await
+        .map_err(internal)?
+        .into_iter()
+        .map(|i| Identity {
+            platform: i.platform,
+            platform_user_id: i.platform_user_id,
+            login: i.login,
+            display_name: i.display_name,
+            avatar: i.avatar,
+        })
+        .collect();
+    let permissions = roles::permissions_of(&mut conn, account.id)
+        .await
+        .map_err(internal)?;
+    Ok(Me {
+        id: ids::to_text(account.id),
+        identities,
+        permissions,
+        created_at: account
+            .created_at
+            .to_rfc3339_opts(SecondsFormat::Millis, true),
+    })
 }
 
 pub struct Query;
@@ -69,7 +139,8 @@ pub struct Query;
 impl Query {
     /// The signed-in account.
     async fn me(&self, ctx: &Context<'_>) -> Result<Me> {
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        me_of(ctx, caller).await
     }
 
     /// A channel by its platform ID.
@@ -130,13 +201,13 @@ impl Query {
 
     /// Pending emotes, oldest first. Needs `emotes.review`.
     async fn review_queue(&self, ctx: &Context<'_>) -> Result<ReviewQueue> {
-        require(ctx, permissions::EMOTES_REVIEW)?;
+        require(ctx, permissions::EMOTES_REVIEW).await?;
         Err(not_implemented())
     }
 
     /// All roles. Needs `roles.manage`.
     async fn roles(&self, ctx: &Context<'_>) -> Result<Vec<Role>> {
-        require(ctx, permissions::ROLES_MANAGE)?;
+        require(ctx, permissions::ROLES_MANAGE).await?;
         Err(not_implemented())
     }
 }
@@ -147,7 +218,20 @@ pub struct Mutation;
 impl Mutation {
     /// Unlink a platform from your account. The last identity can't be removed.
     async fn unlink_identity(&self, ctx: &Context<'_>, platform: Platform) -> Result<Me> {
-        Err(not_implemented())
+        let caller = caller(ctx)?;
+        let mut conn = state(ctx).db.acquire().await.map_err(internal)?;
+        match accounts::unlink(&mut conn, caller.account_id, platform).await {
+            Ok(_) => {}
+            Err(DbError::NotFound) => {
+                return Err(coded(
+                    "not_found",
+                    "That platform isn't linked to your account.",
+                ));
+            }
+            Err(err) => return Err(auth_error(err.into())),
+        }
+        drop(conn);
+        me_of(ctx, caller).await
     }
 
     /// Change a channel's active set and settings. Only the channel's owner.
@@ -250,31 +334,31 @@ impl Mutation {
 
     /// Approve a pending emote. Needs `emotes.review`. Audited.
     async fn approve_emote(&self, ctx: &Context<'_>, id: String) -> Result<Emote> {
-        require(ctx, permissions::EMOTES_REVIEW)?;
+        require(ctx, permissions::EMOTES_REVIEW).await?;
         Err(not_implemented())
     }
 
     /// Reject a pending emote with a reason. Needs `emotes.review`. Audited.
     async fn reject_emote(&self, ctx: &Context<'_>, id: String, reason: String) -> Result<Emote> {
-        require(ctx, permissions::EMOTES_REVIEW)?;
+        require(ctx, permissions::EMOTES_REVIEW).await?;
         Err(not_implemented())
     }
 
     /// Create a role. You can only grant permissions you hold. Needs `roles.manage`. Audited.
     async fn create_role(&self, ctx: &Context<'_>, input: CreateRole) -> Result<Role> {
-        require(ctx, permissions::ROLES_MANAGE)?;
+        require(ctx, permissions::ROLES_MANAGE).await?;
         Err(not_implemented())
     }
 
     /// Change a role below your own highest one. Needs `roles.manage`. Audited.
     async fn update_role(&self, ctx: &Context<'_>, id: String, input: UpdateRole) -> Result<Role> {
-        require(ctx, permissions::ROLES_MANAGE)?;
+        require(ctx, permissions::ROLES_MANAGE).await?;
         Err(not_implemented())
     }
 
     /// Delete a role below your own highest one. Needs `roles.manage`. Audited.
     async fn delete_role(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
-        require(ctx, permissions::ROLES_MANAGE)?;
+        require(ctx, permissions::ROLES_MANAGE).await?;
         Err(not_implemented())
     }
 
@@ -285,7 +369,7 @@ impl Mutation {
         account_id: String,
         role_id: String,
     ) -> Result<bool> {
-        require(ctx, permissions::ROLES_MANAGE)?;
+        require(ctx, permissions::ROLES_MANAGE).await?;
         Err(not_implemented())
     }
 
@@ -297,7 +381,7 @@ impl Mutation {
         account_id: String,
         role_id: String,
     ) -> Result<bool> {
-        require(ctx, permissions::ROLES_MANAGE)?;
+        require(ctx, permissions::ROLES_MANAGE).await?;
         Err(not_implemented())
     }
 }
