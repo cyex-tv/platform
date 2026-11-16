@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["apps/api", "apps/events", "apps/worker", "crates/auth", "crates/db", "crates/shared"]
+members = ["apps/api", "apps/events", "apps/worker", "crates/auth", "crates/db", "crates/shared", "crates/storage"]
 
 [workspace.package]
 version = "0.1.0"
@@ -14,6 +14,7 @@ publish = false
 cyex-tv-auth = { path = "crates/auth" }
 cyex-tv-db = { path = "crates/db" }
 cyex-tv-shared = { path = "crates/shared" }
+cyex-tv-storage = { path = "crates/storage" }
 
 # Keep both at the same minor: async-graphql-derive declares no rust-version, so a lower one
 # can pair an old async-graphql with a new derive crate.
@@ -21,10 +22,12 @@ async-graphql = "7.2"
 async-graphql-axum = "7.2"
 axum = "0.8"
 base64 = "0.22"
+bytes = "1"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 dotenvy = "0.15"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 getrandom = "0.3"
+hmac = "0.12"
 http-body-util = "0.1"
 reqwest = { version = "0.13", default-features = false, features = ["form", "http2", "json", "query", "rustls-no-provider"] }
 # The ring provider, not aws-lc: aws-lc-sys carries the OpenSSL licence, which ADR 0007 doesn't allow.
