@@ -44,3 +44,13 @@ git commit --amend --reset-author
 git push --force-with-lease origin setup/initial
 gh pr edit 1 --body-file <file>
 ```
+
+`cyex-tv/infra` PR 1 had already been merged with the old commit, so infra's `main` was rewritten, with the owner's explicit OK:
+
+```
+gh api -X DELETE repos/cyex-tv/infra/branches/main/protection
+git push --force-with-lease=main:<old main> origin HEAD:main
+gh api -X PUT repos/cyex-tv/infra/branches/main/protection --input protection.json
+```
+
+infra `main` is now `Initial commit` → `b31fc33`. The protection was read back afterwards and matches the other repos.
