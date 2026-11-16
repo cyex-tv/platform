@@ -5,6 +5,7 @@
 pub mod admin;
 pub mod catalog;
 pub mod gql;
+pub mod limits;
 pub mod moderation;
 pub mod routes;
 pub mod search;
@@ -14,7 +15,8 @@ pub mod views;
 
 use async_graphql_axum::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
 use axum::Router;
-use axum::extract::Extension;
+use axum::extract::{Extension, State};
+use axum::response::IntoResponse;
 use axum::routing::get;
 use tower_http::trace::TraceLayer;
 use utoipa::OpenApi;
@@ -57,6 +59,10 @@ pub fn app(state: AppState) -> Router {
         .route("/v1/gql", get(gql::graphiql).post(graphql))
         .route_service("/v1/gql/ws", subscriptions)
         .layer(Extension(schema))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            limits::middleware,
+        ))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }
@@ -64,14 +70,24 @@ pub fn app(state: AppState) -> Router {
 /// `POST /v1/gql`, run as the caller. A cookie caller must send the site's `Origin`, since every
 /// POST counts as a write (`bad_origin` otherwise).
 async fn graphql(
+    State(state): State<AppState>,
     Extension(schema): Extension<ApiSchema>,
     MaybeCaller(caller): MaybeCaller,
     request: GraphQLRequest,
-) -> GraphQLResponse {
-    schema
+) -> axum::response::Response {
+    if let Some(caller) = &caller
+        && let Err(wait) = state
+            .limits
+            .gql_account
+            .check(&cyex_tv_db::ids::to_text(caller.account_id))
+    {
+        return limits::too_many(wait);
+    }
+    let response: GraphQLResponse = schema
         .execute(request.into_inner().data(caller))
         .await
-        .into()
+        .into();
+    response.into_response()
 }
 
 /// The OpenAPI document, as committed in `openapi/openapi.json`.

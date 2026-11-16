@@ -4,6 +4,8 @@ use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use cyex_tv_auth::{Auth, Caller};
 use cyex_tv_hub::Hub;
+
+use crate::limits::Limits;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_storage::Store;
 use sqlx::PgPool;
@@ -22,6 +24,7 @@ pub struct AppState {
     pub store: Option<Store>,
     /// Live updates for GraphQL subscriptions. `main` runs its feeder.
     pub hub: Hub,
+    pub limits: Arc<Limits>,
 }
 
 impl AppState {
@@ -32,7 +35,13 @@ impl AppState {
             cdn_url: DEFAULT_CDN_URL.into(),
             store: None,
             hub: Hub::new(),
+            limits: Arc::new(Limits::default()),
         }
+    }
+
+    pub fn with_limits(mut self, limits: Limits) -> Self {
+        self.limits = Arc::new(limits);
+        self
     }
 
     pub fn with_store(mut self, store: Store) -> Self {

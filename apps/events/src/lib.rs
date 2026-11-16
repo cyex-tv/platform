@@ -13,16 +13,20 @@
 //! - On shutdown the server sends `reconnect` and closes.
 
 use std::collections::{BTreeMap, HashSet};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use axum::Router;
 use axum::extract::State;
 use axum::extract::ws::{CloseFrame, Message as WsMessage, WebSocket, WebSocketUpgrade};
-use axum::response::Response;
+use axum::http::header::RETRY_AFTER;
+use axum::http::{HeaderMap, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use cyex_tv_db::{event_sessions, ids, outbox};
 use cyex_tv_hub::topics::{self, MAX_TOPICS, TopicError};
 use cyex_tv_hub::{Hub, Message, Subscription, wire};
+use cyex_tv_shared::ratelimit::{Limiter, Peer, Rate, client_ip};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -46,6 +50,35 @@ pub struct EventsState {
     pub hub: Hub,
     /// Flips to `true` on shutdown: every connection sends `reconnect`.
     pub stopping: watch::Receiver<bool>,
+    /// New connections per IP (PLAN.md Phase 7).
+    pub connects: Arc<Limiter>,
+    /// Take the client IP from `CF-Connecting-IP` (`CYEX_TV_TRUST_CLOUDFLARE=true`).
+    pub trust_cloudflare: bool,
+}
+
+/// New connections allowed per IP.
+pub const CONNECTS: Rate = Rate::per_minute(60);
+
+impl EventsState {
+    pub fn new(db: PgPool, hub: Hub, stopping: watch::Receiver<bool>) -> Self {
+        Self {
+            db,
+            hub,
+            stopping,
+            connects: Arc::new(Limiter::new(CONNECTS)),
+            trust_cloudflare: false,
+        }
+    }
+
+    pub fn with_connect_rate(mut self, rate: Rate) -> Self {
+        self.connects = Arc::new(Limiter::new(rate));
+        self
+    }
+
+    pub fn trusting_cloudflare(mut self, trust: bool) -> Self {
+        self.trust_cloudflare = trust;
+        self
+    }
 }
 
 pub fn router(state: EventsState) -> Router {
@@ -54,7 +87,22 @@ pub fn router(state: EventsState) -> Router {
         .with_state(state)
 }
 
-async fn upgrade(State(state): State<EventsState>, ws: WebSocketUpgrade) -> Response {
+async fn upgrade(
+    State(state): State<EventsState>,
+    Peer(peer): Peer,
+    headers: HeaderMap,
+    ws: WebSocketUpgrade,
+) -> Response {
+    let ip = client_ip(&headers, peer, state.trust_cloudflare);
+    if let Err(wait) = state.connects.check(&ip) {
+        let secs = wait.as_secs().max(1).to_string();
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            [(RETRY_AFTER, secs)],
+            axum::Json(json!({ "error": "rate_limited", "message": "Too many new connections. Try again shortly." })),
+        )
+            .into_response();
+    }
     ws.max_message_size(MAX_FRAME)
         .max_frame_size(MAX_FRAME)
         .on_upgrade(move |socket| async move {

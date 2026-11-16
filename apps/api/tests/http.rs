@@ -277,3 +277,80 @@ async fn ready_with_database() {
     let (status, _) = get(AppState::new(db, auth()), "/health/ready").await;
     assert_eq!(status, StatusCode::OK);
 }
+
+fn limited_state(trust_cloudflare: bool) -> AppState {
+    let tiny = cyex_tv_shared::ratelimit::Rate::per_minute(2);
+    let rates = cyex_tv_api::limits::Rates {
+        auth: tiny,
+        reads: tiny,
+        ..cyex_tv_api::limits::Rates::default()
+    };
+    offline_state().with_limits(cyex_tv_api::limits::Limits::new(rates, trust_cloudflare))
+}
+
+async fn status_of(
+    app: &axum::Router,
+    uri: &str,
+    ip: Option<&str>,
+) -> (StatusCode, Option<String>) {
+    let mut request = Request::get(uri);
+    if let Some(ip) = ip {
+        request = request.header("cf-connecting-ip", ip);
+    }
+    let response = app
+        .clone()
+        .oneshot(request.body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let retry = response
+        .headers()
+        .get("retry-after")
+        .map(|v| v.to_str().unwrap().to_owned());
+    (response.status(), retry)
+}
+
+#[tokio::test]
+async fn requests_over_the_limit_get_429() {
+    let app = cyex_tv_api::app(limited_state(false));
+    // Sign-in has its own bucket (unconfigured platform: 503, but counted).
+    for _ in 0..2 {
+        assert_eq!(
+            status_of(&app, "/v1/auth/twitch/login", None).await.0,
+            StatusCode::SERVICE_UNAVAILABLE
+        );
+    }
+    let (status, retry) = status_of(&app, "/v1/auth/twitch/login", None).await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert!(retry.unwrap().parse::<u64>().unwrap() >= 1);
+    // Health checks are never limited.
+    for _ in 0..5 {
+        assert_eq!(status_of(&app, "/health", None).await.0, StatusCode::OK);
+    }
+    // Without trusting Cloudflare, its header changes nothing: still the same client.
+    assert_eq!(
+        status_of(&app, "/v1/auth/kick/login", Some("203.0.113.9"))
+            .await
+            .0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+}
+
+#[tokio::test]
+async fn behind_cloudflare_each_client_has_its_own_bucket() {
+    let app = cyex_tv_api::app(limited_state(true));
+    for _ in 0..2 {
+        status_of(&app, "/v1/auth/twitch/login", Some("203.0.113.1")).await;
+    }
+    assert_eq!(
+        status_of(&app, "/v1/auth/twitch/login", Some("203.0.113.1"))
+            .await
+            .0,
+        StatusCode::TOO_MANY_REQUESTS
+    );
+    assert_eq!(
+        status_of(&app, "/v1/auth/twitch/login", Some("203.0.113.2"))
+            .await
+            .0,
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+}

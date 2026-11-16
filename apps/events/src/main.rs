@@ -29,21 +29,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = Router::new()
         .route("/health", get(health))
-        .merge(router(EventsState {
-            db,
-            hub,
-            stopping: stop_rx,
-        }))
+        .merge(router(
+            EventsState::new(db, hub, stop_rx).trusting_cloudflare(matches!(
+                std::env::var("CYEX_TV_TRUST_CLOUDFLARE").as_deref(),
+                Ok("true" | "1")
+            )),
+        ))
         .layer(TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind(cfg.bind).await?;
     tracing::info!(addr = %cfg.bind, "events listening");
-    axum::serve(listener, app)
-        .with_graceful_shutdown(async move {
-            shutdown::signal().await;
-            // Tell every connection to reconnect, then let them close.
-            let _ = stop_tx.send(true);
-        })
-        .await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(async move {
+        shutdown::signal().await;
+        // Tell every connection to reconnect, then let them close.
+        let _ = stop_tx.send(true);
+    })
+    .await?;
     feeder.await??;
     Ok(())
 }
