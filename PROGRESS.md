@@ -2,9 +2,48 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
-## Phase 2: Data model, auth, roles (not started)
+## Phase 2: Data model, auth, roles (in progress)
 
-Paused on 2026/11/16 until work moves to a machine where commands can run (owner's call). That way the phase gets built and tested locally, not through CI round trips.
+Paused on 2026/11/16 until work moves to a machine where commands can run (owner's call). Resumed on the new machine on 2026/11/16. Rust, `git` and `gh` are set up there; Docker isn't installed yet (the owner installs it), so the database tests ran in CI first.
+
+### PR 1: migrations and db queries (branch `phase-2/db`, in review)
+- [x] Migration `20261117000001_core.sql`: every Phase 2 table from PLAN.md, with the indexes it lists (`(platform, platform_user_id)`, `(platform, platform_channel_id)`, `lower(name)` and a `pg_trgm` index on emote names, set owner, emote state), plus indexes for logins, sessions, editors, roles, audit and the outbox.
+- [x] The outbox insert trigger sends `NOTIFY cyex_tv_events, '<id>'` (ADR 0005).
+- [x] Query modules in `crates/db`: `accounts`, `sessions`, `channels`, `emotes`, `files`, `sets`, `roles`, `audit`, `outbox`, `ids`. Each takes `&mut PgConnection`, so the api can put a change, its audit row and its event in one transaction.
+- [x] Rule violations are named errors (`DbError`): `identity_taken`, `last_identity`, `set_full`, `name_taken`, `not_approved` and others.
+- [x] `crates/shared`: text forms for `EmoteState` and `SetKind`, and Postgres mappings for the enums behind a `sqlx` feature.
+- [ ] Owner: review the schema choices below.
+
+#### Choices in this PR (for the owner's review)
+1. **Runtime-checked queries, not compile-time ones.** ADR 0002 says "checked queries". The `query!` macros need a live database or a committed `.sqlx` cache on every build, CI's fmt, clippy and build jobs included. The queries are plain `sqlx::query_as` instead, and every query runs in the integration tests against a real Postgres. Switching to the macros later is a mechanical change. If the owner prefers the macros now, ADR 0002 stays as it is and the `.sqlx` cache gets committed. If not, ADR 0002 gets a line saying the tests do the checking.
+2. **One identity per platform per account** (`UNIQUE (account_id, platform)`): an account has at most one Twitch and one Kick identity.
+3. **Channel settings live on `channels`** (`allow_personal_emotes`), not in a separate `channel_settings` table. They are 1:1.
+4. **A set member stores its own name.** It starts as the emote's name and doesn't follow later renames of the emote. That makes `UNIQUE (set_id, name)` a real constraint.
+5. **`emotes.file_id`** (nullable) links an emote to its stored file; PLAN.md didn't name the link. Phase 3 fills it.
+6. **Set rules are enforced in `sets::add_member`**, under a row lock on the set: capacity, unique names, pending emotes only in their owner's own channel sets, approved only in personal sets, nothing rejected or taken down. Who may edit a set stays the api's check.
+7. **Outbox IDs are a bigint sequence**, so clients resume from a number. A sequence can commit out of order under concurrent writes; the Phase 5 readers have to allow for that.
+8. The text-valued columns (platform, kind, state) are `text` with a CHECK, not Postgres enums, so adding a value is a plain forward migration.
+
+#### GitHub write log
+2026/11/16, account `sery-yx`, under the owner's standing OK for Phase 2 branches:
+```
+git push -u origin phase-2/db
+gh pr create -R cyex-tv/platform --base main --head phase-2/db --title "Phase 2 PR 1: migrations and db queries" --body-file <file>
+```
+The result is PR 4.
+
+#### Tests
+- Unit: ULID text round trip and ordering; topic and event type names; the text forms of the enums match serde.
+- Integration (`crates/db/tests/queries.rs`), one fresh migrated database per test:
+  - sign-in creates, then reuses and refreshes, an account; six concurrent first sign-ins end on one account;
+  - linking and unlinking: `identity_taken`, `platform_already_linked`, `last_identity`;
+  - restricting an account; the schema refusing bad rows (non-numeric IDs, whitespace in names, an owned global set);
+  - sessions: expiry, the sliding `touch` never shortening, sign-out everywhere but the current session, deleted accounts;
+  - channels: upsert, login lookup ignoring case, active set cleared when its set is deleted;
+  - emotes: patch, tags, state, review queue, soft delete; files shared by sha256;
+  - sets: kinds, one personal set, the global set, membership rules, capacity (also with 12 concurrent adds into 5 slots), editors and `can_edit`, the personal lookup for chatters;
+  - roles: permissions union, unknown permissions, names unique ignoring case, highest position, holders of a permission;
+  - audit paging and rollback with the change; outbox IDs, topic filter, NOTIFY and cleanup.
 
 ### How Phase 2 is split (owner's call)
 Four PRs, in this order. The owner merges each before the next one starts:

@@ -1,0 +1,242 @@
+//! Accounts and their linked Twitch and Kick identities (ADR 0009).
+
+use chrono::{DateTime, Utc};
+use cyex_tv_shared::model::Platform;
+use sqlx::{Connection, FromRow, PgConnection};
+use uuid::Uuid;
+
+use crate::error::{DbError, DbResult, unique_violation};
+use crate::ids::new_id;
+
+#[derive(Clone, Debug, PartialEq, Eq, FromRow)]
+pub struct Account {
+    pub id: Uuid,
+    pub created_at: DateTime<Utc>,
+    pub restricted_at: Option<DateTime<Utc>>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, FromRow)]
+pub struct Identity {
+    pub platform: Platform,
+    pub platform_user_id: String,
+    pub account_id: Uuid,
+    pub login: String,
+    pub display_name: String,
+    pub avatar: Option<String>,
+    pub linked_at: DateTime<Utc>,
+    pub refreshed_at: DateTime<Utc>,
+}
+
+/// What a platform's user endpoint told us at sign-in.
+#[derive(Clone, Copy, Debug)]
+pub struct Profile<'a> {
+    pub platform: Platform,
+    pub platform_user_id: &'a str,
+    pub login: &'a str,
+    pub display_name: &'a str,
+    pub avatar: Option<&'a str>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SignIn {
+    pub account: Account,
+    pub identity: Identity,
+    /// True when this sign-in made the account.
+    pub created: bool,
+}
+
+const ACCOUNT: &str = "id, created_at, restricted_at, deleted_at";
+const IDENTITY: &str =
+    "platform, platform_user_id, account_id, login, display_name, avatar, linked_at, refreshed_at";
+
+/// Signs in with a platform identity: refreshes the profile of a known identity, or makes a new
+/// account for an unknown one. Two first sign-ins racing each other end up on the same account.
+pub async fn sign_in(conn: &mut PgConnection, profile: Profile<'_>) -> DbResult<SignIn> {
+    if let Some(identity) = refresh(conn, profile).await? {
+        return existing(conn, identity).await;
+    }
+
+    let mut tx = conn.begin().await?;
+    let account: Account = sqlx::query_as(&format!(
+        "INSERT INTO accounts (id) VALUES ($1) RETURNING {ACCOUNT}"
+    ))
+    .bind(new_id())
+    .fetch_one(&mut *tx)
+    .await?;
+    let identity: Option<Identity> = sqlx::query_as(&format!(
+        "INSERT INTO identities (platform, platform_user_id, account_id, login, display_name, avatar)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (platform, platform_user_id) DO NOTHING
+         RETURNING {IDENTITY}"
+    ))
+    .bind(profile.platform)
+    .bind(profile.platform_user_id)
+    .bind(account.id)
+    .bind(profile.login)
+    .bind(profile.display_name)
+    .bind(profile.avatar)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    match identity {
+        Some(identity) => {
+            tx.commit().await?;
+            Ok(SignIn {
+                account,
+                identity,
+                created: true,
+            })
+        }
+        // Someone signed in with the same identity a moment ago: use that account.
+        None => {
+            tx.rollback().await?;
+            let identity = refresh(conn, profile).await?.ok_or(DbError::NotFound)?;
+            existing(conn, identity).await
+        }
+    }
+}
+
+async fn existing(conn: &mut PgConnection, identity: Identity) -> DbResult<SignIn> {
+    let account = get(conn, identity.account_id)
+        .await?
+        .ok_or(DbError::NotFound)?;
+    Ok(SignIn {
+        account,
+        identity,
+        created: false,
+    })
+}
+
+/// Updates a known identity's login, name and avatar. `None` when the identity is unknown.
+async fn refresh(conn: &mut PgConnection, profile: Profile<'_>) -> DbResult<Option<Identity>> {
+    Ok(sqlx::query_as(&format!(
+        "UPDATE identities
+         SET login = $3, display_name = $4, avatar = $5, refreshed_at = now()
+         WHERE platform = $1 AND platform_user_id = $2
+         RETURNING {IDENTITY}"
+    ))
+    .bind(profile.platform)
+    .bind(profile.platform_user_id)
+    .bind(profile.login)
+    .bind(profile.display_name)
+    .bind(profile.avatar)
+    .fetch_optional(conn)
+    .await?)
+}
+
+pub async fn get(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Account>> {
+    Ok(
+        sqlx::query_as(&format!("SELECT {ACCOUNT} FROM accounts WHERE id = $1"))
+            .bind(id)
+            .fetch_optional(conn)
+            .await?,
+    )
+}
+
+/// An account's identities, Twitch first.
+pub async fn identities(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<Identity>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {IDENTITY} FROM identities WHERE account_id = $1 ORDER BY platform DESC"
+    ))
+    .bind(account_id)
+    .fetch_all(conn)
+    .await?)
+}
+
+pub async fn find_identity(
+    conn: &mut PgConnection,
+    platform: Platform,
+    platform_user_id: &str,
+) -> DbResult<Option<Identity>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {IDENTITY} FROM identities WHERE platform = $1 AND platform_user_id = $2"
+    ))
+    .bind(platform)
+    .bind(platform_user_id)
+    .fetch_optional(conn)
+    .await?)
+}
+
+/// Links another platform's identity to a signed-in account. Linking one that's already on this
+/// account just refreshes it.
+pub async fn link(
+    conn: &mut PgConnection,
+    account_id: Uuid,
+    profile: Profile<'_>,
+) -> DbResult<Identity> {
+    if let Some(found) = find_identity(conn, profile.platform, profile.platform_user_id).await? {
+        if found.account_id != account_id {
+            return Err(DbError::IdentityTaken);
+        }
+        return refresh(conn, profile).await?.ok_or(DbError::NotFound);
+    }
+    sqlx::query_as(&format!(
+        "INSERT INTO identities (platform, platform_user_id, account_id, login, display_name, avatar)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING {IDENTITY}"
+    ))
+    .bind(profile.platform)
+    .bind(profile.platform_user_id)
+    .bind(account_id)
+    .bind(profile.login)
+    .bind(profile.display_name)
+    .bind(profile.avatar)
+    .fetch_one(conn)
+    .await
+    .map_err(|err| match unique_violation(&err) {
+        Some("identities_pkey") => DbError::IdentityTaken,
+        Some("identities_account_id_platform_key") => DbError::PlatformAlreadyLinked,
+        _ => err.into(),
+    })
+}
+
+/// Unlinks the account's identity on `platform`. The last identity stays.
+pub async fn unlink(
+    conn: &mut PgConnection,
+    account_id: Uuid,
+    platform: Platform,
+) -> DbResult<Identity> {
+    let mut tx = conn.begin().await?;
+    // Lock the account's identities, so two unlinks at once can't remove both.
+    let linked: Vec<Identity> = sqlx::query_as(&format!(
+        "SELECT {IDENTITY} FROM identities WHERE account_id = $1 FOR UPDATE"
+    ))
+    .bind(account_id)
+    .fetch_all(&mut *tx)
+    .await?;
+    if !linked.iter().any(|i| i.platform == platform) {
+        return Err(DbError::NotFound);
+    }
+    if linked.len() == 1 {
+        return Err(DbError::LastIdentity);
+    }
+    let removed: Identity = sqlx::query_as(&format!(
+        "DELETE FROM identities WHERE account_id = $1 AND platform = $2 RETURNING {IDENTITY}"
+    ))
+    .bind(account_id)
+    .bind(platform)
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(removed)
+}
+
+/// Restricts an account (`users.restrict`) or lifts the restriction.
+pub async fn set_restricted(
+    conn: &mut PgConnection,
+    account_id: Uuid,
+    restricted: bool,
+) -> DbResult<Account> {
+    sqlx::query_as(&format!(
+        "UPDATE accounts
+         SET restricted_at = CASE WHEN $2 THEN coalesce(restricted_at, now()) END
+         WHERE id = $1
+         RETURNING {ACCOUNT}"
+    ))
+    .bind(account_id)
+    .bind(restricted)
+    .fetch_optional(conn)
+    .await?
+    .ok_or(DbError::NotFound)
+}

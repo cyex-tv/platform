@@ -1,4 +1,22 @@
 //! The cyex.tv database (ADR 0002): one Postgres, its own pool limits, forward-only migrations.
+//!
+//! Each module holds the queries for one area. They take `&mut PgConnection`, so the api can run
+//! several in one transaction (a change, its audit row and its outbox event commit together).
+//! Functions that need more than one statement open a nested transaction (a savepoint) themselves.
+
+pub mod accounts;
+pub mod audit;
+pub mod channels;
+pub mod emotes;
+mod error;
+pub mod files;
+pub mod ids;
+pub mod outbox;
+pub mod roles;
+pub mod sessions;
+pub mod sets;
+
+pub use error::{DbError, DbResult};
 
 use cyex_tv_shared::config::Config;
 use sqlx::Executor;

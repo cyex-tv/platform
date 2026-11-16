@@ -125,6 +125,35 @@ pub enum EmoteState {
     TakenDown,
 }
 
+impl EmoteState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Approved => "approved",
+            Self::Rejected => "rejected",
+            Self::TakenDown => "taken_down",
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[error("unknown emote state: {0}")]
+pub struct UnknownEmoteState(pub String);
+
+impl FromStr for EmoteState {
+    type Err = UnknownEmoteState;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "pending" => Ok(Self::Pending),
+            "approved" => Ok(Self::Approved),
+            "rejected" => Ok(Self::Rejected),
+            "taken_down" => Ok(Self::TakenDown),
+            other => Err(UnknownEmoteState(other.to_owned())),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct EmoteFlags {
@@ -205,6 +234,33 @@ pub enum SetKind {
     Channel,
     Personal,
     Global,
+}
+
+impl SetKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Channel => "channel",
+            Self::Personal => "personal",
+            Self::Global => "global",
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[error("unknown set kind: {0}")]
+pub struct UnknownSetKind(pub String);
+
+impl FromStr for SetKind {
+    type Err = UnknownSetKind;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "channel" => Ok(Self::Channel),
+            "personal" => Ok(Self::Personal),
+            "global" => Ok(Self::Global),
+            other => Err(UnknownSetKind(other.to_owned())),
+        }
+    }
 }
 
 /// An emote as it sits in a set: the name it is typed as there, and who added it.
@@ -419,6 +475,23 @@ mod tests {
             serde_json::to_string(&EmoteState::TakenDown).unwrap(),
             "\"taken_down\""
         );
+    }
+
+    #[test]
+    fn text_forms_match_serde() {
+        use EmoteState::*;
+        for state in [Pending, Approved, Rejected, TakenDown] {
+            assert_eq!(state.as_str().parse::<EmoteState>().unwrap(), state);
+            let json = serde_json::to_string(&state).unwrap();
+            assert_eq!(json, format!("\"{}\"", state.as_str()));
+        }
+        for kind in [SetKind::Channel, SetKind::Personal, SetKind::Global] {
+            assert_eq!(kind.as_str().parse::<SetKind>().unwrap(), kind);
+            let json = serde_json::to_string(&kind).unwrap();
+            assert_eq!(json, format!("\"{}\"", kind.as_str()));
+        }
+        assert!("deleted".parse::<EmoteState>().is_err());
+        assert!("Channel".parse::<SetKind>().is_err());
     }
 
     #[test]
