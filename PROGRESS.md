@@ -2,6 +2,21 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Phase 5: Live updates (in progress)
+
+Taken before Phase 4 in the overnight run: Phase 4 (the deck, in `cyex-app/cyex-deck`) can't meet its "Done when" until the owner's CDN and OAuth steps are done, and its step 2 waits for Phase 5 anyway. See the run's questions.
+
+### PR 1: the hub and the event WebSocket (branch `phase-5/events`)
+- [x] `crates/hub`: topics and subscribers, each event handed to a subscriber once even when it matches several of its topics. A subscriber whose queue (1024) fills is marked lagged and gets `resync`, so a slow client never holds up the rest.
+- [x] The feeder reads `events_outbox` on `NOTIFY cyex_tv_events` and every second. It keeps a watermark, so an event whose transaction commits after a higher ID is visible is still delivered; a missing ID (a rolled-back transaction) holds it back for at most 5 s.
+- [x] `apps/events`: `/v1/events` with the ADR 0005 protocol: `hello`, `subscribe` and `unsubscribe` with `ack` (refused topics listed with their code), `dispatch`, `heartbeat` both ways (closed after 60 s of silence), `resume` with replay from the outbox or `resync` (gap over 24 h, older than the outbox keeps, or over 5000 events), `reconnect` on shutdown, `error` and close on a broken limit (500 topics, 10 frames a second, 16 KB a frame).
+- [x] Migration `20261118000004_event_sessions.sql` (additive): a session's topics, kept 24 h, so `resume` works on another instance and after a restart. Saved on every subscribe and unsubscribe; an open connection marks its session in use every 10 minutes. The worker's clean-up removes old ones.
+
+#### Tests
+- Unit: the hub (once per subscriber, unsubscribing, dropping, lagging), topic names, the frame bucket, both event shapes.
+- `crates/hub/tests/feeder.rs` against Postgres: a commit out of ID order is delivered once the lower ID commits, and a rolled-back ID is passed after the wait.
+- `apps/events/tests/socket.rs` with real servers and a real WebSocket client: subscribe with refusals and delivery in under a second (measured and printed), other topics and unsubscribed ones not delivered, resume replaying exactly the missed events once and then live ones, an unknown session, a gap too old (`resync`), resume on a fresh instance after `reconnect` and a restart, the topic, rate, format and size limits.
+
 ## Phase 3: Upload pipeline, CDN, approval gate (in progress)
 
 Started 2026/11/16, in an overnight run the owner asked for (work on, merge green PRs, questions at the end).
