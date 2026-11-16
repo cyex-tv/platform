@@ -366,6 +366,9 @@ mod tests {
 
     #[test]
     fn emote_state_uses_snake_case() {
-        assert_eq!(serde_json::to_string(&EmoteState::TakenDown).unwrap(), "\"taken_down\"");
+        assert_eq!(
+            serde_json::to_string(&EmoteState::TakenDown).unwrap(),
+            "\"taken_down\""
+        );
     }
 }

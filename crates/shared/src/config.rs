@@ -105,10 +105,13 @@ where
 {
     match get(name) {
         None => Ok(default),
-        Some(raw) => raw.trim().parse().map_err(|err: T::Err| ConfigError::Invalid {
-            name,
-            reason: err.to_string(),
-        }),
+        Some(raw) => raw
+            .trim()
+            .parse()
+            .map_err(|err: T::Err| ConfigError::Invalid {
+                name,
+                reason: err.to_string(),
+            }),
     }
 }
 
@@ -122,8 +125,10 @@ mod tests {
     const BIND: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8080);
 
     fn load(pairs: &[(&str, &str)]) -> Result<Config, ConfigError> {
-        let map: HashMap<String, String> =
-            pairs.iter().map(|(k, v)| ((*k).to_owned(), (*v).to_owned())).collect();
+        let map: HashMap<String, String> = pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect();
         Config::from_source(|name| map.get(name).cloned(), BIND)
     }
 
@@ -138,7 +143,10 @@ mod tests {
 
     #[test]
     fn database_url_is_required() {
-        assert_eq!(load(&[]).unwrap_err(), ConfigError::Missing("CYEX_TV_DATABASE_URL"));
+        assert_eq!(
+            load(&[]).unwrap_err(),
+            ConfigError::Missing("CYEX_TV_DATABASE_URL")
+        );
         assert_eq!(
             load(&[("CYEX_TV_DATABASE_URL", "  ")]).unwrap_err(),
             ConfigError::Missing("CYEX_TV_DATABASE_URL")
@@ -147,16 +155,41 @@ mod tests {
 
     #[test]
     fn bad_values_are_named() {
-        let err = load(&[("CYEX_TV_DATABASE_URL", "x"), ("CYEX_TV_DB_MAX_CONNECTIONS", "ten")])
-            .unwrap_err();
-        assert!(matches!(err, ConfigError::Invalid { name: "CYEX_TV_DB_MAX_CONNECTIONS", .. }));
+        let err = load(&[
+            ("CYEX_TV_DATABASE_URL", "x"),
+            ("CYEX_TV_DB_MAX_CONNECTIONS", "ten"),
+        ])
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            ConfigError::Invalid {
+                name: "CYEX_TV_DB_MAX_CONNECTIONS",
+                ..
+            }
+        ));
 
-        let err = load(&[("CYEX_TV_DATABASE_URL", "x"), ("CYEX_TV_DB_MAX_CONNECTIONS", "0")])
-            .unwrap_err();
-        assert!(matches!(err, ConfigError::Invalid { name: "CYEX_TV_DB_MAX_CONNECTIONS", .. }));
+        let err = load(&[
+            ("CYEX_TV_DATABASE_URL", "x"),
+            ("CYEX_TV_DB_MAX_CONNECTIONS", "0"),
+        ])
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            ConfigError::Invalid {
+                name: "CYEX_TV_DB_MAX_CONNECTIONS",
+                ..
+            }
+        ));
 
-        let err = load(&[("CYEX_TV_DATABASE_URL", "x"), ("CYEX_TV_LOG_FORMAT", "xml")]).unwrap_err();
-        assert!(matches!(err, ConfigError::Invalid { name: "CYEX_TV_LOG_FORMAT", .. }));
+        let err =
+            load(&[("CYEX_TV_DATABASE_URL", "x"), ("CYEX_TV_LOG_FORMAT", "xml")]).unwrap_err();
+        assert!(matches!(
+            err,
+            ConfigError::Invalid {
+                name: "CYEX_TV_LOG_FORMAT",
+                ..
+            }
+        ));
     }
 
     #[test]

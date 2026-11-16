@@ -6,6 +6,12 @@ all-features = false
 [advisories]
 version = 2
 yanked = "deny"
+# Each ignore names why it is safe and when to look again.
+ignore = [
+    # `paste` is unmaintained, not vulnerable. It only enters through utoipa-axum, as a
+    # compile-time macro. Drop this once utoipa-axum moves off it.
+    { id = "RUSTSEC-2024-0436", reason = "unmaintained compile-time macro, via utoipa-axum only" },
+]
 
 [licenses]
 version = 2

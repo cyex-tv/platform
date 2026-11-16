@@ -15,6 +15,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = cyex_tv_api::app(AppState { db });
     let listener = tokio::net::TcpListener::bind(cfg.bind).await?;
     tracing::info!(addr = %cfg.bind, "api listening");
-    axum::serve(listener, app).with_graceful_shutdown(shutdown::signal()).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown::signal())
+        .await?;
     Ok(())
 }

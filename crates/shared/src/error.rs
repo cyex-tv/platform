@@ -24,7 +24,11 @@ pub type ApiResult<T> = Result<T, ApiError>;
 
 impl ApiError {
     pub fn new(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
-        Self { status, code, message: message.into() }
+        Self {
+            status,
+            code,
+            message: message.into(),
+        }
     }
 
     /// Part of the v1 contract, not built yet.
@@ -41,13 +45,20 @@ impl ApiError {
     }
 
     pub fn internal() -> Self {
-        Self::new(StatusCode::INTERNAL_SERVER_ERROR, "internal", "Something went wrong on our side.")
+        Self::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal",
+            "Something went wrong on our side.",
+        )
     }
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let body = ErrorBody { error: self.code.to_owned(), message: self.message };
+        let body = ErrorBody {
+            error: self.code.to_owned(),
+            message: self.message,
+        };
         (self.status, Json(body)).into_response()
     }
 }

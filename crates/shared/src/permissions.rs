@@ -40,7 +40,11 @@ mod tests {
         for name in ALL {
             let (area, action) = name.split_once('.').unwrap();
             assert!(!area.is_empty() && !action.is_empty(), "{name}");
-            assert!(name.chars().all(|c| c.is_ascii_lowercase() || c == '.' || c == '_'), "{name}");
+            assert!(
+                name.chars()
+                    .all(|c| c.is_ascii_lowercase() || c == '.' || c == '_'),
+                "{name}"
+            );
         }
     }
 

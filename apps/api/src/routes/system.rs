@@ -10,7 +10,9 @@ use utoipa_axum::routes;
 use crate::state::AppState;
 
 pub fn router() -> OpenApiRouter<AppState> {
-    OpenApiRouter::new().routes(routes!(health)).routes(routes!(ready))
+    OpenApiRouter::new()
+        .routes(routes!(health))
+        .routes(routes!(ready))
 }
 
 /// The process is up.
@@ -21,7 +23,9 @@ pub fn router() -> OpenApiRouter<AppState> {
     responses((status = 200, description = "The service is running.", body = Health))
 )]
 async fn health() -> Json<Health> {
-    Json(Health { status: "ok".to_owned() })
+    Json(Health {
+        status: "ok".to_owned(),
+    })
 }
 
 /// The service can reach its database.
@@ -39,5 +43,7 @@ async fn ready(State(state): State<AppState>) -> ApiResult<Json<Health>> {
         tracing::warn!(error = %err, "database not ready");
         ApiError::unavailable("The database isn't reachable.")
     })?;
-    Ok(Json(Health { status: "ok".to_owned() }))
+    Ok(Json(Health {
+        status: "ok".to_owned(),
+    }))
 }

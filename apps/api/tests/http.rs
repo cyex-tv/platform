@@ -29,7 +29,9 @@ fn config(database_url: &str) -> Config {
 /// A pool pointing at a port nothing listens on.
 fn offline_state() -> AppState {
     let cfg = config("postgres://nobody:nothing@127.0.0.1:1/none");
-    AppState { db: cyex_tv_db::connect_lazy(&cfg).unwrap() }
+    AppState {
+        db: cyex_tv_db::connect_lazy(&cfg).unwrap(),
+    }
 }
 
 async fn get(state: AppState, uri: &str) -> (StatusCode, Vec<u8>) {
@@ -38,7 +40,13 @@ async fn get(state: AppState, uri: &str) -> (StatusCode, Vec<u8>) {
         .await
         .unwrap();
     let status = response.status();
-    let body = response.into_body().collect().await.unwrap().to_bytes().to_vec();
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes()
+        .to_vec();
     (status, body)
 }
 
@@ -59,7 +67,12 @@ async fn ready_is_503_without_a_database() {
 
 #[tokio::test]
 async fn stubs_answer_not_implemented() {
-    for uri in ["/v1/me", "/v1/sets/global", "/v1/channels/twitch/123", "/v1/search/emotes?q=x"] {
+    for uri in [
+        "/v1/me",
+        "/v1/sets/global",
+        "/v1/channels/twitch/123",
+        "/v1/search/emotes?q=x",
+    ] {
         let (status, body) = get(offline_state(), uri).await;
         assert_eq!(status, StatusCode::NOT_IMPLEMENTED, "{uri}");
         let error: ErrorBody = serde_json::from_slice(&body).unwrap();
