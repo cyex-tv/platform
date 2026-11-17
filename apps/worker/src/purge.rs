@@ -112,7 +112,9 @@ pub async fn run(ctx: Ctx, job: Job) -> Result<(), JobError> {
     drop(conn);
 
     let sha_hex = sigv4::hex(&file.sha256);
-    let names: Vec<String> = file
+    // The recorded names, plus every name the encoder can make: a transcode that was queued or
+    // running at takedown time writes files the record doesn't know about yet.
+    let mut names: Vec<String> = file
         .variants
         .as_array()
         .map(|items| {
@@ -122,6 +124,11 @@ pub async fn run(ctx: Ctx, job: Job) -> Result<(), JobError> {
                 .collect()
         })
         .unwrap_or_default();
+    for name in cyex_tv_media::encode::all_names() {
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
     for name in &names {
         store
             .delete(&emote_key(&sha_hex, name))

@@ -30,6 +30,29 @@ pub async fn check(
     .await?)
 }
 
+/// Like [`check`], for an image with several frames: blocked if the sha256 matches, or any of
+/// the frame hashes is within [`DHASH_DISTANCE`] bits of a blocked one.
+pub async fn check_frames(
+    conn: &mut PgConnection,
+    sha256: &[u8; 32],
+    dhashes: &[i64],
+) -> DbResult<Option<String>> {
+    Ok(sqlx::query_scalar(
+        "SELECT reason FROM blocked_images b
+         WHERE sha256 = $1
+            OR (dhash IS NOT NULL AND EXISTS (
+                SELECT 1 FROM unnest($2::bigint[]) AS h
+                WHERE bit_count((b.dhash # h)::bit(64)) <= $3))
+         ORDER BY (sha256 = $1) DESC NULLS LAST
+         LIMIT 1",
+    )
+    .bind(&sha256[..])
+    .bind(dhashes)
+    .bind(DHASH_DISTANCE)
+    .fetch_optional(conn)
+    .await?)
+}
+
 /// Adds an entry. Phase 7 puts the moderator API and its audit row around this.
 pub async fn add(
     conn: &mut PgConnection,

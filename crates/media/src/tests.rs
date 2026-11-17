@@ -135,6 +135,60 @@ fn a_static_png() {
     assert_eq!(p.first_frame.dimensions(), (112, 100));
 }
 
+/// A GIF of the given frames, 50 ms each.
+fn gif_of(frames: &[RgbaImage]) -> Vec<u8> {
+    let mut out = Vec::new();
+    {
+        let mut enc = GifEncoder::new(&mut out);
+        enc.set_repeat(Repeat::Infinite).unwrap();
+        for f in frames {
+            enc.encode_frame(Frame::from_parts(
+                f.clone(),
+                0,
+                0,
+                Delay::from_numer_denom_ms(50, 1),
+            ))
+            .unwrap();
+        }
+    }
+    out
+}
+
+#[test]
+fn every_frame_is_hashed_not_only_the_first() {
+    let benign = gradient(64, 64, 0);
+    let mut blocked = gradient(64, 64, 0);
+    image::imageops::flip_horizontal_in_place(&mut blocked);
+    assert!(distance(dhash(&benign), dhash(&blocked)) > 20);
+
+    let p = ok(&gif_of(&[benign.clone(), blocked.clone()]));
+    assert_eq!(p.frames, 2);
+    assert_eq!(p.frame_hashes.len(), 2);
+    assert_eq!(p.frame_hashes[0], dhash(&p.first_frame));
+    assert!(
+        p.frame_hashes
+            .iter()
+            .any(|h| distance(*h, dhash(&blocked)) <= 4),
+        "the second frame's hash must be present"
+    );
+
+    // Repeated frames are listed once.
+    let p = ok(&gif_of(&[benign.clone(), benign.clone(), benign]));
+    assert_eq!(p.frame_hashes.len(), 1);
+}
+
+#[test]
+fn all_names_covers_every_name_the_encoder_makes() {
+    let names = encode::all_names();
+    assert_eq!(names.len(), 16);
+    assert!(names.contains(&"1x.webp".to_owned()));
+    assert!(names.contains(&"4x_static.avif".to_owned()));
+    let out = encode::transcode(&gif(40, 30, 3), &Limits::default()).unwrap();
+    for v in out.webp.iter().chain(&out.avif) {
+        assert!(names.contains(&v.name), "{} is missing", v.name);
+    }
+}
+
 #[test]
 fn an_apng() {
     let p = ok(&apng(32, 32, 4));

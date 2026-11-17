@@ -123,15 +123,22 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
             .map_err(media_error)?;
     let sha256: [u8; 32] = Sha256::digest(&input.file).into();
     let sha_hex = sigv4::hex(&sha256);
-    let first = probe.first_frame.clone();
-    let dhash = tokio::task::spawn_blocking(move || cyex_tv_media::dhash(&first))
-        .await
-        .map_err(|_| ApiError::internal())?;
+    // The first frame's hash is what `files.dhash` keeps (always the first entry).
+    let dhash = probe.frame_hashes.first().copied().unwrap_or(0);
     // Stored as the bigint with the same bits.
     let dhash = i64::from_ne_bytes(dhash.to_ne_bytes());
 
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    if blocklist::check(&mut conn, &sha256, dhash)
+    // Every frame counts: a blocked image can be the second frame of an animation.
+    let mut hashes: Vec<i64> = probe
+        .frame_hashes
+        .iter()
+        .map(|h| i64::from_ne_bytes(h.to_ne_bytes()))
+        .collect();
+    if !hashes.contains(&dhash) {
+        hashes.push(dhash);
+    }
+    if blocklist::check_frames(&mut conn, &sha256, &hashes)
         .await
         .map_err(db_error)?
         .is_some()
