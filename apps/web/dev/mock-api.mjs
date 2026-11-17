@@ -5,14 +5,16 @@
 // CDN, nothing is downloaded or stored here; see TWITCH below). MOCK_FACES=1 uses 300 made-up emotes
 // drawn as little procedural faces (SVG) instead. The mock account's own uploads are always faces. "Signing in" sets a mock cookie; everything signed in lives in memory and
 // resets when it restarts. MOCK_ADMIN=1, or opening /mock/admin once, gives the mock account
-// every permission (/mock/admin?off clears it).
+// every permission (/mock/admin?off clears it). MOCK_OPEN=1 is for a shared preview: every
+// visitor counts as signed in as the staff account with every permission, no cookie needed.
 // Development only; nothing here ships.
 import { createServer } from 'node:http';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const ORIGIN = process.env.SITE_ORIGIN ?? 'http://localhost:5173';
 const BASE = `http://localhost:${PORT}`;
-const ADMIN_ENV = process.env.MOCK_ADMIN === '1';
+const OPEN_ENV = process.env.MOCK_OPEN === '1';
+const ADMIN_ENV = process.env.MOCK_ADMIN === '1' || OPEN_ENV;
 const FACES = process.env.MOCK_FACES === '1';
 
 const ME_ID = '01JD8X0000000000000000MEME';
@@ -534,6 +536,21 @@ const emoteChannels = (e, limit) => {
     };
   });
 };
+// Public channel lookup: the mock account's own channel, plus every channel emoteChannels() can
+// return, each with an active set, so a link from "used in" always lands on a channel page.
+const channelIndex = new Map();
+const channelByLogin = (platform, login) => {
+  if (typeof login !== 'string') return null;
+  if (!channelIndex.size) {
+    for (const e of ALL)
+      for (const c of emoteChannels(e, e.channelCount)) {
+        const key = `${c.platform}/${c.login.toLowerCase()}`;
+        if (!channelIndex.has(key)) channelIndex.set(key, c);
+      }
+  }
+  if (login.toLowerCase() === 'lumen_fox') return { ...CHANNELS[0], platform };
+  return channelIndex.get(`${platform}/${login.toLowerCase()}`) ?? null;
+};
 const sorted = (hits, sort) => {
   if (sort === 'TOP') return [...hits].sort((a, b) => b.channelCount - a.channelCount || a.name.localeCompare(b.name));
   if (sort === 'NEW') return [...hits].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -757,8 +774,8 @@ function answer(body, session, admin) {
   }
   if (q.includes('query Emote(')) return { data: { emote: ALL.find((e) => e.id === v.id) ?? null } };
   if (q.includes('query Channel') || q.includes('query FindAccount')) {
-    if (v.login !== 'lumen_fox') return { data: { channelByLogin: null } };
-    return { data: { channelByLogin: { ...CHANNELS[0], platform: v.platform } } };
+    const c = channelByLogin(v.platform, v.login);
+    return { data: { channelByLogin: c } };
   }
   if (q.includes('query Set(')) {
     const s = findSet(v.id) ?? SETS[0];
@@ -780,7 +797,7 @@ function read(req) {
 const LOCAL = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/;
 function siteOf(req) {
   const origin = req.headers.origin;
-  if (origin && LOCAL.test(origin)) return origin;
+  if (origin && (LOCAL.test(origin) || OPEN_ENV)) return origin; // a shared preview is reached from other hosts
   try {
     const ref = new URL(req.headers.referer ?? '').origin;
     if (LOCAL.test(ref)) return ref;
@@ -794,7 +811,7 @@ createServer(async (req, res) => {
   res.setHeader('access-control-allow-credentials', 'true');
   res.setHeader('access-control-allow-headers', 'content-type');
   if (req.method === 'OPTIONS') return res.writeHead(204).end();
-  const session = /(?:^|;\s*)mock_session=1/.test(req.headers.cookie ?? '');
+  const session = OPEN_ENV || /(?:^|;\s*)mock_session=1/.test(req.headers.cookie ?? '');
   const url = new URL(req.url ?? '/', BASE);
   const admin = ADMIN_ENV || /(?:^|;\s*)mock_admin=1/.test(req.headers.cookie ?? '');
   if (url.pathname === '/mock/admin') {
@@ -852,7 +869,7 @@ createServer(async (req, res) => {
     return json(res, 200, answer(JSON.parse(raw || '{}'), session, admin));
   }
   res.writeHead(404).end();
-}).listen(PORT, 'localhost', () => console.log(`mock api on ${BASE}${ADMIN_ENV ? ' (admin)' : ''}`));
+}).listen(PORT, process.env.MOCK_HOST ?? 'localhost', () => console.log(`mock api on ${BASE}${OPEN_ENV ? ' (open: everyone is staff)' : ADMIN_ENV ? ' (admin)' : ''}`));
 
 function json(res, status, body) {
   res.writeHead(status, { 'content-type': 'application/json' });
