@@ -70,9 +70,9 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .nav-scroll { overflow-y: auto; overscroll-behavior: contain; padding-bottom: 28px; flex: 1; min-height: 0; }
 /* Addition: the list's scroll box reaches the rail's edge, so the lit rung there isn't clipped. */
 .docs .nav-scroll { margin-left: calc(-1 * var(--page-pad)); padding-left: var(--page-pad); }
-.docs .nav-group { margin-bottom: 16px; }
+.docs .nav-group { margin-bottom: 4px; }
 .docs .nav-group[hidden], .docs .nav-item[hidden], .docs .nav-empty[hidden] { display: none; }
-.docs .nav-group-title { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; padding: 0 8px; margin-bottom: 6px; }
+.docs .nav-group-title { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; padding: 0 8px; }
 .docs .nav-item {
   display: flex; align-items: center; gap: 8px; padding: 5px 8px; min-height: 32px; border-radius: var(--radius);
   color: var(--muted); text-decoration: none; font-size: .82rem; line-height: 1.35;
@@ -85,6 +85,35 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .nav-item.guide { padding-left: 9px; }
 .docs .nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .docs .nav-empty { padding: 10px 8px; color: var(--dim); font-size: .8rem; }
+
+/* ---------- Groups (additions): collapsible, closed by default ---------- */
+/* One open/closed state per group, shared by the index and the body (behaviour.ts sets data-open).
+   The height animates as grid rows, 0fr to 1fr; the closed content is visibility: hidden, which also
+   takes its links out of the tab order. overflow: clip (not hidden) keeps position: sticky working inside. */
+.docs .collapse { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows var(--collapse-dur, 200ms) ease-out, visibility 0s linear var(--collapse-dur, 200ms); }
+.docs [data-open='true'] > .collapse, .docs .docs-nav.filtering .nav-group > .collapse { grid-template-rows: 1fr; visibility: visible; transition: grid-template-rows var(--collapse-dur, 200ms) ease-out, visibility 0s; }
+.docs .collapse-inner { min-width: 0; min-height: 0; overflow: clip; }
+.docs.no-anim, .docs.no-anim * { --collapse-dur: 0s; }
+@media (prefers-reduced-motion: reduce) { .docs { --collapse-dur: 0s; } }
+
+.docs .group-toggle {
+  display: flex; align-items: center; gap: 6px; width: 100%; min-height: 32px; border: 0; border-radius: var(--radius); background: none;
+  font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; text-align: left; cursor: pointer; transition: background var(--fast), color var(--fast);
+}
+.docs .group-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+@media (hover: hover) and (pointer: fine) { .docs .group-toggle:hover { color: var(--text); } .docs .nav-group-title.group-toggle:hover { background: var(--surface-hover); } }
+.docs .chev { width: 10px; height: 10px; flex: none; transition: transform var(--collapse-dur, 200ms) ease-out; }
+.docs [aria-expanded='true'] > .chev, .docs .docs-nav.filtering .group-toggle .chev { transform: rotate(90deg); }
+.docs .group-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.docs .group-count { font-family: var(--font-mono); font-size: .66rem; font-weight: 600; letter-spacing: 0; font-variant-numeric: tabular-nums; color: var(--dim); margin-left: auto; padding-left: 8px; }
+.docs .nav-group-title.group-toggle { padding: 0 8px; font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+.docs .docs-nav.filtering .group-toggle { cursor: default; }
+
+.docs .nav-tools { flex: none; display: flex; justify-content: flex-end; margin: -6px 0 6px; }
+.docs .nav-tools[hidden] { display: none; }
+.docs .group-all { border: 0; background: none; color: var(--muted); font: inherit; font-size: .74rem; font-weight: 600; padding: 4px 8px; min-height: 28px; border-radius: var(--radius); cursor: pointer; }
+.docs .group-all:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+@media (hover: hover) and (pointer: fine) { .docs .group-all:hover { color: var(--text); background: var(--surface-hover); } }
 
 /* Method chips: a read is the ordinary case and stays grey; writes get a colour. */
 .docs :is(.nav-method, .method) { font-family: var(--font-mono); font-weight: 600; letter-spacing: .03em; border-radius: var(--radius); flex: none; text-align: center; }
@@ -101,7 +130,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 [data-theme='light'] .docs .auth-chip:not(.neutral) { color: color-mix(in srgb, var(--yellow) 80%, #000); }
 
 /* ---------- Body ---------- */
-.docs .docs-body { min-width: 0; padding: 34px var(--page-pad) 60px; }
+.docs .docs-body { min-width: 0; padding: 34px var(--page-pad) 20px; }
 .docs .docs-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; max-width: var(--measure); margin-bottom: 30px; }
 .docs .docs-title h1 { font-size: 2rem; margin: 0 0 6px; font-weight: 600; line-height: 1.2; }
 .docs .docs-title p { color: var(--muted); font-size: .97rem; margin: 0; }
@@ -135,7 +164,10 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .note strong { color: var(--text); }
 
 /* ---------- Endpoints ---------- */
-.docs .op-group-title { font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 44px 0 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); line-height: 1.5; }
+.docs .op-group-title { font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 14px 0 0; padding: 0; border-bottom: 1px solid var(--border); line-height: 1.5; }
+.docs .op-group-title .group-toggle { min-height: 44px; padding: 0 2px; }
+.docs .op-group-title .group-count { margin-left: 0; padding-left: 4px; }
+.docs .op-group.guides .guide:first-child { padding-top: 22px; }
 .docs section.op { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 30px; align-items: start; padding: 26px 0; border-bottom: 1px solid var(--border); }
 .docs section.op:last-child { border-bottom: none; }
 /* Addition: a GraphQL type is its fields, no samples: full width, the fields in two columns when there is room. */
@@ -201,10 +233,10 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .code-block pre[hidden] { display: none; }
 
 /* Addition (cyex-app rule 7): press feedback is instant. */
-.docs :is(.nav-item, .lang-tab, .code-copy, .input-clear, .nav-toc > summary, .to-top):active { opacity: .6; transition: none; }
+.docs :is(.nav-item, .lang-tab, .code-copy, .input-clear, .nav-toc > summary, .to-top, .group-toggle, .group-all):active { opacity: .6; transition: none; }
 
 /* The site's footer carries the credits; this is the reference's own sources line. */
-.docs .docs-end { margin: 40px 0 10px; padding: 18px 0 0; color: var(--dim); font-size: .76rem; line-height: 1.7; border-top: 1px solid var(--border); }
+.docs .docs-end { margin: 28px 0 0; padding: 18px 0 0; color: var(--dim); font-size: .76rem; line-height: 1.7; border-top: 1px solid var(--border); }
 .docs .docs-end a { color: var(--dim); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
 @media (hover: hover) and (pointer: fine) { .docs .docs-end a:hover { color: var(--text); } }
 
@@ -241,7 +273,7 @@ html:has(.docs) { scroll-behavior: smooth; }
   .docs .nav-kbd { display: none; }
   .docs .to-top { display: inline-flex; }
   .docs .to-top[hidden] { display: none; }
-  .docs .docs-body { padding: 26px var(--page-pad) 50px; }
+  .docs .docs-body { padding: 26px var(--page-pad) 20px; }
 }
 @media (max-width: 620px) {
   .docs .fmt, .docs .fmt-grid.wide .fmt { grid-template-columns: 1fr; gap: 4px; }
@@ -251,9 +283,10 @@ html:has(.docs) { scroll-behavior: smooth; }
 
 /* Addition: touch. Targets reach 40px, the filter stops iOS zooming into the page. */
 @media (pointer: coarse) {
-  .docs .nav-item, .docs .lang-tab { min-height: 40px; }
+  .docs .nav-item, .docs .lang-tab, .docs .group-toggle { min-height: 40px; }
+  .docs .group-all { min-height: 40px; }
   .docs .nav-search input { font-size: 16px; padding-block: 11px; }
   .docs .code-copy { padding: 9px; min-width: 44px; min-height: 44px; justify-content: center; align-items: center; }
   .docs .to-top { min-height: 44px; }
 }
-@media (prefers-reduced-motion: reduce) { .docs .nav-toc > summary::after { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .docs .nav-toc > summary::after, .docs .chev { transition: none; } }

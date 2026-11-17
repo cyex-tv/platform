@@ -1,77 +1,52 @@
 <script lang="ts">
-  // The site footer: brand, three link columns (product, developers, legal) and the base line
-  // with the non-affiliation note. /terms, /privacy and /contact are their own pages. Signed in,
-  // the product column offers Your emotes; signed out, Sign in.
+  // The one footer, on every route: slim, in the 1520 wrapper. Desktop: the mark and the product,
+  // developer and legal links in one row, then the non-affiliation note and the year. Phones: the
+  // links wrap, the note stays under them. It never changes with the session or the route.
+  // `slim` (the docs at /developers, from the page's load) also drops the gap above it, so a long
+  // page ends where its content does instead of running into the footer.
   import Mark from './Mark.svelte';
 
-  let { signedIn = false }: { signedIn?: boolean } = $props();
+  let { slim = false }: { slim?: boolean } = $props();
   const year = new Date().getFullYear();
 
-  const columns = $derived([
-    {
-      name: 'Product',
-      links: [
-        { href: '/search', label: 'Browse emotes' },
-        { href: '/#install', label: 'Get the extension' },
-        signedIn ? { href: '/me', label: 'Your emotes' } : { href: '/signin', label: 'Sign in' },
-      ],
-    },
-    {
-      name: 'Developers',
-      links: [
-        { href: '/developers', label: 'Developers' },
-        { href: '/developers/reference', label: 'API reference' },
-        { href: 'https://github.com/cyex-tv/platform', label: 'Source' },
-      ],
-    },
-    {
-      name: 'Legal',
-      links: [
-        { href: '/terms', label: 'Terms' },
-        { href: '/privacy', label: 'Privacy' },
-        { href: 'https://github.com/cyex-tv/platform/blob/main/docs/takedown.md', label: 'Takedowns' },
-        { href: '/contact', label: 'Contact' },
-      ],
-    },
-  ]);
+  const links = [
+    { href: '/search', label: 'Browse emotes' },
+    { href: '/#install', label: 'Get the extension' },
+    { href: '/developers', label: 'Developers' },
+    { href: 'https://github.com/cyex-tv/platform', label: 'Source' },
+    { href: '/terms', label: 'Terms' },
+    { href: '/privacy', label: 'Privacy' },
+    { href: 'https://github.com/cyex-tv/platform/blob/main/docs/takedown.md', label: 'Takedowns' },
+    { href: '/contact', label: 'Contact' },
+  ];
 </script>
 
-<footer class="footer">
-  <div class="page">
-    <div class="top">
-      <div class="about">
-        <a class="brand" href="/"><Mark size={18} /><span>cyex.tv</span></a>
-        <p>Emotes for Twitch and Kick chat.</p>
-      </div>
-      {#each columns as c}
-        <nav class="col" aria-label={c.name}>
-          <h2>{c.name}</h2>
-          <ul>
-            {#each c.links as l}<li><a href={l.href}>{l.label}</a></li>{/each}
-          </ul>
-        </nav>
-      {/each}
+<footer class="footer" class:slim>
+  <div class="wrap">
+    <div class="row">
+      <a class="brand" href="/"><Mark size={16} /><span>cyex.tv</span></a>
+      <nav aria-label="Footer">
+        {#each links as l (l.href)}<a href={l.href}>{l.label}</a>{/each}
+      </nav>
     </div>
-    <div class="base">
+    <p class="base">
       <span>Not affiliated with, endorsed by, or sponsored by Twitch or Kick.</span>
       <span>© {year} cyex</span>
-    </div>
+    </p>
   </div>
 </footer>
 
 <style>
-  .footer { flex: none; border-top: 1px solid var(--border); margin-top: var(--footer-gap);
-    padding-bottom: env(safe-area-inset-bottom, 0px); }
-  .top { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)); gap: 32px 24px; padding: 48px 0 40px; }
-  .brand { display: inline-flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
-  .about p { margin: 12px 0 0; font-size: var(--t-small); color: var(--muted); max-width: 28ch; }
-  h2 { margin: 0 0 12px; font-size: var(--t-small); font-weight: 500; color: var(--text); }
-  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
-  .col a { display: inline-flex; align-items: center; min-height: 40px; font-size: var(--t-small); color: var(--muted);
-    transition: color var(--dur-color); }
-  .base { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; border-top: 1px solid var(--border);
-    padding: 20px 0 36px; font-size: var(--t-fine); color: var(--muted); }
-  @media (hover: hover) and (pointer: fine) { .col a:hover { color: var(--text); } }
-  @media (max-width: 900px) { .top { grid-template-columns: repeat(3, minmax(0, 1fr)); } .about { grid-column: 1 / -1; } }
-  @media (max-width: 520px) { .top { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .footer { flex: none; margin-top: var(--footer-gap); border-top: 1px solid var(--border);
+    padding-bottom: env(safe-area-inset-bottom, 0px); font-size: var(--t-fine); color: var(--muted); }
+  .slim { margin-top: 0; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 28px; padding-top: 14px; }
+  .brand { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; font-size: var(--t-small); font-weight: 600;
+    letter-spacing: -.01em; color: var(--text); }
+  nav { display: flex; flex-wrap: wrap; gap: 0 20px; }
+  nav a { display: inline-flex; align-items: center; min-height: 40px; color: var(--muted); transition: color var(--fast); }
+  nav a:active { opacity: .6; transition: none; }
+  .base { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 24px; margin: 0; padding: 6px 0 20px; color: var(--dim); }
+  @media (hover: hover) and (pointer: fine) { nav a:hover { color: var(--text); } }
+  @media (max-width: 720px) { nav { gap: 0 16px; } .row { gap: 0; } }
 </style>

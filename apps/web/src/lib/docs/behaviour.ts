@@ -10,12 +10,23 @@
 // scroll-spy uses is its height + 16 (the same as the site's scroll-padding-top), and the index
 // folds into a <details class="nav-toc"> when it is stacked above the text (<= 900px).
 //
+// Groups: every [data-group] element (an index group and its body group share an id) opens and closes
+// together. They start closed, except the notes; what the reader toggles is kept in sessionStorage. A
+// link to a section in a closed group opens the group first (without animating, so the jump lands
+// right), the filter shows matching index groups open, and the scroll-spy only counts sections whose
+// group is open. Measured offsets are redone as groups change height.
+//
 // Markup it expects (see the skill's starter page):
 //   .nav                                        the site's sticky nav
 //   aside.docs-nav > .nav-search > input        the filter
 //   aside.docs-nav > nav.nav-scroll             the index; its own scroll container
 //     .nav-group > .nav-group-title + a.nav-item[href="#id"]
 //   section[id]                                 one per index entry, in the same order
+//   [data-group=id][data-open]                  a group, in the index and in the body; its toggle is
+//                                               button[data-group-toggle=id][aria-expanded]
+//   button[data-group-all]                      "Expand all" / "Collapse all"
+
+import { GROUP_KEY, allOpen, isOpen, parseGroupState, withAll, withGroup, type GroupState } from './groups';
 
 export interface DocsOptions {
   headerOffset?: number; // default: the nav's height + 16
@@ -39,6 +50,9 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
   const search = root.querySelector<HTMLElement>('.nav-search');
   const input = search?.querySelector('input') ?? null;
   const sections = [...root.querySelectorAll<HTMLElement>('section[id]')];
+  const docs = aside.closest<HTMLElement>('.docs') ?? aside;
+  const allBtn = root.querySelector<HTMLButtonElement>('[data-group-all]');
+  const tools = root.querySelector<HTMLElement>('.nav-tools');
   const items = new Map([...nav.querySelectorAll<HTMLAnchorElement>('a.nav-item')].map((a) => [a.getAttribute('href')!.slice(1), a]));
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
   const cleanups: (() => void)[] = [];
@@ -51,10 +65,12 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
   // Offsets are measured once (and again on resize) and compared with scrollY.
   // An IntersectionObserver band thin enough for one section is thin enough for two
   // to straddle it, and then it lights the section you are leaving.
+  // Only sections whose group is open count: a closed group's sections have no height of their own.
   let tops: { id: string; top: number }[] = [];
   const measure = () => {
-    tops = sections.map((s) => ({ id: s.id, top: s.getBoundingClientRect().top + scrollY }));
+    tops = sections.filter((s) => s.closest('[data-group]')?.getAttribute('data-open') !== 'false').map((s) => ({ id: s.id, top: s.getBoundingClientRect().top + scrollY }));
   };
+  let dirty = false;
 
   let activeId: string | null = null;
   let edge: 'top' | 'end' | null = null; // the page is at one of its ends
@@ -62,6 +78,10 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
 
   function update() {
     frame = 0;
+    if (dirty) {
+      dirty = false;
+      measure();
+    }
     if (!tops.length) return;
     const atTop = scrollY <= 2;
     const atEnd = innerHeight + scrollY >= document.documentElement.scrollHeight - 2;
@@ -86,8 +106,9 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
   const onScroll = () => {
     if (!frame) frame = requestAnimationFrame(update);
   };
+  // Layout changed (resize, fonts, a group opening): measure again, once per frame.
   const onResize = () => {
-    measure();
+    dirty = true;
     onScroll();
   };
 
@@ -136,6 +157,87 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
     if (Math.abs(target - nav.scrollTop) < 2) return;
     nav.scrollTo({ top: target, behavior: reduced() ? 'auto' : 'smooth' });
   }
+
+  // ---------- groups ----------
+  const toggles = [...root.querySelectorAll<HTMLButtonElement>('[data-group-toggle]')];
+  const groupIds = [...new Set(toggles.map((b) => b.dataset.groupToggle!))];
+  let state: GroupState = {};
+  try {
+    state = parseGroupState(sessionStorage.getItem(GROUP_KEY));
+  } catch {
+    /* storage blocked: the defaults */
+  }
+  const filtering = () => aside.classList.contains('filtering');
+
+  function paint() {
+    for (const el of root.querySelectorAll<HTMLElement>('[data-group]')) el.dataset.open = String(isOpen(state, el.dataset.group!));
+    const f = filtering();
+    for (const b of toggles) {
+      const inIndex = !!b.closest('.docs-nav');
+      b.setAttribute('aria-expanded', String(isOpen(state, b.dataset.groupToggle!) || (f && inIndex)));
+      if (inIndex && f) b.setAttribute('aria-disabled', 'true');
+      else b.removeAttribute('aria-disabled');
+    }
+    if (allBtn) allBtn.textContent = allOpen(state, groupIds) ? 'Collapse all' : 'Expand all';
+  }
+  // Changes that must not animate (links, expand all, the first paint) switch the duration to 0 for
+  // a couple of frames, so the layout is final before anything scrolls.
+  let settle = 0;
+  function commit(next: GroupState, instant: boolean) {
+    state = next;
+    try {
+      sessionStorage.setItem(GROUP_KEY, JSON.stringify(state));
+    } catch {
+      /* not remembered, still changed */
+    }
+    if (instant) {
+      docs.classList.add('no-anim');
+      cancelAnimationFrame(settle);
+      settle = requestAnimationFrame(() => (settle = requestAnimationFrame(() => docs.classList.remove('no-anim'))));
+    }
+    paint();
+    if (instant) {
+      measure();
+      dirty = false;
+    }
+    onScroll();
+  }
+  cleanups.push(() => cancelAnimationFrame(settle));
+
+  /** Opens the group that holds the element with this id. True when that changed anything. */
+  function reveal(id: string): boolean {
+    const group = document.getElementById(id)?.closest<HTMLElement>('[data-group]')?.dataset.group;
+    if (!group || isOpen(state, group)) return false;
+    commit(withGroup(state, group, true), true);
+    return true;
+  }
+
+  for (const b of toggles)
+    on(b, 'click', () => {
+      const id = b.dataset.groupToggle!;
+      if (b.closest('.docs-nav')) {
+        if (filtering()) return; // the filter shows its matches open; nothing to toggle
+        railTouchedAt = performance.now();
+      }
+      commit(withGroup(state, id, !isOpen(state, id)), false);
+    });
+  if (allBtn)
+    on(allBtn, 'click', () => {
+      railTouchedAt = performance.now();
+      commit(withAll(groupIds, !allOpen(state, groupIds)), true);
+    });
+  // Any in-page link (index entries, "see the events subscription", type names) lands in an open group.
+  on<MouseEvent>(root, 'click', (e) => {
+    const a = (e.target as Element).closest<HTMLAnchorElement>('a[href^="#"]');
+    if (a && a.getAttribute('href')!.length > 1) reveal(decodeURIComponent(a.getAttribute('href')!.slice(1)));
+  });
+  // Back/forward and typed hashes: the browser may already have jumped to a hidden target.
+  const onHash = () => {
+    const id = decodeURIComponent(location.hash.slice(1));
+    if (id && reveal(id)) requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ behavior: 'instant' }));
+  };
+  on(window, 'hashchange', onHash);
+  on(window, 'popstate', onHash);
 
   // ---------- two columns, two scrolls ----------
   // Whichever column the pointer is over is the one that moves. overscroll-behavior on
@@ -192,6 +294,9 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
     const apply = () => {
       const q = input.value.trim().toLowerCase();
       search.classList.toggle('has-value', !!input.value);
+      aside.classList.toggle('filtering', !!q); // matching groups show open while a filter is on
+      if (tools) tools.hidden = !!q;
+      paint();
       if (toc && q && stacked()) toc.open = true;
       let any = false;
       // Entries match on their own text (label, method, path); a group heading never
@@ -204,6 +309,8 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
           if (hit) shown++;
         }
         group.hidden = !shown;
+        const count = group.querySelector<HTMLElement>('.group-count');
+        if (count) count.textContent = q ? String(shown) : (count.dataset.total ?? count.textContent);
         if (shown) any = true;
       }
       if (empty) {
@@ -299,8 +406,18 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
   });
 
   // ---------- start ----------
-  measure();
   const hash = decodeURIComponent(location.hash.slice(1));
+  // The saved groups, plus the one a deep link points into, before anything is measured.
+  const hashGroup = hash ? document.getElementById(hash)?.closest<HTMLElement>('[data-group]')?.dataset.group : undefined;
+  commit(hashGroup && !isOpen(state, hashGroup) ? withGroup(state, hashGroup, true) : state, true);
+  if (hashGroup) {
+    // The browser jumped to the fragment before the group was open: go there again.
+    const jump = () => document.getElementById(hash)?.scrollIntoView({ behavior: 'instant' });
+    jump();
+    const t = setTimeout(jump, 120);
+    cleanups.push(() => clearTimeout(t));
+  }
+  measure();
   if (items.has(hash)) setActive(hash); // a deep link lights its entry before any scrolling
   update();
   on(window, 'scroll', onScroll, { passive: true });

@@ -4,6 +4,7 @@
   // rendered from data files in $lib/docs; behaviour.ts adds the scroll-spy, filter and tabs.
   import '$lib/docs/docs.css';
   import { initDocs } from '$lib/docs/behaviour';
+  import { defaultOpen, restGroupId } from '$lib/docs/groups';
   import Code from '$lib/docs/Code.svelte';
   import Fields from '$lib/docs/Fields.svelte';
   import Inline from '$lib/docs/Inline.svelte';
@@ -46,7 +47,26 @@
   const wsHost = $derived(socketUrl.replace(/\/v1\/events$/, ''));
 </script>
 
+{#snippet chev()}
+  <svg class="chev" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
+{/snippet}
+<!-- The header of a group, in the index and in the body. behaviour.ts owns aria-expanded and data-open;
+     the markup is the default state (the notes open, the rest closed), so it reads right before the script runs. -->
+{#snippet navHead(id: string, title: string, count: number)}
+  <button type="button" class="group-toggle nav-group-title" data-group-toggle={id} aria-expanded={defaultOpen(id)} aria-controls="nav-{id}">
+    {@render chev()}<span class="group-name">{title}</span><span class="group-count" data-total={count}>{count}</span>
+  </button>
+{/snippet}
+{#snippet bodyHead(id: string, title: string, count: number)}
+  <h2 class="op-group-title">
+    <button type="button" class="group-toggle" data-group-toggle={id} aria-expanded={defaultOpen(id)} aria-controls="body-{id}">
+      {@render chev()}<span class="group-name">{title}</span><span class="group-count">{count}</span>
+    </button>
+  </h2>
+{/snippet}
+
 <svelte:head>
+  <noscript><style>.docs .collapse { grid-template-rows: 1fr; visibility: visible; } .docs .nav-tools, .docs .group-toggle .chev { display: none; }</style></noscript>
   <title>API - cyex.tv</title>
   <meta name="description" content="The cyex.tv API: public reads for chat clients, GraphQL, and live events, with every endpoint, parameter and response." />
   <meta property="og:title" content="API reference" />
@@ -61,48 +81,59 @@
         <kbd class="nav-kbd">Ctrl K</kbd>
         <button type="button" class="input-clear" aria-label="Clear"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2l6 6M8 2L2 8" /></svg></button>
       </div>
+      <div class="nav-tools"><button type="button" class="group-all" data-group-all>Expand all</button></div>
       <details class="nav-toc">
       <summary>Contents</summary>
       <nav class="nav-scroll" aria-label="Contents">
-        <div class="nav-group">
-          <div class="nav-group-title">Notes</div>
+        <div class="nav-group" data-group="notes" data-open={defaultOpen('notes')}>
+          {@render navHead('notes', 'Notes', guides.length)}
+          <div class="collapse" id="nav-notes"><div class="collapse-inner">
           {#each guides as g}
             <a class="nav-item guide" href="#{g.id}" data-search={g.search}><span class="nav-label">{g.title}</span></a>
           {/each}
+          </div></div>
         </div>
         {#each data.rest as g}
-          <div class="nav-group">
-            <div class="nav-group-title">{g.title}</div>
+          <div class="nav-group" data-group={restGroupId(g.tag)} data-open="false">
+            {@render navHead(restGroupId(g.tag), g.title, g.ops.length)}
+            <div class="collapse" id="nav-{restGroupId(g.tag)}"><div class="collapse-inner">
             {#each g.ops as op}
               <a class="nav-item" href="#{op.id}" data-search="{op.path} rest">
                 <span class="nav-method m-{op.method.toLowerCase()}">{op.method}</span><span class="nav-label">{op.title}</span>
               </a>
             {/each}
+            </div></div>
           </div>
         {/each}
-        <div class="nav-group">
-          <div class="nav-group-title">Live events</div>
+        <div class="nav-group" data-group="live" data-open="false">
+          {@render navHead('live', 'Live events', 1)}
+          <div class="collapse" id="nav-live"><div class="collapse-inner">
           <a class="nav-item" href="#ws-events" data-search="/v1/events websocket socket">
             <span class="nav-method m-ws">WS</span><span class="nav-label">Event socket</span>
           </a>
+          </div></div>
         </div>
         {#each gqlGroups as g}
-          <div class="nav-group">
-            <div class="nav-group-title">{g.title}</div>
+          <div class="nav-group" data-group="gql-{g.id}" data-open="false">
+            {@render navHead(`gql-${g.id}`, g.title, g.ops.length)}
+            <div class="collapse" id="nav-gql-{g.id}"><div class="collapse-inner">
             {#each g.ops as op}
               <a class="nav-item" href="#{op.id}" data-search="graphql {op.kind}">
                 <span class="nav-method {chipClass[op.kind]}">{chip[op.kind]}</span><span class="nav-label">{op.name}</span>
               </a>
             {/each}
+            </div></div>
           </div>
         {/each}
-        <div class="nav-group">
-          <div class="nav-group-title">GraphQL types</div>
+        <div class="nav-group" data-group="gql-types" data-open="false">
+          {@render navHead('gql-types', 'GraphQL types', data.gql.types.length)}
+          <div class="collapse" id="nav-gql-types"><div class="collapse-inner">
           {#each data.gql.types as t}
             <a class="nav-item" href="#{t.id}" data-search="graphql type {t.kind}">
               <span class="nav-method m-get">{typeChip(t)}</span><span class="nav-label">{t.name}</span>
             </a>
           {/each}
+          </div></div>
         </div>
         <div class="nav-empty" hidden></div>
       </nav>
@@ -121,6 +152,9 @@
         </span>
       </header>
 
+      <div class="op-group guides" data-group="notes" data-open={defaultOpen('notes')}>
+        {@render bodyHead('notes', 'Notes', guides.length)}
+        <div class="collapse" id="body-notes"><div class="collapse-inner">
       {#each guides as g}
         <section class="guide" id={g.id}>
           <h2>{g.title}</h2>
@@ -149,10 +183,13 @@
           {/each}
         </section>
       {/each}
+        </div></div>
+      </div>
 
       {#each data.rest as g}
-        <div class="op-group">
-          <h2 class="op-group-title">{g.title}</h2>
+        <div class="op-group" data-group={restGroupId(g.tag)} data-open="false">
+          {@render bodyHead(restGroupId(g.tag), g.title, g.ops.length)}
+          <div class="collapse" id="body-{restGroupId(g.tag)}"><div class="collapse-inner">
           {#each g.ops as op}
             <section class="op" id={op.id}>
               <div class="op-main">
@@ -190,11 +227,13 @@
               </div>
             </section>
           {/each}
+          </div></div>
         </div>
       {/each}
 
-      <div class="op-group">
-        <h2 class="op-group-title">Live events</h2>
+      <div class="op-group" data-group="live" data-open="false">
+        {@render bodyHead('live', 'Live events', 1)}
+        <div class="collapse" id="body-live"><div class="collapse-inner">
         <section class="op" id="ws-events">
           <div class="op-main">
             <div class="op-head">
@@ -246,11 +285,13 @@
             </div>
           </div>
         </section>
+        </div></div>
       </div>
 
       {#each gqlGroups as g}
-        <div class="op-group">
-          <h2 class="op-group-title">{g.title}</h2>
+        <div class="op-group" data-group="gql-{g.id}" data-open="false">
+          {@render bodyHead(`gql-${g.id}`, g.title, g.ops.length)}
+          <div class="collapse" id="body-gql-{g.id}"><div class="collapse-inner">
           {#each g.ops as op}
             <section class="op" id={op.id}>
               <div class="op-main">
@@ -299,11 +340,13 @@
               </div>
             </section>
           {/each}
+          </div></div>
         </div>
       {/each}
 
-      <div class="op-group">
-        <h2 class="op-group-title">GraphQL types</h2>
+      <div class="op-group" data-group="gql-types" data-open="false">
+        {@render bodyHead('gql-types', 'GraphQL types', data.gql.types.length)}
+        <div class="collapse" id="body-gql-types"><div class="collapse-inner">
         {#each data.gql.types as t}
           <section class="op type" id={t.id}>
             <div class="op-main">
@@ -330,6 +373,7 @@
             </div>
           </section>
         {/each}
+        </div></div>
       </div>
 
       <p class="docs-end">
