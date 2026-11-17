@@ -1,5 +1,4 @@
 <script lang="ts">
-  import '../../tool.css';
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
@@ -35,13 +34,7 @@
   });
 </script>
 
-<svelte:head>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" />
-</svelte:head>
-
-<div class="tool">
+<div class="tool ui-page">
   <a class="skip" href="#main">Skip to content</a>
   <header class="bar">
     <div class="wrap inner">
@@ -76,10 +69,10 @@
 <style>
   .bar { position: sticky; top: 0; z-index: var(--z-nav); background: var(--bg); border-bottom: 1px solid var(--border); }
   .inner { display: flex; align-items: center; gap: 24px; padding-block: 10px; min-height: 56px; }
-  .brand { display: flex; align-items: center; gap: 9px; color: var(--text); text-decoration: none; font-weight: 700; font-size: .95rem; flex: none; }
+  .brand { display: flex; align-items: center; gap: 9px; color: var(--text); text-decoration: none; font-weight: 600; font-size: .95rem; flex: none; }
   nav { display: flex; gap: 18px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   nav a { position: relative; padding: 8px 0; color: var(--muted); text-decoration: none; white-space: nowrap;
-    font-size: .74rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; transition: color var(--fast); }
+    font-size: .74rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; transition: color var(--fast); }
   @media (hover: hover) and (pointer: fine) { nav a:hover { color: var(--text); } }
   nav a::after { content: ''; position: absolute; inset: auto 0 2px; height: 2px; background: var(--accent);
     scale: 0 1; transition: scale var(--base) var(--ease); }

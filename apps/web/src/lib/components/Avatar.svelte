@@ -32,6 +32,6 @@
   .av { flex: none; display: inline-grid; place-items: center; overflow: hidden; border-radius: 50%; line-height: 1;
     background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); font-weight: 600;
     -webkit-user-select: none; user-select: none; }
-  .tone-tool { background: var(--neutral-chip, var(--surface-2)); border: 0; font-weight: 700; }
+  .tone-tool { background: var(--neutral-chip, var(--surface-2)); border: 0; font-weight: 600; }
   img { display: block; width: 100%; height: 100%; object-fit: cover; }
 </style>

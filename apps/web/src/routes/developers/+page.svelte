@@ -2,7 +2,6 @@
   // /developers: the cyex.tv API on the cyex docs layout (cyex-docs). Guides first, then the REST
   // endpoints from openapi.json, the event socket, and GraphQL from schema.graphql. Everything is
   // rendered from data files in $lib/docs; behaviour.ts adds the scroll-spy, filter and tabs.
-  import '../../tool.css';
   import '$lib/docs/docs.css';
   import { initDocs } from '$lib/docs/behaviour';
   import Code from '$lib/docs/Code.svelte';
@@ -51,12 +50,9 @@
   <title>API - cyex.tv</title>
   <meta name="description" content="The cyex.tv API: public reads for chat clients, GraphQL, and live events, with every endpoint, parameter and response." />
   <meta property="og:title" content="API reference" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" />
 </svelte:head>
 
-<div class="tool docs" bind:this={root}>
+<div class="docs" bind:this={root}>
   <div class="docs-shell">
     <aside class="docs-nav">
       <div class="nav-search">

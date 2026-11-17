@@ -1,19 +1,29 @@
-/* cyex web tokens: landing pages, product sites, the hub.
-   Ground and greys from the cyex hub; accent tokens from cyex-design (shared with every cyex surface).
-   Copy this block into the page's <style> (or app.css) and use only these values. */
+/* cyex.tv tokens: ONE set for every route (public pages, signed-in pages, admin, docs).
+   Ground and greys from cyex-web (near-black / white), the tool vocabulary from cyex-app
+   (surface steps, dim, row hover, status colours, label sizes), the accent from cyex-design.
+   Components use only these values. There is no second palette: tool density comes from
+   components (tool.css), never from a different ground or font. */
 
 :root {
   color-scheme: dark;
 
-  /* Ground: near-black, neutral greys. No cream or off-white in light. */
+  /* Ground and surfaces: height is a colour step (bg → surface → elevated). */
   --bg: #08090c;
-  --surface: #101217;
-  --surface-2: #171a21;
+  --surface: #101217;        /* rails, tiles, panels, cards, fields */
+  --surface-hover: #171a21;  /* a surface under the pointer */
+  --surface-2: #171a21;      /* a step above surface (hover fills on public components) */
+  --elevated: #171a21;       /* floating things: popovers, menus, dialogs, sheets */
+  --elevated-2: #1f222a;     /* code blocks, nested floating rows */
   --border: rgb(255 255 255 / .08);
   --border-strong: rgb(255 255 255 / .16);
   --text: #eceef3;
   --muted: #9ba1ad;
+  --dim: #868c98;            /* hints, captions, counts (≥ 4.5:1 on every surface) */
   --mark-ink: #e8e8ea;
+  --neutral-chip: #1f222a;
+  --row-hover: rgb(255 255 255 / .05);
+  --row-alt: rgb(255 255 255 / .02);
+  --overlay: rgb(0 0 0 / .55);
 
   /* Accent: --accent fills, --accent-text is the only accent allowed on text. */
   --accent: #145aff;
@@ -21,11 +31,27 @@
   --accent-text: #7ea4ff;
   --accent-ink: #ffffff;
   --accent-glow: rgb(20 90 255 / .35);
+  --accent-dim: rgb(20 90 255 / .16);   /* a selected row or option */
+  --accent-wash: rgb(20 90 255 / .24);
+  --accent-border: rgb(20 90 255 / .6);
 
+  /* Status (chips, errors). */
+  --red: #ff6b6b;
+  --yellow: #ffb545;
+  --green: #33d68f;
+  --cyan: #4fd6ff;
+  --purple: #b083ff;
+  --danger-solid: #e81123;
+
+  --focus-ring: var(--accent-text);
   --shadow: 0 1px 0 rgb(255 255 255 / .04) inset, 0 40px 90px -40px rgb(0 0 0 / .9);
+  --shadow-pop: 0 1px 0 rgb(255 255 255 / .04) inset, 0 18px 44px -14px rgb(0 0 0 / .75);
+  --shadow-dialog: 0 1px 0 rgb(255 255 255 / .04) inset, 0 28px 70px -20px rgb(0 0 0 / .85);
 
-  /* Type: Geist, three weights. */
+  /* Type: Geist, three weights (400/500/600), everywhere. No second UI family. */
   --font: 'Geist', 'Geist Fallback', system-ui, 'Segoe UI', sans-serif;
+  --font-ui: var(--font);
+  --font-mono: ui-monospace, 'Cascadia Mono', 'SF Mono', Consolas, monospace; /* code only, no download */
   --t-h1: clamp(46px, 8.4vw, 128px);
   --t-h2: clamp(36px, 5vw, 68px);
   --t-h2-band: clamp(30px, 3.6vw, 48px);
@@ -39,13 +65,22 @@
   --t-fine: 13px;
   --t-figure: clamp(30px, 3.4vw, 44px);
   --t-count: clamp(44px, 6vw, 84px);
+  --t-label: 12px;           /* small neutral labels on cards */
+  --t-tool: 14px;            /* body text on the dense pages (your emotes, admin) */
+  --text-sub: .85rem;
+  --text-hint: .78rem;
+  --text-label: .68rem;
 
-  /* Shape: buttons and controls share the app's 3px corner; cards and mounts are larger. */
+  /* Shape: 3px controls, 6px cards, tiles, panels and popovers, 50% avatars. */
+  --radius: 3px;
   --radius-btn: 3px;
-  --radius-s: 8px;
-  --radius-m: 12px;
-  --radius-l: 18px;
-  --radius-in: calc(var(--radius-l) - 8px); /* a picture's corner inside a mount */
+  --radius-sm: 2px;
+  --radius-card: 6px;
+  --radius-s: var(--radius-card);
+  --radius-m: var(--radius-card);
+  --radius-l: var(--radius-card);
+  --radius-in: var(--radius);  /* a picture's corner inside a mount */
+  --radius-pill: 999px;        /* switch tracks and count badges only */
 
   /* Layout: the shared cyex page wrapper (cyex-design), 1520px with 20px sides. */
   --page-max: 1520px;
@@ -54,11 +89,16 @@
   --measure-form: 640px;
   --gutter: var(--page-pad);
   --page: min(var(--page-max) - 2 * var(--page-pad), 100% - 2 * var(--page-pad)); /* the content column */
-  --nav-h: 64px;
+  --nav-h: 56px;               /* AppHeader, the same on every route */
+  --rail-w: 240px;
+  --rail-gap: 20px;
   --section-pad: clamp(88px, 12vw, 168px);
 
   /* Motion: one curve; press is quick, reveals are slow. */
   --ease: cubic-bezier(.22, 1, .36, 1);
+  --fast: .12s;   /* hovers, colour and border changes */
+  --base: .2s;    /* things that appear */
+  --slow: .36s;   /* things that travel */
   --dur-press: .1s;
   --dur-color: .2s;
   --dur-hover: .25s;
@@ -74,10 +114,11 @@
   --delay-progress: .15s; /* before the page-load bar shows: quick loads never flash it */
   --dur-progress: 8s;     /* the bar's slow crawl to 85% while a page loads */
 
-  /* Layers: the one z-index scale for every surface (the tool layer maps its names onto it). */
+  /* Layers: the one z-index scale for every surface. */
   --z-panel: 10;
   --z-nav: 50;
   --z-pop: 60;
+  --z-popover: var(--z-pop);
   --z-tip: 70;
   --z-dialog: 80;
   --z-toast: 90;
@@ -85,14 +126,15 @@
 
   /* Platform colours, only where the platform itself is meant (cyex-design). */
   --twitch: #9146ff;
+  --twitch-logo: var(--twitch);
   --kick: #53fc18;
 
   /* Overlays and emote sizes (cyex.tv components). */
   --scrim: rgb(0 0 0 / .55);
-  --shadow-pop: 0 1px 0 rgb(255 255 255 / .04) inset, 0 18px 44px -14px rgb(0 0 0 / .75);
-  --t-label: 12px;   /* small neutral labels on cards */
   --emote-art: 112px;
   --emote-art-compact: 80px;
+  --emote-tile: 150px;         /* EmoteTile's minimum column */
+  --emote-tile-compact: 112px;
   --emote-chat: 28px;
 
   /* Emote preview grounds: the same in both themes (they show how an emote looks on each). */
@@ -108,23 +150,42 @@
 [data-theme="light"] {
   color-scheme: light;
   --bg: #ffffff;
-  --surface: #ffffff;
+  --surface: #f6f7f9;
+  --surface-hover: #eef0f3;
   --surface-2: #eef1f5;
+  --elevated: #ffffff;
+  --elevated-2: #f1f3f6;
   --border: rgb(13 15 20 / .1);
   --border-strong: rgb(13 15 20 / .2);
   --text: #0d0f14;
   --muted: #555b66;
+  --dim: #636975;
   --mark-ink: #1b1c20;
+  --neutral-chip: #e8eaee;
+  --row-hover: rgb(13 15 20 / .045);
+  --row-alt: rgb(13 15 20 / .02);
+  --overlay: rgb(13 15 20 / .32);
 
   --accent: #14e6ff;
   --accent-2: #10c9e6;
   --accent-text: #046a82;
   --accent-ink: #00232b;
   --accent-glow: rgb(20 230 255 / .4);
+  --accent-dim: rgb(4 106 130 / .09);
+  --accent-wash: rgb(4 106 130 / .16);
+  --accent-border: rgb(4 106 130 / .4);
+
+  --red: #c1352f;
+  --yellow: #9a5c05;
+  --green: #0f8a55;
+  --cyan: #0b6d8a;
+  --purple: #6b34c9;
+  --danger-solid: #c42b1c;
 
   --shadow: 0 40px 80px -40px rgb(13 15 20 / .3);
   --scrim: rgb(13 15 20 / .32);
   --shadow-pop: 0 18px 44px -16px rgb(13 15 20 / .28);
+  --shadow-dialog: 0 28px 70px -20px rgb(13 15 20 / .32);
 }
 
 /* Arial sized to Geist per weight, so the font swap moves nothing (CLS 0). */
@@ -147,7 +208,7 @@ p, li, figcaption { text-wrap: pretty; }
 a { color: inherit; text-decoration: none; }
 ::selection { background: var(--accent-glow); }
 
-:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 3px; border-radius: 4px; }
+:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 3px; border-radius: 4px; }
 [tabindex="-1"]:focus { outline: none; }
 
 .page { width: var(--page); margin-inline: auto; }

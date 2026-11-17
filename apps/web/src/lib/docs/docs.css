@@ -1,6 +1,6 @@
 /* cyex docs layout (cyex-docs references/docs.css), for /developers.
    Global, not component-scoped, as the skill asks. Every rule sits under `.docs` (the page root,
-   which also carries `.tool` for the cyex-app tokens in tool.css), so after a client-side
+), so after a client-side
    navigation away nothing here touches the public pages. The site's own nav and footer frame the
    page: the index sticks under the nav (--docs-top) and the site's scroll-padding-top lands jumps
    below it. Values are the skill's; additions are marked. */
@@ -8,7 +8,6 @@
 html:has(.docs) { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html:has(.docs) { scroll-behavior: auto; } }
 .docs { --docs-top: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); font-family: var(--font-ui); font-size: 16px; line-height: 1.5; user-select: auto; background: var(--bg); color: var(--text); }
-.tool.docs { display: block; }
 .docs a { color: var(--accent-text); }
 
 .docs code {
@@ -73,7 +72,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .nav-scroll { margin-left: calc(-1 * var(--page-pad)); padding-left: var(--page-pad); }
 .docs .nav-group { margin-bottom: 16px; }
 .docs .nav-group[hidden], .docs .nav-item[hidden], .docs .nav-empty[hidden] { display: none; }
-.docs .nav-group-title { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 700; padding: 0 8px; margin-bottom: 6px; }
+.docs .nav-group-title { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; padding: 0 8px; margin-bottom: 6px; }
 .docs .nav-item {
   display: flex; align-items: center; gap: 8px; padding: 5px 8px; min-height: 32px; border-radius: var(--radius);
   color: var(--muted); text-decoration: none; font-size: .82rem; line-height: 1.35;
@@ -88,7 +87,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .nav-empty { padding: 10px 8px; color: var(--dim); font-size: .8rem; }
 
 /* Method chips: a read is the ordinary case and stays grey; writes get a colour. */
-.docs :is(.nav-method, .method) { font-family: var(--font-mono); font-weight: 700; letter-spacing: .03em; border-radius: var(--radius); flex: none; text-align: center; }
+.docs :is(.nav-method, .method) { font-family: var(--font-mono); font-weight: 600; letter-spacing: .03em; border-radius: var(--radius); flex: none; text-align: center; }
 .docs .nav-method { font-size: .66rem; width: 46px; padding: 3px 0; }
 .docs .method { font-size: .72rem; padding: 4px 9px; }
 .docs .m-get { background: var(--neutral-chip); color: var(--text); }
@@ -104,15 +103,15 @@ html:has(.docs) { scroll-behavior: smooth; }
 /* ---------- Body ---------- */
 .docs .docs-body { min-width: 0; padding: 34px var(--page-pad) 60px; }
 .docs .docs-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; max-width: var(--measure); margin-bottom: 30px; }
-.docs .docs-title h1 { font-size: 2rem; margin: 0 0 6px; font-weight: 700; line-height: 1.2; }
+.docs .docs-title h1 { font-size: 2rem; margin: 0 0 6px; font-weight: 600; line-height: 1.2; }
 .docs .docs-title p { color: var(--muted); font-size: .97rem; margin: 0; }
 .docs .docs-stat { display: flex; align-items: center; gap: 9px; flex: none; margin-top: 6px; background: var(--surface); border: 1px solid var(--border); padding: 6px 11px; }
-.docs .docs-stat-label { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 700; }
+.docs .docs-stat-label { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; }
 .docs .docs-stat-count { font-family: var(--font-mono); font-size: .86rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* No scroll-margin: the site's scroll-padding-top (nav height + 16) is the scroll-spy's offset too. */
 .docs section.guide { scroll-margin-top: 0; margin-bottom: 34px; max-width: var(--measure); }
-.docs section.guide h2 { font-size: 1.32rem; margin: 0 0 12px; font-weight: 700; line-height: 1.3; }
+.docs section.guide h2 { font-size: 1.32rem; margin: 0 0 12px; font-weight: 600; line-height: 1.3; }
 .docs section.guide p { color: var(--muted); line-height: 1.7; font-size: .92rem; margin: 0 0 12px; }
 .docs section.guide :is(ol, ul) { color: var(--muted); line-height: 1.75; font-size: .92rem; padding-left: 22px; margin: 0 0 12px; }
 .docs section.guide strong { color: var(--text); }
@@ -120,7 +119,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs section.guide pre { margin: 0 0 14px; }
 
 .docs .base-url { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 16px 0 18px; background: var(--surface); border: 1px solid var(--border); padding: 12px 14px; }
-.docs :is(.base-url-label, .param-group-title) { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 700; }
+.docs :is(.base-url-label, .param-group-title) { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; }
 .docs .base-url code { font-size: .86rem; }
 /* Addition: several base URLs in one strip, label column aligned. */
 .docs .base-url.rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 14px; }
@@ -136,7 +135,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .note strong { color: var(--text); }
 
 /* ---------- Endpoints ---------- */
-.docs .op-group-title { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 44px 0 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); line-height: 1.5; }
+.docs .op-group-title { font-size: .78rem; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); margin: 44px 0 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); line-height: 1.5; }
 .docs section.op { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 30px; align-items: start; padding: 26px 0; border-bottom: 1px solid var(--border); }
 .docs section.op:last-child { border-bottom: none; }
 /* Addition: a GraphQL type is its fields, no samples: full width, the fields in two columns when there is room. */
@@ -149,8 +148,8 @@ html:has(.docs) { scroll-behavior: smooth; }
 /* The sample panel is sticky per endpoint: it follows while you read that one, then hands off. */
 .docs .op-aside { min-width: 0; position: sticky; top: calc(var(--docs-top) + 16px); }
 .docs .op-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
-.docs .op-title { font-size: 1.08rem; font-weight: 700; margin: 0; line-height: 1.35; }
-.docs .auth-chip { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; color: var(--yellow); border: 1px solid color-mix(in srgb, var(--yellow) 40%, transparent); background: color-mix(in srgb, var(--yellow) 10%, transparent); border-radius: var(--radius); padding: 3px 8px; }
+.docs .op-title { font-size: 1.08rem; font-weight: 600; margin: 0; line-height: 1.35; }
+.docs .auth-chip { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; color: var(--yellow); border: 1px solid color-mix(in srgb, var(--yellow) 40%, transparent); background: color-mix(in srgb, var(--yellow) 10%, transparent); border-radius: var(--radius); padding: 3px 8px; }
 .docs .auth-chip.neutral { color: var(--muted); border-color: var(--border-strong); background: none; }
 .docs .op-path { font-family: var(--font-mono); font-size: .82rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 11px; margin-bottom: 14px; overflow-x: auto; white-space: nowrap; }
 .docs .op-host { color: var(--dim); }
@@ -165,7 +164,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .param-sig { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; margin-bottom: 4px; }
 .docs .param-name { background: none; border: none; padding: 0; font-size: .83rem; font-weight: 600; color: var(--text); }
 .docs .param-type { font-family: var(--font-mono); font-size: .72rem; color: var(--dim); }
-.docs .param-req { font-size: .64rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; color: var(--red); }
+.docs .param-req { font-size: .64rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; color: var(--red); }
 .docs .param-default { font-size: .72rem; color: var(--dim); }
 .docs .param-desc { color: var(--muted); font-size: .84rem; line-height: 1.6; }
 .docs .param-desc p { margin: 0; }
@@ -174,7 +173,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .enum-chips code { font-size: .72rem; }
 .docs .resp-row { display: flex; align-items: baseline; gap: 9px; padding: 9px 0; border-bottom: 1px solid var(--border); }
 .docs .resp-row:last-child { border-bottom: none; }
-.docs .resp-code { background: none; border: none; padding: 0; font-size: .8rem; font-weight: 700; color: var(--text); flex: none; }
+.docs .resp-code { background: none; border: none; padding: 0; font-size: .8rem; font-weight: 600; color: var(--text); flex: none; }
 .docs .resp-desc { color: var(--muted); font-size: .84rem; line-height: 1.6; }
 .docs .resp-desc p { margin: 0; }
 .docs .status-pip { width: 7px; height: 7px; border-radius: 50%; flex: none; position: relative; top: -1px; }
@@ -190,7 +189,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 @media (hover: hover) and (pointer: fine) { .docs .lang-tab:hover { color: var(--text); background: var(--surface-hover); } }
 .docs .lang-tab[aria-selected="true"] { background: var(--accent-dim); color: var(--accent-text); }
 .docs .resp-head { display: flex; align-items: center; gap: 8px; font-size: .74rem; padding-left: 2px; min-width: 0; }
-.docs .resp-status { font-family: var(--font-mono); font-weight: 700; }
+.docs .resp-status { font-family: var(--font-mono); font-weight: 600; }
 .docs .resp-type { color: var(--dim); }
 .docs .code-copy { background: none; border: 1px solid transparent; color: var(--dim); padding: 5px; border-radius: var(--radius); cursor: pointer; display: flex; flex: none; transition: background var(--fast), color var(--fast); }
 .docs .code-copy svg { width: 14px; height: 14px; }

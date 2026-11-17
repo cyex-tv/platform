@@ -1,11 +1,12 @@
-/* cyex.tv's site styles: the cyex web tokens (tokens.css, a copy of cyex-web's; keep them in
-   step) and the shared web components, then what the emote pages add. Only token values here. */
+/* cyex.tv's site styles: the one token set (tokens.css), the dense pages' `ui-` components
+   (tool.css), then the shared web components. Only token values here. */
 @import './tokens.css';
+@import './tool.css';
 
 /* cyex.tv's rhythm on top of the cyex-web tokens: an emote site is browsed, not read like a
    launch page, so sections sit closer and section headings are a step smaller. One value for
    every page, so the rhythm is the same everywhere. */
-:root { --section-pad: clamp(72px, 8vw, 120px); --t-h2: clamp(32px, 3.8vw, 52px); --footer-gap: clamp(64px, 7vw, 104px);
+:root { --section-pad: clamp(72px, 8vw, 120px); --t-h2: clamp(32px, 3.8vw, 52px); --footer-gap: clamp(48px, 6vw, 80px);
   --t-block: 22px; /* a block's heading inside a page (Used in, More from, Uploads, In chat) */ }
 
 /* Phones (mobile-native): no tap flash, no font inflation, 16px inputs so iOS doesn't zoom,
