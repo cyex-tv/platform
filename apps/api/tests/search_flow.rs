@@ -259,3 +259,175 @@ async fn popularity_counts_channels_showing_the_emote() {
     drop(c);
     db.close().await;
 }
+
+async fn gql(app: &axum::Router, query: &str) -> Value {
+    let request = Request::post("/v1/gql")
+        .header("content-type", "application/json")
+        .body(Body::from(json!({ "query": query }).to_string()))
+        .unwrap();
+    let response = app.clone().oneshot(request).await.unwrap();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let v: Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(v["errors"].is_null(), "{v}");
+    v["data"].clone()
+}
+
+fn app_for(db: &TestDb) -> axum::Router {
+    let auth = Arc::new(Auth::new(AuthConfig::from_source(|_| None).unwrap()).unwrap());
+    cyex_tv_api::app(AppState::new(db.pool.clone(), auth))
+}
+
+#[tokio::test]
+async fn search_sorts_by_relevance_top_and_new() {
+    let Some(db) = TestDb::new().await else {
+        return;
+    };
+    seed(&db).await;
+    let app = app_for(&db);
+
+    // An empty query lists every approved, listed emote, whatever the sort.
+    let r = find(&app, r#"query: """#).await;
+    assert_eq!(r["total"], 5);
+    let r = find(&app, r#"query: "", sort: RELEVANCE"#).await;
+    assert_eq!(names(&r)[..2], ["PogU".to_owned(), "PogChamp".to_owned()]);
+
+    // Most used first, then by name.
+    let r = find(&app, r#"query: "", sort: TOP"#).await;
+    assert_eq!(names(&r), ["PogU", "PogChamp", "KEKW", "pog", "PogTheirs"]);
+
+    // Newest first.
+    let r = find(&app, r#"query: "", sort: NEW"#).await;
+    assert_eq!(names(&r), ["PogTheirs", "pog", "KEKW", "PogU", "PogChamp"]);
+
+    // A text query still filters.
+    let r = find(&app, r#"query: "kekw", sort: NEW"#).await;
+    assert_eq!(names(&r), ["KEKW"]);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn channel_count_is_on_every_emote_of_a_list() {
+    let Some(db) = TestDb::new().await else {
+        return;
+    };
+    seed(&db).await;
+    let app = app_for(&db);
+    let data = gql(
+        &app,
+        r#"{ searchEmotes(query: "") { items { name channelCount } } }"#,
+    )
+    .await;
+    let counts: Vec<(String, u64)> = data["searchEmotes"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| {
+            (
+                i["name"].as_str().unwrap().to_owned(),
+                i["channelCount"].as_u64().unwrap(),
+            )
+        })
+        .collect();
+    let count = |name: &str| counts.iter().find(|(n, _)| n == name).unwrap().1;
+    assert_eq!(count("PogU"), 2);
+    assert_eq!(count("PogChamp"), 1);
+    assert_eq!(count("KEKW"), 0);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn account_is_public_and_null_when_unknown_or_blocked() {
+    let Some(db) = TestDb::new().await else {
+        return;
+    };
+    let made = seed(&db).await;
+    let app = app_for(&db);
+    let id = ids::to_text(made.owner);
+    let data = gql(
+        &app,
+        &format!(r#"{{ account(id: "{id}") {{ id displayName avatar }} }}"#),
+    )
+    .await;
+    assert_eq!(data["account"]["id"], id);
+    assert_eq!(data["account"]["displayName"], "user1");
+
+    for unknown in ["not-an-id", &ids::to_text(Uuid::from_u128(0x1234))] {
+        let data = gql(&app, &format!(r#"{{ account(id: "{unknown}") {{ id }} }}"#)).await;
+        assert!(data["account"].is_null(), "{unknown}");
+    }
+
+    let mut c = db.conn().await;
+    accounts::set_blocked(&mut c, made.owner, true)
+        .await
+        .unwrap();
+    drop(c);
+    let data = gql(&app, &format!(r#"{{ account(id: "{id}") {{ id }} }}"#)).await;
+    assert!(data["account"].is_null());
+    db.close().await;
+}
+
+#[tokio::test]
+async fn emote_channels_lists_public_channels_and_clamps_the_limit() {
+    let Some(db) = TestDb::new().await else {
+        return;
+    };
+    let made = seed(&db).await;
+    let app = app_for(&db);
+    let mut c = db.conn().await;
+    let (pogu,): (Uuid,) = sqlx::query_as("SELECT id FROM emotes WHERE name = 'PogU'")
+        .fetch_one(&mut *c)
+        .await
+        .unwrap();
+    let (pending,): (Uuid,) = sqlx::query_as("SELECT id FROM emotes WHERE name = 'PogPending'")
+        .fetch_one(&mut *c)
+        .await
+        .unwrap();
+    drop(c);
+    let pogu = ids::to_text(pogu);
+
+    let logins = |data: &Value| -> Vec<String> {
+        data["emoteChannels"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["login"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    let q = |args: &str| {
+        format!(r#"{{ emoteChannels({args}) {{ login platform account {{ displayName }} }} }}"#)
+    };
+
+    // Most recently added first.
+    let data = gql(&app, &q(&format!(r#"id: "{pogu}""#))).await;
+    assert_eq!(logins(&data), ["user2", "user1"]);
+
+    // The limit is clamped to 1..=50.
+    let data = gql(&app, &q(&format!(r#"id: "{pogu}", limit: 1"#))).await;
+    assert_eq!(logins(&data), ["user2"]);
+    let data = gql(&app, &q(&format!(r#"id: "{pogu}", limit: 0"#))).await;
+    assert_eq!(logins(&data).len(), 1);
+    let data = gql(&app, &q(&format!(r#"id: "{pogu}", limit: 500"#))).await;
+    assert_eq!(logins(&data).len(), 2);
+
+    // Unknown, malformed and unlisted emotes have no channels.
+    let data = gql(&app, &q(r#"id: "not-an-id""#)).await;
+    assert!(logins(&data).is_empty());
+    let data = gql(&app, &q(&format!(r#"id: "{}""#, ids::to_text(pending)))).await;
+    assert!(logins(&data).is_empty());
+
+    // A blocked account's channel drops out of the list and the count.
+    let mut c = db.conn().await;
+    accounts::set_blocked(&mut c, made.other, true)
+        .await
+        .unwrap();
+    drop(c);
+    let data = gql(&app, &q(&format!(r#"id: "{pogu}""#))).await;
+    assert_eq!(logins(&data), ["user1"]);
+    let data = gql(
+        &app,
+        &format!(r#"{{ emote(id: "{pogu}") {{ channelCount }} }}"#),
+    )
+    .await;
+    assert_eq!(data["emote"]["channelCount"], 1);
+    db.close().await;
+}

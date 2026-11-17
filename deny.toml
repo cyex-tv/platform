@@ -11,6 +11,10 @@ ignore = [
     # `paste` is unmaintained, not vulnerable. It only enters through utoipa-axum, as a
     # compile-time macro. Drop this once utoipa-axum moves off it.
     { id = "RUSTSEC-2024-0436", reason = "unmaintained compile-time macro, via utoipa-axum only" },
+    # `chrono` is marked unmaintained (2026/11), not vulnerable. It's used for timestamps here and
+    # through sqlx's `chrono` feature. Look again when sqlx offers a maintained replacement
+    # (`time` or `jiff`) or an actual vulnerability is filed.
+    { id = "RUSTSEC-2026-0543", reason = "unmaintained, not vulnerable; used via sqlx and for timestamps" },
 ]
 
 [licenses]

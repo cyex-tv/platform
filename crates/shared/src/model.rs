@@ -203,6 +203,10 @@ pub struct Emote {
     pub host: String,
     pub files: Vec<EmoteFile>,
     pub created_at: String,
+    /// How many channels have this emote in their active set right now.
+    #[serde(default)]
+    #[schema(required = false)]
+    pub channel_count: u32,
 }
 
 /// Multipart upload (REST only): the image file and its name.
@@ -346,6 +350,20 @@ pub struct PersonalLookupResult {
 }
 
 // Search
+
+/// How `searchEmotes` orders its results.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "lowercase")]
+pub enum EmoteSort {
+    /// Best match first, then the most used. The default.
+    #[default]
+    Relevance,
+    /// The most used first (channels showing the emote), then by name.
+    Top,
+    /// The newest first.
+    New,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]

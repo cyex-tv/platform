@@ -654,6 +654,12 @@
           "animated": {
             "type": "boolean"
           },
+          "channel_count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many channels have this emote in their active set right now.",
+            "minimum": 0
+          },
           "created_at": {
             "type": "string"
           },

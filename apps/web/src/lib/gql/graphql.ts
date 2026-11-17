@@ -84,6 +84,8 @@ export type CreateSetInput = {
 export type Emote = {
   __typename?: 'Emote';
   animated: Scalars['Boolean']['output'];
+  /** How many channels have this emote in their active set right now. */
+  channelCount: Scalars['Int']['output'];
   createdAt: Scalars['String']['output'];
   files: Array<EmoteFile>;
   flags: EmoteFlags;
@@ -136,6 +138,15 @@ export type EmoteSet = {
   name: Scalars['String']['output'];
   owner?: Maybe<AccountSummary>;
 };
+
+/** How `searchEmotes` orders its results. */
+export type EmoteSort =
+  /** The newest first. */
+  | 'NEW'
+  /** Best match first, then the most used. The default. */
+  | 'RELEVANCE'
+  /** The most used first (channels showing the emote), then by name. */
+  | 'TOP';
 
 export type EmoteState =
   | 'APPROVED'
@@ -419,6 +430,8 @@ export type Platform =
 
 export type Query = {
   __typename?: 'Query';
+  /** An account's public summary. Null when the account is unknown, deleted or blocked. */
+  account?: Maybe<AccountSummary>;
   /** An account's roles. Yours, or anyone's with `roles.manage` or `users.view`. */
   accountRoles: Array<Role>;
   /**
@@ -437,6 +450,11 @@ export type Query = {
   channelByLogin?: Maybe<Channel>;
   /** An emote. Pending ones are visible to their owner and to moderators only. */
   emote?: Maybe<Emote>;
+  /**
+   * Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
+   * default 8. Empty when the emote is unknown or not public.
+   */
+  emoteChannels: Array<Channel>;
   /** The cyex.tv global set, shown in every channel. */
   globalSet: EmoteSet;
   /** The signed-in account. */
@@ -463,13 +481,20 @@ export type Query = {
   roles: Array<Role>;
   /**
    * Approved, listed emotes by name and tag, best match first, then the most used.
-   * `perPage` is 1 to 100, default 50. NSFW emotes only with `nsfw: true`.
+   * `perPage` is 1 to 100, default 50. NSFW emotes only with `nsfw: true`. `sort` is
+   * `RELEVANCE` (default: best match, then most used), `TOP` (most used, then name) or `NEW`
+   * (newest first). An empty `query` lists every approved, listed emote.
    */
   searchEmotes: SearchResults;
   /** A set with its emotes. */
   set?: Maybe<EmoteSet>;
   /** A set's editors. For its owner, its editors and `sets.edit_any`. */
   setEditors: Array<AccountSummary>;
+};
+
+
+export type QueryAccountArgs = {
+  id: Scalars['String']['input'];
 };
 
 
@@ -505,6 +530,12 @@ export type QueryChannelByLoginArgs = {
 
 export type QueryEmoteArgs = {
   id: Scalars['String']['input'];
+};
+
+
+export type QueryEmoteChannelsArgs = {
+  id: Scalars['String']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -550,6 +581,7 @@ export type QuerySearchEmotesArgs = {
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
   query: Scalars['String']['input'];
+  sort?: InputMaybe<EmoteSort>;
 };
 
 
