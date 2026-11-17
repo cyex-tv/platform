@@ -679,3 +679,255 @@ export const EMOTE_CHANNELS = graphql(`
     }
   }
 `);
+
+// Chat cosmetics (ADR 0015): badges and name paints. The dev mock answers only the cosmetics part
+// of an operation, so these stay in operations of their own.
+
+export const COSMETIC_IMAGE_FIELDS = graphql(`
+  fragment CosmeticImageFields on CosmeticImage {
+    id
+    kind
+    host
+    animated
+    ready
+    width
+    height
+    files {
+      name
+      width
+      height
+      isStatic
+    }
+  }
+`);
+
+export const BADGE_FIELDS = graphql(`
+  fragment BadgeFields on Badge {
+    id
+    name
+    tooltip
+    image {
+      ...CosmeticImageFields
+    }
+  }
+`);
+
+export const PAINT_FIELDS = graphql(`
+  fragment PaintFields on Paint {
+    id
+    name
+    kind
+    angle
+    repeat
+    shape
+    color
+    stops {
+      at
+      color
+    }
+    shadows {
+      x
+      y
+      radius
+      color
+    }
+    image {
+      ...CosmeticImageFields
+    }
+  }
+`);
+
+export const COSMETICS = graphql(`
+  query Cosmetics {
+    cosmetics {
+      badges {
+        ...BadgeFields
+      }
+      paints {
+        ...PaintFields
+      }
+    }
+  }
+`);
+
+export const USER_COSMETICS = graphql(`
+  query UserCosmetics($platform: Platform!, $userIds: [String!]!) {
+    userCosmetics(platform: $platform, userIds: $userIds) {
+      platformUserId
+      badgeId
+      paintId
+    }
+  }
+`);
+
+export const MY_COSMETICS = graphql(`
+  query MyCosmetics($accountId: String) {
+    myCosmetics(accountId: $accountId) {
+      account {
+        id
+        displayName
+        avatar
+      }
+      badges {
+        ...BadgeFields
+      }
+      paints {
+        ...PaintFields
+      }
+      badgeId
+      paintId
+    }
+  }
+`);
+
+export const SELECT_COSMETICS = graphql(`
+  mutation SelectCosmetics($badgeId: String, $paintId: String, $ownerId: String) {
+    selectCosmetics(badgeId: $badgeId, paintId: $paintId, ownerId: $ownerId) {
+      badgeId
+      paintId
+    }
+  }
+`);
+
+export const COSMETIC_IMAGE = graphql(`
+  query CosmeticImage($id: String!) {
+    cosmeticImage(id: $id) {
+      ...CosmeticImageFields
+    }
+  }
+`);
+
+export const ENTITLEMENTS = graphql(`
+  query Entitlements($kind: CosmeticKind!, $accountId: String, $cosmeticId: String, $page: Int, $perPage: Int) {
+    cosmeticEntitlements(kind: $kind, accountId: $accountId, cosmeticId: $cosmeticId, page: $page, perPage: $perPage) {
+      total
+      items {
+        account {
+          id
+          displayName
+          avatar
+        }
+        kind
+        cosmeticId
+        source
+        reason
+        grantedBy {
+          id
+          displayName
+        }
+        grantedAt
+      }
+    }
+  }
+`);
+
+export const CREATE_BADGE = graphql(`
+  mutation CreateBadge($input: CreateBadgeInput!) {
+    createBadge(input: $input) {
+      ...BadgeFields
+    }
+  }
+`);
+
+export const UPDATE_BADGE = graphql(`
+  mutation UpdateBadge($id: String!, $input: UpdateBadgeInput!) {
+    updateBadge(id: $id, input: $input) {
+      ...BadgeFields
+    }
+  }
+`);
+
+export const DELETE_BADGE = graphql(`
+  mutation DeleteBadge($id: String!) {
+    deleteBadge(id: $id)
+  }
+`);
+
+export const DELETE_PAINT = graphql(`
+  mutation DeletePaint($id: String!) {
+    deletePaint(id: $id)
+  }
+`);
+
+export const GRANT_COSMETIC = graphql(`
+  mutation GrantCosmetic($input: GrantCosmeticInput!) {
+    grantCosmetic(input: $input) {
+      cosmeticId
+    }
+  }
+`);
+
+export const REVOKE_COSMETIC = graphql(`
+  mutation RevokeCosmetic($accountId: String!, $kind: CosmeticKind!, $cosmeticId: String!, $reason: String) {
+    revokeCosmetic(accountId: $accountId, kind: $kind, cosmeticId: $cosmeticId, reason: $reason)
+  }
+`);
+
+// The profile (your profile is your dashboard): roles, editors, the accounts you edit.
+
+export const ACCOUNT_ROLES = graphql(`
+  query AccountRoles($accountId: String!) {
+    accountRoles(accountId: $accountId) {
+      id
+      name
+      position
+    }
+  }
+`);
+
+export const ACCOUNT_EDITORS = graphql(`
+  query AccountEditors($accountId: String) {
+    accountEditors(accountId: $accountId) {
+      account {
+        id
+        displayName
+        avatar
+      }
+      permissions
+    }
+  }
+`);
+
+export const EDITOR_OF = graphql(`
+  query EditorOf {
+    editorOf {
+      account {
+        id
+        displayName
+        avatar
+      }
+      permissions
+    }
+  }
+`);
+
+export const PROFILE_MINE = graphql(`
+  query ProfileMine {
+    myChannels {
+      platform
+      platformChannelId
+      login
+      activeSetId
+    }
+    mySets {
+      ...SetFields
+    }
+  }
+`);
+
+export const PROFILE_EDITED = graphql(`
+  query ProfileEdited {
+    editorChannels {
+      platform
+      platformChannelId
+      login
+      activeSetId
+      account {
+        id
+      }
+    }
+    editorSets {
+      ...SetFields
+    }
+  }
+`);
