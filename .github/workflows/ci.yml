@@ -128,6 +128,16 @@ jobs:
             echo "$target: $out"
             echo "$out" | grep -q "CYEX_TV_DATABASE_URL"
           done
+      - name: The website's image serves pages
+        run: |
+          docker build -t cyex-tv-web:ci apps/web
+          docker run -d --name web -p 3000:3000 -e PUBLIC_API_URL=http://127.0.0.1:9 cyex-tv-web:ci
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:3000/developers > /dev/null && break; sleep 1; done
+          curl -fsS http://127.0.0.1:3000/developers | grep -q "cyex.tv"
+          # The home page stands without the API.
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/)" = 200
+          test "$(docker inspect --format '{{.Config.User}}' cyex-tv-web:ci)" = node
+          docker rm -f web
 
   # The website (Phase 6): generated GraphQL types current, type check, unit tests, build.
   web:
