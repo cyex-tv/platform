@@ -24,6 +24,10 @@ Work in `cyex-app/cyex-deck` goes on a feature branch with a PR the owner merges
 
 ## Phase 7: Moderation, abuse and limits (in progress)
 
+### PR 4: a test hang (branch `phase-7/test-shutdown`)
+- [x] `restricting_and_blocking_accounts` hung for 20 minutes once in CI (PR 21's run, 2026/11/17). `abuse_flow`'s test world closed the pool while the event feeder still held its listener connection, and closing a pool waits for every connection; `live_flow` and the socket tests already stop the feeder first. `abuse_flow` now does the same (`World::close`).
+- [x] CI's `test` job has `timeout-minutes: 20`, so a hang fails instead of holding a runner for six hours.
+
 ### PR 3: reading an account's restrictions (branch `phase-7/account-status`)
 - [x] `accountStatus(accountId)`: whether uploads or sign-in are blocked, for `users.view` or `users.restrict`. Additive; the admin users page needs it. Tested in `restricting_and_blocking_accounts` (both permissions read it, anyone else is refused).
 
