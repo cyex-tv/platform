@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { ApiError, uploadEmote } from '$lib/api';
   import { bytes, iso } from '$lib/format';
-  import { fileProblem, nameProblem, parseTags, tagsProblem } from '$lib/rules';
+  import { fileProblem, nameFromFile, nameProblem, parseTags, tagsProblem } from '$lib/rules';
   import { onDestroy } from 'svelte';
   import { notify } from '$lib/tool/notices.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
@@ -10,6 +10,7 @@
   let file = $state<File | null>(null);
   let preview = $state<string | null>(null);
   let name = $state('');
+  let prefilled = '';
   let tagText = $state('');
   let busy = $state(false);
   let over = $state(false);
@@ -53,7 +54,8 @@
     file = f;
     preview = URL.createObjectURL(f);
     serverError = null;
-    if (!name) name = f.name.replace(/\.[^.]+$/, '').replace(/\s+/g, '').slice(0, 100);
+    // The name follows the file until it is typed in by hand.
+    if (!name || name === prefilled) name = prefilled = nameFromFile(f.name);
   }
 
   function drop(e: DragEvent) {

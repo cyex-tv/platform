@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fileProblem, nameProblem, parseTags, tagsProblem } from './rules';
+import { fileProblem, nameFromFile, nameProblem, parseTags, tagsProblem } from './rules';
 
 describe('rules', () => {
   it('checks names like the API', () => {
@@ -8,6 +8,13 @@ describe('rules', () => {
     expect(nameProblem('two words')).toBe('No spaces in names.');
     expect(nameProblem('x'.repeat(101))).toBe('At most 100 characters.');
     expect(nameProblem('ぽ'.repeat(100))).toBeNull();
+  });
+
+  it('makes a name from a file name', () => {
+    expect(nameFromFile('catJAM.gif')).toBe('catJAM');
+    expect(nameFromFile('cat jam\t2.final.webp')).toBe('catjam2.final');
+    expect(nameFromFile('.png')).toBe('');
+    expect(nameProblem(nameFromFile(`${'x'.repeat(140)}.png`))).toBeNull();
   });
 
   it('parses and checks tags', () => {

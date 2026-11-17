@@ -46,7 +46,7 @@
   .count { margin-left: 6px; color: var(--dim, var(--muted)); font-family: var(--font-mono, inherit); font-variant-numeric: tabular-nums; }
   .close { position: absolute; top: 8px; right: 8px; width: 18px; height: 18px; display: grid; place-items: center; padding: 0;
     border: 0; border-radius: 50%; background: var(--border-strong); color: var(--text); cursor: pointer; }
-  .close::after { content: ''; position: absolute; inset: -8px; } /* a 34px hit area around the small knob */
+  .close::after { content: ''; position: absolute; inset: -11px; } /* a 40px hit area around the small knob */
   .close:active { opacity: .6; }
   .close svg { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
 </style>

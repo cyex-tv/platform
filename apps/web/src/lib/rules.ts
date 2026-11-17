@@ -14,6 +14,16 @@ export function nameProblem(raw: string): string | null {
   return null;
 }
 
+/**
+ * A name made from a file's name, for the upload form: no extension, no spaces or control
+ * characters between words (they join, "cat jam.gif" is "catjam"), at most 100 characters. Empty
+ * when nothing usable is left.
+ */
+export function nameFromFile(file: string): string {
+  const base = file.replace(/\.[^.]+$/, '');
+  return [...base.replace(/[\s\p{Cc}]+/gu, '')].slice(0, 100).join('');
+}
+
 /** Tags from a comma-separated field: trimmed, lowercased, no duplicates. */
 export function parseTags(raw: string): string[] {
   return [...new Set(raw.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))];
