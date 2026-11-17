@@ -1,17 +1,19 @@
 <script lang="ts">
   // The site footer: brand, three link columns (product, developers, legal) and the base line
-  // with the non-affiliation note. /terms, /privacy and /contact are their own pages.
+  // with the non-affiliation note. /terms, /privacy and /contact are their own pages. Signed in,
+  // the product column offers Your emotes; signed out, Sign in.
   import Mark from './Mark.svelte';
+
+  let { signedIn = false }: { signedIn?: boolean } = $props();
   const year = new Date().getFullYear();
 
-  const columns = [
+  const columns = $derived([
     {
       name: 'Product',
       links: [
         { href: '/search', label: 'Browse emotes' },
         { href: '/#install', label: 'Get the extension' },
-        { href: '/me', label: 'Your emotes' },
-        { href: '/signin', label: 'Sign in' },
+        signedIn ? { href: '/me', label: 'Your emotes' } : { href: '/signin', label: 'Sign in' },
       ],
     },
     {
@@ -31,7 +33,7 @@
         { href: '/contact', label: 'Contact' },
       ],
     },
-  ];
+  ]);
 </script>
 
 <footer class="footer">
@@ -64,8 +66,8 @@
   .brand { display: inline-flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
   .about p { margin: 12px 0 0; font-size: var(--t-small); color: var(--muted); max-width: 28ch; }
   h2 { margin: 0 0 12px; font-size: var(--t-small); font-weight: 500; color: var(--text); }
-  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-  .col a { display: inline-flex; align-items: center; min-height: 32px; font-size: var(--t-small); color: var(--muted);
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+  .col a { display: inline-flex; align-items: center; min-height: 40px; font-size: var(--t-small); color: var(--muted);
     transition: color var(--dur-color); }
   .base { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; border-top: 1px solid var(--border);
     padding: 20px 0 36px; font-size: var(--t-fine); color: var(--muted); }

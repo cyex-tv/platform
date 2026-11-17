@@ -71,6 +71,8 @@
   --dur-pop: .15s;   /* popovers and tooltips */
   --dur-sheet: .28s; /* bottom sheets */
   --delay-tip: .4s;  /* before a tooltip shows */
+  --delay-progress: .15s; /* before the page-load bar shows: quick loads never flash it */
+  --dur-progress: 8s;     /* the bar's slow crawl to 85% while a page loads */
 
   /* Layers: the one z-index scale for every surface (the tool layer maps its names onto it). */
   --z-panel: 10;

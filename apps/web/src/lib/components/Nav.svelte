@@ -12,6 +12,9 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { signOut } from '$lib/api';
+  import { clean } from '$lib/format';
+  import { notify } from '$lib/tool/notices.svelte';
+  import Avatar from './Avatar.svelte';
   import BottomSheet from './BottomSheet.svelte';
   import Icon, { type IconName } from './Icon.svelte';
   import IconButton from './IconButton.svelte';
@@ -25,7 +28,6 @@
   let scrolled = $state(false);
   let menu = $state(false);
   let account = $state(false);
-  let broken = $state(false);
 
   onMount(() => {
     const onScroll = () => (scrolled = window.scrollY > 8);
@@ -35,8 +37,12 @@
   });
 
   type Item = { href: string; label: string; icon: IconName };
-  const links = [
-    { href: '/search', label: 'Emotes', match: (p: string) => p.startsWith('/search') || p.startsWith('/emotes') },
+  const browse = (p: string) => p.startsWith('/search') || p.startsWith('/emotes');
+  const links = [{ href: '/search', label: 'Emotes', match: browse }];
+  // The menu sheet spells the same places out, plus the docs (the bar has no room for them).
+  const sheetLinks = [
+    { href: '/search', label: 'Browse emotes', match: browse },
+    { href: '/developers', label: 'Developers', match: (p: string) => p.startsWith('/developers') },
   ];
   // The signed-in destinations, grouped: what you make, then the account itself.
   const yours: Item[] = [
@@ -51,6 +57,8 @@
   ]);
 
   const onSearch = $derived(page.url.pathname.startsWith('/search'));
+  const onSignin = $derived(page.url.pathname === '/signin');
+  const name = $derived(clean(me?.displayName));
   const signin = $derived(`/signin?back=${encodeURIComponent(page.url.pathname)}`);
   const platform = $derived(me?.platform ? `${me.platform.charAt(0)}${me.platform.slice(1).toLowerCase()}` : null);
 
@@ -59,7 +67,11 @@
     menu = false;
     try {
       await signOut();
-    } catch {}
+    } catch {
+      // Still signed in: stay on the page and say so.
+      notify('Signing out didn’t work. Try again in a moment.', true);
+      return;
+    }
     onsignout?.();
     await goto('/', { invalidateAll: true });
   }
@@ -71,11 +83,7 @@
 </script>
 
 {#snippet avatar(size: number)}
-  {#if me?.avatar && !broken}
-    <img class="av" src={me.avatar} alt="" width={size} height={size} onerror={() => (broken = true)} />
-  {:else}
-    <span class="av blank" style:width="{size}px" style:height="{size}px" aria-hidden="true">{[...(me?.displayName ?? '?')][0]?.toUpperCase() ?? '?'}</span>
-  {/if}
+  <Avatar src={me?.avatar} {name} {size} />
 {/snippet}
 
 <header class="nav" class:scrolled>
@@ -105,16 +113,16 @@
       <a class="btn btn-primary btn-s upload" href="/me/upload"><Icon name="upload" />Upload</a>
       <Popover label="Your account" align="end" width="260px" bind:open={account}>
         {#snippet trigger(props)}
-          <button class="who" type="button" {...props} aria-label="Your account: {me.displayName}">
+          <button class="who" type="button" {...props} aria-label="Your account: {name}">
             {@render avatar(26)}
-            <span class="who-name">{me.displayName}</span>
+            <span class="who-name">{name}</span>
             <Icon name="chevron-down" size={14} />
           </button>
         {/snippet}
         <div class="menu-head">
           {@render avatar(36)}
           <span class="menu-id">
-            <strong>{me.displayName}</strong>
+            <strong>{name}</strong>
             {#if platform}<span>Signed in with {platform}</span>{/if}
           </span>
         </div>
@@ -132,7 +140,7 @@
         </div>
       </Popover>
     {:else}
-      <a class="btn btn-s" href={signin}>Sign in</a>
+      {#if !onSignin}<a class="btn btn-s" href={signin}>Sign in</a>{/if}
       <a class="btn btn-primary btn-s" href="/#install">Get the extension</a>
     {/if}
   </div>
@@ -145,12 +153,12 @@
   </div>
 </header>
 
-<BottomSheet bind:open={menu} label="Menu" title={false}>
+<BottomSheet bind:open={menu} label="Menu">
   {#if me}
     <div class="sheet-who">
       {@render avatar(40)}
       <span class="menu-id">
-        <strong>{me.displayName}</strong>
+        <strong>{name}</strong>
         {#if platform}<span>Signed in with {platform}</span>{/if}
       </span>
     </div>
@@ -161,7 +169,7 @@
     </nav>
   {/if}
   <nav class="sheet-links" aria-label="Main">
-    {#each links as l}
+    {#each sheetLinks as l}
       <a href={l.href} aria-current={l.match(page.url.pathname) ? 'page' : undefined} onclick={() => (menu = false)}>{l.label}</a>
     {/each}
     {#if me}
@@ -176,7 +184,7 @@
     {#if me}<button class="out" type="button" onclick={leave}>Sign out</button>{/if}
   </nav>
   {#snippet footer()}
-    {#if !me}<a class="btn" href={signin} onclick={() => (menu = false)}>Sign in</a>{/if}
+    {#if !me && !onSignin}<a class="btn" href={signin} onclick={() => (menu = false)}>Sign in</a>{/if}
     <a class="btn btn-primary" href="/#install" onclick={() => (menu = false)}>Get the extension</a>
   {/snippet}
 </BottomSheet>
@@ -184,10 +192,14 @@
 <style>
   .nav { position: sticky; top: 0; z-index: var(--z-nav); flex: none; display: flex; align-items: center; gap: 12px;
     height: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); padding-top: env(safe-area-inset-top, 0px);
-    padding-inline: max(var(--page-pad), (100% - var(--page-max)) / 2 + var(--page-pad), env(safe-area-inset-left, 0px));
-    transition: background-color var(--dur-move); }
-  .nav.scrolled { background: color-mix(in srgb, var(--bg) 78%, transparent);
-    -webkit-backdrop-filter: blur(14px) saturate(1.4); backdrop-filter: blur(14px) saturate(1.4); }
+    padding-inline: max(var(--page-pad), (100% - var(--page-max)) / 2 + var(--page-pad)); isolation: isolate; }
+  /* The glass is its own layer that fades in: opacity is cheap to animate, a blur and a tint
+     aren't, and the bar itself never becomes a containing block for fixed children. */
+  .nav::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background: color-mix(in srgb, var(--bg) 78%, transparent);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4); backdrop-filter: blur(14px) saturate(1.4);
+    opacity: 0; transition: opacity var(--dur-move); }
+  .nav.scrolled::before { opacity: 1; }
   .nav::after { content: ''; position: absolute; inset: 100% 0 auto; height: 18px; pointer-events: none;
     background: linear-gradient(color-mix(in srgb, var(--bg) 55%, transparent), transparent);
     opacity: 0; transition: opacity var(--dur-move); }
@@ -218,8 +230,6 @@
     transition: background-color var(--dur-color), border-color var(--dur-color), transform var(--dur-press) ease-out; }
   .who:active { transform: scale(var(--press)); }
   .who[aria-expanded='true'] { background: var(--surface-2); border-color: var(--border-strong); }
-  .av { flex: none; display: block; border-radius: 50%; object-fit: cover; }
-  .blank { display: inline-grid; place-items: center; background: var(--surface-2); color: var(--muted); font-size: 12px; font-weight: 600; }
   .who-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .who :global(svg) { color: var(--muted); }
 
@@ -239,6 +249,7 @@
   .menu-btn { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--radius-btn);
     background: none; color: var(--muted); cursor: pointer; transition: transform var(--dur-press) ease-out; }
   .menu-btn:active { transform: scale(var(--press)); }
+  @media (pointer: coarse) { .menu-btn { width: 44px; height: 44px; } }
 
   .sheet-who { display: flex; align-items: center; gap: 12px; padding: 4px 0 16px; }
   .sheet-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding-bottom: 12px; }
@@ -272,7 +283,11 @@
     .brand { margin-right: 0; }
   }
   @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-    .nav.scrolled { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; border-bottom: 1px solid var(--border-strong); }
+    .nav::before { background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; border-bottom: 1px solid var(--border-strong); }
+    .nav::after { display: none; }
+  }
+  @media (forced-colors: active) {
+    .nav::before { background: Canvas; -webkit-backdrop-filter: none; backdrop-filter: none; border-bottom: 1px solid CanvasText; }
     .nav::after { display: none; }
   }
 </style>
