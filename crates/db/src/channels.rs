@@ -58,6 +58,16 @@ pub async fn get(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Channel>>
     )
 }
 
+/// Channels by ID, in no particular order. Unknown IDs are left out.
+pub async fn get_many(conn: &mut PgConnection, ids: &[Uuid]) -> DbResult<Vec<Channel>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {CHANNEL} FROM channels WHERE id = ANY($1)"
+    ))
+    .bind(ids)
+    .fetch_all(conn)
+    .await?)
+}
+
 pub async fn find(
     conn: &mut PgConnection,
     platform: Platform,

@@ -2,6 +2,31 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Account activity feed (branch `feat/activity`)
+
+ADR 0016. A public activity feed per account, like 7TV's profile "Activity" tab.
+
+- [x] Migration `20261122000001_activity.sql` (additive): `audit_log.subject_account_id` and its index. The owner's own set, channel and cosmetics changes are now audited with the account as subject, and so is the approval of its emotes; staff actions never set it.
+- [x] GraphQL (additive): `accountActivity(accountId, before, limit)` returning `ActivityEntry` (kinds `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED`, `ACTIVE_SET_CHANGED`, `COSMETICS_SELECTED`, `EMOTE_UPLOADED`, `SET_CREATED`, `SET_RENAMED`). Public, 1 to 100 per page (default 30). `apps/api/src/activity.rs`. Schema and web types regenerated; the OpenAPI spec is unchanged.
+- [x] Privacy: no moderation, reasons or reviewers; no pending, private, rejected, taken-down or deleted emotes; blocked owner gives an empty list; blocked actors dropped; deleted sets dropped.
+- [x] Tests: `apps/api/tests/activity.rs` against Postgres in CI (kinds in order, paging, privacy filters, editor attribution, limit clamp). `catalog_flow` and `cosmetics_flow` adjusted for the owner's audit rows.
+- [x] Dev mock: `accountActivity` with sample activity for lumen_fox, quietoak and sunnyfern.
+- No website page yet (another task).
+
+### GitHub write log for PR 51 (`feat/cosmetics`, merged), added afterwards
+```
+git push -u origin feat/cosmetics
+gh pr create --base main --head feat/cosmetics
+gh pr merge 51 --merge
+```
+
+### GitHub write log for this PR (`feat/activity`)
+```
+git push -u origin feat/activity
+gh pr create --base main --head feat/activity
+gh pr merge <n> --merge   (only after all checks were green and the new database suite ran in the CI log)
+```
+
 ## Chat cosmetics (branch `feat/cosmetics`)
 
 ADR 0015. cyex.tv's own chat badges and name paints, like 7TV's (its public API docs and v3 types studied; no code taken), with no real cosmetics made yet. Separate from cyex deck supporter badges (ADR 0011).

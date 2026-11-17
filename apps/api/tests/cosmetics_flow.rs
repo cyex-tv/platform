@@ -826,8 +826,8 @@ async fn selections_are_only_of_owned_cosmetics() {
     let actions = w.audit_actions().await;
     assert!(actions.iter().any(|a| a == "cosmetic.granted"));
     assert!(actions.iter().any(|a| a == "cosmetic.revoked"));
-    // An account's own selection isn't audited.
-    assert!(!actions.iter().any(|a| a == "cosmetics.selected"));
+    // An account's own selection is audited too, for its public activity feed (tests/activity.rs).
+    assert!(actions.iter().any(|a| a == "cosmetics.selected"));
     w.db.close().await;
 }
 

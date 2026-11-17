@@ -3,6 +3,7 @@
 //! the schema itself, so neither committed description can drift from the code.
 
 pub mod abuse;
+pub mod activity;
 pub mod admin;
 pub mod catalog;
 pub mod cors;
