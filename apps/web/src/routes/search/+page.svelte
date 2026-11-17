@@ -177,7 +177,7 @@
       oninput={typed}
       type="search"
       name="q"
-      placeholder="Search emotes by name or tag"
+      placeholder="Name or tag"
       autocomplete="off"
       autocapitalize="off"
       spellcheck="false"

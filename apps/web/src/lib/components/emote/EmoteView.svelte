@@ -135,6 +135,7 @@
 
   .block { margin-top: clamp(48px, 6vw, 80px); }
   .more-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+  .more-head .link { flex: none; white-space: nowrap; }
   h2 { font-size: var(--t-h3-sub); line-height: 1.1; letter-spacing: -.03em; min-width: 0; overflow-wrap: anywhere; }
   svg.arrow { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
