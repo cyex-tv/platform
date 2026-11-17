@@ -27,7 +27,7 @@
   async function unlink(p: Platform, name: string) {
     try {
       await gql(UNLINK, { platform: p });
-      await loadMe();
+      await loadMe({ fresh: true });
       notify(`${name} unlinked.`);
     } catch (err) {
       fail(err);
