@@ -7,8 +7,6 @@ import type { PageServerLoad } from './$types';
 export const prerender = true;
 
 export const load: PageServerLoad = () => ({
-  // The docs bring their own header and footer (cyex-docs); the root layout leaves its out.
-  chrome: false as const,
   base: baseUrl,
   rest: restGroups(),
   gql: graphqlReference(),
