@@ -33,8 +33,8 @@ export const EMOTE_FIELDS = graphql(`
 `);
 
 export const SEARCH = graphql(`
-  query Search($query: String!, $animated: Boolean, $page: Int, $perPage: Int) {
-    searchEmotes(query: $query, animated: $animated, page: $page, perPage: $perPage) {
+  query Search($query: String!, $animated: Boolean, $nsfw: Boolean, $page: Int, $perPage: Int) {
+    searchEmotes(query: $query, animated: $animated, nsfw: $nsfw, page: $page, perPage: $perPage) {
       total
       page
       perPage
