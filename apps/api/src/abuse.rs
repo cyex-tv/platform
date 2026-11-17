@@ -29,6 +29,7 @@ use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
+use crate::admin::{actor, rule};
 use crate::catalog::{
     db_error, forbidden, holds, load_set, not_found, parse_id, publish_member_event,
 };
@@ -439,6 +440,15 @@ pub async fn restrict(
             "owner_protected",
             "The owner's account can't be restricted.",
         ));
+    }
+    if account_id != caller.account_id {
+        let target_highest = cyex_tv_db::roles::highest_position(&mut tx, account_id)
+            .await
+            .map_err(db_error)?;
+        actor(&mut tx, caller)
+            .await?
+            .may_act_on(target_highest)
+            .map_err(rule)?;
     }
     let mut after = before.clone();
     if let Some(u) = uploads_blocked {
