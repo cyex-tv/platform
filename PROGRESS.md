@@ -2,6 +2,18 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Public emote sets (branch `feat/public-sets`)
+
+Gap list G1 (`.claude/runs/2026-11-17-overnight/gap-7tv.md`): sets you can share, list and copy, like 7TV's set pages (its public help pages and v3 schema studied; no code taken). API only; the pages come next.
+
+- [x] Migration `20261130000001_set_visibility.sql` (additive): `emote_sets.visibility` (`listed`, `unlisted`, `private`). Existing rows keep what they could do: channel sets and the global set start listed, personal sets unlisted, nothing private. CHECKs: personal sets never private (chat shows them to everyone), the global set always listed.
+- [x] Rule: anyone opens listed and unlisted sets; a private set only its owner, per-set editors, the owner's account editors and `sets.edit_any`, or anyone while a channel shows it. `set(id)` and `GET /v1/sets/{id}` answer null / 404 otherwise, as for a set that doesn't exist.
+- [x] GraphQL (additive): `SetVisibility`; `EmoteSet.visibility`, `listed`, `slotsUsed`, `createdAt`; `CreateSetInput.visibility`, `UpdateSetInput.visibility` (owner or account editors with `SETS`; per-set editors can't); `accountSets(accountId, preview)` (listed sets as `SetSummary` cards: facts, `active`, newest `preview` emotes; empty for unknown, blocked or deleted accounts); `cloneSet(id, name, ownerId, visibility)` returning `ClonedSet { set, copied, skipped }`; event type `set.created` (listed sets only, on the owner's `user:` topics). Schema, OpenAPI and web types regenerated.
+- [x] Clone rules: only sets the caller may open; for yourself or an account you edit with `SETS` (audited `set.cloned` with `via: account_editor`); emotes go in as `addSetEmote` would (capacity 1000, approved only plus your own pending, others' private emotes skipped, names and zero-width kept); 30 clones an hour per account (`rate_limited`).
+- [x] Tests: `apps/api/tests/public_sets_flow.rs` against Postgres in CI (defaults, private never readable by others over GraphQL and REST, active-set exception, account editors, `accountSets` of blocked and deleted accounts, clone of private and pending emotes, capacity with 1005 emotes, IDOR on `ownerId`, rate limit, audit row, `set.created`); unit tests of the visibility names.
+- [x] Dev mock: sets carry visibility; nora_byte has listed, private and personal sample sets; `accountSets`, `cloneSet`, `createSet`/`updateSet` visibility and the private rule on `set(id)`.
+- [ ] Website: `/sets/[id]`, profile set cards, clone and visibility controls (another task).
+
 ## Chat cosmetics (branch `feat/cosmetics`)
 
 ADR 0015. cyex.tv's own chat badges and name paints, like 7TV's (its public API docs and v3 types studied; no code taken), with no real cosmetics made yet. Separate from cyex deck supporter badges (ADR 0011).

@@ -103,6 +103,20 @@ export type Channel = {
   platformChannelId: Scalars['String']['output'];
 };
 
+/** What `cloneSet` made. */
+export type ClonedSet = {
+  __typename?: 'ClonedSet';
+  /** Emotes copied into it. */
+  copied: Scalars['Int']['output'];
+  /** The new channel set. */
+  set: EmoteSet;
+  /**
+   * Emotes left out: over capacity, private emotes of others, emotes not approved, or ones
+   * you can't see.
+   */
+  skipped: Scalars['Int']['output'];
+};
+
 /** Every badge and paint, for clients to cache (`GET /v1/cosmetics`). */
 export type CosmeticCatalog = {
   __typename?: 'CosmeticCatalog';
@@ -158,6 +172,11 @@ export type CreateSetInput = {
   name: Scalars['String']['input'];
   /** Make the set for an account you edit with `sets` (ADR 0014). Empty: for yourself. */
   ownerId?: InputMaybe<Scalars['String']['input']>;
+  /**
+   * Empty: `LISTED` for channel sets, `UNLISTED` for the personal set. Personal sets can't be
+   * `PRIVATE`.
+   */
+  visibility?: InputMaybe<SetVisibility>;
 };
 
 /** An account you edit, with what you may do there. */
@@ -233,11 +252,21 @@ export type EmotePage = {
 export type EmoteSet = {
   __typename?: 'EmoteSet';
   capacity: Scalars['Int']['output'];
+  createdAt: Scalars['String']['output'];
   emotes: Array<SetEmote>;
   id: Scalars['String']['output'];
   kind: SetKind;
+  /** `visibility` is `LISTED`: shown on the owner's profile. */
+  listed: Scalars['Boolean']['output'];
   name: Scalars['String']['output'];
   owner?: Maybe<AccountSummary>;
+  /**
+   * How many of `capacity` the set uses. Counts every emote in it, also those this answer
+   * doesn't show you (pending ones), so `capacity - slotsUsed` is what still fits.
+   */
+  slotsUsed: Scalars['Int']['output'];
+  /** Who can find and open it. */
+  visibility: SetVisibility;
 };
 
 /** How `searchEmotes` orders its results. */
@@ -314,6 +343,11 @@ export type EventType =
   | 'PERSONAL_UPDATED'
   /** Too much was missed: refetch what you show. */
   | 'RESYNC'
+  /**
+   * A listed set was made (`createSet`, `cloneSet`), on its owner's `user:` topics. Unlisted
+   * and private sets make no event, so their IDs stay unknown.
+   */
+  | 'SET_CREATED'
   | 'SET_EMOTE_ADDED'
   | 'SET_EMOTE_REMOVED'
   | 'SET_EMOTE_RENAMED'
@@ -372,6 +406,14 @@ export type Mutation = {
   approveEmote: Emote;
   /** Give an account a role. Needs `roles.manage`. Audited. */
   assignRole: Scalars['Boolean']['output'];
+  /**
+   * Copy a set you can open into a new channel set: yours, or with `ownerId` one for an account
+   * you edit with `SETS`. Name defaults to the source's; visibility to `LISTED`. Emotes go in
+   * as `addSetEmote` would put them, in order, keeping their names: up to the capacity,
+   * approved ones only (your own pending ones too), never other people's private emotes.
+   * 30 copies an hour. `rate_limited`, `not_found`, `forbidden`, `bad_name`.
+   */
+  cloneSet: ClonedSet;
   /**
    * Make a badge from a ready badge picture (`POST /v1/cosmetics/images`). Needs
    * `cosmetics.manage`. Audited; publishes `cosmetic.created`.
@@ -473,7 +515,10 @@ export type Mutation = {
   updatePaint: Paint;
   /** Change a role below your own highest one. Needs `roles.manage`. Audited. */
   updateRole: Role;
-  /** Rename a set or change its capacity. Owner or editor; capacity needs `sets.edit_any`. */
+  /**
+   * Rename a set, change who sees it (`visibility`: owner or account editors with `SETS`), or
+   * change its capacity. Owner or editor; capacity needs `sets.edit_any`.
+   */
   updateSet: EmoteSet;
   /** Rename an emote in a set, or change its zero-width flag there. */
   updateSetEmote: SetEmote;
@@ -506,6 +551,14 @@ export type MutationApproveEmoteArgs = {
 export type MutationAssignRoleArgs = {
   accountId: Scalars['String']['input'];
   roleId: Scalars['String']['input'];
+};
+
+
+export type MutationCloneSetArgs = {
+  id: Scalars['String']['input'];
+  name?: InputMaybe<Scalars['String']['input']>;
+  ownerId?: InputMaybe<Scalars['String']['input']>;
+  visibility?: InputMaybe<SetVisibility>;
 };
 
 
@@ -833,6 +886,12 @@ export type Query = {
   /** An account's roles. Yours, or anyone's with `roles.manage` or `users.view`. */
   accountRoles: Array<Role>;
   /**
+   * An account's `LISTED` sets as profile cards, oldest first, at most 50. `preview` is how
+   * many of each set's newest emotes to include, 0 to 50, default 12. Empty when the account
+   * is unknown, deleted or blocked.
+   */
+  accountSets: Array<SetSummary>;
+  /**
    * Whether an account's uploads or sign-in are blocked. Needs `users.view` or
    * `users.restrict`.
    */
@@ -910,7 +969,10 @@ export type Query = {
    * (newest first). An empty `query` lists every approved, listed emote.
    */
   searchEmotes: SearchResults;
-  /** A set with its emotes. */
+  /**
+   * A set with its emotes. Null when there is none, or when it is `PRIVATE` and you are not
+   * its owner, an editor or staff (a channel's active set is always public).
+   */
   set?: Maybe<EmoteSet>;
   /** A set's editors. For its owner, its editors and `sets.edit_any`. */
   setEditors: Array<AccountSummary>;
@@ -934,6 +996,12 @@ export type QueryAccountEditorsArgs = {
 
 export type QueryAccountRolesArgs = {
   accountId: Scalars['String']['input'];
+};
+
+
+export type QueryAccountSetsArgs = {
+  accountId: Scalars['String']['input'];
+  preview?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -1124,6 +1192,37 @@ export type SetKind =
   | 'GLOBAL'
   | 'PERSONAL';
 
+/** A set as a card on a profile: its facts and the first few emotes (`accountSets`). */
+export type SetSummary = {
+  __typename?: 'SetSummary';
+  /** A channel shows this set now. */
+  active: Scalars['Boolean']['output'];
+  capacity: Scalars['Int']['output'];
+  createdAt: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+  kind: SetKind;
+  listed: Scalars['Boolean']['output'];
+  name: Scalars['String']['output'];
+  owner?: Maybe<AccountSummary>;
+  /** The newest emotes you may see, at most the `preview` asked for. */
+  preview: Array<SetEmote>;
+  /** Every emote in the set counts; see `EmoteSet.slotsUsed`. */
+  slotsUsed: Scalars['Int']['output'];
+  visibility: SetVisibility;
+};
+
+/** Who can find and open a set. */
+export type SetVisibility =
+  /** Anyone can open it, and it is listed on its owner's profile. New channel sets start here. */
+  | 'LISTED'
+  /**
+   * Only its owner, its editors and staff can open it, except while a channel shows it:
+   * a channel's active set is public. Channel sets only.
+   */
+  | 'PRIVATE'
+  /** Anyone with its link (its ID) can open it; it isn't listed. Personal sets start here. */
+  | 'UNLISTED';
+
 export type Subscription = {
   __typename?: 'Subscription';
   /**
@@ -1176,6 +1275,8 @@ export type UpdateSetInput = {
   /** Needs `sets.edit_any` to raise above the default. */
   capacity?: InputMaybe<Scalars['Int']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
+  /** Personal sets can't be `PRIVATE`; the global set is always listed. */
+  visibility?: InputMaybe<SetVisibility>;
 };
 
 /** What one chatter shows, as IDs from the catalog. Only chatters showing something are listed. */

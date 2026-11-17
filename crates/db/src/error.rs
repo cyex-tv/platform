@@ -49,6 +49,9 @@ pub enum DbError {
     /// A selection named a cosmetic the account doesn't own.
     #[error("the account doesn't own that cosmetic")]
     NotOwned,
+    /// Personal sets can't be private, and the global set is always listed.
+    #[error("sets of this kind can't have that visibility")]
+    InvalidVisibility,
 }
 
 pub type DbResult<T> = Result<T, DbError>;

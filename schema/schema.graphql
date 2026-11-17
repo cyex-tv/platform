@@ -118,6 +118,25 @@ type Channel {
 }
 
 """
+What `cloneSet` made.
+"""
+type ClonedSet {
+	"""
+	The new channel set.
+	"""
+	set: EmoteSet!
+	"""
+	Emotes copied into it.
+	"""
+	copied: Int!
+	"""
+	Emotes left out: over capacity, private emotes of others, emotes not approved, or ones
+	you can't see.
+	"""
+	skipped: Int!
+}
+
+"""
 Every badge and paint, for clients to cache (`GET /v1/cosmetics`).
 """
 type CosmeticCatalog {
@@ -193,6 +212,11 @@ input CreateSetInput {
 	Make the set for an account you edit with `sets` (ADR 0014). Empty: for yourself.
 	"""
 	ownerId: String
+	"""
+	Empty: `LISTED` for channel sets, `UNLISTED` for the personal set. Personal sets can't be
+	`PRIVATE`.
+	"""
+	visibility: SetVisibility
 }
 
 """
@@ -296,6 +320,20 @@ type EmoteSet {
 	owner: AccountSummary
 	capacity: Int!
 	emotes: [SetEmote!]!
+	"""
+	Who can find and open it.
+	"""
+	visibility: SetVisibility!
+	"""
+	`visibility` is `LISTED`: shown on the owner's profile.
+	"""
+	listed: Boolean!
+	"""
+	How many of `capacity` the set uses. Counts every emote in it, also those this answer
+	doesn't show you (pending ones), so `capacity - slotsUsed` is what still fits.
+	"""
+	slotsUsed: Int!
+	createdAt: String!
 }
 
 """
@@ -399,6 +437,11 @@ enum EventType {
 	PERSONAL_UPDATED
 	EMOTE_UPDATED
 	"""
+	A listed set was made (`createSet`, `cloneSet`), on its owner's `user:` topics. Unlisted
+	and private sets make no event, so their IDs stay unknown.
+	"""
+	SET_CREATED
+	"""
 	A badge or paint was made (topic `cosmetics`, ADR 0015).
 	"""
 	COSMETIC_CREATED
@@ -475,7 +518,16 @@ type Mutation {
 	"""
 	createSet(input: CreateSetInput!): EmoteSet!
 	"""
-	Rename a set or change its capacity. Owner or editor; capacity needs `sets.edit_any`.
+	Copy a set you can open into a new channel set: yours, or with `ownerId` one for an account
+	you edit with `SETS`. Name defaults to the source's; visibility to `LISTED`. Emotes go in
+	as `addSetEmote` would put them, in order, keeping their names: up to the capacity,
+	approved ones only (your own pending ones too), never other people's private emotes.
+	30 copies an hour. `rate_limited`, `not_found`, `forbidden`, `bad_name`.
+	"""
+	cloneSet(id: String!, name: String, ownerId: String, visibility: SetVisibility): ClonedSet!
+	"""
+	Rename a set, change who sees it (`visibility`: owner or account editors with `SETS`), or
+	change its capacity. Owner or editor; capacity needs `sets.edit_any`.
 	"""
 	updateSet(id: String!, input: UpdateSetInput!): EmoteSet!
 	"""
@@ -861,9 +913,16 @@ type Query {
 	"""
 	channelByLogin(platform: Platform!, login: String!): Channel
 	"""
-	A set with its emotes.
+	A set with its emotes. Null when there is none, or when it is `PRIVATE` and you are not
+	its owner, an editor or staff (a channel's active set is always public).
 	"""
 	set(id: String!): EmoteSet
+	"""
+	An account's `LISTED` sets as profile cards, oldest first, at most 50. `preview` is how
+	many of each set's newest emotes to include, 0 to 50, default 12. Empty when the account
+	is unknown, deleted or blocked.
+	"""
+	accountSets(accountId: String!, preview: Int): [SetSummary!]!
 	"""
 	The cyex.tv global set, shown in every channel.
 	"""
@@ -1072,6 +1131,51 @@ enum SetKind {
 	GLOBAL
 }
 
+"""
+A set as a card on a profile: its facts and the first few emotes (`accountSets`).
+"""
+type SetSummary {
+	id: String!
+	name: String!
+	kind: SetKind!
+	owner: AccountSummary
+	visibility: SetVisibility!
+	listed: Boolean!
+	capacity: Int!
+	"""
+	Every emote in the set counts; see `EmoteSet.slotsUsed`.
+	"""
+	slotsUsed: Int!
+	"""
+	A channel shows this set now.
+	"""
+	active: Boolean!
+	"""
+	The newest emotes you may see, at most the `preview` asked for.
+	"""
+	preview: [SetEmote!]!
+	createdAt: String!
+}
+
+"""
+Who can find and open a set.
+"""
+enum SetVisibility {
+	"""
+	Anyone can open it, and it is listed on its owner's profile. New channel sets start here.
+	"""
+	LISTED
+	"""
+	Anyone with its link (its ID) can open it; it isn't listed. Personal sets start here.
+	"""
+	UNLISTED
+	"""
+	Only its owner, its editors and staff can open it, except while a channel shows it:
+	a channel's active set is public. Channel sets only.
+	"""
+	PRIVATE
+}
+
 type Subscription {
 	"""
 	Live updates for up to 500 topics: `channel:<platform>:<id>`, `set:<id>`,
@@ -1126,6 +1230,10 @@ input UpdateSetInput {
 	Needs `sets.edit_any` to raise above the default.
 	"""
 	capacity: Int
+	"""
+	Personal sets can't be `PRIVATE`; the global set is always listed.
+	"""
+	visibility: SetVisibility
 }
 
 """

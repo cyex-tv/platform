@@ -474,14 +474,14 @@ let uploads = 0;
 const member = (e, name = e.name) => ({ name, zeroWidth: e.flags.zeroWidth, addedAt: e.createdAt, emote: e });
 const SETS = [
   { id: '01JD8XSET00000000000000MAIN', name: 'Main', kind: 'CHANNEL', capacity: 1000, owner: ME_SUMMARY,
-    emotes: [...MINE.slice(3, 7), ...ALL.slice(10, 30)].map((e) => member(e)), editors: [OTHERS[0]] },
+    emotes: [...MINE.slice(3, 7), ...ALL.slice(10, 30)].map((e) => member(e)), editors: [OTHERS[0]], visibility: 'LISTED', createdAt: '2026-11-10T12:05:00.000Z' },
   { id: '01JD8XSET0000000000000ALTSS', name: 'Subathon', kind: 'CHANNEL', capacity: 1000, owner: ME_SUMMARY,
-    emotes: ALL.slice(40, 46).map((e) => member(e)), editors: [] },
+    emotes: ALL.slice(40, 46).map((e) => member(e)), editors: [], visibility: 'UNLISTED', createdAt: '2026-11-12T19:40:00.000Z' },
   { id: '01JD8XSET000000000000000OAK', name: 'quietoak main', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[0],
-    emotes: ALL.slice(60, 70).map((e) => member(e)), editors: [ME_SUMMARY] },
+    emotes: ALL.slice(60, 70).map((e) => member(e)), editors: [ME_SUMMARY], visibility: 'LISTED', createdAt: '2026-11-08T09:00:00.000Z' },
 ];
 const GLOBAL = { id: '01JD8XSET0000000000000GLOBL', name: 'Global', kind: 'GLOBAL', capacity: 200, owner: null,
-  emotes: ALL.slice(0, 24).map((e) => member(e)), editors: [] };
+  emotes: ALL.slice(0, 24).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-01T00:00:00.000Z' };
 SETS.push(GLOBAL);
 const PENDING = Array.from({ length: 7 }, (_, i) => emote(800 + i, OTHERS[i % 2], 'PENDING'));
 const REPORTS = [
@@ -522,9 +522,21 @@ const EDITOR_OF = [
 ];
 const SHARED_SETS = [
   { id: '01JD8XSET0000000000000OAKAL', name: 'quietoak cozy', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[0],
-    emotes: ALL.slice(70, 78).map((e) => member(e)), editors: [] },
+    emotes: ALL.slice(70, 78).map((e) => member(e)), editors: [], visibility: 'PRIVATE', createdAt: '2026-11-13T09:10:00.000Z' },
   { id: '01JD8XSET0000000000000FERN1', name: 'fern garden', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[4],
-    emotes: ALL.slice(46, 54).map((e) => member(e)), editors: [] },
+    emotes: ALL.slice(46, 54).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-15T20:30:00.000Z' },
+];
+// Public sets of other accounts (accountSets, cloneSet): listed, unlisted and private, so a
+// profile shows only the listed ones and a private one 404s to everyone else.
+const PUBLIC_SETS = [
+  { id: '01JD8XSET0000000000000NORA1', name: 'nora picks', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[1],
+    emotes: ALL.slice(5, 23).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-09T15:00:00.000Z' },
+  { id: '01JD8XSET0000000000000NORA2', name: 'cozy nights', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[1],
+    emotes: ALL.slice(30, 38).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-14T22:00:00.000Z' },
+  { id: '01JD8XSET0000000000000NORA3', name: 'drafts', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[1],
+    emotes: ALL.slice(80, 84).map((e) => member(e)), editors: [], visibility: 'PRIVATE', createdAt: '2026-11-16T08:00:00.000Z' },
+  { id: '01JD8XSET0000000000000NORA4', name: 'nora personal', kind: 'PERSONAL', capacity: 5, owner: OTHERS[1],
+    emotes: ALL.slice(90, 93).map((e) => member(e)), editors: [], visibility: 'UNLISTED', createdAt: '2026-11-11T11:00:00.000Z' },
 ];
 const EDITOR_CHANNELS = [
   { platform: 'TWITCH', platformChannelId: '55500001', login: 'quietoak', activeSetId: SETS[2].id, allowPersonalEmotes: true, account: OTHERS[0] },
@@ -826,9 +838,49 @@ const sorted = (hits, sort) => {
 };
 
 const findEmote = (id) => MINE.find((e) => e.id === id) ?? ALL.find((e) => e.id === id);
-const findSet = (id) => SETS.find((s) => s.id === id) ?? SHARED_SETS.find((s) => s.id === id);
+const findSet = (id) => SETS.find((s) => s.id === id) ?? SHARED_SETS.find((s) => s.id === id) ?? PUBLIC_SETS.find((s) => s.id === id);
+const ALL_SETS = () => [...SETS, ...SHARED_SETS, ...PUBLIC_SETS];
+const ACTIVE_SET_IDS = () => new Set([...CHANNELS, ...EDITOR_CHANNELS].map((c) => c.activeSetId).filter(Boolean));
+// The API's rule: anyone opens listed and unlisted sets; a private one only its owner, editors and
+// account editors, or anyone while a channel shows it.
+const mayView = (s, session) => s.visibility !== 'PRIVATE' || ACTIVE_SET_IDS().has(s.id)
+  || (session && (s.owner?.id === ME_ID || s.editors.some((e) => e.id === ME_ID) || EDITOR_OF.some((g) => g.account.id === s.owner?.id)));
 const err = (message, code) => ({ data: null, errors: [{ message, extensions: { code } }] });
-const setOut = (s) => ({ ...s, editors: undefined });
+const setOut = (s) => ({ ...s, editors: undefined, visibility: s.visibility ?? 'LISTED', listed: (s.visibility ?? 'LISTED') === 'LISTED',
+  slotsUsed: s.emotes.length, createdAt: s.createdAt ?? '2026-11-10T12:00:00.000Z' });
+const setCard = (s, preview = 12) => {
+  const o = setOut(s);
+  return { id: o.id, name: o.name, kind: o.kind, owner: o.owner, visibility: o.visibility, listed: o.listed, capacity: o.capacity,
+    slotsUsed: o.slotsUsed, active: ACTIVE_SET_IDS().has(o.id), createdAt: o.createdAt,
+    preview: [...o.emotes].reverse().slice(0, Math.max(0, Math.min(50, preview))) };
+};
+// accountSets(accountId, preview): an account's listed sets as cards, signed in or not.
+const accountSets = (accountId, preview) =>
+  ALL_SETS().filter((s) => s.owner?.id === accountId && s.kind !== 'GLOBAL' && (s.visibility ?? 'LISTED') === 'LISTED'
+    && !(STATUS[accountId]?.blocked)).slice(0, 50).map((s) => setCard(s, preview ?? 12));
+const VISIBILITIES = ['LISTED', 'UNLISTED', 'PRIVATE'];
+let clones = 0;
+// cloneSet(id, name, ownerId, visibility): the API's rules in small: approved emotes only,
+// others' private emotes skipped, capacity 1000.
+function cloneSet(v, session) {
+  const src = findSet(v.id);
+  if (!src || !mayView(src, session)) return err('Not found.', 'not_found');
+  const ownerId = v.ownerId || ME_ID;
+  if (!flagsOn(ownerId).includes('SETS'))
+    return err('Only the account’s owner and its editors with the sets permission can make sets for it.', 'forbidden');
+  if (++clones > 30) return err('That’s a lot of copied sets. Try again in a while.', 'rate_limited');
+  const name = (v.name ?? src.name).trim();
+  if (!name || name.length > 100) return err('Set names are 1 to 100 characters.', 'bad_name');
+  if (v.visibility && !VISIBILITIES.includes(v.visibility)) return err('Unknown visibility.', 'bad_visibility');
+  const owner = ownerId === ME_ID ? ME_SUMMARY : EDITOR_OF.find((g) => g.account.id === ownerId).account;
+  const keep = src.emotes.filter((m) => m.emote.state === 'APPROVED' && (!m.emote.flags.private || m.emote.owner?.id === ownerId));
+  const copied = keep.slice(0, 1000);
+  const s = { id: `01JD8XSETCPY${String(clones).padStart(14, '0')}`, name, kind: 'CHANNEL', capacity: 1000, owner,
+    emotes: copied.map((m) => ({ ...m, addedAt: new Date().toISOString() })), editors: [], visibility: v.visibility ?? 'LISTED',
+    createdAt: new Date().toISOString() };
+  (ownerId === ME_ID ? SETS : SHARED_SETS).push(s);
+  return { data: { cloneSet: { set: setOut(s), copied: copied.length, skipped: src.emotes.length - copied.length } } };
+}
 
 function signedIn(body, v, ADMIN) {
   const op = (body.query.match(/(?:query|mutation)\s+(\w+)/) ?? [])[1];
@@ -875,15 +927,26 @@ function signedIn(body, v, ADMIN) {
       const list = ownerId === ME_ID ? SETS : SHARED_SETS;
       if (v.input.kind === 'PERSONAL' && [...SETS, ...SHARED_SETS].some((s) => s.kind === 'PERSONAL' && s.owner?.id === ownerId))
         return err('You already have a personal set.', 'personal_set_exists');
+      const visibility = v.input.visibility ?? (v.input.kind === 'PERSONAL' ? 'UNLISTED' : 'LISTED');
+      if (v.input.kind === 'PERSONAL' && visibility === 'PRIVATE')
+        return err('Personal sets can’t be private, and the global set is always listed.', 'bad_visibility');
       const s = { id: `01JD8XSETNEW${String(SETS.length + SHARED_SETS.length).padStart(14, '0')}`, name: v.input.name, kind: v.input.kind,
-        capacity: v.input.kind === 'PERSONAL' ? 5 : 1000, owner, emotes: [], editors: [] };
+        capacity: v.input.kind === 'PERSONAL' ? 5 : 1000, owner, emotes: [], editors: [], visibility, createdAt: new Date().toISOString() };
       list.push(s);
-      return { data: { createSet: { id: s.id } } };
+      return { data: { createSet: setOut(s) } };
     }
     case 'UpdateSet': {
       const s = findSet(v.id);
+      if (!s) return err('Not found.', 'not_found');
+      if (v.input.visibility) {
+        if (s.kind === 'GLOBAL' || (s.kind === 'PERSONAL' && v.input.visibility === 'PRIVATE'))
+          return err('Personal sets can’t be private, and the global set is always listed.', 'bad_visibility');
+        if (!flagsOn(s.owner?.id).includes('SETS'))
+          return err('Only the set’s owner and their editors with the sets permission can change who sees it.', 'forbidden');
+        s.visibility = v.input.visibility;
+      }
       if (v.input.name) s.name = v.input.name;
-      return { data: { updateSet: { id: s.id, name: s.name } } };
+      return { data: { updateSet: setOut(s) } };
     }
     case 'DeleteSet': {
       if ([...CHANNELS, ...EDITOR_CHANNELS].some((c) => c.activeSetId === v.id)) return err('A channel shows this set. Pick another active set first.', 'set_in_use');
@@ -1053,7 +1116,27 @@ function signedIn(body, v, ADMIN) {
   }
 }
 
+// Fields added after the site's first queries, answered by field name so any operation name works.
+function newFields(q, v, session) {
+  if (/\bcloneSet\s*\(/.test(q)) return session ? cloneSet(v, session) : err('Sign in to use this.', 'signed_out');
+  if (/\baccountSets\s*\(/.test(q)) {
+    const data = { accountSets: accountSets(v.accountId ?? v.id ?? '', v.preview) };
+    if (/\baccount\s*\(/.test(q)) data.account = publicAccount(v.accountId ?? v.id ?? '');
+    return { data };
+  }
+  return null;
+}
+
+// New fields merge with whatever else the same operation asks for (the older handlers below).
 function answer(body, session, admin) {
+  const added = newFields(body.query ?? '', body.variables ?? {}, session);
+  if (!added) return baseAnswer(body, session, admin);
+  if (added.errors || !added.data) return added;
+  const base = baseAnswer(body, session, admin);
+  return { ...added, data: base?.data && !base.errors ? { ...base.data, ...added.data } : added.data };
+}
+
+function baseAnswer(body, session, admin) {
   const q = body.query ?? '';
   const v = body.variables ?? {};
   const cosmetic = cosmeticsAnswer(q, v, session, admin);
@@ -1091,9 +1174,10 @@ function answer(body, session, admin) {
     const c = channelByLogin(v.platform, v.login);
     return { data: { channelByLogin: c } };
   }
-  if (q.includes('query Set(')) {
+  if (q.includes('query Set(') || /\bset\s*\(\s*id:/.test(q)) {
+    // Unknown ids fall back to the first set, as before; private ones you can't see are null.
     const s = findSet(v.id) ?? SETS[0];
-    return { data: { set: setOut(s) } };
+    return { data: { set: mayView(s, session) ? setOut(s) : null } };
   }
   return err('Not in the mock.', 'not_implemented');
 }

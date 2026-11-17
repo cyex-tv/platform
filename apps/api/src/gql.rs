@@ -21,12 +21,12 @@ use cyex_tv_hub::topics as hub_topics;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::model::{
     AccountEditor, AccountStatus, AccountSummary, AddAccountEditor, AddSetEmote, AuditEntry, Badge,
-    Channel, CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge, CreateRole, CreateSet,
-    EditedAccount, EditorPermission, Emote, EmotePage, EmoteSet, EmoteSort, Entitlement,
+    Channel, ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge, CreateRole,
+    CreateSet, EditedAccount, EditorPermission, Emote, EmotePage, EmoteSet, EmoteSort, Entitlement,
     EntitlementPage, Event, GrantCosmetic, Identity, Me, Notification, OwnedCosmetics, Paint,
     PaintInput, PersonalSetEntry, Platform, Report, ReportAction, ReportQueue, ReviewQueue, Role,
-    SearchResults, SetEmote, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole,
-    UpdateSet, UpdateSetEmote, UserCosmetics,
+    SearchResults, SetEmote, SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings,
+    UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote, UserCosmetics,
 };
 use cyex_tv_shared::permissions;
 use futures_util::Stream;
@@ -230,9 +230,24 @@ impl Query {
             .map_err(api_error)
     }
 
-    /// A set with its emotes.
+    /// A set with its emotes. Null when there is none, or when it is `PRIVATE` and you are not
+    /// its owner, an editor or staff (a channel's active set is always public).
     async fn set(&self, ctx: &Context<'_>, id: String) -> Result<Option<EmoteSet>> {
         catalog::set(state(ctx), caller_opt(ctx), &id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// An account's `LISTED` sets as profile cards, oldest first, at most 50. `preview` is how
+    /// many of each set's newest emotes to include, 0 to 50, default 12. Empty when the account
+    /// is unknown, deleted or blocked.
+    async fn account_sets(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+        preview: Option<u32>,
+    ) -> Result<Vec<SetSummary>> {
+        catalog::account_sets(state(ctx), caller_opt(ctx), &account_id, preview)
             .await
             .map_err(api_error)
     }
@@ -608,7 +623,34 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Rename a set or change its capacity. Owner or editor; capacity needs `sets.edit_any`.
+    /// Copy a set you can open into a new channel set: yours, or with `ownerId` one for an account
+    /// you edit with `SETS`. Name defaults to the source's; visibility to `LISTED`. Emotes go in
+    /// as `addSetEmote` would put them, in order, keeping their names: up to the capacity,
+    /// approved ones only (your own pending ones too), never other people's private emotes.
+    /// 30 copies an hour. `rate_limited`, `not_found`, `forbidden`, `bad_name`.
+    async fn clone_set(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        name: Option<String>,
+        owner_id: Option<String>,
+        visibility: Option<SetVisibility>,
+    ) -> Result<ClonedSet> {
+        let caller = caller(ctx)?;
+        catalog::clone_set(
+            state(ctx),
+            caller,
+            &id,
+            name.as_deref(),
+            owner_id.as_deref(),
+            visibility,
+        )
+        .await
+        .map_err(api_error)
+    }
+
+    /// Rename a set, change who sees it (`visibility`: owner or account editors with `SETS`), or
+    /// change its capacity. Owner or editor; capacity needs `sets.edit_any`.
     async fn update_set(
         &self,
         ctx: &Context<'_>,
