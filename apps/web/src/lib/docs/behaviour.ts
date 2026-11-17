@@ -6,29 +6,36 @@
 // One change from the skill: the Ctrl/Cmd+K listener runs on window in the capture phase and
 // stops there, so on this page the shortcut reaches the filter and not the site's command palette.
 //
+// Two changes for the site shell: the sticky header is the site's own nav (.nav), so the offset the
+// scroll-spy uses is its height + 16 (the same as the site's scroll-padding-top), and the index
+// folds into a <details class="nav-toc"> when it is stacked above the text (<= 900px).
+//
 // Markup it expects (see the skill's starter page):
-//   header.top                                  the sticky page header
+//   .nav                                        the site's sticky nav
 //   aside.docs-nav > .nav-search > input        the filter
 //   aside.docs-nav > nav.nav-scroll             the index; its own scroll container
 //     .nav-group > .nav-group-title + a.nav-item[href="#id"]
 //   section[id]                                 one per index entry, in the same order
 
 export interface DocsOptions {
-  headerOffset?: number;
+  headerOffset?: number; // default: the nav's height + 16
   band?: [number, number];
   park?: number;
   langKey?: string;
 }
 
 export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): () => void {
-  const HEADER_OFFSET = opts.headerOffset ?? 80; // matches section scroll-margin-top
   const BAND = opts.band ?? [0.25, 0.6]; // the comfortable zone, as fractions of the rail
   const PARK = opts.park ?? 0.35; // where an item is brought to when it leaves it
   const LANG_KEY = opts.langKey ?? 'cyexDocsLang';
 
-  const header = root.querySelector<HTMLElement>('header.top');
+  const header = document.querySelector<HTMLElement>('.nav'); // the site's sticky nav
+  const headerOffset = () => opts.headerOffset ?? (header?.getBoundingClientRect().height ?? 64) + 16;
   const aside = root.querySelector<HTMLElement>('.docs-nav')!;
   const nav = root.querySelector<HTMLElement>('.nav-scroll')!;
+  const toc = root.querySelector<HTMLDetailsElement>('details.nav-toc');
+  const toTop = root.querySelector<HTMLElement>('.to-top');
+  const stacked = () => getComputedStyle(aside).position !== 'sticky';
   const search = root.querySelector<HTMLElement>('.nav-search');
   const input = search?.querySelector('input') ?? null;
   const sections = [...root.querySelectorAll<HTMLElement>('section[id]')];
@@ -39,9 +46,6 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
     target.addEventListener(type, fn as EventListener, options);
     cleanups.push(() => target.removeEventListener(type, fn as EventListener, options));
   };
-
-  // The rail sits under the header, so it needs the header's real height.
-  const setHeaderHeight = () => document.documentElement.style.setProperty('--header-h', `${header?.offsetHeight ?? 62}px`);
 
   // ---------- scroll-spy ----------
   // Offsets are measured once (and again on resize) and compared with scrollY.
@@ -64,7 +68,7 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
     let current = tops[0];
     if (atEnd) current = tops[tops.length - 1]; // a short last section may never reach the header
     else {
-      const y = scrollY + HEADER_OFFSET;
+      const y = scrollY + headerOffset();
       // Two pixels of slack: a hash jump parks a section exactly on the boundary.
       for (const t of tops) {
         if (t.top <= y + 2) current = t;
@@ -72,6 +76,7 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
       }
     }
     const nextEdge = atTop ? 'top' : atEnd ? 'end' : null;
+    if (toTop) toTop.hidden = !(stacked() && scrollY > innerHeight * 2);
     if (current.id !== activeId || nextEdge !== edge) {
       setActive(current.id);
       edge = nextEdge;
@@ -82,7 +87,6 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
     if (!frame) frame = requestAnimationFrame(update);
   };
   const onResize = () => {
-    setHeaderHeight();
     measure();
     onScroll();
   };
@@ -107,7 +111,7 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
   let railTouchedAt = 0;
 
   function follow() {
-    if (getComputedStyle(aside).position !== 'sticky') return; // stacked layout: the rail isn't beside the text
+    if (stacked()) return; // stacked layout: the rail isn't beside the text
     if (performance.now() - railTouchedAt < 1200) return;
     const max = nav.scrollHeight - nav.clientHeight;
     if (max <= 0) return;
@@ -141,7 +145,7 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
     aside,
     'wheel',
     (e) => {
-      if (getComputedStyle(aside).position !== 'sticky') return;
+      if (stacked()) return;
       railTouchedAt = performance.now();
       if (!nav.contains(e.target as Node)) {
         e.preventDefault();
@@ -164,6 +168,22 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
     if ((e.target as Element).closest('a.nav-item')) railTouchedAt = 0;
   });
 
+  // ---------- contents disclosure ----------
+  // Beside the text the contents are always open; stacked above it they fold away, and picking an
+  // entry (or a search that finds some) opens or closes them as needed.
+  if (toc) {
+    const mq = matchMedia('(min-width: 901px)');
+    const sync = () => {
+      toc.open = mq.matches;
+    };
+    sync();
+    on(mq, 'change', sync);
+    on<MouseEvent>(nav, 'click', (e) => {
+      if (stacked() && (e.target as Element).closest('a.nav-item')) toc.open = false;
+    });
+  }
+  if (toTop) on(toTop, 'click', () => scrollTo({ top: 0, behavior: reduced() ? 'auto' : 'smooth' }));
+
   // ---------- filter ----------
   if (search && input) {
     const kbd = search.querySelector('.nav-kbd');
@@ -172,6 +192,7 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
     const apply = () => {
       const q = input.value.trim().toLowerCase();
       search.classList.toggle('has-value', !!input.value);
+      if (toc && q && stacked()) toc.open = true;
       let any = false;
       // Entries match on their own text (label, method, path); a group heading never
       // matches by itself, so "admin" finds admin endpoints by their own names.
@@ -221,7 +242,11 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
   // One language choice for the whole page, remembered: picking Python once shouldn't
   // mean picking it again on the next endpoint.
   const setLang = (lang: string) => {
-    for (const tab of root.querySelectorAll<HTMLElement>('.lang-tab')) tab.setAttribute('aria-selected', String(tab.dataset.lang === lang));
+    for (const tab of root.querySelectorAll<HTMLElement>('.lang-tab')) {
+      const sel = tab.dataset.lang === lang;
+      tab.setAttribute('aria-selected', String(sel));
+      tab.tabIndex = sel ? 0 : -1; // roving: one tab stop per tablist
+    }
     for (const pre of root.querySelectorAll<HTMLElement>('pre[data-lang]')) pre.hidden = pre.dataset.lang !== lang;
   };
   let lang = root.querySelector<HTMLElement>('.lang-tab')?.dataset.lang;
@@ -232,16 +257,31 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
     /* storage blocked: the first language it is */
   }
   if (lang) setLang(lang);
+  const pickLang = (tab: HTMLElement) => {
+    setLang(tab.dataset.lang!);
+    try {
+      localStorage.setItem(LANG_KEY, tab.dataset.lang!);
+    } catch {
+      /* not remembered, still switched */
+    }
+  };
+  // Arrow keys, Home and End move between a tablist's tabs, switch the shared language and follow with focus.
+  on<KeyboardEvent>(document, 'keydown', (e) => {
+    const tab = (e.target as Element).closest<HTMLElement>('.lang-tab');
+    if (!tab || e.altKey || e.ctrlKey || e.metaKey) return;
+    const tabs = [...tab.closest('[role="tablist"]')!.querySelectorAll<HTMLElement>('.lang-tab')];
+    const at = tabs.indexOf(tab);
+    const next = e.key === 'ArrowRight' ? tabs[(at + 1) % tabs.length] : e.key === 'ArrowLeft' ? tabs[(at - 1 + tabs.length) % tabs.length] : e.key === 'Home' ? tabs[0] : e.key === 'End' ? tabs[tabs.length - 1] : null;
+    if (!next) return;
+    e.preventDefault();
+    pickLang(next);
+    next.focus();
+  });
   on<MouseEvent>(document, 'click', (e) => {
     const target = e.target as Element;
     const tab = target.closest<HTMLElement>('.lang-tab');
     if (tab) {
-      setLang(tab.dataset.lang!);
-      try {
-        localStorage.setItem(LANG_KEY, tab.dataset.lang!);
-      } catch {
-        /* not remembered, still switched */
-      }
+      pickLang(tab);
       return;
     }
     const copy = target.closest<HTMLElement & { _t?: ReturnType<typeof setTimeout> }>('.code-copy');
@@ -259,7 +299,6 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
   });
 
   // ---------- start ----------
-  setHeaderHeight();
   measure();
   const hash = decodeURIComponent(location.hash.slice(1));
   if (items.has(hash)) setActive(hash); // a deep link lights its entry before any scrolling
@@ -267,7 +306,7 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
   on(window, 'scroll', onScroll, { passive: true });
   on(window, 'resize', onResize);
   // Sections change height as fonts land and samples fill in; cached offsets go stale.
-  // The header is watched too: it wraps to more lines on narrow screens.
+  // The nav is watched too: its height sets the offset.
   const ro = new ResizeObserver(onResize);
   ro.observe(document.body);
   if (header) ro.observe(header);

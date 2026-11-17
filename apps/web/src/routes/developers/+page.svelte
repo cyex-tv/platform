@@ -45,24 +45,6 @@
   const accessLabel = { 'signed-in': 'Signed in', restricted: 'Restricted' } as const;
   const accessHint = { 'signed-in': 'Needs a session', restricted: 'Needs a session and a permission' } as const;
   const wsHost = $derived(socketUrl.replace(/\/v1\/events$/, ''));
-
-  // The theme toggle of the docs header (cyex-design): instant under reduced motion.
-  function toggleTheme() {
-    const apply = () => {
-      const html = document.documentElement;
-      const light = html.dataset.theme !== 'light';
-      if (light) html.dataset.theme = 'light';
-      else delete html.dataset.theme;
-      try {
-        localStorage.setItem('cyexTheme', light ? 'light' : 'dark');
-      } catch {
-        /* not remembered */
-      }
-    };
-    const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
-    if (!matchMedia('(prefers-reduced-motion: reduce)').matches && doc.startViewTransition) doc.startViewTransition(apply);
-    else apply();
-  }
 </script>
 
 <svelte:head>
@@ -75,34 +57,16 @@
 </svelte:head>
 
 <div class="tool docs" bind:this={root}>
-  <a class="skip" href="#main">Skip to content</a>
-  <header class="top">
-    <div class="top-inner">
-      <a class="brand" href="/" aria-label="cyex.tv front page">
-        <span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>
-        <b>cyex.tv</b>
-      </a>
-      <nav class="links" aria-label="Pages">
-        <a href="/search">Emotes</a>
-        <a href="/#install">Extension</a>
-        <a href="/developers" aria-current="page">Docs</a>
-      </nav>
-      <span class="top-spacer"></span>
-      <button class="theme-toggle" type="button" aria-label="Switch theme" title="Switch theme" onclick={toggleTheme}>
-        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" /></svg>
-        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41" /></svg>
-      </button>
-    </div>
-  </header>
-
   <div class="docs-shell">
     <aside class="docs-nav">
       <div class="nav-search">
         <svg class="nav-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
-        <input type="text" placeholder="Find an endpoint" aria-label="Find an endpoint" autocomplete="off" spellcheck="false" />
+        <input type="search" enterkeyhint="search" placeholder="Find an endpoint" aria-label="Find an endpoint" autocomplete="off" autocapitalize="off" spellcheck="false" />
         <kbd class="nav-kbd">Ctrl K</kbd>
         <button type="button" class="input-clear" aria-label="Clear"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2l6 6M8 2L2 8" /></svg></button>
       </div>
+      <details class="nav-toc">
+      <summary>Contents</summary>
       <nav class="nav-scroll" aria-label="Contents">
         <div class="nav-group">
           <div class="nav-group-title">Notes</div>
@@ -146,9 +110,10 @@
         </div>
         <div class="nav-empty" hidden></div>
       </nav>
+      </details>
     </aside>
 
-    <main class="docs-body" id="main" tabindex="-1">
+    <div class="docs-body">
       <header class="docs-title">
         <div>
           <h1>API</h1>
@@ -353,6 +318,7 @@
               {#if t.description.length}<div class="op-desc"><Prose paras={t.description} /></div>{/if}
               <div class="param-group">
                 <div class="param-group-title">{t.kind === 'enum' ? 'Values' : 'Fields'}</div>
+                <div class="fields">
                 {#each t.members as m}
                   <div class="param">
                     <div class="param-sig">
@@ -363,16 +329,20 @@
                     {#if m.description.length}<div class="param-desc"><Prose paras={m.description} /></div>{/if}
                   </div>
                 {/each}
+                </div>
               </div>
             </div>
           </section>
         {/each}
       </div>
 
-      <footer class="docs-foot">
-        cyex.tv is open source under AGPL-3.0. Not affiliated with, endorsed by, or sponsored by Twitch or Kick.<br />
-        <a href="/">cyex.tv</a> · <a href="https://github.com/cyex-tv/platform">Source</a> · <a href="https://github.com/cyex-tv/platform/blob/main/openapi/openapi.json">openapi.json</a> · <a href="https://github.com/cyex-tv/platform/blob/main/schema/schema.graphql">schema.graphql</a>
-      </footer>
-    </main>
+      <p class="docs-end">
+        <a href="https://github.com/cyex-tv/platform/blob/main/openapi/openapi.json">openapi.json</a> · <a href="https://github.com/cyex-tv/platform/blob/main/schema/schema.graphql">schema.graphql</a> · <a href="https://github.com/cyex-tv/platform">Source</a>
+      </p>
+    </div>
   </div>
+  <button type="button" class="to-top" hidden aria-label="Back to top">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+    Top
+  </button>
 </div>

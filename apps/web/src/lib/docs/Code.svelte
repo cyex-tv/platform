@@ -10,6 +10,8 @@
     ok = false,
     copy = 'Copy',
   }: { tabs?: Tab[]; label?: string; meta?: string; code?: string; ok?: boolean; copy?: string } = $props();
+  // Ids tie each tab to its panel (aria-controls / aria-labelledby); unique per block.
+  const uid = $props.id();
 </script>
 
 <div class="code-block">
@@ -17,7 +19,7 @@
     {#if tabs && tabs.length}
       <div class="lang-tabs" role="tablist" aria-label="Language">
         {#each tabs as t, i}
-          <button type="button" role="tab" class="lang-tab" data-lang={t.lang} aria-selected={i === 0}>{t.label}</button>
+          <button type="button" role="tab" class="lang-tab" id="{uid}-tab-{t.lang}" data-lang={t.lang} aria-selected={i === 0} aria-controls="{uid}-panel-{t.lang}" tabindex={i === 0 ? 0 : -1}>{t.label}</button>
         {/each}
       </div>
     {:else}
@@ -33,7 +35,8 @@
   </div>
   {#if tabs && tabs.length}
     {#each tabs as t, i}
-      <pre data-lang={t.lang} hidden={i > 0}><code>{t.code}</code></pre>
+      <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+      <pre data-lang={t.lang} hidden={i > 0} role="tabpanel" id="{uid}-panel-{t.lang}" aria-labelledby="{uid}-tab-{t.lang}" tabindex="0"><code>{t.code}</code></pre>
     {/each}
   {:else}
     <pre><code>{code}</code></pre>
