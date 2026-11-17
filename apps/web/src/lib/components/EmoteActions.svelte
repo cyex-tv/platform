@@ -118,7 +118,7 @@
   .btn { gap: 8px; }
   .more { width: 38px; padding: 0; }
   .bar { flex-wrap: nowrap; }
-  .bar > :global(.pop-root) { flex: 1; }
+  .bar > :global(.pop-root:first-child), .bar > .add { flex: 1; }
   .bar .add { flex: 1; width: 100%; height: 44px; }
   .bar .copy { height: 44px; }
   .bar .more { width: 44px; height: 44px; }

@@ -70,7 +70,7 @@
     </header>
 
     {#if !public_}
-      <p class="notice {t.tone}" role="status"><strong>{t.status}.</strong> {t.line}</p>
+      <p class="notice {t.tone}" role="status"><strong>{t.status}.</strong> Only you and moderators can open this page.</p>
     {/if}
 
     <div class="stage-area"><PreviewStage emote={e} {pool} /></div>
