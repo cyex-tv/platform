@@ -123,6 +123,19 @@ impl Actor {
         }
     }
 
+    /// Acting on another account (restricting it, taking a role from it): its most senior role
+    /// (`target_highest`, `None` without roles) must be below yours. The owner may always.
+    pub fn may_act_on(&self, target_highest: Option<i32>) -> Result<(), RuleError> {
+        if self.owner {
+            return Ok(());
+        }
+        match (target_highest, self.highest) {
+            (None, _) => Ok(()),
+            (Some(target), Some(mine)) if target < mine => Ok(()),
+            _ => Err(RuleError::NotBelowYou),
+        }
+    }
+
     /// Taking a role away from `target_is_owner`'s account.
     pub fn may_demote(&self, target_is_owner: bool) -> Result<(), RuleError> {
         if target_is_owner && !self.owner {
@@ -226,6 +239,19 @@ mod tests {
         assert_eq!(a.may_manage(51), Err(RuleError::NotBelowYou));
         let roleless = actor(&[], None);
         assert_eq!(roleless.may_manage(i32::MIN), Err(RuleError::NotBelowYou));
+    }
+
+    #[test]
+    fn only_accounts_below_your_highest() {
+        let a = actor(&["users.restrict"], Some(50));
+        assert_eq!(a.may_act_on(None), Ok(()));
+        assert_eq!(a.may_act_on(Some(49)), Ok(()));
+        assert_eq!(a.may_act_on(Some(50)), Err(RuleError::NotBelowYou));
+        assert_eq!(a.may_act_on(Some(100)), Err(RuleError::NotBelowYou));
+        let roleless = actor(&[], None);
+        assert_eq!(roleless.may_act_on(None), Ok(()));
+        assert_eq!(roleless.may_act_on(Some(0)), Err(RuleError::NotBelowYou));
+        assert_eq!(owner().may_act_on(Some(i32::MAX)), Ok(()));
     }
 
     #[test]

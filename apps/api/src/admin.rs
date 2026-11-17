@@ -29,7 +29,7 @@ const ROLE_LOCK: i64 = 0x6379_6578_726f_6c65; // "cyexrole"
 /// The most audit entries one page returns.
 pub const AUDIT_PAGE_MAX: i64 = 100;
 
-fn rule(err: RuleError) -> ApiError {
+pub(crate) fn rule(err: RuleError) -> ApiError {
     let status = match err {
         RuleError::LastManager => StatusCode::CONFLICT,
         _ => StatusCode::FORBIDDEN,
@@ -49,7 +49,7 @@ fn sqlx_error(err: sqlx::Error) -> ApiError {
     db_error(DbError::Sqlx(err))
 }
 
-async fn actor(conn: &mut PgConnection, caller: &Caller) -> ApiResult<Actor> {
+pub(crate) async fn actor(conn: &mut PgConnection, caller: &Caller) -> ApiResult<Actor> {
     let held = permissions_of(conn, caller).await?;
     let highest = roles::highest_position(conn, caller.account_id)
         .await
@@ -475,6 +475,12 @@ pub async fn unassign(
         .await
         .map_err(auth_error)?;
     actor.may_demote(target_is_owner).map_err(rule)?;
+    if account_id != caller.account_id {
+        let target_highest = roles::highest_position(&mut tx, account_id)
+            .await
+            .map_err(db_error)?;
+        actor.may_act_on(target_highest).map_err(rule)?;
+    }
 
     let managers_before = managers(state, &mut tx).await?;
     let removed = roles::unassign(&mut tx, account_id, role_id)
