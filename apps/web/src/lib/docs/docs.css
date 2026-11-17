@@ -71,14 +71,14 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .nav-group + .nav-group { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 .docs .nav-group[hidden], .docs .nav-item[hidden], .docs .nav-empty[hidden] { display: none; }
 .docs .nav-group-title { font-size: var(--text-label); text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; padding: 0 10px; }
-/* The rail's row: 36px, 3px radius; the lit row is the accent-dim fill with the 2px accent rail. */
+/* The rail's row: 3px radius; the lit row is full-contrast and bold, like the site rails (no fill, no bar). */
 .docs .nav-item {
   display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; border-radius: var(--radius);
   color: var(--muted); text-decoration: none; font-size: var(--t-nav); font-weight: 500; line-height: 1.35;
   transition: background-color var(--fast), color var(--fast); position: relative;
 }
 @media (hover: hover) and (pointer: fine) { .docs .nav-item:hover { background: var(--row-hover); color: var(--text); } }
-.docs .nav-item.active, .docs .nav-item.active:hover { background: var(--accent-dim); color: var(--accent-text); box-shadow: inset 2px 0 0 var(--accent); }
+.docs .nav-item.active, .docs .nav-item.active:hover { color: var(--text); font-weight: 600; }
 /* Inside the clipped collapse (and the index's scroller) a ring drawn outside would be cut off. */
 .docs .nav-item:focus-visible, .docs .collapse-inner :focus-visible { outline-offset: -2px; }
 @media (forced-colors: active) {
@@ -222,7 +222,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .lang-tab { background: none; border: none; color: var(--dim); font: inherit; font-size: 12px; font-weight: 600; padding: 5px 10px; min-height: 40px; border-radius: var(--radius); cursor: pointer; transition: background var(--fast), color var(--fast); white-space: nowrap; }
 .docs .lang-tab:focus-visible { outline-offset: -2px; }
 @media (hover: hover) and (pointer: fine) { .docs .lang-tab:hover { color: var(--text); background: var(--surface-hover); } }
-.docs .lang-tab[aria-selected="true"] { background: var(--accent-dim); color: var(--accent-text); }
+.docs .lang-tab[aria-selected="true"] { color: var(--text); font-weight: 600; }
 .docs .resp-head { display: flex; align-items: center; gap: 8px; font-size: 12px; padding-left: 2px; min-width: 0; }
 .docs .resp-status { font-family: var(--font-mono); font-weight: 600; }
 .docs .resp-type { color: var(--dim); }

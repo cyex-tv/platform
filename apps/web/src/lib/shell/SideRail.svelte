@@ -2,7 +2,7 @@
   // The one vertical rail (7TV's side bar, cyex styling): context for the page's subject, never a
   // second top bar. 240px on a surface card, sticky under the header with its own scroll. Groups
   // have a quiet caption and a hairline between them; rows are icon + label + optional count;
-  // the current row has the accent-dim fill and a 2px accent rail (aria-current="page"). The rows
+  // the current row is full-contrast and bold with an accent icon (aria-current="page"), no fill or bar. The rows
   // are one Tab stop (the current row); arrow keys move between them. Fewer than two rows: no
   // nav at all, only the head (a profile card needs no one-tab strip).
   //
@@ -164,8 +164,8 @@
   .row :global(svg) { color: var(--dim); transition: color var(--fast); }
   .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .count { flex: none; font-size: 12px; font-weight: 500; color: var(--dim); font-variant-numeric: tabular-nums; }
-  .row[aria-current='page'] { background: var(--accent-dim); color: var(--accent-text); box-shadow: inset 2px 0 0 var(--accent); }
-  .row[aria-current='page'] :global(svg), .row[aria-current='page'] .count { color: currentColor; }
+  .row[aria-current='page'] { color: var(--text); font-weight: 600; }
+  .row[aria-current='page'] :global(svg) { color: var(--accent-text); }
   .row:focus-visible, .tab:focus-visible { outline-offset: -2px; }
   .row:active, .tab:active { opacity: .6; transition: none; }
   .extra { margin-top: 12px; }
@@ -186,8 +186,8 @@
   .tab { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px; scroll-snap-align: start;
     border-radius: var(--radius); font-size: var(--t-nav); font-weight: 500; color: var(--muted); white-space: nowrap;
     transition: background-color var(--fast), color var(--fast); }
-  .tab[aria-current='page'] { background: var(--accent-dim); color: var(--accent-text); box-shadow: inset 0 -2px 0 var(--accent); }
-  .tab[aria-current='page'] .count { color: currentColor; }
+  .tab[aria-current='page'] { color: var(--text); font-weight: 600; }
+  .tab[aria-current='page'] .count { color: var(--muted); }
   @media (pointer: coarse) { .tab { height: 44px; } .row { min-height: 44px; } }
 
   .sheet-bar { position: sticky; top: calc(var(--nav-h) + 1px + env(safe-area-inset-top, 0px)); z-index: var(--z-panel);
@@ -208,7 +208,7 @@
   @media (hover: hover) and (pointer: fine) {
     .row:hover, .tab:hover { background: var(--row-hover); color: var(--text); }
     .row:hover :global(svg) { color: var(--muted); }
-    .row[aria-current='page']:hover, .tab[aria-current='page']:hover { background: var(--accent-dim); color: var(--accent-text); }
+    .row[aria-current='page']:hover, .tab[aria-current='page']:hover { color: var(--text); }
   }
   @media (forced-colors: active) {
     .row[aria-current='page'], .tab[aria-current='page'] { outline: 2px solid Highlight; outline-offset: -2px; }

@@ -12,7 +12,13 @@ export const LIBRARY: ShellLink[] = [
   { href: '/me/upload', label: 'Upload', icon: 'upload', match: under('/me/upload') },
   { href: '/me/sets', label: 'Sets', icon: 'layers', match: under('/me/sets') },
   { href: '/me/channels', label: 'Channels', icon: 'tv', match: under('/me/channels') },
+  { href: '/me/cosmetics', label: 'Cosmetics', icon: 'sparkles', match: under('/me/cosmetics') },
 ];
+
+/** Your public creator page: what everyone else sees. */
+export function profileLink(id: string): ShellLink {
+  return { href: `/users/${id}`, label: 'Profile', icon: 'circle-user', match: (p) => p === `/users/${id}` };
+}
 
 export const ACCOUNT: ShellLink = { href: '/me/account', label: 'Account', icon: 'user', match: under('/me/account') };
 export const ADMIN: ShellLink = { href: '/admin', label: 'Admin', icon: 'shield', match: under('/admin') };
