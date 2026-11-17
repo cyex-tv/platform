@@ -117,6 +117,6 @@
   .filter { width: min(220px, 50%); padding: 6px 10px; font-size: .82rem; background: var(--bg); }
   .what { display: grid; min-width: 0; flex: 1; }
   .what strong, .what .ui-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .danger:hover { color: var(--red); }
+  @media (hover: hover) and (pointer: fine) { .danger:hover { color: var(--red); } }
   .ui-row .ui-hint { display: block; }
 </style>

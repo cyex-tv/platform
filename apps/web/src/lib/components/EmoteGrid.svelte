@@ -17,6 +17,8 @@
     eager?: number;
     label?: string;
     href?: (e: CardEmote) => string;
+    /** A short status per card (shown as a label), or nothing. */
+    note?: (e: CardEmote) => string | undefined;
   };
   let {
     items,
@@ -29,6 +31,7 @@
     eager = 0,
     label,
     href,
+    note,
   }: Props = $props();
 </script>
 
@@ -38,7 +41,7 @@
   <ul class="grid {density}" aria-label={label} aria-busy={loading}>
     {#each items as e, i (e.id + (e.shownName ?? ''))}
       <li class:wide={isWide(e)}>
-        <EmoteCard emote={e} {density} {creator} {labels} eager={i < eager} href={href?.(e)} />
+        <EmoteCard emote={e} {density} {creator} {labels} eager={i < eager} href={href?.(e)} note={note?.(e)} />
       </li>
     {/each}
     {#if loading}

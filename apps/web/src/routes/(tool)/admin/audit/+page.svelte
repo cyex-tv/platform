@@ -120,7 +120,7 @@
   .row { display: grid; grid-template-columns: 150px minmax(140px, 1fr) minmax(0, 2fr) minmax(0, 1.2fr); gap: 12px; align-items: baseline;
     width: 100%; padding: 7px 14px; border: 0; border-bottom: 1px solid var(--border); background: none; color: var(--text);
     font: inherit; text-align: left; cursor: pointer; }
-  button.row:hover { background: var(--row-hover); box-shadow: inset 2px 0 0 var(--border-strong); }
+  @media (hover: hover) and (pointer: fine) { button.row:hover { background: var(--row-hover); box-shadow: inset 2px 0 0 var(--border-strong); } }
   button.row:focus-visible { outline-offset: -2px; }
   .head { cursor: default; }
   .t { font-size: .74rem; font-weight: 600; color: var(--dim); }

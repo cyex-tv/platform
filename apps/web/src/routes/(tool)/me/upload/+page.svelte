@@ -126,7 +126,8 @@
   .drop { display: grid; justify-items: center; align-content: center; gap: 10px; min-height: 168px; padding: 20px;
     border: 1px dashed var(--border-strong); background: var(--surface); color: var(--muted); font: inherit; cursor: pointer;
     transition: border-color var(--fast), background-color var(--fast); }
-  .drop:hover, .drop.over { border-color: var(--accent-border); background: var(--surface-hover); }
+  .drop.over { border-color: var(--accent-border); background: var(--surface-hover); }
+  @media (hover: hover) and (pointer: fine) { .drop:hover { border-color: var(--accent-border); background: var(--surface-hover); } }
   .drop.invalid { border-color: var(--red); }
   .drop svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
   .sizes { display: flex; align-items: flex-end; gap: 20px; }
