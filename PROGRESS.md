@@ -38,6 +38,15 @@ Work in `cyex-app/cyex-deck` goes on a feature branch with a PR the owner merges
 
 ## Phase 6: Search and the website (in progress)
 
+### PR 3: the website, public pages (branch `phase-6/web`, stacked on PR 2)
+- [x] `apps/web`: SvelteKit 2 (Svelte 5, TypeScript, `adapter-node`), the cyex web design (cyex-design + cyex-web tokens copied into `src/tokens.css`; Geist; dark by default with the light theme as a peer, switched before first paint; reduced motion honoured). Versions are pinned and at least two weeks old.
+- [x] GraphQL types generated from `schema/schema.graphql` with GraphQL Code Generator (string documents, no GraphQL runtime in the browser); CI fails when they are stale.
+- [x] Pages: home (hero, the global set, what it's for, developers band), search (name and tag, all, animated or still, paging), an emote's page (preview, 1x to 4x, facts), a channel's page (its active set), sign in (Twitch or Kick, and what is stored), developers (the public reads, personal lookup, live updates), 404 and errors.
+- [x] `apps/web/dev/mock-api.mjs`: a stand-in API for looking at the site without the stack (development only).
+- [x] Checked in a browser against the mock: desktop 1280 and phone 375, dark and light, the phone menu, search with filters, an emote, a channel, an unknown channel (404).
+- [ ] Signed-in pages (your emotes, upload, sets and editors, personal set, channel settings, linked accounts) and admin pages (review queue, reports, roles, users, audit log, global set): next PRs, in the cyex-app style.
+- [ ] Playwright end-to-end tests: they need test OAuth apps (the owner's) to sign in.
+
 ### PR 2: CORS for the website and browser clients (branch `phase-6/cors`)
 - [x] `apps/api/src/cors.rs`: the site (`CYEX_TV_SITE_URL`) gets credentialed CORS for everything; any other origin only the public reads (channels, sets, emotes, the personal-set lookup) with `*` and no credentials; nothing else. Preflights answer before the rate limits; `ETag` and `Retry-After` are exposed.
 - [x] Tests (`apps/api/tests/http.rs`, no database): the site's preflight and requests, public reads from another origin, GraphQL, uploads and sign-in refused to other origins.
