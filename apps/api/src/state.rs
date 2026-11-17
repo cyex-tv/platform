@@ -7,6 +7,7 @@ use cyex_tv_hub::Hub;
 
 use crate::limits::Limits;
 use cyex_tv_shared::error::ApiError;
+use cyex_tv_shared::metrics::Registry;
 use cyex_tv_storage::Store;
 use sqlx::PgPool;
 
@@ -25,6 +26,8 @@ pub struct AppState {
     /// Live updates for GraphQL subscriptions. `main` runs its feeder.
     pub hub: Hub,
     pub limits: Arc<Limits>,
+    /// Request counts and durations, served on `CYEX_TV_METRICS_BIND` when set.
+    pub metrics: Registry,
 }
 
 impl AppState {
@@ -36,6 +39,7 @@ impl AppState {
             store: None,
             hub: Hub::new(),
             limits: Arc::new(Limits::default()),
+            metrics: Registry::new(),
         }
     }
 

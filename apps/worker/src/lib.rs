@@ -17,6 +17,7 @@ use std::time::Duration;
 use chrono::Utc;
 use cyex_tv_db::jobs::{self, Job};
 use cyex_tv_db::{event_sessions, oauth_states, outbox, search, sessions};
+use cyex_tv_shared::metrics::{self, Labels, Registry};
 use cyex_tv_storage::Store;
 use sqlx::PgPool;
 use sqlx::postgres::PgListener;
@@ -48,9 +49,12 @@ pub struct Ctx {
 pub type JobFuture = Pin<Box<dyn Future<Output = Result<(), JobError>> + Send>>;
 pub type Handler = Arc<dyn Fn(Ctx, Job) -> JobFuture + Send + Sync>;
 
-/// Handlers by job kind.
+/// Handlers by job kind, and where their outcomes are counted.
 #[derive(Clone, Default)]
-pub struct Handlers(HashMap<String, Handler>);
+pub struct Handlers {
+    map: HashMap<String, Handler>,
+    metrics: Option<Registry>,
+}
 
 impl Handlers {
     pub fn on<F, Fut>(mut self, kind: &str, handler: F) -> Self
@@ -58,15 +62,21 @@ impl Handlers {
         F: Fn(Ctx, Job) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = Result<(), JobError>> + Send + 'static,
     {
-        self.0.insert(
+        self.map.insert(
             kind.to_owned(),
             Arc::new(move |ctx, job| Box::pin(handler(ctx, job)) as JobFuture),
         );
         self
     }
 
+    /// Counts finished attempts (`cyex_tv_jobs_finished_total`) and their duration.
+    pub fn with_metrics(mut self, registry: Registry) -> Self {
+        self.metrics = Some(registry);
+        self
+    }
+
     pub fn kinds(&self) -> Vec<String> {
-        let mut kinds: Vec<String> = self.0.keys().cloned().collect();
+        let mut kinds: Vec<String> = self.map.keys().cloned().collect();
         kinds.sort();
         kinds
     }
@@ -109,6 +119,57 @@ pub enum Outcome {
     Failed,
 }
 
+impl Outcome {
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Done => "done",
+            Self::Retrying => "retrying",
+            Self::Failed => "failed",
+        }
+    }
+}
+
+/// The queue's gauges, read at scrape time: jobs not done, by kind and state. Alert when `due`
+/// stays high (PLAN.md Phase 9).
+pub async fn queue_metrics(db: &PgPool) -> String {
+    let mut out = String::new();
+    let mut conn = match db.acquire().await {
+        Ok(conn) => conn,
+        Err(err) => {
+            tracing::warn!(error = %err, "metrics: no database connection");
+            metrics::gauge(
+                &mut out,
+                "cyex_tv_metrics_db_up",
+                "Whether the scrape reached the database.",
+                &[(vec![], 0.0)],
+            );
+            return out;
+        }
+    };
+    metrics::gauge(
+        &mut out,
+        "cyex_tv_metrics_db_up",
+        "Whether the scrape reached the database.",
+        &[(vec![], 1.0)],
+    );
+    match jobs::counts(&mut conn).await {
+        Ok(rows) => {
+            let samples: Vec<(Labels, f64)> = rows
+                .into_iter()
+                .map(|(kind, state, n)| (vec![("kind", kind), ("state", state)], n as f64))
+                .collect();
+            metrics::gauge(
+                &mut out,
+                "cyex_tv_jobs",
+                "Jobs not done, by kind and state (due, waiting, running, failed).",
+                &samples,
+            );
+        }
+        Err(err) => tracing::warn!(error = %err, "metrics: job counts failed"),
+    }
+    out
+}
+
 fn chrono(d: Duration) -> chrono::Duration {
     chrono::Duration::from_std(d).unwrap_or(chrono::Duration::hours(1))
 }
@@ -131,7 +192,7 @@ pub async fn run_one(
     let id = job.id;
     let attempts = job.attempts;
     let kind = job.kind.clone();
-    let Some(handler) = handlers.0.get(&job.kind).cloned() else {
+    let Some(handler) = handlers.map.get(&job.kind).cloned() else {
         return Ok(None);
     };
 
@@ -167,7 +228,25 @@ pub async fn run_one(
             }
         }
     };
-    tracing::info!(job = id, %kind, ?outcome, ms = started.elapsed().as_millis() as u64, "job finished");
+    let elapsed = started.elapsed();
+    if let Some(registry) = &handlers.metrics {
+        let labels: Labels = vec![
+            ("kind", kind.clone()),
+            ("outcome", outcome.label().to_owned()),
+        ];
+        registry.inc(
+            "cyex_tv_jobs_finished_total",
+            "Job attempts finished, by kind and outcome (done, retrying, failed).",
+            &labels,
+        );
+        registry.observe(
+            "cyex_tv_job_duration_seconds",
+            "Time one job attempt took, by kind and outcome.",
+            &labels,
+            elapsed.as_secs_f64(),
+        );
+    }
+    tracing::info!(job = id, %kind, ?outcome, ms = elapsed.as_millis() as u64, "job finished");
     Ok(Some((id, outcome)))
 }
 

@@ -51,6 +51,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let _ = stop_rx.wait_for(|stopping| *stopping).await;
         },
     ));
+    if let Some(addr) = cyex_tv_shared::metrics::bind_from(|name| std::env::var(name).ok())? {
+        let scraped = state.clone();
+        let extra: cyex_tv_shared::metrics::Extra = Arc::new(move || {
+            let state = scraped.clone();
+            Box::pin(async move { cyex_tv_api::scrape_gauges(&state).await })
+        });
+        tokio::spawn(cyex_tv_shared::metrics::serve(
+            addr,
+            state.metrics.clone(),
+            Some(extra),
+            shutdown::signal(),
+        ));
+    }
     let app = cyex_tv_api::app(state);
     let listener = tokio::net::TcpListener::bind(cfg.bind).await?;
     tracing::info!(addr = %cfg.bind, "api listening");

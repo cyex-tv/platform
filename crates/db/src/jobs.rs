@@ -123,3 +123,22 @@ pub async fn delete_done_before(conn: &mut PgConnection, cutoff: DateTime<Utc>) 
         .await?;
     Ok(done.rows_affected())
 }
+
+/// Jobs not yet done, by kind and state, for metrics. A queued job is `due` once its
+/// `run_after` has passed and `waiting` before that; `running` and `failed` are as stored.
+pub async fn counts(conn: &mut PgConnection) -> DbResult<Vec<(String, String, i64)>> {
+    let rows = sqlx::query_as(
+        "SELECT kind,
+                CASE WHEN state = 'queued' AND run_after <= now() THEN 'due'
+                     WHEN state = 'queued' THEN 'waiting'
+                     ELSE state END AS state,
+                count(*)
+           FROM jobs
+          WHERE state <> 'done'
+          GROUP BY 1, 2
+          ORDER BY 1, 2",
+    )
+    .fetch_all(conn)
+    .await?;
+    Ok(rows)
+}
