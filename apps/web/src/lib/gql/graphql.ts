@@ -1006,6 +1006,19 @@ export type AuditQueryVariables = Exact<{
 
 export type AuditQuery = { __typename?: 'Query', auditLog: Array<{ __typename?: 'AuditEntry', id: string, actorId?: string | null, action: string, targetKind: string, targetId: string, before?: string | null, after?: string | null, createdAt: string }> };
 
+export type ReportEmoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  reason: Scalars['String']['input'];
+}>;
+
+
+export type ReportEmoteMutation = { __typename?: 'Mutation', reportEmote: { __typename?: 'Report', id: string } };
+
+export type MySetNamesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type MySetNamesQuery = { __typename?: 'Query', mySets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, emotes: Array<{ __typename?: 'SetEmote', emote: { __typename?: 'Emote', id: string } }> }> };
+
 export class TypedDocumentString<TResult, TVariables>
   extends String
   implements DocumentTypeDecoration<TResult, TVariables>
@@ -1862,3 +1875,24 @@ export const AuditDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<AuditQuery, AuditQueryVariables>;
+export const ReportEmoteDocument = new TypedDocumentString(`
+    mutation ReportEmote($id: String!, $reason: String!) {
+  reportEmote(id: $id, reason: $reason) {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<ReportEmoteMutation, ReportEmoteMutationVariables>;
+export const MySetNamesDocument = new TypedDocumentString(`
+    query MySetNames {
+  mySets {
+    id
+    name
+    kind
+    emotes {
+      emote {
+        id
+      }
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<MySetNamesQuery, MySetNamesQueryVariables>;
