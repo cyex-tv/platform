@@ -67,6 +67,21 @@
   --dur-reveal: .9s;
   --stagger: 70ms;
   --press: .97;
+  --ease-drawer: cubic-bezier(.32, .72, 0, 1); /* sheets: the iOS drawer curve */
+  --dur-pop: .15s;   /* popovers and tooltips */
+  --dur-sheet: .28s; /* bottom sheets */
+  --delay-tip: .4s;  /* before a tooltip shows */
+
+  /* Layers, overlays and emote sizes (cyex.tv components). */
+  --z-nav: 50;
+  --z-pop: 60;
+  --z-tip: 70;
+  --scrim: rgb(0 0 0 / .55);
+  --shadow-pop: 0 1px 0 rgb(255 255 255 / .04) inset, 0 18px 44px -14px rgb(0 0 0 / .75);
+  --t-label: 12px;   /* small neutral labels on cards */
+  --emote-art: 112px;
+  --emote-art-compact: 80px;
+  --emote-chat: 28px;
 }
 
 [data-theme="light"] {
@@ -87,6 +102,8 @@
   --accent-glow: rgb(20 230 255 / .4);
 
   --shadow: 0 40px 80px -40px rgb(13 15 20 / .3);
+  --scrim: rgb(13 15 20 / .32);
+  --shadow-pop: 0 18px 44px -16px rgb(13 15 20 / .28);
 }
 
 /* Arial sized to Geist per weight, so the font swap moves nothing (CLS 0). */

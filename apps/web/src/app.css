@@ -2,6 +2,18 @@
    step) and the shared web components, then what the emote pages add. Only token values here. */
 @import './tokens.css';
 
+/* Phones (mobile-native): no tap flash, no font inflation, 16px inputs so iOS doesn't zoom,
+   no double-tap delay on controls, no long-press text selection on controls. Every :hover in
+   this file sits behind (hover: hover) and (pointer: fine), so a tap never leaves one stuck. */
+html { -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
+body { min-height: 100svh; display: flex; flex-direction: column; } /* the app.html wrapper is display: contents */
+main { flex: 1; }
+input, textarea, select { font-size: 16px; }
+a, button, summary, label, select, [role='button'], [role='option'], [role='radio'], [role='menuitem'] { touch-action: manipulation; }
+button, .btn, summary, [role='button'], [role='radio'], [role='menuitem'], .chip {
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+kbd { font: inherit; }
+
 .skip { position: fixed; left: 12px; top: -60px; z-index: 100; padding: 10px 16px;
   background: var(--text); color: var(--bg); border-radius: var(--radius-btn); font-size: var(--t-ui); }
 .skip:focus { top: 12px; }
@@ -13,14 +25,16 @@
   border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer;
   transition: background-color var(--dur-hover), border-color var(--dur-hover),
     box-shadow var(--dur-hover), filter var(--dur-hover), transform var(--dur-press) ease-out; }
-.btn:hover { border-color: var(--muted); background: var(--surface-2); }
 .btn:active { transform: scale(var(--press)); }
 .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink);
   box-shadow: 0 10px 30px -12px var(--accent-glow); }
-.btn-primary:hover { background: var(--accent); border-color: var(--accent);
-  filter: brightness(1.08); box-shadow: 0 14px 40px -10px var(--accent-glow); }
 .btn .arrow { transition: transform var(--dur-move) var(--ease); }
-.btn:hover .arrow { transform: translateX(3px); }
+@media (hover: hover) and (pointer: fine) {
+  .btn:hover { border-color: var(--muted); background: var(--surface-2); }
+  .btn-primary:hover { background: var(--accent); border-color: var(--accent);
+    filter: brightness(1.08); box-shadow: 0 14px 40px -10px var(--accent-glow); }
+  .btn:hover .arrow { transform: translateX(3px); }
+}
 .btn-s { height: 38px; padding: 0 14px; }
 .btn[disabled] { opacity: 1; color: var(--muted); cursor: default; pointer-events: none; }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; }
@@ -28,7 +42,7 @@
 
 .link { color: var(--accent-text); font-weight: 500; display: inline-flex; align-items: center; gap: 8px; }
 .link .arrow { transition: transform var(--dur-move) var(--ease); }
-.link:hover .arrow { transform: translateX(3px); }
+@media (hover: hover) and (pointer: fine) { .link:hover .arrow { transform: translateX(3px); } }
 
 /* Section eyebrow and head */
 .kicker { display: flex; align-items: center; gap: 10px; margin: 0 0 22px;
@@ -55,7 +69,8 @@
 .band h2 { font-size: var(--t-h2-band); line-height: 1.1; letter-spacing: -.03em; }
 
 /* A page that isn't the landing page: a title under the nav */
-.page-head { padding: calc(var(--nav-h) + clamp(32px, 5vw, 64px)) 0 32px; }
+/* The nav is sticky and in the flow, so pages start right under it (no --nav-h offset). */
+.page-head { padding: clamp(32px, 5vw, 64px) 0 32px; }
 .page-head h1 { font-size: var(--t-h3-sub); line-height: 1.1; letter-spacing: -.03em; }
 .page-head .lead { margin-top: 12px; }
 
@@ -63,9 +78,9 @@
 .field { display: flex; gap: 12px; align-items: stretch; max-width: var(--measure-form); }
 .input { flex: 1; min-width: 0; height: 48px; padding: 0 16px; border-radius: var(--radius-btn);
   border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
-  font: inherit; font-size: var(--t-ui); transition: border-color var(--dur-hover); }
+  font: inherit; font-size: 16px; transition: border-color var(--dur-hover); }
 .input::placeholder { color: var(--muted); }
-.input:hover { border-color: var(--muted); }
+@media (hover: hover) and (pointer: fine) { .input:hover { border-color: var(--muted); } }
 .input:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-color: var(--border-strong); }
 @media (max-width: 480px) { .field { flex-direction: column; } }
 
@@ -77,7 +92,7 @@
   transition: color var(--dur-color), background-color var(--dur-color), transform var(--dur-press) ease-out; }
 .segmented button[aria-pressed='true'], .segmented a[aria-current='true'] { color: var(--text); background: var(--surface-2);
   box-shadow: 0 0 0 1px var(--border-strong) inset; }
-.segmented button:hover, .segmented a:hover { color: var(--text); }
+@media (hover: hover) and (pointer: fine) { .segmented button:hover, .segmented a:hover { color: var(--text); } }
 .segmented button:active, .segmented a:active { transform: scale(var(--press)); }
 
 .muted { color: var(--muted); }

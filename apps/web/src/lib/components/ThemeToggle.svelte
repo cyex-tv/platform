@@ -14,8 +14,8 @@
     try {
       localStorage.setItem('cyexTheme', light ? 'light' : 'dark');
     } catch {}
-    const meta = document.querySelector('meta[name="theme-color"]');
-    meta?.setAttribute('content', getComputedStyle(root).getPropertyValue('--bg').trim());
+    const bg = getComputedStyle(root).getPropertyValue('--bg').trim();
+    document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', bg));
   }
 
   function toggle() {
@@ -41,11 +41,13 @@
 </button>
 
 <style>
-  .theme { width: 38px; height: 38px; display: inline-grid; place-items: center; border-radius: var(--radius-btn);
+  .theme { width: 40px; height: 40px; flex: none; display: inline-grid; place-items: center; border-radius: var(--radius-btn);
     border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer;
     transition: color var(--dur-color), border-color var(--dur-color), background-color var(--dur-color),
       transform var(--dur-press) ease-out; }
-  .theme:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface-2); }
+  @media (hover: hover) and (pointer: fine) {
+    .theme:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface-2); }
+  }
   .theme:active { transform: scale(.94); }
   svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 </style>
