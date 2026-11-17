@@ -1,5 +1,10 @@
 <script lang="ts">
+  // Light or dark, saved in localStorage (cyexTheme) and cross-faded with a view transition
+  // unless reduced motion is on. `variant="tool"` is the cyex-app control for the signed-in
+  // pages: 32px, the tool's corner, and the instant opacity press instead of the scale.
   import { onMount } from 'svelte';
+
+  let { variant = 'web' }: { variant?: 'web' | 'tool' } = $props();
 
   let light = $state(false);
   onMount(() => {
@@ -27,7 +32,7 @@
   }
 </script>
 
-<button class="theme" type="button" onclick={toggle} aria-label={light ? 'Switch to dark' : 'Switch to light'}>
+<button class="theme {variant}" type="button" onclick={toggle} aria-label={light ? 'Switch to dark' : 'Switch to light'}>
   {#if light}
     <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
       <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
@@ -48,6 +53,15 @@
   @media (hover: hover) and (pointer: fine) {
     .theme:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface-2); }
   }
-  .theme:active { transform: scale(.94); }
+  .theme:active { transform: scale(var(--press)); }
   svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+  .tool { width: 32px; height: 32px; border-radius: var(--radius); border-color: var(--border-strong);
+    transition: background-color var(--fast), color var(--fast); }
+  .tool svg { stroke-width: 1.8; }
+  @media (hover: hover) and (pointer: fine) {
+    .tool:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+  }
+  .tool:active { transform: none; opacity: .6; transition: none; }
+  @media (pointer: coarse) { .tool { width: 44px; height: 44px; } }
 </style>
