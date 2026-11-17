@@ -5,6 +5,7 @@
   import { openPalette } from '$lib/components/palette.svelte';
   import EmptyState from '$lib/components/profile/EmptyState.svelte';
   import { clean, iso } from '$lib/format';
+  import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
 
   const missing = $derived(page.status === 404);
   const known = $derived(page.params.platform === 'kick' || page.params.platform === 'twitch');
@@ -29,7 +30,8 @@
   <title>{missing ? 'Channel not found' : 'Something went wrong'} - cyex.tv</title>
 </svelte:head>
 
-<div class="page pad">
+<ColumnLayout>
+<div class="pad">
   {#if missing && known}
     <EmptyState level={1} title="{iso(login)} isn't on cyex.tv yet." role="status">
       Nobody has set up a {platform} channel called <bdi>{login}</bdi> here. A channel shows up once its owner signs in
@@ -65,6 +67,7 @@
     </EmptyState>
   {/if}
 </div>
+</ColumnLayout>
 
 <style>
   .pad { padding-top: clamp(48px, 8vw, 120px); }
