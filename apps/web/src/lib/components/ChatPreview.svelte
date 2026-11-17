@@ -14,6 +14,7 @@
   import { flip } from 'svelte/animate';
   import { fly } from 'svelte/transition';
   import { hasStill, ready, size, src, srcsetW } from '$lib/emote';
+  import { clean } from '$lib/format';
   import { dur } from '$lib/motion';
 
   type Props = {
@@ -135,7 +136,7 @@
   <ol class="lines" aria-live="off">
     {#each shown as l (l.key)}
       <li class="line" animate:flip={{ duration: dur(250) }} in:fly={{ y: 8, duration: dur(250) }}>
-        <span class="user">{l.user}</span><span class="colon">:</span>
+        <span class="user"><bdi>{clean(l.user)}</bdi></span><span class="colon">:</span>
         {#each l.pieces as p}
           {#if p.kind === 'text'}{p.text}{:else}
             <span class="stack" title={p.emotes.map((e) => e.name).join(' ')}>
@@ -153,7 +154,7 @@
                     loading="lazy"
                     decoding="async"
                   />
-                {:else}<span class="missing">{e.name}</span>{/if}
+                {:else}<span class="missing"><bdi>{clean(e.name)}</bdi></span>{/if}
               {/each}
             </span>
           {/if}

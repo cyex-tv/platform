@@ -12,7 +12,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { signOut } from '$lib/api';
-  import { clean } from '$lib/format';
+  import { clean, iso } from '$lib/format';
   import { notify } from '$lib/tool/notices.svelte';
   import Avatar from './Avatar.svelte';
   import BottomSheet from './BottomSheet.svelte';
@@ -113,16 +113,16 @@
       <a class="btn btn-primary btn-s upload" href="/me/upload"><Icon name="upload" />Upload</a>
       <Popover label="Your account" align="end" width="260px" bind:open={account}>
         {#snippet trigger(props)}
-          <button class="who" type="button" {...props} aria-label="Your account: {name}">
+          <button class="who" type="button" {...props} aria-label="Your account: {iso(name)}">
             {@render avatar(26)}
-            <span class="who-name">{name}</span>
+            <span class="who-name"><bdi>{name}</bdi></span>
             <Icon name="chevron-down" size={14} />
           </button>
         {/snippet}
         <div class="menu-head">
           {@render avatar(36)}
           <span class="menu-id">
-            <strong>{name}</strong>
+            <strong><bdi>{name}</bdi></strong>
             {#if platform}<span>Signed in with {platform}</span>{/if}
           </span>
         </div>
@@ -158,7 +158,7 @@
     <div class="sheet-who">
       {@render avatar(40)}
       <span class="menu-id">
-        <strong>{name}</strong>
+        <strong><bdi>{name}</bdi></strong>
         {#if platform}<span>Signed in with {platform}</span>{/if}
       </span>
     </div>

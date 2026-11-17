@@ -4,6 +4,8 @@
   import { REMOVE_SET_EMOTE, UPDATE_SET_EMOTE } from '$lib/queries';
   import { nameProblem } from '$lib/rules';
   import Thumb from './Thumb.svelte';
+  import Name from '$lib/components/Name.svelte';
+  import { iso } from '$lib/format';
   import { STATE_LABEL } from './state';
   import { fail, notify } from './notices.svelte';
 
@@ -25,7 +27,7 @@
 
   /** Its own name when renamed here, who made it, and zero-width. */
   function hint(m: SetFieldsFragment['emotes'][number]): string {
-    return [m.name !== m.emote.name ? m.emote.name : null, m.emote.owner?.displayName ?? 'Unknown', m.zeroWidth ? 'zero-width' : null]
+    return [m.name !== m.emote.name ? iso(m.emote.name) : null, m.emote.owner ? iso(m.emote.owner.displayName) : 'Unknown', m.zeroWidth ? 'zero-width' : null]
       .filter(Boolean)
       .join(' · ');
   }
@@ -53,7 +55,7 @@
   async function remove(m: SetFieldsFragment['emotes'][number]) {
     try {
       await gql(REMOVE_SET_EMOTE, { setId: set.id, emoteId: m.emote.id });
-      notify(`${m.name} removed.`);
+      notify(`${iso(m.name)} removed.`);
       onchange();
     } catch (err) {
       fail(err);
@@ -76,14 +78,14 @@
         <li>
           <Thumb emote={m.emote} name={m.name} box={36} />
           <span class="what">
-            <strong>{m.name}</strong>
+            <strong><Name value={m.name} /></strong>
             <span class="ui-hint">{hint(m)}</span>
           </span>
           {#if m.emote.state !== 'APPROVED'}<span class="ui-chip {m.emote.state.toLowerCase()}">{STATE_LABEL[m.emote.state]}</span>{/if}
-          <button class="ui-icon" type="button" aria-label="Rename {m.name}" title="Rename" onclick={() => edit(m)}>
+          <button class="ui-icon" type="button" aria-label="Rename {iso(m.name)}" title="Rename" onclick={() => edit(m)}>
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16v4ZM14 6l4 4" /></svg>
           </button>
-          <button class="ui-icon danger" type="button" aria-label="Remove {m.name}" title="Remove" onclick={() => remove(m)}>
+          <button class="ui-icon danger" type="button" aria-label="Remove {iso(m.name)}" title="Remove" onclick={() => remove(m)}>
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M5 7h14M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" /></svg>
           </button>
         </li>

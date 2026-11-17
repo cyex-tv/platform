@@ -7,6 +7,16 @@
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#08090c" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#08090c" />
     <link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Loaded as "print" so it doesn't block the first paint; the script below switches it on
+         (no inline onload: the CSP allows this one script by its hash, not event attributes). -->
+    <link
+      id="fonts"
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap"
+      media="print"
+    />
     <script>
       (function () {
         try {
@@ -17,16 +27,13 @@
           }
         } catch (e) {}
         document.documentElement.classList.add('js');
+        var fonts = document.getElementById('fonts');
+        if (fonts) {
+          if (fonts.sheet) fonts.media = 'all';
+          else fonts.addEventListener('load', function () { fonts.media = 'all'; });
+        }
       })();
     </script>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap"
-      media="print"
-      onload="this.media='all'"
-    />
     <noscript>
       <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" />
     </noscript>

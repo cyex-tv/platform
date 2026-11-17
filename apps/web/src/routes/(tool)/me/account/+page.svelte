@@ -1,7 +1,8 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { gql, linkUrl, signOut } from '$lib/api';
-  import { date } from '$lib/format';
+  import { date, iso } from '$lib/format';
+  import Name from '$lib/components/Name.svelte';
   import type { Platform } from '$lib/gql/graphql';
   import { MARK_READ, MY_NOTIFICATIONS, UNLINK } from '$lib/queries';
   import Avatar from '$lib/components/Avatar.svelte';
@@ -56,8 +57,8 @@
     try {
       data = JSON.parse(payload);
     } catch {}
-    const name = typeof data.name === 'string' ? data.name : 'An emote';
-    const reason = typeof data.reason === 'string' ? ` Reason: ${data.reason}` : '';
+    const name = typeof data.name === 'string' ? iso(data.name) : 'An emote';
+    const reason = typeof data.reason === 'string' ? ` Reason: ${iso(data.reason)}` : '';
     if (kind === 'emote.taken_down') return `${name} was taken down.${reason}`;
     if (kind === 'emote.rejected') return `${name} was rejected.${reason}`;
     if (kind === 'emote.approved') return `${name} was approved.`;
@@ -79,7 +80,7 @@
           <li>
             {#if id}
               <Avatar src={id.avatar} name={id.displayName} size={28} tone="tool" />
-              <span class="what"><strong>{id.displayName}</strong><span class="ui-hint">{p.name} · <span class="ui-mono">{id.platformUserId}</span></span></span>
+              <span class="what"><strong><Name value={id.displayName} /></strong><span class="ui-hint">{p.name} · <span class="ui-mono">{id.platformUserId}</span></span></span>
               {#if me.identities.length > 1}
                 <Confirm small label="Unlink" confirm="Click again to unlink" onconfirm={() => unlink(p.id, p.name)} />
               {:else}

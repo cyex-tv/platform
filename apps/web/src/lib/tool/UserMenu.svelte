@@ -2,6 +2,7 @@
   import { goto } from '$app/navigation';
   import { signOut } from '$lib/api';
   import Avatar from '$lib/components/Avatar.svelte';
+  import Name from '$lib/components/Name.svelte';
   import { pop } from '$lib/motion';
   import { forgetMe, session } from './session.svelte';
   import { fail } from './notices.svelte';
@@ -36,7 +37,7 @@
 <div class="menu-root" bind:this={root} onfocusout={(e) => { if (open && !root.contains(e.relatedTarget as Node | null)) open = false; }}>
   <button class="who" type="button" aria-expanded={open} aria-controls="user-menu" onclick={() => (open = !open)}>
     <Avatar src={who?.avatar} name={who?.displayName ?? '?'} size={22} tone="tool" />
-    <span class="name">{who?.displayName}</span>
+    <span class="name"><Name value={who?.displayName} /></span>
     <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
   </button>
   {#if open}

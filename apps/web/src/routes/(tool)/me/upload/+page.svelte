@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { ApiError, uploadEmote } from '$lib/api';
-  import { bytes } from '$lib/format';
+  import { bytes, iso } from '$lib/format';
   import { fileProblem, nameProblem, parseTags, tagsProblem } from '$lib/rules';
   import { onDestroy } from 'svelte';
   import { notify } from '$lib/tool/notices.svelte';
@@ -73,7 +73,7 @@
     serverError = null;
     try {
       const made = await uploadEmote(file, name.trim(), tags);
-      notify(`${made.name} uploaded. It’s pending until a moderator looks at it.`);
+      notify(`${iso(made.name)} uploaded. It’s pending until a moderator looks at it.`);
       await goto(`/me/emotes/${made.id}`);
     } catch (err) {
       serverError = err instanceof ApiError ? err.message : 'The upload didn’t go through.';
@@ -113,7 +113,7 @@
           <span class="sizes">
             {#each [28, 56, 112] as h}<img src={preview} alt="" style:max-height="{h}px" />{/each}
           </span>
-          <span class="ui-hint"><span class="fname">{file.name}</span> · <span class="ui-mono">{bytes(file.size)}</span> · Pick another</span>
+          <span class="ui-hint"><span class="fname"><bdi>{file.name}</bdi></span> · <span class="ui-mono">{bytes(file.size)}</span> · Pick another</span>
         {:else}
           <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
           <span>Drop an image here, or pick one</span>

@@ -41,3 +41,13 @@ export function date(iso: string): string {
 export function clean(s: string | null | undefined): string {
   return (s ?? '').replace(/[\u202A-\u202E\u2066-\u2069]/g, '');
 }
+
+/**
+ * `clean(s)` wrapped in FIRST STRONG ISOLATE ... POP DIRECTIONAL ISOLATE (U+2068, U+2069), for a
+ * name inside a plain string (toasts, titles, labels): a right-to-left name, or an old row that
+ * still holds controls, can't reorder the words around it. `clean` removes any isolate controls
+ * the name brings, so it can't close the isolate early. In markup use `<Name>` instead.
+ */
+export function iso(s: string | null | undefined): string {
+  return `⁨${clean(s)}⁩`;
+}

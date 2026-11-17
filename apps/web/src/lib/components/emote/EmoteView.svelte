@@ -49,12 +49,12 @@
   <div class="layout">
     <header class="head">
       <div class="title">
-        <h1>{name}</h1>
+        <h1><bdi>{name}</bdi></h1>
         <div class="meta">
           {#if e.owner}
             <a class="creator" href="/users/{e.owner.id}">
               <Avatar src={e.owner.avatar} name={e.owner.displayName} size={24} />
-              <span><span class="sr-only">By </span>{ownerName}</span>
+              <span><span class="sr-only">By </span><bdi>{ownerName}</bdi></span>
             </a>
           {/if}
           {#if tags.length}

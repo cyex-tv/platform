@@ -21,7 +21,7 @@
   <Avatar src={avatar} {name} size={80} />
   <div class="who">
     <p class="kind">{kind}</p>
-    <h1>{name}</h1>
+    <h1><bdi>{name}</bdi></h1>
     {#if meta}<p class="meta">{@render meta()}</p>{/if}
   </div>
   {#if actions}<div class="head-actions">{@render actions()}</div>{/if}

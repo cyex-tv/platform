@@ -2,7 +2,7 @@
   import { gql } from '$lib/api';
   import { ready, src } from '$lib/emote';
   import { tick } from 'svelte';
-  import { clean, count, date } from '$lib/format';
+  import { clean, count, date, iso } from '$lib/format';
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
   import { APPROVE, REJECT, REVIEW_QUEUE } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
@@ -36,7 +36,7 @@
     busy = e.id;
     try {
       await gql(APPROVE, { id: e.id });
-      notify(`${clean(e.name)} approved.`);
+      notify(`${iso(e.name)} approved.`);
       done(e.id);
     } catch (err) {
       fail(err);
@@ -55,7 +55,7 @@
     if (!e) return;
     try {
       await gql(REJECT, { id: e.id, reason });
-      notify(`${clean(e.name)} rejected.`);
+      notify(`${iso(e.name)} rejected.`);
       done(e.id);
     } catch (err) {
       fail(err);
@@ -88,9 +88,9 @@
           {/if}
         </div>
         <div class="info">
-          <strong class="name">{clean(e.name)}</strong>
+          <strong class="name"><bdi>{clean(e.name)}</bdi></strong>
           <span class="ui-hint">
-            {clean(e.owner?.displayName) || 'Unknown'} · <span class="ui-mono">{date(e.createdAt)}</span>{e.animated ? ' · animated' : ''}
+            <bdi>{clean(e.owner?.displayName) || 'Unknown'}</bdi> · <span class="ui-mono">{date(e.createdAt)}</span>{e.animated ? ' · animated' : ''}
           </span>
           {#if e.tags.length}<span class="tags">{#each e.tags as t}<span class="ui-chip">{t}</span>{/each}</span>{/if}
         </div>
@@ -108,7 +108,7 @@
 
 <ReasonDialog
   bind:this={dialog}
-  title={`Reject ${clean(rejecting?.name)}`}
+  title={`Reject ${iso(rejecting?.name)}`}
   hint="The uploader sees this. Be short and concrete."
   action="Reject"
   danger

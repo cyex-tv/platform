@@ -78,7 +78,7 @@
     />
   </div>
   {#if items.length === 0}
-    <EmptyState rule title="No public emotes yet.">{name} hasn't published an emote that is ready to show.</EmptyState>
+    <EmptyState rule title="No public emotes yet."><bdi>{name}</bdi> hasn't published an emote that is ready to show.</EmptyState>
   {:else}
     <EmoteGrid {items} creator={false} eager={12} {loading} skeletons={6} label="Emotes by {name}" />
     <div class="foot"><LoadMore hasMore={more} busy={loading} error={failed} {total} onmore={loadMore} /></div>

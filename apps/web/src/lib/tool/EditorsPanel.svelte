@@ -5,7 +5,7 @@
   import type { EditSetQuery, Platform } from '$lib/gql/graphql';
   import { ADD_SET_EDITOR, FIND_ACCOUNT, REMOVE_SET_EDITOR } from '$lib/queries';
   import Avatar from '$lib/components/Avatar.svelte';
-  import { clean } from '$lib/format';
+  import { clean, iso } from '$lib/format';
   import { session } from './session.svelte';
   import { fail, notify } from './notices.svelte';
 
@@ -34,7 +34,7 @@
       }
       const added = (await gql(ADD_SET_EDITOR, { setId, accountId: found.account.id })).addSetEditor;
       if (added) editors = [...editors, found.account];
-      notify(added ? `${found.account.displayName} can edit this set now.` : `${found.account.displayName} edits it already.`);
+      notify(added ? `${iso(found.account.displayName)} can edit this set now.` : `${iso(found.account.displayName)} edits it already.`);
       login = '';
     } catch (err) {
       fail(err);
@@ -61,9 +61,9 @@
       {#each editors as e (e.id)}
         <li>
           <Avatar src={e.avatar} name={e.displayName} size={24} tone="tool" />
-          <span class="who">{clean(e.displayName)}</span>
+          <span class="who"><bdi>{clean(e.displayName)}</bdi></span>
           {#if owner}
-            <button class="ui-icon" type="button" aria-label="Remove {e.displayName}" title="Remove" onclick={() => remove(e.id, e.displayName)}>
+            <button class="ui-icon" type="button" aria-label="Remove {iso(e.displayName)}" title="Remove" onclick={() => remove(e.id, e.displayName)}>
               <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
             </button>
           {/if}

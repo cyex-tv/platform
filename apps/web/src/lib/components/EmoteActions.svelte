@@ -5,9 +5,10 @@
   // copy of the actions shares one sign-in check; without it the component makes its own.
   import { onMount } from 'svelte';
   import { page } from '$app/state';
-  import { clean } from '$lib/format';
+  import { clean, iso } from '$lib/format';
   import { useCopied } from '$lib/clipboard.svelte';
   import Icon from './Icon.svelte';
+  import Name from './Name.svelte';
   import Popover from './Popover.svelte';
   import ReportForm from './emote/ReportForm.svelte';
   import { Viewer } from './emote/viewer.svelte';
@@ -39,7 +40,7 @@
       <Icon name="enter" />Sign in to add
     </a>
   {:else}
-    <Popover label="Add {name} to a set" bind:open={addOpen} sheet width="300px" align={variant === 'head' ? 'end' : 'start'}>
+    <Popover label="Add {iso(name)} to a set" bind:open={addOpen} sheet width="300px" align={variant === 'head' ? 'end' : 'start'}>
       {#snippet trigger(props)}
         <button class="btn btn-primary btn-s add" type="button" {...props}><Icon name="plus" />Add to set</button>
       {/snippet}
@@ -51,7 +52,7 @@
         {:else if viewer.own.length === 0}
           <p class="note fine">You have no sets yet. <a class="link" href="/me/sets">Make one</a></p>
         {:else}
-          <p class="note fine">Add {shown} to</p>
+          <p class="note fine">Add <bdi>{shown}</bdi> to</p>
           <ul>
             {#each viewer.own as s (s.id)}
               {@const inIt = viewer.has(s)}
@@ -62,7 +63,7 @@
                   aria-disabled={inIt || viewer.adding !== null}
                   onclick={() => !inIt && viewer.add(s.id)}
                 >
-                  <span class="set-name" title={s.name}>{s.name}</span>
+                  <span class="set-name" title={clean(s.name)}><Name value={s.name} /></span>
                   {#if viewer.adding === s.id}
                     <span class="state fine">Adding…</span>
                   {:else if inIt}

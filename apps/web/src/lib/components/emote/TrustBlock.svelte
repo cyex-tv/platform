@@ -3,7 +3,7 @@
   // review, and Report (for approved emotes).
   import Icon from '$lib/components/Icon.svelte';
   import Popover from '$lib/components/Popover.svelte';
-  import { clean, date } from '$lib/format';
+  import { date, iso } from '$lib/format';
   import ReportForm from './ReportForm.svelte';
   import { trust, type PageEmote } from './emote-page';
   import type { Viewer } from './viewer.svelte';
@@ -25,7 +25,7 @@
   {/if}
   <p class="fine line">{t.line}</p>
   {#if e.state === 'APPROVED'}
-    <Popover label="Report {clean(e.name)}" bind:open sheet width="340px">
+    <Popover label="Report {iso(e.name)}" bind:open sheet width="340px">
       {#snippet trigger(props)}
         <button class="btn btn-s report" type="button" {...props}><Icon name="flag" />Report this emote</button>
       {/snippet}

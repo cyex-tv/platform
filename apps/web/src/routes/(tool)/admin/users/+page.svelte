@@ -5,7 +5,8 @@
   import type { Platform, RoleFieldsFragment, UserQuery } from '$lib/gql/graphql';
   import { ALL_ROLES, ASSIGN_ROLE, RESTRICT, UNASSIGN_ROLE, USER, USER_DETAILS } from '$lib/queries';
   import Avatar from '$lib/components/Avatar.svelte';
-  import { clean } from '$lib/format';
+  import { clean, iso } from '$lib/format';
+  import Name from '$lib/components/Name.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import { loader } from '$lib/tool/loader.svelte';
@@ -79,7 +80,7 @@
       const role = allRoles.find((r) => r.id === pick);
       if (role) roles = [...roles, role];
       pick = assignable[0]?.id ?? '';
-      notify(`${role?.name ?? 'Role'} given.`);
+      notify(`${role ? iso(role.name) : 'Role'} given.`);
     } catch (e) {
       fail(e);
     }
@@ -91,7 +92,7 @@
       await gql(UNASSIGN_ROLE, { accountId: found.account.id, roleId: role.id });
       roles = roles.filter((r) => r.id !== role.id);
       pick = assignable[0]?.id ?? '';
-      notify(`${role.name} taken away.`);
+      notify(`${iso(role.name)} taken away.`);
     } catch (e) {
       fail(e);
     }
@@ -121,7 +122,7 @@
     <section class="ui-card who">
       <Avatar src={found.account.avatar} name={found.account.displayName} size={48} tone="tool" />
       <div>
-        <h2>{clean(found.account.displayName)}</h2>
+        <h2><bdi>{clean(found.account.displayName)}</bdi></h2>
         <p class="ui-hint">
           {found.platform === 'TWITCH' ? 'Twitch' : 'Kick'} <span class="ui-mono">{found.platformChannelId}</span> · account
           <span class="ui-mono">{found.account.id}</span>
@@ -164,7 +165,7 @@
           <ul class="ui-list">
             {#each roles as r (r.id)}
               <li>
-                <span class="what"><strong>{r.name}</strong><span class="ui-hint">{r.permissions.join(', ') || 'No permissions'}</span></span>
+                <span class="what"><strong><Name value={r.name} /></strong><span class="ui-hint">{r.permissions.join(', ') || 'No permissions'}</span></span>
                 {#if manageRoles}
                   <button class="ui-btn ghost small" type="button" onclick={() => unassign(r)}>Take away</button>
                 {/if}
@@ -177,7 +178,7 @@
         {#if manageRoles && assignable.length}
           <div class="give">
             <select class="ui-input" bind:value={pick} aria-label="Role to give">
-              {#each assignable as r}<option value={r.id}>{r.name}</option>{/each}
+              {#each assignable as r}<option value={r.id}>{iso(r.name)}</option>{/each}
             </select>
             <button class="ui-btn secondary" type="button" onclick={assign}>Give role</button>
           </div>
