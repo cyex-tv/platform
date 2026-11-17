@@ -1,7 +1,7 @@
 // The REST reference, generated from openapi/openapi.json (ADR 0008) when the site is built.
 // Nothing here is a hand-kept list of endpoints: add a path to the spec and it appears.
 import spec from '../../../../../openapi/openapi.json';
-import { exampleString, paragraphs, shellQuote, type Segment } from './example';
+import { EX, EXAMPLE_TAGS, SESSION_ENV, exampleBool, exampleNumber, exampleString, paragraphs, py, shellQuote, type Segment } from './example';
 
 interface Schema {
   $ref?: string;
@@ -125,6 +125,7 @@ function enumOf(schema: Schema | undefined): string[] {
 /** An example value built from a schema; refs followed, cycles and depth cut off. */
 function exampleOf(schema: Schema | undefined, name = '', depth = 0, seen: string[] = []): unknown {
   if (!schema) return null;
+  const ctx = seen[seen.length - 1] ?? '';
   if (schema.example !== undefined) return schema.example;
   const ref = refName(schema);
   if (ref && seen.includes(ref)) return null;
@@ -140,13 +141,14 @@ function exampleOf(schema: Schema | undefined, name = '', depth = 0, seen: strin
   const type = (Array.isArray(s.type) ? s.type.find((t) => t !== 'null') : s.type) ?? 'object';
   switch (type) {
     case 'string':
-      return s.format === 'binary' ? 'cat.png' : exampleString(name);
+      return s.format === 'binary' ? `${EX.emoteName}.png` : exampleString(name, ctx);
     case 'integer':
     case 'number':
-      return name === 'scale' ? 2 : name === 'size' ? 2048 : name === 'width' || name === 'height' ? 64 : 1;
+      return exampleNumber(name);
     case 'boolean':
-      return true;
+      return exampleBool(name);
     case 'array':
+      if (name === 'tags') return EXAMPLE_TAGS;
       return depth > 6 ? [] : [exampleOf(s.items, name, depth + 1, next)];
     default: {
       if (depth > 6) return {};
@@ -185,6 +187,35 @@ function splitSummary(summary: string): [string, string] {
 
 const json = (v: unknown, indent?: number) => JSON.stringify(v, null, indent);
 
+/** Titles as short verb phrases; the spec's summary becomes the first line of the description. */
+const TITLES: Record<string, string> = {
+  get_channel: 'Get a channel',
+  get_set: 'Get a set',
+  get_global_set: 'Get the global set',
+  get_emote: 'Get an emote',
+  lookup_personal_sets: 'Look up personal sets',
+  upload_emote: 'Upload an emote',
+  login: 'Start sign-in',
+  callback: 'Finish sign-in',
+  logout: 'Sign out',
+  health: 'Check the process',
+  ready: 'Check the database',
+};
+
+/** Groups by what they act on, reads first: that's what most callers want. */
+const GROUPS: { tag: string; title: string }[] = [
+  { tag: 'reads', title: 'Reads' },
+  { tag: 'emotes', title: 'Uploads' },
+  { tag: 'auth', title: 'Sign-in' },
+  { tag: 'system', title: 'Health' },
+];
+
+/** Calls that act for an account: they need the session cookie and the site's Origin. */
+const SIGNED_IN = new Set(['upload_emote', 'logout']);
+
+export const SITE = 'https://cyex.tv';
+export const COOKIE = 'cyex_tv_session';
+
 function samplesFor(
   method: string,
   path: string,
@@ -194,8 +225,9 @@ function samplesFor(
   bodyType: string | undefined,
   redirect: boolean,
   hasBody: boolean,
+  signedIn: boolean,
 ): Sample[] {
-  const valueOf = (f: Field) => String(f.values[0] ?? exampleString(f.name));
+  const valueOf = (f: Field) => String(f.values[0] ?? exampleString(f.name, path));
   const filled = pathParams.reduce((p, f) => p.replace(`{${f.name}}`, encodeURIComponent(valueOf(f))), path);
   const query = queryParams
     .filter((f) => f.required)
@@ -203,10 +235,14 @@ function samplesFor(
     .join('&');
   const url = `${baseUrl}${filled}${query ? `?${query}` : ''}`;
   const M = method.toUpperCase();
+  const lower = method.toLowerCase();
 
   const curl: string[] = [`curl ${redirect ? '-i' : '-s'}${M === 'GET' ? '' : ` -X ${M}`} ${shellQuote(url)}`];
+  if (signedIn) curl.push(`-b "${COOKIE}=$${SESSION_ENV}"`, `-H 'origin: ${SITE}'`);
   const init: string[] = [];
+  const pyArgs: string[] = [];
   let prelude = '';
+  let pyPrelude = '';
 
   if (bodyType && op.requestBody) {
     const schema = op.requestBody.content[bodyType]?.schema;
@@ -215,36 +251,62 @@ function samplesFor(
       const example = exampleOf(schema);
       curl.push(`-H 'content-type: application/json'`, `-d ${shellQuote(json(example)!)}`);
       init.push(`headers: { 'content-type': 'application/json' }`, `body: JSON.stringify(${json(example, 2)!.replace(/\n/g, '\n  ')})`);
+      pyArgs.push(`json=${py(example, 1)}`);
     } else if (bodyType === 'multipart/form-data') {
       const required = s.required ?? [];
       const parts = Object.keys(s.properties ?? {})
-        .filter((k) => required.includes(k))
+        .filter((k) => required.includes(k) || k === 'tags')
         .map((k) => {
           const binary = resolve(s.properties![k]).format === 'binary';
-          return { k, binary, v: binary ? 'cat.png' : String(exampleOf(s.properties![k], k)) };
+          return { k, binary, v: binary ? `${EX.emoteName}.png` : String(exampleOf(s.properties![k], k)) };
         });
       for (const p of parts) curl.push(`-F ${shellQuote(p.binary ? `${p.k}=@${p.v}` : `${p.k}=${p.v}`)}`);
       prelude =
         `const form = new FormData();\n` +
         parts.map((p) => (p.binary ? `form.append('${p.k}', fileInput.files[0]);` : `form.append('${p.k}', '${p.v}');`)).join('\n') +
         `\n\n`;
-      init.push(`credentials: 'include'`, 'body: form');
+      init.push('body: form');
+      const file = parts.find((p) => p.binary);
+      const fields = parts.filter((p) => !p.binary);
+      if (file) pyArgs.push(`files={"${file.k}": open("${file.v}", "rb")}`);
+      if (fields.length) pyArgs.push(`data={${fields.map((p) => `"${p.k}": "${p.v}"`).join(', ')}}`);
     }
   }
+  if (signedIn) {
+    init.push(`credentials: 'include'`);
+    pyPrelude = 'import os\n';
+    pyArgs.push(`cookies={"${COOKIE}": os.environ["${SESSION_ENV}"]}`, `headers={"origin": "${SITE}"}`);
+  }
+  if (redirect) pyArgs.push('allow_redirects=False');
 
   const opts = [...(M === 'GET' ? [] : [`method: '${M}'`]), ...init];
   const call = opts.length ? `fetch('${url}', {\n${opts.map((o) => `  ${o},`).join('\n')}\n})` : `fetch('${url}')`;
-  const lines: string[] = redirect
+  const js: string[] = redirect
     ? [`// Send the browser there; the platform's page takes over.`, `location.assign('${url}');`]
     : [`${prelude}const res = await ${call};`, hasBody ? 'const data = await res.json();' : 'console.log(res.status);'];
+
+  const pyCall = pyArgs.length
+    ? `requests.${lower}(\n    "${url}",\n${pyArgs.map((a) => `    ${a},`).join('\n')}\n)`
+    : `requests.${lower}("${url}")`;
+  const pyEnd = redirect ? 'print(res.headers["location"])' : hasBody ? 'data = res.json()' : 'print(res.status_code)';
+  const python = `${pyPrelude}import requests\n\nres = ${pyCall}\n${pyEnd}`;
+
   return [
-    { lang: 'curl', label: 'curl', code: curl.join(' \\\n  ') },
-    { lang: 'fetch', label: 'JavaScript', code: lines.join('\n') },
+    { lang: 'curl', label: 'cURL', code: curl.join(' \\\n  ') },
+    { lang: 'js', label: 'JavaScript', code: js.join('\n') },
+    { lang: 'py', label: 'Python', code: python },
   ];
 }
 
+function redirectTarget(id: string | undefined): string {
+  if (id === 'login') return 'https://id.twitch.tv/oauth2/authorize?response_type=code&client_id=…&state=…&code_challenge=…';
+  return 'https://cyex.tv/me';
+}
+
 function build(method: string, path: string, op: Operation): RestOp {
-  const [title, rest] = splitSummary(op.summary ?? op.operationId ?? `${method.toUpperCase()} ${path}`);
+  const summary = op.summary ?? op.operationId ?? `${method.toUpperCase()} ${path}`;
+  const named = op.operationId ? TITLES[op.operationId] : undefined;
+  const [title, rest] = named ? [named, summary] : splitSummary(summary);
   const pathParams = paramFields(op, 'path');
   const queryParams = paramFields(op, 'query');
   const headerParams = paramFields(op, 'header');
@@ -261,6 +323,7 @@ function build(method: string, path: string, op: Operation): RestOp {
   const redirect = success.startsWith('3');
   const successBody = Object.entries(op.responses[success]?.content ?? {})[0];
   const responseExample = successBody ? json(exampleOf(successBody[1].schema), 2)! : '';
+  const signedIn = op.operationId ? SIGNED_IN.has(op.operationId) : codes.includes('401') && !redirect;
 
   return {
     id: `rest-${op.operationId ?? `${method}-${path}`.replace(/[^a-z0-9]+/gi, '-')}`,
@@ -270,7 +333,7 @@ function build(method: string, path: string, op: Operation): RestOp {
     title,
     summaryRest: paragraphs(rest),
     description: paragraphs(op.description),
-    signedIn: codes.includes('401'),
+    signedIn,
     pathParams,
     queryParams,
     headerParams,
@@ -282,10 +345,11 @@ function build(method: string, path: string, op: Operation): RestOp {
       ok: status === success,
       description: paragraphs(op.responses[status].description),
     })),
-    samples: samplesFor(method, path, op, pathParams, queryParams, bodyType, redirect, Boolean(successBody)),
+    samples: samplesFor(method, path, op, pathParams, queryParams, bodyType, redirect, Boolean(successBody), signedIn),
     responseStatus: success,
-    responseType: successBody?.[0] ?? '',
-    responseExample,
+    responseType: successBody?.[0] ?? (redirect ? 'redirect' : 'no body'),
+    responseExample:
+      responseExample || (redirect ? `HTTP/2 ${success}\nlocation: ${redirectTarget(op.operationId)}` : `HTTP/2 ${success}`),
   };
 }
 
@@ -300,15 +364,22 @@ export function restOperations(): RestOp[] {
   return ops;
 }
 
-/** The operations grouped by tag, in the spec's tag order (untagged ones last). */
+/** The operations grouped by what they act on (GROUPS order, then any other tag). */
 export function restGroups(): RestGroup[] {
   const ops = restOperations();
   const known = api.tags ?? [];
-  const names = [...known.map((t) => t.name), ...ops.map((o) => o.tag)];
+  const names = [...GROUPS.map((g) => g.tag), ...known.map((t) => t.name), ...ops.map((o) => o.tag)];
   return [...new Set(names)]
     .map((tag) => {
       const meta = known.find((t) => t.name === tag);
-      return { tag, title: tag, description: meta?.description ?? '', ops: ops.filter((o) => o.tag === tag) };
+      const title = GROUPS.find((g) => g.tag === tag)?.title ?? tag[0].toUpperCase() + tag.slice(1);
+      // Within a group, the order of TITLES: a channel before its set, sign-in before sign-out.
+      const rank = (o: RestOp) => {
+        const i = Object.keys(TITLES).indexOf(o.id.replace(/^rest-/, ''));
+        return i === -1 ? Infinity : i;
+      };
+      const mine = ops.filter((o) => o.tag === tag).sort((a, b) => rank(a) - rank(b));
+      return { tag, title, description: meta?.description ?? '', ops: mine };
     })
     .filter((g) => g.ops.length);
 }
