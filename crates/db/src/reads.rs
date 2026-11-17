@@ -108,6 +108,31 @@ pub async fn emotes_in_state(
     Ok((items, total))
 }
 
+/// An account's own emotes in every state, newest first, and how many there are.
+pub async fn emotes_by_owner(
+    conn: &mut PgConnection,
+    owner: Uuid,
+    limit: i64,
+    offset: i64,
+) -> DbResult<(Vec<EmoteRow>, i64)> {
+    let items = sqlx::query_as(&format!(
+        "{EMOTE_ROW} WHERE e.owner_account_id = $1 AND e.deleted_at IS NULL
+         ORDER BY e.created_at DESC, e.id DESC LIMIT $2 OFFSET $3"
+    ))
+    .bind(owner)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&mut *conn)
+    .await?;
+    let total = sqlx::query_scalar(
+        "SELECT count(*) FROM emotes WHERE owner_account_id = $1 AND deleted_at IS NULL",
+    )
+    .bind(owner)
+    .fetch_one(conn)
+    .await?;
+    Ok((items, total))
+}
+
 const MEMBER_ROW: &str =
     "SELECT m.set_id, m.emote_id, m.name, m.zero_width, m.added_by, m.added_at,
                 e.owner_account_id AS emote_owner, e.name AS emote_name,

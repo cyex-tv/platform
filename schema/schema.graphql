@@ -133,6 +133,14 @@ type EmoteFlags {
 	nsfw: Boolean!
 }
 
+"""
+A page of emotes and how many there are in all.
+"""
+type EmotePage {
+	items: [Emote!]!
+	total: Int!
+}
+
 type EmoteSet {
 	id: String!
 	name: String!
@@ -394,6 +402,14 @@ type Query {
 	The sets you own, then the ones you edit. Pending emotes included.
 	"""
 	mySets: [EmoteSet!]!
+	"""
+	Your own emotes in every state, newest first. `perPage` is 1 to 100, default 50.
+	"""
+	myEmotes(page: Int, perPage: Int): EmotePage!
+	"""
+	A set's editors. For its owner, its editors and `sets.edit_any`.
+	"""
+	setEditors(setId: String!): [AccountSummary!]!
 	"""
 	Your channels: one per linked platform you have signed in with.
 	"""
