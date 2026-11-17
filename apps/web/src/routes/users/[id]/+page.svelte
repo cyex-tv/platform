@@ -1,15 +1,26 @@
 <script lang="ts">
+  // The one profile page, for everyone (7TV's model: your profile is your dashboard). The server
+  // renders the public page (Uploaded emotes); in the browser, the owner and the account's editors
+  // also get Active emotes, Emote sets, Cosmetics (owner, or editors with PROFILE) and Activity
+  // (when the API has it), plus edit controls. Sections are ?s= tabs in the ProfileRail.
   import { invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
   import Icon from '$lib/components/Icon.svelte';
-  import ProfileCard from '$lib/components/profile/ProfileCard.svelte';
   import State from '$lib/components/State.svelte';
-  import { currentSection, sectionRail, type Section } from '$lib/components/profile/sections';
   import { useCopied } from '$lib/clipboard.svelte';
-  import { clean, count } from '$lib/format';
+  import { clean } from '$lib/format';
   import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
   import RailLayout from '$lib/shell/RailLayout.svelte';
-  import SideRail from '$lib/shell/SideRail.svelte';
+  import { session } from '$lib/tool/session.svelte';
+  import { ACTIVITY_READY } from '$lib/profile/activity';
+  import { relationState } from '$lib/profile/data.svelte';
+  import ProfileRail from '$lib/profile/ProfileRail.svelte';
+  import { canSets, sectionFrom, sectionsFor, type SectionKey } from '$lib/profile/rows';
+  import ActiveEmotes from '$lib/profile/sections/ActiveEmotes.svelte';
+  import ActivityFeed from '$lib/profile/sections/ActivityFeed.svelte';
+  import CosmeticsPicker from '$lib/profile/sections/CosmeticsPicker.svelte';
+  import MyUploads from '$lib/profile/sections/MyUploads.svelte';
+  import SetCards from '$lib/profile/sections/SetCards.svelte';
   import Uploads from './Uploads.svelte';
 
   let { data } = $props();
@@ -24,20 +35,26 @@
     }
   }
 
-  // Sections are query-param tabs. Channels only when the creator has some on cyex.tv.
-  type Key = 'uploads' | 'channels';
-  const sections = $derived<Section<Key>[]>([
-    { key: 'uploads', label: 'Uploads', icon: 'upload', count: data.total },
-    ...(data.channels.length ? [{ key: 'channels' as const, label: 'Channels', icon: 'tv' as const, count: data.channels.length }] : []),
-  ]);
-  const section = $derived(currentSection(sections, page.url.searchParams));
-  const groups = $derived(sectionRail(sections, page.url.pathname, section));
+  const rel = relationState(() => data.id);
+  const relation = $derived(rel.value);
+  const allowed = $derived(sectionsFor(relation, ACTIVITY_READY));
+  const asked = $derived(page.url.searchParams.get('s'));
+  const section = $derived<SectionKey>(sectionFrom(page.url.searchParams, allowed));
+  // Grants load after the session; give them a moment before falling back to Uploaded emotes.
+  let granted = $state(false);
+  $effect(() => {
+    void data.id;
+    granted = false;
+    const t = setTimeout(() => (granted = true), 1500);
+    return () => clearTimeout(t);
+  });
+  // A section only the owner or an editor has, asked for before the session is known: wait for it.
+  const waiting = $derived(!!asked && asked !== section && (!session.known || (!!session.me && !granted)));
+
+  const TITLE: Record<SectionKey, string> = { uploads: 'Uploaded emotes', active: 'Active emotes', sets: 'Emote sets', cosmetics: 'Cosmetics', activity: 'Activity' };
   const link = useCopied();
 </script>
 
-{#snippet meta()}
-  {count(data.total)} {data.total === 1 ? 'emote' : 'emotes'} uploaded
-{/snippet}
 {#snippet actions()}
   <button class="btn btn-s copy" type="button" onclick={() => link.copy(location.origin + page.url.pathname)}>
     <Icon name={link.copied ? 'check' : 'copy'} size={16} />
@@ -51,7 +68,7 @@
 {/snippet}
 
 <svelte:head>
-  <title>{data.creator ? `${name} - cyex.tv` : data.error ? 'Something went wrong - cyex.tv' : 'Nothing here - cyex.tv'}</title>
+  <title>{data.creator ? `${section === 'uploads' ? name : `${TITLE[section]} · ${name}`} - cyex.tv` : data.error ? 'Something went wrong - cyex.tv' : 'Nothing here - cyex.tv'}</title>
   {#if name}<meta name="description" content="{name}'s emotes on cyex.tv." />{/if}
 </svelte:head>
 
@@ -79,26 +96,24 @@
     </div>
   </ColumnLayout>
 {:else}
+  {@const account = { id: data.id, displayName: data.creator.displayName, avatar: data.creator.avatar }}
   <RailLayout>
     {#snippet rail()}
-      <SideRail label="{name}'s page" {groups} collapse="tabs">
-        {#snippet head()}
-          <ProfileCard {name} avatar={data.creator?.avatar} kind="Creator" {meta} {actions} />
-        {/snippet}
-      </SideRail>
+      <ProfileRail {account} {relation} current={section} activity={ACTIVITY_READY} {actions} />
     {/snippet}
 
-    <div class="phone-card"><ProfileCard {name} avatar={data.creator.avatar} kind="Creator" {meta} {actions} /></div>
-
-    {#if section === 'channels'}
-      <section aria-labelledby="ch-h">
-        <h1 class="page-title" id="ch-h">Channels</h1>
-        <ul class="chans">
-          {#each data.channels as ch (ch.platform + ch.login)}
-            <li><a class="btn" href="/channels/{ch.platform}/{encodeURIComponent(ch.login)}">{ch.platform === 'twitch' ? 'Twitch' : 'Kick'}: <bdi>{clean(ch.login)}</bdi></a></li>
-          {/each}
-        </ul>
-      </section>
+    {#if waiting}
+      <State kind="loading" title="Loading…" />
+    {:else if section === 'active'}
+      {#key data.id}<ActiveEmotes accountId={data.id} mine={relation.mine} />{/key}
+    {:else if section === 'sets'}
+      {#key data.id}<SetCards accountId={data.id} mine={relation.mine} canCreate={canSets(relation)} />{/key}
+    {:else if section === 'cosmetics'}
+      {#key data.id}<CosmeticsPicker accountId={data.id} mine={relation.mine} {name} />{/key}
+    {:else if section === 'activity'}
+      {#key data.id}<ActivityFeed accountId={data.id} />{/key}
+    {:else if relation.mine}
+      <MyUploads />
     {:else}
       {#key data.id}
         <Uploads id={data.id} {name} first={data.items} total={data.total} />
@@ -109,12 +124,7 @@
 
 <style>
   .pad { padding-top: var(--rail-gap); }
-  .chans { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
   .labels { display: inline-grid; }
   .labels > span { grid-area: 1 / 1; text-align: left; }
   .off { visibility: hidden; }
-  .phone-card { display: none; }
-  @media (max-width: 899.98px) {
-    .phone-card { display: block; padding: 16px 0; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
-  }
 </style>
