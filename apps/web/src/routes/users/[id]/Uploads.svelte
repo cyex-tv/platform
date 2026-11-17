@@ -4,7 +4,7 @@
   import { ApiError, gql } from '$lib/api';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
-  import EmptyState from '$lib/components/profile/EmptyState.svelte';
+  import State from '$lib/components/State.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import type { CardEmote } from '$lib/components/EmoteCard.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -76,7 +76,7 @@
 
 <section aria-labelledby="up-h">
   <div class="bar">
-    <h2 class="block-title" id="up-h">Uploads <span class="n">{count(total)}</span></h2>
+    <h1 class="page-title" id="up-h">Uploads <span class="n">{count(total)}</span></h1>
     <label class="find">
       <span class="sr-only">Filter uploads</span>
       <Icon name="search" size={16} />
@@ -90,14 +90,14 @@
     />
   </div>
   {#if items.length === 0}
-    <EmptyState rule title="No public emotes yet."><bdi>{name}</bdi> hasn't published an emote that is ready to show.</EmptyState>
+    <State title="No public emotes yet."><bdi>{name}</bdi> hasn't published an emote that is ready to show.</State>
   {:else if shown.length === 0}
-    <EmptyState rule title="Nothing matches “{filter.trim()}”.">
+    <State title="Nothing matches “{filter.trim()}”.">
       Nothing loaded so far matches{#if more}; load more to look further{/if}.
       {#snippet actions()}
-        <button class="btn btn-s" type="button" onclick={() => (filter = '')}>Clear filter</button>
+        <button class="ui-btn secondary" type="button" onclick={() => (filter = '')}>Clear filter</button>
       {/snippet}
-    </EmptyState>
+    </State>
     {#if more}<div class="foot"><LoadMore hasMore={more} busy={loading} error={failed} {total} onmore={loadMore} /></div>{/if}
   {:else}
     <EmoteGrid items={shown} creator={false} eager={12} {loading} skeletons={6} label="Emotes by {name}" />

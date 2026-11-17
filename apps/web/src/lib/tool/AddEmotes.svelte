@@ -6,7 +6,7 @@
   import { ADD_SET_EMOTE, MY_EMOTES, SEARCH } from '$lib/queries';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import { iso } from '$lib/format';
-  import State from './State.svelte';
+  import State from '$lib/components/State.svelte';
   import { session } from './session.svelte';
   import { STATE_LABEL } from './state';
   import { fail, notify } from './notices.svelte';

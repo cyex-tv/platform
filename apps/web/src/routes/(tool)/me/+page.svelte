@@ -7,7 +7,7 @@
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
-  import State from '$lib/tool/State.svelte';
+  import State from '$lib/components/State.svelte';
   import { STATE_LABEL } from '$lib/tool/state';
 
   const PER_PAGE = 60;

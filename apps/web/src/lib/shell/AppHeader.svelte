@@ -50,12 +50,13 @@
     </button>
 
     <div class="end">
-      {#if session.known}
-        {#if me}
-          <a class="btn btn-primary hb" href="/me/upload"><Icon name="upload" />Upload</a>
-        {:else}
-          <a class="btn btn-primary hb" href={signin}>Sign in</a>
-        {/if}
+      {#if me}
+        <a class="btn btn-primary hb" href="/me/upload"><Icon name="upload" />Upload</a>
+      {:else if session.known && !session.failed}
+        <a class="btn btn-primary hb" href={signin}>Sign in</a>
+      {:else}
+        <!-- Not known yet, or the API didn't answer: a neutral slot, never "Sign in" for a valid session. -->
+        <span class="hb-hold" aria-hidden="true"></span>
       {/if}
       <ThemeToggle />
       <AccountMenu bind:open={account} />
@@ -92,21 +93,26 @@
   .links a:active { opacity: .6; transition: none; }
   .links a:focus-visible { outline-offset: -2px; }
 
-  .search { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; height: 36px; padding: 0 8px 0 12px;
+  .search { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; height: 40px; padding: 0 8px 0 12px;
     border: 1px solid var(--border); border-radius: var(--radius-btn); background: var(--surface); color: var(--muted);
     font: inherit; font-size: var(--t-nav); cursor: text; text-align: left;
     transition: border-color var(--fast), color var(--fast); }
   .ph { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .end { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
-  .hb { height: 36px; padding: 0 14px; gap: 8px; font-size: var(--t-nav); box-shadow: none; } /* flat in the bar: no glow over the page */
+  .hb { height: 40px; padding: 0 14px; gap: 8px; font-size: var(--t-nav); box-shadow: none; } /* flat in the bar: no glow over the page */
   .hb:not(:has(svg)) { padding: 0 16px; }
+  .hb-hold { width: 84px; height: 40px; border: 1px solid var(--border); border-radius: var(--radius-btn); }
 
   .phone { display: none; align-items: center; justify-content: flex-end; gap: 4px; }
   .menu-btn { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--radius-btn);
     background: none; color: var(--muted); cursor: pointer; transition: transform var(--dur-press) ease-out; }
   .menu-btn:active { transform: scale(var(--press)); }
-  @media (pointer: coarse) { .menu-btn { width: 44px; height: 44px; } }
+  @media (pointer: coarse) {
+    .menu-btn { width: 44px; height: 44px; }
+    .search, .hb { position: relative; }
+    .search::after, .hb::after { content: ''; position: absolute; inset: -2px 0; }
+  }
 
   @media (hover: hover) and (pointer: fine) {
     .links a:hover { color: var(--text); }

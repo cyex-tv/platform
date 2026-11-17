@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import Icon from '$lib/components/Icon.svelte';
   import ProfileCard from '$lib/components/profile/ProfileCard.svelte';
-  import EmptyState from '$lib/components/profile/EmptyState.svelte';
+  import State from '$lib/components/State.svelte';
   import { currentSection, sectionRail, type Section } from '$lib/components/profile/sections';
   import { useCopied } from '$lib/clipboard.svelte';
   import { clean, count } from '$lib/format';
@@ -58,24 +58,24 @@
 {#if data.error}
   <ColumnLayout>
     <div class="pad">
-      <EmptyState level={1} title="This page can’t load right now." role="alert">
+      <State kind="error" level={1} title="This page can’t load right now.">
         {data.error}
         {#snippet actions()}
-          <button class="btn btn-primary" type="button" onclick={retry} disabled={retrying}>{retrying ? 'Trying' : 'Try again'}</button>
+          <button class="ui-btn primary" type="button" onclick={retry} disabled={retrying}>{retrying ? 'Trying…' : 'Try again'}</button>
         {/snippet}
-      </EmptyState>
+      </State>
     </div>
   </ColumnLayout>
 {:else if !data.creator}
   <ColumnLayout>
     <div class="pad">
-      <EmptyState level={1} title="No public emotes here." role="status">
+      <State level={1} role="status" title="No public emotes here.">
         This account hasn't published an emote, or there is no account with this address. Check the link, or
         look through what everyone has made.
         {#snippet actions()}
-          <a class="btn btn-primary" href="/search">Browse emotes</a>
+          <a class="ui-btn primary" href="/search">Browse emotes</a>
         {/snippet}
-      </EmptyState>
+      </State>
     </div>
   </ColumnLayout>
 {:else}
@@ -88,11 +88,11 @@
       </SideRail>
     {/snippet}
 
-    <div class="phone-card"><ProfileCard heading={false} {name} avatar={data.creator.avatar} kind="Creator" {meta} {actions} /></div>
+    <div class="phone-card"><ProfileCard {name} avatar={data.creator.avatar} kind="Creator" {meta} {actions} /></div>
 
     {#if section === 'channels'}
       <section aria-labelledby="ch-h">
-        <h2 class="block-title" id="ch-h">Channels</h2>
+        <h1 class="page-title" id="ch-h">Channels</h1>
         <ul class="chans">
           {#each data.channels as ch (ch.platform + ch.login)}
             <li><a class="btn" href="/channels/{ch.platform}/{encodeURIComponent(ch.login)}">{ch.platform === 'twitch' ? 'Twitch' : 'Kick'}: <bdi>{clean(ch.login)}</bdi></a></li>
@@ -108,7 +108,7 @@
 {/if}
 
 <style>
-  .pad { padding-top: clamp(48px, 8vw, 120px); }
+  .pad { padding-top: var(--rail-gap); }
   .chans { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
   .labels { display: inline-grid; }
   .labels > span { grid-area: 1 / 1; text-align: left; }

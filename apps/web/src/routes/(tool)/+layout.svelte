@@ -13,6 +13,7 @@
   import RailLayout from '$lib/shell/RailLayout.svelte';
   import SideRail from '$lib/shell/SideRail.svelte';
   import { markCurrent, type RailGroup } from '$lib/shell/rail';
+  import State from '$lib/components/State.svelte';
   import { can, isAdmin, loadMe, session } from '$lib/tool/session.svelte';
 
   let { children } = $props();
@@ -59,17 +60,23 @@
     return markCurrent(groups.filter((g) => g.items.length), path, ['/admin']);
   });
 
-  onMount(async () => {
+  let trying = $state(false);
+  async function signIn(fresh = false) {
+    trying = true;
+    problem = null;
     try {
-      await loadMe();
+      await loadMe({ fresh });
     } catch (e) {
       if (e instanceof ApiError && e.code === 'signed_out') {
         await goto(`/signin?back=${encodeURIComponent(page.url.pathname + page.url.search)}`, { replaceState: true });
         return;
       }
-      problem = e instanceof Error ? e.message : 'cyex.tv can’t be reached right now.';
+      problem = 'cyex.tv didn’t answer, so your account couldn’t load. It’s usually back within a minute.';
+    } finally {
+      trying = false;
     }
-  });
+  }
+  onMount(() => signIn());
 </script>
 
 <RailLayout>
@@ -90,6 +97,12 @@
                 <strong><bdi>{name}</bdi></strong>
                 <span>{platformName(who?.platform) ?? ''}</span>
               </span>
+            {:else if problem}
+              <span class="ph-av" aria-hidden="true"></span>
+              <span class="id">
+                <strong>Not loaded</strong>
+                <button class="retry" type="button" onclick={() => signIn(true)} disabled={trying}>{trying ? 'Trying…' : 'Try again'}</button>
+              </span>
             {:else}
               <span class="ph-av ui-skeleton" aria-hidden="true"></span>
               <span class="ph-line ui-skeleton" aria-hidden="true"></span>
@@ -101,13 +114,14 @@
   {/snippet}
   <div class="ui-page">
     {#if problem}
-      <div class="ui-empty" role="alert">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16.5v.01" /></svg>
-        <p>{problem}</p>
-        <button class="ui-btn secondary" type="button" onclick={() => location.reload()}>Try again</button>
-      </div>
+      <State kind="error" level={1} title="This page can’t load right now.">
+        {problem}
+        {#snippet actions()}
+          <button class="ui-btn primary" type="button" onclick={() => signIn(true)} disabled={trying}>{trying ? 'Trying…' : 'Try again'}</button>
+        {/snippet}
+      </State>
     {:else if !session.me}
-      <div class="ui-empty" aria-busy="true"><span class="ui-spinner" aria-hidden="true"></span><p>Loading…</p></div>
+      <State kind="loading" title="Loading your account…" />
     {:else}
       {@render children()}
     {/if}
@@ -121,6 +135,9 @@
   .id span { font-size: var(--t-fine); color: var(--muted); }
   .title { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding-left: 8px; }
   .title strong { font-size: var(--t-ui); font-weight: 600; }
-  .ph-av { flex: none; width: 40px; height: 40px; border-radius: 50%; }
+  .ph-av { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--surface-hover); }
+  .retry { justify-self: start; display: inline-flex; align-items: center; min-height: 40px; margin-block: -10px; padding: 0;
+    border: 0; background: none; font: inherit; font-size: var(--t-fine); font-weight: 500; color: var(--accent-text); cursor: pointer; }
+  .retry:disabled { color: var(--muted); cursor: default; }
   .ph-line { display: block; width: 110px; height: 12px; border-radius: var(--radius); }
 </style>

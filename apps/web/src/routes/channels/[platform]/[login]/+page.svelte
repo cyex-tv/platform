@@ -4,7 +4,7 @@
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import ProfileCard from '$lib/components/profile/ProfileCard.svelte';
-  import EmptyState from '$lib/components/profile/EmptyState.svelte';
+  import State from '$lib/components/State.svelte';
   import { chatLines } from '$lib/components/profile/chat';
   import { currentSection, sectionRail, type Section } from '$lib/components/profile/sections';
   import { useCopied } from '$lib/clipboard.svelte';
@@ -38,11 +38,11 @@
     shown = STEP;
   });
 
-  // Sections are query-param tabs: the set, and how it looks in chat. (Editors: the API has no list yet.)
-  type Key = 'set' | 'chat';
+  // One section today (the set; its chat preview is a block under it, not a tab). The rail shows
+  // no nav for fewer than two sections, only the channel card. (Editors: the API has no list yet.)
+  type Key = 'set';
   const sections = $derived<Section<Key>[]>([
     { key: 'set', label: 'Active set', icon: 'layers', count: set ? items.length : undefined },
-    ...(set && lines.length ? [{ key: 'chat' as const, label: 'Chat preview', icon: 'smile' as const }] : []),
   ]);
   const section = $derived(currentSection(sections, page.url.searchParams));
   const groups = $derived(sectionRail(sections, page.url.pathname, section));
@@ -82,50 +82,49 @@
 
   <div class="phone-card"><ProfileCard name={who} avatar={c.account.avatar} kind="{platform} channel" {meta} {actions} /></div>
 
-  {#if !set}
-    <EmptyState rule title="No set picked yet.">
-      {who} hasn't chosen an emote set for {platform}, so there is nothing to show here. Their
-      emotes appear in chat as soon as they do.
-      {#snippet actions()}
-        <a class="btn" href="/search">Browse emotes</a>
-      {/snippet}
-    </EmptyState>
-  {:else if section === 'chat'}
-    <section class="chat" aria-labelledby="chat-h">
-      <h2 class="block-title" id="chat-h">Chat preview</h2>
-      <p class="fine">How these emotes look in a {platform} chat. The viewers are made up.</p>
-      <div class="frame">
-        <ChatPreview platform={key} {lines} visible={6} label="{platform} chat with {who}'s emotes" />
-      </div>
-    </section>
-  {:else if items.length === 0}
-    <EmptyState rule title="The set is empty.">
-      {who} has a set, with room for {count(set.capacity)} emotes, but hasn't added any yet.
-      {#snippet actions()}
-        <a class="btn" href="/search">Browse emotes</a>
-      {/snippet}
-    </EmptyState>
-  {:else}
-    <section aria-labelledby="emotes-h">
-      <div class="bar">
-        <h2 class="block-title" id="emotes-h">Active set <span class="n"><bdi>{clean(set.name)}</bdi></span></h2>
+  <section aria-labelledby="emotes-h">
+    <div class="bar">
+      <h1 class="page-title" id="emotes-h">Active set{#if set} <span class="n"><bdi>{clean(set.name)}</bdi></span>{/if}</h1>
+      {#if set && items.length}
         <label class="find">
           <span class="sr-only">Filter this set</span>
           <Icon name="search" size={16} />
           <input class="input" type="search" placeholder="Filter this set" bind:value={filter} autocomplete="off" />
         </label>
+      {/if}
+    </div>
+    {#if !set}
+      <div class="gap">
+        <State title="No set picked yet.">
+          {who} hasn't chosen an emote set for {platform}, so there is nothing to show here. Their
+          emotes appear in chat as soon as they do.
+          {#snippet actions()}
+            <a class="ui-btn secondary" href="/search">Browse emotes</a>
+          {/snippet}
+        </State>
       </div>
-      <p class="fine slots" aria-live="polite">
+    {:else if items.length === 0}
+      <div class="gap">
+        <State title="The set is empty.">
+          {who} has a set, with room for {count(set.capacity)} emotes, but hasn't added any yet.
+          {#snippet actions()}
+            <a class="ui-btn secondary" href="/search">Browse emotes</a>
+          {/snippet}
+        </State>
+      </div>
+    {:else}
+      <p class="fine slots">
         {#if needle}{count(matches.length)} of {count(items.length)} match · {/if}{count(items.length)} of {count(set.capacity)} slots
         {#if fill >= 4}<span class="meter" aria-hidden="true"><span style:width="{fill}%"></span></span>{/if}
       </p>
+      <p class="sr-only" role="status">{needle ? `${count(matches.length)} of ${count(items.length)} match` : ''}</p>
       {#if matches.length === 0}
-        <EmptyState rule title="Nothing matches “{filter.trim()}”.">
+        <State title="Nothing matches “{filter.trim()}”.">
           Check the spelling, or clear the filter to see all {count(items.length)} emotes.
           {#snippet actions()}
-            <button class="btn btn-s" type="button" onclick={() => (filter = '')}>Clear filter</button>
+            <button class="ui-btn secondary" type="button" onclick={() => (filter = '')}>Clear filter</button>
           {/snippet}
-        </EmptyState>
+        </State>
       {:else}
         <EmoteGrid items={visible} creator={false} eager={12} label="{who}'s emotes" />
         {#if matches.length > visible.length}
@@ -136,6 +135,16 @@
           </div>
         {/if}
       {/if}
+    {/if}
+  </section>
+
+  {#if set && lines.length}
+    <section class="chat" aria-labelledby="chat-h">
+      <div class="block-head"><h2 class="block-title" id="chat-h">Chat preview</h2></div>
+      <p class="fine">How these emotes look in a {platform} chat. The viewers are made up.</p>
+      <div class="frame">
+        <ChatPreview platform={key} {lines} visible={6} label="{platform} chat with {who}'s emotes" />
+      </div>
     </section>
   {/if}
 </RailLayout>
@@ -154,7 +163,9 @@
   .meter { flex: 0 1 160px; height: 4px; border-radius: 2px; background: var(--border-strong); overflow: hidden; }
   .meter span { display: block; height: 100%; background: var(--accent); }
   .more { display: flex; justify-content: center; padding: 24px 0 0; }
-  .chat .fine { margin: 6px 0 20px; }
+  .gap { margin-top: 20px; }
+  .chat { margin-top: 48px; }
+  .chat .fine { margin: -8px 0 20px; }
   .frame { max-width: 520px; }
   .phone-card { display: none; }
   @media (max-width: 899.98px) {

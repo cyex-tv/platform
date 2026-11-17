@@ -12,7 +12,7 @@
   import { fail, notify } from '$lib/tool/notices.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
-  import State from '$lib/tool/State.svelte';
+  import State from '$lib/components/State.svelte';
 
   const L = loader(async ({ fetch }) => (await gql(MY_SETS, {}, fetch)).mySets);
   const sets = $derived(L.data);

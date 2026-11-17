@@ -9,7 +9,7 @@
   import { session } from '$lib/tool/session.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
-  import State from '$lib/tool/State.svelte';
+  import State from '$lib/components/State.svelte';
 
   type Channel = MyChannelsQuery['myChannels'][number];
   const L = loader(({ fetch }) => gql(MY_CHANNELS, {}, fetch));

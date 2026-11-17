@@ -64,7 +64,7 @@
     {#if me}
       <hr />
       <button type="button" onclick={out}><Icon name="log-out" /><span>Sign out</span></button>
-    {:else}
+    {:else if session.known && !session.failed}
       <a href={signin} onclick={() => onpick?.()}><Icon name="user" /><span>Sign in</span></a>
     {/if}
   </nav>

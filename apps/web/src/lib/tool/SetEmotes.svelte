@@ -6,7 +6,7 @@
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import type { CardEmote } from '$lib/components/EmoteTile.svelte';
   import { count, iso } from '$lib/format';
-  import State from './State.svelte';
+  import State from '$lib/components/State.svelte';
   import { session } from './session.svelte';
   import { STATE_LABEL } from './state';
   import { fail, notify } from './notices.svelte';

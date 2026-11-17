@@ -37,6 +37,21 @@ describe('loadMe', () => {
     expect(gql).toHaveBeenCalledTimes(2);
   });
 
+  it('marks a failure that is not signed out, and clears it on the next answer', async () => {
+    gql.mockRejectedValueOnce(new Error('down')).mockResolvedValueOnce(me('a'));
+    await expect(loadMe()).rejects.toThrow('down');
+    expect(session.failed).toBe(true);
+    await loadMe();
+    expect(session.failed).toBe(false);
+  });
+
+  it('is not failed when signed out', async () => {
+    gql.mockRejectedValueOnce(Object.assign(new Error('signed out'), { code: 'signed_out' }));
+    await expect(loadMe()).rejects.toThrow();
+    expect(session.known).toBe(true);
+    expect(session.failed).toBe(false);
+  });
+
   it('forgets after sign-out', async () => {
     gql.mockResolvedValue(me('a'));
     await loadMe();
