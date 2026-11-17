@@ -82,6 +82,15 @@
   --emote-art: 112px;
   --emote-art-compact: 80px;
   --emote-chat: 28px;
+
+  /* Emote preview grounds: the same in both themes (they show how an emote looks on each). */
+  --stage-dark: #0e0f13;
+  --stage-light: #ffffff;
+  --stage-dark-ink: #9ba1ad;
+  --stage-light-ink: #555b66;
+  --checker-a: #ffffff;
+  --checker-b: #d6d9df;
+  --checker-size: 16px;
 }
 
 [data-theme="light"] {
