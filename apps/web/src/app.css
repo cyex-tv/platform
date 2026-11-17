@@ -20,7 +20,7 @@ button, .btn, summary, [role='button'], [role='radio'], [role='menuitem'], .chip
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 kbd { font: inherit; }
 
-.skip { position: fixed; left: 12px; top: -60px; z-index: 100; padding: 10px 16px;
+.skip { position: fixed; left: 12px; top: -60px; z-index: var(--z-skip); padding: 10px 16px;
   background: var(--text); color: var(--bg); border-radius: var(--radius-btn); font-size: var(--t-ui); }
 .skip:focus { top: 12px; }
 
@@ -42,24 +42,21 @@ kbd { font: inherit; }
   .btn:hover .arrow { transform: translateX(3px); }
 }
 .btn-s { height: 38px; padding: 0 14px; }
+/* Touch: the small button keeps its 38px look, its hit area grows to 44px. */
+@media (pointer: coarse) { .btn-s { position: relative; } .btn-s::after { content: ''; position: absolute; inset: -3px 0; } }
 .btn[disabled] { opacity: 1; color: var(--muted); cursor: default; pointer-events: none; }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; }
 @media (max-width: 480px) { .actions { display: grid; } }
 
-.link { color: var(--accent-text); font-weight: 500; display: inline-flex; align-items: center; gap: 8px; }
+.link { color: var(--accent-text); font-weight: 500; display: inline-flex; align-items: center; gap: 8px;
+  min-height: 40px; margin-block: -8px; } /* a 40px target that takes no more room than its line */
 .link .arrow { transition: transform var(--dur-move) var(--ease); }
 @media (hover: hover) and (pointer: fine) { .link:hover .arrow { transform: translateX(3px); } }
 
-/* Section eyebrow and head */
-.kicker { display: flex; align-items: center; gap: 10px; margin: 0 0 22px;
-  font-size: var(--t-ui); font-weight: 500; color: var(--muted); }
+/* Section head */
 .head h2 { font-size: var(--t-h2); line-height: 1.02; letter-spacing: -.04em; max-width: 16ch; }
 .lead { margin: 20px 0 0; font-size: var(--t-lead); line-height: 1.55; color: var(--muted); max-width: 44ch; }
 .head .actions { margin-top: 32px; }
-
-/* Mount */
-.mount { padding: 8px; border: 1px solid var(--border); border-radius: var(--radius-l);
-  background: var(--surface); box-shadow: var(--shadow); }
 
 /* Steps: three hairline-topped columns */
 .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; margin-top: 56px; }
@@ -85,25 +82,12 @@ kbd { font: inherit; }
 .block-title { margin: 0; font-size: var(--t-block); font-weight: 600; line-height: 1.25; letter-spacing: -.02em; min-width: 0; overflow-wrap: anywhere; }
 
 /* Fields */
-.field { display: flex; gap: 12px; align-items: stretch; max-width: var(--measure-form); }
 .input { flex: 1; min-width: 0; height: 48px; padding: 0 16px; border-radius: var(--radius-btn);
   border: 1px solid var(--border-strong); background: var(--surface); color: var(--text);
   font: inherit; font-size: 16px; transition: border-color var(--dur-hover); }
 .input::placeholder { color: var(--muted); }
 @media (hover: hover) and (pointer: fine) { .input:hover { border-color: var(--muted); } }
 .input:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-color: var(--border-strong); }
-@media (max-width: 480px) { .field { flex-direction: column; } }
-
-/* Segmented control */
-.segmented { position: relative; display: inline-flex; padding: 4px; border: 1px solid var(--border);
-  background: var(--surface); border-radius: calc(var(--radius-btn) + 4px); }
-.segmented button, .segmented a { position: relative; display: inline-flex; align-items: center; z-index: 1; height: 40px; padding: 0 16px; border: 0; background: none;
-  font: inherit; font-size: 14.5px; font-weight: 500; color: var(--muted); cursor: pointer; border-radius: var(--radius-btn);
-  transition: color var(--dur-color), background-color var(--dur-color), transform var(--dur-press) ease-out; }
-.segmented button[aria-pressed='true'], .segmented a[aria-current='true'] { color: var(--text); background: var(--surface-2);
-  box-shadow: 0 0 0 1px var(--border-strong) inset; }
-@media (hover: hover) and (pointer: fine) { .segmented button:hover, .segmented a:hover { color: var(--text); } }
-.segmented button:active, .segmented a:active { transform: scale(var(--press)); }
 
 .muted { color: var(--muted); }
 .fine { font-size: var(--t-fine); color: var(--muted); }

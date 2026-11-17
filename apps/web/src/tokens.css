@@ -49,7 +49,7 @@
 
   /* Layout: the shared cyex page wrapper (cyex-design), 1520px with 20px sides. */
   --page-max: 1520px;
-  --page-pad: 20px;
+  --page-pad: max(20px, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)); /* clears the notch in landscape */
   --measure: 820px;
   --measure-form: 640px;
   --gutter: var(--page-pad);
@@ -72,10 +72,20 @@
   --dur-sheet: .28s; /* bottom sheets */
   --delay-tip: .4s;  /* before a tooltip shows */
 
-  /* Layers, overlays and emote sizes (cyex.tv components). */
+  /* Layers: the one z-index scale for every surface (the tool layer maps its names onto it). */
+  --z-panel: 10;
   --z-nav: 50;
   --z-pop: 60;
   --z-tip: 70;
+  --z-dialog: 80;
+  --z-toast: 90;
+  --z-skip: 100;
+
+  /* Platform colours, only where the platform itself is meant (cyex-design). */
+  --twitch: #9146ff;
+  --kick: #53fc18;
+
+  /* Overlays and emote sizes (cyex.tv components). */
   --scrim: rgb(0 0 0 / .55);
   --shadow-pop: 0 1px 0 rgb(255 255 255 / .04) inset, 0 18px 44px -14px rgb(0 0 0 / .75);
   --t-label: 12px;   /* small neutral labels on cards */
