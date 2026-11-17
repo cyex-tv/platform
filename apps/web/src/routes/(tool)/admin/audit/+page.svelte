@@ -6,6 +6,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import { AUDIT } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
+  import State from '$lib/components/State.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { fail } from '$lib/tool/notices.svelte';
 
@@ -99,7 +100,7 @@
 <LoadGate source={L} label="Loading the log…">
 {#snippet children()}
 {#if !entries || entries.length === 0}
-  <div class="ui-empty"><p>No entries{page.url.search ? ' for this filter' : ''}.</p></div>
+  <State title="No entries{page.url.search ? ' for this filter' : ''}." />
 {:else}
   <section class="ui-panel log">
     <div class="row head" aria-hidden="true">

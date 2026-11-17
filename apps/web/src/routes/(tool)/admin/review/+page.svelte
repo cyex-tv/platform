@@ -6,6 +6,7 @@
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
   import { APPROVE, REJECT, REVIEW_QUEUE } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
+  import State from '$lib/components/State.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
@@ -74,10 +75,7 @@
 {#snippet children(queue)}
 {@const items = queue.items}
 {#if items.length === 0}
-  <div class="ui-empty">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
-    <p>Nothing waiting. New uploads show up here.</p>
-  </div>
+  <State title="Nothing waiting.">New uploads show up here.</State>
 {:else}
   <ul class="queue">
     {#each items as e (e.id)}
@@ -94,7 +92,7 @@
         <span class="name"><bdi>{clean(e.name)}</bdi></span>
         <span class="by"><bdi>{clean(e.owner?.displayName) || 'Unknown'}</bdi></span>
         <span class="meta ui-mono">{date(e.createdAt)}</span>
-        {#if e.animated || e.tags.length}<span class="tags">{#if e.animated}<span class="ui-chip">animated</span>{/if}{#each e.tags.slice(0, 3) as t}<span class="ui-chip">{t}</span>{/each}</span>{/if}
+        {#if e.animated || e.tags.length}<span class="tags">{#if e.animated}<span class="ui-chip">animated</span>{/if}{#each e.tags.slice(0, 3) as t}<span class="ui-chip" title={t}><bdi>{t}</bdi></span>{/each}</span>{/if}
         <div class="do">
           <button class="ui-btn primary small approve" type="button" disabled={busy === e.id || !ready(e)} onclick={() => approve(e)}>Approve</button>
           <button class="ui-btn danger small" type="button" disabled={busy === e.id} onclick={() => askReject(e)}>Reject</button>
@@ -126,14 +124,16 @@
     transition: border-color var(--fast); }
   @media (hover: hover) and (pointer: fine) { .tile:hover { border-color: var(--border-strong); } }
   .status { position: absolute; top: 6px; left: 6px; z-index: 1; }
-  .art { display: grid; place-items: center; align-content: center; gap: 6px; width: 100%; height: 112px; margin-bottom: 8px; }
+  .art { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; align-content: center; gap: 6px; width: 100%; height: 112px; margin-bottom: 8px; overflow: hidden; }
   .art img { display: block; height: calc(112px * .8); width: auto; max-width: 100%; object-fit: contain; }
   .name, .by { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .name { font-size: var(--t-nav); font-weight: 500; line-height: 1.35; }
   .by { font-size: 12px; line-height: 1.4; color: var(--muted); }
-  .meta { font-size: 11px; color: var(--dim); }
-  .tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 4px; }
-  .tags .ui-chip { text-transform: none; letter-spacing: 0; font-size: .7rem; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .meta { font-size: 12px; color: var(--dim); }
+  /* Chips never leave their card: a long tag ends in an ellipsis (full text in the title). */
+  .tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 4px; max-width: 100%; min-width: 0; }
+  .tags .ui-chip { display: block; line-height: 22px; text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 600;
+    min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .do { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%; margin-top: auto; padding-top: 10px; }
   .do .ui-btn { padding-inline: 6px; }
   .more { margin-top: 16px; text-align: center; }

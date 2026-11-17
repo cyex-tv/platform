@@ -9,6 +9,7 @@
   import Name from '$lib/components/Name.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
+  import State from '$lib/components/State.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { can, session } from '$lib/tool/session.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
@@ -116,7 +117,7 @@
 <LoadGate source={L} label="Looking them up…">
 {#snippet children(result)}
 {#if result.missing}
-  <div class="ui-empty"><p>No one with that login has signed in to cyex.tv.</p></div>
+  <State title="Nobody found.">No one with that login has signed in to cyex.tv.</State>
 {:else if found}
   <div class="layout">
     <section class="ui-card who" aria-label="Account">

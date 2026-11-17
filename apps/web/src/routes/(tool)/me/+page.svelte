@@ -34,11 +34,8 @@
 
 <svelte:head><title>Your emotes - cyex.tv</title></svelte:head>
 
-<PageHead title="Your emotes" line={result ? `${count(result.total)} ${result.total === 1 ? 'emote' : 'emotes'}. Pending ones are only visible to you until a moderator looks at them.` : ' '}>
-  {#snippet actions()}
-    <a class="ui-btn primary" href="/me/upload"><Icon name="upload" size={15} />Upload</a>
-  {/snippet}
-</PageHead>
+<!-- No Upload here: the header has it (and the empty state below, when there is nothing yet). -->
+<PageHead title="Your emotes" line={result ? `${count(result.total)} ${result.total === 1 ? 'emote' : 'emotes'}. Pending ones are only visible to you until a moderator looks at them.` : ' '} />
 
 {#if problem}
   <State kind="error" title="Your emotes didn’t load">

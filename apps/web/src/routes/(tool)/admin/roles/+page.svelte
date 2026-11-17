@@ -5,6 +5,7 @@
   import type { RoleFieldsFragment } from '$lib/gql/graphql';
   import { CREATE_ROLE, DELETE_ROLE, ROLES, UPDATE_ROLE } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
+  import State from '$lib/components/State.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
   import { session } from '$lib/tool/session.svelte';
@@ -92,7 +93,7 @@
 <LoadGate source={L} label="Loading roles…">
 {#snippet children()}
 {#if !roles || roles.length === 0}
-  <div class="ui-empty"><p>No roles yet.</p></div>
+  <State title="No roles yet." />
 {:else}
   <section class="ui-panel">
     <div class="row head" aria-hidden="true">

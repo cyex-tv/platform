@@ -4,6 +4,7 @@
   import type { ReportQueueQuery } from '$lib/gql/graphql';
   import { REPORT_QUEUE, RESOLVE_REPORT } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
+  import State from '$lib/components/State.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
   import Thumb from '$lib/tool/Thumb.svelte';
@@ -50,10 +51,7 @@
 {#snippet children(queue)}
 {@const items = queue.items}
 {#if items.length === 0}
-  <div class="ui-empty">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
-    <p>No open reports.</p>
-  </div>
+  <State title="No open reports.">Reports from viewers show up here.</State>
 {:else}
   <section class="ui-panel">
     <div class="row head" aria-hidden="true">
@@ -67,10 +65,10 @@
           </span>
           <div class="what">
             <strong>
-              {#if clean(r.emote?.name)}<bdi>{clean(r.emote?.name)}</bdi>{:else}Deleted emote{/if}
+              {#if clean(r.emote?.name)}<bdi title={clean(r.emote?.name)}>{clean(r.emote?.name)}</bdi>{:else}Deleted emote{/if}
               {#if r.emote && r.emote.state !== 'APPROVED'}<span class="ui-chip {r.emote.state.toLowerCase()}">{STATE_LABEL[r.emote.state]}</span>{/if}
             </strong>
-            {#if r.emote?.owner}<span class="ui-hint"><bdi>{clean(r.emote.owner.displayName)}</bdi></span>{/if}
+            {#if r.emote?.owner}<span class="ui-hint" title={clean(r.emote.owner.displayName)}><bdi>{clean(r.emote.owner.displayName)}</bdi></span>{/if}
           </div>
           <div class="why">
             <span class="reason">“<bdi>{clean(r.reason)}</bdi>”</span>
@@ -114,7 +112,11 @@
   .actions-h { text-align: right; }
   .frame { display: grid; place-items: center; width: 56px; height: 56px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--bg); }
   .what, .why { display: grid; gap: 3px; min-width: 0; }
-  .what strong { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+  .what strong { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .what strong > bdi { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .what strong > .ui-chip { flex: none; }
+  .what .ui-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .why { overflow-wrap: anywhere; }
   .reason { color: var(--text); overflow-wrap: anywhere; }
   .meta { display: grid; overflow-wrap: anywhere; }
   .gone { width: 40px; height: 40px; border: 1px dashed var(--border-strong); border-radius: var(--radius); }
