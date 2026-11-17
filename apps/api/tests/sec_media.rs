@@ -224,8 +224,8 @@ async fn a_blocked_image_hidden_as_a_later_frame_is_refused() {
     );
 
     // An animation of harmless frames still goes through.
-    let mut other = picture(100, 100, 90);
-    image::imageops::flip_vertical_in_place(&mut other);
+    let mut other = benign.clone();
+    other.put_pixel(50, 50, Rgba([0, 0, 0, 255]));
     let r = w
         .upload(&alice, "fine", &frames_gif(&[benign, other]))
         .await;
