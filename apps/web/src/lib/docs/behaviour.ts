@@ -274,7 +274,7 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
   // Beside the text the contents are always open; stacked above it they fold away, and picking an
   // entry (or a search that finds some) opens or closes them as needed.
   if (toc) {
-    const mq = matchMedia('(min-width: 901px)');
+    const mq = matchMedia('(min-width: 900px)');
     const sync = () => {
       toc.open = mq.matches;
     };
