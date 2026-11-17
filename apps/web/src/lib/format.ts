@@ -33,3 +33,11 @@ export function date(iso: string): string {
   const p = (v: number) => v.toString().padStart(2, '0');
   return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())}`;
 }
+
+/**
+ * A name or text from someone else, safe to show: the bidi embedding, override and isolate
+ * controls (U+202A-202E, U+2066-2069) are removed, so a name can't flip the text around it.
+ */
+export function clean(s: string | null | undefined): string {
+  return (s ?? '').replace(/[\u202A-\u202E\u2066-\u2069]/g, '');
+}
