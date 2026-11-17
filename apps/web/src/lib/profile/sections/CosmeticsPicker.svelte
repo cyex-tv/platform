@@ -179,6 +179,10 @@
   .sub { font-size: var(--t-fine); font-weight: 400; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .none { margin: 0; padding: 10px; color: var(--dim); font-size: var(--t-small); }
   @media (hover: hover) and (pointer: fine) { .opt:hover { background: var(--row-hover); color: var(--text); } }
-  @media (max-width: 640px) { .tools, .find { width: 100%; } .find { flex: 1; } }
+  @media (max-width: 640px) {
+    .tools { width: 100%; }
+    .find { order: 3; flex: 1 1 100%; width: auto; }
+    .views { margin-left: auto; }
+  }
   @media (forced-colors: active) { .on .dot::after { background: Highlight; } .on .dot { border-color: Highlight; } }
 </style>

@@ -87,7 +87,7 @@
             {#if i.kind === 'added'}Added {@render emote(i)} to {@render setName(i)}
             {:else if i.kind === 'removed'}Removed {@render emote(i)} from {@render setName(i)}
             {:else if i.kind === 'renamed'}Renamed <strong><bdi>{clean(i.from)}</bdi></strong> to {@render emote(i)} in {@render setName(i)}
-            {:else if i.kind === 'active'}Made {@render setName(i)} the active set{#if i.from} instead of <strong><bdi>{clean(i.from)}</bdi></strong>{/if}
+            {:else if i.kind === 'active'}Made {@render setName(i)} the active set{#if i.from}{' '}instead of <strong><bdi>{clean(i.from)}</bdi></strong>{/if}
             {:else if i.kind === 'cosmetics'}{@render cosmetics(i)}
             {:else if i.kind === 'uploaded'}Published {@render emote(i)}
             {:else if i.kind === 'created'}Made the set {@render setName(i)}

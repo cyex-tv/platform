@@ -96,7 +96,7 @@
                 {#if badge}<BadgeIcon {badge} size={24} />{/if}
                 <span class="what">
                   <strong>{#if paint}<PaintedName name={paint.name} {paint} />{:else}<bdi>{clean(nameOf(kind, r.cosmeticId))}</bdi>{/if}</strong>
-                  <span class="ui-hint">{date(r.grantedAt)}{#if r.grantedBy} · by <bdi>{clean(r.grantedBy.displayName)}</bdi>{/if}{#if r.reason} · <bdi>{clean(r.reason)}</bdi>{/if}</span>
+                  <span class="ui-hint">{date(r.grantedAt)}{#if r.grantedBy}{' · by '}<bdi>{clean(r.grantedBy.displayName)}</bdi>{/if}{#if r.reason}{' · '}<bdi>{clean(r.reason)}</bdi>{/if}</span>
                 </span>
                 <button class="ui-btn ghost small" type="button" onclick={() => { target = r; revokeDlg?.open(); }}>Revoke</button>
               </li>

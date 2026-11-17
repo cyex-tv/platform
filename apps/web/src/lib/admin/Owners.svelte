@@ -69,7 +69,7 @@
           <Avatar src={r.account.avatar} name={r.account.displayName} size={28} />
           <span class="what">
             <a href="/users/{encodeURIComponent(r.account.id)}"><bdi>{clean(r.account.displayName)}</bdi></a>
-            <span class="ui-hint">{date(r.grantedAt)}{#if r.grantedBy} · by <bdi>{clean(r.grantedBy.displayName)}</bdi>{/if}{#if r.reason} · <bdi>{clean(r.reason)}</bdi>{/if}</span>
+            <span class="ui-hint">{date(r.grantedAt)}{#if r.grantedBy}{' · by '}<bdi>{clean(r.grantedBy.displayName)}</bdi>{/if}{#if r.reason}{' · '}<bdi>{clean(r.reason)}</bdi>{/if}</span>
           </span>
           <button class="ui-btn ghost small" type="button" onclick={() => { target = r; dlg?.open(); }}>Revoke</button>
         </li>

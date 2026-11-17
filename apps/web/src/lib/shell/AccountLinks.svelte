@@ -24,7 +24,8 @@
   const name = $derived(clean(who?.displayName));
   const platform = $derived(platformName(who?.platform));
   const path = $derived(page.url.pathname);
-  const search = $derived(page.url.searchParams);
+  // Only signed in (never while prerendering, where the query string can't be read).
+  const search = $derived(me ? page.url.searchParams : undefined);
   const look = $derived((me && looks[me.id]) || NO_LOOK);
   let role = $state<Role | null>(null);
   // The header of the menu: your name in your paint, your badge and your highest role.
