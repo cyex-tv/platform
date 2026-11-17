@@ -12,6 +12,7 @@ use cyex_tv_db::sets::Set;
 use cyex_tv_db::{DbResult, channels, editors, ids, sets};
 use cyex_tv_shared::model::{
     AccountSummary, Channel, Emote, EmoteFile, EmoteFlags, EmoteSet, EmoteState, SetEmote,
+    SetSummary, SetVisibility,
 };
 use sqlx::PgConnection;
 use uuid::Uuid;
@@ -199,6 +200,7 @@ pub async fn sets(
         .collect();
     let summaries = reads::summaries(conn, &accounts).await?;
     let counts = reads::channel_counts(conn, &emote_ids).await?;
+    let used = sets::counts(conn, &set_ids).await?;
 
     let mut by_set: HashMap<Uuid, Vec<SetEmote>> = HashMap::new();
     for row in &rows {
@@ -216,6 +218,49 @@ pub async fn sets(
             owner: summary(&summaries, set.owner_account_id),
             capacity: u32::try_from(set.capacity).unwrap_or(0),
             emotes: by_set.remove(&set.id).unwrap_or_default(),
+            visibility: set.visibility,
+            listed: set.visibility == SetVisibility::Listed,
+            slots_used: used
+                .get(&set.id)
+                .map_or(0, |n| u32::try_from(*n).unwrap_or(u32::MAX)),
+            created_at: time(set.created_at),
+        })
+        .collect())
+}
+
+/// Sets as profile cards: facts, whether a channel shows each, and the newest `preview` emotes
+/// the viewer may see.
+pub async fn set_summaries(
+    conn: &mut PgConnection,
+    rows: &[Set],
+    viewer: &Viewer,
+    cdn_url: &str,
+    preview: usize,
+) -> DbResult<Vec<SetSummary>> {
+    let ids: Vec<Uuid> = rows.iter().map(|s| s.id).collect();
+    let active = sets::active(conn, &ids).await?;
+    let built = sets(conn, rows, viewer, cdn_url).await?;
+    Ok(built
+        .into_iter()
+        .zip(rows)
+        .map(|(set, row)| {
+            let mut emotes = set.emotes;
+            // Oldest first as built; the card shows the newest.
+            emotes.reverse();
+            emotes.truncate(preview);
+            SetSummary {
+                id: set.id,
+                name: set.name,
+                kind: set.kind,
+                owner: set.owner,
+                visibility: set.visibility,
+                listed: set.listed,
+                capacity: set.capacity,
+                slots_used: set.slots_used,
+                active: active.contains(&row.id),
+                preview: emotes,
+                created_at: set.created_at,
+            }
         })
         .collect())
 }

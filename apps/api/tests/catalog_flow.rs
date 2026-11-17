@@ -463,6 +463,12 @@ async fn member_rules_and_events() {
     assert_eq!(
         kinds,
         [
+            // A listed set's creation goes to its owner's user topics (ADR 0017).
+            (
+                "set.created".to_owned(),
+                vec!["user:twitch:301".to_owned()],
+                json!("Main")
+            ),
             ("set.emote_added".to_owned(), topics.clone(), json!("bobOk")),
             (
                 "set.emote_renamed".to_owned(),
