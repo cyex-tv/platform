@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backgroundImage, paintCss, paintStyle, shadowFilter } from './css';
+import { backgroundImage, paintCss, paintStyleText, shadowFilter } from './css';
 import { fromApi, pictureUrl, toInput } from './backend';
 import { searchItems, SIZES } from './anim';
 import { alphaOf, blankPaint, checkPicture, fmtBytes, LIMITS, normHex, rgbaToHex, sortStops, validatePaint, withAlpha, type StudioPaint } from './format';
@@ -95,25 +95,27 @@ describe('limits', () => {
   });
 });
 
-describe('gradient CSS', () => {
+describe('gradient CSS (through the site renderer)', () => {
   it('builds linear, repeating and radial gradients', () => {
     const p = paint({ angle: 45, stops: [{ at: 0, color: '#FF0000' }, { at: 0.333, color: '#00FF0080' }] });
-    expect(backgroundImage(p)).toBe('linear-gradient(45deg, #FF0000 0%, #00FF0080 33.3%)');
+    expect(backgroundImage(p)).toBe('linear-gradient(45deg, #ff0000 0%, #00ff0080 33.3%)');
     expect(backgroundImage({ ...p, repeat: true })).toMatch(/^repeating-linear-gradient\(45deg,/);
-    expect(backgroundImage({ ...p, kind: 'RADIAL_GRADIENT', shape: 'ELLIPSE' })).toBe('radial-gradient(ellipse, #FF0000 0%, #00FF0080 33.3%)');
+    expect(backgroundImage({ ...p, kind: 'RADIAL_GRADIENT', shape: 'ELLIPSE' })).toBe('radial-gradient(ellipse, #ff0000 0%, #00ff0080 33.3%)');
+    expect(backgroundImage({ ...p, stops: [p.stops[0]] })).toBe('none');
   });
-  it('draws pictures stretched, or tiled with repeat, and quotes the URL', () => {
+  it('draws pictures covering the name, or tiled with repeat, and quotes local URLs', () => {
     const img = paint({ kind: 'IMAGE', stops: [], image: { id: '1', url: 'https://cdn.example/a"b.webp' } });
-    const s = paintStyle(img);
-    expect(s.backgroundImage).toBe('url("https://cdn.example/a%22b.webp")');
-    expect(s.backgroundSize).toBe('100% 100%');
-    expect(paintStyle({ ...img, repeat: true }).backgroundRepeat).toBe('repeat-x');
-    expect(paintStyle({ ...img, image: null }).backgroundImage).toBe('none');
+    const s = paintStyleText(img);
+    expect(s).toContain('background-image: url("https://cdn.example/a%22b.webp")');
+    expect(s).toContain('background-size: cover');
+    expect(paintStyleText({ ...img, repeat: true })).toContain('background-repeat: repeat;');
+    expect(paintStyleText(img, 'blob:http://localhost/x')).toContain('url("blob:http://localhost/x")');
+    expect(paintStyleText({ ...img, image: null })).not.toContain('background-image');
   });
   it('turns shadows into drop-shadow filters', () => {
     expect(shadowFilter({ shadows: [] })).toBe('none');
     expect(shadowFilter({ shadows: [{ x: 1, y: -2, radius: 3, color: '#00000099' }, { x: 0, y: 0, radius: 0, color: '#FFFFFF' }] })).toBe(
-      'drop-shadow(1px -2px 3px #00000099) drop-shadow(0px 0px 0px #FFFFFF)',
+      'drop-shadow(1px -2px 3px #00000099) drop-shadow(0px 0px 0px #ffffff)',
     );
     expect(paintCss(paint())).toMatch(/background-clip: text;/);
   });

@@ -4,3 +4,4 @@
 export { default as PaintStudio } from './PaintStudio.svelte';
 export { apiBackend, fromApi, toInput, pictureUrl, type SavedPaint, type StudioBackend } from './backend';
 export { LIMITS, blankPaint, validatePaint, type StudioPaint } from './format';
+export { default as AdminStudio } from './AdminStudio.svelte';
