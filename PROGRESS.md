@@ -2,6 +2,19 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Phase 8: Browser extension (in progress, in `cyex-tv/extension`)
+
+Five stacked PRs there, each with CI (licences, types, unit tests, Chrome and Firefox builds). They wait for the owner: merging outside `cyex-tv/platform` is the owner's.
+
+- [x] PR 1 (#2): Manifest V3 for Chrome and Firefox from one codebase (Vite); emote providers for cyex.tv, 7TV, BTTV and FFZ over their public APIs; the emote index and message tokenizer (whole words, links and code untouched, zero-width and FFZ modifiers); settings; a background fetcher limited to the providers' API hosts, cached and revalidated with ETags.
+- [x] PR 2 (#3): Twitch and Kick site adapters (all selectors in one module per site); a page-world script that copies sender and channel IDs from the sites' React props onto `data-` attributes; rendering with srcset, overlays, stills and hover animation, tooltips, copy as typed; personal emotes in batches; per-channel opt-out; providers left to their own extensions by default. Checked against live Twitch (148 of 148 messages tagged, BTTV and FFZ emotes drawn) and Kick (28 of 28 message bodies found).
+- [x] PR 3 (#4): the popup with every setting, in the cyex-app tool style.
+- [x] PR 4 (#5): badges: cyex deck supporters (`api.cyex.app/badges/v1` as its spec says; the background reaches cyex.app only under `/badges/v1/`), BTTV and FFZ. Real APIs' shapes checked.
+- [x] PR 5 (#6): live updates for cyex.tv and 7TV channel sets (reload on change, reconnect with backoff). 7TV's EventAPI handshake checked live.
+- [ ] 7TV badges and paints (7TV EventAPI entitlements and cosmetics).
+- [ ] The manual checklist (`docs/test-checklist.md`) with the installed build in Chrome and Firefox, on three Twitch and two Kick channels.
+- [ ] Owner: store listings (Chrome Web Store, Firefox Add-ons); the agent prepares text and screenshots.
+
 ## Phase 9: Operations and launch (started)
 
 ### PR 1: service images (branch `phase-9/images`)
