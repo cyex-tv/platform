@@ -1,13 +1,6 @@
-import { graphqlReference } from '$lib/docs/graphql';
-import { baseUrl, restGroups } from '$lib/docs/rest';
+import { redirect } from '@sveltejs/kit';
 import type { PageServerLoad } from './$types';
 
-// Built once, at build time, from openapi/openapi.json and schema/schema.graphql. The page is
-// static: it makes no request to the API, and the GraphQL parser stays out of the browser bundle.
-export const prerender = true;
-
-export const load: PageServerLoad = () => ({
-  base: baseUrl,
-  rest: restGroups(),
-  gql: graphqlReference(),
-});
+// The reference is part of /developers now. A redirect keeps the URL's #anchor, so deep links
+// such as /developers/reference#rest-get_channel still land on their endpoint.
+export const load: PageServerLoad = () => redirect(308, '/developers');

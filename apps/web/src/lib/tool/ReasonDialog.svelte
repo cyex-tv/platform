@@ -27,11 +27,13 @@
 
   async function submit(e: SubmitEvent) {
     e.preventDefault();
-    if (!optional && !reason.trim()) return;
+    if (busy || (!optional && !reason.trim())) return;
     busy = true;
     try {
       await onsubmit(reason.trim());
       dialog.close();
+    } catch {
+      // The page already showed why; the dialog stays open to try again.
     } finally {
       busy = false;
     }

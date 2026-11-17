@@ -146,6 +146,7 @@ Work in `cyex-app/cyex-deck` goes on a feature branch with a PR the owner merges
 - [x] Migration `20261118000005_popularity.sql` (additive): `emotes.popularity`, the number of channels whose active set holds the emote, refreshed in the worker's hourly run; indexes for searchable emotes and tag prefixes.
 - [x] `searchEmotes(query, animated, owner, nsfw, page, perPage)`: 1 to 100 per page, default 50. With that, every GraphQL field in the contract is built.
 - [x] Browse data for the redesigned site (additive, `api/browse-data`): `searchEmotes(sort: RELEVANCE | TOP | NEW)`, `Emote.channelCount` (one grouped query per list), `Query.account(id)`, `Query.emoteChannels(id, limit)` (1 to 50, default 8); migration `20261119000001_channels_active_set.sql` (index); the mock API and the generated web types follow. There is no REST search endpoint, so REST only gets the optional `channel_count` on the emote shape. Tests in `search_flow.rs`.
+- [ ] Website redesign (`web/redesign`): new nav with Ctrl K palette, emote cards that play on hover, home (emote cluster, Top / New strip, chat previews, steps, install cards), browse with sort, filters and load more, emote page (preview stage, facts, used in, review, more from the creator), channel and new creator pages, signed-in pages brought to cyex-app. Research and plan in `.claude/runs/2026-11-17-web-redesign/`. Checked with the mock at 375 to 2560, dark and light; reduced motion only through headless rendering; not yet on a real phone.
 
 #### Tests
 - Unit: LIKE escaping.

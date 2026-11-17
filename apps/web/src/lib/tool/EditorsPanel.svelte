@@ -4,7 +4,8 @@
   import { gql } from '$lib/api';
   import type { EditSetQuery, Platform } from '$lib/gql/graphql';
   import { ADD_SET_EDITOR, FIND_ACCOUNT, REMOVE_SET_EDITOR } from '$lib/queries';
-  import Avatar from './Avatar.svelte';
+  import Avatar from '$lib/components/Avatar.svelte';
+  import { clean } from '$lib/format';
   import { session } from './session.svelte';
   import { fail, notify } from './notices.svelte';
 
@@ -18,7 +19,7 @@
   async function add(e: SubmitEvent) {
     e.preventDefault();
     const name = login.trim().replace(/^@/, '').toLowerCase();
-    if (!name) return;
+    if (busy || !name) return;
     busy = true;
     problem = null;
     try {
@@ -59,8 +60,8 @@
     <ul class="ui-list">
       {#each editors as e (e.id)}
         <li>
-          <Avatar src={e.avatar} name={e.displayName} size={24} />
-          <span class="who">{e.displayName}</span>
+          <Avatar src={e.avatar} name={e.displayName} size={24} tone="tool" />
+          <span class="who">{clean(e.displayName)}</span>
           {#if owner}
             <button class="ui-icon" type="button" aria-label="Remove {e.displayName}" title="Remove" onclick={() => remove(e.id, e.displayName)}>
               <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>

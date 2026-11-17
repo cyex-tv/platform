@@ -7,7 +7,11 @@
     label = '',
     meta = '',
     code = '',
-  }: { tabs?: Tab[]; label?: string; meta?: string; code?: string } = $props();
+    ok = false,
+    copy = 'Copy',
+  }: { tabs?: Tab[]; label?: string; meta?: string; code?: string; ok?: boolean; copy?: string } = $props();
+  // Ids tie each tab to its panel (aria-controls / aria-labelledby); unique per block.
+  const uid = $props.id();
 </script>
 
 <div class="code-block">
@@ -15,20 +19,24 @@
     {#if tabs && tabs.length}
       <div class="lang-tabs" role="tablist" aria-label="Language">
         {#each tabs as t, i}
-          <button type="button" role="tab" class="lang-tab" data-lang={t.lang} aria-selected={i === 0}>{t.label}</button>
+          <button type="button" role="tab" class="lang-tab" id="{uid}-tab-{t.lang}" data-lang={t.lang} aria-selected={i === 0} aria-controls="{uid}-panel-{t.lang}" tabindex={i === 0 ? 0 : -1}>{t.label}</button>
         {/each}
       </div>
     {:else}
-      <div class="resp-head"><span class="resp-status">{label}</span>{#if meta}<span class="resp-type">{meta}</span>{/if}</div>
+      <div class="resp-head">
+        {#if ok}<span class="status-pip ok" aria-hidden="true"></span>{/if}
+        <span class="resp-status">{label}</span>{#if meta}<span class="resp-type">{meta}</span>{/if}
+      </div>
     {/if}
-    <button type="button" class="code-copy" aria-label="Copy">
-      <svg class="icon-copy" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="5.5" y="5.5" width="8" height="8" rx="1"/><path d="M10.5 3.5v-1h-8v8h1"/></svg>
-      <svg class="icon-done" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>
+    <button type="button" class="code-copy" aria-label={copy} title={copy}>
+      <svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="1.5" /><path d="M5 15V5.5A1.5 1.5 0 0 1 6.5 4H15" /></svg>
+      <svg class="icon-done" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
     </button>
   </div>
   {#if tabs && tabs.length}
     {#each tabs as t, i}
-      <pre data-lang={t.lang} hidden={i > 0}><code>{t.code}</code></pre>
+      <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
+      <pre data-lang={t.lang} hidden={i > 0} role="tabpanel" id="{uid}-panel-{t.lang}" aria-labelledby="{uid}-tab-{t.lang}" tabindex="0"><code>{t.code}</code></pre>
     {/each}
   {:else}
     <pre><code>{code}</code></pre>

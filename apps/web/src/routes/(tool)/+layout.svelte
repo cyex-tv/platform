@@ -8,12 +8,12 @@
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import Toasts from '$lib/tool/Toasts.svelte';
   import UserMenu from '$lib/tool/UserMenu.svelte';
-  import { ADMIN_PERMISSIONS, loadMe, session } from '$lib/tool/session.svelte';
+  import { isAdmin, loadMe, session } from '$lib/tool/session.svelte';
 
   let { children } = $props();
   let problem = $state<string | null>(null);
 
-  const admin = $derived(session.me?.permissions.some((p) => ADMIN_PERMISSIONS.includes(p)) ?? false);
+  const admin = $derived(isAdmin(session.me));
   const links = $derived([
     { href: '/me', label: 'Emotes', match: (p: string) => p === '/me' || p.startsWith('/me/emotes') || p === '/me/upload' },
     { href: '/me/sets', label: 'Sets', match: (p: string) => p.startsWith('/me/sets') },
@@ -52,7 +52,7 @@
         {/each}
       </nav>
       <div class="end">
-        <ThemeToggle />
+        <ThemeToggle variant="tool" />
         {#if session.me}<UserMenu />{/if}
       </div>
     </div>
@@ -74,25 +74,23 @@
 </div>
 
 <style>
-  .bar { position: sticky; top: 0; z-index: var(--z-panel); background: var(--bg); border-bottom: 1px solid var(--border); }
+  .bar { position: sticky; top: 0; z-index: var(--z-nav); background: var(--bg); border-bottom: 1px solid var(--border); }
   .inner { display: flex; align-items: center; gap: 24px; padding-block: 10px; min-height: 56px; }
   .brand { display: flex; align-items: center; gap: 9px; color: var(--text); text-decoration: none; font-weight: 700; font-size: .95rem; flex: none; }
   nav { display: flex; gap: 18px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   nav a { position: relative; padding: 8px 0; color: var(--muted); text-decoration: none; white-space: nowrap;
     font-size: .74rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; transition: color var(--fast); }
-  nav a:hover { color: var(--text); }
+  @media (hover: hover) and (pointer: fine) { nav a:hover { color: var(--text); } }
   nav a::after { content: ''; position: absolute; inset: auto 0 2px; height: 2px; background: var(--accent);
     scale: 0 1; transition: scale var(--base) var(--ease); }
   nav a[aria-current='page'] { color: var(--text); }
   nav a[aria-current='page']::after { scale: 1 1; }
   nav a:active { opacity: .6; transition: none; }
   .end { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }
-  .end :global(.theme) { width: 32px; height: 32px; border-radius: var(--radius); border: 1px solid var(--border-strong); transition: background-color var(--fast), color var(--fast); }
-  .end :global(.theme:hover) { background: var(--surface-hover); border-color: var(--border-strong); }
-  .end :global(.theme:active) { transform: none; opacity: .6; transition: none; }
-  .skip { position: fixed; left: 12px; top: -60px; z-index: var(--z-toast); padding: 8px 12px; background: var(--text); color: var(--bg); }
+  .skip { position: fixed; left: 12px; top: -60px; z-index: var(--z-skip); padding: 8px 12px; background: var(--text); color: var(--bg); }
   .skip:focus { top: 12px; }
   main:focus { outline: none; }
+  @media (prefers-reduced-motion: reduce) { nav a::after { transition: none; } }
   @media (max-width: 640px) {
     .inner { flex-wrap: wrap; gap: 4px 16px; }
     nav { order: 3; flex-basis: 100%; }

@@ -1,31 +1,77 @@
 <script lang="ts">
+  // The site footer: brand, three link columns (product, developers, legal) and the base line
+  // with the non-affiliation note. /terms, /privacy and /contact are their own pages. Signed in,
+  // the product column offers Your emotes; signed out, Sign in.
   import Mark from './Mark.svelte';
+
+  let { signedIn = false }: { signedIn?: boolean } = $props();
   const year = new Date().getFullYear();
+
+  const columns = $derived([
+    {
+      name: 'Product',
+      links: [
+        { href: '/search', label: 'Browse emotes' },
+        { href: '/#install', label: 'Get the extension' },
+        signedIn ? { href: '/me', label: 'Your emotes' } : { href: '/signin', label: 'Sign in' },
+      ],
+    },
+    {
+      name: 'Developers',
+      links: [
+        { href: '/developers', label: 'Developers' },
+        { href: '/developers/reference', label: 'API reference' },
+        { href: 'https://github.com/cyex-tv/platform', label: 'Source' },
+      ],
+    },
+    {
+      name: 'Legal',
+      links: [
+        { href: '/terms', label: 'Terms' },
+        { href: '/privacy', label: 'Privacy' },
+        { href: 'https://github.com/cyex-tv/platform/blob/main/docs/takedown.md', label: 'Takedowns' },
+        { href: '/contact', label: 'Contact' },
+      ],
+    },
+  ]);
 </script>
 
 <footer class="footer">
   <div class="page">
     <div class="top">
-      <a class="brand" href="/"><Mark size={18} /><span>cyex.tv</span></a>
-      <nav class="links" aria-label="Footer">
-        <a href="/search">Search</a>
-        <a href="/developers">Developers</a>
-        <a href="https://github.com/cyex-tv/platform">Source</a>
-        <a href="https://github.com/cyex-tv/platform/blob/main/docs/takedown.md">Takedowns</a>
-      </nav>
+      <div class="about">
+        <a class="brand" href="/"><Mark size={18} /><span>cyex.tv</span></a>
+        <p>Emotes for Twitch and Kick chat.</p>
+      </div>
+      {#each columns as c}
+        <nav class="col" aria-label={c.name}>
+          <h2>{c.name}</h2>
+          <ul>
+            {#each c.links as l}<li><a href={l.href}>{l.label}</a></li>{/each}
+          </ul>
+        </nav>
+      {/each}
     </div>
     <div class="base">
-      Not affiliated with, endorsed by, or sponsored by Twitch or Kick. © {year} seryxx
+      <span>Not affiliated with, endorsed by, or sponsored by Twitch or Kick.</span>
+      <span>© {year} cyex</span>
     </div>
   </div>
 </footer>
 
 <style>
-  .footer { border-top: 1px solid var(--border); margin-top: var(--section-pad); }
-  .top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 24px; padding: 40px 0 32px; }
-  .brand { display: flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
-  .links { display: flex; flex-wrap: wrap; gap: 8px 28px; font-size: 14.5px; color: var(--muted); }
-  .links a { transition: color var(--dur-color); }
-  .links a:hover { color: var(--text); }
-  .base { border-top: 1px solid var(--border); padding: 20px 0 36px; font-size: var(--t-fine); color: var(--muted); }
+  .footer { flex: none; border-top: 1px solid var(--border); margin-top: var(--footer-gap);
+    padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .top { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)); gap: 32px 24px; padding: 48px 0 40px; }
+  .brand { display: inline-flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+  .about p { margin: 12px 0 0; font-size: var(--t-small); color: var(--muted); max-width: 28ch; }
+  h2 { margin: 0 0 12px; font-size: var(--t-small); font-weight: 500; color: var(--text); }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+  .col a { display: inline-flex; align-items: center; min-height: 40px; font-size: var(--t-small); color: var(--muted);
+    transition: color var(--dur-color); }
+  .base { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; border-top: 1px solid var(--border);
+    padding: 20px 0 36px; font-size: var(--t-fine); color: var(--muted); }
+  @media (hover: hover) and (pointer: fine) { .col a:hover { color: var(--text); } }
+  @media (max-width: 900px) { .top { grid-template-columns: repeat(3, minmax(0, 1fr)); } .about { grid-column: 1 / -1; } }
+  @media (max-width: 520px) { .top { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

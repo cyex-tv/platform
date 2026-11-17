@@ -1,19 +1,32 @@
 import { ApiError, gql } from '$lib/api';
+import { apiSort, PER_PAGE, parse } from '$lib/components/browse/params';
 import { SEARCH } from '$lib/queries';
 import type { PageLoad } from './$types';
 
-const PER_PAGE = 60;
-
 export const load: PageLoad = async ({ fetch, url }) => {
-  const query = url.searchParams.get('q')?.trim() ?? '';
-  const kind = url.searchParams.get('kind');
-  const animated = kind === 'animated' ? true : kind === 'still' ? false : null;
-  const page = Math.max(1, Number.parseInt(url.searchParams.get('page') ?? '1', 10) || 1);
+  const view = parse(url.searchParams);
+  const ask = (page: number) =>
+    gql(
+      SEARCH,
+      {
+        query: view.q,
+        animated: view.kind === 'animated' ? true : view.kind === 'still' ? false : null,
+        nsfw: view.nsfw ? true : null,
+        sort: apiSort(view.sort),
+        page,
+        perPage: PER_PAGE,
+      },
+      fetch,
+    ).then((r) => r.searchEmotes);
   try {
-    const { searchEmotes } = await gql(SEARCH, { query, animated, page, perPage: PER_PAGE }, fetch);
-    return { query, kind: kind ?? 'all', results: searchEmotes, error: null };
+    // A shared link with n=3 renders three pages at once, so the view matches.
+    const first = await ask(1);
+    const rest = Math.min(view.pages, Math.ceil(first.total / PER_PAGE)) - 1;
+    const more = await Promise.all(Array.from({ length: Math.max(0, rest) }, (_, i) => ask(i + 2)));
+    const items = [first, ...more].flatMap((r) => r.items);
+    return { view, total: first.total, items, pages: 1 + more.length, error: null };
   } catch (e) {
-    const message = e instanceof ApiError ? e.message : 'Search isn’t available right now.';
-    return { query, kind: kind ?? 'all', results: null, error: message };
+    const error = e instanceof ApiError ? e.message : 'Search isn’t available right now.';
+    return { view, total: 0, items: [], pages: 1, error };
   }
 };

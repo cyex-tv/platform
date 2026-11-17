@@ -49,7 +49,7 @@
 
   /* Layout: the shared cyex page wrapper (cyex-design), 1520px with 20px sides. */
   --page-max: 1520px;
-  --page-pad: 20px;
+  --page-pad: max(20px, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)); /* clears the notch in landscape */
   --measure: 820px;
   --measure-form: 640px;
   --gutter: var(--page-pad);
@@ -67,6 +67,42 @@
   --dur-reveal: .9s;
   --stagger: 70ms;
   --press: .97;
+  --ease-drawer: cubic-bezier(.32, .72, 0, 1); /* sheets: the iOS drawer curve */
+  --dur-pop: .15s;   /* popovers and tooltips */
+  --dur-sheet: .28s; /* bottom sheets */
+  --delay-tip: .4s;  /* before a tooltip shows */
+  --delay-progress: .15s; /* before the page-load bar shows: quick loads never flash it */
+  --dur-progress: 8s;     /* the bar's slow crawl to 85% while a page loads */
+
+  /* Layers: the one z-index scale for every surface (the tool layer maps its names onto it). */
+  --z-panel: 10;
+  --z-nav: 50;
+  --z-pop: 60;
+  --z-tip: 70;
+  --z-dialog: 80;
+  --z-toast: 90;
+  --z-skip: 100;
+
+  /* Platform colours, only where the platform itself is meant (cyex-design). */
+  --twitch: #9146ff;
+  --kick: #53fc18;
+
+  /* Overlays and emote sizes (cyex.tv components). */
+  --scrim: rgb(0 0 0 / .55);
+  --shadow-pop: 0 1px 0 rgb(255 255 255 / .04) inset, 0 18px 44px -14px rgb(0 0 0 / .75);
+  --t-label: 12px;   /* small neutral labels on cards */
+  --emote-art: 112px;
+  --emote-art-compact: 80px;
+  --emote-chat: 28px;
+
+  /* Emote preview grounds: the same in both themes (they show how an emote looks on each). */
+  --stage-dark: #0e0f13;
+  --stage-light: #ffffff;
+  --stage-dark-ink: #9ba1ad;
+  --stage-light-ink: #555b66;
+  --checker-a: #ffffff;
+  --checker-b: #d6d9df;
+  --checker-size: 16px;
 }
 
 [data-theme="light"] {
@@ -87,6 +123,8 @@
   --accent-glow: rgb(20 230 255 / .4);
 
   --shadow: 0 40px 80px -40px rgb(13 15 20 / .3);
+  --scrim: rgb(13 15 20 / .32);
+  --shadow-pop: 0 18px 44px -16px rgb(13 15 20 / .28);
 }
 
 /* Arial sized to Geist per weight, so the font swap moves nothing (CLS 0). */

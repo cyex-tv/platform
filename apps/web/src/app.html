@@ -2,14 +2,19 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="color-scheme" content="dark light" />
-    <meta name="theme-color" content="#08090c" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#08090c" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#08090c" />
     <link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
     <script>
       (function () {
         try {
-          if (localStorage.getItem('cyexTheme') === 'light') document.documentElement.dataset.theme = 'light';
+          if (localStorage.getItem('cyexTheme') === 'light') {
+            document.documentElement.dataset.theme = 'light';
+            // The status bar follows the site's theme, not the OS one.
+            document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.setAttribute('content', '#ffffff'); });
+          }
         } catch (e) {}
         document.documentElement.classList.add('js');
       })();

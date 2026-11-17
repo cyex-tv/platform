@@ -15,8 +15,8 @@ import {
   type GraphQLSchema,
 } from 'graphql';
 import sdl from '../../../../../schema/schema.graphql?raw';
-import { exampleString, paragraphs, shellQuote, type Segment } from './example';
-import { baseUrl } from './rest';
+import { EXAMPLE_TAGS, SESSION_ENV, exampleBool, exampleNumber, exampleString, paragraphs, py, shellQuote, type Segment } from './example';
+import { COOKIE, SITE, baseUrl } from './rest';
 
 export type OpKind = 'query' | 'mutation' | 'subscription';
 
@@ -35,6 +35,8 @@ export interface GqlOp {
   args: GqlArg[];
   returns: string;
   deprecated?: string;
+  /** Who may call it: anyone, a signed-in account, or one holding a permission. */
+  access: 'public' | 'signed-in' | 'restricted';
   /** The document, pretty printed. */
   document: string;
   variables: string;
@@ -66,40 +68,40 @@ export interface GqlReference {
 const SCALARS = new Set(['String', 'Int', 'Float', 'Boolean', 'ID']);
 export const typeId = (name: string) => `gql-type-${name}`;
 
-function inputExample(type: GraphQLInputType, name: string, seen: string[] = []): unknown {
-  if (isNonNullType(type)) return inputExample(type.ofType, name, seen);
-  if (isListType(type)) return [inputExample(type.ofType, name, seen)];
+function inputExample(type: GraphQLInputType, name: string, seen: string[] = [], ctx = ''): unknown {
+  if (isNonNullType(type)) return inputExample(type.ofType, name, seen, ctx);
+  if (isListType(type)) return [inputExample(type.ofType, name, seen, ctx)];
   if (isEnumType(type)) return type.getValues()[0].name;
   if (isInputObjectType(type)) {
     if (seen.includes(type.name)) return {};
     const fields = Object.values(type.getFields());
     const picked = fields.filter((f) => isNonNullType(f.type));
     const use = picked.length ? picked : fields.slice(0, 1);
-    return Object.fromEntries(use.map((f) => [f.name, inputExample(f.type, f.name, [...seen, type.name])]));
+    return Object.fromEntries(use.map((f) => [f.name, inputExample(f.type, f.name, [...seen, type.name], type.name)]));
   }
   switch (type.name) {
     case 'Int':
     case 'Float':
-      return name === 'perPage' ? 20 : 1;
+      return exampleNumber(name);
     case 'Boolean':
-      return true;
+      return exampleBool(name);
     default:
-      return exampleString(name);
+      return exampleString(name, ctx);
   }
 }
 
 /** A selection set and the matching data, from one walk: scalars always, objects two levels deep. */
-function select(type: GraphQLOutputType, name: string, depth: number, indent: string): { text: string; data: unknown } {
-  if (isNonNullType(type)) return select(type.ofType, name, depth, indent);
+function select(type: GraphQLOutputType, name: string, depth: number, indent: string, ctx = ''): { text: string; data: unknown } {
+  if (isNonNullType(type)) return select(type.ofType, name, depth, indent, ctx);
   if (isListType(type)) {
-    const inner = select(type.ofType, name, depth, indent);
-    return { text: inner.text, data: [inner.data] };
+    const inner = select(type.ofType, name, depth, indent, ctx);
+    return { text: inner.text, data: name === 'tags' ? EXAMPLE_TAGS : [inner.data] };
   }
   if (isEnumType(type)) return { text: '', data: type.getValues()[0].name };
   if (isScalarType(type)) {
-    if (type.name === 'Boolean') return { text: '', data: true };
-    if (type.name === 'Int' || type.name === 'Float') return { text: '', data: name === 'total' ? 1 : name === 'capacity' ? 1000 : 1 };
-    return { text: '', data: exampleString(name) };
+    if (type.name === 'Boolean') return { text: '', data: exampleBool(name) };
+    if (type.name === 'Int' || type.name === 'Float') return { text: '', data: exampleNumber(name) };
+    return { text: '', data: exampleString(name, ctx) };
   }
   if (!isObjectType(type)) return { text: '', data: null };
   const lines: string[] = [];
@@ -108,7 +110,7 @@ function select(type: GraphQLOutputType, name: string, depth: number, indent: st
     const named = getNamedType(f.type);
     const leaf = isScalarType(named) || isEnumType(named);
     if (!leaf && depth >= 2) continue;
-    const inner = select(f.type, f.name, depth + 1, indent + '  ');
+    const inner = select(f.type, f.name, depth + 1, indent + '  ', type.name);
     data[f.name] = inner.data;
     lines.push(leaf ? `${indent}  ${f.name}` : `${indent}  ${f.name} {\n${inner.text}\n${indent}  }`);
   }
@@ -124,21 +126,48 @@ function documentFor(kind: OpKind, field: GraphQLField<unknown, unknown>) {
   const head = `${kind} ${label}${vars ? `(${vars})` : ''}`;
   const call = `${field.name}${use ? `(${use})` : ''}`;
   const document = isObjectType(named) ? `${head} {\n  ${call} {\n${sel.text}\n  }\n}` : `${head} {\n  ${call}\n}`;
-  const variables = Object.fromEntries(field.args.map((a) => [a.name, inputExample(a.type, a.name)]));
+  // An `id` next to a `platform` is a platform ID; otherwise the field says what it identifies.
+  const argCtx = field.args.some((a) => a.name === 'platform') ? 'platform' : field.name;
+  const variables = Object.fromEntries(field.args.map((a) => [a.name, inputExample(a.type, a.name, [], argCtx)]));
   return { document, variables, data: { [field.name]: sel.data } };
+}
+
+/** Operations for the signed-in account: `me`, `my…`, and the ones a set or account owner calls. */
+const SIGNED_IN_QUERIES = new Set(['me', 'mySets', 'myEmotes', 'myChannels', 'myNotifications', 'setEditors', 'accountRoles']);
+
+function accessOf(kind: OpKind, field: GraphQLField<unknown, unknown>): GqlOp['access'] {
+  if (/Needs `/.test(field.description ?? '')) return 'restricted';
+  if (kind === 'mutation' || SIGNED_IN_QUERIES.has(field.name)) return 'signed-in';
+  return 'public';
 }
 
 function opFrom(kind: OpKind, field: GraphQLField<unknown, unknown>): GqlOp {
   const { document, variables, data } = documentFor(kind, field);
+  const access = accessOf(kind, field);
+  const session = access !== 'public';
   const hasVars = field.args.length > 0;
   const oneLine = document.replace(/\s+/g, ' ');
   const body = hasVars ? { query: oneLine, variables } : { query: oneLine };
   const endpoint = `${baseUrl}/v1/gql`;
-  const curl = `curl -s ${shellQuote(endpoint)} \\\n  -H 'content-type: application/json' \\\n  -d ${shellQuote(JSON.stringify(body))}`;
+  const curl = [
+    `curl -s ${shellQuote(endpoint)}`,
+    ...(session ? [`-b "${COOKIE}=$${SESSION_ENV}"`, `-H 'origin: ${SITE}'`] : []),
+    `-H 'content-type: application/json'`,
+    `-d ${shellQuote(JSON.stringify(body))}`,
+  ].join(' \\\n  ');
   const fetchCode =
-    `const res = await fetch('${endpoint}', {\n  method: 'POST',\n  headers: { 'content-type': 'application/json' },\n  credentials: 'include',\n  body: JSON.stringify({\n    query: \`${document.replace(/\n/g, '\n    ')}\`,` +
+    `const res = await fetch('${endpoint}', {\n  method: 'POST',\n  headers: { 'content-type': 'application/json' },\n` +
+    (session ? `  credentials: 'include',\n` : '') +
+    `  body: JSON.stringify({\n    query: \`${document.replace(/\n/g, '\n    ')}\`,` +
     (hasVars ? `\n    variables: ${JSON.stringify(variables, null, 2).replace(/\n/g, '\n    ')},` : '') +
     `\n  }),\n});\nconst { data, errors } = await res.json();`;
+  const pyArgs = [
+    `json={"query": query${hasVars ? `, "variables": ${py(variables, 1)}` : ''}}`,
+    ...(session ? [`cookies={"${COOKIE}": os.environ["${SESSION_ENV}"]}`, `headers={"origin": "${SITE}"}`] : []),
+  ];
+  const python =
+    `${session ? 'import os\n' : ''}import requests\n\nquery = """\n${document}\n"""\n\n` +
+    `res = requests.post(\n    "${endpoint}",\n${pyArgs.map((a) => `    ${a},`).join('\n')}\n)\ndata = res.json()["data"]`;
   return {
     id: `gql-${kind}-${field.name}`,
     kind,
@@ -153,14 +182,16 @@ function opFrom(kind: OpKind, field: GraphQLField<unknown, unknown>): GqlOp {
     })),
     returns: String(field.type),
     deprecated: field.deprecationReason ?? undefined,
+    access,
     document,
     variables: hasVars ? JSON.stringify(variables, null, 2) : '',
     samples:
       kind === 'subscription'
         ? []
         : [
-            { lang: 'curl', label: 'curl', code: curl },
-            { lang: 'fetch', label: 'JavaScript', code: fetchCode },
+            { lang: 'curl', label: 'cURL', code: curl },
+            { lang: 'js', label: 'JavaScript', code: fetchCode },
+            { lang: 'py', label: 'Python', code: python },
           ],
     response: JSON.stringify({ data }, null, 2),
   };

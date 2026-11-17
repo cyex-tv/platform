@@ -27,3 +27,25 @@ export function size(e: Picture): { width: number; height: number } {
   const one = e.files.find((f) => f.name === '1x.webp');
   return { width: one?.width ?? 32, height: one?.height ?? 32 };
 }
+
+/** Whether the emote has a still first frame (`1x_static.webp`) to show until it plays. */
+export function hasStill(e: Picture): boolean {
+  return e.animated && e.files.some((f) => f.name === '1x_static.webp');
+}
+
+/** Wide emotes (about twice as wide as tall or more) take two cells in a grid. */
+export function isWide(e: Picture): boolean {
+  const { width, height } = size(e);
+  return width / height >= 1.75;
+}
+
+/** `srcset` with width descriptors, for an emote shown at a set CSS size (pair it with `sizes`). */
+export function srcsetW(e: Picture, still = false): string {
+  const suffix = still && e.animated ? '_static' : '';
+  const out: string[] = [];
+  for (const s of [1, 2, 3, 4] as const) {
+    const f = e.files.find((x) => x.name === `${s}x${suffix}.webp`);
+    if (f) out.push(`${e.host}/${f.name} ${f.width}w`);
+  }
+  return out.join(', ');
+}

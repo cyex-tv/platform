@@ -3,18 +3,20 @@
   import { page } from '$app/state';
   import { gql } from '$lib/api';
   import { ready, src } from '$lib/emote';
-  import { date } from '$lib/format';
+  import { clean, date } from '$lib/format';
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
   import { ADD_SET_EMOTE, DELETE_EMOTE, EMOTE, MY_SETS, UPDATE_EMOTE } from '$lib/queries';
   import { nameProblem, parseTags, tagsProblem } from '$lib/rules';
+  import LoadGate from '$lib/tool/LoadGate.svelte';
+  import { loader } from '$lib/tool/loader.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
-  import { session } from '$lib/tool/session.svelte';
+  import { can, session } from '$lib/tool/session.svelte';
   import { STATE_HINT, STATE_LABEL } from '$lib/tool/state';
   import { fail, notify } from '$lib/tool/notices.svelte';
 
   const scales = [1, 2, 4] as const;
   let emote = $state<EmoteFieldsFragment | null>(null);
-  let missing = $state(false);
+  let slow = $state(false);
   let sets = $state<{ id: string; name: string; kind: string }[]>([]);
   let target = $state('');
 
@@ -49,6 +51,15 @@
     nsfw = e.flags.nsfw;
   }
 
+  const L = loader(async ({ fetch }) => {
+    const id = page.params.id ?? '';
+    slow = false;
+    const r = await gql(EMOTE, { id }, fetch);
+    if (!r.emote) throw new Error('This emote doesn’t exist, or isn’t yours to see.');
+    if (id === page.params.id) fill(r.emote);
+    return r.emote;
+  });
+
   // While the worker is still making the files, look again every two seconds (for a minute).
   $effect(() => {
     if (!emote || ready(emote)) return;
@@ -63,16 +74,16 @@
           emote.files = r.emote.files;
         }
       } catch {}
-      if (tries >= 30) clearInterval(timer);
+      if (tries >= 30) {
+        clearInterval(timer);
+        if (emote?.id === id && !ready(emote)) slow = true;
+      }
     }, 2000);
     return () => clearInterval(timer);
   });
 
   $effect(() => {
     const id = page.params.id ?? '';
-    gql(EMOTE, { id })
-      .then((r) => (r.emote ? fill(r.emote) : (missing = true)))
-      .catch(fail);
     gql(MY_SETS, {})
       .then((r) => {
         sets = r.mySets.filter((s) => s.kind !== 'GLOBAL' && !s.emotes.some((m) => m.emote.id === id));
@@ -131,14 +142,13 @@
 
 <svelte:head><title>{emote?.name ?? 'Emote'} - cyex.tv</title></svelte:head>
 
-<p class="crumbs"><a href="/me">Your emotes</a> <span aria-hidden="true">/</span> {emote?.name ?? ''}</p>
-
-{#if missing}
-  <div class="ui-empty">
-    <p>This emote doesn’t exist, or isn’t yours to see.</p>
-    <a class="ui-btn secondary" href="/me">Back to your emotes</a>
-  </div>
-{:else if emote}
+<LoadGate source={L} label="Loading the emote…">
+{#snippet children()}
+{#if emote}
+  <p class="crumbs">
+    {#if mine}<a href="/me">Your emotes</a>{:else if can('emotes.review')}<a href="/admin">Admin</a>{:else}<a href="/search">Emotes</a>{/if}
+    <span aria-hidden="true">/</span> {clean(emote.name)}
+  </p>
   <div class="layout">
     <section class="ui-card" aria-label="Preview">
       <div class="stage">
@@ -146,7 +156,7 @@
           {#each scales as s}<img src={src(emote, s)} alt={s === 4 ? emote.name : ''} />{/each}
         {:else}
           <span class="ui-spinner" aria-hidden="true"></span>
-          <p class="ui-hint">The files are still being made. This takes a few seconds.</p>
+          <p class="ui-hint">{slow ? 'The files are taking longer than usual. Reload in a minute.' : 'The files are still being made. This takes a few seconds.'}</p>
         {/if}
       </div>
       <div>
@@ -225,14 +235,14 @@
       {/if}
     </div>
   </div>
-{:else}
-  <div class="ui-empty" aria-busy="true"><span class="ui-spinner" aria-hidden="true"></span></div>
 {/if}
+{/snippet}
+</LoadGate>
 
 <style>
-  .crumbs { margin-bottom: 16px; color: var(--dim); font-size: var(--text-sub); }
+  .crumbs { margin-bottom: 16px; min-width: 0; overflow-wrap: anywhere; color: var(--dim); font-size: var(--text-sub); }
   .crumbs a { color: var(--muted); text-decoration: none; }
-  .crumbs a:hover { color: var(--text); }
+  @media (hover: hover) and (pointer: fine) { .crumbs a:hover { color: var(--text); } }
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
   .stage { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 24px; min-height: 200px;
     padding: 24px 0; border-bottom: 1px solid var(--border); text-align: center; }

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state';
-  import { ADMIN_PERMISSIONS, can, session } from '$lib/tool/session.svelte';
+  import { can, isAdmin, session } from '$lib/tool/session.svelte';
 
   let { children } = $props();
 
@@ -14,7 +14,7 @@
       { href: '/admin/audit', label: 'Audit log', show: can('audit.view') },
     ].filter((s) => s.show),
   );
-  const allowed = $derived(session.me?.permissions.some((p) => ADMIN_PERMISSIONS.includes(p)) ?? false);
+  const allowed = $derived(isAdmin(session.me));
 </script>
 
 {#if !allowed}
@@ -33,5 +33,5 @@
 {/if}
 
 <style>
-  .sub { margin-bottom: 20px; }
+  .sub { margin-bottom: 20px; flex-wrap: wrap; overflow: visible; }
 </style>

@@ -15,8 +15,8 @@ import * as types from './graphql';
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
-    "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    flags {\n      zeroWidth\n      nsfw\n      private\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n": typeof types.EmoteFieldsFragmentDoc,
-    "\n  query Search($query: String!, $animated: Boolean, $page: Int, $perPage: Int) {\n    searchEmotes(query: $query, animated: $animated, page: $page, perPage: $perPage) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.SearchDocument,
+    "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    channelCount\n    flags {\n      zeroWidth\n      nsfw\n      private\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n": typeof types.EmoteFieldsFragmentDoc,
+    "\n  query Search($query: String!, $animated: Boolean, $nsfw: Boolean, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: $query, animated: $animated, nsfw: $nsfw, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.SearchDocument,
     "\n  query Emote($id: String!) {\n    emote(id: $id) {\n      ...EmoteFields\n    }\n  }\n": typeof types.EmoteDocument,
     "\n  query Channel($platform: Platform!, $login: String!) {\n    channelByLogin(platform: $platform, login: $login) {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      allowPersonalEmotes\n      account {\n        id\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.ChannelDocument,
     "\n  query Set($id: String!) {\n    set(id: $id) {\n      id\n      name\n      kind\n      capacity\n      owner {\n        id\n        displayName\n      }\n      emotes {\n        name\n        zeroWidth\n        addedAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": typeof types.SetDocument,
@@ -63,10 +63,13 @@ type Documents = {
     "\n  query Audit($targetKind: String, $targetId: String, $before: String, $limit: Int) {\n    auditLog(targetKind: $targetKind, targetId: $targetId, before: $before, limit: $limit) {\n      id\n      actorId\n      action\n      targetKind\n      targetId\n      before\n      after\n      createdAt\n    }\n  }\n": typeof types.AuditDocument,
     "\n  mutation ReportEmote($id: String!, $reason: String!) {\n    reportEmote(id: $id, reason: $reason) {\n      id\n    }\n  }\n": typeof types.ReportEmoteDocument,
     "\n  query MySetNames {\n    mySets {\n      id\n      name\n      kind\n      emotes {\n        emote {\n          id\n        }\n      }\n    }\n  }\n": typeof types.MySetNamesDocument,
+    "\n  query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: \"\", owner: $owner, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.SearchByOwnerDocument,
+    "\n  query PublicAccount($id: String!) {\n    account(id: $id) {\n      id\n      displayName\n      avatar\n    }\n  }\n": typeof types.PublicAccountDocument,
+    "\n  query EmoteChannels($id: String!, $limit: Int) {\n    emoteChannels(id: $id, limit: $limit) {\n      platform\n      login\n      account {\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.EmoteChannelsDocument,
 };
 const documents: Documents = {
-    "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    flags {\n      zeroWidth\n      nsfw\n      private\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n": types.EmoteFieldsFragmentDoc,
-    "\n  query Search($query: String!, $animated: Boolean, $page: Int, $perPage: Int) {\n    searchEmotes(query: $query, animated: $animated, page: $page, perPage: $perPage) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.SearchDocument,
+    "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    channelCount\n    flags {\n      zeroWidth\n      nsfw\n      private\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n": types.EmoteFieldsFragmentDoc,
+    "\n  query Search($query: String!, $animated: Boolean, $nsfw: Boolean, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: $query, animated: $animated, nsfw: $nsfw, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.SearchDocument,
     "\n  query Emote($id: String!) {\n    emote(id: $id) {\n      ...EmoteFields\n    }\n  }\n": types.EmoteDocument,
     "\n  query Channel($platform: Platform!, $login: String!) {\n    channelByLogin(platform: $platform, login: $login) {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      allowPersonalEmotes\n      account {\n        id\n        displayName\n        avatar\n      }\n    }\n  }\n": types.ChannelDocument,
     "\n  query Set($id: String!) {\n    set(id: $id) {\n      id\n      name\n      kind\n      capacity\n      owner {\n        id\n        displayName\n      }\n      emotes {\n        name\n        zeroWidth\n        addedAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": types.SetDocument,
@@ -113,16 +116,19 @@ const documents: Documents = {
     "\n  query Audit($targetKind: String, $targetId: String, $before: String, $limit: Int) {\n    auditLog(targetKind: $targetKind, targetId: $targetId, before: $before, limit: $limit) {\n      id\n      actorId\n      action\n      targetKind\n      targetId\n      before\n      after\n      createdAt\n    }\n  }\n": types.AuditDocument,
     "\n  mutation ReportEmote($id: String!, $reason: String!) {\n    reportEmote(id: $id, reason: $reason) {\n      id\n    }\n  }\n": types.ReportEmoteDocument,
     "\n  query MySetNames {\n    mySets {\n      id\n      name\n      kind\n      emotes {\n        emote {\n          id\n        }\n      }\n    }\n  }\n": types.MySetNamesDocument,
+    "\n  query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: \"\", owner: $owner, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.SearchByOwnerDocument,
+    "\n  query PublicAccount($id: String!) {\n    account(id: $id) {\n      id\n      displayName\n      avatar\n    }\n  }\n": types.PublicAccountDocument,
+    "\n  query EmoteChannels($id: String!, $limit: Int) {\n    emoteChannels(id: $id, limit: $limit) {\n      platform\n      login\n      account {\n        displayName\n        avatar\n      }\n    }\n  }\n": types.EmoteChannelsDocument,
 };
 
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    flags {\n      zeroWidth\n      nsfw\n      private\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n"): typeof import('./graphql').EmoteFieldsFragmentDoc;
+export function graphql(source: "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    channelCount\n    flags {\n      zeroWidth\n      nsfw\n      private\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n"): typeof import('./graphql').EmoteFieldsFragmentDoc;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query Search($query: String!, $animated: Boolean, $page: Int, $perPage: Int) {\n    searchEmotes(query: $query, animated: $animated, page: $page, perPage: $perPage) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n"): typeof import('./graphql').SearchDocument;
+export function graphql(source: "\n  query Search($query: String!, $animated: Boolean, $nsfw: Boolean, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: $query, animated: $animated, nsfw: $nsfw, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n"): typeof import('./graphql').SearchDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -307,6 +313,18 @@ export function graphql(source: "\n  mutation ReportEmote($id: String!, $reason:
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query MySetNames {\n    mySets {\n      id\n      name\n      kind\n      emotes {\n        emote {\n          id\n        }\n      }\n    }\n  }\n"): typeof import('./graphql').MySetNamesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: \"\", owner: $owner, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n"): typeof import('./graphql').SearchByOwnerDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query PublicAccount($id: String!) {\n    account(id: $id) {\n      id\n      displayName\n      avatar\n    }\n  }\n"): typeof import('./graphql').PublicAccountDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query EmoteChannels($id: String!, $limit: Int) {\n    emoteChannels(id: $id, limit: $limit) {\n      platform\n      login\n      account {\n        displayName\n        avatar\n      }\n    }\n  }\n"): typeof import('./graphql').EmoteChannelsDocument;
 
 
 export function graphql(source: string) {
