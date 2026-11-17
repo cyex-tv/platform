@@ -42,6 +42,18 @@ async fn start() -> (SocketAddr, Hub) {
     (addr, hub)
 }
 
+/// An event straight into the hub, as the outbox feeder would deliver it.
+fn publish(hub: &Hub, id: i64, topic: &str) {
+    hub.publish(Arc::new(cyex_tv_db::outbox::Event {
+        id,
+        event_type: "set.emote_added".into(),
+        topics: vec![topic.into()],
+        set_id: None,
+        payload: json!({ "emote_id": "E1", "name": "Pog" }),
+        created_at: chrono::Utc::now(),
+    }));
+}
+
 async fn connect(addr: SocketAddr) -> Socket {
     let mut request = format!("ws://{addr}/v1/gql/ws")
         .into_client_request()
@@ -124,7 +136,7 @@ async fn refused(ws: &mut Socket, id: &str) -> String {
 
 #[tokio::test]
 async fn queries_and_mutations_on_the_socket_are_refused() {
-    let (addr, _) = start().await;
+    let (addr, hub) = start().await;
     let mut ws = connect(addr).await;
     subscribe(&mut ws, "q", "query { __typename }", json!({})).await;
     assert_eq!(refused(&mut ws, "q").await, "subscriptions_only");
@@ -136,9 +148,23 @@ async fn queries_and_mutations_on_the_socket_are_refused() {
     )
     .await;
     assert_eq!(refused(&mut ws, "m").await, "subscriptions_only");
-    // The socket still runs subscriptions afterwards.
+    // A document mixing a subscription with a query is refused too.
+    subscribe(
+        &mut ws,
+        "mix",
+        "subscription S { events(topics: [\"channel:twitch:1\"]) { id } } query Q { __typename }",
+        json!({}),
+    )
+    .await;
+    assert_eq!(refused(&mut ws, "mix").await, "subscriptions_only");
+    // The socket still runs subscriptions afterwards, and their events arrive.
     subscribe(&mut ws, "s", EVENTS, json!({ "t": ["channel:twitch:1"] })).await;
     quiet(&mut ws).await;
+    publish(&hub, 7, "channel:twitch:1");
+    let got = next(&mut ws).await;
+    assert_eq!(got["id"], "s", "{got}");
+    assert_eq!(got["payload"]["data"]["events"]["id"], "7", "{got}");
+    assert!(got["payload"]["errors"].is_null(), "{got}");
 }
 
 #[tokio::test]
@@ -151,6 +177,15 @@ async fn one_socket_holds_at_most_eight_subscriptions() {
     }
     quiet(&mut ws).await;
     assert_eq!(hub.stats().0, MAX_SOCKET_SUBSCRIPTIONS);
+    // They deliver.
+    publish(&hub, 41, "channel:twitch:3");
+    let got = next(&mut ws).await;
+    assert_eq!(
+        (got["type"].as_str(), got["id"].as_str()),
+        (Some("next"), Some("3")),
+        "{got}"
+    );
+    assert_eq!(got["payload"]["data"]["events"]["id"], "41", "{got}");
 
     subscribe(&mut ws, "extra", EVENTS, json!({ "t": ["channel:kick:1"] })).await;
     assert_eq!(refused(&mut ws, "extra").await, "too_many_subscriptions");

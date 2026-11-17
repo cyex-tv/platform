@@ -55,12 +55,9 @@ pub struct SocketConnection {
 impl SocketConnection {
     /// Take a stream slot, or `None` when the connection holds the most it may.
     fn take_slot(&self) -> Option<StreamSlot> {
-        self.streams
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
-                (n < MAX_SOCKET_SUBSCRIPTIONS).then_some(n + 1)
-            })
-            .ok()?;
-        Some(StreamSlot(self.streams.clone()))
+        let slot = StreamSlot(self.streams.clone());
+        // Over the limit, the slot is given straight back as it drops.
+        (self.streams.fetch_add(1, Ordering::AcqRel) < MAX_SOCKET_SUBSCRIPTIONS).then_some(slot)
     }
 }
 
@@ -74,8 +71,9 @@ impl Drop for StreamSlot {
 }
 
 /// The socket runs subscriptions only. async-graphql would otherwise run a query or mutation sent
-/// as a `subscribe` message once, outside the `POST /v1/gql` rate limits. The `execute` hook only
-/// runs for queries and mutations; over HTTP there is no [`SocketConnection`], so it passes.
+/// as a `subscribe` message once, outside the `POST /v1/gql` rate limits. A document sent over the
+/// socket may hold subscription operations only; over HTTP there is no [`SocketConnection`], so
+/// everything passes.
 struct SocketRunsSubscriptionsOnly;
 
 impl async_graphql::extensions::ExtensionFactory for SocketRunsSubscriptionsOnly {
@@ -86,22 +84,26 @@ impl async_graphql::extensions::ExtensionFactory for SocketRunsSubscriptionsOnly
 
 #[async_trait::async_trait]
 impl async_graphql::extensions::Extension for SocketRunsSubscriptionsOnly {
-    async fn execute(
+    async fn parse_query(
         &self,
         ctx: &async_graphql::extensions::ExtensionContext<'_>,
-        operation_name: Option<&str>,
-        next: async_graphql::extensions::NextExecute<'_>,
-    ) -> async_graphql::Response {
-        if ctx.data_opt::<SocketConnection>().is_some() {
-            let error = coded(
+        query: &str,
+        variables: &async_graphql::Variables,
+        next: async_graphql::extensions::NextParseQuery<'_>,
+    ) -> async_graphql::ServerResult<async_graphql::parser::types::ExecutableDocument> {
+        let document = next.run(ctx, query, variables).await?;
+        if ctx.data_opt::<SocketConnection>().is_some()
+            && let Some((_, op)) = document.operations.iter().find(|(_, op)| {
+                op.node.ty != async_graphql::parser::types::OperationType::Subscription
+            })
+        {
+            return Err(coded(
                 "subscriptions_only",
                 "The socket runs subscriptions only. Send queries and mutations to POST /v1/gql.",
-            );
-            return async_graphql::Response::from_errors(vec![
-                error.into_server_error(async_graphql::Pos::default()),
-            ]);
+            )
+            .into_server_error(op.pos));
         }
-        next.run(ctx, operation_name).await
+        Ok(document)
     }
 }
 
@@ -738,8 +740,7 @@ pub struct Subscription;
 #[async_graphql::Subscription]
 impl Subscription {
     /// Live updates for up to 500 topics: `channel:<platform>:<id>`, `set:<id>`,
-    /// `user:<platform>:<id>` (ADR 0005). The same events as the event WebSocket. One socket
-    /// holds at most 8 subscriptions at once.
+    /// `user:<platform>:<id>` (ADR 0005). The same events as the event WebSocket.
     async fn events(
         &self,
         ctx: &Context<'_>,
@@ -763,6 +764,7 @@ impl Subscription {
             })?),
             None => None,
         };
+        // One socket holds at most `MAX_SOCKET_SUBSCRIPTIONS` streams (ADR 0005).
         let sub = state(ctx).hub.subscriber();
         sub.subscribe(topics.iter().map(String::as_str));
         // The slot lives as long as the stream, so ending it frees the connection's place.
