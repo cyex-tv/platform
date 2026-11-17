@@ -32,7 +32,7 @@
   }
 </script>
 
-<button class="theme {variant}" type="button" onclick={toggle} aria-label={light ? 'Switch to dark' : 'Switch to light'}>
+<button class="theme" class:compact={variant === 'tool'} type="button" onclick={toggle} aria-label={light ? 'Switch to dark' : 'Switch to light'}>
   {#if light}
     <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
       <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
@@ -56,12 +56,12 @@
   .theme:active { transform: scale(var(--press)); }
   svg { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
-  .tool { width: 32px; height: 32px; border-radius: var(--radius); border-color: var(--border-strong);
+  .compact { width: 32px; height: 32px; border-radius: var(--radius); border-color: var(--border-strong);
     transition: background-color var(--fast), color var(--fast); }
-  .tool svg { stroke-width: 1.8; }
+  .compact svg { stroke-width: 1.8; }
   @media (hover: hover) and (pointer: fine) {
-    .tool:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+    .compact:hover { background: var(--surface-hover); border-color: var(--border-strong); }
   }
-  .tool:active { transform: none; opacity: .6; transition: none; }
-  @media (pointer: coarse) { .tool { width: 44px; height: 44px; } }
+  .compact:active { transform: none; opacity: .6; transition: none; }
+  @media (pointer: coarse) { .compact { width: 44px; height: 44px; } }
 </style>
