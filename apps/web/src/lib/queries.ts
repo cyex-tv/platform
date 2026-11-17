@@ -181,6 +181,16 @@ export const MY_SETS = graphql(`
     mySets {
       ...SetFields
     }
+    editorSets {
+      ...SetFields
+    }
+    editorOf {
+      account {
+        id
+        displayName
+      }
+      permissions
+    }
   }
 `);
 
@@ -193,6 +203,12 @@ export const EDIT_SET = graphql(`
       id
       displayName
       avatar
+    }
+    editorOf {
+      account {
+        id
+      }
+      permissions
     }
   }
 `);
@@ -276,6 +292,10 @@ export const MY_CHANNELS = graphql(`
       login
       activeSetId
       allowPersonalEmotes
+      account {
+        id
+        displayName
+      }
     }
     mySets {
       id
@@ -284,6 +304,31 @@ export const MY_CHANNELS = graphql(`
       owner {
         id
       }
+    }
+    editorChannels {
+      platform
+      platformChannelId
+      login
+      activeSetId
+      allowPersonalEmotes
+      account {
+        id
+        displayName
+      }
+    }
+    editorSets {
+      id
+      name
+      kind
+      owner {
+        id
+      }
+    }
+    editorOf {
+      account {
+        id
+      }
+      permissions
     }
   }
 `);
@@ -294,6 +339,63 @@ export const UPDATE_CHANNEL = graphql(`
       activeSetId
       allowPersonalEmotes
     }
+  }
+`);
+
+// Account editors (ADR 0014): yours, and the accounts you edit.
+
+export const ACCOUNT_EDITOR_FIELDS = graphql(`
+  fragment AccountEditorFields on AccountEditor {
+    account {
+      id
+      displayName
+      avatar
+    }
+    permissions
+    grantedBy {
+      id
+      displayName
+    }
+    grantedAt
+  }
+`);
+
+export const EDITORS = graphql(`
+  query Editors {
+    accountEditors {
+      ...AccountEditorFields
+    }
+    editorOf {
+      account {
+        id
+        displayName
+        avatar
+      }
+      permissions
+      grantedAt
+    }
+  }
+`);
+
+export const ADD_ACCOUNT_EDITOR = graphql(`
+  mutation AddAccountEditor($input: AddAccountEditorInput!) {
+    addAccountEditor(input: $input) {
+      ...AccountEditorFields
+    }
+  }
+`);
+
+export const UPDATE_ACCOUNT_EDITOR = graphql(`
+  mutation UpdateAccountEditor($ownerId: String, $accountId: String!, $permissions: [EditorPermission!]!) {
+    updateAccountEditor(ownerId: $ownerId, accountId: $accountId, permissions: $permissions) {
+      ...AccountEditorFields
+    }
+  }
+`);
+
+export const REMOVE_ACCOUNT_EDITOR = graphql(`
+  mutation RemoveAccountEditor($ownerId: String, $accountId: String!) {
+    removeAccountEditor(ownerId: $ownerId, accountId: $accountId)
   }
 `);
 

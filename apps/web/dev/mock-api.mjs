@@ -510,6 +510,33 @@ const IDENTITIES = [
 const NOTES = [
   { id: 'N1', kind: 'emote.rejected', payload: JSON.stringify({ name: MINE[2].name, reason: 'Looks like a copy of a well-known emote.' }), createdAt: '2026-11-16T21:00:00.000Z', read: false },
 ];
+// Account editors (ADR 0014): two people work on the mock account, and it works on two others'.
+const EDITOR_FLAGS = ['EMOTES', 'SETS', 'EDITORS', 'PROFILE'];
+const ACCOUNT_EDITORS = [
+  { account: OTHERS[1], permissions: ['EMOTES'], grantedBy: ME_SUMMARY, grantedAt: '2026-11-12T10:00:00.000Z', updatedAt: '2026-11-12T10:00:00.000Z' },
+  { account: OTHERS[2], permissions: ['EMOTES', 'SETS', 'EDITORS'], grantedBy: ME_SUMMARY, grantedAt: '2026-11-14T18:30:00.000Z', updatedAt: '2026-11-14T18:30:00.000Z' },
+];
+const EDITOR_OF = [
+  { account: OTHERS[0], permissions: ['EMOTES', 'SETS'], grantedAt: '2026-11-13T09:00:00.000Z' },
+  { account: OTHERS[4], permissions: ['EMOTES'], grantedAt: '2026-11-15T20:00:00.000Z' },
+];
+const SHARED_SETS = [
+  { id: '01JD8XSET0000000000000OAKAL', name: 'quietoak cozy', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[0],
+    emotes: ALL.slice(70, 78).map((e) => member(e)), editors: [] },
+  { id: '01JD8XSET0000000000000FERN1', name: 'fern garden', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[4],
+    emotes: ALL.slice(46, 54).map((e) => member(e)), editors: [] },
+];
+const EDITOR_CHANNELS = [
+  { platform: 'TWITCH', platformChannelId: '55500001', login: 'quietoak', activeSetId: SETS[2].id, allowPersonalEmotes: true, account: OTHERS[0] },
+  { platform: 'KICK', platformChannelId: '55500002', login: 'quietoak', activeSetId: null, allowPersonalEmotes: false, account: OTHERS[0] },
+  { platform: 'TWITCH', platformChannelId: '55500003', login: 'sunnyfern', activeSetId: SHARED_SETS[1].id, allowPersonalEmotes: true, account: OTHERS[4] },
+];
+// The sets of the accounts the mock account edits: theirs among SETS (per-set grants) and SHARED_SETS.
+const editorSets = () => [...SETS, ...SHARED_SETS].filter((s) => s.owner && EDITOR_OF.some((g) => g.account.id === s.owner.id));
+const editorChannels = () => EDITOR_CHANNELS.filter((c) => EDITOR_OF.some((g) => g.account.id === c.account.id));
+const flagsOn = (ownerId) => (ownerId === ME_ID ? EDITOR_FLAGS : EDITOR_OF.find((g) => g.account.id === ownerId)?.permissions ?? []);
+const editorOfOut = () => EDITOR_OF.map((g) => ({ ...g }));
+
 const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view'];
 
 // A public account for `account(id)`. Unknown ids, and the one for a blocked account, give null.
@@ -558,7 +585,7 @@ const sorted = (hits, sort) => {
 };
 
 const findEmote = (id) => MINE.find((e) => e.id === id) ?? ALL.find((e) => e.id === id);
-const findSet = (id) => SETS.find((s) => s.id === id);
+const findSet = (id) => SETS.find((s) => s.id === id) ?? SHARED_SETS.find((s) => s.id === id);
 const err = (message, code) => ({ data: null, errors: [{ message, extensions: { code } }] });
 const setOut = (s) => ({ ...s, editors: undefined });
 
@@ -588,7 +615,7 @@ function signedIn(body, v, ADMIN) {
       return { data: { deleteEmote: true } };
     }
     case 'MySets':
-      return { data: { mySets: SETS.map(setOut) } };
+      return { data: { mySets: SETS.map(setOut), editorSets: editorSets().map(setOut), editorOf: editorOfOut() } };
     case 'MySetNames':
       return { data: { mySets: SETS.map((s) => ({ id: s.id, name: s.name, kind: s.kind, emotes: s.emotes.map((m) => ({ emote: { id: m.emote.id } })) })) } };
     case 'ReportEmote':
@@ -596,15 +623,20 @@ function signedIn(body, v, ADMIN) {
       return { data: { reportEmote: { id: 'R' + Date.now() } } };
     case 'EditSet': {
       const s = findSet(v.id);
-      if (!s) return { data: { set: null, setEditors: [] } };
-      return { data: { set: setOut(s), setEditors: s.editors } };
+      if (!s) return { data: { set: null, setEditors: [], editorOf: editorOfOut() } };
+      return { data: { set: setOut(s), setEditors: s.editors, editorOf: editorOfOut() } };
     }
     case 'CreateSet': {
-      if (v.input.kind === 'PERSONAL' && SETS.some((s) => s.kind === 'PERSONAL' && s.owner.id === ME_ID))
-        return err('You have a personal set already.', 'personal_set_exists');
-      const s = { id: `01JD8XSETNEW${String(SETS.length).padStart(14, '0')}`, name: v.input.name, kind: v.input.kind,
-        capacity: v.input.kind === 'PERSONAL' ? 50 : 1000, owner: ME_SUMMARY, emotes: [], editors: [] };
-      SETS.push(s);
+      const ownerId = v.input.ownerId || ME_ID;
+      if (!flagsOn(ownerId).includes('SETS'))
+        return err('Only the account’s owner and its editors with the sets permission can make sets for it.', 'forbidden');
+      const owner = ownerId === ME_ID ? ME_SUMMARY : EDITOR_OF.find((g) => g.account.id === ownerId).account;
+      const list = ownerId === ME_ID ? SETS : SHARED_SETS;
+      if (v.input.kind === 'PERSONAL' && [...SETS, ...SHARED_SETS].some((s) => s.kind === 'PERSONAL' && s.owner?.id === ownerId))
+        return err('You already have a personal set.', 'personal_set_exists');
+      const s = { id: `01JD8XSETNEW${String(SETS.length + SHARED_SETS.length).padStart(14, '0')}`, name: v.input.name, kind: v.input.kind,
+        capacity: v.input.kind === 'PERSONAL' ? 5 : 1000, owner, emotes: [], editors: [] };
+      list.push(s);
       return { data: { createSet: { id: s.id } } };
     }
     case 'UpdateSet': {
@@ -613,8 +645,9 @@ function signedIn(body, v, ADMIN) {
       return { data: { updateSet: { id: s.id, name: s.name } } };
     }
     case 'DeleteSet': {
-      if (CHANNELS.some((c) => c.activeSetId === v.id)) return err('A channel’s active set can’t be deleted.', 'set_in_use');
-      SETS.splice(SETS.findIndex((s) => s.id === v.id), 1);
+      if ([...CHANNELS, ...EDITOR_CHANNELS].some((c) => c.activeSetId === v.id)) return err('A channel shows this set. Pick another active set first.', 'set_in_use');
+      const list = SETS.some((s) => s.id === v.id) ? SETS : SHARED_SETS;
+      list.splice(list.findIndex((s) => s.id === v.id), 1);
       return { data: { deleteSet: true } };
     }
     case 'AddSetEmote': {
@@ -652,13 +685,51 @@ function signedIn(body, v, ADMIN) {
       const a = OTHERS.find((o) => o.displayName === v.login);
       return { data: { channelByLogin: a ? { login: v.login, account: a } : null } };
     }
-    case 'MyChannels':
-      return { data: { myChannels: CHANNELS, mySets: SETS.map((s) => ({ id: s.id, name: s.name, kind: s.kind, owner: s.owner ? { id: s.owner.id } : null })) } };
+    case 'MyChannels': {
+      const short = (s) => ({ id: s.id, name: s.name, kind: s.kind, owner: s.owner ? { id: s.owner.id } : null });
+      return { data: { myChannels: CHANNELS, mySets: SETS.map(short), editorChannels: editorChannels(), editorSets: editorSets().map(short), editorOf: editorOfOut() } };
+    }
     case 'UpdateChannel': {
-      const c = CHANNELS.find((x) => x.platform === v.platform && x.platformChannelId === v.id);
+      const c = [...CHANNELS, ...editorChannels()].find((x) => x.platform === v.platform && x.platformChannelId === v.id);
+      if (!c || !flagsOn(c.account.id).includes('SETS'))
+        return err('Only the channel’s owner and its account editors with the sets permission can change it.', 'forbidden');
       if (v.input.activeSetId !== undefined) c.activeSetId = v.input.activeSetId || null;
       if (v.input.allowPersonalEmotes !== undefined) c.allowPersonalEmotes = v.input.allowPersonalEmotes;
       return { data: { updateChannelSettings: { activeSetId: c.activeSetId, allowPersonalEmotes: c.allowPersonalEmotes } } };
+    }
+    case 'Editors':
+      return { data: { accountEditors: ACCOUNT_EDITORS, editorOf: editorOfOut() } };
+    case 'AddAccountEditor': {
+      const { login, permissions } = v.input;
+      if (!permissions?.length) return err('Pick at least one permission.', 'no_permissions');
+      if (ACCOUNT_EDITORS.length >= 20) return err('An account can have at most 20 editors.', 'too_many_editors');
+      const name = String(login ?? '').trim().replace(/^@/, '').toLowerCase();
+      if (name === ME_SUMMARY.displayName.toLowerCase()) return err('The account’s owner can do all of this already.', 'already_owner');
+      const a = OTHERS.find((o) => o.displayName.toLowerCase() === name);
+      if (!a) return err('Not found.', 'not_found');
+      if (ACCOUNT_EDITORS.some((e) => e.account.id === a.id)) return err('They are an editor already.', 'already_editor');
+      const now = new Date().toISOString();
+      const ed = { account: a, permissions: EDITOR_FLAGS.filter((f) => permissions.includes(f)), grantedBy: ME_SUMMARY, grantedAt: now, updatedAt: now };
+      ACCOUNT_EDITORS.push(ed);
+      return { data: { addAccountEditor: ed } };
+    }
+    case 'UpdateAccountEditor': {
+      const ed = ACCOUNT_EDITORS.find((e) => e.account.id === v.accountId);
+      if (!ed) return err('Not found.', 'not_found');
+      if (!v.permissions?.length) return err('Pick at least one permission.', 'no_permissions');
+      ed.permissions = EDITOR_FLAGS.filter((f) => v.permissions.includes(f));
+      ed.updatedAt = new Date().toISOString();
+      return { data: { updateAccountEditor: ed } };
+    }
+    case 'RemoveAccountEditor': {
+      if (v.ownerId && v.ownerId !== ME_ID) {
+        const i = EDITOR_OF.findIndex((g) => g.account.id === v.ownerId);
+        if (i >= 0 && v.accountId === ME_ID) EDITOR_OF.splice(i, 1);
+        return { data: { removeAccountEditor: i >= 0 } };
+      }
+      const i = ACCOUNT_EDITORS.findIndex((e) => e.account.id === v.accountId);
+      if (i >= 0) ACCOUNT_EDITORS.splice(i, 1);
+      return { data: { removeAccountEditor: i >= 0 } };
     }
     case 'Unlink': {
       if (IDENTITIES.length < 2) return err('The last identity can’t be removed.', 'last_identity');
