@@ -37,6 +37,8 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    # A hung test fails the job instead of holding a runner for six hours.
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17-alpine
