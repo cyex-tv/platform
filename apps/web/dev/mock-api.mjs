@@ -37,6 +37,8 @@ const emote = (i, owner = OTHERS[i % 2], state = 'APPROVED') => {
     host: `${BASE}/emotes/${i}`,
     createdAt: new Date(Date.UTC(2026, 10, 16, 20, 0, 0) - i * 3600_000).toISOString(),
     flags: { zeroWidth: false, nsfw: false, private: false },
+    // Made-up but stable: a few popular ones, a long tail, some in no channel.
+    channelCount: i % 11 === 0 ? 0 : (i * 37) % 91 + (i % 5 === 0 ? 400 : 0),
     owner,
     files: [1, 2, 3, 4].map((s) => ({ name: `${s}x.webp`, format: 'WEBP', scale: s, width: w * s, height: 32 * s, size: 900 * s, isStatic: false })),
   };
@@ -87,6 +89,36 @@ const NOTES = [
   { id: 'N1', kind: 'emote.rejected', payload: JSON.stringify({ name: MINE[2].name, reason: 'Looks like a copy of a well-known emote.' }), createdAt: '2026-11-16T21:00:00.000Z', read: false },
 ];
 const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view'];
+
+// A public account for `account(id)`. Unknown ids, and the one for a blocked account, give null.
+const FAKE_LOGINS = ['quietoak', 'nora_byte', 'lumen_fox', 'pixelmoth', 'sipteaTV', 'byteNod', 'foxlook', 'moonhi'];
+const publicAccount = (id) => {
+  const known = [ME_SUMMARY, ...OTHERS].find((a) => a.id === id);
+  if (known) return known;
+  const m = /^01JD8XACC(\d{17})$/.exec(id);
+  return m ? { id, displayName: FAKE_LOGINS[Number(m[1]) % FAKE_LOGINS.length], avatar: null } : null;
+};
+// Channels showing an emote: as many as its channelCount says, newest first, from the mock owners.
+const emoteChannels = (e, limit) => {
+  const n = Math.min(limit, e.channelCount);
+  return Array.from({ length: n }, (_, k) => {
+    const owner = [...OTHERS, ME_SUMMARY][k % 3];
+    const login = k < 3 ? owner.displayName : `${FAKE_LOGINS[k % FAKE_LOGINS.length]}${k}`;
+    return {
+      platform: k % 4 === 3 ? 'KICK' : 'TWITCH',
+      platformChannelId: String(7000 + Number(e.id.slice(-4)) * 100 + k),
+      login,
+      account: k < 3 ? owner : { id: `01JD8XACC${String(k).padStart(17, '0')}`, displayName: login, avatar: null },
+      activeSetId: SETS[k % SETS.length].id,
+      allowPersonalEmotes: true,
+    };
+  });
+};
+const sorted = (hits, sort) => {
+  if (sort === 'TOP') return [...hits].sort((a, b) => b.channelCount - a.channelCount || a.name.localeCompare(b.name));
+  if (sort === 'NEW') return [...hits].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return hits;
+};
 
 const findEmote = (id) => MINE.find((e) => e.id === id) ?? ALL.find((e) => e.id === id);
 const findSet = (id) => SETS.find((s) => s.id === id);
@@ -279,6 +311,16 @@ function answer(body, session, admin) {
     const out = signedIn(body, v, admin);
     if (out) return out;
   }
+  if (/\baccount\s*\(/.test(q) || /\bemoteChannels\s*\(/.test(q)) {
+    const data = {};
+    if (/\baccount\s*\(/.test(q)) data.account = publicAccount(v.id ?? v.accountId ?? '');
+    if (/\bemoteChannels\s*\(/.test(q)) {
+      const e = findEmote(v.id ?? v.emoteId);
+      const limit = Math.min(50, Math.max(1, v.limit ?? 8));
+      data.emoteChannels = e && e.state === 'APPROVED' && !e.flags.private ? emoteChannels(e, limit) : [];
+    }
+    return { data };
+  }
   if (q.includes('query Me') || /^\s*mutation/.test(q) || q.includes('query My') || q.includes('query EditSet'))
     return err('Sign in to use this.', 'signed_out');
   if (q.includes('query GlobalSet')) return { data: { globalSet: { id: GLOBAL.id, name: 'Global', emotes: GLOBAL.emotes } } };
@@ -287,6 +329,7 @@ function answer(body, session, admin) {
     let hits = ALL.filter((e) => !text || e.name.toLowerCase().includes(text) || e.tags.some((t) => t.startsWith(text)));
     if (v.animated === true) hits = hits.filter((e) => e.animated);
     if (v.animated === false) hits = hits.filter((e) => !e.animated);
+    hits = sorted(hits, v.sort ?? 'RELEVANCE');
     const per = v.perPage ?? 50;
     const page = v.page ?? 1;
     return { data: { searchEmotes: { total: hits.length, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };

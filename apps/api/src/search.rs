@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use cyex_tv_db::search::{EmoteSearch, PgSearch, Query};
 use cyex_tv_db::{ids, reads};
 use cyex_tv_shared::error::ApiResult;
-use cyex_tv_shared::model::SearchResults;
+use cyex_tv_shared::model::{EmoteSort, SearchResults};
 
 use crate::catalog::db_error;
 use crate::state::AppState;
@@ -20,6 +20,7 @@ pub struct Params<'a> {
     pub animated: Option<bool>,
     pub owner: Option<&'a str>,
     pub nsfw: bool,
+    pub sort: EmoteSort,
     pub page: Option<u32>,
     pub per_page: Option<u32>,
 }
@@ -50,6 +51,7 @@ pub async fn search(state: &AppState, p: &Params<'_>) -> ApiResult<SearchResults
             animated: p.animated,
             owner,
             nsfw: p.nsfw,
+            sort: p.sort,
             limit: i64::from(per_page),
             offset: i64::from(page - 1) * i64::from(per_page),
         })

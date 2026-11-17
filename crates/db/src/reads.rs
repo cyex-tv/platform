@@ -212,3 +212,50 @@ pub async fn summaries(
     .await?;
     Ok(rows.into_iter().map(|s| (s.account_id, s)).collect())
 }
+
+/// How many channels have each emote in their active set. Channels of deleted or blocked
+/// accounts don't count. Emotes in no channel are missing from the map. One query for any
+/// number of emotes.
+pub async fn channel_counts(
+    conn: &mut PgConnection,
+    emote_ids: &[Uuid],
+) -> DbResult<HashMap<Uuid, u32>> {
+    let rows: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT m.emote_id, count(DISTINCT c.id)
+         FROM emote_set_members m
+         JOIN channels c ON c.active_set_id = m.set_id
+         JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL AND a.blocked_at IS NULL
+         WHERE m.emote_id = ANY($1)
+         GROUP BY m.emote_id",
+    )
+    .bind(emote_ids)
+    .fetch_all(conn)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, n)| (id, u32::try_from(n).unwrap_or(u32::MAX)))
+        .collect())
+}
+
+/// Channels whose active set holds the emote, the most recently added first. Channels of
+/// deleted or blocked accounts are left out.
+pub async fn emote_channels(
+    conn: &mut PgConnection,
+    emote_id: Uuid,
+    limit: i64,
+) -> DbResult<Vec<crate::channels::Channel>> {
+    Ok(sqlx::query_as(
+        "SELECT c.id, c.account_id, c.platform, c.platform_channel_id, c.login, c.active_set_id,
+                c.allow_personal_emotes, c.created_at, c.updated_at
+         FROM emote_set_members m
+         JOIN channels c ON c.active_set_id = m.set_id
+         JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL AND a.blocked_at IS NULL
+         WHERE m.emote_id = $1
+         ORDER BY m.added_at DESC, c.id
+         LIMIT $2",
+    )
+    .bind(emote_id)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
+}

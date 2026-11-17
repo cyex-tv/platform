@@ -19,9 +19,9 @@ use cyex_tv_hub::topics as hub_topics;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::model::{
     AccountStatus, AccountSummary, AddSetEmote, AuditEntry, Channel, CreateRole, CreateSet, Emote,
-    EmotePage, EmoteSet, Event, Identity, Me, Notification, PersonalSetEntry, Platform, Report,
-    ReportAction, ReportQueue, ReviewQueue, Role, SearchResults, SetEmote, UpdateChannelSettings,
-    UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote,
+    EmotePage, EmoteSet, EmoteSort, Event, Identity, Me, Notification, PersonalSetEntry, Platform,
+    Report, ReportAction, ReportQueue, ReviewQueue, Role, SearchResults, SetEmote,
+    UpdateChannelSettings, UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote,
 };
 use cyex_tv_shared::permissions;
 use futures_util::Stream;
@@ -179,7 +179,9 @@ impl Query {
     }
 
     /// Approved, listed emotes by name and tag, best match first, then the most used.
-    /// `perPage` is 1 to 100, default 50. NSFW emotes only with `nsfw: true`.
+    /// `perPage` is 1 to 100, default 50. NSFW emotes only with `nsfw: true`. `sort` is
+    /// `RELEVANCE` (default: best match, then most used), `TOP` (most used, then name) or `NEW`
+    /// (newest first). An empty `query` lists every approved, listed emote.
     #[allow(clippy::too_many_arguments)]
     async fn search_emotes(
         &self,
@@ -190,6 +192,7 @@ impl Query {
         nsfw: Option<bool>,
         page: Option<u32>,
         per_page: Option<u32>,
+        sort: Option<EmoteSort>,
     ) -> Result<SearchResults> {
         search::search(
             state(ctx),
@@ -198,12 +201,31 @@ impl Query {
                 animated,
                 owner: owner.as_deref(),
                 nsfw: nsfw.unwrap_or(false),
+                sort: sort.unwrap_or_default(),
                 page,
                 per_page,
             },
         )
         .await
         .map_err(api_error)
+    }
+
+    /// An account's public summary. Null when the account is unknown, deleted or blocked.
+    async fn account(&self, ctx: &Context<'_>, id: String) -> Result<Option<AccountSummary>> {
+        catalog::account(state(ctx), &id).await.map_err(api_error)
+    }
+
+    /// Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
+    /// default 8. Empty when the emote is unknown or not public.
+    async fn emote_channels(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        limit: Option<u32>,
+    ) -> Result<Vec<Channel>> {
+        catalog::emote_channels(state(ctx), &id, limit)
+            .await
+            .map_err(api_error)
     }
 
     /// One user's personal set.
