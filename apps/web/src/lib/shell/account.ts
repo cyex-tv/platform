@@ -20,6 +20,10 @@ export function profileLink(id: string): ShellLink {
   return { href: `/users/${id}`, label: 'Profile', icon: 'circle-user', match: (p) => p === `/users/${id}` };
 }
 
+/** The account menu's short list: Sets and Channels live in the /me rail, Upload in the header. */
+export const MENU: ShellLink[] = LIBRARY.filter((l) => l.href === '/me' || l.href === '/me/cosmetics');
+export const UPLOAD: ShellLink = LIBRARY.find((l) => l.href === '/me/upload')!;
+
 export const ACCOUNT: ShellLink = { href: '/me/account', label: 'Account', icon: 'user', match: under('/me/account') };
 export const ADMIN: ShellLink = { href: '/admin', label: 'Admin', icon: 'shield', match: under('/admin') };
 export const EMOTES: ShellLink = {
