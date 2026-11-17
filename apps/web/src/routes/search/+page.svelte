@@ -283,7 +283,7 @@
       </div>
     {:else if shown.length === 0 && !hasMore && !switching}
       <div class="state">
-        <h2>No emotes{#if q} match “<bdi>{q}</bdi>”{:else} here{/if}.</h2>
+        <h2>No emotes{#if q}{' '}match “<bdi>{q}</bdi>”{:else}{' '}here{/if}.</h2>
         {#if filters.length}
           <p class="muted">
             {filters.map((f) => f.label).join(', ')} {filters.length === 1 ? 'is' : 'are'} on. Removing {filters.length === 1 ? 'it' : 'one'} may bring emotes back.
