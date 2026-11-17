@@ -18,6 +18,9 @@
   let position = $state(10);
   let picked = $state<string[]>([]);
   let saving = $state(false);
+  let tried = $state(false);
+  const nameError = $derived(tried && !name.trim() ? 'Give it a name.' : null);
+  const posError = $derived(tried && !(Number.isInteger(position) && position >= 1 && position <= 9999) ? 'Position 1 to 9999.' : null);
 
   const mine = $derived(new Set(session.me?.permissions ?? []));
   const sorted = $derived([...(roles ?? [])].sort((a, b) => b.position - a.position));
@@ -26,6 +29,7 @@
 
   function open(role: RoleFieldsFragment | null) {
     editing = role;
+    tried = false;
     name = role?.name ?? '';
     description = role?.description ?? '';
     position = role?.position ?? 10;
@@ -39,7 +43,9 @@
 
   async function save(e: SubmitEvent) {
     e.preventDefault();
-    if (saving || !name.trim()) return;
+    if (saving) return;
+    tried = true;
+    if (!name.trim() || !(Number.isInteger(position) && position >= 1 && position <= 9999)) return;
     saving = true;
     try {
       if (editing) {
@@ -109,17 +115,19 @@
 </LoadGate>
 
 <dialog class="ui-dialog wide" bind:this={dialog} aria-labelledby="role-title">
-  <form onsubmit={save}>
+  <form onsubmit={save} novalidate>
     <div class="body">
       <h2 id="role-title">{editing ? `Edit ${editing.name}` : 'New role'}</h2>
       <div class="two">
         <label class="ui-field">
           <span class="ui-label">Name</span>
-          <input class="ui-input" bind:value={name} maxlength="64" required />
+          <input class="ui-input" bind:value={name} maxlength="64" aria-invalid={nameError ? 'true' : undefined} aria-describedby={nameError ? 'role-name-err' : undefined} />
+          {#if nameError}<span class="ui-error" id="role-name-err">{nameError}</span>{/if}
         </label>
         <label class="ui-field">
           <span class="ui-label">Position</span>
-          <input class="ui-input ui-mono num" type="number" bind:value={position} min="1" max="9999" required />
+          <input class="ui-input ui-mono num" type="number" bind:value={position} min="1" max="9999" aria-invalid={posError ? 'true' : undefined} aria-describedby={posError ? 'role-pos-err' : undefined} />
+          {#if posError}<span class="ui-error" id="role-pos-err">{posError}</span>{/if}
         </label>
       </div>
       <label class="ui-field">
@@ -141,7 +149,7 @@
     </div>
     <footer>
       <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="ui-btn primary" type="submit" disabled={saving || !name.trim()}>{saving ? 'Saving…' : 'Save'}</button>
+      <button class="ui-btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
     </footer>
   </form>
 </dialog>

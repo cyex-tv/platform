@@ -3,6 +3,7 @@
   import { ApiError, uploadEmote } from '$lib/api';
   import { bytes } from '$lib/format';
   import { fileProblem, nameProblem, parseTags, tagsProblem } from '$lib/rules';
+  import { onDestroy } from 'svelte';
   import { notify } from '$lib/tool/notices.svelte';
 
   let file = $state<File | null>(null);
@@ -14,15 +15,40 @@
   let tried = $state(false);
   let serverError = $state<string | null>(null);
   let input: HTMLInputElement;
+  let nameInput: HTMLInputElement;
+  let tagInput: HTMLInputElement;
+  let dropButton: HTMLButtonElement;
+  let dimError = $state<string | null>(null);
+  let picked = 0;
 
-  const fileError = $derived(file ? fileProblem(file) : tried ? 'Pick an image.' : null);
+  const fileError = $derived(file ? (fileProblem(file) ?? dimError) : tried ? 'Pick an image.' : null);
   const nameError = $derived(tried || name ? nameProblem(name) : null);
   const tags = $derived(parseTags(tagText));
   const tagError = $derived(tagsProblem(tags));
 
+  onDestroy(() => {
+    if (preview) URL.revokeObjectURL(preview);
+  });
+
+  /** Reads the image's size, so a too-big or unreadable file is named before the upload. */
+  async function checkSize(f: File) {
+    const mine = ++picked;
+    dimError = null;
+    if (fileProblem(f)) return;
+    try {
+      const bmp = await createImageBitmap(f);
+      const { width, height } = bmp;
+      bmp.close();
+      if (mine === picked && (width > 1000 || height > 1000)) dimError = 'At most 1000 × 1000 px.';
+    } catch {
+      if (mine === picked) dimError = 'That file isn’t an image.';
+    }
+  }
+
   function pick(f: File | undefined | null) {
     if (!f) return;
     if (preview) URL.revokeObjectURL(preview);
+    checkSize(f);
     file = f;
     preview = URL.createObjectURL(f);
     serverError = null;
@@ -37,8 +63,12 @@
 
   async function submit(e: SubmitEvent) {
     e.preventDefault();
+    if (busy) return;
     tried = true;
-    if (!file || fileError || nameError || tagError) return;
+    if (!file || fileError || nameError || tagError) {
+      (fileError || !file ? dropButton : nameError ? nameInput : tagInput)?.focus();
+      return;
+    }
     busy = true;
     serverError = null;
     try {
@@ -72,8 +102,8 @@
         class:over
         class:has={file}
         class:invalid={!!fileError}
-        aria-labelledby="file-label"
-        aria-describedby="file-hint"
+        bind:this={dropButton}
+        aria-describedby={fileError ? 'file-hint' : undefined}
         onclick={() => input.click()}
         ondragover={(e) => { e.preventDefault(); over = true; }}
         ondragleave={() => (over = false)}
@@ -96,15 +126,15 @@
 
     <label class="ui-field">
       <span class="ui-label">Name</span>
-      <input class="ui-input" bind:value={name} maxlength="100" autocomplete="off" spellcheck="false"
-        aria-invalid={nameError ? 'true' : undefined} placeholder="catJAM" />
-      {#if nameError}<span class="ui-error">{nameError}</span>{:else}<span class="ui-hint">What people type in chat. No spaces.</span>{/if}
+      <input class="ui-input" bind:this={nameInput} bind:value={name} maxlength="100" autocomplete="off" spellcheck="false"
+        aria-invalid={nameError ? 'true' : undefined} aria-describedby={nameError ? 'name-msg' : 'name-hint'} placeholder="catJAM" />
+      {#if nameError}<span class="ui-error" id="name-msg">{nameError}</span>{:else}<span class="ui-hint" id="name-hint">What people type in chat. No spaces.</span>{/if}
     </label>
 
     <label class="ui-field">
       <span class="ui-label">Tags</span>
-      <input class="ui-input" bind:value={tagText} autocomplete="off" aria-invalid={tagError ? 'true' : undefined} placeholder="cat, dance" />
-      {#if tagError}<span class="ui-error">{tagError}</span>{:else}<span class="ui-hint">Up to 10, separated by commas. They help people find it.</span>{/if}
+      <input class="ui-input" bind:this={tagInput} bind:value={tagText} autocomplete="off" aria-invalid={tagError ? 'true' : undefined} aria-describedby={tagError ? 'tag-msg' : 'tag-hint'} placeholder="cat, dance" />
+      {#if tagError}<span class="ui-error" id="tag-msg">{tagError}</span>{:else}<span class="ui-hint" id="tag-hint">Up to 10, separated by commas. They help people find it.</span>{/if}
     </label>
 
     {#if serverError}<p class="ui-error" role="alert">{serverError}</p>{/if}

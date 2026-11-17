@@ -1,6 +1,6 @@
 <script lang="ts">
   import { gql } from '$lib/api';
-  import { count, date } from '$lib/format';
+  import { clean, count, date } from '$lib/format';
   import type { ReportQueueQuery } from '$lib/gql/graphql';
   import { REPORT_QUEUE, RESOLVE_REPORT } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
@@ -62,13 +62,13 @@
           {#if r.emote}<Thumb emote={r.emote} name={r.emote.name} box={48} />{:else}<span class="gone" aria-hidden="true"></span>{/if}
           <div class="what">
             <strong>
-              {r.emote?.name ?? 'Deleted emote'}
+              {clean(r.emote?.name) || 'Deleted emote'}
               {#if r.emote && r.emote.state !== 'APPROVED'}<span class="ui-chip {r.emote.state.toLowerCase()}">{STATE_LABEL[r.emote.state]}</span>{/if}
             </strong>
-            <span class="reason">“{r.reason}”</span>
+            <span class="reason">“{clean(r.reason)}”</span>
             <span class="ui-hint meta">
               <span class="ui-mono">{date(r.createdAt)}</span>
-              {#if r.emote?.owner}<span>by {r.emote.owner.displayName}</span>{/if}
+              {#if r.emote?.owner}<span>by {clean(r.emote.owner.displayName)}</span>{/if}
               {#if r.reporterId}<span>reporter <span class="ui-mono">{r.reporterId}</span></span>{/if}
             </span>
           </div>
@@ -89,7 +89,7 @@
 
 <ReasonDialog
   bind:this={dialog}
-  title={mode === 'DISMISS' ? 'Dismiss the report' : `Take down ${current?.emote?.name ?? ''}`}
+  title={mode === 'DISMISS' ? 'Dismiss the report' : `Take down ${clean(current?.emote?.name)}`}
   hint={mode === 'DISMISS'
     ? 'Kept with the report for the audit log.'
     : 'It leaves every set, its image is blocked and deleted, and its owners are told this note. This can’t be undone.'}

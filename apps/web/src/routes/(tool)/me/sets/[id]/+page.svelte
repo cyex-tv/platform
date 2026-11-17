@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { MediaQuery } from 'svelte/reactivity';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { ApiError, gql } from '$lib/api';
@@ -21,6 +22,7 @@
   let saving = $state(false);
   let deleting = $state(false);
 
+  const narrow = new MediaQuery('max-width: 1000px');
   const id = $derived(page.params.id ?? '');
   const owner = $derived(set?.owner?.id === session.me?.id);
 
@@ -89,6 +91,26 @@
 
 <svelte:head><title>{set?.name ?? 'Set'} - cyex.tv</title></svelte:head>
 
+{#snippet editorsBlock()}
+  {#if set}<EditorsPanel setId={set.id} {owner} bind:editors />{/if}
+{/snippet}
+
+{#snippet dangerBlock()}
+  {#if set}
+    <section class="ui-card">
+      {#if owner}
+        <h2>Delete set</h2>
+        <p class="ui-hint">The emotes stay; only this set goes. A channel’s active set can’t be deleted: pick another one first.</p>
+        <div class="ui-actions gap"><Confirm label="Delete set" confirm="Click again to delete" busy={deleting} onconfirm={remove} /></div>
+      {:else}
+        <h2>Stop editing</h2>
+        <p class="ui-hint">You lose access to this set until the owner adds you again.</p>
+        <div class="ui-actions gap"><Confirm label="Leave" confirm="Click again to leave" onconfirm={leave} /></div>
+      {/if}
+    </section>
+  {/if}
+{/snippet}
+
 <LoadGate source={L} label="Loading the set…">
 {#snippet children()}
 {#if set}
@@ -119,21 +141,19 @@
       </form>
 
       {#if set.kind === 'CHANNEL'}
-        <EditorsPanel setId={set.id} {owner} bind:editors />
+        {#if narrow.current}
+          <details class="fold"><summary>Editors</summary>{@render editorsBlock()}</details>
+        {:else}
+          {@render editorsBlock()}
+        {/if}
       {/if}
 
       {#if set.kind !== 'GLOBAL'}
-      <section class="ui-card">
-        {#if owner}
-          <h2>Delete set</h2>
-          <p class="ui-hint">The emotes stay; only this set goes. A channel’s active set can’t be deleted: pick another one first.</p>
-          <div class="ui-actions gap"><Confirm label="Delete set" confirm="Click again to delete" busy={deleting} onconfirm={remove} /></div>
+        {#if narrow.current}
+          <details class="fold"><summary>{owner ? 'Delete set' : 'Stop editing'}</summary>{@render dangerBlock()}</details>
         {:else}
-          <h2>Stop editing</h2>
-          <p class="ui-hint">You lose access to this set until the owner adds you again.</p>
-          <div class="ui-actions gap"><Confirm label="Leave" confirm="Click again to leave" onconfirm={leave} /></div>
+          {@render dangerBlock()}
         {/if}
-      </section>
       {/if}
     </aside>
   </div>
@@ -149,5 +169,7 @@
   .row { display: flex; gap: 8px; }
   .row input { min-width: 0; }
   .gap { margin-top: 12px; }
-  @media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  .fold > summary { cursor: pointer; padding: 10px 14px; font-weight: 600; background: var(--surface); border: 1px solid var(--border); }
+  .fold[open] > summary { margin-bottom: 8px; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr); } aside { order: -1; } }
 </style>
