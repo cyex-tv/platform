@@ -424,3 +424,51 @@ async fn other_origins_get_the_public_reads_only() {
         );
     }
 }
+
+#[tokio::test]
+async fn requests_are_counted_per_route() {
+    let state = offline_state();
+    for uri in ["/health", "/health", "/health/ready", "/nowhere"] {
+        get(state.clone(), uri).await;
+    }
+    let scrape = cyex_tv_shared::metrics::router(state.metrics.clone(), None)
+        .oneshot(Request::get("/metrics").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(scrape.status(), StatusCode::OK);
+    assert!(
+        scrape.headers()["content-type"]
+            .to_str()
+            .unwrap()
+            .starts_with("text/plain; version=0.0.4")
+    );
+    let body = scrape.into_body().collect().await.unwrap().to_bytes();
+    let text = String::from_utf8(body.to_vec()).unwrap();
+    assert!(
+        text.contains(
+            r#"cyex_tv_http_requests_total{method="GET",route="/health",status="200"} 2"#
+        ),
+        "{text}"
+    );
+    assert!(
+        text.contains(
+            r#"cyex_tv_http_requests_total{method="GET",route="/health/ready",status="503"} 1"#
+        ),
+        "{text}"
+    );
+    assert!(
+        !text.contains("nowhere"),
+        "unrouted paths make no series: {text}"
+    );
+    assert!(
+        text.contains(r#"cyex_tv_http_request_duration_seconds_count{method="GET",route="/health",status="200"} 2"#),
+        "{text}"
+    );
+
+    let gauges = cyex_tv_api::scrape_gauges(&state).await;
+    assert!(gauges.contains("cyex_tv_hub_subscribers 0\n"), "{gauges}");
+    assert!(
+        gauges.contains("# TYPE cyex_tv_db_pool_connections gauge"),
+        "{gauges}"
+    );
+}

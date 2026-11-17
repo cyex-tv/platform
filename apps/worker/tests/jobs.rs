@@ -332,3 +332,65 @@ async fn clean_up_removes_what_expired() {
     drop(conn);
     db.close().await;
 }
+
+#[tokio::test]
+async fn outcomes_and_the_queue_are_measured() {
+    let Some(db) = TestDb::new().await else {
+        return;
+    };
+    let ctx = Ctx {
+        db: db.pool.clone(),
+        store: None,
+        purge: None,
+    };
+    let registry = cyex_tv_shared::metrics::Registry::new();
+    let handlers = Handlers::default()
+        .on("ok", |_, _| async { Ok(()) })
+        .on("broken", |_, _| async {
+            Err(JobError::Permanent("corrupt file".into()))
+        })
+        .with_metrics(registry.clone());
+
+    enqueue(&db, "ok", 5).await;
+    enqueue(&db, "broken", 5).await;
+    enqueue(&db, "ok", 5).await;
+    // Due, but no handler here: it stays queued and shows as due.
+    enqueue(&db, "elsewhere", 5).await;
+    let before = cyex_tv_worker::queue_metrics(&db.pool).await;
+    assert!(before.contains("cyex_tv_metrics_db_up 1\n"), "{before}");
+    assert!(
+        before.contains(r#"cyex_tv_jobs{kind="ok",state="due"} 2"#),
+        "{before}"
+    );
+
+    while run_one(&ctx, &handlers, limits()).await.unwrap().is_some() {}
+
+    let text = registry.render();
+    assert!(
+        text.contains(r#"cyex_tv_jobs_finished_total{kind="ok",outcome="done"} 2"#),
+        "{text}"
+    );
+    assert!(
+        text.contains(r#"cyex_tv_jobs_finished_total{kind="broken",outcome="failed"} 1"#),
+        "{text}"
+    );
+    assert!(
+        text.contains(r#"cyex_tv_job_duration_seconds_count{kind="ok",outcome="done"} 2"#),
+        "{text}"
+    );
+
+    let after = cyex_tv_worker::queue_metrics(&db.pool).await;
+    assert!(
+        !after.contains(r#"kind="ok""#),
+        "done jobs aren't counted: {after}"
+    );
+    assert!(
+        after.contains(r#"cyex_tv_jobs{kind="broken",state="failed"} 1"#),
+        "{after}"
+    );
+    assert!(
+        after.contains(r#"cyex_tv_jobs{kind="elsewhere",state="due"} 1"#),
+        "{after}"
+    );
+    db.close().await;
+}

@@ -70,8 +70,52 @@ pub fn app(state: AppState) -> Router {
             state.clone(),
             cors::middleware,
         ))
+        // Around the limits and CORS, so 429s and refused preflights are counted too. Requests
+        // for no route at all are not.
+        .route_layer(axum::middleware::from_fn_with_state(
+            state.metrics.clone(),
+            cyex_tv_shared::metrics::track,
+        ))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+/// The api's scrape-time gauges: live-update subscribers and the database pool.
+pub async fn scrape_gauges(state: &AppState) -> String {
+    use cyex_tv_shared::metrics::gauge;
+    let mut out = String::new();
+    let (subscribers, topics) = state.hub.stats();
+    gauge(
+        &mut out,
+        "cyex_tv_hub_subscribers",
+        "GraphQL subscriptions connected.",
+        &[(vec![], subscribers as f64)],
+    );
+    gauge(
+        &mut out,
+        "cyex_tv_hub_topics",
+        "Topics watched by at least one subscriber.",
+        &[(vec![], topics as f64)],
+    );
+    pool_gauges(&mut out, &state.db);
+    out
+}
+
+/// Pool size and idle connections.
+fn pool_gauges(out: &mut String, db: &sqlx::PgPool) {
+    use cyex_tv_shared::metrics::gauge;
+    gauge(
+        out,
+        "cyex_tv_db_pool_connections",
+        "Database connections open.",
+        &[(vec![], f64::from(db.size()))],
+    );
+    gauge(
+        out,
+        "cyex_tv_db_pool_idle",
+        "Database connections idle.",
+        &[(vec![], db.num_idle() as f64)],
+    );
 }
 
 /// `POST /v1/gql`, run as the caller. A cookie caller must send the site's `Origin`, since every

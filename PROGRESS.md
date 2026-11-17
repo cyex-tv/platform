@@ -2,9 +2,12 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
-## Phase 8: Browser extension (in progress, in `cyex-tv/extension`)
+## Phase 8: Browser extension (merged, in `cyex-tv/extension`)
 
-Six stacked PRs there, each with CI (licences, types, unit tests, Chrome and Firefox builds). They wait for the owner: merging outside `cyex-tv/platform` is the owner's.
+Six stacked PRs there, each with CI (licences, types, unit tests, Chrome and Firefox builds), and the store listing draft. The owner extended merge rights to the extension on 2026/11/17; all seven were merged that day, in order, and main's CI passed after the last one.
+
+#### GitHub write log
+- `gh pr merge 2 -R cyex-tv/extension --merge`, then for 3 to 7: `gh pr edit <n> -R cyex-tv/extension --base main` and `gh pr merge <n> -R cyex-tv/extension --merge`; then `gh pr merge 8 -R cyex-tv/extension --merge`.
 
 - [x] PR 1 (#2): Manifest V3 for Chrome and Firefox from one codebase (Vite); emote providers for cyex.tv, 7TV, BTTV and FFZ over their public APIs; the emote index and message tokenizer (whole words, links and code untouched, zero-width and FFZ modifiers); settings; a background fetcher limited to the providers' API hosts, cached and revalidated with ETags.
 - [x] PR 2 (#3): Twitch and Kick site adapters (all selectors in one module per site); a page-world script that copies sender and channel IDs from the sites' React props onto `data-` attributes; rendering with srcset, overlays, stills and hover animation, tooltips, copy as typed; personal emotes in batches; per-channel opt-out; providers left to their own extensions by default. Checked against live Twitch (148 of 148 messages tagged, BTTV and FFZ emotes drawn) and Kick (28 of 28 message bodies found).
@@ -20,7 +23,18 @@ Six stacked PRs there, each with CI (licences, types, unit tests, Chrome and Fir
 ### PR 1: service images (branch `phase-9/images`)
 - [x] `Dockerfile`: one release build of the workspace, then one image per service (`--target api`, `events`, `worker`) on `debian:bookworm-slim`, running as a non-root user, with health checks for api and events. Migrations are compiled into the api. No secrets in the images.
 - [x] CI's `images` job builds all three and checks that each binary starts and asks for its config.
-- [ ] The production compose, tunnel hostnames, backups and restore go in `cyex-tv/infra` (next).
+- [x] The production compose, tunnel hostnames, backups and restore are in `cyex-tv/infra` (PR 2, merged by the owner 2026/11/17).
+
+### PR 2: metrics (branch `phase-9/metrics`)
+- [x] `cyex_tv_shared::metrics`: counters, histograms and gauges in the Prometheus text format, written here (no new dependency). Each service serves `GET /metrics` on `CYEX_TV_METRICS_BIND` when set, on its own listener, so it never sits behind a public route.
+- [x] api and events: `cyex_tv_http_requests_total` and `cyex_tv_http_request_duration_seconds` by method, matched route (`/v1/emotes/{id}`, never the raw path) and status, 429s included; live-update subscribers and topics; the database pool.
+- [x] worker: `cyex_tv_jobs_finished_total` and `cyex_tv_job_duration_seconds` by kind and outcome; `cyex_tv_jobs` (not done, by kind and state: due, waiting, running, failed), read at scrape time; `cyex_tv_metrics_db_up`.
+- [ ] Alerts and the scraper go in `cyex-tv/infra` (next): the events service down, `cyex_tv_jobs{state="due"}` over 100 for 10 minutes, R2 errors, disk.
+
+#### Tests
+- Unit: the text format (escaping, buckets, grouping), gauges, the optional bind.
+- `apps/api/tests/http.rs`: requests counted per matched route and status, unrouted paths making no series, the scrape's content type, the gauges.
+- `apps/worker/tests/jobs.rs` against Postgres: outcomes and durations counted per kind, the queue gauges before and after.
 
 ## Phase 4: cyex deck integration (in progress)
 
