@@ -16,7 +16,7 @@ use cyex_tv_db::sets::{self, NewMember, Set};
 use cyex_tv_db::{DbError, accounts, audit, channels, emotes, ids, outbox, reads, roles};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
-    AccountSummary, AddSetEmote, Channel, CreateSet, EmotePage, EmoteSet, EventType,
+    AccountSummary, AddSetEmote, Channel, CreateSet, EmotePage, EmoteSet, EmoteState, EventType,
     PersonalSetEntry, Platform, SetEmote, SetKind, UpdateChannelSettings, UpdateSet,
     UpdateSetEmote,
 };
@@ -250,6 +250,17 @@ pub(crate) async fn publish_member_event(
     emote_id: Uuid,
     name: Option<&str>,
 ) -> ApiResult<()> {
+    // Every topic is public, and public reads hide emotes that aren't approved: an event naming
+    // one would leak a name nobody has reviewed. Clients learn it when it is approved.
+    if name.is_some() {
+        let approved = emotes::get(conn, emote_id)
+            .await
+            .map_err(db_error)?
+            .is_some_and(|e| e.state == EmoteState::Approved);
+        if !approved {
+            return Ok(());
+        }
+    }
     let topics = set_topics(conn, set).await?;
     // ADR 0005: clients watch personal sets through `personal.updated`.
     let event_type = if set.kind == SetKind::Personal {

@@ -399,7 +399,7 @@ async fn owners_edit_and_delete_their_emotes() {
         )
         .await;
     assert_eq!(r["data"]["set"]["emotes"], json!([]));
-    let events = w.event_types().await;
-    assert_eq!(events.last().map(String::as_str), Some("set.emote_removed"));
+    // It was never approved, so no public event named it, not even on the way out.
+    assert!(w.event_types().await.is_empty());
     w.db.close().await;
 }
