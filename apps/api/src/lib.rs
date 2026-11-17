@@ -126,6 +126,7 @@ fn pool_gauges(out: &mut String, db: &sqlx::PgPool) {
 async fn graphql(
     State(state): State<AppState>,
     Extension(schema): Extension<ApiSchema>,
+    ip: Option<Extension<limits::ClientIp>>,
     MaybeCaller(caller): MaybeCaller,
     request: GraphQLRequest,
 ) -> axum::response::Response {
@@ -137,8 +138,9 @@ async fn graphql(
     {
         return limits::too_many(wait);
     }
+    let ip = ip.map_or_else(|| limits::ClientIp(String::new()), |Extension(ip)| ip);
     let response: GraphQLResponse = schema
-        .execute(request.into_inner().data(caller))
+        .execute(request.into_inner().data(caller).data(ip))
         .await
         .into();
     response.into_response()

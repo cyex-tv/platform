@@ -98,6 +98,59 @@ pub async fn search(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<Hits> {
     })
 }
 
+/// Live accounts (not deleted, not blocked) whose Twitch or Kick login or display name matches
+/// `text` (lowercase, trimmed, at most 64 characters), in rank order, and how many match in all.
+/// Ranking: exact login, then login prefix, then display name prefix, then similarity.
+pub async fn accounts(
+    conn: &mut PgConnection,
+    text: &str,
+    limit: i64,
+    offset: i64,
+) -> DbResult<Hits> {
+    let text: String = text.trim().to_lowercase().chars().take(64).collect();
+    if text.is_empty() {
+        return Ok(Hits {
+            ids: Vec::new(),
+            total: 0,
+        });
+    }
+    let pattern = like_escape(&text);
+    let rows: Vec<(Uuid, i64)> = sqlx::query_as(
+        "WITH hits AS (
+             SELECT i.account_id,
+                    max(CASE WHEN lower(i.login) = $1 THEN 3
+                             WHEN lower(i.login) LIKE $2 || '%' THEN 2
+                             WHEN lower(i.display_name) LIKE $2 || '%' THEN 1
+                             ELSE 0 END) AS tier,
+                    max(greatest(similarity(lower(i.login), $1),
+                                 similarity(lower(i.display_name), $1))) AS score
+             FROM identities i
+             JOIN accounts a ON a.id = i.account_id
+                            AND a.deleted_at IS NULL AND a.blocked_at IS NULL
+             WHERE lower(i.login) LIKE '%' || $2 || '%'
+                OR lower(i.display_name) LIKE '%' || $2 || '%'
+                OR lower(i.login) % $1
+                OR lower(i.display_name) % $1
+             GROUP BY i.account_id
+         )
+         SELECT account_id, count(*) OVER () AS total
+         FROM hits
+         ORDER BY tier DESC, score DESC, account_id
+         LIMIT $3 OFFSET $4",
+    )
+    .bind(&text)
+    .bind(&pattern)
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(conn)
+    .await?;
+    let total = rows.first().map_or(0, |(_, t)| *t);
+    Ok(Hits {
+        ids: rows.into_iter().map(|(id, _)| id).collect(),
+        total,
+    })
+}
+
 impl EmoteSearch for PgSearch {
     async fn search(&self, query: &Query<'_>) -> DbResult<Hits> {
         let mut conn = self.pool.acquire().await?;

@@ -2,6 +2,17 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## User search (branch `feat/account-search`)
+
+Gap list G10: find people by their Twitch or Kick name. API only; the `/search` Users tab comes next.
+
+- [x] Migration `20261130000002_account_search.sql` (additive): trigram indexes on `lower(login)` and `lower(display_name)` of identities.
+- [x] GraphQL (additive): `searchAccounts(query, page, perPage)` returning `AccountResults { items: [AccountHit { account: AccountSummary, identities: [PublicIdentity { platform, login, displayName }] }], total, page, perPage }`. Exact login first, then login and display-name prefixes, then similar names; a leading `@` is ignored; `%` and `_` mean themselves. Public fields only (no platform IDs). Deleted and blocked accounts are never listed. `perPage` 1 to 50, default 20.
+- [x] 60 searches a minute per account, or per IP when signed out (the limits middleware now hands the client IP to GraphQL resolvers).
+- [x] Tests: `apps/api/tests/account_search_flow.rs` against Postgres in CI (ranking, both platforms in one hit, no IDs, paging, wildcards, blocked and deleted never listed signed in or out, per-account and per-IP limits).
+- [x] Dev mock: `searchAccounts` over the mock's people (quietoak has a Kick login too).
+- [ ] Website: the Users tab on `/search` and people in the palette (another task).
+
 ## Public emote sets (branch `feat/public-sets`)
 
 Gap list G1 (`.claude/runs/2026-11-17-overnight/gap-7tv.md`): sets you can share, list and copy, like 7TV's set pages (its public help pages and v3 schema studied; no code taken). API only; the pages come next.

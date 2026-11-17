@@ -20,13 +20,14 @@ use cyex_tv_hub::Message as HubMessage;
 use cyex_tv_hub::topics as hub_topics;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::model::{
-    AccountEditor, AccountStatus, AccountSummary, AddAccountEditor, AddSetEmote, AuditEntry, Badge,
-    Channel, ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge, CreateRole,
-    CreateSet, EditedAccount, EditorPermission, Emote, EmotePage, EmoteSet, EmoteSort, Entitlement,
-    EntitlementPage, Event, GrantCosmetic, Identity, Me, Notification, OwnedCosmetics, Paint,
-    PaintInput, PersonalSetEntry, Platform, Report, ReportAction, ReportQueue, ReviewQueue, Role,
-    SearchResults, SetEmote, SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings,
-    UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote, UserCosmetics,
+    AccountEditor, AccountResults, AccountStatus, AccountSummary, AddAccountEditor, AddSetEmote,
+    AuditEntry, Badge, Channel, ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind,
+    CreateBadge, CreateRole, CreateSet, EditedAccount, EditorPermission, Emote, EmotePage,
+    EmoteSet, EmoteSort, Entitlement, EntitlementPage, Event, GrantCosmetic, Identity, Me,
+    Notification, OwnedCosmetics, Paint, PaintInput, PersonalSetEntry, Platform, Report,
+    ReportAction, ReportQueue, ReviewQueue, Role, SearchResults, SetEmote, SetSummary,
+    SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole, UpdateSet,
+    UpdateSetEmote, UserCosmetics,
 };
 use cyex_tv_shared::permissions;
 use futures_util::Stream;
@@ -296,6 +297,25 @@ impl Query {
         )
         .await
         .map_err(api_error)
+    }
+
+    /// Accounts by Twitch or Kick login or display name (a leading `@` is ignored): exact login
+    /// first, then login and name prefixes, then similar names. Public fields only; deleted and
+    /// blocked accounts are never listed. `perPage` is 1 to 50, default 20. 60 searches a minute
+    /// per account, or per IP signed out (`rate_limited`). An empty `query` finds nobody.
+    async fn search_accounts(
+        &self,
+        ctx: &Context<'_>,
+        query: String,
+        page: Option<u32>,
+        per_page: Option<u32>,
+    ) -> Result<AccountResults> {
+        let ip = ctx
+            .data_opt::<crate::limits::ClientIp>()
+            .map_or("", |ip| ip.0.as_str());
+        search::accounts(state(ctx), caller_opt(ctx), ip, &query, page, per_page)
+            .await
+            .map_err(api_error)
     }
 
     /// An account's public summary. Null when the account is unknown, deleted or blocked.
