@@ -29,9 +29,9 @@
   .head :global(h1), .head :global(h2) { max-width: 16ch; }
   .s-section :global(h1), .s-section :global(h2) { font-size: var(--t-h2); line-height: 1.02; letter-spacing: -.04em; }
   .s-page :global(h1), .s-page :global(h2) { font-size: var(--t-h3-sub); line-height: 1.1; letter-spacing: -.03em; max-width: 24ch; }
-  .lead { margin: 20px 0 0; font-size: var(--t-lead); line-height: 1.55; color: var(--muted); max-width: 44ch; }
+  .lead { margin: 16px 0 0; font-size: var(--t-lead); line-height: 1.55; color: var(--muted); max-width: 44ch; }
   .s-page .lead { margin-top: 12px; }
-  .actions { margin-top: 32px; }
+  .actions { margin-top: 28px; }
   .center { text-align: center; }
   .center :global(h1), .center :global(h2), .center .lead { margin-inline: auto; }
   .center :global(.eyebrow), .center .actions { justify-content: center; }

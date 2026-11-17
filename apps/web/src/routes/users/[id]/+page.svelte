@@ -1,7 +1,6 @@
 <script lang="ts">
   import { ApiError, gql } from '$lib/api';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
-  import Eyebrow from '$lib/components/Eyebrow.svelte';
   import ProfileHead from '$lib/components/profile/ProfileHead.svelte';
   import ProfileState from '$lib/components/profile/ProfileState.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
@@ -120,7 +119,7 @@
 
     <section aria-labelledby="up-h">
       <div class="bar">
-        <h2 id="up-h"><Eyebrow lit="top">Uploads</Eyebrow></h2>
+        <h2 class="block-title" id="up-h">Uploads</h2>
         <Segmented
           label="Sort uploads"
           options={[{ value: 'top', label: 'Top' }, { value: 'new', label: 'New' }]}
@@ -151,9 +150,7 @@
 
 <style>
   .pad { padding-top: clamp(48px, 8vw, 120px); }
-  h2 { font-size: inherit; font-weight: inherit; margin: 0; }
   .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin-bottom: 20px; }
-  .bar :global(.eyebrow) { margin: 0; }
   .chans { display: flex; flex-wrap: wrap; gap: 8px; }
   .more { display: grid; justify-items: center; gap: 12px; padding: 24px 0 0; }
   .more p { margin: 0; }

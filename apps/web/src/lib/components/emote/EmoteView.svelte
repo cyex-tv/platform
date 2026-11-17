@@ -87,8 +87,8 @@
 
   {#if more.length && e.owner}
     <section class="block more" aria-labelledby="more-h">
-      <div class="more-head">
-        <h2 id="more-h">More from {e.owner.displayName}</h2>
+      <div class="block-head">
+        <h2 class="block-title" id="more-h">More from {e.owner.displayName}</h2>
         <a class="link" href="/users/{e.owner.id}">
           See all
           <svg class="arrow" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" /></svg>
@@ -105,7 +105,7 @@
 
 <style>
   p { margin: 0; }
-  .emote { padding-top: clamp(16px, 3vw, 32px); padding-bottom: clamp(64px, 8vw, 120px); }
+  .emote { padding-top: clamp(16px, 3vw, 32px); }
   .back { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; color: var(--muted); font-size: var(--t-small);
     transition: color var(--dur-color); }
   .back :global(.icon) { transition: transform var(--dur-move) var(--ease); }
@@ -133,10 +133,8 @@
     font-size: var(--t-small); max-width: 72ch; }
   .notice strong { font-weight: 600; }
 
-  .block { margin-top: clamp(48px, 6vw, 80px); }
-  .more-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
-  .more-head .link { flex: none; white-space: nowrap; }
-  h2 { font-size: var(--t-h3-sub); line-height: 1.1; letter-spacing: -.03em; min-width: 0; overflow-wrap: anywhere; }
+  .block { margin-top: clamp(48px, 6vw, 72px); }
+  .block-head .link { flex: none; white-space: nowrap; }
   svg.arrow { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
   .bar { display: none; }

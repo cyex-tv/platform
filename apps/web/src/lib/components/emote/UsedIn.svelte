@@ -10,8 +10,8 @@
 </script>
 
 <section class="used" aria-labelledby="used-h">
-  <div class="head">
-    <h2 id="used-h">Used in</h2>
+  <div class="block-head">
+    <h2 class="block-title" id="used-h">Used in</h2>
     {#if total !== null && total > shown.length}<p class="fine">{shown.length} of {count(total)} channels</p>{/if}
   </div>
   {#if shown.length === 0}
@@ -37,8 +37,6 @@
 
 <style>
   p { margin: 0; }
-  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
-  h2 { font-size: var(--t-h3); line-height: 1.3; letter-spacing: -.015em; }
   ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 16px; }
   a { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 10px; margin-inline: -10px;
     border-radius: var(--radius-s); color: var(--text); transition: background-color var(--dur-color); }

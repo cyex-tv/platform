@@ -7,6 +7,7 @@
   import Footer from '$lib/components/Footer.svelte';
   import Nav, { type NavUser } from '$lib/components/Nav.svelte';
   import { ME } from '$lib/queries';
+  import { ADMIN_PERMISSIONS } from '$lib/tool/session.svelte';
 
   let { children } = $props();
   let me = $state<NavUser | null>(null);
@@ -16,8 +17,11 @@
   onMount(async () => {
     // Only the browser has the session cookie; signed out is the default.
     try {
-      const who = (await gql(ME, {})).me?.identities[0];
-      me = who ? { displayName: who.displayName, avatar: who.avatar } : null;
+      const m = (await gql(ME, {})).me;
+      const who = m?.identities[0];
+      me = who
+        ? { displayName: who.displayName, avatar: who.avatar, platform: who.platform, admin: m.permissions.some((p) => ADMIN_PERMISSIONS.includes(p)) }
+        : null;
     } catch {
       me = null;
     }

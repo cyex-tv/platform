@@ -1,7 +1,6 @@
 <script lang="ts">
   import ChatPreview from '$lib/components/ChatPreview.svelte';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
-  import Eyebrow from '$lib/components/Eyebrow.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import ProfileHead from '$lib/components/profile/ProfileHead.svelte';
   import ProfileState from '$lib/components/profile/ProfileState.svelte';
@@ -87,7 +86,7 @@
   {:else}
     <section aria-labelledby="emotes-h">
       <div class="bar">
-        <h2 id="emotes-h"><Eyebrow lit="top">Emotes</Eyebrow></h2>
+        <h2 class="block-title" id="emotes-h">Emotes</h2>
         <label class="find">
           <span class="sr-only">Filter this set</span>
           <Icon name="search" size={16} />
@@ -119,7 +118,7 @@
 
     {#if lines.length}
       <section class="chat" aria-labelledby="chat-h">
-        <h2 id="chat-h"><Eyebrow lit="middle">In chat</Eyebrow></h2>
+        <h2 class="block-title" id="chat-h">In chat</h2>
         <p class="fine">How these emotes look in a {platform} chat. The viewers are made up.</p>
         <div class="frame">
           <ChatPreview platform={key} {lines} visible={6} label="{platform} chat with {c.account.displayName}'s emotes" />
@@ -130,20 +129,17 @@
 </div>
 
 <style>
-  h2 { font-size: inherit; font-weight: inherit; margin: 0; }
   .actions { display: flex; flex-wrap: wrap; gap: 8px; }
   .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
-  .bar :global(.eyebrow) { margin: 0; }
   .find { position: relative; display: block; flex: 0 1 320px; min-width: 0; }
   .find :global(svg) { position: absolute; left: 12px; top: 50%; translate: 0 -50%; color: var(--muted); pointer-events: none; }
   .find .input { width: 100%; height: 40px; padding-left: 36px; }
   @media (max-width: 520px) { .find { flex-basis: 100%; } }
-  .slots { display: flex; align-items: center; gap: 12px; margin: 16px 0 20px; font-variant-numeric: tabular-nums; }
+  .slots { display: flex; align-items: center; gap: 12px; margin: 8px 0 20px; font-variant-numeric: tabular-nums; }
   .meter { flex: 0 1 160px; height: 2px; background: var(--border-strong); }
   .meter span { display: block; height: 100%; background: var(--muted); }
   .more { display: flex; justify-content: center; padding: 24px 0 0; }
-  .chat { padding-top: clamp(56px, 7vw, 96px); padding-bottom: 8px; }
-  .chat :global(.eyebrow) { margin-bottom: 10px; }
-  .chat .fine { margin: 0 0 20px; }
+  .chat { padding-top: clamp(48px, 6vw, 72px); }
+  .chat .fine { margin: 6px 0 20px; }
   .frame { max-width: 520px; }
 </style>

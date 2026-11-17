@@ -168,28 +168,28 @@
     {/if}
   </header>
 
-  <form class="search" role="search" onsubmit={submit}>
-    <Icon name="search" size={20} />
-    <label class="sr-only" for="q">Emote name or tag</label>
-    <input
-      id="q"
-      bind:this={input}
-      bind:value={text}
-      oninput={typed}
-      type="search"
-      name="q"
-      placeholder="Name or tag"
-      autocomplete="off"
-      autocapitalize="off"
-      spellcheck="false"
-      enterkeyhint="search"
-    />
-    {#if text}
-      <span class="clear"><IconButton icon="x" label="Clear search" size="s" tip="none" onclick={clearText} type="button" /></span>
-    {/if}
-  </form>
-
   <div class="controls">
+    <form class="search" role="search" onsubmit={submit}>
+      <Icon name="search" size={17} />
+      <label class="sr-only" for="q">Emote name or tag</label>
+      <input
+        id="q"
+        bind:this={input}
+        bind:value={text}
+        oninput={typed}
+        type="search"
+        name="q"
+        placeholder="Name or tag"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        enterkeyhint="search"
+        data-page-search
+      />
+      {#if text}
+        <span class="clear"><IconButton icon="x" label="Clear search" size="s" tip="none" onclick={clearText} type="button" /></span>
+      {/if}
+    </form>
     <Segmented label="Sort" size="s" options={sorts} value={view.sort} onchange={(v) => go({ sort: v })} />
     <Popover label="Filters" sheet width="340px">
       {#snippet trigger(p)}
@@ -260,25 +260,27 @@
 </div>
 
 <style>
-  .head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; padding: clamp(28px, 4vw, 56px) 0 20px; }
+  .head { display: flex; align-items: baseline; gap: 12px; padding: clamp(28px, 4vw, 48px) 0 20px; }
   h1 { font-size: var(--t-h3-sub); line-height: 1.1; letter-spacing: -.03em; margin: 0; }
-  .total { margin: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .total { margin: 0; font-size: var(--t-ui); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
-  .search { position: relative; display: flex; align-items: center; color: var(--muted); }
-  .search > :global(svg) { position: absolute; left: 16px; pointer-events: none; }
-  .search input { width: 100%; height: 56px; padding: 0 56px 0 48px; font: inherit; font-size: 18px; color: var(--text);
+  /* One toolbar, one height (40px): the field, sort, filters, then density at the far end. */
+  .controls { display: flex; align-items: center; gap: 8px; }
+  .search { position: relative; flex: 0 1 480px; min-width: 0; display: flex; align-items: center; margin-right: 8px; color: var(--muted); }
+  .search > :global(svg) { position: absolute; left: 13px; pointer-events: none; }
+  .search input { width: 100%; height: 40px; padding: 0 40px 0 38px; font: inherit; font-size: 16px; color: var(--text);
     background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-btn);
     transition: border-color var(--dur-color); -webkit-appearance: none; appearance: none; }
   .search input::-webkit-search-cancel-button { display: none; }
   .search input::placeholder { color: var(--muted); }
   .search input:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
-  .clear { position: absolute; right: 8px; display: inline-flex; }
+  .clear { position: absolute; right: 4px; display: inline-flex; }
   @media (hover: hover) and (pointer: fine) { .search input:hover { border-color: var(--muted); } }
-
-  .controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; }
+  .controls :global(.seg button) { height: 32px; }
+  .filters-btn { height: 40px; gap: 8px; }
   .grow { flex: 1; }
   .dens { display: inline-flex; gap: 4px; }
-  .filters-btn { gap: 8px; }
+  .dens :global(.ib) { width: 40px; height: 40px; }
   .n { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 3px;
     background: var(--text); color: var(--bg); font-size: 12px; font-weight: 600; }
   .foot { margin-right: auto; font-size: var(--t-small); color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -296,10 +298,11 @@
   .state h2 { margin: 0; font-size: var(--t-h4, 22px); letter-spacing: -.02em; }
   .state p { margin: 0; max-width: 52ch; }
 
+  /* Phones and small tablets: the field takes its own row, the controls scroll sideways under it. */
   @media (max-width: 720px) {
-    .controls { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-inline: -16px; padding-inline: 16px; padding-block: 2px; }
-    .controls::-webkit-scrollbar { display: none; }
-    .controls > :global(*) { flex: none; }
+    .controls { flex-wrap: wrap; row-gap: 12px; }
+    .search { flex: 1 1 100%; margin-right: 0; }
+    .search input { height: 44px; }
     .grow { display: none; }
     .dens { margin-left: auto; }
   }

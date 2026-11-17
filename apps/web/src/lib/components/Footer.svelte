@@ -52,13 +52,13 @@
     </div>
     <div class="base">
       <span>Not affiliated with, endorsed by, or sponsored by Twitch or Kick.</span>
-      <span>© {year} seryxx</span>
+      <span>© {year} cyex</span>
     </div>
   </div>
 </footer>
 
 <style>
-  .footer { flex: none; border-top: 1px solid var(--border); margin-top: var(--section-pad);
+  .footer { flex: none; border-top: 1px solid var(--border); margin-top: var(--footer-gap);
     padding-bottom: env(safe-area-inset-bottom, 0px); }
   .top { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)); gap: 32px 24px; padding: 48px 0 40px; }
   .brand { display: inline-flex; align-items: center; gap: 9px; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }

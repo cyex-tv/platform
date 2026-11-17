@@ -8,9 +8,9 @@ See them all with live data at `/dev/components` (dev server only; a 404 in prod
 
 | Component | Props | Notes |
 |---|---|---|
-| `Nav` | `me?: { displayName, avatar? } \| null`, `onsignout?()` | Sticky, 64px plus the top safe area, **in the flow**: pages start right under it, so don't pad by `--nav-h`. Glass after 8px of scroll. Search field opens the palette. 720px and narrower: search and menu buttons, menu in a `BottomSheet`. |
+| `Nav` | `me?: { displayName, avatar?, platform?, admin? } \| null`, `onsignout?()` | Sticky, 64px plus the top safe area, **in the flow**: pages start right under it, so don't pad by `--nav-h`. Glass after 8px of scroll. Links: Emotes. Search field opens the palette (no shortcut hint; hidden on /search). Signed in: Upload and the account menu (your emotes, upload, sets, channels; account, admin for staff; sign out last). 720px and narrower: search and menu buttons (the avatar when signed in), menu in a `BottomSheet`. |
 | `Footer` | none | Product, Developers, Legal (`/terms`, `/privacy`, `/contact`), non-affiliation line. |
-| `CommandPalette` | none | Ctrl K / Cmd K, or `/` outside a field. Open it from code with `openPalette(query?)` from `palette.svelte.ts`. |
+| `CommandPalette` | none | Ctrl K / Cmd K, or `/` outside a field (no on-screen hint). A page input marked `data-page-search` takes `/` instead. Open it from code with `openPalette(query?)` from `palette.svelte.ts`. |
 
 ## Emotes
 
@@ -38,7 +38,7 @@ See them all with live data at `/dev/components` (dev server only; a 404 in prod
 | Component | Props | Usage |
 |---|---|---|
 | `Segmented` | `options: {value, label}[]`, `bind:value`, `label`, `size?: 's' \| 'm'`, `onchange?(v)` | `<Segmented label="Sort" options={[{value:'top',label:'Top'},{value:'new',label:'New'}]} bind:value={sort} onchange={go} />` Radiogroup: one tab stop, arrows/Home/End select. |
-| `Popover` | `label`, `bind:open?`, `align?: 'start' \| 'end'`, `width? = '320px'`, `sheet?`, `onclose?`, snippets `trigger(props)`, `children`, `footer?` | `<Popover label="Filters" sheet>{#snippet trigger(p)}<button class="btn btn-s" {...p}>Filters</button>{/snippet}…</Popover>` Spread `props` on the trigger. Escape, outside click or focus leaving closes. `sheet`: a `BottomSheet` at 720px and narrower. |
+| `Popover` | `label`, `bind:open?`, `align?: 'start' \| 'end'`, `width? = '320px'`, `sheet?`, `onclose?`, snippets `trigger(props)`, `children`, `footer?` | `<Popover label="Filters" sheet>{#snippet trigger(p)}<button class="btn btn-s" {...p}>Filters</button>{/snippet}…</Popover>` Spread `props` on the trigger. Renders in the top layer (popover API) at fixed coordinates, follows the trigger on scroll and closes when it scrolls away, so no ancestor can clip or cover it. Escape, outside click or focus leaving closes. `sheet`: a `BottomSheet` at 720px and narrower. |
 | `BottomSheet` | `bind:open`, `label`, `title? = true`, `onclose?`, snippets `children`, `footer?` | `<BottomSheet bind:open={filters} label="Filters">…{#snippet footer()}<button class="btn btn-primary">Show 120 emotes</button>{/snippet}</BottomSheet>` Modal dialog; drag the handle down, tap outside or Escape to close. |
 | `Chip` | `label`, `onremove?()`, `href?` | `<Chip label="Animated" onremove={() => drop('animated')} />` or `<Chip label="Animated" href={urlWithout('animated')} />` |
 | `IconButton` | `label`, `icon: IconName`, `href?`, `size?: 's' (32) \| 'm' (40)`, `variant?: 'ghost' \| 'outline'`, `tip?: 'bottom' \| 'top' \| 'none'`, `pressed?`, button attributes | `<IconButton icon="copy" label="Copy link" onclick={copy} />` `label` is the aria-label and the tooltip. |
