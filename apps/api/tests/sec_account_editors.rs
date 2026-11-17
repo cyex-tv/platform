@@ -223,6 +223,7 @@ async fn each_flag_gates_its_actions() {
     let Some(w) = World::new().await else { return };
     let alice = w.user("1001").await;
     let bob = w.user("1002").await;
+    let carol = w.user("1003").await;
     let set = w.set(&alice, "Main").await;
     let ok = w
         .emote(&alice, "aliceOk", EmoteState::Approved, false)
@@ -233,7 +234,9 @@ async fn each_flag_gates_its_actions() {
     let private = w
         .emote(&alice, "alicePriv", EmoteState::Approved, true)
         .await;
-    let bobs_private = w.emote(&bob, "bobPriv", EmoteState::Approved, true).await;
+    let carols_private = w
+        .emote(&carol, "carolPriv", EmoteState::Approved, true)
+        .await;
 
     // Nothing before a grant.
     assert_eq!(code(&w.add_emote(&bob, &set, &ok, None).await), "forbidden");
@@ -264,9 +267,9 @@ async fn each_flag_gates_its_actions() {
     assert_eq!(r["data"]["addSetEmote"]["name"], "alicePending", "{r}");
     let r = w.add_emote(&bob, &set, &private, None).await;
     assert_eq!(r["data"]["addSetEmote"]["name"], "alicePriv", "{r}");
-    // Not the editor's own private emote in someone else's set.
+    // Nobody else's private emotes: not a third account's.
     assert_eq!(
-        code(&w.add_emote(&bob, &set, &bobs_private, None).await),
+        code(&w.add_emote(&bob, &set, &carols_private, None).await),
         "emote_private"
     );
     let r = w
