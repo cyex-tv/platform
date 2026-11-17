@@ -15,8 +15,10 @@ RUN cargo build --release --locked \
     && cp target/release/cyex-tv-api target/release/cyex-tv-events target/release/cyex-tv-worker /out/
 
 FROM debian:bookworm-slim AS runtime
+# libwebp's runtime libraries: the encoder links to the system copy rust:bookworm builds with.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
+        libwebp7 libwebpmux3 libwebpdemux2 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --no-create-home cyextv
 USER cyextv
