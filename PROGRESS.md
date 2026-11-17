@@ -2,11 +2,48 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
-## Paint studio (branch `feat/paint-studio`, ADR 0016)
+## Paint studio (branch `feat/paint-studio`, ADR 0017)
 - `apps/web/src/lib/paint-studio/`: the staff editor for name paints, built on the owner's cyex paints tool. Gradient paints (kind, angle or shape, repeat, 2 to 10 stops, up to 4 shadows, fallback colour) with the API's limits checked live; animated paints from the tool's engine (layers, effects, scene elements, presets) rendered and encoded in a Web Worker as WebP, APNG or GIF; previews on sample names on both grounds and in Twitch- and Kick-style chat; import of cyex.tv JSON, integer-colour paint JSON and tool project files, export as cyex.tv JSON, integer JSON, CSS, picture and project; Save to cyex.tv (createPaint / updatePaint; animated: render, upload, wait for ready, IMAGE paint); Open an existing paint.
 - Provenance: the tool's gradient CSS builder and integer-colour formatter were ports of the 7TV extension; neither came over (the gradient side is new code, the formatter was removed from the engine). The engine's custom-code items (`new Function`) were removed.
 - Dev page `/dev/paint-studio` (404 in production). Tests: `src/lib/paint-studio/studio.test.ts` (colours, limits, CSS, import/export, API mapping, engine render and GIF).
 - Manual check (2026/11/17): headless Edge against the dev mock at 1440 and 375, dark and light: a gradient paint saved, an animated paint rendered, uploaded, processed and saved as an IMAGE paint, an existing paint reopened (Open and `?id=`), integer JSON imported with its corrections listed, reduced motion pauses animated previews with a Play button. Screens in `.claude/runs/2026-11-17-web-v4/screens/studio/`.
+
+## Website v4: the profile is the dashboard, cosmetics, admin cosmetics (branch `web/v4`)
+
+7TV's signed-in structure, in the cyex design (one shell, one accent, selection = bold text + accent icon).
+
+- [x] `/users/<id>` is the one profile page. Everyone: Uploaded emotes. The owner and the account's editors also get Active emotes, Emote sets (cards: two rows of emotes, capacity meter, active set marked, New set), Cosmetics (owner, or editors with PROFILE) and Channels (owner). Rail head: avatar ringed in the paint, name in the paint with the badge, role chips, collapsible Connections and Editors; "Admin ›" pinned for staff. Phones: profile card on top, sections as a tab strip.
+- [x] `/me`, `/me/sets` and `/me/cosmetics` redirect to the profile sections; the other `/me` pages keep their routes and show the profile rail with their row marked.
+- [x] Account menu: Profile, Your emotes, Cosmetics, Account, Admin, Sign out; its head shows the name in the paint, the badge and the highest role.
+- [x] Paint renderer `lib/cosmetics/paint.ts` (strict colour check, clamped values, safe image urls, at most 4 shadows; vitest), `PaintedName`, `BadgeIcon`, a batched `userCosmetics` cache; paints on the profile, the account menu, channel pages, admin Users and admin lists.
+- [x] Cosmetics picker: badge and paint radio groups with None, search, grid/list and a "Paint name / Your name" preview; saves with `selectCosmetics` (with `ownerId` for edited accounts); empty states.
+- [x] Admin rail: Overview; Tickets (Review, Reports with counts); Cosmetics (Paints, Badges); People; System. Overview: welcome line and count cards. Paints: list with preview, owners, Give, Delete, Edit and New paint go to the paint studio placeholder (`/admin/cosmetics/paints/studio`, to be replaced by the ported paint tool). Badges: list, New/Edit dialog with picture upload and ready polling, Give, owners with Revoke. Users: owned cosmetics, Give with a reason, Revoke.
+- [x] Activity (public, ADR 0016): `accountActivity` through the adapter in `lib/profile/activity.ts`, rows with icon, sentence (emote picture, set, paints in the paint), who and how long ago, paged by 30.
+- Manual check: screenshots at 375 and 1440, dark and light, with the dev mock (`.claude/runs/2026-11-17-web-v4/screens`). Open questions: `.claude/runs/2026-11-17-web-v4/questions.md`.
+## Account activity feed (branch `feat/activity`)
+
+ADR 0016. A public activity feed per account, like 7TV's profile "Activity" tab.
+
+- [x] Migration `20261122000001_activity.sql` (additive): `audit_log.subject_account_id` and its index. The owner's own set, channel and cosmetics changes are now audited with the account as subject, and so is the approval of its emotes; staff actions never set it.
+- [x] GraphQL (additive): `accountActivity(accountId, before, limit)` returning `ActivityEntry` (kinds `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED`, `ACTIVE_SET_CHANGED`, `COSMETICS_SELECTED`, `EMOTE_UPLOADED`, `SET_CREATED`, `SET_RENAMED`). Public, 1 to 100 per page (default 30). `apps/api/src/activity.rs`. Schema and web types regenerated; the OpenAPI spec is unchanged.
+- [x] Privacy: no moderation, reasons or reviewers; no pending, private, rejected, taken-down or deleted emotes; blocked owner gives an empty list; blocked actors dropped; deleted sets dropped.
+- [x] Tests: `apps/api/tests/activity.rs` against Postgres in CI (kinds in order, paging, privacy filters, editor attribution, limit clamp). `catalog_flow` and `cosmetics_flow` adjusted for the owner's audit rows.
+- [x] Dev mock: `accountActivity` with sample activity for lumen_fox, quietoak and sunnyfern.
+- No website page yet (another task).
+
+### GitHub write log for PR 51 (`feat/cosmetics`, merged), added afterwards
+```
+git push -u origin feat/cosmetics
+gh pr create --base main --head feat/cosmetics
+gh pr merge 51 --merge
+```
+
+### GitHub write log for this PR (`feat/activity`)
+```
+git push -u origin feat/activity
+gh pr create --base main --head feat/activity
+gh pr merge <n> --merge   (only after all checks were green and the new database suite ran in the CI log)
+```
 
 ## Chat cosmetics (branch `feat/cosmetics`)
 

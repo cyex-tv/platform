@@ -3,7 +3,11 @@
 import type { IconName } from '$lib/components/Icon.svelte';
 
 export type RailItem = { href: string; label: string; icon?: IconName; count?: number | string; current?: boolean };
-export type RailGroup = { caption?: string; items: RailItem[] };
+/**
+ * A group of rows. `toggle` makes it collapsible under a row of its own (7TV's admin "Tickets"
+ * and "Cosmetics"): open by default, or while one of its rows is current.
+ */
+export type RailGroup = { caption?: string; toggle?: { label: string; icon?: IconName }; items: RailItem[] };
 
 /** Moves focus between a list's links with the arrow keys (and Home / End). */
 export function arrowNav(node: HTMLElement, axis: 'vertical' | 'horizontal' = 'vertical') {

@@ -550,6 +550,76 @@ pub struct AccountStatus {
     pub blocked: bool,
 }
 
+// Account activity (ADR 0016)
+
+/// What one line of an account's public activity feed says happened.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "snake_case")]
+pub enum ActivityKind {
+    SetEmoteAdded,
+    SetEmoteRemoved,
+    /// The emote's name in the set changed (`from_name`, `to_name`).
+    SetEmoteRenamed,
+    /// A channel's active set changed (`set` is the new one; `from_name`, `to_name`).
+    ActiveSetChanged,
+    /// The badge and/or paint shown changed (`badge`, `paint`).
+    CosmeticsSelected,
+    /// An emote of the account was approved and listed.
+    EmoteUploaded,
+    SetCreated,
+    /// A set was renamed (`from_name`, `to_name`).
+    SetRenamed,
+}
+
+/// A set, as a feed line names it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct ActivitySet {
+    pub id: String,
+    pub name: String,
+}
+
+/// An emote, as a feed line names it. `name` is what it was called in the set at the time.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct ActivityEmote {
+    pub id: String,
+    pub name: String,
+    /// For example `https://cdn.cyex.tv/emotes/<sha256>`.
+    pub host: String,
+    pub files: Vec<EmoteFile>,
+}
+
+/// A badge or paint change: what it was and what it is now. Empty ends mean none; names are
+/// empty when the cosmetic was deleted since.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct ActivityCosmeticChange {
+    pub from_id: Option<String>,
+    pub from_name: Option<String>,
+    pub to_id: Option<String>,
+    pub to_name: Option<String>,
+}
+
+/// One line of an account's public activity feed (7TV's "Activity" tab).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct ActivityEntry {
+    /// An audit row ID; page back with it.
+    pub id: String,
+    pub kind: ActivityKind,
+    /// Who did it: the account or one of its editors.
+    pub actor: AccountSummary,
+    pub set: Option<ActivitySet>,
+    pub emote: Option<ActivityEmote>,
+    pub from_name: Option<String>,
+    pub to_name: Option<String>,
+    pub badge: Option<ActivityCosmeticChange>,
+    pub paint: Option<ActivityCosmeticChange>,
+    pub created_at: String,
+}
+
 /// One audited change (ADR 0010). `before` and `after` are JSON, as text.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]

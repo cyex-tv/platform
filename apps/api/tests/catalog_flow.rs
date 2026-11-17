@@ -17,7 +17,7 @@ use cyex_tv_auth::{Auth, AuthConfig, tokens};
 use cyex_tv_db::accounts::{self, Profile};
 use cyex_tv_db::emotes::{self, NewEmote};
 use cyex_tv_db::sessions::{self, SessionKind};
-use cyex_tv_db::{audit, channels, ids, outbox, roles};
+use cyex_tv_db::{channels, ids, outbox, roles};
 use cyex_tv_shared::model::{EmoteState, Platform};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -207,16 +207,16 @@ impl World {
         .unwrap()
     }
 
+    /// Audit actions oldest first, without the owners' own changes, which are audited for their
+    /// public activity feed (they have a subject account; see tests/activity.rs).
     async fn audit_actions(&self) -> Vec<String> {
         let mut conn = self.db.conn().await;
-        let mut actions: Vec<String> = audit::list(&mut conn, &audit::Filter::default(), 100)
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|e| e.action)
-            .collect();
-        actions.reverse();
-        actions
+        sqlx::query_scalar(
+            "SELECT action FROM audit_log WHERE subject_account_id IS NULL ORDER BY id",
+        )
+        .fetch_all(&mut *conn)
+        .await
+        .unwrap()
     }
 }
 
@@ -472,7 +472,7 @@ async fn member_rules_and_events() {
             ("set.emote_removed".to_owned(), topics, json!("Renamed")),
         ]
     );
-    // Owners editing their own sets aren't audited.
+    // Owners editing their own sets aren't audited as grants or permissions.
     assert!(w.audit_actions().await.is_empty());
     w.db.close().await;
 }

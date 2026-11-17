@@ -48,10 +48,21 @@ const ENTRY: &str = "id, actor_account_id, action, target_kind, target_id, befor
                      after_json, created_at";
 
 pub async fn write(conn: &mut PgConnection, entry: &NewEntry<'_>) -> DbResult<Uuid> {
+    write_for(conn, entry, None).await
+}
+
+/// Like `write`, for a change the account `subject` can see on its public activity feed. Only
+/// changes the owner or its account editors made themselves, never staff actions.
+pub async fn write_for(
+    conn: &mut PgConnection,
+    entry: &NewEntry<'_>,
+    subject: Option<Uuid>,
+) -> DbResult<Uuid> {
     Ok(sqlx::query_scalar(
         "INSERT INTO audit_log
-             (id, actor_account_id, action, target_kind, target_id, before_json, after_json)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+             (id, actor_account_id, action, target_kind, target_id, before_json, after_json,
+              subject_account_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id",
     )
     .bind(new_id())
@@ -61,6 +72,7 @@ pub async fn write(conn: &mut PgConnection, entry: &NewEntry<'_>) -> DbResult<Uu
     .bind(entry.target_id)
     .bind(&entry.before)
     .bind(&entry.after)
+    .bind(subject)
     .fetch_one(conn)
     .await?)
 }
@@ -84,6 +96,59 @@ pub async fn list(
     .bind(filter.target_kind)
     .bind(filter.target_id)
     .bind(filter.before_id)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// The actions the public activity feed is built from (see `apps/api/src/activity.rs`).
+pub const ACTIVITY_ACTIONS: [&str; 8] = [
+    "set.created",
+    "set.renamed",
+    "set.emote_added",
+    "set.emote_removed",
+    "set.emote_updated",
+    "channel.settings_changed",
+    "cosmetics.selected",
+    "emote.approved",
+];
+
+/// Candidate rows for `subject`'s public activity feed, newest first. The rows pass the checks
+/// that fit in SQL: they are about the account, are one of `ACTIVITY_ACTIONS`, were made by the
+/// account itself or through an account editor grant (never by staff acting on their own
+/// permissions), by an actor who isn't blocked or deleted, and an emote's approval counts once.
+/// The api drops what's still private (pending emotes, deleted sets and so on).
+pub async fn activity_rows(
+    conn: &mut PgConnection,
+    subject: Uuid,
+    before_id: Option<Uuid>,
+    limit: i64,
+) -> DbResult<Vec<Entry>> {
+    let actions: Vec<&str> = ACTIVITY_ACTIONS.to_vec();
+    Ok(sqlx::query_as(
+        "SELECT a.id, a.actor_account_id, a.action, a.target_kind, a.target_id, a.before_json,
+                a.after_json, a.created_at
+         FROM audit_log a
+         LEFT JOIN accounts act ON act.id = a.actor_account_id
+         WHERE a.subject_account_id = $1
+           AND ($2::uuid IS NULL OR a.id < $2)
+           AND a.action = ANY($3)
+           AND (
+               (a.action = 'emote.approved'
+                AND NOT EXISTS (SELECT 1 FROM audit_log p
+                                WHERE p.action = 'emote.approved'
+                                  AND p.target_id = a.target_id AND p.id < a.id))
+               OR (a.action <> 'emote.approved'
+                   AND act.id IS NOT NULL AND act.blocked_at IS NULL AND act.deleted_at IS NULL
+                   AND (a.actor_account_id = a.subject_account_id
+                        OR a.after_json ->> 'via' = 'account_editor'))
+           )
+         ORDER BY a.id DESC
+         LIMIT $4",
+    )
+    .bind(subject)
+    .bind(before_id)
+    .bind(&actions)
     .bind(limit)
     .fetch_all(conn)
     .await?)
