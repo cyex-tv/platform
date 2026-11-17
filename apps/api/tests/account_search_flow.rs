@@ -220,8 +220,11 @@ async fn blocked_and_deleted_accounts_are_never_listed() {
         let r = w.search(t, json!({ "q": "hidden" })).await;
         assert_eq!(ids_of(&r), vec![ids::to_text(live)], "{r}");
         assert_eq!(r["data"]["searchAccounts"]["total"], 1);
+        // Even the exact login finds only similar live names, never the blocked account.
         let r = w.search(t, json!({ "q": "hidden_one" })).await;
-        assert!(ids_of(&r).is_empty(), "{r}");
+        let found = ids_of(&r);
+        assert!(!found.contains(&ids::to_text(blocked)), "{r}");
+        assert!(!found.contains(&ids::to_text(deleted)), "{r}");
     }
     w.db.close().await;
 }

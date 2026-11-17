@@ -15,6 +15,11 @@ import * as types from './graphql';
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
+    "\n  fragment StudioPaintFields on Paint {\n    id\n    name\n    kind\n    angle\n    repeat\n    shape\n    color\n    stops {\n      at\n      color\n    }\n    shadows {\n      x\n      y\n      radius\n      color\n    }\n    image {\n      id\n      host\n      ready\n      width\n      height\n      animated\n      files {\n        name\n        format\n        scale\n        width\n        height\n        isStatic\n      }\n    }\n    updatedAt\n  }\n": typeof types.StudioPaintFieldsFragmentDoc,
+    "\n  query StudioPaints {\n    cosmetics {\n      paints {\n        ...StudioPaintFields\n      }\n    }\n  }\n": typeof types.StudioPaintsDocument,
+    "\n  mutation StudioCreatePaint($input: PaintInput!) {\n    createPaint(input: $input) {\n      ...StudioPaintFields\n    }\n  }\n": typeof types.StudioCreatePaintDocument,
+    "\n  mutation StudioUpdatePaint($id: String!, $input: PaintInput!) {\n    updatePaint(id: $id, input: $input) {\n      ...StudioPaintFields\n    }\n  }\n": typeof types.StudioUpdatePaintDocument,
+    "\n  query StudioCosmeticImage($id: String!) {\n    cosmeticImage(id: $id) {\n      id\n      host\n      ready\n      width\n      height\n      animated\n      files {\n        name\n        format\n        scale\n        width\n        height\n        isStatic\n      }\n    }\n  }\n": typeof types.StudioCosmeticImageDocument,
     "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    channelCount\n    flags {\n      zeroWidth\n      nsfw\n      private\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n": typeof types.EmoteFieldsFragmentDoc,
     "\n  query Search($query: String!, $animated: Boolean, $nsfw: Boolean, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: $query, animated: $animated, nsfw: $nsfw, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.SearchDocument,
     "\n  query Emote($id: String!) {\n    emote(id: $id) {\n      ...EmoteFields\n    }\n  }\n": typeof types.EmoteDocument,
@@ -94,6 +99,11 @@ type Documents = {
     "\n  query AccountActivity($accountId: String!, $before: String, $limit: Int) {\n    accountActivity(accountId: $accountId, before: $before, limit: $limit) {\n      id\n      kind\n      actor {\n        id\n        displayName\n        avatar\n      }\n      set {\n        id\n        name\n      }\n      emote {\n        id\n        name\n        host\n        files {\n          name\n          width\n          height\n          isStatic\n        }\n      }\n      fromName\n      toName\n      badge {\n        fromId\n        fromName\n        toId\n        toName\n      }\n      paint {\n        fromId\n        fromName\n        toId\n        toName\n      }\n      createdAt\n    }\n  }\n": typeof types.AccountActivityDocument,
 };
 const documents: Documents = {
+    "\n  fragment StudioPaintFields on Paint {\n    id\n    name\n    kind\n    angle\n    repeat\n    shape\n    color\n    stops {\n      at\n      color\n    }\n    shadows {\n      x\n      y\n      radius\n      color\n    }\n    image {\n      id\n      host\n      ready\n      width\n      height\n      animated\n      files {\n        name\n        format\n        scale\n        width\n        height\n        isStatic\n      }\n    }\n    updatedAt\n  }\n": types.StudioPaintFieldsFragmentDoc,
+    "\n  query StudioPaints {\n    cosmetics {\n      paints {\n        ...StudioPaintFields\n      }\n    }\n  }\n": types.StudioPaintsDocument,
+    "\n  mutation StudioCreatePaint($input: PaintInput!) {\n    createPaint(input: $input) {\n      ...StudioPaintFields\n    }\n  }\n": types.StudioCreatePaintDocument,
+    "\n  mutation StudioUpdatePaint($id: String!, $input: PaintInput!) {\n    updatePaint(id: $id, input: $input) {\n      ...StudioPaintFields\n    }\n  }\n": types.StudioUpdatePaintDocument,
+    "\n  query StudioCosmeticImage($id: String!) {\n    cosmeticImage(id: $id) {\n      id\n      host\n      ready\n      width\n      height\n      animated\n      files {\n        name\n        format\n        scale\n        width\n        height\n        isStatic\n      }\n    }\n  }\n": types.StudioCosmeticImageDocument,
     "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    channelCount\n    flags {\n      zeroWidth\n      nsfw\n      private\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n": types.EmoteFieldsFragmentDoc,
     "\n  query Search($query: String!, $animated: Boolean, $nsfw: Boolean, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: $query, animated: $animated, nsfw: $nsfw, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.SearchDocument,
     "\n  query Emote($id: String!) {\n    emote(id: $id) {\n      ...EmoteFields\n    }\n  }\n": types.EmoteDocument,
@@ -173,6 +183,26 @@ const documents: Documents = {
     "\n  query AccountActivity($accountId: String!, $before: String, $limit: Int) {\n    accountActivity(accountId: $accountId, before: $before, limit: $limit) {\n      id\n      kind\n      actor {\n        id\n        displayName\n        avatar\n      }\n      set {\n        id\n        name\n      }\n      emote {\n        id\n        name\n        host\n        files {\n          name\n          width\n          height\n          isStatic\n        }\n      }\n      fromName\n      toName\n      badge {\n        fromId\n        fromName\n        toId\n        toName\n      }\n      paint {\n        fromId\n        fromName\n        toId\n        toName\n      }\n      createdAt\n    }\n  }\n": types.AccountActivityDocument,
 };
 
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment StudioPaintFields on Paint {\n    id\n    name\n    kind\n    angle\n    repeat\n    shape\n    color\n    stops {\n      at\n      color\n    }\n    shadows {\n      x\n      y\n      radius\n      color\n    }\n    image {\n      id\n      host\n      ready\n      width\n      height\n      animated\n      files {\n        name\n        format\n        scale\n        width\n        height\n        isStatic\n      }\n    }\n    updatedAt\n  }\n"): typeof import('./graphql').StudioPaintFieldsFragmentDoc;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query StudioPaints {\n    cosmetics {\n      paints {\n        ...StudioPaintFields\n      }\n    }\n  }\n"): typeof import('./graphql').StudioPaintsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation StudioCreatePaint($input: PaintInput!) {\n    createPaint(input: $input) {\n      ...StudioPaintFields\n    }\n  }\n"): typeof import('./graphql').StudioCreatePaintDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation StudioUpdatePaint($id: String!, $input: PaintInput!) {\n    updatePaint(id: $id, input: $input) {\n      ...StudioPaintFields\n    }\n  }\n"): typeof import('./graphql').StudioUpdatePaintDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query StudioCosmeticImage($id: String!) {\n    cosmeticImage(id: $id) {\n      id\n      host\n      ready\n      width\n      height\n      animated\n      files {\n        name\n        format\n        scale\n        width\n        height\n        isStatic\n      }\n    }\n  }\n"): typeof import('./graphql').StudioCosmeticImageDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
