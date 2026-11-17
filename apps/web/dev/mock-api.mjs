@@ -435,7 +435,7 @@ const TWITCH = [
   ['ClapHands', 'emotesv2_cb4c93c8bef44ae6888cf239f98754b7', 28, 28, 'clap,happy', 'a'],
 ];
 const CDN = 'https://static-cdn.jtvnw.net/emoticons/v2';
-const CDN_SCALE = { 1: '1.0', 2: '2.0', 4: '3.0' };
+const CDN_SCALE = { 1: '1.0', 2: '2.0', 3: '3.0', 4: '3.0' }; // 3x has no CDN size: the 4x file, shown smaller
 const twitchUrl = (n, k, still) => {
   const t = TWITCH[n];
   if (!t || !CDN_SCALE[k]) return null;
@@ -457,7 +457,7 @@ const twitchEmote = (n, owner = OTHERS[n % OTHERS.length]) => {
     flags: { zeroWidth: false, nsfw: false, private: false },
     channelCount: n % 11 === 0 ? 0 : (n * 37) % 91 + (n % 5 === 0 ? 400 : 0),
     owner,
-    files: [1, 2, 4].flatMap((k) => [
+    files: [1, 2, 3, 4].flatMap((k) => [
       { name: `${k}x.webp`, format: 'WEBP', scale: k, width: w * k, height: h * k, size: 900 * k, isStatic: false },
       ...(animated ? [{ name: `${k}x_static.webp`, format: 'WEBP', scale: k, width: w * k, height: h * k, size: 400 * k, isStatic: true }] : []),
     ]),
