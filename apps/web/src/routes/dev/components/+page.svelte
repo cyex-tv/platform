@@ -46,12 +46,13 @@
     <section>
       <Eyebrow lit="top">Controls</Eyebrow>
       <div class="row">
-        <Segmented label="Sort" options={[{ value: 'top', label: 'Top' }, { value: 'new', label: 'New' }]} bind:value={sort} />
+        <Segmented label="Sort" options={[{ value: 'top', label: 'Top' }, { value: 'new', label: 'New' }]} value={sort} onchange={(v) => (sort = v)} />
         <Segmented
           label="Kind"
           size="s"
           options={[{ value: 'all', label: 'All' }, { value: 'animated', label: 'Animated' }, { value: 'static', label: 'Static' }]}
-          bind:value={kind}
+          value={kind}
+          onchange={(v) => (kind = v)}
         />
         <Popover label="Filters" sheet>
           {#snippet trigger(props)}
@@ -59,7 +60,7 @@
           {/snippet}
           <div class="filters">
             <p class="fine">Type</p>
-            <Segmented label="Type" size="s" options={[{ value: 'all', label: 'All' }, { value: 'animated', label: 'Animated' }, { value: 'static', label: 'Static' }]} bind:value={kind} />
+            <Segmented label="Type" size="s" options={[{ value: 'all', label: 'All' }, { value: 'animated', label: 'Animated' }, { value: 'static', label: 'Static' }]} value={kind} onchange={(v) => (kind = v)} />
             <label class="check"><input type="checkbox" bind:checked={zeroWidth} /> Zero-width only <span class="fine">Emotes that sit on top of the one before them.</span></label>
           </div>
         </Popover>

@@ -73,7 +73,7 @@
   <div class="strip-head" use:reveal>
     <SectionHead eyebrow="Emotes" lit="top" title="Fresh from the library." id="strip-title" />
     <div class="strip-tools">
-      <Segmented label="Sort" options={[{ value: 'top', label: 'Top' }, { value: 'new', label: 'New' }]} bind:value={sort} onchange={() => stripEl?.scrollTo({ left: 0 })} />
+      <Segmented label="Sort" options={[{ value: 'top', label: 'Top' }, { value: 'new', label: 'New' }]} value={sort} onchange={(v) => { sort = v; stripEl?.scrollTo({ left: 0 }); }} />
       <a class="link" href="/search">
         Browse all{data.total ? ` ${count(data.total)}` : ''}
         <span class="arrow"><Icon name="arrow-right" /></span>

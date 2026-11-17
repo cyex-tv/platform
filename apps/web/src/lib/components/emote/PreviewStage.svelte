@@ -41,7 +41,7 @@
 
 <section class="preview" aria-label="Preview">
   <div class="tools">
-    <Segmented label="Background" size="s" options={grounds} bind:value={ground} />
+    <Segmented label="Background" size="s" options={grounds} value={ground} onchange={(v) => (ground = v)} />
     {#if canPause}
       <IconButton
         icon={still ? 'play' : 'pause'}
