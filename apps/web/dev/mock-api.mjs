@@ -120,6 +120,11 @@ function signedIn(body, v, ADMIN) {
     }
     case 'MySets':
       return { data: { mySets: SETS.map(setOut) } };
+    case 'MySetNames':
+      return { data: { mySets: SETS.map((s) => ({ id: s.id, name: s.name, kind: s.kind, emotes: s.emotes.map((m) => ({ emote: { id: m.emote.id } })) })) } };
+    case 'ReportEmote':
+      if (!v.reason?.trim()) return err('Give a reason of 1 to 500 characters; the uploader sees it.', 'bad_reason');
+      return { data: { reportEmote: { id: 'R' + Date.now() } } };
     case 'EditSet': {
       const s = findSet(v.id);
       if (!s) return { data: { set: null, setEditors: [] } };

@@ -58,6 +58,9 @@ Work in `cyex-app/cyex-deck` goes on a feature branch with a PR the owner merges
 
 ## Phase 6: Search and the website (in progress)
 
+### PR 7: add and report from an emote's page (branch `phase-6/emote-actions`)
+- [x] On an approved emote's public page: signed in, add it to one of your sets or report it (a reason of up to 500 characters); signed out, a sign-in link that comes back to the emote. Checked in a browser against the mock, signed in and out.
+
 ### PR 6: the website, admin pages (branch `phase-6/web-admin`, stacked on PR 5 and Phase 7 PR 3)
 - [x] `/admin`, shown to accounts holding any moderation or admin permission, each part only with the permission it needs: an overview with the queue counts; the review queue (approve, reject with a reason); reports (dismiss with a note, take down with a reason); users (find by Twitch or Kick login, block uploads or the account, give and take roles); roles (create, edit with the permissions you hold, delete); the audit log (filter by kind and ID, before and after, older pages); the global set (the set page, without delete).
 - [x] The mock gives the signed-in account every permission after `/mock/admin`.

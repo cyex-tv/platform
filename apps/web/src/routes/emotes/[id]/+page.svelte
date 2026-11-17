@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ready, src } from '$lib/emote';
   import { bytes, date } from '$lib/format';
+  import EmoteActions from '$lib/components/EmoteActions.svelte';
 
   let { data } = $props();
   const e = $derived(data.emote);
@@ -47,6 +48,8 @@
           <div><dt>Files</dt><dd>{webp.map((f) => `${f.scale}x ${f.width}×${f.height} ${bytes(f.size)}`).join(' · ')}</dd></div>
         {/if}
       </dl>
+
+      {#if e.state === 'APPROVED'}<EmoteActions emoteId={e.id} name={e.name} />{/if}
     </div>
   </div>
 </div>

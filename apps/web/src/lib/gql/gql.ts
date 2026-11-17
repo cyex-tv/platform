@@ -61,6 +61,8 @@ type Documents = {
     "\n  mutation AssignRole($accountId: String!, $roleId: String!) {\n    assignRole(accountId: $accountId, roleId: $roleId)\n  }\n": typeof types.AssignRoleDocument,
     "\n  mutation UnassignRole($accountId: String!, $roleId: String!) {\n    unassignRole(accountId: $accountId, roleId: $roleId)\n  }\n": typeof types.UnassignRoleDocument,
     "\n  query Audit($targetKind: String, $targetId: String, $before: String, $limit: Int) {\n    auditLog(targetKind: $targetKind, targetId: $targetId, before: $before, limit: $limit) {\n      id\n      actorId\n      action\n      targetKind\n      targetId\n      before\n      after\n      createdAt\n    }\n  }\n": typeof types.AuditDocument,
+    "\n  mutation ReportEmote($id: String!, $reason: String!) {\n    reportEmote(id: $id, reason: $reason) {\n      id\n    }\n  }\n": typeof types.ReportEmoteDocument,
+    "\n  query MySetNames {\n    mySets {\n      id\n      name\n      kind\n      emotes {\n        emote {\n          id\n        }\n      }\n    }\n  }\n": typeof types.MySetNamesDocument,
 };
 const documents: Documents = {
     "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    flags {\n      zeroWidth\n      nsfw\n      private\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n": types.EmoteFieldsFragmentDoc,
@@ -109,6 +111,8 @@ const documents: Documents = {
     "\n  mutation AssignRole($accountId: String!, $roleId: String!) {\n    assignRole(accountId: $accountId, roleId: $roleId)\n  }\n": types.AssignRoleDocument,
     "\n  mutation UnassignRole($accountId: String!, $roleId: String!) {\n    unassignRole(accountId: $accountId, roleId: $roleId)\n  }\n": types.UnassignRoleDocument,
     "\n  query Audit($targetKind: String, $targetId: String, $before: String, $limit: Int) {\n    auditLog(targetKind: $targetKind, targetId: $targetId, before: $before, limit: $limit) {\n      id\n      actorId\n      action\n      targetKind\n      targetId\n      before\n      after\n      createdAt\n    }\n  }\n": types.AuditDocument,
+    "\n  mutation ReportEmote($id: String!, $reason: String!) {\n    reportEmote(id: $id, reason: $reason) {\n      id\n    }\n  }\n": types.ReportEmoteDocument,
+    "\n  query MySetNames {\n    mySets {\n      id\n      name\n      kind\n      emotes {\n        emote {\n          id\n        }\n      }\n    }\n  }\n": types.MySetNamesDocument,
 };
 
 /**
@@ -295,6 +299,14 @@ export function graphql(source: "\n  mutation UnassignRole($accountId: String!, 
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query Audit($targetKind: String, $targetId: String, $before: String, $limit: Int) {\n    auditLog(targetKind: $targetKind, targetId: $targetId, before: $before, limit: $limit) {\n      id\n      actorId\n      action\n      targetKind\n      targetId\n      before\n      after\n      createdAt\n    }\n  }\n"): typeof import('./graphql').AuditDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation ReportEmote($id: String!, $reason: String!) {\n    reportEmote(id: $id, reason: $reason) {\n      id\n    }\n  }\n"): typeof import('./graphql').ReportEmoteDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query MySetNames {\n    mySets {\n      id\n      name\n      kind\n      emotes {\n        emote {\n          id\n        }\n      }\n    }\n  }\n"): typeof import('./graphql').MySetNamesDocument;
 
 
 export function graphql(source: string) {

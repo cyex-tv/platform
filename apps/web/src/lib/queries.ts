@@ -514,3 +514,26 @@ export const AUDIT = graphql(`
     }
   }
 `);
+
+export const REPORT_EMOTE = graphql(`
+  mutation ReportEmote($id: String!, $reason: String!) {
+    reportEmote(id: $id, reason: $reason) {
+      id
+    }
+  }
+`);
+
+export const MY_SET_NAMES = graphql(`
+  query MySetNames {
+    mySets {
+      id
+      name
+      kind
+      emotes {
+        emote {
+          id
+        }
+      }
+    }
+  }
+`);
