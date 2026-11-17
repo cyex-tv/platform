@@ -1,8 +1,9 @@
 // A stand-in for api.cyex.tv, for looking at the site without the real stack:
 //   node dev/mock-api.mjs            (listens on localhost:8787)
 //   PUBLIC_API_URL=http://localhost:8787 npm run dev
-// It answers the site's GraphQL operations with made-up emotes and draws their pictures as
-// little procedural faces (SVG). "Signing in" sets a mock cookie; everything signed in lives in memory and
+// It answers the site's GraphQL operations with Twitch's global emotes (hotlinked from Twitch's own
+// CDN, nothing is downloaded or stored here; see TWITCH below). MOCK_FACES=1 uses 300 made-up emotes
+// drawn as little procedural faces (SVG) instead. The mock account's own uploads are always faces. "Signing in" sets a mock cookie; everything signed in lives in memory and
 // resets when it restarts. MOCK_ADMIN=1, or opening /mock/admin once, gives the mock account
 // every permission (/mock/admin?off clears it).
 // Development only; nothing here ships.
@@ -12,6 +13,7 @@ const PORT = Number(process.env.PORT ?? 8787);
 const ORIGIN = process.env.SITE_ORIGIN ?? 'http://localhost:5173';
 const BASE = `http://localhost:${PORT}`;
 const ADMIN_ENV = process.env.MOCK_ADMIN === '1';
+const FACES = process.env.MOCK_FACES === '1';
 
 const ME_ID = '01JD8X0000000000000000MEME';
 const OWNER_DEFS = [
@@ -343,7 +345,125 @@ const emote = (i, owner = OTHERS[i % OTHERS.length], state = 'APPROVED') => {
     ]),
   };
 };
-const ALL = Array.from({ length: 300 }, (_, i) => emote(i));
+
+// ---- Twitch global emotes -------------------------------------------------------------
+// Names and ids were read from the global-emote listing at https://twitchemotes.com/ and each id was
+// checked against https://static-cdn.jtvnw.net/emoticons/v2/<id>/default/dark/{1.0,2.0,3.0} (200 and an
+// image). The images belong to Twitch and are only ever referenced by URL: /twitch/<n>/<k>x[_static].webp
+// on this mock redirects to the CDN, so the site's `host + /1x.webp` URLs work unchanged. On that CDN
+// 1.0 / 2.0 / 3.0 are 1x / 2x / 4x of the same emote (a 28 px emote is 28, 56 and 112 px); there is no 3x.
+// Animated ones use the `animated` format (GIF) and `static` for the first frame.
+// [name, CDN id, width at 1x, height at 1x, tags, 'a' if animated]
+const TWITCH = [
+  ['4Head', '354', 20, 30, 'laugh,meme'],
+  ['ANELE', '3792', 28, 28, 'happy,meme'],
+  ['ArsonNoSexy', '50', 18, 27, 'meme,fire'],
+  ['BatChest', '115234', 28, 28, 'hype,meme'],
+  ['BCWarrior', '30', 29, 27, 'hype,meme'],
+  ['BigBrother', '1904', 24, 30, 'meme,face'],
+  ['BloodTrail', '69', 41, 28, 'hype,meme'],
+  ['BrainSlug', '115233', 28, 28, 'meme,weird'],
+  ['BrokeBack', '4057', 28, 28, 'sad,meme'],
+  ['CoolStoryBob', '123171', 28, 28, 'meme,sarcasm'],
+  ['CorgiDerp', '49106', 27, 28, 'dog,cute'],
+  ['CurseLit', '116625', 28, 28, 'hype,fire'],
+  ['DendiFace', '58135', 28, 28, 'face,meme'],
+  ['DogFace', '114835', 28, 28, 'dog,meme'],
+  ['DoritosChip', '102242', 28, 28, 'meme,food'],
+  ['FailFish', '360', 22, 30, 'sad,meme'],
+  ['FrankerZ', '65', 40, 30, 'dog,happy'],
+  ['FreakinStinkin', '117701', 28, 28, 'meme,face'],
+  ['GrammarKing', '3632', 28, 28, 'meme,face'],
+  ['HassaanChop', '20225', 28, 28, 'meme,hype'],
+  ['HeyGuys', '30259', 28, 28, 'wave,happy'],
+  ['Jebaited', '114836', 28, 28, 'meme,troll'],
+  ['JonCarnage', '26', 20, 27, 'meme,face'],
+  ['KAPOW', '133537', 28, 28, 'hype,meme'],
+  ['KappaPride', '55338', 28, 28, 'pride,meme'],
+  ['KappaRoss', '70433', 28, 28, 'meme,art'],
+  ['KappaWealth', '81997', 28, 28, 'meme,money'],
+  ['Kippa', '1901', 24, 28, 'meme,face'],
+  ['KomodoHype', '81273', 28, 28, 'hype,happy'],
+  ['Kreygasm', '41', 19, 27, 'hype,pog'],
+  ['MrDestructoid', '28', 39, 27, 'robot,meme'],
+  ['NinjaGrumpy', '138325', 28, 28, 'meme,mad'],
+  ['NotLikeThis', '58765', 28, 28, 'sad,meme'],
+  ['OneHand', '66', 20, 27, 'meme,hand'],
+  ['OptimizePrime', '16', 22, 27, 'robot,meme'],
+  ['PJSalt', '36', 36, 30, 'mad,meme'],
+  ['PartyTime', '135393', 28, 28, 'happy,hype'],
+  ['PeoplesChamp', '3412', 28, 28, 'hype,pog'],
+  ['PermaSmug', '27509', 28, 28, 'smug,meme'],
+  ['PogChamp', '305954156', 28, 28, 'pog,hype'],
+  ['Poooound', '117484', 28, 28, 'hype,meme'],
+  ['PopCorn', '724216', 28, 28, 'food,meme'],
+  ['RaccAttack', '114870', 28, 28, 'cute,hype'],
+  ['RalpherZ', '1900', 33, 30, 'dog,happy'],
+  ['RedCoat', '22', 19, 27, 'meme,face'],
+  ['RlyTho', '134256', 28, 28, 'meme,sarcasm'],
+  ['RuleFive', '107030', 28, 28, 'meme,face'],
+  ['SMOrc', '52', 32, 32, 'hype,meme'],
+  ['SeriousSloth', '81249', 28, 28, 'cute,meme'],
+  ['ShadyLulu', '52492', 28, 28, 'meme,face'],
+  ['ShazBotstix', '87', 24, 30, 'meme,face'],
+  ['StrawBeary', '114876', 28, 28, 'cute,happy'],
+  ['SwiftRage', '34', 21, 28, 'mad,meme'],
+  ['TBAngel', '143490', 28, 28, 'happy,cute'],
+  ['TearGlove', '160403', 28, 28, 'sad,cute'],
+  ['TheRinger', '18', 20, 27, 'meme,face'],
+  ['TheTarFu', '111351', 28, 28, 'meme,face'],
+  ['TooSpicy', '114846', 28, 28, 'meme,fire'],
+  ['TriHard', '120232', 28, 28, 'hype,meme'],
+  ['TwitchLit', '166263', 28, 28, 'hype,fire'],
+  ['UWot', '134255', 28, 28, 'meme,confused'],
+  ['UnSane', '111792', 28, 28, 'meme,mad'],
+  ['UncleNox', '114856', 28, 28, 'meme,face'],
+  ['VoteYea', '106293', 28, 28, 'vote,happy'],
+  ['WTRuck', '114847', 28, 28, 'meme,truck'],
+  ['WholeWheat', '1896', 20, 30, 'meme,food'],
+  ['YouWHY', '4337', 28, 28, 'sad,meme'],
+  ['bleedPurple', '62835', 28, 28, 'twitch,hype'],
+  ['cmonBruh', '84608', 28, 28, 'meme,sarcasm'],
+  ['imGlitch', '112290', 28, 28, 'twitch,meme'],
+  ['mcaT', '35063', 28, 28, 'cat,meme'],
+  ['panicBasket', '22998', 28, 28, 'meme,panic'],
+  ['twitchRaid', '62836', 28, 28, 'twitch,hype'],
+  ['HmmFace', 'emotesv2_e455cf70a96e44db9da533b89d40f062', 28, 28, 'meme,thinking'],
+  ['Shush', 'emotesv2_819621bcb8f44566a1bd8ea63d06c58f', 28, 28, 'meme,quiet'],
+  ['DinoDance', 'emotesv2_dcd06b30a5c24f6eb871e8f5edbd44f7', 28, 28, 'dance,happy', 'a'],
+  ['YappingDuck', 'emotesv2_bea88a2caa044e409c1b32ee0850b825', 28, 28, 'meme,duck', 'a'],
+  ['ClapHands', 'emotesv2_cb4c93c8bef44ae6888cf239f98754b7', 28, 28, 'clap,happy', 'a'],
+];
+const CDN = 'https://static-cdn.jtvnw.net/emoticons/v2';
+const CDN_SCALE = { 1: '1.0', 2: '2.0', 4: '3.0' };
+const twitchUrl = (n, k, still) => {
+  const t = TWITCH[n];
+  if (!t || !CDN_SCALE[k]) return null;
+  const format = t[5] ? (still ? 'static' : 'animated') : 'default';
+  return `${CDN}/${t[1]}/${format}/dark/${CDN_SCALE[k]}`;
+};
+const twitchEmote = (n, owner = OTHERS[n % OTHERS.length]) => {
+  const [name, , w, h, tags, a] = TWITCH[n];
+  const animated = a === 'a';
+  const idx = n;
+  return {
+    id: `01JD8X${String(n).padStart(20, '0')}`,
+    name,
+    state: 'APPROVED',
+    animated,
+    tags: tags.split(','),
+    host: `${BASE}/twitch/${n}`,
+    createdAt: new Date(NOW - idx * 0.2 * DAY - Math.floor(rngFor(n, 3)() * 0.18 * DAY)).toISOString(),
+    flags: { zeroWidth: false, nsfw: false, private: false },
+    channelCount: n % 11 === 0 ? 0 : (n * 37) % 91 + (n % 5 === 0 ? 400 : 0),
+    owner,
+    files: [1, 2, 4].flatMap((k) => [
+      { name: `${k}x.webp`, format: 'WEBP', scale: k, width: w * k, height: h * k, size: 900 * k, isStatic: false },
+      ...(animated ? [{ name: `${k}x_static.webp`, format: 'WEBP', scale: k, width: w * k, height: h * k, size: 400 * k, isStatic: true }] : []),
+    ]),
+  };
+};
+const ALL = FACES ? Array.from({ length: 300 }, (_, i) => emote(i)) : TWITCH.map((_, n) => twitchEmote(n));
 // The mock account's own uploads: a few of each state.
 const MINE = Array.from({ length: 9 }, (_, i) =>
   emote(600 + i, ME_SUMMARY, i < 2 ? 'PENDING' : i === 2 ? 'REJECTED' : 'APPROVED'));
@@ -684,6 +804,13 @@ createServer(async (req, res) => {
     return res.end();
   }
 
+  const tw = url.pathname.match(/^\/twitch\/(\d+)\/(\d)x(_static)?\.webp$/);
+  if (tw) {
+    const to = twitchUrl(Number(tw[1]), Number(tw[2]), Boolean(tw[3]));
+    if (!to) return res.writeHead(404).end();
+    res.writeHead(302, { location: to, 'cache-control': 'max-age=3600' });
+    return res.end();
+  }
   const img = url.pathname.match(/^\/emotes\/(\d+)\/(\d)x(_static)?\.webp$/);
   if (img) {
     res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' });
