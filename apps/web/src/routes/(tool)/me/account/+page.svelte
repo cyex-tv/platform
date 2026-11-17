@@ -4,11 +4,11 @@
   import { date } from '$lib/format';
   import type { Platform } from '$lib/gql/graphql';
   import { MARK_READ, MY_NOTIFICATIONS, UNLINK } from '$lib/queries';
-  import Avatar from '$lib/tool/Avatar.svelte';
+  import Avatar from '$lib/components/Avatar.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
-  import { loadMe, session } from '$lib/tool/session.svelte';
+  import { forgetMe, loadMe, session } from '$lib/tool/session.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
 
   const PLATFORMS: { id: Platform; name: string; slug: 'twitch' | 'kick' }[] = [
@@ -43,7 +43,7 @@
   async function leave() {
     try {
       await signOut();
-      session.me = null;
+      forgetMe();
       await goto('/');
     } catch (err) {
       fail(err);
@@ -78,7 +78,7 @@
           {@const id = me.identities.find((i) => i.platform === p.id)}
           <li>
             {#if id}
-              <Avatar src={id.avatar} name={id.displayName} size={28} />
+              <Avatar src={id.avatar} name={id.displayName} size={28} tone="tool" />
               <span class="what"><strong>{id.displayName}</strong><span class="ui-hint">{p.name} · <span class="ui-mono">{id.platformUserId}</span></span></span>
               {#if me.identities.length > 1}
                 <Confirm small label="Unlink" confirm="Click again to unlink" onconfirm={() => unlink(p.id, p.name)} />

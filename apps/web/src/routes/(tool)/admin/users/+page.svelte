@@ -119,7 +119,7 @@
 {:else if found}
   <div class="layout">
     <section class="ui-card who">
-      <Avatar src={found.account.avatar} name={found.account.displayName} size={48} />
+      <Avatar src={found.account.avatar} name={found.account.displayName} size={48} tone="tool" />
       <div>
         <h2>{clean(found.account.displayName)}</h2>
         <p class="ui-hint">
