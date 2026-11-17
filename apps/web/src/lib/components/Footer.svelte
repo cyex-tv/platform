@@ -14,10 +14,8 @@
     { href: '/#install', label: 'Get the extension' },
     { href: '/developers', label: 'Developers' },
     { href: 'https://github.com/cyex-tv/platform', label: 'Source' },
-    { href: '/terms', label: 'Terms' },
-    { href: '/privacy', label: 'Privacy' },
+    // Terms, Privacy and Contact come back when their pages exist.
     { href: 'https://github.com/cyex-tv/platform/blob/main/docs/takedown.md', label: 'Takedowns' },
-    { href: '/contact', label: 'Contact' },
   ];
 </script>
 

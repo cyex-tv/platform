@@ -2,8 +2,9 @@
   // The one vertical rail (7TV's side bar, cyex styling): context for the page's subject, never a
   // second top bar. 240px on a surface card, sticky under the header with its own scroll. Groups
   // have a quiet caption and a hairline between them; rows are icon + label + optional count;
-  // the current row has the accent-dim fill and a 2px accent rail (aria-current="page"). Arrow
-  // keys move between rows.
+  // the current row has the accent-dim fill and a 2px accent rail (aria-current="page"). The rows
+  // are one Tab stop (the current row); arrow keys move between them. Fewer than two rows: no
+  // nav at all, only the head (a profile card needs no one-tab strip).
   //
   // Below 900px it never stacks above the content:
   //   collapse="tabs"  (sections: /me, admin, creator, channel) a horizontal tab strip that sticks
@@ -51,6 +52,26 @@
     return () => mq.removeEventListener('change', on);
   });
 
+  // Edge fades only where there is more to scroll to.
+  let fadeStart = $state(false);
+  let fadeEnd = $state(false);
+  function edges() {
+    if (!strip) return;
+    fadeStart = strip.scrollLeft > 1;
+    fadeEnd = strip.scrollLeft + strip.clientWidth < strip.scrollWidth - 1;
+  }
+  $effect(() => {
+    if (!strip) return;
+    const el = strip;
+    const ro = new ResizeObserver(edges);
+    ro.observe(el);
+    el.addEventListener('scroll', edges, { passive: true });
+    return () => {
+      ro.disconnect();
+      el.removeEventListener('scroll', edges);
+    };
+  });
+
   // Keep the current tab in view when the strip is narrower than its tabs.
   $effect(() => {
     if (!narrow || !strip) return;
@@ -63,9 +84,13 @@
     const right = tab.offsetLeft + tab.offsetWidth + pad - strip.clientWidth;
     if (left < strip.scrollLeft) strip.scrollLeft = Math.max(0, left);
     else if (right > strip.scrollLeft) strip.scrollLeft = right;
+    edges();
   });
 
   const flat = $derived(groups.flatMap((g) => g.items));
+  const navigable = $derived(flat.length >= 2);
+  // The one Tab stop: the current row, else the first.
+  const stop = $derived(flat.find((i) => i.current)?.href ?? flat[0]?.href);
   const current = $derived(flat.find((i) => i.current));
   const shown = (c: RailItem['count']) => (typeof c === 'number' ? fmt(c) : c);
   const has = (c: RailItem['count']) => c != null && c !== '';
@@ -78,7 +103,7 @@
       <ul>
         {#each g.items as i (i.href)}
           <li>
-            <a class="row" href={i.href} aria-current={i.current ? 'page' : undefined} onclick={() => onpick?.()}>
+            <a class="row" href={i.href} aria-current={i.current ? 'page' : undefined} tabindex={i.href === stop ? 0 : -1} onclick={() => onpick?.()}>
               {#if i.icon}<Icon name={i.icon} />{/if}
               <span class="lbl">{i.label}</span>
               {#if has(i.count)}<span class="count">{shown(i.count)}</span>{/if}
@@ -92,18 +117,20 @@
 
 {#snippet body(onpick?: () => void)}
   {#if head}<div class="head">{@render head()}</div>{/if}
-  {#if groups.length}<nav aria-label={label} use:arrowNav>{@render rows(onpick)}</nav>{/if}
+  {#if navigable}<nav aria-label={label} use:arrowNav>{@render rows(onpick)}</nav>{/if}
   {#if children}<div class="extra">{@render children()}</div>{/if}
 {/snippet}
 
 {#if narrow && collapse === 'tabs'}
-  <nav class="strip" aria-label={label} bind:this={strip} use:arrowNav={'horizontal'}>
+  {#if navigable}
+  <nav class="strip" class:fade-start={fadeStart} class:fade-end={fadeEnd} aria-label={label} bind:this={strip} use:arrowNav={'horizontal'}>
     {#each flat as i (i.href)}
-      <a class="tab" href={i.href} aria-current={i.current ? 'page' : undefined}>
+      <a class="tab" href={i.href} aria-current={i.current ? 'page' : undefined} tabindex={i.href === stop ? 0 : -1}>
         {i.label}{#if has(i.count)}<span class="count">{shown(i.count)}</span>{/if}
       </a>
     {/each}
   </nav>
+  {/if}
 {:else if narrow}
   <div class="sheet-bar" class:with-bar={!!bar}>
     {#if bar}<div class="bar-extra">{@render bar()}</div>{/if}
@@ -117,7 +144,7 @@
     <div class="in-sheet">{@render body(() => (sheet = false))}</div>
   </BottomSheet>
 {:else}
-  <aside class="rail">{@render body()}</aside>
+  <aside class="rail" aria-label={label}>{@render body()}</aside>
 {/if}
 
 <style>
@@ -132,7 +159,7 @@
   .caption { margin: 0 0 4px; padding: 0 10px; font-size: var(--text-label); font-weight: 600; letter-spacing: .06em;
     text-transform: uppercase; color: var(--dim); line-height: 1.8; }
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
-  .row { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border-radius: var(--radius);
+  .row { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; border-radius: var(--radius);
     font-size: var(--t-nav); font-weight: 500; color: var(--muted); transition: background-color var(--fast), color var(--fast); }
   .row :global(svg) { color: var(--dim); transition: color var(--fast); }
   .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -145,21 +172,25 @@
   .head + .extra { margin-top: 0; }
 
   /* Narrow windows and phones: sections become a tab strip that sticks under the header. */
-  .strip { position: sticky; top: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); z-index: var(--z-panel);
+  /* Sticky right under the header (its 56px bar plus its 1px hairline). */
+  .strip { position: sticky; top: calc(var(--nav-h) + 1px + env(safe-area-inset-top, 0px)); z-index: var(--z-panel);
     display: flex; gap: 4px; margin-inline: calc(-1 * var(--page-pad)); padding: 8px var(--page-pad);
     overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; scroll-padding-inline: var(--page-pad);
     background: var(--bg); border-bottom: 1px solid var(--border); overscroll-behavior-x: contain;
-    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent);
-    mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+    --fs: 0px; --fe: 0px;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--fs), #000 calc(100% - var(--fe)), transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 var(--fs), #000 calc(100% - var(--fe)), transparent); }
+  .strip.fade-start { --fs: 28px; }
+  .strip.fade-end { --fe: 28px; }
   .strip::-webkit-scrollbar { display: none; }
-  .tab { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; scroll-snap-align: start;
+  .tab { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px; scroll-snap-align: start;
     border-radius: var(--radius); font-size: var(--t-nav); font-weight: 500; color: var(--muted); white-space: nowrap;
     transition: background-color var(--fast), color var(--fast); }
   .tab[aria-current='page'] { background: var(--accent-dim); color: var(--accent-text); box-shadow: inset 0 -2px 0 var(--accent); }
   .tab[aria-current='page'] .count { color: currentColor; }
   @media (pointer: coarse) { .tab { height: 44px; } .row { min-height: 44px; } }
 
-  .sheet-bar { position: sticky; top: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); z-index: var(--z-panel);
+  .sheet-bar { position: sticky; top: calc(var(--nav-h) + 1px + env(safe-area-inset-top, 0px)); z-index: var(--z-panel);
     margin-inline: calc(-1 * var(--page-pad)); padding: 8px var(--page-pad); background: var(--bg); border-bottom: 1px solid var(--border); }
   .sheet-n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius);
     background: var(--accent-dim); color: var(--accent-text); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -171,6 +202,8 @@
   .now { color: var(--muted); font-weight: 400; }
   .now::before { content: '·'; margin-right: 8px; color: var(--dim); }
   .in-sheet .row { min-height: 48px; font-size: var(--t-ui); }
+  /* Short landscape phones: the header alone stays pinned, the strip scrolls with the page. */
+  @media (max-height: 499.98px) { .strip, .sheet-bar { position: static; } }
 
   @media (hover: hover) and (pointer: fine) {
     .row:hover, .tab:hover { background: var(--row-hover); color: var(--text); }

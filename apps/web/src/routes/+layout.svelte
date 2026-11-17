@@ -54,14 +54,14 @@
 
 <style>
   main:focus { outline: none; }
-  .progress { position: fixed; top: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); left: 0; right: 0; height: 2px;
+  .progress { position: fixed; top: calc(var(--nav-h) + 1px + env(safe-area-inset-top, 0px)); left: 0; right: 0; height: 2px;
     z-index: var(--z-nav); pointer-events: none; background: var(--accent); transform-origin: 0 50%;
     opacity: 0; transform: scaleX(0); }
   .progress.run { opacity: 1; transform: scaleX(.85);
-    transition: opacity var(--dur-color) ease-out var(--delay-progress), transform var(--dur-progress) var(--ease) var(--delay-progress); }
+    transition: opacity var(--dur-color) ease-out var(--delay-progress), transform var(--dur-progress) linear var(--delay-progress); }
   .progress.done { opacity: 0; transform: scaleX(1);
     transition: transform var(--dur-color) ease-out, opacity var(--dur-color) ease-out var(--dur-color); }
-  /* Reduced motion: no crawl, the bar only fades in and out. */
-  @media (prefers-reduced-motion: reduce) { .progress, .progress.run, .progress.done { transform: none; } }
+  /* Reduced motion: no crawl and no static full-width bar; the bar stays hidden. */
+  @media (prefers-reduced-motion: reduce) { .progress { display: none; } }
   @media (forced-colors: active) { .progress { background: Highlight; } }
 </style>

@@ -16,6 +16,7 @@
   --elevated-2: #1f222a;     /* code blocks, nested floating rows */
   --border: rgb(255 255 255 / .08);
   --border-strong: rgb(255 255 255 / .16);
+  --field-border: #6b717d;   /* a form control's edge: ≥ 3:1 on bg, surface and elevated (WCAG 1.4.11) */
   --text: #eceef3;
   --muted: #9ba1ad;
   --dim: #868c98;            /* hints, captions, counts (≥ 4.5:1 on every surface) */
@@ -69,7 +70,7 @@
   --t-tool: 14px;            /* body text on the dense pages (your emotes, admin) */
   --text-sub: .85rem;
   --text-hint: .78rem;
-  --text-label: .68rem;
+  --text-label: 12px;        /* the uppercase labels and captions: never under 12px */
 
   /* Shape: 3px controls, 6px cards, tiles, panels and popovers, 50% avatars. */
   --radius: 3px;
@@ -102,8 +103,8 @@
   --dur-press: .1s;
   --dur-color: .2s;
   --dur-hover: .25s;
-  --dur-move: .3s;
-  --dur-theme: .32s;
+  --dur-move: .25s;
+  --dur-theme: .25s;
   --dur-reveal: .9s;
   --stagger: 70ms;
   --press: .97;
@@ -158,6 +159,7 @@
   --elevated-2: #f1f3f6;
   --border: rgb(13 15 20 / .1);
   --border-strong: rgb(13 15 20 / .2);
+  --field-border: #80868f;
   --text: #0d0f14;
   --muted: #555b66;
   --dim: #636975;
@@ -176,9 +178,9 @@
   --accent-wash: rgb(4 106 130 / .16);
   --accent-border: rgb(4 106 130 / .4);
 
-  --red: #c1352f;
-  --yellow: #9a5c05;
-  --green: #0f8a55;
+  --red: #a82b26;     /* ≥ 4.5:1 as chip text on its own 18% tint, on white and on surface */
+  --yellow: #844e00;
+  --green: #0a6b41;
   --cyan: #0b6d8a;
   --purple: #6b34c9;
   --danger-solid: #c42b1c;
@@ -187,6 +189,12 @@
   --scrim: rgb(13 15 20 / .32);
   --shadow-pop: 0 18px 44px -16px rgb(13 15 20 / .28);
   --shadow-dialog: 0 28px 70px -20px rgb(13 15 20 / .32);
+}
+
+/* More contrast asked for: stronger hairlines and control edges, in both themes. */
+@media (prefers-contrast: more) {
+  :root { --border: rgb(255 255 255 / .2); --border-strong: rgb(255 255 255 / .38); --field-border: #9ba1ad; }
+  [data-theme="light"] { --border: rgb(13 15 20 / .28); --border-strong: rgb(13 15 20 / .5); --field-border: #555b66; }
 }
 
 /* Arial sized to Geist per weight, so the font swap moves nothing (CLS 0). */

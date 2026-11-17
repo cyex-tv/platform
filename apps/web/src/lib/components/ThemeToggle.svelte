@@ -21,14 +21,14 @@
 </button>
 
 <style>
-  .theme { position: relative; width: 36px; height: 36px; flex: none; display: inline-grid; place-items: center; border-radius: var(--radius-btn);
+  .theme { position: relative; width: 40px; height: 40px; flex: none; display: inline-grid; place-items: center; border-radius: var(--radius-btn);
     border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer;
     transition: color var(--fast), border-color var(--fast), background-color var(--fast), transform var(--dur-press) ease-out; }
   @media (hover: hover) and (pointer: fine) {
     .theme:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface-hover); }
   }
   .theme:active { transform: scale(var(--press)); }
-  /* Touch: the 36px look keeps a 44px target. */
-  @media (pointer: coarse) { .theme::after { content: ''; position: absolute; inset: -4px; } }
+  /* Touch: the 40px look keeps a 44px target. */
+  @media (pointer: coarse) { .theme::after { content: ''; position: absolute; inset: -2px; } }
   svg { fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 </style>

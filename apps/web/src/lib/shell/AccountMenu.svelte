@@ -30,7 +30,7 @@
 {/if}
 
 <style>
-  .who { position: relative; display: flex; align-items: center; gap: 8px; height: 36px; max-width: 200px; padding: 0 8px 0 5px;
+  .who { position: relative; display: flex; align-items: center; gap: 8px; height: 40px; max-width: 200px; padding: 0 8px 0 5px;
     border: 1px solid var(--border); border-radius: var(--radius-btn); background: transparent; color: var(--text);
     font: inherit; font-size: var(--t-nav); font-weight: 500; cursor: pointer;
     transition: background-color var(--fast), border-color var(--fast), transform var(--dur-press) ease-out; }
@@ -39,6 +39,7 @@
   .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .who :global(svg) { color: var(--muted); }
   @media (hover: hover) and (pointer: fine) { .who:hover { background: var(--surface-hover); border-color: var(--border-strong); } }
-  @media (pointer: coarse) { .who::after { content: ''; position: absolute; inset: -4px 0; } }
+  @media (pointer: coarse) { .who::after { content: ''; position: absolute; inset: -2px 0; } }
+  @media (forced-colors: active) { .who[aria-expanded='true'] { outline: 2px solid Highlight; outline-offset: 1px; } }
   @media (max-width: 1000px) { .name { display: none; } .who { padding-right: 6px; } }
 </style>
