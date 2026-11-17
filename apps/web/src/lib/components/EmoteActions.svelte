@@ -32,6 +32,11 @@
   const said = $derived(
     linkCopy.copied ? 'Link copied' : linkCopy.failed ? 'Couldn’t copy' : nameCopy.copied ? 'Name copied' : nameCopy.failed ? 'Couldn’t copy' : '',
   );
+  // What adding to a set did, in one short line (not the whole list read out again).
+  const setName = (id: string | null) => clean(viewer.own.find((s) => s.id === id)?.name ?? '');
+  const addSaid = $derived(
+    viewer.adding ? `Adding to ${setName(viewer.adding)}…` : viewer.added ? `Added to ${setName(viewer.added)}` : '',
+  );
 </script>
 
 <div class="actions-row {variant}">
@@ -44,7 +49,8 @@
       {#snippet trigger(props)}
         <button class="btn btn-primary btn-s add" type="button" {...props}><Icon name="plus" />Add to set</button>
       {/snippet}
-      <div class="sets" aria-live="polite">
+      <div class="sets">
+        <p class="sr-only" role="status">{addSaid}</p>
         {#if viewer.who === 'loading'}
           <p class="note fine">Checking your sets…</p>
         {:else if viewer.who === 'none'}
@@ -118,7 +124,7 @@
   .actions-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .btn :global(.icon) { flex: none; }
   .btn { gap: 8px; }
-  .more { width: 38px; padding: 0; }
+  .more { width: 40px; padding: 0; }
   .bar { flex-wrap: nowrap; }
   .bar > :global(.pop-root:first-child), .bar > .add { flex: 1; }
   .bar .add { flex: 1; width: 100%; height: 44px; }

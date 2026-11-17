@@ -46,19 +46,26 @@
     return () => ro.disconnect();
   });
 
-  async function pick(v: T, focus = false) {
+  // `slide`: false for a held arrow key (key repeat), so the marker jumps instead of chasing.
+  async function pick(v: T, focus = false, slide = true) {
     if (v !== value) {
-      glide = marker.ready && !still();
+      glide = slide && marker.ready && !still();
       onchange(v);
     }
     if (focus) {
+      // The option asked for, by value: the parent may set `value` later (after a navigation),
+      // so the checked option can still be the old one here.
       await tick();
-      root.querySelector<HTMLElement>('[aria-checked="true"]')?.focus();
+      const i = options.findIndex((o) => o.value === v);
+      root.querySelectorAll<HTMLElement>('[role="radio"]')[i]?.focus();
     }
   }
 
   function onkeydown(e: KeyboardEvent) {
-    const i = options.findIndex((o) => o.value === value);
+    // From the focused option (it is the last pick even when `value` hasn't caught up yet).
+    const radios = [...root.querySelectorAll<HTMLElement>('[role="radio"]')];
+    const at = radios.indexOf(document.activeElement as HTMLElement);
+    const i = at >= 0 ? at : options.findIndex((o) => o.value === value);
     let n = -1;
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') n = (i + 1) % options.length;
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') n = (i - 1 + options.length) % options.length;
@@ -66,7 +73,7 @@
     else if (e.key === 'End') n = options.length - 1;
     if (n < 0) return;
     e.preventDefault();
-    pick(options[n].value, true);
+    pick(options[n].value, true, !e.repeat);
   }
 </script>
 
@@ -105,6 +112,8 @@
      resizing or a font swap never animates it. */
   .marker.ready { opacity: 1; }
   .marker.glide { transition: transform var(--dur-move) var(--ease), width var(--dur-move) var(--ease); }
+  /* 34px to see in the 's' size, 40px to hit: the hit area takes in the 3px frame. */
+  button::after { content: ''; position: absolute; inset: -3px 0; }
   button { position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center; flex: none;
     height: var(--seg-h, 34px); padding: 0 14px; border: 0; background: none; border-radius: var(--radius-btn);
     font: inherit; font-size: 14.5px; font-weight: 500; color: var(--muted); cursor: pointer; white-space: nowrap;

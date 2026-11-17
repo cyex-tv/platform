@@ -1,5 +1,5 @@
 import { ApiError, gql } from '$lib/api';
-import { apiSort, PER_PAGE, parse } from '$lib/components/browse/params';
+import { apiQuery, apiSort, PER_PAGE, parse } from '$lib/components/browse/params';
 import { SEARCH } from '$lib/queries';
 import type { PageLoad } from './$types';
 
@@ -9,7 +9,7 @@ export const load: PageLoad = async ({ fetch, url }) => {
     gql(
       SEARCH,
       {
-        query: view.q,
+        query: apiQuery(view),
         animated: view.kind === 'animated' ? true : view.kind === 'still' ? false : null,
         nsfw: view.nsfw ? true : null,
         sort: apiSort(view.sort),

@@ -4,24 +4,19 @@
   import { navigating, page } from '$app/state';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import Footer from '$lib/components/Footer.svelte';
-  import Nav, { type NavUser } from '$lib/components/Nav.svelte';
+  import AppHeader from '$lib/shell/AppHeader.svelte';
   import Toasts from '$lib/tool/Toasts.svelte';
-  import { forgetMe, isAdmin, loadMe, session } from '$lib/tool/session.svelte';
+  import { loadMe } from '$lib/tool/session.svelte';
 
   let { children } = $props();
-  // The signed-in pages (`(tool)`) bring their own header in the cyex-app style, and a page whose
-  // load returns `chrome: false` (the docs at /developers) brings its own header and footer.
-  const tool = $derived(page.route.id?.startsWith('/(tool)') || page.data.chrome === false);
+  // One shell for every route: AppHeader, main, Footer. Pages (and the signed-in group's layout)
+  // only fill main, with RailLayout or ColumnLayout. A page's load may return `footer: 'slim'`
+  // (the docs) to end the page without the gap above the footer.
 
-  // Only the browser has the session cookie; signed out is the default. The tool layout loads
-  // the account itself, and loadMe() shares one request between the two.
+  // Only the browser has the session cookie; signed out is the default. The signed-in layout
+  // asks too (to send you to sign in), and loadMe() shares one request between the two.
   $effect(() => {
-    if (!tool) loadMe().catch(() => {});
-  });
-  const me = $derived.by<NavUser | null>(() => {
-    const m = session.me;
-    const who = m?.identities[0];
-    return m && who ? { displayName: who.displayName, avatar: who.avatar, platform: who.platform, admin: isAdmin(m) } : null;
+    loadMe().catch(() => {});
   });
 
   // A thin bar under the nav while a page loads: it shows only after a short delay, crawls to
@@ -47,29 +42,26 @@
   });
 </script>
 
-{#if tool}
+<a class="skip" href="#main">Skip to content</a>
+<AppHeader />
+<div class="progress {bar}" aria-hidden="true"></div>
+<main id="main" tabindex="-1">
   {@render children()}
-{:else}
-  <a class="skip" href="#main">Skip to content</a>
-  <Nav {me} onsignout={forgetMe} />
-  <div class="progress {bar}" aria-hidden="true"></div>
-  <main id="main" tabindex="-1">
-    {@render children()}
-  </main>
-  <Footer signedIn={!!me} slim={page.data.footer === 'slim'} />
-  <Toasts />
-{/if}
+</main>
+<Footer slim={page.data.footer === 'slim'} />
+<Toasts />
 <CommandPalette />
 
 <style>
-  .progress { position: fixed; top: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); left: 0; right: 0; height: 2px;
+  main:focus { outline: none; }
+  .progress { position: fixed; top: calc(var(--nav-h) + 1px + env(safe-area-inset-top, 0px)); left: 0; right: 0; height: 2px;
     z-index: var(--z-nav); pointer-events: none; background: var(--accent); transform-origin: 0 50%;
     opacity: 0; transform: scaleX(0); }
   .progress.run { opacity: 1; transform: scaleX(.85);
-    transition: opacity var(--dur-color) ease-out var(--delay-progress), transform var(--dur-progress) var(--ease) var(--delay-progress); }
+    transition: opacity var(--dur-color) ease-out var(--delay-progress), transform var(--dur-progress) linear var(--delay-progress); }
   .progress.done { opacity: 0; transform: scaleX(1);
     transition: transform var(--dur-color) ease-out, opacity var(--dur-color) ease-out var(--dur-color); }
-  /* Reduced motion: no crawl, the bar only fades in and out. */
-  @media (prefers-reduced-motion: reduce) { .progress, .progress.run, .progress.done { transform: none; } }
+  /* Reduced motion: no crawl and no static full-width bar; the bar stays hidden. */
+  @media (prefers-reduced-motion: reduce) { .progress { display: none; } }
   @media (forced-colors: active) { .progress { background: Highlight; } }
 </style>

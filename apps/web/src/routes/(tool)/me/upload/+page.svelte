@@ -2,13 +2,15 @@
   import { goto } from '$app/navigation';
   import { ApiError, uploadEmote } from '$lib/api';
   import { bytes, iso } from '$lib/format';
-  import { fileProblem, nameProblem, parseTags, tagsProblem } from '$lib/rules';
+  import { fileProblem, nameFromFile, nameProblem, parseTags, tagsProblem } from '$lib/rules';
   import { onDestroy } from 'svelte';
   import { notify } from '$lib/tool/notices.svelte';
+  import PageHead from '$lib/tool/PageHead.svelte';
 
   let file = $state<File | null>(null);
   let preview = $state<string | null>(null);
   let name = $state('');
+  let prefilled = '';
   let tagText = $state('');
   let busy = $state(false);
   let over = $state(false);
@@ -52,7 +54,8 @@
     file = f;
     preview = URL.createObjectURL(f);
     serverError = null;
-    if (!name) name = f.name.replace(/\.[^.]+$/, '').replace(/\s+/g, '').slice(0, 100);
+    // The name follows the file until it is typed in by hand.
+    if (!name || name === prefilled) name = prefilled = nameFromFile(f.name);
   }
 
   function drop(e: DragEvent) {
@@ -86,14 +89,9 @@
 <svelte:head><title>Upload - cyex.tv</title></svelte:head>
 
 <div class="narrow">
-  <div class="ui-head">
-    <div>
-      <h1>Upload an emote</h1>
-      <p>PNG, APNG, GIF or WebP, at most 5 MB and 1000×1000 px. Square or wide works best.</p>
-    </div>
-  </div>
+  <PageHead title="Upload" line="PNG, APNG, GIF or WebP, at most 5 MB and 1000×1000 px. Square or wide works best." />
 
-  <form class="ui-form" onsubmit={submit} novalidate>
+  <form class="ui-card ui-form" onsubmit={submit} novalidate>
     <div class="ui-field">
       <span class="ui-label" id="file-label">Image</span>
       <button
@@ -113,7 +111,7 @@
           <span class="sizes">
             {#each [28, 56, 112] as h}<img src={preview} alt="" style:max-height="{h}px" />{/each}
           </span>
-          <span class="ui-hint"><span class="fname"><bdi>{file.name}</bdi></span> · <span class="ui-mono">{bytes(file.size)}</span> · Pick another</span>
+          <span class="ui-hint"><span class="fname"><bdi>{file.name}</bdi></span> · <span class="ui-num">{bytes(file.size)}</span> · Pick another</span>
         {:else}
           <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
           <span>Drop an image here, or pick one</span>
@@ -139,7 +137,7 @@
 
     {#if serverError}<p class="ui-error" role="alert">{serverError}</p>{/if}
 
-    <div class="ui-actions">
+    <div class="ui-actions foot">
       <button class="ui-btn primary" type="submit" disabled={busy}>
         {#if busy}<span class="ui-spinner small" aria-hidden="true"></span> Uploading…{:else}Upload{/if}
       </button>
@@ -153,7 +151,7 @@
 </div>
 
 <style>
-  .drop { display: grid; justify-items: center; align-content: center; gap: 10px; min-height: 168px; padding: 20px;
+  .drop { display: grid; border-radius: var(--radius-card); justify-items: center; align-content: center; gap: 10px; min-height: 168px; padding: 20px;
     border: 1px dashed var(--border-strong); background: var(--surface); color: var(--muted); font: inherit; cursor: pointer;
     transition: border-color var(--fast), background-color var(--fast); }
   .drop.over { border-color: var(--accent-border); background: var(--surface-hover); }
@@ -163,5 +161,6 @@
   .sizes { display: flex; align-items: flex-end; gap: 20px; }
   .sizes img { max-width: 220px; height: auto; }
   .fname { display: inline-block; max-width: 28ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+  .foot { padding-top: 4px; }
   .small { width: 13px; height: 13px; border-color: color-mix(in srgb, var(--accent-ink) 35%, transparent); border-top-color: var(--accent-ink); }
 </style>

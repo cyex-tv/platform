@@ -11,6 +11,7 @@
   import Confirm from '$lib/tool/Confirm.svelte';
   import { forgetMe, loadMe, session } from '$lib/tool/session.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
+  import PageHead from '$lib/tool/PageHead.svelte';
 
   const PLATFORMS: { id: Platform; name: string; slug: 'twitch' | 'kick' }[] = [
     { id: 'TWITCH', name: 'Twitch', slug: 'twitch' },
@@ -69,7 +70,9 @@
 <svelte:head><title>Account - cyex.tv</title></svelte:head>
 
 <div class="narrow">
-  <div class="ui-head"><div><h1>Account</h1><p>Member since <span class="ui-mono">{date(me.createdAt)}</span></p></div></div>
+  <PageHead title="Account">
+    {#snippet line()}Member since <span class="ui-num">{date(me.createdAt)}</span>{/snippet}
+  </PageHead>
 
   <div class="ui-stack">
     <section class="ui-panel">
@@ -110,7 +113,7 @@
         <ul class="ui-list">
           {#each notes as n (n.id)}
             <li class:unread={!n.read}>
-              <span class="what"><span>{describe(n.kind, n.payload)}</span><span class="ui-hint ui-mono">{date(n.createdAt)}</span></span>
+              <span class="what"><span>{describe(n.kind, n.payload)}</span><span class="ui-hint ui-num">{date(n.createdAt)}</span></span>
             </li>
           {/each}
         </ul>

@@ -15,7 +15,7 @@
 </script>
 
 <section class="trust" aria-labelledby="trust-h">
-  <h2 id="trust-h">Review</h2>
+  <h2 id="trust-h">Review status</h2>
   <p class="status {t.tone}">
     <span class="dot" aria-hidden="true">{#if t.tone === 'ok'}<Icon name="check" size={12} stroke={2.2} />{/if}</span>
     {t.status}
@@ -36,9 +36,8 @@
 
 <style>
   p { margin: 0; }
-  .trust { display: grid; gap: 10px; justify-items: start; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-m);
-    background: var(--surface); }
-  h2 { font-size: var(--t-h3); line-height: 1.3; letter-spacing: -.015em; }
+  .trust { display: grid; gap: 8px; justify-items: start; padding-top: 16px; border-top: 1px solid var(--border); }
+  h2 { font-size: var(--t-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
   .status { display: inline-flex; align-items: center; gap: 8px; font-size: var(--t-ui); font-weight: 500; }
   .dot { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--border-strong); }
   .ok .dot { background: var(--text); border-color: var(--text); color: var(--bg); }

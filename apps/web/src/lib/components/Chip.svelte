@@ -28,14 +28,19 @@
   .chip.static { padding-right: 10px; }
   a.chip { padding-right: 8px; color: var(--text); }
   a.chip :global(svg), .x { color: var(--muted); }
-  .x { display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--radius-btn);
+  .chip { position: relative; }
+  /* The remove button: 24px to see, the chip's full height and 40px wide to hit. */
+  .x { position: relative; display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--radius-btn);
     background: none; cursor: pointer; transition: color var(--dur-color), background-color var(--dur-color); }
+  .x::after { content: ''; position: absolute; inset: -8px -4px -8px -12px; }
+  a.chip::after { content: ''; position: absolute; inset: -4px 0; }
   a.chip:active, .x:active { transform: scale(var(--press)); }
   /* Touch: a 32px remove button with a 44px hit area around it. */
   @media (pointer: coarse) {
     .chip:has(.x) { padding-right: 0; }
-    .x { position: relative; width: 32px; height: 32px; }
-    .x::after { content: ''; position: absolute; inset: -6px; }
+    .x { width: 32px; height: 32px; }
+    .x::after { inset: -6px; }
+    a.chip::after { inset: -6px 0; }
   }
   @media (hover: hover) and (pointer: fine) {
     a.chip:hover { border-color: var(--muted); background: var(--surface-2); }

@@ -2,10 +2,10 @@
   // /developers: the cyex.tv API on the cyex docs layout (cyex-docs). Guides first, then the REST
   // endpoints from openapi.json, the event socket, and GraphQL from schema.graphql. Everything is
   // rendered from data files in $lib/docs; behaviour.ts adds the scroll-spy, filter and tabs.
-  import '../../tool.css';
   import '$lib/docs/docs.css';
   import { initDocs } from '$lib/docs/behaviour';
   import { defaultOpen, restGroupId } from '$lib/docs/groups';
+  import RailLayout from '$lib/shell/RailLayout.svelte';
   import Code from '$lib/docs/Code.svelte';
   import Fields from '$lib/docs/Fields.svelte';
   import Inline from '$lib/docs/Inline.svelte';
@@ -55,13 +55,13 @@
      the markup is the default state (the notes open, the rest closed), so it reads right before the script runs. -->
 {#snippet navHead(id: string, title: string, count: number)}
   <button type="button" class="group-toggle nav-group-title" data-group-toggle={id} aria-expanded={defaultOpen(id)} aria-controls="nav-{id}">
-    {@render chev()}<span class="group-name">{title}</span><span class="group-count" data-total={count}>{count}</span>
+    {@render chev()}<span class="group-name">{title}</span><span class="group-count" data-total={count} aria-hidden="true">{count}</span>
   </button>
 {/snippet}
 {#snippet bodyHead(id: string, title: string, count: number)}
   <h2 class="op-group-title">
     <button type="button" class="group-toggle" data-group-toggle={id} aria-expanded={defaultOpen(id)} aria-controls="body-{id}">
-      {@render chev()}<span class="group-name">{title}</span><span class="group-count">{count}</span>
+      {@render chev()}<span class="group-name">{title}</span><span class="group-count" aria-hidden="true">{count}</span>
     </button>
   </h2>
 {/snippet}
@@ -71,18 +71,16 @@
   <title>API - cyex.tv</title>
   <meta name="description" content="The cyex.tv API: public reads for chat clients, GraphQL, and live events, with every endpoint, parameter and response." />
   <meta property="og:title" content="API reference" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" />
 </svelte:head>
 
-<div class="tool docs" bind:this={root}>
-  <div class="docs-shell">
-    <aside class="docs-nav">
+<div class="docs" bind:this={root}>
+  <RailLayout>
+    {#snippet rail()}
+    <aside class="docs-nav" aria-label="API index">
       <div class="nav-search">
         <svg class="nav-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
         <input type="search" enterkeyhint="search" placeholder="Find an endpoint" aria-label="Find an endpoint" autocomplete="off" autocapitalize="off" spellcheck="false" />
-        <kbd class="nav-kbd">Ctrl K</kbd>
+        <kbd class="nav-kbd" aria-hidden="true">Ctrl K</kbd>
         <button type="button" class="input-clear" aria-label="Clear"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2l6 6M8 2L2 8" /></svg></button>
       </div>
       <div class="nav-tools"><button type="button" class="group-all" data-group-all>Expand all</button></div>
@@ -103,7 +101,7 @@
             <div class="collapse" id="nav-{restGroupId(g.tag)}"><div class="collapse-inner">
             {#each g.ops as op}
               <a class="nav-item" href="#{op.id}" data-search="{op.path} rest">
-                <span class="nav-method m-{op.method.toLowerCase()}">{op.method}</span><span class="nav-label">{op.title}</span>
+                <span class="nav-method m-{op.method.toLowerCase()}">{op.method}</span>{' '}<span class="nav-label">{op.title}</span>
               </a>
             {/each}
             </div></div>
@@ -113,7 +111,7 @@
           {@render navHead('live', 'Live events', 1)}
           <div class="collapse" id="nav-live"><div class="collapse-inner">
           <a class="nav-item" href="#ws-events" data-search="/v1/events websocket socket">
-            <span class="nav-method m-ws">WS</span><span class="nav-label">Event socket</span>
+            <span class="nav-method m-ws">WS</span>{' '}<span class="nav-label">Event socket</span>
           </a>
           </div></div>
         </div>
@@ -123,7 +121,7 @@
             <div class="collapse" id="nav-gql-{g.id}"><div class="collapse-inner">
             {#each g.ops as op}
               <a class="nav-item" href="#{op.id}" data-search="graphql {op.kind}">
-                <span class="nav-method {chipClass[op.kind]}">{chip[op.kind]}</span><span class="nav-label">{op.name}</span>
+                <span class="nav-method {chipClass[op.kind]}">{chip[op.kind]}</span>{' '}<span class="nav-label">{op.name}</span>
               </a>
             {/each}
             </div></div>
@@ -134,15 +132,17 @@
           <div class="collapse" id="nav-gql-types"><div class="collapse-inner">
           {#each data.gql.types as t}
             <a class="nav-item" href="#{t.id}" data-search="graphql type {t.kind}">
-              <span class="nav-method m-get">{typeChip(t)}</span><span class="nav-label">{t.name}</span>
+              <span class="nav-method m-get">{typeChip(t)}</span>{' '}<span class="nav-label">{t.name}</span>
             </a>
           {/each}
           </div></div>
         </div>
         <div class="nav-empty" hidden></div>
+        <p class="sr-only" role="status" data-filter-status></p>
       </nav>
       </details>
     </aside>
+    {/snippet}
 
     <div class="docs-body">
       <header class="docs-title">
@@ -384,7 +384,7 @@
         <a href="https://github.com/cyex-tv/platform/blob/main/openapi/openapi.json">openapi.json</a> · <a href="https://github.com/cyex-tv/platform/blob/main/schema/schema.graphql">schema.graphql</a> · <a href="https://github.com/cyex-tv/platform">Source</a>
       </p>
     </div>
-  </div>
+  </RailLayout>
   <button type="button" class="to-top" hidden aria-label="Back to top">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
     Top

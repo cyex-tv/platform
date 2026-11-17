@@ -1,134 +1,17 @@
-/* The signed-in pages (your emotes, sets, channels, account, admin): the cyex-app tool layer.
-   Its tokens are a copy of cyex-app's tokens.css (keep them in step), set on `.tool` rather than
-   `:root` so they don't touch the public pages' web tokens when both are loaded in one visit.
-   Classes are prefixed `ui-` so they never meet the site's `.btn`, `.input` and friends.
-   z-indexes, --twitch and --kick come from tokens.css (one scale for every surface). */
+/* The dense pages' components (your emotes, sets, channels, account, admin): cyex-app controls
+   on the shared tokens in tokens.css. There is no `.tool` ground or font any more: these pages sit
+   on the same ground, in the same Geist, under the same AppHeader as every other page. Classes are
+   prefixed `ui-` so they never meet the site's `.btn`, `.input` and friends. `.ui-page` is the
+   content density for those pages (a smaller body size and plain titles), nothing else. */
 
-/* The tool ground, also painted on <html> so overscroll shows it. */
-:root { --tool-bg: #1e1f23; }
-:root[data-theme='light'] { --tool-bg: #f3f3f4; }
-
-.tool {
-  color-scheme: dark;
-  --bg: var(--tool-bg);
-  --surface: #26272c;
-  --surface-hover: #2d2e34;
-  --elevated: #2f3037;
-  --elevated-2: #353640;
-  --border: #34353c;
-  --border-strong: #43454d;
-  --text: #e8e8ea;
-  --muted: #b4b5bb;
-  --dim: #9fa1a9;
-  --neutral-chip: #34353c;
-  --row-hover: rgba(255, 255, 255, .035);
-  --row-alt: rgba(255, 255, 255, .015);
-  --shadow: rgba(0, 0, 0, .35);
-  --overlay: rgba(14, 15, 18, .6);
-
-  --accent: #145aff;
-  --accent-2: #2a6aff;
-  --accent-text: #7ea4ff;
-  --accent-ink: #ffffff;
-  --accent-dim: rgba(20, 90, 255, .14);
-  --accent-wash: rgba(20, 90, 255, .22);
-  --accent-border: rgba(20, 90, 255, .55);
-
-  --red: #ff6b6b;
-  --yellow: #ffb545;
-  --green: #33d68f;
-  --cyan: #4fd6ff;
-  --purple: #b083ff;
-  --danger-solid: #e81123;
-
-  --shadow-pop: 0 8px 24px var(--shadow);
-  --shadow-dialog: 0 16px 48px var(--shadow);
-  --focus-ring: var(--text);
-
-  --twitch-logo: var(--twitch);
-  --font-ui: 'IBM Plex Sans', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', 'Cascadia Mono', ui-monospace, Consolas, monospace;
-  --text-sub: .85rem;
-  --text-hint: .78rem;
-  --text-label: .68rem;
-  --page-max: 1520px;
-  --page-pad: 20px;
-  --measure: 820px;
-  --measure-form: 640px;
-  --radius: 3px;
-  --radius-sm: 2px;
-  --radius-pill: 999px;
-  --fast: .12s;
-  --base: .2s;
-  --slow: .36s;
-  --ease: cubic-bezier(.16, 1, .3, 1);
-  --z-popover: var(--z-pop);
-
-  /* The web tokens' names on the tool's values, so shared components (IconButton, Segmented,
-     ThemeToggle) read right inside .tool: instant press, tool durations, 3px corners. */
-  --dur-press: 0s;
-  --dur-color: var(--fast);
-  --dur-move: var(--base);
-  --radius-btn: var(--radius);
-
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg);
-  color: var(--text);
-  font: .87rem/1.55 var(--font-ui);
-  -webkit-font-smoothing: antialiased;
-}
-
-:root[data-theme='light'] .tool {
-  color-scheme: light;
-  --surface: #ffffff;
-  --surface-hover: #f6f6f7;
-  --elevated: #ffffff;
-  --elevated-2: #f4f4f6;
-  --border: #dcdde1;
-  --border-strong: #c4c6cc;
-  --text: #1b1c20;
-  --muted: #4f515a;
-  --dim: #6b6d76;
-  --neutral-chip: #e6e7ea;
-  --row-hover: rgba(20, 22, 30, .035);
-  --row-alt: rgba(20, 22, 30, .015);
-  --shadow: rgba(20, 22, 30, .12);
-  --overlay: rgba(243, 243, 244, .7);
-
-  --accent: #14e6ff;
-  --accent-2: #10c9e6;
-  --accent-text: #046a82;
-  --accent-ink: #00232b;
-  --accent-dim: rgba(4, 106, 130, .08);
-  --accent-wash: rgba(4, 106, 130, .16);
-  --accent-border: rgba(4, 106, 130, .4);
-
-  --red: #c1352f;
-  --yellow: #9a5c05;
-  --green: #0f8a55;
-  --cyan: #0b6d8a;
-  --purple: #6b34c9;
-  --danger-solid: #c42b1c;
-}
-
-/* The page behind the tool, so overscroll shows the tool's ground. */
-html:has(.tool) { background: var(--tool-bg); }
-
-.tool :where(a) { color: var(--accent-text); } /* zero specificity: buttons, tabs and rows set their own colour */
-.tool ::selection { background: var(--border-strong); }
-.tool :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 0; }
-.tool h1, .tool h2, .tool h3 { letter-spacing: 0; font-weight: 700; margin: 0; }
-.tool h1, .tool h2 { overflow-wrap: anywhere; }
-.tool h1 { font-size: 1.3rem; line-height: 1.3; }
-.tool h2 { font-size: 1rem; line-height: 1.35; }
-.tool p { margin: 0; }
-.tool * { scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
-
-.tool .wrap { width: 100%; max-width: var(--page-max); margin-inline: auto; padding-inline: var(--page-pad); }
-.tool main { flex: 1; padding-block: 26px 60px; }
-.tool .narrow { max-width: var(--measure-form); }
+.ui-page { font-size: var(--t-tool); line-height: 1.5; }
+.ui-page :where(a) { color: var(--accent-text); } /* zero specificity: buttons, tabs and rows set their own colour */
+.ui-page h1, .ui-page h2, .ui-page h3 { font-weight: 600; margin: 0; }
+.ui-page h1, .ui-page h2 { overflow-wrap: anywhere; }
+.ui-page h1 { font-size: var(--t-page); line-height: 1.25; letter-spacing: -.02em; }
+.ui-page h2 { font-size: 16px; line-height: 1.35; letter-spacing: -.01em; }
+.ui-page p { margin: 0; }
+.ui-page .narrow { max-width: var(--measure-form); }
 
 /* Page head: a title, an optional line under it, actions on the right. */
 .ui-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 20px; }
@@ -137,34 +20,40 @@ html:has(.tool) { background: var(--tool-bg); }
 .ui-head .ui-actions { margin-left: auto; }
 
 /* The one uppercase style. */
-.ui-label { font-size: var(--text-label); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.ui-label { font-size: var(--text-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
 .ui-hint { font-size: var(--text-hint); color: var(--dim); }
 .ui-muted { color: var(--muted); }
+.ui-num { font-variant-numeric: tabular-nums; } /* counts and dates: Geist, not mono */
 .ui-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 /* Buttons (web-tool density). */
-.ui-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  padding: 10.5px 18px; border: 1px solid transparent; border-radius: var(--radius);
-  font: inherit; font-size: .87rem; font-weight: 600; line-height: 1.1; white-space: nowrap; cursor: pointer;
+/* One button system with the site's .btn: same colours, weight, 3px corners and hover; only the
+   height is the tool's (40px, the web floor; 32px small with a 40px hit area) where .btn is the
+   48px landing button. */
+.ui-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 40px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--radius-btn);
+  font: inherit; font-size: var(--t-nav); font-weight: 500; letter-spacing: -.005em; line-height: 1.1; white-space: nowrap; cursor: pointer;
   text-decoration: none; color: var(--text);
-  transition: background-color var(--fast), border-color var(--fast), color var(--fast); }
+  transition: background-color var(--fast), border-color var(--fast), color var(--fast), filter var(--fast); }
 .ui-btn svg { flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.ui-btn.primary { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.ui-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .ui-btn.secondary { background: var(--surface); border-color: var(--border-strong); }
 .ui-btn.ghost { background: none; color: var(--muted); }
 .ui-btn.danger { background: var(--surface); border-color: var(--border-strong); color: var(--red); }
 @media (hover: hover) and (pointer: fine) {
-  .ui-btn.primary:hover { background: var(--accent-2); }
-  .ui-btn.secondary:hover, .ui-btn.danger:hover { background: var(--surface-hover); }
+  .ui-btn.primary:hover { filter: brightness(1.08); }
+  .ui-btn.secondary:hover, .ui-btn.danger:hover { background: var(--surface-2); border-color: var(--muted); }
   .ui-btn.ghost:hover { background: var(--surface-hover); color: var(--text); }
 }
 .ui-btn.danger.armed { background: color-mix(in srgb, var(--red) 14%, transparent); border-color: var(--red); }
-.ui-btn.small { padding: 7px 13px; font-size: .78rem; }
+.ui-btn.small { height: 32px; padding: 0 12px; font-size: var(--t-fine); }
+.ui-btn.small::after { content: ''; position: absolute; inset: -4px 0; } /* 40px to hit, 32px to see */
 .ui-btn:active { opacity: .6; transition: none; }
 .ui-btn:disabled { opacity: .5; cursor: not-allowed; }
+a.ui-btn { box-sizing: border-box; }
 .ui-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
-.ui-icon { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; flex: none;
+.ui-icon { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; flex: none;
   border: 0; border-radius: var(--radius); background: transparent; color: var(--muted); cursor: pointer;
   transition: background-color var(--fast), color var(--fast); }
 @media (hover: hover) and (pointer: fine) { .ui-icon:hover { background: var(--surface-hover); color: var(--text); } }
@@ -174,10 +63,12 @@ html:has(.tool) { background: var(--tool-bg); }
 /* Fields. */
 .ui-field { display: grid; gap: 7px; }
 .ui-field > .ui-label { margin: 0; }
-.ui-input { width: 100%; min-width: 0; padding: 10px 12px; font: inherit; font-size: .89rem; color: var(--text);
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); outline: none;
+/* Same field as the site's .input (the 3:1 field edge, 3px, accent focus ring); 40px, like .ui-btn. */
+.ui-input { width: 100%; min-width: 0; min-height: 40px; padding: 8px 12px; font: inherit; font-size: 16px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--field-border); border-radius: var(--radius-btn); outline: none;
   transition: border-color var(--fast), background-color var(--fast); }
-.ui-input:focus-visible { border-color: var(--accent-border); background: var(--surface-hover); outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { .ui-input:hover:not(:focus-visible) { border-color: var(--muted); } }
+.ui-input:focus-visible { background: var(--surface); outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .ui-input::placeholder { color: var(--dim); }
 .ui-input[aria-invalid='true'] { border-color: var(--red); }
 select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
@@ -187,47 +78,61 @@ select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
 .ui-form { display: grid; gap: 16px; }
 
 /* Checkbox and switch. */
-.ui-check { display: inline-flex; align-items: center; gap: 7px; cursor: pointer; }
+.ui-check { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; cursor: pointer; }
 .ui-check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
-.ui-switch { position: relative; flex: none; width: 36px; height: 20px; margin: 0; appearance: none; cursor: pointer;
-  border-radius: var(--radius-pill); background: var(--border-strong);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 40%, transparent); transition: background-color var(--fast); }
-:root[data-theme='light'] .tool .ui-switch { background: var(--dim); }
-.ui-switch::before { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%;
+/* The switch is a 40px square to hit; ::before draws the 36x20 track (with an "on" bar when
+   checked, so on never depends on colour), ::after the knob. */
+.ui-switch { position: relative; flex: none; width: 40px; height: 40px; margin: 0; appearance: none; cursor: pointer;
+  border-radius: var(--radius); background: none; }
+.ui-switch::before { content: ''; position: absolute; top: 10px; left: 2px; width: 36px; height: 20px; border-radius: var(--radius-pill);
+  background: var(--border-strong) no-repeat 9px 50% / 2px 8px; box-shadow: inset 0 0 0 1px var(--field-border);
+  transition: background-color var(--fast); }
+[data-theme='light'] .ui-switch::before { background-color: var(--dim); }
+.ui-switch::after { content: ''; position: absolute; top: 13px; left: 5px; width: 14px; height: 14px; border-radius: 50%;
   background: var(--text); transition: translate var(--fast) var(--ease), background-color var(--fast); }
-.ui-switch::after { content: ''; position: absolute; top: 6px; left: 9px; width: 2px; height: 8px; background: var(--accent-ink); opacity: 0; }
-.tool .ui-switch:checked { background: var(--accent); }
-.ui-switch:checked::before { translate: 16px 0; background: var(--accent-ink); }
-.ui-switch:checked::after { opacity: 1; }
-.ui-switch:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.ui-switch:checked::before { background-color: var(--accent); background-image: linear-gradient(var(--accent-ink), var(--accent-ink));
+  box-shadow: none; }
+.ui-switch:checked::after { translate: 16px 0; background: var(--accent-ink); }
+.ui-switch:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 
 /* Segmented control (links or buttons). */
 .ui-seg { display: inline-flex; gap: 2px; padding: 2px; max-width: 100%; overflow-x: auto; scrollbar-width: none;
   background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); }
-.ui-seg > * { display: inline-flex; align-items: center; height: 32px; padding: 0 10px; border: 0; border-radius: var(--radius-sm);
-  background: none; font: inherit; font-size: .8rem; font-weight: 600; color: var(--muted); cursor: pointer; text-decoration: none; white-space: nowrap; }
+.ui-seg > * { position: relative; display: inline-flex; align-items: center; height: 36px; padding: 0 10px; border: 0; border-radius: var(--radius-sm);
+  background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; text-decoration: none; white-space: nowrap; }
 @media (hover: hover) and (pointer: fine) { .ui-seg > *:hover { color: var(--text); } }
 .ui-seg > *:focus-visible { outline-offset: -2px; }
+.ui-seg > *::after { content: ''; position: absolute; inset: -2px 0; } /* 40px to hit inside the 2px frame */
 .ui-seg > [aria-current='page'], .ui-seg > [aria-pressed='true'] { background: var(--accent-dim); color: var(--accent-text); }
 
 /* Touch: 44px targets (cyex-design floor on the web, mobile-native). */
 @media (pointer: coarse) {
   .ui-icon { width: 44px; height: 44px; }
   .ui-btn { min-height: 44px; }
+  .ui-btn.small::after { inset: -6px 0; }
   .ui-seg > * { height: 44px; }
+  .ui-check { min-height: 44px; }
+  .ui-switch { width: 44px; height: 44px; }
+  .ui-switch::before { top: 12px; left: 4px; }
+  .ui-switch::after { top: 15px; left: 7px; }
 }
 /* Forced colours drop backgrounds, so the selected option gets a system outline instead. */
 @media (forced-colors: active) {
   .ui-seg > [aria-current], .ui-seg > [aria-pressed='true'] { outline: 2px solid Highlight; outline-offset: -2px; }
+  .ui-switch::before { forced-color-adjust: none; background-color: Canvas; box-shadow: inset 0 0 0 1px CanvasText; }
+  .ui-switch::after { forced-color-adjust: none; background: CanvasText; }
+  .ui-switch:checked::before { background-color: Highlight; background-image: none; box-shadow: none; }
+  .ui-switch:checked::after { background: HighlightText; }
+  .ui-chip { border: 1px solid CanvasText; }
 }
 
-/* Cards: square in web tools. */
-.ui-card { background: var(--surface); border: 1px solid var(--border); padding: 19px 22px; }
-.ui-card > h2 { font-size: .8rem; }
+/* Cards and panels: 6px, one step above the ground. */
+.ui-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 19px 22px; }
+.ui-card > h2 { font-size: var(--t-ui); }
 .ui-card > h2 + * { margin-top: 12px; }
-.ui-panel { background: var(--surface); border: 1px solid var(--border); }
-.ui-panel > header { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--border); }
-.ui-panel > header h2 { flex: 1; min-width: 0; font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
+.ui-panel > header { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 8px 12px 8px 16px; border-bottom: 1px solid var(--border); }
+.ui-panel > header h2 { flex: 1; min-width: 0; font-size: var(--t-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-stack { display: grid; gap: 16px; }
 
 /* Settings rows. */
@@ -245,8 +150,8 @@ select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
 }
 
 /* Chips: neutral, or a status tint. */
-.ui-chip { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: var(--radius);
-  font-size: .6rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;
+.ui-chip { display: inline-flex; align-items: center; height: 22px; padding: 0 7px; border-radius: var(--radius);
+  font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap;
   background: var(--neutral-chip); color: var(--muted); }
 .ui-chip.pending { background: color-mix(in srgb, var(--yellow) 18%, transparent); color: var(--yellow); }
 .ui-chip.approved { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
@@ -261,11 +166,11 @@ select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
 @keyframes ui-pulse { to { opacity: .55; } } /* opacity only: composited, no repaint per frame */
 @media (prefers-reduced-motion: reduce) {
   .ui-spinner, .ui-skeleton { animation: none; }
-  .ui-switch::before { transition: none; }
+  .ui-switch::after { transition: none; }
 }
 
 /* Dialog. */
-.ui-dialog { padding: 0; border: 1px solid var(--border-strong); background: var(--elevated); color: var(--text);
+.ui-dialog { padding: 0; border: 1px solid var(--border-strong); border-radius: var(--radius-card); background: var(--elevated); color: var(--text);
   box-shadow: var(--shadow-dialog); width: min(440px, calc(100vw - 24px)); }
 /* In from scale(.97) over --base, out a little faster (~70%): @starting-style for the entry,
    allow-discrete on display and overlay so the exit plays before it leaves the top layer. */

@@ -2,7 +2,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { gql } from '$lib/api';
-  import { ready, src } from '$lib/emote';
+  import { ready } from '$lib/emote';
   import { clean, date, iso } from '$lib/format';
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
   import { ADD_SET_EMOTE, DELETE_EMOTE, EMOTE, MY_SETS, UPDATE_EMOTE } from '$lib/queries';
@@ -13,6 +13,10 @@
   import { can, session } from '$lib/tool/session.svelte';
   import { STATE_HINT, STATE_LABEL } from '$lib/tool/state';
   import { fail, notify } from '$lib/tool/notices.svelte';
+  import EmoteFacts from '$lib/components/emote/EmoteFacts.svelte';
+  import PreviewStage from '$lib/components/emote/PreviewStage.svelte';
+  import Icon from '$lib/components/Icon.svelte';
+  import PageHead from '$lib/tool/PageHead.svelte';
 
   const scales = [1, 2, 4] as const;
   let emote = $state<EmoteFieldsFragment | null>(null);
@@ -145,32 +149,33 @@
 <LoadGate source={L} label="Loading the emote…">
 {#snippet children()}
 {#if emote}
-  <p class="crumbs">
-    {#if mine}<a href="/me">Your emotes</a>{:else if can('emotes.review')}<a href="/admin">Admin</a>{:else}<a href="/search">Emotes</a>{/if}
-    <span aria-hidden="true">/</span> <bdi>{clean(emote.name)}</bdi>
-  </p>
+  <PageHead
+    name
+    title={clean(emote.name)}
+    back={mine ? { href: '/me', label: 'Your emotes' } : can('emotes.review') ? { href: '/admin', label: 'Admin' } : { href: '/search', label: 'Emotes' }}
+  >
+    {#snippet line()}
+      <span class="ui-chip {emote!.state.toLowerCase()}">{STATE_LABEL[emote!.state]}</span>
+      Uploaded <span>{date(emote!.createdAt)}</span>
+    {/snippet}
+    {#snippet actions()}
+      {#if emote!.state === 'APPROVED'}
+        <a class="ui-btn secondary" href="/emotes/{emote!.id}"><Icon name="arrow-right" size={15} />Public page</a>
+      {/if}
+    {/snippet}
+  </PageHead>
   <div class="layout">
-    <section class="ui-card" aria-label="Preview">
-      <div class="stage">
-        {#if ready(emote)}
-          {#each scales as s}<img src={src(emote, s)} alt={s === 4 ? emote.name : ''} />{/each}
-        {:else}
-          <span class="ui-spinner" aria-hidden="true"></span>
-          <p class="ui-hint">{slow ? 'The files are taking longer than usual. Reload in a minute.' : 'The files are still being made. This takes a few seconds.'}</p>
-        {/if}
-      </div>
-      <div>
-        <div class="ui-row">
-          <div><strong>State</strong><span class="ui-hint">{STATE_HINT[emote.state]}</span></div>
-          <span class="ui-chip {emote.state.toLowerCase()}">{STATE_LABEL[emote.state]}</span>
-        </div>
-        <div class="ui-row"><div><strong>Uploaded</strong></div><span class="ui-mono">{date(emote.createdAt)}</span></div>
+    <div class="ui-stack">
+      <PreviewStage {emote} />
+      {#if !ready(emote)}
+        <p class="ui-hint">{slow ? 'The files are taking longer than usual. Reload in a minute.' : 'The files are still being made. This takes a few seconds.'}</p>
+      {/if}
+      <section class="ui-card" aria-label="Status">
+        <div class="ui-row"><div><strong>State</strong><span class="ui-hint">{STATE_HINT[emote.state]}</span></div></div>
         <div class="ui-row"><div><strong>ID</strong></div><span class="ui-mono id">{emote.id}</span></div>
-        {#if emote.state === 'APPROVED'}
-          <div class="ui-row"><div><strong>Public page</strong></div><a href="/emotes/{emote.id}">Open</a></div>
-        {/if}
-      </div>
-    </section>
+      </section>
+      <EmoteFacts {emote} channels={emote.channelCount > 0 ? emote.channelCount : null} />
+    </div>
 
     <div class="ui-stack">
       {#if mine}
@@ -240,18 +245,11 @@
 </LoadGate>
 
 <style>
-  .crumbs { margin-bottom: 16px; min-width: 0; overflow-wrap: anywhere; color: var(--dim); font-size: var(--text-sub); }
-  .crumbs a { color: var(--muted); text-decoration: none; }
-  @media (hover: hover) and (pointer: fine) { .crumbs a:hover { color: var(--text); } }
-  .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-  .stage { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 24px; min-height: 200px;
-    padding: 24px 0; border-bottom: 1px solid var(--border); text-align: center; }
-  .stage img { max-width: 100%; height: auto; }
-  .stage .ui-hint { flex-basis: 100%; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
   .ui-row .ui-hint { display: block; }
   .id { font-size: .78rem; color: var(--muted); overflow-wrap: anywhere; text-align: right; }
   .add { display: flex; gap: 8px; }
   .add select { flex: 1; }
   .gap { margin-top: 12px; }
-  @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } }
 </style>

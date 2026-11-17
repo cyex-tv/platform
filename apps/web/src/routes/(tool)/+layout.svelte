@@ -1,98 +1,143 @@
 <script lang="ts">
-  import '../../tool.css';
+  // The signed-in pages (your emotes, sets, channels, account, admin). The root layout already
+  // draws the one AppHeader and Footer; this layout only signs you in (or sends you to /signin)
+  // and puts the page in a RailLayout with the /me rail or, under /admin, the admin rail.
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { ApiError } from '$lib/api';
-  import Mark from '$lib/components/Mark.svelte';
-  import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-  import Toasts from '$lib/tool/Toasts.svelte';
-  import UserMenu from '$lib/tool/UserMenu.svelte';
-  import { isAdmin, loadMe, session } from '$lib/tool/session.svelte';
+  import Avatar from '$lib/components/Avatar.svelte';
+  import type { IconName } from '$lib/components/Icon.svelte';
+  import { clean } from '$lib/format';
+  import { ACCOUNT, LIBRARY, platformName } from '$lib/shell/account';
+  import RailLayout from '$lib/shell/RailLayout.svelte';
+  import SideRail from '$lib/shell/SideRail.svelte';
+  import { markCurrent, type RailGroup } from '$lib/shell/rail';
+  import State from '$lib/components/State.svelte';
+  import { can, isAdmin, loadMe, session } from '$lib/tool/session.svelte';
 
   let { children } = $props();
   let problem = $state<string | null>(null);
 
-  const admin = $derived(isAdmin(session.me));
-  const links = $derived([
-    { href: '/me', label: 'Emotes', match: (p: string) => p === '/me' || p.startsWith('/me/emotes') || p === '/me/upload' },
-    { href: '/me/sets', label: 'Sets', match: (p: string) => p.startsWith('/me/sets') },
-    { href: '/me/channels', label: 'Channels', match: (p: string) => p.startsWith('/me/channels') },
-    { href: '/me/account', label: 'Account', match: (p: string) => p.startsWith('/me/account') },
-    ...(admin ? [{ href: '/admin', label: 'Admin', match: (p: string) => p.startsWith('/admin') }] : []),
-  ]);
+  const path = $derived(page.url.pathname);
+  const who = $derived(session.me?.identities[0]);
+  const name = $derived(clean(who?.displayName));
+  // Under /admin with staff permissions: the admin rail. Anything else: the /me rail.
+  const admin = $derived((path === '/admin' || path.startsWith('/admin/')) && isAdmin(session.me));
 
-  onMount(async () => {
+  const row = (href: string, label: string, icon: IconName, show = true) => (show ? [{ href, label, icon }] : []);
+
+  const meRail = $derived<RailGroup[]>(
+    markCurrent(
+      [
+        { caption: 'Library', items: LIBRARY.map(({ href, label, icon }) => ({ href, label, icon })) },
+        { caption: 'Settings', items: row(ACCOUNT.href, ACCOUNT.label, ACCOUNT.icon) },
+      ],
+      path,
+    ),
+  );
+
+  const adminRail = $derived.by<RailGroup[]>(() => {
+    void session.me; // permissions come from the account
+    const groups: RailGroup[] = [
+      {
+        caption: 'Moderation',
+        items: [
+          ...row('/admin', 'Overview', 'gauge'),
+          ...row('/admin/review', 'Review', 'inbox', can('emotes.review')),
+          ...row('/admin/reports', 'Reports', 'flag', can('emotes.review') || can('emotes.takedown')),
+        ],
+      },
+      {
+        caption: 'People',
+        items: [
+          ...row('/admin/users', 'Users', 'users', can('users.view') || can('users.restrict') || can('roles.manage')),
+          ...row('/admin/roles', 'Roles', 'key', can('roles.manage')),
+        ],
+      },
+      { caption: 'System', items: row('/admin/audit', 'Audit log', 'scroll', can('audit.view')) },
+    ];
+    return markCurrent(groups.filter((g) => g.items.length), path, ['/admin']);
+  });
+
+  let trying = $state(false);
+  async function signIn(fresh = false) {
+    trying = true;
+    problem = null;
     try {
-      await loadMe();
+      await loadMe({ fresh });
     } catch (e) {
       if (e instanceof ApiError && e.code === 'signed_out') {
         await goto(`/signin?back=${encodeURIComponent(page.url.pathname + page.url.search)}`, { replaceState: true });
         return;
       }
-      problem = e instanceof Error ? e.message : 'cyex.tv can’t be reached right now.';
+      problem = 'cyex.tv didn’t answer, so your account couldn’t load. It’s usually back within a minute.';
+    } finally {
+      trying = false;
     }
-  });
+  }
+  onMount(() => signIn());
 </script>
 
-<svelte:head>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" />
-</svelte:head>
-
-<div class="tool">
-  <a class="skip" href="#main">Skip to content</a>
-  <header class="bar">
-    <div class="wrap inner">
-      <a class="brand" href="/" aria-label="cyex.tv front page"><Mark /><span>cyex.tv</span></a>
-      <nav aria-label="Your account">
-        {#each links as l}
-          <a href={l.href} aria-current={l.match(page.url.pathname) ? 'page' : undefined}>{l.label}</a>
-        {/each}
-      </nav>
-      <div class="end">
-        <ThemeToggle variant="tool" />
-        {#if session.me}<UserMenu />{/if}
-      </div>
-    </div>
-  </header>
-  <main id="main" tabindex="-1" class="wrap">
+<RailLayout>
+  {#snippet rail()}
+    {#if admin}
+      <SideRail label="Admin" groups={adminRail}>
+        {#snippet head()}
+          <div class="title"><strong>Admin</strong><span class="ui-chip">Staff</span></div>
+        {/snippet}
+      </SideRail>
+    {:else}
+      <SideRail label="Your account" groups={meRail}>
+        {#snippet head()}
+          <div class="me">
+            {#if session.me}
+              <Avatar src={who?.avatar} {name} size={40} />
+              <span class="id">
+                <strong><bdi>{name}</bdi></strong>
+                <span>{platformName(who?.platform) ?? ''}</span>
+              </span>
+            {:else if problem}
+              <span class="ph-av" aria-hidden="true"></span>
+              <span class="id">
+                <strong>Not loaded</strong>
+                <button class="retry" type="button" onclick={() => signIn(true)} disabled={trying}>{trying ? 'Trying…' : 'Try again'}</button>
+              </span>
+            {:else}
+              <span class="ph-av ui-skeleton" aria-hidden="true"></span>
+              <span class="ph-line ui-skeleton" aria-hidden="true"></span>
+            {/if}
+          </div>
+        {/snippet}
+      </SideRail>
+    {/if}
+  {/snippet}
+  <div class="ui-page">
     {#if problem}
-      <div class="ui-empty" role="alert">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 8v5M12 16.5v.01" /></svg>
-        <p>{problem}</p>
-        <button class="ui-btn secondary" type="button" onclick={() => location.reload()}>Try again</button>
-      </div>
+      <State kind="error" level={1} title="This page can’t load right now.">
+        {problem}
+        {#snippet actions()}
+          <button class="ui-btn primary" type="button" onclick={() => signIn(true)} disabled={trying}>{trying ? 'Trying…' : 'Try again'}</button>
+        {/snippet}
+      </State>
     {:else if !session.me}
-      <div class="ui-empty" aria-busy="true"><span class="ui-spinner" aria-hidden="true"></span><p>Loading…</p></div>
+      <State kind="loading" title="Loading your account…" />
     {:else}
       {@render children()}
     {/if}
-  </main>
-  <Toasts />
-</div>
+  </div>
+</RailLayout>
 
 <style>
-  .bar { position: sticky; top: 0; z-index: var(--z-nav); background: var(--bg); border-bottom: 1px solid var(--border); }
-  .inner { display: flex; align-items: center; gap: 24px; padding-block: 10px; min-height: 56px; }
-  .brand { display: flex; align-items: center; gap: 9px; color: var(--text); text-decoration: none; font-weight: 700; font-size: .95rem; flex: none; }
-  nav { display: flex; gap: 18px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-  nav a { position: relative; padding: 8px 0; color: var(--muted); text-decoration: none; white-space: nowrap;
-    font-size: .74rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; transition: color var(--fast); }
-  @media (hover: hover) and (pointer: fine) { nav a:hover { color: var(--text); } }
-  nav a::after { content: ''; position: absolute; inset: auto 0 2px; height: 2px; background: var(--accent);
-    scale: 0 1; transition: scale var(--base) var(--ease); }
-  nav a[aria-current='page'] { color: var(--text); }
-  nav a[aria-current='page']::after { scale: 1 1; }
-  nav a:active { opacity: .6; transition: none; }
-  .end { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }
-  .skip { position: fixed; left: 12px; top: -60px; z-index: var(--z-skip); padding: 8px 12px; background: var(--text); color: var(--bg); }
-  .skip:focus { top: 12px; }
-  main:focus { outline: none; }
-  @media (prefers-reduced-motion: reduce) { nav a::after { transition: none; } }
-  @media (max-width: 640px) {
-    .inner { flex-wrap: wrap; gap: 4px 16px; }
-    nav { order: 3; flex-basis: 100%; }
-  }
+  .me { display: flex; align-items: center; gap: 12px; min-height: 40px; }
+  .id { display: grid; min-width: 0; line-height: 1.3; }
+  .id strong { font-size: var(--t-ui); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .id span { font-size: var(--t-fine); color: var(--muted); }
+  .title { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding-left: 8px; }
+  .title strong { font-size: var(--t-ui); font-weight: 600; }
+  .ph-av { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--surface-hover); }
+  .retry { justify-self: start; display: inline-flex; align-items: center; min-height: 40px; margin-block: -10px; padding: 0;
+    border: 0; background: none; font: inherit; font-size: var(--t-fine); font-weight: 500; color: var(--accent-text); cursor: pointer; }
+  .retry:disabled { color: var(--muted); cursor: default; }
+  .ph-line { display: block; width: 110px; height: 12px; border-radius: var(--radius); }
 </style>

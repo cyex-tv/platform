@@ -1,16 +1,8 @@
 <script lang="ts" module>
-  import type { Picture } from '$lib/emote';
-
-  /** What a card needs: the emote's pictures, id and name; owner and flags when known. */
-  export type CardEmote = Picture & {
-    id: string;
-    name: string;
-    owner?: { displayName: string } | null;
-    flags?: { zeroWidth: boolean } | null;
-    /** The name it has in a set, when that differs from its own. */
-    shownName?: string;
-  };
-  export type Density = 'comfortable' | 'compact';
+  // The tile types live with EmoteTile (the grid tile); this card is the home page's borderless
+  // variant and re-exports them so existing imports keep working.
+  import type { CardEmote, Density } from './EmoteTile.svelte';
+  export type { CardEmote, Density };
   /** The art box's height per density (keep in step with --emote-art / --emote-art-compact). */
   export const ART = { comfortable: 112, compact: 80 } as const;
 </script>
@@ -134,9 +126,9 @@
     font-size: var(--t-fine); line-height: 1.4; color: var(--muted); }
   .tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 4px; }
   .tag { display: inline-flex; align-items: center; height: 18px; padding: 0 5px; border: 1px solid var(--border);
-    border-radius: var(--radius-btn); font-size: 11px; font-weight: 500; line-height: 1; color: var(--muted); white-space: nowrap; }
+    border-radius: var(--radius-btn); font-size: 12px; font-weight: 500; line-height: 1; color: var(--muted); white-space: nowrap; }
   .kinds { position: absolute; left: 50%; bottom: -4px; translate: -50% 0; padding: 1px 6px; border-radius: var(--radius-btn);
-    background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 500; line-height: 16px; white-space: nowrap;
+    background: var(--surface-2); color: var(--muted); font-size: 12px; font-weight: 500; line-height: 16px; white-space: nowrap;
     opacity: 0; transition: opacity var(--dur-color) ease-out; pointer-events: none; }
   .card:focus-visible .kinds { opacity: 1; }
   @media (hover: hover) and (pointer: fine) {

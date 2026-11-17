@@ -10,6 +10,9 @@
   import { loader } from '$lib/tool/loader.svelte';
   import { session } from '$lib/tool/session.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
+  import Icon from '$lib/components/Icon.svelte';
+  import PageHead from '$lib/tool/PageHead.svelte';
+  import State from '$lib/components/State.svelte';
 
   const L = loader(async ({ fetch }) => (await gql(MY_SETS, {}, fetch)).mySets);
   const sets = $derived(L.data);
@@ -53,19 +56,15 @@
 
 <svelte:head><title>Your sets - cyex.tv</title></svelte:head>
 
-<div class="ui-head">
-  <div>
-    <h1>Sets</h1>
-    <p>A channel shows one set to everyone in its chat. Your personal set goes with you to every channel that allows it.</p>
-  </div>
-  <div class="ui-actions">
-    <button class="ui-btn primary" type="button" onclick={open}>New set</button>
-  </div>
-</div>
+<PageHead title="Sets" line="A channel shows one set to everyone in its chat. Your personal set goes with you to every channel that allows it.">
+  {#snippet actions()}
+    <button class="ui-btn primary" type="button" onclick={open}><Icon name="plus" size={15} />New set</button>
+  {/snippet}
+</PageHead>
 
 {#snippet table(items: MySetsQuery['mySets'], title: string)}
   <section class="ui-panel">
-    <header><h2>{title}</h2><span class="ui-hint ui-mono">{items.length}</span></header>
+    <header><h2>{title}</h2><span class="ui-hint ui-num">{items.length}</span></header>
     <ul class="ui-list">
       {#each items as s (s.id)}
         <li>
@@ -77,7 +76,7 @@
               <strong><Name value={s.name} /></strong>
               <span class="ui-hint">{s.kind === 'PERSONAL' ? 'Personal' : s.kind === 'GLOBAL' ? 'Global' : 'Channel'}{s.owner && s.owner.id !== session.me?.id ? ` · by ${iso(s.owner.displayName)}` : ''}</span>
             </span>
-            <span class="ui-mono ui-hint">{count(s.emotes.length)} / {count(s.capacity)}</span>
+            <span class="ui-num ui-hint">{count(s.emotes.length)} / {count(s.capacity)}</span>
           </a>
         </li>
       {/each}
@@ -88,11 +87,10 @@
 <LoadGate source={L} label="Loading your sets…">
 {#snippet children(sets)}
 {#if sets.length === 0}
-  <div class="ui-empty">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg>
-    <p>No sets yet. Make one for your channel, then pick it in Channels.</p>
-    <button class="ui-btn secondary" type="button" onclick={open}>New set</button>
-  </div>
+  <State title="No sets yet">
+    Make one for your channel, then pick it in Channels.
+    {#snippet actions()}<button class="ui-btn primary" type="button" onclick={open}><Icon name="plus" size={15} />New set</button>{/snippet}
+  </State>
 {:else}
   <div class="ui-stack">
     {#if owned.length}{@render table(owned, 'Yours')}{/if}

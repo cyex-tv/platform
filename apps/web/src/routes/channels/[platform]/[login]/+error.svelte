@@ -3,8 +3,9 @@
   import { invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
   import { openPalette } from '$lib/components/palette.svelte';
-  import EmptyState from '$lib/components/profile/EmptyState.svelte';
+  import State from '$lib/components/State.svelte';
   import { clean, iso } from '$lib/format';
+  import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
 
   const missing = $derived(page.status === 404);
   const known = $derived(page.params.platform === 'kick' || page.params.platform === 'twitch');
@@ -29,44 +30,33 @@
   <title>{missing ? 'Channel not found' : 'Something went wrong'} - cyex.tv</title>
 </svelte:head>
 
-<div class="page pad">
+<ColumnLayout top>
   {#if missing && known}
-    <EmptyState level={1} title="{iso(login)} isn't on cyex.tv yet." role="status">
+    <State level={1} role="status" title="{iso(login)} isn't on cyex.tv yet.">
       Nobody has set up a {platform} channel called <bdi>{login}</bdi> here. A channel shows up once its owner signs in
       with {platform} and picks an emote set. Check the spelling, or look for another channel.
       {#snippet actions()}
-        <div class="row">
-          <button class="btn btn-primary" type="button" onclick={() => openPalette(login)}>Search channels</button>
-          <a class="btn" href="/search">Browse emotes</a>
-        </div>
+        <button class="ui-btn primary" type="button" onclick={() => openPalette(login)}>Search channels</button>
+        <a class="ui-btn secondary" href="/search">Browse emotes</a>
       {/snippet}
-    </EmptyState>
+    </State>
   {:else if missing}
-    <EmptyState level={1} title="Nothing here." role="status">
+    <State level={1} role="status" title="Nothing here.">
       cyex.tv has Twitch and Kick channels.
       {#snippet actions()}
-        <div class="row">
-          <a class="btn btn-primary" href="/search">Browse emotes</a>
-          <a class="btn" href="/">Back to the front page</a>
-        </div>
+        <a class="ui-btn primary" href="/search">Browse emotes</a>
+        <a class="ui-btn secondary" href="/">Back to the front page</a>
       {/snippet}
-    </EmptyState>
+    </State>
   {:else}
-    <EmptyState level={1} title="This page can’t load right now." role="alert">
+    <State kind="error" level={1} title="This page can’t load right now.">
       cyex.tv didn’t answer. It’s usually back within a minute.
       {#snippet actions()}
-        <div class="row">
-          {#if page.status >= 500}
-            <button class="btn btn-primary" type="button" onclick={retry} disabled={retrying}>{retrying ? 'Trying' : 'Try again'}</button>
-          {/if}
-          <a class="btn" href="/">Back to the front page</a>
-        </div>
+        {#if page.status >= 500}
+          <button class="ui-btn primary" type="button" onclick={retry} disabled={retrying}>{retrying ? 'Trying…' : 'Try again'}</button>
+        {/if}
+        <a class="ui-btn secondary" href="/">Back to the front page</a>
       {/snippet}
-    </EmptyState>
+    </State>
   {/if}
-</div>
-
-<style>
-  .pad { padding-top: clamp(48px, 8vw, 120px); }
-  .row { display: flex; flex-wrap: wrap; gap: 12px; }
-</style>
+</ColumnLayout>

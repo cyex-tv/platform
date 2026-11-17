@@ -1,9 +1,11 @@
 <script lang="ts">
-  // A grid of EmoteCards. Wide emotes take two cells (the grid packs densely so no holes
-  // open). While `loading`, skeleton tiles follow the items (or stand alone on a first load).
+  // A grid of EmoteTiles (the 7TV-style grid: ~150px tiles, 16px gap; 112px and 8px compact).
+  // Wide emotes take two cells (the grid packs densely so no holes open). While `loading`,
+  // skeleton tiles follow the items (or stand alone on a first load).
+  import type { Snippet } from 'svelte';
   import { isWide } from '$lib/emote';
-  import EmoteCard, { type CardEmote, type Density } from './EmoteCard.svelte';
   import EmoteSkeleton from './EmoteSkeleton.svelte';
+  import EmoteTile, { type CardEmote, type Density } from './EmoteTile.svelte';
 
   type Props = {
     items: CardEmote[];
@@ -13,12 +15,16 @@
     loading?: boolean;
     skeletons?: number;
     empty?: string;
-    /** How many of the first cards load eagerly (above the fold). */
+    /** How many of the first tiles load eagerly (above the fold). */
     eager?: number;
     label?: string;
     href?: (e: CardEmote) => string;
-    /** A short status per card (shown as a label), or nothing. */
+    /** A short status per tile (a chip in its corner), or nothing. */
     note?: (e: CardEmote) => string | undefined;
+    /** Your own corner content per tile, instead of `note`. */
+    status?: Snippet<[CardEmote]>;
+    /** Controls under each tile (rename, remove, add), outside the tile's link. */
+    below?: Snippet<[CardEmote]>;
   };
   let {
     items,
@@ -32,6 +38,8 @@
     label,
     href,
     note,
+    status: corner,
+    below,
   }: Props = $props();
 </script>
 
@@ -41,7 +49,14 @@
   <ul class="grid {density}" aria-label={label} aria-busy={loading}>
     {#each items as e, i (e.id + (e.shownName ?? ''))}
       <li class:wide={isWide(e)}>
-        <EmoteCard emote={e} {density} {creator} {labels} eager={i < eager} href={href?.(e)} note={note?.(e)} />
+        {#if corner}
+          <EmoteTile emote={e} {density} {creator} {labels} eager={i < eager} href={href?.(e)}>
+            {#snippet status()}{@render corner(e)}{/snippet}
+          </EmoteTile>
+        {:else}
+          <EmoteTile emote={e} {density} {creator} {labels} eager={i < eager} href={href?.(e)} note={note?.(e)} />
+        {/if}
+        {#if below}<div class="below">{@render below(e)}</div>{/if}
       </li>
     {/each}
     {#if loading}
@@ -54,10 +69,15 @@
 
 <style>
   .none { padding: 24px 0; color: var(--muted); }
-  .grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px;
-    grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); grid-auto-flow: row dense; }
-  .compact { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 2px; }
+  .grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(var(--emote-tile), 1fr)); grid-auto-flow: row dense; }
+  .compact { grid-template-columns: repeat(auto-fill, minmax(var(--emote-tile-compact), 1fr)); gap: 8px; }
   .wide { grid-column: span 2; }
   li { min-width: 0; }
-  @media (max-width: 360px) { .grid { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); } }
+  li:has(.below) { display: grid; grid-template-rows: 1fr auto; gap: 6px; }
+  .below { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 40px; min-width: 0; }
+  @media (max-width: 520px) {
+    .grid { gap: 8px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+    .compact { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+  }
 </style>

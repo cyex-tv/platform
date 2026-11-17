@@ -8,11 +8,27 @@
   import Icon from '$lib/components/Icon.svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
-  import Popover from '$lib/components/Popover.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
-  import FilterSheet from '$lib/components/browse/FilterSheet.svelte';
-  import { apiSort, CLEARED, MAX_PAGES, PER_PAGE, active as activeOf, change, matches, toSearch, type Browse, type Sort } from '$lib/components/browse/params';
-  import { clean, count } from '$lib/format';
+  import BrowseFilters from '$lib/components/browse/BrowseFilters.svelte';
+  import State from '$lib/components/State.svelte';
+  import {
+    apiQuery,
+    apiSort,
+    CLEARED,
+    clientSide,
+    MAX_PAGES,
+    PER_PAGE,
+    active as activeOf,
+    change,
+    matches,
+    toSearch,
+    topTags,
+    type Browse,
+    type Sort,
+  } from '$lib/components/browse/params';
+  import RailLayout from '$lib/shell/RailLayout.svelte';
+  import SideRail from '$lib/shell/SideRail.svelte';
+  import { clean, count, iso } from '$lib/format';
   import { SEARCH } from '$lib/queries';
 
   let { data } = $props();
@@ -35,7 +51,8 @@
   const totalPages = $derived(Math.ceil(data.total / PER_PAGE));
   const hasMore = $derived(pageNo < totalPages);
   const shown = $derived(loaded.filter((e) => matches(view, e)));
-  const clientFiltered = $derived(view.zeroWidth || view.wide);
+  const clientFiltered = $derived(clientSide(view));
+  const tags = $derived(topTags(loaded));
   const switching = $derived(!!navigating.to);
 
   const sorts = $derived<{ value: Sort; label: string }[]>([
@@ -60,14 +77,14 @@
   }
   let clearAll = $state<HTMLButtonElement>();
   let chipsEl = $state<HTMLElement>();
-  let filtersBtn = $state<HTMLElement>();
+  let gridTop = $state<HTMLElement>();
   // Removing a chip would drop focus to the page: hand it to the next chip's remove button,
-  // else Clear all, else the Filters button.
+  // else Clear all, else the toolbar.
   async function removeChip(key: keyof typeof CLEARED, i: number) {
     await go({ [key]: CLEARED[key] } as Partial<Browse>);
     await tick();
     const rm = chipsEl?.querySelectorAll<HTMLElement>('.chips [role=listitem] button');
-    const target = rm?.[Math.min(i, rm.length - 1)] ?? clearAll ?? filtersBtn;
+    const target = rm?.[Math.min(i, rm.length - 1)] ?? clearAll ?? gridTop?.querySelector<HTMLElement>('[aria-checked="true"]');
     target?.focus();
   }
   function typed() {
@@ -87,6 +104,17 @@
     go({ q: '' }, true);
     input?.focus();
   }
+
+  // ---- Phones and narrow windows (SideRail's breakpoint): the rail becomes a Filters sheet and
+  // the search field moves into its sticky bar, so it is never hidden behind a button.
+  let narrow = $state(false);
+  $effect(() => {
+    const mq = matchMedia('(max-width: 899.98px)');
+    const on = () => (narrow = mq.matches);
+    on();
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  });
 
   // ---- Density, remembered on this device.
   type Density = 'comfortable' | 'compact';
@@ -108,8 +136,10 @@
     }
   }
 
-  // ---- Load more: button, and automatically when the end comes near.
-  async function loadMore() {
+  // ---- Load more: button, and automatically when the end comes near. The page count goes into
+  // the URL (n=) only for loads the reader asked for: the button, or scrolling down to the end.
+  // Loads that only fill a tall window leave the address as it was.
+  async function loadMore(asked = true) {
     if (busy || !hasMore) return;
     const from = data;
     busy = true;
@@ -118,7 +148,7 @@
       const r = await gql(
         SEARCH,
         {
-          query: view.q,
+          query: apiQuery(view),
           animated: view.kind === 'animated' ? true : view.kind === 'still' ? false : null,
           nsfw: view.nsfw ? true : null,
           sort: apiSort(view.sort),
@@ -131,7 +161,7 @@
       const seen = new Set(loaded.map((e) => e.id));
       loaded = [...loaded, ...r.searchEmotes.items.filter((e) => !seen.has(e.id))];
       pageNo += 1;
-      replaceState(`/search${toSearch({ ...view, pages: Math.min(pageNo, MAX_PAGES) })}`, {});
+      if (asked || scrollY > 0) replaceState(`/search${toSearch({ ...view, pages: Math.min(pageNo, MAX_PAGES) })}`, {});
     } catch (e) {
       moreError = e instanceof ApiError ? e.message : 'Couldn’t load more emotes.';
     } finally {
@@ -147,7 +177,7 @@
     const io = new IntersectionObserver(
       (hits) => {
         // With a client-side filter that hides everything so far, keep going a little, not forever.
-        if (hits.some((h) => h.isIntersecting) && (shown.length > 0 || pageNo < 8)) void loadMore();
+        if (hits.some((h) => h.isIntersecting) && (shown.length > 0 || pageNo < 8)) void loadMore(false);
       },
       { rootMargin: '0px 0px 800px 0px' },
     );
@@ -174,141 +204,166 @@
   <meta name="description" content="Search approved cyex.tv emotes by name and tag." />
 </svelte:head>
 
-<div class="page">
-  <header class="head">
-    <h1>Emotes</h1>
-    {#if !data.error}
-      <p class="total muted" aria-live="polite">{countText}</p>
+{#snippet field()}
+  <form class="search" role="search" onsubmit={submit}>
+    <Icon name="search" size={16} />
+    <label class="sr-only" for="q">Emote name or tag</label>
+    <input
+      id="q"
+      bind:this={input}
+      bind:value={text}
+      oninput={typed}
+      type="search"
+      name="q"
+      placeholder="Name or tag"
+      autocomplete="off"
+      autocapitalize="off"
+      spellcheck="false"
+      enterkeyhint="search"
+      data-page-search
+    />
+    {#if text}
+      <span class="clear"><IconButton icon="x" label="Clear search" size="s" tip="none" onclick={clearText} type="button" /></span>
     {/if}
-  </header>
+  </form>
+{/snippet}
 
-  <div class="controls">
-    <form class="search" role="search" onsubmit={submit}>
-      <Icon name="search" size={17} />
-      <label class="sr-only" for="q">Emote name or tag</label>
-      <input
-        id="q"
-        bind:this={input}
-        bind:value={text}
-        oninput={typed}
-        type="search"
-        name="q"
-        placeholder="Name or tag"
-        autocomplete="off"
-        autocapitalize="off"
-        spellcheck="false"
-        enterkeyhint="search"
-        data-page-search
-      />
-      {#if text}
-        <span class="clear"><IconButton icon="x" label="Clear search" size="s" tip="none" onclick={clearText} type="button" /></span>
-      {/if}
-    </form>
-    <Segmented label="Sort" size="s" options={sorts} value={view.sort} onchange={(v) => go({ sort: v }, true)} />
-    <Popover label="Filters" sheet width="340px">
-      {#snippet trigger(p)}
-        <button class="btn btn-s filters-btn" type="button" bind:this={filtersBtn} {...p}>
-          <Icon name="sliders" size={16} /> Filters{#if filters.length}<span class="n">{filters.length}</span>{/if}
-        </button>
-      {/snippet}
-      <FilterSheet {view} onchange={(o) => go(o)} />
-      {#snippet footer()}
-        <span class="foot">{countText}</span>
-        {#if filters.length}<button class="btn btn-s" type="button" onclick={() => go({ ...CLEARED })}>Reset</button>{/if}
-      {/snippet}
-    </Popover>
-    <span class="grow"></span>
-    <div class="dens" role="group" aria-label="Density">
-      <IconButton icon="grid" label="Comfortable" size="s" variant="outline" pressed={density === 'comfortable'} onclick={() => setDensity('comfortable')} />
-      <IconButton icon="grid-dense" label="Compact" size="s" variant="outline" pressed={density === 'compact'} onclick={() => setDensity('compact')} />
-    </div>
+{#snippet railHead()}
+  <div class="rail-head">
+    {#if narrow}
+      <p class="rail-on">{filters.length} on</p>
+    {:else}
+      <p class="rail-title">Filters{#if filters.length}<span class="n">{filters.length}</span>{/if}</p>
+    {/if}
+    {#if filters.length}<button class="reset" type="button" onclick={() => go({ ...CLEARED })}>Reset</button>{/if}
   </div>
+{/snippet}
 
-  {#if filters.length}
-    <div class="chips" bind:this={chipsEl} role="list" aria-label="Active filters">
-      {#each filters as f, i (f.key)}
-        <span role="listitem"><Chip label={f.label} onremove={() => removeChip(f.key, i)} /></span>
-      {/each}
-      <button class="link clearall" type="button" bind:this={clearAll} onclick={() => go({ ...CLEARED })}>Clear all</button>
-    </div>
-  {/if}
+<RailLayout>
+  {#snippet rail()}
+    <!-- In the sheet its title already says Filters: the head is only there to Reset. -->
+    <SideRail
+      label="Emote filters"
+      collapse="sheet"
+      sheetLabel="Filters"
+      bar={narrow ? field : undefined}
+      sheetCount={filters.length}
+      head={narrow && !filters.length ? undefined : railHead}
+    >
+      <BrowseFilters {view} {tags} onchange={(o) => go(o)} search={narrow ? undefined : field} />
+    </SideRail>
+  {/snippet}
 
-  {#if data.error}
-    <div class="state" role="alert">
-      <h2>Couldn’t load emotes.</h2>
-      <p class="muted">{data.error}</p>
-      <button class="btn btn-s" type="button" onclick={() => invalidateAll()}>Try again</button>
+  <div class="browse">
+    <div class="toolbar" bind:this={gridTop}>
+      <div class="title">
+        <h1>Emotes</h1>
+        {#if !data.error}<p class="total" aria-live="polite">{countText}</p>{/if}
+      </div>
+      <div class="tools">
+        <Segmented label="Sort" size="s" options={sorts} value={view.sort} onchange={(v) => go({ sort: v }, true)} />
+        <div class="dens" role="group" aria-label="Density">
+          <IconButton icon="grid" label="Comfortable" size="s" variant="outline" pressed={density === 'comfortable'} onclick={() => setDensity('comfortable')} />
+          <IconButton icon="grid-dense" label="Compact" size="s" variant="outline" pressed={density === 'compact'} onclick={() => setDensity('compact')} />
+        </div>
+      </div>
     </div>
-  {:else if shown.length === 0 && !hasMore && !switching}
-    <div class="state">
-      <h2>No emotes{#if q} match “<bdi>{q}</bdi>”{:else} here{/if}.</h2>
-      {#if filters.length}
-        <p class="muted">
-          {filters.map((f) => f.label).join(', ')} {filters.length === 1 ? 'is' : 'are'} on. Removing {filters.length === 1 ? 'it' : 'one'} may bring emotes back.
-        </p>
-        <button class="btn btn-s" type="button" onclick={() => go({ ...CLEARED })}>Clear filters</button>
-      {:else if view.q}
-        <p class="muted">Check the spelling, or try a shorter name or a tag.</p>
-        <button class="btn btn-s" type="button" onclick={clearText}>Clear search</button>
-      {:else}
-        <p class="muted">Approved emotes show up here.</p>
-      {/if}
-    </div>
-  {:else}
-    <div class="results" class:dim={switching}>
-      <EmoteGrid items={shown} {density} eager={12} loading={busy || (switching && shown.length === 0)} skeletons={density === 'compact' ? 16 : 10} label="Emotes" />
-    </div>
-    <div class="more" bind:this={end}>
-      <LoadMore {hasMore} {busy} error={moreError} total={shown.length > 0 ? (clientFiltered ? shown.length : data.total) : 0} onmore={loadMore} href={moreHref} />
-    </div>
-  {/if}
-</div>
+
+    {#if filters.length}
+      <div class="chips" bind:this={chipsEl} role="list" aria-label="Active filters">
+        {#each filters as f, i (f.key)}
+          <span role="listitem"><Chip label={f.label} onremove={() => removeChip(f.key, i)} /></span>
+        {/each}
+        <button class="link clearall" type="button" bind:this={clearAll} onclick={() => go({ ...CLEARED })}>Clear all</button>
+      </div>
+    {/if}
+
+    {#if data.error}
+      <div class="state">
+        <State kind="error" title="Couldn’t load emotes.">
+          {data.error}
+          {#snippet actions()}
+            <button class="ui-btn secondary" type="button" onclick={() => invalidateAll()}>Try again</button>
+          {/snippet}
+        </State>
+      </div>
+    {:else if shown.length === 0 && !hasMore && !switching}
+      <div class="state">
+        <State title={q ? `No emotes match “${iso(q)}”.` : 'No emotes here.'}>
+          {#if filters.length}
+            {filters.map((f) => f.label).join(', ')} {filters.length === 1 ? 'is' : 'are'} on. Removing {filters.length === 1 ? 'it' : 'one'} may bring emotes back.
+          {:else if view.q}
+            Check the spelling, or try a shorter name or a tag.
+          {:else}
+            Approved emotes show up here.
+          {/if}
+          {#snippet actions()}
+            {#if filters.length}
+              <button class="ui-btn secondary" type="button" onclick={() => go({ ...CLEARED })}>Clear filters</button>
+            {:else if view.q}
+              <button class="ui-btn secondary" type="button" onclick={clearText}>Clear search</button>
+            {/if}
+          {/snippet}
+        </State>
+      </div>
+    {:else}
+      <div class="results" class:dim={switching}>
+        <EmoteGrid items={shown} {density} eager={12} loading={busy || (switching && shown.length === 0)} skeletons={density === 'compact' ? 16 : 10} label="Emotes" />
+      </div>
+      <div class="more" bind:this={end}>
+        <LoadMore {hasMore} {busy} error={moreError} total={shown.length > 0 ? (clientFiltered ? shown.length : data.total) : 0} onmore={loadMore} href={moreHref} />
+      </div>
+    {/if}
+  </div>
+</RailLayout>
 
 <style>
-  .head { display: flex; align-items: baseline; gap: 12px; padding: clamp(28px, 4vw, 48px) 0 20px; }
-  h1 { font-size: var(--t-h3-sub); line-height: 1.1; letter-spacing: -.03em; margin: 0; }
-  .total { margin: 0; font-size: var(--t-ui); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  /* Rail head: the rail's title, the number of filters on, and Reset. */
+  .rail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding-left: 8px; }
+  .rail-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--t-ui); font-weight: 600; letter-spacing: -.01em; }
+  .rail-on { margin: 0; font-size: var(--t-nav); color: var(--muted); }
+  .n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius);
+    background: var(--accent-dim); color: var(--accent-text); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .reset { height: 40px; padding: 0 10px; border: 0; border-radius: var(--radius); background: none; color: var(--accent-text);
+    font: inherit; font-size: var(--t-fine); font-weight: 500; cursor: pointer; }
+  .reset:active { opacity: .6; }
 
-  /* One toolbar, one height (40px): the field, sort, filters, then density at the far end. */
-  .controls { display: flex; align-items: center; gap: 8px; }
-  .search { position: relative; flex: 0 1 480px; min-width: 0; display: flex; align-items: center; margin-right: 8px; color: var(--muted); }
-  .search > :global(svg) { position: absolute; left: 13px; pointer-events: none; }
-  .search input { width: 100%; height: 40px; padding: 0 40px 0 38px; font: inherit; font-size: 16px; color: var(--text);
-    background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-btn);
-    transition: border-color var(--dur-color); -webkit-appearance: none; appearance: none; }
+  /* The search field: in the rail on wide screens, above the toolbar on narrow ones. */
+  .search { position: relative; display: flex; align-items: center; min-width: 0; color: var(--muted); }
+  .search > :global(svg) { position: absolute; left: 10px; pointer-events: none; }
+  .search input { width: 100%; min-width: 0; height: 40px; padding: 0 40px 0 32px; font: inherit; font-size: 16px; color: var(--text);
+    background: var(--bg); border: 1px solid var(--field-border); border-radius: var(--radius-btn);
+    transition: border-color var(--fast); -webkit-appearance: none; appearance: none; }
   .search input::-webkit-search-cancel-button { display: none; }
-  .search input::placeholder { color: var(--muted); }
-  .search input:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+  .search input::placeholder { color: var(--dim); }
+  .search input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   .clear { position: absolute; right: 4px; display: inline-flex; }
   @media (hover: hover) and (pointer: fine) { .search input:hover { border-color: var(--muted); } }
-  .controls :global(.seg button) { height: 32px; }
-  .filters-btn { height: 40px; gap: 8px; }
-  .grow { flex: 1; }
+  /* Narrow: the field sits in the sticky Filters bar, beside the button, at its height. */
+  :global(.bar-extra) .search input { height: 40px; background: var(--surface); }
+
+  /* Toolbar: title and count left; sort and density right; one 40px row like the header's. */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; min-height: 40px; }
+  @media (max-width: 899.98px) { .toolbar { padding-top: 4px; } }
+  .title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  h1 { margin: 0; font-size: var(--t-page); line-height: 1.25; letter-spacing: -.02em; }
+  .total { margin: 0; font-size: var(--t-nav); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
   .dens { display: inline-flex; gap: 4px; }
   .dens :global(.ib) { width: 40px; height: 40px; }
-  .n { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 3px;
-    background: var(--text); color: var(--bg); font-size: 12px; font-weight: 600; }
-  .foot { margin-right: auto; font-size: var(--t-small); color: var(--muted); font-variant-numeric: tabular-nums; }
+  /* The smallest phones: density gives way, sort keeps the row. */
+  @media (max-width: 360px) { .dens { display: none; } }
 
   .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
-  .clearall { background: none; border: 0; padding: 4px 6px; font: inherit; font-size: var(--t-small); cursor: pointer; min-height: 32px; }
+  .clearall { background: none; border: 0; padding: 0 8px; font: inherit; font-size: var(--t-small); cursor: pointer; min-height: 40px; margin-block: 0; }
 
-  .results { margin-top: 20px; transition: opacity var(--dur-color) ease-out; }
+  .results { margin-top: 16px; transition: opacity var(--dur-color) ease-out; }
   .results.dim { opacity: .55; transition-delay: .15s; }
   .more { padding: 32px 0 8px; min-height: 96px; }
 
-  .state { display: grid; justify-items: start; gap: 12px; padding: 48px 0; }
-  .state h2 { margin: 0; font-size: var(--t-block); letter-spacing: -.02em; }
-  .state h2, .state p { overflow-wrap: anywhere; }
-  .state p { margin: 0; max-width: 52ch; }
+  .state { margin-top: 16px; }
 
-  /* Phones and small tablets: the field takes its own row, the controls scroll sideways under it. */
-  @media (max-width: 720px) {
-    .controls { flex-wrap: wrap; row-gap: 12px; }
-    .search { flex: 1 1 100%; margin-right: 0; }
-    .search input { height: 44px; }
-    .grow { display: none; }
-    .dens { margin-left: auto; }
-  }
+  @media (max-width: 480px) { .title { flex-direction: column; align-items: flex-start; gap: 0; } }
+  @media (pointer: coarse) { .dens :global(.ib) { width: 44px; height: 44px; } }
   @media (prefers-reduced-motion: reduce) { .results { transition: none; } }
 </style>

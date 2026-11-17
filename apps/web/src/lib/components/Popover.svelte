@@ -10,6 +10,10 @@
   // transform, overflow) can clip it or paint over it. It follows the trigger while the page
   // scrolls and closes once the trigger has scrolled out of view.
   //
+  // `kind="disclosure"` (the account menu) is a plain show/hide region of links: the trigger
+  // carries aria-expanded and aria-controls only, the panel has no dialog role, and focus stays
+  // on the trigger (Tab walks straight into the links, which follow it in the DOM).
+  //
   //   <Popover label="Filters" sheet>
   //     {#snippet trigger(props)}<button class="btn btn-s" {...props}>Filters</button>{/snippet}
   //     …content…
@@ -25,12 +29,13 @@
     align?: 'start' | 'end';
     width?: string;
     sheet?: boolean;
+    kind?: 'dialog' | 'disclosure';
     onclose?: () => void;
     trigger: Snippet<[Record<string | symbol, unknown>]>;
     children: Snippet;
     footer?: Snippet;
   };
-  let { label, open = $bindable(false), align = 'start', width = '320px', sheet = false, onclose, trigger, children, footer }: Props =
+  let { label, open = $bindable(false), align = 'start', width = '320px', sheet = false, kind = 'dialog', onclose, trigger, children, footer }: Props =
     $props();
 
   const id = $props.id();
@@ -63,7 +68,7 @@
   const triggerProps = $derived({
     'aria-expanded': open,
     'aria-controls': open ? id : undefined, // only while the panel exists
-    'aria-haspopup': 'dialog',
+    'aria-haspopup': kind === 'dialog' ? 'dialog' : undefined,
     onclick: () => (open ? close() : (open = true)),
     [createAttachmentKey()]: (el: HTMLElement) => {
       triggerEl = el;
@@ -99,6 +104,7 @@
       } catch {}
     }
     place(true);
+    if (kind === 'disclosure') return;
     const first = panel.querySelector<HTMLElement>('a[href], button:not([disabled]), input, select, textarea, [tabindex="0"]');
     (first ?? panel).focus({ preventScroll: true });
   }
@@ -147,8 +153,8 @@
       class="pop {align}"
       class:above
       {id}
-      role="dialog"
-      aria-label={label}
+      role={kind === 'dialog' ? 'dialog' : undefined}
+      aria-label={kind === 'dialog' ? label : undefined}
       tabindex="-1"
       popover="manual"
       bind:this={panel}
@@ -169,7 +175,7 @@
   /* Top layer (popover="manual"): reset the UA popover box, place it with fixed coordinates. */
   .pop { position: fixed; inset: auto; margin: 0; padding: 0; overflow: visible; z-index: var(--z-pop);
     max-width: calc(100vw - 32px); max-height: min(70dvh, 560px); display: flex; flex-direction: column;
-    border: 1px solid var(--border-strong); border-radius: var(--radius-m); background: var(--surface);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-card); background: var(--elevated);
     box-shadow: var(--shadow-pop); color: var(--text); text-align: left; }
   .pop:focus { outline: none; }
   .start { transform-origin: 0 0; }

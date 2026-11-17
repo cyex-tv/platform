@@ -32,7 +32,8 @@
   }
 </script>
 
-<div class="report" aria-live="polite">
+<div class="report">
+  <p class="sr-only" role="status">{viewer.reported ? 'Thanks, it’s reported.' : ''}</p>
   {#if viewer.reported}
     <p class="head" tabindex="-1" bind:this={thanks}>Thanks, it’s reported.</p>
     <p class="fine">A moderator reads every report. If <bdi>{name}</bdi> breaks the rules, it comes down.</p>

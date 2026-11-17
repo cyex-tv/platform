@@ -66,8 +66,9 @@
       transform var(--dur-press) ease-out; }
   .m { width: 40px; height: 40px; }
   .s { width: 32px; height: 32px; }
+  .s::after { content: ''; position: absolute; inset: -4px; } /* 40px to hit, 32px to see */
   /* Touch: 44px whatever the size (mobile-native). */
-  @media (pointer: coarse) { .m, .s { width: 44px; height: 44px; } }
+  @media (pointer: coarse) { .m, .s { width: 44px; height: 44px; } .s::after { inset: 0; } }
   .outline { border-color: var(--border); }
   .ib[aria-pressed='true'] { color: var(--text); background: var(--surface-2); border-color: var(--border-strong); }
   .ib:active { transform: scale(var(--press)); }

@@ -1,16 +1,19 @@
 <script lang="ts">
   import { gql } from '$lib/api';
-  import { ready, src } from '$lib/emote';
+  import { ready, size, src, srcsetW } from '$lib/emote';
   import { tick } from 'svelte';
   import { clean, count, date, iso } from '$lib/format';
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
   import { APPROVE, REJECT, REVIEW_QUEUE } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
+  import State from '$lib/components/State.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
 
   const PER_PAGE = 50;
+  /** The art box, as in EmoteTile at its comfortable density. */
+  const ART = 112;
   const L = loader(async ({ fetch }) => (await gql(REVIEW_QUEUE, { page: 1, perPage: PER_PAGE }, fetch)).reviewQueue);
   const items = $derived(L.data?.items ?? null);
   const total = $derived(L.data?.total ?? 0);
@@ -72,29 +75,25 @@
 {#snippet children(queue)}
 {@const items = queue.items}
 {#if items.length === 0}
-  <div class="ui-empty">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
-    <p>Nothing waiting. New uploads show up here.</p>
-  </div>
+  <State title="Nothing waiting.">New uploads show up here.</State>
 {:else}
   <ul class="queue">
     {#each items as e (e.id)}
-      <li class="ui-panel" data-card={e.id}>
-        <div class="stage">
+      {@const dims = size(e)}
+      <li class="tile" data-card={e.id}>
+        <span class="status"><span class="ui-chip pending">Pending</span></span>
+        <span class="art">
           {#if ready(e)}
-            {#each [1, 2, 4] as const as s}<img src={src(e, s)} alt={s === 4 ? clean(e.name) : ''} loading="lazy" />{/each}
+            <img src={src(e, 1)} srcset={srcsetW(e)} sizes="{Math.round((ART * 0.8 * dims.width) / dims.height)}px" width={dims.width} height={dims.height} alt={clean(e.name)} loading="lazy" decoding="async" />
           {:else}
             <span class="ui-spinner" aria-hidden="true"></span><span class="ui-hint">Files not made yet</span>
           {/if}
-        </div>
-        <div class="info">
-          <strong class="name"><bdi>{clean(e.name)}</bdi></strong>
-          <span class="ui-hint">
-            <bdi>{clean(e.owner?.displayName) || 'Unknown'}</bdi> · <span class="ui-mono">{date(e.createdAt)}</span>{e.animated ? ' · animated' : ''}
-          </span>
-          {#if e.tags.length}<span class="tags">{#each e.tags as t}<span class="ui-chip">{t}</span>{/each}</span>{/if}
-        </div>
-        <div class="ui-actions do">
+        </span>
+        <span class="name"><bdi>{clean(e.name)}</bdi></span>
+        <span class="by"><bdi>{clean(e.owner?.displayName) || 'Unknown'}</bdi></span>
+        <span class="meta ui-mono">{date(e.createdAt)}</span>
+        {#if e.animated || e.tags.length}<span class="tags">{#if e.animated}<span class="ui-chip">animated</span>{/if}{#each e.tags.slice(0, 3) as t}<span class="ui-chip" title={t}><bdi>{t}</bdi></span>{/each}</span>{/if}
+        <div class="do">
           <button class="ui-btn primary small approve" type="button" disabled={busy === e.id || !ready(e)} onclick={() => approve(e)}>Approve</button>
           <button class="ui-btn danger small" type="button" disabled={busy === e.id} onclick={() => askReject(e)}>Reject</button>
         </div>
@@ -117,15 +116,25 @@
 
 <style>
   h1:focus { outline: none; }
-  .queue { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 16px; }
-  .queue > li { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; }
-  .stage { display: flex; align-items: flex-end; justify-content: center; gap: 16px; height: 150px; padding: 16px; overflow: hidden;
-    border-bottom: 1px solid var(--border); background: var(--bg); }
-  .stage img { flex: 0 1 auto; min-width: 0; max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
-  .info { display: grid; align-content: start; gap: 4px; padding: 10px 14px; min-width: 0; }
-  .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
-  .tags .ui-chip { text-transform: none; letter-spacing: 0; font-size: .7rem; font-weight: 600; }
-  .do { padding: 0 14px 12px; }
+  /* The anatomy of EmoteTile (surface card, hairline, art box, name, creator), with the verdict
+     buttons under it. Not an EmoteTile itself: that is one link, and a pending emote has no public page. */
+  .queue { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(var(--emote-tile, 150px), 100%), 1fr)); gap: 12px; }
+  .tile { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; padding: 14px 10px 10px;
+    border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); text-align: center;
+    transition: border-color var(--fast); }
+  @media (hover: hover) and (pointer: fine) { .tile:hover { border-color: var(--border-strong); } }
+  .status { position: absolute; top: 6px; left: 6px; z-index: 1; }
+  .art { display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; align-content: center; gap: 6px; width: 100%; height: 112px; margin-bottom: 8px; overflow: hidden; }
+  .art img { display: block; height: calc(112px * .8); width: auto; max-width: 100%; object-fit: contain; }
+  .name, .by { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .name { font-size: var(--t-nav); font-weight: 500; line-height: 1.35; }
+  .by { font-size: 12px; line-height: 1.4; color: var(--muted); }
+  .meta { font-size: 12px; color: var(--dim); }
+  /* Chips never leave their card: a long tag ends in an ellipsis (full text in the title). */
+  .tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 4px; max-width: 100%; min-width: 0; }
+  .tags .ui-chip { display: block; line-height: 22px; text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 600;
+    min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .do { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; width: 100%; margin-top: auto; padding-top: 10px; }
+  .do .ui-btn { padding-inline: 6px; }
   .more { margin-top: 16px; text-align: center; }
 </style>

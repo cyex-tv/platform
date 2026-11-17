@@ -18,7 +18,7 @@
   let { title, eyebrow, lit = 'middle', lead, level = 2, size = 'section', center = false, id, actions }: Props = $props();
 </script>
 
-<header class="head s-{size}" class:center>
+<header class="head section-head s-{size}" class:center>
   {#if eyebrow}<Eyebrow {lit}>{eyebrow}</Eyebrow>{/if}
   <svelte:element this={level === 1 ? 'h1' : 'h2'} {id}>{title}</svelte:element>
   {#if lead}<p class="lead">{lead}</p>{/if}

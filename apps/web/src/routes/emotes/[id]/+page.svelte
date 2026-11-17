@@ -3,6 +3,8 @@
   import { page } from '$app/state';
   import { gql } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
+  import State from '$lib/components/State.svelte';
+  import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
   import EmoteView from '$lib/components/emote/EmoteView.svelte';
   import { channelsUsing, globalPool } from '$lib/components/emote/data';
   import { backTarget, channelCount, type ChatPool, type EmoteChannel, type PageEmote } from '$lib/components/emote/emote-page';
@@ -75,40 +77,31 @@
   {/key}
 {:else if asked === undefined}
   <!-- Asking from the browser: hold the space quietly, then show the page or say it's gone. -->
-  <div class="page missing" aria-busy="true">
-    <span class="back ghost" aria-hidden="true">All emotes</span>
-    <div class="nothing" aria-hidden="true"><h1 class="hold">No emote here.</h1></div>
-    <p class="sr-only" role="status">Looking for this emote…</p>
-  </div>
+  <ColumnLayout top>
+    <div class="missing">
+      <span class="back ghost" aria-hidden="true">All emotes</span>
+      <State kind="loading" title="Looking for this emote…" />
+    </div>
+  </ColumnLayout>
 {:else}
-  <div class="page missing">
-    <a class="back" href="/search"><Icon name="arrow-left" />All emotes</a>
-    <div class="nothing">
-      <h1>No emote here.</h1>
-      <p class="lead">
+  <ColumnLayout top>
+    <div class="missing">
+      <a class="back" href="/search"><Icon name="arrow-left" />All emotes</a>
+      <State level={1} role="status" title="No emote here.">
         It may have been taken down, its creator may have deleted it, or the link is missing a character. Pending emotes are
         only visible to their creator.
-      </p>
-      <div class="actions">
-        <a class="btn btn-primary" href="/search">
-          Browse emotes
-          <svg class="arrow" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" /></svg>
-        </a>
-        <a class="btn" href="/">Front page</a>
-      </div>
+        {#snippet actions()}
+          <a class="ui-btn primary" href="/search">Browse emotes</a>
+          <a class="ui-btn secondary" href="/">Front page</a>
+        {/snippet}
+      </State>
     </div>
-  </div>
+  </ColumnLayout>
 {/if}
 
 <style>
-  .missing { padding-top: clamp(16px, 3vw, 32px); padding-bottom: clamp(64px, 8vw, 120px); min-height: 60svh; }
-  .back { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; color: var(--muted); font-size: var(--t-small); }
-  .nothing { padding-top: clamp(48px, 8vw, 112px); max-width: 640px; }
-  h1 { font-size: clamp(44px, 7vw, 96px); line-height: 1; letter-spacing: -.045em; }
-  .hold { visibility: hidden; }
+  .missing { display: grid; gap: 16px; min-height: 50svh; align-content: start; padding-bottom: 40px; }
+  .back { justify-self: start; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; color: var(--muted); font-size: var(--t-small); }
   .ghost { visibility: hidden; }
-  .lead { margin-top: 20px; }
-  .actions { margin-top: 32px; }
-  svg.arrow { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
   @media (hover: hover) and (pointer: fine) { .back:hover { color: var(--text); } }
 </style>
