@@ -1401,6 +1401,35 @@ export type UserCosmetics = {
   platformUserId: Scalars['String']['output'];
 };
 
+export type StudioPaintFieldsFragment = { __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, updatedAt: string, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, host: string, ready: boolean, width: number, height: number, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, isStatic: boolean }> } | null };
+
+export type StudioPaintsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type StudioPaintsQuery = { __typename?: 'Query', cosmetics: { __typename?: 'CosmeticCatalog', paints: Array<{ __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, updatedAt: string, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, host: string, ready: boolean, width: number, height: number, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, isStatic: boolean }> } | null }> } };
+
+export type StudioCreatePaintMutationVariables = Exact<{
+  input: PaintInput;
+}>;
+
+
+export type StudioCreatePaintMutation = { __typename?: 'Mutation', createPaint: { __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, updatedAt: string, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, host: string, ready: boolean, width: number, height: number, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, isStatic: boolean }> } | null } };
+
+export type StudioUpdatePaintMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: PaintInput;
+}>;
+
+
+export type StudioUpdatePaintMutation = { __typename?: 'Mutation', updatePaint: { __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, updatedAt: string, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, host: string, ready: boolean, width: number, height: number, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, isStatic: boolean }> } | null } };
+
+export type StudioCosmeticImageQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type StudioCosmeticImageQuery = { __typename?: 'Query', cosmeticImage?: { __typename?: 'CosmeticImage', id: string, host: string, ready: boolean, width: number, height: number, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, isStatic: boolean }> } | null };
+
 export type EmoteFieldsFragment = { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> };
 
 export type SearchQueryVariables = Exact<{
@@ -1953,6 +1982,44 @@ export class TypedDocumentString<TResult, TVariables>
     return this.value;
   }
 }
+export const StudioPaintFieldsFragmentDoc = new TypedDocumentString(`
+    fragment StudioPaintFields on Paint {
+  id
+  name
+  kind
+  angle
+  repeat
+  shape
+  color
+  stops {
+    at
+    color
+  }
+  shadows {
+    x
+    y
+    radius
+    color
+  }
+  image {
+    id
+    host
+    ready
+    width
+    height
+    animated
+    files {
+      name
+      format
+      scale
+      width
+      height
+      isStatic
+    }
+  }
+  updatedAt
+}
+    `, {"fragmentName":"StudioPaintFields"}) as unknown as TypedDocumentString<StudioPaintFieldsFragment, unknown>;
 export const EmoteFieldsFragmentDoc = new TypedDocumentString(`
     fragment EmoteFields on Emote {
   id
@@ -2136,6 +2203,154 @@ export const PaintFieldsFragmentDoc = new TypedDocumentString(`
     isStatic
   }
 }`, {"fragmentName":"PaintFields"}) as unknown as TypedDocumentString<PaintFieldsFragment, unknown>;
+export const StudioPaintsDocument = new TypedDocumentString(`
+    query StudioPaints {
+  cosmetics {
+    paints {
+      ...StudioPaintFields
+    }
+  }
+}
+    fragment StudioPaintFields on Paint {
+  id
+  name
+  kind
+  angle
+  repeat
+  shape
+  color
+  stops {
+    at
+    color
+  }
+  shadows {
+    x
+    y
+    radius
+    color
+  }
+  image {
+    id
+    host
+    ready
+    width
+    height
+    animated
+    files {
+      name
+      format
+      scale
+      width
+      height
+      isStatic
+    }
+  }
+  updatedAt
+}`) as unknown as TypedDocumentString<StudioPaintsQuery, StudioPaintsQueryVariables>;
+export const StudioCreatePaintDocument = new TypedDocumentString(`
+    mutation StudioCreatePaint($input: PaintInput!) {
+  createPaint(input: $input) {
+    ...StudioPaintFields
+  }
+}
+    fragment StudioPaintFields on Paint {
+  id
+  name
+  kind
+  angle
+  repeat
+  shape
+  color
+  stops {
+    at
+    color
+  }
+  shadows {
+    x
+    y
+    radius
+    color
+  }
+  image {
+    id
+    host
+    ready
+    width
+    height
+    animated
+    files {
+      name
+      format
+      scale
+      width
+      height
+      isStatic
+    }
+  }
+  updatedAt
+}`) as unknown as TypedDocumentString<StudioCreatePaintMutation, StudioCreatePaintMutationVariables>;
+export const StudioUpdatePaintDocument = new TypedDocumentString(`
+    mutation StudioUpdatePaint($id: String!, $input: PaintInput!) {
+  updatePaint(id: $id, input: $input) {
+    ...StudioPaintFields
+  }
+}
+    fragment StudioPaintFields on Paint {
+  id
+  name
+  kind
+  angle
+  repeat
+  shape
+  color
+  stops {
+    at
+    color
+  }
+  shadows {
+    x
+    y
+    radius
+    color
+  }
+  image {
+    id
+    host
+    ready
+    width
+    height
+    animated
+    files {
+      name
+      format
+      scale
+      width
+      height
+      isStatic
+    }
+  }
+  updatedAt
+}`) as unknown as TypedDocumentString<StudioUpdatePaintMutation, StudioUpdatePaintMutationVariables>;
+export const StudioCosmeticImageDocument = new TypedDocumentString(`
+    query StudioCosmeticImage($id: String!) {
+  cosmeticImage(id: $id) {
+    id
+    host
+    ready
+    width
+    height
+    animated
+    files {
+      name
+      format
+      scale
+      width
+      height
+      isStatic
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<StudioCosmeticImageQuery, StudioCosmeticImageQueryVariables>;
 export const SearchDocument = new TypedDocumentString(`
     query Search($query: String!, $animated: Boolean, $nsfw: Boolean, $page: Int, $perPage: Int, $sort: EmoteSort) {
   searchEmotes(
