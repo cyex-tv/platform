@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
 pub use crate::cosmetics::*;
+pub use crate::shop::*;
 
 /// A streaming platform.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]

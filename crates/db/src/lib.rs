@@ -8,6 +8,7 @@ pub mod accounts;
 pub mod audit;
 pub mod blocklist;
 pub mod channels;
+pub mod codes;
 pub mod cosmetics;
 pub mod editors;
 pub mod emotes;
@@ -25,6 +26,7 @@ pub mod roles;
 pub mod search;
 pub mod sessions;
 pub mod sets;
+pub mod shop;
 #[cfg(feature = "testing")]
 pub mod testing;
 

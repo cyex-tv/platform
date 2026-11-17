@@ -225,7 +225,8 @@ pub struct OwnedCosmetics {
     pub paint_id: Option<String>,
 }
 
-/// How an account came to own a cosmetic. Only `GRANT` is used for now.
+/// How an account came to own a cosmetic: given by staff, bought in the shop (ADR 0016), from an
+/// event, or from a redeem code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
 #[serde(rename_all = "lowercase")]
@@ -233,6 +234,7 @@ pub enum EntitlementSource {
     Grant,
     Purchase,
     Event,
+    Code,
 }
 
 impl EntitlementSource {
@@ -241,6 +243,7 @@ impl EntitlementSource {
             "grant" => Some(Self::Grant),
             "purchase" => Some(Self::Purchase),
             "event" => Some(Self::Event),
+            "code" => Some(Self::Code),
             _ => None,
         }
     }
