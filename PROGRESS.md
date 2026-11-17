@@ -24,6 +24,10 @@ Work in `cyex-app/cyex-deck` goes on a feature branch with a PR the owner merges
 
 ## Phase 7: Moderation, abuse and limits (in progress)
 
+### PR 4: a test hang (branch `phase-7/test-shutdown`)
+- [x] `restricting_and_blocking_accounts` hung for 20 minutes once in CI (PR 21's run, 2026/11/17). `abuse_flow`'s test world closed the pool while the event feeder still held its listener connection, and closing a pool waits for every connection; `live_flow` and the socket tests already stop the feeder first. `abuse_flow` now does the same (`World::close`).
+- [x] CI's `test` job has `timeout-minutes: 20`, so a hang fails instead of holding a runner for six hours.
+
 ### PR 3: reading an account's restrictions (branch `phase-7/account-status`)
 - [x] `accountStatus(accountId)`: whether uploads or sign-in are blocked, for `users.view` or `users.restrict`. Additive; the admin users page needs it. Tested in `restricting_and_blocking_accounts` (both permissions read it, anyone else is refused).
 
@@ -53,6 +57,28 @@ Work in `cyex-app/cyex-deck` goes on a feature branch with a PR the owner merges
 - `apps/events/tests/socket.rs`: the third connection in a minute from one IP refused with 429 at the handshake.
 
 ## Phase 6: Search and the website (in progress)
+
+### PR 6: the website, admin pages (branch `phase-6/web-admin`, stacked on PR 5 and Phase 7 PR 3)
+- [x] `/admin`, shown to accounts holding any moderation or admin permission, each part only with the permission it needs: an overview with the queue counts; the review queue (approve, reject with a reason); reports (dismiss with a note, take down with a reason); users (find by Twitch or Kick login, block uploads or the account, give and take roles); roles (create, edit with the permissions you hold, delete); the audit log (filter by kind and ID, before and after, older pages); the global set (the set page, without delete).
+- [x] The mock gives the signed-in account every permission after `/mock/admin`.
+- [x] Checked in a browser against the mock: every action above, 1280 and 375 wide (no sideways scroll), and an account without permissions refused.
+
+### PR 5: the website, signed-in pages (branch `phase-6/web-me`, stacked on PR 3 and PR 4)
+- [x] A `(tool)` route group in the cyex-app web-tool style (IBM Plex, warm grey, square cards, flat sticky header with uppercase links): its tokens are a copy of cyex-app's, set on `.tool` so the public pages keep the cyex-web look. Browser-only (`ssr = false`): the session cookie belongs to the API's domain. Signed out goes to `/signin?back=…`.
+- [x] Your emotes (every state, paged), upload (drag and drop or pick, previews at three sizes, name and tags checked like the API before sending, `POST /v1/emotes`), an emote's page (details, zero-width, unlisted, NSFW, add to a set, delete; picks up the files once the worker has made them).
+- [x] Sets: yours and the ones you edit, a new channel or personal set, a set's page (filter, rename an emote in the set, zero-width, remove; add from search or your uploads, with full sets and name clashes shown; rename; editors added by Twitch or Kick login and removed; delete, or leave as an editor).
+- [x] Channels (active set, personal emotes) and account (linked accounts with link and unlink, notifications, permissions, sign out).
+- [x] `dev/mock-api.mjs` signs in with a cookie and keeps the signed-in data in memory.
+- [x] Checked in a browser against the mock: every flow above, 1280 and 375 wide (no sideways scroll), dark and light, and the public pages unchanged after visiting the signed-in ones. Unit tests for the name, tag and file rules.
+
+### PR 3: the website, public pages (branch `phase-6/web`, stacked on PR 2)
+- [x] `apps/web`: SvelteKit 2 (Svelte 5, TypeScript, `adapter-node`), the cyex web design (cyex-design + cyex-web tokens copied into `src/tokens.css`; Geist; dark by default with the light theme as a peer, switched before first paint; reduced motion honoured). Versions are pinned and at least two weeks old.
+- [x] GraphQL types generated from `schema/schema.graphql` with GraphQL Code Generator (string documents, no GraphQL runtime in the browser); CI fails when they are stale.
+- [x] Pages: home (hero, the global set, what it's for, developers band), search (name and tag, all, animated or still, paging), an emote's page (preview, 1x to 4x, facts), a channel's page (its active set), sign in (Twitch or Kick, and what is stored), developers (the public reads, personal lookup, live updates), 404 and errors.
+- [x] `apps/web/dev/mock-api.mjs`: a stand-in API for looking at the site without the stack (development only).
+- [x] Checked in a browser against the mock: desktop 1280 and phone 375, dark and light, the phone menu, search with filters, an emote, a channel, an unknown channel (404).
+- [x] Signed-in pages and admin pages: PR 5 and PR 6.
+- [ ] Playwright end-to-end tests: they need test OAuth apps (the owner's) to sign in.
 
 ### PR 2: CORS for the website and browser clients (branch `phase-6/cors`)
 - [x] `apps/api/src/cors.rs`: the site (`CYEX_TV_SITE_URL`) gets credentialed CORS for everything; any other origin only the public reads (channels, sets, emotes, the personal-set lookup) with `*` and no credentials; nothing else. Preflights answer before the rate limits; `ETag` and `Retry-After` are exposed.

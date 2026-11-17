@@ -37,7 +37,8 @@ struct World {
     db: TestDb,
     app: Router,
     state: AppState,
-    _stop: watch::Sender<bool>,
+    stop: watch::Sender<bool>,
+    feeder: tokio::task::JoinHandle<Result<(), cyex_tv_db::DbError>>,
 }
 
 const BOUNDARY: &str = "abuseboundary0Xz";
@@ -67,7 +68,7 @@ impl World {
         let state = AppState::new(db.pool.clone(), Arc::new(Auth::new(cfg).unwrap()))
             .with_store(Store::memory());
         let (stop, mut rx) = watch::channel(false);
-        tokio::spawn(cyex_tv_hub::feeder::run(
+        let feeder = tokio::spawn(cyex_tv_hub::feeder::run(
             db.pool.clone(),
             state.hub.clone(),
             async move {
@@ -79,8 +80,17 @@ impl World {
             app: cyex_tv_api::app(state.clone()),
             state,
             db,
-            _stop: stop,
+            stop,
+            feeder,
         })
+    }
+
+    /// Stops the feeder, then drops the database. The feeder's listener holds a pool connection,
+    /// and closing the pool waits for every connection to come back, so it has to stop first.
+    async fn close(self) {
+        let _ = self.stop.send(true);
+        let _ = self.feeder.await;
+        self.db.close().await;
     }
 
     async fn user(&self, twitch_id: &str, permissions: &[&str]) -> User {
@@ -304,7 +314,7 @@ async fn report_then_dismiss() {
             .await,
         1
     );
-    w.db.close().await;
+    w.close().await;
 }
 
 #[tokio::test]
@@ -337,7 +347,7 @@ async fn reports_are_limited_per_account() {
         ),
         "rate_limited"
     );
-    w.db.close().await;
+    w.close().await;
 }
 
 #[tokio::test]
@@ -474,7 +484,7 @@ async fn a_takedown_removes_the_image_everywhere_and_reaches_clients() {
         )
         .await;
     assert_eq!(code(&again), "already_taken_down");
-    w.db.close().await;
+    w.close().await;
 }
 
 #[tokio::test]
@@ -571,5 +581,5 @@ async fn restricting_and_blocking_accounts() {
             .await,
         2
     );
-    w.db.close().await;
+    w.close().await;
 }
