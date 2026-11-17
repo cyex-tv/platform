@@ -18,3 +18,18 @@ describe('safeBack', () => {
     expect(signInUrl('twitch', '//evil.test')).not.toContain('evil');
   });
 });
+
+describe('uploadForm', () => {
+  it('sends only the flags that are on, and tags comma-separated', async () => {
+    const { uploadForm } = await import('./api');
+    const f = uploadForm(new Blob(['x']), 'catJAM', ['cat', 'dance'], { zeroWidth: true, private: false, nsfw: true });
+    expect(f.get('name')).toBe('catJAM');
+    expect(f.get('tags')).toBe('cat,dance');
+    expect(f.get('zero_width')).toBe('true');
+    expect(f.get('private')).toBeNull();
+    expect(f.get('nsfw')).toBe('true');
+    expect(f.get('file')).toBeInstanceOf(Blob);
+    const plain = uploadForm(new Blob(['x']), 'a', []);
+    expect([...plain.keys()]).toEqual(['name', 'file']);
+  });
+});

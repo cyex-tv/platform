@@ -506,7 +506,7 @@
           "emotes"
         ],
         "summary": "Upload an emote. It starts `pending`: usable in your own sets, hidden from everyone else until a\nmoderator approves it. Manage it afterwards through GraphQL.",
-        "description": "PNG, APNG, GIF or WebP; at most 5 MB, 1000×1000 px and 1000 frames. Sign in first (with the\ncookie, from `https://cyex.tv`). At most 20 uploads an hour.",
+        "description": "PNG, APNG, GIF or WebP; at most 5 MB, 1000×1000 px and 1000 frames. Sign in first (with the\ncookie, from `https://cyex.tv`). At most 20 uploads an hour. The flags `zero_width`, `private`\nand `nsfw` may be set at once (each `true` or `false`, default `false`); `updateEmote` changes\nthem later.",
         "operationId": "upload_emote",
         "requestBody": {
           "content": {
@@ -1428,7 +1428,7 @@
       },
       "UploadEmote": {
         "type": "object",
-        "description": "Multipart upload (REST only): the image file and its name.",
+        "description": "Multipart upload (REST only): the image file, its name, and optionally its tags and flags.",
         "required": [
           "name",
           "file"
@@ -1441,12 +1441,33 @@
           "name": {
             "type": "string"
           },
+          "nsfw": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "As `zero_width`. Search leaves it out unless asked for NSFW."
+          },
+          "private": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "As `zero_width`. Only its owner can add it to sets, and search leaves it out."
+          },
           "tags": {
             "type": [
               "string",
               "null"
             ],
             "description": "Comma-separated."
+          },
+          "zero_width": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`true` or `false` (also `1`/`0`, `on`/`off`); default `false`. Drawn over the emote before it."
           }
         }
       },
