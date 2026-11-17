@@ -31,6 +31,12 @@
   .x { display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--radius-btn);
     background: none; cursor: pointer; transition: color var(--dur-color), background-color var(--dur-color); }
   a.chip:active, .x:active { transform: scale(var(--press)); }
+  /* Touch: a 32px remove button with a 44px hit area around it. */
+  @media (pointer: coarse) {
+    .chip:has(.x) { padding-right: 0; }
+    .x { position: relative; width: 32px; height: 32px; }
+    .x::after { content: ''; position: absolute; inset: -6px; }
+  }
   @media (hover: hover) and (pointer: fine) {
     a.chip:hover { border-color: var(--muted); background: var(--surface-2); }
     a.chip:hover :global(svg), .x:hover { color: var(--text); }
