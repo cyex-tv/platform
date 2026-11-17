@@ -43,6 +43,12 @@ pub enum DbError {
     TooManyEditors,
     #[error("the account is an editor already")]
     AlreadyEditor,
+    /// A badge or paint with this name exists (names are unique per kind, ignoring case).
+    #[error("a cosmetic with this name exists")]
+    CosmeticNameTaken,
+    /// A selection named a cosmetic the account doesn't own.
+    #[error("the account doesn't own that cosmetic")]
+    NotOwned,
 }
 
 pub type DbResult<T> = Result<T, DbError>;

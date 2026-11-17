@@ -10,6 +10,8 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
+pub use crate::cosmetics::*;
+
 /// A streaming platform.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
@@ -104,7 +106,7 @@ pub enum EditorPermission {
     Sets,
     /// Add, change and remove editors, never granting more than you hold.
     Editors,
-    /// The owner's profile and cosmetics. Stored now, used by the cosmetics phase.
+    /// Pick the badge and paint the owner shows (ADR 0015). Never grants.
     Profile,
 }
 
@@ -604,6 +606,17 @@ pub enum EventType {
     PersonalUpdated,
     #[serde(rename = "emote.updated")]
     EmoteUpdated,
+    /// A badge or paint was made (topic `cosmetics`, ADR 0015).
+    #[serde(rename = "cosmetic.created")]
+    CosmeticCreated,
+    #[serde(rename = "cosmetic.updated")]
+    CosmeticUpdated,
+    /// Gone: stop showing it on anyone.
+    #[serde(rename = "cosmetic.deleted")]
+    CosmeticDeleted,
+    /// The badge or paint a user shows changed (their `user:` topics).
+    #[serde(rename = "user.cosmetics_updated")]
+    UserCosmeticsUpdated,
     /// Too much was missed: refetch what you show.
     #[serde(rename = "resync")]
     Resync,
@@ -624,6 +637,18 @@ pub struct Event {
     /// The emote's name in the set, for added and renamed.
     pub name: Option<String>,
     pub created_at: String,
+    /// `cosmetic.*`: which kind of cosmetic.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cosmetic_kind: Option<CosmeticKind>,
+    /// `cosmetic.*`: its ID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cosmetic_id: Option<String>,
+    /// `user.cosmetics_updated`: the badge shown now; empty for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub badge_id: Option<String>,
+    /// `user.cosmetics_updated`: the paint shown now; empty for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paint_id: Option<String>,
 }
 
 // REST query strings
@@ -699,8 +724,17 @@ mod tests {
             emote_id: Some("e1".to_owned()),
             name: Some("wave".to_owned()),
             created_at: "2026-11-16T12:00:00Z".to_owned(),
+            cosmetic_kind: None,
+            cosmetic_id: None,
+            badge_id: None,
+            paint_id: None,
         };
         let json = serde_json::to_value(&event).unwrap();
         assert_eq!(json["type"], "set.emote_added");
+        assert!(json.get("cosmetic_id").is_none());
+        assert_eq!(
+            serde_json::to_string(&EventType::UserCosmeticsUpdated).unwrap(),
+            "\"user.cosmetics_updated\""
+        );
     }
 }

@@ -47,6 +47,9 @@ pub fn set_topic(set_id: Uuid) -> String {
     format!("set:{}", to_text(set_id))
 }
 
+/// The cosmetics catalog's topic (ADR 0015): badge and paint changes.
+pub const COSMETICS_TOPIC: &str = "cosmetics";
+
 pub fn user_topic(platform: Platform, platform_user_id: &str) -> String {
     format!("user:{platform}:{platform_user_id}")
 }
