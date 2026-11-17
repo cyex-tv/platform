@@ -1,5 +1,7 @@
 <script lang="ts">
   // The command palette: Ctrl K / Cmd K or "/" (outside a field) opens it, so does openPalette().
+  // No on-screen shortcut hint anywhere; the keys just work. On a page with its own search field
+  // (marked data-page-search), "/" focuses that field instead.
   // Emotes come live from the search (debounced), a text that looks like a login offers its
   // Twitch and Kick channel, and the site's pages are always there. Arrow keys move, Enter goes,
   // Escape closes and focus goes back. No open or close animation: it's keyboard-driven and
@@ -123,7 +125,10 @@
       palette.open = !palette.open;
     } else if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !palette.open && !typing(e.target)) {
       e.preventDefault();
-      palette.open = true;
+      // A page with its own search field (/search) takes "/" there instead of the palette.
+      const own = document.querySelector<HTMLInputElement>('input[data-page-search]');
+      if (own) own.focus();
+      else palette.open = true;
     }
   }
 
