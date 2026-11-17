@@ -4,7 +4,9 @@
   // the product column offers Your emotes; signed out, Sign in.
   import Mark from './Mark.svelte';
 
-  let { signedIn = false }: { signedIn?: boolean } = $props();
+  // `slim` is one line (the non-affiliation note, the year, three links) for pages that scroll a long
+  // way and should end where their content does, like /developers.
+  let { signedIn = false, slim = false }: { signedIn?: boolean; slim?: boolean } = $props();
   const year = new Date().getFullYear();
 
   const columns = $derived([
@@ -36,6 +38,20 @@
   ]);
 </script>
 
+{#if slim}
+  <footer class="footer slim">
+    <div class="page">
+      <p>
+        <span>Not affiliated with, endorsed by, or sponsored by Twitch or Kick.</span>
+        <span class="dot" aria-hidden="true">·</span>
+        <span>© {year} cyex</span>
+      </p>
+      <nav aria-label="Legal">
+        <a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/contact">Contact</a>
+      </nav>
+    </div>
+  </footer>
+{:else}
 <footer class="footer">
   <div class="page">
     <div class="top">
@@ -58,6 +74,7 @@
     </div>
   </div>
 </footer>
+{/if}
 
 <style>
   .footer { flex: none; border-top: 1px solid var(--border); margin-top: var(--footer-gap);
@@ -71,6 +88,13 @@
     transition: color var(--dur-color); }
   .base { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; border-top: 1px solid var(--border);
     padding: 20px 0 36px; font-size: var(--t-fine); color: var(--muted); }
+  .slim { margin-top: 0; }
+  .slim .page { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 24px; padding-block: 10px; }
+  .slim p { margin: 0; display: flex; flex-wrap: wrap; gap: 0 8px; font-size: var(--t-fine); color: var(--muted); }
+  .slim nav { display: flex; gap: 4px; }
+  .slim nav a { display: inline-flex; align-items: center; min-height: 40px; padding: 0 8px; font-size: var(--t-fine); color: var(--muted);
+    transition: color var(--dur-color); }
+  @media (hover: hover) and (pointer: fine) { .slim nav a:hover { color: var(--text); } }
   @media (hover: hover) and (pointer: fine) { .col a:hover { color: var(--text); } }
   @media (max-width: 900px) { .top { grid-template-columns: repeat(3, minmax(0, 1fr)); } .about { grid-column: 1 / -1; } }
   @media (max-width: 520px) { .top { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

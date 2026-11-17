@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import spec from '../../../../../openapi/openapi.json';
 import { graphqlReference } from './graphql';
 import { guides } from './guides';
+import { defaultOpen, isOpen, parseGroupState, restGroupId, withAll, withGroup, allOpen } from './groups';
 import { restGroups, restOperations } from './rest';
 
 describe('REST reference', () => {
@@ -78,5 +79,36 @@ describe('GraphQL reference', () => {
     expect(ref.mutations.find((o) => o.name === 'addSetEmote')!.access).toBe('signed-in');
     expect(ref.mutations.find((o) => o.name === 'approveEmote')!.access).toBe('restricted');
     expect(ref.mutations.find((o) => o.name === 'addSetEmote')!.samples[0].code).toContain("origin: https://cyex.tv");
+  });
+});
+
+describe('collapsible groups', () => {
+  it('start closed, except the notes', () => {
+    expect(defaultOpen('notes')).toBe(true);
+    expect(isOpen({}, 'rest-emotes')).toBe(false);
+    expect(isOpen({ 'rest-emotes': true, notes: false }, 'rest-emotes')).toBe(true);
+    expect(isOpen({ notes: false }, 'notes')).toBe(false);
+  });
+
+  it('reads back only what it wrote', () => {
+    expect(parseGroupState(null)).toEqual({});
+    expect(parseGroupState('not json')).toEqual({});
+    expect(parseGroupState('[true]')).toEqual({});
+    expect(parseGroupState('{"a":true,"b":"yes","c":false}')).toEqual({ a: true, c: false });
+    expect(parseGroupState(JSON.stringify(withGroup({}, 'x', true)))).toEqual({ x: true });
+  });
+
+  it('expands and collapses all, and says which the control does next', () => {
+    const ids = ['notes', 'a', 'b'];
+    expect(allOpen({}, ids)).toBe(false);
+    expect(allOpen(withAll(ids, true), ids)).toBe(true);
+    expect(allOpen(withAll(ids, false), ids)).toBe(false);
+  });
+
+  it('gives each REST tag a distinct, anchor-safe id', () => {
+    const ids = restGroups().map((g) => restGroupId(g.tag));
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of ids) expect(id).toMatch(/^rest-[a-z0-9-]+$/);
+    expect(restGroupId('Live Events!')).toBe('rest-live-events');
   });
 });
