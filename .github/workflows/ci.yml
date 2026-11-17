@@ -78,7 +78,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --workspace
 
-  # Phase 5's load test (PLAN.md): 5000 event WebSocket connections with ten topics each.
+  # Phase 5's load tests (PLAN.md): 5000 event WebSocket connections and 2000 GraphQL
+  # subscriptions, ten topics each.
   load:
     runs-on: ubuntu-latest
     services:
@@ -105,6 +106,10 @@ jobs:
         run: |
           ulimit -n 65536 || ulimit -n
           cargo test --release -p cyex-tv-events --test load -- --ignored --nocapture
+      - name: Run the GraphQL socket load test
+        run: |
+          ulimit -n 65536 || ulimit -n
+          cargo test --release -p cyex-tv-api --test gql_load -- --ignored --nocapture
 
   # Phase 9: the service images build, and each binary in them runs.
   images:

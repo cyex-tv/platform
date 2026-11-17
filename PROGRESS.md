@@ -97,9 +97,13 @@ Work in `cyex-app/cyex-deck` goes on a feature branch with a PR the owner merges
 - [x] `myEmotes(page, perPage)`: the caller's emotes in every state (pending, rejected, taken down), newest first, as an `EmotePage`; `setEditors(setId)` for the set's owner, its editors and `sets.edit_any`. Additive; the signed-in pages need both.
 - [x] Tests in `apps/api/tests/catalog_flow.rs`: paging and order, only your own, signed out refused; editors seen by owner and editor, refused to a stranger.
 
-## Phase 5: Live updates (done, merged 2026/11/17 as PRs 12 to 14; the GraphQL socket's own load run is still owed)
+## Phase 5: Live updates (done, merged 2026/11/17 as PRs 12 to 14 and 27)
 
 Taken before Phase 4 in the overnight run: Phase 4 (the deck, in `cyex-app/cyex-deck`) can't meet its "Done when" until the owner's CDN and OAuth steps are done, and its step 2 waits for Phase 5 anyway. See the run's questions.
+
+### PR 4: the GraphQL socket's load run (branch `phase-5/gql-load`)
+- [x] `apps/api/tests/gql_load.rs` (ignored; CI's `load` job runs it after the event socket's): 2000 `graphql-transport-ws` subscriptions to `events` on `/v1/gql/ws`, ten topics each, 300 events at 30 a second.
+- [x] CI run on 2026/11/17: 2.000 of 2.000 subscribed in 7,8 s; 6.000 of 6.000 deliveries; write to delivery p50 1,2 ms, p95 2,8 ms, p99 7,7 ms, max 9,1 ms. The same run's event-socket test: 15.000 of 15.000, p95 18,9 ms (both share one runner).
 
 ### PR 3: the load test (branch `phase-5/load`)
 - [x] `apps/events/tests/load.rs`, run by CI's `load` job in a release build (`cargo test --release -p cyex-tv-events --test load -- --ignored --nocapture`).
