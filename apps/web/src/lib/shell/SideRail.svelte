@@ -56,7 +56,13 @@
     if (!narrow || !strip) return;
     void groups;
     const tab = strip.querySelector<HTMLElement>('[aria-current="page"]');
-    if (tab) strip.scrollLeft = Math.max(0, tab.offsetLeft - (strip.clientWidth - tab.offsetWidth) / 2);
+    if (!tab) return;
+    // Scroll only as far as needed, so the first tabs stay readable when the current one already shows.
+    const pad = 20;
+    const left = tab.offsetLeft - pad;
+    const right = tab.offsetLeft + tab.offsetWidth + pad - strip.clientWidth;
+    if (left < strip.scrollLeft) strip.scrollLeft = Math.max(0, left);
+    else if (right > strip.scrollLeft) strip.scrollLeft = right;
   });
 
   const flat = $derived(groups.flatMap((g) => g.items));

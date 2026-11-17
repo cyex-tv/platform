@@ -138,6 +138,7 @@
   --emote-chat: 28px;
 
   /* Emote preview grounds: the same in both themes (they show how an emote looks on each). */
+  --t-page: clamp(24px, 1.2vw + 18px, 28px); /* the title of every app-style page */
   --stage-dark: #0e0f13;
   --stage-light: #ffffff;
   --stage-dark-ink: #9ba1ad;

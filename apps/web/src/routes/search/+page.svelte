@@ -336,7 +336,7 @@
   .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; min-height: 36px; }
   @media (max-width: 899.98px) { .toolbar { padding-top: 4px; } }
   .title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-  h1 { margin: 0; font-size: 22px; line-height: 1.25; letter-spacing: -.02em; }
+  h1 { margin: 0; font-size: var(--t-page); line-height: 1.25; letter-spacing: -.02em; }
   .total { margin: 0; font-size: var(--t-nav); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .tools { display: flex; align-items: center; gap: 8px; }
   .dens { display: inline-flex; gap: 4px; }

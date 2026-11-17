@@ -8,7 +8,7 @@
 .ui-page :where(a) { color: var(--accent-text); } /* zero specificity: buttons, tabs and rows set their own colour */
 .ui-page h1, .ui-page h2, .ui-page h3 { font-weight: 600; margin: 0; }
 .ui-page h1, .ui-page h2 { overflow-wrap: anywhere; }
-.ui-page h1 { font-size: 22px; line-height: 1.25; letter-spacing: -.02em; }
+.ui-page h1 { font-size: var(--t-page); line-height: 1.25; letter-spacing: -.02em; }
 .ui-page h2 { font-size: 16px; line-height: 1.35; letter-spacing: -.01em; }
 .ui-page p { margin: 0; }
 .ui-page .narrow { max-width: var(--measure-form); }
