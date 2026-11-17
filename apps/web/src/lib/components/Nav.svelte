@@ -205,7 +205,7 @@
     opacity: 0; transition: opacity var(--dur-move); }
   .nav.scrolled::after { opacity: 1; }
 
-  .brand { flex: none; display: flex; align-items: center; gap: 9px; margin-right: 10px;
+  .brand { flex: none; display: flex; align-items: center; min-height: 40px; gap: 9px; margin-right: 10px;
     font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
   .links { display: flex; gap: 2px; }
   .links a { padding: 8px 10px; font-size: var(--t-nav); color: var(--muted); border-radius: var(--radius-btn);

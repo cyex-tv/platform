@@ -254,7 +254,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 @media (pointer: coarse) {
   .docs .nav-item, .docs .lang-tab { min-height: 40px; }
   .docs .nav-search input { font-size: 16px; padding-block: 11px; }
-  .docs .code-copy { padding: 9px; }
+  .docs .code-copy { padding: 9px; min-width: 44px; min-height: 44px; justify-content: center; align-items: center; }
   .docs .to-top { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .docs .nav-toc > summary::after { transition: none; } }

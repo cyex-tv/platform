@@ -115,6 +115,7 @@
   .seg:not(:has(.marker.ready)) button[aria-checked='true'] { background: var(--surface-2);
     box-shadow: 0 0 0 1px var(--border-strong) inset; }
   button:active { transform: scale(var(--press)); }
+  @media (pointer: coarse) { button { min-height: 44px; } }
   button:focus-visible { outline-offset: -2px; }
   @media (hover: hover) and (pointer: fine) { button:hover { color: var(--text); } }
   /* Forced colours drop the marker's ground: outline the checked option instead. */

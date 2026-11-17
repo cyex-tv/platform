@@ -213,6 +213,7 @@ select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
 /* Touch: 44px targets (cyex-design floor on the web, mobile-native). */
 @media (pointer: coarse) {
   .ui-icon { width: 44px; height: 44px; }
+  .ui-btn { min-height: 44px; }
   .ui-seg > * { height: 44px; }
 }
 /* Forced colours drop backgrounds, so the selected option gets a system outline instead. */

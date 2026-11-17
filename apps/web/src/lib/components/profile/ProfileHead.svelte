@@ -24,7 +24,7 @@
     <h1>{name}</h1>
     {#if meta}<p class="meta">{@render meta()}</p>{/if}
   </div>
-  {#if actions}<div class="actions">{@render actions()}</div>{/if}
+  {#if actions}<div class="head-actions">{@render actions()}</div>{/if}
 </header>
 
 <style>
@@ -33,6 +33,6 @@
   .kind { margin: 0 0 6px; font-size: var(--t-small); font-weight: 500; color: var(--muted); }
   h1 { font-size: var(--t-h3-sub); line-height: 1.1; letter-spacing: -.03em; overflow-wrap: anywhere; text-wrap: balance; }
   .meta { margin: 8px 0 0; font-size: var(--t-ui); color: var(--muted); }
-  .actions { margin-left: auto; }
-  @media (max-width: 520px) { .head { gap: 16px; } .actions { margin-left: 0; width: 100%; } }
+  .head-actions { margin-left: auto; }
+  @media (max-width: 520px) { .head { gap: 16px; } .head-actions { margin-left: 0; width: 100%; } }
 </style>

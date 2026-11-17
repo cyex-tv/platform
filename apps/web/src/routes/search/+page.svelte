@@ -170,7 +170,7 @@
 </script>
 
 <svelte:head>
-  <title>{q ? `${q} - ` : ''}Emotes - cyex.tv</title>
+  <title>{q ? `${[...q].length > 40 ? [...q].slice(0, 40).join('') + '…' : q} - ` : ''}Emotes - cyex.tv</title>
   <meta name="description" content="Search approved cyex.tv emotes by name and tag." />
 </svelte:head>
 

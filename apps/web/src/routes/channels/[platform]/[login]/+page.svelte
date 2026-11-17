@@ -47,7 +47,7 @@
       {#if set}Active set: {set.name}{:else}No set picked yet{/if}
     {/snippet}
     {#snippet actions()}
-      <div class="actions">
+      <div class="ch-actions">
         <button class="btn btn-s copy" type="button" onclick={() => link.copy(location.href)}>
           <Icon name={link.copied ? 'check' : 'copy'} size={16} />
           <span class="labels">
@@ -128,7 +128,7 @@
   .labels { display: inline-grid; }
   .labels > span { grid-area: 1 / 1; text-align: left; }
   .off { visibility: hidden; }
-  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  .ch-actions { display: flex; flex-wrap: wrap; gap: 8px; }
   .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
   .find { position: relative; display: block; flex: 0 1 320px; min-width: 0; }
   .find :global(svg) { position: absolute; left: 12px; top: 50%; translate: 0 -50%; color: var(--muted); pointer-events: none; }
