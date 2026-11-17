@@ -1,6 +1,6 @@
 <script lang="ts">
-  // A placeholder tile the same size as an EmoteCard, while emotes load.
-  import type { Density } from './EmoteCard.svelte';
+  // A placeholder the same size as an EmoteTile, while emotes load.
+  import type { Density } from './EmoteTile.svelte';
 
   let { density = 'comfortable', creator = true }: { density?: Density; creator?: boolean } = $props();
 </script>
@@ -12,12 +12,13 @@
 </span>
 
 <style>
-  .sk { --art: var(--emote-art); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 8px 12px; }
-  .compact { --art: var(--emote-art-compact); padding: 8px 6px 10px; }
-  .art { width: calc(var(--art) * .75); height: calc(var(--art) * .75); margin: calc(var(--art) * .125) 0 calc(var(--art) * .125 + 2px);
-    border-radius: var(--radius-m); background: var(--surface-2); }
-  .line { height: 12px; border-radius: var(--radius-btn); background: var(--surface-2); }
-  .name { width: 64%; margin-top: 3px; }
+  .sk { --art: 88px; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; padding: 14px 10px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); }
+  .compact { --art: 60px; padding: 10px 8px 9px; }
+  .art { width: calc(var(--art) * .8); height: calc(var(--art) * .8); margin: calc(var(--art) * .1) 0 calc(var(--art) * .1 + 2px);
+    border-radius: var(--radius); background: var(--surface-hover); }
+  .line { height: 12px; border-radius: var(--radius); background: var(--surface-hover); }
+  .name { width: 64%; }
   .by { width: 40%; height: 10px; }
   .sk > * { animation: breathe 1.6s ease-in-out infinite alternate; }
   @keyframes breathe { from { opacity: 1; } to { opacity: .55; } }

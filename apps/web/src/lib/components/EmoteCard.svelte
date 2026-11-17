@@ -1,16 +1,8 @@
 <script lang="ts" module>
-  import type { Picture } from '$lib/emote';
-
-  /** What a card needs: the emote's pictures, id and name; owner and flags when known. */
-  export type CardEmote = Picture & {
-    id: string;
-    name: string;
-    owner?: { displayName: string } | null;
-    flags?: { zeroWidth: boolean } | null;
-    /** The name it has in a set, when that differs from its own. */
-    shownName?: string;
-  };
-  export type Density = 'comfortable' | 'compact';
+  // The tile types live with EmoteTile (the grid tile); this card is the home page's borderless
+  // variant and re-exports them so existing imports keep working.
+  import type { CardEmote, Density } from './EmoteTile.svelte';
+  export type { CardEmote, Density };
   /** The art box's height per density (keep in step with --emote-art / --emote-art-compact). */
   export const ART = { comfortable: 112, compact: 80 } as const;
 </script>
