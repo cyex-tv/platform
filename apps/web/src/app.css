@@ -84,3 +84,11 @@
 .fine { font-size: var(--t-fine); color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Long-form legal pages: prose capped at the reading measure. */
+.legal { max-width: var(--measure); padding-bottom: 24px; }
+.legal h2 { font-size: var(--t-h3); line-height: 1.3; letter-spacing: -.015em; margin-top: 40px; }
+.legal h3 { font-size: var(--t-body); margin-top: 24px; }
+.legal p, .legal li { color: var(--muted); }
+.legal ul { padding-left: 1.25em; margin: 12px 0; }
+.legal li { margin: 6px 0; }
