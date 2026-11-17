@@ -39,7 +39,8 @@
   const moving = (name: string) => `${e.host}/${name}`;
 </script>
 
-<section class="preview" aria-label="Preview">
+<section class="preview">
+  <h2 class="sr-only">Preview</h2>
   <div class="tools">
     <Segmented label="Background" size="s" options={grounds} value={ground} onchange={(v) => (ground = v)} />
     {#if canPause}
@@ -91,16 +92,16 @@
 
 <style>
   p { margin: 0; }
-  .preview { display: grid; gap: 12px; min-width: 0; }
+  .preview { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 16px; min-width: 0; height: 100%; }
   .tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-  .stage { position: relative; display: grid; place-items: center; min-height: clamp(240px, 26vw, 340px);
-    padding: clamp(24px, 4vw, 48px); border: 1px solid var(--border); border-radius: var(--radius-l);
+  .stage { position: relative; display: grid; place-items: center; min-height: clamp(220px, 22vw, 300px);
+    padding: clamp(24px, 4vw, 40px); border: 1px solid var(--border); border-radius: var(--radius-btn);
     overflow: hidden; --ink: var(--stage-dark-ink); background: var(--stage-dark); }
   .light { --ink: var(--stage-light-ink); background: var(--stage-light); }
   .checker { --ink: var(--stage-light-ink); background-color: var(--checker-a);
     background-image: repeating-conic-gradient(var(--checker-b) 0 25%, transparent 0 50%);
     background-size: var(--checker-size) var(--checker-size); }
-  .chatting { padding: clamp(12px, 2vw, 24px); background: var(--surface); place-items: stretch; align-content: center; }
+  .chatting { padding: clamp(12px, 2vw, 24px); background: var(--bg); place-items: stretch; align-content: center; }
 
   .sizes { max-width: 100%; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: clamp(20px, 3vw, 40px); }
   figure { max-width: 100%; margin: 0; display: grid; justify-items: center; gap: 12px; }

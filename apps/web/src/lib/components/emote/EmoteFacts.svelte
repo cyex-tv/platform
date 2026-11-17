@@ -40,12 +40,12 @@
 </section>
 
 <style>
-  .facts { margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; border-top: 1px solid var(--border); }
-  .facts > div { display: grid; gap: 4px; padding: 14px 0; border-bottom: 1px solid var(--border); min-width: 0; }
+  .facts { margin: -10px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 20px; }
+  .facts > div { display: grid; align-content: start; gap: 2px; padding: 10px 0; border-bottom: 1px solid var(--border); min-width: 0; }
   .wide-fact { grid-column: 1 / -1; }
-  dt { color: var(--muted); font-size: var(--t-fine); }
-  dd { margin: 0; font-size: var(--t-ui); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-  .figure { font-size: var(--t-h3-sub); font-weight: 500; letter-spacing: -.03em; line-height: 1.1; }
+  dt { color: var(--muted); font-size: var(--t-label); }
+  dd { margin: 0; font-size: var(--t-small); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .figure { font-size: 22px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; }
   .files { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; }
   .x { color: var(--muted); }
 </style>
