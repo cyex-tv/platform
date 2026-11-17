@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import spec from '../../../../../openapi/openapi.json';
 import { graphqlReference } from './graphql';
+import { guides } from './guides';
 import { restGroups, restOperations } from './rest';
 
 describe('REST reference', () => {
@@ -17,7 +18,7 @@ describe('REST reference', () => {
   it('has unique anchors, a sample in each language and the responses of the spec', () => {
     expect(new Set(ops.map((o) => o.id)).size).toBe(ops.length);
     for (const o of ops) {
-      expect(o.samples.map((s) => s.lang)).toEqual(['curl', 'fetch']);
+      expect(o.samples.map((s) => s.lang)).toEqual(['curl', 'js', 'py']);
       expect(o.samples[0].code).toContain('https://api.cyex.tv');
       expect(o.responses.length).toBeGreaterThan(0);
     }
@@ -26,7 +27,25 @@ describe('REST reference', () => {
 
   it('puts path parameters into the sample URL', () => {
     const channel = ops.find((o) => o.path === '/v1/channels/{platform}/{id}')!;
-    expect(channel.samples[0].code).toContain('/v1/channels/twitch/123');
+    expect(channel.samples[0].code).toContain('/v1/channels/twitch/12345678');
+    expect(channel.samples[2].code).toContain('requests.get("https://api.cyex.tv/v1/channels/twitch/12345678")');
+  });
+});
+
+describe('guides', () => {
+  const ids = new Set([...restOperations().map((o) => o.id), ...graphqlReference().queries.map((o) => o.id), ...guides.map((g) => g.id), 'ws-events', 'gql-subscription-events']);
+
+  it('link only to sections that exist', () => {
+    for (const g of guides)
+      for (const b of g.blocks) {
+        const runs = 'text' in b ? [b.text] : 'items' in b ? b.items : 'rows' in b && b.t === 'fmt' ? b.rows.map((r) => r[1]) : [];
+        for (const para of runs.flat(2)) if (para.href?.startsWith('#')) expect(ids, para.href).toContain(para.href.slice(1));
+      }
+  });
+
+  it('never use the owner IDs as examples', () => {
+    const text = JSON.stringify({ guides, rest: restOperations(), gql: graphqlReference() });
+    for (const id of ['9285' + '4357', '3169' + '440']) expect(text).not.toContain(id);
   });
 });
 
@@ -51,5 +70,13 @@ describe('GraphQL reference', () => {
     expect(channel.document).toContain('query Channel($platform: Platform!, $id: String!)');
     expect(channel.samples[0].code).toContain('https://api.cyex.tv/v1/gql');
     expect(JSON.parse(channel.response).data.channel.login).toBeTruthy();
+    expect(channel.document && JSON.parse(channel.variables)).toEqual({ platform: 'TWITCH', id: '12345678' });
+    expect(channel.access).toBe('public');
+  });
+
+  it('marks what needs a session or a permission', () => {
+    expect(ref.mutations.find((o) => o.name === 'addSetEmote')!.access).toBe('signed-in');
+    expect(ref.mutations.find((o) => o.name === 'approveEmote')!.access).toBe('restricted');
+    expect(ref.mutations.find((o) => o.name === 'addSetEmote')!.samples[0].code).toContain("origin: https://cyex.tv");
   });
 });
