@@ -76,7 +76,7 @@
 </section>
 
 <style>
-  .hero { padding: calc(var(--nav-h) + clamp(40px, 6vw, 96px)) 0 clamp(48px, 6vw, 72px); text-align: center;
+  .hero { padding: clamp(40px, 6vw, 96px) 0 clamp(48px, 6vw, 72px); text-align: center;
     background: radial-gradient(60% 45% at 50% 0%, color-mix(in srgb, var(--accent-glow) 60%, transparent), transparent 70%); }
   .hero h1 { font-size: var(--t-h1); line-height: .98; letter-spacing: -.045em; max-width: 14ch; margin-inline: auto; }
   .center { margin-inline: auto; }

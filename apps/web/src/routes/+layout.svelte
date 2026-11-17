@@ -3,21 +3,23 @@
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { gql } from '$lib/api';
+  import CommandPalette from '$lib/components/CommandPalette.svelte';
   import Footer from '$lib/components/Footer.svelte';
-  import Nav from '$lib/components/Nav.svelte';
+  import Nav, { type NavUser } from '$lib/components/Nav.svelte';
   import { ME } from '$lib/queries';
 
   let { children } = $props();
-  let signedIn = $state(false);
+  let me = $state<NavUser | null>(null);
   // The signed-in pages (`(tool)`) bring their own header in the cyex-app style.
   const tool = $derived(page.route.id?.startsWith('/(tool)') ?? false);
 
   onMount(async () => {
     // Only the browser has the session cookie; signed out is the default.
     try {
-      signedIn = Boolean((await gql(ME, {})).me);
+      const who = (await gql(ME, {})).me?.identities[0];
+      me = who ? { displayName: who.displayName, avatar: who.avatar } : null;
     } catch {
-      signedIn = false;
+      me = null;
     }
   });
 </script>
@@ -26,9 +28,10 @@
   {@render children()}
 {:else}
   <a class="skip" href="#main">Skip to content</a>
-  <Nav {signedIn} />
+  <Nav {me} onsignout={() => (me = null)} />
   <main id="main" tabindex="-1">
     {@render children()}
   </main>
   <Footer />
 {/if}
+<CommandPalette />

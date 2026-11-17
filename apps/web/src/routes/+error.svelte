@@ -18,7 +18,7 @@
 </div>
 
 <style>
-  .nothing { padding-top: calc(var(--nav-h) + clamp(64px, 10vw, 140px)); text-align: center; }
+  .nothing { padding-top: clamp(64px, 10vw, 140px); text-align: center; }
   h1 { font-size: clamp(44px, 7vw, 96px); line-height: 1; letter-spacing: -.045em; }
   .lead { margin-inline: auto; }
   .actions { justify-content: center; margin-top: 32px; }

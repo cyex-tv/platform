@@ -39,7 +39,7 @@
 
 .docs-nav {
   position: sticky; top: var(--nav-h); align-self: start;
-  height: calc(100vh - var(--nav-h)); display: flex; flex-direction: column;
+  height: calc(100dvh - var(--nav-h)); display: flex; flex-direction: column;
   border-right: 1px solid var(--border); padding: 16px 10px 0 var(--page-pad);
 }
 .nav-search { position: relative; display: flex; align-items: center; margin-bottom: 14px; flex: none; }
@@ -91,7 +91,7 @@
 .m-ws { background: color-mix(in srgb, var(--yellow) 16%, transparent); color: var(--yellow); }
 
 /* ---------- Body ---------- */
-.docs-body { min-width: 0; padding: calc(var(--nav-h) + 34px) var(--page-pad) 20px; }
+.docs-body { min-width: 0; padding: 34px var(--page-pad) 20px; }
 .docs-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; max-width: var(--measure); margin-bottom: 30px; }
 .docs-title h1 { font-size: 2rem; margin: 0 0 6px; font-weight: 600; letter-spacing: -.02em; }
 .docs-title p { color: var(--muted); font-size: .97rem; }
@@ -183,7 +183,7 @@ section.type-block { padding: 22px 0; border-bottom: 1px solid var(--border); sc
 }
 @media (max-width: 900px) {
   .docs-shell { grid-template-columns: minmax(0, 1fr); }
-  .docs-nav { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); padding: calc(var(--nav-h) + 14px) var(--page-pad) 14px; }
+  .docs-nav { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); padding: 14px var(--page-pad) 14px; }
   .nav-scroll { max-height: 220px; flex: none; }
   .nav-kbd { display: none; }
   .docs-body { padding-top: 26px; }

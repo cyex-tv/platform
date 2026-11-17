@@ -56,7 +56,7 @@
 
 <style>
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 40px 72px;
-    padding-top: calc(var(--nav-h) + clamp(32px, 5vw, 64px)); align-items: start; }
+    padding-top: clamp(32px, 5vw, 64px); align-items: start; }
   .stage { display: grid; place-items: center; min-height: 320px; padding: 40px; border-radius: var(--radius-l);
     border: 1px solid var(--border); background: var(--surface); }
   .big { max-width: 100%; height: auto; max-height: 256px; }
