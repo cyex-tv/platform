@@ -1,4 +1,4 @@
-# 0017: The paint studio (staff editor for name paints)
+# 0018: The paint studio (staff editor for name paints)
 
 - Status: accepted
 - Date: 2026/11/17

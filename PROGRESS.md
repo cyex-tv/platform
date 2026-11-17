@@ -2,7 +2,7 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
-## Paint studio (branch `feat/paint-studio`, ADR 0017)
+## Paint studio (branch `feat/paint-studio`, ADR 0018)
 - `apps/web/src/lib/paint-studio/`: the staff editor for name paints, built on the owner's cyex paints tool. Gradient paints (kind, angle or shape, repeat, 2 to 10 stops, up to 4 shadows, fallback colour) with the API's limits checked live; animated paints from the tool's engine (layers, effects, scene elements, presets) rendered and encoded in a Web Worker as WebP, APNG or GIF; previews on sample names on both grounds and in Twitch- and Kick-style chat; import of cyex.tv JSON, integer-colour paint JSON and tool project files, export as cyex.tv JSON, integer JSON, CSS, picture and project; Save to cyex.tv (createPaint / updatePaint; animated: render, upload, wait for ready, IMAGE paint); Open an existing paint.
 - Provenance: the tool's gradient CSS builder and integer-colour formatter were ports of the 7TV extension; neither came over (the gradient side is new code, the formatter was removed from the engine). The engine's custom-code items (`new Function`) were removed.
 - Admin: `/admin/cosmetics/paints/studio` (new; `?id=` still opens one) and `/admin/cosmetics/paints/<id>/studio` (edit; the Paints list's Edit links there), `cosmetics.manage`; after the first save the address becomes the paint's own (shallow routing) and the catalog cache is dropped. Previews go through `lib/cosmetics/paint.ts`. Dev page `/dev/paint-studio` (404 in production). Tests: `src/lib/paint-studio/studio.test.ts` (colours, limits, CSS, import/export, API mapping, engine render and GIF).
