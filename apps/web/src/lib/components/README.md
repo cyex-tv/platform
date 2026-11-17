@@ -9,7 +9,7 @@ See them all with live data at `/dev/components` (dev server only; a 404 in prod
 | Component | Props | Notes |
 |---|---|---|
 | `Nav` | `me?: { displayName, avatar?, platform?, admin? } \| null`, `onsignout?()` | Sticky, 64px plus the top safe area, **in the flow**: pages start right under it, so don't pad by `--nav-h`. Glass after 8px of scroll. Links: Emotes. Search field opens the palette (no shortcut hint; hidden on /search). Signed in: Upload and the account menu (your emotes, upload, sets, channels; account, admin for staff; sign out last). 720px and narrower: search and menu buttons (the avatar when signed in), menu in a `BottomSheet`. |
-| `Footer` | none | Product, Developers, Legal (`/terms`, `/privacy`, `/contact`), non-affiliation line. |
+| `Footer` | none | Browse, Download, Cosmetics, Help, Developers, Source, Takedowns (Terms, Privacy and Contact once their pages exist), non-affiliation line. |
 | `CommandPalette` | none | Ctrl K / Cmd K, or `/` outside a field (no on-screen hint). A page input marked `data-page-search` takes `/` instead. Open it from code with `openPalette(query?)` from `palette.svelte.ts`. |
 
 ## Emotes

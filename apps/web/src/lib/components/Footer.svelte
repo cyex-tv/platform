@@ -11,7 +11,9 @@
 
   const links = [
     { href: '/search', label: 'Browse emotes' },
-    { href: '/#install', label: 'Get the extension' },
+    { href: '/download', label: 'Download' },
+    { href: '/cosmetics', label: 'Cosmetics' },
+    { href: '/help', label: 'Help' },
     { href: '/developers', label: 'Developers' },
     { href: 'https://github.com/cyex-tv/platform', label: 'Source' },
     // Terms, Privacy and Contact come back when their pages exist.
