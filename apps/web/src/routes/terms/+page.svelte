@@ -38,6 +38,6 @@
     <p>We may change these terms. The date at the top shows the latest version. Using cyex.tv after a change means you accept it.</p>
 
     <h2>Questions</h2>
-    <p>Write to <a class="link" href="mailto:abuse@cyex.tv">abuse@cyex.tv</a>.</p>
+    <p>See <a class="link" href="/contact">contact</a>.</p>
   </div>
 </div>

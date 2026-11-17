@@ -34,7 +34,7 @@
     <h2>How long</h2>
     <ul>
       <li>Sessions expire. Signing out ends yours at once.</li>
-      <li>When an account is deleted, its data is removed.</li>
+      <li>To delete your account, write to <a class="link" href="mailto:privacy@cyex.tv">privacy@cyex.tv</a> from a channel you signed in with, or name it in your message. Its data is removed within 30 days.</li>
       <li>Backups rotate after 14 days, so deleted data is gone from them by then.</li>
     </ul>
 
