@@ -321,3 +321,196 @@ export const MARK_READ = graphql(`
     markNotificationsRead
   }
 `);
+
+// Admin: review, reports, users, roles, audit.
+
+export const ADMIN_COUNTS = graphql(`
+  query AdminCounts($review: Boolean!, $reports: Boolean!) {
+    reviewQueue(page: 1, perPage: 1) @include(if: $review) {
+      total
+    }
+    reportQueue(page: 1, perPage: 1) @include(if: $reports) {
+      total
+    }
+    globalSet {
+      id
+    }
+  }
+`);
+
+export const REVIEW_QUEUE = graphql(`
+  query ReviewQueue($page: Int, $perPage: Int) {
+    reviewQueue(page: $page, perPage: $perPage) {
+      total
+      items {
+        ...EmoteFields
+      }
+    }
+  }
+`);
+
+export const APPROVE = graphql(`
+  mutation Approve($id: String!) {
+    approveEmote(id: $id) {
+      id
+      state
+    }
+  }
+`);
+
+export const REJECT = graphql(`
+  mutation Reject($id: String!, $reason: String!) {
+    rejectEmote(id: $id, reason: $reason) {
+      id
+      state
+    }
+  }
+`);
+
+export const REPORT_QUEUE = graphql(`
+  query ReportQueue($page: Int, $perPage: Int) {
+    reportQueue(page: $page, perPage: $perPage) {
+      total
+      items {
+        id
+        reason
+        reporterId
+        state
+        createdAt
+        emote {
+          ...EmoteFields
+        }
+      }
+    }
+  }
+`);
+
+export const RESOLVE_REPORT = graphql(`
+  mutation ResolveReport($id: String!, $action: ReportAction!, $note: String) {
+    resolveReport(id: $id, action: $action, note: $note) {
+      id
+      state
+    }
+  }
+`);
+
+export const TAKEDOWN = graphql(`
+  mutation Takedown($id: String!, $reason: String!) {
+    takedownEmote(id: $id, reason: $reason) {
+      id
+      state
+    }
+  }
+`);
+
+export const ROLE_FIELDS = graphql(`
+  fragment RoleFields on Role {
+    id
+    name
+    description
+    position
+    permissions
+  }
+`);
+
+export const ROLES = graphql(`
+  query Roles {
+    roles {
+      ...RoleFields
+    }
+    permissions
+  }
+`);
+
+export const CREATE_ROLE = graphql(`
+  mutation CreateRole($input: CreateRoleInput!) {
+    createRole(input: $input) {
+      ...RoleFields
+    }
+  }
+`);
+
+export const UPDATE_ROLE = graphql(`
+  mutation UpdateRole($id: String!, $input: UpdateRoleInput!) {
+    updateRole(id: $id, input: $input) {
+      ...RoleFields
+    }
+  }
+`);
+
+export const DELETE_ROLE = graphql(`
+  mutation DeleteRole($id: String!) {
+    deleteRole(id: $id)
+  }
+`);
+
+export const USER = graphql(`
+  query User($platform: Platform!, $login: String!) {
+    channelByLogin(platform: $platform, login: $login) {
+      platform
+      platformChannelId
+      login
+      account {
+        id
+        displayName
+        avatar
+      }
+    }
+  }
+`);
+
+export const USER_DETAILS = graphql(`
+  query UserDetails($accountId: String!, $status: Boolean!, $roles: Boolean!) {
+    accountStatus(accountId: $accountId) @include(if: $status) {
+      uploadsBlocked
+      blocked
+    }
+    accountRoles(accountId: $accountId) @include(if: $roles) {
+      ...RoleFields
+    }
+  }
+`);
+
+export const ALL_ROLES = graphql(`
+  query AllRoles {
+    roles {
+      ...RoleFields
+    }
+  }
+`);
+
+export const RESTRICT = graphql(`
+  mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {
+    restrictAccount(accountId: $accountId, uploadsBlocked: $uploadsBlocked, blocked: $blocked) {
+      uploadsBlocked
+      blocked
+    }
+  }
+`);
+
+export const ASSIGN_ROLE = graphql(`
+  mutation AssignRole($accountId: String!, $roleId: String!) {
+    assignRole(accountId: $accountId, roleId: $roleId)
+  }
+`);
+
+export const UNASSIGN_ROLE = graphql(`
+  mutation UnassignRole($accountId: String!, $roleId: String!) {
+    unassignRole(accountId: $accountId, roleId: $roleId)
+  }
+`);
+
+export const AUDIT = graphql(`
+  query Audit($targetKind: String, $targetId: String, $before: String, $limit: Int) {
+    auditLog(targetKind: $targetKind, targetId: $targetId, before: $before, limit: $limit) {
+      id
+      actorId
+      action
+      targetKind
+      targetId
+      before
+      after
+      createdAt
+    }
+  }
+`);

@@ -3,14 +3,15 @@
 //   PUBLIC_API_URL=http://localhost:8787 npm run dev
 // It answers the site's GraphQL operations with made-up emotes and draws their pictures as
 // simple shapes. "Signing in" sets a mock cookie; everything signed in lives in memory and
-// resets when it restarts. MOCK_ADMIN=1 gives the mock account every permission.
+// resets when it restarts. MOCK_ADMIN=1, or opening /mock/admin once, gives the mock account
+// every permission (/mock/admin?off clears it).
 // Development only; nothing here ships.
 import { createServer } from 'node:http';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const ORIGIN = process.env.SITE_ORIGIN ?? 'http://localhost:5173';
 const BASE = `http://localhost:${PORT}`;
-const ADMIN = process.env.MOCK_ADMIN === '1';
+const ADMIN_ENV = process.env.MOCK_ADMIN === '1';
 
 const NAMES = ['catJAM', 'pogHop', 'quietoak', 'lumenWave', 'noraWow', 'pixelmoth', 'byteNod', 'foxLook',
   'oakCry', 'moonHi', 'sipTea', 'clapclap', 'wideSmile', 'thinking', 'rainyDay', 'gg', 'okBuddy', 'sleepy',
@@ -55,6 +56,27 @@ const SETS = [
   { id: '01JD8XSET000000000000000OAK', name: 'quietoak main', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[0],
     emotes: ALL.slice(60, 70).map((e) => member(e)), editors: [ME_SUMMARY] },
 ];
+const GLOBAL = { id: '01JD8XSET0000000000000GLOBL', name: 'Global', kind: 'GLOBAL', capacity: 200, owner: null,
+  emotes: ALL.slice(0, 24).map((e) => member(e)), editors: [] };
+SETS.push(GLOBAL);
+const PENDING = Array.from({ length: 7 }, (_, i) => emote(400 + i, OTHERS[i % 2], 'PENDING'));
+const REPORTS = [
+  { id: 'R1', reason: 'This is a copy of my emote.', reporterId: OTHERS[1].id, state: 'OPEN', createdAt: '2026-11-16T18:00:00.000Z', emote: ALL[5] },
+  { id: 'R2', reason: 'Spam', reporterId: OTHERS[0].id, state: 'OPEN', createdAt: '2026-11-16T19:30:00.000Z', emote: ALL[8] },
+];
+const ROLES = [
+  { id: 'ROLE1', name: 'Admin', description: 'Runs the platform.', position: 100, permissions: ['roles.manage', 'users.view', 'users.restrict', 'audit.view'] },
+  { id: 'ROLE2', name: 'Moderator', description: 'Reviews uploads and reports.', position: 50, permissions: ['emotes.review', 'emotes.takedown'] },
+];
+const ACCOUNT_ROLES = { [OTHERS[0].id]: ['ROLE2'] };
+const STATUS = {};
+const AUDIT = Array.from({ length: 64 }, (_, i) => ({
+  id: '01JD8XAUD' + String(1000 - i).padStart(17, '0'), actorId: i % 5 === 0 ? null : ME_ID,
+  action: ['emote.approved', 'set.editor_added', 'role.updated', 'account.restricted'][i % 4],
+  targetKind: ['emote', 'set', 'role', 'account'][i % 4], targetId: '01JD8X' + String(i).padStart(20, '0'),
+  before: i % 4 === 3 ? JSON.stringify({ uploads_blocked: false, blocked: false }) : null,
+  after: JSON.stringify({ state: 'APPROVED', n: i }), createdAt: new Date(Date.UTC(2026, 10, 16, 22, 0, 0) - i * 600_000).toISOString(),
+}));
 const CHANNELS = [
   { platform: 'TWITCH', platformChannelId: '141981764', login: 'lumen_fox', activeSetId: SETS[0].id, allowPersonalEmotes: true, account: ME_SUMMARY },
 ];
@@ -71,7 +93,7 @@ const findSet = (id) => SETS.find((s) => s.id === id);
 const err = (message, code) => ({ data: null, errors: [{ message, extensions: { code } }] });
 const setOut = (s) => ({ ...s, editors: undefined });
 
-function signedIn(body, v) {
+function signedIn(body, v, ADMIN) {
   const op = (body.query.match(/(?:query|mutation)\s+(\w+)/) ?? [])[1];
   switch (op) {
     case 'Me':
@@ -177,22 +199,84 @@ function signedIn(body, v) {
       return { data: { markNotificationsRead: n } };
     }
     case 'Emote':
-      return { data: { emote: findEmote(v.id) ?? null } };
+      return { data: { emote: findEmote(v.id) ?? PENDING.find((e) => e.id === v.id) ?? null } };
+    case 'AdminCounts':
+      return { data: { reviewQueue: { total: PENDING.length }, reportQueue: { total: REPORTS.length }, globalSet: { id: GLOBAL.id } } };
+    case 'ReviewQueue':
+      if (!ADMIN) return err('This needs emotes.review.', 'forbidden');
+      return { data: { reviewQueue: { total: PENDING.length, items: PENDING.slice(0, v.perPage ?? 50) } } };
+    case 'Approve':
+    case 'Reject': {
+      const e = PENDING.splice(PENDING.findIndex((x) => x.id === v.id), 1)[0];
+      e.state = op === 'Approve' ? 'APPROVED' : 'REJECTED';
+      return { data: { [op === 'Approve' ? 'approveEmote' : 'rejectEmote']: { id: e.id, state: e.state } } };
+    }
+    case 'ReportQueue':
+      return { data: { reportQueue: { total: REPORTS.length, items: REPORTS } } };
+    case 'ResolveReport': {
+      const r = REPORTS.splice(REPORTS.findIndex((x) => x.id === v.id), 1)[0];
+      return { data: { resolveReport: { id: r.id, state: v.action === 'DISMISS' ? 'DISMISSED' : 'ACTIONED' } } };
+    }
+    case 'Roles':
+      return { data: { roles: ROLES, permissions: PERMISSIONS } };
+    case 'AllRoles':
+      return { data: { roles: ROLES } };
+    case 'CreateRole': {
+      const r = { id: 'ROLE' + (ROLES.length + 1), ...v.input, description: v.input.description ?? null };
+      ROLES.push(r);
+      return { data: { createRole: r } };
+    }
+    case 'UpdateRole': {
+      const r = ROLES.find((x) => x.id === v.id);
+      Object.assign(r, v.input);
+      if (r.description === '') r.description = null;
+      return { data: { updateRole: r } };
+    }
+    case 'DeleteRole':
+      ROLES.splice(ROLES.findIndex((x) => x.id === v.id), 1);
+      return { data: { deleteRole: true } };
+    case 'User': {
+      const a = [...OTHERS, ME_SUMMARY].find((o) => o.displayName === v.login);
+      return { data: { channelByLogin: a ? { platform: v.platform, platformChannelId: '5550' + a.id.slice(-3), login: v.login, account: a } : null } };
+    }
+    case 'UserDetails': {
+      const st = STATUS[v.accountId] ?? { uploadsBlocked: false, blocked: false };
+      const roles = (ACCOUNT_ROLES[v.accountId] ?? []).map((id) => ROLES.find((r) => r.id === id)).filter(Boolean);
+      return { data: { ...(v.status ? { accountStatus: st } : {}), ...(v.roles ? { accountRoles: roles } : {}) } };
+    }
+    case 'Restrict': {
+      if (v.accountId === ME_ID) return err('The owner’s account can’t be restricted.', 'owner_protected');
+      const st = (STATUS[v.accountId] ??= { uploadsBlocked: false, blocked: false });
+      if (v.uploadsBlocked !== undefined && v.uploadsBlocked !== null) st.uploadsBlocked = v.uploadsBlocked;
+      if (v.blocked !== undefined && v.blocked !== null) st.blocked = v.blocked;
+      return { data: { restrictAccount: st } };
+    }
+    case 'AssignRole':
+      (ACCOUNT_ROLES[v.accountId] ??= []).push(v.roleId);
+      return { data: { assignRole: true } };
+    case 'UnassignRole':
+      ACCOUNT_ROLES[v.accountId] = (ACCOUNT_ROLES[v.accountId] ?? []).filter((id) => id !== v.roleId);
+      return { data: { unassignRole: true } };
+    case 'Audit': {
+      let rows = AUDIT.filter((a) => (!v.targetKind || a.targetKind === v.targetKind) && (!v.targetId || a.targetId === v.targetId));
+      if (v.before) rows = rows.filter((a) => a.id < v.before);
+      return { data: { auditLog: rows.slice(0, v.limit ?? 50) } };
+    }
     default:
       return null;
   }
 }
 
-function answer(body, session) {
+function answer(body, session, admin) {
   const q = body.query ?? '';
   const v = body.variables ?? {};
   if (session) {
-    const out = signedIn(body, v);
+    const out = signedIn(body, v, admin);
     if (out) return out;
   }
   if (q.includes('query Me') || /^\s*mutation/.test(q) || q.includes('query My') || q.includes('query EditSet'))
     return err('Sign in to use this.', 'signed_out');
-  if (q.includes('query GlobalSet')) return { data: { globalSet: { id: 'G', name: 'Global', emotes: ALL.slice(0, 24).map((e) => ({ name: e.name, zeroWidth: false, emote: e })) } } };
+  if (q.includes('query GlobalSet')) return { data: { globalSet: { id: GLOBAL.id, name: 'Global', emotes: GLOBAL.emotes } } };
   if (q.includes('query Search')) {
     const text = (v.query ?? '').toLowerCase();
     let hits = ALL.filter((e) => !text || e.name.toLowerCase().includes(text) || e.tags.some((t) => t.startsWith(text)));
@@ -240,6 +324,13 @@ createServer(async (req, res) => {
   if (req.method === 'OPTIONS') return res.writeHead(204).end();
   const session = /(?:^|;\s*)mock_session=1/.test(req.headers.cookie ?? '');
   const url = new URL(req.url ?? '/', BASE);
+  const admin = ADMIN_ENV || /(?:^|;\s*)mock_admin=1/.test(req.headers.cookie ?? '');
+  if (url.pathname === '/mock/admin') {
+    const off = url.searchParams.has('off');
+    const cookie = off ? 'mock_admin=; Path=/; Max-Age=0' : 'mock_admin=1; Path=/; SameSite=Lax';
+    res.writeHead(302, { location: ORIGIN + '/admin', 'set-cookie': cookie });
+    return res.end();
+  }
 
   const img = url.pathname.match(/^\/emotes\/(\d+)\/(\d)x(?:_static)?\.webp$/);
   if (img) {
@@ -274,10 +365,10 @@ createServer(async (req, res) => {
   }
   if (req.method === 'POST' && url.pathname === '/v1/gql') {
     const raw = (await read(req)).toString('utf8');
-    return json(res, 200, answer(JSON.parse(raw || '{}'), session));
+    return json(res, 200, answer(JSON.parse(raw || '{}'), session, admin));
   }
   res.writeHead(404).end();
-}).listen(PORT, 'localhost', () => console.log(`mock api on ${BASE}${ADMIN ? ' (admin)' : ''}`));
+}).listen(PORT, 'localhost', () => console.log(`mock api on ${BASE}${ADMIN_ENV ? ' (admin)' : ''}`));
 
 function json(res, status, body) {
   res.writeHead(status, { 'content-type': 'application/json' });

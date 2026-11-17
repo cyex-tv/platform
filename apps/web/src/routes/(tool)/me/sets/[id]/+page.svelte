@@ -89,7 +89,7 @@
 
 <svelte:head><title>{set?.name ?? 'Set'} - cyex.tv</title></svelte:head>
 
-<p class="crumbs"><a href="/me/sets">Sets</a> <span aria-hidden="true">/</span> {set?.name ?? ''}</p>
+<p class="crumbs"><a href={set?.kind === 'GLOBAL' ? '/admin' : '/me/sets'}>{set?.kind === 'GLOBAL' ? 'Admin' : 'Sets'}</a> <span aria-hidden="true">/</span> {set?.name ?? ''}</p>
 
 {#if problem}
   <div class="ui-empty"><p>{problem}</p><a class="ui-btn secondary" href="/me/sets">Back to your sets</a></div>
@@ -98,9 +98,9 @@
     <div>
       <h1>{set.name}</h1>
       <p>
-        {set.kind === 'PERSONAL' ? 'Personal set' : 'Channel set'} ·
+        {set.kind === 'GLOBAL' ? 'The global set' : set.kind === 'PERSONAL' ? 'Personal set' : 'Channel set'} ·
         <span class="ui-mono">{count(set.emotes.length)} / {count(set.capacity)}</span> emotes
-        {#if !owner}· by {set.owner?.displayName}{/if}
+        {#if !owner && set.owner}· by {set.owner.displayName}{/if}
       </p>
     </div>
   </div>
@@ -123,6 +123,7 @@
         <EditorsPanel setId={set.id} {owner} bind:editors />
       {/if}
 
+      {#if set.kind !== 'GLOBAL'}
       <section class="ui-card">
         {#if owner}
           <h2>Delete set</h2>
@@ -134,6 +135,7 @@
           <div class="ui-actions gap"><Confirm label="Leave" confirm="Click again to leave" onconfirm={leave} /></div>
         {/if}
       </section>
+      {/if}
     </aside>
   </div>
 {:else}

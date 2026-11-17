@@ -422,6 +422,11 @@ export type Query = {
   /** An account's roles. Yours, or anyone's with `roles.manage` or `users.view`. */
   accountRoles: Array<Role>;
   /**
+   * Whether an account's uploads or sign-in are blocked. Needs `users.view` or
+   * `users.restrict`.
+   */
+  accountStatus: AccountStatus;
+  /**
    * Audited changes, newest first. Needs `audit.view`. Page back with `before` (an entry ID);
    * `limit` is 1 to 100, default 50.
    */
@@ -469,6 +474,11 @@ export type Query = {
 
 
 export type QueryAccountRolesArgs = {
+  accountId: Scalars['String']['input'];
+};
+
+
+export type QueryAccountStatusArgs = {
   accountId: Scalars['String']['input'];
 };
 
@@ -854,6 +864,148 @@ export type MarkReadMutationVariables = Exact<{ [key: string]: never; }>;
 
 export type MarkReadMutation = { __typename?: 'Mutation', markNotificationsRead: number };
 
+export type AdminCountsQueryVariables = Exact<{
+  review: Scalars['Boolean']['input'];
+  reports: Scalars['Boolean']['input'];
+}>;
+
+
+export type AdminCountsQuery = { __typename?: 'Query', reviewQueue?: { __typename?: 'ReviewQueue', total: number }, reportQueue?: { __typename?: 'ReportQueue', total: number }, globalSet: { __typename?: 'EmoteSet', id: string } };
+
+export type ReviewQueueQueryVariables = Exact<{
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type ReviewQueueQuery = { __typename?: 'Query', reviewQueue: { __typename?: 'ReviewQueue', total: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+
+export type ApproveMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type ApproveMutation = { __typename?: 'Mutation', approveEmote: { __typename?: 'Emote', id: string, state: EmoteState } };
+
+export type RejectMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  reason: Scalars['String']['input'];
+}>;
+
+
+export type RejectMutation = { __typename?: 'Mutation', rejectEmote: { __typename?: 'Emote', id: string, state: EmoteState } };
+
+export type ReportQueueQueryVariables = Exact<{
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type ReportQueueQuery = { __typename?: 'Query', reportQueue: { __typename?: 'ReportQueue', total: number, items: Array<{ __typename?: 'Report', id: string, reason: string, reporterId?: string | null, state: ReportState, createdAt: string, emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null }> } };
+
+export type ResolveReportMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  action: ReportAction;
+  note?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type ResolveReportMutation = { __typename?: 'Mutation', resolveReport: { __typename?: 'Report', id: string, state: ReportState } };
+
+export type TakedownMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  reason: Scalars['String']['input'];
+}>;
+
+
+export type TakedownMutation = { __typename?: 'Mutation', takedownEmote: { __typename?: 'Emote', id: string, state: EmoteState } };
+
+export type RoleFieldsFragment = { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> };
+
+export type RolesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type RolesQuery = { __typename?: 'Query', permissions: Array<string>, roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> }> };
+
+export type CreateRoleMutationVariables = Exact<{
+  input: CreateRoleInput;
+}>;
+
+
+export type CreateRoleMutation = { __typename?: 'Mutation', createRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> } };
+
+export type UpdateRoleMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: UpdateRoleInput;
+}>;
+
+
+export type UpdateRoleMutation = { __typename?: 'Mutation', updateRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> } };
+
+export type DeleteRoleMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DeleteRoleMutation = { __typename?: 'Mutation', deleteRole: boolean };
+
+export type UserQueryVariables = Exact<{
+  platform: Platform;
+  login: Scalars['String']['input'];
+}>;
+
+
+export type UserQuery = { __typename?: 'Query', channelByLogin?: { __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } } | null };
+
+export type UserDetailsQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+  status: Scalars['Boolean']['input'];
+  roles: Scalars['Boolean']['input'];
+}>;
+
+
+export type UserDetailsQuery = { __typename?: 'Query', accountStatus?: { __typename?: 'AccountStatus', uploadsBlocked: boolean, blocked: boolean }, accountRoles?: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> }> };
+
+export type AllRolesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type AllRolesQuery = { __typename?: 'Query', roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> }> };
+
+export type RestrictMutationVariables = Exact<{
+  accountId: Scalars['String']['input'];
+  uploadsBlocked?: InputMaybe<Scalars['Boolean']['input']>;
+  blocked?: InputMaybe<Scalars['Boolean']['input']>;
+}>;
+
+
+export type RestrictMutation = { __typename?: 'Mutation', restrictAccount: { __typename?: 'AccountStatus', uploadsBlocked: boolean, blocked: boolean } };
+
+export type AssignRoleMutationVariables = Exact<{
+  accountId: Scalars['String']['input'];
+  roleId: Scalars['String']['input'];
+}>;
+
+
+export type AssignRoleMutation = { __typename?: 'Mutation', assignRole: boolean };
+
+export type UnassignRoleMutationVariables = Exact<{
+  accountId: Scalars['String']['input'];
+  roleId: Scalars['String']['input'];
+}>;
+
+
+export type UnassignRoleMutation = { __typename?: 'Mutation', unassignRole: boolean };
+
+export type AuditQueryVariables = Exact<{
+  targetKind?: InputMaybe<Scalars['String']['input']>;
+  targetId?: InputMaybe<Scalars['String']['input']>;
+  before?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type AuditQuery = { __typename?: 'Query', auditLog: Array<{ __typename?: 'AuditEntry', id: string, actorId?: string | null, action: string, targetKind: string, targetId: string, before?: string | null, after?: string | null, createdAt: string }> };
+
 export class TypedDocumentString<TResult, TVariables>
   extends String
   implements DocumentTypeDecoration<TResult, TVariables>
@@ -950,6 +1102,15 @@ export const SetFieldsFragmentDoc = new TypedDocumentString(`
     isStatic
   }
 }`, {"fragmentName":"SetFields"}) as unknown as TypedDocumentString<SetFieldsFragment, unknown>;
+export const RoleFieldsFragmentDoc = new TypedDocumentString(`
+    fragment RoleFields on Role {
+  id
+  name
+  description
+  position
+  permissions
+}
+    `, {"fragmentName":"RoleFields"}) as unknown as TypedDocumentString<RoleFieldsFragment, unknown>;
 export const SearchDocument = new TypedDocumentString(`
     query Search($query: String!, $animated: Boolean, $page: Int, $perPage: Int) {
   searchEmotes(query: $query, animated: $animated, page: $page, perPage: $perPage) {
@@ -1445,3 +1606,259 @@ export const MarkReadDocument = new TypedDocumentString(`
   markNotificationsRead
 }
     `) as unknown as TypedDocumentString<MarkReadMutation, MarkReadMutationVariables>;
+export const AdminCountsDocument = new TypedDocumentString(`
+    query AdminCounts($review: Boolean!, $reports: Boolean!) {
+  reviewQueue(page: 1, perPage: 1) @include(if: $review) {
+    total
+  }
+  reportQueue(page: 1, perPage: 1) @include(if: $reports) {
+    total
+  }
+  globalSet {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<AdminCountsQuery, AdminCountsQueryVariables>;
+export const ReviewQueueDocument = new TypedDocumentString(`
+    query ReviewQueue($page: Int, $perPage: Int) {
+  reviewQueue(page: $page, perPage: $perPage) {
+    total
+    items {
+      ...EmoteFields
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  flags {
+    zeroWidth
+    nsfw
+    private
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<ReviewQueueQuery, ReviewQueueQueryVariables>;
+export const ApproveDocument = new TypedDocumentString(`
+    mutation Approve($id: String!) {
+  approveEmote(id: $id) {
+    id
+    state
+  }
+}
+    `) as unknown as TypedDocumentString<ApproveMutation, ApproveMutationVariables>;
+export const RejectDocument = new TypedDocumentString(`
+    mutation Reject($id: String!, $reason: String!) {
+  rejectEmote(id: $id, reason: $reason) {
+    id
+    state
+  }
+}
+    `) as unknown as TypedDocumentString<RejectMutation, RejectMutationVariables>;
+export const ReportQueueDocument = new TypedDocumentString(`
+    query ReportQueue($page: Int, $perPage: Int) {
+  reportQueue(page: $page, perPage: $perPage) {
+    total
+    items {
+      id
+      reason
+      reporterId
+      state
+      createdAt
+      emote {
+        ...EmoteFields
+      }
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  flags {
+    zeroWidth
+    nsfw
+    private
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<ReportQueueQuery, ReportQueueQueryVariables>;
+export const ResolveReportDocument = new TypedDocumentString(`
+    mutation ResolveReport($id: String!, $action: ReportAction!, $note: String) {
+  resolveReport(id: $id, action: $action, note: $note) {
+    id
+    state
+  }
+}
+    `) as unknown as TypedDocumentString<ResolveReportMutation, ResolveReportMutationVariables>;
+export const TakedownDocument = new TypedDocumentString(`
+    mutation Takedown($id: String!, $reason: String!) {
+  takedownEmote(id: $id, reason: $reason) {
+    id
+    state
+  }
+}
+    `) as unknown as TypedDocumentString<TakedownMutation, TakedownMutationVariables>;
+export const RolesDocument = new TypedDocumentString(`
+    query Roles {
+  roles {
+    ...RoleFields
+  }
+  permissions
+}
+    fragment RoleFields on Role {
+  id
+  name
+  description
+  position
+  permissions
+}`) as unknown as TypedDocumentString<RolesQuery, RolesQueryVariables>;
+export const CreateRoleDocument = new TypedDocumentString(`
+    mutation CreateRole($input: CreateRoleInput!) {
+  createRole(input: $input) {
+    ...RoleFields
+  }
+}
+    fragment RoleFields on Role {
+  id
+  name
+  description
+  position
+  permissions
+}`) as unknown as TypedDocumentString<CreateRoleMutation, CreateRoleMutationVariables>;
+export const UpdateRoleDocument = new TypedDocumentString(`
+    mutation UpdateRole($id: String!, $input: UpdateRoleInput!) {
+  updateRole(id: $id, input: $input) {
+    ...RoleFields
+  }
+}
+    fragment RoleFields on Role {
+  id
+  name
+  description
+  position
+  permissions
+}`) as unknown as TypedDocumentString<UpdateRoleMutation, UpdateRoleMutationVariables>;
+export const DeleteRoleDocument = new TypedDocumentString(`
+    mutation DeleteRole($id: String!) {
+  deleteRole(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeleteRoleMutation, DeleteRoleMutationVariables>;
+export const UserDocument = new TypedDocumentString(`
+    query User($platform: Platform!, $login: String!) {
+  channelByLogin(platform: $platform, login: $login) {
+    platform
+    platformChannelId
+    login
+    account {
+      id
+      displayName
+      avatar
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<UserQuery, UserQueryVariables>;
+export const UserDetailsDocument = new TypedDocumentString(`
+    query UserDetails($accountId: String!, $status: Boolean!, $roles: Boolean!) {
+  accountStatus(accountId: $accountId) @include(if: $status) {
+    uploadsBlocked
+    blocked
+  }
+  accountRoles(accountId: $accountId) @include(if: $roles) {
+    ...RoleFields
+  }
+}
+    fragment RoleFields on Role {
+  id
+  name
+  description
+  position
+  permissions
+}`) as unknown as TypedDocumentString<UserDetailsQuery, UserDetailsQueryVariables>;
+export const AllRolesDocument = new TypedDocumentString(`
+    query AllRoles {
+  roles {
+    ...RoleFields
+  }
+}
+    fragment RoleFields on Role {
+  id
+  name
+  description
+  position
+  permissions
+}`) as unknown as TypedDocumentString<AllRolesQuery, AllRolesQueryVariables>;
+export const RestrictDocument = new TypedDocumentString(`
+    mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {
+  restrictAccount(
+    accountId: $accountId
+    uploadsBlocked: $uploadsBlocked
+    blocked: $blocked
+  ) {
+    uploadsBlocked
+    blocked
+  }
+}
+    `) as unknown as TypedDocumentString<RestrictMutation, RestrictMutationVariables>;
+export const AssignRoleDocument = new TypedDocumentString(`
+    mutation AssignRole($accountId: String!, $roleId: String!) {
+  assignRole(accountId: $accountId, roleId: $roleId)
+}
+    `) as unknown as TypedDocumentString<AssignRoleMutation, AssignRoleMutationVariables>;
+export const UnassignRoleDocument = new TypedDocumentString(`
+    mutation UnassignRole($accountId: String!, $roleId: String!) {
+  unassignRole(accountId: $accountId, roleId: $roleId)
+}
+    `) as unknown as TypedDocumentString<UnassignRoleMutation, UnassignRoleMutationVariables>;
+export const AuditDocument = new TypedDocumentString(`
+    query Audit($targetKind: String, $targetId: String, $before: String, $limit: Int) {
+  auditLog(
+    targetKind: $targetKind
+    targetId: $targetId
+    before: $before
+    limit: $limit
+  ) {
+    id
+    actorId
+    action
+    targetKind
+    targetId
+    before
+    after
+    createdAt
+  }
+}
+    `) as unknown as TypedDocumentString<AuditQuery, AuditQueryVariables>;

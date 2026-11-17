@@ -54,6 +54,11 @@ Work in `cyex-app/cyex-deck` goes on a feature branch with a PR the owner merges
 
 ## Phase 6: Search and the website (in progress)
 
+### PR 6: the website, admin pages (branch `phase-6/web-admin`, stacked on PR 5 and Phase 7 PR 3)
+- [x] `/admin`, shown to accounts holding any moderation or admin permission, each part only with the permission it needs: an overview with the queue counts; the review queue (approve, reject with a reason); reports (dismiss with a note, take down with a reason); users (find by Twitch or Kick login, block uploads or the account, give and take roles); roles (create, edit with the permissions you hold, delete); the audit log (filter by kind and ID, before and after, older pages); the global set (the set page, without delete).
+- [x] The mock gives the signed-in account every permission after `/mock/admin`.
+- [x] Checked in a browser against the mock: every action above, 1280 and 375 wide (no sideways scroll), and an account without permissions refused.
+
 ### PR 5: the website, signed-in pages (branch `phase-6/web-me`, stacked on PR 3 and PR 4)
 - [x] A `(tool)` route group in the cyex-app web-tool style (IBM Plex, warm grey, square cards, flat sticky header with uppercase links): its tokens are a copy of cyex-app's, set on `.tool` so the public pages keep the cyex-web look. Browser-only (`ssr = false`): the session cookie belongs to the API's domain. Signed out goes to `/signin?back=…`.
 - [x] Your emotes (every state, paged), upload (drag and drop or pick, previews at three sizes, name and tags checked like the API before sending, `POST /v1/emotes`), an emote's page (details, zero-width, unlisted, NSFW, add to a set, delete; picks up the files once the worker has made them).
@@ -68,7 +73,7 @@ Work in `cyex-app/cyex-deck` goes on a feature branch with a PR the owner merges
 - [x] Pages: home (hero, the global set, what it's for, developers band), search (name and tag, all, animated or still, paging), an emote's page (preview, 1x to 4x, facts), a channel's page (its active set), sign in (Twitch or Kick, and what is stored), developers (the public reads, personal lookup, live updates), 404 and errors.
 - [x] `apps/web/dev/mock-api.mjs`: a stand-in API for looking at the site without the stack (development only).
 - [x] Checked in a browser against the mock: desktop 1280 and phone 375, dark and light, the phone menu, search with filters, an emote, a channel, an unknown channel (404).
-- [ ] Signed-in pages (your emotes, upload, sets and editors, personal set, channel settings, linked accounts) and admin pages (review queue, reports, roles, users, audit log, global set): next PRs, in the cyex-app style.
+- [x] Signed-in pages and admin pages: PR 5 and PR 6.
 - [ ] Playwright end-to-end tests: they need test OAuth apps (the owner's) to sign in.
 
 ### PR 2: CORS for the website and browser clients (branch `phase-6/cors`)
