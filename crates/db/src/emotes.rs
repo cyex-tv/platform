@@ -233,6 +233,21 @@ pub async fn review(
     .await?)
 }
 
+/// Sends an approved emote back to review: `pending` again, with the last review cleared. `None`
+/// if it wasn't approved (or doesn't exist).
+pub async fn resubmit(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Emote>> {
+    Ok(sqlx::query_as(&format!(
+        "UPDATE emotes
+         SET state = 'pending', reviewed_by = NULL, reviewed_at = NULL, review_reason = NULL,
+             updated_at = now()
+         WHERE id = $1 AND deleted_at IS NULL AND state = 'approved'
+         RETURNING {EMOTE}"
+    ))
+    .bind(id)
+    .fetch_optional(conn)
+    .await?)
+}
+
 /// The sets an emote is in.
 pub async fn sets_containing(conn: &mut PgConnection, id: Uuid) -> DbResult<Vec<Uuid>> {
     Ok(sqlx::query_scalar(

@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 use axum::http::StatusCode;
 use cyex_tv_auth::Caller;
 use cyex_tv_db::emotes::{self, EmotePatch};
-use cyex_tv_db::{DbError, audit, ids, reads, sets};
+use cyex_tv_db::{DbError, accounts, audit, ids, reads, sets};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{Emote, EmoteState, EventType, ReviewQueue, UpdateEmote};
 use cyex_tv_shared::permissions;
@@ -223,8 +223,10 @@ async fn review(
         Some(json!({ "state": to, "reason": why })),
     )
     .await?;
-    // Sets that held it pending now show it (approved) or keep hiding it (rejected).
-    announce(&mut tx, id, EventType::EmoteUpdated).await?;
+    // Sets that held it pending show it now; a rejected one stays hidden, so nothing to tell.
+    if to == EmoteState::Approved {
+        announce(&mut tx, id, EventType::EmoteUpdated).await?;
+    }
     tx.commit().await.map_err(sqlx_error)?;
 
     let after = row(&mut conn, id).await?.ok_or_else(not_found)?;
@@ -239,7 +241,9 @@ pub async fn reject(state: &AppState, caller: &Caller, id: &str, why: &str) -> A
     review(state, caller, id, EmoteState::Rejected, Some(why)).await
 }
 
-/// The owner, or `emotes.edit_any` (audited).
+/// The owner, or `emotes.edit_any` (audited). A restricted owner can't edit. When an owner
+/// without `emotes.review` or `emotes.edit_any` changes the name or tags of an approved emote, it
+/// goes back to review (audited as `emote.resubmitted`); flags alone don't.
 pub async fn update(
     state: &AppState,
     caller: &Caller,
@@ -253,10 +257,32 @@ pub async fn update(
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let before = row(&mut tx, id).await?.ok_or_else(not_found)?;
     let owner = before.owner == Some(caller.account_id);
-    if !owner && !holds(&mut tx, caller, permissions::EMOTES_EDIT_ANY).await? {
+    let edit_any = holds(&mut tx, caller, permissions::EMOTES_EDIT_ANY).await?;
+    if !owner && !edit_any {
         return Err(forbidden("Only the emote's owner can change it."));
     }
+    if owner {
+        let account = accounts::get(&mut tx, caller.account_id)
+            .await
+            .map_err(db_error)?
+            .ok_or_else(not_found)?;
+        if account.restricted_at.is_some() {
+            return Err(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "restricted",
+                "Your account can't change emotes right now.",
+            ));
+        }
+    }
     let old_tags = emotes::tags(&mut tx, id).await.map_err(db_error)?;
+    let renamed = name.is_some_and(|n| n != before.name);
+    let retagged = tags.as_ref().is_some_and(|t| {
+        t.iter().collect::<BTreeSet<_>>() != old_tags.iter().collect::<BTreeSet<_>>()
+    });
+    let resubmit = before.state == EmoteState::Approved
+        && (renamed || retagged)
+        && !edit_any
+        && !holds(&mut tx, caller, permissions::EMOTES_REVIEW).await?;
     emotes::update(
         &mut tx,
         id,
@@ -274,10 +300,24 @@ pub async fn update(
             .await
             .map_err(db_error)?;
     }
+    if resubmit {
+        emotes::resubmit(&mut tx, id).await.map_err(db_error)?;
+    }
     let after = row(&mut tx, id).await?.ok_or_else(not_found)?;
+    let new_tags = tags.clone().unwrap_or_else(|| old_tags.clone());
+    if resubmit {
+        write_audit(
+            &mut tx,
+            caller,
+            "emote.resubmitted",
+            id,
+            Some(json!({ "state": before.state, "name": before.name, "tags": old_tags })),
+            Some(json!({ "state": after.state, "name": after.name, "tags": new_tags })),
+        )
+        .await?;
+    }
     if !owner {
         let snap = |r: &reads::EmoteRow, tags: &[String]| json!({ "name": r.name, "zero_width": r.zero_width, "private": r.private, "nsfw": r.nsfw, "tags": tags });
-        let new_tags = tags.clone().unwrap_or_else(|| old_tags.clone());
         write_audit(
             &mut tx,
             caller,
@@ -288,7 +328,11 @@ pub async fn update(
         )
         .await?;
     }
-    announce(&mut tx, id, EventType::EmoteUpdated).await?;
+    // Only emotes the public could see (before or after) are announced: one that went back to
+    // review is dropped by clients when they refetch.
+    if before.state == EmoteState::Approved || after.state == EmoteState::Approved {
+        announce(&mut tx, id, EventType::EmoteUpdated).await?;
+    }
     tx.commit().await.map_err(sqlx_error)?;
     build(state, &mut conn, &after).await
 }
