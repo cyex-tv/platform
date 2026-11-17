@@ -227,7 +227,7 @@
   /* Strip: one snapping row on phones and tablets, two rows of 10 (7 at 1024) on desktop. */
   .strip-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 24px 40px; }
   .strip-tools { display: flex; align-items: center; gap: 24px; }
-  .strip { list-style: none; margin: 40px 0 0; padding: 0; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 8px 0; }
+  .strip { list-style: none; margin: 32px 0 0; padding: 0; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 8px 0; }
   .strip li { min-width: 0; display: flex; justify-content: center; }
   @media (max-width: 1199px) { .strip { grid-template-columns: repeat(7, minmax(0, 1fr)); } .late { display: none; } }
   @media (max-width: 1023px) {
@@ -243,7 +243,7 @@
   .empty strong { color: var(--text); font-weight: 500; }
 
   /* Chat band */
-  .chats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 48px; }
+  .chats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 40px; }
   @media (max-width: 900px) { .chats { grid-template-columns: minmax(0, 1fr); } }
   .caption { margin: 14px 0 0; }
 
@@ -254,7 +254,7 @@
     letter-spacing: -.035em; font-variant-numeric: tabular-nums; color: var(--muted); }
 
   /* Install */
-  .installs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 48px; }
+  .installs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 40px; }
   @media (max-width: 900px) { .installs { grid-template-columns: minmax(0, 1fr); } }
   .install { display: flex; flex-direction: column; gap: 10px; padding: 24px; border: 1px solid var(--border);
     border-radius: var(--radius-m); background: var(--surface); }
@@ -284,7 +284,6 @@
   .code code { font-family: ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace; }
 
   /* Closing band (the page's second and last glow lives in .band) */
-  .closing { padding-bottom: var(--section-pad); }
   .band-sub { margin: 10px 0 0; font-size: var(--t-small); }
 
   /* Reveal once (reveal.ts sets data-reveal only below the fold, never under reduced motion). */

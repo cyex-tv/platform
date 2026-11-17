@@ -40,8 +40,11 @@
   const dims = $derived(size(e));
   // The picture fills 3/4 of the box height; `sizes` lets the browser pick the right file.
   const shownW = $derived(Math.round((ART[density] * 0.75 * dims.width) / dims.height));
-  const tags = $derived(
-    [note, ...(labels ? [e.animated && 'animated', e.flags?.zeroWidth && 'zero-width', wide && 'wide'] : [])].filter(Boolean) as string[],
+  // Type labels stay out of the card's flow (every card the same height, less noise): they
+  // show in the art's corner on hover or keyboard focus, and are always in the link's name.
+  // A status `note` (e.g. "pending") matters more, so it stays visible under the name.
+  const kinds = $derived(
+    (labels ? [e.animated && 'animated', e.flags?.zeroWidth && 'zero-width', wide && 'wide'] : []).filter(Boolean) as string[],
   );
 
   function heat(on: boolean) {
@@ -90,12 +93,12 @@
     {:else}
       <span class="processing">Processing</span>
     {/if}
+    {#if kinds.length}<span class="kinds" aria-hidden="true">{kinds.join(' · ')}</span>{/if}
   </span>
   <span class="name">{e.shownName ?? e.name}</span>
   {#if creator && e.owner}<span class="by">{e.owner.displayName}</span>{/if}
-  {#if tags.length}
-    <span class="tags">{#each tags as t}<span class="tag">{t}</span>{/each}</span>
-  {/if}
+  {#if note}<span class="tags"><span class="tag">{note}</span></span>{/if}
+  {#if kinds.length}<span class="sr-only">, {kinds.join(', ')}</span>{/if}
 </a>
 
 <style>
@@ -119,7 +122,12 @@
   .tags { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 4px; }
   .tag { display: inline-flex; align-items: center; height: 18px; padding: 0 5px; border: 1px solid var(--border);
     border-radius: var(--radius-btn); font-size: 11px; font-weight: 500; line-height: 1; color: var(--muted); white-space: nowrap; }
+  .kinds { position: absolute; left: 50%; bottom: -4px; translate: -50% 0; padding: 1px 6px; border-radius: var(--radius-btn);
+    background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 500; line-height: 16px; white-space: nowrap;
+    opacity: 0; transition: opacity var(--dur-color) ease-out; pointer-events: none; }
+  .card:focus-visible .kinds { opacity: 1; }
   @media (hover: hover) and (pointer: fine) {
     .card:hover { background: var(--surface); }
+    .card:hover .kinds { opacity: 1; }
   }
 </style>

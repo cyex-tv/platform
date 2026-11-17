@@ -2,6 +2,12 @@
    step) and the shared web components, then what the emote pages add. Only token values here. */
 @import './tokens.css';
 
+/* cyex.tv's rhythm on top of the cyex-web tokens: an emote site is browsed, not read like a
+   launch page, so sections sit closer and section headings are a step smaller. One value for
+   every page, so the rhythm is the same everywhere. */
+:root { --section-pad: clamp(72px, 8vw, 120px); --t-h2: clamp(32px, 3.8vw, 52px); --footer-gap: clamp(64px, 7vw, 104px);
+  --t-block: 22px; /* a block's heading inside a page (Used in, More from, Uploads, In chat) */ }
+
 /* Phones (mobile-native): no tap flash, no font inflation, 16px inputs so iOS doesn't zoom,
    no double-tap delay on controls, no long-press text selection on controls. Every :hover in
    this file sits behind (hover: hover) and (pointer: fine), so a tap never leaves one stuck. */
@@ -73,6 +79,10 @@ kbd { font: inherit; }
 .page-head { padding: clamp(32px, 5vw, 64px) 0 32px; }
 .page-head h1 { font-size: var(--t-h3-sub); line-height: 1.1; letter-spacing: -.03em; }
 .page-head .lead { margin-top: 12px; }
+
+/* A block's heading inside a page: one size everywhere, with a quiet note or link on the right. */
+.block-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin-bottom: 16px; }
+.block-title { margin: 0; font-size: var(--t-block); font-weight: 600; line-height: 1.25; letter-spacing: -.02em; min-width: 0; overflow-wrap: anywhere; }
 
 /* Fields */
 .field { display: flex; gap: 12px; align-items: stretch; max-width: var(--measure-form); }
