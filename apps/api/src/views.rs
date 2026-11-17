@@ -65,6 +65,7 @@ fn emote(
     row: &EmoteRow,
     tags: &HashMap<Uuid, Vec<String>>,
     summaries: &HashMap<Uuid, Summary>,
+    counts: &HashMap<Uuid, u32>,
     cdn_url: &str,
 ) -> Emote {
     Emote {
@@ -86,6 +87,7 @@ fn emote(
             .unwrap_or_default(),
         files: files(row.variants.as_ref()),
         created_at: time(row.created_at),
+        channel_count: counts.get(&row.id).copied().unwrap_or(0),
     }
 }
 
@@ -104,9 +106,10 @@ pub async fn emotes(
         .into_iter()
         .collect();
     let summaries = reads::summaries(conn, &owners).await?;
+    let counts = reads::channel_counts(conn, &ids).await?;
     Ok(rows
         .iter()
-        .map(|row| emote(row, &tags, &summaries, cdn_url))
+        .map(|row| emote(row, &tags, &summaries, &counts, cdn_url))
         .collect())
 }
 
@@ -145,6 +148,7 @@ fn set_emote(
     row: &MemberRow,
     tags: &HashMap<Uuid, Vec<String>>,
     summaries: &HashMap<Uuid, Summary>,
+    counts: &HashMap<Uuid, u32>,
     cdn_url: &str,
 ) -> SetEmote {
     SetEmote {
@@ -152,7 +156,7 @@ fn set_emote(
         zero_width: row.zero_width,
         added_by: row.added_by.map(ids::to_text),
         added_at: time(row.added_at),
-        emote: emote(&row.emote(), tags, summaries, cdn_url),
+        emote: emote(&row.emote(), tags, summaries, counts, cdn_url),
     }
 }
 
@@ -181,13 +185,14 @@ pub async fn sets(
         .into_iter()
         .collect();
     let summaries = reads::summaries(conn, &accounts).await?;
+    let counts = reads::channel_counts(conn, &emote_ids).await?;
 
     let mut by_set: HashMap<Uuid, Vec<SetEmote>> = HashMap::new();
     for row in &rows {
         by_set
             .entry(row.set_id)
             .or_default()
-            .push(set_emote(row, &tags, &summaries, cdn_url));
+            .push(set_emote(row, &tags, &summaries, &counts, cdn_url));
     }
     Ok(sets
         .iter()
@@ -225,23 +230,39 @@ pub async fn member(
     let tags = reads::tags(conn, &[emote_id]).await?;
     let owners: Vec<Uuid> = row.emote_owner.into_iter().collect();
     let summaries = reads::summaries(conn, &owners).await?;
-    Ok(Some(set_emote(&row, &tags, &summaries, cdn_url)))
+    let counts = reads::channel_counts(conn, &[emote_id]).await?;
+    Ok(Some(set_emote(&row, &tags, &summaries, &counts, cdn_url)))
+}
+
+fn channel_of(ch: &channels::Channel, summaries: &HashMap<Uuid, Summary>) -> Option<Channel> {
+    Some(Channel {
+        platform: ch.platform,
+        platform_channel_id: ch.platform_channel_id.clone(),
+        login: ch.login.clone(),
+        account: summary(summaries, Some(ch.account_id))?,
+        active_set_id: ch.active_set_id.map(ids::to_text),
+        allow_personal_emotes: ch.allow_personal_emotes,
+    })
 }
 
 /// A channel, or `None` when its account is gone.
 pub async fn channel(conn: &mut PgConnection, ch: &channels::Channel) -> DbResult<Option<Channel>> {
     let summaries = reads::summaries(conn, &[ch.account_id]).await?;
-    let Some(account) = summary(&summaries, Some(ch.account_id)) else {
-        return Ok(None);
-    };
-    Ok(Some(Channel {
-        platform: ch.platform,
-        platform_channel_id: ch.platform_channel_id.clone(),
-        login: ch.login.clone(),
-        account,
-        active_set_id: ch.active_set_id.map(ids::to_text),
-        allow_personal_emotes: ch.allow_personal_emotes,
-    }))
+    Ok(channel_of(ch, &summaries))
+}
+
+/// Several channels in the order given, with one query for their accounts. Channels whose
+/// account is gone are left out.
+pub async fn channels_of(
+    conn: &mut PgConnection,
+    chs: &[channels::Channel],
+) -> DbResult<Vec<Channel>> {
+    let accounts: Vec<Uuid> = chs.iter().map(|c| c.account_id).collect();
+    let summaries = reads::summaries(conn, &accounts).await?;
+    Ok(chs
+        .iter()
+        .filter_map(|c| channel_of(c, &summaries))
+        .collect())
 }
 
 #[cfg(test)]

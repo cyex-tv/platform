@@ -321,6 +321,53 @@ pub async fn channel(state: &AppState, platform: Platform, id: &str) -> ApiResul
     views::channel(&mut conn, &ch).await.map_err(db_error)
 }
 
+/// An account's public summary; `None` when unknown, deleted or blocked.
+pub async fn account(state: &AppState, id: &str) -> ApiResult<Option<AccountSummary>> {
+    let Some(id) = ids::from_text(id.trim()) else {
+        return Ok(None);
+    };
+    let mut conn = conn(state).await?;
+    let Some(acc) = accounts::get(&mut conn, id).await.map_err(db_error)? else {
+        return Ok(None);
+    };
+    if acc.deleted_at.is_some() || acc.blocked_at.is_some() {
+        return Ok(None);
+    }
+    let summaries = reads::summaries(&mut conn, &[id]).await.map_err(db_error)?;
+    Ok(summaries.get(&id).map(|s| AccountSummary {
+        id: ids::to_text(s.account_id),
+        display_name: s.display_name.clone(),
+        avatar: s.avatar.clone(),
+    }))
+}
+
+pub const EMOTE_CHANNELS: u32 = 8;
+pub const EMOTE_CHANNELS_MAX: u32 = 50;
+
+/// Channels showing a public emote. Unknown, pending, private and deleted emotes have none.
+pub async fn emote_channels(
+    state: &AppState,
+    id: &str,
+    limit: Option<u32>,
+) -> ApiResult<Vec<Channel>> {
+    let Some(id) = ids::from_text(id.trim()) else {
+        return Ok(Vec::new());
+    };
+    let limit = limit.unwrap_or(EMOTE_CHANNELS).clamp(1, EMOTE_CHANNELS_MAX);
+    let mut conn = conn(state).await?;
+    let rows = reads::emotes(&mut conn, &[id]).await.map_err(db_error)?;
+    let public = rows
+        .first()
+        .is_some_and(|e| e.state == cyex_tv_shared::model::EmoteState::Approved && !e.private);
+    if !public {
+        return Ok(Vec::new());
+    }
+    let chs = reads::emote_channels(&mut conn, id, i64::from(limit))
+        .await
+        .map_err(db_error)?;
+    views::channels_of(&mut conn, &chs).await.map_err(db_error)
+}
+
 pub async fn channel_by_login(
     state: &AppState,
     platform: Platform,

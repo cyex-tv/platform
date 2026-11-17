@@ -5,6 +5,7 @@
 //! Only approved, listed (not private), not deleted emotes are found. NSFW ones only when asked.
 //! Ranking: exact name, then name prefix, then name similarity, then popularity.
 
+use cyex_tv_shared::model::EmoteSort;
 use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
@@ -17,6 +18,7 @@ pub struct Query<'a> {
     pub animated: Option<bool>,
     pub owner: Option<Uuid>,
     pub nsfw: bool,
+    pub sort: EmoteSort,
     pub limit: i64,
     pub offset: i64,
 }
@@ -53,7 +55,19 @@ fn like_escape(text: &str) -> String {
 pub async fn search(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<Hits> {
     let text: String = q.text.trim().chars().take(100).collect();
     let pattern = like_escape(&text.to_lowercase());
-    let rows: Vec<(Uuid, i64)> = sqlx::query_as(
+    // The order is one of three fixed strings, never user text.
+    let order = match q.sort {
+        EmoteSort::Relevance => {
+            "($1 <> '' AND lower(e.name) = lower($1)) DESC,
+                  ($1 <> '' AND lower(e.name) LIKE $5 || '%') DESC,
+                  CASE WHEN $1 = '' THEN 0 ELSE similarity(e.name, $1) END DESC,
+                  e.popularity DESC,
+                  e.id"
+        }
+        EmoteSort::Top => "e.popularity DESC, lower(e.name), e.id",
+        EmoteSort::New => "e.created_at DESC, e.id DESC",
+    };
+    let rows: Vec<(Uuid, i64)> = sqlx::query_as(&format!(
         "SELECT e.id, count(*) OVER () AS total
          FROM emotes e
          WHERE e.state = 'approved' AND e.deleted_at IS NULL AND NOT e.private
@@ -65,13 +79,9 @@ pub async fn search(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<Hits> {
                 OR e.name % $1
                 OR EXISTS (SELECT 1 FROM emote_tags t
                            WHERE t.emote_id = e.id AND t.tag LIKE $5 || '%'))
-         ORDER BY ($1 <> '' AND lower(e.name) = lower($1)) DESC,
-                  ($1 <> '' AND lower(e.name) LIKE $5 || '%') DESC,
-                  CASE WHEN $1 = '' THEN 0 ELSE similarity(e.name, $1) END DESC,
-                  e.popularity DESC,
-                  e.id
-         LIMIT $6 OFFSET $7",
-    )
+         ORDER BY {order}
+         LIMIT $6 OFFSET $7"
+    ))
     .bind(&text)
     .bind(q.animated)
     .bind(q.owner)

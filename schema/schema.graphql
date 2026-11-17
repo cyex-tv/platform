@@ -97,6 +97,10 @@ type Emote {
 	host: String!
 	files: [EmoteFile!]!
 	createdAt: String!
+	"""
+	How many channels have this emote in their active set right now.
+	"""
+	channelCount: Int!
 }
 
 """
@@ -148,6 +152,24 @@ type EmoteSet {
 	owner: AccountSummary
 	capacity: Int!
 	emotes: [SetEmote!]!
+}
+
+"""
+How `searchEmotes` orders its results.
+"""
+enum EmoteSort {
+	"""
+	Best match first, then the most used. The default.
+	"""
+	RELEVANCE
+	"""
+	The most used first (channels showing the emote), then by name.
+	"""
+	TOP
+	"""
+	The newest first.
+	"""
+	NEW
 }
 
 enum EmoteState {
@@ -387,9 +409,20 @@ type Query {
 	emote(id: String!): Emote
 	"""
 	Approved, listed emotes by name and tag, best match first, then the most used.
-	`perPage` is 1 to 100, default 50. NSFW emotes only with `nsfw: true`.
+	`perPage` is 1 to 100, default 50. NSFW emotes only with `nsfw: true`. `sort` is
+	`RELEVANCE` (default: best match, then most used), `TOP` (most used, then name) or `NEW`
+	(newest first). An empty `query` lists every approved, listed emote.
 	"""
-	searchEmotes(query: String!, animated: Boolean, owner: String, nsfw: Boolean, page: Int, perPage: Int): SearchResults!
+	searchEmotes(query: String!, animated: Boolean, owner: String, nsfw: Boolean, page: Int, perPage: Int, sort: EmoteSort): SearchResults!
+	"""
+	An account's public summary. Null when the account is unknown, deleted or blocked.
+	"""
+	account(id: String!): AccountSummary
+	"""
+	Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
+	default 8. Empty when the emote is unknown or not public.
+	"""
+	emoteChannels(id: String!, limit: Int): [Channel!]!
 	"""
 	One user's personal set.
 	"""
