@@ -2,6 +2,13 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Phase 4: cyex deck integration (in progress)
+
+Work in `cyex-app/cyex-deck` goes on a feature branch with a PR the owner merges (the agent doesn't merge outside `cyex-tv/platform`).
+
+### ADR 0013: how clients get the API's types (branch `phase-4/client-types`)
+- [x] No platform crate is linked into clients: the platform is AGPL-3.0 and the deck has its own licence. Rust clients write small `serde` structs for the reads they use, tested against fixtures of real output; TypeScript clients generate types from `schema.graphql` and `openapi.json`. The contract stays additive within v1.
+
 ## Phase 7: Moderation, abuse and limits (in progress)
 
 ### PR 2: reports, takedowns and restrictions (branch `phase-7/moderation`)
