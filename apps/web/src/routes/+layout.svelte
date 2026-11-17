@@ -56,7 +56,7 @@
   <main id="main" tabindex="-1">
     {@render children()}
   </main>
-  <Footer signedIn={!!me} />
+  <Footer signedIn={!!me} slim={page.data.footer === 'slim'} />
   <Toasts />
 {/if}
 <CommandPalette />

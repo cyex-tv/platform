@@ -7,6 +7,7 @@ import type { PageServerLoad } from './$types';
 export const prerender = true;
 
 export const load: PageServerLoad = () => ({
+  footer: 'slim' as const, // the root layout shows the one-line footer here, so the scroll ends at the last section
   base: baseUrl,
   rest: restGroups(),
   gql: graphqlReference(),
