@@ -866,7 +866,14 @@ createServer(async (req, res) => {
   }
   if (req.method === 'POST' && url.pathname === '/v1/gql') {
     const raw = (await read(req)).toString('utf8');
-    return json(res, 200, answer(JSON.parse(raw || '{}'), session, admin));
+    // A malformed request (bad JSON, no query, a batch) gets an error, never a crashed mock.
+    try {
+      const body = JSON.parse(raw || '{}');
+      if (typeof body?.query !== 'string') return json(res, 400, { data: null, errors: [{ message: 'Send one query.', extensions: { code: 'bad_request' } }] });
+      return json(res, 200, answer(body, session, admin));
+    } catch (e) {
+      return json(res, 400, { data: null, errors: [{ message: String(e?.message ?? e), extensions: { code: 'bad_request' } }] });
+    }
   }
   res.writeHead(404).end();
 }).listen(PORT, process.env.MOCK_HOST ?? 'localhost', () => console.log(`mock api on ${BASE}${OPEN_ENV ? ' (open: everyone is staff)' : ADMIN_ENV ? ' (admin)' : ''}`));
