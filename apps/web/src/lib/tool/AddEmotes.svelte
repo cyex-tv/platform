@@ -1,6 +1,7 @@
 <script lang="ts">
   // Find emotes to add: public search, or your own uploads (pending ones too, except for a
   // personal set, which takes approved emotes only).
+  import { tick } from 'svelte';
   import { gql } from '$lib/api';
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
   import { ADD_SET_EMOTE, MY_EMOTES, SEARCH } from '$lib/queries';
@@ -18,7 +19,9 @@
     names,
     full,
     onadded,
-  }: { setId: string; personal: boolean; taken: Set<string>; names: Set<string>; full: boolean; onadded: () => void } = $props();
+  }: { setId: string; personal: boolean; taken: Set<string>; names: Set<string>; full: boolean; onadded: () => unknown } = $props();
+  let gridEl = $state<HTMLElement>();
+  let findEl = $state<HTMLInputElement>();
 
   let source = $state<'search' | 'mine'>('search');
   let query = $state('');
@@ -54,11 +57,19 @@
   });
 
   async function add(e: EmoteFieldsFragment) {
+    if (busy) return;
     busy = e.id;
+    // The pressed button turns into "Added" (disabled): focus moves on to the next Add.
+    const at = (results ?? []).findIndex((r) => r.id === e.id);
     try {
       await gql(ADD_SET_EMOTE, { setId, emoteId: e.id });
       notify(`${iso(e.name)} added.`);
-      onadded();
+      await onadded();
+      busy = null;
+      await tick();
+      const buttons = [...(gridEl?.querySelectorAll<HTMLButtonElement>('.below button') ?? [])];
+      const next = buttons.slice(at + 1).find((b) => !b.disabled) ?? buttons.slice(0, at).reverse().find((b) => !b.disabled);
+      (next ?? findEl)?.focus();
     } catch (err) {
       fail(err);
     } finally {
@@ -76,7 +87,7 @@
     </div>
   </header>
   <div class="find">
-    <input class="ui-input" type="search" bind:value={query} placeholder={source === 'search' ? 'Search by name or tag…' : 'Filter your uploads…'} aria-label="Find emotes" />
+    <input class="ui-input" type="search" bind:this={findEl} bind:value={query} placeholder={source === 'search' ? 'Search by name or tag…' : 'Filter your uploads…'} aria-label="Find emotes" />
     {#if full}<p class="ui-error">This set is full. Remove something first.</p>{/if}
   </div>
   {#if results === null}
@@ -86,7 +97,7 @@
       {source === 'search' ? 'Try another name or tag.' : 'Pending and approved uploads you haven’t added yet show up here.'}
     </State>
   {:else}
-    <div class="grid">
+    <div class="grid" bind:this={gridEl}>
       <EmoteGrid
         items={results}
         density="compact"

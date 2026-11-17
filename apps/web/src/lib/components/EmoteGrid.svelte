@@ -75,7 +75,7 @@
   .wide { grid-column: span 2; }
   li { min-width: 0; }
   li:has(.below) { display: grid; grid-template-rows: 1fr auto; gap: 6px; }
-  .below { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 32px; }
+  .below { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 40px; min-width: 0; }
   @media (max-width: 520px) {
     .grid { gap: 8px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
     .compact { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }

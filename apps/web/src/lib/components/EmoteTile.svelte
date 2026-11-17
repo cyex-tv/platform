@@ -129,7 +129,7 @@
 </a>
 
 <style>
-  .tile { --art: 88px; position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  .tile { --art: 88px; position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0;
     height: 100%; padding: 14px 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-card);
     background: var(--surface); text-align: center;
     transition: background-color var(--fast), border-color var(--fast), transform var(--dur-press) ease-out; }
@@ -137,20 +137,25 @@
   .tile:active { transform: scale(var(--press)); }
   .tile:focus-visible { outline-offset: 2px; border-radius: var(--radius-card); }
   .status { position: absolute; top: 6px; left: 6px; z-index: 1; display: flex; gap: 4px; max-width: calc(100% - 12px); }
-  .art { position: relative; display: grid; place-items: center; width: 100%; height: var(--art); margin-bottom: 8px; }
-  .pic { grid-area: 1 / 1; display: block; height: calc(var(--art) * .8); width: auto; max-width: 100%; object-fit: contain; }
+  /* A fixed art box: however wide the picture, it fits inside (contain) and never widens the tile. */
+  .art { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; width: 100%; min-width: 0;
+    height: var(--art); margin-bottom: 8px; overflow: hidden; }
+  .pic { grid-area: 1 / 1; display: block; height: calc(var(--art) * .8); width: auto; min-width: 0; max-width: 100%; object-fit: contain; }
   .moving { opacity: 0; transition: opacity var(--dur-color); }
   .fade { opacity: 0; }
   .pic:not(.fade):not(.moving) { transition: opacity var(--dur-color); }
   .moving.loaded { opacity: 1; }
   .processing { font-size: var(--t-fine); color: var(--muted); }
+  /* Truncated names stay centred: the bdi is a block that ends in an ellipsis. */
+  .name bdi, .by bdi { display: block; overflow: hidden; text-overflow: ellipsis; }
   .name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font-size: var(--t-nav); font-weight: 500; line-height: 1.35; color: var(--text); }
   .compact .name { font-size: var(--t-fine); }
   .by { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font-size: 12px; line-height: 1.4; color: var(--muted); }
-  .kinds { position: absolute; left: 50%; bottom: -6px; translate: -50% 0; padding: 0 6px; border-radius: var(--radius);
-    background: var(--elevated-2); color: var(--muted); font-size: 11px; font-weight: 500; line-height: 16px; white-space: nowrap;
+  .kinds { position: absolute; left: 50%; bottom: 0; translate: -50% 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+    padding: 0 6px; border-radius: var(--radius);
+    background: var(--elevated-2); color: var(--muted); font-size: 12px; font-weight: 500; line-height: 16px; white-space: nowrap;
     opacity: 0; transition: opacity var(--fast) ease-out; pointer-events: none; }
   .tile:focus-visible .kinds { opacity: 1; }
   @media (hover: hover) and (pointer: fine) {
