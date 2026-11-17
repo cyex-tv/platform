@@ -291,6 +291,7 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
     const kbd = search.querySelector('.nav-kbd');
     if (kbd) kbd.textContent = /Mac|iP(hone|ad|od)/.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K';
     const empty = nav.querySelector<HTMLElement>('.nav-empty');
+    const status = nav.querySelector<HTMLElement>('[data-filter-status]');
     const apply = () => {
       const q = input.value.trim().toLowerCase();
       search.classList.toggle('has-value', !!input.value);
@@ -299,6 +300,7 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
       paint();
       if (toc && q && stacked()) toc.open = true;
       let any = false;
+      let total = 0;
       // Entries match on their own text (label, method, path); a group heading never
       // matches by itself, so "admin" finds admin endpoints by their own names.
       for (const group of nav.querySelectorAll<HTMLElement>('.nav-group')) {
@@ -312,7 +314,10 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
         const count = group.querySelector<HTMLElement>('.group-count');
         if (count) count.textContent = q ? String(shown) : (count.dataset.total ?? count.textContent);
         if (shown) any = true;
+        total += shown;
       }
+      // One short line for screen readers: how many entries match (nothing while no filter is on).
+      if (status) status.textContent = q ? (total ? `${total} ${total === 1 ? 'entry matches' : 'entries match'}` : 'Nothing matches') : '';
       if (empty) {
         empty.hidden = any;
         empty.textContent = `Nothing matches “${input.value.trim()}”.`;
