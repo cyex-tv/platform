@@ -63,6 +63,8 @@ export const ADMIN_PERMISSIONS = [
   'users.restrict',
   'audit.view',
   'global_set.edit',
+  'cosmetics.manage',
+  'cosmetics.grant',
 ];
 
 /** Whether the account may open any part of the admin pages. */

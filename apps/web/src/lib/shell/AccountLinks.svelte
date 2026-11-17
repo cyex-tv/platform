@@ -9,7 +9,10 @@
   import Icon from '$lib/components/Icon.svelte';
   import { clean } from '$lib/format';
   import { isAdmin, session } from '$lib/tool/session.svelte';
-  import { EMOTES, MENU, UPLOAD, platformName, profileLink, settingsLinks, type ShellLink } from './account';
+  import { EMOTES, UPLOAD, menuLinks, platformName, profileLink, settingsLinks, type ShellLink } from './account';
+  import PaintedName from '$lib/cosmetics/PaintedName.svelte';
+  import { loadOwned, looks, NO_LOOK } from '$lib/cosmetics/store.svelte';
+  import { rolesOf, type Role } from '$lib/profile/data.svelte';
   import { leave } from './signout';
   import { theme, toggleTheme } from './theme.svelte';
 
@@ -21,6 +24,19 @@
   const name = $derived(clean(who?.displayName));
   const platform = $derived(platformName(who?.platform));
   const path = $derived(page.url.pathname);
+  const search = $derived(page.url.searchParams);
+  const look = $derived((me && looks[me.id]) || NO_LOOK);
+  let role = $state<Role | null>(null);
+  // The header of the menu: your name in your paint, your badge and your highest role.
+  $effect(() => {
+    const id = me?.id;
+    role = null;
+    if (!id) return;
+    loadOwned(id, true).catch(() => {});
+    rolesOf(id).then((r) => {
+      if (me?.id === id) role = r[0] ?? null;
+    });
+  });
   const settings = $derived(settingsLinks(isAdmin(me)));
 
   async function out() {
@@ -30,7 +46,7 @@
 </script>
 
 {#snippet row(l: ShellLink)}
-  <a href={l.href} aria-current={l.match(path) ? 'page' : undefined} onclick={() => onpick?.()}>
+  <a href={l.href} aria-current={l.match(path, search) ? 'page' : undefined} onclick={() => onpick?.()}>
     <Icon name={l.icon} /><span>{l.label}</span>
   </a>
 {/snippet}
@@ -38,10 +54,13 @@
 <div class="acct" class:touch>
   {#if me}
     <div class="head">
-      <Avatar src={who?.avatar} {name} size={36} />
+      <Avatar src={who?.avatar} {name} size={40} />
       <span class="id">
-        <strong><bdi>{name}</bdi></strong>
-        {#if platform}<span>{platform}{#if who?.login && who.login !== name.toLowerCase()} · <bdi>{who.login}</bdi>{/if}</span>{/if}
+        <strong><PaintedName {name} paint={look.paint} badge={look.badge} /></strong>
+        <span class="sub">
+          {#if role}<span class="role"><bdi>{role.name}</bdi></span>{/if}
+          {#if platform}<span class="plat">{platform}{#if who?.login && who.login !== name.toLowerCase()} · <bdi>{who.login}</bdi>{/if}</span>{/if}
+        </span>
       </span>
     </div>
   {/if}
@@ -55,7 +74,7 @@
     {/if}
     {#if me}
       {@render row(profileLink(me.id))}
-      {#each MENU as l (l.href)}{@render row(l)}{/each}
+      {#each menuLinks(me.id) as l (l.href)}{@render row(l)}{/each}
       {#if touch}{@render row(UPLOAD)}{/if}
       <hr />
       {#each settings as l (l.href)}{@render row(l)}{/each}
@@ -81,7 +100,11 @@
   .head { display: flex; align-items: center; gap: 12px; padding: 6px 8px 12px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
   .id { display: grid; min-width: 0; line-height: 1.3; }
   .id strong { font-size: var(--t-ui); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .id span { font-size: var(--t-fine); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .id strong { display: flex; min-width: 0; }
+  .sub { display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 2px; }
+  .plat { font-size: var(--t-fine); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .role { flex: none; display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: var(--radius);
+    background: var(--neutral-chip); color: var(--muted); font-size: 12px; font-weight: 600; }
   .list { display: grid; }
   .list a, .list button { display: flex; align-items: center; gap: 10px; min-height: var(--row); padding: 0 8px; border: 0;
     border-radius: var(--radius); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer;

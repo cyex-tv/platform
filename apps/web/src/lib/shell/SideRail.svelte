@@ -27,6 +27,8 @@
     head?: Snippet;
     /** Anything below the groups (filter controls, a note). */
     children?: Snippet;
+    /** Pinned to the rail's bottom (7TV's "Admin ›"); wide windows only. */
+    foot?: Snippet;
     collapse?: 'tabs' | 'sheet';
     /** The sheet button's text (collapse="sheet"): "Filters" or "Menu". */
     sheetLabel?: 'Filters' | 'Menu';
@@ -35,7 +37,11 @@
     /** collapse="sheet" only: a number on the sheet button (filters that are on); hidden at 0. */
     sheetCount?: number;
   };
-  let { label, groups = [], head, children, collapse = 'tabs', sheetLabel = 'Menu', bar, sheetCount = 0 }: Props = $props();
+  let { label, groups = [], head, children, foot, collapse = 'tabs', sheetLabel = 'Menu', bar, sheetCount = 0 }: Props = $props();
+
+  // Collapsible groups the reader closed, by their label. A group holding the current row stays open.
+  let closed = $state<Record<string, boolean>>({});
+  const isOpen = (g: RailGroup) => !g.toggle || g.items.some((i) => i.current) || !closed[g.toggle.label];
 
   let narrow = $state(false);
   let sheet = $state(false);
@@ -98,9 +104,19 @@
 
 {#snippet rows(onpick?: () => void)}
   {#each groups as g, gi (gi)}
-    <div class="group">
+    <div class="group" class:sub={!!g.toggle} class:joined={!g.caption && !g.toggle && gi > 0 && !!groups[gi - 1]?.toggle}>
       {#if g.caption}<p class="caption">{g.caption}</p>{/if}
-      <ul>
+      {#if g.toggle}
+        {@const open = isOpen(g)}
+        <button class="row toggle" type="button" aria-expanded={open} onclick={() => (closed[g.toggle!.label] = open)}
+          disabled={open && g.items.some((i) => i.current)}>
+          {#if g.toggle.icon}<Icon name={g.toggle.icon} />{/if}
+          <span class="lbl">{g.toggle.label}</span>
+          <span class="chev" class:up={open}><Icon name="chevron-down" size={14} /></span>
+        </button>
+      {/if}
+      {#if isOpen(g)}
+      <ul class:nested={!!g.toggle}>
         {#each g.items as i (i.href)}
           <li>
             <a class="row" href={i.href} aria-current={i.current ? 'page' : undefined} tabindex={i.href === stop ? 0 : -1} onclick={() => onpick?.()}>
@@ -111,6 +127,7 @@
           </li>
         {/each}
       </ul>
+      {/if}
     </div>
   {/each}
 {/snippet}
@@ -119,6 +136,7 @@
   {#if head}<div class="head">{@render head()}</div>{/if}
   {#if navigable}<nav aria-label={label} use:arrowNav>{@render rows(onpick)}</nav>{/if}
   {#if children}<div class="extra">{@render children()}</div>{/if}
+  {#if foot && !narrow}<div class="foot">{@render foot()}</div>{/if}
 {/snippet}
 
 {#if narrow && collapse === 'tabs'}
@@ -144,7 +162,7 @@
     <div class="in-sheet">{@render body(() => (sheet = false))}</div>
   </BottomSheet>
 {:else}
-  <aside class="rail" aria-label={label}>{@render body()}</aside>
+  <aside class="rail" class:footed={!!foot} aria-label={label}>{@render body()}</aside>
 {/if}
 
 <style>
@@ -156,6 +174,21 @@
   @media (max-width: 899.98px) { .rail { display: none; } }
   .head { padding: 2px 2px 12px; margin-bottom: 10px; border-bottom: 1px solid var(--border); }
   .group + .group { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+  /* Collapsible groups sit together like rows, without hairlines between them. */
+  .group.sub + .group.sub, .group.joined, .group + .group.sub:not(:has(.caption)) { margin-top: 1px; padding-top: 0; border-top: 0; }
+  .toggle { width: 100%; border: 0; background: none; font: inherit; font-size: var(--t-nav); text-align: left; cursor: pointer; }
+  .toggle:disabled { cursor: default; }
+  .chev { display: inline-grid; flex: none; transition: rotate var(--base) var(--ease); }
+  .chev.up { rotate: 180deg; }
+  .nested { margin-top: 1px; }
+  .nested .row { padding-left: 36px; }
+  .footed { display: flex; flex-direction: column; min-height: calc(100dvh - var(--nav-h) - env(safe-area-inset-top, 0px) - 2 * var(--rail-gap)); }
+  .foot { margin-top: auto; padding-top: 12px; }
+  .foot :global(.rail-foot) { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; margin-top: 10px;
+    border-top: 1px solid var(--border); padding-top: 10px; border-radius: 0; font-size: var(--t-nav); font-weight: 500; color: var(--muted); }
+  .foot :global(.rail-foot svg) { color: var(--dim); }
+  .foot :global(.rail-foot .lbl) { flex: 1; }
+  @media (hover: hover) and (pointer: fine) { .foot :global(.rail-foot:hover) { color: var(--text); } }
   .caption { margin: 0 0 4px; padding: 0 10px; font-size: var(--text-label); font-weight: 600; letter-spacing: .06em;
     text-transform: uppercase; color: var(--dim); line-height: 1.8; }
   ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; }
@@ -210,6 +243,7 @@
     .row:hover :global(svg) { color: var(--muted); }
     .row[aria-current='page']:hover, .tab[aria-current='page']:hover { color: var(--text); }
   }
+  @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
   @media (forced-colors: active) {
     .row[aria-current='page'], .tab[aria-current='page'] { outline: 2px solid Highlight; outline-offset: -2px; }
   }
