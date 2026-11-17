@@ -1,7 +1,8 @@
 <script lang="ts">
   // The top of a channel or creator page: avatar, name, a quiet line under it, actions on the right.
   import type { Snippet } from 'svelte';
-  import Avatar from './Avatar.svelte';
+  import { clean } from '$lib/format';
+  import Avatar from '../Avatar.svelte';
 
   type Props = {
     name: string;
@@ -12,7 +13,8 @@
     meta?: Snippet;
     actions?: Snippet;
   };
-  let { name, avatar = null, kind, meta, actions }: Props = $props();
+  let { name: raw, avatar = null, kind, meta, actions }: Props = $props();
+  const name = $derived(clean(raw));
 </script>
 
 <header class="head">

@@ -74,6 +74,7 @@
     <SectionHead eyebrow="Emotes" lit="top" title="Fresh from the library." id="strip-title" />
     <div class="strip-tools">
       <Segmented label="Sort" options={[{ value: 'top', label: 'Top' }, { value: 'new', label: 'New' }]} value={sort} onchange={(v) => { sort = v; stripEl?.scrollTo({ left: 0 }); }} />
+      <span class="sr-only" role="status">Showing {sort === 'top' ? 'top' : 'new'} emotes</span>
       <a class="link" href="/search">
         Browse all{data.total ? ` ${count(data.total)}` : ''}
         <span class="arrow"><Icon name="arrow-right" /></span>
@@ -203,6 +204,7 @@
 <style>
   /* Hero: copy beside the cluster, stacked below 900px. Short enough that the cluster
      starts on the first screen of a 375 x 667 phone. */
+  section { --home-gap: 32px 24px; }
   .hero { padding: clamp(24px, 5vw, 72px) 0 0; }
   .hero-grid { display: grid; grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr); gap: 32px 72px; align-items: center; }
   .hero-grid.solo { grid-template-columns: minmax(0, 1fr); }
@@ -229,6 +231,7 @@
   .strip-tools { display: flex; align-items: center; gap: 24px; }
   .strip { list-style: none; margin: 32px 0 0; padding: 0; display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 8px 0; }
   .strip li { min-width: 0; display: flex; justify-content: center; }
+  .strip li > :global(.card) { min-width: 0; max-width: 100%; }
   @media (max-width: 1199px) { .strip { grid-template-columns: repeat(7, minmax(0, 1fr)); } .late { display: none; } }
   @media (max-width: 1023px) {
     .strip { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 128px; overflow-x: auto;
@@ -243,19 +246,20 @@
   .empty strong { color: var(--text); font-weight: 500; }
 
   /* Chat band */
-  .chats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 40px; }
+  .chats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--home-gap); margin-top: 40px; }
   @media (max-width: 900px) { .chats { grid-template-columns: minmax(0, 1fr); } }
   .caption { margin: 14px 0 0; }
 
   /* Steps */
-  .how { list-style: none; padding: 0; margin-bottom: 0; }
+  .how { list-style: none; padding: 0; margin-bottom: 0; gap: var(--home-gap); }
+  @media (min-width: 721px) and (max-width: 900px) { .how { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
   .how li { border-top: 1px solid var(--border-strong); padding-top: 20px; }
   .num { display: block; margin-bottom: 14px; font-size: var(--t-figure); font-weight: 500; line-height: 1.05;
     letter-spacing: -.035em; font-variant-numeric: tabular-nums; color: var(--muted); }
 
   /* Install */
-  .installs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 40px; }
-  @media (max-width: 900px) { .installs { grid-template-columns: minmax(0, 1fr); } }
+  .installs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--home-gap); margin-top: 40px; }
+  @media (max-width: 720px) { .installs { grid-template-columns: minmax(0, 1fr); } }
   .install { display: flex; flex-direction: column; gap: 10px; padding: 24px; border: 1px solid var(--border);
     border-radius: var(--radius-m); background: var(--surface); }
   .install h3 { font-size: var(--t-h3); line-height: 1.3; letter-spacing: -.015em; }
@@ -268,14 +272,15 @@
   .dot.off { background: transparent; border: 1.5px solid var(--muted); box-shadow: none; }
 
   /* Trio */
-  .trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 48px 40px; }
-  @media (max-width: 900px) { .trio { grid-template-columns: minmax(0, 1fr); } }
+  .trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--home-gap); }
+  @media (max-width: 720px) { .trio { grid-template-columns: minmax(0, 1fr); } }
   .part { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; min-width: 0;
     border-top: 1px solid var(--border-strong); padding-top: 24px; }
   .part :global(.eyebrow) { margin-bottom: 4px; }
   .part h3 { font-size: var(--t-h3-sub); line-height: 1.1; letter-spacing: -.03em; }
   .part p { margin: 0; color: var(--muted); max-width: 44ch; }
-  .part .link { margin-top: 4px; }
+  .part .link { margin-top: auto; }
+  .part :global(.link) { align-self: flex-start; }
   .link-inline { color: var(--accent-text); text-decoration: underline; text-underline-offset: 3px; }
   .links { display: flex; flex-wrap: wrap; gap: 8px 24px; }
   .code { width: 100%; margin: 4px 0; padding: 14px 16px; overflow-x: auto; border: 1px solid var(--border);

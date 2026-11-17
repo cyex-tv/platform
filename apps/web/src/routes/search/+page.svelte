@@ -1,22 +1,24 @@
 <script lang="ts">
   import { goto, invalidateAll, replaceState } from '$app/navigation';
   import { navigating } from '$app/state';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { ApiError, gql } from '$lib/api';
   import Chip from '$lib/components/Chip.svelte';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import LoadMore from '$lib/components/LoadMore.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import Popover from '$lib/components/Popover.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import FilterSheet from '$lib/components/browse/FilterSheet.svelte';
   import { apiSort, CLEARED, MAX_PAGES, PER_PAGE, active as activeOf, change, matches, toSearch, type Browse, type Sort } from '$lib/components/browse/params';
-  import { count } from '$lib/format';
+  import { clean, count } from '$lib/format';
   import { SEARCH } from '$lib/queries';
 
   let { data } = $props();
 
   const view = $derived(data.view);
+  const q = $derived(clean(view.q));
   const filters = $derived(activeOf(view));
 
   // ---- Results: the pages the server rendered, plus the ones loaded here.
@@ -55,6 +57,18 @@
   function go(over: Partial<Browse>, replace = false) {
     const next = change(view, over);
     return goto(`/search${toSearch(next)}`, { replaceState: replace, keepFocus: true, noScroll: true });
+  }
+  let clearAll = $state<HTMLButtonElement>();
+  let chipsEl = $state<HTMLElement>();
+  let filtersBtn = $state<HTMLElement>();
+  // Removing a chip would drop focus to the page: hand it to the next chip's remove button,
+  // else Clear all, else the Filters button.
+  async function removeChip(key: keyof typeof CLEARED, i: number) {
+    await go({ [key]: CLEARED[key] } as Partial<Browse>);
+    await tick();
+    const rm = chipsEl?.querySelectorAll<HTMLElement>('.chips [role=listitem] button');
+    const target = rm?.[Math.min(i, rm.length - 1)] ?? clearAll ?? filtersBtn;
+    target?.focus();
   }
   function typed() {
     clearTimeout(timer);
@@ -144,7 +158,7 @@
   // ---- Back navigation brings the scroll position back (the URL already holds the page count).
   export const snapshot = {
     capture: () => ({ y: scrollY }),
-    restore: (s: { y: number }) => requestAnimationFrame(() => scrollTo(0, s.y)),
+    restore: (s: { y: number }) => requestAnimationFrame(() => scrollTo({ top: s.y, behavior: 'instant' })),
   };
 
   const countText = $derived(
@@ -156,7 +170,7 @@
 </script>
 
 <svelte:head>
-  <title>{view.q ? `${view.q} - ` : ''}Emotes - cyex.tv</title>
+  <title>{q ? `${q} - ` : ''}Emotes - cyex.tv</title>
   <meta name="description" content="Search approved cyex.tv emotes by name and tag." />
 </svelte:head>
 
@@ -190,10 +204,10 @@
         <span class="clear"><IconButton icon="x" label="Clear search" size="s" tip="none" onclick={clearText} type="button" /></span>
       {/if}
     </form>
-    <Segmented label="Sort" size="s" options={sorts} value={view.sort} onchange={(v) => go({ sort: v })} />
+    <Segmented label="Sort" size="s" options={sorts} value={view.sort} onchange={(v) => go({ sort: v }, true)} />
     <Popover label="Filters" sheet width="340px">
       {#snippet trigger(p)}
-        <button class="btn btn-s filters-btn" type="button" {...p}>
+        <button class="btn btn-s filters-btn" type="button" bind:this={filtersBtn} {...p}>
           <Icon name="sliders" size={16} /> Filters{#if filters.length}<span class="n">{filters.length}</span>{/if}
         </button>
       {/snippet}
@@ -211,11 +225,11 @@
   </div>
 
   {#if filters.length}
-    <div class="chips" role="list" aria-label="Active filters">
-      {#each filters as f (f.key)}
-        <span role="listitem"><Chip label={f.label} onremove={() => go({ [f.key]: CLEARED[f.key] })} /></span>
+    <div class="chips" bind:this={chipsEl} role="list" aria-label="Active filters">
+      {#each filters as f, i (f.key)}
+        <span role="listitem"><Chip label={f.label} onremove={() => removeChip(f.key, i)} /></span>
       {/each}
-      <button class="link clearall" type="button" onclick={() => go({ ...CLEARED })}>Clear all</button>
+      <button class="link clearall" type="button" bind:this={clearAll} onclick={() => go({ ...CLEARED })}>Clear all</button>
     </div>
   {/if}
 
@@ -227,7 +241,7 @@
     </div>
   {:else if shown.length === 0 && !hasMore && !switching}
     <div class="state">
-      <h2>No emotes{view.q ? ` match “${view.q}”` : ' here'}.</h2>
+      <h2>No emotes{q ? ` match “${q}”` : ' here'}.</h2>
       {#if filters.length}
         <p class="muted">
           {filters.map((f) => f.label).join(', ')} {filters.length === 1 ? 'is' : 'are'} on. Removing {filters.length === 1 ? 'it' : 'one'} may bring emotes back.
@@ -245,16 +259,7 @@
       <EmoteGrid items={shown} {density} eager={12} loading={busy || (switching && shown.length === 0)} skeletons={density === 'compact' ? 16 : 10} label="Emotes" />
     </div>
     <div class="more" bind:this={end}>
-      {#if moreError}
-        <p class="muted" role="alert">{moreError}</p>
-        <button class="btn btn-s" type="button" onclick={loadMore}>Try again</button>
-      {:else if hasMore}
-        <a class="btn btn-s" href={moreHref} onclick={(e) => { e.preventDefault(); void loadMore(); }} aria-disabled={busy}>
-          {busy ? 'Loading…' : 'Load more'}
-        </a>
-      {:else if shown.length > 0}
-        <p class="muted fine">That’s everything{view.q ? ` for “${view.q}”` : ''}.</p>
-      {/if}
+      <LoadMore {hasMore} {busy} error={moreError} total={shown.length > 0 ? (clientFiltered ? shown.length : data.total) : 0} onmore={loadMore} href={moreHref} />
     </div>
   {/if}
 </div>
@@ -289,13 +294,12 @@
   .clearall { background: none; border: 0; padding: 4px 6px; font: inherit; font-size: var(--t-small); cursor: pointer; min-height: 32px; }
 
   .results { margin-top: 20px; transition: opacity var(--dur-color) ease-out; }
-  .results.dim { opacity: .55; }
-  .more { display: grid; justify-items: center; gap: 12px; padding: 32px 0 8px; min-height: 96px; }
-  .more p { margin: 0; }
-  .more a[aria-disabled='true'] { pointer-events: none; opacity: .7; }
+  .results.dim { opacity: .55; transition-delay: .15s; }
+  .more { padding: 32px 0 8px; min-height: 96px; }
 
   .state { display: grid; justify-items: start; gap: 12px; padding: 48px 0; }
-  .state h2 { margin: 0; font-size: var(--t-h4, 22px); letter-spacing: -.02em; }
+  .state h2 { margin: 0; font-size: var(--t-block); letter-spacing: -.02em; }
+  .state h2, .state p { overflow-wrap: anywhere; }
   .state p { margin: 0; max-width: 52ch; }
 
   /* Phones and small tablets: the field takes its own row, the controls scroll sideways under it. */
