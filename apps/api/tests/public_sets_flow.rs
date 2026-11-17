@@ -403,8 +403,7 @@ async fn private_sets_are_never_readable_by_others() {
     let r = w.gql(&bob, READ, json!({ "id": hidden })).await;
     assert!(r["data"]["set"].is_null(), "{r}");
 
-    // Owner changes are not audited (only staff and account editors are); no event for a
-    // private or unlisted set.
+    // No event for a private or unlisted set.
     assert!(w.events("set.created").await.is_empty());
     w.db.close().await;
 }
@@ -598,7 +597,12 @@ async fn clone_copies_what_may_be_copied() {
     let rows = w.audit_rows().await;
     let row = rows
         .iter()
-        .find(|e| e.action == "set.cloned")
+        .find(|e| {
+            e.action == "set.created"
+                && e.after_json
+                    .as_ref()
+                    .is_some_and(|a| a["via"] == "account_editor")
+        })
         .expect("audited");
     assert_eq!(row.actor_account_id, Some(bob.id));
     let after = row.after_json.as_ref().unwrap();
@@ -664,5 +668,52 @@ async fn clones_are_rate_limited() {
     }
     let r = w.gql(&alice, CLONE, json!({ "id": source })).await;
     assert_eq!(code(&r), "rate_limited", "{r}");
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn activity_shows_listed_sets_only() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("2601").await;
+    let listed = w.set(&alice, "Out loud", None).await;
+    let unlisted = w.set(&alice, "By link", Some("UNLISTED")).await;
+    let hidden = w.set(&alice, "Quiet", Some("PRIVATE")).await;
+    let e = w
+        .emote(&alice, "aliceOk", EmoteState::Approved, false)
+        .await;
+    for set in [&listed, &unlisted, &hidden] {
+        w.add(&alice, set, &e).await;
+    }
+    // A copy is a set made: it shows when listed.
+    let r = w
+        .gql(&alice, CLONE, json!({ "id": listed, "n": "Copy" }))
+        .await;
+    let copy = r["data"]["cloneSet"]["set"]["id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{r}"))
+        .to_owned();
+
+    const FEED: &str = "query($a: String!) { accountActivity(accountId: $a) { kind set { id } } }";
+    let r = w.post(None, FEED, json!({ "a": alice.tid() })).await;
+    let lines = r["data"]["accountActivity"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{r}"));
+    let sets: Vec<&str> = lines
+        .iter()
+        .filter_map(|l| l["set"]["id"].as_str())
+        .collect();
+    assert!(sets.contains(&listed.as_str()), "{r}");
+    assert!(sets.contains(&copy.as_str()), "{r}");
+    assert!(!sets.contains(&unlisted.as_str()), "{r}");
+    assert!(!sets.contains(&hidden.as_str()), "{r}");
+    assert!(!r.to_string().contains(&hidden), "{r}");
+
+    // Hiding a set later hides its past lines too.
+    let r = w
+        .gql(&alice, UPDATE, json!({ "id": listed, "v": "PRIVATE" }))
+        .await;
+    assert_eq!(r["data"]["updateSet"]["visibility"], "PRIVATE", "{r}");
+    let r = w.post(None, FEED, json!({ "a": alice.tid() })).await;
+    assert!(!r.to_string().contains(&listed), "{r}");
     w.db.close().await;
 }

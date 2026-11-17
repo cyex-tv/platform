@@ -45,6 +45,68 @@ export type AccountSummary = {
   id: Scalars['String']['output'];
 };
 
+/**
+ * A badge or paint change: what it was and what it is now. Empty ends mean none; names are
+ * empty when the cosmetic was deleted since.
+ */
+export type ActivityCosmeticChange = {
+  __typename?: 'ActivityCosmeticChange';
+  fromId?: Maybe<Scalars['String']['output']>;
+  fromName?: Maybe<Scalars['String']['output']>;
+  toId?: Maybe<Scalars['String']['output']>;
+  toName?: Maybe<Scalars['String']['output']>;
+};
+
+/** An emote, as a feed line names it. `name` is what it was called in the set at the time. */
+export type ActivityEmote = {
+  __typename?: 'ActivityEmote';
+  files: Array<EmoteFile>;
+  /** For example `https://cdn.cyex.tv/emotes/<sha256>`. */
+  host: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+};
+
+/** One line of an account's public activity feed (7TV's "Activity" tab). */
+export type ActivityEntry = {
+  __typename?: 'ActivityEntry';
+  /** Who did it: the account or one of its editors. */
+  actor: AccountSummary;
+  badge?: Maybe<ActivityCosmeticChange>;
+  createdAt: Scalars['String']['output'];
+  emote?: Maybe<ActivityEmote>;
+  fromName?: Maybe<Scalars['String']['output']>;
+  /** An audit row ID; page back with it. */
+  id: Scalars['String']['output'];
+  kind: ActivityKind;
+  paint?: Maybe<ActivityCosmeticChange>;
+  set?: Maybe<ActivitySet>;
+  toName?: Maybe<Scalars['String']['output']>;
+};
+
+/** What one line of an account's public activity feed says happened. */
+export type ActivityKind =
+  /** A channel's active set changed (`set` is the new one; `from_name`, `to_name`). */
+  | 'ACTIVE_SET_CHANGED'
+  /** The badge and/or paint shown changed (`badge`, `paint`). */
+  | 'COSMETICS_SELECTED'
+  /** An emote of the account was approved and listed. */
+  | 'EMOTE_UPLOADED'
+  | 'SET_CREATED'
+  | 'SET_EMOTE_ADDED'
+  | 'SET_EMOTE_REMOVED'
+  /** The emote's name in the set changed (`from_name`, `to_name`). */
+  | 'SET_EMOTE_RENAMED'
+  /** A set was renamed (`from_name`, `to_name`). */
+  | 'SET_RENAMED';
+
+/** A set, as a feed line names it. */
+export type ActivitySet = {
+  __typename?: 'ActivitySet';
+  id: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+};
+
 /** Who to add as an editor: an account ID, or a Twitch or Kick login. */
 export type AddAccountEditorInput = {
   /** The editor's cyex.tv account ID. Or give `platform` and `login`. */
@@ -879,6 +941,13 @@ export type Query = {
   /** An account's public summary. Null when the account is unknown, deleted or blocked. */
   account?: Maybe<AccountSummary>;
   /**
+   * An account's public activity, newest first, like 7TV's "Activity" tab: sets and emotes the
+   * owner or their editors changed, the active set, badge and paint picks, approved uploads.
+   * Page back with `before` (an entry ID); `limit` is 1 to 100, default 30. Empty when the
+   * account is unknown, deleted or blocked. Nothing private or from moderation shows.
+   */
+  accountActivity: Array<ActivityEntry>;
+  /**
    * An account's editors (ADR 0014): yours, or, with `accountId`, those of an account you edit
    * with the `EDITORS` permission.
    */
@@ -986,6 +1055,13 @@ export type Query = {
 
 export type QueryAccountArgs = {
   id: Scalars['String']['input'];
+};
+
+
+export type QueryAccountActivityArgs = {
+  accountId: Scalars['String']['input'];
+  before?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 

@@ -111,7 +111,9 @@ fn sqlx_error(err: sqlx::Error) -> ApiError {
     db_error(DbError::Sqlx(err))
 }
 
-async fn conn(state: &AppState) -> ApiResult<sqlx::pool::PoolConnection<sqlx::Postgres>> {
+pub(crate) async fn conn(
+    state: &AppState,
+) -> ApiResult<sqlx::pool::PoolConnection<sqlx::Postgres>> {
     state.db.acquire().await.map_err(sqlx_error)
 }
 
@@ -212,28 +214,34 @@ async fn owner_grant(
     }
 }
 
+/// Audits a set change. The owner's own changes and those made through an account grant are
+/// audited too, and tagged with the owner as their subject: they are what the owner's public
+/// activity feed shows (`activity.rs`). Staff acting on a permission are audited as before and
+/// never reach the feed. Per-set editors are not audited.
 async fn audit_if_permission(
     conn: &mut PgConnection,
     caller: &Caller,
     grant: Grant,
     action: &str,
-    set_id: Uuid,
+    set: &Set,
     before: Option<serde_json::Value>,
     after: Option<serde_json::Value>,
 ) -> ApiResult<()> {
-    let after = match grant {
-        Grant::Permission(_) => after,
-        Grant::AccountEditor(_) => Some(via_account_editor(after)),
-        Grant::Owner | Grant::Editor => return Ok(()),
+    let (after, subject) = match grant {
+        Grant::Permission(_) => (after, None),
+        Grant::AccountEditor(_) => (Some(via_account_editor(after)), set.owner_account_id),
+        Grant::Owner => (after, set.owner_account_id),
+        Grant::Editor => return Ok(()),
     };
-    write_audit(
+    write_audit_for(
         conn,
         caller,
         action,
         "set",
-        &ids::to_text(set_id),
+        &ids::to_text(set.id),
         before,
         after,
+        subject,
     )
     .await
 }
@@ -259,7 +267,32 @@ async fn write_audit(
     before: Option<serde_json::Value>,
     after: Option<serde_json::Value>,
 ) -> ApiResult<()> {
-    audit::write(
+    write_audit_for(
+        conn,
+        caller,
+        action,
+        target_kind,
+        target_id,
+        before,
+        after,
+        None,
+    )
+    .await
+}
+
+/// `subject` is the account whose public activity feed shows the change, if any.
+#[allow(clippy::too_many_arguments)]
+async fn write_audit_for(
+    conn: &mut PgConnection,
+    caller: &Caller,
+    action: &str,
+    target_kind: &str,
+    target_id: &str,
+    before: Option<serde_json::Value>,
+    after: Option<serde_json::Value>,
+    subject: Option<Uuid>,
+) -> ApiResult<()> {
+    audit::write_for(
         conn,
         &audit::NewEntry {
             actor: Some(caller.account_id),
@@ -269,6 +302,7 @@ async fn write_audit(
             before,
             after,
         },
+        subject,
     )
     .await
     .map_err(db_error)?;
@@ -767,23 +801,26 @@ pub async fn create_set(
     let set = sets::create_with(&mut tx, owner, &name, input.kind, input.visibility)
         .await
         .map_err(db_error)?;
-    if by_editor {
-        audit_if_permission(
-            &mut tx,
-            caller,
-            Grant::AccountEditor(EditorPermission::Sets),
-            "set.created",
-            set.id,
-            None,
-            Some(json!({
-                "name": set.name,
-                "kind": set.kind,
-                "owner_id": ids::to_text(owner),
-                "visibility": set.visibility,
-            })),
-        )
-        .await?;
-    }
+    let grant = if by_editor {
+        Grant::AccountEditor(EditorPermission::Sets)
+    } else {
+        Grant::Owner
+    };
+    audit_if_permission(
+        &mut tx,
+        caller,
+        grant,
+        "set.created",
+        &set,
+        None,
+        Some(json!({
+            "name": set.name,
+            "kind": set.kind,
+            "owner_id": ids::to_text(owner),
+            "visibility": set.visibility,
+        })),
+    )
+    .await?;
     publish_set_created(&mut tx, &set).await?;
     tx.commit().await.map_err(sqlx_error)?;
     drop(conn);
@@ -889,25 +926,30 @@ pub async fn clone_set(
     skipped += u32::try_from(total)
         .unwrap_or(0)
         .saturating_sub(copied + skipped);
-    if by_editor {
-        audit_if_permission(
-            &mut tx,
-            caller,
-            Grant::AccountEditor(EditorPermission::Sets),
-            "set.cloned",
-            set.id,
-            None,
-            Some(json!({
-                "source_id": ids::to_text(source.id),
-                "name": set.name,
-                "owner_id": ids::to_text(owner),
-                "visibility": set.visibility,
-                "copied": copied,
-                "skipped": skipped,
-            })),
-        )
-        .await?;
-    }
+    // A copy is a new set: the same audit row as `createSet`, so it shows in the activity feed.
+    let grant = if by_editor {
+        Grant::AccountEditor(EditorPermission::Sets)
+    } else {
+        Grant::Owner
+    };
+    audit_if_permission(
+        &mut tx,
+        caller,
+        grant,
+        "set.created",
+        &set,
+        None,
+        Some(json!({
+            "name": set.name,
+            "kind": set.kind,
+            "owner_id": ids::to_text(owner),
+            "visibility": set.visibility,
+            "source_id": ids::to_text(source.id),
+            "copied": copied,
+            "skipped": skipped,
+        })),
+    )
+    .await?;
     publish_set_created(&mut tx, &set).await?;
     tx.commit().await.map_err(sqlx_error)?;
     drop(conn);
@@ -958,7 +1000,7 @@ pub async fn update_set(
             caller,
             grant_used,
             "set.capacity_changed",
-            id,
+            &set,
             Some(json!({ "capacity": set.capacity })),
             Some(json!({ "capacity": after.capacity })),
         )
@@ -983,7 +1025,7 @@ pub async fn update_set(
             caller,
             grant,
             "set.visibility_changed",
-            id,
+            &set,
             Some(json!({ "visibility": set.visibility })),
             Some(json!({ "visibility": after.visibility })),
         )
@@ -995,7 +1037,7 @@ pub async fn update_set(
             caller,
             grant,
             "set.renamed",
-            id,
+            &set,
             Some(json!({ "name": set.name })),
             Some(json!({ "name": after.name })),
         )
@@ -1031,7 +1073,7 @@ pub async fn delete_set(state: &AppState, caller: &Caller, id: &str) -> ApiResul
         caller,
         grant,
         "set.deleted",
-        id,
+        &set,
         Some(json!({ "name": set.name, "kind": set.kind })),
         None,
     )
@@ -1094,7 +1136,7 @@ pub async fn add_set_emote(
         caller,
         grant,
         "set.emote_added",
-        set_id,
+        &set,
         None,
         Some(json!({ "emote_id": ids::to_text(emote_id), "name": member.name })),
     )
@@ -1121,6 +1163,9 @@ pub async fn update_set_emote(
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let set = load_set(&mut tx, set_id).await?;
     let grant = edit_grant(&mut tx, caller, &set, EditorPermission::Emotes).await?;
+    let previous = reads::member(&mut tx, set_id, emote_id)
+        .await
+        .map_err(db_error)?;
     let member = sets::update_member(&mut tx, set_id, emote_id, name, input.zero_width)
         .await
         .map_err(db_error)?;
@@ -1137,8 +1182,10 @@ pub async fn update_set_emote(
         caller,
         grant,
         "set.emote_updated",
-        set_id,
-        None,
+        &set,
+        previous.map(|p| {
+            json!({ "emote_id": ids::to_text(emote_id), "name": p.name, "zero_width": p.zero_width })
+        }),
         Some(json!({ "emote_id": ids::to_text(emote_id), "name": member.name, "zero_width": member.zero_width })),
     )
     .await?;
@@ -1181,7 +1228,7 @@ pub async fn remove_set_emote(
         caller,
         grant,
         "set.emote_removed",
-        set_id,
+        &set,
         Some(json!({ "emote_id": ids::to_text(emote_id), "name": member.name })),
         None,
     )
@@ -1338,8 +1385,15 @@ pub async fn update_channel_settings(
             .await
             .map_err(db_error)?;
     }
-    if by_editor {
-        write_audit(
+    // Editors are always audited; the owner's own changes are too, for their activity feed.
+    let changed = updated.active_set_id != ch.active_set_id
+        || updated.allow_personal_emotes != ch.allow_personal_emotes;
+    if by_editor || changed {
+        let after = json!({
+            "active_set_id": updated.active_set_id.map(ids::to_text),
+            "allow_personal_emotes": updated.allow_personal_emotes,
+        });
+        write_audit_for(
             &mut tx,
             caller,
             "channel.settings_changed",
@@ -1349,10 +1403,12 @@ pub async fn update_channel_settings(
                 "active_set_id": ch.active_set_id.map(ids::to_text),
                 "allow_personal_emotes": ch.allow_personal_emotes,
             })),
-            Some(via_account_editor(Some(json!({
-                "active_set_id": updated.active_set_id.map(ids::to_text),
-                "allow_personal_emotes": updated.allow_personal_emotes,
-            })))),
+            Some(if by_editor {
+                via_account_editor(Some(after))
+            } else {
+                after
+            }),
+            Some(ch.account_id),
         )
         .await?;
     }
