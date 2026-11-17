@@ -60,3 +60,49 @@ export function signInUrl(platform: 'twitch' | 'kick', back = '/'): string {
   const returnTo = encodeURIComponent(back.startsWith('/') ? back : '/');
   return `${apiUrl()}/v1/auth/${platform}/login?return_to=${returnTo}`;
 }
+
+/** The address that links another platform to the signed-in account, and comes back to `back`. */
+export function linkUrl(platform: 'twitch' | 'kick', back = '/me/account'): string {
+  return `${signInUrl(platform, back)}&link=true`;
+}
+
+/** A REST call's error: `{ error, message }` from the API, or a stand-in when it didn't answer. */
+async function restError(response: Response): Promise<ApiError> {
+  if (response.status === 429) return new ApiError('Too many requests. Try again in a moment.', 'rate_limited');
+  try {
+    const body = (await response.json()) as { error?: string; message?: string };
+    return new ApiError(body.message ?? 'That didn’t work.', body.error ?? 'error');
+  } catch {
+    return new ApiError('cyex.tv answered in a way the site didn’t expect.', 'bad_answer');
+  }
+}
+
+/** The upload's answer: the new emote, pending while its files are made. */
+export type Uploaded = { id: string; name: string; state: string };
+
+/** Uploads an emote (`POST /v1/emotes`, multipart). Throws `ApiError` with the API's code. */
+export async function uploadEmote(file: File, name: string, tags: string[]): Promise<Uploaded> {
+  const form = new FormData();
+  form.set('name', name);
+  if (tags.length) form.set('tags', tags.join(','));
+  form.set('file', file);
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl()}/v1/emotes`, { method: 'POST', credentials: 'include', body: form });
+  } catch {
+    throw new ApiError('cyex.tv can’t be reached right now.', 'offline');
+  }
+  if (!response.ok) throw await restError(response);
+  return (await response.json()) as Uploaded;
+}
+
+/** Ends the session (`POST /v1/auth/logout`). */
+export async function signOut(): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl()}/v1/auth/logout`, { method: 'POST', credentials: 'include' });
+  } catch {
+    throw new ApiError('cyex.tv can’t be reached right now.', 'offline');
+  }
+  if (!response.ok && response.status !== 401) throw await restError(response);
+}

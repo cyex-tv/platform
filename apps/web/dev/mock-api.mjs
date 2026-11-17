@@ -1,42 +1,197 @@
 // A stand-in for api.cyex.tv, for looking at the site without the real stack:
-//   node dev/mock-api.mjs            (listens on 127.0.0.1:8787)
-//   PUBLIC_API_URL=http://127.0.0.1:8787 npm run dev
+//   node dev/mock-api.mjs            (listens on localhost:8787)
+//   PUBLIC_API_URL=http://localhost:8787 npm run dev
 // It answers the site's GraphQL operations with made-up emotes and draws their pictures as
-// simple shapes. Development only; nothing here ships.
+// simple shapes. "Signing in" sets a mock cookie; everything signed in lives in memory and
+// resets when it restarts. MOCK_ADMIN=1 gives the mock account every permission.
+// Development only; nothing here ships.
 import { createServer } from 'node:http';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const ORIGIN = process.env.SITE_ORIGIN ?? 'http://localhost:5173';
-const BASE = `http://127.0.0.1:${PORT}`;
+const BASE = `http://localhost:${PORT}`;
+const ADMIN = process.env.MOCK_ADMIN === '1';
 
 const NAMES = ['catJAM', 'pogHop', 'quietoak', 'lumenWave', 'noraWow', 'pixelmoth', 'byteNod', 'foxLook',
   'oakCry', 'moonHi', 'sipTea', 'clapclap', 'wideSmile', 'thinking', 'rainyDay', 'gg', 'okBuddy', 'sleepy',
   'hype', 'shrug', 'lgtm', 'wave', 'coolCat', 'tinyHeart'];
 const HUES = [210, 25, 140, 280, 340, 50, 180, 0];
+const ME_ID = '01JD8X0000000000000000MEME';
+const ME_SUMMARY = { id: ME_ID, displayName: 'lumen_fox', avatar: null };
+const OTHERS = [
+  { id: '01JD8X0000000000000000OAK1', displayName: 'quietoak', avatar: null },
+  { id: '01JD8X0000000000000000NORA', displayName: 'nora_byte', avatar: null },
+];
 
-const emote = (i) => {
+const emote = (i, owner = OTHERS[i % 2], state = 'APPROVED') => {
   const name = NAMES[i % NAMES.length] + (i >= NAMES.length ? String(i) : '');
   const wide = i % 7 === 3;
   const w = wide ? 64 : 32;
   return {
     id: `01JD8X${String(i).padStart(20, '0')}`,
     name,
-    state: 'APPROVED',
+    state,
     animated: i % 4 === 1,
     tags: i % 3 === 0 ? ['funny', 'cat'] : [],
     host: `${BASE}/emotes/${i}`,
-    createdAt: '2026-11-16T20:00:00.000Z',
+    createdAt: new Date(Date.UTC(2026, 10, 16, 20, 0, 0) - i * 3600_000).toISOString(),
     flags: { zeroWidth: false, nsfw: false, private: false },
-    owner: { id: '01JD8X0000000000000000OWNR', displayName: ['lumen_fox', 'quietoak', 'nora_byte'][i % 3], avatar: null },
+    owner,
     files: [1, 2, 3, 4].map((s) => ({ name: `${s}x.webp`, format: 'WEBP', scale: s, width: w * s, height: 32 * s, size: 900 * s, isStatic: false })),
   };
 };
 const ALL = Array.from({ length: 140 }, (_, i) => emote(i));
+// The mock account's own uploads: a few of each state.
+const MINE = Array.from({ length: 9 }, (_, i) =>
+  emote(200 + i, ME_SUMMARY, i < 2 ? 'PENDING' : i === 2 ? 'REJECTED' : 'APPROVED'));
+let uploads = 0;
 
-function answer(body) {
+const member = (e, name = e.name) => ({ name, zeroWidth: e.flags.zeroWidth, addedAt: e.createdAt, emote: e });
+const SETS = [
+  { id: '01JD8XSET00000000000000MAIN', name: 'Main', kind: 'CHANNEL', capacity: 1000, owner: ME_SUMMARY,
+    emotes: [...MINE.slice(3, 7), ...ALL.slice(10, 30)].map((e) => member(e)), editors: [OTHERS[0]] },
+  { id: '01JD8XSET0000000000000ALTSS', name: 'Subathon', kind: 'CHANNEL', capacity: 1000, owner: ME_SUMMARY,
+    emotes: ALL.slice(40, 46).map((e) => member(e)), editors: [] },
+  { id: '01JD8XSET000000000000000OAK', name: 'quietoak main', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[0],
+    emotes: ALL.slice(60, 70).map((e) => member(e)), editors: [ME_SUMMARY] },
+];
+const CHANNELS = [
+  { platform: 'TWITCH', platformChannelId: '141981764', login: 'lumen_fox', activeSetId: SETS[0].id, allowPersonalEmotes: true, account: ME_SUMMARY },
+];
+const IDENTITIES = [
+  { platform: 'TWITCH', platformUserId: '141981764', login: 'lumen_fox', displayName: 'lumen_fox', avatar: null },
+];
+const NOTES = [
+  { id: 'N1', kind: 'emote.rejected', payload: JSON.stringify({ name: MINE[2].name, reason: 'Looks like a copy of a well-known emote.' }), createdAt: '2026-11-16T21:00:00.000Z', read: false },
+];
+const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view'];
+
+const findEmote = (id) => MINE.find((e) => e.id === id) ?? ALL.find((e) => e.id === id);
+const findSet = (id) => SETS.find((s) => s.id === id);
+const err = (message, code) => ({ data: null, errors: [{ message, extensions: { code } }] });
+const setOut = (s) => ({ ...s, editors: undefined });
+
+function signedIn(body, v) {
+  const op = (body.query.match(/(?:query|mutation)\s+(\w+)/) ?? [])[1];
+  switch (op) {
+    case 'Me':
+      return { data: { me: { id: ME_ID, createdAt: '2026-11-10T12:00:00.000Z', permissions: ADMIN ? PERMISSIONS : [], identities: IDENTITIES } } };
+    case 'MyEmotes': {
+      const per = v.perPage ?? 50;
+      const page = v.page ?? 1;
+      return { data: { myEmotes: { total: MINE.length, items: MINE.slice((page - 1) * per, page * per) } } };
+    }
+    case 'UpdateEmote': {
+      const e = MINE.find((x) => x.id === v.id);
+      if (!e) return err('Only the emote’s owner can change it.', 'forbidden');
+      if (v.input.name !== undefined) e.name = v.input.name;
+      if (v.input.tags) e.tags = v.input.tags;
+      for (const k of ['zeroWidth', 'private', 'nsfw']) if (v.input[k] !== undefined) e.flags[k] = v.input[k];
+      return { data: { updateEmote: e } };
+    }
+    case 'DeleteEmote': {
+      const i = MINE.findIndex((x) => x.id === v.id);
+      if (i < 0) return err('Not found.', 'not_found');
+      MINE.splice(i, 1);
+      for (const s of SETS) s.emotes = s.emotes.filter((m) => m.emote.id !== v.id);
+      return { data: { deleteEmote: true } };
+    }
+    case 'MySets':
+      return { data: { mySets: SETS.map(setOut) } };
+    case 'EditSet': {
+      const s = findSet(v.id);
+      if (!s) return { data: { set: null, setEditors: [] } };
+      return { data: { set: setOut(s), setEditors: s.editors } };
+    }
+    case 'CreateSet': {
+      if (v.input.kind === 'PERSONAL' && SETS.some((s) => s.kind === 'PERSONAL' && s.owner.id === ME_ID))
+        return err('You have a personal set already.', 'personal_set_exists');
+      const s = { id: `01JD8XSETNEW${String(SETS.length).padStart(14, '0')}`, name: v.input.name, kind: v.input.kind,
+        capacity: v.input.kind === 'PERSONAL' ? 50 : 1000, owner: ME_SUMMARY, emotes: [], editors: [] };
+      SETS.push(s);
+      return { data: { createSet: { id: s.id } } };
+    }
+    case 'UpdateSet': {
+      const s = findSet(v.id);
+      if (v.input.name) s.name = v.input.name;
+      return { data: { updateSet: { id: s.id, name: s.name } } };
+    }
+    case 'DeleteSet': {
+      if (CHANNELS.some((c) => c.activeSetId === v.id)) return err('A channel’s active set can’t be deleted.', 'set_in_use');
+      SETS.splice(SETS.findIndex((s) => s.id === v.id), 1);
+      return { data: { deleteSet: true } };
+    }
+    case 'AddSetEmote': {
+      const s = findSet(v.setId);
+      const e = findEmote(v.emoteId);
+      if (s.emotes.length >= s.capacity) return err('The set is full.', 'set_full');
+      if (s.emotes.some((m) => m.name === e.name)) return err('Another emote in this set has that name.', 'name_taken');
+      s.emotes.push(member(e, v.input?.name ?? e.name));
+      return { data: { addSetEmote: { name: e.name } } };
+    }
+    case 'UpdateSetEmote': {
+      const m = findSet(v.setId).emotes.find((x) => x.emote.id === v.emoteId);
+      if (v.input.name) m.name = v.input.name;
+      if (v.input.zeroWidth !== undefined) m.zeroWidth = v.input.zeroWidth;
+      return { data: { updateSetEmote: { name: m.name, zeroWidth: m.zeroWidth } } };
+    }
+    case 'RemoveSetEmote': {
+      const s = findSet(v.setId);
+      s.emotes = s.emotes.filter((m) => m.emote.id !== v.emoteId);
+      return { data: { removeSetEmote: true } };
+    }
+    case 'AddSetEditor': {
+      const s = findSet(v.setId);
+      if (s.editors.some((e) => e.id === v.accountId)) return { data: { addSetEditor: false } };
+      s.editors.push([...OTHERS, ME_SUMMARY].find((a) => a.id === v.accountId));
+      return { data: { addSetEditor: true } };
+    }
+    case 'RemoveSetEditor': {
+      const s = findSet(v.setId);
+      s.editors = s.editors.filter((e) => e.id !== v.accountId);
+      if (v.accountId === ME_ID) SETS.splice(SETS.indexOf(s), 1);
+      return { data: { removeSetEditor: true } };
+    }
+    case 'FindAccount': {
+      const a = OTHERS.find((o) => o.displayName === v.login);
+      return { data: { channelByLogin: a ? { login: v.login, account: a } : null } };
+    }
+    case 'MyChannels':
+      return { data: { myChannels: CHANNELS, mySets: SETS.map((s) => ({ id: s.id, name: s.name, kind: s.kind, owner: { id: s.owner.id } })) } };
+    case 'UpdateChannel': {
+      const c = CHANNELS.find((x) => x.platform === v.platform && x.platformChannelId === v.id);
+      if (v.input.activeSetId !== undefined) c.activeSetId = v.input.activeSetId || null;
+      if (v.input.allowPersonalEmotes !== undefined) c.allowPersonalEmotes = v.input.allowPersonalEmotes;
+      return { data: { updateChannelSettings: { activeSetId: c.activeSetId, allowPersonalEmotes: c.allowPersonalEmotes } } };
+    }
+    case 'Unlink': {
+      if (IDENTITIES.length < 2) return err('The last identity can’t be removed.', 'last_identity');
+      IDENTITIES.splice(IDENTITIES.findIndex((i) => i.platform === v.platform), 1);
+      return { data: { unlinkIdentity: { id: ME_ID } } };
+    }
+    case 'MyNotifications':
+      return { data: { myNotifications: NOTES } };
+    case 'MarkRead': {
+      const n = NOTES.filter((x) => !x.read).length;
+      NOTES.forEach((x) => (x.read = true));
+      return { data: { markNotificationsRead: n } };
+    }
+    case 'Emote':
+      return { data: { emote: findEmote(v.id) ?? null } };
+    default:
+      return null;
+  }
+}
+
+function answer(body, session) {
   const q = body.query ?? '';
   const v = body.variables ?? {};
-  if (q.includes('query Me')) return { data: null, errors: [{ message: 'Sign in to use this.', extensions: { code: 'signed_out' } }] };
+  if (session) {
+    const out = signedIn(body, v);
+    if (out) return out;
+  }
+  if (q.includes('query Me') || /^\s*mutation/.test(q) || q.includes('query My') || q.includes('query EditSet'))
+    return err('Sign in to use this.', 'signed_out');
   if (q.includes('query GlobalSet')) return { data: { globalSet: { id: 'G', name: 'Global', emotes: ALL.slice(0, 24).map((e) => ({ name: e.name, zeroWidth: false, emote: e })) } } };
   if (q.includes('query Search')) {
     const text = (v.query ?? '').toLowerCase();
@@ -48,12 +203,15 @@ function answer(body) {
     return { data: { searchEmotes: { total: hits.length, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
   }
   if (q.includes('query Emote(')) return { data: { emote: ALL.find((e) => e.id === v.id) ?? null } };
-  if (q.includes('query Channel')) {
+  if (q.includes('query Channel') || q.includes('query FindAccount')) {
     if (v.login !== 'lumen_fox') return { data: { channelByLogin: null } };
-    return { data: { channelByLogin: { platform: v.platform, platformChannelId: '141981764', login: 'lumen_fox', activeSetId: 'S1', allowPersonalEmotes: true, account: { id: 'A', displayName: 'lumen_fox', avatar: null } } } };
+    return { data: { channelByLogin: { ...CHANNELS[0], platform: v.platform } } };
   }
-  if (q.includes('query Set(')) return { data: { set: { id: v.id, name: 'Main', kind: 'CHANNEL', capacity: 1000, owner: { id: 'A', displayName: 'lumen_fox' }, emotes: ALL.slice(10, 46).map((e) => ({ name: e.name, zeroWidth: false, addedAt: e.createdAt, emote: e })) } } };
-  return { data: null, errors: [{ message: 'Not in the mock.', extensions: { code: 'not_implemented' } }] };
+  if (q.includes('query Set(')) {
+    const s = findSet(v.id) ?? SETS[0];
+    return { data: { set: setOut(s) } };
+  }
+  return err('Not in the mock.', 'not_implemented');
 }
 
 function picture(i, scale) {
@@ -67,24 +225,61 @@ function picture(i, scale) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${shape}<circle cx="${w * 0.4}" cy="${h * 0.42}" r="${h * 0.06}" fill="#0d0f14"/><circle cx="${w * 0.6}" cy="${h * 0.42}" r="${h * 0.06}" fill="#0d0f14"/></svg>`;
 }
 
-createServer((req, res) => {
+function read(req) {
+  return new Promise((resolve) => {
+    const chunks = [];
+    req.on('data', (c) => chunks.push(c));
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+  });
+}
+
+createServer(async (req, res) => {
   res.setHeader('access-control-allow-origin', ORIGIN);
   res.setHeader('access-control-allow-credentials', 'true');
   res.setHeader('access-control-allow-headers', 'content-type');
   if (req.method === 'OPTIONS') return res.writeHead(204).end();
-  const img = req.url?.match(/^\/emotes\/(\d+)\/(\d)x(?:_static)?\.webp$/);
+  const session = /(?:^|;\s*)mock_session=1/.test(req.headers.cookie ?? '');
+  const url = new URL(req.url ?? '/', BASE);
+
+  const img = url.pathname.match(/^\/emotes\/(\d+)\/(\d)x(?:_static)?\.webp$/);
   if (img) {
     res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' });
     return res.end(picture(Number(img[1]), Number(img[2])));
   }
-  if (req.method === 'POST' && req.url === '/v1/gql') {
-    let raw = '';
-    req.on('data', (c) => (raw += c));
-    req.on('end', () => {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(answer(JSON.parse(raw || '{}'))));
-    });
-    return;
+  if (req.method === 'GET' && /^\/v1\/auth\/(twitch|kick)\/login$/.test(url.pathname)) {
+    if (url.searchParams.get('link') === 'true' && !IDENTITIES.some((i) => i.platform === 'KICK') && url.pathname.includes('kick'))
+      IDENTITIES.push({ platform: 'KICK', platformUserId: '4815162', login: 'lumen_fox', displayName: 'lumen_fox', avatar: null });
+    const back = url.searchParams.get('return_to') ?? '/';
+    res.writeHead(302, { location: ORIGIN + (back.startsWith('/') ? back : '/'), 'set-cookie': 'mock_session=1; Path=/; HttpOnly; SameSite=Lax' });
+    return res.end();
+  }
+  if (req.method === 'POST' && url.pathname === '/v1/auth/logout') {
+    res.writeHead(204, { 'set-cookie': 'mock_session=; Path=/; Max-Age=0' });
+    return res.end();
+  }
+  if (req.method === 'POST' && url.pathname === '/v1/emotes') {
+    const raw = (await read(req)).toString('latin1');
+    if (!session) return json(res, 401, { error: 'signed_out', message: 'Sign in to upload.' });
+    const name = raw.match(/name="name"\r\n\r\n([^\r]*)/)?.[1] ?? 'upload';
+    if (name === 'blocked') return json(res, 422, { error: 'blocked', message: 'This image was taken down before and can’t be uploaded again.' });
+    const e = emote(300 + uploads++, ME_SUMMARY, 'PENDING');
+    e.name = name;
+    e.host = '';
+    e.files = [];
+    e.createdAt = new Date().toISOString();
+    MINE.unshift(e);
+    // The worker "finishes" the files a few seconds later.
+    setTimeout(() => Object.assign(e, { host: emote(300).host, files: emote(300).files }), 4000);
+    return json(res, 202, e);
+  }
+  if (req.method === 'POST' && url.pathname === '/v1/gql') {
+    const raw = (await read(req)).toString('utf8');
+    return json(res, 200, answer(JSON.parse(raw || '{}'), session));
   }
   res.writeHead(404).end();
-}).listen(PORT, '127.0.0.1', () => console.log(`mock api on ${BASE}`));
+}).listen(PORT, 'localhost', () => console.log(`mock api on ${BASE}${ADMIN ? ' (admin)' : ''}`));
+
+function json(res, status, body) {
+  res.writeHead(status, { 'content-type': 'application/json' });
+  res.end(JSON.stringify(body));
+}
