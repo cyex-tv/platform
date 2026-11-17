@@ -484,7 +484,7 @@ function signedIn(body, v, ADMIN) {
       return { data: { channelByLogin: a ? { login: v.login, account: a } : null } };
     }
     case 'MyChannels':
-      return { data: { myChannels: CHANNELS, mySets: SETS.map((s) => ({ id: s.id, name: s.name, kind: s.kind, owner: { id: s.owner.id } })) } };
+      return { data: { myChannels: CHANNELS, mySets: SETS.map((s) => ({ id: s.id, name: s.name, kind: s.kind, owner: s.owner ? { id: s.owner.id } : null })) } };
     case 'UpdateChannel': {
       const c = CHANNELS.find((x) => x.platform === v.platform && x.platformChannelId === v.id);
       if (v.input.activeSetId !== undefined) c.activeSetId = v.input.activeSetId || null;
@@ -611,8 +611,22 @@ function read(req) {
   });
 }
 
+// Any local dev port may call the mock (several dev servers run at once); redirects go back to the
+// site that sent the visitor, else to SITE_ORIGIN.
+const LOCAL = /^http:\/\/(localhost|127\.0\.0\.1):\d+$/;
+function siteOf(req) {
+  const origin = req.headers.origin;
+  if (origin && LOCAL.test(origin)) return origin;
+  try {
+    const ref = new URL(req.headers.referer ?? '').origin;
+    if (LOCAL.test(ref)) return ref;
+  } catch {}
+  return ORIGIN;
+}
+
 createServer(async (req, res) => {
-  res.setHeader('access-control-allow-origin', ORIGIN);
+  const SITE = siteOf(req);
+  res.setHeader('access-control-allow-origin', SITE);
   res.setHeader('access-control-allow-credentials', 'true');
   res.setHeader('access-control-allow-headers', 'content-type');
   if (req.method === 'OPTIONS') return res.writeHead(204).end();
@@ -622,7 +636,7 @@ createServer(async (req, res) => {
   if (url.pathname === '/mock/admin') {
     const off = url.searchParams.has('off');
     const cookie = off ? 'mock_admin=; Path=/; Max-Age=0' : 'mock_admin=1; Path=/; SameSite=Lax';
-    res.writeHead(302, { location: ORIGIN + '/admin', 'set-cookie': cookie });
+    res.writeHead(302, { location: SITE + '/admin', 'set-cookie': cookie });
     return res.end();
   }
 
@@ -640,7 +654,7 @@ createServer(async (req, res) => {
     if (url.searchParams.get('link') === 'true' && !IDENTITIES.some((i) => i.platform === 'KICK') && url.pathname.includes('kick'))
       IDENTITIES.push({ platform: 'KICK', platformUserId: '4815162', login: 'lumen_fox', displayName: 'lumen_fox', avatar: null });
     const back = url.searchParams.get('return_to') ?? '/';
-    res.writeHead(302, { location: ORIGIN + (back.startsWith('/') ? back : '/'), 'set-cookie': 'mock_session=1; Path=/; HttpOnly; SameSite=Lax' });
+    res.writeHead(302, { location: SITE + (back.startsWith('/') ? back : '/'), 'set-cookie': 'mock_session=1; Path=/; HttpOnly; SameSite=Lax' });
     return res.end();
   }
   if (req.method === 'POST' && url.pathname === '/v1/auth/logout') {
