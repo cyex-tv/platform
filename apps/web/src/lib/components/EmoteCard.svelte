@@ -20,6 +20,7 @@
   // Animated emotes show their still first frame and play while hovered or focused; under
   // reduced motion they stay still. The tile's ground lifts one tone on hover.
   import { hasStill, isWide, ready, size, src, srcsetW } from '$lib/emote';
+  import { clean } from '$lib/format';
 
   type Props = {
     emote: CardEmote;
@@ -35,6 +36,15 @@
 
   let hot = $state(false);
   let loaded = $state(false);
+  const name = $derived(clean(e.shownName ?? e.name));
+  const owner = $derived(e.owner ? clean(e.owner.displayName) : '');
+  // A lazy still that is already cached shows at once; one that loads late fades in.
+  function settle(node: HTMLImageElement) {
+    if (node.complete || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    node.classList.add('fade');
+    node.addEventListener('load', () => node.classList.remove('fade'), { once: true });
+    node.addEventListener('error', () => node.classList.remove('fade'), { once: true });
+  }
   const wide = $derived(isWide(e));
   const still = $derived(hasStill(e));
   const dims = $derived(size(e));
@@ -75,6 +85,7 @@
         alt=""
         loading={eager ? 'eager' : 'lazy'}
         decoding="async"
+        use:settle
       />
       {#if hot}
         <img
@@ -95,8 +106,8 @@
     {/if}
     {#if kinds.length}<span class="kinds" aria-hidden="true">{kinds.join(' · ')}</span>{/if}
   </span>
-  <span class="name">{e.shownName ?? e.name}</span>
-  {#if creator && e.owner}<span class="by">{e.owner.displayName}</span>{/if}
+  <span class="name" title={name}>{name}</span>
+  {#if creator && owner}<span class="by" title={owner}>{owner}</span>{/if}
   {#if note}<span class="tags"><span class="tag">{note}</span></span>{/if}
   {#if kinds.length}<span class="sr-only">, {kinds.join(', ')}</span>{/if}
 </a>
@@ -111,7 +122,9 @@
   .art { position: relative; display: grid; place-items: center; width: var(--art); height: var(--art); margin-bottom: 6px; }
   .wide .art { width: calc(var(--art) * 2); }
   .pic { grid-area: 1 / 1; display: block; height: calc(var(--art) * .75); width: auto; max-width: 100%; object-fit: contain; }
-  .moving { opacity: 0; }
+  .moving { opacity: 0; transition: opacity var(--dur-color); }
+  .fade { opacity: 0; }
+  .pic:not(.fade):not(.moving) { transition: opacity var(--dur-color); }
   .moving.loaded { opacity: 1; }
   .processing { font-size: var(--t-fine); color: var(--muted); }
   .name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

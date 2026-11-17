@@ -11,7 +11,10 @@
   // made-up viewers and emotes inline at chat size (28px tall; wide ones wider; zero-width ones
   // stacked on the emote before them). With `live`, a new line arrives every ~2.5s, cycling
   // through `lines`; it pauses off screen and in a hidden tab, and never runs under reduced motion.
+  import { flip } from 'svelte/animate';
+  import { fly } from 'svelte/transition';
   import { hasStill, ready, size, src, srcsetW } from '$lib/emote';
+  import { dur } from '$lib/motion';
 
   type Props = {
     platform: 'twitch' | 'kick';
@@ -49,6 +52,8 @@
 
   let root: HTMLElement;
   let still = $state(false);
+  let held = $state(false); // hovered or focused: lines stop arriving so they can be read
+  let paused = $state(false); // the reader's own pause
   let next = 0;
   let key = 0;
   let shown = $state<Shown[]>([]);
@@ -83,6 +88,7 @@
       timer = undefined;
       if (!seen || document.hidden) return;
       timer = setInterval(() => {
+        if (held || paused) return;
         shown = [...shown.slice(-(visible - 1)), at(next++)];
       }, interval);
     };
@@ -108,14 +114,27 @@
   const moving = $derived(play && !still);
 </script>
 
-<figure class="chat {platform}" class:live bind:this={root} style:--rows={visible} aria-label={label ?? `${name} chat preview`}>
+<figure
+  class="chat {platform}"
+  class:live
+  bind:this={root}
+  style:--rows={visible}
+  aria-label={label ?? `${name} chat preview`}
+  onpointerenter={() => (held = true)}
+  onpointerleave={() => (held = false)}
+  onfocusin={() => (held = true)}
+  onfocusout={() => (held = false)}
+>
   <figcaption class="top">
     <span class="platform">{name}</span>
     <span class="what">Chat</span>
+    {#if live && !still}
+      <button class="pause" type="button" aria-pressed={paused} onclick={() => (paused = !paused)}>{paused ? 'Play' : 'Pause'}</button>
+    {/if}
   </figcaption>
   <ol class="lines" aria-live="off">
     {#each shown as l (l.key)}
-      <li class="line">
+      <li class="line" animate:flip={{ duration: dur(250) }} in:fly={{ y: 8, duration: dur(250) }}>
         <span class="user">{l.user}</span><span class="colon">:</span>
         {#each l.pieces as p}
           {#if p.kind === 'text'}{p.text}{:else}
@@ -162,7 +181,8 @@
   .stack { display: inline-grid; vertical-align: middle; place-items: center; margin: -4px 0; }
   .stack img { grid-area: 1 / 1; display: block; height: var(--emote-chat); width: auto; }
   .missing { color: var(--muted); }
-  .live .line:last-child { animation: arrive var(--dur-hover) var(--ease); }
-  @keyframes arrive { from { opacity: 0; transform: translateY(8px); } }
-  @media (prefers-reduced-motion: reduce) { .live .line:last-child { animation: none; } }
+  .pause { margin-left: auto; min-height: 32px; padding: 0 8px; border: 0; background: none; font: inherit; font-size: var(--t-small);
+    color: var(--muted); border-radius: var(--radius-btn); cursor: pointer; }
+  @media (hover: hover) and (pointer: fine) { .pause:hover { color: var(--text); } }
+  @media (pointer: coarse) { .pause { min-height: 44px; padding: 0 12px; } }
 </style>
