@@ -12,6 +12,7 @@ Gap list G5.
 - [x] `/me/emotes/[id]`: the same Visibility and flag controls (`EmoteFlags`), NSFW asks first. "Replace file" skipped: the API can't swap an emote's file.
 - [x] Dev mock: the upload reads the flags and tags; the names `blocked`, `ratelimited` and `broken` answer as the API's refusals.
 - Manual check: headless Edge at 375, 768, 1440, 2560, dark and light, with the dev mock: queue with good, too-big and wrong-type files, a batch with one refusal, NSFW confirmation by keyboard (focus goes to Mark NSFW and back to the switch), the edit page saving Private + zero-width + NSFW and showing them after a reload (`.claude/runs/2026-11-17-overnight/screens/g8g5`).
+
 ## Help, download and the cosmetics gallery (branch `web/help-download`)
 
 - [x] `/help`: 34 short answers in eight groups (getting started, the extension, uploading, sets and channels, editors, cosmetics, account and privacy, moderation and takedowns) on the docs layout. The filter narrows the index and the answers together (every word, question or answer), `/` focuses it, Escape clears it, `?q=` is kept in the address. Questions are data in `lib/help/faq.ts` (vitest: groups, unique anchors, every site link points at a route).
