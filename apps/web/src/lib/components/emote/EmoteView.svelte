@@ -1,8 +1,10 @@
 <script lang="ts">
   // The emote page's body, made once per emote (the route keys it by id), in ColumnLayout:
   // a header row (name, creator chip, labels, actions), then panels: the preview (real sizes,
-  // background switch, chat) beside the details (facts, review status), then a tabbed panel with
-  // the channels using it and more from its creator. Phones get the actions in a sticky bar.
+  // background switch, chat) beside the details (facts, review status), then a panel with the
+  // channels using it and more from its creator: tabs when there are both, a plain heading when
+  // there is one. Phones get the actions in a bar fixed to the bottom of the screen; it comes right
+  // after the header in the Tab order.
   import { onMount } from 'svelte';
   import EmoteActions from '$lib/components/EmoteActions.svelte';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
@@ -90,6 +92,10 @@
       {/if}
     </header>
 
+    {#if public_}
+      <div class="bar"><EmoteActions emoteId={e.id} {name} {viewer} variant="bar" /></div>
+    {/if}
+
     {#if !public_}
       <p class="notice {t.tone}" role="status"><strong>{t.status}.</strong> Only you and moderators can open this page.</p>
     {/if}
@@ -102,7 +108,25 @@
       </aside>
     </div>
 
-    {#if tabs.length}
+    {#if tabs.length === 1}
+      {@const only = tabs[0]}
+      <section class="panel tabbed" aria-labelledby="sec-{only.id}">
+        <div class="block-head">
+          <h2 class="block-title" id="sec-{only.id}">{only.id === 'more' ? `More from ${ownerName}` : only.label}{#if only.n}<span class="n">{only.n}</span>{/if}</h2>
+          {#if only.id === 'more' && e.owner}
+            <a class="link" href="/users/{e.owner.id}">
+              See all
+              <svg class="arrow" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" /></svg>
+            </a>
+          {/if}
+        </div>
+        {#if only.id === 'channels' && channels}
+          <UsedIn {channels} total={channelCount} />
+        {:else}
+          <EmoteGrid items={more} creator={false} skeletons={0} label="More from {ownerName}" />
+        {/if}
+      </section>
+    {:else if tabs.length}
       <section class="panel tabbed" aria-label="Channels and more from the creator">
         <div class="tabbar">
           <div class="tablist" role="tablist" aria-label="Sections">
@@ -139,27 +163,24 @@
         {/if}
       </section>
     {/if}
-
-    {#if public_}
-      <div class="bar"><EmoteActions emoteId={e.id} {name} {viewer} variant="bar" /></div>
-    {/if}
   </div>
 </ColumnLayout>
 
 <style>
   p { margin: 0; }
   .emote { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; padding-bottom: clamp(24px, 4vw, 40px); }
-  .back { justify-self: start; display: inline-flex; align-items: center; gap: 8px; min-height: 36px; color: var(--muted); font-size: var(--t-small);
+  .back { justify-self: start; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; color: var(--muted); font-size: var(--t-small);
     transition: color var(--dur-color); }
   .back :global(.icon) { transition: transform var(--dur-move) var(--ease); }
 
   .head { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
   .title { min-width: 0; flex: 1 1 320px; }
-  h1 { font-size: clamp(24px, 2.6vw, 30px); line-height: 1.15; letter-spacing: -.025em; overflow-wrap: anywhere; text-wrap: balance; }
+  h1 { font-size: var(--t-page); line-height: 1.25; letter-spacing: -.02em; overflow-wrap: anywhere; text-wrap: balance; }
   .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
-  .creator { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 10px 0 6px; max-width: 100%; min-width: 0;
+  .creator { position: relative; display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 10px 0 6px; max-width: 100%; min-width: 0;
     border: 1px solid var(--border-strong); border-radius: var(--radius-btn); background: var(--surface); color: var(--text);
     font-size: var(--t-small); font-weight: 500; transition: border-color var(--fast), background-color var(--fast); }
+  .creator::after { content: ''; position: absolute; inset: -4px 0; } /* 40px to hit */
   .creator > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .labels { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
   .label { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border: 1px solid var(--border);
@@ -176,11 +197,14 @@
   .tabbed { padding-top: 12px; }
   .tabbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
   .tablist { display: flex; gap: 4px; padding: 3px; margin: -3px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
-  .tabbtn { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border: 0; border-radius: var(--radius-btn);
+  .tabbtn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: 0; border-radius: var(--radius-btn);
     background: none; color: var(--muted); font: inherit; font-size: var(--t-small); font-weight: 500; white-space: nowrap; cursor: pointer;
     transition: background-color var(--fast), color var(--fast); touch-action: manipulation; }
   .tabbtn[aria-selected='true'] { background: var(--accent-dim); color: var(--accent-text); }
   .n { color: var(--dim); font-variant-numeric: tabular-nums; font-size: var(--t-label); }
+  .block-title .n { margin-left: 8px; font-size: var(--t-small); font-weight: 500; }
+  .tabbed .block-head { margin-top: 4px; }
+  .tabbtn:focus-visible { outline-offset: -2px; }
   .tabbtn[aria-selected='true'] .n { color: inherit; }
   .tabbar .link { flex: none; white-space: nowrap; }
   svg.arrow { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
@@ -197,16 +221,21 @@
   @media (max-width: 1000px) { .panels { grid-template-columns: minmax(0, 1fr); } }
   @media (max-width: 560px) { .panel { padding: 16px; } }
 
-  /* Phones: the actions move to a bar stuck to the bottom of the screen, above the home indicator. */
+  /* Phones: the actions move to a bar fixed to the bottom of the screen, above the home indicator.
+     The page ends 72px higher, so the bar never covers the footer. */
   @media (max-width: 720px) {
     :global(html:has(.emote.with-bar)) { scroll-padding-bottom: 88px; }
+    :global(body:has(.emote.with-bar)) { padding-bottom: calc(65px + env(safe-area-inset-bottom, 0px)); }
     .head-actions { display: none; }
-    .bar { display: block; position: sticky; bottom: 0; z-index: var(--z-nav); margin: 24px calc(-1 * var(--page-pad)) 0;
+    .bar { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-nav);
       padding: 10px var(--page-pad) calc(10px + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 86%, transparent);
       backdrop-filter: blur(14px) saturate(1.4); -webkit-backdrop-filter: blur(14px) saturate(1.4); }
   }
-  @media (max-width: 720px) and (max-height: 500px) { .bar { position: static; } }
+  @media (max-width: 720px) and (max-height: 500px) {
+    .bar { position: static; margin-inline: calc(-1 * var(--page-pad)); border-bottom: 1px solid var(--border); }
+    :global(body:has(.emote.with-bar)) { padding-bottom: 0; }
+  }
   @media (max-width: 720px) and ((prefers-reduced-transparency: reduce) or (prefers-contrast: more)) {
     .bar { background: var(--bg); backdrop-filter: none; -webkit-backdrop-filter: none; border-top-color: var(--border-strong); }
   }

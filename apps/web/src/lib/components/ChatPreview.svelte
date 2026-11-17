@@ -182,7 +182,8 @@
   .stack { display: inline-grid; vertical-align: middle; place-items: center; margin: -4px 0; }
   .stack img { grid-area: 1 / 1; display: block; height: var(--emote-chat); width: auto; }
   .missing { color: var(--muted); }
-  .pause { margin-left: auto; min-height: 32px; padding: 0 8px; border: 0; background: none; font: inherit; font-size: var(--t-small);
+  .pause:focus-visible { outline-offset: -2px; }
+  .pause { margin-left: auto; min-height: 40px; padding: 0 8px; border: 0; background: none; font: inherit; font-size: var(--t-small);
     color: var(--muted); border-radius: var(--radius-btn); cursor: pointer; }
   @media (hover: hover) and (pointer: fine) { .pause:hover { color: var(--text); } }
   @media (pointer: coarse) { .pause { min-height: 44px; padding: 0 12px; } }
