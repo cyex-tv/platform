@@ -357,7 +357,7 @@ async fn images_for(conn: &mut PgConnection, ids: Vec<Uuid>) -> ApiResult<HashMa
 }
 
 /// Badges and paints (all, or only the given IDs), as the API shows them.
-async fn build(
+pub(crate) async fn build(
     conn: &mut PgConnection,
     cdn: &str,
     badge_ids: Option<&[Uuid]>,
@@ -439,7 +439,7 @@ async fn publish_cosmetic(
 }
 
 /// `user.cosmetics_updated` on every identity of the account.
-async fn publish_selection(
+pub(crate) async fn publish_selection(
     conn: &mut PgConnection,
     account: Uuid,
     (badge, paint): (Option<Uuid>, Option<Uuid>),
