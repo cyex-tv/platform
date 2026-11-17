@@ -10,6 +10,7 @@
 
   const one = $derived(size(e));
   const files = $derived(scaleFiles(e.files));
+  const added = $derived(date(e.createdAt));
   const kinds = $derived(formats(e.files));
 </script>
 
@@ -23,8 +24,8 @@
     {#if kinds.length}<div><dt>{kinds.length > 1 ? 'Formats' : 'Format'}</dt><dd>{kinds.join(', ')}</dd></div>{/if}
     {#if files.length}<div><dt>Size at 1x</dt><dd>{one.width} × {one.height} px</dd></div>{/if}
     {#if frames}<div><dt>Frames</dt><dd>{count(frames)}</dd></div>{/if}
-    <div><dt>Added</dt><dd><time datetime={e.createdAt}>{date(e.createdAt)}</time></dd></div>
-    {#if e.tags.length}<div><dt>Tags</dt><dd>{e.tags.join(', ')}</dd></div>{/if}
+    {#if added}<div><dt>Added</dt><dd><time datetime={e.createdAt}>{added}</time></dd></div>{/if}
+    {#if e.tags.length}<div class="wide-fact"><dt>Tags</dt><dd>{e.tags.join(', ')}</dd></div>{/if}
     {#if files.length}
       <div class="wide-fact">
         <dt>File sizes</dt>

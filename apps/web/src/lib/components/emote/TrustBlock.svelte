@@ -3,13 +3,14 @@
   // review, and Report (for approved emotes).
   import Icon from '$lib/components/Icon.svelte';
   import Popover from '$lib/components/Popover.svelte';
-  import { date } from '$lib/format';
+  import { clean, date } from '$lib/format';
   import ReportForm from './ReportForm.svelte';
   import { trust, type PageEmote } from './emote-page';
   import type { Viewer } from './viewer.svelte';
 
   let { emote: e, viewer }: { emote: PageEmote; viewer: Viewer } = $props();
   const t = $derived(trust(e.state));
+  const uploaded = $derived(date(e.createdAt));
   let open = $state(false);
 </script>
 
@@ -19,14 +20,12 @@
     <span class="dot" aria-hidden="true">{#if t.tone === 'ok'}<Icon name="check" size={12} stroke={2.2} />{/if}</span>
     {t.status}
   </p>
-  <p class="by">
-    Uploaded by
-    {#if e.owner}<a class="link" href="/users/{e.owner.id}">{e.owner.displayName}</a>{:else}an account that’s gone{/if}
-    on <time datetime={e.createdAt}>{date(e.createdAt)}</time>.
-  </p>
+  {#if uploaded}
+    <p class="by">Uploaded on <time datetime={e.createdAt}>{uploaded}</time>.</p>
+  {/if}
   <p class="fine line">{t.line}</p>
   {#if e.state === 'APPROVED'}
-    <Popover label="Report {e.name}" bind:open sheet width="340px">
+    <Popover label="Report {clean(e.name)}" bind:open sheet width="340px">
       {#snippet trigger(props)}
         <button class="btn btn-s report" type="button" {...props}><Icon name="flag" />Report this emote</button>
       {/snippet}
@@ -45,7 +44,7 @@
   .ok .dot { background: var(--text); border-color: var(--text); color: var(--bg); }
   .wait .dot { border-style: dashed; border-color: var(--muted); }
   .off .dot { background: var(--muted); border-color: var(--muted); }
-  .by { font-size: var(--t-small); }
+  .by { font-size: var(--t-small); overflow-wrap: anywhere; }
   .line { max-width: 52ch; text-wrap: pretty; }
   .report { margin-top: 4px; gap: 8px; }
 </style>

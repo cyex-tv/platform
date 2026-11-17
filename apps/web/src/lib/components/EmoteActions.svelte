@@ -5,6 +5,8 @@
   // copy of the actions shares one sign-in check; without it the component makes its own.
   import { onMount } from 'svelte';
   import { page } from '$app/state';
+  import { clean } from '$lib/format';
+  import { useCopied } from '$lib/clipboard.svelte';
   import Icon from './Icon.svelte';
   import Popover from './Popover.svelte';
   import ReportForm from './emote/ReportForm.svelte';
@@ -20,22 +22,15 @@
   let addOpen = $state(false);
   let moreOpen = $state(false);
   let mode = $state<'menu' | 'report'>('menu');
-  let copied = $state<'link' | 'name' | null>(null);
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  const linkCopy = useCopied();
+  const nameCopy = useCopied();
+  const shown = $derived(clean(name));
 
   const signIn = $derived(`/signin?back=${encodeURIComponent(page.url.pathname)}`);
-
-  async function copy(what: 'link' | 'name') {
-    const text = what === 'link' ? page.url.origin + page.url.pathname : name;
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      return; // No clipboard (insecure context, denied): the address bar still has it.
-    }
-    copied = what;
-    clearTimeout(timer);
-    timer = setTimeout(() => (copied = null), 1600);
-  }
+  const link = () => page.url.origin + page.url.pathname;
+  const said = $derived(
+    linkCopy.copied ? 'Link copied' : linkCopy.failed ? 'Couldn’t copy' : nameCopy.copied ? 'Name copied' : nameCopy.failed ? 'Couldn’t copy' : '',
+  );
 </script>
 
 <div class="actions-row {variant}">
@@ -56,7 +51,7 @@
         {:else if viewer.own.length === 0}
           <p class="note fine">You have no sets yet. <a class="link" href="/me/sets">Make one</a></p>
         {:else}
-          <p class="note fine">Add {name} to</p>
+          <p class="note fine">Add {shown} to</p>
           <ul>
             {#each viewer.own as s (s.id)}
               {@const inIt = viewer.has(s)}
@@ -67,7 +62,7 @@
                   aria-disabled={inIt || viewer.adding !== null}
                   onclick={() => !inIt && viewer.add(s.id)}
                 >
-                  <span class="set-name">{s.name}</span>
+                  <span class="set-name" title={s.name}>{s.name}</span>
                   {#if viewer.adding === s.id}
                     <span class="state fine">Adding…</span>
                   {:else if inIt}
@@ -86,9 +81,15 @@
     </Popover>
   {/if}
 
-  <button class="btn btn-s copy" type="button" onclick={() => copy('link')} aria-live="polite">
-    <Icon name={copied === 'link' ? 'check' : 'copy'} />{copied === 'link' ? 'Copied' : 'Copy link'}
+  <button class="btn btn-s copy" type="button" onclick={() => linkCopy.copy(link())}>
+    <Icon name={linkCopy.copied ? 'check' : 'copy'} />
+    <span class="stack">
+      <span class="lbl" class:off={linkCopy.state !== 'idle'}>Copy link</span>
+      <span class="lbl" class:off={!linkCopy.copied}>Copied</span>
+      <span class="lbl" class:off={!linkCopy.failed}>Couldn’t copy</span>
+    </span>
   </button>
+  <span class="sr-only" role="status">{said}</span>
 
   <Popover label="More actions" bind:open={moreOpen} align="end" width={mode === 'report' ? '340px' : '220px'} sheet onclose={() => (mode = 'menu')}>
       {#snippet trigger(props)}
@@ -97,8 +98,8 @@
       {#if mode === 'menu'}
         <ul class="menu">
           <li>
-            <button type="button" class="item" onclick={() => copy('name')}>
-              <Icon name={copied === 'name' ? 'check' : 'copy'} />{copied === 'name' ? 'Name copied' : 'Copy name'}
+            <button type="button" class="item" onclick={() => nameCopy.copy(name)}>
+              <Icon name={nameCopy.copied ? 'check' : 'copy'} />{nameCopy.copied ? 'Name copied' : nameCopy.failed ? 'Couldn’t copy' : 'Copy name'}
             </button>
           </li>
           <li>
@@ -120,13 +121,17 @@
   .bar { flex-wrap: nowrap; }
   .bar > :global(.pop-root:first-child), .bar > .add { flex: 1; }
   .bar .add { flex: 1; width: 100%; height: 44px; }
-  .bar .copy { height: 44px; }
+  .bar .copy { height: 44px; position: relative; }
   .bar .more { width: 44px; height: 44px; }
 
-  .sets { display: grid; gap: 2px; }
+  .stack { display: inline-grid; justify-items: center; }
+  .lbl { grid-area: 1 / 1; }
+  .lbl.off { visibility: hidden; }
+  .bar .add { min-width: 0; }
+  .sets { display: grid; gap: 2px; grid-template-columns: minmax(0, 1fr); }
   .note { padding: 6px 8px; }
   .err { color: var(--text); }
-  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; grid-template-columns: minmax(0, 1fr); }
   .set, .item { width: 100%; display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px;
     border: 0; border-radius: var(--radius-btn); background: none; color: var(--text); font: inherit; font-size: var(--t-ui);
     text-align: left; cursor: pointer; transition: background-color var(--dur-color), transform var(--dur-press) ease-out;
@@ -139,6 +144,10 @@
   .set[aria-disabled='true'] .set-name { color: var(--muted); }
   .state { display: inline-flex; align-items: center; gap: 4px; flex: none; }
   .set:focus-visible, .item:focus-visible { outline-offset: -2px; }
+  @media (max-width: 360px) {
+    .bar .copy .stack { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .bar .copy { width: 44px; padding: 0; justify-content: center; }
+  }
   @media (hover: hover) and (pointer: fine) {
     .set:hover:not([aria-disabled='true']), .item:hover { background: var(--surface-2); }
   }

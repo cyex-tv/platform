@@ -7,6 +7,7 @@
   import { channelsUsing, globalPool } from '$lib/components/emote/data';
   import { backTarget, channelCount, type ChatPool, type EmoteChannel, type PageEmote } from '$lib/components/emote/emote-page';
   import { src, ready } from '$lib/emote';
+  import { clean } from '$lib/format';
   import { EMOTE } from '$lib/queries';
 
   let { data } = $props();
@@ -41,23 +42,24 @@
   });
   const back = $derived(backTarget(from, page.url.pathname));
 
+  const name = $derived(e ? clean(e.name) : '');
   const description = $derived(
-    e ? `${e.name}, ${e.animated ? 'an animated' : 'an'} emote for Twitch and Kick chat on cyex.tv${e.owner ? `, by ${e.owner.displayName}` : ''}.` : '',
+    e ? `${name}, ${e.animated ? 'an animated' : 'an'} emote for Twitch and Kick chat on cyex.tv${e.owner ? `, by ${clean(e.owner.displayName)}` : ''}.` : '',
   );
 </script>
 
 <svelte:head>
   {#if e}
-    <title>{e.name} - cyex.tv</title>
+    <title>{name} - cyex.tv</title>
     <meta name="description" content={description} />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="cyex.tv" />
-    <meta property="og:title" content="{e.name} - cyex.tv" />
+    <meta property="og:title" content="{name} - cyex.tv" />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={page.url.origin + page.url.pathname} />
     {#if ready(e)}
       <meta property="og:image" content={src(e, 4, true)} />
-      <meta property="og:image:alt" content={e.name} />
+      <meta property="og:image:alt" content={name} />
       <meta name="twitter:card" content="summary" />
     {/if}
     {#if e.state !== 'APPROVED'}<meta name="robots" content="noindex" />{/if}
@@ -73,7 +75,11 @@
   {/key}
 {:else if asked === undefined}
   <!-- Asking from the browser: hold the space quietly, then show the page or say it's gone. -->
-  <div class="page missing" aria-busy="true"><p class="sr-only" role="status">Looking for this emote…</p></div>
+  <div class="page missing" aria-busy="true">
+    <span class="back ghost" aria-hidden="true">All emotes</span>
+    <div class="nothing" aria-hidden="true"><h1 class="hold">No emote here.</h1></div>
+    <p class="sr-only" role="status">Looking for this emote…</p>
+  </div>
 {:else}
   <div class="page missing">
     <a class="back" href="/search"><Icon name="arrow-left" />All emotes</a>
@@ -99,6 +105,8 @@
   .back { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; color: var(--muted); font-size: var(--t-small); }
   .nothing { padding-top: clamp(48px, 8vw, 112px); max-width: 640px; }
   h1 { font-size: clamp(44px, 7vw, 96px); line-height: 1; letter-spacing: -.045em; }
+  .hold { visibility: hidden; }
+  .ghost { visibility: hidden; }
   .lead { margin-top: 20px; }
   .actions { margin-top: 32px; }
   svg.arrow { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }

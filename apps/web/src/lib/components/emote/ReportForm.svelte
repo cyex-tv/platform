@@ -1,12 +1,16 @@
 <script lang="ts">
   // The report form, shown in the overflow menu and in the review block. Signed out, it offers
   // sign-in instead; once sent, it says what happens next.
+  import { tick } from 'svelte';
   import { page } from '$app/state';
+  import { clean } from '$lib/format';
   import type { Viewer } from './viewer.svelte';
 
-  let { viewer, name, oncancel }: { viewer: Viewer; name: string; oncancel?: () => void } = $props();
+  let { viewer, name: raw, oncancel }: { viewer: Viewer; name: string; oncancel?: () => void } = $props();
+  const name = $derived(clean(raw));
+  let thanks = $state<HTMLElement>();
 
-  const id = `report-${Math.random().toString(36).slice(2, 9)}`;
+  const id = $props.id();
   let reason = $state('');
   let busy = $state(false);
   let error = $state<string | null>(null);
@@ -18,6 +22,8 @@
     error = null;
     try {
       await viewer.report(reason.trim());
+      await tick();
+      thanks?.focus();
     } catch (err) {
       error = err instanceof Error ? err.message : 'That didn’t work.';
     } finally {
@@ -28,7 +34,7 @@
 
 <div class="report" aria-live="polite">
   {#if viewer.reported}
-    <p class="head">Thanks, it’s reported.</p>
+    <p class="head" tabindex="-1" bind:this={thanks}>Thanks, it’s reported.</p>
     <p class="fine">A moderator reads every report. If {name} breaks the rules, it comes down.</p>
   {:else if viewer.who === 'out'}
     <p class="head">Sign in to report it.</p>
@@ -38,9 +44,10 @@
     <p class="fine">cyex.tv can’t be reached right now, so reports can’t be sent. Try again in a moment.</p>
   {:else}
     <form onsubmit={send}>
-      <label class="head" for={id}>What’s wrong with {name}?</label>
+      <label class="head" for="{id}-reason">What’s wrong with {name}?</label>
       <textarea
-        {id}
+        id="{id}-reason"
+        aria-describedby="{id}-hint"
         class="input area"
         bind:value={reason}
         maxlength="500"
@@ -49,7 +56,7 @@
         disabled={viewer.who === 'loading'}
         {@attach (el) => el.focus({ preventScroll: true })}
       ></textarea>
-      <p class="fine">A moderator reads it. The creator doesn’t see who sent it.</p>
+      <p class="fine" id="{id}-hint">A moderator reads it. The creator doesn’t see who sent it.{#if !reason.trim()} Write a few words to send it.{/if}</p>
       <div class="row">
         <button class="btn btn-s" type="submit" disabled={busy || !reason.trim()}>{busy ? 'Sending…' : 'Send report'}</button>
         {#if oncancel}<button class="btn btn-s ghost" type="button" onclick={oncancel}>Cancel</button>{/if}
@@ -63,6 +70,7 @@
   p { margin: 0; }
   .report { display: grid; gap: 8px; padding: 8px; }
   form { display: grid; gap: 8px; }
+  .head:focus { outline: none; }
   .head { font-size: var(--t-ui); font-weight: 500; color: var(--text); }
   .area { height: auto; padding: 10px 12px; resize: vertical; line-height: 1.5; }
   .row { display: flex; gap: 8px; margin-top: 4px; }
