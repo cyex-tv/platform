@@ -1019,6 +1019,15 @@ export type MySetNamesQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type MySetNamesQuery = { __typename?: 'Query', mySets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, emotes: Array<{ __typename?: 'SetEmote', emote: { __typename?: 'Emote', id: string } }> }> };
 
+export type SearchByOwnerQueryVariables = Exact<{
+  owner: Scalars['String']['input'];
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type SearchByOwnerQuery = { __typename?: 'Query', searchEmotes: { __typename?: 'SearchResults', total: number, page: number, perPage: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+
 export class TypedDocumentString<TResult, TVariables>
   extends String
   implements DocumentTypeDecoration<TResult, TVariables>
@@ -1896,3 +1905,42 @@ export const MySetNamesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<MySetNamesQuery, MySetNamesQueryVariables>;
+export const SearchByOwnerDocument = new TypedDocumentString(`
+    query SearchByOwner($owner: String!, $page: Int, $perPage: Int) {
+  searchEmotes(query: "", owner: $owner, page: $page, perPage: $perPage) {
+    total
+    page
+    perPage
+    items {
+      ...EmoteFields
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  flags {
+    zeroWidth
+    nsfw
+    private
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<SearchByOwnerQuery, SearchByOwnerQueryVariables>;

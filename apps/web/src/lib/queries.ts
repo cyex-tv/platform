@@ -537,3 +537,17 @@ export const MY_SET_NAMES = graphql(`
     }
   }
 `);
+
+// A creator's public emotes (the creator page): the search, narrowed to one owner.
+export const SEARCH_BY_OWNER = graphql(`
+  query SearchByOwner($owner: String!, $page: Int, $perPage: Int) {
+    searchEmotes(query: "", owner: $owner, page: $page, perPage: $perPage) {
+      total
+      page
+      perPage
+      items {
+        ...EmoteFields
+      }
+    }
+  }
+`);

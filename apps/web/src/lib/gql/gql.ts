@@ -63,6 +63,7 @@ type Documents = {
     "\n  query Audit($targetKind: String, $targetId: String, $before: String, $limit: Int) {\n    auditLog(targetKind: $targetKind, targetId: $targetId, before: $before, limit: $limit) {\n      id\n      actorId\n      action\n      targetKind\n      targetId\n      before\n      after\n      createdAt\n    }\n  }\n": typeof types.AuditDocument,
     "\n  mutation ReportEmote($id: String!, $reason: String!) {\n    reportEmote(id: $id, reason: $reason) {\n      id\n    }\n  }\n": typeof types.ReportEmoteDocument,
     "\n  query MySetNames {\n    mySets {\n      id\n      name\n      kind\n      emotes {\n        emote {\n          id\n        }\n      }\n    }\n  }\n": typeof types.MySetNamesDocument,
+    "\n  query SearchByOwner($owner: String!, $page: Int, $perPage: Int) {\n    searchEmotes(query: \"\", owner: $owner, page: $page, perPage: $perPage) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.SearchByOwnerDocument,
 };
 const documents: Documents = {
     "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    flags {\n      zeroWidth\n      nsfw\n      private\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n": types.EmoteFieldsFragmentDoc,
@@ -113,6 +114,7 @@ const documents: Documents = {
     "\n  query Audit($targetKind: String, $targetId: String, $before: String, $limit: Int) {\n    auditLog(targetKind: $targetKind, targetId: $targetId, before: $before, limit: $limit) {\n      id\n      actorId\n      action\n      targetKind\n      targetId\n      before\n      after\n      createdAt\n    }\n  }\n": types.AuditDocument,
     "\n  mutation ReportEmote($id: String!, $reason: String!) {\n    reportEmote(id: $id, reason: $reason) {\n      id\n    }\n  }\n": types.ReportEmoteDocument,
     "\n  query MySetNames {\n    mySets {\n      id\n      name\n      kind\n      emotes {\n        emote {\n          id\n        }\n      }\n    }\n  }\n": types.MySetNamesDocument,
+    "\n  query SearchByOwner($owner: String!, $page: Int, $perPage: Int) {\n    searchEmotes(query: \"\", owner: $owner, page: $page, perPage: $perPage) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.SearchByOwnerDocument,
 };
 
 /**
@@ -307,6 +309,10 @@ export function graphql(source: "\n  mutation ReportEmote($id: String!, $reason:
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query MySetNames {\n    mySets {\n      id\n      name\n      kind\n      emotes {\n        emote {\n          id\n        }\n      }\n    }\n  }\n"): typeof import('./graphql').MySetNamesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query SearchByOwner($owner: String!, $page: Int, $perPage: Int) {\n    searchEmotes(query: \"\", owner: $owner, page: $page, perPage: $perPage) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n"): typeof import('./graphql').SearchByOwnerDocument;
 
 
 export function graphql(source: string) {
