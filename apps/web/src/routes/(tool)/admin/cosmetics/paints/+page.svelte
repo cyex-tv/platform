@@ -90,7 +90,7 @@
                 <button class="ui-btn secondary small" type="button" onclick={() => { giving = p; dlg?.open({ id: p.id, name: p.name }); }}>Give</button>
               {/if}
               {#if manage}
-                <a class="ui-btn secondary small" href="/admin/cosmetics/paints/studio?id={encodeURIComponent(p.id)}"><Icon name="pencil" size={14} />Edit</a>
+                <a class="ui-btn secondary small" href="/admin/cosmetics/paints/{encodeURIComponent(p.id)}/studio"><Icon name="pencil" size={14} />Edit</a>
                 <Confirm small label="Delete" confirm="Click again to delete it for everyone" {busy} onconfirm={() => remove(p)} />
               {/if}
             </div>
