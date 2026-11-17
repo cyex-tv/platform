@@ -6,6 +6,9 @@ export type Jump = { id: string; label: string; hint?: string; href: string };
 /** The site's pages, in the order the palette lists them. */
 export const PAGES: Jump[] = [
   { id: 'page-browse', label: 'Browse emotes', hint: 'Search, sort and filter', href: '/search' },
+  { id: 'page-help', label: 'Help', hint: 'Questions and answers', href: '/help' },
+  { id: 'page-download', label: 'Download', hint: 'The extension for Chrome and Firefox', href: '/download' },
+  { id: 'page-cosmetics', label: 'Cosmetics', hint: 'Every badge and paint', href: '/cosmetics' },
   { id: 'page-developers', label: 'Developers', hint: 'The public API', href: '/developers' },
   { id: 'page-reference', label: 'API reference', hint: 'Every query and endpoint', href: '/developers/reference' },
   { id: 'page-me', label: 'Your emotes', hint: 'Uploads, sets and channels', href: '/me' },

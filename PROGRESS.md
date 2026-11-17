@@ -2,6 +2,14 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Help, download and the cosmetics gallery (branch `web/help-download`)
+
+- [x] `/help`: 34 short answers in eight groups (getting started, the extension, uploading, sets and channels, editors, cosmetics, account and privacy, moderation and takedowns) on the docs layout. The filter narrows the index and the answers together (every word, question or answer), `/` focuses it, Escape clears it, `?q=` is kept in the address. Questions are data in `lib/help/faq.ts` (vitest: groups, unique anchors, every site link points at a route).
+- [x] `/download`: the extension for Chrome and Firefox as "early testing, coming to the stores", the test build (clone, `npm ci`, `npm run build`, then Load unpacked or Load Temporary Add-on), cyex deck "coming", a line for chat clients and bots. Your browser's card first.
+- [x] `/cosmetics`: every badge and paint from the public `cosmetics` query, badges with a chat-line sample, paints drawn live; signed in, "Paint name / Your name" draws your name in each paint. No ownership anywhere.
+- [x] Footer: Download, Cosmetics, Help (Terms, Privacy, Contact stay out until PR #33). Palette: Help, Download, Cosmetics pages. `initDocs` takes `filter: false` for pages that filter themselves.
+- Manual check: 375, 768, 1440, 2560, dark and light, keyboard (`/`, typing, Escape, index jump), with the dev mock (`.claude/runs/2026-11-17-overnight/screens/g8g5`).
+
 ## Website v4: the profile is the dashboard, cosmetics, admin cosmetics (branch `web/v4`)
 
 7TV's signed-in structure, in the cyex design (one shell, one accent, selection = bold text + accent icon).
