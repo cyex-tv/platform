@@ -103,7 +103,7 @@
 
 <div class="ui-head"><div><h1>Users</h1><p>Find someone by the login they signed in with.</p></div></div>
 
-<form class="find" onsubmit={search}>
+<form class="find ui-panel" onsubmit={search}>
   <div class="ui-seg" role="group" aria-label="Platform">
     <button type="button" aria-pressed={platform === 'TWITCH'} onclick={() => (platform = 'TWITCH')}>Twitch</button>
     <button type="button" aria-pressed={platform === 'KICK'} onclick={() => (platform = 'KICK')}>Kick</button>
@@ -119,21 +119,26 @@
   <div class="ui-empty"><p>No one with that login has signed in to cyex.tv.</p></div>
 {:else if found}
   <div class="layout">
-    <section class="ui-card who">
-      <Avatar src={found.account.avatar} name={found.account.displayName} size={48} tone="tool" />
-      <div>
-        <h2><bdi>{clean(found.account.displayName)}</bdi></h2>
-        <p class="ui-hint">
-          {found.platform === 'TWITCH' ? 'Twitch' : 'Kick'} <span class="ui-mono">{found.platformChannelId}</span> · account
-          <span class="ui-mono">{found.account.id}</span>
-        </p>
-        <p class="links">
-          <a href="/channels/{found.platform.toLowerCase()}/{encodeURIComponent(found.login)}">Channel page</a>
-          {#if can('audit.view')}<a href="/admin/audit?kind=account&id={found.account.id}">Audit log</a>{/if}
-        </p>
-      </div>
+    <section class="ui-card who" aria-label="Account">
+      <Avatar src={found.account.avatar} name={found.account.displayName} size={72} tone="tool" />
+      <h2><bdi>{clean(found.account.displayName)}</bdi></h2>
+      <p class="chips">
+        <span class="ui-chip">{found.platform === 'TWITCH' ? 'Twitch' : 'Kick'}</span>
+        {#if status?.blocked}<span class="ui-chip rejected">Blocked</span>{:else if status?.uploadsBlocked}<span class="ui-chip pending">Uploads blocked</span>{/if}
+        {#each roles as r (r.id)}<span class="ui-chip"><Name value={r.name} /></span>{/each}
+      </p>
+      <dl class="ids">
+        <div><dt class="ui-label">Login</dt><dd class="ui-mono"><bdi>{found.login}</bdi></dd></div>
+        <div><dt class="ui-label">Channel ID</dt><dd class="ui-mono">{found.platformChannelId}</dd></div>
+        <div><dt class="ui-label">Account ID</dt><dd class="ui-mono">{found.account.id}</dd></div>
+      </dl>
+      <p class="links">
+        <a href="/channels/{found.platform.toLowerCase()}/{encodeURIComponent(found.login)}">Channel page</a>
+        {#if can('audit.view')}<a href="/admin/audit?kind=account&id={found.account.id}">Audit log</a>{/if}
+      </p>
     </section>
 
+    <div class="stack">
     {#if status}
       <section class="ui-panel">
         <header><h2>Restrictions</h2></header>
@@ -185,6 +190,7 @@
         {/if}
       </section>
     {/if}
+    </div>
   </div>
 {/if}
 {/snippet}
@@ -192,14 +198,16 @@
 {/if}
 
 <style>
-  .find { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: var(--measure-form); margin-bottom: 20px; }
+  .find { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: var(--measure-form); padding: 10px; margin-bottom: 16px; }
   .find .ui-input { flex: 1; min-width: 160px; }
-  .layout { display: grid; gap: 16px; max-width: var(--measure); }
-  .who { display: flex; gap: 16px; align-items: center; }
-  .who { min-width: 0; }
-  .who > div { min-width: 0; }
-  .who h2 { overflow-wrap: anywhere; }
-  .who p { margin-top: 2px; overflow-wrap: anywhere; }
+  .layout { display: grid; gap: 16px; align-items: start; }
+  .stack { display: grid; gap: 16px; min-width: 0; }
+  @media (min-width: 1100px) { .layout { grid-template-columns: 300px minmax(0, 1fr); } .who { position: sticky; top: calc(var(--nav-h) + 20px); } }
+  .who { display: grid; justify-items: center; gap: 10px; min-width: 0; text-align: center; }
+  .who h2 { font-size: 18px; max-width: 100%; }
+  .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+  .ids { display: grid; gap: 8px; width: 100%; margin: 4px 0 0; padding-top: 12px; border-top: 1px solid var(--border); text-align: left; }
+  .ids dd { margin: 2px 0 0; font-size: var(--text-sub); overflow-wrap: anywhere; }
   .links { display: flex; gap: 16px; font-size: var(--text-sub); }
   .pad { padding: 2px 14px 10px; }
   .ui-row .ui-hint { display: block; }

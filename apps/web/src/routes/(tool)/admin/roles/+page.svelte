@@ -95,15 +95,18 @@
   <div class="ui-empty"><p>No roles yet.</p></div>
 {:else}
   <section class="ui-panel">
+    <div class="row head" aria-hidden="true">
+      <span class="ui-label">Pos</span><span class="ui-label">Role</span><span class="ui-label">Permissions</span><span class="ui-label actions-h">Action</span>
+    </div>
     <ul class="ui-list">
       {#each sorted as r (r.id)}
-        <li>
+        <li class="row">
           <span class="pos ui-mono" title="Position">{r.position}</span>
           <span class="what">
             <strong><Name value={r.name} /></strong>
-            {#if r.description}<span class="ui-muted"><Name value={r.description} /></span>{/if}
-            <span class="perms">{#each r.permissions as p}<span class="ui-chip">{p}</span>{:else}<span class="ui-hint">No permissions</span>{/each}</span>
+            {#if r.description}<span class="ui-hint"><Name value={r.description} /></span>{/if}
           </span>
+          <span class="perms">{#each r.permissions as p}<span class="ui-chip">{p}</span>{:else}<span class="ui-hint">No permissions</span>{/each}</span>
           <div class="ui-actions">
             <button class="ui-btn secondary small" type="button" onclick={() => open(r)}>Edit</button>
             <Confirm small label="Delete" confirm="Click again" onconfirm={() => remove(r)} />
@@ -157,11 +160,22 @@
 </dialog>
 
 <style>
-  .ui-list > li { align-items: flex-start; padding-block: 12px; flex-wrap: wrap; }
-  .pos { width: 40px; flex: none; color: var(--dim); padding-top: 1px; }
-  .what { display: grid; gap: 4px; flex: 1; min-width: 200px; }
+  /* One grid for the header and every row, so the columns line up. */
+  .row { display: grid; grid-template-columns: 44px minmax(140px, 1fr) minmax(0, 2.2fr) 180px; gap: 14px; align-items: start; }
+  .ui-list > li.row { padding-block: 12px; }
+  .head { align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--row-alt); }
+  .actions-h { text-align: right; }
+  .pos { color: var(--dim); padding-top: 1px; }
+  .what { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
   .perms { display: flex; flex-wrap: wrap; gap: 4px; }
   .perms .ui-chip { text-transform: none; letter-spacing: 0; font-family: var(--font-mono); font-weight: 600; }
+  .row .ui-actions { justify-content: flex-end; flex-wrap: nowrap; }
+  @media (max-width: 860px) {
+    .head { display: none; }
+    .row { grid-template-columns: 36px minmax(0, 1fr); gap: 8px 12px; }
+    .perms, .row .ui-actions { grid-column: 2; }
+    .row .ui-actions { justify-content: flex-start; }
+  }
   .wide { width: min(560px, calc(100vw - 24px)); }
   .two { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 12px; }
   .num { text-align: right; }
