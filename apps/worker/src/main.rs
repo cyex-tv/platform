@@ -23,12 +23,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             None
         }
     };
+    let registry = cyex_tv_shared::metrics::Registry::new();
+    if let Some(addr) = cyex_tv_shared::metrics::bind_from(|name| std::env::var(name).ok())? {
+        let db = db.clone();
+        let extra: cyex_tv_shared::metrics::Extra = std::sync::Arc::new(move || {
+            let db = db.clone();
+            Box::pin(async move { cyex_tv_worker::queue_metrics(&db).await })
+        });
+        tokio::spawn(cyex_tv_shared::metrics::serve(
+            addr,
+            registry.clone(),
+            Some(extra),
+            shutdown::signal(),
+        ));
+    }
     let handlers = Handlers::default()
         .on(
             cyex_tv_worker::transcode::KIND,
             cyex_tv_worker::transcode::run,
         )
-        .on(cyex_tv_worker::purge::KIND, cyex_tv_worker::purge::run);
+        .on(cyex_tv_worker::purge::KIND, cyex_tv_worker::purge::run)
+        .with_metrics(registry);
     let purge = cyex_tv_worker::purge::Purge::from_env(|name| std::env::var(name).ok())?;
     if purge.is_none() {
         tracing::warn!("CYEX_TV_CLOUDFLARE_PURGE_TOKEN not set; takedowns won't purge the CDN");

@@ -1,6 +1,7 @@
 //! The events service: the event WebSocket at `/v1/events` (ADR 0005), fed from the outbox.
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 
 use axum::routing::get;
 use axum::{Json, Router};
@@ -8,7 +9,7 @@ use cyex_tv_events::{EventsState, router};
 use cyex_tv_hub::Hub;
 use cyex_tv_shared::config::Config;
 use cyex_tv_shared::model::Health;
-use cyex_tv_shared::{logging, shutdown};
+use cyex_tv_shared::{logging, metrics, shutdown};
 use tokio::sync::watch;
 use tower_http::trace::TraceLayer;
 
@@ -27,6 +28,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }));
 
+    let registry = metrics::Registry::new();
+    if let Some(addr) = metrics::bind_from(|name| std::env::var(name).ok())? {
+        let (hub, db) = (hub.clone(), db.clone());
+        let extra: metrics::Extra = Arc::new(move || {
+            let mut out = String::new();
+            let (connections, topics) = hub.stats();
+            metrics::gauge(
+                &mut out,
+                "cyex_tv_hub_subscribers",
+                "Event socket connections open.",
+                &[(vec![], connections as f64)],
+            );
+            metrics::gauge(
+                &mut out,
+                "cyex_tv_hub_topics",
+                "Topics watched by at least one connection.",
+                &[(vec![], topics as f64)],
+            );
+            metrics::gauge(
+                &mut out,
+                "cyex_tv_db_pool_connections",
+                "Database connections open.",
+                &[(vec![], f64::from(db.size()))],
+            );
+            metrics::gauge(
+                &mut out,
+                "cyex_tv_db_pool_idle",
+                "Database connections idle.",
+                &[(vec![], db.num_idle() as f64)],
+            );
+            Box::pin(async move { out })
+        });
+        tokio::spawn(metrics::serve(
+            addr,
+            registry.clone(),
+            Some(extra),
+            shutdown::signal(),
+        ));
+    }
+
     let app = Router::new()
         .route("/health", get(health))
         .merge(router(
@@ -34,6 +75,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 std::env::var("CYEX_TV_TRUST_CLOUDFLARE").as_deref(),
                 Ok("true" | "1")
             )),
+        ))
+        .route_layer(axum::middleware::from_fn_with_state(
+            registry,
+            metrics::track,
         ))
         .layer(TraceLayer::new_for_http());
     let listener = tokio::net::TcpListener::bind(cfg.bind).await?;
