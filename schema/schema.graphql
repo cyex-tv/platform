@@ -440,6 +440,11 @@ type Query {
 	"""
 	myNotifications(unreadOnly: Boolean): [Notification!]!
 	"""
+	Whether an account's uploads or sign-in are blocked. Needs `users.view` or
+	`users.restrict`.
+	"""
+	accountStatus(accountId: String!): AccountStatus!
+	"""
 	All roles. Needs `roles.manage`.
 	"""
 	roles: [Role!]!

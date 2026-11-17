@@ -341,6 +341,15 @@ impl Query {
             .map_err(api_error)
     }
 
+    /// Whether an account's uploads or sign-in are blocked. Needs `users.view` or
+    /// `users.restrict`.
+    async fn account_status(&self, ctx: &Context<'_>, account_id: String) -> Result<AccountStatus> {
+        let caller = caller(ctx)?;
+        abuse::status(state(ctx), caller, &account_id)
+            .await
+            .map_err(api_error)
+    }
+
     /// All roles. Needs `roles.manage`.
     async fn roles(&self, ctx: &Context<'_>) -> Result<Vec<Role>> {
         let caller = caller(ctx)?;

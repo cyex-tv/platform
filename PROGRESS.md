@@ -24,6 +24,9 @@ Work in `cyex-app/cyex-deck` goes on a feature branch with a PR the owner merges
 
 ## Phase 7: Moderation, abuse and limits (in progress)
 
+### PR 3: reading an account's restrictions (branch `phase-7/account-status`)
+- [x] `accountStatus(accountId)`: whether uploads or sign-in are blocked, for `users.view` or `users.restrict`. Additive; the admin users page needs it. Tested in `restricting_and_blocking_accounts` (both permissions read it, anyone else is refused).
+
 ### PR 2: reports, takedowns and restrictions (branch `phase-7/moderation`)
 - [x] Migration `20261118000006_moderation.sql` (additive): `reports` (one open report per emote and reporter), `notifications`, and `accounts.blocked_at`.
 - [x] Reports: `reportEmote(id, reason)` for any emote the caller can see, at most 10 an hour per account. `reportQueue` and `resolveReport(id, DISMISS | TAKE_DOWN, note)` for `emotes.review` or `emotes.takedown`; taking down needs `emotes.takedown`. Audited.
