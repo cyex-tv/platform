@@ -1,0 +1,56 @@
+// What the command palette offers for a piece of text, apart from the live emote search.
+
+export type Jump = { id: string; label: string; hint?: string; href: string };
+
+/** The site's pages, in the order the palette lists them. */
+export const PAGES: Jump[] = [
+  { id: 'page-browse', label: 'Browse emotes', hint: 'Search, sort and filter', href: '/search' },
+  { id: 'page-developers', label: 'Developers', hint: 'The public API', href: '/developers' },
+  { id: 'page-reference', label: 'API reference', hint: 'Every query and endpoint', href: '/developers/reference' },
+  { id: 'page-me', label: 'Your emotes', hint: 'Uploads, sets and channels', href: '/me' },
+];
+
+/**
+ * Whether the text could be a channel login. Twitch logins are 4 to 25 letters, digits and
+ * underscores; Kick slugs also allow hyphens. Spaces mean it's an emote search, not a login.
+ */
+export function asLogin(text: string): { twitch: boolean; kick: boolean; login: string } | null {
+  const login = text.trim().replace(/^@/, '').toLowerCase();
+  if (!/^[a-z0-9_-]{3,25}$/.test(login)) return null;
+  const twitch = /^[a-z0-9_]{4,25}$/.test(login) && !login.startsWith('_');
+  return { twitch, kick: true, login };
+}
+
+/** "Twitch channel x" and "Kick channel x", when the text looks like a login. */
+export function channelJumps(text: string): Jump[] {
+  const l = asLogin(text);
+  if (!l) return [];
+  const out: Jump[] = [];
+  if (l.twitch) out.push({ id: 'ch-twitch', label: `Twitch channel ${l.login}`, href: `/channels/twitch/${l.login}` });
+  if (l.kick) out.push({ id: 'ch-kick', label: `Kick channel ${l.login}`, href: `/channels/kick/${l.login}` });
+  return out;
+}
+
+/** Pages whose name or hint contains every word of the text; all of them for no text. */
+export function pageJumps(text: string): Jump[] {
+  const words = text.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return PAGES;
+  return PAGES.filter((p) => {
+    const hay = `${p.label} ${p.hint ?? ''}`.toLowerCase();
+    return words.every((w) => hay.includes(w));
+  });
+}
+
+/** Moves the active row by `step`, wrapping at both ends. -1 means nothing is active. */
+export function move(active: number, step: number, length: number): number {
+  if (length === 0) return -1;
+  if (active < 0) return step > 0 ? 0 : length - 1;
+  return (active + step + length) % length;
+}
+
+/** Whether a key press was typed into a field (so "/" there types a slash). */
+export function typing(target: EventTarget | null): boolean {
+  if (!target || typeof Element === 'undefined' || !(target instanceof Element)) return false;
+  const el = target as HTMLElement;
+  return el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
+}
