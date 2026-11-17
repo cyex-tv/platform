@@ -4,6 +4,11 @@
   // back to the trigger), a click outside, or focus leaving it. With `sheet`, phones (720px and
   // narrower) get the same content in a BottomSheet instead.
   //
+  // The panel lives in the browser's top layer (the popover API) and is placed with fixed
+  // coordinates from the trigger's box, so no ancestor (the nav's glass, a sticky bar, a
+  // transform, overflow) can clip it or paint over it. It follows the trigger while the page
+  // scrolls and closes once the trigger has scrolled out of view.
+  //
   //   <Popover label="Filters" sheet>
   //     {#snippet trigger(props)}<button class="btn btn-s" {...props}>Filters</button>{/snippet}
   //     …content…
@@ -31,7 +36,8 @@
   let panel = $state<HTMLDivElement>();
   let triggerEl: HTMLElement | null = null;
   let above = $state(false);
-  let shift = $state(0);
+  let top = $state(0);
+  let left = $state(0);
   let phone = $state(false);
 
   $effect(() => {
@@ -64,19 +70,33 @@
 
   $effect(() => {
     if (!open || asSheet) return;
-    void place();
+    void show();
+    // Follow the trigger while anything scrolls or the window resizes.
+    let frame = 0;
+    const follow = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => place(false));
+    };
+    addEventListener('scroll', follow, { passive: true, capture: true });
+    addEventListener('resize', follow, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      removeEventListener('scroll', follow, { capture: true });
+      removeEventListener('resize', follow);
+    };
   });
 
-  async function place() {
+  const topLayer = typeof HTMLElement !== 'undefined' && 'showPopover' in HTMLElement.prototype;
+
+  async function show() {
     await tick();
     if (!panel) return;
-    const t = root.getBoundingClientRect();
-    const p = panel.getBoundingClientRect();
-    above = t.bottom + p.height + 12 > innerHeight && t.top - p.height - 12 > 0;
-    // Keep it inside the viewport sideways (16px gutter).
-    const left = p.left - shift;
-    const right = left + p.width;
-    shift = right > innerWidth - 16 ? innerWidth - 16 - right : left < 16 ? 16 - left : 0;
+    if (topLayer) {
+      try {
+        panel.showPopover();
+      } catch {}
+    }
+    place(true);
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
     panel.animate(
       still ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 0, transform: 'scale(.97)' }, { opacity: 1, transform: 'scale(1)' }],
@@ -84,6 +104,24 @@
     );
     const first = panel.querySelector<HTMLElement>('a[href], button:not([disabled]), input, select, textarea, [tabindex="0"]');
     (first ?? panel).focus({ preventScroll: true });
+  }
+
+  /** Fixed coordinates from the trigger's box; `flip` re-decides above or below (only on open). */
+  function place(flip: boolean) {
+    if (!panel || !open) return;
+    const t = (triggerEl ?? root).getBoundingClientRect();
+    if (!flip && (t.bottom < 0 || t.top > innerHeight)) {
+      close();
+      return;
+    }
+    const w = panel.offsetWidth;
+    const h = panel.offsetHeight;
+    if (flip) above = t.bottom + h + 12 > innerHeight && t.top - h - 12 > 0;
+    const gutter = 16;
+    let x = align === 'end' ? t.right - w : t.left;
+    x = Math.min(Math.max(x, gutter), innerWidth - gutter - w);
+    left = Math.round(x);
+    top = Math.round(above ? t.top - 6 - h : t.bottom + 6);
   }
 
   function onkeydown(e: KeyboardEvent) {
@@ -115,9 +153,11 @@
       role="dialog"
       aria-label={label}
       tabindex="-1"
+      popover="manual"
       bind:this={panel}
       style:width
-      style:translate="{shift}px 0"
+      style:top="{top}px"
+      style:left="{left}px"
     >
       <div class="pop-body">{@render children()}</div>
       {#if footer}<div class="pop-foot">{@render footer()}</div>{/if}
@@ -127,14 +167,14 @@
 
 <style>
   .pop-root { position: relative; display: inline-flex; }
-  .pop { position: absolute; top: calc(100% + 6px); z-index: var(--z-pop); max-width: calc(100vw - 32px);
-    max-height: min(70dvh, 560px); display: flex; flex-direction: column;
+  /* Top layer (popover="manual"): reset the UA popover box, place it with fixed coordinates. */
+  .pop { position: fixed; inset: auto; margin: 0; padding: 0; overflow: visible; z-index: var(--z-pop);
+    max-width: calc(100vw - 32px); max-height: min(70dvh, 560px); display: flex; flex-direction: column;
     border: 1px solid var(--border-strong); border-radius: var(--radius-m); background: var(--surface);
     box-shadow: var(--shadow-pop); color: var(--text); text-align: left; }
   .pop:focus { outline: none; }
-  .start { left: 0; transform-origin: 0 0; }
-  .end { right: 0; transform-origin: 100% 0; }
-  .above { top: auto; bottom: calc(100% + 6px); }
+  .start { transform-origin: 0 0; }
+  .end { transform-origin: 100% 0; }
   .start.above { transform-origin: 0 100%; }
   .end.above { transform-origin: 100% 100%; }
   .pop-body { padding: 8px; overflow-y: auto; overscroll-behavior: contain; }
