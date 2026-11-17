@@ -4,7 +4,11 @@
   import { gql } from '$lib/api';
   import type { Platform, RoleFieldsFragment, UserQuery } from '$lib/gql/graphql';
   import { ALL_ROLES, ASSIGN_ROLE, RESTRICT, UNASSIGN_ROLE, USER, USER_DETAILS } from '$lib/queries';
-  import Avatar from '$lib/tool/Avatar.svelte';
+  import Avatar from '$lib/components/Avatar.svelte';
+  import { clean } from '$lib/format';
+  import Confirm from '$lib/tool/Confirm.svelte';
+  import LoadGate from '$lib/tool/LoadGate.svelte';
+  import { loader } from '$lib/tool/loader.svelte';
   import { can, session } from '$lib/tool/session.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
 
@@ -18,7 +22,6 @@
   let platform = $state<Platform>((page.url.searchParams.get('platform')?.toUpperCase() as Platform) || 'TWITCH');
   let login = $state(page.url.searchParams.get('login') ?? '');
   let found = $state<Found | null>(null);
-  let missing = $state(false);
   let status = $state<{ uploadsBlocked: boolean; blocked: boolean } | null>(null);
   let roles = $state<RoleFieldsFragment[]>([]);
   let allRoles = $state<RoleFieldsFragment[]>([]);
@@ -27,33 +30,27 @@
 
   const assignable = $derived(allRoles.filter((r) => !roles.some((x) => x.id === r.id)));
 
-  async function lookup(p: Platform, name: string) {
+  /** The account in the address (`?platform=…&login=…`), looked up again when the address changes. */
+  const L = loader(async ({ fetch }) => {
+    const p = (page.url.searchParams.get('platform')?.toUpperCase() as Platform) || 'TWITCH';
+    const name = (page.url.searchParams.get('login') ?? '').trim().toLowerCase();
+    const mine = page.url.search;
     found = null;
-    missing = false;
     status = null;
     roles = [];
-    if (!name) return;
-    try {
-      const r = await gql(USER, { platform: p, login: name });
-      if (!r.channelByLogin) {
-        missing = true;
-        return;
-      }
-      found = r.channelByLogin;
-      const d = await gql(USER_DETAILS, { accountId: found.account.id, status: canStatus, roles: canRoles });
+    if (!name) return { missing: false };
+    const r = await gql(USER, { platform: p, login: name }, fetch);
+    if (!r.channelByLogin) return { missing: true };
+    const f = r.channelByLogin;
+    const d = await gql(USER_DETAILS, { accountId: f.account.id, status: canStatus, roles: canRoles }, fetch);
+    if (manageRoles && allRoles.length === 0) allRoles = (await gql(ALL_ROLES, {}, fetch)).roles;
+    if (mine === page.url.search) {
+      found = f;
       status = d.accountStatus ?? null;
       roles = d.accountRoles ?? [];
-      if (manageRoles && allRoles.length === 0) allRoles = (await gql(ALL_ROLES, {})).roles;
       pick = assignable[0]?.id ?? '';
-    } catch (e) {
-      fail(e);
     }
-  }
-
-  $effect(() => {
-    const p = (page.url.searchParams.get('platform')?.toUpperCase() as Platform) || 'TWITCH';
-    const l = page.url.searchParams.get('login') ?? '';
-    lookup(p, l.trim().toLowerCase());
+    return { missing: false };
   });
 
   function search(e: SubmitEvent) {
@@ -63,7 +60,7 @@
   }
 
   async function restrict(input: { uploadsBlocked?: boolean; blocked?: boolean }) {
-    if (!found) return;
+    if (!found || busy) return;
     busy = true;
     try {
       status = (await gql(RESTRICT, { accountId: found.account.id, ...input })).restrictAccount;
@@ -114,20 +111,23 @@
   <button class="ui-btn primary" type="submit" disabled={!login.trim()}>Find</button>
 </form>
 
-{#if missing}
+{#if page.url.searchParams.get('login')}
+<LoadGate source={L} label="Looking them up…">
+{#snippet children(result)}
+{#if result.missing}
   <div class="ui-empty"><p>No one with that login has signed in to cyex.tv.</p></div>
 {:else if found}
   <div class="layout">
     <section class="ui-card who">
       <Avatar src={found.account.avatar} name={found.account.displayName} size={48} />
       <div>
-        <h2>{found.account.displayName}</h2>
+        <h2>{clean(found.account.displayName)}</h2>
         <p class="ui-hint">
           {found.platform === 'TWITCH' ? 'Twitch' : 'Kick'} <span class="ui-mono">{found.platformChannelId}</span> · account
           <span class="ui-mono">{found.account.id}</span>
         </p>
         <p class="links">
-          <a href="/channels/{found.platform.toLowerCase()}/{found.login}">Channel page</a>
+          <a href="/channels/{found.platform.toLowerCase()}/{encodeURIComponent(found.login)}">Channel page</a>
           {#if can('audit.view')}<a href="/admin/audit?kind=account&id={found.account.id}">Audit log</a>{/if}
         </p>
       </div>
@@ -144,8 +144,13 @@
           </label>
           <label class="ui-row">
             <div><strong>Block the account</strong><span class="ui-hint">Signs them out everywhere and refuses sign-in.</span></div>
-            <input class="ui-switch" type="checkbox" checked={status.blocked} disabled={!canRestrict || busy || found.account.id === session.me?.id}
-              onchange={(e) => restrict({ blocked: e.currentTarget.checked })} />
+            {#if status.blocked}
+              <input class="ui-switch" type="checkbox" checked disabled={!canRestrict || busy || found.account.id === session.me?.id}
+                aria-label="Block the account" onchange={() => restrict({ blocked: false })} />
+            {:else}
+              <Confirm small label="Block" confirm="Click again to block and sign out" busy={!canRestrict || busy || found.account.id === session.me?.id}
+                onconfirm={() => restrict({ blocked: true })} />
+            {/if}
           </label>
           {#if !canRestrict}<p class="ui-hint">Changing these needs users.restrict.</p>{/if}
         </div>
@@ -181,12 +186,18 @@
     {/if}
   </div>
 {/if}
+{/snippet}
+</LoadGate>
+{/if}
 
 <style>
   .find { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: var(--measure-form); margin-bottom: 20px; }
   .find .ui-input { flex: 1; min-width: 160px; }
   .layout { display: grid; gap: 16px; max-width: var(--measure); }
   .who { display: flex; gap: 16px; align-items: center; }
+  .who { min-width: 0; }
+  .who > div { min-width: 0; }
+  .who h2 { overflow-wrap: anywhere; }
   .who p { margin-top: 2px; overflow-wrap: anywhere; }
   .links { display: flex; gap: 16px; font-size: var(--text-sub); }
   .pad { padding: 2px 14px 10px; }

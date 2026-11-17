@@ -3,6 +3,8 @@
   import { count, date } from '$lib/format';
   import type { ReportQueueQuery } from '$lib/gql/graphql';
   import { REPORT_QUEUE, RESOLVE_REPORT } from '$lib/queries';
+  import LoadGate from '$lib/tool/LoadGate.svelte';
+  import { loader } from '$lib/tool/loader.svelte';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
   import Thumb from '$lib/tool/Thumb.svelte';
   import { STATE_LABEL } from '$lib/tool/state';
@@ -10,26 +12,14 @@
   import { fail, notify } from '$lib/tool/notices.svelte';
 
   type Report = ReportQueueQuery['reportQueue']['items'][number];
-  let items = $state<Report[] | null>(null);
-  let total = $state(0);
+  const L = loader(async ({ fetch }) => (await gql(REPORT_QUEUE, { page: 1, perPage: 50 }, fetch)).reportQueue);
+  const total = $derived(L.data?.total ?? 0);
   let current = $state<Report | null>(null);
   let mode = $state<'DISMISS' | 'TAKE_DOWN'>('DISMISS');
   let dialog: ReturnType<typeof ReasonDialog>;
   const takedown = can('emotes.takedown');
 
-  async function load() {
-    try {
-      const r = await gql(REPORT_QUEUE, { page: 1, perPage: 50 });
-      items = r.reportQueue.items;
-      total = r.reportQueue.total;
-    } catch (e) {
-      fail(e);
-    }
-  }
-
-  $effect(() => {
-    load();
-  });
+  const load = () => L.reload();
 
   function ask(r: Report, action: 'DISMISS' | 'TAKE_DOWN') {
     current = r;
@@ -56,9 +46,10 @@
 
 <div class="ui-head"><div><h1>Reports</h1><p><span class="ui-mono">{count(total)}</span> open, oldest first</p></div></div>
 
-{#if !items}
-  <div class="ui-empty" aria-busy="true"><span class="ui-spinner" aria-hidden="true"></span></div>
-{:else if items.length === 0}
+<LoadGate source={L} label="Loading reports…">
+{#snippet children(queue)}
+{@const items = queue.items}
+{#if items.length === 0}
   <div class="ui-empty">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
     <p>No open reports.</p>
@@ -93,6 +84,8 @@
     </ul>
   </section>
 {/if}
+{/snippet}
+</LoadGate>
 
 <ReasonDialog
   bind:this={dialog}

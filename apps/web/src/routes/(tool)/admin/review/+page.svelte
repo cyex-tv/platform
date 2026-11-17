@@ -4,34 +4,25 @@
   import { count, date } from '$lib/format';
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
   import { APPROVE, REJECT, REVIEW_QUEUE } from '$lib/queries';
+  import LoadGate from '$lib/tool/LoadGate.svelte';
+  import { loader } from '$lib/tool/loader.svelte';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
 
   const PER_PAGE = 50;
-  let items = $state<EmoteFieldsFragment[] | null>(null);
-  let total = $state(0);
+  const L = loader(async ({ fetch }) => (await gql(REVIEW_QUEUE, { page: 1, perPage: PER_PAGE }, fetch)).reviewQueue);
+  const items = $derived(L.data?.items ?? null);
+  const total = $derived(L.data?.total ?? 0);
   let busy = $state<string | null>(null);
   let rejecting = $state<EmoteFieldsFragment | null>(null);
   let dialog: ReturnType<typeof ReasonDialog>;
 
-  async function load() {
-    try {
-      const r = await gql(REVIEW_QUEUE, { page: 1, perPage: PER_PAGE });
-      items = r.reviewQueue.items;
-      total = r.reviewQueue.total;
-    } catch (e) {
-      fail(e);
-    }
-  }
-
-  $effect(() => {
-    load();
-  });
-
   function done(id: string) {
-    items = items?.filter((e) => e.id !== id) ?? null;
-    total = Math.max(0, total - 1);
-    if (items && items.length === 0 && total > 0) load();
+    const q = L.data;
+    if (!q) return;
+    const left = q.items.filter((e) => e.id !== id);
+    L.set({ ...q, items: left, total: Math.max(0, q.total - 1) });
+    if (left.length === 0 && q.total - 1 > 0) L.reload();
   }
 
   async function approve(e: EmoteFieldsFragment) {
@@ -68,11 +59,12 @@
 
 <svelte:head><title>Review - cyex.tv</title></svelte:head>
 
-<div class="ui-head"><div><h1>Review queue</h1><p><span class="ui-mono">{count(total)}</span> pending, oldest first</p></div></div>
+<div class="ui-head"><div><h1>Review queue</h1><p>{#if items}<span class="ui-mono">{count(total)}</span> pending, oldest first{:else}Oldest first{/if}</p></div></div>
 
-{#if !items}
-  <div class="ui-empty" aria-busy="true"><span class="ui-spinner" aria-hidden="true"></span></div>
-{:else if items.length === 0}
+<LoadGate source={L} label="Loading the queue…">
+{#snippet children(queue)}
+{@const items = queue.items}
+{#if items.length === 0}
   <div class="ui-empty">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
     <p>Nothing waiting. New uploads show up here.</p>
@@ -102,8 +94,10 @@
       </li>
     {/each}
   </ul>
-  {#if total > items.length}<p class="ui-hint more">Showing the oldest {items.length}. The rest load as you work through these.</p>{/if}
+  {#if queue.total > items.length}<p class="ui-hint more">Showing the oldest {items.length}. The rest load as you work through these.</p>{/if}
 {/if}
+{/snippet}
+</LoadGate>
 
 <ReasonDialog
   bind:this={dialog}

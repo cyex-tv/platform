@@ -2,12 +2,15 @@
   import { gql } from '$lib/api';
   import type { RoleFieldsFragment } from '$lib/gql/graphql';
   import { CREATE_ROLE, DELETE_ROLE, ROLES, UPDATE_ROLE } from '$lib/queries';
+  import LoadGate from '$lib/tool/LoadGate.svelte';
+  import { loader } from '$lib/tool/loader.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
   import { session } from '$lib/tool/session.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
 
-  let roles = $state<RoleFieldsFragment[] | null>(null);
-  let permissions = $state<string[]>([]);
+  const L = loader(({ fetch }) => gql(ROLES, {}, fetch));
+  const roles = $derived(L.data?.roles ?? null);
+  const permissions = $derived(L.data?.permissions ?? []);
   let dialog: HTMLDialogElement;
   let editing = $state<RoleFieldsFragment | null>(null);
   let name = $state('');
@@ -19,19 +22,7 @@
   const mine = $derived(new Set(session.me?.permissions ?? []));
   const sorted = $derived([...(roles ?? [])].sort((a, b) => b.position - a.position));
 
-  async function load() {
-    try {
-      const r = await gql(ROLES, {});
-      roles = r.roles;
-      permissions = r.permissions;
-    } catch (e) {
-      fail(e);
-    }
-  }
-
-  $effect(() => {
-    load();
-  });
+  const load = () => L.reload();
 
   function open(role: RoleFieldsFragment | null) {
     editing = role;
@@ -48,7 +39,7 @@
 
   async function save(e: SubmitEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (saving || !name.trim()) return;
     saving = true;
     try {
       if (editing) {
@@ -90,9 +81,9 @@
   <div class="ui-actions"><button class="ui-btn primary" type="button" onclick={() => open(null)}>New role</button></div>
 </div>
 
-{#if !roles}
-  <div class="ui-empty" aria-busy="true"><span class="ui-spinner" aria-hidden="true"></span></div>
-{:else if roles.length === 0}
+<LoadGate source={L} label="Loading roles…">
+{#snippet children()}
+{#if !roles || roles.length === 0}
   <div class="ui-empty"><p>No roles yet.</p></div>
 {:else}
   <section class="ui-panel">
@@ -114,6 +105,8 @@
     </ul>
   </section>
 {/if}
+{/snippet}
+</LoadGate>
 
 <dialog class="ui-dialog wide" bind:this={dialog} aria-labelledby="role-title">
   <form onsubmit={save}>
