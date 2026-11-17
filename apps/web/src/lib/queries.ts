@@ -45,6 +45,17 @@ export const SEARCH = graphql(`
   }
 `);
 
+export const SEARCH_BY_OWNER = graphql(`
+  query SearchByOwner($owner: String!, $perPage: Int) {
+    searchEmotes(query: "", owner: $owner, perPage: $perPage) {
+      total
+      items {
+        ...EmoteFields
+      }
+    }
+  }
+`);
+
 export const EMOTE = graphql(`
   query Emote($id: String!) {
     emote(id: $id) {
