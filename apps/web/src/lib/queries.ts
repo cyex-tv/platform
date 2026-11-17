@@ -931,3 +931,48 @@ export const PROFILE_EDITED = graphql(`
     }
   }
 `);
+
+// An account's public activity feed (ADR 0016), newest first; page back with `before`.
+export const ACCOUNT_ACTIVITY = graphql(`
+  query AccountActivity($accountId: String!, $before: String, $limit: Int) {
+    accountActivity(accountId: $accountId, before: $before, limit: $limit) {
+      id
+      kind
+      actor {
+        id
+        displayName
+        avatar
+      }
+      set {
+        id
+        name
+      }
+      emote {
+        id
+        name
+        host
+        files {
+          name
+          width
+          height
+          isStatic
+        }
+      }
+      fromName
+      toName
+      badge {
+        fromId
+        fromName
+        toId
+        toName
+      }
+      paint {
+        fromId
+        fromName
+        toId
+        toName
+      }
+      createdAt
+    }
+  }
+`);

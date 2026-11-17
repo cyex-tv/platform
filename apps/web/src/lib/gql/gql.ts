@@ -91,6 +91,7 @@ type Documents = {
     "\n  query EditorOf {\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n    }\n  }\n": typeof types.EditorOfDocument,
     "\n  query ProfileMine {\n    myChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n    }\n    mySets {\n      ...SetFields\n    }\n  }\n": typeof types.ProfileMineDocument,
     "\n  query ProfileEdited {\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorSets {\n      ...SetFields\n    }\n  }\n": typeof types.ProfileEditedDocument,
+    "\n  query AccountActivity($accountId: String!, $before: String, $limit: Int) {\n    accountActivity(accountId: $accountId, before: $before, limit: $limit) {\n      id\n      kind\n      actor {\n        id\n        displayName\n        avatar\n      }\n      set {\n        id\n        name\n      }\n      emote {\n        id\n        name\n        host\n        files {\n          name\n          width\n          height\n          isStatic\n        }\n      }\n      fromName\n      toName\n      badge {\n        fromId\n        fromName\n        toId\n        toName\n      }\n      paint {\n        fromId\n        fromName\n        toId\n        toName\n      }\n      createdAt\n    }\n  }\n": typeof types.AccountActivityDocument,
 };
 const documents: Documents = {
     "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    channelCount\n    flags {\n      zeroWidth\n      nsfw\n      private\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n": types.EmoteFieldsFragmentDoc,
@@ -169,6 +170,7 @@ const documents: Documents = {
     "\n  query EditorOf {\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n    }\n  }\n": types.EditorOfDocument,
     "\n  query ProfileMine {\n    myChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n    }\n    mySets {\n      ...SetFields\n    }\n  }\n": types.ProfileMineDocument,
     "\n  query ProfileEdited {\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorSets {\n      ...SetFields\n    }\n  }\n": types.ProfileEditedDocument,
+    "\n  query AccountActivity($accountId: String!, $before: String, $limit: Int) {\n    accountActivity(accountId: $accountId, before: $before, limit: $limit) {\n      id\n      kind\n      actor {\n        id\n        displayName\n        avatar\n      }\n      set {\n        id\n        name\n      }\n      emote {\n        id\n        name\n        host\n        files {\n          name\n          width\n          height\n          isStatic\n        }\n      }\n      fromName\n      toName\n      badge {\n        fromId\n        fromName\n        toId\n        toName\n      }\n      paint {\n        fromId\n        fromName\n        toId\n        toName\n      }\n      createdAt\n    }\n  }\n": types.AccountActivityDocument,
 };
 
 /**
@@ -475,6 +477,10 @@ export function graphql(source: "\n  query ProfileMine {\n    myChannels {\n    
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query ProfileEdited {\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorSets {\n      ...SetFields\n    }\n  }\n"): typeof import('./graphql').ProfileEditedDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AccountActivity($accountId: String!, $before: String, $limit: Int) {\n    accountActivity(accountId: $accountId, before: $before, limit: $limit) {\n      id\n      kind\n      actor {\n        id\n        displayName\n        avatar\n      }\n      set {\n        id\n        name\n      }\n      emote {\n        id\n        name\n        host\n        files {\n          name\n          width\n          height\n          isStatic\n        }\n      }\n      fromName\n      toName\n      badge {\n        fromId\n        fromName\n        toId\n        toName\n      }\n      paint {\n        fromId\n        fromName\n        toId\n        toName\n      }\n      createdAt\n    }\n  }\n"): typeof import('./graphql').AccountActivityDocument;
 
 
 export function graphql(source: string) {

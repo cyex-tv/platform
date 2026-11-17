@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { relative } from './activity';
+import { relative, toItem } from './activity';
 import { profileRail, railKeyForPath, sectionFrom, sectionHref, sectionsFor, NOBODY, type Relation } from './rows';
 
 const now = Date.UTC(2026, 10, 17, 12, 0, 0);
@@ -22,9 +22,23 @@ const mine: Relation = { mine: true, perms: new Set(['EMOTES', 'SETS', 'EDITORS'
 const editor: Relation = { mine: false, perms: new Set(['EMOTES']) };
 const profiler: Relation = { mine: false, perms: new Set(['PROFILE']) };
 
+describe('toItem', () => {
+  const base = { id: 'a1', actor: { id: 'u', displayName: 'U', avatar: null }, set: { id: 's', name: 'Main' }, emote: null,
+    fromName: null, toName: null, badge: null, paint: null, createdAt: '2026-11-17T12:00:00Z' };
+  it('maps the API kinds', () => {
+    expect(toItem({ ...base, kind: 'SET_EMOTE_ADDED' })?.kind).toBe('added');
+    expect(toItem({ ...base, kind: 'COSMETICS_SELECTED' })?.kind).toBe('cosmetics');
+    expect(toItem({ ...base, kind: 'SET_RENAMED', fromName: 'a', toName: 'b' })).toMatchObject({ kind: 'setRenamed', from: 'a', to: 'b' });
+  });
+  it('drops kinds it doesn’t know', () => {
+    expect(toItem({ ...base, kind: 'SOMETHING_NEW' as never })).toBeNull();
+  });
+});
+
 describe('profile rows', () => {
-  it('gives the public only the uploads', () => {
-    expect(sectionsFor(NOBODY, true)).toEqual(['uploads']);
+  it('gives the public the uploads and the activity', () => {
+    expect(sectionsFor(NOBODY, false)).toEqual(['uploads']);
+    expect(sectionsFor(NOBODY, true)).toEqual(['uploads', 'activity']);
   });
   it('gives the owner everything, activity only when the API has it', () => {
     expect(sectionsFor(mine, false)).toEqual(['active', 'uploads', 'sets', 'cosmetics']);

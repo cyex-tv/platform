@@ -3,7 +3,7 @@
 //   - Everyone: Uploaded emotes.
 //   - The owner, and editors of the account: Active emotes and Emote sets; the owner also Channels.
 //   - The owner, and editors with PROFILE: Cosmetics.
-//   - Activity: when the API has it, for the owner and the account's editors.
+//   - Everyone: Activity (public, ADR 0016), when the API has it.
 // Sections are query-param tabs on /users/<id> (?s=sets); Uploaded emotes is the default (no
 // parameter), so the server-rendered public page and the owner's page share one address.
 // The /me management pages keep their routes and mark the row they belong to.
@@ -39,7 +39,7 @@ export function sectionsFor(r: Relation, activity: boolean): SectionKey[] {
   out.push('uploads');
   if (manages(r)) out.push('sets');
   if (canProfile(r)) out.push('cosmetics');
-  if (activity && manages(r)) out.push('activity');
+  if (activity) out.push('activity');
   return out;
 }
 
