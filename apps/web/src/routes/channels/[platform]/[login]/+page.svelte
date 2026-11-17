@@ -84,7 +84,7 @@
 
   <section aria-labelledby="emotes-h">
     <div class="bar">
-      <h1 class="page-title" id="emotes-h">Active set{#if set} <span class="n"><bdi>{clean(set.name)}</bdi></span>{/if}</h1>
+      <h1 class="page-title" id="emotes-h">Active set{#if set}{' '}<span class="n"><bdi>{clean(set.name)}</bdi></span>{/if}</h1>
       {#if set && items.length}
         <label class="find">
           <span class="sr-only">Filter this set</span>
@@ -157,7 +157,7 @@
   .n { margin-left: 6px; font-size: var(--t-small); font-weight: 500; color: var(--dim); }
   .find { position: relative; display: block; flex: 0 1 320px; min-width: 0; }
   .find :global(svg) { position: absolute; left: 12px; top: 50%; translate: 0 -50%; color: var(--muted); pointer-events: none; }
-  .find .input { width: 100%; height: 38px; padding-left: 36px; }
+  .find .input { width: 100%; height: 40px; padding-left: 36px; }
   @media (max-width: 520px) { .find { flex-basis: 100%; } }
   .slots { display: flex; align-items: center; gap: 12px; margin: 8px 0 20px; font-variant-numeric: tabular-nums; }
   .meter { flex: 0 1 160px; height: 4px; border-radius: 2px; background: var(--border-strong); overflow: hidden; }

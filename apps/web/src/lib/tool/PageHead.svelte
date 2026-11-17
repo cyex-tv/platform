@@ -31,7 +31,7 @@
 
 <style>
   .head { margin-bottom: 24px; }
-  .back { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; margin: 0 0 4px -2px; font-size: var(--t-small);
+  .back { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; margin: -4px 0 0 -2px; font-size: var(--t-small);
     color: var(--muted); text-decoration: none; }
   @media (hover: hover) and (pointer: fine) { .back:hover { color: var(--text); } }
   .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }

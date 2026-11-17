@@ -143,7 +143,7 @@
   .filters .kind { flex: 0 1 160px; }
   .rows { list-style: none; margin: 0; padding: 0; }
   .rows li.alt { background: var(--row-alt); }
-  .row { display: grid; grid-template-columns: 150px minmax(140px, 1fr) minmax(0, 2fr) minmax(0, 1.2fr) 16px; gap: 12px; align-items: center;
+  .row { display: grid; grid-template-columns: 150px minmax(140px, 1fr) minmax(0, 2fr) minmax(0, 1.2fr) 16px; gap: 12px; align-items: center; min-height: 40px;
     width: 100%; padding: 7px 14px; border: 0; border-bottom: 1px solid var(--border); background: none; color: var(--text);
     font: inherit; text-align: left; cursor: pointer; }
   @media (hover: hover) and (pointer: fine) { button.row:hover { background: var(--row-hover); box-shadow: inset 2px 0 0 var(--border-strong); } }
@@ -154,7 +154,7 @@
   .target { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .target .ui-chip { flex: none; }
   .id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .t { font-size: .74rem; font-weight: 600; color: var(--dim); }
+  .t { font-size: 12px; font-weight: 600; color: var(--dim); }
   .action { font-weight: 600; }
   .id, .by { font-size: .78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .diff { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 14px 14px; border-bottom: 1px solid var(--border); background: var(--bg); }
