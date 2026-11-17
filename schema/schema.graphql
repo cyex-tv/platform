@@ -568,7 +568,8 @@ enum SetKind {
 type Subscription {
 	"""
 	Live updates for up to 500 topics: `channel:<platform>:<id>`, `set:<id>`,
-	`user:<platform>:<id>` (ADR 0005). The same events as the event WebSocket.
+	`user:<platform>:<id>` (ADR 0005). The same events as the event WebSocket. One socket
+	holds at most 8 subscriptions at once.
 	"""
 	events(topics: [String!]!): Event!
 }

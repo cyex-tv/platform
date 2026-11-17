@@ -28,7 +28,7 @@ Two transports over **one event model**:
 | server → client | `ack` | `op`, `topics`, and the `error` code per topic that was refused |
 | server → client | `dispatch` | `id` (event ID), `type`, `data` |
 | both | `heartbeat` | `{}`. The server sends one every 20 s; a client that misses 3 should reconnect. |
-| client → server | `resume` | `session_id`, `last_event_id`. Replays missed events for the old topics. |
+| client → server | `resume` | `session_id`, `last_event_id`. Replays missed events for the old topics. Once per connection (`already_resumed` after that); refused with `too_many_topics` when the old and current topics together pass 500. |
 | server → client | `reconnect` | The server is restarting, so reconnect and resume. |
 | server → client | `error` | `code`, `message`, then the connection closes. |
 
@@ -38,6 +38,7 @@ Two transports over **one event model**:
 - These are for the website and apps that already speak GraphQL.
 - Protocol: `graphql-transport-ws` (the `graphql-ws` library).
 - One field: `subscription { events(topics: [String!]!) { id type … } }`. It uses the same topics and event types as the event WebSocket.
+- The socket runs subscriptions only (a query or mutation gets `subscriptions_only`; those go to `POST /v1/gql`), and one connection holds at most 8 subscriptions at once (`too_many_subscriptions`).
 
 **The event model, shared by both**
 - Types:

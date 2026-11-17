@@ -26,6 +26,8 @@ use cyex_tv_shared::model::{
 use cyex_tv_shared::permissions;
 use futures_util::Stream;
 use sqlx::Connection;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::state::AppState;
 use crate::{abuse, admin, catalog, moderation, search};
@@ -37,6 +39,70 @@ pub fn builder() -> SchemaBuilder<Query, Mutation, Subscription> {
     Schema::build(Query, Mutation, Subscription)
         .limit_depth(12)
         .limit_complexity(1_000)
+        .extension(SocketRunsSubscriptionsOnly)
+}
+
+/// Subscription streams one `/v1/gql/ws` connection may hold at once.
+pub const MAX_SOCKET_SUBSCRIPTIONS: usize = 8;
+
+/// Connection data for one `/v1/gql/ws` socket: marks requests as coming over the socket and
+/// counts the subscription streams it holds.
+#[derive(Default)]
+pub struct SocketConnection {
+    streams: Arc<AtomicUsize>,
+}
+
+impl SocketConnection {
+    /// Take a stream slot, or `None` when the connection holds the most it may.
+    fn take_slot(&self) -> Option<StreamSlot> {
+        self.streams
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |n| {
+                (n < MAX_SOCKET_SUBSCRIPTIONS).then_some(n + 1)
+            })
+            .ok()?;
+        Some(StreamSlot(self.streams.clone()))
+    }
+}
+
+/// One subscription stream's place in its connection's count, given back when the stream ends.
+struct StreamSlot(Arc<AtomicUsize>);
+
+impl Drop for StreamSlot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+/// The socket runs subscriptions only. async-graphql would otherwise run a query or mutation sent
+/// as a `subscribe` message once, outside the `POST /v1/gql` rate limits. The `execute` hook only
+/// runs for queries and mutations; over HTTP there is no [`SocketConnection`], so it passes.
+struct SocketRunsSubscriptionsOnly;
+
+impl async_graphql::extensions::ExtensionFactory for SocketRunsSubscriptionsOnly {
+    fn create(&self) -> Arc<dyn async_graphql::extensions::Extension> {
+        Arc::new(SocketRunsSubscriptionsOnly)
+    }
+}
+
+#[async_trait::async_trait]
+impl async_graphql::extensions::Extension for SocketRunsSubscriptionsOnly {
+    async fn execute(
+        &self,
+        ctx: &async_graphql::extensions::ExtensionContext<'_>,
+        operation_name: Option<&str>,
+        next: async_graphql::extensions::NextExecute<'_>,
+    ) -> async_graphql::Response {
+        if ctx.data_opt::<SocketConnection>().is_some() {
+            let error = coded(
+                "subscriptions_only",
+                "The socket runs subscriptions only. Send queries and mutations to POST /v1/gql.",
+            );
+            return async_graphql::Response::from_errors(vec![
+                error.into_server_error(async_graphql::Pos::default()),
+            ]);
+        }
+        next.run(ctx, operation_name).await
+    }
 }
 
 /// The SDL, as committed in `schema/schema.graphql`.
@@ -672,7 +738,8 @@ pub struct Subscription;
 #[async_graphql::Subscription]
 impl Subscription {
     /// Live updates for up to 500 topics: `channel:<platform>:<id>`, `set:<id>`,
-    /// `user:<platform>:<id>` (ADR 0005). The same events as the event WebSocket.
+    /// `user:<platform>:<id>` (ADR 0005). The same events as the event WebSocket. One socket
+    /// holds at most 8 subscriptions at once.
     async fn events(
         &self,
         ctx: &Context<'_>,
@@ -687,14 +754,27 @@ impl Subscription {
                     .extend_with(|_, e| e.set("code", "invalid_topic")),
             );
         }
+        let slot = match ctx.data_opt::<SocketConnection>() {
+            Some(connection) => Some(connection.take_slot().ok_or_else(|| {
+                coded(
+                    "too_many_subscriptions",
+                    "At most 8 subscriptions on one socket.",
+                )
+            })?),
+            None => None,
+        };
         let sub = state(ctx).hub.subscriber();
         sub.subscribe(topics.iter().map(String::as_str));
-        Ok(futures_util::stream::unfold(sub, |mut sub| async move {
-            let event = match sub.recv().await? {
-                HubMessage::Event(d) => cyex_tv_hub::model_event(&d.event, &d.topic),
-                HubMessage::Lagged => cyex_tv_hub::resync(""),
-            };
-            Some((event, sub))
-        }))
+        // The slot lives as long as the stream, so ending it frees the connection's place.
+        Ok(futures_util::stream::unfold(
+            (sub, slot),
+            |(mut sub, slot)| async move {
+                let event = match sub.recv().await? {
+                    HubMessage::Event(d) => cyex_tv_hub::model_event(&d.event, &d.topic),
+                    HubMessage::Lagged => cyex_tv_hub::resync(""),
+                };
+                Some((event, (sub, slot)))
+            },
+        ))
     }
 }
