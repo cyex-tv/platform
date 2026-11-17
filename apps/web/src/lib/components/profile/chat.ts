@@ -9,7 +9,7 @@ export function chatLines(emotes: ChatEmote[], max = 6): ChatLine[] {
   const base = emotes.filter((e) => !e.zeroWidth);
   if (base.length === 0) return [];
   const out: ChatLine[] = [];
-  for (let i = 0; i < Math.min(max, Math.max(base.length, 3)); i++) {
+  for (let i = 0; i < max; i++) {
     const a = base[i % base.length];
     const parts: ChatLine['parts'] = [{ text: SAYS[i % SAYS.length] }, { emote: a }];
     if (i % 3 === 1 && base.length > 1) parts.push({ text: ' ' }, { emote: base[(i + 1) % base.length] });
