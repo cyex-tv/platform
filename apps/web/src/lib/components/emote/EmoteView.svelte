@@ -200,7 +200,7 @@
   .tabbtn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: 0; border-radius: var(--radius-btn);
     background: none; color: var(--muted); font: inherit; font-size: var(--t-small); font-weight: 500; white-space: nowrap; cursor: pointer;
     transition: background-color var(--fast), color var(--fast); touch-action: manipulation; }
-  .tabbtn[aria-selected='true'] { background: var(--accent-dim); color: var(--accent-text); }
+  .tabbtn[aria-selected='true'] { color: var(--text); font-weight: 600; }
   .n { color: var(--dim); font-variant-numeric: tabular-nums; font-size: var(--t-label); }
   .block-title .n { margin-left: 8px; font-size: var(--t-small); font-weight: 500; }
   .tabbed .block-head { margin-top: 4px; }

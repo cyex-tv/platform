@@ -8,7 +8,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import { clean } from '$lib/format';
   import { isAdmin, session } from '$lib/tool/session.svelte';
-  import { EMOTES, LIBRARY, platformName, settingsLinks, type ShellLink } from './account';
+  import { EMOTES, LIBRARY, platformName, profileLink, settingsLinks, type ShellLink } from './account';
   import { leave } from './signout';
   import { theme, toggleTheme } from './theme.svelte';
 
@@ -53,6 +53,7 @@
       <hr />
     {/if}
     {#if me}
+      {@render row(profileLink(me.id))}
       {#each LIBRARY as l (l.href)}{@render row(l)}{/each}
       <hr />
       {#each settings as l (l.href)}{@render row(l)}{/each}
@@ -82,15 +83,15 @@
     border-radius: var(--radius); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer;
     transition: background-color var(--fast); }
   .list :global(svg) { color: var(--muted); }
-  .list a[aria-current='page'] { background: var(--accent-dim); color: var(--accent-text); box-shadow: inset 2px 0 0 var(--accent); }
-  .list a[aria-current='page'] :global(svg) { color: currentColor; }
+  .list a[aria-current='page'] { color: var(--text); font-weight: 600; }
+  .list a[aria-current='page'] :global(svg) { color: var(--accent-text); }
   .list a:focus-visible, .list button:focus-visible { outline-offset: -2px; }
   .list a:active, .list button:active { opacity: .6; transition: none; }
   .value { margin-left: auto; color: var(--dim); }
   hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid var(--border); }
   @media (hover: hover) and (pointer: fine) {
     .list a:hover, .list button:hover { background: var(--row-hover); }
-    .list a[aria-current='page']:hover { background: var(--accent-dim); }
+    .list a[aria-current='page']:hover { color: var(--text); }
   }
   @media (forced-colors: active) { .list a[aria-current='page'] { outline: 2px solid Highlight; outline-offset: -2px; } }
 </style>

@@ -133,7 +133,7 @@
   .opt .lbl { flex: 1; min-width: 0; display: grid; line-height: 1.35; }
   .opt small { font-size: 12px; font-weight: 400; color: var(--dim); }
   .tick { display: inline-flex; color: var(--accent-text); opacity: 0; }
-  .opt:not(.check).on { background: var(--accent-dim); color: var(--accent-text); box-shadow: inset 2px 0 0 var(--accent); }
+  .opt:not(.check).on { color: var(--text); font-weight: 600; }
   .opt.on .tick { opacity: 1; }
   .opt.check.on { color: var(--text); }
   .box { flex: none; display: inline-grid; place-items: center; width: 16px; height: 16px; border: 1px solid var(--border-strong);
@@ -162,7 +162,7 @@
   @media (hover: hover) and (pointer: fine) {
     summary:hover { color: var(--text); }
     .opt:hover { background: var(--row-hover); color: var(--text); }
-    .opt:not(.check).on:hover { background: var(--accent-dim); color: var(--accent-text); }
+    .opt:not(.check).on:hover { color: var(--text); }
     .tag:hover { border-color: var(--border-strong); color: var(--text); }
     .tag[aria-pressed='true']:hover { color: var(--accent-text); }
   }
