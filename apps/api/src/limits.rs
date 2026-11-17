@@ -37,6 +37,8 @@ pub struct Rates {
     pub cosmetics: Rate,
     /// `cloneSet`, per account: each copies up to a whole set.
     pub set_clones: Rate,
+    /// `exportMyData`, per account: each reads everything about the account.
+    pub data_export: Rate,
     /// `searchAccounts`, per account, or per IP when signed out.
     pub account_search: Rate,
 }
@@ -53,6 +55,7 @@ impl Default for Rates {
             editors: Rate::per_hour(60),
             cosmetics: Rate::per_hour(300),
             set_clones: Rate::per_hour(30),
+            data_export: Rate::per_hour(5),
             account_search: Rate::per_minute(60),
         }
     }
@@ -68,6 +71,7 @@ pub struct Limits {
     pub editors: Limiter,
     pub cosmetics: Limiter,
     pub set_clones: Limiter,
+    pub data_export: Limiter,
     pub account_search: Limiter,
     /// Take the client IP from `CF-Connecting-IP` (`CYEX_TV_TRUST_CLOUDFLARE=true`).
     pub trust_cloudflare: bool,
@@ -85,6 +89,7 @@ impl Limits {
             editors: Limiter::new(rates.editors),
             cosmetics: Limiter::new(rates.cosmetics),
             set_clones: Limiter::new(rates.set_clones),
+            data_export: Limiter::new(rates.data_export),
             account_search: Limiter::new(rates.account_search),
             trust_cloudflare,
         }

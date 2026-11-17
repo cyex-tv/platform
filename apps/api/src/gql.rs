@@ -20,14 +20,14 @@ use cyex_tv_hub::Message as HubMessage;
 use cyex_tv_hub::topics as hub_topics;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::model::{
-    AccountEditor, AccountResults, AccountStatus, AccountSummary, ActivityEntry, AddAccountEditor,
-    AddSetEmote, AuditEntry, Badge, Channel, ClonedSet, CosmeticCatalog, CosmeticImage,
-    CosmeticKind, CreateBadge, CreateRole, CreateSet, EditedAccount, EditorPermission, Emote,
-    EmotePage, EmoteSet, EmoteSort, Entitlement, EntitlementPage, Event, GrantCosmetic, Identity,
-    Me, Notification, OwnedCosmetics, Paint, PaintInput, PersonalSetEntry, Platform, Report,
-    ReportAction, ReportQueue, ReviewQueue, Role, SearchResults, SetEmote, SetSummary,
-    SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole, UpdateSet,
-    UpdateSetEmote, UserCosmetics,
+    AccountEditor, AccountResults, AccountSession, AccountStatus, AccountSummary, ActivityEntry,
+    AddAccountEditor, AddSetEmote, AuditEntry, Badge, Channel, ClonedSet, CosmeticCatalog,
+    CosmeticImage, CosmeticKind, CreateBadge, CreateRole, CreateSet, EditedAccount,
+    EditorPermission, Emote, EmotePage, EmoteSet, EmoteSort, Entitlement, EntitlementPage, Event,
+    GrantCosmetic, Identity, Me, Notification, OwnedCosmetics, Paint, PaintInput, PersonalSetEntry,
+    Platform, Report, ReportAction, ReportQueue, ReviewQueue, Role, SearchResults, SetEmote,
+    SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole,
+    UpdateSet, UpdateSetEmote, UserCosmetics,
 };
 use cyex_tv_shared::permissions;
 use futures_util::Stream;
@@ -36,7 +36,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::state::AppState;
-use crate::{abuse, activity, admin, catalog, cosmetics, editors, moderation, search};
+use crate::{abuse, account, activity, admin, catalog, cosmetics, editors, moderation, search};
 
 pub type ApiSchema = Schema<Query, Mutation, Subscription>;
 
@@ -579,7 +579,27 @@ impl Query {
             .map_err(api_error)
     }
 
-    /// Your notifications, newest first (the latest 100).
+    /// Where you are signed in: your live sessions, the most recently used first, with the one
+    /// this request came with marked `current`. Never shows tokens.
+    async fn my_sessions(&self, ctx: &Context<'_>) -> Result<Vec<AccountSession>> {
+        let caller = caller(ctx)?;
+        account::my_sessions(state(ctx), caller)
+            .await
+            .map_err(api_error)
+    }
+
+    /// How many of your notifications are unread.
+    async fn unread_notification_count(&self, ctx: &Context<'_>) -> Result<u64> {
+        let caller = caller(ctx)?;
+        account::unread_count(state(ctx), caller)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
+    /// `emote.rejected`, `emote.taken_down`, `editor.added`, `editor.changed`, `editor.removed`,
+    /// `cosmetic.granted` and `cosmetic.revoked`; `payload` is JSON with the IDs and names it is
+    /// about (see the API reference).
     async fn my_notifications(
         &self,
         ctx: &Context<'_>,
@@ -1034,12 +1054,61 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Mark all your notifications read. Returns how many were unread.
-    async fn mark_notifications_read(&self, ctx: &Context<'_>) -> Result<u64> {
+    /// Mark your notifications read: those in `ids` (up to 100; others' IDs are ignored), or all
+    /// of them without `ids`. Returns how many were unread.
+    async fn mark_notifications_read(
+        &self,
+        ctx: &Context<'_>,
+        ids: Option<Vec<String>>,
+    ) -> Result<u64> {
         let caller = caller(ctx)?;
-        abuse::mark_read(state(ctx), caller)
+        account::mark_read(state(ctx), caller, ids.as_deref())
             .await
             .map_err(api_error)
+    }
+
+    /// Sign out one of your sessions, the current one too. False when you have none with that
+    /// ID.
+    async fn revoke_session(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
+        let caller = caller(ctx)?;
+        account::revoke_session(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Sign out everywhere but here. Returns how many sessions ended.
+    async fn revoke_other_sessions(&self, ctx: &Context<'_>) -> Result<u64> {
+        let caller = caller(ctx)?;
+        account::revoke_other_sessions(state(ctx), caller)
+            .await
+            .map_err(api_error)
+    }
+
+    /// A copy of everything about your account, as JSON text (`format`, `version`, `account`,
+    /// `identities`, `sessions`, `channels`, `emotes`, `sets`, `set_editors`, `account_editors`,
+    /// `editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`). 5 an hour
+    /// (`rate_limited`). Audited.
+    async fn export_my_data(&self, ctx: &Context<'_>) -> Result<String> {
+        let caller = caller(ctx)?;
+        account::export(state(ctx), caller).await.map_err(api_error)
+    }
+
+    /// Delete your account now. `confirm` is one of your Twitch or Kick logins. Website only
+    /// (`website_only` with an app token); the owner's account can't be (`owner_protected`).
+    /// Your sessions, identities, channels, sets, editor grants, cosmetics and notifications go;
+    /// your approved emotes that are in other people's sets stay, shown as by a deleted user;
+    /// your other emotes are deleted. Signing in again later makes a new account. Audited.
+    /// `confirm_mismatch` when `confirm` isn't one of your logins.
+    async fn delete_account(&self, ctx: &Context<'_>, confirm: String) -> Result<bool> {
+        let caller = caller(ctx)?;
+        account::delete_account(state(ctx), caller, &confirm)
+            .await
+            .map_err(api_error)?;
+        ctx.insert_http_header(
+            axum::http::header::SET_COOKIE,
+            cyex_tv_auth::cookies::clear_session(state(ctx).auth.config()),
+        );
+        Ok(true)
     }
 
     /// Create a role. You can only grant permissions you hold. Needs `roles.manage`. Audited.

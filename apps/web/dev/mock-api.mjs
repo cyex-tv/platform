@@ -508,8 +508,13 @@ const IDENTITIES = [
   { platform: 'TWITCH', platformUserId: '141981764', login: 'lumen_fox', displayName: 'lumen_fox', avatar: ME_SUMMARY.avatar },
 ];
 const NOTES = [
-  { id: 'N1', kind: 'emote.rejected', payload: JSON.stringify({ name: MINE[2].name, reason: 'Looks like a copy of a well-known emote.' }), createdAt: '2026-11-16T21:00:00.000Z', read: false },
+  { id: '01JD8XNOTE0000000000000006', kind: 'cosmetic.granted', payload: JSON.stringify({ kind: 'paint', cosmetic_id: 'P1', name: 'Sample sunrise', reason: 'Thanks for testing' }), createdAt: '2026-11-17T09:30:00.000Z', read: false },
+  { id: '01JD8XNOTE0000000000000005', kind: 'editor.added', payload: JSON.stringify({ role: 'editor', owner_id: OTHERS[4].id, owner_name: OTHERS[4].displayName, editor_id: ME_ID, editor_name: ME_SUMMARY.displayName, actor_id: OTHERS[4].id, actor_name: OTHERS[4].displayName, permissions: ['emotes', 'profile'] }), createdAt: '2026-11-15T20:00:00.000Z', read: false },
+  { id: '01JD8XNOTE0000000000000004', kind: 'editor.changed', payload: JSON.stringify({ role: 'owner', owner_id: ME_ID, owner_name: ME_SUMMARY.displayName, editor_id: OTHERS[1].id, editor_name: OTHERS[1].displayName, actor_id: OTHERS[2].id, actor_name: OTHERS[2].displayName, permissions: ['emotes'] }), createdAt: '2026-11-14T19:00:00.000Z', read: true },
+  { id: '01JD8XNOTE0000000000000003', kind: 'emote.approved', payload: JSON.stringify({ emote_id: MINE[3].id, name: MINE[3].name }), createdAt: '2026-11-16T22:10:00.000Z', read: false },
+  { id: 'N1', kind: 'emote.rejected', payload: JSON.stringify({ emote_id: MINE[2].id, name: MINE[2].name, reason: 'Looks like a copy of a well-known emote.' }), createdAt: '2026-11-16T21:00:00.000Z', read: false },
 ];
+NOTES.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 // Account editors (ADR 0014): two people work on the mock account, and it works on two others'.
 const EDITOR_FLAGS = ['EMOTES', 'SETS', 'EDITORS', 'PROFILE'];
 const ACCOUNT_EDITORS = [
@@ -1206,8 +1211,66 @@ function searchAccounts(v) {
   return { data: { searchAccounts: { total: hits.length, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
 }
 
+// Sessions (mySessions, revokeSession, revokeOtherSessions): where the mock account is signed in.
+const SESSIONS = [
+  { id: '01JD8XSESS0000000000000001', kind: 'SITE', device: 'Firefox on Windows', createdAt: '2026-11-10T12:00:00.000Z', lastSeenAt: '2026-11-17T22:40:00.000Z', expiresAt: '2026-12-17T22:40:00.000Z', current: true },
+  { id: '01JD8XSESS0000000000000002', kind: 'SITE', device: 'Safari on iPhone', createdAt: '2026-11-12T08:15:00.000Z', lastSeenAt: '2026-11-16T07:55:00.000Z', expiresAt: '2026-12-16T07:55:00.000Z', current: false },
+  { id: '01JD8XSESS0000000000000003', kind: 'APP', device: 'cyex.tv app', createdAt: '2026-11-11T18:00:00.000Z', lastSeenAt: '2026-11-17T21:05:00.000Z', expiresAt: '2027-02-15T21:05:00.000Z', current: false },
+  { id: '01JD8XSESS0000000000000004', kind: 'SITE', device: 'Chrome on Android', createdAt: '2026-11-02T10:00:00.000Z', lastSeenAt: '2026-11-03T10:00:00.000Z', expiresAt: '2026-12-03T10:00:00.000Z', current: false },
+];
+let exports = 0;
+// exportMyData: the API's document shape, filled from the mock's data.
+const exportDoc = () => JSON.stringify({
+  format: 'cyex.tv account export', version: 1, exported_at: new Date().toISOString(),
+  account: { id: ME_ID, created_at: '2026-11-10T12:00:00.000Z', uploads_blocked: false },
+  identities: IDENTITIES.map((i) => ({ platform: i.platform.toLowerCase(), platform_user_id: i.platformUserId, login: i.login, display_name: i.displayName, avatar: i.avatar, linked_at: '2026-11-10T12:00:00.000Z', refreshed_at: '2026-11-17T08:00:00.000Z' })),
+  sessions: SESSIONS,
+  channels: CHANNELS.map((c) => ({ platform: c.platform.toLowerCase(), platform_channel_id: c.platformChannelId, login: c.login, active_set_id: c.activeSetId, allow_personal_emotes: c.allowPersonalEmotes, created_at: '2026-11-10T12:00:00.000Z' })),
+  emotes: MINE, sets: SETS.filter((x) => x.owner?.id === ME_ID).map(setOut),
+  set_editors: SETS.filter((x) => x.owner?.id === ME_ID && x.editors.length).map((x) => ({ set_id: x.id, editor_ids: x.editors.map((e) => e.id) })),
+  account_editors: ACCOUNT_EDITORS.map((e) => ({ account_id: ME_ID, editor_id: e.account.id, permissions: e.permissions.map((f) => f.toLowerCase()), granted_at: e.grantedAt })),
+  editor_of: EDITOR_OF.map((g) => ({ account_id: g.account.id, editor_id: ME_ID, permissions: g.permissions.map((f) => f.toLowerCase()), granted_at: g.grantedAt })),
+  cosmetics: { badges: [], paints: [], badge_id: null, paint_id: null }, roles: [],
+  reports_filed: [], notifications: NOTES.map((n) => ({ id: n.id, kind: n.kind, payload: JSON.parse(n.payload), created_at: n.createdAt, read_at: n.read ? n.createdAt : null })),
+  orders: [],
+});
+function accountHub(q, v) {
+  const data = {};
+  if (/\bmySessions\b/.test(q)) data.mySessions = SESSIONS;
+  if (/\brevokeSession\s*\(/.test(q)) {
+    const i = SESSIONS.findIndex((x) => x.id === v.id);
+    if (i >= 0) SESSIONS.splice(i, 1);
+    data.revokeSession = i >= 0;
+  }
+  if (/\brevokeOtherSessions\b/.test(q)) {
+    data.revokeOtherSessions = SESSIONS.filter((x) => !x.current).length;
+    SESSIONS.splice(0, SESSIONS.length, ...SESSIONS.filter((x) => x.current));
+  }
+  if (/\bexportMyData\b/.test(q)) {
+    if (++exports > 5) return err('You asked for a copy of your data a few times already. Try again in an hour.', 'rate_limited');
+    data.exportMyData = exportDoc();
+  }
+  if (/\bdeleteAccount\s*\(/.test(q)) {
+    const typed = String(v.confirm ?? '').trim().replace(/^@/, '').toLowerCase();
+    if (!IDENTITIES.some((i) => i.login.toLowerCase() === typed))
+      return err('Type one of your Twitch or Kick logins to confirm.', 'confirm_mismatch');
+    // The mock keeps its data (it would have nothing left to show); it signs you out like the API.
+    return { data: { deleteAccount: true }, _cookie: 'mock_session=; Path=/; Max-Age=0' };
+  }
+  if (/\bmarkNotificationsRead\b/.test(q)) {
+    if (Array.isArray(v.ids) && v.ids.length > 100) return err('Mark at most 100 notifications at once.', 'too_many');
+    const pick = Array.isArray(v.ids) ? NOTES.filter((n) => v.ids.includes(n.id)) : NOTES;
+    data.markNotificationsRead = pick.filter((x) => !x.read).length;
+    pick.forEach((x) => (x.read = true));
+  }
+  if (/\bunreadNotificationCount\b/.test(q)) data.unreadNotificationCount = NOTES.filter((n) => !n.read).length;
+  return Object.keys(data).length ? { data } : null;
+}
+
 // Fields added after the site's first queries, answered by field name so any operation name works.
 function newFields(q, v, session) {
+  if (/\b(mySessions|unreadNotificationCount|revokeSession|revokeOtherSessions|exportMyData|deleteAccount|markNotificationsRead)\b/.test(q))
+    return session ? accountHub(q, v) ?? null : err('Sign in to use this.', 'signed_out');
   if (/\bsearchAccounts\s*\(/.test(q)) return searchAccounts(v);
   if (/\bcloneSet\s*\(/.test(q)) return session ? cloneSet(v, session) : err('Sign in to use this.', 'signed_out');
   if (/\baccountSets\s*\(/.test(q)) {
@@ -1390,7 +1453,12 @@ createServer(async (req, res) => {
     try {
       const body = JSON.parse(raw || '{}');
       if (typeof body?.query !== 'string') return json(res, 400, { data: null, errors: [{ message: 'Send one query.', extensions: { code: 'bad_request' } }] });
-      return json(res, 200, answer(body, session, admin));
+      const out = answer(body, session, admin);
+      if (out?._cookie) {
+        res.setHeader('set-cookie', out._cookie);
+        delete out._cookie;
+      }
+      return json(res, 200, out);
     } catch (e) {
       return json(res, 400, { data: null, errors: [{ message: String(e?.message ?? e), extensions: { code: 'bad_request' } }] });
     }

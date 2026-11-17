@@ -1116,6 +1116,19 @@ pub async fn grant(
         .await?
         .pop()
         .ok_or_else(ApiError::internal)?;
+    let name = cosmetic_display_name(&mut tx, input.kind, cosmetic).await?;
+    crate::account::notify(
+        &mut tx,
+        account,
+        "cosmetic.granted",
+        &json!({
+            "kind": input.kind.as_str(),
+            "cosmetic_id": ids::to_text(cosmetic),
+            "name": name,
+            "reason": why,
+        }),
+    )
+    .await?;
     tx.commit().await.map_err(sqlx_error)?;
     Ok(out)
 }
@@ -1167,8 +1180,39 @@ pub async fn revoke(
         Some(json!({ "reason": why })),
     )
     .await?;
+    let name = cosmetic_display_name(&mut tx, kind, cosmetic).await?;
+    crate::account::notify(
+        &mut tx,
+        account,
+        "cosmetic.revoked",
+        &json!({
+            "kind": kind.as_str(),
+            "cosmetic_id": ids::to_text(cosmetic),
+            "name": name,
+            "reason": why,
+        }),
+    )
+    .await?;
     tx.commit().await.map_err(sqlx_error)?;
     Ok(true)
+}
+
+/// A badge's or paint's name, for notifications. `None` when it is gone.
+async fn cosmetic_display_name(
+    conn: &mut PgConnection,
+    kind: CosmeticKind,
+    id: Uuid,
+) -> ApiResult<Option<String>> {
+    Ok(match kind {
+        CosmeticKind::Badge => db::get_badge(conn, id)
+            .await
+            .map_err(db_error)?
+            .map(|b| b.name),
+        CosmeticKind::Paint => db::get_paint(conn, id)
+            .await
+            .map_err(db_error)?
+            .map(|p| p.name),
+    })
 }
 
 /// Who owns what, newest first: for one account, one cosmetic, or both. Needs `cosmetics.grant`.
