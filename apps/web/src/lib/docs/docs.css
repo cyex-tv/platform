@@ -7,7 +7,7 @@
 
 html:has(.docs) { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html:has(.docs) { scroll-behavior: auto; } }
-.docs { --docs-top: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); font-family: var(--font-ui); font-size: 16px; line-height: 1.5; user-select: auto; background: var(--bg); color: var(--text); }
+.docs { --docs-top: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); font-family: var(--font-ui); font-size: 16px; line-height: 1.5; user-select: auto; color: var(--text); }
 .docs a { color: var(--accent-text); }
 
 .docs code {
@@ -15,7 +15,7 @@ html:has(.docs) { scroll-behavior: smooth; }
   padding: 1px 6px; font-size: .86em; font-family: var(--font-mono);
 }
 .docs pre {
-  margin: 0; background: var(--elevated-2); border: 1px solid var(--border); border-radius: 0;
+  margin: 0; background: var(--elevated-2); border: 1px solid var(--border); border-radius: var(--radius-card);
   padding: 14px 16px; overflow-x: auto; font-size: .82rem; line-height: 1.6; font-family: var(--font-mono);
 }
 .docs pre code { background: none; border: none; padding: 0; font-size: inherit; }
@@ -26,27 +26,27 @@ html:has(.docs) { scroll-behavior: smooth; }
 }
 
 /* ---------- Shell ---------- */
-.docs .docs-shell { display: grid; grid-template-columns: 272px minmax(0, 1fr); align-items: start; max-width: var(--page-max); width: 100%; margin: 0 auto; }
-
-/* The index: sticky under the header, its own height, its own scroll. */
+/* The page frame is RailLayout (the 1520 wrapper, rail column + content). The index is the shared
+   SideRail's look: 240px surface card, 6px radius, sticky under the header, its own scroll. */
 .docs .docs-nav {
-  position: sticky; top: var(--docs-top); align-self: start;
-  height: calc(100vh - var(--docs-top)); height: calc(100dvh - var(--docs-top)); display: flex; flex-direction: column;
-  border-right: 1px solid var(--border); padding: 16px 10px 0 var(--page-pad);
+  position: sticky; top: calc(var(--docs-top) + var(--rail-gap)); align-self: start;
+  max-height: calc(100dvh - var(--docs-top) - 2 * var(--rail-gap)); display: flex; flex-direction: column; min-width: 0;
+  padding: 12px 0 12px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card);
 }
-.docs .nav-search { position: relative; display: flex; align-items: center; margin-bottom: 14px; flex: none; }
+.docs .nav-search { position: relative; display: flex; align-items: center; margin: 0 12px 10px 0; flex: none; }
 /* The ring sits on the whole field, so it holds with the icon and clear button inside it. */
-.docs .nav-search:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-.docs .nav-search-icon { position: absolute; left: 10px; width: 13px; height: 13px; color: var(--dim); pointer-events: none; }
+.docs .nav-search:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: var(--radius); }
+.docs .nav-search-icon { position: absolute; left: 10px; width: 14px; height: 14px; color: var(--dim); pointer-events: none; }
 .docs .nav-search input {
-  width: 100%; padding: 8px 44px 8px 30px; -webkit-appearance: none; appearance: none; border-radius: 0; border: 1px solid var(--border);
-  background: var(--surface); color: var(--text); font: inherit; font-size: .82rem; outline: none;
+  width: 100%; height: 36px; padding: 0 52px 0 32px; -webkit-appearance: none; appearance: none; border-radius: var(--radius); border: 1px solid var(--border);
+  background: var(--bg); color: var(--text); font: inherit; font-size: var(--t-nav); outline: none;
   transition: border-color var(--fast), background var(--fast);
 }
 .docs .nav-search input::placeholder { color: var(--dim); }
-.docs .nav-search input:focus { border-color: var(--accent-border); background: var(--surface-hover); }
+.docs .nav-search input:focus { border-color: var(--accent-border); }
 .docs .nav-search input:focus-visible { outline: none; }
 .docs .nav-search input::-webkit-search-cancel-button, .docs .nav-search input::-webkit-search-decoration { -webkit-appearance: none; display: none; }
+/* The Ctrl K hint: the docs filter only (cyex-docs spec). */
 .docs .nav-kbd {
   position: absolute; right: 8px; font-family: var(--font-mono); font-size: .66rem; color: var(--dim);
   border: 1px solid var(--border); border-radius: var(--radius); padding: 2px 5px; pointer-events: none;
@@ -67,24 +67,20 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .nav-toc::details-content { display: contents; }
 
 /* min-height: 0 lets the list shrink inside the column so it scrolls instead of overflowing. */
-.docs .nav-scroll { overflow-y: auto; overscroll-behavior: contain; padding-bottom: 28px; flex: 1; min-height: 0; }
-/* Addition: the list's scroll box reaches the rail's edge, so the lit rung there isn't clipped. */
-.docs .nav-scroll { margin-left: calc(-1 * var(--page-pad)); padding-left: var(--page-pad); }
-.docs .nav-group { margin-bottom: 4px; }
+.docs .nav-scroll { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; padding-right: 12px; flex: 1; min-height: 0; }
+.docs .nav-group + .nav-group { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
 .docs .nav-group[hidden], .docs .nav-item[hidden], .docs .nav-empty[hidden] { display: none; }
-.docs .nav-group-title { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; padding: 0 8px; }
+.docs .nav-group-title { font-size: var(--text-label); text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; padding: 0 10px; }
+/* The rail's row: 36px, 3px radius; the lit row is the accent-dim fill with the 2px accent rail. */
 .docs .nav-item {
-  display: flex; align-items: center; gap: 8px; padding: 5px 8px; min-height: 32px; border-radius: var(--radius);
-  color: var(--muted); text-decoration: none; font-size: .82rem; line-height: 1.35;
-  transition: background var(--fast), color var(--fast); position: relative;
+  display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border-radius: var(--radius);
+  color: var(--muted); text-decoration: none; font-size: var(--t-nav); font-weight: 500; line-height: 1.35;
+  transition: background-color var(--fast), color var(--fast); position: relative;
 }
-@media (hover: hover) and (pointer: fine) { .docs .nav-item:hover { background: var(--surface-hover); color: var(--text); } }
-.docs .nav-item.active { background: var(--surface-hover); color: var(--text); font-weight: 600; }
-/* One lit rung on the rail's edge: the only accent in the index. */
-.docs .nav-item.active::before { content: ''; position: absolute; left: calc(-1 * var(--page-pad)); top: 4px; bottom: 4px; width: 2px; background: var(--accent); }
-.docs .nav-item.guide { padding-left: 9px; }
-.docs .nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.docs .nav-empty { padding: 10px 8px; color: var(--dim); font-size: .8rem; }
+@media (hover: hover) and (pointer: fine) { .docs .nav-item:hover { background: var(--row-hover); color: var(--text); } }
+.docs .nav-item.active, .docs .nav-item.active:hover { background: var(--accent-dim); color: var(--accent-text); box-shadow: inset 2px 0 0 var(--accent); }
+.docs .nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.docs .nav-empty { padding: 10px; color: var(--dim); font-size: .8rem; }
 
 /* ---------- Groups (additions): collapsible, closed by default ---------- */
 /* One open/closed state per group, shared by the index and the body (behaviour.ts sets data-open).
@@ -97,7 +93,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { .docs { --collapse-dur: 0s; } }
 
 .docs .group-toggle {
-  display: flex; align-items: center; gap: 6px; width: 100%; min-height: 32px; border: 0; border-radius: var(--radius); background: none;
+  display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; border: 0; border-radius: var(--radius); background: none;
   font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; text-align: left; cursor: pointer; transition: background var(--fast), color var(--fast);
 }
 .docs .group-toggle:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
@@ -105,11 +101,11 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .chev { width: 10px; height: 10px; flex: none; transition: transform var(--collapse-dur, 200ms) ease-out; }
 .docs [aria-expanded='true'] > .chev, .docs .docs-nav.filtering .group-toggle .chev { transform: rotate(90deg); }
 .docs .group-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.docs .group-count { font-family: var(--font-mono); font-size: .66rem; font-weight: 600; letter-spacing: 0; font-variant-numeric: tabular-nums; color: var(--dim); margin-left: auto; padding-left: 8px; }
-.docs .nav-group-title.group-toggle { padding: 0 8px; font-size: .66rem; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+.docs .group-count { font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: 0; font-variant-numeric: tabular-nums; color: var(--dim); margin-left: auto; padding-left: 8px; }
+.docs .nav-group-title.group-toggle { padding: 0 10px; margin-bottom: 2px; font-size: var(--text-label); letter-spacing: .06em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
 .docs .docs-nav.filtering .group-toggle { cursor: default; }
 
-.docs .nav-tools { flex: none; display: flex; justify-content: flex-end; margin: -6px 0 6px; }
+.docs .nav-tools { flex: none; display: flex; justify-content: flex-end; margin: -4px 12px 6px 0; }
 .docs .nav-tools[hidden] { display: none; }
 .docs .group-all { border: 0; background: none; color: var(--muted); font: inherit; font-size: .74rem; font-weight: 600; padding: 4px 8px; min-height: 28px; border-radius: var(--radius); cursor: pointer; }
 .docs .group-all:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
@@ -130,11 +126,11 @@ html:has(.docs) { scroll-behavior: smooth; }
 [data-theme='light'] .docs .auth-chip:not(.neutral) { color: color-mix(in srgb, var(--yellow) 80%, #000); }
 
 /* ---------- Body ---------- */
-.docs .docs-body { min-width: 0; padding: 34px var(--page-pad) 20px; }
+.docs .docs-body { min-width: 0; padding: 14px 0 20px; }
 .docs .docs-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; max-width: var(--measure); margin-bottom: 30px; }
 .docs .docs-title h1 { font-size: 2rem; margin: 0 0 6px; font-weight: 600; line-height: 1.2; }
 .docs .docs-title p { color: var(--muted); font-size: .97rem; margin: 0; }
-.docs .docs-stat { display: flex; align-items: center; gap: 9px; flex: none; margin-top: 6px; background: var(--surface); border: 1px solid var(--border); padding: 6px 11px; }
+.docs .docs-stat { display: flex; align-items: center; gap: 9px; flex: none; margin-top: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 6px 11px; }
 .docs .docs-stat-label { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; }
 .docs .docs-stat-count { font-family: var(--font-mono); font-size: .86rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 
@@ -147,19 +143,19 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs section.guide .guide-lede { font-size: 1rem; color: var(--text); }
 .docs section.guide pre { margin: 0 0 14px; }
 
-.docs .base-url { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 16px 0 18px; background: var(--surface); border: 1px solid var(--border); padding: 12px 14px; }
+.docs .base-url { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 16px 0 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 12px 14px; }
 .docs :is(.base-url-label, .param-group-title) { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; }
 .docs .base-url code { font-size: .86rem; }
 /* Addition: several base URLs in one strip, label column aligned. */
 .docs .base-url.rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 14px; }
 .docs .base-url.rows code { justify-self: start; max-width: 100%; overflow-wrap: anywhere; }
-.docs .fmt-grid { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); overflow: hidden; margin: 14px 0; }
+.docs .fmt-grid { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; margin: 14px 0; }
 .docs .fmt { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 14px; background: var(--surface); padding: 10px 14px; align-items: baseline; }
 .docs .fmt > code { justify-self: start; max-width: 100%; overflow-wrap: anywhere; }
 .docs .fmt > span { color: var(--muted); font-size: .86rem; line-height: 1.55; }
 .docs .fmt > b { font-size: .86rem; font-weight: 600; color: var(--text); }
 .docs .fmt-grid.wide .fmt { grid-template-columns: 220px minmax(0, 1fr); }
-.docs .note { border: 1px solid var(--border); background: var(--elevated-2); padding: 12px 14px; font-size: .85rem; color: var(--muted); line-height: 1.6; margin: 14px 0; }
+.docs .note { border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); padding: 12px 14px; font-size: .85rem; color: var(--muted); line-height: 1.6; margin: 14px 0; }
 .docs .note p, .docs section.guide .note p { margin: 0; font-size: inherit; line-height: inherit; }
 .docs .note strong { color: var(--text); }
 
@@ -214,7 +210,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 
 /* ---------- Sample panel ---------- */
 .docs .code-panel { display: flex; flex-direction: column; gap: 12px; }
-.docs .code-block { background: var(--elevated-2); border: 1px solid var(--border); overflow: hidden; }
+.docs .code-block { background: var(--elevated-2); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
 .docs .code-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--border); background: var(--surface); }
 .docs .lang-tabs { display: flex; gap: 2px; min-width: 0; overflow-x: auto; }
 .docs .lang-tab { background: none; border: none; color: var(--dim); font: inherit; font-size: .74rem; font-weight: 600; padding: 5px 9px; min-height: 32px; border-radius: var(--radius); cursor: pointer; transition: background var(--fast), color var(--fast); white-space: nowrap; }
@@ -243,7 +239,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 /* Addition: back to top, only when the index is stacked above a long page. */
 .docs .to-top {
   display: none; position: fixed; right: max(var(--page-pad), 12px); bottom: max(16px, env(safe-area-inset-bottom)); z-index: var(--z-panel);
-  align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: var(--radius);
+  align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-btn);
   background: var(--elevated); color: var(--text); font: inherit; font-size: .8rem; font-weight: 600; cursor: pointer;
   box-shadow: 0 4px 16px var(--shadow);
 }
@@ -254,26 +250,25 @@ html:has(.docs) { scroll-behavior: smooth; }
   .docs section.op { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   .docs .op-aside { position: static; }
 }
-@media (max-width: 900px) {
-  .docs .docs-shell { grid-template-columns: minmax(0, 1fr); }
-  .docs .docs-nav { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); padding: 14px var(--page-pad); }
-  .docs .nav-search { margin-bottom: 10px; }
-  /* The contents fold into a disclosure: no nested scroller above the text. */
+@media (max-width: 899.98px) {
+  /* The rail's sheet variant: not a card but a bar above the text with the Contents button. */
+  .docs .docs-nav { position: static; max-height: none; padding: 8px 0; background: none; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; }
+  .docs .nav-search, .docs .nav-tools { margin-right: 0; }
   .docs .nav-toc { display: block; }
   .docs .nav-toc::details-content { display: block; }
   .docs .nav-toc > summary {
-    display: flex; align-items: center; justify-content: space-between; min-height: 40px; padding: 0 10px; cursor: pointer; list-style: none;
-    border: 1px solid var(--border); background: var(--surface); font-size: .82rem; font-weight: 600; color: var(--text);
+    display: flex; align-items: center; justify-content: space-between; height: 40px; padding: 0 14px; cursor: pointer; list-style: none;
+    border: 1px solid var(--border-strong); border-radius: var(--radius-btn); background: var(--surface);
+    font-size: var(--t-nav); font-weight: 600; color: var(--text);
   }
   .docs .nav-toc > summary::-webkit-details-marker { display: none; }
   .docs .nav-toc > summary::after { content: ''; width: 7px; height: 7px; border: solid currentColor; border-width: 0 2px 2px 0; transform: rotate(45deg) translate(-2px, -2px); transition: transform var(--base) var(--ease); }
   .docs .nav-toc[open] > summary::after { transform: rotate(-135deg) translate(-2px, -2px); }
-  .docs .nav-scroll { overflow: visible; margin-left: 0; padding: 12px 0 0; }
-  .docs .nav-item.active::before { left: 0; }
+  .docs .nav-scroll { overflow: visible; padding: 12px 0 0; }
   .docs .nav-kbd { display: none; }
   .docs .to-top { display: inline-flex; }
   .docs .to-top[hidden] { display: none; }
-  .docs .docs-body { padding: 26px var(--page-pad) 20px; }
+  .docs .docs-body { padding: 18px 0 20px; }
 }
 @media (max-width: 620px) {
   .docs .fmt, .docs .fmt-grid.wide .fmt { grid-template-columns: 1fr; gap: 4px; }
@@ -283,7 +278,8 @@ html:has(.docs) { scroll-behavior: smooth; }
 
 /* Addition: touch. Targets reach 40px, the filter stops iOS zooming into the page. */
 @media (pointer: coarse) {
-  .docs .nav-item, .docs .lang-tab, .docs .group-toggle { min-height: 40px; }
+  .docs .nav-item { min-height: 44px; }
+  .docs .lang-tab, .docs .group-toggle { min-height: 40px; }
   .docs .group-all { min-height: 40px; }
   .docs .nav-search input { font-size: 16px; padding-block: 11px; }
   .docs .code-copy { padding: 9px; min-width: 44px; min-height: 44px; justify-content: center; align-items: center; }

@@ -5,6 +5,7 @@
   import '$lib/docs/docs.css';
   import { initDocs } from '$lib/docs/behaviour';
   import { defaultOpen, restGroupId } from '$lib/docs/groups';
+  import RailLayout from '$lib/shell/RailLayout.svelte';
   import Code from '$lib/docs/Code.svelte';
   import Fields from '$lib/docs/Fields.svelte';
   import Inline from '$lib/docs/Inline.svelte';
@@ -73,7 +74,8 @@
 </svelte:head>
 
 <div class="docs" bind:this={root}>
-  <div class="docs-shell">
+  <RailLayout>
+    {#snippet rail()}
     <aside class="docs-nav">
       <div class="nav-search">
         <svg class="nav-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
@@ -139,6 +141,7 @@
       </nav>
       </details>
     </aside>
+    {/snippet}
 
     <div class="docs-body">
       <header class="docs-title">
@@ -380,7 +383,7 @@
         <a href="https://github.com/cyex-tv/platform/blob/main/openapi/openapi.json">openapi.json</a> · <a href="https://github.com/cyex-tv/platform/blob/main/schema/schema.graphql">schema.graphql</a> · <a href="https://github.com/cyex-tv/platform">Source</a>
       </p>
     </div>
-  </div>
+  </RailLayout>
   <button type="button" class="to-top" hidden aria-label="Back to top">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
     Top
