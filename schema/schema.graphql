@@ -13,6 +13,24 @@ type AccountEditor {
 }
 
 """
+One `searchAccounts` hit: the account's public summary and its linked logins.
+"""
+type AccountHit {
+	account: AccountSummary!
+	"""
+	Twitch first.
+	"""
+	identities: [PublicIdentity!]!
+}
+
+type AccountResults {
+	items: [AccountHit!]!
+	total: Int!
+	page: Int!
+	perPage: Int!
+}
+
+"""
 What an account may do (`users.restrict`).
 """
 type AccountStatus {
@@ -982,6 +1000,15 @@ enum Platform {
 	KICK
 }
 
+"""
+A linked Twitch or Kick account as anyone may see it: no IDs.
+"""
+type PublicIdentity {
+	platform: Platform!
+	login: String!
+	displayName: String!
+}
+
 type Query {
 	"""
 	The signed-in account.
@@ -1021,6 +1048,13 @@ type Query {
 	(newest first). An empty `query` lists every approved, listed emote.
 	"""
 	searchEmotes(query: String!, animated: Boolean, owner: String, nsfw: Boolean, page: Int, perPage: Int, sort: EmoteSort): SearchResults!
+	"""
+	Accounts by Twitch or Kick login or display name (a leading `@` is ignored): exact login
+	first, then login and name prefixes, then similar names. Public fields only; deleted and
+	blocked accounts are never listed. `perPage` is 1 to 50, default 20. 60 searches a minute
+	per account, or per IP signed out (`rate_limited`). An empty `query` finds nobody.
+	"""
+	searchAccounts(query: String!, page: Int, perPage: Int): AccountResults!
 	"""
 	An account's public summary. Null when the account is unknown, deleted or blocked.
 	"""
