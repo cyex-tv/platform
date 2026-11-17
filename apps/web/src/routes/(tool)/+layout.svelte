@@ -80,7 +80,7 @@
   nav { display: flex; gap: 18px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
   nav a { position: relative; padding: 8px 0; color: var(--muted); text-decoration: none; white-space: nowrap;
     font-size: .74rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; transition: color var(--fast); }
-  nav a:hover { color: var(--text); }
+  @media (hover: hover) and (pointer: fine) { nav a:hover { color: var(--text); } }
   nav a::after { content: ''; position: absolute; inset: auto 0 2px; height: 2px; background: var(--accent);
     scale: 0 1; transition: scale var(--base) var(--ease); }
   nav a[aria-current='page'] { color: var(--text); }
@@ -88,11 +88,12 @@
   nav a:active { opacity: .6; transition: none; }
   .end { display: flex; align-items: center; gap: 8px; margin-left: auto; flex: none; }
   .end :global(.theme) { width: 32px; height: 32px; border-radius: var(--radius); border: 1px solid var(--border-strong); transition: background-color var(--fast), color var(--fast); }
-  .end :global(.theme:hover) { background: var(--surface-hover); border-color: var(--border-strong); }
+  @media (hover: hover) and (pointer: fine) { .end :global(.theme:hover) { background: var(--surface-hover); border-color: var(--border-strong); } }
   .end :global(.theme:active) { transform: none; opacity: .6; transition: none; }
   .skip { position: fixed; left: 12px; top: -60px; z-index: var(--z-toast); padding: 8px 12px; background: var(--text); color: var(--bg); }
   .skip:focus { top: 12px; }
   main:focus { outline: none; }
+  @media (prefers-reduced-motion: reduce) { nav a::after { transition: none; } }
   @media (max-width: 640px) {
     .inner { flex-wrap: wrap; gap: 4px 16px; }
     nav { order: 3; flex-basis: 100%; }

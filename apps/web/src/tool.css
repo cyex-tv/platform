@@ -110,7 +110,7 @@
 html:has(.tool) { background: #1e1f23; }
 :root[data-theme='light']:has(.tool) { background: #f3f3f4; }
 
-.tool a { color: var(--accent-text); }
+.tool :where(a) { color: var(--accent-text); } /* zero specificity: buttons, tabs and rows set their own colour */
 .tool ::selection { background: var(--border-strong); }
 .tool :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 0; }
 .tool h1, .tool h2, .tool h3 { letter-spacing: 0; font-weight: 700; margin: 0; }
@@ -142,13 +142,14 @@ html:has(.tool) { background: #1e1f23; }
   transition: background-color var(--fast), border-color var(--fast), color var(--fast); }
 .ui-btn svg { flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ui-btn.primary { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
-.ui-btn.primary:hover { background: var(--accent-2); }
 .ui-btn.secondary { background: var(--surface); border-color: var(--border-strong); }
-.ui-btn.secondary:hover { background: var(--surface-hover); }
 .ui-btn.ghost { background: none; color: var(--muted); }
-.ui-btn.ghost:hover { background: var(--surface-hover); color: var(--text); }
 .ui-btn.danger { background: var(--surface); border-color: var(--border-strong); color: var(--red); }
-.ui-btn.danger:hover { background: var(--surface-hover); }
+@media (hover: hover) and (pointer: fine) {
+  .ui-btn.primary:hover { background: var(--accent-2); }
+  .ui-btn.secondary:hover, .ui-btn.danger:hover { background: var(--surface-hover); }
+  .ui-btn.ghost:hover { background: var(--surface-hover); color: var(--text); }
+}
 .ui-btn.danger.armed { background: color-mix(in srgb, var(--red) 14%, transparent); border-color: var(--red); }
 .ui-btn.small { padding: 7px 13px; font-size: .78rem; }
 .ui-btn:active { opacity: .6; transition: none; }
@@ -158,7 +159,7 @@ html:has(.tool) { background: #1e1f23; }
 .ui-icon { display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0; flex: none;
   border: 0; border-radius: var(--radius); background: transparent; color: var(--muted); cursor: pointer;
   transition: background-color var(--fast), color var(--fast); }
-.ui-icon:hover { background: var(--surface-hover); color: var(--text); }
+@media (hover: hover) and (pointer: fine) { .ui-icon:hover { background: var(--surface-hover); color: var(--text); } }
 .ui-icon:active { opacity: .6; transition: none; }
 .ui-icon svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
@@ -168,7 +169,7 @@ html:has(.tool) { background: #1e1f23; }
 .ui-input { width: 100%; min-width: 0; padding: 10px 12px; font: inherit; font-size: .89rem; color: var(--text);
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); outline: none;
   transition: border-color var(--fast), background-color var(--fast); }
-.ui-input:focus-visible { border-color: var(--accent-border); background: var(--surface-hover); outline: none; }
+.ui-input:focus-visible { border-color: var(--accent-border); background: var(--surface-hover); outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .ui-input::placeholder { color: var(--dim); }
 .ui-input[aria-invalid='true'] { border-color: var(--red); }
 select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
@@ -197,11 +198,13 @@ select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
   background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); }
 .ui-seg > * { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border: 0; border-radius: var(--radius-sm);
   background: none; font: inherit; font-size: .8rem; font-weight: 600; color: var(--muted); cursor: pointer; text-decoration: none; white-space: nowrap; }
-.ui-seg > *:hover { color: var(--text); }
+@media (hover: hover) and (pointer: fine) { .ui-seg > *:hover { color: var(--text); } }
+.ui-seg > *:focus-visible { outline-offset: -2px; }
 .ui-seg > [aria-current='page'], .ui-seg > [aria-pressed='true'] { background: var(--accent-dim); color: var(--accent-text); }
 
 /* Cards: square in web tools. */
 .ui-card { background: var(--surface); border: 1px solid var(--border); padding: 19px 22px; }
+.ui-card > h2 { font-size: .8rem; }
 .ui-card > h2 + * { margin-top: 12px; }
 .ui-panel { background: var(--surface); border: 1px solid var(--border); }
 .ui-panel > header { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--border); }
@@ -218,7 +221,9 @@ select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
 .ui-list { list-style: none; margin: 0; padding: 0; }
 .ui-list > li { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--border); }
 .ui-list > li:last-child { border-bottom: 0; }
-.ui-list > li:hover { background: var(--row-hover); box-shadow: inset 2px 0 0 var(--border-strong); }
+@media (hover: hover) and (pointer: fine) {
+  .ui-list > li:hover { background: var(--row-hover); box-shadow: inset 2px 0 0 var(--border-strong); }
+}
 
 /* Chips: neutral, or a status tint. */
 .ui-chip { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: var(--radius);
@@ -235,7 +240,10 @@ select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
 @keyframes ui-spin { to { rotate: 360deg; } }
 .ui-skeleton { background: var(--surface-hover); animation: ui-shimmer 1.4s ease-in-out infinite alternate; }
 @keyframes ui-shimmer { to { background: var(--elevated-2); } }
-@media (prefers-reduced-motion: reduce) { .ui-spinner, .ui-skeleton { animation: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .ui-spinner, .ui-skeleton, .ui-dialog[open] { animation: none; }
+  .ui-switch::before { transition: none; }
+}
 
 /* Dialog. */
 .ui-dialog { padding: 0; border: 1px solid var(--border-strong); background: var(--elevated); color: var(--text);

@@ -145,7 +145,7 @@
 <style>
   .crumbs { margin-bottom: 16px; color: var(--dim); font-size: var(--text-sub); }
   .crumbs a { color: var(--muted); text-decoration: none; }
-  .crumbs a:hover { color: var(--text); }
+  @media (hover: hover) and (pointer: fine) { .crumbs a:hover { color: var(--text); } }
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
   .row { display: flex; gap: 8px; }
   .gap { margin-top: 12px; }

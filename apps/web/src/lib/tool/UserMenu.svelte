@@ -53,7 +53,7 @@
   .who { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px 0 5px; border: 1px solid var(--border-strong);
     border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; font: inherit; font-weight: 600;
     transition: background-color var(--fast); }
-  .who:hover { background: var(--surface-hover); }
+  @media (hover: hover) and (pointer: fine) { .who:hover { background: var(--surface-hover); } }
   .who:active { opacity: .6; transition: none; }
   .who svg { fill: none; stroke: var(--dim); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .name { max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -63,7 +63,7 @@
   @keyframes pop { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
   .pop a, .pop button { display: flex; align-items: center; width: 100%; height: 30px; padding: 0 8px; border: 0; border-radius: var(--radius);
     background: none; color: var(--text); font: inherit; text-align: left; text-decoration: none; cursor: pointer; }
-  .pop a:hover, .pop button:hover { background: var(--surface-hover); }
+  @media (hover: hover) and (pointer: fine) { .pop a:hover, .pop button:hover { background: var(--surface-hover); } }
   .pop a:focus-visible, .pop button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
   .pop button { color: var(--red); }
   hr { margin: 4px 0; border: 0; border-top: 1px solid var(--border); }

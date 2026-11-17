@@ -72,7 +72,7 @@
             </span>
             <span class="what">
               <strong>{s.name}</strong>
-              <span class="ui-hint">{s.kind === 'PERSONAL' ? 'Personal' : 'Channel'}{s.owner?.id !== session.me?.id ? ` · by ${s.owner?.displayName}` : ''}</span>
+              <span class="ui-hint">{s.kind === 'PERSONAL' ? 'Personal' : s.kind === 'GLOBAL' ? 'Global' : 'Channel'}{s.owner && s.owner.id !== session.me?.id ? ` · by ${s.owner.displayName}` : ''}</span>
             </span>
             <span class="ui-mono ui-hint">{count(s.emotes.length)} / {count(s.capacity)}</span>
           </a>

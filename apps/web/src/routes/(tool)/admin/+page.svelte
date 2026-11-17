@@ -49,7 +49,7 @@
 <style>
   .cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
   .card { display: grid; gap: 6px; height: 100%; color: var(--text); text-decoration: none; transition: background-color var(--fast), border-color var(--fast); }
-  .card:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+  @media (hover: hover) and (pointer: fine) { .card:hover { background: var(--surface-hover); border-color: var(--border-strong); } }
   .card:active { opacity: .6; transition: none; }
   .top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
   .figure { font-size: 1.1rem; font-weight: 600; }

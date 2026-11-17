@@ -28,8 +28,10 @@
     labels?: boolean;
     href?: string;
     eager?: boolean;
+    /** A short status shown as a label before the others (e.g. "pending"). */
+    note?: string;
   };
-  let { emote: e, density = 'comfortable', creator = true, labels = true, href, eager = false }: Props = $props();
+  let { emote: e, density = 'comfortable', creator = true, labels = true, href, eager = false, note }: Props = $props();
 
   let hot = $state(false);
   let loaded = $state(false);
@@ -39,7 +41,7 @@
   // The picture fills 3/4 of the box height; `sizes` lets the browser pick the right file.
   const shownW = $derived(Math.round((ART[density] * 0.75 * dims.width) / dims.height));
   const tags = $derived(
-    labels ? [e.animated && 'animated', e.flags?.zeroWidth && 'zero-width', wide && 'wide'].filter(Boolean) as string[] : [],
+    [note, ...(labels ? [e.animated && 'animated', e.flags?.zeroWidth && 'zero-width', wide && 'wide'] : [])].filter(Boolean) as string[],
   );
 
   function heat(on: boolean) {

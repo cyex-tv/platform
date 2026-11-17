@@ -232,7 +232,7 @@
 <style>
   .crumbs { margin-bottom: 16px; color: var(--dim); font-size: var(--text-sub); }
   .crumbs a { color: var(--muted); text-decoration: none; }
-  .crumbs a:hover { color: var(--text); }
+  @media (hover: hover) and (pointer: fine) { .crumbs a:hover { color: var(--text); } }
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
   .stage { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 24px; min-height: 200px;
     padding: 24px 0; border-bottom: 1px solid var(--border); text-align: center; }

@@ -4,7 +4,7 @@
   import { count } from '$lib/format';
   import type { MyEmotesQuery } from '$lib/gql/graphql';
   import { MY_EMOTES } from '$lib/queries';
-  import Thumb from '$lib/tool/Thumb.svelte';
+  import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import { STATE_LABEL } from '$lib/tool/state';
 
   const PER_PAGE = 60;
@@ -20,6 +20,12 @@
       .catch((e) => (problem = e.message));
   });
 
+  // Only what needs attention gets a label; approved emotes are the normal case.
+  const states = $derived(
+    Object.fromEntries(
+      (result?.items ?? []).filter((e) => e.state !== 'APPROVED').map((e) => [e.id, STATE_LABEL[e.state].toLowerCase()]),
+    ),
+  );
   const pages = $derived(result ? Math.max(1, Math.ceil(result.total / PER_PAGE)) : 1);
 </script>
 
@@ -41,9 +47,7 @@
 {#if problem}
   <p class="ui-error" role="alert">{problem}</p>
 {:else if !result}
-  <ul class="grid" aria-busy="true" aria-label="Loading">
-    {#each Array(12) as _}<li class="tile ui-skeleton" aria-hidden="true"></li>{/each}
-  </ul>
+  <EmoteGrid items={[]} loading skeletons={12} creator={false} labels={false} />
 {:else if result.items.length === 0}
   <div class="ui-empty">
     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01" /></svg>
@@ -51,17 +55,14 @@
     <a class="ui-btn secondary" href="/me/upload">Upload an emote</a>
   </div>
 {:else}
-  <ul class="grid">
-    {#each result.items as e (e.id)}
-      <li>
-        <a class="tile" href="/me/emotes/{e.id}">
-          <Thumb emote={e} name={e.name} />
-          <span class="name">{e.name}</span>
-          <span class="ui-chip {e.state.toLowerCase()}">{STATE_LABEL[e.state]}</span>
-        </a>
-      </li>
-    {/each}
-  </ul>
+  <EmoteGrid
+    items={result.items}
+    creator={false}
+    eager={12}
+    label="Your emotes"
+    href={(e) => `/me/emotes/${e.id}`}
+    note={(e) => (e.id in states ? states[e.id] : undefined)}
+  />
   {#if pages > 1}
     <nav class="paging ui-actions" aria-label="Pages">
       {#if current > 1}<a class="ui-btn secondary small" href="?page={current - 1}">Previous</a>{/if}
@@ -72,14 +73,5 @@
 {/if}
 
 <style>
-  .grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
-    gap: 1px; background: var(--border); border: 1px solid var(--border); }
-  .grid > li { background: var(--surface); }
-  .tile { display: grid; justify-items: center; gap: 8px; padding: 16px 10px 12px; min-height: 140px; color: var(--text);
-    text-decoration: none; transition: background-color var(--fast); }
-  a.tile:hover { background: var(--surface-hover); }
-  a.tile:active { opacity: .6; transition: none; }
-  li.tile { min-height: 140px; }
-  .name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .paging { justify-content: center; margin-top: 20px; }
 </style>

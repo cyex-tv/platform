@@ -117,10 +117,10 @@
 <style>
   .queue { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 16px; }
   .queue > li { display: grid; grid-template-rows: auto 1fr auto; min-width: 0; }
-  .stage { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 16px; min-height: 150px; padding: 16px;
+  .stage { display: flex; align-items: flex-end; justify-content: center; gap: 16px; height: 150px; padding: 16px; overflow: hidden;
     border-bottom: 1px solid var(--border); background: var(--bg); }
-  .stage img { max-width: 100%; height: auto; }
-  .info { display: grid; gap: 4px; padding: 10px 14px; min-width: 0; }
+  .stage img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+  .info { display: grid; align-content: start; gap: 4px; padding: 10px 14px; min-width: 0; }
   .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
   .tags .ui-chip { text-transform: none; letter-spacing: 0; font-size: .7rem; font-weight: 600; }
