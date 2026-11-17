@@ -133,7 +133,7 @@
 {/snippet}
 
 {#snippet body(onpick?: () => void)}
-  {#if head}<div class="head">{@render head()}</div>{/if}
+  {#if head}<div class="head" class:alone={!navigable && !children}>{@render head()}</div>{/if}
   {#if navigable}<nav aria-label={label} use:arrowNav>{@render rows(onpick)}</nav>{/if}
   {#if children}<div class="extra">{@render children()}</div>{/if}
   {#if foot && !narrow}<div class="foot">{@render foot()}</div>{/if}
@@ -173,6 +173,7 @@
   /* Before hydration on a narrow screen: no full rail above the content, the strip follows. */
   @media (max-width: 899.98px) { .rail { display: none; } }
   .head { padding: 2px 2px 12px; margin-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .head.alone { border-bottom: 0; margin-bottom: 0; }
   .group + .group { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
   /* Collapsible groups sit together like rows, without hairlines between them. */
   .group.sub + .group.sub, .group.joined, .group + .group.sub:not(:has(.caption)) { margin-top: 1px; padding-top: 0; border-top: 0; }
