@@ -2,6 +2,19 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Account editors (branch `feat/account-editors`)
+
+ADR 0014. An account lets others work on all its sets and channels, each with permission flags, like 7TV's editors (studied from 7TV's public help pages; no code taken).
+
+- [x] Flags: `emotes` (members, aliases, the active sets too), `sets` (create, rename, delete, capacity up to the default, a channel's active set and settings), `editors` (manage editors within your own flags), `profile` (stored for cosmetics). The owner holds all of them.
+- [x] Migration `20261120000001_account_editors.sql` (additive), `crates/db/src/editors.rs`, `apps/api/src/editors.rs`; set and channel checks in `catalog` name the flag they need. Per-set editors are unchanged.
+- [x] GraphQL (additive): `accountEditors`, `editorOf`, `editorSets`, `editorChannels`, `addAccountEditor`, `updateAccountEditor`, `removeAccountEditor`, `CreateSetInput.ownerId`. `schema/schema.graphql` regenerated; the OpenAPI spec is unchanged (REST has no editor routes).
+- [x] Rules: no escalation (grant only flags you hold, change only editors within your flags), the owner can't be added or removed, editors can leave, 20 editors per account, 60 editor changes an hour per caller, blocked or deleted accounts can't be added and their grants count for nothing, every change audited (and every set or channel change made through a grant, with `"via": "account_editor"`).
+- [x] Tests: `apps/api/tests/sec_account_editors.rs` against Postgres in CI (each flag, IDOR, escalation, immediate loss of access, blocked accounts, limits); unit tests in `apps/api/src/editors.rs` and `apps/web/src/lib/tool/editors.test.ts`.
+- [x] Website: `/me/editors` (rail under Settings): your editors with their permissions, add by Twitch or Kick login with checkboxes, change, remove; "You edit" with links to their sets and channels, and leave. `/me/sets` and `/me/channels` show what you manage for others, grouped and labelled with the owner; a new set can be made for an account you edit with `sets`. The set page shows what you may do there. The dev mock has sample editors and accounts you edit.
+- [ ] Manual: the pages against the mock in the browser at phone and desktop widths, both themes.
+- Open questions (defaults taken): an accept step like 7TV's invitations, notifications when a grant changes, whether editors may add the owner's private emotes.
+
 ## Security assessment 2026-11 (done 2026/11/17; open items listed)
 
 Report: `docs/security/assessment-2026-11.md`. 0 critical, 2 high, 14 medium, 19 low. Both highs and 9 mediums fixed, each with a regression test that ran in CI against Postgres: platform PRs 38 (web headers, `back` check), 39 (blocklist on every frame, full purge), 40 (target seniority), 41 (bidi and invisible characters refused on write), 42 (re-review renamed emotes, no pending names on public topics), 43 (GraphQL socket subscriptions only, caps, bounded resume); extension PR 10 (numeric ids). Infra PR 5 (age-encrypted backups) waits for the owner. The owner extended merge rights to these security PRs.

@@ -160,6 +160,25 @@ pub async fn find_identity(
     .await?)
 }
 
+/// The account whose identity on `platform` has this login (case-insensitive). Logins change and
+/// can be reused, so the identity refreshed last wins.
+pub async fn find_by_login(
+    conn: &mut PgConnection,
+    platform: Platform,
+    login: &str,
+) -> DbResult<Option<Identity>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {IDENTITY} FROM identities
+         WHERE platform = $1 AND lower(login) = lower($2)
+         ORDER BY refreshed_at DESC
+         LIMIT 1"
+    ))
+    .bind(platform)
+    .bind(login)
+    .fetch_optional(conn)
+    .await?)
+}
+
 /// Links another platform's identity to a signed-in account. Linking one that's already on this
 /// account just refreshes it.
 pub async fn link(

@@ -90,6 +90,82 @@ pub struct AccountSummary {
     pub avatar: Option<String>,
 }
 
+// Account editors (ADR 0014)
+
+/// What an account editor may do on the account they edit. The account's owner has all of them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "lowercase")]
+pub enum EditorPermission {
+    /// Add, remove, rename and alias emotes in the owner's sets, the active channel sets too.
+    Emotes,
+    /// Create, rename and delete sets, change their capacity, and change the owner's channels'
+    /// active set and settings.
+    Sets,
+    /// Add, change and remove editors, never granting more than you hold.
+    Editors,
+    /// The owner's profile and cosmetics. Stored now, used by the cosmetics phase.
+    Profile,
+}
+
+impl EditorPermission {
+    pub const ALL: [Self; 4] = [Self::Emotes, Self::Sets, Self::Editors, Self::Profile];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Emotes => "emotes",
+            Self::Sets => "sets",
+            Self::Editors => "editors",
+            Self::Profile => "profile",
+        }
+    }
+
+    /// `None` for a name this version doesn't know.
+    pub fn parse(s: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|p| p.as_str() == s)
+    }
+}
+
+/// Someone who edits an account, with what they may do.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct AccountEditor {
+    pub account: AccountSummary,
+    pub permissions: Vec<EditorPermission>,
+    /// Who added them: the owner, or an editor with `editors`.
+    pub granted_by: Option<AccountSummary>,
+    pub granted_at: String,
+    pub updated_at: String,
+}
+
+/// An account you edit, with what you may do there.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct EditedAccount {
+    pub account: AccountSummary,
+    pub permissions: Vec<EditorPermission>,
+    pub granted_at: String,
+}
+
+/// Who to add as an editor: an account ID, or a Twitch or Kick login.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
+#[cfg_attr(feature = "graphql", graphql(name = "AddAccountEditorInput"))]
+pub struct AddAccountEditor {
+    /// The account to add editors to. Empty: your own.
+    #[serde(default)]
+    pub owner_id: Option<String>,
+    /// The editor's cyex.tv account ID. Or give `platform` and `login`.
+    #[serde(default)]
+    pub account_id: Option<String>,
+    #[serde(default)]
+    pub platform: Option<Platform>,
+    #[serde(default)]
+    pub login: Option<String>,
+    /// At least one.
+    pub permissions: Vec<EditorPermission>,
+}
+
 // Channels
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -298,6 +374,9 @@ pub struct CreateSet {
     pub name: String,
     /// `CHANNEL` or `PERSONAL`. The global set exists already.
     pub kind: SetKind,
+    /// Make the set for an account you edit with `sets` (ADR 0014). Empty: for yourself.
+    #[serde(default)]
+    pub owner_id: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

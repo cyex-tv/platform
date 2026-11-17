@@ -1,4 +1,18 @@
 """
+Someone who edits an account, with what they may do.
+"""
+type AccountEditor {
+	account: AccountSummary!
+	permissions: [EditorPermission!]!
+	"""
+	Who added them: the owner, or an editor with `editors`.
+	"""
+	grantedBy: AccountSummary
+	grantedAt: String!
+	updatedAt: String!
+}
+
+"""
 What an account may do (`users.restrict`).
 """
 type AccountStatus {
@@ -20,6 +34,26 @@ type AccountSummary {
 	id: String!
 	displayName: String!
 	avatar: String
+}
+
+"""
+Who to add as an editor: an account ID, or a Twitch or Kick login.
+"""
+input AddAccountEditorInput {
+	"""
+	The account to add editors to. Empty: your own.
+	"""
+	ownerId: String
+	"""
+	The editor's cyex.tv account ID. Or give `platform` and `login`.
+	"""
+	accountId: String
+	platform: Platform
+	login: String
+	"""
+	At least one.
+	"""
+	permissions: [EditorPermission!]!
 }
 
 input AddSetEmoteInput {
@@ -81,6 +115,42 @@ input CreateSetInput {
 	`CHANNEL` or `PERSONAL`. The global set exists already.
 	"""
 	kind: SetKind!
+	"""
+	Make the set for an account you edit with `sets` (ADR 0014). Empty: for yourself.
+	"""
+	ownerId: String
+}
+
+"""
+An account you edit, with what you may do there.
+"""
+type EditedAccount {
+	account: AccountSummary!
+	permissions: [EditorPermission!]!
+	grantedAt: String!
+}
+
+"""
+What an account editor may do on the account they edit. The account's owner has all of them.
+"""
+enum EditorPermission {
+	"""
+	Add, remove, rename and alias emotes in the owner's sets, the active channel sets too.
+	"""
+	EMOTES
+	"""
+	Create, rename and delete sets, change their capacity, and change the owner's channels'
+	active set and settings.
+	"""
+	SETS
+	"""
+	Add, change and remove editors, never granting more than you hold.
+	"""
+	EDITORS
+	"""
+	The owner's profile and cosmetics. Stored now, used by the cosmetics phase.
+	"""
+	PROFILE
 }
 
 type Emote {
@@ -255,11 +325,13 @@ type Mutation {
 	"""
 	unlinkIdentity(platform: Platform!): Me!
 	"""
-	Change a channel's active set and settings. Only the channel's owner.
+	Change a channel's active set and settings. The channel's owner, or their account editors
+	with `SETS`.
 	"""
 	updateChannelSettings(platform: Platform!, id: String!, input: UpdateChannelSettingsInput!): Channel!
 	"""
-	Create a channel set, or your personal set (one per account).
+	Create a channel set, or your personal set (one per account). With `ownerId`, for an
+	account you edit with `SETS`.
 	"""
 	createSet(input: CreateSetInput!): EmoteSet!
 	"""
@@ -267,7 +339,8 @@ type Mutation {
 	"""
 	updateSet(id: String!, input: UpdateSetInput!): EmoteSet!
 	"""
-	Delete a set. Owner only. A channel's active set can't be deleted.
+	Delete a set. Its owner, or their account editors with `SETS`. A channel's active set
+	can't be deleted.
 	"""
 	deleteSet(id: String!): Boolean!
 	"""
@@ -283,13 +356,30 @@ type Mutation {
 	"""
 	removeSetEmote(setId: String!, emoteId: String!): Boolean!
 	"""
-	Make someone an editor of a set. Owner only.
+	Make someone an editor of a set. Its owner, or their account editors with `EDITORS` and
+	`EMOTES`.
 	"""
 	addSetEditor(setId: String!, accountId: String!): Boolean!
 	"""
 	Remove an editor. Owner, or the editor themselves.
 	"""
 	removeSetEditor(setId: String!, accountId: String!): Boolean!
+	"""
+	Make someone an editor of your account, or of an account you edit with `EDITORS` (ADR
+	0014). Give their account ID, or a platform and login. You can only grant permissions you
+	hold. At most 20 editors per account. Audited.
+	"""
+	addAccountEditor(input: AddAccountEditorInput!): AccountEditor!
+	"""
+	Change an account editor's permissions. `ownerId` is the account edited; empty for yours.
+	Audited.
+	"""
+	updateAccountEditor(ownerId: String, accountId: String!, permissions: [EditorPermission!]!): AccountEditor!
+	"""
+	Remove an account editor: the owner, an editor with `EDITORS`, or the editor themselves
+	(with `ownerId` set to the account they leave). False when they weren't one. Audited.
+	"""
+	removeAccountEditor(ownerId: String, accountId: String!): Boolean!
 	"""
 	Change an emote's name, tags or flags. Owner, or `emotes.edit_any`.
 	"""
@@ -447,6 +537,23 @@ type Query {
 	Your channels: one per linked platform you have signed in with.
 	"""
 	myChannels: [Channel!]!
+	"""
+	An account's editors (ADR 0014): yours, or, with `accountId`, those of an account you edit
+	with the `EDITORS` permission.
+	"""
+	accountEditors(accountId: String): [AccountEditor!]!
+	"""
+	The accounts you edit, with what you may do on each.
+	"""
+	editorOf: [EditedAccount!]!
+	"""
+	The sets of the accounts you edit. Each set names its owner.
+	"""
+	editorSets: [EmoteSet!]!
+	"""
+	The channels of the accounts you edit.
+	"""
+	editorChannels: [Channel!]!
 	"""
 	Every permission name a role can hold.
 	"""

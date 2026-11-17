@@ -31,7 +31,7 @@
     markCurrent(
       [
         { caption: 'Library', items: LIBRARY.map(({ href, label, icon }) => ({ href, label, icon })) },
-        { caption: 'Settings', items: row(ACCOUNT.href, ACCOUNT.label, ACCOUNT.icon) },
+        { caption: 'Settings', items: [...row(ACCOUNT.href, ACCOUNT.label, ACCOUNT.icon), ...row('/me/editors', 'Editors', 'users')] },
       ],
       path,
     ),

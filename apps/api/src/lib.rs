@@ -6,6 +6,7 @@ pub mod abuse;
 pub mod admin;
 pub mod catalog;
 pub mod cors;
+pub mod editors;
 pub mod gql;
 pub mod limits;
 pub mod moderation;
