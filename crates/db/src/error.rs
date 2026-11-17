@@ -38,6 +38,11 @@ pub enum DbError {
     RoleNameTaken,
     #[error("unknown permission: {0}")]
     UnknownPermission(String),
+    /// The account has `editors::MAX_PER_ACCOUNT` editors already.
+    #[error("the account has the most editors it can have")]
+    TooManyEditors,
+    #[error("the account is an editor already")]
+    AlreadyEditor,
 }
 
 pub type DbResult<T> = Result<T, DbError>;

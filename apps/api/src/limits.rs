@@ -1,7 +1,8 @@
 //! Request rate limits (PLAN.md Phase 7), per IP for every route class and per account on
 //! GraphQL. A request over a limit gets `429 rate_limited` with `Retry-After`.
 //!
-//! The upload's 20 an hour per account lives in `upload`, since it counts what was made.
+//! The upload's 20 an hour per account lives in `upload`, since it counts what was made. Editor
+//! changes are checked per account in `editors`.
 
 use std::net::SocketAddr;
 
@@ -29,6 +30,8 @@ pub struct Rates {
     pub reads: Rate,
     /// Opening `/v1/gql/ws`, per IP.
     pub socket: Rate,
+    /// Adding, changing and removing account editors, per account (ADR 0014).
+    pub editors: Rate,
 }
 
 impl Default for Rates {
@@ -40,6 +43,7 @@ impl Default for Rates {
             upload: Rate::per_hour(30),
             reads: Rate::per_minute(1200),
             socket: Rate::per_minute(60),
+            editors: Rate::per_hour(60),
         }
     }
 }
@@ -51,6 +55,7 @@ pub struct Limits {
     pub upload: Limiter,
     pub reads: Limiter,
     pub socket: Limiter,
+    pub editors: Limiter,
     /// Take the client IP from `CF-Connecting-IP` (`CYEX_TV_TRUST_CLOUDFLARE=true`).
     pub trust_cloudflare: bool,
 }
@@ -64,6 +69,7 @@ impl Limits {
             upload: Limiter::new(rates.upload),
             reads: Limiter::new(rates.reads),
             socket: Limiter::new(rates.socket),
+            editors: Limiter::new(rates.editors),
             trust_cloudflare,
         }
     }

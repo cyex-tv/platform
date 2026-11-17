@@ -18,10 +18,11 @@ use cyex_tv_hub::Message as HubMessage;
 use cyex_tv_hub::topics as hub_topics;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::model::{
-    AccountStatus, AccountSummary, AddSetEmote, AuditEntry, Channel, CreateRole, CreateSet, Emote,
-    EmotePage, EmoteSet, EmoteSort, Event, Identity, Me, Notification, PersonalSetEntry, Platform,
-    Report, ReportAction, ReportQueue, ReviewQueue, Role, SearchResults, SetEmote,
-    UpdateChannelSettings, UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote,
+    AccountEditor, AccountStatus, AccountSummary, AddAccountEditor, AddSetEmote, AuditEntry,
+    Channel, CreateRole, CreateSet, EditedAccount, EditorPermission, Emote, EmotePage, EmoteSet,
+    EmoteSort, Event, Identity, Me, Notification, PersonalSetEntry, Platform, Report, ReportAction,
+    ReportQueue, ReviewQueue, Role, SearchResults, SetEmote, UpdateChannelSettings, UpdateEmote,
+    UpdateRole, UpdateSet, UpdateSetEmote,
 };
 use cyex_tv_shared::permissions;
 use futures_util::Stream;
@@ -30,7 +31,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::state::AppState;
-use crate::{abuse, admin, catalog, moderation, search};
+use crate::{abuse, admin, catalog, editors, moderation, search};
 
 pub type ApiSchema = Schema<Query, Mutation, Subscription>;
 
@@ -357,6 +358,43 @@ impl Query {
             .map_err(api_error)
     }
 
+    /// An account's editors (ADR 0014): yours, or, with `accountId`, those of an account you edit
+    /// with the `EDITORS` permission.
+    async fn account_editors(
+        &self,
+        ctx: &Context<'_>,
+        account_id: Option<String>,
+    ) -> Result<Vec<AccountEditor>> {
+        let caller = caller(ctx)?;
+        editors::account_editors(state(ctx), caller, account_id.as_deref())
+            .await
+            .map_err(api_error)
+    }
+
+    /// The accounts you edit, with what you may do on each.
+    async fn editor_of(&self, ctx: &Context<'_>) -> Result<Vec<EditedAccount>> {
+        let caller = caller(ctx)?;
+        editors::editor_of(state(ctx), caller)
+            .await
+            .map_err(api_error)
+    }
+
+    /// The sets of the accounts you edit. Each set names its owner.
+    async fn editor_sets(&self, ctx: &Context<'_>) -> Result<Vec<EmoteSet>> {
+        let caller = caller(ctx)?;
+        editors::editor_sets(state(ctx), caller)
+            .await
+            .map_err(api_error)
+    }
+
+    /// The channels of the accounts you edit.
+    async fn editor_channels(&self, ctx: &Context<'_>) -> Result<Vec<Channel>> {
+        let caller = caller(ctx)?;
+        editors::editor_channels(state(ctx), caller)
+            .await
+            .map_err(api_error)
+    }
+
     /// Every permission name a role can hold.
     async fn permissions(&self) -> Vec<String> {
         permissions::ALL.iter().map(|p| (*p).to_owned()).collect()
@@ -475,7 +513,8 @@ impl Mutation {
         me_of(ctx, caller).await
     }
 
-    /// Change a channel's active set and settings. Only the channel's owner.
+    /// Change a channel's active set and settings. The channel's owner, or their account editors
+    /// with `SETS`.
     async fn update_channel_settings(
         &self,
         ctx: &Context<'_>,
@@ -489,7 +528,8 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Create a channel set, or your personal set (one per account).
+    /// Create a channel set, or your personal set (one per account). With `ownerId`, for an
+    /// account you edit with `SETS`.
     async fn create_set(&self, ctx: &Context<'_>, input: CreateSet) -> Result<EmoteSet> {
         let caller = caller(ctx)?;
         catalog::create_set(state(ctx), caller, &input)
@@ -510,7 +550,8 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Delete a set. Owner only. A channel's active set can't be deleted.
+    /// Delete a set. Its owner, or their account editors with `SETS`. A channel's active set
+    /// can't be deleted.
     async fn delete_set(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
         let caller = caller(ctx)?;
         catalog::delete_set(state(ctx), caller, &id)
@@ -565,7 +606,8 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Make someone an editor of a set. Owner only.
+    /// Make someone an editor of a set. Its owner, or their account editors with `EDITORS` and
+    /// `EMOTES`.
     async fn add_set_editor(
         &self,
         ctx: &Context<'_>,
@@ -587,6 +629,55 @@ impl Mutation {
     ) -> Result<bool> {
         let caller = caller(ctx)?;
         catalog::remove_set_editor(state(ctx), caller, &set_id, &account_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Make someone an editor of your account, or of an account you edit with `EDITORS` (ADR
+    /// 0014). Give their account ID, or a platform and login. You can only grant permissions you
+    /// hold. At most 20 editors per account. Audited.
+    async fn add_account_editor(
+        &self,
+        ctx: &Context<'_>,
+        input: AddAccountEditor,
+    ) -> Result<AccountEditor> {
+        let caller = caller(ctx)?;
+        editors::add(state(ctx), caller, &input)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Change an account editor's permissions. `ownerId` is the account edited; empty for yours.
+    /// Audited.
+    async fn update_account_editor(
+        &self,
+        ctx: &Context<'_>,
+        owner_id: Option<String>,
+        account_id: String,
+        permissions: Vec<EditorPermission>,
+    ) -> Result<AccountEditor> {
+        let caller = caller(ctx)?;
+        editors::update(
+            state(ctx),
+            caller,
+            owner_id.as_deref(),
+            &account_id,
+            &permissions,
+        )
+        .await
+        .map_err(api_error)
+    }
+
+    /// Remove an account editor: the owner, an editor with `EDITORS`, or the editor themselves
+    /// (with `ownerId` set to the account they leave). False when they weren't one. Audited.
+    async fn remove_account_editor(
+        &self,
+        ctx: &Context<'_>,
+        owner_id: Option<String>,
+        account_id: String,
+    ) -> Result<bool> {
+        let caller = caller(ctx)?;
+        editors::remove(state(ctx), caller, owner_id.as_deref(), &account_id)
             .await
             .map_err(api_error)
     }

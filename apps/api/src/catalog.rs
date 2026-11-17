@@ -2,8 +2,10 @@
 //!
 //! Who may change a set:
 //! - the global set: holders of `global_set.edit`;
-//! - any other set: its owner and its editors; anyone else needs `sets.edit_any`;
-//! - deleting a set and managing its editors: its owner (or `sets.edit_any`).
+//! - any other set: its owner, its editors, and the owner's account editors holding the flag the
+//!   change needs (ADR 0014); anyone else needs `sets.edit_any`;
+//! - deleting a set and managing its editors: its owner, account editors with `sets` (delete) or
+//!   `editors` and `emotes` (set editors), or `sets.edit_any`.
 //!
 //! Every write runs in one transaction with its outbox event (ADR 0005) and, when it grants
 //! something or relies on a permission instead of ownership, its audit row.
@@ -16,9 +18,9 @@ use cyex_tv_db::sets::{self, NewMember, Set};
 use cyex_tv_db::{DbError, accounts, audit, channels, emotes, ids, outbox, reads, roles};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
-    AccountSummary, AddSetEmote, Channel, CreateSet, EmotePage, EmoteSet, EmoteState, EventType,
-    PersonalSetEntry, Platform, SetEmote, SetKind, UpdateChannelSettings, UpdateSet,
-    UpdateSetEmote,
+    AccountSummary, AddSetEmote, Channel, CreateSet, EditorPermission, EmotePage, EmoteSet,
+    EmoteState, EventType, PersonalSetEntry, Platform, SetEmote, SetKind, UpdateChannelSettings,
+    UpdateSet, UpdateSetEmote,
 };
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
@@ -26,6 +28,7 @@ use serde_json::json;
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
+use crate::editors::has_flag;
 use crate::moderation::{QUEUE_PAGE, QUEUE_PAGE_MAX};
 use crate::state::AppState;
 use crate::views::{self, Viewer};
@@ -76,6 +79,11 @@ pub fn db_error(err: DbError) -> ApiError {
         DbError::EmoteUnavailable => conflict("emote_unavailable", "That emote can't be used."),
         DbError::RoleNameTaken => conflict("role_name_taken", "A role with that name exists."),
         DbError::UnknownPermission(_) => bad("unknown_permission", "Unknown permission name."),
+        DbError::TooManyEditors => conflict(
+            "too_many_editors",
+            "An account can have at most 20 editors.",
+        ),
+        DbError::AlreadyEditor => conflict("already_editor", "They are an editor already."),
         err @ (DbError::IdentityTaken | DbError::PlatformAlreadyLinked | DbError::LastIdentity) => {
             AuthError::from(err).into()
         }
@@ -134,13 +142,22 @@ pub async fn viewer(conn: &mut PgConnection, caller: Option<&Caller>) -> ApiResu
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Grant {
     Owner,
+    /// A per-set editor.
     Editor,
+    /// An account editor of the set's owner holding this flag (ADR 0014): audited.
+    AccountEditor(EditorPermission),
     /// Through a permission rather than the set: audited.
     Permission(&'static str),
 }
 
-/// May the caller change what's in `set` (rename, members)?
-async fn edit_grant(conn: &mut PgConnection, caller: &Caller, set: &Set) -> ApiResult<Grant> {
+/// May the caller change `set` in a way an account editor needs `need` for? Per-set editors may
+/// rename the set and change its members, as before.
+async fn edit_grant(
+    conn: &mut PgConnection,
+    caller: &Caller,
+    set: &Set,
+    need: EditorPermission,
+) -> ApiResult<Grant> {
     let account = caller.account_id;
     if set.kind == SetKind::Global {
         return if holds(conn, caller, permissions::GLOBAL_SET_EDIT).await? {
@@ -151,6 +168,11 @@ async fn edit_grant(conn: &mut PgConnection, caller: &Caller, set: &Set) -> ApiR
     }
     if set.owner_account_id == Some(account) {
         return Ok(Grant::Owner);
+    }
+    if let Some(owner) = set.owner_account_id
+        && has_flag(conn, owner, account, need).await?
+    {
+        return Ok(Grant::AccountEditor(need));
     }
     if sets::can_edit(conn, account, set.id)
         .await
@@ -164,9 +186,14 @@ async fn edit_grant(conn: &mut PgConnection, caller: &Caller, set: &Set) -> ApiR
     Err(forbidden("Only the set's owner and editors can change it."))
 }
 
-/// May the caller delete `set` or manage its editors?
-async fn owner_grant(conn: &mut PgConnection, caller: &Caller, set: &Set) -> ApiResult<Grant> {
-    match edit_grant(conn, caller, set).await? {
+/// May the caller delete `set` or manage its editors? Per-set editors may not.
+async fn owner_grant(
+    conn: &mut PgConnection,
+    caller: &Caller,
+    set: &Set,
+    need: EditorPermission,
+) -> ApiResult<Grant> {
+    match edit_grant(conn, caller, set, need).await? {
         Grant::Editor => Err(forbidden("Only the set's owner can do this.")),
         grant => Ok(grant),
     }
@@ -181,19 +208,33 @@ async fn audit_if_permission(
     before: Option<serde_json::Value>,
     after: Option<serde_json::Value>,
 ) -> ApiResult<()> {
-    if let Grant::Permission(_) = grant {
-        write_audit(
-            conn,
-            caller,
-            action,
-            "set",
-            &ids::to_text(set_id),
-            before,
-            after,
-        )
-        .await?;
+    let after = match grant {
+        Grant::Permission(_) => after,
+        Grant::AccountEditor(_) => Some(via_account_editor(after)),
+        Grant::Owner | Grant::Editor => return Ok(()),
+    };
+    write_audit(
+        conn,
+        caller,
+        action,
+        "set",
+        &ids::to_text(set_id),
+        before,
+        after,
+    )
+    .await
+}
+
+/// Marks an audited change as made through an account editor grant.
+fn via_account_editor(after: Option<serde_json::Value>) -> serde_json::Value {
+    match after {
+        Some(serde_json::Value::Object(mut map)) => {
+            map.insert("via".to_owned(), json!("account_editor"));
+            serde_json::Value::Object(map)
+        }
+        None => json!({ "via": "account_editor" }),
+        Some(other) => json!({ "via": "account_editor", "value": other }),
     }
-    Ok(())
 }
 
 async fn write_audit(
@@ -525,7 +566,12 @@ pub async fn set_editors(
     let set_id = parse_id(set_id)?;
     let mut conn = conn(state).await?;
     let set = load_set(&mut conn, set_id).await?;
-    edit_grant(&mut conn, caller, &set).await?;
+    if edit_grant(&mut conn, caller, &set, EditorPermission::Emotes)
+        .await
+        .is_err()
+    {
+        edit_grant(&mut conn, caller, &set, EditorPermission::Editors).await?;
+    }
     let editors = sets::editors(&mut conn, set_id).await.map_err(db_error)?;
     let account_ids: Vec<Uuid> = editors.iter().map(|e| e.account_id).collect();
     let summaries = reads::summaries(&mut conn, &account_ids)
@@ -583,10 +629,34 @@ pub async fn create_set(
     if input.kind == SetKind::Global {
         return Err(db_error(DbError::InvalidSetKind));
     }
+    let owner = match input.owner_id.as_deref().map(str::trim) {
+        Some(raw) if !raw.is_empty() => parse_id(raw)?,
+        _ => caller.account_id,
+    };
     let mut conn = conn(state).await?;
-    let set = sets::create(&mut conn, caller.account_id, &name, input.kind)
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    let by_editor = owner != caller.account_id;
+    if by_editor && !has_flag(&mut tx, owner, caller.account_id, EditorPermission::Sets).await? {
+        return Err(forbidden(
+            "Only the account's owner and its editors with the sets permission can make sets for it.",
+        ));
+    }
+    let set = sets::create(&mut tx, owner, &name, input.kind)
         .await
         .map_err(db_error)?;
+    if by_editor {
+        audit_if_permission(
+            &mut tx,
+            caller,
+            Grant::AccountEditor(EditorPermission::Sets),
+            "set.created",
+            set.id,
+            None,
+            Some(json!({ "name": set.name, "kind": set.kind, "owner_id": ids::to_text(owner) })),
+        )
+        .await?;
+    }
+    tx.commit().await.map_err(sqlx_error)?;
     drop(conn);
     built(state, caller, set.id).await
 }
@@ -602,7 +672,7 @@ pub async fn update_set(
     let mut conn = conn(state).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let set = load_set(&mut tx, id).await?;
-    let grant = edit_grant(&mut tx, caller, &set).await?;
+    let grant = edit_grant(&mut tx, caller, &set, EditorPermission::Sets).await?;
 
     let mut after = set.clone();
     if let Some(name) = &name {
@@ -662,7 +732,7 @@ pub async fn delete_set(state: &AppState, caller: &Caller, id: &str) -> ApiResul
     if set.kind == SetKind::Global {
         return Err(db_error(DbError::InvalidSetKind));
     }
-    let grant = owner_grant(&mut tx, caller, &set).await?;
+    let grant = owner_grant(&mut tx, caller, &set, EditorPermission::Sets).await?;
     if !channels::using_set(&mut tx, id)
         .await
         .map_err(db_error)?
@@ -701,13 +771,17 @@ pub async fn add_set_emote(
     let mut conn = conn(state).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let set = load_set(&mut tx, set_id).await?;
-    let grant = edit_grant(&mut tx, caller, &set).await?;
+    let grant = edit_grant(&mut tx, caller, &set, EditorPermission::Emotes).await?;
 
     let emote = emotes::get(&mut tx, emote_id)
         .await
         .map_err(db_error)?
         .ok_or_else(|| db_error(DbError::EmoteUnavailable))?;
-    if emote.private && emote.owner_account_id != Some(caller.account_id) {
+    // An account editor with `emotes` may use the owner's own private emotes in the owner's sets.
+    let owners_own = matches!(grant, Grant::AccountEditor(_))
+        && emote.owner_account_id.is_some()
+        && emote.owner_account_id == set.owner_account_id;
+    if emote.private && emote.owner_account_id != Some(caller.account_id) && !owners_own {
         return Err(conflict(
             "emote_private",
             "Only its owner can add a private emote to sets.",
@@ -764,7 +838,7 @@ pub async fn update_set_emote(
     let mut conn = conn(state).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let set = load_set(&mut tx, set_id).await?;
-    let grant = edit_grant(&mut tx, caller, &set).await?;
+    let grant = edit_grant(&mut tx, caller, &set, EditorPermission::Emotes).await?;
     let member = sets::update_member(&mut tx, set_id, emote_id, name, input.zero_width)
         .await
         .map_err(db_error)?;
@@ -806,7 +880,7 @@ pub async fn remove_set_emote(
     let mut conn = conn(state).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let set = load_set(&mut tx, set_id).await?;
-    let grant = edit_grant(&mut tx, caller, &set).await?;
+    let grant = edit_grant(&mut tx, caller, &set, EditorPermission::Emotes).await?;
     let member = match sets::remove_member(&mut tx, set_id, emote_id).await {
         Ok(member) => member,
         Err(DbError::NotFound) => return Ok(false),
@@ -849,7 +923,13 @@ pub async fn add_set_editor(
     if set.kind == SetKind::Global {
         return Err(db_error(DbError::InvalidSetKind));
     }
-    owner_grant(&mut tx, caller, &set).await?;
+    let grant = owner_grant(&mut tx, caller, &set, EditorPermission::Editors).await?;
+    // A set editor can change emotes, so granting one needs `emotes` as well.
+    if let (Grant::AccountEditor(_), Some(owner)) = (grant, set.owner_account_id)
+        && !has_flag(&mut tx, owner, caller.account_id, EditorPermission::Emotes).await?
+    {
+        return Err(forbidden("You can only grant permissions you hold."));
+    }
     if set.owner_account_id == Some(account_id) {
         return Err(bad("already_owner", "The set's owner can edit it already."));
     }
@@ -890,7 +970,7 @@ pub async fn remove_set_editor(
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let set = load_set(&mut tx, set_id).await?;
     if account_id != caller.account_id {
-        owner_grant(&mut tx, caller, &set).await?;
+        owner_grant(&mut tx, caller, &set, EditorPermission::Editors).await?;
     }
     let removed = sets::remove_editor(&mut tx, set_id, account_id)
         .await
@@ -911,8 +991,8 @@ pub async fn remove_set_editor(
     Ok(removed)
 }
 
-/// Only the channel's owner. The active set must be one of the owner's channel sets; an empty
-/// `activeSetId` clears it.
+/// The channel's owner, or the owner's account editors with `sets` (audited). The active set must
+/// be one of the owner's channel sets; an empty `activeSetId` clears it.
 pub async fn update_channel_settings(
     state: &AppState,
     caller: &Caller,
@@ -926,8 +1006,19 @@ pub async fn update_channel_settings(
         .await
         .map_err(db_error)?
         .ok_or_else(not_found)?;
-    if ch.account_id != caller.account_id {
-        return Err(forbidden("Only the channel's owner can change it."));
+    let by_editor = ch.account_id != caller.account_id;
+    if by_editor
+        && !has_flag(
+            &mut tx,
+            ch.account_id,
+            caller.account_id,
+            EditorPermission::Sets,
+        )
+        .await?
+    {
+        return Err(forbidden(
+            "Only the channel's owner and its account editors with the sets permission can change it.",
+        ));
     }
     let mut updated = ch.clone();
     if let Some(raw) = input.active_set_id.as_deref() {
@@ -938,7 +1029,7 @@ pub async fn update_channel_settings(
             if set.kind != SetKind::Channel || set.owner_account_id != Some(ch.account_id) {
                 return Err(bad(
                     "invalid_active_set",
-                    "The active set must be one of your channel sets.",
+                    "The active set must be one of the channel owner's channel sets.",
                 ));
             }
             Some(set.id)
@@ -964,6 +1055,24 @@ pub async fn update_channel_settings(
         updated = channels::set_allow_personal_emotes(&mut tx, ch.id, allow)
             .await
             .map_err(db_error)?;
+    }
+    if by_editor {
+        write_audit(
+            &mut tx,
+            caller,
+            "channel.settings_changed",
+            "channel",
+            &ids::to_text(ch.id),
+            Some(json!({
+                "active_set_id": ch.active_set_id.map(ids::to_text),
+                "allow_personal_emotes": ch.allow_personal_emotes,
+            })),
+            Some(via_account_editor(Some(json!({
+                "active_set_id": updated.active_set_id.map(ids::to_text),
+                "allow_personal_emotes": updated.allow_personal_emotes,
+            })))),
+        )
+        .await?;
     }
     tx.commit().await.map_err(sqlx_error)?;
     views::channel(&mut conn, &updated)

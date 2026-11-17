@@ -1,7 +1,7 @@
 //! Database rows to API shapes, shared by the GraphQL resolvers and the REST reads.
 //!
-//! Who sees a pending emote in a set: its owner, the set's owner and editors, and moderators
-//! (`emotes.review`). Everyone else, chat clients included, sees approved emotes only. Rejected,
+//! Who sees a pending emote in a set: its owner, the set's owner, editors and account editors, and
+//! moderators (`emotes.review`). Everyone else, chat clients included, sees approved emotes only. Rejected,
 //! taken-down and deleted emotes are never shown.
 
 use std::collections::{HashMap, HashSet};
@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use chrono::{DateTime, SecondsFormat, Utc};
 use cyex_tv_db::reads::{self, EmoteRow, MemberRow, Summary};
 use cyex_tv_db::sets::Set;
-use cyex_tv_db::{DbResult, channels, ids, sets};
+use cyex_tv_db::{DbResult, channels, editors, ids, sets};
 use cyex_tv_shared::model::{
     AccountSummary, Channel, Emote, EmoteFile, EmoteFlags, EmoteSet, EmoteState, SetEmote,
 };
@@ -137,11 +137,24 @@ async fn editable(
         return Ok(out);
     };
     for set in sets {
-        if set.owner_account_id == Some(account) || sets::can_edit(conn, account, set.id).await? {
+        if set.owner_account_id == Some(account)
+            || sets::can_edit(conn, account, set.id).await?
+            || account_editor(conn, set, account).await?
+        {
             out.insert(set.id);
         }
     }
     Ok(out)
+}
+
+/// An account editor of the set's owner who works on sets (`emotes` or `sets`, ADR 0014).
+async fn account_editor(conn: &mut PgConnection, set: &Set, account: Uuid) -> DbResult<bool> {
+    let Some(owner) = set.owner_account_id else {
+        return Ok(false);
+    };
+    Ok(editors::permissions_of(conn, owner, account)
+        .await?
+        .is_some_and(|flags| flags.iter().any(|f| f == "emotes" || f == "sets")))
 }
 
 fn set_emote(
