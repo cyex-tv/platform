@@ -119,3 +119,60 @@ CYEX_TV_CLOUDFLARE_PURGE_TOKEN=<token value>
   shown in a screenshot).
 - Checked from outside: `cdn.cyex.tv/emotes/…` reaches R2 (404 for a missing file), `/originals/…`
   and other paths answer 403, and CORS sends `Access-Control-Allow-Origin: *`.
+
+
+# Owner steps 2026/11/17: security headers at Cloudflare for cyex.tv
+
+The website's Node server sets its security headers and a Content-Security-Policy on every page
+it renders. Prerendered pages are files the server sends as they are, without that code: today
+only `/developers` (the API docs). They carry their script policy in a `<meta>` tag, but a
+`<meta>` policy can't say `frame-ancestors`, and the other headers aren't there at all. These two
+rules add them at Cloudflare. Nothing here touches cyex.app, api.cyex.tv or cdn.cyex.tv.
+
+Where: the `cyex.tv` zone → Rules → Overview → Create rule → **Response Header Transform Rule**
+(older dashboards: Rules → Transform Rules → Modify Response Header → Create rule).
+
+## 1. Rule "cyex.tv security headers"
+- If incoming requests match: **Custom filter expression**, Edit expression:
+  ```
+  (http.host eq "cyex.tv")
+  ```
+- Then, one row per header, operation **Set static**:
+
+  | Header name | Value |
+  |---|---|
+  | `X-Frame-Options` | `DENY` |
+  | `X-Content-Type-Options` | `nosniff` |
+  | `Referrer-Policy` | `strict-origin-when-cross-origin` |
+  | `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` |
+  | `Strict-Transport-Security` | `max-age=31536000` |
+
+  These are the values the server already sends, so on server-rendered pages nothing changes.
+- Deploy.
+
+## 2. Rule "cyex.tv CSP for prerendered pages"
+Only for the prerendered paths: **Set** replaces a header, and on every other page it would
+replace the server's full policy (with its per-request nonce) with this short one.
+- Custom filter expression:
+  ```
+  (http.host eq "cyex.tv" and http.request.uri.path in {"/developers" "/developers/"})
+  ```
+- Then, operation **Set static**:
+
+  | Header name | Value |
+  |---|---|
+  | `Content-Security-Policy` | `frame-ancestors 'none'; base-uri 'self'; object-src 'none'; form-action 'self'` |
+
+  The page's own `<meta>` policy (scripts by hash, styles, images, connections) still applies;
+  the browser enforces both.
+- Deploy. If a later release prerenders another page, add its path to this expression (the
+  build lists them under `apps/web/build/prerendered/`).
+
+## 3. Check
+```
+curl -sI https://cyex.tv/developers | grep -iE "content-security|x-frame|nosniff|referrer|permissions|strict-transport"
+curl -sI https://cyex.tv/ | grep -i content-security
+```
+The first shows all six headers. The second still shows the long policy with
+`script-src 'self' 'sha256-…' … 'nonce-…'` and `frame-ancestors 'none'` at the end, which means
+rule 2 didn't catch it.

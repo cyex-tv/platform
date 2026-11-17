@@ -3,7 +3,7 @@
   import { page } from '$app/state';
   import { gql } from '$lib/api';
   import { ready, src } from '$lib/emote';
-  import { clean, date } from '$lib/format';
+  import { clean, date, iso } from '$lib/format';
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
   import { ADD_SET_EMOTE, DELETE_EMOTE, EMOTE, MY_SETS, UPDATE_EMOTE } from '$lib/queries';
   import { nameProblem, parseTags, tagsProblem } from '$lib/rules';
@@ -115,7 +115,7 @@
     deleting = true;
     try {
       await gql(DELETE_EMOTE, { id: emote.id });
-      notify(`${emote.name} deleted.`);
+      notify(`${iso(emote.name)} deleted.`);
       await goto('/me');
     } catch (err) {
       fail(err);
@@ -129,7 +129,7 @@
     try {
       await gql(ADD_SET_EMOTE, { setId: target, emoteId: emote.id });
       const set = sets.find((s) => s.id === target);
-      notify(`Added to ${set?.name ?? 'the set'}.`);
+      notify(`Added to ${set ? iso(set.name) : 'the set'}.`);
       sets = sets.filter((s) => s.id !== target);
       target = sets[0]?.id ?? '';
     } catch (err) {
@@ -147,7 +147,7 @@
 {#if emote}
   <p class="crumbs">
     {#if mine}<a href="/me">Your emotes</a>{:else if can('emotes.review')}<a href="/admin">Admin</a>{:else}<a href="/search">Emotes</a>{/if}
-    <span aria-hidden="true">/</span> {clean(emote.name)}
+    <span aria-hidden="true">/</span> <bdi>{clean(emote.name)}</bdi>
   </p>
   <div class="layout">
     <section class="ui-card" aria-label="Preview">
@@ -214,7 +214,7 @@
           {#if sets.length}
             <div class="add">
               <select class="ui-input" bind:value={target} aria-label="Set">
-                {#each sets as s}<option value={s.id}>{s.name} ({s.kind === 'PERSONAL' ? 'personal' : 'channel'})</option>{/each}
+                {#each sets as s}<option value={s.id}>{iso(s.name)} ({s.kind === 'PERSONAL' ? 'personal' : 'channel'})</option>{/each}
               </select>
               <button class="ui-btn secondary" type="button" disabled={adding} onclick={addTo}>Add</button>
             </div>

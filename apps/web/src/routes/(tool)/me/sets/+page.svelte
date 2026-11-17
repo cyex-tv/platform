@@ -1,7 +1,8 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { gql } from '$lib/api';
-  import { count } from '$lib/format';
+  import { count, iso } from '$lib/format';
+  import Name from '$lib/components/Name.svelte';
   import type { MySetsQuery, SetKind } from '$lib/gql/graphql';
   import { CREATE_SET, MY_SETS } from '$lib/queries';
   import Thumb from '$lib/tool/Thumb.svelte';
@@ -73,8 +74,8 @@
               {#each s.emotes.slice(0, 4) as m}<Thumb emote={m.emote} name="" box={28} />{/each}
             </span>
             <span class="what">
-              <strong>{s.name}</strong>
-              <span class="ui-hint">{s.kind === 'PERSONAL' ? 'Personal' : s.kind === 'GLOBAL' ? 'Global' : 'Channel'}{s.owner && s.owner.id !== session.me?.id ? ` · by ${s.owner.displayName}` : ''}</span>
+              <strong><Name value={s.name} /></strong>
+              <span class="ui-hint">{s.kind === 'PERSONAL' ? 'Personal' : s.kind === 'GLOBAL' ? 'Global' : 'Channel'}{s.owner && s.owner.id !== session.me?.id ? ` · by ${iso(s.owner.displayName)}` : ''}</span>
             </span>
             <span class="ui-mono ui-hint">{count(s.emotes.length)} / {count(s.capacity)}</span>
           </a>

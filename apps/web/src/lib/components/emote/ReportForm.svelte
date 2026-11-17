@@ -35,7 +35,7 @@
 <div class="report" aria-live="polite">
   {#if viewer.reported}
     <p class="head" tabindex="-1" bind:this={thanks}>Thanks, it’s reported.</p>
-    <p class="fine">A moderator reads every report. If {name} breaks the rules, it comes down.</p>
+    <p class="fine">A moderator reads every report. If <bdi>{name}</bdi> breaks the rules, it comes down.</p>
   {:else if viewer.who === 'out'}
     <p class="head">Sign in to report it.</p>
     <p class="fine">Reports come from signed-in accounts, so moderators can ask about them.</p>
@@ -44,7 +44,7 @@
     <p class="fine">cyex.tv can’t be reached right now, so reports can’t be sent. Try again in a moment.</p>
   {:else}
     <form onsubmit={send}>
-      <label class="head" for="{id}-reason">What’s wrong with {name}?</label>
+      <label class="head" for="{id}-reason">What’s wrong with <bdi>{name}</bdi>?</label>
       <textarea
         id="{id}-reason"
         aria-describedby="{id}-hint"

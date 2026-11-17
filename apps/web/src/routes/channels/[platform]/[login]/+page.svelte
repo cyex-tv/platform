@@ -44,7 +44,7 @@
 <div class="page">
   <ProfileHead name={who} avatar={c.account.avatar} kind="{platform} channel">
     {#snippet meta()}
-      {#if set}Active set: {set.name}{:else}No set picked yet{/if}
+      {#if set}Active set: <bdi>{clean(set.name)}</bdi>{:else}No set picked yet{/if}
     {/snippet}
     {#snippet actions()}
       <div class="ch-actions">

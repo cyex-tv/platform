@@ -9,7 +9,7 @@
   import { goto } from '$app/navigation';
   import { gql } from '$lib/api';
   import { hasStill, ready, size, src, srcsetW } from '$lib/emote';
-  import { clean, count } from '$lib/format';
+  import { clean, count, iso } from '$lib/format';
   import { announce, channelJumps, emptyText, move, pageJumps, typing } from '$lib/palette';
   import type { SearchQuery } from '$lib/gql/graphql';
   import { SEARCH } from '$lib/queries';
@@ -38,7 +38,7 @@
     const out: Row[] = [];
     if (text) {
       for (const e of emotes) out.push({ kind: 'emote', id: `pe-${e.id}`, href: `/emotes/${e.id}`, emote: e });
-      out.push({ kind: 'all', id: 'pe-all', href: `/search?q=${encodeURIComponent(text)}`, label: `Search all emotes for “${text}”` });
+      out.push({ kind: 'all', id: 'pe-all', href: `/search?q=${encodeURIComponent(text)}`, label: `Search all emotes for “${iso(text)}”` });
       for (const c of channelJumps(text)) out.push({ kind: 'channel', ...c });
     }
     for (const p of pageJumps(text)) out.push({ kind: 'page', ...p });
@@ -217,8 +217,8 @@
                     />
                   {/if}
                 </span>
-                <span class="label">{clean(r.emote.name)}</span>
-                {#if r.emote.owner}<span class="hint">{clean(r.emote.owner.displayName)}</span>{/if}
+                <span class="label"><bdi>{clean(r.emote.name)}</bdi></span>
+                {#if r.emote.owner}<span class="hint"><bdi>{clean(r.emote.owner.displayName)}</bdi></span>{/if}
               {:else if r.kind === 'all'}
                 <span class="art"><Icon name="search" /></span>
                 <span class="label">{r.label}</span>

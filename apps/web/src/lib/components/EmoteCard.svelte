@@ -106,8 +106,8 @@
     {/if}
     {#if kinds.length}<span class="kinds" aria-hidden="true">{kinds.join(' · ')}</span>{/if}
   </span>
-  <span class="name" title={name}>{name}</span>
-  {#if creator && owner}<span class="by" title={owner}>{owner}</span>{/if}
+  <span class="name" title={name}><bdi>{name}</bdi></span>
+  {#if creator && owner}<span class="by" title={owner}><bdi>{owner}</bdi></span>{/if}
   {#if note}<span class="tags"><span class="tag">{note}</span></span>{/if}
   {#if kinds.length}<span class="sr-only">, {kinds.join(', ')}</span>{/if}
 </a>

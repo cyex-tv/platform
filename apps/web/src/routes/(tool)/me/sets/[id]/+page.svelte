@@ -3,7 +3,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { ApiError, gql } from '$lib/api';
-  import { clean, count } from '$lib/format';
+  import { clean, count, iso } from '$lib/format';
+  import Name from '$lib/components/Name.svelte';
   import type { EditSetQuery } from '$lib/gql/graphql';
   import { EDIT_SET, DELETE_SET, REMOVE_SET_EDITOR, UPDATE_SET } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
@@ -65,7 +66,7 @@
     deleting = true;
     try {
       await gql(DELETE_SET, { id: set.id });
-      notify(`${set.name} deleted.`);
+      notify(`${iso(set.name)} deleted.`);
       await goto('/me/sets');
     } catch (err) {
       fail(err);
@@ -77,7 +78,7 @@
     if (!set || !session.me) return;
     try {
       await gql(REMOVE_SET_EDITOR, { setId: set.id, accountId: session.me.id });
-      notify(`You no longer edit ${set.name}.`);
+      notify(`You no longer edit ${iso(set.name)}.`);
       await goto('/me/sets');
     } catch (err) {
       fail(err);
@@ -114,14 +115,14 @@
 <LoadGate source={L} label="Loading the set…">
 {#snippet children()}
 {#if set}
-  <p class="crumbs"><a href={set.kind === 'GLOBAL' ? '/admin' : '/me/sets'}>{set.kind === 'GLOBAL' ? 'Admin' : 'Sets'}</a> <span aria-hidden="true">/</span> {clean(set.name)}</p>
+  <p class="crumbs"><a href={set.kind === 'GLOBAL' ? '/admin' : '/me/sets'}>{set.kind === 'GLOBAL' ? 'Admin' : 'Sets'}</a> <span aria-hidden="true">/</span> <bdi>{clean(set.name)}</bdi></p>
   <div class="ui-head">
     <div>
-      <h1>{clean(set.name)}</h1>
+      <h1><bdi>{clean(set.name)}</bdi></h1>
       <p>
         {set.kind === 'GLOBAL' ? 'The global set' : set.kind === 'PERSONAL' ? 'Personal set' : 'Channel set'} ·
         <span class="ui-mono">{count(set.emotes.length)} / {count(set.capacity)}</span> emotes
-        {#if !owner && set.owner}· by {set.owner.displayName}{/if}
+        {#if !owner && set.owner}· by <Name value={set.owner.displayName} />{/if}
       </p>
     </div>
   </div>

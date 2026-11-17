@@ -52,7 +52,7 @@
         {#if data.channels.length}
           <div class="chans">
             {#each data.channels as ch (ch.platform + ch.login)}
-              <a class="btn btn-s" href="/channels/{ch.platform}/{encodeURIComponent(ch.login)}">{ch.platform === 'twitch' ? 'Twitch' : 'Kick'}: {clean(ch.login)}</a>
+              <a class="btn btn-s" href="/channels/{ch.platform}/{encodeURIComponent(ch.login)}">{ch.platform === 'twitch' ? 'Twitch' : 'Kick'}: <bdi>{clean(ch.login)}</bdi></a>
             {/each}
           </div>
         {/if}

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Name from '$lib/components/Name.svelte';
+  import { iso } from '$lib/format';
   import { gql } from '$lib/api';
   import type { MyChannelsQuery } from '$lib/gql/graphql';
   import { MY_CHANNELS, UPDATE_CHANNEL } from '$lib/queries';
@@ -54,7 +56,7 @@
         <section class="ui-panel" data-platform={ch.platform.toLowerCase()}>
           <header>
             <span class="dot" aria-hidden="true"></span>
-            <h2>{ch.login}</h2>
+            <h2><Name value={ch.login} /></h2>
             <span class="ui-hint">{platformName(ch.platform)}</span>
             <a class="ui-btn ghost small" href="/channels/{ch.platform.toLowerCase()}/{encodeURIComponent(ch.login)}">Public page</a>
           </header>
@@ -64,7 +66,7 @@
               <select class="ui-input pick" disabled={busy} value={ch.activeSetId ?? ''}
                 onchange={(e) => update(ch, { activeSetId: e.currentTarget.value })}>
                 <option value="">None</option>
-                {#each channelSets as s}<option value={s.id}>{s.name}</option>{/each}
+                {#each channelSets as s}<option value={s.id}>{iso(s.name)}</option>{/each}
               </select>
             </label>
             {#if channelSets.length === 0}

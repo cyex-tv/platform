@@ -1,4 +1,6 @@
 <script lang="ts">
+  import Name from '$lib/components/Name.svelte';
+  import { iso } from '$lib/format';
   import { gql } from '$lib/api';
   import type { RoleFieldsFragment } from '$lib/gql/graphql';
   import { CREATE_ROLE, DELETE_ROLE, ROLES, UPDATE_ROLE } from '$lib/queries';
@@ -72,7 +74,7 @@
   async function remove(role: RoleFieldsFragment) {
     try {
       await gql(DELETE_ROLE, { id: role.id });
-      notify(`${role.name} deleted.`);
+      notify(`${iso(role.name)} deleted.`);
       await load();
     } catch (err) {
       fail(err);
@@ -98,8 +100,8 @@
         <li>
           <span class="pos ui-mono" title="Position">{r.position}</span>
           <span class="what">
-            <strong>{r.name}</strong>
-            {#if r.description}<span class="ui-muted">{r.description}</span>{/if}
+            <strong><Name value={r.name} /></strong>
+            {#if r.description}<span class="ui-muted"><Name value={r.description} /></span>{/if}
             <span class="perms">{#each r.permissions as p}<span class="ui-chip">{p}</span>{:else}<span class="ui-hint">No permissions</span>{/each}</span>
           </span>
           <div class="ui-actions">
@@ -117,7 +119,7 @@
 <dialog class="ui-dialog wide" bind:this={dialog} aria-labelledby="role-title">
   <form onsubmit={save} novalidate>
     <div class="body">
-      <h2 id="role-title">{editing ? `Edit ${editing.name}` : 'New role'}</h2>
+      <h2 id="role-title">{editing ? `Edit ${iso(editing.name)}` : 'New role'}</h2>
       <div class="two">
         <label class="ui-field">
           <span class="ui-label">Name</span>

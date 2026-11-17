@@ -23,7 +23,7 @@
         <li>
           <a href="/channels/{c.platform.toLowerCase()}/{encodeURIComponent(c.login)}">
             <Avatar src={c.avatar} name={c.displayName} size={32} />
-            <span class="name">{clean(c.displayName)}</span>
+            <span class="name"><bdi>{clean(c.displayName)}</bdi></span>
             <span class="platform">{platformName(c.platform)}</span>
           </a>
         </li>

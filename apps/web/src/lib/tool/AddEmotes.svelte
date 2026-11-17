@@ -5,6 +5,8 @@
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
   import { ADD_SET_EMOTE, MY_EMOTES, SEARCH } from '$lib/queries';
   import Thumb from './Thumb.svelte';
+  import Name from '$lib/components/Name.svelte';
+  import { iso } from '$lib/format';
   import { STATE_LABEL } from './state';
   import { fail, notify } from './notices.svelte';
 
@@ -53,7 +55,7 @@
     busy = e.id;
     try {
       await gql(ADD_SET_EMOTE, { setId, emoteId: e.id });
-      notify(`${e.name} added.`);
+      notify(`${iso(e.name)} added.`);
       onadded();
     } catch (err) {
       fail(err);
@@ -86,7 +88,7 @@
         {@const clash = !inSet && names.has(e.name)}
         <li>
           <Thumb emote={e} name={e.name} box={40} />
-          <span class="name" title={e.name}>{e.name}</span>
+          <span class="name" title={e.name}><Name value={e.name} /></span>
           {#if e.state !== 'APPROVED'}<span class="ui-chip {e.state.toLowerCase()}">{STATE_LABEL[e.state]}</span>{/if}
           <button class="ui-btn small {inSet ? 'ghost' : 'secondary'}" type="button" disabled={inSet || clash || full || busy === e.id}
             title={clash ? 'Another emote here has this name. Rename that one first.' : undefined} onclick={() => add(e)}>

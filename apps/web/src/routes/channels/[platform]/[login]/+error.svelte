@@ -4,7 +4,7 @@
   import { page } from '$app/state';
   import { openPalette } from '$lib/components/palette.svelte';
   import EmptyState from '$lib/components/profile/EmptyState.svelte';
-  import { clean } from '$lib/format';
+  import { clean, iso } from '$lib/format';
 
   const missing = $derived(page.status === 404);
   const known = $derived(page.params.platform === 'kick' || page.params.platform === 'twitch');
@@ -31,8 +31,8 @@
 
 <div class="page pad">
   {#if missing && known}
-    <EmptyState level={1} title="{login} isn't on cyex.tv yet." role="status">
-      Nobody has set up a {platform} channel called {login} here. A channel shows up once its owner signs in
+    <EmptyState level={1} title="{iso(login)} isn't on cyex.tv yet." role="status">
+      Nobody has set up a {platform} channel called <bdi>{login}</bdi> here. A channel shows up once its owner signs in
       with {platform} and picks an emote set. Check the spelling, or look for another channel.
       {#snippet actions()}
         <div class="row">
