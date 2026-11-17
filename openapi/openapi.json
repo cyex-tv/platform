@@ -766,6 +766,73 @@
           }
         }
       }
+    },
+    "/v1/shop/paddle/webhook": {
+      "post": {
+        "tags": [
+          "shop"
+        ],
+        "summary": "Paddle's webhook for cyex.tv's own Paddle account (ADR 0016). Not for clients.",
+        "description": "The raw body is checked against `Paddle-Signature` (HMAC-SHA256 of `\"<ts>:<body>\"` with the\nendpoint's secret; `ts` within 5 minutes). Each event is handled once, by its `event_id`.\n`transaction.completed` fulfils an order, `transaction.canceled` fails a pending one, and an\napproved `refund` or `chargeback` adjustment takes the cosmetics back. Other events are\nacknowledged and ignored.",
+        "operationId": "paddle_webhook",
+        "parameters": [
+          {
+            "name": "Paddle-Signature",
+            "in": "header",
+            "description": "`ts=<unix>;h1=<hex>`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "A Paddle notification.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Handled, seen before, or not used."
+          },
+          "400": {
+            "description": "`bad_payload`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`bad_signature` or `stale_signature`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: the webhook secret isn't set.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1507,6 +1574,10 @@
     {
       "name": "cosmetics",
       "description": "cyex.tv chat badges and name paints (ADR 0015): the catalog, chatters' picks, and staff picture uploads."
+    },
+    {
+      "name": "shop",
+      "description": "The cosmetics shop (ADR 0016): Paddle's webhook. Items, checkout, orders and codes are GraphQL."
     },
     {
       "name": "reads",

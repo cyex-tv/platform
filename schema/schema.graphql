@@ -118,6 +118,91 @@ type Channel {
 }
 
 """
+What `startCheckout` gives: open Paddle's checkout for this transaction (Paddle.js
+`Paddle.Checkout.open({ transactionId })` with `clientToken`, or go to `checkoutUrl`). The
+order turns `PAID` when Paddle's webhook says so; poll `order(id)`.
+"""
+type Checkout {
+	order: Order!
+	transactionId: String!
+	"""
+	Paddle's hosted checkout link, when the Paddle account has a default payment link.
+	"""
+	checkoutUrl: String
+	"""
+	The Paddle.js client-side token, when configured.
+	"""
+	clientToken: String
+	"""
+	`sandbox` or `production`: pass to `Paddle.Environment.set`.
+	"""
+	environment: String!
+}
+
+type CodeBatch {
+	id: String!
+	name: String!
+	"""
+	Codes look like `PREFIX-XXXX-XXXX-XXXX-XXXX`.
+	"""
+	prefix: String!
+	"""
+	The item whose cosmetics a code gives, if any.
+	"""
+	itemId: String
+	itemName: String
+	"""
+	Cosmetics a code gives besides the item's.
+	"""
+	badgeIds: [String!]!
+	paintIds: [String!]!
+	codeCount: Int!
+	usesPerCode: Int!
+	"""
+	Uses so far, over every code.
+	"""
+	redemptions: Int!
+	expiresAt: String
+	disabledAt: String
+	createdBy: AccountSummary
+	createdAt: String!
+}
+
+input CodeBatchInput {
+	"""
+	For staff, 1 to 64 characters.
+	"""
+	name: String!
+	"""
+	1 to 12 letters or digits (upper-cased).
+	"""
+	prefix: String!
+	"""
+	1 to 1000 codes.
+	"""
+	count: Int!
+	"""
+	1 to 10000, default 1. Each account can use a code once.
+	"""
+	usesPerCode: Int
+	"""
+	RFC 3339, in the future.
+	"""
+	expiresAt: String
+	"""
+	A shop item whose cosmetics a code gives.
+	"""
+	itemId: String
+	badgeIds: [String!]! = []
+	paintIds: [String!]! = []
+}
+
+type CodeBatchPage {
+	items: [CodeBatch!]!
+	total: Int!
+}
+
+"""
 Every badge and paint, for clients to cache (`GET /v1/cosmetics`).
 """
 type CosmeticCatalog {
@@ -193,6 +278,14 @@ input CreateSetInput {
 	Make the set for an account you edit with `sets` (ADR 0014). Empty: for yourself.
 	"""
 	ownerId: String
+}
+
+"""
+A new batch and its codes in plain text. This is the only time they are shown.
+"""
+type CreatedCodeBatch {
+	batch: CodeBatch!
+	codes: [String!]!
 }
 
 """
@@ -342,12 +435,14 @@ type EntitlementPage {
 }
 
 """
-How an account came to own a cosmetic. Only `GRANT` is used for now.
+How an account came to own a cosmetic: given by staff, bought in the shop (ADR 0016), from an
+event, or from a redeem code.
 """
 enum EntitlementSource {
 	GRANT
 	PURCHASE
 	EVENT
+	CODE
 }
 
 """
@@ -563,6 +658,45 @@ type Mutation {
 	"""
 	revokeCosmetic(accountId: String!, kind: CosmeticKind!, cosmeticId: String!, reason: String): Boolean!
 	"""
+	Make a shop item: a bundle of 1 to 10 badges and paints. Needs `shop.manage`. Audited.
+	"""
+	createShopItem(input: ShopItemInput!): ShopItem!
+	"""
+	Replace every field of a shop item. Orders made already keep their price. Needs
+	`shop.manage`. Audited.
+	"""
+	updateShopItem(id: String!, input: ShopItemInput!): ShopItem!
+	"""
+	Delete a shop item: never listed or sold again; its orders stay. False when there was
+	none. Needs `shop.manage`. Audited.
+	"""
+	deleteShopItem(id: String!): Boolean!
+	"""
+	Start buying an item for yourself, or as a gift with `recipient`. Answers the Paddle
+	transaction to open in Paddle's checkout; the order turns `PAID` once Paddle confirms.
+	`checkout_unavailable` while Paddle isn't set up or the item has no Paddle price.
+	"""
+	startCheckout(itemId: String!, recipient: RecipientInput): Checkout!
+	"""
+	Refund a paid order: asks Paddle for a full refund when it is set up, and takes the
+	cosmetics back at once. Needs `shop.orders`. Audited.
+	"""
+	refundOrder(id: String!, reason: String!): Order!
+	"""
+	Redeem a code (case, spaces and dashes don't matter). Wrong codes lock you out for a
+	while after a few tries (`locked_out`).
+	"""
+	redeemCode(code: String!): RedeemResult!
+	"""
+	Make a batch of 1 to 1000 redeem codes. The answer holds the codes in plain text; this is
+	the only time they are shown. Needs `codes.manage`. Audited.
+	"""
+	createCodeBatch(input: CodeBatchInput!): CreatedCodeBatch!
+	"""
+	Turn off every code of a batch. Needs `codes.manage`. Audited.
+	"""
+	disableCodeBatch(id: String!): CodeBatch!
+	"""
 	Change an emote's name, tags or flags. Owner, or `emotes.edit_any`.
 	"""
 	updateEmote(id: String!, input: UpdateEmoteInput!): Emote!
@@ -639,6 +773,75 @@ type Notification {
 	payload: String!
 	createdAt: String!
 	read: Boolean!
+}
+
+type Order {
+	id: String!
+	"""
+	Who paid. None once their account is gone.
+	"""
+	buyer: AccountSummary
+	"""
+	Who got the cosmetics.
+	"""
+	recipient: AccountSummary
+	"""
+	Bought for another account.
+	"""
+	gift: Boolean!
+	itemId: String!
+	"""
+	The item's name when it was bought.
+	"""
+	itemName: String!
+	status: OrderStatus!
+	"""
+	The item's price when the checkout started, in cents.
+	"""
+	amountCents: Int!
+	currency: String!
+	"""
+	What Paddle says was paid, tax included, in the lowest unit. Set once paid.
+	"""
+	paidTotalCents: Int
+	paidCurrency: String
+	"""
+	`paddle`.
+	"""
+	provider: String!
+	"""
+	Paddle's transaction ID (`txn_…`).
+	"""
+	providerTransactionId: String
+	refundReason: String
+	createdAt: String!
+	paidAt: String
+	refundedAt: String
+	failedAt: String
+}
+
+type OrderPage {
+	items: [Order!]!
+	total: Int!
+}
+
+enum OrderStatus {
+	"""
+	Checkout started, not paid yet.
+	"""
+	PENDING
+	"""
+	Paid; the recipient owns the cosmetics.
+	"""
+	PAID
+	"""
+	Refunded or charged back; the cosmetics were taken back.
+	"""
+	REFUNDED
+	"""
+	Cancelled at Paddle.
+	"""
+	FAILED
 }
 
 """
@@ -955,6 +1158,35 @@ type Query {
 	"""
 	cosmeticEntitlements(kind: CosmeticKind!, accountId: String, cosmeticId: String, page: Int, perPage: Int): EntitlementPage!
 	"""
+	Shop items on sale now, by sort order (ADR 0016). Public; signed in, `owned` says whether
+	you own everything in each. With `all: true`, every item that isn't deleted, hidden and
+	scheduled ones too (needs `shop.manage`).
+	"""
+	shopItems(all: Boolean! = false): [ShopItem!]!
+	"""
+	One shop item: on sale for everyone; any, deleted ones too, with `shop.manage`.
+	"""
+	shopItem(id: String!): ShopItem
+	"""
+	Orders you bought or received (gifts), newest first. `perPage` 1 to 100, default 50.
+	"""
+	myOrders(page: Int, perPage: Int): OrderPage!
+	"""
+	One order, for its buyer, its recipient, or `shop.orders`. Poll it after `startCheckout`
+	until it is `PAID`.
+	"""
+	order(id: String!): Order
+	"""
+	Every order, newest first; narrow by status, account (bought or received) and item.
+	Needs `shop.orders`.
+	"""
+	orders(status: OrderStatus, accountId: String, itemId: String, page: Int, perPage: Int): OrderPage!
+	"""
+	Redeem code batches, newest first. Needs `codes.manage`. The codes themselves are shown
+	only once, by `createCodeBatch`.
+	"""
+	codeBatches(page: Int, perPage: Int): CodeBatchPage!
+	"""
 	Every permission name a role can hold.
 	"""
 	permissions: [String!]!
@@ -988,6 +1220,29 @@ type Query {
 	All roles. Needs `roles.manage`.
 	"""
 	roles: [Role!]!
+}
+
+"""
+Who gets a gift: their Twitch or Kick login.
+"""
+input RecipientInput {
+	platform: Platform!
+	login: String!
+}
+
+"""
+What a redeemed code gave.
+"""
+type RedeemResult {
+	"""
+	The batch's name.
+	"""
+	name: String!
+	"""
+	Newly owned.
+	"""
+	badges: [Badge!]!
+	paints: [Paint!]!
 }
 
 type Report {
@@ -1070,6 +1325,115 @@ enum SetKind {
 	CHANNEL
 	PERSONAL
 	GLOBAL
+}
+
+"""
+Something staff sell: one or more badges and paints as a bundle.
+"""
+type ShopItem {
+	id: String!
+	name: String!
+	description: String!
+	"""
+	The price shown, in cents. Paddle's price (`paddlePriceId`) is what is charged.
+	"""
+	priceCents: Int!
+	"""
+	ISO 4217, for example `EUR`.
+	"""
+	currency: String!
+	paddlePriceId: String
+	badges: [Badge!]!
+	paints: [Paint!]!
+	"""
+	On sale from (RFC 3339); none: already.
+	"""
+	activeFrom: String
+	"""
+	On sale until (RFC 3339); none: no end.
+	"""
+	activeTo: String
+	"""
+	Most copies sold; none: no limit.
+	"""
+	stockLimit: Int
+	"""
+	Copies left (pending checkouts of the last hour hold one each); none: no limit.
+	"""
+	stockLeft: Int
+	"""
+	Listed in the public shop (still only while on sale).
+	"""
+	visible: Boolean!
+	"""
+	Lower first.
+	"""
+	sortOrder: Int!
+	"""
+	Can be bought now: visible, on sale, in stock, has cosmetics.
+	"""
+	available: Boolean!
+	"""
+	The caller owns every cosmetic in it (always false signed out). They can still gift it.
+	"""
+	owned: Boolean!
+	"""
+	Deleted: only staff see it, in lists with `all: true`.
+	"""
+	deleted: Boolean!
+	createdAt: String!
+	updatedAt: String!
+}
+
+"""
+A whole item: `createShopItem` makes one, `updateShopItem` replaces every field.
+"""
+input ShopItemInput {
+	"""
+	1 to 64 characters.
+	"""
+	name: String!
+	"""
+	Up to 500 characters; new lines allowed.
+	"""
+	description: String
+	"""
+	0 to 100000 (1000.00).
+	"""
+	priceCents: Int!
+	"""
+	ISO 4217, default `EUR`.
+	"""
+	currency: String
+	"""
+	The Paddle price (`pri_…`). Without one, checkout says it isn't available.
+	"""
+	paddlePriceId: String
+	"""
+	1 to 10 cosmetics in all.
+	"""
+	badgeIds: [String!]! = []
+	paintIds: [String!]! = []
+	"""
+	RFC 3339.
+	"""
+	activeFrom: String
+	"""
+	RFC 3339, after `activeFrom`.
+	"""
+	activeTo: String
+	"""
+	1 or more; none: no limit.
+	"""
+	stockLimit: Int
+	"""
+	Default false.
+	"""
+	visible: Boolean
+	"""
+	Default 0.
+	"""
+	sortOrder: Int
 }
 
 type Subscription {
