@@ -101,7 +101,7 @@
     border: 1px solid var(--border); border-radius: var(--radius); font-size: 12px; color: var(--dim); }
 
   .end { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
-  .hb { height: 36px; padding: 0 14px; gap: 8px; font-size: var(--t-nav); }
+  .hb { height: 36px; padding: 0 14px; gap: 8px; font-size: var(--t-nav); box-shadow: none; } /* flat in the bar: no glow over the page */
   .hb:not(:has(svg)) { padding: 0 16px; }
 
   .phone { display: none; align-items: center; justify-content: flex-end; gap: 4px; }
@@ -113,6 +113,7 @@
   @media (hover: hover) and (pointer: fine) {
     .links a:hover { color: var(--text); }
     .search:hover { border-color: var(--border-strong); color: var(--text); }
+    .hb:hover { box-shadow: none; }
     .menu-btn:hover { color: var(--text); }
   }
   @media (max-width: 1000px) {
