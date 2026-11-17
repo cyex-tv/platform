@@ -3,7 +3,8 @@
   // 56px, sticky, flat on the ground with a hairline, its content in the 1520 wrapper. Left the
   // mark + cyex.tv and Emotes; centre a search field that opens the command palette; right
   // Upload (signed in) or Sign in, the theme toggle and the AccountMenu. Nothing in it depends
-  // on the route. 720px and narrower: the mark, a search button and a menu button that opens a
+  // on the route. No shortcut hint in the field; "/" and Ctrl K still open search (CommandPalette).
+  // 720px and narrower: the mark, a search button and a menu button that opens a
   // sheet with the account menu's items plus Emotes and Developers.
   import { page } from '$app/state';
   import Avatar from '$lib/components/Avatar.svelte';
@@ -46,7 +47,6 @@
     <button class="search" type="button" onclick={search} aria-label="Search emotes, channels and pages" aria-haspopup="dialog">
       <Icon name="search" />
       <span class="ph">Search emotes</span>
-      <kbd class="key" aria-hidden="true">/</kbd>
     </button>
 
     <div class="end">
@@ -97,8 +97,6 @@
     font: inherit; font-size: var(--t-nav); cursor: text; text-align: left;
     transition: border-color var(--fast), color var(--fast); }
   .ph { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .key { flex: none; display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 5px;
-    border: 1px solid var(--border); border-radius: var(--radius); font-size: 12px; color: var(--dim); }
 
   .end { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
   .hb { height: 36px; padding: 0 14px; gap: 8px; font-size: var(--t-nav); box-shadow: none; } /* flat in the bar: no glow over the page */
@@ -118,7 +116,6 @@
   }
   @media (max-width: 1000px) {
     .bar { grid-template-columns: minmax(0, 1fr) minmax(0, 260px) auto; }
-    .key { display: none; }
   }
   @media (max-width: 720px) {
     .bar { grid-template-columns: minmax(0, 1fr) auto; }

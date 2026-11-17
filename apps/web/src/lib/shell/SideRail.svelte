@@ -29,8 +29,12 @@
     collapse?: 'tabs' | 'sheet';
     /** The sheet button's text (collapse="sheet"): "Filters" or "Menu". */
     sheetLabel?: 'Filters' | 'Menu';
+    /** collapse="sheet" only: something kept beside the sheet button in its sticky bar (a search field). */
+    bar?: Snippet;
+    /** collapse="sheet" only: a number on the sheet button (filters that are on); hidden at 0. */
+    sheetCount?: number;
   };
-  let { label, groups = [], head, children, collapse = 'tabs', sheetLabel = 'Menu' }: Props = $props();
+  let { label, groups = [], head, children, collapse = 'tabs', sheetLabel = 'Menu', bar, sheetCount = 0 }: Props = $props();
 
   let narrow = $state(false);
   let sheet = $state(false);
@@ -95,10 +99,12 @@
     {/each}
   </nav>
 {:else if narrow}
-  <div class="sheet-bar">
+  <div class="sheet-bar" class:with-bar={!!bar}>
+    {#if bar}<div class="bar-extra">{@render bar()}</div>{/if}
     <button class="btn sheet-btn" type="button" aria-haspopup="dialog" aria-expanded={sheet} onclick={() => (sheet = true)}>
       <Icon name={sheetLabel === 'Filters' ? 'sliders' : 'menu'} />{sheetLabel}
       {#if current}<span class="now">{current.label}</span>{/if}
+      {#if sheetCount > 0}<span class="sheet-n">{sheetCount}<span class="sr-only"> on</span></span>{/if}
     </button>
   </div>
   <BottomSheet bind:open={sheet} label={sheetLabel === 'Menu' ? label : sheetLabel}>
@@ -149,6 +155,12 @@
 
   .sheet-bar { position: sticky; top: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); z-index: var(--z-panel);
     margin-inline: calc(-1 * var(--page-pad)); padding: 8px var(--page-pad); background: var(--bg); border-bottom: 1px solid var(--border); }
+  .sheet-n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius);
+    background: var(--accent-dim); color: var(--accent-text); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .with-bar { display: flex; align-items: center; gap: 8px; }
+  .bar-extra { flex: 1; min-width: 0; }
+  .with-bar .sheet-btn { flex: none; }
+  .with-bar .now { display: none; }
   .sheet-btn { height: 40px; padding: 0 14px; gap: 8px; font-size: var(--t-nav); }
   .now { color: var(--muted); font-weight: 400; }
   .now::before { content: '·'; margin-right: 8px; color: var(--dim); }

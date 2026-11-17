@@ -1,7 +1,7 @@
 // What the home page shows from one list of emotes: the hero cluster, the Top / New strip and
 // the chat preview lines. Pure, so it's tested without a browser.
 import type { ChatEmote, ChatLine } from '$lib/components/ChatPreview.svelte';
-import type { CardEmote } from '$lib/components/EmoteCard.svelte';
+import type { CardEmote } from '$lib/components/EmoteTile.svelte';
 import { isWide, ready } from '$lib/emote';
 
 export type HomeEmote = CardEmote & { createdAt: string; flags: { zeroWidth: boolean } };
