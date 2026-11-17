@@ -12,6 +12,9 @@
         <a href="/developers">Developers</a>
         <a href="https://github.com/cyex-tv/platform">Source</a>
         <a href="https://github.com/cyex-tv/platform/blob/main/docs/takedown.md">Takedowns</a>
+        <a href="/terms">Terms</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/contact">Contact</a>
       </nav>
     </div>
     <div class="base">
