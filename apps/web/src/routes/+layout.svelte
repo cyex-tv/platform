@@ -10,8 +10,9 @@
 
   let { children } = $props();
   let me = $state<NavUser | null>(null);
-  // The signed-in pages (`(tool)`) bring their own header in the cyex-app style.
-  const tool = $derived(page.route.id?.startsWith('/(tool)') ?? false);
+  // The signed-in pages (`(tool)`) bring their own header in the cyex-app style, and a page whose
+  // load returns `chrome: false` (the docs at /developers) brings its own header and footer.
+  const tool = $derived(page.route.id?.startsWith('/(tool)') || page.data.chrome === false);
 
   onMount(async () => {
     // Only the browser has the session cookie; signed out is the default.
