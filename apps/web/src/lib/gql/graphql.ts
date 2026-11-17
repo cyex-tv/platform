@@ -79,6 +79,18 @@ export type AuditEntry = {
   targetKind: Scalars['String']['output'];
 };
 
+/** A chat badge, shown before a chatter's name. */
+export type Badge = {
+  __typename?: 'Badge';
+  createdAt: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+  /** Square, 18 px at 1x. */
+  image: CosmeticImage;
+  name: Scalars['String']['output'];
+  tooltip: Scalars['String']['output'];
+  updatedAt: Scalars['String']['output'];
+};
+
 export type Channel = {
   __typename?: 'Channel';
   account: AccountSummary;
@@ -89,6 +101,48 @@ export type Channel = {
   platform: Platform;
   /** Twitch: the broadcaster's user ID. Kick: `broadcaster_user_id`. */
   platformChannelId: Scalars['String']['output'];
+};
+
+/** Every badge and paint, for clients to cache (`GET /v1/cosmetics`). */
+export type CosmeticCatalog = {
+  __typename?: 'CosmeticCatalog';
+  badges: Array<Badge>;
+  paints: Array<Paint>;
+};
+
+/** A badge's or an image paint's picture, served at `{host}/{name}` like emote files. */
+export type CosmeticImage = {
+  __typename?: 'CosmeticImage';
+  animated: Scalars['Boolean']['output'];
+  createdAt: Scalars['String']['output'];
+  /**
+   * WebP and AVIF at 1x, 2x and 4x, and static first frames for animations. Empty until the
+   * worker made them.
+   */
+  files: Array<EmoteFile>;
+  height: Scalars['Int']['output'];
+  /** For example `https://cdn.cyex.tv/cosmetics/badges/<sha256>`. */
+  host: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+  kind: CosmeticKind;
+  /** The files are made: only then can a badge or paint use it. */
+  ready: Scalars['Boolean']['output'];
+  /** The original's size in px. */
+  width: Scalars['Int']['output'];
+};
+
+/** A badge or a paint. */
+export type CosmeticKind =
+  | 'BADGE'
+  | 'PAINT';
+
+export type CreateBadgeInput = {
+  /** A ready badge image from `POST /v1/cosmetics/images`. */
+  imageId: Scalars['String']['input'];
+  /** 1 to 32 characters, unique. */
+  name: Scalars['String']['input'];
+  /** 1 to 64 characters. */
+  tooltip: Scalars['String']['input'];
 };
 
 export type CreateRoleInput = {
@@ -120,7 +174,7 @@ export type EditorPermission =
   | 'EDITORS'
   /** Add, remove, rename and alias emotes in the owner's sets, the active channel sets too. */
   | 'EMOTES'
-  /** The owner's profile and cosmetics. Stored now, used by the cosmetics phase. */
+  /** Pick the badge and paint the owner shows (ADR 0015). Never grants. */
   | 'PROFILE'
   /**
    * Create, rename and delete sets, change their capacity, and change the owner's channels'
@@ -201,9 +255,39 @@ export type EmoteState =
   | 'REJECTED'
   | 'TAKEN_DOWN';
 
+/** One account owning one cosmetic. */
+export type Entitlement = {
+  __typename?: 'Entitlement';
+  account: AccountSummary;
+  cosmeticId: Scalars['String']['output'];
+  grantedAt: Scalars['String']['output'];
+  grantedBy?: Maybe<AccountSummary>;
+  kind: CosmeticKind;
+  reason?: Maybe<Scalars['String']['output']>;
+  source: EntitlementSource;
+};
+
+export type EntitlementPage = {
+  __typename?: 'EntitlementPage';
+  items: Array<Entitlement>;
+  total: Scalars['Int']['output'];
+};
+
+/** How an account came to own a cosmetic. Only `GRANT` is used for now. */
+export type EntitlementSource =
+  | 'EVENT'
+  | 'GRANT'
+  | 'PURCHASE';
+
 /** One change, as delivered on both sockets. */
 export type Event = {
   __typename?: 'Event';
+  /** `user.cosmetics_updated`: the badge shown now; empty for none. */
+  badgeId?: Maybe<Scalars['String']['output']>;
+  /** `cosmetic.*`: its ID. */
+  cosmeticId?: Maybe<Scalars['String']['output']>;
+  /** `cosmetic.*`: which kind of cosmetic. */
+  cosmeticKind?: Maybe<CosmeticKind>;
   createdAt: Scalars['String']['output'];
   emoteId?: Maybe<Scalars['String']['output']>;
   eventType: EventType;
@@ -211,6 +295,8 @@ export type Event = {
   id: Scalars['String']['output'];
   /** The emote's name in the set, for added and renamed. */
   name?: Maybe<Scalars['String']['output']>;
+  /** `user.cosmetics_updated`: the paint shown now; empty for none. */
+  paintId?: Maybe<Scalars['String']['output']>;
   setId?: Maybe<Scalars['String']['output']>;
   /** The topic it was delivered for, for example `channel:twitch:123`. */
   topic: Scalars['String']['output'];
@@ -219,13 +305,28 @@ export type Event = {
 /** What changed. On the event WebSocket these are written `set.emote_added` and so on. */
 export type EventType =
   | 'CHANNEL_ACTIVE_SET_CHANGED'
+  /** A badge or paint was made (topic `cosmetics`, ADR 0015). */
+  | 'COSMETIC_CREATED'
+  /** Gone: stop showing it on anyone. */
+  | 'COSMETIC_DELETED'
+  | 'COSMETIC_UPDATED'
   | 'EMOTE_UPDATED'
   | 'PERSONAL_UPDATED'
   /** Too much was missed: refetch what you show. */
   | 'RESYNC'
   | 'SET_EMOTE_ADDED'
   | 'SET_EMOTE_REMOVED'
-  | 'SET_EMOTE_RENAMED';
+  | 'SET_EMOTE_RENAMED'
+  /** The badge or paint a user shows changed (their `user:` topics). */
+  | 'USER_COSMETICS_UPDATED';
+
+export type GrantCosmeticInput = {
+  accountId: Scalars['String']['input'];
+  cosmeticId: Scalars['String']['input'];
+  kind: CosmeticKind;
+  /** Why, for the audit log. 1 to 500 characters. */
+  reason: Scalars['String']['input'];
+};
 
 /** A Twitch or Kick account linked to a cyex.tv account. */
 export type Identity = {
@@ -271,6 +372,13 @@ export type Mutation = {
   approveEmote: Emote;
   /** Give an account a role. Needs `roles.manage`. Audited. */
   assignRole: Scalars['Boolean']['output'];
+  /**
+   * Make a badge from a ready badge picture (`POST /v1/cosmetics/images`). Needs
+   * `cosmetics.manage`. Audited; publishes `cosmetic.created`.
+   */
+  createBadge: Badge;
+  /** Make a paint. Needs `cosmetics.manage`. Audited; publishes `cosmetic.created`. */
+  createPaint: Paint;
   /** Create a role. You can only grant permissions you hold. Needs `roles.manage`. Audited. */
   createRole: Role;
   /**
@@ -278,8 +386,18 @@ export type Mutation = {
    * account you edit with `SETS`.
    */
   createSet: EmoteSet;
+  /**
+   * Delete a badge: everyone loses it and stops showing it. False when there was none. Needs
+   * `cosmetics.manage`. Audited.
+   */
+  deleteBadge: Scalars['Boolean']['output'];
   /** Delete your emote. It is removed from every set. */
   deleteEmote: Scalars['Boolean']['output'];
+  /**
+   * Delete a paint: everyone loses it and stops showing it. False when there was none. Needs
+   * `cosmetics.manage`. Audited.
+   */
+  deletePaint: Scalars['Boolean']['output'];
   /** Delete a role below your own highest one. Needs `roles.manage`. Audited. */
   deleteRole: Scalars['Boolean']['output'];
   /**
@@ -287,6 +405,8 @@ export type Mutation = {
    * can't be deleted.
    */
   deleteSet: Scalars['Boolean']['output'];
+  /** Give an account a badge or paint, with a reason. Needs `cosmetics.grant`. Audited. */
+  grantCosmetic: Entitlement;
   /** Mark all your notifications read. Returns how many were unread. */
   markNotificationsRead: Scalars['Int']['output'];
   /** Reject a pending emote with a reason. Needs `emotes.review`. Audited. */
@@ -313,6 +433,17 @@ export type Mutation = {
    */
   restrictAccount: AccountStatus;
   /**
+   * Take a badge or paint away; if they showed it, it stops. False when they didn't own it.
+   * Needs `cosmetics.grant`. Audited.
+   */
+  revokeCosmetic: Scalars['Boolean']['output'];
+  /**
+   * Pick the badge and paint you show, from what you own (ADR 0015). Leave a field out to keep
+   * it; send null or an empty string to show none. With `ownerId`, for an account you edit
+   * with `PROFILE`.
+   */
+  selectCosmetics: OwnedCosmetics;
+  /**
    * Take an emote's image down everywhere: out of every set, its file blocked and deleted,
    * its owners told. Needs `emotes.takedown`. Audited.
    */
@@ -329,6 +460,8 @@ export type Mutation = {
    * Audited.
    */
   updateAccountEditor: AccountEditor;
+  /** Change a badge's name, tooltip or picture. Needs `cosmetics.manage`. Audited. */
+  updateBadge: Badge;
   /**
    * Change a channel's active set and settings. The channel's owner, or their account editors
    * with `SETS`.
@@ -336,6 +469,8 @@ export type Mutation = {
   updateChannelSettings: Channel;
   /** Change an emote's name, tags or flags. Owner, or `emotes.edit_any`. */
   updateEmote: Emote;
+  /** Replace every field of a paint. Needs `cosmetics.manage`. Audited. */
+  updatePaint: Paint;
   /** Change a role below your own highest one. Needs `roles.manage`. Audited. */
   updateRole: Role;
   /** Rename a set or change its capacity. Owner or editor; capacity needs `sets.edit_any`. */
@@ -374,6 +509,16 @@ export type MutationAssignRoleArgs = {
 };
 
 
+export type MutationCreateBadgeArgs = {
+  input: CreateBadgeInput;
+};
+
+
+export type MutationCreatePaintArgs = {
+  input: PaintInput;
+};
+
+
 export type MutationCreateRoleArgs = {
   input: CreateRoleInput;
 };
@@ -384,7 +529,17 @@ export type MutationCreateSetArgs = {
 };
 
 
+export type MutationDeleteBadgeArgs = {
+  id: Scalars['String']['input'];
+};
+
+
 export type MutationDeleteEmoteArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type MutationDeletePaintArgs = {
   id: Scalars['String']['input'];
 };
 
@@ -396,6 +551,11 @@ export type MutationDeleteRoleArgs = {
 
 export type MutationDeleteSetArgs = {
   id: Scalars['String']['input'];
+};
+
+
+export type MutationGrantCosmeticArgs = {
+  input: GrantCosmeticInput;
 };
 
 
@@ -443,6 +603,21 @@ export type MutationRestrictAccountArgs = {
 };
 
 
+export type MutationRevokeCosmeticArgs = {
+  accountId: Scalars['String']['input'];
+  cosmeticId: Scalars['String']['input'];
+  kind: CosmeticKind;
+  reason?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationSelectCosmeticsArgs = {
+  badgeId?: InputMaybe<Scalars['String']['input']>;
+  ownerId?: InputMaybe<Scalars['String']['input']>;
+  paintId?: InputMaybe<Scalars['String']['input']>;
+};
+
+
 export type MutationTakedownEmoteArgs = {
   id: Scalars['String']['input'];
   reason: Scalars['String']['input'];
@@ -467,6 +642,12 @@ export type MutationUpdateAccountEditorArgs = {
 };
 
 
+export type MutationUpdateBadgeArgs = {
+  id: Scalars['String']['input'];
+  input: UpdateBadgeInput;
+};
+
+
 export type MutationUpdateChannelSettingsArgs = {
   id: Scalars['String']['input'];
   input: UpdateChannelSettingsInput;
@@ -477,6 +658,12 @@ export type MutationUpdateChannelSettingsArgs = {
 export type MutationUpdateEmoteArgs = {
   id: Scalars['String']['input'];
   input: UpdateEmoteInput;
+};
+
+
+export type MutationUpdatePaintArgs = {
+  id: Scalars['String']['input'];
+  input: PaintInput;
 };
 
 
@@ -508,6 +695,119 @@ export type Notification = {
   /** JSON, as text. */
   payload: Scalars['String']['output'];
   read: Scalars['Boolean']['output'];
+};
+
+/** An account's cosmetics: what it owns and what it shows. */
+export type OwnedCosmetics = {
+  __typename?: 'OwnedCosmetics';
+  account: AccountSummary;
+  /** The badge shown, one of `badges`. */
+  badgeId?: Maybe<Scalars['String']['output']>;
+  badges: Array<Badge>;
+  /** The paint shown, one of `paints`. */
+  paintId?: Maybe<Scalars['String']['output']>;
+  paints: Array<Paint>;
+};
+
+/** A name paint: a gradient or a picture drawn into the chatter's name. */
+export type Paint = {
+  __typename?: 'Paint';
+  /** Degrees, 0 to 360, CSS convention (0 points up, 90 to the right). Linear only. */
+  angle: Scalars['Int']['output'];
+  /** Shown where a client can't draw the paint. */
+  color?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+  /** Image paints only. 64 px tall at 1x. */
+  image?: Maybe<CosmeticImage>;
+  kind: PaintKind;
+  name: Scalars['String']['output'];
+  /** `repeating-*-gradient`, or a tiled image. */
+  repeat: Scalars['Boolean']['output'];
+  /** At most 4. */
+  shadows: Array<PaintShadow>;
+  /** Radial only. */
+  shape: PaintShape;
+  /** 2 to 10 for gradients; none for image paints. */
+  stops: Array<PaintStop>;
+  updatedAt: Scalars['String']['output'];
+};
+
+/** A whole paint: `createPaint` makes one, `updatePaint` replaces every field. */
+export type PaintInput = {
+  /** 0 to 360, default 90. */
+  angle?: InputMaybe<Scalars['Int']['input']>;
+  /** `#RRGGBB` or `#RRGGBBAA`. */
+  color?: InputMaybe<Scalars['String']['input']>;
+  /** A ready paint image; `IMAGE` paints only. */
+  imageId?: InputMaybe<Scalars['String']['input']>;
+  kind: PaintKind;
+  /** 1 to 32 characters, unique. */
+  name: Scalars['String']['input'];
+  /** Default false. */
+  repeat?: InputMaybe<Scalars['Boolean']['input']>;
+  /** At most 4. */
+  shadows?: Array<PaintShadowInput>;
+  /** Default `CIRCLE`. */
+  shape?: InputMaybe<PaintShape>;
+  /** 2 to 10 for gradients, none for `IMAGE`. */
+  stops?: Array<PaintStopInput>;
+};
+
+/** How a paint is drawn. */
+export type PaintKind =
+  /** The paint's image, drawn into the name's text. */
+  | 'IMAGE'
+  /** `linear-gradient(<angle>deg, <stops>)`. */
+  | 'LINEAR_GRADIENT'
+  /** `radial-gradient(<shape>, <stops>)`. */
+  | 'RADIAL_GRADIENT';
+
+/** A drop shadow under a painted name (CSS `drop-shadow(x y radius color)`, in px). */
+export type PaintShadow = {
+  __typename?: 'PaintShadow';
+  /** `#RRGGBB` or `#RRGGBBAA`. */
+  color: Scalars['String']['output'];
+  /** Blur radius, 0 to 16. */
+  radius: Scalars['Float']['output'];
+  /** −16 to 16. */
+  x: Scalars['Float']['output'];
+  /** −16 to 16. */
+  y: Scalars['Float']['output'];
+};
+
+/** A drop shadow under a painted name (CSS `drop-shadow(x y radius color)`, in px). */
+export type PaintShadowInput = {
+  /** `#RRGGBB` or `#RRGGBBAA`. */
+  color: Scalars['String']['input'];
+  /** Blur radius, 0 to 16. */
+  radius: Scalars['Float']['input'];
+  /** −16 to 16. */
+  x: Scalars['Float']['input'];
+  /** −16 to 16. */
+  y: Scalars['Float']['input'];
+};
+
+/** The shape of a radial paint. */
+export type PaintShape =
+  | 'CIRCLE'
+  | 'ELLIPSE';
+
+/** One colour stop of a gradient paint. */
+export type PaintStop = {
+  __typename?: 'PaintStop';
+  /** Where along the gradient, 0 to 1. Each stop is at or after the one before. */
+  at: Scalars['Float']['output'];
+  /** `#RRGGBB` or `#RRGGBBAA`. */
+  color: Scalars['String']['output'];
+};
+
+/** One colour stop of a gradient paint. */
+export type PaintStopInput = {
+  /** Where along the gradient, 0 to 1. Each stop is at or after the one before. */
+  at: Scalars['Float']['input'];
+  /** `#RRGGBB` or `#RRGGBBAA`. */
+  color: Scalars['String']['input'];
 };
 
 export type PersonalSetEntry = {
@@ -546,6 +846,21 @@ export type Query = {
   channel?: Maybe<Channel>;
   /** A channel by its login or slug. Logins change; store the ID, not the login. */
   channelByLogin?: Maybe<Channel>;
+  /**
+   * Who owns which badges or paints, newest first; narrow it with `accountId` and/or
+   * `cosmeticId`. `perPage` is 1 to 100, default 50. Needs `cosmetics.grant`.
+   */
+  cosmeticEntitlements: EntitlementPage;
+  /**
+   * A badge or paint picture, to see whether its files are made (`ready`). Needs
+   * `cosmetics.manage`.
+   */
+  cosmeticImage?: Maybe<CosmeticImage>;
+  /**
+   * Every cyex.tv chat badge and name paint (ADR 0015). Public; clients cache it
+   * (`GET /v1/cosmetics` has an ETag) and follow the `cosmetics` topic.
+   */
+  cosmetics: CosmeticCatalog;
   /** The channels of the accounts you edit. */
   editorChannels: Array<Channel>;
   /** The accounts you edit, with what you may do on each. */
@@ -565,6 +880,11 @@ export type Query = {
   me: Me;
   /** Your channels: one per linked platform you have signed in with. */
   myChannels: Array<Channel>;
+  /**
+   * The cosmetics you own and show; with `accountId`, those of an account you edit with
+   * `PROFILE`.
+   */
+  myCosmetics: OwnedCosmetics;
   /** Your own emotes in every state, newest first. `perPage` is 1 to 100, default 50. */
   myEmotes: EmotePage;
   /** Your notifications, newest first (the latest 100). */
@@ -594,6 +914,11 @@ export type Query = {
   set?: Maybe<EmoteSet>;
   /** A set's editors. For its owner, its editors and `sets.edit_any`. */
   setEditors: Array<AccountSummary>;
+  /**
+   * The badge and paint up to 100 chatters show, as catalog IDs. Only chatters showing
+   * something are listed.
+   */
+  userCosmetics: Array<UserCosmetics>;
 };
 
 
@@ -637,6 +962,20 @@ export type QueryChannelByLoginArgs = {
 };
 
 
+export type QueryCosmeticEntitlementsArgs = {
+  accountId?: InputMaybe<Scalars['String']['input']>;
+  cosmeticId?: InputMaybe<Scalars['String']['input']>;
+  kind: CosmeticKind;
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryCosmeticImageArgs = {
+  id: Scalars['String']['input'];
+};
+
+
 export type QueryEmoteArgs = {
   id: Scalars['String']['input'];
 };
@@ -645,6 +984,11 @@ export type QueryEmoteArgs = {
 export type QueryEmoteChannelsArgs = {
   id: Scalars['String']['input'];
   limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryMyCosmeticsArgs = {
+  accountId?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -701,6 +1045,12 @@ export type QuerySetArgs = {
 
 export type QuerySetEditorsArgs = {
   setId: Scalars['String']['input'];
+};
+
+
+export type QueryUserCosmeticsArgs = {
+  platform: Platform;
+  userIds: Array<Scalars['String']['input']>;
 };
 
 export type Report = {
@@ -778,7 +1128,7 @@ export type Subscription = {
   __typename?: 'Subscription';
   /**
    * Live updates for up to 500 topics: `channel:<platform>:<id>`, `set:<id>`,
-   * `user:<platform>:<id>` (ADR 0005). The same events as the event WebSocket.
+   * `user:<platform>:<id>` (ADR 0005), and `cosmetics` (ADR 0015). The same events as the event WebSocket.
    */
   events: Event;
 };
@@ -786,6 +1136,13 @@ export type Subscription = {
 
 export type SubscriptionEventsArgs = {
   topics: Array<Scalars['String']['input']>;
+};
+
+export type UpdateBadgeInput = {
+  /** Another ready badge image. */
+  imageId?: InputMaybe<Scalars['String']['input']>;
+  name?: InputMaybe<Scalars['String']['input']>;
+  tooltip?: InputMaybe<Scalars['String']['input']>;
 };
 
 export type UpdateChannelSettingsInput = {
@@ -819,6 +1176,14 @@ export type UpdateSetInput = {
   /** Needs `sets.edit_any` to raise above the default. */
   capacity?: InputMaybe<Scalars['Int']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** What one chatter shows, as IDs from the catalog. Only chatters showing something are listed. */
+export type UserCosmetics = {
+  __typename?: 'UserCosmetics';
+  badgeId?: Maybe<Scalars['String']['output']>;
+  paintId?: Maybe<Scalars['String']['output']>;
+  platformUserId: Scalars['String']['output'];
 };
 
 export type EmoteFieldsFragment = { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> };

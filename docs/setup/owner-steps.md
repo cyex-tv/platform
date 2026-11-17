@@ -63,10 +63,10 @@ In Cloudflare → R2 → `cyex-tv-cdn` → Settings → Custom Domains, connect 
 ## 2. What may be served
 Only `emotes/` is public. `originals/` must never be. In R2 there is no per-prefix public switch, so add a WAF custom rule on `cdn.cyex.tv`:
 - Name: `cyex.tv: block originals`
-- Expression: `(http.host eq "cdn.cyex.tv" and not starts_with(http.request.uri.path, "/emotes/"))`
+- Expression: `(http.host eq "cdn.cyex.tv" and not starts_with(http.request.uri.path, "/emotes/") and not starts_with(http.request.uri.path, "/cosmetics/"))`
 - Action: Block
 
-(`cosmetics/` joins the allowed prefixes in the cosmetics phase.)
+`/cosmetics/` holds the chat badge and paint files (ADR 0015). Their originals are under `/originals/cosmetics/`, which this rule keeps blocked. If the rule was made with `/emotes/` only, edit its expression to the one above.
 
 ## 3. Caching
 The files carry `Cache-Control: public, max-age=31536000, immutable`, and their keys never change. Add a Cache Rule on `cdn.cyex.tv`:
