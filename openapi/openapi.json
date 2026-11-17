@@ -310,6 +310,196 @@
         }
       }
     },
+    "/v1/cosmetics": {
+      "get": {
+        "tags": [
+          "cosmetics"
+        ],
+        "summary": "Every cyex.tv chat badge and name paint (ADR 0015). Cache it with `If-None-Match`; live\nchanges come as `cosmetic.*` events on the `cosmetics` topic.",
+        "operationId": "get_cosmetics",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CosmeticCatalog"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified."
+          }
+        }
+      }
+    },
+    "/v1/cosmetics/images": {
+      "post": {
+        "tags": [
+          "cosmetics"
+        ],
+        "summary": "Upload a badge or paint picture (staff, `cosmetics.manage`).",
+        "description": "The worker makes its files (WebP and AVIF at 1x, 2x and 4x) under `cosmetics/`; poll\n`cosmeticImage(id)` until `ready`, then use the ID in `createBadge` or `createPaint`. Badges:\nsquare, at least 72×72 px. Paints: at least 64 px tall. PNG, APNG, GIF or WebP, at most 5 MB.\nThe same bytes give the same picture again.",
+        "operationId": "upload_cosmetic_image",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/UploadCosmeticImage"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted; the files are being made.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CosmeticImage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`bad_form` or `bad_kind`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`signed_out`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`forbidden` (needs `cosmetics.manage`), or `bad_origin`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`too_large`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_format`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_image` or `bad_dimensions`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`unavailable`: storage isn't reachable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/cosmetics/users": {
+      "get": {
+        "tags": [
+          "cosmetics"
+        ],
+        "summary": "The badge and paint up to 100 chatters show, as catalog IDs. Only chatters showing something\nare listed; changes come as `user.cosmetics_updated` on their `user:` topics.",
+        "operationId": "get_user_cosmetics",
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "query",
+            "description": "`twitch` or `kick`.",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Platform"
+            }
+          },
+          {
+            "name": "ids",
+            "in": "query",
+            "description": "Up to 100 platform user IDs, comma-separated.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserCosmeticsResult"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified."
+          },
+          "400": {
+            "description": "`too_many`: more than 100 IDs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/emotes": {
       "post": {
         "tags": [
@@ -602,6 +792,39 @@
           }
         }
       },
+      "Badge": {
+        "type": "object",
+        "description": "A chat badge, shown before a chatter's name.",
+        "required": [
+          "id",
+          "name",
+          "tooltip",
+          "image",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image": {
+            "$ref": "#/components/schemas/CosmeticImage",
+            "description": "Square, 18 px at 1x."
+          },
+          "name": {
+            "type": "string"
+          },
+          "tooltip": {
+            "type": "string"
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
       "Channel": {
         "type": "object",
         "required": [
@@ -636,6 +859,91 @@
             "description": "Twitch: the broadcaster's user ID. Kick: `broadcaster_user_id`."
           }
         }
+      },
+      "CosmeticCatalog": {
+        "type": "object",
+        "description": "Every badge and paint, for clients to cache (`GET /v1/cosmetics`).",
+        "required": [
+          "badges",
+          "paints"
+        ],
+        "properties": {
+          "badges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Badge"
+            }
+          },
+          "paints": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Paint"
+            }
+          }
+        }
+      },
+      "CosmeticImage": {
+        "type": "object",
+        "description": "A badge's or an image paint's picture, served at `{host}/{name}` like emote files.",
+        "required": [
+          "id",
+          "kind",
+          "host",
+          "files",
+          "animated",
+          "width",
+          "height",
+          "ready",
+          "created_at"
+        ],
+        "properties": {
+          "animated": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmoteFile"
+            },
+            "description": "WebP and AVIF at 1x, 2x and 4x, and static first frames for animations. Empty until the\nworker made them."
+          },
+          "height": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "host": {
+            "type": "string",
+            "description": "For example `https://cdn.cyex.tv/cosmetics/badges/<sha256>`."
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CosmeticKind"
+          },
+          "ready": {
+            "type": "boolean",
+            "description": "The files are made: only then can a badge or paint use it."
+          },
+          "width": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The original's size in px.",
+            "minimum": 0
+          }
+        }
+      },
+      "CosmeticKind": {
+        "type": "string",
+        "description": "A badge or a paint.",
+        "enum": [
+          "badge",
+          "paint"
+        ]
       },
       "Emote": {
         "type": "object",
@@ -857,6 +1165,152 @@
           "avif"
         ]
       },
+      "Paint": {
+        "type": "object",
+        "description": "A name paint: a gradient or a picture drawn into the chatter's name.",
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "angle",
+          "repeat",
+          "shape",
+          "stops",
+          "shadows",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "angle": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Degrees, 0 to 360, CSS convention (0 points up, 90 to the right). Linear only.",
+            "minimum": 0
+          },
+          "color": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Shown where a client can't draw the paint."
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "image": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CosmeticImage",
+                "description": "Image paints only. 64 px tall at 1x."
+              }
+            ]
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PaintKind"
+          },
+          "name": {
+            "type": "string"
+          },
+          "repeat": {
+            "type": "boolean",
+            "description": "`repeating-*-gradient`, or a tiled image."
+          },
+          "shadows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaintShadow"
+            },
+            "description": "At most 4."
+          },
+          "shape": {
+            "$ref": "#/components/schemas/PaintShape",
+            "description": "Radial only."
+          },
+          "stops": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PaintStop"
+            },
+            "description": "2 to 10 for gradients; none for image paints."
+          },
+          "updated_at": {
+            "type": "string"
+          }
+        }
+      },
+      "PaintKind": {
+        "type": "string",
+        "description": "How a paint is drawn.",
+        "enum": [
+          "linear_gradient",
+          "radial_gradient",
+          "image"
+        ]
+      },
+      "PaintShadow": {
+        "type": "object",
+        "description": "A drop shadow under a painted name (CSS `drop-shadow(x y radius color)`, in px).",
+        "required": [
+          "x",
+          "y",
+          "radius",
+          "color"
+        ],
+        "properties": {
+          "color": {
+            "type": "string",
+            "description": "`#RRGGBB` or `#RRGGBBAA`."
+          },
+          "radius": {
+            "type": "number",
+            "format": "double",
+            "description": "Blur radius, 0 to 16."
+          },
+          "x": {
+            "type": "number",
+            "format": "double",
+            "description": "−16 to 16."
+          },
+          "y": {
+            "type": "number",
+            "format": "double",
+            "description": "−16 to 16."
+          }
+        }
+      },
+      "PaintShape": {
+        "type": "string",
+        "description": "The shape of a radial paint.",
+        "enum": [
+          "circle",
+          "ellipse"
+        ]
+      },
+      "PaintStop": {
+        "type": "object",
+        "description": "One colour stop of a gradient paint.",
+        "required": [
+          "at",
+          "color"
+        ],
+        "properties": {
+          "at": {
+            "type": "number",
+            "format": "double",
+            "description": "Where along the gradient, 0 to 1. Each stop is at or after the one before."
+          },
+          "color": {
+            "type": "string",
+            "description": "`#RRGGBB` or `#RRGGBBAA`."
+          }
+        }
+      },
       "PersonalLookup": {
         "type": "object",
         "description": "`POST /v1/personal-sets/lookup`.",
@@ -954,6 +1408,24 @@
           "global"
         ]
       },
+      "UploadCosmeticImage": {
+        "type": "object",
+        "description": "Multipart upload (REST only): a badge or paint picture.",
+        "required": [
+          "kind",
+          "file"
+        ],
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary"
+          },
+          "kind": {
+            "type": "string",
+            "description": "`badge` or `paint`."
+          }
+        }
+      },
       "UploadEmote": {
         "type": "object",
         "description": "Multipart upload (REST only): the image file and its name.",
@@ -977,6 +1449,45 @@
             "description": "Comma-separated."
           }
         }
+      },
+      "UserCosmetics": {
+        "type": "object",
+        "description": "What one chatter shows, as IDs from the catalog. Only chatters showing something are listed.",
+        "required": [
+          "platform_user_id"
+        ],
+        "properties": {
+          "badge_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "paint_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "platform_user_id": {
+            "type": "string"
+          }
+        }
+      },
+      "UserCosmeticsResult": {
+        "type": "object",
+        "description": "`GET /v1/cosmetics/users`.",
+        "required": [
+          "users"
+        ],
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserCosmetics"
+            }
+          }
+        }
       }
     }
   },
@@ -992,6 +1503,10 @@
     {
       "name": "emotes",
       "description": "Uploading emotes."
+    },
+    {
+      "name": "cosmetics",
+      "description": "cyex.tv chat badges and name paints (ADR 0015): the catalog, chatters' picks, and staff picture uploads."
     },
     {
       "name": "reads",

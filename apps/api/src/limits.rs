@@ -2,7 +2,7 @@
 //! GraphQL. A request over a limit gets `429 rate_limited` with `Retry-After`.
 //!
 //! The upload's 20 an hour per account lives in `upload`, since it counts what was made. Editor
-//! changes are checked per account in `editors`.
+//! changes are checked per account in `editors`, cosmetics writes in `cosmetics`.
 
 use std::net::SocketAddr;
 
@@ -32,6 +32,8 @@ pub struct Rates {
     pub socket: Rate,
     /// Adding, changing and removing account editors, per account (ADR 0014).
     pub editors: Rate,
+    /// Cosmetics writes (staff changes, grants, selections), per account (ADR 0015).
+    pub cosmetics: Rate,
 }
 
 impl Default for Rates {
@@ -44,6 +46,7 @@ impl Default for Rates {
             reads: Rate::per_minute(1200),
             socket: Rate::per_minute(60),
             editors: Rate::per_hour(60),
+            cosmetics: Rate::per_hour(300),
         }
     }
 }
@@ -56,6 +59,7 @@ pub struct Limits {
     pub reads: Limiter,
     pub socket: Limiter,
     pub editors: Limiter,
+    pub cosmetics: Limiter,
     /// Take the client IP from `CF-Connecting-IP` (`CYEX_TV_TRUST_CLOUDFLARE=true`).
     pub trust_cloudflare: bool,
 }
@@ -70,6 +74,7 @@ impl Limits {
             reads: Limiter::new(rates.reads),
             socket: Limiter::new(rates.socket),
             editors: Limiter::new(rates.editors),
+            cosmetics: Limiter::new(rates.cosmetics),
             trust_cloudflare,
         }
     }
@@ -104,7 +109,7 @@ fn class<'a>(limits: &'a Limits, method: &Method, path: &str) -> Option<&'a Limi
     match (method, path) {
         (&Method::POST, "/v1/gql") => Some(&limits.gql),
         (_, "/v1/gql/ws") => Some(&limits.socket),
-        (&Method::POST, "/v1/emotes") => Some(&limits.upload),
+        (&Method::POST, "/v1/emotes" | "/v1/cosmetics/images") => Some(&limits.upload),
         (&Method::POST, "/v1/personal-sets/lookup") => Some(&limits.reads),
         (&Method::GET | &Method::HEAD, p) if p.starts_with("/v1/") => Some(&limits.reads),
         _ => None,
@@ -142,6 +147,14 @@ mod tests {
         assert!(same(class(&l, &Method::POST, "/v1/gql"), &l.gql));
         assert!(same(class(&l, &Method::GET, "/v1/gql/ws"), &l.socket));
         assert!(same(class(&l, &Method::POST, "/v1/emotes"), &l.upload));
+        assert!(same(
+            class(&l, &Method::POST, "/v1/cosmetics/images"),
+            &l.upload
+        ));
+        assert!(same(
+            class(&l, &Method::GET, "/v1/cosmetics/users"),
+            &l.reads
+        ));
         assert!(same(class(&l, &Method::GET, "/v1/sets/global"), &l.reads));
         assert!(same(
             class(&l, &Method::POST, "/v1/personal-sets/lookup"),

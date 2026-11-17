@@ -87,6 +87,21 @@ type AuditEntry {
 	createdAt: String!
 }
 
+"""
+A chat badge, shown before a chatter's name.
+"""
+type Badge {
+	id: String!
+	name: String!
+	tooltip: String!
+	"""
+	Square, 18 px at 1x.
+	"""
+	image: CosmeticImage!
+	createdAt: String!
+	updatedAt: String!
+}
+
 type Channel {
 	platform: Platform!
 	"""
@@ -100,6 +115,65 @@ type Channel {
 	Whether other people's personal emotes show in this channel.
 	"""
 	allowPersonalEmotes: Boolean!
+}
+
+"""
+Every badge and paint, for clients to cache (`GET /v1/cosmetics`).
+"""
+type CosmeticCatalog {
+	badges: [Badge!]!
+	paints: [Paint!]!
+}
+
+"""
+A badge's or an image paint's picture, served at `{host}/{name}` like emote files.
+"""
+type CosmeticImage {
+	id: String!
+	kind: CosmeticKind!
+	"""
+	For example `https://cdn.cyex.tv/cosmetics/badges/<sha256>`.
+	"""
+	host: String!
+	"""
+	WebP and AVIF at 1x, 2x and 4x, and static first frames for animations. Empty until the
+	worker made them.
+	"""
+	files: [EmoteFile!]!
+	animated: Boolean!
+	"""
+	The original's size in px.
+	"""
+	width: Int!
+	height: Int!
+	"""
+	The files are made: only then can a badge or paint use it.
+	"""
+	ready: Boolean!
+	createdAt: String!
+}
+
+"""
+A badge or a paint.
+"""
+enum CosmeticKind {
+	BADGE
+	PAINT
+}
+
+input CreateBadgeInput {
+	"""
+	1 to 32 characters, unique.
+	"""
+	name: String!
+	"""
+	1 to 64 characters.
+	"""
+	tooltip: String!
+	"""
+	A ready badge image from `POST /v1/cosmetics/images`.
+	"""
+	imageId: String!
 }
 
 input CreateRoleInput {
@@ -148,7 +222,7 @@ enum EditorPermission {
 	"""
 	EDITORS
 	"""
-	The owner's profile and cosmetics. Stored now, used by the cosmetics phase.
+	Pick the badge and paint the owner shows (ADR 0015). Never grants.
 	"""
 	PROFILE
 }
@@ -250,6 +324,33 @@ enum EmoteState {
 }
 
 """
+One account owning one cosmetic.
+"""
+type Entitlement {
+	account: AccountSummary!
+	kind: CosmeticKind!
+	cosmeticId: String!
+	source: EntitlementSource!
+	reason: String
+	grantedBy: AccountSummary
+	grantedAt: String!
+}
+
+type EntitlementPage {
+	items: [Entitlement!]!
+	total: Int!
+}
+
+"""
+How an account came to own a cosmetic. Only `GRANT` is used for now.
+"""
+enum EntitlementSource {
+	GRANT
+	PURCHASE
+	EVENT
+}
+
+"""
 One change, as delivered on both sockets.
 """
 type Event {
@@ -269,6 +370,22 @@ type Event {
 	"""
 	name: String
 	createdAt: String!
+	"""
+	`cosmetic.*`: which kind of cosmetic.
+	"""
+	cosmeticKind: CosmeticKind
+	"""
+	`cosmetic.*`: its ID.
+	"""
+	cosmeticId: String
+	"""
+	`user.cosmetics_updated`: the badge shown now; empty for none.
+	"""
+	badgeId: String
+	"""
+	`user.cosmetics_updated`: the paint shown now; empty for none.
+	"""
+	paintId: String
 }
 
 """
@@ -282,9 +399,32 @@ enum EventType {
 	PERSONAL_UPDATED
 	EMOTE_UPDATED
 	"""
+	A badge or paint was made (topic `cosmetics`, ADR 0015).
+	"""
+	COSMETIC_CREATED
+	COSMETIC_UPDATED
+	"""
+	Gone: stop showing it on anyone.
+	"""
+	COSMETIC_DELETED
+	"""
+	The badge or paint a user shows changed (their `user:` topics).
+	"""
+	USER_COSMETICS_UPDATED
+	"""
 	Too much was missed: refetch what you show.
 	"""
 	RESYNC
+}
+
+input GrantCosmeticInput {
+	accountId: String!
+	kind: CosmeticKind!
+	cosmeticId: String!
+	"""
+	Why, for the audit log. 1 to 500 characters.
+	"""
+	reason: String!
 }
 
 """
@@ -381,6 +521,48 @@ type Mutation {
 	"""
 	removeAccountEditor(ownerId: String, accountId: String!): Boolean!
 	"""
+	Pick the badge and paint you show, from what you own (ADR 0015). Leave a field out to keep
+	it; send null or an empty string to show none. With `ownerId`, for an account you edit
+	with `PROFILE`.
+	"""
+	selectCosmetics(badgeId: String, paintId: String, ownerId: String): OwnedCosmetics!
+	"""
+	Make a badge from a ready badge picture (`POST /v1/cosmetics/images`). Needs
+	`cosmetics.manage`. Audited; publishes `cosmetic.created`.
+	"""
+	createBadge(input: CreateBadgeInput!): Badge!
+	"""
+	Change a badge's name, tooltip or picture. Needs `cosmetics.manage`. Audited.
+	"""
+	updateBadge(id: String!, input: UpdateBadgeInput!): Badge!
+	"""
+	Delete a badge: everyone loses it and stops showing it. False when there was none. Needs
+	`cosmetics.manage`. Audited.
+	"""
+	deleteBadge(id: String!): Boolean!
+	"""
+	Make a paint. Needs `cosmetics.manage`. Audited; publishes `cosmetic.created`.
+	"""
+	createPaint(input: PaintInput!): Paint!
+	"""
+	Replace every field of a paint. Needs `cosmetics.manage`. Audited.
+	"""
+	updatePaint(id: String!, input: PaintInput!): Paint!
+	"""
+	Delete a paint: everyone loses it and stops showing it. False when there was none. Needs
+	`cosmetics.manage`. Audited.
+	"""
+	deletePaint(id: String!): Boolean!
+	"""
+	Give an account a badge or paint, with a reason. Needs `cosmetics.grant`. Audited.
+	"""
+	grantCosmetic(input: GrantCosmeticInput!): Entitlement!
+	"""
+	Take a badge or paint away; if they showed it, it stops. False when they didn't own it.
+	Needs `cosmetics.grant`. Audited.
+	"""
+	revokeCosmetic(accountId: String!, kind: CosmeticKind!, cosmeticId: String!, reason: String): Boolean!
+	"""
 	Change an emote's name, tags or flags. Owner, or `emotes.edit_any`.
 	"""
 	updateEmote(id: String!, input: UpdateEmoteInput!): Emote!
@@ -457,6 +639,199 @@ type Notification {
 	payload: String!
 	createdAt: String!
 	read: Boolean!
+}
+
+"""
+An account's cosmetics: what it owns and what it shows.
+"""
+type OwnedCosmetics {
+	account: AccountSummary!
+	badges: [Badge!]!
+	paints: [Paint!]!
+	"""
+	The badge shown, one of `badges`.
+	"""
+	badgeId: String
+	"""
+	The paint shown, one of `paints`.
+	"""
+	paintId: String
+}
+
+"""
+A name paint: a gradient or a picture drawn into the chatter's name.
+"""
+type Paint {
+	id: String!
+	name: String!
+	kind: PaintKind!
+	"""
+	Degrees, 0 to 360, CSS convention (0 points up, 90 to the right). Linear only.
+	"""
+	angle: Int!
+	"""
+	`repeating-*-gradient`, or a tiled image.
+	"""
+	repeat: Boolean!
+	"""
+	Radial only.
+	"""
+	shape: PaintShape!
+	"""
+	Shown where a client can't draw the paint.
+	"""
+	color: String
+	"""
+	2 to 10 for gradients; none for image paints.
+	"""
+	stops: [PaintStop!]!
+	"""
+	At most 4.
+	"""
+	shadows: [PaintShadow!]!
+	"""
+	Image paints only. 64 px tall at 1x.
+	"""
+	image: CosmeticImage
+	createdAt: String!
+	updatedAt: String!
+}
+
+"""
+A whole paint: `createPaint` makes one, `updatePaint` replaces every field.
+"""
+input PaintInput {
+	"""
+	1 to 32 characters, unique.
+	"""
+	name: String!
+	kind: PaintKind!
+	"""
+	0 to 360, default 90.
+	"""
+	angle: Int
+	"""
+	Default false.
+	"""
+	repeat: Boolean
+	"""
+	Default `CIRCLE`.
+	"""
+	shape: PaintShape
+	"""
+	`#RRGGBB` or `#RRGGBBAA`.
+	"""
+	color: String
+	"""
+	2 to 10 for gradients, none for `IMAGE`.
+	"""
+	stops: [PaintStopInput!]! = []
+	"""
+	At most 4.
+	"""
+	shadows: [PaintShadowInput!]! = []
+	"""
+	A ready paint image; `IMAGE` paints only.
+	"""
+	imageId: String
+}
+
+"""
+How a paint is drawn.
+"""
+enum PaintKind {
+	"""
+	`linear-gradient(<angle>deg, <stops>)`.
+	"""
+	LINEAR_GRADIENT
+	"""
+	`radial-gradient(<shape>, <stops>)`.
+	"""
+	RADIAL_GRADIENT
+	"""
+	The paint's image, drawn into the name's text.
+	"""
+	IMAGE
+}
+
+"""
+A drop shadow under a painted name (CSS `drop-shadow(x y radius color)`, in px).
+"""
+type PaintShadow {
+	"""
+	−16 to 16.
+	"""
+	x: Float!
+	"""
+	−16 to 16.
+	"""
+	y: Float!
+	"""
+	Blur radius, 0 to 16.
+	"""
+	radius: Float!
+	"""
+	`#RRGGBB` or `#RRGGBBAA`.
+	"""
+	color: String!
+}
+
+"""
+A drop shadow under a painted name (CSS `drop-shadow(x y radius color)`, in px).
+"""
+input PaintShadowInput {
+	"""
+	−16 to 16.
+	"""
+	x: Float!
+	"""
+	−16 to 16.
+	"""
+	y: Float!
+	"""
+	Blur radius, 0 to 16.
+	"""
+	radius: Float!
+	"""
+	`#RRGGBB` or `#RRGGBBAA`.
+	"""
+	color: String!
+}
+
+"""
+The shape of a radial paint.
+"""
+enum PaintShape {
+	CIRCLE
+	ELLIPSE
+}
+
+"""
+One colour stop of a gradient paint.
+"""
+type PaintStop {
+	"""
+	Where along the gradient, 0 to 1. Each stop is at or after the one before.
+	"""
+	at: Float!
+	"""
+	`#RRGGBB` or `#RRGGBBAA`.
+	"""
+	color: String!
+}
+
+"""
+One colour stop of a gradient paint.
+"""
+input PaintStopInput {
+	"""
+	Where along the gradient, 0 to 1. Each stop is at or after the one before.
+	"""
+	at: Float!
+	"""
+	`#RRGGBB` or `#RRGGBBAA`.
+	"""
+	color: String!
 }
 
 type PersonalSetEntry {
@@ -554,6 +929,31 @@ type Query {
 	The channels of the accounts you edit.
 	"""
 	editorChannels: [Channel!]!
+	"""
+	Every cyex.tv chat badge and name paint (ADR 0015). Public; clients cache it
+	(`GET /v1/cosmetics` has an ETag) and follow the `cosmetics` topic.
+	"""
+	cosmetics: CosmeticCatalog!
+	"""
+	The badge and paint up to 100 chatters show, as catalog IDs. Only chatters showing
+	something are listed.
+	"""
+	userCosmetics(platform: Platform!, userIds: [String!]!): [UserCosmetics!]!
+	"""
+	The cosmetics you own and show; with `accountId`, those of an account you edit with
+	`PROFILE`.
+	"""
+	myCosmetics(accountId: String): OwnedCosmetics!
+	"""
+	A badge or paint picture, to see whether its files are made (`ready`). Needs
+	`cosmetics.manage`.
+	"""
+	cosmeticImage(id: String!): CosmeticImage
+	"""
+	Who owns which badges or paints, newest first; narrow it with `accountId` and/or
+	`cosmeticId`. `perPage` is 1 to 100, default 50. Needs `cosmetics.grant`.
+	"""
+	cosmeticEntitlements(kind: CosmeticKind!, accountId: String, cosmeticId: String, page: Int, perPage: Int): EntitlementPage!
 	"""
 	Every permission name a role can hold.
 	"""
@@ -675,9 +1075,18 @@ enum SetKind {
 type Subscription {
 	"""
 	Live updates for up to 500 topics: `channel:<platform>:<id>`, `set:<id>`,
-	`user:<platform>:<id>` (ADR 0005). The same events as the event WebSocket.
+	`user:<platform>:<id>` (ADR 0005), and `cosmetics` (ADR 0015). The same events as the event WebSocket.
 	"""
 	events(topics: [String!]!): Event!
+}
+
+input UpdateBadgeInput {
+	name: String
+	tooltip: String
+	"""
+	Another ready badge image.
+	"""
+	imageId: String
 }
 
 input UpdateChannelSettingsInput {
@@ -717,6 +1126,15 @@ input UpdateSetInput {
 	Needs `sets.edit_any` to raise above the default.
 	"""
 	capacity: Int
+}
+
+"""
+What one chatter shows, as IDs from the catalog. Only chatters showing something are listed.
+"""
+type UserCosmetics {
+	platformUserId: String!
+	badgeId: String
+	paintId: String
 }
 
 """

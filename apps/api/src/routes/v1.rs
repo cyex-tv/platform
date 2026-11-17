@@ -15,8 +15,9 @@ use cyex_tv_auth::cookies;
 use cyex_tv_auth::flow::Callback;
 use cyex_tv_shared::error::{ApiError, ApiResult, ErrorBody};
 use cyex_tv_shared::model::{
-    CallbackQuery, Channel, Emote, EmoteSet, LoginQuery, PersonalLookup, PersonalLookupResult,
-    Platform, UploadEmote,
+    CallbackQuery, Channel, CosmeticCatalog, CosmeticImage, CosmeticKind, Emote, EmoteSet,
+    LoginQuery, PersonalLookup, PersonalLookupResult, Platform, UploadCosmeticImage, UploadEmote,
+    UserCosmeticsQuery, UserCosmeticsResult,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -24,7 +25,7 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 use crate::state::{AppState, MaybeCaller};
-use crate::{catalog, moderation, upload};
+use crate::{catalog, cosmetics, moderation, upload};
 
 /// The upload body may be a little over the 5 MB file limit (multipart framing, the name and
 /// tags); anything beyond this is cut off before it is read.
@@ -33,6 +34,7 @@ const UPLOAD_BODY_LIMIT: usize = 5 * 1024 * 1024 + 64 * 1024;
 pub fn router() -> OpenApiRouter<AppState> {
     let upload = OpenApiRouter::new()
         .routes(routes!(upload_emote))
+        .routes(routes!(upload_cosmetic_image))
         .layer(DefaultBodyLimit::max(UPLOAD_BODY_LIMIT));
     OpenApiRouter::new()
         .merge(upload)
@@ -44,6 +46,8 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(get_global_set))
         .routes(routes!(get_emote))
         .routes(routes!(lookup_personal_sets))
+        .routes(routes!(get_cosmetics))
+        .routes(routes!(get_user_cosmetics))
 }
 
 // Auth
@@ -271,6 +275,92 @@ async fn upload_emote(
     Ok((StatusCode::ACCEPTED, Json(emote)))
 }
 
+/// Reads a multipart file field under the 5 MB limit.
+async fn file_field(
+    field: &mut axum::extract::multipart::Field<'_>,
+    bad_form: impl Fn(&str) -> ApiError,
+) -> ApiResult<Vec<u8>> {
+    let mut bytes = Vec::new();
+    while let Some(chunk) = field.chunk().await.map_err(|err| {
+        if err.status() == StatusCode::PAYLOAD_TOO_LARGE {
+            upload::too_large()
+        } else {
+            bad_form("The file couldn't be read.")
+        }
+    })? {
+        if bytes.len() + chunk.len() > cyex_tv_media::Limits::default().max_bytes {
+            return Err(upload::too_large());
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
+/// Upload a badge or paint picture (staff, `cosmetics.manage`).
+///
+/// The worker makes its files (WebP and AVIF at 1x, 2x and 4x) under `cosmetics/`; poll
+/// `cosmeticImage(id)` until `ready`, then use the ID in `createBadge` or `createPaint`. Badges:
+/// square, at least 72×72 px. Paints: at least 64 px tall. PNG, APNG, GIF or WebP, at most 5 MB.
+/// The same bytes give the same picture again.
+#[utoipa::path(
+    post,
+    path = "/v1/cosmetics/images",
+    tag = "cosmetics",
+    request_body(content = UploadCosmeticImage, content_type = "multipart/form-data"),
+    responses(
+        (status = 202, description = "Accepted; the files are being made.", body = CosmeticImage),
+        (status = 400, description = "`bad_form` or `bad_kind`.", body = ErrorBody),
+        (status = 401, description = "`signed_out`.", body = ErrorBody),
+        (status = 403, description = "`forbidden` (needs `cosmetics.manage`), or `bad_origin`.", body = ErrorBody),
+        (status = 413, description = "`too_large`.", body = ErrorBody),
+        (status = 415, description = "`unsupported_format`.", body = ErrorBody),
+        (status = 422, description = "`invalid_image` or `bad_dimensions`.", body = ErrorBody),
+        (status = 429, description = "`rate_limited`.", body = ErrorBody),
+        (status = 503, description = "`unavailable`: storage isn't reachable.", body = ErrorBody)
+    )
+)]
+async fn upload_cosmetic_image(
+    State(state): State<AppState>,
+    MaybeCaller(caller): MaybeCaller,
+    mut form: Multipart,
+) -> ApiResult<(StatusCode, Json<CosmeticImage>)> {
+    let caller = caller.ok_or_else(|| ApiError::from(AuthError::SignedOut))?;
+    let bad_form = |message: &str| ApiError::new(StatusCode::BAD_REQUEST, "bad_form", message);
+    let mut kind = None;
+    let mut file: Option<Vec<u8>> = None;
+    while let Some(mut field) = form
+        .next_field()
+        .await
+        .map_err(|_| bad_form("The form couldn't be read."))?
+    {
+        match field.name() {
+            Some("file") if file.is_none() => file = Some(file_field(&mut field, bad_form).await?),
+            Some("kind") if kind.is_none() => {
+                let text = field
+                    .text()
+                    .await
+                    .map_err(|_| bad_form("A form field couldn't be read."))?;
+                kind = Some(CosmeticKind::parse(text.trim()).ok_or_else(|| {
+                    ApiError::new(
+                        StatusCode::BAD_REQUEST,
+                        "bad_kind",
+                        "kind is badge or paint.",
+                    )
+                })?);
+            }
+            _ => {
+                return Err(bad_form(
+                    "Unknown or repeated form field. Send kind and file.",
+                ));
+            }
+        }
+    }
+    let kind = kind.ok_or_else(|| bad_form("Say what it is for: kind=badge or kind=paint."))?;
+    let file = file.ok_or_else(|| bad_form("Attach the image as `file`."))?;
+    let image = cosmetics::upload_image(&state, &caller, kind, file.into()).await?;
+    Ok((StatusCode::ACCEPTED, Json(image)))
+}
+
 // Chat-client reads: public, no auth, `ETag` and `Cache-Control`.
 
 /// How long clients and the CDN may keep a read before asking again (`If-None-Match` then gets a
@@ -413,4 +503,45 @@ async fn lookup_personal_sets(
 ) -> ApiResult<Json<PersonalLookupResult>> {
     let sets = catalog::personal_sets(&state, lookup.platform, &lookup.user_ids).await?;
     Ok(Json(PersonalLookupResult { sets }))
+}
+
+/// Every cyex.tv chat badge and name paint (ADR 0015). Cache it with `If-None-Match`; live
+/// changes come as `cosmetic.*` events on the `cosmetics` topic.
+#[utoipa::path(
+    get,
+    path = "/v1/cosmetics",
+    tag = "cosmetics",
+    responses((status = 200, body = CosmeticCatalog), (status = 304, description = "Not modified."))
+)]
+async fn get_cosmetics(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Response> {
+    let catalog = cosmetics::catalog(&state).await?;
+    cached(&headers, &catalog, READ_MAX_AGE)
+}
+
+/// The badge and paint up to 100 chatters show, as catalog IDs. Only chatters showing something
+/// are listed; changes come as `user.cosmetics_updated` on their `user:` topics.
+#[utoipa::path(
+    get,
+    path = "/v1/cosmetics/users",
+    tag = "cosmetics",
+    params(UserCosmeticsQuery),
+    responses(
+        (status = 200, body = UserCosmeticsResult),
+        (status = 304, description = "Not modified."),
+        (status = 400, description = "`too_many`: more than 100 IDs.", body = ErrorBody)
+    )
+)]
+async fn get_user_cosmetics(
+    State(state): State<AppState>,
+    Query(query): Query<UserCosmeticsQuery>,
+    headers: HeaderMap,
+) -> ApiResult<Response> {
+    let ids: Vec<String> = query
+        .ids
+        .split(',')
+        .map(str::to_owned)
+        .filter(|s| !s.trim().is_empty())
+        .collect();
+    let users = cosmetics::user_cosmetics(&state, query.platform, &ids).await?;
+    cached(&headers, &UserCosmeticsResult { users }, READ_MAX_AGE)
 }

@@ -84,6 +84,11 @@ pub fn db_error(err: DbError) -> ApiError {
             "An account can have at most 20 editors.",
         ),
         DbError::AlreadyEditor => conflict("already_editor", "They are an editor already."),
+        DbError::CosmeticNameTaken => conflict(
+            "name_taken",
+            "A badge or paint with that name exists already.",
+        ),
+        DbError::NotOwned => conflict("not_owned", "You can only show cosmetics the account owns."),
         err @ (DbError::IdentityTaken | DbError::PlatformAlreadyLinked | DbError::LastIdentity) => {
             AuthError::from(err).into()
         }
