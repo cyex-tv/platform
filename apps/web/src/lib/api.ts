@@ -55,9 +55,14 @@ export async function gql<TResult, TVariables>(
   return body.data;
 }
 
+/** `back` when it is a path on this site; otherwise `/`. Rejects `//host` and backslash forms that browsers read as another host. */
+export function safeBack(back: string): string {
+  return back.startsWith('/') && !back.startsWith('//') && !back.includes('\\') ? back : '/';
+}
+
 /** The address that starts signing in with a platform, and comes back to `back`. */
 export function signInUrl(platform: 'twitch' | 'kick', back = '/'): string {
-  const returnTo = encodeURIComponent(back.startsWith('/') ? back : '/');
+  const returnTo = encodeURIComponent(safeBack(back));
   return `${apiUrl()}/v1/auth/${platform}/login?return_to=${returnTo}`;
 }
 
