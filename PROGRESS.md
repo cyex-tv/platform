@@ -13,6 +13,12 @@ Gap list G10: find people by their Twitch or Kick name. API only; the `/search` 
 - [x] Dev mock: `searchAccounts` over the mock's people (quietoak has a Kick login too).
 - [ ] Website: the Users tab on `/search` and people in the palette (another task).
 
+#### GitHub write log
+```
+git push -u origin feat/account-search
+gh pr create --base main --head feat/account-search
+```
+
 ## Public emote sets (branch `feat/public-sets`)
 
 Gap list G1 (`.claude/runs/2026-11-17-overnight/gap-7tv.md`): sets you can share, list and copy, like 7TV's set pages (its public help pages and v3 schema studied; no code taken). API only; the pages come next.
@@ -25,6 +31,14 @@ Gap list G1 (`.claude/runs/2026-11-17-overnight/gap-7tv.md`): sets you can share
 - [x] Tests: `apps/api/tests/public_sets_flow.rs` against Postgres in CI (defaults, private never readable by others over GraphQL and REST, active-set exception, account editors, `accountSets` of blocked and deleted accounts, clone of private and pending emotes, capacity with 1005 emotes, IDOR on `ownerId`, rate limit, audit row, `set.created`); unit tests of the visibility names.
 - [x] Dev mock: sets carry visibility; nora_byte has listed, private and personal sample sets; `accountSets`, `cloneSet`, `createSet`/`updateSet` visibility and the private rule on `set(id)`.
 - [ ] Website: `/sets/[id]`, profile set cards, clone and visibility controls (another task).
+
+#### GitHub write log
+```
+git push -u origin feat/public-sets
+gh pr create --base main --head feat/public-sets
+git push origin feat/public-sets   (merges of origin/main, a test fix)
+gh pr merge 53 --merge   (all checks green; public_sets_flow ran against Postgres in CI)
+```
 
 ## Website v4: the profile is the dashboard, cosmetics, admin cosmetics (branch `web/v4`)
 
