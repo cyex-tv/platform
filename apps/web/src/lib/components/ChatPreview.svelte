@@ -1,0 +1,168 @@
+<script lang="ts" module>
+  import type { Picture } from '$lib/emote';
+
+  export type ChatEmote = Picture & { name: string; zeroWidth?: boolean };
+  export type ChatPart = { text: string } | { emote: ChatEmote };
+  export type ChatLine = { user: string; parts: ChatPart[] };
+</script>
+
+<script lang="ts">
+  // A neutral chat frame, labelled "Twitch" or "Kick" (no logos, no platform colours), with
+  // made-up viewers and emotes inline at chat size (28px tall; wide ones wider; zero-width ones
+  // stacked on the emote before them). With `live`, a new line arrives every ~2.5s, cycling
+  // through `lines`; it pauses off screen and in a hidden tab, and never runs under reduced motion.
+  import { hasStill, ready, size, src, srcsetW } from '$lib/emote';
+
+  type Props = {
+    platform: 'twitch' | 'kick';
+    lines: ChatLine[];
+    live?: boolean;
+    /** Lines in view at once in live mode (the frame keeps a fixed height). */
+    visible?: number;
+    interval?: number;
+    /** Animated emotes play (as in a real chat). Off, or under reduced motion, they stay still. */
+    play?: boolean;
+    label?: string;
+  };
+  let { platform, lines, live = false, visible = 6, interval = 2500, play = true, label }: Props = $props();
+
+  type Piece = { kind: 'text'; text: string } | { kind: 'stack'; emotes: ChatEmote[] };
+  type Shown = { key: number; user: string; pieces: Piece[] };
+
+  // Zero-width emotes join the stack of the emote before them; text keeps its spaces.
+  function pieces(parts: ChatPart[]): Piece[] {
+    const out: Piece[] = [];
+    for (const p of parts) {
+      if ('text' in p) {
+        out.push({ kind: 'text', text: p.text });
+        continue;
+      }
+      const last = out[out.length - 1];
+      const prev = last?.kind === 'stack' ? last : out[out.length - 2]?.kind === 'stack' && last?.kind === 'text' && !last.text.trim() ? out[out.length - 2] : null;
+      if (p.emote.zeroWidth && prev && prev.kind === 'stack') {
+        if (last !== prev) out.pop(); // drop the blank between an emote and its overlay
+        prev.emotes.push(p.emote);
+      } else out.push({ kind: 'stack', emotes: [p.emote] });
+    }
+    return out;
+  }
+
+  let root: HTMLElement;
+  let still = $state(false);
+  let next = 0;
+  let key = 0;
+  let shown = $state<Shown[]>([]);
+
+  function at(i: number): Shown {
+    const l = lines[i % lines.length];
+    return { key: key++, user: l.user, pieces: pieces(l.parts) };
+  }
+
+  $effect(() => {
+    // Start (or restart when the lines change) with the first lines in view.
+    const n = live ? Math.min(visible, lines.length) : lines.length;
+    key = 0;
+    shown = Array.from({ length: n }, (_, i) => at(i));
+    next = n;
+  });
+
+  $effect(() => {
+    const mq = matchMedia('(prefers-reduced-motion: reduce)');
+    still = mq.matches;
+    const on = () => (still = mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  });
+
+  $effect(() => {
+    if (!live || still || lines.length === 0) return;
+    let seen = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const run = () => {
+      clearInterval(timer);
+      timer = undefined;
+      if (!seen || document.hidden) return;
+      timer = setInterval(() => {
+        shown = [...shown.slice(-(visible - 1)), at(next++)];
+      }, interval);
+    };
+    const io = new IntersectionObserver(([entry]) => {
+      seen = entry.isIntersecting;
+      run();
+    });
+    io.observe(root);
+    document.addEventListener('visibilitychange', run);
+    return () => {
+      io.disconnect();
+      document.removeEventListener('visibilitychange', run);
+      clearInterval(timer);
+    };
+  });
+
+  const name = $derived(platform === 'twitch' ? 'Twitch' : 'Kick');
+
+  function width(e: ChatEmote) {
+    const s = size(e);
+    return Math.round((28 * s.width) / s.height);
+  }
+  const moving = $derived(play && !still);
+</script>
+
+<figure class="chat {platform}" class:live bind:this={root} style:--rows={visible} aria-label={label ?? `${name} chat preview`}>
+  <figcaption class="top">
+    <span class="platform">{name}</span>
+    <span class="what">Chat</span>
+  </figcaption>
+  <ol class="lines" aria-live="off">
+    {#each shown as l (l.key)}
+      <li class="line">
+        <span class="user">{l.user}</span><span class="colon">:</span>
+        {#each l.pieces as p}
+          {#if p.kind === 'text'}{p.text}{:else}
+            <span class="stack" title={p.emotes.map((e) => e.name).join(' ')}>
+              {#each p.emotes as e, i}
+                {#if ready(e)}
+                  {@const st = !moving && hasStill(e)}
+                  <img
+                    class:over={i > 0}
+                    src={src(e, 1, st)}
+                    srcset={srcsetW(e, st)}
+                    sizes="{width(e)}px"
+                    width={width(e)}
+                    height="28"
+                    alt={e.name}
+                    loading="lazy"
+                    decoding="async"
+                  />
+                {:else}<span class="missing">{e.name}</span>{/if}
+              {/each}
+            </span>
+          {/if}
+        {/each}
+      </li>
+    {/each}
+  </ol>
+</figure>
+
+<style>
+  .chat { margin: 0; display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-m);
+    background: var(--bg); overflow: hidden; }
+  .top { display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px; border-bottom: 1px solid var(--border);
+    font-size: var(--t-small); background: var(--surface); }
+  .platform { font-weight: 600; }
+  .what { color: var(--muted); }
+  .lines { list-style: none; margin: 0; padding: 10px 0; display: flex; flex-direction: column; justify-content: flex-end; }
+  .live .lines { height: calc(var(--rows) * 40px + 20px); overflow: hidden; }
+  .line { padding: 4px 16px; font-size: var(--t-small); line-height: 32px; color: var(--text); overflow-wrap: anywhere; }
+  /* The two frames differ in rhythm, not colour: Kick's lines sit a little looser. */
+  .kick .line { padding-block: 5px; }
+  .user { font-weight: 600; }
+  .colon { margin-right: 6px; color: var(--muted); }
+  .twitch .colon { color: var(--text); }
+  .stack { display: inline-grid; vertical-align: middle; place-items: center; margin: -4px 0; }
+  .stack img { grid-area: 1 / 1; display: block; height: var(--emote-chat); width: auto; }
+  .missing { color: var(--muted); }
+  .live .line:last-child { animation: arrive var(--dur-hover) var(--ease); }
+  @keyframes arrive { from { opacity: 0; transform: translateY(8px); } }
+  @media (prefers-reduced-motion: reduce) { .live .line:last-child { animation: none; } }
+</style>
