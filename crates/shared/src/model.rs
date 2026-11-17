@@ -346,6 +346,48 @@ impl FromStr for SetKind {
     }
 }
 
+/// Who can find and open a set.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "lowercase")]
+pub enum SetVisibility {
+    /// Anyone can open it, and it is listed on its owner's profile. New channel sets start here.
+    #[default]
+    Listed,
+    /// Anyone with its link (its ID) can open it; it isn't listed. Personal sets start here.
+    Unlisted,
+    /// Only its owner, its editors and staff can open it, except while a channel shows it:
+    /// a channel's active set is public. Channel sets only.
+    Private,
+}
+
+impl SetVisibility {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Listed => "listed",
+            Self::Unlisted => "unlisted",
+            Self::Private => "private",
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[error("unknown set visibility: {0}")]
+pub struct UnknownSetVisibility(pub String);
+
+impl FromStr for SetVisibility {
+    type Err = UnknownSetVisibility;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "listed" => Ok(Self::Listed),
+            "unlisted" => Ok(Self::Unlisted),
+            "private" => Ok(Self::Private),
+            other => Err(UnknownSetVisibility(other.to_owned())),
+        }
+    }
+}
+
 /// An emote as it sits in a set: the name it is typed as there, and who added it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
@@ -367,6 +409,51 @@ pub struct EmoteSet {
     pub owner: Option<AccountSummary>,
     pub capacity: u32,
     pub emotes: Vec<SetEmote>,
+    /// Who can find and open it.
+    #[serde(default)]
+    pub visibility: SetVisibility,
+    /// `visibility` is `LISTED`: shown on the owner's profile.
+    #[serde(default)]
+    pub listed: bool,
+    /// How many of `capacity` the set uses. Counts every emote in it, also those this answer
+    /// doesn't show you (pending ones), so `capacity - slotsUsed` is what still fits.
+    #[serde(default)]
+    pub slots_used: u32,
+    #[serde(default)]
+    pub created_at: String,
+}
+
+/// A set as a card on a profile: its facts and the first few emotes (`accountSets`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct SetSummary {
+    pub id: String,
+    pub name: String,
+    pub kind: SetKind,
+    pub owner: Option<AccountSummary>,
+    pub visibility: SetVisibility,
+    pub listed: bool,
+    pub capacity: u32,
+    /// Every emote in the set counts; see `EmoteSet.slotsUsed`.
+    pub slots_used: u32,
+    /// A channel shows this set now.
+    pub active: bool,
+    /// The newest emotes you may see, at most the `preview` asked for.
+    pub preview: Vec<SetEmote>,
+    pub created_at: String,
+}
+
+/// What `cloneSet` made.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct ClonedSet {
+    /// The new channel set.
+    pub set: EmoteSet,
+    /// Emotes copied into it.
+    pub copied: u32,
+    /// Emotes left out: over capacity, private emotes of others, emotes not approved, or ones
+    /// you can't see.
+    pub skipped: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -379,6 +466,10 @@ pub struct CreateSet {
     /// Make the set for an account you edit with `sets` (ADR 0014). Empty: for yourself.
     #[serde(default)]
     pub owner_id: Option<String>,
+    /// Empty: `LISTED` for channel sets, `UNLISTED` for the personal set. Personal sets can't be
+    /// `PRIVATE`.
+    #[serde(default)]
+    pub visibility: Option<SetVisibility>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -388,6 +479,9 @@ pub struct UpdateSet {
     pub name: Option<String>,
     /// Needs `sets.edit_any` to raise above the default.
     pub capacity: Option<u32>,
+    /// Personal sets can't be `PRIVATE`; the global set is always listed.
+    #[serde(default)]
+    pub visibility: Option<SetVisibility>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -676,6 +770,10 @@ pub enum EventType {
     PersonalUpdated,
     #[serde(rename = "emote.updated")]
     EmoteUpdated,
+    /// A listed set was made (`createSet`, `cloneSet`), on its owner's `user:` topics. Unlisted
+    /// and private sets make no event, so their IDs stay unknown.
+    #[serde(rename = "set.created")]
+    SetCreated,
     /// A badge or paint was made (topic `cosmetics`, ADR 0015).
     #[serde(rename = "cosmetic.created")]
     CosmeticCreated,
@@ -776,8 +874,18 @@ mod tests {
             let json = serde_json::to_string(&kind).unwrap();
             assert_eq!(json, format!("\"{}\"", kind.as_str()));
         }
+        for v in [
+            SetVisibility::Listed,
+            SetVisibility::Unlisted,
+            SetVisibility::Private,
+        ] {
+            assert_eq!(v.as_str().parse::<SetVisibility>().unwrap(), v);
+            let json = serde_json::to_string(&v).unwrap();
+            assert_eq!(json, format!("\"{}\"", v.as_str()));
+        }
         assert!("deleted".parse::<EmoteState>().is_err());
         assert!("Channel".parse::<SetKind>().is_err());
+        assert!("public".parse::<SetVisibility>().is_err());
     }
 
     #[test]

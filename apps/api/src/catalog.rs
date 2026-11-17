@@ -7,6 +7,10 @@
 //! - deleting a set and managing its editors: its owner, account editors with `sets` (delete) or
 //!   `editors` and `emotes` (set editors), or `sets.edit_any`.
 //!
+//! Who may open a set (`set`, `GET /v1/sets/{id}`): anyone, unless it is `PRIVATE`; then its
+//! owner, its editors, the owner's account editors and `sets.edit_any`, or anyone while a channel
+//! shows it (chat shows it to everyone then).
+//!
 //! Every write runs in one transaction with its outbox event (ADR 0005) and, when it grants
 //! something or relies on a permission instead of ownership, its audit row.
 
@@ -18,9 +22,9 @@ use cyex_tv_db::sets::{self, NewMember, Set};
 use cyex_tv_db::{DbError, accounts, audit, channels, emotes, ids, outbox, reads, roles};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
-    AccountSummary, AddSetEmote, Channel, CreateSet, EditorPermission, EmotePage, EmoteSet,
-    EmoteState, EventType, PersonalSetEntry, Platform, SetEmote, SetKind, UpdateChannelSettings,
-    UpdateSet, UpdateSetEmote,
+    AccountSummary, AddSetEmote, Channel, ClonedSet, CreateSet, EditorPermission, EmotePage,
+    EmoteSet, EmoteState, EventType, PersonalSetEntry, Platform, SetEmote, SetKind, SetSummary,
+    SetVisibility, UpdateChannelSettings, UpdateSet, UpdateSetEmote,
 };
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
@@ -89,6 +93,10 @@ pub fn db_error(err: DbError) -> ApiError {
             "A badge or paint with that name exists already.",
         ),
         DbError::NotOwned => conflict("not_owned", "You can only show cosmetics the account owns."),
+        DbError::InvalidVisibility => bad(
+            "bad_visibility",
+            "Personal sets can't be private, and the global set is always listed.",
+        ),
         err @ (DbError::IdentityTaken | DbError::PlatformAlreadyLinked | DbError::LastIdentity) => {
             AuthError::from(err).into()
         }
@@ -366,6 +374,38 @@ pub(crate) async fn publish_member_event(
     Ok(())
 }
 
+/// `set.created` on the owner's `user:` topics, for listed sets only: an unlisted or private
+/// set's ID is its secret, and every topic is public.
+async fn publish_set_created(conn: &mut PgConnection, set: &Set) -> ApiResult<()> {
+    let Some(owner) = set.owner_account_id else {
+        return Ok(());
+    };
+    if set.visibility != SetVisibility::Listed {
+        return Ok(());
+    }
+    let topics: Vec<String> = accounts::identities(conn, owner)
+        .await
+        .map_err(db_error)?
+        .iter()
+        .map(|i| outbox::user_topic(i.platform, &i.platform_user_id))
+        .collect();
+    if topics.is_empty() {
+        return Ok(());
+    }
+    outbox::publish(
+        conn,
+        &outbox::NewEvent {
+            event_type: EventType::SetCreated,
+            topics,
+            set_id: Some(set.id),
+            payload: json!({ "set_id": ids::to_text(set.id), "name": set.name }),
+        },
+    )
+    .await
+    .map_err(db_error)?;
+    Ok(())
+}
+
 // Checks on input
 
 /// Set names: 1 to 100 characters after trimming, no control characters.
@@ -488,10 +528,88 @@ pub async fn set(
     let Some(set) = sets::get(&mut conn, id).await.map_err(db_error)? else {
         return Ok(None);
     };
+    if !may_view(&mut conn, caller, &set).await? {
+        return Ok(None);
+    }
     let viewer = viewer(&mut conn, caller).await?;
     views::set(&mut conn, &set, &viewer, &state.cdn_url)
         .await
         .map(Some)
+        .map_err(db_error)
+}
+
+/// Whether the caller may open `set` (the module's rule). A private set the caller may not see
+/// answers like one that doesn't exist.
+pub(crate) async fn may_view(
+    conn: &mut PgConnection,
+    caller: Option<&Caller>,
+    set: &Set,
+) -> ApiResult<bool> {
+    if set.visibility != SetVisibility::Private {
+        return Ok(true);
+    }
+    if !sets::active(conn, &[set.id])
+        .await
+        .map_err(db_error)?
+        .is_empty()
+    {
+        return Ok(true);
+    }
+    let Some(caller) = caller else {
+        return Ok(false);
+    };
+    let account = caller.account_id;
+    if set.owner_account_id == Some(account) {
+        return Ok(true);
+    }
+    if let Some(owner) = set.owner_account_id
+        && cyex_tv_db::editors::permissions_of(conn, owner, account)
+            .await
+            .map_err(db_error)?
+            .is_some()
+    {
+        return Ok(true);
+    }
+    if sets::can_edit(conn, account, set.id)
+        .await
+        .map_err(db_error)?
+    {
+        return Ok(true);
+    }
+    holds(conn, caller, permissions::SETS_EDIT_ANY).await
+}
+
+/// Cards per `accountSets` answer, and emotes per card.
+pub const ACCOUNT_SETS_MAX: i64 = 50;
+pub const SET_PREVIEW: u32 = 12;
+pub const SET_PREVIEW_MAX: u32 = 50;
+
+/// An account's listed sets, oldest first, as profile cards. Empty when the account is unknown,
+/// deleted or blocked.
+pub async fn account_sets(
+    state: &AppState,
+    caller: Option<&Caller>,
+    account_id: &str,
+    preview: Option<u32>,
+) -> ApiResult<Vec<SetSummary>> {
+    let Some(id) = ids::from_text(account_id.trim()) else {
+        return Ok(Vec::new());
+    };
+    let preview = preview.unwrap_or(SET_PREVIEW).min(SET_PREVIEW_MAX) as usize;
+    let mut conn = conn(state).await?;
+    let live = accounts::get(&mut conn, id)
+        .await
+        .map_err(db_error)?
+        .is_some_and(|a| a.deleted_at.is_none() && a.blocked_at.is_none());
+    if !live {
+        return Ok(Vec::new());
+    }
+    let rows = sets::list_listed(&mut conn, id, ACCOUNT_SETS_MAX)
+        .await
+        .map_err(db_error)?;
+    let viewer = viewer(&mut conn, caller).await?;
+    views::set_summaries(&mut conn, &rows, &viewer, &state.cdn_url, preview)
+        .await
         .map_err(db_error)
 }
 
@@ -680,7 +798,7 @@ pub async fn create_set(
             "Only the account's owner and its editors with the sets permission can make sets for it.",
         ));
     }
-    let set = sets::create(&mut tx, owner, &name, input.kind)
+    let set = sets::create_with(&mut tx, owner, &name, input.kind, input.visibility)
         .await
         .map_err(db_error)?;
     let grant = if by_editor {
@@ -695,12 +813,151 @@ pub async fn create_set(
         "set.created",
         &set,
         None,
-        Some(json!({ "name": set.name, "kind": set.kind, "owner_id": ids::to_text(owner) })),
+        Some(json!({
+            "name": set.name,
+            "kind": set.kind,
+            "owner_id": ids::to_text(owner),
+            "visibility": set.visibility,
+        })),
     )
     .await?;
+    publish_set_created(&mut tx, &set).await?;
     tx.commit().await.map_err(sqlx_error)?;
     drop(conn);
     built(state, caller, set.id).await
+}
+
+/// Copies a set the caller may open into a new channel set owned by the caller, or by an account
+/// they edit with `sets`. Emotes go in as `addSetEmote` would put them (capacity, approved only,
+/// others' private emotes left out), in the source's order, keeping the source's names.
+pub async fn clone_set(
+    state: &AppState,
+    caller: &Caller,
+    id: &str,
+    name: Option<&str>,
+    owner_id: Option<&str>,
+    visibility: Option<SetVisibility>,
+) -> ApiResult<ClonedSet> {
+    let source_id = parse_id(id)?;
+    let owner = match owner_id.map(str::trim) {
+        Some(raw) if !raw.is_empty() => parse_id(raw)?,
+        _ => caller.account_id,
+    };
+    let name = name.map(set_name).transpose()?;
+    state
+        .limits
+        .set_clones
+        .check(&ids::to_text(caller.account_id))
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::TOO_MANY_REQUESTS,
+                "rate_limited",
+                "That's a lot of copied sets. Try again in a while.",
+            )
+        })?;
+    let mut conn = conn(state).await?;
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    let source = load_set(&mut tx, source_id).await?;
+    if !may_view(&mut tx, Some(caller), &source).await? {
+        return Err(not_found());
+    }
+    let by_editor = owner != caller.account_id;
+    if by_editor && !has_flag(&mut tx, owner, caller.account_id, EditorPermission::Sets).await? {
+        return Err(forbidden(
+            "Only the account's owner and its editors with the sets permission can make sets for it.",
+        ));
+    }
+    let name = match name {
+        Some(name) => name,
+        None => set_name(&source.name)?,
+    };
+    let set = sets::create_with(&mut tx, owner, &name, SetKind::Channel, visibility)
+        .await
+        .map_err(db_error)?;
+
+    // As the caller sees the source: pending emotes only when they may see them.
+    let viewer = viewer(&mut tx, Some(caller)).await?;
+    let shown = views::set(&mut tx, &source, &viewer, &state.cdn_url)
+        .await
+        .map_err(db_error)?;
+    let total = sets::count(&mut tx, source.id).await.map_err(db_error)?;
+    let (mut copied, mut skipped) = (0u32, 0u32);
+    for member in &shown.emotes {
+        let Some(emote_id) = ids::from_text(&member.emote.id) else {
+            skipped += 1;
+            continue;
+        };
+        // Private emotes: the caller's own, or, for an account editor, the new owner's own.
+        let emote_owner = member
+            .emote
+            .owner
+            .as_ref()
+            .and_then(|o| ids::from_text(&o.id));
+        let own =
+            emote_owner == Some(caller.account_id) || (by_editor && emote_owner == Some(owner));
+        if member.emote.flags.private && !own {
+            skipped += 1;
+            continue;
+        }
+        let added = sets::add_member(
+            &mut tx,
+            set.id,
+            NewMember {
+                emote_id,
+                name: Some(&member.name),
+                zero_width: Some(member.zero_width),
+                added_by: Some(caller.account_id),
+            },
+        )
+        .await;
+        match added {
+            Ok(_) => copied += 1,
+            Err(
+                DbError::SetFull
+                | DbError::NotApproved
+                | DbError::EmoteUnavailable
+                | DbError::NameTaken
+                | DbError::AlreadyInSet,
+            ) => skipped += 1,
+            Err(err) => return Err(db_error(err)),
+        }
+    }
+    // Members the caller couldn't see weren't copied either.
+    skipped += u32::try_from(total)
+        .unwrap_or(0)
+        .saturating_sub(copied + skipped);
+    // A copy is a new set: the same audit row as `createSet`, so it shows in the activity feed.
+    let grant = if by_editor {
+        Grant::AccountEditor(EditorPermission::Sets)
+    } else {
+        Grant::Owner
+    };
+    audit_if_permission(
+        &mut tx,
+        caller,
+        grant,
+        "set.created",
+        &set,
+        None,
+        Some(json!({
+            "name": set.name,
+            "kind": set.kind,
+            "owner_id": ids::to_text(owner),
+            "visibility": set.visibility,
+            "source_id": ids::to_text(source.id),
+            "copied": copied,
+            "skipped": skipped,
+        })),
+    )
+    .await?;
+    publish_set_created(&mut tx, &set).await?;
+    tx.commit().await.map_err(sqlx_error)?;
+    drop(conn);
+    Ok(ClonedSet {
+        set: built(state, caller, set.id).await?,
+        copied,
+        skipped,
+    })
 }
 
 pub async fn update_set(
@@ -746,6 +1003,31 @@ pub async fn update_set(
             &set,
             Some(json!({ "capacity": set.capacity })),
             Some(json!({ "capacity": after.capacity })),
+        )
+        .await?;
+    }
+    if let Some(visibility) = input.visibility
+        && visibility != set.visibility
+    {
+        if set.kind == SetKind::Global {
+            return Err(db_error(DbError::InvalidVisibility));
+        }
+        if grant == Grant::Editor {
+            return Err(forbidden(
+                "Only the set's owner and their editors with the sets permission can change who sees it.",
+            ));
+        }
+        after = sets::set_visibility(&mut tx, id, visibility)
+            .await
+            .map_err(db_error)?;
+        audit_if_permission(
+            &mut tx,
+            caller,
+            grant,
+            "set.visibility_changed",
+            &set,
+            Some(json!({ "visibility": set.visibility })),
+            Some(json!({ "visibility": after.visibility })),
         )
         .await?;
     }

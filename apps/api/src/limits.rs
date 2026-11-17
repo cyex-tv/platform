@@ -2,7 +2,8 @@
 //! GraphQL. A request over a limit gets `429 rate_limited` with `Retry-After`.
 //!
 //! The upload's 20 an hour per account lives in `upload`, since it counts what was made. Editor
-//! changes are checked per account in `editors`, cosmetics writes in `cosmetics`.
+//! changes are checked per account in `editors`, cosmetics writes in `cosmetics`, set clones in
+//! `catalog`.
 
 use std::net::SocketAddr;
 
@@ -34,6 +35,8 @@ pub struct Rates {
     pub editors: Rate,
     /// Cosmetics writes (staff changes, grants, selections), per account (ADR 0015).
     pub cosmetics: Rate,
+    /// `cloneSet`, per account: each copies up to a whole set.
+    pub set_clones: Rate,
 }
 
 impl Default for Rates {
@@ -47,6 +50,7 @@ impl Default for Rates {
             socket: Rate::per_minute(60),
             editors: Rate::per_hour(60),
             cosmetics: Rate::per_hour(300),
+            set_clones: Rate::per_hour(30),
         }
     }
 }
@@ -60,6 +64,7 @@ pub struct Limits {
     pub socket: Limiter,
     pub editors: Limiter,
     pub cosmetics: Limiter,
+    pub set_clones: Limiter,
     /// Take the client IP from `CF-Connecting-IP` (`CYEX_TV_TRUST_CLOUDFLARE=true`).
     pub trust_cloudflare: bool,
 }
@@ -75,6 +80,7 @@ impl Limits {
             socket: Limiter::new(rates.socket),
             editors: Limiter::new(rates.editors),
             cosmetics: Limiter::new(rates.cosmetics),
+            set_clones: Limiter::new(rates.set_clones),
             trust_cloudflare,
         }
     }

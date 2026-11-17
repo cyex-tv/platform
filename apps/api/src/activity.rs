@@ -5,7 +5,9 @@
 //! What never shows: moderation actions, reasons, staff-only changes, pending, private, rejected
 //! and taken-down emotes, deleted sets, and anything about a blocked, deleted or unknown account
 //! (an empty list). A line about an emote that isn't public (yet) is left out; it appears once
-//! the emote is approved. Sets have no privacy setting; every set of an account is public.
+//! the emote is approved. Only listed sets show (ADR 0017): an unlisted set's ID is its secret and
+//! a private set is nobody else's business, so lines about them are left out, whatever their
+//! visibility was when the line was written.
 
 use std::collections::{HashMap, HashSet};
 
@@ -16,7 +18,7 @@ use cyex_tv_db::{accounts, audit, channels, ids, sets};
 use cyex_tv_shared::error::ApiResult;
 use cyex_tv_shared::model::{
     AccountSummary, ActivityCosmeticChange, ActivityEmote, ActivityEntry, ActivityKind,
-    ActivitySet, EmoteState,
+    ActivitySet, EmoteState, SetVisibility,
 };
 use serde_json::Value;
 use sqlx::PgConnection;
@@ -183,11 +185,11 @@ async fn lookup(
 }
 
 impl Lookup {
-    /// A set of this account, by ID.
+    /// A listed set of this account, by ID.
     fn set_of(&self, id: Uuid, owner: Uuid) -> Option<&Set> {
         self.sets
             .get(&id)
-            .filter(|s| s.owner_account_id == Some(owner))
+            .filter(|s| s.owner_account_id == Some(owner) && s.visibility == SetVisibility::Listed)
     }
 
     fn named_set(&self, id: Uuid, owner: Uuid) -> Option<ActivitySet> {
