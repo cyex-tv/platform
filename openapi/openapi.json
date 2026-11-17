@@ -1094,6 +1094,9 @@
             "format": "int32",
             "minimum": 0
           },
+          "created_at": {
+            "type": "string"
+          },
           "emotes": {
             "type": "array",
             "items": {
@@ -1105,6 +1108,10 @@
           },
           "kind": {
             "$ref": "#/components/schemas/SetKind"
+          },
+          "listed": {
+            "type": "boolean",
+            "description": "`visibility` is `LISTED`: shown on the owner's profile."
           },
           "name": {
             "type": "string"
@@ -1118,6 +1125,16 @@
                 "$ref": "#/components/schemas/AccountSummary"
               }
             ]
+          },
+          "slots_used": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many of `capacity` the set uses. Counts every emote in it, also those this answer\ndoesn't show you (pending ones), so `capacity - slotsUsed` is what still fits.",
+            "minimum": 0
+          },
+          "visibility": {
+            "$ref": "#/components/schemas/SetVisibility",
+            "description": "Who can find and open it."
           }
         }
       },
@@ -1406,6 +1423,15 @@
           "channel",
           "personal",
           "global"
+        ]
+      },
+      "SetVisibility": {
+        "type": "string",
+        "description": "Who can find and open a set.",
+        "enum": [
+          "listed",
+          "unlisted",
+          "private"
         ]
       },
       "UploadCosmeticImage": {
