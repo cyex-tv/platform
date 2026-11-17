@@ -685,6 +685,7 @@ export type EmoteFieldsFragment = { __typename?: 'Emote', id: string, name: stri
 export type SearchQueryVariables = Exact<{
   query: Scalars['String']['input'];
   animated?: InputMaybe<Scalars['Boolean']['input']>;
+  nsfw?: InputMaybe<Scalars['Boolean']['input']>;
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
 }>;
@@ -1125,8 +1126,14 @@ export const RoleFieldsFragmentDoc = new TypedDocumentString(`
 }
     `, {"fragmentName":"RoleFields"}) as unknown as TypedDocumentString<RoleFieldsFragment, unknown>;
 export const SearchDocument = new TypedDocumentString(`
-    query Search($query: String!, $animated: Boolean, $page: Int, $perPage: Int) {
-  searchEmotes(query: $query, animated: $animated, page: $page, perPage: $perPage) {
+    query Search($query: String!, $animated: Boolean, $nsfw: Boolean, $page: Int, $perPage: Int) {
+  searchEmotes(
+    query: $query
+    animated: $animated
+    nsfw: $nsfw
+    page: $page
+    perPage: $perPage
+  ) {
     total
     page
     perPage
