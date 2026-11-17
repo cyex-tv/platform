@@ -1659,6 +1659,143 @@ export type EmoteChannelsQueryVariables = Exact<{
 
 export type EmoteChannelsQuery = { __typename?: 'Query', emoteChannels: Array<{ __typename?: 'Channel', platform: Platform, login: string, account: { __typename?: 'AccountSummary', displayName: string, avatar?: string | null } }> };
 
+export type CosmeticImageFieldsFragment = { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> };
+
+export type BadgeFieldsFragment = { __typename?: 'Badge', id: string, name: string, tooltip: string, image: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } };
+
+export type PaintFieldsFragment = { __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null };
+
+export type CosmeticsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type CosmeticsQuery = { __typename?: 'Query', cosmetics: { __typename?: 'CosmeticCatalog', badges: Array<{ __typename?: 'Badge', id: string, name: string, tooltip: string, image: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } }>, paints: Array<{ __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null }> } };
+
+export type UserCosmeticsQueryVariables = Exact<{
+  platform: Platform;
+  userIds: Array<Scalars['String']['input']> | Scalars['String']['input'];
+}>;
+
+
+export type UserCosmeticsQuery = { __typename?: 'Query', userCosmetics: Array<{ __typename?: 'UserCosmetics', platformUserId: string, badgeId?: string | null, paintId?: string | null }> };
+
+export type MyCosmeticsQueryVariables = Exact<{
+  accountId?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type MyCosmeticsQuery = { __typename?: 'Query', myCosmetics: { __typename?: 'OwnedCosmetics', badgeId?: string | null, paintId?: string | null, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, badges: Array<{ __typename?: 'Badge', id: string, name: string, tooltip: string, image: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } }>, paints: Array<{ __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null }> } };
+
+export type SelectCosmeticsMutationVariables = Exact<{
+  badgeId?: InputMaybe<Scalars['String']['input']>;
+  paintId?: InputMaybe<Scalars['String']['input']>;
+  ownerId?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type SelectCosmeticsMutation = { __typename?: 'Mutation', selectCosmetics: { __typename?: 'OwnedCosmetics', badgeId?: string | null, paintId?: string | null } };
+
+export type CosmeticImageQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type CosmeticImageQuery = { __typename?: 'Query', cosmeticImage?: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null };
+
+export type EntitlementsQueryVariables = Exact<{
+  kind: CosmeticKind;
+  accountId?: InputMaybe<Scalars['String']['input']>;
+  cosmeticId?: InputMaybe<Scalars['String']['input']>;
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type EntitlementsQuery = { __typename?: 'Query', cosmeticEntitlements: { __typename?: 'EntitlementPage', total: number, items: Array<{ __typename?: 'Entitlement', kind: CosmeticKind, cosmeticId: string, source: EntitlementSource, reason?: string | null, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null }> } };
+
+export type CreateBadgeMutationVariables = Exact<{
+  input: CreateBadgeInput;
+}>;
+
+
+export type CreateBadgeMutation = { __typename?: 'Mutation', createBadge: { __typename?: 'Badge', id: string, name: string, tooltip: string, image: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } } };
+
+export type UpdateBadgeMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: UpdateBadgeInput;
+}>;
+
+
+export type UpdateBadgeMutation = { __typename?: 'Mutation', updateBadge: { __typename?: 'Badge', id: string, name: string, tooltip: string, image: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } } };
+
+export type DeleteBadgeMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DeleteBadgeMutation = { __typename?: 'Mutation', deleteBadge: boolean };
+
+export type DeletePaintMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DeletePaintMutation = { __typename?: 'Mutation', deletePaint: boolean };
+
+export type GrantCosmeticMutationVariables = Exact<{
+  input: GrantCosmeticInput;
+}>;
+
+
+export type GrantCosmeticMutation = { __typename?: 'Mutation', grantCosmetic: { __typename?: 'Entitlement', cosmeticId: string } };
+
+export type RevokeCosmeticMutationVariables = Exact<{
+  accountId: Scalars['String']['input'];
+  kind: CosmeticKind;
+  cosmeticId: Scalars['String']['input'];
+  reason?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type RevokeCosmeticMutation = { __typename?: 'Mutation', revokeCosmetic: boolean };
+
+export type AccountRolesQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type AccountRolesQuery = { __typename?: 'Query', accountRoles: Array<{ __typename?: 'Role', id: string, name: string, position: number }> };
+
+export type AccountEditorsQueryVariables = Exact<{
+  accountId?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type AccountEditorsQuery = { __typename?: 'Query', accountEditors: Array<{ __typename?: 'AccountEditor', permissions: Array<EditorPermission>, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } }> };
+
+export type EditorOfQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type EditorOfQuery = { __typename?: 'Query', editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } }> };
+
+export type ProfileMineQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ProfileMineQuery = { __typename?: 'Query', myChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null }>, mySets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, capacity: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> }> };
+
+export type ProfileEditedQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ProfileEditedQuery = { __typename?: 'Query', editorChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }>, editorSets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, capacity: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> }> };
+
+export type AccountActivityQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+  before?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type AccountActivityQuery = { __typename?: 'Query', accountActivity: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> };
+
 export class TypedDocumentString<TResult, TVariables>
   extends String
   implements DocumentTypeDecoration<TResult, TVariables>
@@ -1781,6 +1918,85 @@ export const RoleFieldsFragmentDoc = new TypedDocumentString(`
   permissions
 }
     `, {"fragmentName":"RoleFields"}) as unknown as TypedDocumentString<RoleFieldsFragment, unknown>;
+export const CosmeticImageFieldsFragmentDoc = new TypedDocumentString(`
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}
+    `, {"fragmentName":"CosmeticImageFields"}) as unknown as TypedDocumentString<CosmeticImageFieldsFragment, unknown>;
+export const BadgeFieldsFragmentDoc = new TypedDocumentString(`
+    fragment BadgeFields on Badge {
+  id
+  name
+  tooltip
+  image {
+    ...CosmeticImageFields
+  }
+}
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}`, {"fragmentName":"BadgeFields"}) as unknown as TypedDocumentString<BadgeFieldsFragment, unknown>;
+export const PaintFieldsFragmentDoc = new TypedDocumentString(`
+    fragment PaintFields on Paint {
+  id
+  name
+  kind
+  angle
+  repeat
+  shape
+  color
+  stops {
+    at
+    color
+  }
+  shadows {
+    x
+    y
+    radius
+    color
+  }
+  image {
+    ...CosmeticImageFields
+  }
+}
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}`, {"fragmentName":"PaintFields"}) as unknown as TypedDocumentString<PaintFieldsFragment, unknown>;
 export const SearchDocument = new TypedDocumentString(`
     query Search($query: String!, $animated: Boolean, $nsfw: Boolean, $page: Int, $perPage: Int, $sort: EmoteSort) {
   searchEmotes(
@@ -2757,3 +2973,473 @@ export const EmoteChannelsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<EmoteChannelsQuery, EmoteChannelsQueryVariables>;
+export const CosmeticsDocument = new TypedDocumentString(`
+    query Cosmetics {
+  cosmetics {
+    badges {
+      ...BadgeFields
+    }
+    paints {
+      ...PaintFields
+    }
+  }
+}
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}
+fragment BadgeFields on Badge {
+  id
+  name
+  tooltip
+  image {
+    ...CosmeticImageFields
+  }
+}
+fragment PaintFields on Paint {
+  id
+  name
+  kind
+  angle
+  repeat
+  shape
+  color
+  stops {
+    at
+    color
+  }
+  shadows {
+    x
+    y
+    radius
+    color
+  }
+  image {
+    ...CosmeticImageFields
+  }
+}`) as unknown as TypedDocumentString<CosmeticsQuery, CosmeticsQueryVariables>;
+export const UserCosmeticsDocument = new TypedDocumentString(`
+    query UserCosmetics($platform: Platform!, $userIds: [String!]!) {
+  userCosmetics(platform: $platform, userIds: $userIds) {
+    platformUserId
+    badgeId
+    paintId
+  }
+}
+    `) as unknown as TypedDocumentString<UserCosmeticsQuery, UserCosmeticsQueryVariables>;
+export const MyCosmeticsDocument = new TypedDocumentString(`
+    query MyCosmetics($accountId: String) {
+  myCosmetics(accountId: $accountId) {
+    account {
+      id
+      displayName
+      avatar
+    }
+    badges {
+      ...BadgeFields
+    }
+    paints {
+      ...PaintFields
+    }
+    badgeId
+    paintId
+  }
+}
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}
+fragment BadgeFields on Badge {
+  id
+  name
+  tooltip
+  image {
+    ...CosmeticImageFields
+  }
+}
+fragment PaintFields on Paint {
+  id
+  name
+  kind
+  angle
+  repeat
+  shape
+  color
+  stops {
+    at
+    color
+  }
+  shadows {
+    x
+    y
+    radius
+    color
+  }
+  image {
+    ...CosmeticImageFields
+  }
+}`) as unknown as TypedDocumentString<MyCosmeticsQuery, MyCosmeticsQueryVariables>;
+export const SelectCosmeticsDocument = new TypedDocumentString(`
+    mutation SelectCosmetics($badgeId: String, $paintId: String, $ownerId: String) {
+  selectCosmetics(badgeId: $badgeId, paintId: $paintId, ownerId: $ownerId) {
+    badgeId
+    paintId
+  }
+}
+    `) as unknown as TypedDocumentString<SelectCosmeticsMutation, SelectCosmeticsMutationVariables>;
+export const CosmeticImageDocument = new TypedDocumentString(`
+    query CosmeticImage($id: String!) {
+  cosmeticImage(id: $id) {
+    ...CosmeticImageFields
+  }
+}
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<CosmeticImageQuery, CosmeticImageQueryVariables>;
+export const EntitlementsDocument = new TypedDocumentString(`
+    query Entitlements($kind: CosmeticKind!, $accountId: String, $cosmeticId: String, $page: Int, $perPage: Int) {
+  cosmeticEntitlements(
+    kind: $kind
+    accountId: $accountId
+    cosmeticId: $cosmeticId
+    page: $page
+    perPage: $perPage
+  ) {
+    total
+    items {
+      account {
+        id
+        displayName
+        avatar
+      }
+      kind
+      cosmeticId
+      source
+      reason
+      grantedBy {
+        id
+        displayName
+      }
+      grantedAt
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<EntitlementsQuery, EntitlementsQueryVariables>;
+export const CreateBadgeDocument = new TypedDocumentString(`
+    mutation CreateBadge($input: CreateBadgeInput!) {
+  createBadge(input: $input) {
+    ...BadgeFields
+  }
+}
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}
+fragment BadgeFields on Badge {
+  id
+  name
+  tooltip
+  image {
+    ...CosmeticImageFields
+  }
+}`) as unknown as TypedDocumentString<CreateBadgeMutation, CreateBadgeMutationVariables>;
+export const UpdateBadgeDocument = new TypedDocumentString(`
+    mutation UpdateBadge($id: String!, $input: UpdateBadgeInput!) {
+  updateBadge(id: $id, input: $input) {
+    ...BadgeFields
+  }
+}
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}
+fragment BadgeFields on Badge {
+  id
+  name
+  tooltip
+  image {
+    ...CosmeticImageFields
+  }
+}`) as unknown as TypedDocumentString<UpdateBadgeMutation, UpdateBadgeMutationVariables>;
+export const DeleteBadgeDocument = new TypedDocumentString(`
+    mutation DeleteBadge($id: String!) {
+  deleteBadge(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeleteBadgeMutation, DeleteBadgeMutationVariables>;
+export const DeletePaintDocument = new TypedDocumentString(`
+    mutation DeletePaint($id: String!) {
+  deletePaint(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeletePaintMutation, DeletePaintMutationVariables>;
+export const GrantCosmeticDocument = new TypedDocumentString(`
+    mutation GrantCosmetic($input: GrantCosmeticInput!) {
+  grantCosmetic(input: $input) {
+    cosmeticId
+  }
+}
+    `) as unknown as TypedDocumentString<GrantCosmeticMutation, GrantCosmeticMutationVariables>;
+export const RevokeCosmeticDocument = new TypedDocumentString(`
+    mutation RevokeCosmetic($accountId: String!, $kind: CosmeticKind!, $cosmeticId: String!, $reason: String) {
+  revokeCosmetic(
+    accountId: $accountId
+    kind: $kind
+    cosmeticId: $cosmeticId
+    reason: $reason
+  )
+}
+    `) as unknown as TypedDocumentString<RevokeCosmeticMutation, RevokeCosmeticMutationVariables>;
+export const AccountRolesDocument = new TypedDocumentString(`
+    query AccountRoles($accountId: String!) {
+  accountRoles(accountId: $accountId) {
+    id
+    name
+    position
+  }
+}
+    `) as unknown as TypedDocumentString<AccountRolesQuery, AccountRolesQueryVariables>;
+export const AccountEditorsDocument = new TypedDocumentString(`
+    query AccountEditors($accountId: String) {
+  accountEditors(accountId: $accountId) {
+    account {
+      id
+      displayName
+      avatar
+    }
+    permissions
+  }
+}
+    `) as unknown as TypedDocumentString<AccountEditorsQuery, AccountEditorsQueryVariables>;
+export const EditorOfDocument = new TypedDocumentString(`
+    query EditorOf {
+  editorOf {
+    account {
+      id
+      displayName
+      avatar
+    }
+    permissions
+  }
+}
+    `) as unknown as TypedDocumentString<EditorOfQuery, EditorOfQueryVariables>;
+export const ProfileMineDocument = new TypedDocumentString(`
+    query ProfileMine {
+  myChannels {
+    platform
+    platformChannelId
+    login
+    activeSetId
+  }
+  mySets {
+    ...SetFields
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  flags {
+    zeroWidth
+    nsfw
+    private
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}
+fragment SetFields on EmoteSet {
+  id
+  name
+  kind
+  capacity
+  owner {
+    id
+    displayName
+    avatar
+  }
+  emotes {
+    name
+    zeroWidth
+    addedAt
+    emote {
+      ...EmoteFields
+    }
+  }
+}`) as unknown as TypedDocumentString<ProfileMineQuery, ProfileMineQueryVariables>;
+export const ProfileEditedDocument = new TypedDocumentString(`
+    query ProfileEdited {
+  editorChannels {
+    platform
+    platformChannelId
+    login
+    activeSetId
+    account {
+      id
+    }
+  }
+  editorSets {
+    ...SetFields
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  flags {
+    zeroWidth
+    nsfw
+    private
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}
+fragment SetFields on EmoteSet {
+  id
+  name
+  kind
+  capacity
+  owner {
+    id
+    displayName
+    avatar
+  }
+  emotes {
+    name
+    zeroWidth
+    addedAt
+    emote {
+      ...EmoteFields
+    }
+  }
+}`) as unknown as TypedDocumentString<ProfileEditedQuery, ProfileEditedQueryVariables>;
+export const AccountActivityDocument = new TypedDocumentString(`
+    query AccountActivity($accountId: String!, $before: String, $limit: Int) {
+  accountActivity(accountId: $accountId, before: $before, limit: $limit) {
+    id
+    kind
+    actor {
+      id
+      displayName
+      avatar
+    }
+    set {
+      id
+      name
+    }
+    emote {
+      id
+      name
+      host
+      files {
+        name
+        width
+        height
+        isStatic
+      }
+    }
+    fromName
+    toName
+    badge {
+      fromId
+      fromName
+      toId
+      toName
+    }
+    paint {
+      fromId
+      fromName
+      toId
+      toName
+    }
+    createdAt
+  }
+}
+    `) as unknown as TypedDocumentString<AccountActivityQuery, AccountActivityQueryVariables>;

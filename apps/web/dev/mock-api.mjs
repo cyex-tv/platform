@@ -987,6 +987,23 @@ function signedIn(body, v, ADMIN) {
       if (v.input.allowPersonalEmotes !== undefined) c.allowPersonalEmotes = v.input.allowPersonalEmotes;
       return { data: { updateChannelSettings: { activeSetId: c.activeSetId, allowPersonalEmotes: c.allowPersonalEmotes } } };
     }
+    // The profile (your profile is your dashboard): channels and sets, roles, editors.
+    case 'ProfileMine':
+      return { data: { myChannels: CHANNELS, mySets: SETS.filter((s) => s.owner?.id === ME_ID).map(setOut) } };
+    case 'ProfileEdited':
+      return { data: { editorChannels: editorChannels(), editorSets: editorSets().map(setOut) } };
+    case 'EditorOf':
+      return { data: { editorOf: editorOfOut() } };
+    case 'AccountEditors': {
+      if (!v.accountId || v.accountId === ME_ID) return { data: { accountEditors: ACCOUNT_EDITORS } };
+      if (!flagsOn(v.accountId).includes('EDITORS')) return err('This needs the editors permission on that account.', 'forbidden');
+      return { data: { accountEditors: [] } };
+    }
+    case 'AccountRoles': {
+      if (v.accountId !== ME_ID && !ADMIN) return err('This needs users.view.', 'forbidden');
+      const ids = v.accountId === ME_ID ? (ADMIN ? ['ROLE1'] : []) : ACCOUNT_ROLES[v.accountId] ?? [];
+      return { data: { accountRoles: ids.map((id) => ROLES.find((r) => r.id === id)).filter(Boolean) } };
+    }
     case 'Editors':
       return { data: { accountEditors: ACCOUNT_EDITORS, editorOf: editorOfOut() } };
     case 'AddAccountEditor': {

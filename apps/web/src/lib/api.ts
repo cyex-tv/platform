@@ -111,3 +111,21 @@ export async function signOut(): Promise<void> {
   }
   if (!response.ok && response.status !== 401) throw await restError(response);
 }
+
+/** A badge or paint picture's answer: not ready until the worker made its files. */
+export type CosmeticUpload = { id: string; kind: 'BADGE' | 'PAINT'; ready: boolean };
+
+/** Uploads a badge or paint picture (`POST /v1/cosmetics/images`, staff). Poll `cosmeticImage(id)` until ready. */
+export async function uploadCosmeticImage(file: File, kind: 'badge' | 'paint'): Promise<CosmeticUpload> {
+  const form = new FormData();
+  form.set('kind', kind);
+  form.set('file', file);
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl()}/v1/cosmetics/images`, { method: 'POST', credentials: 'include', body: form });
+  } catch {
+    throw new ApiError('cyex.tv can’t be reached right now.', 'offline');
+  }
+  if (!response.ok) throw await restError(response);
+  return (await response.json()) as CosmeticUpload;
+}

@@ -5,7 +5,7 @@
   import type { Platform, RoleFieldsFragment, UserQuery } from '$lib/gql/graphql';
   import { ALL_ROLES, ASSIGN_ROLE, RESTRICT, UNASSIGN_ROLE, USER, USER_DETAILS } from '$lib/queries';
   import Avatar from '$lib/components/Avatar.svelte';
-  import { clean, iso } from '$lib/format';
+  import { iso } from '$lib/format';
   import Name from '$lib/components/Name.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
@@ -13,6 +13,9 @@
   import { loader } from '$lib/tool/loader.svelte';
   import { can, session } from '$lib/tool/session.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
+  import UserCosmetics from '$lib/admin/UserCosmetics.svelte';
+  import PaintedName from '$lib/cosmetics/PaintedName.svelte';
+  import { lookFor, NO_LOOK, type Look } from '$lib/cosmetics/store.svelte';
 
   type Found = NonNullable<UserQuery['channelByLogin']>;
 
@@ -29,6 +32,15 @@
   let allRoles = $state<RoleFieldsFragment[]>([]);
   let pick = $state('');
   let busy = $state(false);
+
+  const canCosmetics = can('cosmetics.grant');
+  // Their name in their paint, from the chatter lookup (by the platform id we found them by).
+  let look = $state<Look>(NO_LOOK);
+  $effect(() => {
+    const f = found;
+    look = NO_LOOK;
+    if (f) lookFor(f.platform, f.platformChannelId).then((l) => found === f && (look = l));
+  });
 
   const assignable = $derived(allRoles.filter((r) => !roles.some((x) => x.id === r.id)));
 
@@ -122,7 +134,7 @@
   <div class="layout">
     <section class="ui-card who" aria-label="Account">
       <Avatar src={found.account.avatar} name={found.account.displayName} size={72} tone="tool" />
-      <h2><bdi>{clean(found.account.displayName)}</bdi></h2>
+      <h2><PaintedName name={found.account.displayName} paint={look.paint} badge={look.badge} badgeSize={20} /></h2>
       <p class="chips">
         <span class="ui-chip">{found.platform === 'TWITCH' ? 'Twitch' : 'Kick'}</span>
         {#if status?.blocked}<span class="ui-chip rejected">Blocked</span>{:else if status?.uploadsBlocked}<span class="ui-chip pending">Uploads blocked</span>{/if}
@@ -163,6 +175,8 @@
         </div>
       </section>
     {/if}
+
+    {#if canCosmetics}<UserCosmetics account={found.account} />{/if}
 
     {#if canRoles}
       <section class="ui-panel">
@@ -205,7 +219,7 @@
   .stack { display: grid; gap: 16px; min-width: 0; }
   @media (min-width: 1100px) { .layout { grid-template-columns: 300px minmax(0, 1fr); } .who { position: sticky; top: calc(var(--nav-h) + 20px); } }
   .who { display: grid; justify-items: center; gap: 10px; min-width: 0; text-align: center; }
-  .who h2 { font-size: 18px; max-width: 100%; }
+  .who h2 { display: flex; justify-content: center; font-size: 18px; max-width: 100%; min-width: 0; }
   .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
   .ids { display: grid; gap: 8px; width: 100%; margin: 4px 0 0; padding-top: 12px; border-top: 1px solid var(--border); text-align: left; }
   .ids dd { margin: 2px 0 0; font-size: var(--text-sub); overflow-wrap: anywhere; }

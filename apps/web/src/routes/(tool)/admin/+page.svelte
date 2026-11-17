@@ -4,7 +4,9 @@
   import Icon, { type IconName } from '$lib/components/Icon.svelte';
   import type { AdminCountsQuery } from '$lib/gql/graphql';
   import { ADMIN_COUNTS } from '$lib/queries';
-  import { can } from '$lib/tool/session.svelte';
+  import { can, session } from '$lib/tool/session.svelte';
+  import PaintedName from '$lib/cosmetics/PaintedName.svelte';
+  import { loadCatalog, loadOwned, looks, NO_LOOK } from '$lib/cosmetics/store.svelte';
   import { fail } from '$lib/tool/notices.svelte';
 
   let counts = $state<AdminCountsQuery | null>(null);
@@ -17,11 +19,23 @@
       .catch(fail);
   });
 
+  // The catalog's size for the cosmetics cards, and your own look for the welcome line.
+  const cosmetics = can('cosmetics.manage') || can('cosmetics.grant');
+  let catalog = $state<{ paints: number; badges: number } | null>(null);
+  $effect(() => {
+    if (cosmetics) loadCatalog().then((c) => (catalog = { paints: c.paints.size, badges: c.badges.size })).catch(() => {});
+    if (session.me) loadOwned(session.me.id, true).catch(() => {});
+  });
+  const me = $derived(session.me);
+  const look = $derived((me && looks[me.id]) || NO_LOOK);
+
   type Card = { href: string; title: string; text: string; icon: IconName; figure?: number; show: boolean };
   const cards = $derived(
     [
       { href: '/admin/review', title: 'Review queue', icon: 'inbox' as const, text: 'Pending uploads, oldest first.', figure: counts?.reviewQueue?.total, show: review },
       { href: '/admin/reports', title: 'Reports', icon: 'flag' as const, text: 'Open reports. Dismiss them or take the emote down.', figure: counts?.reportQueue?.total, show: reports },
+      { href: '/admin/cosmetics/paints', title: 'Paints', icon: 'brush' as const, text: 'Name paints: who owns them, give and take away.', figure: catalog?.paints, show: cosmetics },
+      { href: '/admin/cosmetics/badges', title: 'Badges', icon: 'badge' as const, text: 'Chat badges: make, edit, give and take away.', figure: catalog?.badges, show: cosmetics },
       { href: '/admin/users', title: 'Users', icon: 'users' as const, text: 'Find someone by login; block uploads or sign-in; give roles.', show: can('users.view') || can('users.restrict') || can('roles.manage') },
       { href: '/admin/roles', title: 'Roles', icon: 'key' as const, text: 'Who may do what. You manage roles below your own.', show: can('roles.manage') },
       { href: '/admin/audit', title: 'Audit log', icon: 'scroll' as const, text: 'Every audited change, newest first.', show: can('audit.view') },
@@ -32,7 +46,10 @@
 
 <svelte:head><title>Admin - cyex.tv</title></svelte:head>
 
-<div class="ui-head"><div><h1>Overview</h1><p>What your roles let you do.</p></div></div>
+<header class="welcome">
+  <h1>Welcome back{#if me}, <PaintedName name={me.identities[0]?.displayName ?? ''} paint={look.paint} />{/if}</h1>
+  <p>What your roles let you do, and what waits for you.</p>
+</header>
 
 <ul class="cards">
   {#each cards as c (c.href)}
@@ -43,13 +60,16 @@
           <strong>{c.title}</strong>
           <span class="ui-hint">{c.text}</span>
         </span>
-        {#if c.figure !== undefined}<span class="ui-mono figure" class:some={c.figure > 0}>{count(c.figure)}</span>{/if}
+        {#if c.figure !== undefined}<span class="ui-mono figure" class:some={c.figure > 0 && (c.href === '/admin/review' || c.href === '/admin/reports')}>{count(c.figure)}</span>{/if}
       </a>
     </li>
   {/each}
 </ul>
 
 <style>
+  .welcome { margin-bottom: 24px; }
+  .welcome h1 { margin: 0; font-size: var(--t-page); font-weight: 600; line-height: 1.2; letter-spacing: -.02em; overflow-wrap: anywhere; }
+  .welcome p { margin: 8px 0 0; color: var(--muted); font-size: var(--t-ui); }
   .cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 12px; }
   .card { display: flex; align-items: flex-start; gap: 12px; height: 100%; padding: 14px; color: var(--text); text-decoration: none;
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card);
