@@ -1,28 +1,35 @@
 // The signed-in destinations, in one place: the AccountMenu popover, the phone menu sheet and
-// the /me rail all read these, so the same places have the same names and icons everywhere.
+// the profile rail all read these, so the same places have the same names and icons everywhere.
 import type { IconName } from '$lib/components/Icon.svelte';
 
-export type ShellLink = { href: string; label: string; icon: IconName; match: (path: string) => boolean };
+export type ShellLink = { href: string; label: string; icon: IconName; match: (path: string, search?: URLSearchParams) => boolean };
 
 const under = (base: string) => (p: string) => p === base || p.startsWith(`${base}/`);
 
-/** What you make: your emotes, upload, sets, channels. */
-export const LIBRARY: ShellLink[] = [
-  { href: '/me', label: 'Your emotes', icon: 'smile', match: (p) => p === '/me' || p.startsWith('/me/emotes') },
-  { href: '/me/upload', label: 'Upload', icon: 'upload', match: under('/me/upload') },
-  { href: '/me/sets', label: 'Sets', icon: 'layers', match: under('/me/sets') },
-  { href: '/me/channels', label: 'Channels', icon: 'tv', match: under('/me/channels') },
-  { href: '/me/cosmetics', label: 'Cosmetics', icon: 'sparkles', match: under('/me/cosmetics') },
-];
+/** Your profile is your dashboard (/users/<id>): its sections are ?s= tabs. */
+const profile = (id: string, s = '') => `/users/${encodeURIComponent(id)}${s ? `?s=${s}` : ''}`;
+const on = (id: string, s: string | null) => (p: string, q?: URLSearchParams) =>
+  p === profile(id) && (q?.get('s') ?? null) === s;
 
-/** Your public creator page: what everyone else sees. */
+/** Your profile: what everyone else sees, with your edit controls. */
 export function profileLink(id: string): ShellLink {
-  return { href: `/users/${id}`, label: 'Profile', icon: 'circle-user', match: (p) => p === `/users/${id}` };
+  return { href: profile(id), label: 'Profile', icon: 'circle-user', match: on(id, null) };
 }
 
-/** The account menu's short list: Sets and Channels live in the /me rail, Upload in the header. */
-export const MENU: ShellLink[] = LIBRARY.filter((l) => l.href === '/me' || l.href === '/me/cosmetics');
-export const UPLOAD: ShellLink = LIBRARY.find((l) => l.href === '/me/upload')!;
+/** The account menu's list after Profile: your emotes and your cosmetics, both on the profile. */
+export function menuLinks(id: string): ShellLink[] {
+  return [
+    {
+      href: profile(id, 'uploads'),
+      label: 'Your emotes',
+      icon: 'smile',
+      match: (p, q) => on(id, 'uploads')(p, q) || p.startsWith('/me/emotes'),
+    },
+    { href: profile(id, 'cosmetics'), label: 'Cosmetics', icon: 'brush', match: on(id, 'cosmetics') },
+  ];
+}
+
+export const UPLOAD: ShellLink = { href: '/me/upload', label: 'Upload', icon: 'upload', match: under('/me/upload') };
 
 export const ACCOUNT: ShellLink = { href: '/me/account', label: 'Account', icon: 'user', match: under('/me/account') };
 export const ADMIN: ShellLink = { href: '/admin', label: 'Admin', icon: 'shield', match: under('/admin') };

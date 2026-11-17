@@ -26,6 +26,18 @@ Gap list G1 (`.claude/runs/2026-11-17-overnight/gap-7tv.md`): sets you can share
 - [x] Dev mock: sets carry visibility; nora_byte has listed, private and personal sample sets; `accountSets`, `cloneSet`, `createSet`/`updateSet` visibility and the private rule on `set(id)`.
 - [ ] Website: `/sets/[id]`, profile set cards, clone and visibility controls (another task).
 
+## Website v4: the profile is the dashboard, cosmetics, admin cosmetics (branch `web/v4`)
+
+7TV's signed-in structure, in the cyex design (one shell, one accent, selection = bold text + accent icon).
+
+- [x] `/users/<id>` is the one profile page. Everyone: Uploaded emotes. The owner and the account's editors also get Active emotes, Emote sets (cards: two rows of emotes, capacity meter, active set marked, New set), Cosmetics (owner, or editors with PROFILE) and Channels (owner). Rail head: avatar ringed in the paint, name in the paint with the badge, role chips, collapsible Connections and Editors; "Admin ›" pinned for staff. Phones: profile card on top, sections as a tab strip.
+- [x] `/me`, `/me/sets` and `/me/cosmetics` redirect to the profile sections; the other `/me` pages keep their routes and show the profile rail with their row marked.
+- [x] Account menu: Profile, Your emotes, Cosmetics, Account, Admin, Sign out; its head shows the name in the paint, the badge and the highest role.
+- [x] Paint renderer `lib/cosmetics/paint.ts` (strict colour check, clamped values, safe image urls, at most 4 shadows; vitest), `PaintedName`, `BadgeIcon`, a batched `userCosmetics` cache; paints on the profile, the account menu, channel pages, admin Users and admin lists.
+- [x] Cosmetics picker: badge and paint radio groups with None, search, grid/list and a "Paint name / Your name" preview; saves with `selectCosmetics` (with `ownerId` for edited accounts); empty states.
+- [x] Admin rail: Overview; Tickets (Review, Reports with counts); Cosmetics (Paints, Badges); People; System. Overview: welcome line and count cards. Paints: list with preview, owners, Give, Delete, Edit and New paint go to the paint studio placeholder (`/admin/cosmetics/paints/studio`, to be replaced by the ported paint tool). Badges: list, New/Edit dialog with picture upload and ready polling, Give, owners with Revoke. Users: owned cosmetics, Give with a reason, Revoke.
+- [x] Activity (public, ADR 0016): `accountActivity` through the adapter in `lib/profile/activity.ts`, rows with icon, sentence (emote picture, set, paints in the paint), who and how long ago, paged by 30.
+- Manual check: screenshots at 375 and 1440, dark and light, with the dev mock (`.claude/runs/2026-11-17-web-v4/screens`). Open questions: `.claude/runs/2026-11-17-web-v4/questions.md`.
 ## Account activity feed (branch `feat/activity`)
 
 ADR 0016. A public activity feed per account, like 7TV's profile "Activity" tab.
