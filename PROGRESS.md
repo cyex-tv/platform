@@ -64,6 +64,10 @@ Work in `cyex-app/cyex-deck` goes on a feature branch with a PR the owner merges
 - Unit: LIKE escaping.
 - `apps/api/tests/search_flow.rs` against Postgres: rank order (exact, prefixes, tag-only last), pending, private, deleted and unasked NSFW emotes never found, the animated and owner filters, an empty query by popularity, paging and the page-size cap, literal wildcards; popularity counted from active sets, and a second refresh changing nothing.
 
+### PR 4: your own emotes and a set's editors (branch `phase-6/my-reads`)
+- [x] `myEmotes(page, perPage)`: the caller's emotes in every state (pending, rejected, taken down), newest first, as an `EmotePage`; `setEditors(setId)` for the set's owner, its editors and `sets.edit_any`. Additive; the signed-in pages need both.
+- [x] Tests in `apps/api/tests/catalog_flow.rs`: paging and order, only your own, signed out refused; editors seen by owner and editor, refused to a stranger.
+
 ## Phase 5: Live updates (done, merged 2026/11/17 as PRs 12 to 14; the GraphQL socket's own load run is still owed)
 
 Taken before Phase 4 in the overnight run: Phase 4 (the deck, in `cyex-app/cyex-deck`) can't meet its "Done when" until the owner's CDN and OAuth steps are done, and its step 2 waits for Phase 5 anyway. See the run's questions.

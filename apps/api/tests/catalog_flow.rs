@@ -783,3 +783,57 @@ async fn reads_without_a_session_hide_pending_emotes_from_everyone_but_reviewers
     );
     w.db.close().await;
 }
+
+#[tokio::test]
+async fn my_emotes_and_set_editors() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("801").await;
+    let bob = w.user("802").await;
+    let stranger = w.user("803").await;
+    w.emote(&alice, "first", EmoteState::Approved, false).await;
+    w.emote(&alice, "second", EmoteState::Pending, false).await;
+    w.emote(&alice, "third", EmoteState::Rejected, false).await;
+    w.emote(&bob, "bobs", EmoteState::Approved, false).await;
+
+    // Every state, newest first, paged; only your own.
+    let mine = "query($p: Int, $n: Int) { myEmotes(page: $p, perPage: $n) { total items { name state } } }";
+    let r = w.gql(Some(&alice), mine, json!({ "p": 1, "n": 2 })).await;
+    assert_eq!(r["data"]["myEmotes"]["total"], 3, "{r}");
+    let names: Vec<&str> = r["data"]["myEmotes"]["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["name"].as_str().unwrap())
+        .collect();
+    assert_eq!(names, ["third", "second"]);
+    let r = w.gql(Some(&alice), mine, json!({ "p": 2, "n": 2 })).await;
+    assert_eq!(r["data"]["myEmotes"]["items"][0]["name"], "first", "{r}");
+    assert_eq!(code(&w.gql(None, mine, json!({})).await), "signed_out");
+
+    // Editors: visible to the owner and the editors, not to anyone else.
+    let set = w.create_set(&alice, "Main", "CHANNEL").await;
+    let add = "mutation($s: String!, $a: String!) { addSetEditor(setId: $s, accountId: $a) }";
+    let r = w
+        .gql(
+            Some(&alice),
+            add,
+            json!({ "s": set, "a": ids::to_text(bob.id) }),
+        )
+        .await;
+    assert_eq!(r["data"]["addSetEditor"], true, "{r}");
+    let editors = "query($s: String!) { setEditors(setId: $s) { id displayName } }";
+    for user in [&alice, &bob] {
+        let r = w.gql(Some(user), editors, json!({ "s": set })).await;
+        assert_eq!(
+            r["data"]["setEditors"][0]["id"],
+            ids::to_text(bob.id),
+            "{r}"
+        );
+        assert_eq!(r["data"]["setEditors"][0]["displayName"], "user802");
+    }
+    assert_eq!(
+        code(&w.gql(Some(&stranger), editors, json!({ "s": set })).await),
+        "forbidden"
+    );
+    w.db.close().await;
+}
