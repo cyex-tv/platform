@@ -300,8 +300,8 @@ async fn search_sorts_by_relevance_top_and_new() {
     assert_eq!(names(&r), ["PogTheirs", "pog", "KEKW", "PogU", "PogChamp"]);
 
     // A text query still filters.
-    let r = find(&app, r#"query: "pogu", sort: NEW"#).await;
-    assert_eq!(names(&r), ["PogU"]);
+    let r = find(&app, r#"query: "kekw", sort: NEW"#).await;
+    assert_eq!(names(&r), ["KEKW"]);
     db.close().await;
 }
 
