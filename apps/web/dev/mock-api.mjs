@@ -207,7 +207,7 @@ function face(s) {
       break;
     case 'zzz': {
       const f = (b) => (A ? `<animate attributeName="opacity" values=".2;1;.2" dur="1.2s" begin="${b}s" repeatCount="indefinite"/>` : '');
-      out += zed(19.5, 7.6, 0.8, ink, f(0)) + zed(23.4, 3.6, 1, ink, f(0.4)) + zed(27.2, 0.2, 1.1, ink, f(0.8));
+      out += zed(19.5, 7.6, 0.8, ink, f(0)) + zed(23.4, 3.6, 1, ink, f(0.4)) + zed(26.8, 0.8, 1.05, ink, f(0.8));
       break;
     }
   }
@@ -284,11 +284,14 @@ function scene(s) {
     + `<path d="M12 12.6q8-3.2 16-3.4" ${pen('#fff', 1.6)} opacity=".3"/>`
     + `<path d="M18.6 19q3.6 3 7.2 0M38.2 19q3.6 3 7.2 0" ${pen(ink, 1.5)}/><path d="M30 22.4q2 1.6 4 0" ${pen(ink, 1.2)}/><ellipse cx="15.4" cy="22.4" rx="3" ry="1.7" fill="#ff6f91" opacity=".55"/><ellipse cx="48.6" cy="22.4" rx="3" ry="1.7" fill="#ff6f91" opacity=".55"/>`
     + `<g fill="${fill}" stroke="${line}" stroke-width="1.2"><ellipse cx="22" cy="29.4" rx="4.4" ry="2"/><ellipse cx="42" cy="29.4" rx="4.4" ry="2"/></g></g></g></g>`
-    + `${zed(52, 9, 0.9, ink, f(0))}${zed(56, 4.6, 1.1, ink, f(0.4))}${zed(60, 0.4, 1.2, ink, f(0.8))}`;
+    // The three z's sit in the free corner above the loaf's right side, inside the 64x32 box (stroke
+    // included): the biggest one ends at x 63.6, y 0.4.
+    + `${zed(54.8, 8, 0.65, ink, f(0))}${zed(57.2, 4.4, 0.8, ink, f(0.4))}${zed(59.2, 1, 0.95, ink, f(0.8))}`;
 }
 
-function picture(i, scale) {
-  const s = spec(i);
+function picture(i, scale, still = false) {
+  // The `_static` files are the first frame: the same drawing without its SMIL animation.
+  const s = still ? { ...spec(i), animated: false } : spec(i);
   const W = s.wide ? 64 : 32;
   const body = s.wide ? scene(s) : s.zero ? overlay(s) : face(s);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W * scale}" height="${32 * scale}" viewBox="0 0 ${W} 32">${body}</svg>`;
@@ -332,7 +335,10 @@ const emote = (i, owner = OTHERS[i % OTHERS.length], state = 'APPROVED') => {
     createdAt: new Date(NOW - idx * 0.2 * DAY - Math.floor(rngFor(i, 3)() * 0.18 * DAY)).toISOString(),
     flags: { zeroWidth: s.zero, nsfw: false, private: false },
     owner,
-    files: [1, 2, 3, 4].map((k) => ({ name: `${k}x.webp`, format: 'WEBP', scale: k, width: w * k, height: 32 * k, size: 900 * k, isStatic: false })),
+    files: [1, 2, 3, 4].flatMap((k) => [
+      { name: `${k}x.webp`, format: 'WEBP', scale: k, width: w * k, height: 32 * k, size: 900 * k, isStatic: false },
+      ...(s.animated ? [{ name: `${k}x_static.webp`, format: 'WEBP', scale: k, width: w * k, height: 32 * k, size: 400 * k, isStatic: true }] : []),
+    ]),
   };
 };
 const ALL = Array.from({ length: 300 }, (_, i) => emote(i));
@@ -620,10 +626,10 @@ createServer(async (req, res) => {
     return res.end();
   }
 
-  const img = url.pathname.match(/^\/emotes\/(\d+)\/(\d)x(?:_static)?\.webp$/);
+  const img = url.pathname.match(/^\/emotes\/(\d+)\/(\d)x(_static)?\.webp$/);
   if (img) {
     res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' });
-    return res.end(picture(Number(img[1]), Number(img[2])));
+    return res.end(picture(Number(img[1]), Number(img[2]), Boolean(img[3])));
   }
   const av = url.pathname.match(/^\/avatars\/(\d+)\.svg$/);
   if (av) {
