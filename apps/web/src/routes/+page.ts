@@ -1,13 +1,15 @@
 import { gql } from '$lib/api';
-import { GLOBAL_SET } from '$lib/queries';
+import { SEARCH } from '$lib/queries';
 import type { PageLoad } from './$types';
 
 export const load: PageLoad = async ({ fetch }) => {
-  // The page stands without it: a down API only hides the preview.
+  // One query feeds the hero cluster, the strip and the chat previews. The page stands
+  // without it: a down API hides the art and the strip says so.
+  // wire: sort - Top and New become searchEmotes(sort: TOP) and searchEmotes(sort: NEW).
   try {
-    const { globalSet } = await gql(GLOBAL_SET, {}, fetch);
-    return { global: globalSet.emotes.slice(0, 24) };
+    const { searchEmotes } = await gql(SEARCH, { query: '', animated: null, page: 1, perPage: 60 }, fetch);
+    return { emotes: searchEmotes.items, total: searchEmotes.total, failed: false };
   } catch {
-    return { global: [] };
+    return { emotes: [], total: 0, failed: true };
   }
 };
