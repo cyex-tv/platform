@@ -15,6 +15,8 @@
       <p class="lead">Show cyex.tv emotes in your chat client. Reads are public; no key needed.</p>
     </header>
 
+    <p><a class="link" href="/developers/reference">API reference <span class="arrow" aria-hidden="true">→</span></a> every endpoint, GraphQL operation and the event socket, with samples.</p>
+
     <h2>Read a channel's emotes</h2>
     <p>Ask for the channel by its platform user ID, then fetch its active set. Both answer with an <code>ETag</code>; send it back as <code>If-None-Match</code> and you get a cheap <code>304</code> while nothing changed.</p>
     <pre><code>GET {api}/v1/channels/twitch/&lt;user id&gt;
@@ -31,6 +33,7 @@ GET {api}/v1/sets/global</code></pre>
     <p>One WebSocket carries many subscriptions: <code>wss://api.cyex.tv/v1/events</code>. Subscribe to <code>channel:twitch:&lt;id&gt;</code>, <code>set:&lt;id&gt;</code> or <code>user:twitch:&lt;id&gt;</code>, keep the heartbeat, and resume with your session after a reconnect.</p>
 
     <h2>Everything else</h2>
+    <p>Every endpoint and operation is in the <a class="link" href="/developers/reference">API reference</a>.</p>
     <p>GraphQL at <code>{api}/v1/gql</code> (open it in a browser to explore). The REST description is <a class="link" href="https://github.com/cyex-tv/platform/blob/main/openapi/openapi.json">openapi.json</a>, the GraphQL schema is <a class="link" href="https://github.com/cyex-tv/platform/blob/main/schema/schema.graphql">schema.graphql</a>.</p>
   </div>
 </div>
