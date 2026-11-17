@@ -4,9 +4,9 @@
   import { navigating, page } from '$app/state';
   import CommandPalette from '$lib/components/CommandPalette.svelte';
   import Footer from '$lib/components/Footer.svelte';
-  import Nav, { type NavUser } from '$lib/components/Nav.svelte';
+  import AppHeader from '$lib/shell/AppHeader.svelte';
   import Toasts from '$lib/tool/Toasts.svelte';
-  import { forgetMe, isAdmin, loadMe, session } from '$lib/tool/session.svelte';
+  import { loadMe } from '$lib/tool/session.svelte';
 
   let { children } = $props();
   // The signed-in pages (`(tool)`) bring their own header in the cyex-app style, and a page whose
@@ -17,11 +17,6 @@
   // the account itself, and loadMe() shares one request between the two.
   $effect(() => {
     if (!tool) loadMe().catch(() => {});
-  });
-  const me = $derived.by<NavUser | null>(() => {
-    const m = session.me;
-    const who = m?.identities[0];
-    return m && who ? { displayName: who.displayName, avatar: who.avatar, platform: who.platform, admin: isAdmin(m) } : null;
   });
 
   // A thin bar under the nav while a page loads: it shows only after a short delay, crawls to
@@ -51,12 +46,12 @@
   {@render children()}
 {:else}
   <a class="skip" href="#main">Skip to content</a>
-  <Nav {me} onsignout={forgetMe} />
+  <AppHeader />
   <div class="progress {bar}" aria-hidden="true"></div>
   <main id="main" tabindex="-1">
     {@render children()}
   </main>
-  <Footer signedIn={!!me} />
+  <Footer />
   <Toasts />
 {/if}
 <CommandPalette />

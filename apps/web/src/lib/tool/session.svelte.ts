@@ -7,7 +7,8 @@ import type { MeQuery } from '$lib/gql/graphql';
 
 export type Me = MeQuery['me'];
 
-export const session = $state<{ me: Me | null }>({ me: null });
+/** `known`: the first answer (signed in or not) has arrived, so the header can show the right slot. */
+export const session = $state<{ me: Me | null; known: boolean }>({ me: null, known: false });
 
 let pending: Promise<Me> | null = null;
 
@@ -19,10 +20,12 @@ export function loadMe({ fresh = false }: { fresh?: boolean } = {}): Promise<Me>
   if (pending && !fresh) return pending;
   const mine: Promise<Me> = gql(ME, {}).then(({ me }) => {
     if (pending === mine) session.me = me;
+    session.known = true;
     return me;
   });
   pending = mine;
   mine.catch(() => {
+    session.known = true;
     if (pending === mine) pending = null;
   });
   return mine;

@@ -135,7 +135,7 @@
     max-height: 88dvh; background: transparent; color: var(--text); overflow: visible; }
   .sheet::backdrop { background: var(--scrim); }
   .panel { display: flex; flex-direction: column; max-height: 88dvh; border: 1px solid var(--border); border-bottom: 0;
-    border-radius: var(--radius-l) var(--radius-l) 0 0; background: var(--surface); box-shadow: var(--shadow-pop);
+    border-radius: var(--radius-card) var(--radius-card) 0 0; background: var(--elevated); box-shadow: var(--shadow-pop);
     padding-bottom: env(safe-area-inset-bottom, 0px); }
   .grab { flex: none; padding: 8px max(var(--page-pad), env(safe-area-inset-left, 0px)) 0; touch-action: none; cursor: grab;
     -webkit-user-select: none; user-select: none; }

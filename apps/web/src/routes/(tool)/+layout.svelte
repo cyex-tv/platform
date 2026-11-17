@@ -6,7 +6,7 @@
   import Mark from '$lib/components/Mark.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
   import Toasts from '$lib/tool/Toasts.svelte';
-  import UserMenu from '$lib/tool/UserMenu.svelte';
+  import AccountMenu from '$lib/shell/AccountMenu.svelte';
   import { isAdmin, loadMe, session } from '$lib/tool/session.svelte';
 
   let { children } = $props();
@@ -45,8 +45,8 @@
         {/each}
       </nav>
       <div class="end">
-        <ThemeToggle variant="tool" />
-        {#if session.me}<UserMenu />{/if}
+        <ThemeToggle />
+        <AccountMenu />
       </div>
     </div>
   </header>
