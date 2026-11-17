@@ -51,6 +51,10 @@ Work in `cyex-app/cyex-deck` goes on a feature branch with a PR the owner merges
 
 ## Phase 6: Search and the website (in progress)
 
+### PR 2: CORS for the website and browser clients (branch `phase-6/cors`)
+- [x] `apps/api/src/cors.rs`: the site (`CYEX_TV_SITE_URL`) gets credentialed CORS for everything; any other origin only the public reads (channels, sets, emotes, the personal-set lookup) with `*` and no credentials; nothing else. Preflights answer before the rate limits; `ETag` and `Retry-After` are exposed.
+- [x] Tests (`apps/api/tests/http.rs`, no database): the site's preflight and requests, public reads from another origin, GraphQL, uploads and sign-in refused to other origins.
+
 ### PR 1: search (branch `phase-6/search`, merged 2026/11/17 as PR 15)
 - [x] `crates/db::search` behind the `EmoteSearch` trait (ADR 0004), on Postgres: names by substring and `pg_trgm` similarity, tags by prefix; only approved, listed (not private), not deleted emotes, and NSFW only with `nsfw: true` (new, additive). Ranked: exact name, name prefix, similarity, popularity. `%` and `_` are taken literally.
 - [x] Migration `20261118000005_popularity.sql` (additive): `emotes.popularity`, the number of channels whose active set holds the emote, refreshed in the worker's hourly run; indexes for searchable emotes and tag prefixes.
