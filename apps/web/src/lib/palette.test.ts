@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { asLogin, channelJumps, move, pageJumps, PAGES } from './palette';
+import { announce, asLogin, channelJumps, move, pageJumps, PAGES } from './palette';
 import { hasStill, isWide, srcsetW } from './emote';
 
 describe('palette', () => {
@@ -48,5 +48,19 @@ describe('emote cards', () => {
       'https://cdn.cyex.tv/emotes/a/1x.webp 32w, https://cdn.cyex.tv/emotes/a/2x.webp 64w, https://cdn.cyex.tv/emotes/a/3x.webp 96w, https://cdn.cyex.tv/emotes/a/4x.webp 128w',
     );
     expect(srcsetW(e, true)).toContain('1x_static.webp 32w');
+  });
+});
+
+describe('announce', () => {
+  it('counts what is listed', () => {
+    expect(announce({ emotes: 6, channels: 2, pages: 1 }, 'lumen')).toBe('6 emotes, 2 channels, 1 page.');
+    expect(announce({ emotes: 1, channels: 0, pages: 0 }, 'x')).toBe('1 emote.');
+    expect(announce({ emotes: 0, channels: 0, pages: 4 }, '')).toBe('4 pages.');
+    expect(announce({ emotes: 1200, channels: 1, pages: 0 }, 'x')).toBe('1.200 emotes, 1 channel.');
+  });
+
+  it('says when nothing matches, and nothing without text', () => {
+    expect(announce({ emotes: 0, channels: 0, pages: 0 }, 'zzz')).toBe('No emotes or pages match “zzz”.');
+    expect(announce({ emotes: 0, channels: 0, pages: 0 }, '')).toBe('');
   });
 });

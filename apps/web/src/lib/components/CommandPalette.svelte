@@ -9,8 +9,8 @@
   import { goto } from '$app/navigation';
   import { gql } from '$lib/api';
   import { hasStill, ready, size, src, srcsetW } from '$lib/emote';
-  import { count } from '$lib/format';
-  import { channelJumps, move, pageJumps, typing } from '$lib/palette';
+  import { clean, count } from '$lib/format';
+  import { announce, channelJumps, emptyText, move, pageJumps, typing } from '$lib/palette';
   import type { SearchQuery } from '$lib/gql/graphql';
   import { SEARCH } from '$lib/queries';
   import Icon from './Icon.svelte';
@@ -48,6 +48,18 @@
   const channelRows = $derived(rows.filter((r) => r.kind === 'channel'));
   const pageRows = $derived(rows.filter((r) => r.kind === 'page'));
   const activeId = $derived(rows[active]?.id);
+  const nothing = $derived(!!text && !rows.some((r) => r.kind !== 'all'));
+
+  // One status line, read out 300ms after the results settle (not on every key).
+  let status = $state('');
+  $effect(() => {
+    const n = { emotes: emotes.length, channels: channelRows.length, pages: pageRows.length };
+    const t = text;
+    status = '';
+    if (!palette.open || searching) return;
+    const timer = setTimeout(() => (status = announce(n, t)), 300);
+    return () => clearTimeout(timer);
+  });
 
   // Open and close follow the shared state.
   $effect(() => {
@@ -146,7 +158,7 @@
 
 <dialog class="palette" bind:this={dialog} aria-label="Search cyex.tv" {onclose} {onclick}>
   <div class="box">
-    <div class="field">
+    <div class="pal-field">
       <Icon name="search" size={18} />
       <input
         bind:this={input}
@@ -205,8 +217,8 @@
                     />
                   {/if}
                 </span>
-                <span class="label">{r.emote.name}</span>
-                {#if r.emote.owner}<span class="hint">{r.emote.owner.displayName}</span>{/if}
+                <span class="label">{clean(r.emote.name)}</span>
+                {#if r.emote.owner}<span class="hint">{clean(r.emote.owner.displayName)}</span>{/if}
               {:else if r.kind === 'all'}
                 <span class="art"><Icon name="search" /></span>
                 <span class="label">{r.label}</span>
@@ -245,10 +257,10 @@
         </div>
       {/if}
 
-      {#if text && !rows.some((r) => r.kind !== 'all')}
-        <p class="empty" role="status">{searching ? '' : `No emotes or pages match “${text}”.`}</p>
-      {/if}
     </div>
+
+    {#if nothing && !searching}<p class="empty">{emptyText(text)}</p>{/if}
+    <p class="sr-only" role="status">{status}</p>
 
     <p class="keys" aria-hidden="true">
       <span><kbd>↑</kbd><kbd>↓</kbd> to move</span>
@@ -265,8 +277,10 @@
   .palette::backdrop { background: var(--scrim); }
   .box { display: flex; flex-direction: column; max-height: min(560px, 76dvh); border: 1px solid var(--border-strong);
     border-radius: var(--radius-m); background: var(--surface); box-shadow: var(--shadow-pop); overflow: hidden; }
-  .field { flex: none; display: flex; align-items: center; gap: 12px; padding: 0 14px 0 16px; height: 56px;
-    border-bottom: 1px solid var(--border); color: var(--muted); }
+  .pal-field { flex: none; display: flex; align-items: center; gap: 12px; padding: 0 14px 0 16px; height: 56px;
+    border-bottom: 1px solid var(--border); color: var(--muted); border-radius: var(--radius-m) var(--radius-m) 0 0; }
+  /* The input draws no outline of its own; the whole field row shows focus. */
+  .pal-field:focus-within { outline: 2px solid var(--accent-text); outline-offset: -2px; }
   input { flex: 1; min-width: 0; height: 100%; border: 0; background: none; color: var(--text); font: inherit; font-size: 17px; }
   input:focus, input:focus-visible { outline: none; }
   input::placeholder { color: var(--muted); }
@@ -285,11 +299,11 @@
   .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
   .hint { margin-left: auto; padding-left: 12px; flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font-size: var(--t-small); color: var(--muted); }
-  .empty { margin: 0; padding: 14px 10px; color: var(--muted); font-size: var(--t-small); }
-  .empty:empty { display: none; }
+  .empty { flex: none; margin: 0; padding: 8px 16px 16px; color: var(--muted); font-size: var(--t-small); overflow-wrap: anywhere; }
   .keys { flex: none; display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 10px 16px; border-top: 1px solid var(--border);
     font-size: var(--t-fine); color: var(--muted); }
   .keys span { display: inline-flex; align-items: center; gap: 4px; }
-  @media (pointer: coarse) { .keys, .esc { display: none; } }
+  /* Phones and touch: no keyboard hints. */
+  @media (pointer: coarse), (max-width: 520px) { .keys, .esc { display: none; } }
   @media (max-width: 520px) { .palette { margin-top: max(12px, env(safe-area-inset-top, 0px)); } }
 </style>

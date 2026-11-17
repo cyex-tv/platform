@@ -1,4 +1,5 @@
 // What the command palette offers for a piece of text, apart from the live emote search.
+import { count } from './format';
 
 export type Jump = { id: string; label: string; hint?: string; href: string };
 
@@ -53,4 +54,20 @@ export function typing(target: EventTarget | null): boolean {
   if (!target || typeof Element === 'undefined' || !(target instanceof Element)) return false;
   const el = target as HTMLElement;
   return el.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName);
+}
+
+/**
+ * What the palette's status line reads out once results settle: "6 emotes, 2 channels, 1 page.",
+ * or a sentence saying nothing matched. Empty when there's nothing to say.
+ */
+export function announce(n: { emotes: number; channels: number; pages: number }, text: string): string {
+  const part = (v: number, one: string, many: string) => (v ? `${count(v)} ${v === 1 ? one : many}` : '');
+  const parts = [part(n.emotes, 'emote', 'emotes'), part(n.channels, 'channel', 'channels'), part(n.pages, 'page', 'pages')].filter(Boolean);
+  if (parts.length) return `${parts.join(', ')}.`;
+  return text ? emptyText(text) : '';
+}
+
+/** The line shown (and read) when nothing matches the text. */
+export function emptyText(text: string): string {
+  return `No emotes or pages match “${text}”.`;
 }
