@@ -6,6 +6,7 @@ pub mod abuse;
 pub mod admin;
 pub mod catalog;
 pub mod cors;
+pub mod cosmetics;
 pub mod editors;
 pub mod gql;
 pub mod limits;
@@ -41,6 +42,7 @@ use crate::state::{AppState, MaybeCaller};
         (name = "system", description = "Health checks."),
         (name = "auth", description = "Signing in with Twitch or Kick."),
         (name = "emotes", description = "Uploading emotes."),
+        (name = "cosmetics", description = "cyex.tv chat badges and name paints (ADR 0015): the catalog, chatters' picks, and staff picture uploads."),
         (name = "reads", description = "Public, cacheable reads for chat clients.")
     )
 )]

@@ -2,6 +2,20 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Chat cosmetics (branch `feat/cosmetics`)
+
+ADR 0015. cyex.tv's own chat badges and name paints, like 7TV's (its public API docs and v3 types studied; no code taken), with no real cosmetics made yet. Separate from cyex deck supporter badges (ADR 0011).
+
+- [x] Migration `20261121000001_cosmetics.sql` (additive): `cosmetic_images`, `badges`, `paints` (linear/radial gradient or image; angle, repeat, shape, fallback colour, 2-10 stops, up to 4 shadows), `badge_entitlements` and `paint_entitlements` (source grant/purchase/event, reason, granted by), `cosmetic_selections` (foreign keys into the entitlements, so only owned cosmetics, cleared on revoke or delete).
+- [x] Permissions `cosmetics.manage` and `cosmetics.grant` (the owner holds both); account editors with `profile` pick for the owner.
+- [x] Pictures: `POST /v1/cosmetics/images` (staff), original at `originals/cosmetics/{sha256}`, worker job `cosmetic.transcode` makes WebP and AVIF at 1x/2x/4x (badges 18 px square, paint images 64 px tall) under `cosmetics/{badges,paints}/{sha256}/` (`crates/media` profiles).
+- [x] GraphQL (additive): `cosmetics`, `userCosmetics`, `myCosmetics`, `cosmeticImage`, `cosmeticEntitlements`; `createBadge`, `updateBadge`, `deleteBadge`, `createPaint`, `updatePaint`, `deletePaint`, `grantCosmetic`, `revokeCosmetic`, `selectCosmetics`. REST: `GET /v1/cosmetics`, `GET /v1/cosmetics/users` (ETag), `POST /v1/cosmetics/images`. Schema, OpenAPI and web types regenerated.
+- [x] Events: topic `cosmetics` with `cosmetic.created`/`updated`/`deleted`; `user.cosmetics_updated` on the account's user topics. Every staff action audited; 300 cosmetics writes an hour per account.
+- [x] Tests: `apps/api/tests/cosmetics_flow.rs` and `apps/worker/tests/cosmetics.rs` against Postgres in CI; unit tests of the validation, the media profiles, the worker's image path, topics and event shapes.
+- [x] Dev mock: sample catalog (2 SVG badges, 3 paints, all marked sample data), every new query and mutation, the REST routes.
+- [ ] Owner: allow `/cosmetics/` in the CDN's WAF rule (`docs/setup/owner-steps.md`).
+- [ ] Website pages (another task) and extension and deck support.
+
 ## Account editors (branch `feat/account-editors`)
 
 ADR 0014. An account lets others work on all its sets and channels, each with permission flags, like 7TV's editors (studied from 7TV's public help pages; no code taken).

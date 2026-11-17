@@ -4,7 +4,9 @@
 //! Key layout:
 //! - `emotes/{sha256}/{variant}`: public, immutable, served at `cdn.cyex.tv`;
 //! - `originals/{sha256}`: never public;
-//! - `cosmetics/`: reserved.
+//! - `cosmetics/badges/{sha256}/{variant}` and `cosmetics/paints/{sha256}/{variant}`: chat
+//!   cosmetics (ADR 0015), public and immutable like emotes;
+//! - `originals/cosmetics/{sha256}`: cosmetic originals, never public.
 
 pub mod sigv4;
 
@@ -28,6 +30,22 @@ pub fn emote_key(sha256_hex: &str, variant: &str) -> String {
 
 pub fn original_key(sha256_hex: &str) -> String {
     format!("originals/{sha256_hex}")
+}
+
+/// Where a cosmetic picture's files go: `kind` is `badge` or `paint` (ADR 0015).
+pub fn cosmetic_key(kind: &str, sha256_hex: &str, variant: &str) -> String {
+    format!("{}/{variant}", cosmetic_prefix(kind, sha256_hex))
+}
+
+/// The folder a cosmetic picture's files share; `{cdn}/{prefix}` is its `host`.
+pub fn cosmetic_prefix(kind: &str, sha256_hex: &str) -> String {
+    format!("cosmetics/{kind}s/{sha256_hex}")
+}
+
+/// A cosmetic picture's original. Kept apart from emote originals so a takedown's deletion of
+/// `originals/{sha256}` never touches it.
+pub fn cosmetic_original_key(sha256_hex: &str) -> String {
+    format!("originals/cosmetics/{sha256_hex}")
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -364,6 +382,12 @@ mod tests {
     fn keys_follow_adr_0003() {
         assert_eq!(emote_key("ab12", "2x.webp"), "emotes/ab12/2x.webp");
         assert_eq!(original_key("ab12"), "originals/ab12");
+        assert_eq!(
+            cosmetic_key("badge", "ab12", "1x.webp"),
+            "cosmetics/badges/ab12/1x.webp"
+        );
+        assert_eq!(cosmetic_prefix("paint", "ab12"), "cosmetics/paints/ab12");
+        assert_eq!(cosmetic_original_key("ab12"), "originals/cosmetics/ab12");
     }
 
     #[tokio::test]

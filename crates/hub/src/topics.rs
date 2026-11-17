@@ -1,4 +1,8 @@
-//! Topic names (ADR 0005): `channel:<platform>:<id>`, `set:<id>`, `user:<platform>:<id>`.
+//! Topic names (ADR 0005): `channel:<platform>:<id>`, `set:<id>`, `user:<platform>:<id>`, and
+//! `cosmetics` for the cosmetics catalog (ADR 0015).
+
+/// The topic badge and paint changes go out on.
+pub const COSMETICS: &str = cyex_tv_db::outbox::COSMETICS_TOPIC;
 
 /// Topics one connection or subscription may hold.
 pub const MAX_TOPICS: usize = 500;
@@ -30,6 +34,9 @@ fn platform_id(rest: &str) -> bool {
 
 /// Whether `topic` is a well-formed topic name.
 pub fn is_valid(topic: &str) -> bool {
+    if topic == COSMETICS {
+        return true;
+    }
     if let Some(rest) = topic.strip_prefix("channel:") {
         return platform_id(rest);
     }
@@ -58,6 +65,7 @@ mod tests {
             "channel:kick:9".to_owned(),
             "user:twitch:1".to_owned(),
             format!("set:{set}"),
+            "cosmetics".to_owned(),
         ] {
             assert!(is_valid(&ok), "{ok}");
         }
@@ -70,6 +78,8 @@ mod tests {
             "set:nope".to_owned(),
             format!("set:{}", set.to_lowercase()),
             "cosmetic:badge:1".to_owned(),
+            "cosmetics:".to_owned(),
+            "Cosmetics".to_owned(),
             String::new(),
         ] {
             assert!(!is_valid(&bad), "{bad}");

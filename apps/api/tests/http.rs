@@ -236,6 +236,9 @@ fn openapi_lists_only_the_rest_part() {
         "/v1/sets/{id}",
         "/v1/sets/global",
         "/v1/personal-sets/lookup",
+        "/v1/cosmetics",
+        "/v1/cosmetics/users",
+        "/v1/cosmetics/images",
     ] {
         assert!(spec.paths.paths.contains_key(path), "missing {path}");
     }
@@ -260,6 +263,10 @@ fn sdl_lists_the_contract() {
         "addSetEmote",
         "events(topics: [String!]!)",
         "enum Platform",
+        "cosmetics: CosmeticCatalog!",
+        "userCosmetics(platform: Platform!, userIds: [String!]!): [UserCosmetics!]!",
+        "selectCosmetics(badgeId: String, paintId: String, ownerId: String): OwnedCosmetics!",
+        "grantCosmetic(input: GrantCosmeticInput!): Entitlement!",
     ] {
         assert!(sdl.contains(needle), "missing {needle}");
     }

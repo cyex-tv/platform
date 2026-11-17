@@ -11,7 +11,7 @@ Emote files are small, immutable once processed, and read far more often than wr
 - Key layout:
   - `emotes/{sha256}/{variant}` with variants `1x.webp … 4x.webp`, `1x.avif … 4x.avif`, `1x_static.webp …` for animated emotes;
   - `originals/{sha256}`, never public;
-  - `cosmetics/` reserved for the later cosmetics phase.
+  - `cosmetics/` reserved for the later cosmetics phase (used since ADR 0015: `cosmetics/{badges,paints}/{sha256}/`, originals at `originals/cosmetics/{sha256}`).
 - Content-addressed by the hash of the original, so a duplicate upload reuses the files and URLs never change.
 - `Cache-Control: public, max-age=31536000, immutable` on derivatives. A takedown deletes the objects and purges the URLs.
 - Local dev uses an S3-compatible server with the same API (MinIO first; Versity Gateway since MinIO stopped publishing images, 2026/11/16).

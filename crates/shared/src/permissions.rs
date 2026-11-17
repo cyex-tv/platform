@@ -9,6 +9,10 @@ pub const USERS_VIEW: &str = "users.view";
 pub const USERS_RESTRICT: &str = "users.restrict";
 pub const ROLES_MANAGE: &str = "roles.manage";
 pub const AUDIT_VIEW: &str = "audit.view";
+/// Create, change and delete chat badges, paints and their images (ADR 0015).
+pub const COSMETICS_MANAGE: &str = "cosmetics.manage";
+/// Grant and revoke cosmetics, and read who owns what (ADR 0015).
+pub const COSMETICS_GRANT: &str = "cosmetics.grant";
 
 /// Every permission that exists. A role can only hold names from this list.
 pub const ALL: &[&str] = &[
@@ -21,6 +25,8 @@ pub const ALL: &[&str] = &[
     USERS_RESTRICT,
     ROLES_MANAGE,
     AUDIT_VIEW,
+    COSMETICS_MANAGE,
+    COSMETICS_GRANT,
 ];
 
 pub fn is_known(name: &str) -> bool {

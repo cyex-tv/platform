@@ -15,7 +15,7 @@ Streamers hand their emotes to a team: moderators who add and rename emotes, a m
   | `emotes` | add, remove, rename (alias) and change zero-width on emotes in any of the owner's sets, the active channel sets included; see the owner's pending emotes in those sets; add the owner's own private emotes to the owner's sets (their own private emotes too, as for per-set editors; nobody else's) |
   | `sets` | create, rename and delete sets, change a set's capacity up to its default (raising above it still needs `sets.edit_any`); set a channel's active set and its settings (allow personal emotes) |
   | `editors` | add, change and remove account editors, and per-set editors on the owner's sets (that also needs `emotes`, since a set editor can change emotes) |
-  | `profile` | stored now, used by the upcoming cosmetics (ADR 0011); nothing checks it yet |
+  | `profile` | pick the badge and paint the owner shows, and read what they own (ADR 0015); never grant |
 
 - The owner always has every flag and is never in the table (`account_id <> editor_id`).
 - **No escalation:** an editor with `editors` can only grant flags they hold, and can only change or remove editors whose current flags are all flags they hold. Nobody but the owner can grant on the owner's behalf more than they have; nobody can act on the owner.

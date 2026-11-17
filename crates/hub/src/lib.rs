@@ -218,15 +218,32 @@ fn text(payload: &Value, key: &str) -> Option<String> {
     payload.get(key).and_then(Value::as_str).map(str::to_owned)
 }
 
-/// The JSON the event WebSocket sends as a dispatch's `data`.
+fn is_cosmetic(event_type: &str) -> bool {
+    event_type.starts_with("cosmetic.")
+}
+
+/// The JSON the event WebSocket sends as a dispatch's `data`. Cosmetic events (ADR 0015) add
+/// `cosmetic_kind`, `cosmetic_id` and, for created and updated, the whole `cosmetic` as the
+/// catalog has it; `user.cosmetics_updated` adds `badge_id` and `paint_id`.
 pub fn wire(event: &Event, topic: &str) -> Value {
-    json!({
+    let mut out = json!({
         "topic": topic,
         "set_id": event.set_id.map(cyex_tv_db::ids::to_text),
         "emote_id": text(&event.payload, "emote_id"),
         "name": text(&event.payload, "name"),
         "created_at": event.created_at.to_rfc3339_opts(SecondsFormat::Millis, true),
-    })
+    });
+    if is_cosmetic(&event.event_type) {
+        out["cosmetic_kind"] = json!(text(&event.payload, "cosmetic_kind"));
+        out["cosmetic_id"] = json!(text(&event.payload, "cosmetic_id"));
+        if let Some(cosmetic) = event.payload.get("cosmetic") {
+            out["cosmetic"] = cosmetic.clone();
+        }
+    } else if event.event_type == "user.cosmetics_updated" {
+        out["badge_id"] = json!(text(&event.payload, "badge_id"));
+        out["paint_id"] = json!(text(&event.payload, "paint_id"));
+    }
+    out
 }
 
 /// The same event as the GraphQL `Event` type.
@@ -241,6 +258,12 @@ pub fn model_event(event: &Event, topic: &str) -> model::Event {
         created_at: event
             .created_at
             .to_rfc3339_opts(SecondsFormat::Millis, true),
+        cosmetic_kind: text(&event.payload, "cosmetic_kind")
+            .as_deref()
+            .and_then(model::CosmeticKind::parse),
+        cosmetic_id: text(&event.payload, "cosmetic_id"),
+        badge_id: text(&event.payload, "badge_id"),
+        paint_id: text(&event.payload, "paint_id"),
     }
 }
 
@@ -254,6 +277,10 @@ pub fn resync(topic: &str) -> model::Event {
         emote_id: None,
         name: None,
         created_at: chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+        cosmetic_kind: None,
+        cosmetic_id: None,
+        badge_id: None,
+        paint_id: None,
     }
 }
 
@@ -345,5 +372,34 @@ mod tests {
         );
         assert_eq!(event_type("nope"), None);
         assert_eq!(resync("set:1").event_type, EventType::Resync);
+        assert!(w.get("cosmetic_id").is_none());
+    }
+
+    #[test]
+    fn cosmetic_events_carry_their_fields() {
+        let mut created = (*event(8, &["cosmetics"])).clone();
+        created.event_type = "cosmetic.created".to_owned();
+        created.payload = json!({
+            "cosmetic_kind": "paint", "cosmetic_id": "P1", "cosmetic": { "id": "P1", "name": "Dawn" }
+        });
+        let w = wire(&created, "cosmetics");
+        assert_eq!(
+            (w["cosmetic_kind"].as_str(), w["cosmetic_id"].as_str()),
+            (Some("paint"), Some("P1"))
+        );
+        assert_eq!(w["cosmetic"]["name"], "Dawn");
+        let m = model_event(&created, "cosmetics");
+        assert_eq!(m.event_type, EventType::CosmeticCreated);
+        assert_eq!(m.cosmetic_kind, Some(model::CosmeticKind::Paint));
+
+        let mut selected = (*event(9, &["user:twitch:1"])).clone();
+        selected.event_type = "user.cosmetics_updated".to_owned();
+        selected.payload = json!({ "badge_id": "B1", "paint_id": null });
+        let w = wire(&selected, "user:twitch:1");
+        assert_eq!(w["badge_id"], "B1");
+        assert!(w["paint_id"].is_null());
+        assert!(w.get("cosmetic").is_none());
+        let m = model_event(&selected, "user:twitch:1");
+        assert_eq!((m.badge_id.as_deref(), m.paint_id), (Some("B1"), None));
     }
 }

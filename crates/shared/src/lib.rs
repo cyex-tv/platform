@@ -2,6 +2,7 @@
 //! public API types.
 
 pub mod config;
+pub mod cosmetics;
 pub mod error;
 pub mod logging;
 pub mod metrics;
