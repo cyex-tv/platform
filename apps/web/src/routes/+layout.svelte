@@ -9,14 +9,14 @@
   import { loadMe } from '$lib/tool/session.svelte';
 
   let { children } = $props();
-  // The signed-in pages (`(tool)`) bring their own header in the cyex-app style, and a page whose
-  // load returns `chrome: false` (the docs at /developers) brings its own header and footer.
-  const tool = $derived(page.route.id?.startsWith('/(tool)') || page.data.chrome === false);
+  // One shell for every route: AppHeader, main, Footer. Pages (and the signed-in group's layout)
+  // only fill main, with RailLayout or ColumnLayout. A page's load may return `footer: 'slim'`
+  // (the docs) to end the page without the gap above the footer.
 
-  // Only the browser has the session cookie; signed out is the default. The tool layout loads
-  // the account itself, and loadMe() shares one request between the two.
+  // Only the browser has the session cookie; signed out is the default. The signed-in layout
+  // asks too (to send you to sign in), and loadMe() shares one request between the two.
   $effect(() => {
-    if (!tool) loadMe().catch(() => {});
+    loadMe().catch(() => {});
   });
 
   // A thin bar under the nav while a page loads: it shows only after a short delay, crawls to
@@ -42,21 +42,18 @@
   });
 </script>
 
-{#if tool}
+<a class="skip" href="#main">Skip to content</a>
+<AppHeader />
+<div class="progress {bar}" aria-hidden="true"></div>
+<main id="main" tabindex="-1">
   {@render children()}
-{:else}
-  <a class="skip" href="#main">Skip to content</a>
-  <AppHeader />
-  <div class="progress {bar}" aria-hidden="true"></div>
-  <main id="main" tabindex="-1">
-    {@render children()}
-  </main>
-  <Footer slim={page.data.footer === 'slim'} />
-  <Toasts />
-{/if}
+</main>
+<Footer slim={page.data.footer === 'slim'} />
+<Toasts />
 <CommandPalette />
 
 <style>
+  main:focus { outline: none; }
   .progress { position: fixed; top: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); left: 0; right: 0; height: 2px;
     z-index: var(--z-nav); pointer-events: none; background: var(--accent); transform-origin: 0 50%;
     opacity: 0; transform: scaleX(0); }

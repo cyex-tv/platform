@@ -1,19 +1,9 @@
 <script lang="ts">
-  import { page } from '$app/state';
-  import { can, isAdmin, session } from '$lib/tool/session.svelte';
+  // The admin gate. The admin rail (in the signed-in layout) lists the sections you may open.
+  import { isAdmin, session } from '$lib/tool/session.svelte';
 
   let { children } = $props();
 
-  const sections = $derived(
-    [
-      { href: '/admin', label: 'Overview', show: true },
-      { href: '/admin/review', label: 'Review', show: can('emotes.review') },
-      { href: '/admin/reports', label: 'Reports', show: can('emotes.review') || can('emotes.takedown') },
-      { href: '/admin/users', label: 'Users', show: can('users.view') || can('users.restrict') || can('roles.manage') },
-      { href: '/admin/roles', label: 'Roles', show: can('roles.manage') },
-      { href: '/admin/audit', label: 'Audit log', show: can('audit.view') },
-    ].filter((s) => s.show),
-  );
   const allowed = $derived(isAdmin(session.me));
 </script>
 
@@ -24,14 +14,6 @@
     <a class="ui-btn secondary" href="/me">Back to your emotes</a>
   </div>
 {:else}
-  <nav class="ui-seg sub" aria-label="Admin">
-    {#each sections as s}
-      <a href={s.href} aria-current={page.url.pathname === s.href ? 'page' : undefined}>{s.label}</a>
-    {/each}
-  </nav>
   {@render children()}
 {/if}
 
-<style>
-  .sub { margin-bottom: 20px; flex-wrap: wrap; overflow: visible; }
-</style>

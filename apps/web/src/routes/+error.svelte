@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
+  import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
 
   const missing = $derived(page.status === 404);
   // Fixed copy per status: a server's own message never reaches the page.
@@ -26,7 +27,8 @@
   <title>{missing ? 'Nothing here' : 'Something went wrong'} - cyex.tv</title>
 </svelte:head>
 
-<div class="page nothing">
+<ColumnLayout>
+<div class="nothing">
   <h1>{missing ? 'Nothing here.' : 'Something went wrong.'}</h1>
   <p class="lead">{lead}</p>
   <div class="actions">
@@ -40,6 +42,7 @@
     <a class="btn" href="/search">Browse emotes</a>
   </div>
 </div>
+</ColumnLayout>
 
 <style>
   .nothing { padding-top: clamp(64px, 10vw, 140px); text-align: center; }

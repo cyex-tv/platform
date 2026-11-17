@@ -1,6 +1,7 @@
 <script lang="ts">
   import { page } from '$app/state';
   import { signInUrl } from '$lib/api';
+  import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
 
   const back = $derived(page.url.searchParams.get('back') ?? '/me');
 </script>
@@ -10,8 +11,8 @@
   <meta name="description" content="Sign in to cyex.tv with Twitch or Kick." />
 </svelte:head>
 
-<div class="page">
-  <div class="form">
+<ColumnLayout width="form">
+  <div>
     <header class="page-head">
       <h1>Sign in</h1>
       <p class="lead">With the account you stream or chat with. You can link the other one afterwards.</p>
@@ -36,10 +37,9 @@
       access to your account.
     </p>
   </div>
-</div>
+</ColumnLayout>
 
 <style>
-  .form { max-width: var(--measure-form); }
   .choices { display: grid; gap: 12px; max-width: 360px; }
   .choice { justify-content: flex-start; }
   .note { margin-top: 24px; max-width: 52ch; }
