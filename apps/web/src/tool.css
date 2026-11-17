@@ -23,28 +23,32 @@
 .ui-label { font-size: var(--text-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
 .ui-hint { font-size: var(--text-hint); color: var(--dim); }
 .ui-muted { color: var(--muted); }
+.ui-num { font-variant-numeric: tabular-nums; } /* counts and dates: Geist, not mono */
 .ui-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 /* Buttons (web-tool density). */
-.ui-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px;
-  padding: 10.5px 18px; border: 1px solid transparent; border-radius: var(--radius);
-  font: inherit; font-size: .87rem; font-weight: 600; line-height: 1.1; white-space: nowrap; cursor: pointer;
+/* One button system with the site's .btn: same colours, weight, 3px corners and hover; only the
+   height is the tool's (38px, 32px small) where .btn is the 48px landing button. */
+.ui-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 38px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--radius-btn);
+  font: inherit; font-size: var(--t-nav); font-weight: 500; letter-spacing: -.005em; line-height: 1.1; white-space: nowrap; cursor: pointer;
   text-decoration: none; color: var(--text);
-  transition: background-color var(--fast), border-color var(--fast), color var(--fast); }
+  transition: background-color var(--fast), border-color var(--fast), color var(--fast), filter var(--fast); }
 .ui-btn svg { flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-.ui-btn.primary { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.ui-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .ui-btn.secondary { background: var(--surface); border-color: var(--border-strong); }
 .ui-btn.ghost { background: none; color: var(--muted); }
 .ui-btn.danger { background: var(--surface); border-color: var(--border-strong); color: var(--red); }
 @media (hover: hover) and (pointer: fine) {
-  .ui-btn.primary:hover { background: var(--accent-2); }
-  .ui-btn.secondary:hover, .ui-btn.danger:hover { background: var(--surface-hover); }
+  .ui-btn.primary:hover { filter: brightness(1.08); }
+  .ui-btn.secondary:hover, .ui-btn.danger:hover { background: var(--surface-2); border-color: var(--muted); }
   .ui-btn.ghost:hover { background: var(--surface-hover); color: var(--text); }
 }
 .ui-btn.danger.armed { background: color-mix(in srgb, var(--red) 14%, transparent); border-color: var(--red); }
-.ui-btn.small { padding: 7px 13px; font-size: .78rem; }
+.ui-btn.small { height: 32px; padding: 0 12px; font-size: var(--t-fine); }
 .ui-btn:active { opacity: .6; transition: none; }
 .ui-btn:disabled { opacity: .5; cursor: not-allowed; }
+a.ui-btn { box-sizing: border-box; }
 .ui-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
 .ui-icon { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; flex: none;
@@ -57,10 +61,12 @@
 /* Fields. */
 .ui-field { display: grid; gap: 7px; }
 .ui-field > .ui-label { margin: 0; }
-.ui-input { width: 100%; min-width: 0; padding: 9px 12px; font: inherit; font-size: 16px; color: var(--text);
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); outline: none;
+/* Same field as the site's .input (strong hairline, 3px, accent focus ring); 38px, like .ui-btn. */
+.ui-input { width: 100%; min-width: 0; min-height: 38px; padding: 7px 12px; font: inherit; font-size: 16px; color: var(--text);
+  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-btn); outline: none;
   transition: border-color var(--fast), background-color var(--fast); }
-.ui-input:focus-visible { border-color: var(--accent-border); background: var(--surface-hover); outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { .ui-input:hover:not(:focus-visible) { border-color: var(--muted); } }
+.ui-input:focus-visible { background: var(--surface); outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .ui-input::placeholder { color: var(--dim); }
 .ui-input[aria-invalid='true'] { border-color: var(--red); }
 select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
@@ -106,11 +112,11 @@ select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
 
 /* Cards and panels: 6px, one step above the ground. */
 .ui-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 19px 22px; }
-.ui-card > h2 { font-size: .8rem; }
+.ui-card > h2 { font-size: var(--t-ui); }
 .ui-card > h2 + * { margin-top: 12px; }
 .ui-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
-.ui-panel > header { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--border); }
-.ui-panel > header h2 { flex: 1; min-width: 0; font-size: .8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-panel > header { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 8px 12px 8px 16px; border-bottom: 1px solid var(--border); }
+.ui-panel > header h2 { flex: 1; min-width: 0; font-size: var(--t-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ui-stack { display: grid; gap: 16px; }
 
 /* Settings rows. */

@@ -15,6 +15,7 @@
   import AddEmotes from '$lib/tool/AddEmotes.svelte';
   import { session } from '$lib/tool/session.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
+  import PageHead from '$lib/tool/PageHead.svelte';
 
   type EditableSet = NonNullable<EditSetQuery['set']>;
   let set = $state<EditableSet | null>(null);
@@ -115,28 +116,28 @@
 <LoadGate source={L} label="Loading the set…">
 {#snippet children()}
 {#if set}
-  <p class="crumbs"><a href={set.kind === 'GLOBAL' ? '/admin' : '/me/sets'}>{set.kind === 'GLOBAL' ? 'Admin' : 'Sets'}</a> <span aria-hidden="true">/</span> <bdi>{clean(set.name)}</bdi></p>
-  <div class="ui-head">
-    <div>
-      <h1><bdi>{clean(set.name)}</bdi></h1>
-      <p>
-        {set.kind === 'GLOBAL' ? 'The global set' : set.kind === 'PERSONAL' ? 'Personal set' : 'Channel set'} ·
-        <span class="ui-mono">{count(set.emotes.length)} / {count(set.capacity)}</span> emotes
-        {#if !owner && set.owner}· by <Name value={set.owner.displayName} />{/if}
-      </p>
-    </div>
-  </div>
+  <PageHead
+    name
+    title={clean(set.name)}
+    back={set.kind === 'GLOBAL' ? { href: '/admin', label: 'Admin' } : { href: '/me/sets', label: 'Sets' }}
+  >
+    {#snippet line()}
+      {set!.kind === 'GLOBAL' ? 'The global set' : set!.kind === 'PERSONAL' ? 'Personal set' : 'Channel set'} ·
+      <span>{count(set!.emotes.length)} / {count(set!.capacity)}</span> emotes
+      {#if !owner && set!.owner}· by <Name value={set!.owner.displayName} />{/if}
+    {/snippet}
+  </PageHead>
 
   <div class="layout">
-    <div class="ui-stack">
+    <div class="ui-stack main">
       <SetEmotes {set} onchange={load} />
       <AddEmotes setId={set.id} personal={set.kind === 'PERSONAL'} {taken} {names} {full} onadded={load} />
     </div>
     <aside class="ui-stack">
       <form class="ui-card ui-form" onsubmit={rename}>
-        <h2>Name</h2>
+        <h2><label for="set-name">Name</label></h2>
         <div class="row">
-          <input class="ui-input" bind:value={name} maxlength="100" aria-label="Set name" />
+          <input id="set-name" class="ui-input" bind:value={name} maxlength="100" />
           <button class="ui-btn secondary" type="submit" disabled={saving || !name.trim() || name.trim() === set.name}>Rename</button>
         </div>
       </form>
@@ -163,14 +164,11 @@
 </LoadGate>
 
 <style>
-  .crumbs { margin-bottom: 16px; min-width: 0; overflow-wrap: anywhere; color: var(--dim); font-size: var(--text-sub); }
-  .crumbs a { color: var(--muted); text-decoration: none; }
-  @media (hover: hover) and (pointer: fine) { .crumbs a:hover { color: var(--text); } }
-  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
   .row { display: flex; gap: 8px; }
   .row input { min-width: 0; }
   .gap { margin-top: 12px; }
-  .fold > summary { cursor: pointer; padding: 10px 14px; font-weight: 600; background: var(--surface); border: 1px solid var(--border); }
+  .fold > summary { cursor: pointer; padding: 10px 14px; font-weight: 600; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
   .fold[open] > summary { margin-bottom: 8px; }
   @media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr); } aside { order: -1; } }
 </style>

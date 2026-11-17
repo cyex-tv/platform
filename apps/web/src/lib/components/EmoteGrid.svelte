@@ -23,6 +23,8 @@
     note?: (e: CardEmote) => string | undefined;
     /** Your own corner content per tile, instead of `note`. */
     status?: Snippet<[CardEmote]>;
+    /** Controls under each tile (rename, remove, add), outside the tile's link. */
+    below?: Snippet<[CardEmote]>;
   };
   let {
     items,
@@ -37,6 +39,7 @@
     href,
     note,
     status: corner,
+    below,
   }: Props = $props();
 </script>
 
@@ -53,6 +56,7 @@
         {:else}
           <EmoteTile emote={e} {density} {creator} {labels} eager={i < eager} href={href?.(e)} note={note?.(e)} />
         {/if}
+        {#if below}<div class="below">{@render below(e)}</div>{/if}
       </li>
     {/each}
     {#if loading}
@@ -70,6 +74,8 @@
   .compact { grid-template-columns: repeat(auto-fill, minmax(var(--emote-tile-compact), 1fr)); gap: 8px; }
   .wide { grid-column: span 2; }
   li { min-width: 0; }
+  li:has(.below) { display: grid; grid-template-rows: 1fr auto; gap: 6px; }
+  .below { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 32px; }
   @media (max-width: 520px) {
     .grid { gap: 8px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
     .compact { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
