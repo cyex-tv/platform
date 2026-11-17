@@ -27,6 +27,8 @@ pub enum AuthError {
     LastIdentity,
     #[error("account deleted")]
     AccountDeleted,
+    #[error("account blocked")]
+    AccountBlocked,
     #[error("Origin not allowed")]
     BadOrigin,
     #[error(transparent)]
@@ -57,7 +59,7 @@ impl AuthError {
                 StatusCode::BAD_REQUEST
             }
             Self::SignedOut => StatusCode::UNAUTHORIZED,
-            Self::AccountDeleted | Self::BadOrigin => StatusCode::FORBIDDEN,
+            Self::AccountDeleted | Self::AccountBlocked | Self::BadOrigin => StatusCode::FORBIDDEN,
             Self::IdentityTaken | Self::PlatformAlreadyLinked | Self::LastIdentity => {
                 StatusCode::CONFLICT
             }
@@ -80,6 +82,7 @@ impl AuthError {
             Self::PlatformAlreadyLinked => "platform_already_linked",
             Self::LastIdentity => "last_identity",
             Self::AccountDeleted => "account_deleted",
+            Self::AccountBlocked => "account_blocked",
             Self::BadOrigin => "bad_origin",
             Self::Db(_) => "internal",
         }
@@ -99,6 +102,7 @@ impl AuthError {
             Self::PlatformAlreadyLinked => "This platform is already linked to your account.",
             Self::LastIdentity => "Your last linked account can't be removed.",
             Self::AccountDeleted => "This cyex.tv account was deleted.",
+            Self::AccountBlocked => "This cyex.tv account is blocked.",
             Self::BadOrigin => "Requests with the session cookie must come from cyex.tv.",
             Self::Db(_) => "Something went wrong on our side.",
         }

@@ -14,6 +14,8 @@ pub struct Account {
     pub created_at: DateTime<Utc>,
     pub restricted_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
+    /// Blocked by `users.restrict`: can't sign in.
+    pub blocked_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, FromRow)]
@@ -46,7 +48,7 @@ pub struct SignIn {
     pub created: bool,
 }
 
-const ACCOUNT: &str = "id, created_at, restricted_at, deleted_at";
+const ACCOUNT: &str = "id, created_at, restricted_at, deleted_at, blocked_at";
 const IDENTITY: &str =
     "platform, platform_user_id, account_id, login, display_name, avatar, linked_at, refreshed_at";
 
@@ -260,4 +262,23 @@ pub async fn is_any_of(
     .bind(account_ids)
     .fetch_one(conn)
     .await?)
+}
+
+/// Blocks an account (`users.restrict`) or lifts the block.
+pub async fn set_blocked(
+    conn: &mut PgConnection,
+    account_id: Uuid,
+    blocked: bool,
+) -> DbResult<Account> {
+    sqlx::query_as(&format!(
+        "UPDATE accounts
+         SET blocked_at = CASE WHEN $2 THEN coalesce(blocked_at, now()) END
+         WHERE id = $1
+         RETURNING {ACCOUNT}"
+    ))
+    .bind(account_id)
+    .bind(blocked)
+    .fetch_optional(conn)
+    .await?
+    .ok_or(DbError::NotFound)
 }

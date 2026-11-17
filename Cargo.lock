@@ -755,18 +755,22 @@ dependencies = [
 name = "cyex-tv-worker"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "chrono",
  "cyex-tv-db",
  "cyex-tv-media",
  "cyex-tv-shared",
  "cyex-tv-storage",
  "image",
+ "reqwest",
+ "rustls",
  "serde_json",
  "sha2",
  "sqlx",
  "thiserror",
  "tokio",
  "tracing",
+ "url",
  "uuid",
 ]
 

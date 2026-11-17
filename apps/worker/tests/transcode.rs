@@ -115,6 +115,7 @@ async fn a_still_upload_gets_eight_files() {
     let ctx = Ctx {
         db: db.pool.clone(),
         store: Some(store.clone()),
+        purge: None,
     };
     let (file, hex) = uploaded(&db, &store, &png(100, 100), "image/png").await;
 
@@ -165,6 +166,7 @@ async fn an_animated_upload_gets_animated_webp_and_static_frames() {
     let ctx = Ctx {
         db: db.pool.clone(),
         store: Some(store.clone()),
+        purge: None,
     };
     let (file, _) = uploaded(&db, &store, &gif(64, 64, 4), "image/gif").await;
     assert_eq!(
@@ -192,6 +194,7 @@ async fn bad_originals_fail_for_good() {
     let ctx = Ctx {
         db: db.pool.clone(),
         store: Some(store.clone()),
+        purge: None,
     };
     // The original went missing.
     let (missing, _) = uploaded(&db, &store, &png(20, 20), "image/png").await;
@@ -221,6 +224,7 @@ async fn bad_originals_fail_for_good() {
     let no_store = Ctx {
         db: db.pool.clone(),
         store: None,
+        purge: None,
     };
     uploaded(&db, &store, &png(21, 21), "image/png").await;
     assert_eq!(

@@ -88,13 +88,14 @@ pub async fn create(
     .await?)
 }
 
-/// The session for a token, if it hasn't expired and its account isn't deleted.
+/// The session for a token, if it hasn't expired and its account isn't deleted or blocked.
 pub async fn find_active(conn: &mut PgConnection, hash: &TokenHash) -> DbResult<Option<Session>> {
     Ok(sqlx::query_as(
         "SELECT s.id_hash, s.account_id, s.kind, s.created_at, s.expires_at, s.last_seen_at
          FROM sessions s
          JOIN accounts a ON a.id = s.account_id
-         WHERE s.id_hash = $1 AND s.expires_at > now() AND a.deleted_at IS NULL",
+         WHERE s.id_hash = $1 AND s.expires_at > now()
+           AND a.deleted_at IS NULL AND a.blocked_at IS NULL",
     )
     .bind(&hash[..])
     .fetch_optional(conn)

@@ -224,6 +224,9 @@ impl Auth {
                 if signed_in.account.deleted_at.is_some() {
                     return Err(AuthError::AccountDeleted);
                 }
+                if signed_in.account.blocked_at.is_some() {
+                    return Err(AuthError::AccountBlocked);
+                }
                 (signed_in.account.id, signed_in.created, false)
             }
         };

@@ -272,3 +272,13 @@ pub async fn count_since(
     .fetch_one(conn)
     .await?)
 }
+
+/// The emotes made from one file (the same image, uploaded by anyone).
+pub async fn by_file(conn: &mut PgConnection, file_id: Uuid) -> DbResult<Vec<Emote>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {EMOTE} FROM emotes WHERE file_id = $1 AND deleted_at IS NULL ORDER BY id"
+    ))
+    .bind(file_id)
+    .fetch_all(conn)
+    .await?)
+}
