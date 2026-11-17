@@ -56,19 +56,26 @@
   </div>
 {:else}
   <section class="ui-panel">
+    <div class="row head" aria-hidden="true">
+      <span></span><span class="ui-label">Emote</span><span class="ui-label">Report</span><span class="ui-label actions-h">Action</span>
+    </div>
     <ul class="ui-list">
       {#each items as r (r.id)}
-        <li>
-          {#if r.emote}<Thumb emote={r.emote} name={r.emote.name} box={48} />{:else}<span class="gone" aria-hidden="true"></span>{/if}
+        <li class="row">
+          <span class="frame">
+            {#if r.emote}<Thumb emote={r.emote} name={clean(r.emote.name)} box={48} />{:else}<span class="gone" aria-hidden="true"></span>{/if}
+          </span>
           <div class="what">
             <strong>
               {#if clean(r.emote?.name)}<bdi>{clean(r.emote?.name)}</bdi>{:else}Deleted emote{/if}
               {#if r.emote && r.emote.state !== 'APPROVED'}<span class="ui-chip {r.emote.state.toLowerCase()}">{STATE_LABEL[r.emote.state]}</span>{/if}
             </strong>
+            {#if r.emote?.owner}<span class="ui-hint"><bdi>{clean(r.emote.owner.displayName)}</bdi></span>{/if}
+          </div>
+          <div class="why">
             <span class="reason">“<bdi>{clean(r.reason)}</bdi>”</span>
             <span class="ui-hint meta">
               <span class="ui-mono">{date(r.createdAt)}</span>
-              {#if r.emote?.owner}<span>by <bdi>{clean(r.emote.owner.displayName)}</bdi></span>{/if}
               {#if r.reporterId}<span>reporter <span class="ui-mono">{r.reporterId}</span></span>{/if}
             </span>
           </div>
@@ -100,11 +107,22 @@
 />
 
 <style>
-  .ui-list > li { align-items: flex-start; padding-block: 12px; flex-wrap: wrap; }
-  .what { display: grid; gap: 3px; flex: 1; min-width: 200px; }
-  .what strong { display: flex; align-items: center; gap: 8px; }
-  .reason { color: var(--muted); overflow-wrap: anywhere; }
-  .meta { display: flex; flex-wrap: wrap; overflow-wrap: anywhere; }
-  .meta > :global(* + *)::before { content: '·'; margin: 0 6px; }
-  .gone { width: 48px; height: 48px; border: 1px dashed var(--border-strong); flex: none; }
+  /* One grid for the header and every row, so the columns line up. */
+  .row { display: grid; grid-template-columns: 56px minmax(0, 1fr) minmax(0, 1.6fr) 210px; gap: 14px; align-items: center; }
+  .ui-list > li.row { padding-block: 10px; }
+  .head { padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--row-alt); }
+  .actions-h { text-align: right; }
+  .frame { display: grid; place-items: center; width: 56px; height: 56px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--bg); }
+  .what, .why { display: grid; gap: 3px; min-width: 0; }
+  .what strong { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+  .reason { color: var(--text); overflow-wrap: anywhere; }
+  .meta { display: grid; overflow-wrap: anywhere; }
+  .gone { width: 40px; height: 40px; border: 1px dashed var(--border-strong); border-radius: var(--radius); }
+  .row .ui-actions { justify-content: flex-end; }
+  @media (max-width: 760px) {
+    .head { display: none; }
+    .row { grid-template-columns: 56px minmax(0, 1fr); gap: 8px 12px; }
+    .why, .row .ui-actions { grid-column: 1 / -1; }
+    .row .ui-actions { justify-content: flex-start; }
+  }
 </style>

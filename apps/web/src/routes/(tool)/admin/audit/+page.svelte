@@ -3,6 +3,7 @@
   import { page } from '$app/state';
   import { gql } from '$lib/api';
   import type { AuditQuery } from '$lib/gql/graphql';
+  import Icon from '$lib/components/Icon.svelte';
   import { AUDIT } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import { loader } from '$lib/tool/loader.svelte';
@@ -102,7 +103,7 @@
 {:else}
   <section class="ui-panel log">
     <div class="row head" aria-hidden="true">
-      <span class="ui-label">When</span><span class="ui-label">Action</span><span class="ui-label">Target</span><span class="ui-label">By</span>
+      <span class="ui-label">When</span><span class="ui-label">Action</span><span class="ui-label">Target</span><span class="ui-label">By</span><span></span>
     </div>
     <ul class="rows">
       {#each entries as e, i (e.id)}
@@ -110,8 +111,9 @@
           <button class="row" type="button" aria-expanded={open === e.id} onclick={() => (open = open === e.id ? null : e.id)}>
             <span class="ui-mono t">{when(e.createdAt)}</span>
             <span class="action">{e.action}</span>
-            <span class="ui-mono target">{e.targetKind} {e.targetId}</span>
+            <span class="target"><span class="ui-chip">{e.targetKind}</span> <span class="ui-mono id">{e.targetId}</span></span>
             <span class="ui-mono by">{e.actorId ?? 'system'}</span>
+            <span class="chev" aria-hidden="true"><Icon name="chevron-down" size={14} /></span>
           </button>
           {#if open === e.id}
             <div class="diff">
@@ -140,22 +142,29 @@
   .filters .kind { flex: 0 1 160px; }
   .rows { list-style: none; margin: 0; padding: 0; }
   .rows li.alt { background: var(--row-alt); }
-  .row { display: grid; grid-template-columns: 150px minmax(140px, 1fr) minmax(0, 2fr) minmax(0, 1.2fr); gap: 12px; align-items: baseline;
+  .row { display: grid; grid-template-columns: 150px minmax(140px, 1fr) minmax(0, 2fr) minmax(0, 1.2fr) 16px; gap: 12px; align-items: center;
     width: 100%; padding: 7px 14px; border: 0; border-bottom: 1px solid var(--border); background: none; color: var(--text);
     font: inherit; text-align: left; cursor: pointer; }
   @media (hover: hover) and (pointer: fine) { button.row:hover { background: var(--row-hover); box-shadow: inset 2px 0 0 var(--border-strong); } }
   button.row:focus-visible { outline-offset: -2px; }
-  .head { cursor: default; }
+  .head { cursor: default; background: var(--row-alt); }
+  .chev { color: var(--dim); transition: rotate var(--fast); }
+  [aria-expanded='true'] .chev { rotate: 180deg; }
+  .target { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .target .ui-chip { flex: none; }
+  .id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .t { font-size: .74rem; font-weight: 600; color: var(--dim); }
   .action { font-weight: 600; }
-  .target, .by { font-size: .78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .id, .by { font-size: .78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .diff { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 10px 14px 14px; border-bottom: 1px solid var(--border); background: var(--bg); }
   pre { margin: 6px 0 0; padding: 10px 12px; background: var(--elevated-2); border: 1px solid var(--border); font: .78rem/1.65 var(--font-mono);
     white-space: pre-wrap; overflow-wrap: anywhere; }
   .next { justify-content: center; margin-top: 16px; }
   @media (max-width: 760px) {
     .head { display: none; }
-    .row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+    .row { grid-template-columns: minmax(0, 1fr) 16px; gap: 2px 8px; }
+    .row > :not(.chev) { grid-column: 1; }
+    .chev { grid-column: 2; grid-row: 1; }
     .diff { grid-template-columns: minmax(0, 1fr); }
   }
 </style>
