@@ -35,7 +35,13 @@ Six stacked PRs there, each with CI (licences, types, unit tests, Chrome and Fir
 ### PR 3: the website's image (branch `phase-9/web-image`)
 - [x] `apps/web/Dockerfile`: SvelteKit's Node build as the `node` user, configured at run time (`PUBLIC_API_URL`, `ORIGIN`, `PORT`); the health check loads `/developers`, which needs no API call.
 - [x] CI's `images` job builds it and checks that `/developers` and `/` answer with the API unreachable, and that it doesn't run as root.
-- [ ] The `web` service and the `cyex.tv` tunnel hostname in `cyex-tv/infra` (next).
+- [x] Merged 2026/11/17 as PR 31 (all checks green, the image started and served pages in CI).
+- [x] The `web` service and the `www` redirect: `cyex-tv/infra` PR 3, for the owner.
+
+### Owner setup (2026/11/17)
+- [x] Twitch and Kick OAuth apps; Cloudflare R2, `cdn.cyex.tv`, its WAF and cache rules, the storage and purge tokens (details in `docs/setup/owner-steps.md`). The CDN's rules were checked from outside.
+- [ ] The env files on the server, the deploy (`cyex-tv/infra` `docs/deploy.md`) and the tunnel hostnames.
+- [ ] The abuse@cyex.tv and privacy@cyex.tv mailboxes (the pages already name them).
 
 #### Tests
 - Unit: the text format (escaping, buckets, grouping), gauges, the optional bind.
