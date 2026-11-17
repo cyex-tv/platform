@@ -8,6 +8,8 @@
   import { loader } from '$lib/tool/loader.svelte';
   import { session } from '$lib/tool/session.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
+  import PageHead from '$lib/tool/PageHead.svelte';
+  import State from '$lib/tool/State.svelte';
 
   type Channel = MyChannelsQuery['myChannels'][number];
   const L = loader(({ fetch }) => gql(MY_CHANNELS, {}, fetch));
@@ -37,18 +39,13 @@
 <svelte:head><title>Channels - cyex.tv</title></svelte:head>
 
 <div class="narrow">
-  <div class="ui-head">
-    <div>
-      <h1>Channels</h1>
-      <p>Your channel on each platform you signed in with. Pick the set its chat shows.</p>
-    </div>
-  </div>
+  <PageHead title="Channels" line="Your channel on each platform you signed in with. Pick the set its chat shows." />
 
   <LoadGate source={L} label="Loading your channels…">
   {#snippet children(data)}
   {@const channels = data.myChannels}
   {#if channels.length === 0}
-    <div class="ui-empty"><p>No channels yet. Sign in with Twitch or Kick and yours appears here.</p></div>
+    <State title="No channels yet">Sign in with Twitch or Kick and yours appears here.</State>
   {:else}
     <div class="ui-stack">
       {#each channels as ch (ch.platform + ch.platformChannelId)}

@@ -5,6 +5,9 @@
   import type { MyEmotesQuery } from '$lib/gql/graphql';
   import { MY_EMOTES } from '$lib/queries';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
+  import Icon from '$lib/components/Icon.svelte';
+  import PageHead from '$lib/tool/PageHead.svelte';
+  import State from '$lib/tool/State.svelte';
   import { STATE_LABEL } from '$lib/tool/state';
 
   const PER_PAGE = 60;
@@ -31,29 +34,24 @@
 
 <svelte:head><title>Your emotes - cyex.tv</title></svelte:head>
 
-<div class="ui-head">
-  <div>
-    <h1>Your emotes</h1>
-    <p>{result ? `${count(result.total)} ${result.total === 1 ? 'emote' : 'emotes'}` : ' '}</p>
-  </div>
-  <div class="ui-actions">
-    <a class="ui-btn primary" href="/me/upload">
-      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M5 20h14" /></svg>
-      Upload
-    </a>
-  </div>
-</div>
+<PageHead title="Your emotes" line={result ? `${count(result.total)} ${result.total === 1 ? 'emote' : 'emotes'}. Pending ones are only visible to you until a moderator looks at them.` : ' '}>
+  {#snippet actions()}
+    <a class="ui-btn primary" href="/me/upload"><Icon name="upload" size={15} />Upload</a>
+  {/snippet}
+</PageHead>
 
 {#if problem}
-  <p class="ui-error" role="alert">{problem}</p>
+  <State kind="error" title="Your emotes didn’t load">
+    {problem}
+    {#snippet actions()}<button class="ui-btn secondary" type="button" onclick={() => location.reload()}>Try again</button>{/snippet}
+  </State>
 {:else if !result}
   <EmoteGrid items={[]} loading skeletons={12} creator={false} labels={false} />
 {:else if result.items.length === 0}
-  <div class="ui-empty">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01" /></svg>
-    <p>No emotes yet. Upload one and it shows up here.</p>
-    <a class="ui-btn secondary" href="/me/upload">Upload an emote</a>
-  </div>
+  <State title="No emotes yet">
+    Upload one and it shows up here, ready to add to a set.
+    {#snippet actions()}<a class="ui-btn primary" href="/me/upload"><Icon name="upload" size={15} />Upload an emote</a>{/snippet}
+  </State>
 {:else}
   <EmoteGrid
     items={result.items}
@@ -64,14 +62,14 @@
     note={(e) => (e.id in states ? states[e.id] : undefined)}
   />
   {#if pages > 1}
-    <nav class="paging ui-actions" aria-label="Pages">
+    <nav class="paging" aria-label="Pages">
       {#if current > 1}<a class="ui-btn secondary small" href="?page={current - 1}">Previous</a>{/if}
-      <span class="ui-hint ui-mono">{current} / {pages}</span>
+      <span class="ui-hint ui-num">{current} / {pages}</span>
       {#if current < pages}<a class="ui-btn secondary small" href="?page={current + 1}">Next</a>{/if}
     </nav>
   {/if}
 {/if}
 
 <style>
-  .paging { justify-content: center; margin-top: 20px; }
+  .paging { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 24px; }
 </style>
