@@ -10,6 +10,7 @@
   import IconButton from '$lib/components/IconButton.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import BrowseFilters from '$lib/components/browse/BrowseFilters.svelte';
+  import State from '$lib/components/State.svelte';
   import {
     apiQuery,
     apiSort,
@@ -27,7 +28,7 @@
   } from '$lib/components/browse/params';
   import RailLayout from '$lib/shell/RailLayout.svelte';
   import SideRail from '$lib/shell/SideRail.svelte';
-  import { clean, count } from '$lib/format';
+  import { clean, count, iso } from '$lib/format';
   import { SEARCH } from '$lib/queries';
 
   let { data } = $props();
@@ -135,8 +136,10 @@
     }
   }
 
-  // ---- Load more: button, and automatically when the end comes near.
-  async function loadMore() {
+  // ---- Load more: button, and automatically when the end comes near. The page count goes into
+  // the URL (n=) only for loads the reader asked for: the button, or scrolling down to the end.
+  // Loads that only fill a tall window leave the address as it was.
+  async function loadMore(asked = true) {
     if (busy || !hasMore) return;
     const from = data;
     busy = true;
@@ -158,7 +161,7 @@
       const seen = new Set(loaded.map((e) => e.id));
       loaded = [...loaded, ...r.searchEmotes.items.filter((e) => !seen.has(e.id))];
       pageNo += 1;
-      replaceState(`/search${toSearch({ ...view, pages: Math.min(pageNo, MAX_PAGES) })}`, {});
+      if (asked || scrollY > 0) replaceState(`/search${toSearch({ ...view, pages: Math.min(pageNo, MAX_PAGES) })}`, {});
     } catch (e) {
       moreError = e instanceof ApiError ? e.message : 'Couldn’t load more emotes.';
     } finally {
@@ -174,7 +177,7 @@
     const io = new IntersectionObserver(
       (hits) => {
         // With a client-side filter that hides everything so far, keep going a little, not forever.
-        if (hits.some((h) => h.isIntersecting) && (shown.length > 0 || pageNo < 8)) void loadMore();
+        if (hits.some((h) => h.isIntersecting) && (shown.length > 0 || pageNo < 8)) void loadMore(false);
       },
       { rootMargin: '0px 0px 800px 0px' },
     );
@@ -258,7 +261,7 @@
         {#if !data.error}<p class="total" aria-live="polite">{countText}</p>{/if}
       </div>
       <div class="tools">
-        <Segmented label="Sort" size="s" height={28} options={sorts} value={view.sort} onchange={(v) => go({ sort: v }, true)} />
+        <Segmented label="Sort" size="s" options={sorts} value={view.sort} onchange={(v) => go({ sort: v }, true)} />
         <div class="dens" role="group" aria-label="Density">
           <IconButton icon="grid" label="Comfortable" size="s" variant="outline" pressed={density === 'comfortable'} onclick={() => setDensity('comfortable')} />
           <IconButton icon="grid-dense" label="Compact" size="s" variant="outline" pressed={density === 'compact'} onclick={() => setDensity('compact')} />
@@ -276,25 +279,32 @@
     {/if}
 
     {#if data.error}
-      <div class="state" role="alert">
-        <h2>Couldn’t load emotes.</h2>
-        <p class="muted">{data.error}</p>
-        <button class="btn btn-s" type="button" onclick={() => invalidateAll()}>Try again</button>
+      <div class="state">
+        <State kind="error" title="Couldn’t load emotes.">
+          {data.error}
+          {#snippet actions()}
+            <button class="ui-btn secondary" type="button" onclick={() => invalidateAll()}>Try again</button>
+          {/snippet}
+        </State>
       </div>
     {:else if shown.length === 0 && !hasMore && !switching}
       <div class="state">
-        <h2>No emotes{#if q}{' '}match “<bdi>{q}</bdi>”{:else}{' '}here{/if}.</h2>
-        {#if filters.length}
-          <p class="muted">
+        <State title={q ? `No emotes match “${iso(q)}”.` : 'No emotes here.'}>
+          {#if filters.length}
             {filters.map((f) => f.label).join(', ')} {filters.length === 1 ? 'is' : 'are'} on. Removing {filters.length === 1 ? 'it' : 'one'} may bring emotes back.
-          </p>
-          <button class="btn btn-s" type="button" onclick={() => go({ ...CLEARED })}>Clear filters</button>
-        {:else if view.q}
-          <p class="muted">Check the spelling, or try a shorter name or a tag.</p>
-          <button class="btn btn-s" type="button" onclick={clearText}>Clear search</button>
-        {:else}
-          <p class="muted">Approved emotes show up here.</p>
-        {/if}
+          {:else if view.q}
+            Check the spelling, or try a shorter name or a tag.
+          {:else}
+            Approved emotes show up here.
+          {/if}
+          {#snippet actions()}
+            {#if filters.length}
+              <button class="ui-btn secondary" type="button" onclick={() => go({ ...CLEARED })}>Clear filters</button>
+            {:else if view.q}
+              <button class="ui-btn secondary" type="button" onclick={clearText}>Clear search</button>
+            {/if}
+          {/snippet}
+        </State>
       </div>
     {:else}
       <div class="results" class:dim={switching}>
@@ -309,50 +319,49 @@
 
 <style>
   /* Rail head: the rail's title, the number of filters on, and Reset. */
-  .rail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; padding-left: 8px; }
+  .rail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding-left: 8px; }
   .rail-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--t-ui); font-weight: 600; letter-spacing: -.01em; }
   .rail-on { margin: 0; font-size: var(--t-nav); color: var(--muted); }
   .n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius);
     background: var(--accent-dim); color: var(--accent-text); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .reset { height: 28px; padding: 0 8px; border: 0; border-radius: var(--radius); background: none; color: var(--accent-text);
+  .reset { height: 40px; padding: 0 10px; border: 0; border-radius: var(--radius); background: none; color: var(--accent-text);
     font: inherit; font-size: var(--t-fine); font-weight: 500; cursor: pointer; }
   .reset:active { opacity: .6; }
 
   /* The search field: in the rail on wide screens, above the toolbar on narrow ones. */
   .search { position: relative; display: flex; align-items: center; min-width: 0; color: var(--muted); }
   .search > :global(svg) { position: absolute; left: 10px; pointer-events: none; }
-  .search input { width: 100%; height: 36px; padding: 0 36px 0 32px; font: inherit; font-size: 16px; color: var(--text);
-    background: var(--bg); border: 1px solid var(--border-strong); border-radius: var(--radius-btn);
+  .search input { width: 100%; min-width: 0; height: 40px; padding: 0 40px 0 32px; font: inherit; font-size: 16px; color: var(--text);
+    background: var(--bg); border: 1px solid var(--field-border); border-radius: var(--radius-btn);
     transition: border-color var(--fast); -webkit-appearance: none; appearance: none; }
   .search input::-webkit-search-cancel-button { display: none; }
   .search input::placeholder { color: var(--dim); }
   .search input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-  .clear { position: absolute; right: 2px; display: inline-flex; }
+  .clear { position: absolute; right: 4px; display: inline-flex; }
   @media (hover: hover) and (pointer: fine) { .search input:hover { border-color: var(--muted); } }
   /* Narrow: the field sits in the sticky Filters bar, beside the button, at its height. */
   :global(.bar-extra) .search input { height: 40px; background: var(--surface); }
 
-  /* Toolbar: title and count left; sort and density right; one 36px row like the header's. */
-  .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; min-height: 36px; }
+  /* Toolbar: title and count left; sort and density right; one 40px row like the header's. */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; min-height: 40px; }
   @media (max-width: 899.98px) { .toolbar { padding-top: 4px; } }
   .title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
   h1 { margin: 0; font-size: var(--t-page); line-height: 1.25; letter-spacing: -.02em; }
   .total { margin: 0; font-size: var(--t-nav); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .tools { display: flex; align-items: center; gap: 8px; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
   .dens { display: inline-flex; gap: 4px; }
-  .dens :global(.ib) { width: 36px; height: 36px; }
+  .dens :global(.ib) { width: 40px; height: 40px; }
+  /* The smallest phones: density gives way, sort keeps the row. */
+  @media (max-width: 360px) { .dens { display: none; } }
 
   .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
-  .clearall { background: none; border: 0; padding: 4px 6px; font: inherit; font-size: var(--t-small); cursor: pointer; min-height: 32px; }
+  .clearall { background: none; border: 0; padding: 0 8px; font: inherit; font-size: var(--t-small); cursor: pointer; min-height: 40px; margin-block: 0; }
 
   .results { margin-top: 16px; transition: opacity var(--dur-color) ease-out; }
   .results.dim { opacity: .55; transition-delay: .15s; }
   .more { padding: 32px 0 8px; min-height: 96px; }
 
-  .state { display: grid; justify-items: start; gap: 12px; padding: 40px 0; }
-  .state h2 { margin: 0; font-size: var(--t-block); letter-spacing: -.02em; }
-  .state h2, .state p { overflow-wrap: anywhere; }
-  .state p { margin: 0; max-width: 52ch; }
+  .state { margin-top: 16px; }
 
   @media (max-width: 480px) { .title { flex-direction: column; align-items: flex-start; gap: 0; } }
   @media (pointer: coarse) { .dens :global(.ib) { width: 44px; height: 44px; } }

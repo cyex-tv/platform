@@ -91,7 +91,7 @@
   {#if shownTags.length}
     <div class="tags" role="group" aria-label="Tags">
       {#each shownTags as t (t.tag)}
-        <button class="tag" type="button" aria-pressed={view.tag === t.tag} onclick={() => onchange({ tag: view.tag === t.tag ? '' : t.tag })}>
+        <button class="tag" type="button" title="#{t.tag}" aria-pressed={view.tag === t.tag} onclick={() => onchange({ tag: view.tag === t.tag ? '' : t.tag })}>
           <bdi>#{t.tag}</bdi>{#if t.count}<span class="n">{fmt(t.count)}</span>{/if}
         </button>
       {/each}
@@ -109,20 +109,21 @@
 </div>
 
 <style>
-  .filters { display: grid; }
+  .filters { display: grid; min-width: 0; }
+  .sec, .body { min-width: 0; }
   .sec + .sec { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
   /* The summary reads like the rail's group caption, with a chevron that turns when closed. */
-  summary { display: flex; align-items: center; justify-content: space-between; min-height: 28px; padding: 0 10px;
+  summary { display: flex; align-items: center; justify-content: space-between; min-height: 40px; padding: 0 10px;
     border-radius: var(--radius); list-style: none; cursor: pointer; font-size: var(--t-label); font-weight: 600;
     letter-spacing: .06em; text-transform: uppercase; color: var(--dim); transition: color var(--fast); }
   summary::-webkit-details-marker { display: none; }
   summary :global(svg) { transition: rotate var(--base) var(--ease); }
   details:not([open]) summary :global(svg) { rotate: -90deg; }
   summary:focus-visible { outline-offset: -2px; }
-  .body { padding-top: 6px; }
+  .body { padding-top: 2px; }
 
   .opts { display: grid; gap: 1px; }
-  .opt { position: relative; display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 6px 10px;
+  .opt { position: relative; display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 10px;
     border-radius: var(--radius); font-size: var(--t-nav); font-weight: 500; color: var(--muted); cursor: pointer;
     transition: background-color var(--fast), color var(--fast); }
   .opt input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
@@ -141,12 +142,15 @@
   .on .box { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   .opt:active { opacity: .6; transition: none; }
 
-  .tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 2px; }
-  .tag { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 28px; padding: 0 8px;
+  .tags { display: flex; flex-wrap: wrap; gap: 8px 6px; padding: 4px 2px; min-width: 0; }
+  /* 32px to see, 40px to hit (the row gap takes the rest). Long tags end in an ellipsis. */
+  .tag { position: relative; display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; height: 32px; padding: 0 8px;
     border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--muted);
     font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
     transition: background-color var(--fast), border-color var(--fast), color var(--fast); }
-  .tag bdi { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tag::after { content: ''; position: absolute; inset: -4px 0; }
+  .tag bdi { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tag .n { flex: none; }
   .tag .n { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
   .tag[aria-pressed='true'] { background: var(--accent-dim); border-color: var(--accent-border); color: var(--accent-text); }
   .tag[aria-pressed='true'] .n { color: currentColor; }
@@ -154,7 +158,7 @@
   .tag:focus-visible { outline-offset: 1px; }
   .none { margin: 0; padding: 0 10px; font-size: var(--t-fine); color: var(--dim); }
 
-  @media (pointer: coarse) { .opt { min-height: 44px; } .tag { height: 36px; } summary { min-height: 40px; } }
+  @media (pointer: coarse) { .opt { min-height: 44px; } .tag { height: 36px; } .tags { row-gap: 8px; } summary { min-height: 44px; } }
   @media (hover: hover) and (pointer: fine) {
     summary:hover { color: var(--text); }
     .opt:hover { background: var(--row-hover); color: var(--text); }
