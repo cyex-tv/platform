@@ -1,10 +1,13 @@
 <script lang="ts">
+  import { MediaQuery } from 'svelte/reactivity';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { ApiError, gql } from '$lib/api';
-  import { count } from '$lib/format';
+  import { clean, count } from '$lib/format';
   import type { EditSetQuery } from '$lib/gql/graphql';
   import { EDIT_SET, DELETE_SET, REMOVE_SET_EDITOR, UPDATE_SET } from '$lib/queries';
+  import LoadGate from '$lib/tool/LoadGate.svelte';
+  import { loader } from '$lib/tool/loader.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
   import EditorsPanel from '$lib/tool/EditorsPanel.svelte';
   import SetEmotes from '$lib/tool/SetEmotes.svelte';
@@ -15,37 +18,36 @@
   type EditableSet = NonNullable<EditSetQuery['set']>;
   let set = $state<EditableSet | null>(null);
   let editors = $state<EditSetQuery['setEditors']>([]);
-  let problem = $state<string | null>(null);
   let name = $state('');
   let saving = $state(false);
   let deleting = $state(false);
 
+  const narrow = new MediaQuery('max-width: 1000px');
   const id = $derived(page.params.id ?? '');
   const owner = $derived(set?.owner?.id === session.me?.id);
 
-  async function load() {
+  const L = loader(async ({ fetch }) => {
+    const want = page.params.id ?? '';
+    let r: EditSetQuery;
     try {
-      const r = await gql(EDIT_SET, { id });
-      if (!r.set) {
-        problem = 'This set doesn’t exist.';
-        return;
-      }
+      r = await gql(EDIT_SET, { id: want }, fetch);
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'forbidden') throw new Error('Only the set’s owner and editors can change it.');
+      throw e;
+    }
+    if (!r.set) throw new Error('This set doesn’t exist.');
+    if (want === page.params.id) {
       set = r.set;
       editors = r.setEditors;
       name = r.set.name;
-    } catch (e) {
-      problem = e instanceof ApiError && e.code === 'forbidden' ? 'Only the set’s owner and editors can change it.' : (e as Error).message;
     }
-  }
-
-  $effect(() => {
-    void id;
-    load();
+    return r.set;
   });
+  const load = () => L.reload();
 
   async function rename(e: SubmitEvent) {
     e.preventDefault();
-    if (!set || !name.trim() || name.trim() === set.name) return;
+    if (saving || !set || !name.trim() || name.trim() === set.name) return;
     saving = true;
     try {
       const r = await gql(UPDATE_SET, { id: set.id, input: { name: name.trim() } });
@@ -89,14 +91,33 @@
 
 <svelte:head><title>{set?.name ?? 'Set'} - cyex.tv</title></svelte:head>
 
-<p class="crumbs"><a href={set?.kind === 'GLOBAL' ? '/admin' : '/me/sets'}>{set?.kind === 'GLOBAL' ? 'Admin' : 'Sets'}</a> <span aria-hidden="true">/</span> {set?.name ?? ''}</p>
+{#snippet editorsBlock()}
+  {#if set}<EditorsPanel setId={set.id} {owner} bind:editors />{/if}
+{/snippet}
 
-{#if problem}
-  <div class="ui-empty"><p>{problem}</p><a class="ui-btn secondary" href="/me/sets">Back to your sets</a></div>
-{:else if set}
+{#snippet dangerBlock()}
+  {#if set}
+    <section class="ui-card">
+      {#if owner}
+        <h2>Delete set</h2>
+        <p class="ui-hint">The emotes stay; only this set goes. A channel’s active set can’t be deleted: pick another one first.</p>
+        <div class="ui-actions gap"><Confirm label="Delete set" confirm="Click again to delete" busy={deleting} onconfirm={remove} /></div>
+      {:else}
+        <h2>Stop editing</h2>
+        <p class="ui-hint">You lose access to this set until the owner adds you again.</p>
+        <div class="ui-actions gap"><Confirm label="Leave" confirm="Click again to leave" onconfirm={leave} /></div>
+      {/if}
+    </section>
+  {/if}
+{/snippet}
+
+<LoadGate source={L} label="Loading the set…">
+{#snippet children()}
+{#if set}
+  <p class="crumbs"><a href={set.kind === 'GLOBAL' ? '/admin' : '/me/sets'}>{set.kind === 'GLOBAL' ? 'Admin' : 'Sets'}</a> <span aria-hidden="true">/</span> {clean(set.name)}</p>
   <div class="ui-head">
     <div>
-      <h1>{set.name}</h1>
+      <h1>{clean(set.name)}</h1>
       <p>
         {set.kind === 'GLOBAL' ? 'The global set' : set.kind === 'PERSONAL' ? 'Personal set' : 'Channel set'} ·
         <span class="ui-mono">{count(set.emotes.length)} / {count(set.capacity)}</span> emotes
@@ -120,34 +141,35 @@
       </form>
 
       {#if set.kind === 'CHANNEL'}
-        <EditorsPanel setId={set.id} {owner} bind:editors />
+        {#if narrow.current}
+          <details class="fold"><summary>Editors</summary>{@render editorsBlock()}</details>
+        {:else}
+          {@render editorsBlock()}
+        {/if}
       {/if}
 
       {#if set.kind !== 'GLOBAL'}
-      <section class="ui-card">
-        {#if owner}
-          <h2>Delete set</h2>
-          <p class="ui-hint">The emotes stay; only this set goes. A channel’s active set can’t be deleted: pick another one first.</p>
-          <div class="ui-actions gap"><Confirm label="Delete set" confirm="Click again to delete" busy={deleting} onconfirm={remove} /></div>
+        {#if narrow.current}
+          <details class="fold"><summary>{owner ? 'Delete set' : 'Stop editing'}</summary>{@render dangerBlock()}</details>
         {:else}
-          <h2>Stop editing</h2>
-          <p class="ui-hint">You lose access to this set until the owner adds you again.</p>
-          <div class="ui-actions gap"><Confirm label="Leave" confirm="Click again to leave" onconfirm={leave} /></div>
+          {@render dangerBlock()}
         {/if}
-      </section>
       {/if}
     </aside>
   </div>
-{:else}
-  <div class="ui-empty" aria-busy="true"><span class="ui-spinner" aria-hidden="true"></span></div>
 {/if}
+{/snippet}
+</LoadGate>
 
 <style>
-  .crumbs { margin-bottom: 16px; color: var(--dim); font-size: var(--text-sub); }
+  .crumbs { margin-bottom: 16px; min-width: 0; overflow-wrap: anywhere; color: var(--dim); font-size: var(--text-sub); }
   .crumbs a { color: var(--muted); text-decoration: none; }
   @media (hover: hover) and (pointer: fine) { .crumbs a:hover { color: var(--text); } }
   .layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
   .row { display: flex; gap: 8px; }
+  .row input { min-width: 0; }
   .gap { margin-top: 12px; }
-  @media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  .fold > summary { cursor: pointer; padding: 10px 14px; font-weight: 600; background: var(--surface); border: 1px solid var(--border); }
+  .fold[open] > summary { margin-bottom: 8px; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr); } aside { order: -1; } }
 </style>

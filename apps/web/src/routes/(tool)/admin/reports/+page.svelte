@@ -1,8 +1,10 @@
 <script lang="ts">
   import { gql } from '$lib/api';
-  import { count, date } from '$lib/format';
+  import { clean, count, date } from '$lib/format';
   import type { ReportQueueQuery } from '$lib/gql/graphql';
   import { REPORT_QUEUE, RESOLVE_REPORT } from '$lib/queries';
+  import LoadGate from '$lib/tool/LoadGate.svelte';
+  import { loader } from '$lib/tool/loader.svelte';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
   import Thumb from '$lib/tool/Thumb.svelte';
   import { STATE_LABEL } from '$lib/tool/state';
@@ -10,26 +12,14 @@
   import { fail, notify } from '$lib/tool/notices.svelte';
 
   type Report = ReportQueueQuery['reportQueue']['items'][number];
-  let items = $state<Report[] | null>(null);
-  let total = $state(0);
+  const L = loader(async ({ fetch }) => (await gql(REPORT_QUEUE, { page: 1, perPage: 50 }, fetch)).reportQueue);
+  const total = $derived(L.data?.total ?? 0);
   let current = $state<Report | null>(null);
   let mode = $state<'DISMISS' | 'TAKE_DOWN'>('DISMISS');
   let dialog: ReturnType<typeof ReasonDialog>;
   const takedown = can('emotes.takedown');
 
-  async function load() {
-    try {
-      const r = await gql(REPORT_QUEUE, { page: 1, perPage: 50 });
-      items = r.reportQueue.items;
-      total = r.reportQueue.total;
-    } catch (e) {
-      fail(e);
-    }
-  }
-
-  $effect(() => {
-    load();
-  });
+  const load = () => L.reload();
 
   function ask(r: Report, action: 'DISMISS' | 'TAKE_DOWN') {
     current = r;
@@ -56,9 +46,10 @@
 
 <div class="ui-head"><div><h1>Reports</h1><p><span class="ui-mono">{count(total)}</span> open, oldest first</p></div></div>
 
-{#if !items}
-  <div class="ui-empty" aria-busy="true"><span class="ui-spinner" aria-hidden="true"></span></div>
-{:else if items.length === 0}
+<LoadGate source={L} label="Loading reports…">
+{#snippet children(queue)}
+{@const items = queue.items}
+{#if items.length === 0}
   <div class="ui-empty">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
     <p>No open reports.</p>
@@ -71,13 +62,13 @@
           {#if r.emote}<Thumb emote={r.emote} name={r.emote.name} box={48} />{:else}<span class="gone" aria-hidden="true"></span>{/if}
           <div class="what">
             <strong>
-              {r.emote?.name ?? 'Deleted emote'}
+              {clean(r.emote?.name) || 'Deleted emote'}
               {#if r.emote && r.emote.state !== 'APPROVED'}<span class="ui-chip {r.emote.state.toLowerCase()}">{STATE_LABEL[r.emote.state]}</span>{/if}
             </strong>
-            <span class="reason">“{r.reason}”</span>
+            <span class="reason">“{clean(r.reason)}”</span>
             <span class="ui-hint meta">
               <span class="ui-mono">{date(r.createdAt)}</span>
-              {#if r.emote?.owner}<span>by {r.emote.owner.displayName}</span>{/if}
+              {#if r.emote?.owner}<span>by {clean(r.emote.owner.displayName)}</span>{/if}
               {#if r.reporterId}<span>reporter <span class="ui-mono">{r.reporterId}</span></span>{/if}
             </span>
           </div>
@@ -93,10 +84,12 @@
     </ul>
   </section>
 {/if}
+{/snippet}
+</LoadGate>
 
 <ReasonDialog
   bind:this={dialog}
-  title={mode === 'DISMISS' ? 'Dismiss the report' : `Take down ${current?.emote?.name ?? ''}`}
+  title={mode === 'DISMISS' ? 'Dismiss the report' : `Take down ${clean(current?.emote?.name)}`}
   hint={mode === 'DISMISS'
     ? 'Kept with the report for the audit log.'
     : 'It leaves every set, its image is blocked and deleted, and its owners are told this note. This can’t be undone.'}

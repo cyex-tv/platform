@@ -5,33 +5,35 @@
   import type { MySetsQuery, SetKind } from '$lib/gql/graphql';
   import { CREATE_SET, MY_SETS } from '$lib/queries';
   import Thumb from '$lib/tool/Thumb.svelte';
+  import LoadGate from '$lib/tool/LoadGate.svelte';
+  import { loader } from '$lib/tool/loader.svelte';
   import { session } from '$lib/tool/session.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
 
-  let sets = $state<MySetsQuery['mySets'] | null>(null);
+  const L = loader(async ({ fetch }) => (await gql(MY_SETS, {}, fetch)).mySets);
+  const sets = $derived(L.data);
   let dialog: HTMLDialogElement;
   let name = $state('');
   let kind = $state<SetKind>('CHANNEL');
   let creating = $state(false);
+  let tried = $state(false);
+  const nameError = $derived(tried && !name.trim() ? 'Give it a name.' : null);
 
   const owned = $derived(sets?.filter((s) => s.owner?.id === session.me?.id) ?? []);
   const edited = $derived(sets?.filter((s) => s.owner?.id !== session.me?.id) ?? []);
   const hasPersonal = $derived(owned.some((s) => s.kind === 'PERSONAL'));
 
-  $effect(() => {
-    gql(MY_SETS, {})
-      .then((r) => (sets = r.mySets))
-      .catch(fail);
-  });
-
   function open() {
     name = '';
+    tried = false;
     kind = 'CHANNEL';
     dialog.showModal();
   }
 
   async function create(e: SubmitEvent) {
     e.preventDefault();
+    if (creating) return;
+    tried = true;
     const trimmed = name.trim();
     if (!trimmed) return;
     creating = true;
@@ -82,9 +84,9 @@
   </section>
 {/snippet}
 
-{#if !sets}
-  <div class="ui-empty" aria-busy="true"><span class="ui-spinner" aria-hidden="true"></span></div>
-{:else if sets.length === 0}
+<LoadGate source={L} label="Loading your sets…">
+{#snippet children(sets)}
+{#if sets.length === 0}
   <div class="ui-empty">
     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /></svg>
     <p>No sets yet. Make one for your channel, then pick it in Channels.</p>
@@ -96,14 +98,17 @@
     {#if edited.length}{@render table(edited, 'You edit')}{/if}
   </div>
 {/if}
+{/snippet}
+</LoadGate>
 
 <dialog class="ui-dialog" bind:this={dialog} aria-labelledby="new-set-title">
-  <form onsubmit={create}>
+  <form onsubmit={create} novalidate>
     <div class="body">
       <h2 id="new-set-title">New set</h2>
       <label class="ui-field">
         <span class="ui-label">Name</span>
-        <input class="ui-input" bind:value={name} maxlength="100" required placeholder="Main" />
+        <input class="ui-input" bind:value={name} maxlength="100" placeholder="Main" aria-invalid={nameError ? 'true' : undefined} aria-describedby={nameError ? 'new-set-err' : undefined} />
+        {#if nameError}<span class="ui-error" id="new-set-err">{nameError}</span>{/if}
       </label>
       <div class="ui-field">
         <span class="ui-label" id="kind-label">Kind</span>
@@ -118,7 +123,7 @@
     </div>
     <footer>
       <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="ui-btn primary" type="submit" disabled={creating || !name.trim()}>{creating ? 'Creating…' : 'Create'}</button>
+      <button class="ui-btn primary" type="submit" disabled={creating}>{creating ? 'Creating…' : 'Create'}</button>
     </footer>
   </form>
 </dialog>

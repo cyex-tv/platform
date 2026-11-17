@@ -2,11 +2,13 @@
   import { goto } from '$app/navigation';
   import { gql, linkUrl, signOut } from '$lib/api';
   import { date } from '$lib/format';
-  import type { MyNotificationsQuery, Platform } from '$lib/gql/graphql';
+  import type { Platform } from '$lib/gql/graphql';
   import { MARK_READ, MY_NOTIFICATIONS, UNLINK } from '$lib/queries';
-  import Avatar from '$lib/tool/Avatar.svelte';
+  import Avatar from '$lib/components/Avatar.svelte';
+  import LoadGate from '$lib/tool/LoadGate.svelte';
+  import { loader } from '$lib/tool/loader.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
-  import { loadMe, session } from '$lib/tool/session.svelte';
+  import { forgetMe, loadMe, session } from '$lib/tool/session.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
 
   const PLATFORMS: { id: Platform; name: string; slug: 'twitch' | 'kick' }[] = [
@@ -14,15 +16,10 @@
     { id: 'KICK', name: 'Kick', slug: 'kick' },
   ];
 
-  let notes = $state<MyNotificationsQuery['myNotifications'] | null>(null);
+  const L = loader(async ({ fetch }) => (await gql(MY_NOTIFICATIONS, {}, fetch)).myNotifications);
+  const notes = $derived(L.data);
   const me = $derived(session.me!);
   const unread = $derived(notes?.filter((n) => !n.read).length ?? 0);
-
-  $effect(() => {
-    gql(MY_NOTIFICATIONS, {})
-      .then((r) => (notes = r.myNotifications))
-      .catch(fail);
-  });
 
   async function unlink(p: Platform, name: string) {
     try {
@@ -37,7 +34,7 @@
   async function markRead() {
     try {
       await gql(MARK_READ, {});
-      notes = notes?.map((n) => ({ ...n, read: true })) ?? null;
+      L.set(notes?.map((n) => ({ ...n, read: true })) ?? null);
     } catch (err) {
       fail(err);
     }
@@ -46,7 +43,7 @@
   async function leave() {
     try {
       await signOut();
-      session.me = null;
+      forgetMe();
       await goto('/');
     } catch (err) {
       fail(err);
@@ -81,7 +78,7 @@
           {@const id = me.identities.find((i) => i.platform === p.id)}
           <li>
             {#if id}
-              <Avatar src={id.avatar} name={id.displayName} size={28} />
+              <Avatar src={id.avatar} name={id.displayName} size={28} tone="tool" />
               <span class="what"><strong>{id.displayName}</strong><span class="ui-hint">{p.name} · <span class="ui-mono">{id.platformUserId}</span></span></span>
               {#if me.identities.length > 1}
                 <Confirm small label="Unlink" confirm="Click again to unlink" onconfirm={() => unlink(p.id, p.name)} />
@@ -104,9 +101,9 @@
         <h2>Notifications</h2>
         {#if unread}<button class="ui-btn ghost small" type="button" onclick={markRead}>Mark {unread} read</button>{/if}
       </header>
-      {#if !notes}
-        <div class="ui-empty" aria-busy="true"><span class="ui-spinner" aria-hidden="true"></span></div>
-      {:else if notes.length === 0}
+      <LoadGate source={L} label="Loading notifications…">
+      {#snippet children(notes)}
+      {#if notes.length === 0}
         <p class="ui-hint pad">Nothing yet. Moderation decisions about your emotes show up here.</p>
       {:else}
         <ul class="ui-list">
@@ -117,6 +114,8 @@
           {/each}
         </ul>
       {/if}
+      {/snippet}
+      </LoadGate>
     </section>
 
     {#if me.permissions.length}
