@@ -104,6 +104,24 @@ jobs:
           ulimit -n 65536 || ulimit -n
           cargo test --release -p cyex-tv-events --test load -- --ignored --nocapture
 
+  # Phase 9: the service images build, and each binary in them runs.
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the images
+        run: |
+          for target in api events worker; do
+            docker build --target "$target" -t "cyex-tv-$target:ci" .
+          done
+      - name: Each starts and asks for its config
+        run: |
+          for target in api events worker; do
+            out=$(docker run --rm "cyex-tv-$target:ci" 2>&1 || true)
+            echo "$target: $out"
+            echo "$out" | grep -q "CYEX_TV_DATABASE_URL"
+          done
+
   build:
     runs-on: ubuntu-latest
     steps:
