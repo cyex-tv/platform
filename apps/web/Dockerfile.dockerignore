@@ -1,0 +1,13 @@
+# For `docker build -f apps/web/Dockerfile .` from the repository root (BuildKit reads this file
+# next to the Dockerfile). Only apps/web, openapi and schema are sent; the rest is ignored.
+*
+!apps/web
+!openapi
+!schema
+**/node_modules
+**/build
+**/.svelte-kit
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log

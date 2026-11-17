@@ -38,6 +38,13 @@ Six stacked PRs there, each with CI (licences, types, unit tests, Chrome and Fir
 - [x] Merged 2026/11/17 as PR 31 (all checks green, the image started and served pages in CI).
 - [x] The `web` service and the `www` redirect: `cyex-tv/infra` PR 3, for the owner.
 
+### PR 4: the public API docs (branch `phase-9/api-docs`)
+- [x] `/developers/reference`, prerendered, in the cyex-docs layout (sticky filterable index, endpoint blocks beside a sample panel with curl and JavaScript tabs and copy buttons) on the site's tokens, both themes, reduced motion, no external requests of its own.
+- [x] REST: generated at build time from `openapi/openapi.json` (`apps/web/src/lib/docs/rest.ts`): every path and method, parameters, request body, responses, samples and example responses built from the schemas. GraphQL: generated from `schema/schema.graphql` with the `graphql` package (`graphql.ts`): queries, mutations, subscriptions, arguments, return types, the types they use, and curl and fetch samples. The event socket guide follows ADR 0005; its event types come from the SDL's `EventType`.
+- [x] The web image is now built from the repository root (`docker build -f apps/web/Dockerfile .`, with `apps/web/Dockerfile.dockerignore`) so the build can read `openapi/` and `schema/`; CI's `images` job uses the new command.
+- [x] Test: `apps/web/src/lib/docs/docs.test.ts` (every path and method in `openapi.json` is listed, samples, GraphQL operations and types).
+- [ ] Manual: the image build and `/developers/reference` in CI's `images` job (Docker isn't available here); scroll and filter checked in the browser at 1440 px.
+
 ### Owner setup (2026/11/17)
 - [x] Twitch and Kick OAuth apps; Cloudflare R2, `cdn.cyex.tv`, its WAF and cache rules, the storage and purge tokens (details in `docs/setup/owner-steps.md`). The CDN's rules were checked from outside.
 - [ ] The env files on the server, the deploy (`cyex-tv/infra` `docs/deploy.md`) and the tunnel hostnames.
