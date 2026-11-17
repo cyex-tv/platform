@@ -4,6 +4,7 @@
 use std::time::Duration;
 
 use cyex_tv_shared::model::Platform;
+use cyex_tv_shared::text;
 use serde::Deserialize;
 use url::Url;
 
@@ -285,10 +286,13 @@ fn check_user(
     let login = login.trim().to_owned();
     if login.is_empty()
         || login.chars().count() > 64
-        || login.chars().any(|c| c.is_whitespace() || c.is_control())
+        || login.chars().any(char::is_whitespace)
+        || text::has_unsafe(&login, false)
     {
         return Err(bad("login"));
     }
+    // Hidden characters are stripped, not refused: the user is already signing in.
+    let display_name = text::strip_hidden(display_name.trim());
     let display_name = display_name.trim();
     let display_name = if display_name.is_empty()
         || display_name.chars().count() > 64
@@ -389,5 +393,24 @@ mod tests {
                 "{id:?} {login:?}"
             );
         }
+    }
+
+    #[test]
+    fn hidden_characters_are_stripped_from_display_names() {
+        let user = |login: &str, display: &str| {
+            check_user(
+                Platform::Twitch,
+                "1".into(),
+                login.into(),
+                display.into(),
+                None,
+            )
+        };
+        assert_eq!(
+            user("bob", "Bo\u{202E}b\u{200B}").unwrap().display_name,
+            "Bob"
+        );
+        assert_eq!(user("bob", "\u{3164}").unwrap().display_name, "bob");
+        assert!(user("b\u{200B}ob", "Bob").is_err());
     }
 }

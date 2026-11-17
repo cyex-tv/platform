@@ -21,6 +21,7 @@ use cyex_tv_shared::model::{
     UpdateSetEmote,
 };
 use cyex_tv_shared::permissions;
+use cyex_tv_shared::text;
 use serde_json::json;
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
@@ -280,7 +281,7 @@ pub(crate) async fn publish_member_event(
 fn set_name(raw: &str) -> ApiResult<String> {
     let name = raw.trim();
     let len = name.chars().count();
-    if len == 0 || len > 100 || name.chars().any(char::is_control) {
+    if len == 0 || len > 100 || text::has_unsafe(name, false) {
         return Err(bad("bad_name", "Set names are 1 to 100 characters."));
     }
     Ok(name.to_owned())
@@ -289,7 +290,8 @@ fn set_name(raw: &str) -> ApiResult<String> {
 /// Names emotes are typed as in a set: 1 to 100 characters, no spaces.
 pub(crate) fn member_name(raw: &str) -> ApiResult<&str> {
     let len = raw.chars().count();
-    if len == 0 || len > 100 || raw.chars().any(|c| c.is_whitespace() || c.is_control()) {
+    if len == 0 || len > 100 || raw.chars().any(char::is_whitespace) || text::has_unsafe(raw, false)
+    {
         return Err(bad(
             "bad_name",
             "Emote names are 1 to 100 characters, without spaces.",

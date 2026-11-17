@@ -25,10 +25,12 @@ use cyex_tv_shared::model::{
     ReportState,
 };
 use cyex_tv_shared::permissions;
+use cyex_tv_shared::text;
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
+use crate::admin::{actor, rule};
 use crate::catalog::{
     db_error, forbidden, holds, load_set, not_found, parse_id, publish_member_event,
 };
@@ -57,7 +59,7 @@ fn sqlx_error(err: sqlx::Error) -> ApiError {
 fn text(raw: &str, what: &'static str) -> ApiResult<String> {
     let t = raw.trim();
     let len = t.chars().count();
-    if len == 0 || len > 500 {
+    if len == 0 || len > 500 || text::has_unsafe(t, true) {
         return Err(bad(
             "bad_reason",
             &format!("Give a {what} of 1 to 500 characters."),
@@ -439,6 +441,15 @@ pub async fn restrict(
             "owner_protected",
             "The owner's account can't be restricted.",
         ));
+    }
+    if account_id != caller.account_id {
+        let target_highest = cyex_tv_db::roles::highest_position(&mut tx, account_id)
+            .await
+            .map_err(db_error)?;
+        actor(&mut tx, caller)
+            .await?
+            .may_act_on(target_highest)
+            .map_err(rule)?;
     }
     let mut after = before.clone();
     if let Some(u) = uploads_blocked {

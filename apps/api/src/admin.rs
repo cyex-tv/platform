@@ -15,6 +15,7 @@ use cyex_tv_db::{DbError, accounts, audit, ids};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{AuditEntry, CreateRole, Role, UpdateRole};
 use cyex_tv_shared::permissions;
+use cyex_tv_shared::text;
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
@@ -29,7 +30,7 @@ const ROLE_LOCK: i64 = 0x6379_6578_726f_6c65; // "cyexrole"
 /// The most audit entries one page returns.
 pub const AUDIT_PAGE_MAX: i64 = 100;
 
-fn rule(err: RuleError) -> ApiError {
+pub(crate) fn rule(err: RuleError) -> ApiError {
     let status = match err {
         RuleError::LastManager => StatusCode::CONFLICT,
         _ => StatusCode::FORBIDDEN,
@@ -49,7 +50,7 @@ fn sqlx_error(err: sqlx::Error) -> ApiError {
     db_error(DbError::Sqlx(err))
 }
 
-async fn actor(conn: &mut PgConnection, caller: &Caller) -> ApiResult<Actor> {
+pub(crate) async fn actor(conn: &mut PgConnection, caller: &Caller) -> ApiResult<Actor> {
     let held = permissions_of(conn, caller).await?;
     let highest = roles::highest_position(conn, caller.account_id)
         .await
@@ -92,7 +93,7 @@ async fn managers(state: &AppState, conn: &mut PgConnection) -> ApiResult<Vec<Uu
 fn role_name(raw: &str) -> ApiResult<String> {
     let name = raw.trim();
     let len = name.chars().count();
-    if len == 0 || len > 64 || name.chars().any(char::is_control) {
+    if len == 0 || len > 64 || text::has_unsafe(name, false) {
         return Err(bad("bad_name", "Role names are 1 to 64 characters."));
     }
     Ok(name.to_owned())
@@ -100,7 +101,7 @@ fn role_name(raw: &str) -> ApiResult<String> {
 
 fn description(raw: &str) -> ApiResult<Option<String>> {
     let text = raw.trim();
-    if text.chars().count() > 500 {
+    if text.chars().count() > 500 || text::has_unsafe(text, true) {
         return Err(bad(
             "bad_description",
             "Descriptions are at most 500 characters.",
@@ -475,6 +476,12 @@ pub async fn unassign(
         .await
         .map_err(auth_error)?;
     actor.may_demote(target_is_owner).map_err(rule)?;
+    if account_id != caller.account_id {
+        let target_highest = roles::highest_position(&mut tx, account_id)
+            .await
+            .map_err(db_error)?;
+        actor.may_act_on(target_highest).map_err(rule)?;
+    }
 
     let managers_before = managers(state, &mut tx).await?;
     let removed = roles::unassign(&mut tx, account_id, role_id)
