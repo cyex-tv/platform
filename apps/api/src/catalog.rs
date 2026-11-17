@@ -13,17 +13,19 @@ use std::collections::HashSet;
 use axum::http::StatusCode;
 use cyex_tv_auth::{AuthError, Caller, rbac};
 use cyex_tv_db::sets::{self, NewMember, Set};
-use cyex_tv_db::{DbError, accounts, audit, channels, emotes, ids, outbox, roles};
+use cyex_tv_db::{DbError, accounts, audit, channels, emotes, ids, outbox, reads, roles};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
-    AddSetEmote, Channel, CreateSet, EmoteSet, EventType, PersonalSetEntry, Platform, SetEmote,
-    SetKind, UpdateChannelSettings, UpdateSet, UpdateSetEmote,
+    AccountSummary, AddSetEmote, Channel, CreateSet, EmotePage, EmoteSet, EventType,
+    PersonalSetEntry, Platform, SetEmote, SetKind, UpdateChannelSettings, UpdateSet,
+    UpdateSetEmote,
 };
 use cyex_tv_shared::permissions;
 use serde_json::json;
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
+use crate::moderation::{QUEUE_PAGE, QUEUE_PAGE_MAX};
 use crate::state::AppState;
 use crate::views::{self, Viewer};
 
@@ -429,6 +431,55 @@ pub async fn my_sets(state: &AppState, caller: &Caller) -> ApiResult<Vec<EmoteSe
     views::sets(&mut conn, &all, &viewer, &state.cdn_url)
         .await
         .map_err(db_error)
+}
+
+/// The caller's own emotes in every state (pending, rejected and taken down too), newest first.
+pub async fn my_emotes(
+    state: &AppState,
+    caller: &Caller,
+    page: Option<u32>,
+    per_page: Option<u32>,
+) -> ApiResult<EmotePage> {
+    let per_page = per_page.unwrap_or(QUEUE_PAGE).clamp(1, QUEUE_PAGE_MAX);
+    let page = page.unwrap_or(1).max(1);
+    let offset = i64::from(page - 1) * i64::from(per_page);
+    let mut conn = conn(state).await?;
+    let (rows, total) =
+        reads::emotes_by_owner(&mut conn, caller.account_id, i64::from(per_page), offset)
+            .await
+            .map_err(db_error)?;
+    Ok(EmotePage {
+        items: views::emotes(&mut conn, &rows, &state.cdn_url)
+            .await
+            .map_err(db_error)?,
+        total: u64::try_from(total).unwrap_or(0),
+    })
+}
+
+/// A set's editors, oldest grant first. For whoever may change the set.
+pub async fn set_editors(
+    state: &AppState,
+    caller: &Caller,
+    set_id: &str,
+) -> ApiResult<Vec<AccountSummary>> {
+    let set_id = parse_id(set_id)?;
+    let mut conn = conn(state).await?;
+    let set = load_set(&mut conn, set_id).await?;
+    edit_grant(&mut conn, caller, &set).await?;
+    let editors = sets::editors(&mut conn, set_id).await.map_err(db_error)?;
+    let account_ids: Vec<Uuid> = editors.iter().map(|e| e.account_id).collect();
+    let summaries = reads::summaries(&mut conn, &account_ids)
+        .await
+        .map_err(db_error)?;
+    Ok(editors
+        .iter()
+        .filter_map(|e| summaries.get(&e.account_id))
+        .map(|s| AccountSummary {
+            id: ids::to_text(s.account_id),
+            display_name: s.display_name.clone(),
+            avatar: s.avatar.clone(),
+        })
+        .collect())
 }
 
 pub async fn my_channels(state: &AppState, caller: &Caller) -> ApiResult<Vec<Channel>> {

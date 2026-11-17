@@ -365,6 +365,14 @@ pub struct ReviewQueue {
     pub total: u64,
 }
 
+/// A page of emotes and how many there are in all.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct EmotePage {
+    pub items: Vec<Emote>,
+    pub total: u64,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct Role {

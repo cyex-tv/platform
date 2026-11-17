@@ -18,10 +18,10 @@ use cyex_tv_hub::Message as HubMessage;
 use cyex_tv_hub::topics as hub_topics;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::model::{
-    AccountStatus, AddSetEmote, AuditEntry, Channel, CreateRole, CreateSet, Emote, EmoteSet, Event,
-    Identity, Me, Notification, PersonalSetEntry, Platform, Report, ReportAction, ReportQueue,
-    ReviewQueue, Role, SearchResults, SetEmote, UpdateChannelSettings, UpdateEmote, UpdateRole,
-    UpdateSet, UpdateSetEmote,
+    AccountStatus, AccountSummary, AddSetEmote, AuditEntry, Channel, CreateRole, CreateSet, Emote,
+    EmotePage, EmoteSet, Event, Identity, Me, Notification, PersonalSetEntry, Platform, Report,
+    ReportAction, ReportQueue, ReviewQueue, Role, SearchResults, SetEmote, UpdateChannelSettings,
+    UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote,
 };
 use cyex_tv_shared::permissions;
 use futures_util::Stream;
@@ -234,6 +234,27 @@ impl Query {
     async fn my_sets(&self, ctx: &Context<'_>) -> Result<Vec<EmoteSet>> {
         let caller = caller(ctx)?;
         catalog::my_sets(state(ctx), caller)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Your own emotes in every state, newest first. `perPage` is 1 to 100, default 50.
+    async fn my_emotes(
+        &self,
+        ctx: &Context<'_>,
+        page: Option<u32>,
+        per_page: Option<u32>,
+    ) -> Result<EmotePage> {
+        let caller = caller(ctx)?;
+        catalog::my_emotes(state(ctx), caller, page, per_page)
+            .await
+            .map_err(api_error)
+    }
+
+    /// A set's editors. For its owner, its editors and `sets.edit_any`.
+    async fn set_editors(&self, ctx: &Context<'_>, set_id: String) -> Result<Vec<AccountSummary>> {
+        let caller = caller(ctx)?;
+        catalog::set_editors(state(ctx), caller, &set_id)
             .await
             .map_err(api_error)
     }
