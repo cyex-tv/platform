@@ -2,7 +2,20 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Phase 9: Operations and launch (started)
+
+### PR 1: service images (branch `phase-9/images`)
+- [x] `Dockerfile`: one release build of the workspace, then one image per service (`--target api`, `events`, `worker`) on `debian:bookworm-slim`, running as a non-root user, with health checks for api and events. Migrations are compiled into the api. No secrets in the images.
+- [x] CI's `images` job builds all three and checks that each binary starts and asks for its config.
+- [ ] The production compose, tunnel hostnames, backups and restore go in `cyex-tv/infra` (next).
+
 ## Phase 4: cyex deck integration (in progress)
+
+### The deck PR (branch `cyex-tv/provider` in `cyex-app/cyex-deck`, local only)
+- [x] Provider `CyexTv`: the global set and a channel's active set from `api.cyex.tv/v1`, loaded and retried like 7TV, BTTV and FFZ; its own switch (`chat.cyextvEmotes`), the emote menu tab, cards linking cyex.tv, recordings. Types are the deck's own (ADR 0013), tested against fixtures in the platform's output shape.
+- [x] Checked: deck clippy clean; deck Rust and UI tests pass apart from four that read `docs/`, which isn't in that repo (they fail on a fresh clone of main too); `svelte-check` 0 errors, 0 warnings.
+- [ ] Pushed and opened as a PR: waits for the owner's OK (pushing outside `cyex-tv` needs it).
+- [ ] Live updates from `/v1/events` and personal emotes per chatter (next deck PR). Kick waits for Kick support in the deck.
 
 Work in `cyex-app/cyex-deck` goes on a feature branch with a PR the owner merges (the agent doesn't merge outside `cyex-tv/platform`).
 
