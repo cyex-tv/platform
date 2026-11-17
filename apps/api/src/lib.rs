@@ -15,9 +15,10 @@ pub mod state;
 pub mod upload;
 pub mod views;
 
-use async_graphql_axum::{GraphQLRequest, GraphQLResponse, GraphQLSubscription};
+use async_graphql::http::ALL_WEBSOCKET_PROTOCOLS;
+use async_graphql_axum::{GraphQLProtocol, GraphQLRequest, GraphQLResponse, GraphQLWebSocket};
 use axum::Router;
-use axum::extract::{Extension, State};
+use axum::extract::{Extension, State, WebSocketUpgrade};
 use axum::response::IntoResponse;
 use axum::routing::get;
 use tower_http::trace::TraceLayer;
@@ -55,11 +56,10 @@ pub fn router() -> OpenApiRouter<AppState> {
 /// subscriptions (`/v1/gql/ws`).
 pub fn app(state: AppState) -> Router {
     let schema = gql::builder().data(state.clone()).finish();
-    let subscriptions = GraphQLSubscription::new(schema.clone());
     let (rest_router, _spec) = router().split_for_parts();
     rest_router
         .route("/v1/gql", get(gql::graphiql).post(graphql))
-        .route_service("/v1/gql/ws", subscriptions)
+        .route("/v1/gql/ws", get(graphql_ws))
         .layer(Extension(schema))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
@@ -139,6 +139,25 @@ async fn graphql(
         .await
         .into();
     response.into_response()
+}
+
+/// `/v1/gql/ws` (`graphql-transport-ws`, or the older `graphql-ws`): subscriptions only, at most
+/// `gql::MAX_SOCKET_SUBSCRIPTIONS` at once. No caller is attached, so nothing on the socket runs
+/// as a signed-in account.
+async fn graphql_ws(
+    Extension(schema): Extension<ApiSchema>,
+    protocol: GraphQLProtocol,
+    upgrade: WebSocketUpgrade,
+) -> axum::response::Response {
+    upgrade
+        .protocols(ALL_WEBSOCKET_PROTOCOLS)
+        .on_upgrade(move |stream| {
+            let mut data = async_graphql::Data::default();
+            data.insert(gql::SocketConnection::default());
+            GraphQLWebSocket::new(stream, schema, protocol)
+                .with_data(data)
+                .serve()
+        })
 }
 
 /// The OpenAPI document, as committed in `openapi/openapi.json`.

@@ -23,6 +23,7 @@ path = "src/bin/schema.rs"
 [dependencies]
 async-graphql.workspace = true
 async-graphql-axum.workspace = true
+async-trait.workspace = true
 axum.workspace = true
 bytes.workspace = true
 chrono.workspace = true

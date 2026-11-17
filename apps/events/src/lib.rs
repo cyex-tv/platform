@@ -7,7 +7,9 @@
 //! - Both sides send `heartbeat` every 20 s. A client silent for 60 s is closed.
 //! - `resume` (`session_id`, `last_event_id`) on a new connection takes over the old session's
 //!   topics and replays what was missed from the outbox, within 24 h; anything older gets
-//!   `resync`. Sessions live in Postgres, so this works across restarts and instances.
+//!   `resync`. Sessions live in Postgres, so this works across restarts and instances. A
+//!   connection resumes at most once (`already_resumed` after that), and not when the old and
+//!   current topics together would pass the 500 limit (`too_many_topics`).
 //! - Limits: 500 topics, 10 frames a second, 16 KB a frame. Breaking one ends the connection
 //!   with `error`.
 //! - On shutdown the server sends `reconnect` and closes.
@@ -147,6 +149,11 @@ fn resync() -> WsMessage {
     )
 }
 
+/// A `resume` that didn't take over a session, and why.
+fn resume_refused(code: &str) -> WsMessage {
+    frame("ack", json!({ "op": "resume", "error": code }))
+}
+
 /// A token bucket: `FRAMES_PER_SECOND` on average, bursts up to the same.
 struct Bucket {
     tokens: f64,
@@ -190,6 +197,8 @@ struct Connection {
     sub: Subscription,
     /// Event IDs sent by a resume replay, so the live queue doesn't repeat them.
     replayed: HashSet<i64>,
+    /// A session was taken over already; a connection resumes once.
+    resumed: bool,
     last_heard: Instant,
     last_touch: Instant,
     bucket: Bucket,
@@ -204,6 +213,7 @@ impl Connection {
             state,
             socket,
             replayed: HashSet::new(),
+            resumed: false,
             last_heard: Instant::now(),
             last_touch: Instant::now(),
             bucket: Bucket::new(),
@@ -386,6 +396,9 @@ impl Connection {
     }
 
     async fn resume(&mut self, body: ResumeBody) -> Result<(), End> {
+        if self.resumed {
+            return self.send(resume_refused("already_resumed")).await;
+        }
         let last = match &body.last_event_id {
             Value::Number(n) => n.as_i64(),
             Value::String(s) => s.parse().ok(),
@@ -404,19 +417,28 @@ impl Connection {
             Ok(Some(topics)) => topics,
             _ => {
                 drop(conn);
-                return self
-                    .send(frame(
-                        "ack",
-                        json!({ "op": "resume", "error": "unknown_session" }),
-                    ))
-                    .await;
+                return self.send(resume_refused("unknown_session")).await;
             }
         };
+        // The old topics join the current ones, so together they stay within the limit.
+        let current: HashSet<String> = self.sub.topics().into_iter().collect();
+        let added = topics.iter().filter(|t| !current.contains(*t)).count();
+        if current.len() + added > MAX_TOPICS {
+            drop(conn);
+            return self.send(resume_refused(TopicError::TooMany.code())).await;
+        }
         // Take over the old session; live events start queueing now, before the replay reads.
+        self.resumed = true;
         self.session = old;
         self.sub.subscribe(topics.iter().map(String::as_str));
         let oldest = outbox::oldest_id(&mut conn).await.ok().flatten();
-        let missed = outbox::since(&mut conn, last, &topics, REPLAY_LIMIT).await;
+        // A gap older than the outbox is a resync anyway: don't read the replay for it.
+        let too_old = oldest.is_some_and(|o| o > last + 1);
+        let missed = if too_old {
+            None
+        } else {
+            Some(outbox::since(&mut conn, last, &topics, REPLAY_LIMIT).await)
+        };
         drop(conn);
         self.save().await;
         self.send(frame(
@@ -426,9 +448,8 @@ impl Connection {
         .await?;
 
         let window_start = chrono::Utc::now() - REPLAY_WINDOW;
-        let too_old = oldest.is_some_and(|o| o > last + 1);
         let events = match missed {
-            Ok(events) if !too_old => events,
+            Some(Ok(events)) => events,
             _ => return self.send(resync()).await,
         };
         if i64::try_from(events.len()).unwrap_or(i64::MAX) >= REPLAY_LIMIT
