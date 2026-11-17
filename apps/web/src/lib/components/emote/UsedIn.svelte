@@ -1,7 +1,8 @@
 <script lang="ts">
   // "Used in": up to 8 channels with the emote in their active set (avatar, name, platform).
   // The page hides it when the API sends no list.
-  import { count } from '$lib/format';
+  import Avatar from '$lib/components/Avatar.svelte';
+  import { clean, count } from '$lib/format';
   import type { EmoteChannel } from './emote-page';
 
   let { channels, total = null }: { channels: EmoteChannel[]; total?: number | null } = $props();
@@ -21,12 +22,8 @@
       {#each shown as c (c.platform + c.login)}
         <li>
           <a href="/channels/{c.platform.toLowerCase()}/{encodeURIComponent(c.login)}">
-            {#if c.avatar}
-              <img class="avatar" src={c.avatar} alt="" width="32" height="32" loading="lazy" />
-            {:else}
-              <span class="avatar blank" aria-hidden="true">{c.displayName.slice(0, 1).toUpperCase()}</span>
-            {/if}
-            <span class="name">{c.displayName}</span>
+            <Avatar src={c.avatar} name={c.displayName} size={32} />
+            <span class="name">{clean(c.displayName)}</span>
             <span class="platform">{platformName(c.platform)}</span>
           </a>
         </li>
@@ -40,9 +37,7 @@
   ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 4px 16px; }
   a { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 8px 10px; margin-inline: -10px;
     border-radius: var(--radius-s); color: var(--text); transition: background-color var(--dur-color); }
-  .avatar { flex: none; width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: var(--surface-2); }
-  .blank { display: grid; place-items: center; font-size: var(--t-fine); font-weight: 600; color: var(--muted); }
-  .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-ui); font-weight: 500; }
+  .name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-ui); font-weight: 500; }
   .platform { flex: none; font-size: var(--t-label); color: var(--muted); padding: 0 6px; height: 20px; display: inline-flex;
     align-items: center; border: 1px solid var(--border); border-radius: var(--radius-btn); }
   .empty { padding: 8px 0; }

@@ -2,7 +2,7 @@
 // the phone action bar and the review block. Only the browser asks (only it has the cookie).
 import { ApiError, gql } from '$lib/api';
 import type { MySetNamesQuery } from '$lib/gql/graphql';
-import { ADD_SET_EMOTE, ME, MY_SET_NAMES, REPORT_EMOTE } from '$lib/queries';
+import { ADD_SET_EMOTE, MY_SET_NAMES, REPORT_EMOTE } from '$lib/queries';
 
 export type ViewerSet = MySetNamesQuery['mySets'][number];
 
@@ -32,7 +32,7 @@ export class Viewer {
     if (this.started) return;
     this.started = true;
     try {
-      await gql(ME, {});
+      // mySets itself answers signed_out when there is no session, so no separate ME call.
       this.sets = (await gql(MY_SET_NAMES, {})).mySets;
       this.who = 'in';
     } catch (e) {

@@ -56,7 +56,7 @@
 
   <div class="stage {ground}" class:chatting={ground === 'chat'}>
     {#if !ready(e)}
-      <p class="wait">The files are still being made. This takes a minute or so.</p>
+      <p class="wait">{e.state === 'APPROVED' && e.files.length === 0 ? 'The files for this emote are missing.' : 'The files are still being made. This takes a minute or so.'}</p>
     {:else if ground === 'chat'}
       <div class="chats">
         <ChatPreview platform="twitch" {lines} play={!still} label="{e.name} in a Twitch-style chat" />
@@ -66,7 +66,7 @@
       <div class="sizes">
         {#each files as f (f.name)}
           <figure>
-            <span class="cell" style:width="{f.width}px" style:height="{f.height}px">
+            <span class="cell" style:--w="{f.width}px" style:aspect-ratio="{f.width} / {f.height}">
               {#if canPause && paused === null}
                 <picture>
                   <source media="(prefers-reduced-motion: reduce)" srcset={stillName(f.scale)} />
@@ -102,10 +102,10 @@
     background-size: var(--checker-size) var(--checker-size); }
   .chatting { padding: clamp(12px, 2vw, 24px); background: var(--surface); place-items: stretch; align-content: center; }
 
-  .sizes { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: clamp(20px, 3vw, 40px); }
-  figure { margin: 0; display: grid; justify-items: center; gap: 12px; }
-  .cell { display: grid; place-items: center; }
-  .cell img { display: block; max-width: none; }
+  .sizes { max-width: 100%; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: clamp(20px, 3vw, 40px); }
+  figure { max-width: 100%; margin: 0; display: grid; justify-items: center; gap: 12px; }
+  .cell { display: grid; place-items: center; max-width: 100%; width: min(var(--w), 100%); }
+  .cell img { display: block; max-width: 100%; height: auto; }
   figcaption { font-size: var(--t-fine); color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .x { font-weight: 600; }
   .wait { color: var(--ink); font-size: var(--t-small); text-align: center; max-width: 32ch; }
