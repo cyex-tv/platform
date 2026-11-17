@@ -124,6 +124,32 @@ jobs:
             echo "$out" | grep -q "CYEX_TV_DATABASE_URL"
           done
 
+  # The website (Phase 6): generated GraphQL types current, type check, unit tests, build.
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: npm ci
+      - name: The generated GraphQL types match the schema and queries
+        run: |
+          npm run codegen
+          if [ -n "$(git status --porcelain src/lib/gql)" ]; then
+            echo "::error::apps/web/src/lib/gql is out of date. Run npm run codegen in apps/web."
+            git diff --stat src/lib/gql
+            exit 1
+          fi
+      - run: npm run check
+      - run: npm test
+      - run: npm run build
+
   build:
     runs-on: ubuntu-latest
     steps:
