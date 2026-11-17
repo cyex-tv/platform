@@ -29,7 +29,13 @@ Six stacked PRs there, each with CI (licences, types, unit tests, Chrome and Fir
 - [x] `cyex_tv_shared::metrics`: counters, histograms and gauges in the Prometheus text format, written here (no new dependency). Each service serves `GET /metrics` on `CYEX_TV_METRICS_BIND` when set, on its own listener, so it never sits behind a public route.
 - [x] api and events: `cyex_tv_http_requests_total` and `cyex_tv_http_request_duration_seconds` by method, matched route (`/v1/emotes/{id}`, never the raw path) and status, 429s included; live-update subscribers and topics; the database pool.
 - [x] worker: `cyex_tv_jobs_finished_total` and `cyex_tv_job_duration_seconds` by kind and outcome; `cyex_tv_jobs` (not done, by kind and state: due, waiting, running, failed), read at scrape time; `cyex_tv_metrics_db_up`.
-- [ ] Alerts and the scraper go in `cyex-tv/infra` (next): the events service down, `cyex_tv_jobs{state="due"}` over 100 for 10 minutes, R2 errors, disk.
+- [x] Merged 2026/11/17 as PR 30 (all checks green, the database tests seen running).
+- [ ] Alerts: `cyex-tv/infra` PR 3 (a cron check posting to a webhook), for the owner.
+
+### PR 3: the website's image (branch `phase-9/web-image`)
+- [x] `apps/web/Dockerfile`: SvelteKit's Node build as the `node` user, configured at run time (`PUBLIC_API_URL`, `ORIGIN`, `PORT`); the health check loads `/developers`, which needs no API call.
+- [x] CI's `images` job builds it and checks that `/developers` and `/` answer with the API unreachable, and that it doesn't run as root.
+- [ ] The `web` service and the `cyex.tv` tunnel hostname in `cyex-tv/infra` (next).
 
 #### Tests
 - Unit: the text format (escaping, buckets, grouping), gauges, the optional bind.
