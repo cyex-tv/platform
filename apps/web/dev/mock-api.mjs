@@ -792,6 +792,55 @@ function cosmeticsAnswer(q, v, session, admin) {
   return null;
 }
 
+// ---- Account activity (accountActivity) -------------------------------------------------
+// Sample public activity, newest first, for lumen_fox (the mock signed-in account), quietoak and
+// sunnyfern. Same shape as the real API: pending/private emotes, moderation and blocked accounts
+// never appear, so none are here. Everyone else has none; blocked accounts answer an empty list.
+const act = (n, minsAgo, kind, actor, rest) => ({
+  id: `01JD8XACT${String(9000 - n).padStart(17, '0')}`, kind, actor, set: null, emote: null, fromName: null, toName: null,
+  badge: null, paint: null, createdAt: new Date(NOW - minsAgo * 60_000).toISOString(), ...rest,
+});
+const aSet = (s) => ({ id: s.id, name: s.name });
+const aEmote = (e, name = e.name) => ({ id: e.id, name, host: e.host, files: e.files });
+const aChange = (from, to) => ({ fromId: from?.id ?? null, fromName: from?.name ?? null, toId: to?.id ?? null, toName: to?.name ?? null });
+const [FOX_MAIN, FOX_SUB, OAK_MAIN] = SETS;
+const [OAK_COZY, FERN] = SHARED_SETS;
+const [NORA, PIXEL] = [OTHERS[1], OTHERS[2]];
+const ACTIVITY = {
+  [ME_ID]: [
+    act(1, 6, 'SET_EMOTE_ADDED', ME_SUMMARY, { set: aSet(FOX_MAIN), emote: aEmote(ALL[12]) }),
+    act(2, 41, 'SET_EMOTE_RENAMED', NORA, { set: aSet(FOX_MAIN), emote: aEmote(ALL[14], 'KEKwait'), fromName: ALL[14].name, toName: 'KEKwait' }),
+    act(3, 95, 'COSMETICS_SELECTED', ME_SUMMARY, { paint: aChange(PAINTS[0], PAINTS[1]) }),
+    act(4, 180, 'SET_EMOTE_REMOVED', PIXEL, { set: aSet(FOX_MAIN), emote: aEmote(ALL[21]) }),
+    act(5, 300, 'EMOTE_UPLOADED', ME_SUMMARY, { emote: aEmote(MINE[3]) }),
+    act(6, 22 * 60, 'ACTIVE_SET_CHANGED', PIXEL, { set: aSet(FOX_MAIN), fromName: FOX_SUB.name, toName: FOX_MAIN.name }),
+    act(7, 26 * 60, 'SET_RENAMED', ME_SUMMARY, { set: aSet(FOX_SUB), fromName: 'Subs', toName: FOX_SUB.name }),
+    act(8, 2 * 1440, 'COSMETICS_SELECTED', ME_SUMMARY, { badge: aChange(null, BADGES[0]), paint: aChange(null, PAINTS[0]) }),
+    act(9, 2 * 1440 + 30, 'SET_CREATED', ME_SUMMARY, { set: aSet(FOX_SUB) }),
+    act(10, 4 * 1440, 'SET_EMOTE_ADDED', ME_SUMMARY, { set: aSet(FOX_MAIN), emote: aEmote(MINE[4]) }),
+    act(11, 6 * 1440, 'SET_CREATED', ME_SUMMARY, { set: aSet(FOX_MAIN) }),
+  ],
+  [OTHERS[0].id]: [
+    act(21, 12, 'SET_EMOTE_ADDED', OTHERS[0], { set: aSet(OAK_MAIN), emote: aEmote(ALL[62]) }),
+    act(22, 130, 'SET_EMOTE_ADDED', ME_SUMMARY, { set: aSet(OAK_COZY), emote: aEmote(ALL[72]) }),
+    act(23, 1500, 'COSMETICS_SELECTED', OTHERS[0], { badge: aChange(BADGES[0], BADGES[1]), paint: aChange(null, PAINTS[2]) }),
+    act(24, 3 * 1440, 'SET_CREATED', OTHERS[0], { set: aSet(OAK_COZY) }),
+  ],
+  [OTHERS[4].id]: [
+    act(31, 55, 'ACTIVE_SET_CHANGED', ME_SUMMARY, { set: aSet(FERN), fromName: null, toName: FERN.name }),
+    act(32, 70, 'SET_EMOTE_REMOVED', OTHERS[4], { set: aSet(FERN), emote: aEmote(ALL[48]) }),
+    act(33, 2 * 1440, 'COSMETICS_SELECTED', OTHERS[4], { paint: aChange(null, PAINTS[1]) }),
+  ],
+};
+// `accountActivity(accountId, before, limit)`: newest first, `limit` 1 to 100 (default 30).
+function activityAnswer(v) {
+  if (STATUS[v.accountId]?.blocked) return { data: { accountActivity: [] } };
+  const limit = Math.min(100, Math.max(1, v.limit ?? 30));
+  let rows = ACTIVITY[v.accountId] ?? [];
+  if (v.before) rows = rows.filter((a) => a.id < v.before);
+  return { data: { accountActivity: rows.slice(0, limit) } };
+}
+
 // A public account for `account(id)`. Unknown ids, and the one for a blocked account, give null.
 const FAKE_LOGINS = ['quietoak', 'nora_byte', 'lumen_fox', 'pixelmoth', 'sipteaTV', 'byteNod', 'foxlook', 'moonhi'];
 const publicAccount = (id) => {
@@ -1166,6 +1215,7 @@ function baseAnswer(body, session, admin) {
   const v = body.variables ?? {};
   const cosmetic = cosmeticsAnswer(q, v, session, admin);
   if (cosmetic) return cosmetic;
+  if (/accountActivity\s*\(/.test(q)) return activityAnswer(v);
   if (session) {
     const out = signedIn(body, v, admin);
     if (out) return out;

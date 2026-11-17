@@ -20,11 +20,11 @@ use cyex_tv_hub::Message as HubMessage;
 use cyex_tv_hub::topics as hub_topics;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::model::{
-    AccountEditor, AccountResults, AccountStatus, AccountSummary, AddAccountEditor, AddSetEmote,
-    AuditEntry, Badge, Channel, ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind,
-    CreateBadge, CreateRole, CreateSet, EditedAccount, EditorPermission, Emote, EmotePage,
-    EmoteSet, EmoteSort, Entitlement, EntitlementPage, Event, GrantCosmetic, Identity, Me,
-    Notification, OwnedCosmetics, Paint, PaintInput, PersonalSetEntry, Platform, Report,
+    AccountEditor, AccountResults, AccountStatus, AccountSummary, ActivityEntry, AddAccountEditor,
+    AddSetEmote, AuditEntry, Badge, Channel, ClonedSet, CosmeticCatalog, CosmeticImage,
+    CosmeticKind, CreateBadge, CreateRole, CreateSet, EditedAccount, EditorPermission, Emote,
+    EmotePage, EmoteSet, EmoteSort, Entitlement, EntitlementPage, Event, GrantCosmetic, Identity,
+    Me, Notification, OwnedCosmetics, Paint, PaintInput, PersonalSetEntry, Platform, Report,
     ReportAction, ReportQueue, ReviewQueue, Role, SearchResults, SetEmote, SetSummary,
     SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole, UpdateSet,
     UpdateSetEmote, UserCosmetics,
@@ -36,7 +36,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::state::AppState;
-use crate::{abuse, admin, catalog, cosmetics, editors, moderation, search};
+use crate::{abuse, activity, admin, catalog, cosmetics, editors, moderation, search};
 
 pub type ApiSchema = Schema<Query, Mutation, Subscription>;
 
@@ -321,6 +321,22 @@ impl Query {
     /// An account's public summary. Null when the account is unknown, deleted or blocked.
     async fn account(&self, ctx: &Context<'_>, id: String) -> Result<Option<AccountSummary>> {
         catalog::account(state(ctx), &id).await.map_err(api_error)
+    }
+
+    /// An account's public activity, newest first, like 7TV's "Activity" tab: sets and emotes the
+    /// owner or their editors changed, the active set, badge and paint picks, approved uploads.
+    /// Page back with `before` (an entry ID); `limit` is 1 to 100, default 30. Empty when the
+    /// account is unknown, deleted or blocked. Nothing private or from moderation shows.
+    async fn account_activity(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+        before: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<Vec<ActivityEntry>> {
+        activity::account_activity(state(ctx), &account_id, before.as_deref(), limit)
+            .await
+            .map_err(api_error)
     }
 
     /// Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,

@@ -18,12 +18,38 @@ Gap list G10: find people by their Twitch or Kick name. API only; the `/search` 
 Gap list G1 (`.claude/runs/2026-11-17-overnight/gap-7tv.md`): sets you can share, list and copy, like 7TV's set pages (its public help pages and v3 schema studied; no code taken). API only; the pages come next.
 
 - [x] Migration `20261130000001_set_visibility.sql` (additive): `emote_sets.visibility` (`listed`, `unlisted`, `private`). Existing rows keep what they could do: channel sets and the global set start listed, personal sets unlisted, nothing private. CHECKs: personal sets never private (chat shows them to everyone), the global set always listed.
+- [x] ADR 0017 (set visibility). The activity feed (ADR 0016) now shows lines about listed sets only.
 - [x] Rule: anyone opens listed and unlisted sets; a private set only its owner, per-set editors, the owner's account editors and `sets.edit_any`, or anyone while a channel shows it. `set(id)` and `GET /v1/sets/{id}` answer null / 404 otherwise, as for a set that doesn't exist.
 - [x] GraphQL (additive): `SetVisibility`; `EmoteSet.visibility`, `listed`, `slotsUsed`, `createdAt`; `CreateSetInput.visibility`, `UpdateSetInput.visibility` (owner or account editors with `SETS`; per-set editors can't); `accountSets(accountId, preview)` (listed sets as `SetSummary` cards: facts, `active`, newest `preview` emotes; empty for unknown, blocked or deleted accounts); `cloneSet(id, name, ownerId, visibility)` returning `ClonedSet { set, copied, skipped }`; event type `set.created` (listed sets only, on the owner's `user:` topics). Schema, OpenAPI and web types regenerated.
-- [x] Clone rules: only sets the caller may open; for yourself or an account you edit with `SETS` (audited `set.cloned` with `via: account_editor`); emotes go in as `addSetEmote` would (capacity 1000, approved only plus your own pending, others' private emotes skipped, names and zero-width kept); 30 clones an hour per account (`rate_limited`).
+- [x] Clone rules: only sets the caller may open; for yourself or an account you edit with `SETS` (audited as `set.created` with `source_id`, `copied` and `skipped`, and `via: account_editor` through a grant, so copies show in the activity feed); emotes go in as `addSetEmote` would (capacity 1000, approved only plus your own pending, others' private emotes skipped, names and zero-width kept); 30 clones an hour per account (`rate_limited`).
 - [x] Tests: `apps/api/tests/public_sets_flow.rs` against Postgres in CI (defaults, private never readable by others over GraphQL and REST, active-set exception, account editors, `accountSets` of blocked and deleted accounts, clone of private and pending emotes, capacity with 1005 emotes, IDOR on `ownerId`, rate limit, audit row, `set.created`); unit tests of the visibility names.
 - [x] Dev mock: sets carry visibility; nora_byte has listed, private and personal sample sets; `accountSets`, `cloneSet`, `createSet`/`updateSet` visibility and the private rule on `set(id)`.
 - [ ] Website: `/sets/[id]`, profile set cards, clone and visibility controls (another task).
+
+## Account activity feed (branch `feat/activity`)
+
+ADR 0016. A public activity feed per account, like 7TV's profile "Activity" tab.
+
+- [x] Migration `20261122000001_activity.sql` (additive): `audit_log.subject_account_id` and its index. The owner's own set, channel and cosmetics changes are now audited with the account as subject, and so is the approval of its emotes; staff actions never set it.
+- [x] GraphQL (additive): `accountActivity(accountId, before, limit)` returning `ActivityEntry` (kinds `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED`, `ACTIVE_SET_CHANGED`, `COSMETICS_SELECTED`, `EMOTE_UPLOADED`, `SET_CREATED`, `SET_RENAMED`). Public, 1 to 100 per page (default 30). `apps/api/src/activity.rs`. Schema and web types regenerated; the OpenAPI spec is unchanged.
+- [x] Privacy: no moderation, reasons or reviewers; no pending, private, rejected, taken-down or deleted emotes; blocked owner gives an empty list; blocked actors dropped; deleted sets dropped.
+- [x] Tests: `apps/api/tests/activity.rs` against Postgres in CI (kinds in order, paging, privacy filters, editor attribution, limit clamp). `catalog_flow` and `cosmetics_flow` adjusted for the owner's audit rows.
+- [x] Dev mock: `accountActivity` with sample activity for lumen_fox, quietoak and sunnyfern.
+- No website page yet (another task).
+
+### GitHub write log for PR 51 (`feat/cosmetics`, merged), added afterwards
+```
+git push -u origin feat/cosmetics
+gh pr create --base main --head feat/cosmetics
+gh pr merge 51 --merge
+```
+
+### GitHub write log for this PR (`feat/activity`)
+```
+git push -u origin feat/activity
+gh pr create --base main --head feat/activity
+gh pr merge <n> --merge   (only after all checks were green and the new database suite ran in the CI log)
+```
 
 ## Chat cosmetics (branch `feat/cosmetics`)
 

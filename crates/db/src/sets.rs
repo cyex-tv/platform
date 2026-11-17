@@ -171,6 +171,16 @@ pub async fn get(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Set>> {
     )
 }
 
+/// Sets by ID, in no particular order. Unknown IDs are left out.
+pub async fn get_many(conn: &mut PgConnection, ids: &[Uuid]) -> DbResult<Vec<Set>> {
+    Ok(
+        sqlx::query_as(&format!("SELECT {SET} FROM emote_sets WHERE id = ANY($1)"))
+            .bind(ids)
+            .fetch_all(conn)
+            .await?,
+    )
+}
+
 /// The sets an account owns, oldest first.
 pub async fn list_for_owner(conn: &mut PgConnection, owner: Uuid) -> DbResult<Vec<Set>> {
     Ok(sqlx::query_as(&format!(
