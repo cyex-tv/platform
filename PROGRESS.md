@@ -2,6 +2,14 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Security assessment 2026-11 (done 2026/11/17; open items listed)
+
+Report: `docs/security/assessment-2026-11.md`. 0 critical, 2 high, 14 medium, 19 low. Both highs and 9 mediums fixed, each with a regression test that ran in CI against Postgres: platform PRs 38 (web headers, `back` check), 39 (blocklist on every frame, full purge), 40 (target seniority), 41 (bidi and invisible characters refused on write), 42 (re-review renamed emotes, no pending names on public topics), 43 (GraphQL socket subscriptions only, caps, bounded resume); extension PR 10 (numeric ids). Infra PR 5 (age-encrypted backups) waits for the owner. The owner extended merge rights to these security PRs.
+
+#### GitHub write log
+- `gh pr create --base main` for each fix branch (`sec/web-headers`, `sec/media`, `sec/role-seniority`, `sec/text-sanitize`, `sec/emote-edit-review`, `sec/gql-ws`), `-R cyex-tv/extension` for `sec/extension`, `-R cyex-tv/infra` for `sec/infra`.
+- `gh pr merge <n> --merge` for 40, 41, 42, 39, 43, 38; `gh pr merge 10 -R cyex-tv/extension --merge`.
+
 ## Phase 8: Browser extension (merged, in `cyex-tv/extension`)
 
 Six stacked PRs there, each with CI (licences, types, unit tests, Chrome and Firefox builds), and the store listing draft. The owner extended merge rights to the extension on 2026/11/17; all seven were merged that day, in order, and main's CI passed after the last one.
