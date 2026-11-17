@@ -542,6 +542,30 @@ async fn restricting_and_blocking_accounts() {
         code(&w.gql(&dave, "{ me { id } }", json!({})).await),
         "signed_out"
     );
+
+    // Reading the state needs users.view or users.restrict.
+    let status = "query($a: String!) { accountStatus(accountId: $a) { uploadsBlocked blocked } }";
+    let r = w
+        .gql(&admin, status, json!({ "a": ids::to_text(dave.id) }))
+        .await;
+    assert_eq!(
+        r["data"]["accountStatus"],
+        json!({ "uploadsBlocked": false, "blocked": true }),
+        "{r}"
+    );
+    let viewer = w.user("33", &["users.view"]).await;
+    let r = w
+        .gql(&viewer, status, json!({ "a": ids::to_text(owner.id) }))
+        .await;
+    assert_eq!(r["data"]["accountStatus"]["blocked"], false, "{r}");
+    let nobody = w.user("34", &[]).await;
+    assert_eq!(
+        code(
+            &w.gql(&nobody, status, json!({ "a": ids::to_text(admin.id) }))
+                .await
+        ),
+        "forbidden"
+    );
     assert_eq!(
         w.count("SELECT count(*) FROM audit_log WHERE action = 'account.restricted'")
             .await,

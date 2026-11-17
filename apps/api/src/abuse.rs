@@ -474,6 +474,31 @@ pub async fn restrict(
     })
 }
 
+/// Whether an account's uploads or sign-in are blocked. Needs `users.view` or `users.restrict`.
+pub async fn status(
+    state: &AppState,
+    caller: &Caller,
+    account_id: &str,
+) -> ApiResult<AccountStatus> {
+    let account_id = parse_id(account_id)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    if !holds(&mut conn, caller, permissions::USERS_VIEW).await?
+        && !holds(&mut conn, caller, permissions::USERS_RESTRICT).await?
+    {
+        return Err(forbidden("This needs users.view or users.restrict."));
+    }
+    let account = accounts::get(&mut conn, account_id)
+        .await
+        .map_err(db_error)?
+        .filter(|a| a.deleted_at.is_none())
+        .ok_or_else(not_found)?;
+    Ok(AccountStatus {
+        id: ids::to_text(account_id),
+        uploads_blocked: account.restricted_at.is_some(),
+        blocked: account.blocked_at.is_some(),
+    })
+}
+
 // Notifications
 
 pub async fn my_notifications(
