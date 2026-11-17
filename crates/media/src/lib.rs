@@ -80,6 +80,8 @@ pub struct Probe {
     pub frames: u32,
     pub animated: bool,
     pub first_frame: RgbaImage,
+    /// The dHash of every frame, in order, without repeats. The first is the first frame's.
+    pub frame_hashes: Vec<u64>,
 }
 
 /// The format by magic bytes, never by name or declared type.
@@ -243,10 +245,16 @@ pub fn decode_frames(
     }
 }
 
-/// Validates an upload by decoding all of it under `limits`. Keeps only the first frame.
+/// Validates an upload by decoding all of it under `limits`. Keeps the first frame and the dHash
+/// of every frame (so a blocked image can't hide behind a harmless first frame).
 pub fn probe(bytes: &[u8], limits: &Limits) -> Result<Probe, MediaError> {
     let mut first: Option<RgbaImage> = None;
+    let mut frame_hashes: Vec<u64> = Vec::new();
     let (canvas, frames) = decode_frames(bytes, limits, &mut |_, frame, _| {
+        let hash = dhash(&frame);
+        if !frame_hashes.contains(&hash) {
+            frame_hashes.push(hash);
+        }
         if first.is_none() {
             first = Some(frame);
         }
@@ -261,14 +269,14 @@ pub fn probe(bytes: &[u8], limits: &Limits) -> Result<Probe, MediaError> {
         // A one-frame "animation" is a still image.
         animated: frames > 1,
         first_frame,
+        frame_hashes,
     })
 }
 
 /// The 64-bit difference hash of an image: shrink to 9×8 grey, then one bit per neighbour pair
 /// (left brighter than right). Near-identical images differ in few bits.
 pub fn dhash(image: &RgbaImage) -> u64 {
-    let grey = DynamicImage::ImageRgba8(image.clone())
-        .resize_exact(9, 8, FilterType::Triangle)
+    let grey = DynamicImage::ImageRgba8(image::imageops::resize(image, 9, 8, FilterType::Triangle))
         .to_luma8();
     let mut hash = 0u64;
     for y in 0..8 {

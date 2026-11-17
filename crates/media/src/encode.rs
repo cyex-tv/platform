@@ -88,6 +88,21 @@ fn name(scale: u32, kind: Kind, is_static: bool) -> String {
     format!("{scale}x{suffix}.{}", kind.extension())
 }
 
+/// Every file name `transcode` can produce, whatever the image: each scale as WebP, AVIF, and
+/// the static WebP and AVIF forms of an animation. Takedown deletes all of them, so a transcode
+/// that was still running leaves nothing behind.
+pub fn all_names() -> Vec<String> {
+    let mut names = Vec::new();
+    for scale in SCALES {
+        for kind in [Kind::Webp, Kind::Avif] {
+            for is_static in [false, true] {
+                names.push(name(scale, kind, is_static));
+            }
+        }
+    }
+    names
+}
+
 fn encode_err(err: impl std::fmt::Debug) -> MediaError {
     MediaError::Encode(format!("{err:?}"))
 }

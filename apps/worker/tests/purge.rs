@@ -187,13 +187,16 @@ async fn files_are_deleted_and_purged() {
     let (zone, auth, body) = seen.lock().unwrap().calls.last().cloned().unwrap();
     assert_eq!(zone.as_str(), "zone123");
     assert_eq!(auth.as_deref(), Some("Bearer purge-token"));
-    assert_eq!(
-        body["files"],
-        json!([
-            format!("https://cdn.example.test/emotes/{hex}/1x.webp"),
-            format!("https://cdn.example.test/emotes/{hex}/1x.avif"),
-        ])
-    );
+    // Sixteen names fit one batch.
+    let urls: Vec<String> = body["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|u| u.as_str().map(str::to_owned))
+        .collect();
+    for name in ["1x.webp", "1x.avif"] {
+        assert!(urls.contains(&format!("https://cdn.example.test/emotes/{hex}/{name}")));
+    }
     db.close().await;
 }
 
