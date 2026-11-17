@@ -354,3 +354,73 @@ async fn behind_cloudflare_each_client_has_its_own_bucket() {
         StatusCode::SERVICE_UNAVAILABLE
     );
 }
+
+async fn cors(method: &str, uri: &str, origin: &str, preflight: bool) -> axum::http::HeaderMap {
+    let mut request = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("origin", origin);
+    if preflight {
+        request = request.header("access-control-request-method", "POST");
+    }
+    let response = cyex_tv_api::app(offline_state())
+        .oneshot(request.body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    response.headers().clone()
+}
+
+#[tokio::test]
+async fn the_site_gets_credentialed_cors() {
+    let h = cors("OPTIONS", "/v1/gql", "https://cyex.tv", true).await;
+    assert_eq!(h["access-control-allow-origin"], "https://cyex.tv");
+    assert_eq!(h["access-control-allow-credentials"], "true");
+    assert!(
+        h["access-control-allow-methods"]
+            .to_str()
+            .unwrap()
+            .contains("POST")
+    );
+    assert!(
+        h["access-control-allow-headers"]
+            .to_str()
+            .unwrap()
+            .contains("content-type")
+    );
+    let h = cors("GET", "/health", "https://cyex.tv", false).await;
+    assert_eq!(h["access-control-allow-origin"], "https://cyex.tv");
+}
+
+#[tokio::test]
+async fn other_origins_get_the_public_reads_only() {
+    // Public reads: anyone, without credentials.
+    let h = cors("GET", "/v1/sets/global", "https://www.twitch.tv", false).await;
+    assert_eq!(h["access-control-allow-origin"], "*");
+    assert!(!h.contains_key("access-control-allow-credentials"));
+    assert!(
+        h["access-control-expose-headers"]
+            .to_str()
+            .unwrap()
+            .contains("etag")
+    );
+    let h = cors(
+        "OPTIONS",
+        "/v1/personal-sets/lookup",
+        "https://www.twitch.tv",
+        true,
+    )
+    .await;
+    assert_eq!(h["access-control-allow-origin"], "*");
+    // GraphQL, uploads and sign-in: nothing for other origins.
+    for (method, uri) in [
+        ("OPTIONS", "/v1/gql"),
+        ("OPTIONS", "/v1/emotes"),
+        ("GET", "/v1/auth/twitch/login"),
+    ] {
+        let h = cors(method, uri, "https://evil.example", method == "OPTIONS").await;
+        assert!(
+            !h.contains_key("access-control-allow-origin"),
+            "{method} {uri}"
+        );
+    }
+}

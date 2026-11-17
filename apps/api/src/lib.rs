@@ -5,6 +5,7 @@
 pub mod abuse;
 pub mod admin;
 pub mod catalog;
+pub mod cors;
 pub mod gql;
 pub mod limits;
 pub mod moderation;
@@ -63,6 +64,11 @@ pub fn app(state: AppState) -> Router {
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             limits::middleware,
+        ))
+        // Outside the limits: preflights aren't counted, and a 429 still carries CORS headers.
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            cors::middleware,
         ))
         .layer(TraceLayer::new_for_http())
         .with_state(state)
