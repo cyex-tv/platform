@@ -464,4 +464,49 @@ mod encoding {
             Err(MediaError::TooLarge(_))
         ));
     }
+
+    #[test]
+    fn badge_and_paint_profiles() {
+        use crate::encode::{Profile, transcode_with};
+        let b = Profile::BADGE;
+        assert_eq!(b.size_for(72, 72, 1), (18, 18));
+        assert_eq!(b.size_for(72, 72, 2), (36, 36));
+        assert_eq!(b.size_for(72, 72, 4), (72, 72));
+        // Square boxes: a wide picture fits the width.
+        assert_eq!(b.size_for(144, 72, 1), (18, 9));
+        assert_eq!(b.all_names().len(), 12);
+        assert!(!b.all_names().contains(&"3x.webp".to_owned()));
+        let p = Profile::PAINT;
+        assert_eq!(p.size_for(512, 256, 1), (128, 64));
+        assert_eq!(p.size_for(1000, 100, 1), (512, 51));
+
+        let still = transcode_with(&png(96, 96), &Limits::default(), &b).unwrap();
+        let sizes: Vec<_> = still
+            .webp
+            .iter()
+            .map(|v| (v.name.as_str(), v.width, v.height))
+            .collect();
+        assert_eq!(
+            sizes,
+            [
+                ("1x.webp", 18, 18),
+                ("2x.webp", 36, 36),
+                ("4x.webp", 72, 72)
+            ]
+        );
+        assert_eq!(still.avif.len(), 3);
+        assert!(still.avif.iter().all(|v| is_avif(&v.bytes)));
+
+        let moving = transcode_with(&gif(80, 80, 3), &Limits::default(), &b).unwrap();
+        assert!(moving.animated);
+        // Animated WebP at each scale, plus static WebP and AVIF first frames.
+        assert_eq!(moving.webp.len(), 6);
+        assert!(moving.avif.iter().all(|v| v.is_static));
+        let (animated, frames, dims) = webp_frames(&moving.webp[0].bytes);
+        assert!(animated);
+        assert_eq!((frames, dims), (3, (18, 18)));
+        for v in moving.webp.iter().chain(&moving.avif) {
+            assert!(b.all_names().contains(&v.name), "{}", v.name);
+        }
+    }
 }

@@ -22,6 +22,7 @@ use cyex_tv_storage::Store;
 use sqlx::PgPool;
 use sqlx::postgres::PgListener;
 
+pub mod cosmetics;
 pub mod purge;
 pub mod transcode;
 

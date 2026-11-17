@@ -15,6 +15,64 @@ pub const BASE_HEIGHT: u32 = 32;
 pub const SCALES: [u32; 4] = [1, 2, 3, 4];
 /// Wider than 4:1 is scaled to fit.
 pub const MAX_ASPECT: u32 = 4;
+
+/// The sizes one kind of picture is made at: emotes, chat badges or paint images (ADR 0015).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Profile {
+    /// 1x is this many pixels tall.
+    pub base_height: u32,
+    pub scales: &'static [u32],
+    /// Wider than this many times the height is scaled to fit.
+    pub max_aspect: u32,
+}
+
+impl Profile {
+    /// Emotes (ADR 0012): 32 px tall at 1x, 1x to 4x, up to 4:1.
+    pub const EMOTE: Self = Self {
+        base_height: BASE_HEIGHT,
+        scales: &SCALES,
+        max_aspect: MAX_ASPECT,
+    };
+    /// Chat badges (ADR 0015): square, 18 px at 1x, then 2x and 4x, as chat badges are.
+    pub const BADGE: Self = Self {
+        base_height: 18,
+        scales: &[1, 2, 4],
+        max_aspect: 1,
+    };
+    /// Paint images (ADR 0015): 64 px tall at 1x, then 2x and 4x, up to 8:1.
+    pub const PAINT: Self = Self {
+        base_height: 64,
+        scales: &[1, 2, 4],
+        max_aspect: 8,
+    };
+
+    /// The size at `scale`: `base_height × scale` tall, at most `max_aspect` times as wide,
+    /// aspect kept, never larger than the original.
+    pub fn size_for(&self, width: u32, height: u32, scale: u32) -> (u32, u32) {
+        let box_h = f64::from(self.base_height * scale);
+        let box_w = box_h * f64::from(self.max_aspect);
+        let factor = (box_h / f64::from(height))
+            .min(box_w / f64::from(width))
+            .min(1.0);
+        let w = (f64::from(width) * factor).round().max(1.0);
+        let h = (f64::from(height) * factor).round().max(1.0);
+        // Both are at most the original side (≤ 1000), so they fit in u32.
+        (w as u32, h as u32)
+    }
+
+    /// Every file name `transcode_with` can produce for this profile.
+    pub fn all_names(&self) -> Vec<String> {
+        let mut names = Vec::new();
+        for &scale in self.scales {
+            for kind in [Kind::Webp, Kind::Avif] {
+                for is_static in [false, true] {
+                    names.push(name(scale, kind, is_static));
+                }
+            }
+        }
+        names
+    }
+}
 /// Frames shorter than this show for 100 ms, as browsers do with GIFs.
 pub const MIN_DELAY_MS: u32 = 20;
 
@@ -69,18 +127,9 @@ pub struct Encoded {
     pub avif: Vec<Variant>,
 }
 
-/// The size at `scale`: `BASE_HEIGHT × scale` tall, at most four times as wide, aspect kept,
-/// never larger than the original.
+/// The size at `scale` for an emote (see [`Profile::size_for`]).
 pub fn size_for(width: u32, height: u32, scale: u32) -> (u32, u32) {
-    let box_h = f64::from(BASE_HEIGHT * scale);
-    let box_w = box_h * f64::from(MAX_ASPECT);
-    let factor = (box_h / f64::from(height))
-        .min(box_w / f64::from(width))
-        .min(1.0);
-    let w = (f64::from(width) * factor).round().max(1.0);
-    let h = (f64::from(height) * factor).round().max(1.0);
-    // Both are at most the original side (≤ 1000), so they fit in u32.
-    (w as u32, h as u32)
+    Profile::EMOTE.size_for(width, height, scale)
 }
 
 fn name(scale: u32, kind: Kind, is_static: bool) -> String {
@@ -92,15 +141,7 @@ fn name(scale: u32, kind: Kind, is_static: bool) -> String {
 /// the static WebP and AVIF forms of an animation. Takedown deletes all of them, so a transcode
 /// that was still running leaves nothing behind.
 pub fn all_names() -> Vec<String> {
-    let mut names = Vec::new();
-    for scale in SCALES {
-        for kind in [Kind::Webp, Kind::Avif] {
-            for is_static in [false, true] {
-                names.push(name(scale, kind, is_static));
-            }
-        }
-    }
-    names
+    Profile::EMOTE.all_names()
 }
 
 fn encode_err(err: impl std::fmt::Debug) -> MediaError {
@@ -162,6 +203,15 @@ struct Scale {
 
 /// Decodes `bytes` under `limits` and makes every emote file.
 pub fn transcode(bytes: &[u8], limits: &Limits) -> Result<Encoded, MediaError> {
+    transcode_with(bytes, limits, &Profile::EMOTE)
+}
+
+/// Decodes `bytes` under `limits` and makes every file at `profile`'s sizes.
+pub fn transcode_with(
+    bytes: &[u8],
+    limits: &Limits,
+    profile: &Profile,
+) -> Result<Encoded, MediaError> {
     let mut scales: Vec<Scale> = Vec::new();
     let mut first: Option<RgbaImage> = None;
     let mut timestamp: i32 = 0;
@@ -169,8 +219,8 @@ pub fn transcode(bytes: &[u8], limits: &Limits) -> Result<Encoded, MediaError> {
 
     let (canvas, frames) = decode_frames(bytes, limits, &mut |canvas, frame, delay| {
         if scales.is_empty() {
-            for scale in SCALES {
-                let size = size_for(canvas.width, canvas.height, scale);
+            for &scale in profile.scales {
+                let size = profile.size_for(canvas.width, canvas.height, scale);
                 scales.push(Scale {
                     scale,
                     size,
@@ -216,8 +266,8 @@ pub fn transcode(bytes: &[u8], limits: &Limits) -> Result<Encoded, MediaError> {
     }
 
     let mut avif = Vec::new();
-    for scale in SCALES {
-        let size = size_for(canvas.width, canvas.height, scale);
+    for &scale in profile.scales {
+        let size = profile.size_for(canvas.width, canvas.height, scale);
         let small = resized(&first, size);
         if animated {
             webp.push(Variant {
