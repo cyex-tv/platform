@@ -18,10 +18,11 @@ gh auth status
 ## 2. Twitch app (new, not the cyex.app one)
 At https://dev.twitch.tv/console/apps, choose "Register Your Application":
 - Name: `cyex.tv`
-- OAuth Redirect URLs (add all three):
+- OAuth Redirect URLs (Twitch allows `http` only for `localhost`, so not `127.0.0.1`):
   - `https://api.cyex.tv/v1/auth/twitch/callback`
   - `http://localhost:8080/v1/auth/twitch/callback`
-  - `http://127.0.0.1:8080/v1/auth/twitch/callback`
+
+Local sign-in tests open the site through `localhost`, not `127.0.0.1`.
 - Category: Website Integration
 - Client type: **Confidential**
 
@@ -35,7 +36,9 @@ Kick requires 2FA on your Kick account before you can create an app. Then go to 
 - Redirect URLs:
   - `https://api.cyex.tv/v1/auth/kick/callback`
   - `http://localhost:8080/v1/auth/kick/callback`
-- Scopes: **`user:read` only**
+- Scopes: **`user:read` only** ("Read user information"). It would allow reading the email
+  address; cyex.tv never reads or stores it.
+- Webhooks: **off**. cyex.tv uses no Kick events.
 
 Keep the client ID and secret in your password manager.
 
@@ -86,7 +89,7 @@ Chat clients and the extension fetch the files from other origins. In R2 → `cy
 ```
 
 ## 5. Keys for the worker and the api
-In R2 → Manage API tokens, create one token with **Object Read & Write** on `cyex-tv-cdn` only. Put its values in the server's `.env` (never the repo or a chat):
+In R2 → Manage API tokens, create an **Account API token** with **Object Read & Write** on `cyex-tv-cdn` only (optionally limited to the server's IPs). The worker and api need its Access Key ID, Secret Access Key and the account's S3 endpoint, not the token value. Put them in `/etc/cyextv/api.env` and `worker.env` (never the repo or a chat):
 ```
 CYEX_TV_S3_ENDPOINT=https://<account id>.r2.cloudflarestorage.com
 CYEX_TV_S3_BUCKET=cyex-tv-cdn
@@ -94,3 +97,25 @@ CYEX_TV_S3_ACCESS_KEY_ID=<from the token>
 CYEX_TV_S3_SECRET_ACCESS_KEY=<from the token>
 CYEX_TV_S3_REGION=auto
 ```
+
+## 6. The purge token for takedowns
+Manage Account → Account API Tokens → Create Token, with one permission policy: **Specified
+Domains → `cyex.tv`**, **Cache & Performance → Cache → Purge**. Optionally limited to the
+server's IPs. Copy the token value at once. The token dialog's "Example usage" box prints the
+token in clear text, so never screenshot or share that dialog.
+
+The Zone ID is on the cyex.tv zone's Overview page (right column, "API"). Both go in
+`/etc/cyextv/worker.env`:
+```
+CYEX_TV_CLOUDFLARE_ZONE_ID=<zone id>
+CYEX_TV_CLOUDFLARE_PURGE_TOKEN=<token value>
+```
+
+## Done (2026/11/17)
+- Twitch and Kick apps registered, redirect URLs as above.
+- Cloudflare: the cyex.tv zone; R2 bucket `cyex-tv-cdn` (location automatic, Eastern Europe;
+  Standard class); custom domain `cdn.cyex.tv` active with minimum TLS 1.2; r2.dev off; CORS;
+  the WAF rule and the cache rule; the storage token; the purge token (rolled once after it was
+  shown in a screenshot).
+- Checked from outside: `cdn.cyex.tv/emotes/…` reaches R2 (404 for a missing file), `/originals/…`
+  and other paths answer 403, and CORS sends `Access-Control-Allow-Origin: *`.
