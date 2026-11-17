@@ -1,14 +1,15 @@
 <script lang="ts">
   // The account menu's content, shared by the AccountMenu popover (desktop) and the phone menu
   // sheet, so both list the same places in the same order: who you are, your library, account
-  // (and Admin for staff), the theme, sign out. `emotes` adds the site's own links first (the
+  // (and Admin for staff), sign out. The header already has Upload and the theme toggle on
+  // desktop, so those two rows only appear in the phone sheet (`touch`), whose header has neither. `emotes` adds the site's own links first (the
   // phone header has no room for them). `touch` makes the rows 48px for fingers.
   import { page } from '$app/state';
   import Avatar from '$lib/components/Avatar.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import { clean } from '$lib/format';
   import { isAdmin, session } from '$lib/tool/session.svelte';
-  import { EMOTES, LIBRARY, platformName, profileLink, settingsLinks, type ShellLink } from './account';
+  import { EMOTES, MENU, UPLOAD, platformName, profileLink, settingsLinks, type ShellLink } from './account';
   import { leave } from './signout';
   import { theme, toggleTheme } from './theme.svelte';
 
@@ -54,16 +55,19 @@
     {/if}
     {#if me}
       {@render row(profileLink(me.id))}
-      {#each LIBRARY as l (l.href)}{@render row(l)}{/each}
+      {#each MENU as l (l.href)}{@render row(l)}{/each}
+      {#if touch}{@render row(UPLOAD)}{/if}
       <hr />
       {#each settings as l (l.href)}{@render row(l)}{/each}
       <hr />
     {/if}
+    {#if touch}
     <button type="button" class="theme-row" onclick={toggleTheme} aria-label={theme.light ? 'Theme: light. Switch to dark' : 'Theme: dark. Switch to light'}>
       <Icon name={theme.light ? 'sun' : 'moon'} /><span>Theme</span><span class="value">{theme.light ? 'Light' : 'Dark'}</span>
     </button>
+    {/if}
     {#if me}
-      <hr />
+      {#if touch}<hr />{/if}
       <button type="button" onclick={out}><Icon name="log-out" /><span>Sign out</span></button>
     {:else if session.known && !session.failed}
       <a href={signin} onclick={() => onpick?.()}><Icon name="user" /><span>Sign in</span></a>
