@@ -1,7 +1,8 @@
 <script lang="ts">
   // A panel anchored to its trigger (filters, the account menu). It scales in from the corner
-  // nearest the trigger, flips above when there's no room below, and closes on Escape (focus
-  // back to the trigger), a click outside, or focus leaving it. With `sheet`, phones (720px and
+  // nearest the trigger and fades out a little faster (no motion under reduced motion), flips
+  // above when there's no room below, and closes on Escape (focus back to the trigger, at once),
+  // a click outside, or focus leaving it. With `sheet`, phones (720px and
   // narrower) get the same content in a BottomSheet instead.
   //
   // The panel lives in the browser's top layer (the popover API) and is placed with fixed
@@ -15,6 +16,7 @@
   //   </Popover>
   import { tick, type Snippet } from 'svelte';
   import { createAttachmentKey } from 'svelte/attachments';
+  import { pop } from '$lib/motion';
   import BottomSheet from './BottomSheet.svelte';
 
   type Props = {
@@ -31,7 +33,7 @@
   let { label, open = $bindable(false), align = 'start', width = '320px', sheet = false, onclose, trigger, children, footer }: Props =
     $props();
 
-  const id = `pop-${Math.random().toString(36).slice(2, 9)}`;
+  const id = $props.id();
   let root: HTMLSpanElement;
   let panel = $state<HTMLDivElement>();
   let triggerEl: HTMLElement | null = null;
@@ -60,7 +62,7 @@
 
   const triggerProps = $derived({
     'aria-expanded': open,
-    'aria-controls': id,
+    'aria-controls': open ? id : undefined, // only while the panel exists
     'aria-haspopup': 'dialog',
     onclick: () => (open ? close() : (open = true)),
     [createAttachmentKey()]: (el: HTMLElement) => {
@@ -97,11 +99,6 @@
       } catch {}
     }
     place(true);
-    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    panel.animate(
-      still ? [{ opacity: 0 }, { opacity: 1 }] : [{ opacity: 0, transform: 'scale(.97)' }, { opacity: 1, transform: 'scale(1)' }],
-      { duration: 150, easing: 'cubic-bezier(.23, 1, .32, 1)' },
-    );
     const first = panel.querySelector<HTMLElement>('a[href], button:not([disabled]), input, select, textarea, [tabindex="0"]');
     (first ?? panel).focus({ preventScroll: true });
   }
@@ -158,6 +155,8 @@
       style:width
       style:top="{top}px"
       style:left="{left}px"
+      in:pop
+      out:pop={{ duration: 100 }}
     >
       <div class="pop-body">{@render children()}</div>
       {#if footer}<div class="pop-foot">{@render footer()}</div>{/if}
