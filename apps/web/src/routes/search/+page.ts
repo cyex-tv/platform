@@ -1,11 +1,10 @@
 import { ApiError, gql } from '$lib/api';
-import { PER_PAGE, parse } from '$lib/components/browse/params';
+import { apiSort, PER_PAGE, parse } from '$lib/components/browse/params';
 import { SEARCH } from '$lib/queries';
 import type { PageLoad } from './$types';
 
 export const load: PageLoad = async ({ fetch, url }) => {
   const view = parse(url.searchParams);
-  // wire: sort (searchEmotes(sort: RELEVANCE | TOP | NEW) is not in the schema yet; every order is today's)
   const ask = (page: number) =>
     gql(
       SEARCH,
@@ -13,6 +12,7 @@ export const load: PageLoad = async ({ fetch, url }) => {
         query: view.q,
         animated: view.kind === 'animated' ? true : view.kind === 'still' ? false : null,
         nsfw: view.nsfw ? true : null,
+        sort: apiSort(view.sort),
         page,
         perPage: PER_PAGE,
       },

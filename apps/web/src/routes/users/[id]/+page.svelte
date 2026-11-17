@@ -13,6 +13,8 @@
 
   type Sort = 'top' | 'new';
   let sort = $state<Sort>('top');
+  // The first page of Top comes from the load; New, and every page after, from the browser.
+  let fresh = $state<typeof data.items | null>(null);
   let extra = $state<typeof data.items>([]);
   let nextPage = $state(2);
   let loading = $state(false);
@@ -21,29 +23,54 @@
   // A new creator (client-side navigation) starts over.
   $effect(() => {
     void data.id;
+    fresh = null;
     extra = [];
     nextPage = 2;
     failed = null;
     sort = 'top';
   });
 
-  const loaded = $derived([...data.items, ...extra]);
-  // wire: sort (the API's `sort: TOP | NEW`; until then "New" orders what is loaded by date)
-  const items = $derived(sort === 'new' ? [...loaded].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) : loaded);
+  const items = $derived([...(sort === 'new' ? (fresh ?? []) : data.items), ...extra]);
   const fetched = $derived(PER_PAGE * (nextPage - 1));
   const more = $derived(data.total > fetched);
   const name = $derived(data.creator?.displayName ?? '');
 
+  const ask = (page: number, s: Sort) =>
+    gql(SEARCH_BY_OWNER, { owner: data.id, page, perPage: PER_PAGE, sort: s === 'new' ? 'NEW' : 'TOP' }).then(
+      (r) => r.searchEmotes.items,
+    );
+
   async function loadMore() {
     if (loading) return;
+    const s = sort;
     loading = true;
     failed = null;
     try {
-      const { searchEmotes } = await gql(SEARCH_BY_OWNER, { owner: data.id, page: nextPage, perPage: PER_PAGE });
-      extra = [...extra, ...searchEmotes.items.filter((e) => e.owner?.id === data.id)];
+      const got = await ask(nextPage, s);
+      if (s !== sort) return; // the order changed while this loaded
+      extra = [...extra, ...got];
       nextPage += 1;
     } catch (e) {
       failed = e instanceof ApiError ? e.message : 'That didn’t load. Try again.';
+    } finally {
+      loading = false;
+    }
+  }
+
+  // Changing the order asks again from the first page.
+  async function reorder(s: Sort) {
+    sort = s;
+    extra = [];
+    nextPage = 2;
+    failed = null;
+    if (s === 'top') return;
+    loading = true;
+    try {
+      const got = await ask(1, s);
+      if (s === sort) fresh = got;
+    } catch (e) {
+      failed = e instanceof ApiError ? e.message : 'That didn’t load. Try again.';
+      if (s === sort) sort = 'top';
     } finally {
       loading = false;
     }
@@ -82,7 +109,6 @@
       {/snippet}
       {#snippet actions()}
         {#if data.channels.length}
-          <!-- wire: account -->
           <div class="chans">
             {#each data.channels as ch (ch.platform + ch.login)}
               <a class="btn btn-s" href="/channels/{ch.platform}/{ch.login}">{ch.platform === 'twitch' ? 'Twitch' : 'Kick'}: {ch.login}</a>
@@ -98,7 +124,8 @@
         <Segmented
           label="Sort uploads"
           options={[{ value: 'top', label: 'Top' }, { value: 'new', label: 'New' }]}
-          bind:value={sort}
+          value={sort}
+          onchange={reorder}
         />
       </div>
       {#if items.length === 0}

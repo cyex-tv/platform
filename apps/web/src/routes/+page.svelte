@@ -18,7 +18,7 @@
   const hasArt = $derived(art.tiles.length >= 3);
   let sort = $state<Sort>('top');
   let stripEl = $state<HTMLUListElement>();
-  const row = $derived(strip(data.emotes, sort));
+  const row = $derived(strip(sort === 'new' ? data.fresh : data.emotes));
   const twitch = $derived(chat(data.emotes, 'twitch'));
   const kick = $derived(chat(data.emotes, 'kick'));
 

@@ -10,6 +10,7 @@ export const EMOTE_FIELDS = graphql(`
     tags
     host
     createdAt
+    channelCount
     flags {
       zeroWidth
       nsfw
@@ -33,8 +34,8 @@ export const EMOTE_FIELDS = graphql(`
 `);
 
 export const SEARCH = graphql(`
-  query Search($query: String!, $animated: Boolean, $nsfw: Boolean, $page: Int, $perPage: Int) {
-    searchEmotes(query: $query, animated: $animated, nsfw: $nsfw, page: $page, perPage: $perPage) {
+  query Search($query: String!, $animated: Boolean, $nsfw: Boolean, $page: Int, $perPage: Int, $sort: EmoteSort) {
+    searchEmotes(query: $query, animated: $animated, nsfw: $nsfw, page: $page, perPage: $perPage, sort: $sort) {
       total
       page
       perPage
@@ -540,13 +541,38 @@ export const MY_SET_NAMES = graphql(`
 
 // A creator's public emotes (the creator page): the search, narrowed to one owner.
 export const SEARCH_BY_OWNER = graphql(`
-  query SearchByOwner($owner: String!, $page: Int, $perPage: Int) {
-    searchEmotes(query: "", owner: $owner, page: $page, perPage: $perPage) {
+  query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {
+    searchEmotes(query: "", owner: $owner, page: $page, perPage: $perPage, sort: $sort) {
       total
       page
       perPage
       items {
         ...EmoteFields
+      }
+    }
+  }
+`);
+
+// A public account by id (the creator page).
+export const ACCOUNT = graphql(`
+  query PublicAccount($id: String!) {
+    account(id: $id) {
+      id
+      displayName
+      avatar
+    }
+  }
+`);
+
+// Channels that have an emote in their active set (the emote page's "Used in").
+export const EMOTE_CHANNELS = graphql(`
+  query EmoteChannels($id: String!, $limit: Int) {
+    emoteChannels(id: $id, limit: $limit) {
+      platform
+      login
+      account {
+        displayName
+        avatar
       }
     }
   }

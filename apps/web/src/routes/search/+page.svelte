@@ -10,7 +10,7 @@
   import Popover from '$lib/components/Popover.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import FilterSheet from '$lib/components/browse/FilterSheet.svelte';
-  import { CLEARED, MAX_PAGES, PER_PAGE, active as activeOf, change, matches, toSearch, type Browse, type Sort } from '$lib/components/browse/params';
+  import { apiSort, CLEARED, MAX_PAGES, PER_PAGE, active as activeOf, change, matches, toSearch, type Browse, type Sort } from '$lib/components/browse/params';
   import { count } from '$lib/format';
   import { SEARCH } from '$lib/queries';
 
@@ -107,6 +107,7 @@
           query: view.q,
           animated: view.kind === 'animated' ? true : view.kind === 'still' ? false : null,
           nsfw: view.nsfw ? true : null,
+          sort: apiSort(view.sort),
           page: pageNo + 1,
           perPage: PER_PAGE,
         },

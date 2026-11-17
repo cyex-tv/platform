@@ -8,13 +8,12 @@ const PER_PAGE = 60;
 export const load: PageLoad = async ({ fetch, params }) => {
   try {
     const [{ searchEmotes }, account, channels] = await Promise.all([
-      gql(SEARCH_BY_OWNER, { owner: params.id, page: 1, perPage: PER_PAGE }, fetch),
-      lookupAccount(params.id),
+      gql(SEARCH_BY_OWNER, { owner: params.id, page: 1, perPage: PER_PAGE, sort: 'TOP' }, fetch),
+      lookupAccount(params.id, fetch),
       channelsOf(params.id),
     ]);
-    // The API only returns this owner's emotes; the filter keeps the page honest if it ever doesn't.
-    const items = searchEmotes.items.filter((e) => e.owner?.id === params.id);
-    // wire: account (until then the name comes from the first emote's owner)
+    const items = searchEmotes.items;
+    // No account but emotes: the name comes from the first emote's owner. Neither: not found.
     const creator: Creator | null = account ?? items[0]?.owner ?? null;
     return { id: params.id, creator, items, total: searchEmotes.total, channels, error: null as string | null };
   } catch (e) {

@@ -49,11 +49,10 @@ describe('cluster', () => {
 });
 
 describe('strip', () => {
-  it('keeps square emotes only and sorts New by date', () => {
-    expect(strip(lib, 'top').some((e) => e.id === 'e3')).toBe(false);
-    const fresh = strip(lib, 'new');
-    expect(fresh[0].createdAt >= fresh[1].createdAt).toBe(true);
-    expect(strip(lib, 'top', 3)).toHaveLength(3);
+  it('keeps square emotes only, in the order given', () => {
+    expect(strip(lib).some((e) => e.id === 'e3')).toBe(false);
+    expect(strip(lib).map((e) => e.id)).toEqual(lib.filter((e) => e.id !== 'e3').map((e) => e.id));
+    expect(strip(lib, 3)).toHaveLength(3);
   });
 });
 

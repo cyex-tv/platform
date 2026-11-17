@@ -4,8 +4,8 @@
   import { gql } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import EmoteView from '$lib/components/emote/EmoteView.svelte';
-  import { globalPool } from '$lib/components/emote/data';
-  import { backTarget, type ChatPool, type PageEmote } from '$lib/components/emote/emote-page';
+  import { channelsUsing, globalPool } from '$lib/components/emote/data';
+  import { backTarget, channelCount, type ChatPool, type EmoteChannel, type PageEmote } from '$lib/components/emote/emote-page';
   import { src, ready } from '$lib/emote';
   import { EMOTE } from '$lib/queries';
 
@@ -13,7 +13,7 @@
 
   // The server can't see pending, rejected or taken-down emotes (no session cookie), so when it
   // found nothing the browser asks once more: their owner and moderators get the page.
-  let late = $state<{ id: string; emote: PageEmote | null; pool: ChatPool } | null>(null);
+  let late = $state<{ id: string; emote: PageEmote | null; pool: ChatPool; channels: EmoteChannel[] | null } | null>(null);
   $effect(() => {
     if (data.emote) return;
     const id = data.id;
@@ -25,8 +25,8 @@
       } catch {
         emote = null;
       }
-      const pool = emote ? await globalPool() : [];
-      if (!gone) late = { id, emote, pool };
+      const [pool, channels] = emote ? await Promise.all([globalPool(), channelsUsing(emote)]) : [[], null];
+      if (!gone) late = { id, emote, pool, channels };
     })();
     return () => (gone = true);
   });
@@ -69,7 +69,7 @@
 
 {#if e}
   {#key e.id}
-    <EmoteView emote={e} {pool} more={data.more} channels={data.channels} channelCount={data.channelCount} {back} />
+    <EmoteView emote={e} {pool} more={data.more} channels={data.emote ? data.channels : (asked?.channels ?? null)} channelCount={channelCount(e)} {back} />
   {/key}
 {:else if asked === undefined}
   <!-- Asking from the browser: hold the space quietly, then show the page or say it's gone. -->

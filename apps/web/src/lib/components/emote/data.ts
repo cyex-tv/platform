@@ -1,8 +1,8 @@
 // What the emote page asks for besides the emote itself. Both are best-effort: a failure hides
 // the part that needed them instead of failing the page.
 import { gql } from '$lib/api';
-import { GLOBAL_SET, SEARCH_BY_OWNER } from '$lib/queries';
-import type { PageEmote } from './emote-page';
+import { EMOTE_CHANNELS, GLOBAL_SET, SEARCH_BY_OWNER } from '$lib/queries';
+import type { EmoteChannel, PageEmote } from './emote-page';
 
 /** The global set's emotes, for the chat preview (a zero-width emote needs one to sit on). */
 export async function globalPool(fetcher: typeof fetch = fetch) {
@@ -21,5 +21,18 @@ export async function moreBy(e: PageEmote, fetcher: typeof fetch = fetch): Promi
     return found.items.filter((x) => x.id !== e.id && x.owner?.id === e.owner?.id).slice(0, 12);
   } catch {
     return [];
+  }
+}
+
+/** Up to 8 channels with the emote in their active set; null (the section is hidden) when none, or on a failure. */
+export async function channelsUsing(e: PageEmote, fetcher: typeof fetch = fetch): Promise<EmoteChannel[] | null> {
+  if (e.state !== 'APPROVED' || e.channelCount <= 0) return null;
+  try {
+    const list = (await gql(EMOTE_CHANNELS, { id: e.id, limit: 8 }, fetcher)).emoteChannels;
+    return list.length
+      ? list.map((c) => ({ platform: c.platform, login: c.login, displayName: c.account.displayName, avatar: c.account.avatar }))
+      : null;
+  } catch {
+    return null;
   }
 }

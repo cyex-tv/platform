@@ -18,6 +18,11 @@ export type Browse = {
 export const PER_PAGE = 48;
 export const MAX_PAGES = 10;
 
+/** The API's name for a sort. Relevance only counts with a query. */
+export function apiSort(s: Sort): 'RELEVANCE' | 'TOP' | 'NEW' {
+  return s === 'new' ? 'NEW' : s === 'top' ? 'TOP' : 'RELEVANCE';
+}
+
 export function defaultSort(q: string): Sort {
   return q ? 'relevance' : 'top';
 }
@@ -79,8 +84,7 @@ export function active(b: Browse): Active[] {
 
 export const CLEARED = { kind: 'all', zeroWidth: false, wide: false, nsfw: false } as const;
 
-/** Zero-width and wide are filtered here, from the emote's flag and its 1x file. */
-// wire: zeroWidth, wide (move to API args when searchEmotes has them)
+/** Zero-width and wide are filtered here (the API has no args for them), from the emote's flag and its 1x file. */
 export function matches(
   b: Browse,
   e: { flags?: { zeroWidth: boolean } | null; files: { name: string; width: number; height: number }[] },

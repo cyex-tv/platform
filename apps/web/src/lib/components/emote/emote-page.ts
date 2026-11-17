@@ -1,5 +1,5 @@
 // Pure helpers for the emote page (src/routes/emotes/[id]): the back link, facts, chat lines,
-// review copy, and the slots for data the API doesn't send yet.
+// review copy.
 import type { ChatEmote, ChatLine } from '$lib/components/ChatPreview.svelte';
 import { isWide, type Picture } from '$lib/emote';
 import type { EmoteFieldsFragment, EmoteState } from '$lib/gql/graphql';
@@ -14,16 +14,9 @@ export type EmoteChannel = {
   avatar?: string | null;
 };
 
-/** How many channels use the emote. Not in the schema yet: null hides the fact. */
-export function channelCount(_e: PageEmote): number | null {
-  // wire: channelCount (Emote.channelCount)
-  return null;
-}
-
-/** Up to 8 channels using the emote. Not in the schema yet: null hides "Used in". */
-export function emoteChannels(_e: PageEmote): EmoteChannel[] | null {
-  // wire: emoteChannels (Query.emoteChannels(id, limit: 8))
-  return null;
+/** How many channels use the emote; null (the fact is hidden) when none do. */
+export function channelCount(e: Pick<PageEmote, 'channelCount'>): number | null {
+  return e.channelCount > 0 ? e.channelCount : null;
 }
 
 /** Where the back link goes: the browse view the reader came from, else all emotes. */

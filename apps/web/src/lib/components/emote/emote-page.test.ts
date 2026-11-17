@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backTarget, baseEmote, chatLines, formats, kind, labels, scaleFiles, trust, type PageEmote } from './emote-page';
+import { backTarget, baseEmote, channelCount, chatLines, formats, kind, labels, scaleFiles, trust, type PageEmote } from './emote-page';
 
 const file = (scale: number, opts: Partial<PageEmote['files'][number]> = {}) => ({
   name: `${scale}x${opts.isStatic ? '_static' : ''}.webp`,
@@ -21,6 +21,7 @@ function emote(over: Partial<PageEmote> = {}): PageEmote {
     tags: [],
     host: 'https://cdn.example/emotes/1',
     createdAt: '2026-11-17T10:00:00.000Z',
+    channelCount: 0,
     flags: { zeroWidth: false, nsfw: false, private: false },
     owner: { id: 'A1', displayName: 'nora_byte', avatar: null },
     files: [1, 2, 3, 4].flatMap((s) => [file(s), file(s, { isStatic: true, size: 400 * s })]),
@@ -88,5 +89,12 @@ describe('trust', () => {
       expect(trust(s).status.length).toBeGreaterThan(0);
       expect(trust(s).line).toMatch(/\.$/);
     }
+  });
+});
+
+describe('channelCount', () => {
+  it('hides the fact when no channel uses the emote', () => {
+    expect(channelCount(emote())).toBeNull();
+    expect(channelCount(emote({ channelCount: 12 }))).toBe(12);
   });
 });

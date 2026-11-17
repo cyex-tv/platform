@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { active, change, matches, parse, toSearch } from './params';
+import { active, apiSort, change, matches, parse, toSearch } from './params';
 
 const u = (s: string) => parse(new URLSearchParams(s));
 
@@ -35,5 +35,14 @@ describe('browse params', () => {
     const wide = { files: [{ name: '1x.webp', width: 64, height: 32 }], flags: { zeroWidth: false } };
     expect(matches(u('wide=1'), wide)).toBe(true);
     expect(matches(u('zw=1'), wide)).toBe(false);
+  });
+});
+
+describe('apiSort', () => {
+  it('names the API order for each sort, relevance only with a query', () => {
+    expect(apiSort(parse(new URLSearchParams('sort=new')).sort)).toBe('NEW');
+    expect(apiSort(parse(new URLSearchParams('')).sort)).toBe('TOP');
+    expect(apiSort(parse(new URLSearchParams('q=fern')).sort)).toBe('RELEVANCE');
+    expect(apiSort(parse(new URLSearchParams('sort=relevance')).sort)).toBe('TOP');
   });
 });

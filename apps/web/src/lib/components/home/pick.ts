@@ -39,13 +39,11 @@ export function cluster(all: HomeEmote[], n = 7): Cluster {
 export type Sort = 'top' | 'new';
 
 /**
- * The strip: square emotes only, so two rows on desktop stay two rows.
- * wire: sort - today both come from searchEmotes(query: ""); New sorts that page by date.
+ * The strip: square emotes only, so two rows on desktop stay two rows. The list arrives
+ * already in order (the API's TOP or NEW), so this only filters and cuts.
  */
-export function strip(all: HomeEmote[], sort: Sort, n = 20): HomeEmote[] {
-  const square = all.filter((e) => !isWide(e));
-  const list = sort === 'new' ? [...square].sort((a, b) => b.createdAt.localeCompare(a.createdAt)) : square;
-  return list.slice(0, n);
+export function strip(all: HomeEmote[], n = 20): HomeEmote[] {
+  return all.filter((e) => !isWide(e)).slice(0, n);
 }
 
 /** Made-up viewers (cyex-design), and lines that read like a real, slightly silly chat. */
