@@ -15,6 +15,7 @@ use cyex_tv_db::{DbError, accounts, audit, ids};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{AuditEntry, CreateRole, Role, UpdateRole};
 use cyex_tv_shared::permissions;
+use cyex_tv_shared::text;
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
@@ -92,7 +93,7 @@ async fn managers(state: &AppState, conn: &mut PgConnection) -> ApiResult<Vec<Uu
 fn role_name(raw: &str) -> ApiResult<String> {
     let name = raw.trim();
     let len = name.chars().count();
-    if len == 0 || len > 64 || name.chars().any(char::is_control) {
+    if len == 0 || len > 64 || text::has_unsafe(name, false) {
         return Err(bad("bad_name", "Role names are 1 to 64 characters."));
     }
     Ok(name.to_owned())
@@ -100,7 +101,7 @@ fn role_name(raw: &str) -> ApiResult<String> {
 
 fn description(raw: &str) -> ApiResult<Option<String>> {
     let text = raw.trim();
-    if text.chars().count() > 500 {
+    if text.chars().count() > 500 || text::has_unsafe(text, true) {
         return Err(bad(
             "bad_description",
             "Descriptions are at most 500 characters.",

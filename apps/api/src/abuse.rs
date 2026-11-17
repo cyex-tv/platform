@@ -25,6 +25,7 @@ use cyex_tv_shared::model::{
     ReportState,
 };
 use cyex_tv_shared::permissions;
+use cyex_tv_shared::text;
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
@@ -58,7 +59,7 @@ fn sqlx_error(err: sqlx::Error) -> ApiError {
 fn text(raw: &str, what: &'static str) -> ApiResult<String> {
     let t = raw.trim();
     let len = t.chars().count();
-    if len == 0 || len > 500 {
+    if len == 0 || len > 500 || text::has_unsafe(t, true) {
         return Err(bad(
             "bad_reason",
             &format!("Give a {what} of 1 to 500 characters."),

@@ -13,6 +13,7 @@ use cyex_tv_db::{DbError, audit, ids, reads, sets};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{Emote, EmoteState, EventType, ReviewQueue, UpdateEmote};
 use cyex_tv_shared::permissions;
+use cyex_tv_shared::text;
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
@@ -64,7 +65,7 @@ pub fn clean_tags(raw: &[String]) -> ApiResult<Vec<String>> {
 fn reason(raw: &str) -> ApiResult<String> {
     let text = raw.trim();
     let len = text.chars().count();
-    if len == 0 || len > MAX_REASON_LEN {
+    if len == 0 || len > MAX_REASON_LEN || text::has_unsafe(text, true) {
         return Err(bad(
             "bad_reason",
             "Give a reason of 1 to 500 characters; the uploader sees it.",

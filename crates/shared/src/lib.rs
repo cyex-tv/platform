@@ -11,3 +11,4 @@ pub mod ratelimit;
 pub mod shutdown;
 #[cfg(feature = "sqlx")]
 mod sql;
+pub mod text;
