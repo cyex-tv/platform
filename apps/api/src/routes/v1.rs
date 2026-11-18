@@ -195,7 +195,9 @@ async fn logout(
 /// moderator approves it. Manage it afterwards through GraphQL.
 ///
 /// PNG, APNG, GIF or WebP; at most 5 MB, 1000×1000 px and 1000 frames. Sign in first (with the
-/// cookie, from `https://cyex.tv`). At most 20 uploads an hour.
+/// cookie, from `https://cyex.tv`). At most 20 uploads an hour. The flags `zero_width`, `private`
+/// and `nsfw` may be set at once (each `true` or `false`, default `false`); `updateEmote` changes
+/// them later.
 #[utoipa::path(
     post,
     path = "/v1/emotes",
@@ -222,6 +224,7 @@ async fn upload_emote(
     let bad_form = |message: &str| ApiError::new(StatusCode::BAD_REQUEST, "bad_form", message);
     let mut name = None;
     let mut tags = None;
+    let mut flags = upload::Flags::default();
     let mut file: Option<Vec<u8>> = None;
     while let Some(mut field) = form
         .next_field()
@@ -260,7 +263,25 @@ async fn upload_emote(
                     tags = Some(text);
                 }
             }
-            _ => return Err(bad_form("Unknown form field. Send name, tags and file.")),
+            Some(key @ ("zero_width" | "private" | "nsfw")) => {
+                let key = key.to_owned();
+                let text = field
+                    .text()
+                    .await
+                    .map_err(|_| bad_form("A form field couldn't be read."))?;
+                let on = upload::parse_flag(&text)
+                    .ok_or_else(|| bad_form("A flag is true or false."))?;
+                match key.as_str() {
+                    "zero_width" => flags.zero_width = on,
+                    "private" => flags.private = on,
+                    _ => flags.nsfw = on,
+                }
+            }
+            _ => {
+                return Err(bad_form(
+                    "Unknown form field. Send name, tags, zero_width, private, nsfw and file.",
+                ));
+            }
         }
     }
     let name = name.ok_or_else(|| bad_form("Give the emote a name."))?;
@@ -271,6 +292,7 @@ async fn upload_emote(
         upload::Upload {
             name,
             tags: upload::split_tags(tags.as_deref()),
+            flags,
             file: file.into(),
         },
     )

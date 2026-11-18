@@ -317,12 +317,18 @@ pub struct Emote {
     pub channel_count: u32,
 }
 
-/// Multipart upload (REST only): the image file and its name.
+/// Multipart upload (REST only): the image file, its name, and optionally its tags and flags.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct UploadEmote {
     pub name: String,
     /// Comma-separated.
     pub tags: Option<String>,
+    /// `true` or `false` (also `1`/`0`, `on`/`off`); default `false`. Drawn over the emote before it.
+    pub zero_width: Option<String>,
+    /// As `zero_width`. Only its owner can add it to sets, and search leaves it out.
+    pub private: Option<String>,
+    /// As `zero_width`. Search leaves it out unless asked for NSFW.
+    pub nsfw: Option<String>,
     #[schema(value_type = String, format = Binary)]
     pub file: Vec<u8>,
 }

@@ -17,6 +17,7 @@
   import PreviewStage from '$lib/components/emote/PreviewStage.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
+  import EmoteFlags from '$lib/tool/EmoteFlags.svelte';
 
   const scales = [1, 2, 4] as const;
   let emote = $state<EmoteFieldsFragment | null>(null);
@@ -180,7 +181,7 @@
     <div class="ui-stack">
       {#if mine}
         <form class="ui-card ui-form" onsubmit={save} novalidate>
-          <h2>Details</h2>
+          <h2>Details and visibility</h2>
           <label class="ui-field">
             <span class="ui-label">Name</span>
             <input class="ui-input" bind:value={name} maxlength="100" spellcheck="false" aria-invalid={nameError ? 'true' : undefined} />
@@ -191,20 +192,7 @@
             <input class="ui-input" bind:value={tagText} placeholder="cat, dance" aria-invalid={tagError ? 'true' : undefined} />
             {#if tagError}<span class="ui-error">{tagError}</span>{/if}
           </label>
-          <div>
-            <label class="ui-row">
-              <div><strong>Zero-width</strong><span class="ui-hint">Drawn over the emote before it, like a hat.</span></div>
-              <input class="ui-switch" type="checkbox" bind:checked={zeroWidth} />
-            </label>
-            <label class="ui-row">
-              <div><strong>Unlisted</strong><span class="ui-hint">Left out of search. Sets that have it keep it.</span></div>
-              <input class="ui-switch" type="checkbox" bind:checked={hidden} />
-            </label>
-            <label class="ui-row">
-              <div><strong>Not safe for work</strong><span class="ui-hint">Hidden from search unless people ask for it.</span></div>
-              <input class="ui-switch" type="checkbox" bind:checked={nsfw} />
-            </label>
-          </div>
+          <EmoteFlags id="edit" bind:zeroWidth bind:hidden bind:nsfw disabled={saving} />
           <div class="ui-actions">
             <button class="ui-btn primary" type="submit" disabled={saving || !changed || !!nameError || !!tagError}>
               {saving ? 'Saving…' : 'Save'}

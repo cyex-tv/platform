@@ -42,3 +42,44 @@ export function fileProblem(file: Pick<File, 'type' | 'size'>): string | null {
   if (file.size > MAX_UPLOAD_BYTES) return 'At most 5 MB.';
   return null;
 }
+
+/** At most this many files in one upload batch: the API takes 20 uploads an hour per account. */
+export const QUEUE_MAX = 20;
+
+/** Two picked files that are the same file (same name, size and date), so a batch doesn't hold it twice. */
+export function sameFile(a: Pick<File, 'name' | 'size' | 'lastModified'>, b: Pick<File, 'name' | 'size' | 'lastModified'>): boolean {
+  return a.name === b.name && a.size === b.size && a.lastModified === b.lastModified;
+}
+
+/**
+ * What an upload's refusal means, in words that say what to do. `code` is the API's error code;
+ * `message` its own text, kept where it names the limit that was hit.
+ */
+export function uploadProblem(code: string, message: string): string {
+  switch (code) {
+    case 'blocked':
+      return 'This image was taken down before (or is too close to one that was), so it can’t be uploaded again.';
+    case 'too_large':
+      return 'Too big: at most 5 MB, 1000 × 1000 px and 1000 frames.';
+    case 'unsupported_format':
+      return 'Not a format cyex.tv takes: PNG, APNG, GIF or WebP.';
+    case 'invalid_image':
+      return 'The file doesn’t open as an image; it may be damaged. Save it again and retry.';
+    case 'rate_limited':
+      return 'That’s 20 uploads in the last hour, the most there can be. The rest can go in an hour.';
+    case 'restricted':
+      return 'Your account can’t upload right now. Your notifications say why.';
+    case 'signed_out':
+      return 'You were signed out. Sign in again, then upload.';
+    case 'bad_name':
+    case 'bad_tag':
+    case 'too_many_tags':
+      return message;
+    case 'offline':
+      return 'cyex.tv can’t be reached right now. Check your connection and try again.';
+    case 'unavailable':
+      return 'Uploads are paused for a moment. Try again in a minute.';
+    default:
+      return message || 'The upload didn’t go through.';
+  }
+}
