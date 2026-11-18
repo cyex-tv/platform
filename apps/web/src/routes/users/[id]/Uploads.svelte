@@ -76,7 +76,7 @@
 
 <section aria-labelledby="up-h">
   <div class="bar">
-    <h1 class="page-title" id="up-h">Uploaded emotes <span class="n">{count(total)}</span></h1>
+    <h2 class="page-title" id="up-h">Uploaded emotes<span class="n" aria-hidden="true">{count(total)}</span><span class="sr-only">, {count(total)}</span></h2>
     <label class="find">
       <span class="sr-only">Filter uploads</span>
       <Icon name="search" size={16} />

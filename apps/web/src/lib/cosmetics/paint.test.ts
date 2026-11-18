@@ -121,6 +121,10 @@ describe('readability floor', () => {
     expect(paintFloor(paint(['#0f7bd9', '#c2410c']))).toBeNull();
     expect(paintFloor(paint(['#fff3b0', '#10131a']))).toBe('both');
   });
+  it('leaves a paint with shadows of its own alone', () => {
+    const shadowed = { ...paint(['#ffb020', '#ff5a1f']), shadows: [{ x: 0, y: 1, radius: 2, color: '#00000099' }] };
+    expect(paintFloor(shadowed)).toBeNull();
+  });
   it('has no opinion about unknown colours', () => {
     expect(paintFloor(null)).toBeNull();
     expect(paintFloor({ ...base, kind: 'IMAGE', color: null, stops: [] })).toBeNull();

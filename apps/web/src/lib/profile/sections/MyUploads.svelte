@@ -7,6 +7,7 @@
   import type { CardEmote } from '$lib/components/EmoteCard.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
+  import Problem from '$lib/components/Problem.svelte';
   import State from '$lib/components/State.svelte';
   import { count } from '$lib/format';
   import type { MyEmotesQuery } from '$lib/gql/graphql';
@@ -56,10 +57,7 @@
 {#if first}
   <EmoteGrid items={[]} loading skeletons={12} creator={false} />
 {:else if problem && !items.length}
-  <State kind="error" title="Your emotes didn’t load">
-    {problem}
-    {#snippet actions()}<button class="ui-btn secondary" type="button" onclick={more}>Try again</button>{/snippet}
-  </State>
+  <Problem cause="server" onretry={more} />
 {:else if !items.length}
   <State title="No emotes yet">
     Upload one and it shows up here, ready to add to a set.

@@ -7,11 +7,13 @@ import { session } from '$lib/tool/session.svelte';
 
 export type Note = { id: string; kind: string; payload: string; createdAt: string; read: boolean };
 
-export const inbox = $state<{ count: number; items: Note[] | null; loading: boolean; error: string | null }>({
+export const inbox = $state<{ count: number; items: Note[] | null; loading: boolean; error: string | null; marking: boolean }>({
   count: 0,
   items: null,
   loading: false,
   error: null,
+  /** "Mark all read" is on its way: the button waits, a second press sends nothing. */
+  marking: false,
 });
 
 /** The unread count. A failure keeps the number it had: a bell must never complain. */
@@ -40,10 +42,16 @@ export async function loadInbox(): Promise<void> {
 
 /** Marks some (up to 100) or all of them read; true when it worked. */
 export async function markRead(ids?: string[]): Promise<boolean> {
+  if (!ids) {
+    if (inbox.marking) return false;
+    inbox.marking = true;
+  }
   try {
     await gql(MARK_READ, { ids: ids ?? null });
   } catch {
     return false;
+  } finally {
+    if (!ids) inbox.marking = false;
   }
   if (inbox.items) {
     const set = ids ? new Set(ids) : null;

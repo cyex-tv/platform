@@ -2695,7 +2695,7 @@ export type AdminOrdersQueryVariables = Exact<{
 }>;
 
 
-export type AdminOrdersQuery = { __typename?: 'Query', orders: { __typename?: 'OrderPage', total: number, items: Array<{ __typename?: 'Order', providerTransactionId?: string | null, id: string, gift: boolean, itemId: string, itemName: string, status: OrderStatus, amountCents: number, currency: string, paidTotalCents?: number | null, paidCurrency?: string | null, refundReason?: string | null, createdAt: string, paidAt?: string | null, refundedAt?: string | null, failedAt?: string | null, buyer?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, recipient?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null }> } };
+export type AdminOrdersQuery = { __typename?: 'Query', orders: { __typename?: 'OrderPage', total: number, items: Array<{ __typename?: 'Order', providerTransactionId?: string | null, refundRejectedAt?: string | null, id: string, gift: boolean, itemId: string, itemName: string, status: OrderStatus, amountCents: number, currency: string, paidTotalCents?: number | null, paidCurrency?: string | null, refundReason?: string | null, createdAt: string, paidAt?: string | null, refundedAt?: string | null, failedAt?: string | null, buyer?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, recipient?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null }> } };
 
 export type RefundOrderMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -2703,7 +2703,7 @@ export type RefundOrderMutationVariables = Exact<{
 }>;
 
 
-export type RefundOrderMutation = { __typename?: 'Mutation', refundOrder: { __typename?: 'Order', providerTransactionId?: string | null, id: string, gift: boolean, itemId: string, itemName: string, status: OrderStatus, amountCents: number, currency: string, paidTotalCents?: number | null, paidCurrency?: string | null, refundReason?: string | null, createdAt: string, paidAt?: string | null, refundedAt?: string | null, failedAt?: string | null, buyer?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, recipient?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null } };
+export type RefundOrderMutation = { __typename?: 'Mutation', refundOrder: { __typename?: 'Order', providerTransactionId?: string | null, refundRejectedAt?: string | null, id: string, gift: boolean, itemId: string, itemName: string, status: OrderStatus, amountCents: number, currency: string, paidTotalCents?: number | null, paidCurrency?: string | null, refundReason?: string | null, createdAt: string, paidAt?: string | null, refundedAt?: string | null, failedAt?: string | null, buyer?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, recipient?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null } };
 
 export type CodeBatchFieldsFragment = { __typename?: 'CodeBatch', id: string, name: string, prefix: string, itemId?: string | null, itemName?: string | null, badgeIds: Array<string>, paintIds: Array<string>, codeCount: number, usesPerCode: number, redemptions: number, expiresAt?: string | null, disabledAt?: string | null, createdAt: string, createdBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null };
 
@@ -5474,6 +5474,7 @@ export const AdminOrdersDocument = new TypedDocumentString(`
     items {
       ...OrderFields
       providerTransactionId
+      refundRejectedAt
     }
   }
 }
@@ -5508,6 +5509,7 @@ export const RefundOrderDocument = new TypedDocumentString(`
   refundOrder(id: $id, reason: $reason) {
     ...OrderFields
     providerTransactionId
+    refundRejectedAt
   }
 }
     fragment OrderFields on Order {

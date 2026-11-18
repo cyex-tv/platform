@@ -40,12 +40,12 @@
   <div class="act">
     {#if item.owned}
       <span class="own"><Icon name="check" size={15} />Owned</span>
-      <button class="ui-btn secondary" type="button" disabled={soldOut} onclick={() => onopen(item, true)}>Gift it</button>
+      <button class="ui-btn secondary" type="button" disabled={soldOut} onclick={() => onopen(item, true)}>Gift</button>
     {:else if soldOut}
       <span class="muted">Sold out</span>
     {:else}
       <button class="ui-btn primary" type="button" onclick={() => onopen(item, false)}>Buy</button>
-      <button class="ui-btn ghost" type="button" onclick={() => onopen(item, true)}>Gift</button>
+      <button class="ui-btn secondary" type="button" onclick={() => onopen(item, true)}>Gift</button>
     {/if}
   </div>
 </li>
@@ -61,7 +61,7 @@
   .facts { display: flex; flex-wrap: wrap; gap: 2px 12px; margin: -4px 0 0; font-size: var(--t-fine); color: var(--muted); font-variant-numeric: tabular-nums; }
   .low { color: var(--text); font-weight: 600; }
   .act { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 2px; }
-  .own { display: inline-flex; align-items: center; gap: 6px; margin-right: auto; font-size: var(--t-small); font-weight: 700; color: var(--text); }
+  .own { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding-right: 8px; font-size: var(--t-small); font-weight: 700; color: var(--text); }
   .own :global(svg) { color: var(--accent-text); }
-  .muted { margin-right: auto; font-size: var(--t-small); color: var(--muted); }
+  .muted { min-height: 40px; display: inline-flex; align-items: center; font-size: var(--t-small); color: var(--muted); }
 </style>

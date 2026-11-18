@@ -5,6 +5,7 @@
   // on the bell. The count is kept fresh by watchInbox (the AppHeader starts it).
   import Icon from '$lib/components/Icon.svelte';
   import Popover from '$lib/components/Popover.svelte';
+  import Problem from '$lib/components/Problem.svelte';
   import State from '$lib/components/State.svelte';
   import { badge } from './notifications';
   import { inbox, loadInbox, markRead, type Note } from './inbox.svelte';
@@ -38,13 +39,10 @@
   {/snippet}
   <div class="head">
     <h2>Notifications</h2>
-    {#if inbox.count}<button class="ui-btn ghost small" type="button" onclick={() => markRead()}>Mark all read</button>{/if}
+    {#if inbox.count}<button class="ui-btn ghost small" type="button" disabled={inbox.marking} onclick={() => markRead()}>Mark all read</button>{/if}
   </div>
   {#if inbox.items === null && inbox.error}
-    <State bare kind="error" title="That didn’t load">
-      {inbox.error}
-      {#snippet actions()}<button class="ui-btn secondary small" type="button" onclick={() => loadInbox()}>Try again</button>{/snippet}
-    </State>
+    <Problem bare cause="server" onretry={() => loadInbox()} home={null} />
   {:else if inbox.items === null}
     <State bare kind="loading" title="Loading…" />
   {:else if recent.length === 0}
