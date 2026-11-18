@@ -1,52 +1,72 @@
 <script lang="ts">
   // An account's sets as cards (7TV's emote sets view): two rows of emotes, the name, how full it
-  // is, and a mark on the set a channel shows. "New set" for the owner and editors with SETS.
+  // is, and a mark on the set a channel shows. The owner and editors see all their sets, open them
+  // in the editor and get "New set" (with SETS); everyone else sees the listed ones, which open
+  // the public set page (/sets/<id>).
   import EmoteThumbs from './EmoteThumbs.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import State from '$lib/components/State.svelte';
   import { clean, count } from '$lib/format';
+  import { fillPercent } from '$lib/sets/public';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
   import { loader } from '$lib/tool/loader.svelte';
-  import { libraryOf } from '../data.svelte';
+  import { libraryOf, publicSetsOf } from '../data.svelte';
   import NewSetDialog from '../NewSetDialog.svelte';
+  import type { Picture } from '$lib/emote';
 
-  let { accountId, mine, canCreate }: { accountId: string; mine: boolean; canCreate: boolean } = $props();
+  let { accountId, mine, canCreate, name = '' }: { accountId: string; mine: boolean; canCreate: boolean; name?: string } = $props();
 
-  const L = loader(() => libraryOf(accountId, mine));
+  type Card = { id: string; name: string; kind: string; used: number; capacity: number; thumbs: Picture[]; chat: string | null };
+  type Shown = { cards: Card[]; hasPersonal: boolean };
+
+  const managed = $derived(mine || canCreate);
+  const platformLabel = (p: string) => (p === 'KICK' ? 'Kick' : 'Twitch');
+  const L = loader<Shown>(async () => {
+    if (!(mine || canCreate)) {
+      const sets = await publicSetsOf(accountId);
+      return { hasPersonal: false, cards: sets.map((s) => ({ id: s.id, name: s.name, kind: s.kind, used: s.slotsUsed, capacity: s.capacity, thumbs: s.preview.map((m) => m.emote), chat: s.active ? 'chat' : null })) };
+    }
+    const lib = await libraryOf(accountId, mine);
+    const active = new Map(lib.channels.filter((c) => c.activeSetId).map((c) => [c.activeSetId!, c.platform]));
+    return {
+      hasPersonal: lib.sets.some((s) => s.kind === 'PERSONAL'),
+      cards: lib.sets.map((s) => ({ id: s.id, name: s.name, kind: s.kind, used: s.emotes.length, capacity: s.capacity, thumbs: s.emotes.map((m) => m.emote),
+        chat: active.has(s.id) ? platformLabel(active.get(s.id)!) : null })),
+    };
+  });
   let dlg = $state<NewSetDialog>();
-  const pct = (n: number, cap: number) => (cap > 0 ? Math.min(100, Math.round((n / cap) * 100)) : 0);
   const kindLabel = (k: string) => (k === 'PERSONAL' ? 'Personal' : k === 'GLOBAL' ? 'Global' : 'Channel');
 </script>
 
 <LoadGate source={L} label="Loading the sets…">
   {#snippet children(lib)}
-    {@const active = new Map(lib.channels.filter((c) => c.activeSetId).map((c) => [c.activeSetId!, c.platform]))}
-    <PageHead title="Emote sets" line={`${count(lib.sets.length)} ${lib.sets.length === 1 ? 'set' : 'sets'}. A channel shows one set; a personal set goes with ${mine ? 'you' : 'them'} to every channel that allows it.`}>
+    <PageHead title="Emote sets" line={managed
+      ? `${count(lib.cards.length)} ${lib.cards.length === 1 ? 'set' : 'sets'}. A channel shows one set; a personal set goes with ${mine ? 'you' : 'them'} to every channel that allows it.`
+      : `${count(lib.cards.length)} ${lib.cards.length === 1 ? 'set' : 'sets'} anyone can open.`}>
       {#snippet actions()}
         {#if canCreate}<button class="ui-btn primary" type="button" onclick={() => dlg?.open()}><Icon name="plus" size={15} />New set</button>{/if}
       {/snippet}
     </PageHead>
-    {#if !lib.sets.length}
+    {#if !lib.cards.length}
       <State title="No sets yet">
-        Make one for {mine ? 'your' : 'the'} channel, then pick it in Channels.
+        {#if managed}Make one for {mine ? 'your' : 'the'} channel, then pick it in Channels.{:else}<bdi>{name || 'This account'}</bdi> hasn’t listed a set.{/if}
         {#snippet actions()}
           {#if canCreate}<button class="ui-btn primary" type="button" onclick={() => dlg?.open()}><Icon name="plus" size={15} />New set</button>{/if}
         {/snippet}
       </State>
     {:else}
       <ul class="cards">
-        {#each lib.sets as s (s.id)}
-          {@const p = pct(s.emotes.length, s.capacity)}
-          {@const on = active.get(s.id)}
+        {#each lib.cards as s (s.id)}
+          {@const p = fillPercent(s.used, s.capacity)}
           <li>
-            <a class="card" href="/me/sets/{s.id}">
-              <EmoteThumbs emotes={s.emotes.map((m) => m.emote)} />
+            <a class="card" href="{managed ? '/me/sets' : '/sets'}/{s.id}">
+              <EmoteThumbs emotes={s.thumbs} />
               <span class="row">
                 <strong class="nm"><bdi>{clean(s.name)}</bdi></strong>
-                {#if on}<span class="on" title="Active in {on === 'KICK' ? 'Kick' : 'Twitch'} chat"><Icon name="zap" size={15} /><span class="sr-only">Active in {on === 'KICK' ? 'Kick' : 'Twitch'} chat</span></span>{/if}
+                {#if s.chat}<span class="on" title={s.chat === 'chat' ? 'Shown in chat' : `Active in ${s.chat} chat`}><Icon name="zap" size={15} /><span class="sr-only">{s.chat === 'chat' ? 'Shown in chat' : `Active in ${s.chat} chat`}</span></span>{/if}
               </span>
-              <span class="meta">{kindLabel(s.kind)} · {count(s.emotes.length)} / {count(s.capacity)}</span>
+              <span class="meta">{kindLabel(s.kind)} · {count(s.used)} / {count(s.capacity)}</span>
               <span class="cap" role="meter" aria-label="How full" aria-valuemin={0} aria-valuemax={100} aria-valuenow={p}>
                 <span class="fill" class:full={p >= 90} style:width="{p}%"></span>
                 <span class="pc">{p}%</span>
@@ -56,7 +76,7 @@
         {/each}
       </ul>
     {/if}
-    <NewSetDialog bind:this={dlg} ownerId={accountId} {mine} hasPersonal={lib.sets.some((s) => s.kind === 'PERSONAL')} />
+    <NewSetDialog bind:this={dlg} ownerId={accountId} {mine} hasPersonal={lib.hasPersonal} />
   {/snippet}
 </LoadGate>
 

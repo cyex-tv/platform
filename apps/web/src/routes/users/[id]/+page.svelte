@@ -107,7 +107,7 @@
     {:else if section === 'active'}
       {#key data.id}<ActiveEmotes accountId={data.id} mine={relation.mine} />{/key}
     {:else if section === 'sets'}
-      {#key data.id}<SetCards accountId={data.id} mine={relation.mine} canCreate={canSets(relation)} />{/key}
+      {#key data.id}<SetCards accountId={data.id} mine={relation.mine} canCreate={canSets(relation)} {name} />{/key}
     {:else if section === 'cosmetics'}
       {#key data.id}<CosmeticsPicker accountId={data.id} mine={relation.mine} {name} />{/key}
     {:else if section === 'activity'}

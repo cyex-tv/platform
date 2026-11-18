@@ -1,7 +1,7 @@
 // The profile's rail (your profile is your dashboard, the 7TV model): which rows a viewer gets on
 // an account's page, where each goes, and which one is current. Pure, so it is tested.
-//   - Everyone: Uploaded emotes.
-//   - The owner, and editors of the account: Active emotes and Emote sets; the owner also Channels.
+//   - Everyone: Uploaded emotes and Emote sets (the account's listed sets, ADR 0017).
+//   - The owner, and editors of the account: Active emotes, and all their sets; the owner also Channels.
 //   - The owner, and editors with PROFILE: Cosmetics.
 //   - Everyone: Activity (public, ADR 0016), when the API has it.
 // Sections are query-param tabs on /users/<id> (?s=sets); Uploaded emotes is the default (no
@@ -37,7 +37,7 @@ export function sectionsFor(r: Relation, activity: boolean): SectionKey[] {
   const out: SectionKey[] = [];
   if (manages(r)) out.push('active');
   out.push('uploads');
-  if (manages(r)) out.push('sets');
+  out.push('sets');
   if (canProfile(r)) out.push('cosmetics');
   if (activity) out.push('activity');
   return out;
