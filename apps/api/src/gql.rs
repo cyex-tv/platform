@@ -1067,13 +1067,20 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Sign out one of your sessions, the current one too. False when you have none with that
-    /// ID.
+    /// Sign out one of your sessions, the current one too (then the cookie is cleared). False
+    /// when you have none with that ID.
     async fn revoke_session(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
         let caller = caller(ctx)?;
-        account::revoke_session(state(ctx), caller, &id)
+        let (done, current) = account::revoke_session(state(ctx), caller, &id)
             .await
-            .map_err(api_error)
+            .map_err(api_error)?;
+        if current && caller.via == cyex_tv_auth::Via::Cookie {
+            ctx.insert_http_header(
+                axum::http::header::SET_COOKIE,
+                cyex_tv_auth::cookies::clear_session(state(ctx).auth.config()),
+            );
+        }
+        Ok(done)
     }
 
     /// Sign out everywhere but here. Returns how many sessions ended.
@@ -1098,7 +1105,8 @@ impl Mutation {
     /// Your sessions, identities, channels, sets, editor grants, cosmetics and notifications go;
     /// your approved emotes that are in other people's sets stay, shown as by a deleted user;
     /// your other emotes are deleted. Signing in again later makes a new account. Audited.
-    /// `confirm_mismatch` when `confirm` isn't one of your logins.
+    /// `confirm_mismatch` when `confirm` isn't one of your logins; `restricted` while the account's
+    /// uploads or sign-in are blocked.
     async fn delete_account(&self, ctx: &Context<'_>, confirm: String) -> Result<bool> {
         let caller = caller(ctx)?;
         account::delete_account(state(ctx), caller, &confirm)

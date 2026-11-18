@@ -8,7 +8,8 @@
 //! sets, editor grants both ways, cosmetics, roles and notifications go; reports it filed stay
 //! without the reporter; its approved emotes that are in other people's sets stay, owned by
 //! nobody ("deleted user"); every other emote of it is deleted. The account row stays, marked
-//! deleted, so audit rows keep their actor. The owner's account is protected. Audited.
+//! deleted, so audit rows keep their actor. The owner's account and restricted or blocked accounts
+//! can't be deleted this way. Audited.
 
 use axum::http::StatusCode;
 use cyex_tv_auth::{Caller, Via};
@@ -112,16 +113,27 @@ pub async fn my_sessions(state: &AppState, caller: &Caller) -> ApiResult<Vec<Acc
         .collect())
 }
 
-/// Signs out one of the caller's sessions (the current one too). False when they have no session
-/// with that ID; another account's ID is just that.
-pub async fn revoke_session(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bool> {
+/// Signs out one of the caller's sessions (the current one too). `(false, _)` when they have no
+/// session with that ID; another account's ID is just that. The second value says whether it was
+/// the session this request came with (the cookie then goes too).
+pub async fn revoke_session(
+    state: &AppState,
+    caller: &Caller,
+    id: &str,
+) -> ApiResult<(bool, bool)> {
     let Some(id) = ids::from_text(id.trim()) else {
-        return Ok(false);
+        return Ok((false, false));
     };
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    sessions::delete_by_id(&mut conn, caller.account_id, id)
+    let current = sessions::list_for_account(&mut conn, caller.account_id)
         .await
-        .map_err(db_error)
+        .map_err(db_error)?
+        .iter()
+        .any(|s| s.id == id && s.id_hash.as_slice() == caller.token_hash.as_slice());
+    let done = sessions::delete_by_id(&mut conn, caller.account_id, id)
+        .await
+        .map_err(db_error)?;
+    Ok((done, done && current))
 }
 
 /// Signs out every session of the caller but the one this request came with. Returns how many.
@@ -443,6 +455,19 @@ pub async fn delete_account(
         .await
         .map_err(db_error)?
         .ok_or_else(not_found)?;
+    // A restricted or blocked account can't delete itself: signing in again would make a fresh,
+    // unrestricted account.
+    let account = accounts::get(&mut tx, account_id)
+        .await
+        .map_err(db_error)?
+        .ok_or_else(not_found)?;
+    if account.restricted_at.is_some() || account.blocked_at.is_some() {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "restricted",
+            "A restricted account can't be deleted. Write to us if you want it removed.",
+        ));
+    }
     let identities = accounts::identities(&mut tx, account_id)
         .await
         .map_err(db_error)?;

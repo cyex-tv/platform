@@ -317,6 +317,30 @@ async fn sessions_are_yours_only_and_never_tokens() {
     assert_eq!(r["data"]["revokeSession"], true, "{r}");
     let (r, _) = w.site(&alice, "{ me { id } }", json!({})).await;
     assert_eq!(code(&r), "signed_out", "{r}");
+    // Signing out the session you're using on the website also clears its cookie.
+    let fresh = w.session(alice.id, SessionKind::Site, None).await;
+    let (r, _) = w.post(Some((&fresh, true)), SESSIONS, json!({})).await;
+    let fresh_id = r["data"]["mySessions"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{r}"))
+        .iter()
+        .find(|s| s["current"] == true)
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (r, cookie) = w
+        .post(
+            Some((&fresh, true)),
+            "mutation($id: String!) { revokeSession(id: $id) }",
+            json!({ "id": fresh_id }),
+        )
+        .await;
+    assert_eq!(r["data"]["revokeSession"], true, "{r}");
+    assert!(
+        cookie.is_some_and(|c| c.contains("Max-Age=0")),
+        "the cookie is cleared"
+    );
     let r = w
         .gql(
             &alice,
@@ -642,6 +666,27 @@ async fn deleting_an_account_removes_it_and_keeps_what_others_use() {
     assert_eq!(code(&r), "confirm_mismatch", "{r}");
     let (r, _) = w.post(None, DELETE, json!({ "c": alice.login })).await;
     assert_eq!(code(&r), "signed_out", "{r}");
+    // While restricted, no: signing in again would make a fresh, unrestricted account.
+    {
+        let mut conn = w.db.conn().await;
+        accounts::set_restricted(&mut conn, alice.id, true)
+            .await
+            .unwrap();
+    }
+    let (r, _) = w.site(&alice, DELETE, json!({ "c": alice.login })).await;
+    assert_eq!(code(&r), "restricted", "{r}");
+    {
+        let mut conn = w.db.conn().await;
+        assert!(
+            !accounts::identities(&mut conn, alice.id)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        accounts::set_restricted(&mut conn, alice.id, false)
+            .await
+            .unwrap();
+    }
 
     let (r, cookie) = w
         .site(
@@ -678,7 +723,11 @@ async fn deleting_an_account_removes_it_and_keeps_what_others_use() {
     assert_eq!(r["data"]["accountSets"], json!([]));
     assert!(r["data"]["set"].is_null());
     assert!(r["data"]["channelByLogin"].is_null());
-    assert_eq!(r["data"]["searchAccounts"]["total"], 0);
+    assert!(
+        !r.to_string()
+            .contains(&format!("\"id\":\"{}\"", alice.tid())),
+        "not found by search: {r}"
+    );
 
     // The emote in Bob's set stays there, by nobody; the others are gone.
     let (r, _) = w
