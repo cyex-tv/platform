@@ -17,9 +17,11 @@
     size?: 's' | 'm';
     /** Option height in px, overriding the size's (34 for 's', 40 for 'm'). */
     height?: number;
+    /** Phones (380px and narrower): options with an icon show only the icon (the label stays as the accessible name and the tooltip), so the control fits a card. */
+    compact?: boolean;
     onchange: (value: T) => void;
   };
-  let { options, value, label, size = 'm', height, onchange }: Props = $props();
+  let { options, value, label, size = 'm', height, compact = false, onchange }: Props = $props();
 
   let root: HTMLDivElement;
 
@@ -48,7 +50,7 @@
   const stop = $derived(options.some((o) => o.value === value) ? value : options.find((o) => !o.disabled)?.value);
 </script>
 
-<div class="seg {size}" role="radiogroup" aria-label={label} bind:this={root} tabindex="-1" {onkeydown}
+<div class="seg {size}" class:compact role="radiogroup" aria-label={label} bind:this={root} tabindex="-1" {onkeydown}
   style:--seg-h={height ? `${height}px` : undefined}>
   {#each options as o (o.value)}
     <button
@@ -57,10 +59,11 @@
       aria-checked={o.value === value}
       tabindex={o.value === stop ? 0 : -1}
       disabled={o.disabled}
+      title={compact && o.icon ? o.label : undefined}
       onclick={() => pick(o.value)}
     >
       {#if o.icon}<Icon name={o.icon} size={size === 's' ? 15 : 16} />{/if}
-      <span class="lb" data-t={o.label}>{o.label}</span>
+      <span class="lb" class:icon-only={compact && !!o.icon} data-t={o.label}>{o.label}</span>
     </button>
   {/each}
 </div>
@@ -87,6 +90,11 @@
   @media (forced-colors: active) { button[aria-checked='true']:not(:focus-visible) { outline: 1px solid Highlight; outline-offset: -2px; } }
   /* Phones: tighter options so four icon + label options still fit a card without scrolling. */
   @media (max-width: 480px) { .seg { gap: 0; } button { gap: 4px; padding: 0 7px; } .m button { padding: 0 10px; } }
-  @media (pointer: coarse) { button { min-height: 44px; } }
+  /* compact: below 380px an icon option drops its label (visually; it is still the name). */
+  @media (max-width: 380px) {
+    .compact .icon-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .compact button { gap: 0; padding: 0 12px; }
+  }
+  @media (pointer: coarse) { button { min-height: 44px; min-width: 44px; } }
   @media (hover: hover) and (pointer: fine) { button:hover:not(:disabled) { color: var(--text); } }
 </style>

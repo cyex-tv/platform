@@ -74,4 +74,5 @@
   .all:focus-visible { outline-offset: -2px; }
   @media (hover: hover) and (pointer: fine) { .bell:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface-hover); } }
   @media (forced-colors: active) { .badge { border: 1px solid CanvasText; } .bell[aria-expanded='true'] { outline: 2px solid Highlight; } }
+  @media (pointer: coarse) { .bell::after { content: ''; position: absolute; inset: -2px; } }
 </style>

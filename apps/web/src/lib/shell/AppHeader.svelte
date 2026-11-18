@@ -56,11 +56,12 @@
 
     <div class="end">
       {#if me}
-        <a class="btn btn-primary hb" href="/me/upload"><Icon name="upload" />Upload</a>
-      {:else if session.known && !session.failed}
+        <a class="btn btn-primary hb up" href="/me/upload" title="Upload" aria-label="Upload"><Icon name="upload" /><span class="hl">Upload</span></a>
+      {:else if session.known}
+        <!-- Signed out, or the API didn't answer (session.failed): either way a way in, never an empty box. -->
         <a class="btn btn-primary hb" href={signin}>Sign in</a>
       {:else}
-        <!-- Not known yet, or the API didn't answer: a neutral slot, never "Sign in" for a valid session. -->
+        <!-- Not known yet: a neutral slot while the first answer is on its way. -->
         <span class="hb-hold" aria-hidden="true"></span>
       {/if}
       <ThemeToggle />
@@ -84,9 +85,11 @@
 <style>
   .app-header { position: sticky; top: 0; z-index: var(--z-nav); flex: none; background: var(--bg);
     border-bottom: 1px solid var(--border); padding-top: env(safe-area-inset-top, 0px); }
-  .bar { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px) minmax(0, 1fr); align-items: center; gap: 16px;
+  /* The two sides take their content width (never squeezed under the search); the search is what
+     gives: 420px at most, 160px at least, centred while the sides are the same width. */
+  .bar { display: grid; grid-template-columns: minmax(max-content, 1fr) minmax(160px, 420px) minmax(max-content, 1fr); align-items: center; gap: 16px;
     height: var(--nav-h); }
-  .start { display: flex; align-items: center; gap: 16px; min-width: 0; height: 100%; }
+  .start { display: flex; align-items: center; gap: 16px; height: 100%; }
   .brand { flex: none; display: flex; align-items: center; gap: 9px; min-height: 40px;
     font-size: 16px; font-weight: 600; letter-spacing: -.01em; color: var(--text); }
   .links { display: flex; height: 100%; }
@@ -107,8 +110,10 @@
     transition: border-color var(--fast), color var(--fast); }
   .ph { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  .end { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-width: 0; }
-  .hb { height: 40px; padding: 0 14px; gap: 8px; font-size: var(--t-nav); box-shadow: none; } /* flat in the bar: no glow over the page */
+  .end { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+  /* Flat in the bar, by design: the primary button's glow (app.css, cyex-web allows it on a page's
+     one main action) would spill over the header's hairline and the page under it. */
+  .hb { height: 40px; padding: 0 14px; gap: 8px; font-size: var(--t-nav); box-shadow: none; }
   .hb:not(:has(svg)) { padding: 0 16px; }
   .hb-hold { width: 84px; height: 40px; border: 1px solid var(--border); border-radius: var(--radius-btn); }
 
@@ -120,8 +125,11 @@
   .menu-btn:active { transform: scale(var(--press)); }
   @media (pointer: coarse) {
     .menu-btn { width: 44px; height: 44px; }
+    .brand { min-height: 44px; }
+    .hb { min-height: 0; } /* 40px to see, 44px to hit (the ::after below) */
     .search, .hb { position: relative; }
     .search::after, .hb::after { content: ''; position: absolute; inset: -2px 0; }
+    .up::after { inset: -2px; } /* icon-only Upload: 44 by 44 */
   }
 
   @media (hover: hover) and (pointer: fine) {
@@ -130,13 +138,19 @@
     .hb:hover { box-shadow: none; }
     .menu-btn:hover { color: var(--text); }
   }
-  @media (max-width: 1000px) {
-    .bar { grid-template-columns: minmax(0, 1fr) minmax(0, 260px) auto; }
+  /* Not enough room for the label: Upload becomes its icon (name and tooltip stay), before the search or anything else gives up. */
+  @media (max-width: 800px) {
+    .up { width: 40px; padding: 0; }
+    .hl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   }
   @media (max-width: 720px) {
     .bar { grid-template-columns: minmax(0, 1fr) auto; }
     .links, .search, .end { display: none; }
     .phone { display: flex; }
   }
-  @media (forced-colors: active) { .app-header { border-bottom-color: CanvasText; } }
+  @media (forced-colors: active) {
+    .app-header { border-bottom-color: CanvasText; }
+    /* Weight alone doesn't show in forced colours: the current link gets an outline. */
+    .links a[aria-current='page'] { outline: 1px solid Highlight; outline-offset: -2px; }
+  }
 </style>

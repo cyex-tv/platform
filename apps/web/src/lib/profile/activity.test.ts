@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { relative, toItem } from './activity';
-import { profileRail, railKeyForPath, sectionFrom, sectionHref, sectionsFor, NOBODY, type Relation } from './rows';
+import { profileRail, railKeyForPath, stripExtra, stripTabs, sectionFrom, sectionHref, sectionsFor, NOBODY, type Relation } from './rows';
 
 const now = Date.UTC(2026, 10, 17, 12, 0, 0);
 const ago = (s: number) => new Date(now - s * 1000).toISOString();
@@ -67,5 +67,22 @@ describe('profile rows', () => {
     expect(rows.filter((r) => r.current).map((r) => r.label)).toEqual(['Emote sets']);
     expect(rows.some((r) => r.href === '/me/channels')).toBe(true);
     expect(profileRail('a1', editor, null, false).flatMap((g) => g.items).some((r) => r.href === '/me/channels')).toBe(false);
+  });
+});
+
+describe('the phone strip on /me pages without a row', () => {
+  it('names Upload, Notifications, Account and Editors, nothing else', () => {
+    expect(stripExtra('/me/upload')?.label).toBe('Upload');
+    expect(stripExtra('/me/notifications')?.label).toBe('Notifications');
+    expect(stripExtra('/me/account')?.label).toBe('Account');
+    expect(stripExtra('/me/editors')?.label).toBe('Editors');
+    expect(stripExtra('/me/sets')).toBeNull();
+    expect(stripExtra('/me/uploads-old')).toBeNull();
+    expect(stripExtra('/users/x')).toBeNull();
+  });
+  it('marks the extra tab and no other', () => {
+    const groups = profileRail('a', { mine: true, perms: new Set() }, 'uploads', false);
+    expect(stripTabs(groups, stripExtra('/me/upload')).filter((t) => t.current).map((t) => t.label)).toEqual(['Upload']);
+    expect(stripTabs(groups, null).filter((t) => t.current).map((t) => t.label)).toEqual(['Uploaded emotes']);
   });
 });

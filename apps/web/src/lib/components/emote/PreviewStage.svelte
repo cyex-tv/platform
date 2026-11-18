@@ -43,7 +43,7 @@
 <section class="preview">
   <h2 class="sr-only">Preview</h2>
   <div class="tools">
-    <Segmented label="Background" size="s" options={grounds} value={ground} onchange={(v) => (ground = v)} />
+    <Segmented label="Background" size="s" compact options={grounds} value={ground} onchange={(v) => (ground = v)} />
     {#if canPause}
       <IconButton
         icon={still ? 'play' : 'pause'}
@@ -93,8 +93,8 @@
 
 <style>
   p { margin: 0; }
-  .preview { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 16px; min-width: 0; height: 100%; }
-  .tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .preview { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 16px; min-width: 0; height: 100%; }
+  .tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; min-width: 0; }
   .stage { position: relative; display: grid; place-items: center; min-height: clamp(220px, 22vw, 300px);
     padding: clamp(24px, 4vw, 40px); border: 1px solid var(--border); border-radius: var(--radius-btn);
     overflow: hidden; --ink: var(--stage-dark-ink); background: var(--stage-dark); }

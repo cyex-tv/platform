@@ -216,6 +216,7 @@
   .owner { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; min-height: 32px; color: var(--text); font-weight: 500; }
   .owner span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .owner :global(.av) { flex: none; }
+  @media (pointer: coarse) { .owner { min-height: 44px; } }
   @media (hover: hover) and (pointer: fine) { .owner:hover span { text-decoration: underline; text-underline-offset: 3px; } }
   .mark { display: inline-flex; align-items: center; gap: 6px; }
   .mark :global(svg) { color: var(--accent-text); }

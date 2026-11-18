@@ -159,7 +159,9 @@
 
 <style>
   .set-link { color: var(--text); font-weight: 500; text-decoration: none; }
-  .set-link:hover, .set-link:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+  .set-link:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+  /* Hover only where there is a pointer to hover with (a tap would leave it stuck). */
+  @media (hover: hover) and (pointer: fine) { .set-link:hover { text-decoration: underline; text-underline-offset: 3px; } }
   .labels { display: inline-grid; }
   .labels > span { grid-area: 1 / 1; text-align: left; }
   .off { visibility: hidden; }

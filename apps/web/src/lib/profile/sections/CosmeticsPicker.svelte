@@ -164,6 +164,7 @@
     background: none; color: var(--dim); cursor: pointer; transition: color var(--fast), border-color var(--fast); }
   .vb[aria-pressed='true'] { color: var(--accent-text); } /* the accent icon, no box */
   @media (hover: hover) and (pointer: fine) { .vb:hover { color: var(--text); } }
+  @media (pointer: coarse) { .vb { width: 44px; height: 44px; } }
 
   .opts { display: grid; gap: 2px 8px; }
   .opts.grid { grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); }
