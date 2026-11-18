@@ -104,12 +104,12 @@ fn list(set: &HashSet<Uuid>) -> Vec<Uuid> {
 async fn lookup(
     conn: &mut PgConnection,
     rows: &[audit::Entry],
-    owner: Uuid,
+    owners: &[Uuid],
     cdn_url: &str,
 ) -> ApiResult<Lookup> {
     let mut r = refs(rows);
     // An approval shows the owner as its actor.
-    r.people.insert(owner);
+    r.people.extend(owners.iter().copied());
     let sets = sets::get_many(conn, &list(&r.sets))
         .await
         .map_err(db_error)?
@@ -352,9 +352,67 @@ pub async fn account_activity(
         let Some(last) = rows.last() else { break };
         cursor = Some(last.id);
         let exhausted = rows.len() < BATCH as usize;
-        let look = lookup(&mut conn, &rows, owner, &state.cdn_url).await?;
+        let look = lookup(&mut conn, &rows, &[owner], &state.cdn_url).await?;
         for row in &rows {
             if let Some(line) = entry(row, owner, &look) {
+                out.push(line);
+                if out.len() == limit {
+                    return Ok(out);
+                }
+            }
+        }
+        if exhausted {
+            break;
+        }
+    }
+    Ok(out)
+}
+
+/// One emote's public activity, newest first (gap list G2): when it was uploaded (approved), and
+/// when it was added to, removed from or renamed in listed sets, by their owners or account
+/// editors. Each line is built as on the set owner's own feed, so the same things never show
+/// (moderation, reviewers, reasons, unlisted, private and deleted sets). Empty unless the emote
+/// is public: approved, not private, not deleted. `before` and `limit` as `accountActivity`.
+pub async fn emote_activity(
+    state: &AppState,
+    emote_id: &str,
+    before: Option<&str>,
+    limit: Option<u32>,
+) -> ApiResult<Vec<ActivityEntry>> {
+    let before_id = before.map(parse_id).transpose()?;
+    let limit = limit.unwrap_or(ACTIVITY_PAGE).clamp(1, ACTIVITY_PAGE_MAX) as usize;
+    let Some(emote) = ids::from_text(emote_id.trim()) else {
+        return Ok(Vec::new());
+    };
+    let mut conn = conn(state).await?;
+    let public = reads::emotes(&mut conn, &[emote])
+        .await
+        .map_err(db_error)?
+        .first()
+        .is_some_and(|e| e.state == EmoteState::Approved && !e.private);
+    if !public {
+        return Ok(Vec::new());
+    }
+    let key = ids::to_text(emote);
+    let mut out = Vec::new();
+    let mut cursor = before_id;
+    for _ in 0..ROUNDS {
+        let rows = audit::emote_activity_rows(&mut conn, &key, cursor, BATCH)
+            .await
+            .map_err(db_error)?;
+        let Some(last) = rows.last() else { break };
+        cursor = Some(last.entry.id);
+        let exhausted = rows.len() < BATCH as usize;
+        let entries: Vec<audit::Entry> = rows.iter().map(|r| r.entry.clone()).collect();
+        let owners: Vec<Uuid> = rows
+            .iter()
+            .map(|r| r.subject_account_id)
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect();
+        let look = lookup(&mut conn, &entries, &owners, &state.cdn_url).await?;
+        for row in &rows {
+            if let Some(line) = entry(&row.entry, row.subject_account_id, &look) {
                 out.push(line);
                 if out.len() == limit {
                     return Ok(out);

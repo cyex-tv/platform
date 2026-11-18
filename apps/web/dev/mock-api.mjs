@@ -489,10 +489,11 @@ const REPORTS = [
   { id: 'R2', reason: 'Spam', reporterId: OTHERS[0].id, state: 'OPEN', createdAt: '2026-11-16T19:30:00.000Z', emote: ALL[8] },
 ];
 const ROLES = [
-  { id: 'ROLE1', name: 'Admin', description: 'Runs the platform.', position: 100, permissions: ['roles.manage', 'users.view', 'users.restrict', 'audit.view'] },
-  { id: 'ROLE2', name: 'Moderator', description: 'Reviews uploads and reports.', position: 50, permissions: ['emotes.review', 'emotes.takedown'] },
+  { id: 'ROLE1', name: 'Admin', description: 'Runs the platform.', position: 100, permissions: ['roles.manage', 'users.view', 'users.restrict', 'audit.view'], public: false },
+  { id: 'ROLE2', name: 'Moderator', description: 'Reviews uploads and reports.', position: 50, permissions: ['emotes.review', 'emotes.takedown'], public: true },
+  { id: 'ROLE3', name: 'Artist', description: 'Makes emotes people love.', position: 10, permissions: [], public: true },
 ];
-const ACCOUNT_ROLES = { [OTHERS[0].id]: ['ROLE2'] };
+const ACCOUNT_ROLES = { [OTHERS[0].id]: ['ROLE2', 'ROLE3'], [OTHERS[1].id]: ['ROLE3'], [ME_ID]: ['ROLE1'] };
 const STATUS = {};
 const AUDIT = Array.from({ length: 64 }, (_, i) => ({
   id: '01JD8XAUD' + String(1000 - i).padStart(17, '0'), actorId: i % 5 === 0 ? null : ME_ID,
@@ -508,8 +509,13 @@ const IDENTITIES = [
   { platform: 'TWITCH', platformUserId: '141981764', login: 'lumen_fox', displayName: 'lumen_fox', avatar: ME_SUMMARY.avatar },
 ];
 const NOTES = [
-  { id: 'N1', kind: 'emote.rejected', payload: JSON.stringify({ name: MINE[2].name, reason: 'Looks like a copy of a well-known emote.' }), createdAt: '2026-11-16T21:00:00.000Z', read: false },
+  { id: '01JD8XNOTE0000000000000006', kind: 'cosmetic.granted', payload: JSON.stringify({ kind: 'paint', cosmetic_id: 'P1', name: 'Sample sunrise', reason: 'Thanks for testing' }), createdAt: '2026-11-17T09:30:00.000Z', read: false },
+  { id: '01JD8XNOTE0000000000000005', kind: 'editor.added', payload: JSON.stringify({ role: 'editor', owner_id: OTHERS[4].id, owner_name: OTHERS[4].displayName, editor_id: ME_ID, editor_name: ME_SUMMARY.displayName, actor_id: OTHERS[4].id, actor_name: OTHERS[4].displayName, permissions: ['emotes', 'profile'] }), createdAt: '2026-11-15T20:00:00.000Z', read: false },
+  { id: '01JD8XNOTE0000000000000004', kind: 'editor.changed', payload: JSON.stringify({ role: 'owner', owner_id: ME_ID, owner_name: ME_SUMMARY.displayName, editor_id: OTHERS[1].id, editor_name: OTHERS[1].displayName, actor_id: OTHERS[2].id, actor_name: OTHERS[2].displayName, permissions: ['emotes'] }), createdAt: '2026-11-14T19:00:00.000Z', read: true },
+  { id: '01JD8XNOTE0000000000000003', kind: 'emote.approved', payload: JSON.stringify({ emote_id: MINE[3].id, name: MINE[3].name }), createdAt: '2026-11-16T22:10:00.000Z', read: false },
+  { id: 'N1', kind: 'emote.rejected', payload: JSON.stringify({ emote_id: MINE[2].id, name: MINE[2].name, reason: 'Looks like a copy of a well-known emote.' }), createdAt: '2026-11-16T21:00:00.000Z', read: false },
 ];
+NOTES.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 // Account editors (ADR 0014): two people work on the mock account, and it works on two others'.
 const EDITOR_FLAGS = ['EMOTES', 'SETS', 'EDITORS', 'PROFILE'];
 const ACCOUNT_EDITORS = [
@@ -549,7 +555,7 @@ const editorChannels = () => EDITOR_CHANNELS.filter((c) => EDITOR_OF.some((g) =>
 const flagsOn = (ownerId) => (ownerId === ME_ID ? EDITOR_FLAGS : EDITOR_OF.find((g) => g.account.id === ownerId)?.permissions ?? []);
 const editorOfOut = () => EDITOR_OF.map((g) => ({ ...g }));
 
-const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view', 'cosmetics.manage', 'cosmetics.grant', 'shop.manage', 'shop.orders', 'codes.manage'];
+const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view', 'cosmetics.manage', 'cosmetics.grant'];
 
 // ---- Chat cosmetics (ADR 0015) ----------------------------------------------------------
 // SAMPLE DATA ONLY: two made-up badges (simple SVG drawn here) and three sample paints, so the
@@ -790,55 +796,6 @@ function cosmeticsAnswer(q, v, session, admin) {
     }
   }
   return null;
-}
-
-// ---- Account activity (accountActivity) -------------------------------------------------
-// Sample public activity, newest first, for lumen_fox (the mock signed-in account), quietoak and
-// sunnyfern. Same shape as the real API: pending/private emotes, moderation and blocked accounts
-// never appear, so none are here. Everyone else has none; blocked accounts answer an empty list.
-const act = (n, minsAgo, kind, actor, rest) => ({
-  id: `01JD8XACT${String(9000 - n).padStart(17, '0')}`, kind, actor, set: null, emote: null, fromName: null, toName: null,
-  badge: null, paint: null, createdAt: new Date(NOW - minsAgo * 60_000).toISOString(), ...rest,
-});
-const aSet = (s) => ({ id: s.id, name: s.name });
-const aEmote = (e, name = e.name) => ({ id: e.id, name, host: e.host, files: e.files });
-const aChange = (from, to) => ({ fromId: from?.id ?? null, fromName: from?.name ?? null, toId: to?.id ?? null, toName: to?.name ?? null });
-const [FOX_MAIN, FOX_SUB, OAK_MAIN] = SETS;
-const [OAK_COZY, FERN] = SHARED_SETS;
-const [NORA, PIXEL] = [OTHERS[1], OTHERS[2]];
-const ACTIVITY = {
-  [ME_ID]: [
-    act(1, 6, 'SET_EMOTE_ADDED', ME_SUMMARY, { set: aSet(FOX_MAIN), emote: aEmote(ALL[12]) }),
-    act(2, 41, 'SET_EMOTE_RENAMED', NORA, { set: aSet(FOX_MAIN), emote: aEmote(ALL[14], 'KEKwait'), fromName: ALL[14].name, toName: 'KEKwait' }),
-    act(3, 95, 'COSMETICS_SELECTED', ME_SUMMARY, { paint: aChange(PAINTS[0], PAINTS[1]) }),
-    act(4, 180, 'SET_EMOTE_REMOVED', PIXEL, { set: aSet(FOX_MAIN), emote: aEmote(ALL[21]) }),
-    act(5, 300, 'EMOTE_UPLOADED', ME_SUMMARY, { emote: aEmote(MINE[3]) }),
-    act(6, 22 * 60, 'ACTIVE_SET_CHANGED', PIXEL, { set: aSet(FOX_MAIN), fromName: FOX_SUB.name, toName: FOX_MAIN.name }),
-    act(7, 26 * 60, 'SET_RENAMED', ME_SUMMARY, { set: aSet(FOX_SUB), fromName: 'Subs', toName: FOX_SUB.name }),
-    act(8, 2 * 1440, 'COSMETICS_SELECTED', ME_SUMMARY, { badge: aChange(null, BADGES[0]), paint: aChange(null, PAINTS[0]) }),
-    act(9, 2 * 1440 + 30, 'SET_CREATED', ME_SUMMARY, { set: aSet(FOX_SUB) }),
-    act(10, 4 * 1440, 'SET_EMOTE_ADDED', ME_SUMMARY, { set: aSet(FOX_MAIN), emote: aEmote(MINE[4]) }),
-    act(11, 6 * 1440, 'SET_CREATED', ME_SUMMARY, { set: aSet(FOX_MAIN) }),
-  ],
-  [OTHERS[0].id]: [
-    act(21, 12, 'SET_EMOTE_ADDED', OTHERS[0], { set: aSet(OAK_MAIN), emote: aEmote(ALL[62]) }),
-    act(22, 130, 'SET_EMOTE_ADDED', ME_SUMMARY, { set: aSet(OAK_COZY), emote: aEmote(ALL[72]) }),
-    act(23, 1500, 'COSMETICS_SELECTED', OTHERS[0], { badge: aChange(BADGES[0], BADGES[1]), paint: aChange(null, PAINTS[2]) }),
-    act(24, 3 * 1440, 'SET_CREATED', OTHERS[0], { set: aSet(OAK_COZY) }),
-  ],
-  [OTHERS[4].id]: [
-    act(31, 55, 'ACTIVE_SET_CHANGED', ME_SUMMARY, { set: aSet(FERN), fromName: null, toName: FERN.name }),
-    act(32, 70, 'SET_EMOTE_REMOVED', OTHERS[4], { set: aSet(FERN), emote: aEmote(ALL[48]) }),
-    act(33, 2 * 1440, 'COSMETICS_SELECTED', OTHERS[4], { paint: aChange(null, PAINTS[1]) }),
-  ],
-};
-// `accountActivity(accountId, before, limit)`: newest first, `limit` 1 to 100 (default 30).
-function activityAnswer(v) {
-  if (STATUS[v.accountId]?.blocked) return { data: { accountActivity: [] } };
-  const limit = Math.min(100, Math.max(1, v.limit ?? 30));
-  let rows = ACTIVITY[v.accountId] ?? [];
-  if (v.before) rows = rows.filter((a) => a.id < v.before);
-  return { data: { accountActivity: rows.slice(0, limit) } };
 }
 
 // ---- Shop and redeem codes (ADR 0016) ---------------------------------------------------
@@ -1105,6 +1062,77 @@ function shopAnswer(q, v, session, admin) {
     return { data: { redeemCode: { name: batch.name, ...fresh } } };
   }
   return null;
+}
+
+// ---- Account activity (accountActivity) -------------------------------------------------
+// Sample public activity, newest first, for lumen_fox (the mock signed-in account), quietoak and
+// sunnyfern. Same shape as the real API: pending/private emotes, moderation and blocked accounts
+// never appear, so none are here. Everyone else has none; blocked accounts answer an empty list.
+const act = (n, minsAgo, kind, actor, rest) => ({
+  id: `01JD8XACT${String(9000 - n).padStart(17, '0')}`, kind, actor, set: null, emote: null, fromName: null, toName: null,
+  badge: null, paint: null, createdAt: new Date(NOW - minsAgo * 60_000).toISOString(), ...rest,
+});
+const aSet = (s) => ({ id: s.id, name: s.name });
+const aEmote = (e, name = e.name) => ({ id: e.id, name, host: e.host, files: e.files });
+const aChange = (from, to) => ({ fromId: from?.id ?? null, fromName: from?.name ?? null, toId: to?.id ?? null, toName: to?.name ?? null });
+const [FOX_MAIN, FOX_SUB, OAK_MAIN] = SETS;
+const [OAK_COZY, FERN] = SHARED_SETS;
+const [NORA, PIXEL] = [OTHERS[1], OTHERS[2]];
+const ACTIVITY = {
+  [ME_ID]: [
+    act(1, 6, 'SET_EMOTE_ADDED', ME_SUMMARY, { set: aSet(FOX_MAIN), emote: aEmote(ALL[12]) }),
+    act(2, 41, 'SET_EMOTE_RENAMED', NORA, { set: aSet(FOX_MAIN), emote: aEmote(ALL[14], 'KEKwait'), fromName: ALL[14].name, toName: 'KEKwait' }),
+    act(3, 95, 'COSMETICS_SELECTED', ME_SUMMARY, { paint: aChange(PAINTS[0], PAINTS[1]) }),
+    act(4, 180, 'SET_EMOTE_REMOVED', PIXEL, { set: aSet(FOX_MAIN), emote: aEmote(ALL[21]) }),
+    act(5, 300, 'EMOTE_UPLOADED', ME_SUMMARY, { emote: aEmote(MINE[3]) }),
+    act(6, 22 * 60, 'ACTIVE_SET_CHANGED', PIXEL, { set: aSet(FOX_MAIN), fromName: FOX_SUB.name, toName: FOX_MAIN.name }),
+    act(7, 26 * 60, 'SET_RENAMED', ME_SUMMARY, { set: aSet(FOX_SUB), fromName: 'Subs', toName: FOX_SUB.name }),
+    act(8, 2 * 1440, 'COSMETICS_SELECTED', ME_SUMMARY, { badge: aChange(null, BADGES[0]), paint: aChange(null, PAINTS[0]) }),
+    act(9, 2 * 1440 + 30, 'SET_CREATED', ME_SUMMARY, { set: aSet(FOX_SUB) }),
+    act(10, 4 * 1440, 'SET_EMOTE_ADDED', ME_SUMMARY, { set: aSet(FOX_MAIN), emote: aEmote(MINE[4]) }),
+    act(11, 6 * 1440, 'SET_CREATED', ME_SUMMARY, { set: aSet(FOX_MAIN) }),
+  ],
+  [OTHERS[0].id]: [
+    act(21, 12, 'SET_EMOTE_ADDED', OTHERS[0], { set: aSet(OAK_MAIN), emote: aEmote(ALL[62]) }),
+    act(22, 130, 'SET_EMOTE_ADDED', ME_SUMMARY, { set: aSet(OAK_COZY), emote: aEmote(ALL[72]) }),
+    act(23, 1500, 'COSMETICS_SELECTED', OTHERS[0], { badge: aChange(BADGES[0], BADGES[1]), paint: aChange(null, PAINTS[2]) }),
+    act(24, 3 * 1440, 'SET_CREATED', OTHERS[0], { set: aSet(OAK_COZY) }),
+  ],
+  [OTHERS[4].id]: [
+    act(31, 55, 'ACTIVE_SET_CHANGED', ME_SUMMARY, { set: aSet(FERN), fromName: null, toName: FERN.name }),
+    act(32, 70, 'SET_EMOTE_REMOVED', OTHERS[4], { set: aSet(FERN), emote: aEmote(ALL[48]) }),
+    act(33, 2 * 1440, 'COSMETICS_SELECTED', OTHERS[4], { paint: aChange(null, PAINTS[1]) }),
+  ],
+};
+// `accountActivity(accountId, before, limit)`: newest first, `limit` 1 to 100 (default 30).
+function activityAnswer(v) {
+  if (STATUS[v.accountId]?.blocked) return { data: { accountActivity: [] } };
+  const limit = Math.min(100, Math.max(1, v.limit ?? 30));
+  let rows = ACTIVITY[v.accountId] ?? [];
+  if (v.before) rows = rows.filter((a) => a.id < v.before);
+  return { data: { accountActivity: rows.slice(0, limit) } };
+}
+
+// `emoteActivity(emoteId, before, limit)`: the sample lines about this emote from every account's
+// feed, plus an upload line and a few adds for any public emote, newest first.
+function emoteActivityAnswer(v) {
+  const e = findEmote(v.emoteId ?? v.id);
+  if (!e || e.state !== 'APPROVED' || e.flags.private) return { data: { emoteActivity: [] } };
+  const own = Object.values(ACTIVITY).flat().filter((a) => a.emote?.id === e.id);
+  const n = Number(e.id.slice(-3)) || 0;
+  const made = [
+    act(900 + n * 4, 90 + n, 'SET_EMOTE_ADDED', OTHERS[n % OTHERS.length], { set: aSet(SETS[n % SETS.length]), emote: aEmote(e) }),
+    act(901 + n * 4, 600 + n, 'SET_EMOTE_RENAMED', OTHERS[(n + 1) % OTHERS.length], { set: aSet(SETS[(n + 1) % SETS.length]), emote: aEmote(e, e.name + 'x'), fromName: e.name, toName: e.name + 'x' }),
+    act(902 + n * 4, 3000 + n, 'SET_EMOTE_ADDED', OTHERS[(n + 2) % OTHERS.length], { set: aSet(SETS[(n + 2) % SETS.length]), emote: aEmote(e) }),
+    act(903 + n * 4, 6000 + n, 'EMOTE_UPLOADED', e.owner ?? ME_SUMMARY, { emote: aEmote(e) }),
+  ];
+  let rows = [...own, ...made].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  if (v.before) {
+    const at = rows.findIndex((a) => a.id === v.before);
+    rows = at >= 0 ? rows.slice(at + 1) : rows;
+  }
+  const limit = Math.min(100, Math.max(1, v.limit ?? 30));
+  return { data: { emoteActivity: rows.slice(0, limit) } };
 }
 
 // A public account for `account(id)`. Unknown ids, and the one for a blocked account, give null.
@@ -1403,7 +1431,7 @@ function signedIn(body, v, ADMIN) {
     case 'AllRoles':
       return { data: { roles: ROLES } };
     case 'CreateRole': {
-      const r = { id: 'ROLE' + (ROLES.length + 1), ...v.input, description: v.input.description ?? null };
+      const r = { id: 'ROLE' + (ROLES.length + 1), ...v.input, description: v.input.description ?? null, public: v.input.public ?? false };
       ROLES.push(r);
       return { data: { createRole: r } };
     }
@@ -1472,16 +1500,117 @@ function searchAccounts(v) {
   return { data: { searchAccounts: { total: hits.length, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
 }
 
+// accountProfile(accountId): public logins (no IDs), roles marked public, each channel's active set.
+function accountProfile(id) {
+  const account = [ME_SUMMARY, ...OTHERS].find((a) => a.id === id);
+  if (!account || STATUS[id]?.blocked) return null;
+  const identities = id === ME_ID
+    ? IDENTITIES.map((i) => ({ platform: i.platform, login: i.login, displayName: i.displayName }))
+    : searchPeople().find((h) => h.account.id === id)?.identities ?? [];
+  const roles = (ACCOUNT_ROLES[id] ?? []).map((r) => ROLES.find((x) => x.id === r)).filter((r) => r?.public)
+    .sort((a, b) => b.position - a.position).map((r) => ({ id: r.id, name: r.name }));
+  const activeSets = [...CHANNELS, ...EDITOR_CHANNELS].filter((c) => c.account.id === id && c.activeSetId).map((c) => {
+    const set = findSet(c.activeSetId);
+    return set ? { platform: c.platform, login: c.login, setId: set.id, setName: set.name } : null;
+  }).filter(Boolean);
+  return { account, identities, roles, activeSets, createdAt: id === ME_ID ? '2026-11-10T12:00:00.000Z' : '2026-11-08T09:00:00.000Z' };
+}
+// accountCosmetics(accountIds): what each account shows, with the badge and paint themselves.
+function accountCosmetics(ids) {
+  if (!Array.isArray(ids)) return [];
+  if (ids.length > 100) return null;
+  const catalog = cosmeticCatalog();
+  const out = [];
+  for (const id of [...new Set(ids)]) {
+    if (STATUS[id]?.blocked) continue;
+    const pick = C_SELECTED[id];
+    if (!pick) continue;
+    const badge = catalog.badges.find((b) => b.id === pick.badgeId) ?? null;
+    const paint = catalog.paints.find((x) => x.id === pick.paintId) ?? null;
+    if (badge || paint) out.push({ accountId: id, badge, paint });
+  }
+  return out;
+}
+
+// Sessions (mySessions, revokeSession, revokeOtherSessions): where the mock account is signed in.
+const SESSIONS = [
+  { id: '01JD8XSESS0000000000000001', kind: 'SITE', device: 'Firefox on Windows', createdAt: '2026-11-10T12:00:00.000Z', lastSeenAt: '2026-11-17T22:40:00.000Z', expiresAt: '2026-12-17T22:40:00.000Z', current: true },
+  { id: '01JD8XSESS0000000000000002', kind: 'SITE', device: 'Safari on iPhone', createdAt: '2026-11-12T08:15:00.000Z', lastSeenAt: '2026-11-16T07:55:00.000Z', expiresAt: '2026-12-16T07:55:00.000Z', current: false },
+  { id: '01JD8XSESS0000000000000003', kind: 'APP', device: 'cyex.tv app', createdAt: '2026-11-11T18:00:00.000Z', lastSeenAt: '2026-11-17T21:05:00.000Z', expiresAt: '2027-02-15T21:05:00.000Z', current: false },
+  { id: '01JD8XSESS0000000000000004', kind: 'SITE', device: 'Chrome on Android', createdAt: '2026-11-02T10:00:00.000Z', lastSeenAt: '2026-11-03T10:00:00.000Z', expiresAt: '2026-12-03T10:00:00.000Z', current: false },
+];
+let exports = 0;
+// exportMyData: the API's document shape, filled from the mock's data.
+const exportDoc = () => JSON.stringify({
+  format: 'cyex.tv account export', version: 1, exported_at: new Date().toISOString(),
+  account: { id: ME_ID, created_at: '2026-11-10T12:00:00.000Z', uploads_blocked: false },
+  identities: IDENTITIES.map((i) => ({ platform: i.platform.toLowerCase(), platform_user_id: i.platformUserId, login: i.login, display_name: i.displayName, avatar: i.avatar, linked_at: '2026-11-10T12:00:00.000Z', refreshed_at: '2026-11-17T08:00:00.000Z' })),
+  sessions: SESSIONS,
+  channels: CHANNELS.map((c) => ({ platform: c.platform.toLowerCase(), platform_channel_id: c.platformChannelId, login: c.login, active_set_id: c.activeSetId, allow_personal_emotes: c.allowPersonalEmotes, created_at: '2026-11-10T12:00:00.000Z' })),
+  emotes: MINE, sets: SETS.filter((x) => x.owner?.id === ME_ID).map(setOut),
+  set_editors: SETS.filter((x) => x.owner?.id === ME_ID && x.editors.length).map((x) => ({ set_id: x.id, editor_ids: x.editors.map((e) => e.id) })),
+  account_editors: ACCOUNT_EDITORS.map((e) => ({ account_id: ME_ID, editor_id: e.account.id, permissions: e.permissions.map((f) => f.toLowerCase()), granted_at: e.grantedAt })),
+  editor_of: EDITOR_OF.map((g) => ({ account_id: g.account.id, editor_id: ME_ID, permissions: g.permissions.map((f) => f.toLowerCase()), granted_at: g.grantedAt })),
+  cosmetics: { badges: [], paints: [], badge_id: null, paint_id: null }, roles: [],
+  reports_filed: [], notifications: NOTES.map((n) => ({ id: n.id, kind: n.kind, payload: JSON.parse(n.payload), created_at: n.createdAt, read_at: n.read ? n.createdAt : null })),
+  orders: [],
+});
+function accountHub(q, v) {
+  const data = {};
+  if (/\bmySessions\b/.test(q)) data.mySessions = SESSIONS;
+  if (/\brevokeSession\s*\(/.test(q)) {
+    const i = SESSIONS.findIndex((x) => x.id === v.id);
+    if (i >= 0) SESSIONS.splice(i, 1);
+    data.revokeSession = i >= 0;
+  }
+  if (/\brevokeOtherSessions\b/.test(q)) {
+    data.revokeOtherSessions = SESSIONS.filter((x) => !x.current).length;
+    SESSIONS.splice(0, SESSIONS.length, ...SESSIONS.filter((x) => x.current));
+  }
+  if (/\bexportMyData\b/.test(q)) {
+    if (++exports > 5) return err('You asked for a copy of your data a few times already. Try again in an hour.', 'rate_limited');
+    data.exportMyData = exportDoc();
+  }
+  if (/\bdeleteAccount\s*\(/.test(q)) {
+    const typed = String(v.confirm ?? '').trim().replace(/^@/, '').toLowerCase();
+    if (!IDENTITIES.some((i) => i.login.toLowerCase() === typed))
+      return err('Type one of your Twitch or Kick logins to confirm.', 'confirm_mismatch');
+    // The mock keeps its data (it would have nothing left to show); it signs you out like the API.
+    return { data: { deleteAccount: true }, _cookie: 'mock_session=; Path=/; Max-Age=0' };
+  }
+  if (/\bmarkNotificationsRead\b/.test(q)) {
+    if (Array.isArray(v.ids) && v.ids.length > 100) return err('Mark at most 100 notifications at once.', 'too_many');
+    const pick = Array.isArray(v.ids) ? NOTES.filter((n) => v.ids.includes(n.id)) : NOTES;
+    data.markNotificationsRead = pick.filter((x) => !x.read).length;
+    pick.forEach((x) => (x.read = true));
+  }
+  if (/\bunreadNotificationCount\b/.test(q)) data.unreadNotificationCount = NOTES.filter((n) => !n.read).length;
+  return Object.keys(data).length ? { data } : null;
+}
+
 // Fields added after the site's first queries, answered by field name so any operation name works.
 function newFields(q, v, session) {
-  if (/\bsearchAccounts\s*\(/.test(q)) return searchAccounts(v);
-  if (/\bcloneSet\s*\(/.test(q)) return session ? cloneSet(v, session) : err('Sign in to use this.', 'signed_out');
-  if (/\baccountSets\s*\(/.test(q)) {
-    const data = { accountSets: accountSets(v.accountId ?? v.id ?? '', v.preview) };
-    if (/\baccount\s*\(/.test(q)) data.account = publicAccount(v.accountId ?? v.id ?? '');
-    return { data };
+  if (/\b(mySessions|unreadNotificationCount|revokeSession|revokeOtherSessions|exportMyData|deleteAccount|markNotificationsRead)\b/.test(q))
+    if (!session) return err('Sign in to use this.', 'signed_out');
+  // Each handler answers one new field; an operation may ask for several, and for older ones too.
+  const id = v.accountId ?? v.id ?? '';
+  const parts = [];
+  const hub = session ? accountHub(q, v) : null;
+  if (hub?._cookie || hub?.errors) return hub;
+  if (hub) parts.push(hub);
+  const has = (name) => new RegExp(`\\b${name}\\s*\\(`).test(q);
+  if (has('accountProfile')) parts.push({ data: { accountProfile: accountProfile(id) } });
+  if (has('accountCosmetics')) {
+    const list = accountCosmetics(v.accountIds ?? v.ids);
+    parts.push(list === null ? err('Look up at most 100 accounts at once.', 'too_many') : { data: { accountCosmetics: list } });
   }
-  return null;
+  if (has('searchAccounts')) parts.push(searchAccounts(v));
+  if (has('cloneSet')) parts.push(session ? cloneSet(v, session) : err('Sign in to use this.', 'signed_out'));
+  if (has('accountSets')) parts.push({ data: { accountSets: accountSets(id, v.preview) } });
+  if (!parts.length) return null;
+  const failed = parts.find((p) => p.errors);
+  if (failed) return failed;
+  return { data: Object.assign({}, ...parts.map((p) => p.data)) };
 }
 
 // New fields merge with whatever else the same operation asks for (the older handlers below).
@@ -1501,6 +1630,7 @@ function baseAnswer(body, session, admin) {
   const shop = shopAnswer(q, v, session, admin);
   if (shop) return shop;
   if (/accountActivity\s*\(/.test(q)) return activityAnswer(v);
+  if (/emoteActivity\s*\(/.test(q)) return emoteActivityAnswer(v);
   if (session) {
     const out = signedIn(body, v, admin);
     if (out) return out;
@@ -1674,7 +1804,12 @@ createServer(async (req, res) => {
     try {
       const body = JSON.parse(raw || '{}');
       if (typeof body?.query !== 'string') return json(res, 400, { data: null, errors: [{ message: 'Send one query.', extensions: { code: 'bad_request' } }] });
-      return json(res, 200, answer(body, session, admin));
+      const out = answer(body, session, admin);
+      if (out?._cookie) {
+        res.setHeader('set-cookie', out._cookie);
+        delete out._cookie;
+      }
+      return json(res, 200, out);
     } catch (e) {
       return json(res, 400, { data: null, errors: [{ message: String(e?.message ?? e), extensions: { code: 'bad_request' } }] });
     }

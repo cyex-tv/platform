@@ -212,6 +212,15 @@ pub struct UserCosmeticsQuery {
     pub ids: String,
 }
 
+/// What one account shows, with the badge and paint themselves (`accountCosmetics`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct AccountCosmetics {
+    pub account_id: String,
+    pub badge: Option<Badge>,
+    pub paint: Option<Paint>,
+}
+
 /// An account's cosmetics: what it owns and what it shows.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]

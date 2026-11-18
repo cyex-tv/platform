@@ -84,6 +84,36 @@ pub struct Me {
     pub created_at: String,
 }
 
+/// How a session signed in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[cfg_attr(feature = "graphql", graphql(name = "SessionKind"))]
+#[serde(rename_all = "lowercase")]
+pub enum SessionKindView {
+    /// The cyex.tv website's cookie.
+    Site,
+    /// A Bearer token for an app (cyex deck, the extension).
+    App,
+}
+
+/// One place you are signed in. Never holds the token or anything made from it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct AccountSession {
+    /// Pass to `revokeSession`.
+    pub id: String,
+    pub kind: SessionKindView,
+    /// For example `Firefox on Windows`, `cyex.tv app` or `Unknown device`, from the user agent
+    /// that signed in.
+    pub device: String,
+    pub created_at: String,
+    /// Updated at most once an hour.
+    pub last_seen_at: String,
+    pub expires_at: String,
+    /// The session this request came with.
+    pub current: bool,
+}
+
 /// A short reference to an account, for owners and editors.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
@@ -609,6 +639,43 @@ pub struct Role {
     /// Higher means more senior. You can only manage roles below your own highest one.
     pub position: i32,
     pub permissions: Vec<String>,
+    /// Shown on its holders' public profiles (`accountProfile`). Off by default.
+    #[serde(default)]
+    pub public: bool,
+}
+
+/// A role as anyone may see it on a profile.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct PublicRole {
+    pub id: String,
+    pub name: String,
+}
+
+/// The set a channel shows now, on a profile ("Active emotes").
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct ActiveChannelSet {
+    pub platform: Platform,
+    /// The channel's login.
+    pub login: String,
+    pub set_id: String,
+    pub set_name: String,
+}
+
+/// An account's public profile, like 7TV's public user pages. Listed sets come from
+/// `accountSets`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct AccountProfile {
+    pub account: AccountSummary,
+    /// Linked Twitch and Kick accounts: platform, login and display name only. Twitch first.
+    pub identities: Vec<PublicIdentity>,
+    /// Roles marked public, most senior first.
+    pub roles: Vec<PublicRole>,
+    /// Each channel's active set, for channels showing one.
+    pub active_sets: Vec<ActiveChannelSet>,
+    pub created_at: String,
 }
 
 // Reports and takedowns (Phase 7)
@@ -773,6 +840,9 @@ pub struct CreateRole {
     pub description: Option<String>,
     pub position: i32,
     pub permissions: Vec<String>,
+    /// Show it on its holders' public profiles. Default false.
+    #[serde(default)]
+    pub public: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -784,6 +854,9 @@ pub struct UpdateRole {
     pub description: Option<String>,
     pub position: Option<i32>,
     pub permissions: Option<Vec<String>>,
+    /// Show it on its holders' public profiles.
+    #[serde(default)]
+    pub public: Option<bool>,
 }
 
 // Live updates (ADR 0005)

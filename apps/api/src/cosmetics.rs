@@ -508,6 +508,62 @@ pub async fn catalog(state: &AppState) -> ApiResult<CosmeticCatalog> {
     Ok(CosmeticCatalog { badges, paints })
 }
 
+/// What up to 100 accounts show, with the badges and paints themselves. Only live accounts
+/// showing something are listed; unknown IDs are skipped.
+pub async fn account_cosmetics(
+    state: &AppState,
+    raw_ids: &[String],
+) -> ApiResult<Vec<cyex_tv_shared::model::AccountCosmetics>> {
+    if raw_ids.len() > 100 {
+        return Err(ApiError::new(
+            axum::http::StatusCode::BAD_REQUEST,
+            "too_many",
+            "Look up at most 100 accounts at once.",
+        ));
+    }
+    let mut wanted: Vec<Uuid> = raw_ids
+        .iter()
+        .filter_map(|r| ids::from_text(r.trim()))
+        .collect();
+    wanted.sort();
+    wanted.dedup();
+    if wanted.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut conn = acquire(state).await?;
+    let picks = db::selections_for_accounts(&mut conn, &wanted)
+        .await
+        .map_err(db_error)?;
+    let badge_ids: Vec<Uuid> = picks.iter().filter_map(|p| p.1).collect();
+    let paint_ids: Vec<Uuid> = picks.iter().filter_map(|p| p.2).collect();
+    let (badges, paints) = build(
+        &mut conn,
+        &state.cdn_url,
+        Some(&badge_ids),
+        Some(&paint_ids),
+    )
+    .await?;
+    Ok(picks
+        .into_iter()
+        .map(|(account, badge, paint)| {
+            let badge = badge.and_then(|b| {
+                let id = ids::to_text(b);
+                badges.iter().find(|x| x.id == id).cloned()
+            });
+            let paint = paint.and_then(|p| {
+                let id = ids::to_text(p);
+                paints.iter().find(|x| x.id == id).cloned()
+            });
+            cyex_tv_shared::model::AccountCosmetics {
+                account_id: ids::to_text(account),
+                badge,
+                paint,
+            }
+        })
+        .filter(|c| c.badge.is_some() || c.paint.is_some())
+        .collect())
+}
+
 /// What up to 100 chatters show. Only those showing something are listed.
 pub async fn user_cosmetics(
     state: &AppState,
@@ -1116,6 +1172,19 @@ pub async fn grant(
         .await?
         .pop()
         .ok_or_else(ApiError::internal)?;
+    let name = cosmetic_display_name(&mut tx, input.kind, cosmetic).await?;
+    crate::account::notify(
+        &mut tx,
+        account,
+        "cosmetic.granted",
+        &json!({
+            "kind": input.kind.as_str(),
+            "cosmetic_id": ids::to_text(cosmetic),
+            "name": name,
+            "reason": why,
+        }),
+    )
+    .await?;
     tx.commit().await.map_err(sqlx_error)?;
     Ok(out)
 }
@@ -1167,8 +1236,39 @@ pub async fn revoke(
         Some(json!({ "reason": why })),
     )
     .await?;
+    let name = cosmetic_display_name(&mut tx, kind, cosmetic).await?;
+    crate::account::notify(
+        &mut tx,
+        account,
+        "cosmetic.revoked",
+        &json!({
+            "kind": kind.as_str(),
+            "cosmetic_id": ids::to_text(cosmetic),
+            "name": name,
+            "reason": why,
+        }),
+    )
+    .await?;
     tx.commit().await.map_err(sqlx_error)?;
     Ok(true)
+}
+
+/// A badge's or paint's name, for notifications. `None` when it is gone.
+async fn cosmetic_display_name(
+    conn: &mut PgConnection,
+    kind: CosmeticKind,
+    id: Uuid,
+) -> ApiResult<Option<String>> {
+    Ok(match kind {
+        CosmeticKind::Badge => db::get_badge(conn, id)
+            .await
+            .map_err(db_error)?
+            .map(|b| b.name),
+        CosmeticKind::Paint => db::get_paint(conn, id)
+            .await
+            .map_err(db_error)?
+            .map(|p| p.name),
+    })
 }
 
 /// Who owns what, newest first: for one account, one cosmetic, or both. Needs `cosmetics.grant`.

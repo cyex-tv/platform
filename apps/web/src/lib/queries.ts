@@ -46,6 +46,29 @@ export const SEARCH = graphql(`
   }
 `);
 
+// People by login or display name (the Users tab, the palette, admin). No emote count: the API gives none.
+export const SEARCH_ACCOUNTS = graphql(`
+  query FindPeople($query: String!, $page: Int, $perPage: Int) {
+    searchAccounts(query: $query, page: $page, perPage: $perPage) {
+      total
+      page
+      perPage
+      items {
+        account {
+          id
+          displayName
+          avatar
+        }
+        identities {
+          platform
+          login
+          displayName
+        }
+      }
+    }
+  }
+`);
+
 export const EMOTE = graphql(`
   query Emote($id: String!) {
     emote(id: $id) {

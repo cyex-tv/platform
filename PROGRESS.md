@@ -22,6 +22,57 @@ ADR 0016. A shop for cyex.tv's chat cosmetics and redeem codes, like 7TV's Store
 #### GitHub write log
 - `gh pr create -R cyex-tv/infra --base main --head env/paddle`, `gh pr merge 7 -R cyex-tv/infra --merge`.
 - `gh pr create --base main --head feat/shop`.
+
+## Account hub: sessions, notifications, export, deletion (branch `feat/account-hub`)
+
+Gap list G6. API only; `/me/account` (Connections, Sessions, Data) and `/me/inbox` with the header bell come next.
+
+- [x] Migration `20261130000003_account_hub.sql` (additive): `sessions.id` (a public handle; existing sessions get a random one) and `sessions.user_agent` (cut to 512 characters, saved at sign-in), and an index for unread notifications.
+- [x] Sessions: `mySessions` (`AccountSession { id, kind: SITE | APP, device, createdAt, lastSeenAt, expiresAt, current }`; `device` is a short name like `Firefox on Windows`, never the raw user agent, never a token or hash), `revokeSession(id)` (yours only: another account's ID is `false`; revoking the current website session also clears its cookie), `revokeOtherSessions` (count).
+- [x] Notifications: `unreadNotificationCount`, `markNotificationsRead(ids)` (optional, up to 100, others' IDs ignored; no `ids` marks all, as before). New kinds made in the same transaction as their change: `emote.approved`, `emote.rejected` (with the reason), `editor.added`, `editor.changed`, `editor.removed` (for the editor, and for the owner when someone else acted; payload has both IDs and names, the actor and the permissions), `cosmetic.granted`, `cosmetic.revoked` (name and reason). Orders wait for the shop.
+- [x] `exportMyData`: one JSON document (`format`, `version`, account, identities, sessions, channels, emotes in every state, sets with emotes, set editors, account editors both ways, cosmetics, roles, reports filed, notifications, `orders: []`). Only yours, 5 an hour, audited (`account.exported`, no content).
+- [x] `deleteAccount(confirm)`: `confirm` is one of your logins; website (cookie) sessions only (`website_only`); the owner is protected (`owner_protected`); restricted or blocked accounts can't (`restricted`), since signing in again would make a fresh, unrestricted account (security review). At once: sessions, identities, channels (chat clients get `channel.active_set_changed` to none), sets (`personal.updated` for the personal set), editor grants both ways, cosmetics (`user.cosmetics_updated` to none), roles and notifications go; reports filed stay without the reporter; approved emotes in other people's sets stay with no owner ("deleted user"); every other emote is deleted (others' sets get `set.emote_removed`). The account row stays, marked deleted. The response clears the cookie. Audited (`account.deleted` with counts, no names). Signing in again later makes a new account.
+- [x] Tests: `apps/api/tests/account_hub_flow.rs` against Postgres in CI (sessions only yours and never tokens, IDOR on revoke, revoke others, notifications made for reviews, editor grants and cosmetics, unread count and marking only yours, export complete and only yours, its limit and audit row, deletion confirm, website only, owner protected, what stays and what goes, invisible afterwards, audit row, a new account on sign-in); unit tests of the device names and the confirm check.
+- [x] Dev mock: four sample sessions, the new notification kinds, `mySessions`, `revokeSession`, `revokeOtherSessions`, `exportMyData`, `deleteAccount` (signs the mock out, keeps its data), `unreadNotificationCount`, `markNotificationsRead(ids)`.
+- [ ] Website pages (another task). Privacy page (PR #33) should say deletion is self-serve and immediate once this ships.
+
+#### GitHub write log
+```
+git push -u origin feat/account-hub
+gh pr create --base main --head feat/account-hub
+
+## Public profiles and account cosmetics (branch `feat/public-profile`)
+
+For the website's public user pages (like 7TV's) and painted names everywhere. API only.
+
+- [x] Migration `20261130000005_public_roles.sql` (additive): `roles.public` (default false), so staff-only roles stay hidden unless someone with `roles.manage` marks a role public. `Role.public`, `CreateRoleInput.public`, `UpdateRoleInput.public`; the change is in the `role.created` / `role.updated` audit snapshots.
+- [x] GraphQL (additive): `accountProfile(accountId): AccountProfile` (`account`, `identities: [PublicIdentity]` with platform, login and display name only, `roles: [PublicRole { id name }]` (public roles, most senior first), `activeSets: [ActiveChannelSet { platform login setId setName }]`, `createdAt`); null for unknown, blocked or deleted accounts. Listed sets stay in `accountSets`.
+- [x] `accountCosmetics(accountIds): [AccountCosmetics { accountId badge paint }]`: what up to 100 accounts show, with the badge and paint themselves, by cyex.tv account ID; only live accounts showing something; `too_many` over 100.
+- [x] Tests: `apps/api/tests/profile_flow.rs` against Postgres in CI (no platform IDs, only public roles, roles.manage needed and audited, active set shown, blocked and deleted have no profile; cosmetics only for live accounts showing something, duplicates once, the 100 limit).
+- [x] Dev mock: `accountProfile` for the mock's people (Moderator and Artist marked public), `accountCosmetics` from the sample picks; new fields in one operation are answered together.
+- [ ] Website: role chips, "Active emotes", painted names (another task); a "public" checkbox in the roles editor.
+
+#### GitHub write log
+```
+git push -u origin feat/public-profile
+gh pr create --base main --head feat/public-profile
+
+## Emote activity (branch `feat/emote-activity`)
+
+Gap list G2 (API side): an emote page's Activity tab, from the account activity store (ADR 0016).
+
+- [x] Migration `20261130000004_emote_activity.sql` (additive): an index on the emote ID in activity rows' JSON.
+- [x] GraphQL (additive): `emoteActivity(emoteId, before, limit): [ActivityEntry!]!`. Kinds `EMOTE_UPLOADED` (its approval, shown as by the owner), `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED`, each built exactly as on the set owner's own feed: listed sets only (ADR 0017), no moderation, reviewers or reasons, nothing by or about blocked or deleted accounts. Empty unless the emote is approved, not private and not deleted. Paged by entry ID like `accountActivity`; `limit` 1 to 100, default 30.
+- [x] Tests: `apps/api/tests/emote_activity_flow.rs` against Postgres in CI (pending emotes have no feed, kinds in order, owner shown for the upload, no reviewer, unlisted and private sets hidden, paging, blocked accounts' lines gone, private emote empty).
+- [x] Dev mock: `emoteActivity` for any public emote (the sample feed lines about it plus an upload and a few set changes).
+- [ ] Website: the Activity tab on `/emotes/[id]` (another task).
+
+#### GitHub write log
+```
+git push -u origin feat/emote-activity
+gh pr create --base main --head feat/emote-activity
+```
+
 ## Upload v2 and emote settings (branch `feat/upload-v2`)
 
 Gap list G5.

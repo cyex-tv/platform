@@ -60,17 +60,17 @@ export function typing(target: EventTarget | null): boolean {
 }
 
 /**
- * What the palette's status line reads out once results settle: "6 emotes, 2 channels, 1 page.",
+ * What the palette's status line reads out once results settle: "6 emotes, 2 users, 2 channels, 1 page.",
  * or a sentence saying nothing matched. Empty when there's nothing to say.
  */
-export function announce(n: { emotes: number; channels: number; pages: number }, text: string): string {
+export function announce(n: { emotes: number; users?: number; channels: number; pages: number }, text: string): string {
   const part = (v: number, one: string, many: string) => (v ? `${count(v)} ${v === 1 ? one : many}` : '');
-  const parts = [part(n.emotes, 'emote', 'emotes'), part(n.channels, 'channel', 'channels'), part(n.pages, 'page', 'pages')].filter(Boolean);
+  const parts = [part(n.emotes, 'emote', 'emotes'), part(n.users ?? 0, 'user', 'users'), part(n.channels, 'channel', 'channels'), part(n.pages, 'page', 'pages')].filter(Boolean);
   if (parts.length) return `${parts.join(', ')}.`;
   return text ? emptyText(text) : '';
 }
 
 /** The line shown (and read) when nothing matches the text. */
 export function emptyText(text: string): string {
-  return `No emotes or pages match “${text}”.`;
+  return `No emotes, users or pages match “${text}”.`;
 }

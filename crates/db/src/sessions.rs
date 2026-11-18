@@ -64,9 +64,16 @@ pub struct Session {
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub last_seen_at: DateTime<Utc>,
+    /// The public handle (`mySessions`, `revokeSession`). Never the token or its hash.
+    pub id: Uuid,
+    pub user_agent: Option<String>,
 }
 
-const SESSION: &str = "id_hash, account_id, kind, created_at, expires_at, last_seen_at";
+const SESSION: &str =
+    "id_hash, account_id, kind, created_at, expires_at, last_seen_at, id, user_agent";
+
+/// The longest user agent kept.
+pub const USER_AGENT_MAX: usize = 512;
 
 pub async fn create(
     conn: &mut PgConnection,
@@ -75,23 +82,65 @@ pub async fn create(
     kind: SessionKind,
     ttl: Duration,
 ) -> DbResult<Session> {
+    create_with(conn, hash, account_id, kind, ttl, None).await
+}
+
+/// [`create`], noting the user agent that signed in (cut to [`USER_AGENT_MAX`] characters).
+pub async fn create_with(
+    conn: &mut PgConnection,
+    hash: &TokenHash,
+    account_id: Uuid,
+    kind: SessionKind,
+    ttl: Duration,
+    user_agent: Option<&str>,
+) -> DbResult<Session> {
+    let user_agent: Option<String> = user_agent
+        .map(str::trim)
+        .filter(|ua| !ua.is_empty())
+        .map(|ua| ua.chars().take(USER_AGENT_MAX).collect());
     Ok(sqlx::query_as(&format!(
-        "INSERT INTO sessions (id_hash, account_id, kind, expires_at)
-         VALUES ($1, $2, $3, now() + $4)
+        "INSERT INTO sessions (id_hash, account_id, kind, expires_at, id, user_agent)
+         VALUES ($1, $2, $3, now() + $4, $5, $6)
          RETURNING {SESSION}"
     ))
     .bind(&hash[..])
     .bind(account_id)
     .bind(kind)
     .bind(ttl)
+    .bind(crate::ids::new_id())
+    .bind(user_agent)
     .fetch_one(conn)
     .await?)
+}
+
+/// An account's live sessions, the most recently used first.
+pub async fn list_for_account(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<Session>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {SESSION} FROM sessions
+         WHERE account_id = $1 AND expires_at > now()
+         ORDER BY last_seen_at DESC, created_at DESC"
+    ))
+    .bind(account_id)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// Signs out one of the account's sessions by its public ID. False when the account has no such
+/// session: another account's ID signs nobody out.
+pub async fn delete_by_id(conn: &mut PgConnection, account_id: Uuid, id: Uuid) -> DbResult<bool> {
+    let done = sqlx::query("DELETE FROM sessions WHERE account_id = $1 AND id = $2")
+        .bind(account_id)
+        .bind(id)
+        .execute(conn)
+        .await?;
+    Ok(done.rows_affected() > 0)
 }
 
 /// The session for a token, if it hasn't expired and its account isn't deleted or blocked.
 pub async fn find_active(conn: &mut PgConnection, hash: &TokenHash) -> DbResult<Option<Session>> {
     Ok(sqlx::query_as(
-        "SELECT s.id_hash, s.account_id, s.kind, s.created_at, s.expires_at, s.last_seen_at
+        "SELECT s.id_hash, s.account_id, s.kind, s.created_at, s.expires_at, s.last_seen_at,
+                s.id, s.user_agent
          FROM sessions s
          JOIN accounts a ON a.id = s.account_id
          WHERE s.id_hash = $1 AND s.expires_at > now()

@@ -1,4 +1,13 @@
 """
+What one account shows, with the badge and paint themselves (`accountCosmetics`).
+"""
+type AccountCosmetics {
+	accountId: String!
+	badge: Badge
+	paint: Paint
+}
+
+"""
 Someone who edits an account, with what they may do.
 """
 type AccountEditor {
@@ -23,11 +32,58 @@ type AccountHit {
 	identities: [PublicIdentity!]!
 }
 
+"""
+An account's public profile, like 7TV's public user pages. Listed sets come from
+`accountSets`.
+"""
+type AccountProfile {
+	account: AccountSummary!
+	"""
+	Linked Twitch and Kick accounts: platform, login and display name only. Twitch first.
+	"""
+	identities: [PublicIdentity!]!
+	"""
+	Roles marked public, most senior first.
+	"""
+	roles: [PublicRole!]!
+	"""
+	Each channel's active set, for channels showing one.
+	"""
+	activeSets: [ActiveChannelSet!]!
+	createdAt: String!
+}
+
 type AccountResults {
 	items: [AccountHit!]!
 	total: Int!
 	page: Int!
 	perPage: Int!
+}
+
+"""
+One place you are signed in. Never holds the token or anything made from it.
+"""
+type AccountSession {
+	"""
+	Pass to `revokeSession`.
+	"""
+	id: String!
+	kind: SessionKind!
+	"""
+	For example `Firefox on Windows`, `cyex.tv app` or `Unknown device`, from the user agent
+	that signed in.
+	"""
+	device: String!
+	createdAt: String!
+	"""
+	Updated at most once an hour.
+	"""
+	lastSeenAt: String!
+	expiresAt: String!
+	"""
+	The session this request came with.
+	"""
+	current: Boolean!
 }
 
 """
@@ -52,6 +108,19 @@ type AccountSummary {
 	id: String!
 	displayName: String!
 	avatar: String
+}
+
+"""
+The set a channel shows now, on a profile ("Active emotes").
+"""
+type ActiveChannelSet {
+	platform: Platform!
+	"""
+	The channel's login.
+	"""
+	login: String!
+	setId: String!
+	setName: String!
 }
 
 """
@@ -386,6 +455,10 @@ input CreateRoleInput {
 	description: String
 	position: Int!
 	permissions: [String!]!
+	"""
+	Show it on its holders' public profiles. Default false.
+	"""
+	public: Boolean
 }
 
 input CreateSetInput {
@@ -885,9 +958,36 @@ type Mutation {
 	"""
 	restrictAccount(accountId: String!, uploadsBlocked: Boolean, blocked: Boolean): AccountStatus!
 	"""
-	Mark all your notifications read. Returns how many were unread.
+	Mark your notifications read: those in `ids` (up to 100; others' IDs are ignored), or all
+	of them without `ids`. Returns how many were unread.
 	"""
-	markNotificationsRead: Int!
+	markNotificationsRead(ids: [String!]): Int!
+	"""
+	Sign out one of your sessions, the current one too (then the cookie is cleared). False
+	when you have none with that ID.
+	"""
+	revokeSession(id: String!): Boolean!
+	"""
+	Sign out everywhere but here. Returns how many sessions ended.
+	"""
+	revokeOtherSessions: Int!
+	"""
+	A copy of everything about your account, as JSON text (`format`, `version`, `account`,
+	`identities`, `sessions`, `channels`, `emotes`, `sets`, `set_editors`, `account_editors`,
+	`editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`). 5 an hour
+	(`rate_limited`). Audited.
+	"""
+	exportMyData: String!
+	"""
+	Delete your account now. `confirm` is one of your Twitch or Kick logins. Website only
+	(`website_only` with an app token); the owner's account can't be (`owner_protected`).
+	Your sessions, identities, channels, sets, editor grants, cosmetics and notifications go;
+	your approved emotes that are in other people's sets stay, shown as by a deleted user;
+	your other emotes are deleted. Signing in again later makes a new account. Audited.
+	`confirm_mismatch` when `confirm` isn't one of your logins; `restricted` while the account's
+	uploads or sign-in are blocked.
+	"""
+	deleteAccount(confirm: String!): Boolean!
 	"""
 	Create a role. You can only grant permissions you hold. Needs `roles.manage`. Audited.
 	"""
@@ -1212,6 +1312,14 @@ type PublicIdentity {
 	displayName: String!
 }
 
+"""
+A role as anyone may see it on a profile.
+"""
+type PublicRole {
+	id: String!
+	name: String!
+}
+
 type Query {
 	"""
 	The signed-in account.
@@ -1259,6 +1367,18 @@ type Query {
 	"""
 	searchAccounts(query: String!, page: Int, perPage: Int): AccountResults!
 	"""
+	An account's public profile: linked Twitch and Kick logins (no IDs), roles marked public,
+	and each channel's active set ("Active emotes"). Listed sets: `accountSets`. Null when the
+	account is unknown, deleted or blocked.
+	"""
+	accountProfile(accountId: String!): AccountProfile
+	"""
+	The badge and paint up to 100 accounts show, with the badges and paints themselves, by
+	cyex.tv account ID (for names on profiles, tiles and lists). Only accounts showing
+	something are listed; blocked and deleted ones never. `too_many` over 100.
+	"""
+	accountCosmetics(accountIds: [String!]!): [AccountCosmetics!]!
+	"""
 	An account's public summary. Null when the account is unknown, deleted or blocked.
 	"""
 	account(id: String!): AccountSummary
@@ -1269,6 +1389,14 @@ type Query {
 	account is unknown, deleted or blocked. Nothing private or from moderation shows.
 	"""
 	accountActivity(accountId: String!, before: String, limit: Int): [ActivityEntry!]!
+	"""
+	An emote's public activity, newest first: `EMOTE_UPLOADED` (when it was approved, shown
+	as by its owner) and `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED` in listed
+	sets, by their owners and account editors. Page back with `before` (an entry ID); `limit`
+	is 1 to 100, default 30. Empty when the emote is unknown or not public. Nothing private or
+	from moderation shows.
+	"""
+	emoteActivity(emoteId: String!, before: String, limit: Int): [ActivityEntry!]!
 	"""
 	Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
 	default 8. Empty when the emote is unknown or not public.
@@ -1391,7 +1519,19 @@ type Query {
 	"""
 	reportQueue(page: Int, perPage: Int): ReportQueue!
 	"""
-	Your notifications, newest first (the latest 100).
+	Where you are signed in: your live sessions, the most recently used first, with the one
+	this request came with marked `current`. Never shows tokens.
+	"""
+	mySessions: [AccountSession!]!
+	"""
+	How many of your notifications are unread.
+	"""
+	unreadNotificationCount: Int!
+	"""
+	Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
+	`emote.rejected`, `emote.taken_down`, `editor.added`, `editor.changed`, `editor.removed`,
+	`cosmetic.granted` and `cosmetic.revoked`; `payload` is JSON with the IDs and names it is
+	about (see the API reference).
 	"""
 	myNotifications(unreadOnly: Boolean): [Notification!]!
 	"""
@@ -1481,6 +1621,10 @@ type Role {
 	"""
 	position: Int!
 	permissions: [String!]!
+	"""
+	Shown on its holders' public profiles (`accountProfile`). Off by default.
+	"""
+	public: Boolean!
 }
 
 type SearchResults {
@@ -1488,6 +1632,20 @@ type SearchResults {
 	total: Int!
 	page: Int!
 	perPage: Int!
+}
+
+"""
+How a session signed in.
+"""
+enum SessionKind {
+	"""
+	The cyex.tv website's cookie.
+	"""
+	SITE
+	"""
+	A Bearer token for an app (cyex deck, the extension).
+	"""
+	APP
 }
 
 """
@@ -1705,6 +1863,10 @@ input UpdateRoleInput {
 	description: String
 	position: Int
 	permissions: [String!]
+	"""
+	Show it on its holders' public profiles.
+	"""
+	public: Boolean
 }
 
 input UpdateSetEmoteInput {

@@ -16,6 +16,14 @@ export type Scalars = {
   Float: { input: number; output: number; }
 };
 
+/** What one account shows, with the badge and paint themselves (`accountCosmetics`). */
+export type AccountCosmetics = {
+  __typename?: 'AccountCosmetics';
+  accountId: Scalars['String']['output'];
+  badge?: Maybe<Badge>;
+  paint?: Maybe<Paint>;
+};
+
 /** Someone who edits an account, with what they may do. */
 export type AccountEditor = {
   __typename?: 'AccountEditor';
@@ -35,12 +43,47 @@ export type AccountHit = {
   identities: Array<PublicIdentity>;
 };
 
+/**
+ * An account's public profile, like 7TV's public user pages. Listed sets come from
+ * `accountSets`.
+ */
+export type AccountProfile = {
+  __typename?: 'AccountProfile';
+  account: AccountSummary;
+  /** Each channel's active set, for channels showing one. */
+  activeSets: Array<ActiveChannelSet>;
+  createdAt: Scalars['String']['output'];
+  /** Linked Twitch and Kick accounts: platform, login and display name only. Twitch first. */
+  identities: Array<PublicIdentity>;
+  /** Roles marked public, most senior first. */
+  roles: Array<PublicRole>;
+};
+
 export type AccountResults = {
   __typename?: 'AccountResults';
   items: Array<AccountHit>;
   page: Scalars['Int']['output'];
   perPage: Scalars['Int']['output'];
   total: Scalars['Int']['output'];
+};
+
+/** One place you are signed in. Never holds the token or anything made from it. */
+export type AccountSession = {
+  __typename?: 'AccountSession';
+  createdAt: Scalars['String']['output'];
+  /** The session this request came with. */
+  current: Scalars['Boolean']['output'];
+  /**
+   * For example `Firefox on Windows`, `cyex.tv app` or `Unknown device`, from the user agent
+   * that signed in.
+   */
+  device: Scalars['String']['output'];
+  expiresAt: Scalars['String']['output'];
+  /** Pass to `revokeSession`. */
+  id: Scalars['String']['output'];
+  kind: SessionKind;
+  /** Updated at most once an hour. */
+  lastSeenAt: Scalars['String']['output'];
 };
 
 /** What an account may do (`users.restrict`). */
@@ -59,6 +102,16 @@ export type AccountSummary = {
   avatar?: Maybe<Scalars['String']['output']>;
   displayName: Scalars['String']['output'];
   id: Scalars['String']['output'];
+};
+
+/** The set a channel shows now, on a profile ("Active emotes"). */
+export type ActiveChannelSet = {
+  __typename?: 'ActiveChannelSet';
+  /** The channel's login. */
+  login: Scalars['String']['output'];
+  platform: Platform;
+  setId: Scalars['String']['output'];
+  setName: Scalars['String']['output'];
 };
 
 /**
@@ -304,6 +357,8 @@ export type CreateRoleInput = {
   name: Scalars['String']['input'];
   permissions: Array<Scalars['String']['input']>;
   position: Scalars['Int']['input'];
+  /** Show it on its holders' public profiles. Default false. */
+  public?: InputMaybe<Scalars['Boolean']['input']>;
 };
 
 export type CreateSetInput = {
@@ -587,6 +642,16 @@ export type Mutation = {
   /** Make a shop item: a bundle of 1 to 10 badges and paints. Needs `shop.manage`. Audited. */
   createShopItem: ShopItem;
   /**
+   * Delete your account now. `confirm` is one of your Twitch or Kick logins. Website only
+   * (`website_only` with an app token); the owner's account can't be (`owner_protected`).
+   * Your sessions, identities, channels, sets, editor grants, cosmetics and notifications go;
+   * your approved emotes that are in other people's sets stay, shown as by a deleted user;
+   * your other emotes are deleted. Signing in again later makes a new account. Audited.
+   * `confirm_mismatch` when `confirm` isn't one of your logins; `restricted` while the account's
+   * uploads or sign-in are blocked.
+   */
+  deleteAccount: Scalars['Boolean']['output'];
+  /**
    * Delete a badge: everyone loses it and stops showing it. False when there was none. Needs
    * `cosmetics.manage`. Audited.
    */
@@ -612,9 +677,19 @@ export type Mutation = {
   deleteShopItem: Scalars['Boolean']['output'];
   /** Turn off every code of a batch. Needs `codes.manage`. Audited. */
   disableCodeBatch: CodeBatch;
+  /**
+   * A copy of everything about your account, as JSON text (`format`, `version`, `account`,
+   * `identities`, `sessions`, `channels`, `emotes`, `sets`, `set_editors`, `account_editors`,
+   * `editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`). 5 an hour
+   * (`rate_limited`). Audited.
+   */
+  exportMyData: Scalars['String']['output'];
   /** Give an account a badge or paint, with a reason. Needs `cosmetics.grant`. Audited. */
   grantCosmetic: Entitlement;
-  /** Mark all your notifications read. Returns how many were unread. */
+  /**
+   * Mark your notifications read: those in `ids` (up to 100; others' IDs are ignored), or all
+   * of them without `ids`. Returns how many were unread.
+   */
   markNotificationsRead: Scalars['Int']['output'];
   /**
    * Redeem a code (case, spaces and dashes don't matter). Wrong codes lock you out for a
@@ -654,6 +729,13 @@ export type Mutation = {
    * Needs `cosmetics.grant`. Audited.
    */
   revokeCosmetic: Scalars['Boolean']['output'];
+  /** Sign out everywhere but here. Returns how many sessions ended. */
+  revokeOtherSessions: Scalars['Int']['output'];
+  /**
+   * Sign out one of your sessions, the current one too (then the cookie is cleared). False
+   * when you have none with that ID.
+   */
+  revokeSession: Scalars['Boolean']['output'];
   /**
    * Pick the badge and paint you show, from what you own (ADR 0015). Leave a field out to keep
    * it; send null or an empty string to show none. With `ownerId`, for an account you edit
@@ -778,6 +860,11 @@ export type MutationCreateShopItemArgs = {
 };
 
 
+export type MutationDeleteAccountArgs = {
+  confirm: Scalars['String']['input'];
+};
+
+
 export type MutationDeleteBadgeArgs = {
   id: Scalars['String']['input'];
 };
@@ -815,6 +902,11 @@ export type MutationDisableCodeBatchArgs = {
 
 export type MutationGrantCosmeticArgs = {
   input: GrantCosmeticInput;
+};
+
+
+export type MutationMarkNotificationsReadArgs = {
+  ids?: InputMaybe<Array<Scalars['String']['input']>>;
 };
 
 
@@ -878,6 +970,11 @@ export type MutationRevokeCosmeticArgs = {
   cosmeticId: Scalars['String']['input'];
   kind: CosmeticKind;
   reason?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationRevokeSessionArgs = {
+  id: Scalars['String']['input'];
 };
 
 
@@ -1157,6 +1254,13 @@ export type PublicIdentity = {
   platform: Platform;
 };
 
+/** A role as anyone may see it on a profile. */
+export type PublicRole = {
+  __typename?: 'PublicRole';
+  id: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+};
+
 export type Query = {
   __typename?: 'Query';
   /** An account's public summary. Null when the account is unknown, deleted or blocked. */
@@ -1169,10 +1273,22 @@ export type Query = {
    */
   accountActivity: Array<ActivityEntry>;
   /**
+   * The badge and paint up to 100 accounts show, with the badges and paints themselves, by
+   * cyex.tv account ID (for names on profiles, tiles and lists). Only accounts showing
+   * something are listed; blocked and deleted ones never. `too_many` over 100.
+   */
+  accountCosmetics: Array<AccountCosmetics>;
+  /**
    * An account's editors (ADR 0014): yours, or, with `accountId`, those of an account you edit
    * with the `EDITORS` permission.
    */
   accountEditors: Array<AccountEditor>;
+  /**
+   * An account's public profile: linked Twitch and Kick logins (no IDs), roles marked public,
+   * and each channel's active set ("Active emotes"). Listed sets: `accountSets`. Null when the
+   * account is unknown, deleted or blocked.
+   */
+  accountProfile?: Maybe<AccountProfile>;
   /** An account's roles. Yours, or anyone's with `roles.manage` or `users.view`. */
   accountRoles: Array<Role>;
   /**
@@ -1224,6 +1340,14 @@ export type Query = {
   /** An emote. Pending ones are visible to their owner and to moderators only. */
   emote?: Maybe<Emote>;
   /**
+   * An emote's public activity, newest first: `EMOTE_UPLOADED` (when it was approved, shown
+   * as by its owner) and `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED` in listed
+   * sets, by their owners and account editors. Page back with `before` (an entry ID); `limit`
+   * is 1 to 100, default 30. Empty when the emote is unknown or not public. Nothing private or
+   * from moderation shows.
+   */
+  emoteActivity: Array<ActivityEntry>;
+  /**
    * Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
    * default 8. Empty when the emote is unknown or not public.
    */
@@ -1241,10 +1365,20 @@ export type Query = {
   myCosmetics: OwnedCosmetics;
   /** Your own emotes in every state, newest first. `perPage` is 1 to 100, default 50. */
   myEmotes: EmotePage;
-  /** Your notifications, newest first (the latest 100). */
+  /**
+   * Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
+   * `emote.rejected`, `emote.taken_down`, `editor.added`, `editor.changed`, `editor.removed`,
+   * `cosmetic.granted` and `cosmetic.revoked`; `payload` is JSON with the IDs and names it is
+   * about (see the API reference).
+   */
   myNotifications: Array<Notification>;
   /** Orders you bought or received (gifts), newest first. `perPage` 1 to 100, default 50. */
   myOrders: OrderPage;
+  /**
+   * Where you are signed in: your live sessions, the most recently used first, with the one
+   * this request came with marked `current`. Never shows tokens.
+   */
+  mySessions: Array<AccountSession>;
   /** The sets you own, then the ones you edit. Pending emotes included. */
   mySets: Array<EmoteSet>;
   /**
@@ -1298,6 +1432,8 @@ export type Query = {
    * scheduled ones too (needs `shop.manage`).
    */
   shopItems: Array<ShopItem>;
+  /** How many of your notifications are unread. */
+  unreadNotificationCount: Scalars['Int']['output'];
   /**
    * The badge and paint up to 100 chatters show, as catalog IDs. Only chatters showing
    * something are listed.
@@ -1318,8 +1454,18 @@ export type QueryAccountActivityArgs = {
 };
 
 
+export type QueryAccountCosmeticsArgs = {
+  accountIds: Array<Scalars['String']['input']>;
+};
+
+
 export type QueryAccountEditorsArgs = {
   accountId?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryAccountProfileArgs = {
+  accountId: Scalars['String']['input'];
 };
 
 
@@ -1381,6 +1527,13 @@ export type QueryCosmeticImageArgs = {
 
 export type QueryEmoteArgs = {
   id: Scalars['String']['input'];
+};
+
+
+export type QueryEmoteActivityArgs = {
+  before?: InputMaybe<Scalars['String']['input']>;
+  emoteId: Scalars['String']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -1554,6 +1707,8 @@ export type Role = {
   permissions: Array<Scalars['String']['output']>;
   /** Higher means more senior. You can only manage roles below your own highest one. */
   position: Scalars['Int']['output'];
+  /** Shown on its holders' public profiles (`accountProfile`). Off by default. */
+  public: Scalars['Boolean']['output'];
 };
 
 export type SearchResults = {
@@ -1563,6 +1718,13 @@ export type SearchResults = {
   perPage: Scalars['Int']['output'];
   total: Scalars['Int']['output'];
 };
+
+/** How a session signed in. */
+export type SessionKind =
+  /** A Bearer token for an app (cyex deck, the extension). */
+  | 'APP'
+  /** The cyex.tv website's cookie. */
+  | 'SITE';
 
 /** An emote as it sits in a set: the name it is typed as there, and who added it. */
 export type SetEmote = {
@@ -1714,6 +1876,8 @@ export type UpdateRoleInput = {
   name?: InputMaybe<Scalars['String']['input']>;
   permissions?: InputMaybe<Array<Scalars['String']['input']>>;
   position?: InputMaybe<Scalars['Int']['input']>;
+  /** Show it on its holders' public profiles. */
+  public?: InputMaybe<Scalars['Boolean']['input']>;
 };
 
 export type UpdateSetEmoteInput = {
@@ -1779,6 +1943,15 @@ export type SearchQueryVariables = Exact<{
 
 
 export type SearchQuery = { __typename?: 'Query', searchEmotes: { __typename?: 'SearchResults', total: number, page: number, perPage: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+
+export type FindPeopleQueryVariables = Exact<{
+  query: Scalars['String']['input'];
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type FindPeopleQuery = { __typename?: 'Query', searchAccounts: { __typename?: 'AccountResults', total: number, page: number, perPage: number, items: Array<{ __typename?: 'AccountHit', account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }> }> } };
 
 export type EmoteQueryVariables = Exact<{
   id: Scalars['String']['input'];
@@ -2734,6 +2907,27 @@ export const SearchDocument = new TypedDocumentString(`
     isStatic
   }
 }`) as unknown as TypedDocumentString<SearchQuery, SearchQueryVariables>;
+export const FindPeopleDocument = new TypedDocumentString(`
+    query FindPeople($query: String!, $page: Int, $perPage: Int) {
+  searchAccounts(query: $query, page: $page, perPage: $perPage) {
+    total
+    page
+    perPage
+    items {
+      account {
+        id
+        displayName
+        avatar
+      }
+      identities {
+        platform
+        login
+        displayName
+      }
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<FindPeopleQuery, FindPeopleQueryVariables>;
 export const EmoteDocument = new TypedDocumentString(`
     query Emote($id: String!) {
   emote(id: $id) {

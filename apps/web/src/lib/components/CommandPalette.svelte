@@ -2,7 +2,7 @@
   // The command palette: Ctrl K / Cmd K or "/" (outside a field) opens it, so does openPalette().
   // No on-screen shortcut hint anywhere; the keys just work. On a page with its own search field
   // (marked data-page-search), "/" focuses that field instead.
-  // Emotes come live from the search (debounced), a text that looks like a login offers its
+  // Emotes and users (up to 5, by name or login) come live from the search (debounced), a text that looks like a login offers its
   // Twitch and Kick channel, and the site's pages are always there. Arrow keys move, Enter goes,
   // Escape closes and focus goes back. No open or close animation: it's keyboard-driven and
   // opened many times a day (Emil). Mount it once, in the root layout.
@@ -11,14 +11,18 @@
   import { hasStill, ready, size, src, srcsetW } from '$lib/emote';
   import { clean, count, iso } from '$lib/format';
   import { announce, channelJumps, emptyText, move, pageJumps, typing } from '$lib/palette';
-  import type { SearchQuery } from '$lib/gql/graphql';
-  import { SEARCH } from '$lib/queries';
+  import type { FindPeopleQuery, SearchQuery } from '$lib/gql/graphql';
+  import { SEARCH, SEARCH_ACCOUNTS } from '$lib/queries';
+  import Avatar from './Avatar.svelte';
   import Icon from './Icon.svelte';
   import { palette } from './palette.svelte';
 
   type Emote = SearchQuery['searchEmotes']['items'][number];
+  type Person = FindPeopleQuery['searchAccounts']['items'][number];
+  const USERS = 5;
   type Row =
     | { kind: 'emote'; id: string; href: string; emote: Emote }
+    | { kind: 'user'; id: string; href: string; person: Person }
     | { kind: 'all'; id: string; href: string; label: string }
     | { kind: 'channel' | 'page'; id: string; href: string; label: string; hint?: string };
 
@@ -28,6 +32,8 @@
   let active = $state(0);
   let emotes = $state<Emote[]>([]);
   let total = $state(0);
+  let people = $state<Person[]>([]);
+  let peopleTotal = $state(0);
   let searching = $state(false);
   let failed = $state(false);
   let seq = 0;
@@ -39,12 +45,14 @@
     if (text) {
       for (const e of emotes) out.push({ kind: 'emote', id: `pe-${e.id}`, href: `/emotes/${e.id}`, emote: e });
       out.push({ kind: 'all', id: 'pe-all', href: `/search?q=${encodeURIComponent(text)}`, label: `Search all emotes for “${iso(text)}”` });
+      for (const p of people) out.push({ kind: 'user', id: `pu-${p.account.id}`, href: `/users/${encodeURIComponent(p.account.id)}`, person: p });
       for (const c of channelJumps(text)) out.push({ kind: 'channel', ...c });
     }
     for (const p of pageJumps(text)) out.push({ kind: 'page', ...p });
     return out;
   });
   const emoteRows = $derived(rows.filter((r) => r.kind === 'emote' || r.kind === 'all'));
+  const userRows = $derived(rows.filter((r) => r.kind === 'user'));
   const channelRows = $derived(rows.filter((r) => r.kind === 'channel'));
   const pageRows = $derived(rows.filter((r) => r.kind === 'page'));
   const activeId = $derived(rows[active]?.id);
@@ -53,7 +61,7 @@
   // One status line, read out 300ms after the results settle (not on every key).
   let status = $state('');
   $effect(() => {
-    const n = { emotes: emotes.length, channels: channelRows.length, pages: pageRows.length };
+    const n = { emotes: emotes.length, users: userRows.length, channels: channelRows.length, pages: pageRows.length };
     const t = text;
     status = '';
     if (!palette.open || searching) return;
@@ -82,25 +90,36 @@
     if (!q) {
       emotes = [];
       total = 0;
+      people = [];
+      peopleTotal = 0;
       searching = false;
       return;
     }
     searching = true;
     const mine = ++seq;
     timer = setTimeout(async () => {
-      try {
-        const r = await gql(SEARCH, { query: q, animated: null, page: 1, perPage: 6 });
-        if (mine !== seq) return;
-        emotes = r.searchEmotes.items;
-        total = r.searchEmotes.total;
+      // Emotes and people are asked together; either may fail without hiding the other.
+      const [e, p] = await Promise.allSettled([
+        gql(SEARCH, { query: q, animated: null, page: 1, perPage: 6 }),
+        gql(SEARCH_ACCOUNTS, { query: q, page: 1, perPage: USERS }),
+      ]);
+      if (mine !== seq) return;
+      if (e.status === 'fulfilled') {
+        emotes = e.value.searchEmotes.items;
+        total = e.value.searchEmotes.total;
         failed = false;
-      } catch {
-        if (mine !== seq) return;
+      } else {
         emotes = [];
         failed = true;
-      } finally {
-        if (mine === seq) searching = false;
       }
+      if (p.status === 'fulfilled') {
+        people = p.value.searchAccounts.items;
+        peopleTotal = p.value.searchAccounts.total;
+      } else {
+        people = [];
+        peopleTotal = 0;
+      }
+      searching = false;
     }, 150);
     return () => clearTimeout(timer);
   });
@@ -169,8 +188,8 @@
         aria-controls="palette-list"
         aria-activedescendant={activeId}
         aria-autocomplete="list"
-        aria-label="Search emotes, channels and pages"
-        placeholder="Emotes, channels, pages"
+        aria-label="Search emotes, users, channels and pages"
+        placeholder="Emotes, users, channels, pages"
         autocomplete="off"
         autocapitalize="none"
         autocorrect="off"
@@ -222,6 +241,26 @@
               {:else if r.kind === 'all'}
                 <span class="art"><Icon name="search" /></span>
                 <span class="label">{r.label}</span>
+              {/if}
+            </a>
+          {/each}
+        </div>
+      {/if}
+
+      {#if userRows.length}
+        <div class="group" role="group" aria-labelledby="pg-users">
+          <p class="group-name" id="pg-users" role="presentation">
+            Users
+            {#if peopleTotal > USERS}<span class="state">{USERS} of {count(peopleTotal)}</span>{/if}
+          </p>
+          {#each userRows as r (r.id)}
+            {@const i = rows.indexOf(r)}
+            <a class="row" id={r.id} href={r.href} role="option" aria-selected={i === active} tabindex="-1"
+              onpointermove={() => (active = i)} onclick={(e) => { e.preventDefault(); go(r); }}>
+              {#if r.kind === 'user'}
+                <span class="art"><Avatar src={r.person.account.avatar} name={r.person.account.displayName} size={28} /></span>
+                <span class="label"><bdi>{clean(r.person.account.displayName)}</bdi></span>
+                {#if r.person.identities[0]}<span class="hint"><bdi>{clean(r.person.identities[0].login)}</bdi> on {r.person.identities[0].platform === 'KICK' ? 'Kick' : 'Twitch'}</span>{/if}
               {/if}
             </a>
           {/each}
