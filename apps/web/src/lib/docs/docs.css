@@ -293,3 +293,4 @@ html:has(.docs) { scroll-behavior: smooth; }
   .docs .to-top { min-height: 44px; }
 }
 @media (prefers-reduced-motion: reduce) { .docs .nav-toc > summary::after, .docs .chev { transition: none; } }
+.docs-body:focus { outline: none; }

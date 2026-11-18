@@ -14,8 +14,10 @@
     search?: Snippet;
     /** The most used tags in what is loaded. */
     tags: { tag: string; count: number }[];
+    /** The emotes didn't load: there is nothing to say about their tags. */
+    failed?: boolean;
   };
-  let { view, onchange, search, tags }: Props = $props();
+  let { view, onchange, search, tags, failed = false }: Props = $props();
 
   const kinds: { value: Kind; label: string }[] = [
     { value: 'all', label: 'All' },
@@ -116,7 +118,7 @@
   {#if view.q}{@render section('match', 'Match', matchBody)}{/if}
   {@render section('type', 'Type', typeBody)}
   {@render section('flags', 'Flags', flagsBody)}
-  {@render section('tags', 'Tags', tagsBody)}
+  {#if !failed || shownTags.length}{@render section('tags', 'Tags', tagsBody)}{/if}
 </div>
 
 <style>

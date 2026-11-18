@@ -14,6 +14,7 @@
   import type { PageEmote } from './emote/emote-page';
   import ReportForm from './emote/ReportForm.svelte';
   import { Viewer } from './emote/viewer.svelte';
+  import { roving } from './roving';
 
   type Props = { emoteId: string; name: string; viewer?: Viewer; variant?: 'head' | 'bar'; picture?: Pick<PageEmote, 'host' | 'animated' | 'files'> };
   let { emoteId, name, viewer: given, variant = 'head', picture }: Props = $props();
@@ -61,7 +62,8 @@
           <p class="note fine">You have no sets yet. <a class="link" href="/me/sets">Make one</a></p>
         {:else}
           <p class="note fine">Add <bdi>{shown}</bdi> to</p>
-          <ul>
+          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+          <ul onkeydown={roving}>
             {#each viewer.own as s (s.id)}
               {@const inIt = viewer.has(s)}
               <li>
@@ -107,7 +109,8 @@
         <button class="btn btn-s more" type="button" aria-label="More actions" {...props}><Icon name="more" size={18} /></button>
       {/snippet}
       {#if mode === 'menu'}
-        <ul class="menu">
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+        <ul class="menu" onkeydown={roving}>
           <li>
             <button type="button" class="item" onclick={() => nameCopy.copy(name)}>
               <Icon name={nameCopy.copied ? 'check' : 'copy'} />{nameCopy.copied ? 'Name copied' : nameCopy.failed ? 'Couldn’t copy' : 'Copy name'}

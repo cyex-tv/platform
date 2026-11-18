@@ -59,3 +59,15 @@ export function clean(s: string | null | undefined): string {
 export function iso(s: string | null | undefined): string {
   return `⁨${clean(s)}⁩`;
 }
+
+/**
+ * A sentence built with `iso`, split into plain pieces and isolated names, so a page can put the
+ * names in `<bdi>` and keep the isolate marks out of what a screen reader reads or a link is called.
+ */
+export function isoParts(text: string): { text: string; name: boolean }[] {
+  const out: { text: string; name: boolean }[] = [];
+  for (const [i, piece] of text.split(/⁨([^⁩]*)⁩/).entries()) {
+    if (piece) out.push({ text: piece, name: i % 2 === 1 });
+  }
+  return out;
+}

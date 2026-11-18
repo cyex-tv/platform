@@ -43,6 +43,7 @@
 </script>
 
 <a class="skip" href="#main">Skip to content</a>
+{#if page.data.skipTo}<a class="skip" href="#{page.data.skipTo}">Skip to contents</a>{/if}
 <AppHeader />
 <div class="progress {bar}" aria-hidden="true"></div>
 <main id="main" tabindex="-1">

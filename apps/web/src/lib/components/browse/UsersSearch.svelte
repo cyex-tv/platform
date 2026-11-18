@@ -8,6 +8,7 @@
   import { untrack } from 'svelte';
   import { ApiError, gql } from '$lib/api';
   import LoadMore from '$lib/components/LoadMore.svelte';
+  import Problem from '$lib/components/Problem.svelte';
   import State from '$lib/components/State.svelte';
   import { looks } from '$lib/cosmetics/store.svelte';
   import { clean, count, iso } from '$lib/format';
@@ -147,12 +148,7 @@
 
     {#if data.error}
       <div class="state">
-        <State kind="error" title="Couldn’t search for people.">
-          {data.error}
-          {#snippet actions()}
-            <button class="ui-btn secondary" type="button" onclick={() => invalidateAll()}>Try again</button>
-          {/snippet}
-        </State>
+        <Problem cause="server" onretry={() => invalidateAll()} />
       </div>
     {:else if !view.q}
       <div class="state">

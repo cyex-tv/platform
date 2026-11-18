@@ -5,6 +5,7 @@
   import { inbox, loadInbox, markRead, type Note } from '$lib/account/inbox.svelte';
   import NotificationRow from '$lib/account/NotificationRow.svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
+  import Problem from '$lib/components/Problem.svelte';
   import State from '$lib/components/State.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
 
@@ -25,15 +26,12 @@
   <PageHead title="Notifications">
     {#snippet line()}{inbox.count ? `${inbox.count} unread` : 'You’re all caught up.'}{/snippet}
     {#snippet actions()}
-      {#if inbox.count}<button class="ui-btn secondary" type="button" onclick={() => markRead()}>Mark all read</button>{/if}
+      {#if inbox.count}<button class="ui-btn secondary" type="button" disabled={inbox.marking} onclick={() => markRead()}>Mark all read</button>{/if}
     {/snippet}
   </PageHead>
 
   {#if inbox.items === null && inbox.error}
-    <State kind="error" title="That didn’t load">
-      {inbox.error}
-      {#snippet actions()}<button class="ui-btn secondary" type="button" disabled={inbox.loading} onclick={() => loadInbox()}>Try again</button>{/snippet}
-    </State>
+    <Problem cause="server" onretry={() => loadInbox()} />
   {:else if inbox.items === null}
     <State kind="loading" title="Loading notifications…" />
   {:else if items.length === 0}

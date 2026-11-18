@@ -67,7 +67,7 @@
           <strong>{c.title}</strong>
           <span class="ui-hint">{c.text}</span>
         </span>
-        {#if c.figure !== undefined}<span class="ui-mono figure" class:some={c.figure > 0 && (c.href === '/admin/review' || c.href === '/admin/reports')}>{count(c.figure)}</span>{/if}
+        {#if c.figure !== undefined}<span class="ui-mono figure" aria-hidden="true" class:some={c.figure > 0 && (c.href === '/admin/review' || c.href === '/admin/reports')}>{count(c.figure)}</span><span class="sr-only">, {count(c.figure)}</span>{/if}
       </a>
     </li>
   {/each}
