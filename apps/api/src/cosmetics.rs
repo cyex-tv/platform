@@ -640,21 +640,26 @@ pub async fn select(
             .await
             .map_err(db_error)?;
         publish_selection(&mut tx, account, after).await?;
+        // The owner's own picks are audited too: they are on their public activity feed.
+        let show = |(b, p): (Option<Uuid>, Option<Uuid>)| json!({ "badge_id": b.map(ids::to_text), "paint_id": p.map(ids::to_text) });
+        let mut after_json = show(after);
         if account != caller.account_id {
-            let show = |(b, p): (Option<Uuid>, Option<Uuid>)| json!({ "badge_id": b.map(ids::to_text), "paint_id": p.map(ids::to_text) });
-            let mut after_json = show(after);
             after_json["via"] = json!("account_editor");
-            write_audit(
-                &mut tx,
-                caller,
-                "cosmetics.selected",
-                "account",
-                account,
-                Some(show(before)),
-                Some(after_json),
-            )
-            .await?;
         }
+        audit::write_for(
+            &mut tx,
+            &audit::NewEntry {
+                actor: Some(caller.account_id),
+                action: "cosmetics.selected",
+                target_kind: "account",
+                target_id: &ids::to_text(account),
+                before: Some(show(before)),
+                after: Some(after_json),
+            },
+            Some(account),
+        )
+        .await
+        .map_err(db_error)?;
     }
     tx.commit().await.map_err(sqlx_error)?;
     owned_of(state, &mut conn, account).await

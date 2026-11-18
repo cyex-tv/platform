@@ -13,6 +13,24 @@ type AccountEditor {
 }
 
 """
+One `searchAccounts` hit: the account's public summary and its linked logins.
+"""
+type AccountHit {
+	account: AccountSummary!
+	"""
+	Twitch first.
+	"""
+	identities: [PublicIdentity!]!
+}
+
+type AccountResults {
+	items: [AccountHit!]!
+	total: Int!
+	page: Int!
+	perPage: Int!
+}
+
+"""
 What an account may do (`users.restrict`).
 """
 type AccountStatus {
@@ -34,6 +52,89 @@ type AccountSummary {
 	id: String!
 	displayName: String!
 	avatar: String
+}
+
+"""
+A badge or paint change: what it was and what it is now. Empty ends mean none; names are
+empty when the cosmetic was deleted since.
+"""
+type ActivityCosmeticChange {
+	fromId: String
+	fromName: String
+	toId: String
+	toName: String
+}
+
+"""
+An emote, as a feed line names it. `name` is what it was called in the set at the time.
+"""
+type ActivityEmote {
+	id: String!
+	name: String!
+	"""
+	For example `https://cdn.cyex.tv/emotes/<sha256>`.
+	"""
+	host: String!
+	files: [EmoteFile!]!
+}
+
+"""
+One line of an account's public activity feed (7TV's "Activity" tab).
+"""
+type ActivityEntry {
+	"""
+	An audit row ID; page back with it.
+	"""
+	id: String!
+	kind: ActivityKind!
+	"""
+	Who did it: the account or one of its editors.
+	"""
+	actor: AccountSummary!
+	set: ActivitySet
+	emote: ActivityEmote
+	fromName: String
+	toName: String
+	badge: ActivityCosmeticChange
+	paint: ActivityCosmeticChange
+	createdAt: String!
+}
+
+"""
+What one line of an account's public activity feed says happened.
+"""
+enum ActivityKind {
+	SET_EMOTE_ADDED
+	SET_EMOTE_REMOVED
+	"""
+	The emote's name in the set changed (`from_name`, `to_name`).
+	"""
+	SET_EMOTE_RENAMED
+	"""
+	A channel's active set changed (`set` is the new one; `from_name`, `to_name`).
+	"""
+	ACTIVE_SET_CHANGED
+	"""
+	The badge and/or paint shown changed (`badge`, `paint`).
+	"""
+	COSMETICS_SELECTED
+	"""
+	An emote of the account was approved and listed.
+	"""
+	EMOTE_UPLOADED
+	SET_CREATED
+	"""
+	A set was renamed (`from_name`, `to_name`).
+	"""
+	SET_RENAMED
+}
+
+"""
+A set, as a feed line names it.
+"""
+type ActivitySet {
+	id: String!
+	name: String!
 }
 
 """
@@ -137,6 +238,25 @@ type Checkout {
 	`sandbox` or `production`: pass to `Paddle.Environment.set`.
 	"""
 	environment: String!
+}
+
+"""
+What `cloneSet` made.
+"""
+type ClonedSet {
+	"""
+	The new channel set.
+	"""
+	set: EmoteSet!
+	"""
+	Emotes copied into it.
+	"""
+	copied: Int!
+	"""
+	Emotes left out: over capacity, private emotes of others, emotes not approved, or ones
+	you can't see.
+	"""
+	skipped: Int!
 }
 
 type CodeBatch {
@@ -278,6 +398,11 @@ input CreateSetInput {
 	Make the set for an account you edit with `sets` (ADR 0014). Empty: for yourself.
 	"""
 	ownerId: String
+	"""
+	Empty: `LISTED` for channel sets, `UNLISTED` for the personal set. Personal sets can't be
+	`PRIVATE`.
+	"""
+	visibility: SetVisibility
 }
 
 """
@@ -389,6 +514,20 @@ type EmoteSet {
 	owner: AccountSummary
 	capacity: Int!
 	emotes: [SetEmote!]!
+	"""
+	Who can find and open it.
+	"""
+	visibility: SetVisibility!
+	"""
+	`visibility` is `LISTED`: shown on the owner's profile.
+	"""
+	listed: Boolean!
+	"""
+	How many of `capacity` the set uses. Counts every emote in it, also those this answer
+	doesn't show you (pending ones), so `capacity - slotsUsed` is what still fits.
+	"""
+	slotsUsed: Int!
+	createdAt: String!
 }
 
 """
@@ -494,6 +633,11 @@ enum EventType {
 	PERSONAL_UPDATED
 	EMOTE_UPDATED
 	"""
+	A listed set was made (`createSet`, `cloneSet`), on its owner's `user:` topics. Unlisted
+	and private sets make no event, so their IDs stay unknown.
+	"""
+	SET_CREATED
+	"""
 	A badge or paint was made (topic `cosmetics`, ADR 0015).
 	"""
 	COSMETIC_CREATED
@@ -570,7 +714,16 @@ type Mutation {
 	"""
 	createSet(input: CreateSetInput!): EmoteSet!
 	"""
-	Rename a set or change its capacity. Owner or editor; capacity needs `sets.edit_any`.
+	Copy a set you can open into a new channel set: yours, or with `ownerId` one for an account
+	you edit with `SETS`. Name defaults to the source's; visibility to `LISTED`. Emotes go in
+	as `addSetEmote` would put them, in order, keeping their names: up to the capacity,
+	approved ones only (your own pending ones too), never other people's private emotes.
+	30 copies an hour. `rate_limited`, `not_found`, `forbidden`, `bad_name`.
+	"""
+	cloneSet(id: String!, name: String, ownerId: String, visibility: SetVisibility): ClonedSet!
+	"""
+	Rename a set, change who sees it (`visibility`: owner or account editors with `SETS`), or
+	change its capacity. Owner or editor; capacity needs `sets.edit_any`.
 	"""
 	updateSet(id: String!, input: UpdateSetInput!): EmoteSet!
 	"""
@@ -1050,6 +1203,15 @@ enum Platform {
 	KICK
 }
 
+"""
+A linked Twitch or Kick account as anyone may see it: no IDs.
+"""
+type PublicIdentity {
+	platform: Platform!
+	login: String!
+	displayName: String!
+}
+
 type Query {
 	"""
 	The signed-in account.
@@ -1064,9 +1226,16 @@ type Query {
 	"""
 	channelByLogin(platform: Platform!, login: String!): Channel
 	"""
-	A set with its emotes.
+	A set with its emotes. Null when there is none, or when it is `PRIVATE` and you are not
+	its owner, an editor or staff (a channel's active set is always public).
 	"""
 	set(id: String!): EmoteSet
+	"""
+	An account's `LISTED` sets as profile cards, oldest first, at most 50. `preview` is how
+	many of each set's newest emotes to include, 0 to 50, default 12. Empty when the account
+	is unknown, deleted or blocked.
+	"""
+	accountSets(accountId: String!, preview: Int): [SetSummary!]!
 	"""
 	The cyex.tv global set, shown in every channel.
 	"""
@@ -1083,9 +1252,23 @@ type Query {
 	"""
 	searchEmotes(query: String!, animated: Boolean, owner: String, nsfw: Boolean, page: Int, perPage: Int, sort: EmoteSort): SearchResults!
 	"""
+	Accounts by Twitch or Kick login or display name (a leading `@` is ignored): exact login
+	first, then login and name prefixes, then similar names. Public fields only; deleted and
+	blocked accounts are never listed. `perPage` is 1 to 50, default 20. 60 searches a minute
+	per account, or per IP signed out (`rate_limited`). An empty `query` finds nobody.
+	"""
+	searchAccounts(query: String!, page: Int, perPage: Int): AccountResults!
+	"""
 	An account's public summary. Null when the account is unknown, deleted or blocked.
 	"""
 	account(id: String!): AccountSummary
+	"""
+	An account's public activity, newest first, like 7TV's "Activity" tab: sets and emotes the
+	owner or their editors changed, the active set, badge and paint picks, approved uploads.
+	Page back with `before` (an entry ID); `limit` is 1 to 100, default 30. Empty when the
+	account is unknown, deleted or blocked. Nothing private or from moderation shows.
+	"""
+	accountActivity(accountId: String!, before: String, limit: Int): [ActivityEntry!]!
 	"""
 	Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
 	default 8. Empty when the emote is unknown or not public.
@@ -1328,6 +1511,51 @@ enum SetKind {
 }
 
 """
+A set as a card on a profile: its facts and the first few emotes (`accountSets`).
+"""
+type SetSummary {
+	id: String!
+	name: String!
+	kind: SetKind!
+	owner: AccountSummary
+	visibility: SetVisibility!
+	listed: Boolean!
+	capacity: Int!
+	"""
+	Every emote in the set counts; see `EmoteSet.slotsUsed`.
+	"""
+	slotsUsed: Int!
+	"""
+	A channel shows this set now.
+	"""
+	active: Boolean!
+	"""
+	The newest emotes you may see, at most the `preview` asked for.
+	"""
+	preview: [SetEmote!]!
+	createdAt: String!
+}
+
+"""
+Who can find and open a set.
+"""
+enum SetVisibility {
+	"""
+	Anyone can open it, and it is listed on its owner's profile. New channel sets start here.
+	"""
+	LISTED
+	"""
+	Anyone with its link (its ID) can open it; it isn't listed. Personal sets start here.
+	"""
+	UNLISTED
+	"""
+	Only its owner, its editors and staff can open it, except while a channel shows it:
+	a channel's active set is public. Channel sets only.
+	"""
+	PRIVATE
+}
+
+"""
 Something staff sell: one or more badges and paints as a bundle.
 """
 type ShopItem {
@@ -1490,6 +1718,10 @@ input UpdateSetInput {
 	Needs `sets.edit_any` to raise above the default.
 	"""
 	capacity: Int
+	"""
+	Personal sets can't be `PRIVATE`; the global set is always listed.
+	"""
+	visibility: SetVisibility
 }
 
 """

@@ -5,11 +5,14 @@
   import { onMount } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { ApiError } from '$lib/api';
-  import Avatar from '$lib/components/Avatar.svelte';
+  import { ApiError, gql } from '$lib/api';
+  import type { AdminCountsQuery } from '$lib/gql/graphql';
+  import { ADMIN_COUNTS } from '$lib/queries';
+  import { relationTo } from '$lib/profile/data.svelte';
+  import ProfileRail from '$lib/profile/ProfileRail.svelte';
+  import { railKeyForPath } from '$lib/profile/rows';
+  import Icon from '$lib/components/Icon.svelte';
   import type { IconName } from '$lib/components/Icon.svelte';
-  import { clean } from '$lib/format';
-  import { ACCOUNT, LIBRARY, platformName } from '$lib/shell/account';
   import RailLayout from '$lib/shell/RailLayout.svelte';
   import SideRail from '$lib/shell/SideRail.svelte';
   import { markCurrent, type RailGroup } from '$lib/shell/rail';
@@ -21,37 +24,52 @@
 
   const path = $derived(page.url.pathname);
   const who = $derived(session.me?.identities[0]);
-  const name = $derived(clean(who?.displayName));
   // Under /admin with staff permissions: the admin rail. Anything else: the /me rail.
   const admin = $derived((path === '/admin' || path.startsWith('/admin/')) && isAdmin(session.me));
 
-  const row = (href: string, label: string, icon: IconName, show = true) => (show ? [{ href, label, icon }] : []);
+  const row = (href: string, label: string, icon: IconName, show = true, count?: number) => (show ? [{ href, label, icon, count }] : []);
 
-  const meRail = $derived<RailGroup[]>(
-    markCurrent(
-      [
-        { caption: 'Library', items: LIBRARY.map(({ href, label, icon }) => ({ href, label, icon })) },
-        { caption: 'Settings', items: [...row(ACCOUNT.href, ACCOUNT.label, ACCOUNT.icon), ...row('/me/editors', 'Editors', 'users')] },
-      ],
-      path,
-    ),
-  );
+  // The /me pages sit in your profile's rail (your profile is your dashboard), the row they belong to marked.
+  const meAccount = $derived(session.me ? { id: session.me.id, displayName: who?.displayName ?? '', avatar: who?.avatar } : null);
+  const meRelation = $derived(relationTo(session.me?.id ?? '', session.me, null));
+
+  // Open tickets for the admin rail's counts.
+  let counts = $state<AdminCountsQuery | null>(null);
+  $effect(() => {
+    if (!admin) return;
+    const review = can('emotes.review');
+    const reports = review || can('emotes.takedown');
+    if (!review && !reports) return;
+    gql(ADMIN_COUNTS, { review, reports })
+      .then((r) => (counts = r))
+      .catch(() => {});
+  });
 
   const adminRail = $derived.by<RailGroup[]>(() => {
     void session.me; // permissions come from the account
+    const tickets = can('emotes.review') || can('emotes.takedown');
+    const cosmetics = can('cosmetics.manage') || can('cosmetics.grant');
+    // Reserved for later (another branch): a "Shop" group with Items, Orders and Codes.
     const groups: RailGroup[] = [
+      { items: row('/admin', 'Overview', 'gauge') },
       {
-        caption: 'Moderation',
+        toggle: { label: 'Tickets', icon: 'ticket' },
         items: [
-          ...row('/admin', 'Overview', 'gauge'),
-          ...row('/admin/review', 'Review', 'inbox', can('emotes.review')),
-          ...row('/admin/reports', 'Reports', 'flag', can('emotes.review') || can('emotes.takedown')),
+          ...row('/admin/review', 'Review', 'inbox', can('emotes.review'), counts?.reviewQueue?.total),
+          ...row('/admin/reports', 'Reports', 'flag', tickets, counts?.reportQueue?.total),
+        ],
+      },
+      {
+        toggle: { label: 'Cosmetics', icon: 'palette' },
+        items: [
+          ...row('/admin/cosmetics/paints', 'Paints', 'brush', cosmetics),
+          ...row('/admin/cosmetics/badges', 'Badges', 'badge', cosmetics),
         ],
       },
       {
         caption: 'People',
         items: [
-          ...row('/admin/users', 'Users', 'users', can('users.view') || can('users.restrict') || can('roles.manage')),
+          ...row('/admin/users', 'Users', 'users', can('users.view') || can('users.restrict') || can('roles.manage') || can('cosmetics.grant')),
           ...row('/admin/roles', 'Roles', 'key', can('roles.manage')),
         ],
       },
@@ -86,18 +104,17 @@
         {#snippet head()}
           <div class="title"><strong>Admin</strong><span class="ui-chip">Staff</span></div>
         {/snippet}
+        {#snippet foot()}
+          {#if session.me}<a class="rail-foot" href="/users/{session.me.id}"><Icon name="circle-user" /><span class="lbl">Your profile</span><Icon name="chevron-right" size={14} /></a>{/if}
+        {/snippet}
       </SideRail>
+    {:else if meAccount}
+      <ProfileRail account={meAccount} relation={meRelation} current={railKeyForPath(path)} />
     {:else}
-      <SideRail label="Your account" groups={meRail}>
+      <SideRail label="Your account">
         {#snippet head()}
           <div class="me">
-            {#if session.me}
-              <Avatar src={who?.avatar} {name} size={40} />
-              <span class="id">
-                <strong><bdi>{name}</bdi></strong>
-                <span>{platformName(who?.platform) ?? ''}</span>
-              </span>
-            {:else if problem}
+            {#if problem}
               <span class="ph-av" aria-hidden="true"></span>
               <span class="id">
                 <strong>Not loaded</strong>
@@ -132,7 +149,6 @@
   .me { display: flex; align-items: center; gap: 12px; min-height: 40px; }
   .id { display: grid; min-width: 0; line-height: 1.3; }
   .id strong { font-size: var(--t-ui); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .id span { font-size: var(--t-fine); color: var(--muted); }
   .title { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding-left: 8px; }
   .title strong { font-size: var(--t-ui); font-weight: 600; }
   .ph-av { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--surface-hover); }

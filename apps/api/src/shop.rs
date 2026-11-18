@@ -464,7 +464,13 @@ fn summary(map: &HashMap<Uuid, reads::Summary>, id: Uuid) -> AccountSummary {
     }
 }
 
-async fn order_views(conn: &mut PgConnection, rows: &[OrderRow]) -> ApiResult<Vec<Order>> {
+/// Orders as the API shows them. Refund reasons are staff notes: only `staff` (holders of
+/// `shop.orders`) see them.
+async fn order_views(
+    conn: &mut PgConnection,
+    rows: &[OrderRow],
+    staff: bool,
+) -> ApiResult<Vec<Order>> {
     let people: Vec<Uuid> = rows
         .iter()
         .flat_map(|r| r.account_id.into_iter().chain(r.recipient_id))
@@ -486,7 +492,7 @@ async fn order_views(conn: &mut PgConnection, rows: &[OrderRow]) -> ApiResult<Ve
             paid_currency: r.paid_currency.clone(),
             provider: r.provider.clone(),
             provider_transaction_id: r.provider_transaction_id.clone(),
-            refund_reason: r.refund_reason.clone(),
+            refund_reason: r.refund_reason.clone().filter(|_| staff),
             created_at: time(r.created_at),
             paid_at: opt_time(r.paid_at),
             refunded_at: opt_time(r.refunded_at),
@@ -495,8 +501,8 @@ async fn order_views(conn: &mut PgConnection, rows: &[OrderRow]) -> ApiResult<Ve
         .collect())
 }
 
-async fn one_order(conn: &mut PgConnection, row: &OrderRow) -> ApiResult<Order> {
-    order_views(conn, std::slice::from_ref(row))
+async fn one_order(conn: &mut PgConnection, row: &OrderRow, staff: bool) -> ApiResult<Order> {
+    order_views(conn, std::slice::from_ref(row), staff)
         .await?
         .pop()
         .ok_or_else(ApiError::internal)
@@ -791,11 +797,16 @@ pub async fn start_checkout(
             return Err(provider_error(&err));
         }
     };
-    let order = db::set_transaction(&mut conn, order.id, &transaction.id)
-        .await
-        .map_err(db_error)?;
+    let order = db::set_transaction(
+        &mut conn,
+        order.id,
+        &transaction.id,
+        transaction.currency_code.as_deref(),
+    )
+    .await
+    .map_err(db_error)?;
     Ok(Checkout {
-        order: one_order(&mut conn, &order).await?,
+        order: one_order(&mut conn, &order, false).await?,
         transaction_id: transaction.id,
         checkout_url: transaction.checkout_url,
         client_token: paddle.cfg.client_token.clone(),
@@ -822,7 +833,7 @@ pub async fn my_orders(
         .await
         .map_err(db_error)?;
     Ok(OrderPage {
-        items: order_views(&mut conn, &rows).await?,
+        items: order_views(&mut conn, &rows, false).await?,
         total: u64::try_from(total).unwrap_or(0),
     })
 }
@@ -838,10 +849,11 @@ pub async fn order(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Opt
     };
     let party =
         row.account_id == Some(caller.account_id) || row.recipient_id == Some(caller.account_id);
-    if !party && !holds(&mut conn, caller, permissions::SHOP_ORDERS).await? {
+    let staff = holds(&mut conn, caller, permissions::SHOP_ORDERS).await?;
+    if !party && !staff {
         return Ok(None);
     }
-    one_order(&mut conn, &row).await.map(Some)
+    one_order(&mut conn, &row, staff).await.map(Some)
 }
 
 /// Every order, newest first, narrowed by status, account (bought or received) and item. Needs
@@ -876,7 +888,7 @@ pub async fn orders(
         .await
         .map_err(db_error)?;
     Ok(OrderPage {
-        items: order_views(&mut conn, &rows).await?,
+        items: order_views(&mut conn, &rows, true).await?,
         total: u64::try_from(total).unwrap_or(0),
     })
 }
@@ -978,7 +990,7 @@ pub async fn refund_order(
         via,
     )
     .await?;
-    let out = one_order(&mut tx, &row).await?;
+    let out = one_order(&mut tx, &row, true).await?;
     tx.commit().await.map_err(sqlx_error)?;
     Ok(out)
 }
@@ -1029,41 +1041,59 @@ pub async fn webhook(state: &AppState, signature: Option<&str>, body: &[u8]) -> 
     Ok(())
 }
 
-/// The order a transaction belongs to, locked: by Paddle's ID, or by our order ID in
-/// `custom_data` when the ID wasn't stored yet. A mismatch between the two is ignored.
+/// The order a transaction belongs to, locked. Found only by the transaction ID stored when the
+/// checkout made it, never by `custom_data` alone (anyone can make a Paddle transaction with the
+/// public client token and tag it with any order). Our order ID in `custom_data`, when present,
+/// has to agree.
 async fn order_of(conn: &mut PgConnection, data: &Value) -> ApiResult<Option<OrderRow>> {
     let Some(txn) = data["id"].as_str() else {
         return Ok(None);
     };
-    let tagged = data["custom_data"]["cyex_tv_order_id"]
-        .as_str()
-        .and_then(ids::from_text);
-    if let Some(order) = db::lock_order_by_transaction(conn, txn)
+    let tagged = data["custom_data"]["cyex_tv_order_id"].as_str();
+    let Some(order) = db::lock_order_by_transaction(conn, txn)
         .await
         .map_err(db_error)?
-    {
-        if tagged.is_some_and(|t| t != order.id) {
-            tracing::warn!(%txn, "paddle transaction names another order; ignored");
-            return Ok(None);
+    else {
+        if let Some(tagged) = tagged {
+            tracing::warn!(%txn, order = tagged, "paddle transaction isn't stored on any order; ignored, check it by hand");
+        } else {
+            tracing::info!(%txn, "paddle transaction isn't one of ours; ignored");
         }
-        return Ok(Some(order));
-    }
-    let Some(tagged) = tagged else {
-        tracing::info!(%txn, "paddle transaction isn't one of ours; ignored");
         return Ok(None);
     };
-    let Some(order) = db::lock_order(conn, tagged).await.map_err(db_error)? else {
-        return Ok(None);
-    };
-    if order.provider_transaction_id.is_some() {
-        tracing::warn!(%txn, "order has another paddle transaction; ignored");
+    if tagged.is_some_and(|t| ids::from_text(t) != Some(order.id)) {
+        tracing::warn!(%txn, "paddle transaction names another order; ignored");
         return Ok(None);
     }
-    Ok(Some(
-        db::set_transaction(conn, order.id, txn)
-            .await
-            .map_err(db_error)?,
-    ))
+    Ok(Some(order))
+}
+
+/// Whether a completed transaction is the one the checkout made: one item, the order's Paddle
+/// price, quantity 1, in the currency Paddle gave it. The total isn't compared: Paddle adds the
+/// buyer's tax, which depends on where they are.
+pub fn matches_order(order: &OrderRow, data: &Value) -> Result<(), &'static str> {
+    let items = data["items"].as_array().ok_or("no items")?;
+    let [item] = items.as_slice() else {
+        return Err("not exactly one item");
+    };
+    let expected = order
+        .paddle_price_id
+        .as_deref()
+        .ok_or("order has no price")?;
+    if item["price"]["id"].as_str() != Some(expected) {
+        return Err("another price");
+    }
+    if item["quantity"].as_u64() != Some(1) {
+        return Err("quantity isn't 1");
+    }
+    let currency = order
+        .provider_currency
+        .as_deref()
+        .unwrap_or(&order.currency);
+    if data["currency_code"].as_str() != Some(currency) {
+        return Err("another currency");
+    }
+    Ok(())
 }
 
 /// `transaction.completed`: the recipient gets every cosmetic of the item they don't own yet.
@@ -1072,8 +1102,23 @@ async fn fulfil(conn: &mut PgConnection, data: &Value) -> ApiResult<()> {
     let Some(order) = order_of(conn, data).await? else {
         return Ok(());
     };
-    if matches!(order.status.as_str(), "paid" | "refunded") {
+    // Only a pending order is fulfilled: paid and refunded ones are done, failed ones were
+    // cancelled at Paddle or never got a transaction.
+    if order.status != "pending" {
         return Ok(());
+    }
+    if let Err(why) = matches_order(&order, data) {
+        tracing::warn!(order = %ids::to_text(order.id), why, "paddle transaction doesn't match its order; not fulfilled");
+        return write_audit(
+            conn,
+            None,
+            "shop.order_mismatch",
+            "shop_order",
+            order.id,
+            Some(order_json(&order)),
+            Some(json!({ "why": why, "transaction": data["id"], "items": data["items"], "currency_code": data["currency_code"] })),
+        )
+        .await;
     }
     let bundle = db::item_bundles(conn, &[order.item_id])
         .await
@@ -1147,7 +1192,9 @@ async fn cancel(conn: &mut PgConnection, data: &Value) -> ApiResult<()> {
     .await
 }
 
-/// `adjustment.*`: an approved refund or a chargeback takes the cosmetics back.
+/// `adjustment.*`: an approved full refund or a chargeback takes the cosmetics back. A partial
+/// refund is recorded in the audit log only. One that arrives before its order is paid is
+/// answered 503, so Paddle sends it again later instead of it being dropped.
 async fn adjust(conn: &mut PgConnection, data: &Value) -> ApiResult<()> {
     let action = data["action"].as_str().unwrap_or("");
     let status = data["status"].as_str().unwrap_or("");
@@ -1163,8 +1210,29 @@ async fn adjust(conn: &mut PgConnection, data: &Value) -> ApiResult<()> {
     else {
         return Ok(());
     };
-    if order.status != "paid" {
-        return Ok(());
+    match order.status.as_str() {
+        "paid" => {}
+        "pending" => {
+            return Err(ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "order_not_ready",
+                "That order isn't paid yet. Send the adjustment again later.",
+            ));
+        }
+        _ => return Ok(()),
+    }
+    let full = action == "chargeback" || data["type"].as_str() == Some("full");
+    if !full {
+        return write_audit(
+            conn,
+            None,
+            "shop.order_partial_refund",
+            "shop_order",
+            order.id,
+            Some(order_json(&order)),
+            Some(json!({ "provider_adjustment_id": data["id"], "totals": data["totals"] })),
+        )
+        .await;
     }
     let reason = format!("Paddle {action}");
     reverse(
@@ -1251,6 +1319,47 @@ mod tests {
         let mut i = input();
         i.description = Some("a\u{202E}b".into());
         assert_eq!(item_input(&i).unwrap_err().code, "bad_description");
+    }
+
+    #[test]
+    fn completions_must_match_their_order() {
+        let now = Utc::now();
+        let order = OrderRow {
+            id: ids::new_id(),
+            account_id: None,
+            recipient_id: None,
+            item_id: ids::new_id(),
+            item_name: "x".into(),
+            status: "pending".into(),
+            amount_cents: 499,
+            currency: "EUR".into(),
+            provider: "paddle".into(),
+            provider_transaction_id: Some("txn_1".into()),
+            paddle_price_id: Some("pri_good".into()),
+            provider_currency: Some("EUR".into()),
+            paid_total_cents: None,
+            paid_currency: None,
+            provider_adjustment_id: None,
+            refund_reason: None,
+            created_at: now,
+            updated_at: now,
+            paid_at: None,
+            refunded_at: None,
+            failed_at: None,
+        };
+        let data =
+            |items: Value, currency: &str| json!({ "items": items, "currency_code": currency });
+        let one = |price: &str, qty: u64| json!([{ "price": { "id": price }, "quantity": qty }]);
+        assert_eq!(
+            matches_order(&order, &data(one("pri_good", 1), "EUR")),
+            Ok(())
+        );
+        assert!(matches_order(&order, &data(one("pri_cheap", 1), "EUR")).is_err());
+        assert!(matches_order(&order, &data(one("pri_good", 2), "EUR")).is_err());
+        assert!(matches_order(&order, &data(one("pri_good", 1), "USD")).is_err());
+        let two = json!([{ "price": { "id": "pri_good" }, "quantity": 1 }, { "price": { "id": "pri_x" }, "quantity": 1 }]);
+        assert!(matches_order(&order, &data(two, "EUR")).is_err());
+        assert!(matches_order(&order, &json!({})).is_err());
     }
 
     #[test]

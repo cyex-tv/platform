@@ -3,6 +3,7 @@
 //! the schema itself, so neither committed description can drift from the code.
 
 pub mod abuse;
+pub mod activity;
 pub mod admin;
 pub mod catalog;
 pub mod codes;
@@ -130,8 +131,8 @@ fn pool_gauges(out: &mut String, db: &sqlx::PgPool) {
 async fn graphql(
     State(state): State<AppState>,
     Extension(schema): Extension<ApiSchema>,
-    MaybeCaller(caller): MaybeCaller,
     ip: Option<Extension<limits::ClientIp>>,
+    MaybeCaller(caller): MaybeCaller,
     request: GraphQLRequest,
 ) -> axum::response::Response {
     if let Some(caller) = &caller
@@ -142,13 +143,9 @@ async fn graphql(
     {
         return limits::too_many(wait);
     }
+    let ip = ip.map_or_else(|| limits::ClientIp(String::new()), |Extension(ip)| ip);
     let response: GraphQLResponse = schema
-        .execute(
-            request
-                .into_inner()
-                .data(caller)
-                .data(ip.map_or_else(|| limits::ClientIp("unknown".to_owned()), |e| e.0)),
-        )
+        .execute(request.into_inner().data(caller).data(ip))
         .await
         .into();
     response.into_response()

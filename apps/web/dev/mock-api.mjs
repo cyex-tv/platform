@@ -474,14 +474,14 @@ let uploads = 0;
 const member = (e, name = e.name) => ({ name, zeroWidth: e.flags.zeroWidth, addedAt: e.createdAt, emote: e });
 const SETS = [
   { id: '01JD8XSET00000000000000MAIN', name: 'Main', kind: 'CHANNEL', capacity: 1000, owner: ME_SUMMARY,
-    emotes: [...MINE.slice(3, 7), ...ALL.slice(10, 30)].map((e) => member(e)), editors: [OTHERS[0]] },
+    emotes: [...MINE.slice(3, 7), ...ALL.slice(10, 30)].map((e) => member(e)), editors: [OTHERS[0]], visibility: 'LISTED', createdAt: '2026-11-10T12:05:00.000Z' },
   { id: '01JD8XSET0000000000000ALTSS', name: 'Subathon', kind: 'CHANNEL', capacity: 1000, owner: ME_SUMMARY,
-    emotes: ALL.slice(40, 46).map((e) => member(e)), editors: [] },
+    emotes: ALL.slice(40, 46).map((e) => member(e)), editors: [], visibility: 'UNLISTED', createdAt: '2026-11-12T19:40:00.000Z' },
   { id: '01JD8XSET000000000000000OAK', name: 'quietoak main', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[0],
-    emotes: ALL.slice(60, 70).map((e) => member(e)), editors: [ME_SUMMARY] },
+    emotes: ALL.slice(60, 70).map((e) => member(e)), editors: [ME_SUMMARY], visibility: 'LISTED', createdAt: '2026-11-08T09:00:00.000Z' },
 ];
 const GLOBAL = { id: '01JD8XSET0000000000000GLOBL', name: 'Global', kind: 'GLOBAL', capacity: 200, owner: null,
-  emotes: ALL.slice(0, 24).map((e) => member(e)), editors: [] };
+  emotes: ALL.slice(0, 24).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-01T00:00:00.000Z' };
 SETS.push(GLOBAL);
 const PENDING = Array.from({ length: 7 }, (_, i) => emote(800 + i, OTHERS[i % 2], 'PENDING'));
 const REPORTS = [
@@ -522,9 +522,21 @@ const EDITOR_OF = [
 ];
 const SHARED_SETS = [
   { id: '01JD8XSET0000000000000OAKAL', name: 'quietoak cozy', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[0],
-    emotes: ALL.slice(70, 78).map((e) => member(e)), editors: [] },
+    emotes: ALL.slice(70, 78).map((e) => member(e)), editors: [], visibility: 'PRIVATE', createdAt: '2026-11-13T09:10:00.000Z' },
   { id: '01JD8XSET0000000000000FERN1', name: 'fern garden', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[4],
-    emotes: ALL.slice(46, 54).map((e) => member(e)), editors: [] },
+    emotes: ALL.slice(46, 54).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-15T20:30:00.000Z' },
+];
+// Public sets of other accounts (accountSets, cloneSet): listed, unlisted and private, so a
+// profile shows only the listed ones and a private one 404s to everyone else.
+const PUBLIC_SETS = [
+  { id: '01JD8XSET0000000000000NORA1', name: 'nora picks', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[1],
+    emotes: ALL.slice(5, 23).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-09T15:00:00.000Z' },
+  { id: '01JD8XSET0000000000000NORA2', name: 'cozy nights', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[1],
+    emotes: ALL.slice(30, 38).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-14T22:00:00.000Z' },
+  { id: '01JD8XSET0000000000000NORA3', name: 'drafts', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[1],
+    emotes: ALL.slice(80, 84).map((e) => member(e)), editors: [], visibility: 'PRIVATE', createdAt: '2026-11-16T08:00:00.000Z' },
+  { id: '01JD8XSET0000000000000NORA4', name: 'nora personal', kind: 'PERSONAL', capacity: 5, owner: OTHERS[1],
+    emotes: ALL.slice(90, 93).map((e) => member(e)), editors: [], visibility: 'UNLISTED', createdAt: '2026-11-11T11:00:00.000Z' },
 ];
 const EDITOR_CHANNELS = [
   { platform: 'TWITCH', platformChannelId: '55500001', login: 'quietoak', activeSetId: SETS[2].id, allowPersonalEmotes: true, account: OTHERS[0] },
@@ -778,6 +790,55 @@ function cosmeticsAnswer(q, v, session, admin) {
     }
   }
   return null;
+}
+
+// ---- Account activity (accountActivity) -------------------------------------------------
+// Sample public activity, newest first, for lumen_fox (the mock signed-in account), quietoak and
+// sunnyfern. Same shape as the real API: pending/private emotes, moderation and blocked accounts
+// never appear, so none are here. Everyone else has none; blocked accounts answer an empty list.
+const act = (n, minsAgo, kind, actor, rest) => ({
+  id: `01JD8XACT${String(9000 - n).padStart(17, '0')}`, kind, actor, set: null, emote: null, fromName: null, toName: null,
+  badge: null, paint: null, createdAt: new Date(NOW - minsAgo * 60_000).toISOString(), ...rest,
+});
+const aSet = (s) => ({ id: s.id, name: s.name });
+const aEmote = (e, name = e.name) => ({ id: e.id, name, host: e.host, files: e.files });
+const aChange = (from, to) => ({ fromId: from?.id ?? null, fromName: from?.name ?? null, toId: to?.id ?? null, toName: to?.name ?? null });
+const [FOX_MAIN, FOX_SUB, OAK_MAIN] = SETS;
+const [OAK_COZY, FERN] = SHARED_SETS;
+const [NORA, PIXEL] = [OTHERS[1], OTHERS[2]];
+const ACTIVITY = {
+  [ME_ID]: [
+    act(1, 6, 'SET_EMOTE_ADDED', ME_SUMMARY, { set: aSet(FOX_MAIN), emote: aEmote(ALL[12]) }),
+    act(2, 41, 'SET_EMOTE_RENAMED', NORA, { set: aSet(FOX_MAIN), emote: aEmote(ALL[14], 'KEKwait'), fromName: ALL[14].name, toName: 'KEKwait' }),
+    act(3, 95, 'COSMETICS_SELECTED', ME_SUMMARY, { paint: aChange(PAINTS[0], PAINTS[1]) }),
+    act(4, 180, 'SET_EMOTE_REMOVED', PIXEL, { set: aSet(FOX_MAIN), emote: aEmote(ALL[21]) }),
+    act(5, 300, 'EMOTE_UPLOADED', ME_SUMMARY, { emote: aEmote(MINE[3]) }),
+    act(6, 22 * 60, 'ACTIVE_SET_CHANGED', PIXEL, { set: aSet(FOX_MAIN), fromName: FOX_SUB.name, toName: FOX_MAIN.name }),
+    act(7, 26 * 60, 'SET_RENAMED', ME_SUMMARY, { set: aSet(FOX_SUB), fromName: 'Subs', toName: FOX_SUB.name }),
+    act(8, 2 * 1440, 'COSMETICS_SELECTED', ME_SUMMARY, { badge: aChange(null, BADGES[0]), paint: aChange(null, PAINTS[0]) }),
+    act(9, 2 * 1440 + 30, 'SET_CREATED', ME_SUMMARY, { set: aSet(FOX_SUB) }),
+    act(10, 4 * 1440, 'SET_EMOTE_ADDED', ME_SUMMARY, { set: aSet(FOX_MAIN), emote: aEmote(MINE[4]) }),
+    act(11, 6 * 1440, 'SET_CREATED', ME_SUMMARY, { set: aSet(FOX_MAIN) }),
+  ],
+  [OTHERS[0].id]: [
+    act(21, 12, 'SET_EMOTE_ADDED', OTHERS[0], { set: aSet(OAK_MAIN), emote: aEmote(ALL[62]) }),
+    act(22, 130, 'SET_EMOTE_ADDED', ME_SUMMARY, { set: aSet(OAK_COZY), emote: aEmote(ALL[72]) }),
+    act(23, 1500, 'COSMETICS_SELECTED', OTHERS[0], { badge: aChange(BADGES[0], BADGES[1]), paint: aChange(null, PAINTS[2]) }),
+    act(24, 3 * 1440, 'SET_CREATED', OTHERS[0], { set: aSet(OAK_COZY) }),
+  ],
+  [OTHERS[4].id]: [
+    act(31, 55, 'ACTIVE_SET_CHANGED', ME_SUMMARY, { set: aSet(FERN), fromName: null, toName: FERN.name }),
+    act(32, 70, 'SET_EMOTE_REMOVED', OTHERS[4], { set: aSet(FERN), emote: aEmote(ALL[48]) }),
+    act(33, 2 * 1440, 'COSMETICS_SELECTED', OTHERS[4], { paint: aChange(null, PAINTS[1]) }),
+  ],
+};
+// `accountActivity(accountId, before, limit)`: newest first, `limit` 1 to 100 (default 30).
+function activityAnswer(v) {
+  if (STATUS[v.accountId]?.blocked) return { data: { accountActivity: [] } };
+  const limit = Math.min(100, Math.max(1, v.limit ?? 30));
+  let rows = ACTIVITY[v.accountId] ?? [];
+  if (v.before) rows = rows.filter((a) => a.id < v.before);
+  return { data: { accountActivity: rows.slice(0, limit) } };
 }
 
 // ---- Shop and redeem codes (ADR 0016) ---------------------------------------------------
@@ -1092,9 +1153,49 @@ const sorted = (hits, sort) => {
 };
 
 const findEmote = (id) => MINE.find((e) => e.id === id) ?? ALL.find((e) => e.id === id);
-const findSet = (id) => SETS.find((s) => s.id === id) ?? SHARED_SETS.find((s) => s.id === id);
+const findSet = (id) => SETS.find((s) => s.id === id) ?? SHARED_SETS.find((s) => s.id === id) ?? PUBLIC_SETS.find((s) => s.id === id);
+const ALL_SETS = () => [...SETS, ...SHARED_SETS, ...PUBLIC_SETS];
+const ACTIVE_SET_IDS = () => new Set([...CHANNELS, ...EDITOR_CHANNELS].map((c) => c.activeSetId).filter(Boolean));
+// The API's rule: anyone opens listed and unlisted sets; a private one only its owner, editors and
+// account editors, or anyone while a channel shows it.
+const mayView = (s, session) => s.visibility !== 'PRIVATE' || ACTIVE_SET_IDS().has(s.id)
+  || (session && (s.owner?.id === ME_ID || s.editors.some((e) => e.id === ME_ID) || EDITOR_OF.some((g) => g.account.id === s.owner?.id)));
 const err = (message, code) => ({ data: null, errors: [{ message, extensions: { code } }] });
-const setOut = (s) => ({ ...s, editors: undefined });
+const setOut = (s) => ({ ...s, editors: undefined, visibility: s.visibility ?? 'LISTED', listed: (s.visibility ?? 'LISTED') === 'LISTED',
+  slotsUsed: s.emotes.length, createdAt: s.createdAt ?? '2026-11-10T12:00:00.000Z' });
+const setCard = (s, preview = 12) => {
+  const o = setOut(s);
+  return { id: o.id, name: o.name, kind: o.kind, owner: o.owner, visibility: o.visibility, listed: o.listed, capacity: o.capacity,
+    slotsUsed: o.slotsUsed, active: ACTIVE_SET_IDS().has(o.id), createdAt: o.createdAt,
+    preview: [...o.emotes].reverse().slice(0, Math.max(0, Math.min(50, preview))) };
+};
+// accountSets(accountId, preview): an account's listed sets as cards, signed in or not.
+const accountSets = (accountId, preview) =>
+  ALL_SETS().filter((s) => s.owner?.id === accountId && s.kind !== 'GLOBAL' && (s.visibility ?? 'LISTED') === 'LISTED'
+    && !(STATUS[accountId]?.blocked)).slice(0, 50).map((s) => setCard(s, preview ?? 12));
+const VISIBILITIES = ['LISTED', 'UNLISTED', 'PRIVATE'];
+let clones = 0;
+// cloneSet(id, name, ownerId, visibility): the API's rules in small: approved emotes only,
+// others' private emotes skipped, capacity 1000.
+function cloneSet(v, session) {
+  const src = findSet(v.id);
+  if (!src || !mayView(src, session)) return err('Not found.', 'not_found');
+  const ownerId = v.ownerId || ME_ID;
+  if (!flagsOn(ownerId).includes('SETS'))
+    return err('Only the account’s owner and its editors with the sets permission can make sets for it.', 'forbidden');
+  if (++clones > 30) return err('That’s a lot of copied sets. Try again in a while.', 'rate_limited');
+  const name = (v.name ?? src.name).trim();
+  if (!name || name.length > 100) return err('Set names are 1 to 100 characters.', 'bad_name');
+  if (v.visibility && !VISIBILITIES.includes(v.visibility)) return err('Unknown visibility.', 'bad_visibility');
+  const owner = ownerId === ME_ID ? ME_SUMMARY : EDITOR_OF.find((g) => g.account.id === ownerId).account;
+  const keep = src.emotes.filter((m) => m.emote.state === 'APPROVED' && (!m.emote.flags.private || m.emote.owner?.id === ownerId));
+  const copied = keep.slice(0, 1000);
+  const s = { id: `01JD8XSETCPY${String(clones).padStart(14, '0')}`, name, kind: 'CHANNEL', capacity: 1000, owner,
+    emotes: copied.map((m) => ({ ...m, addedAt: new Date().toISOString() })), editors: [], visibility: v.visibility ?? 'LISTED',
+    createdAt: new Date().toISOString() };
+  (ownerId === ME_ID ? SETS : SHARED_SETS).push(s);
+  return { data: { cloneSet: { set: setOut(s), copied: copied.length, skipped: src.emotes.length - copied.length } } };
+}
 
 function signedIn(body, v, ADMIN) {
   const op = (body.query.match(/(?:query|mutation)\s+(\w+)/) ?? [])[1];
@@ -1141,15 +1242,26 @@ function signedIn(body, v, ADMIN) {
       const list = ownerId === ME_ID ? SETS : SHARED_SETS;
       if (v.input.kind === 'PERSONAL' && [...SETS, ...SHARED_SETS].some((s) => s.kind === 'PERSONAL' && s.owner?.id === ownerId))
         return err('You already have a personal set.', 'personal_set_exists');
+      const visibility = v.input.visibility ?? (v.input.kind === 'PERSONAL' ? 'UNLISTED' : 'LISTED');
+      if (v.input.kind === 'PERSONAL' && visibility === 'PRIVATE')
+        return err('Personal sets can’t be private, and the global set is always listed.', 'bad_visibility');
       const s = { id: `01JD8XSETNEW${String(SETS.length + SHARED_SETS.length).padStart(14, '0')}`, name: v.input.name, kind: v.input.kind,
-        capacity: v.input.kind === 'PERSONAL' ? 5 : 1000, owner, emotes: [], editors: [] };
+        capacity: v.input.kind === 'PERSONAL' ? 5 : 1000, owner, emotes: [], editors: [], visibility, createdAt: new Date().toISOString() };
       list.push(s);
-      return { data: { createSet: { id: s.id } } };
+      return { data: { createSet: setOut(s) } };
     }
     case 'UpdateSet': {
       const s = findSet(v.id);
+      if (!s) return err('Not found.', 'not_found');
+      if (v.input.visibility) {
+        if (s.kind === 'GLOBAL' || (s.kind === 'PERSONAL' && v.input.visibility === 'PRIVATE'))
+          return err('Personal sets can’t be private, and the global set is always listed.', 'bad_visibility');
+        if (!flagsOn(s.owner?.id).includes('SETS'))
+          return err('Only the set’s owner and their editors with the sets permission can change who sees it.', 'forbidden');
+        s.visibility = v.input.visibility;
+      }
       if (v.input.name) s.name = v.input.name;
-      return { data: { updateSet: { id: s.id, name: s.name } } };
+      return { data: { updateSet: setOut(s) } };
     }
     case 'DeleteSet': {
       if ([...CHANNELS, ...EDITOR_CHANNELS].some((c) => c.activeSetId === v.id)) return err('A channel shows this set. Pick another active set first.', 'set_in_use');
@@ -1203,6 +1315,23 @@ function signedIn(body, v, ADMIN) {
       if (v.input.activeSetId !== undefined) c.activeSetId = v.input.activeSetId || null;
       if (v.input.allowPersonalEmotes !== undefined) c.allowPersonalEmotes = v.input.allowPersonalEmotes;
       return { data: { updateChannelSettings: { activeSetId: c.activeSetId, allowPersonalEmotes: c.allowPersonalEmotes } } };
+    }
+    // The profile (your profile is your dashboard): channels and sets, roles, editors.
+    case 'ProfileMine':
+      return { data: { myChannels: CHANNELS, mySets: SETS.filter((s) => s.owner?.id === ME_ID).map(setOut) } };
+    case 'ProfileEdited':
+      return { data: { editorChannels: editorChannels(), editorSets: editorSets().map(setOut) } };
+    case 'EditorOf':
+      return { data: { editorOf: editorOfOut() } };
+    case 'AccountEditors': {
+      if (!v.accountId || v.accountId === ME_ID) return { data: { accountEditors: ACCOUNT_EDITORS } };
+      if (!flagsOn(v.accountId).includes('EDITORS')) return err('This needs the editors permission on that account.', 'forbidden');
+      return { data: { accountEditors: [] } };
+    }
+    case 'AccountRoles': {
+      if (v.accountId !== ME_ID && !ADMIN) return err('This needs users.view.', 'forbidden');
+      const ids = v.accountId === ME_ID ? (ADMIN ? ['ROLE1'] : []) : ACCOUNT_ROLES[v.accountId] ?? [];
+      return { data: { accountRoles: ids.map((id) => ROLES.find((r) => r.id === id)).filter(Boolean) } };
     }
     case 'Editors':
       return { data: { accountEditors: ACCOUNT_EDITORS, editorOf: editorOfOut() } };
@@ -1319,13 +1448,59 @@ function signedIn(body, v, ADMIN) {
   }
 }
 
+// searchAccounts(query, page, perPage): the mock's people by login or display name, exact login
+// first, then prefixes, then anything containing the text. Blocked accounts are never listed.
+let accountSearches = 0;
+const searchPeople = () => [ME_SUMMARY, ...OTHERS].map((a) => ({
+  account: a,
+  identities: [
+    { platform: 'TWITCH', login: a.displayName.toLowerCase(), displayName: a.displayName },
+    ...(a.id === OTHERS[0].id ? [{ platform: 'KICK', login: 'quietoak_live', displayName: 'QuietOak' }] : []),
+  ],
+}));
+function searchAccounts(v) {
+  if (++accountSearches > 600) return err('That’s a lot of searches. Try again in a minute.', 'rate_limited');
+  const text = String(v.query ?? '').trim().replace(/^@/, '').toLowerCase();
+  const per = Math.min(50, Math.max(1, v.perPage ?? 20));
+  const page = Math.min(1000, Math.max(1, v.page ?? 1));
+  const tier = (h) => Math.max(...h.identities.map((i) =>
+    i.login === text ? 3 : i.login.startsWith(text) ? 2 : i.displayName.toLowerCase().startsWith(text) ? 1 : 0));
+  const hits = !text ? [] : searchPeople()
+    .filter((h) => !STATUS[h.account.id]?.blocked)
+    .filter((h) => h.identities.some((i) => i.login.includes(text) || i.displayName.toLowerCase().includes(text)))
+    .sort((a, b) => tier(b) - tier(a) || a.account.id.localeCompare(b.account.id));
+  return { data: { searchAccounts: { total: hits.length, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
+}
+
+// Fields added after the site's first queries, answered by field name so any operation name works.
+function newFields(q, v, session) {
+  if (/\bsearchAccounts\s*\(/.test(q)) return searchAccounts(v);
+  if (/\bcloneSet\s*\(/.test(q)) return session ? cloneSet(v, session) : err('Sign in to use this.', 'signed_out');
+  if (/\baccountSets\s*\(/.test(q)) {
+    const data = { accountSets: accountSets(v.accountId ?? v.id ?? '', v.preview) };
+    if (/\baccount\s*\(/.test(q)) data.account = publicAccount(v.accountId ?? v.id ?? '');
+    return { data };
+  }
+  return null;
+}
+
+// New fields merge with whatever else the same operation asks for (the older handlers below).
 function answer(body, session, admin) {
+  const added = newFields(body.query ?? '', body.variables ?? {}, session);
+  if (!added) return baseAnswer(body, session, admin);
+  if (added.errors || !added.data) return added;
+  const base = baseAnswer(body, session, admin);
+  return { ...added, data: base?.data && !base.errors ? { ...base.data, ...added.data } : added.data };
+}
+
+function baseAnswer(body, session, admin) {
   const q = body.query ?? '';
   const v = body.variables ?? {};
   const cosmetic = cosmeticsAnswer(q, v, session, admin);
   if (cosmetic) return cosmetic;
   const shop = shopAnswer(q, v, session, admin);
   if (shop) return shop;
+  if (/accountActivity\s*\(/.test(q)) return activityAnswer(v);
   if (session) {
     const out = signedIn(body, v, admin);
     if (out) return out;
@@ -1359,9 +1534,10 @@ function answer(body, session, admin) {
     const c = channelByLogin(v.platform, v.login);
     return { data: { channelByLogin: c } };
   }
-  if (q.includes('query Set(')) {
+  if (q.includes('query Set(') || /\bset\s*\(\s*id:/.test(q)) {
+    // Unknown ids fall back to the first set, as before; private ones you can't see are null.
     const s = findSet(v.id) ?? SETS[0];
-    return { data: { set: setOut(s) } };
+    return { data: { set: mayView(s, session) ? setOut(s) : null } };
   }
   return err('Not in the mock.', 'not_implemented');
 }
@@ -1464,10 +1640,26 @@ createServer(async (req, res) => {
   if (req.method === 'POST' && url.pathname === '/v1/emotes') {
     const raw = (await read(req)).toString('latin1');
     if (!session) return json(res, 401, { error: 'signed_out', message: 'Sign in to upload.' });
-    const name = raw.match(/name="name"\r\n\r\n([^\r]*)/)?.[1] ?? 'upload';
-    if (name === 'blocked') return json(res, 422, { error: 'blocked', message: 'This image was taken down before and can’t be uploaded again.' });
+    const field = (k) => raw.match(new RegExp(`name="${k}"\\r\\n\\r\\n([^\\r]*)`))?.[1];
+    const name = field('name') ?? 'upload';
+    // Names that stand in for the API's refusals, to see how the upload form explains them.
+    if (name === 'blocked') return json(res, 422, { error: 'blocked', message: 'This image can’t be uploaded to cyex.tv.' });
+    if (name === 'ratelimited') return json(res, 429, { error: 'rate_limited', message: 'That’s a lot of uploads. Try again in an hour.' });
+    if (name === 'broken') return json(res, 422, { error: 'invalid_image', message: 'That file isn’t a valid image (truncated).' });
+    // The flags, as the API reads them (POST /v1/emotes): true/1/on, false/0/off/empty.
+    const flag = (k) => {
+      const v = (field(k) ?? '').trim().toLowerCase();
+      if (['true', '1', 'on'].includes(v)) return true;
+      if (['false', '0', 'off', ''].includes(v)) return false;
+      return null;
+    };
+    const flags = { zeroWidth: flag('zero_width'), private: flag('private'), nsfw: flag('nsfw') };
+    if (Object.values(flags).includes(null)) return json(res, 400, { error: 'bad_form', message: 'A flag is true or false.' });
+    await new Promise((r) => setTimeout(r, 700)); // long enough to see the progress
     const e = emote(700 + uploads++, ME_SUMMARY, 'PENDING');
     e.name = name;
+    e.flags = flags;
+    e.tags = (field('tags') ?? '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
     e.host = '';
     e.files = [];
     e.createdAt = new Date().toISOString();

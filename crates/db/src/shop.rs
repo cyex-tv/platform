@@ -1,5 +1,5 @@
 //! The cosmetics shop (ADR 0016): items, orders, Paddle webhook events, and the entitlements an
-//! order makes. See the migration `20261122000001_shop.sql`. The api checks permissions and
+//! order makes. See the migration `20261201000001_shop.sql`. The api checks permissions and
 //! input, and runs a checkout's or a fulfilment's statements in one transaction.
 
 use std::collections::HashMap;
@@ -362,6 +362,10 @@ pub struct OrderRow {
     pub currency: String,
     pub provider: String,
     pub provider_transaction_id: Option<String>,
+    /// The item's Paddle price when the checkout started.
+    pub paddle_price_id: Option<String>,
+    /// The currency Paddle gave the transaction.
+    pub provider_currency: Option<String>,
     pub paid_total_cents: Option<i64>,
     pub paid_currency: Option<String>,
     pub provider_adjustment_id: Option<String>,
@@ -374,7 +378,8 @@ pub struct OrderRow {
 }
 
 const ORDER: &str = "id, account_id, recipient_id, item_id, item_name, status, amount_cents, \
-                     currency, provider, provider_transaction_id, paid_total_cents, \
+                     currency, provider, provider_transaction_id, paddle_price_id, \
+                     provider_currency, paid_total_cents, \
                      paid_currency, provider_adjustment_id, refund_reason, created_at, \
                      updated_at, paid_at, refunded_at, failed_at";
 
@@ -386,8 +391,9 @@ pub async fn create_order(
     item: &ItemRow,
 ) -> DbResult<OrderRow> {
     Ok(sqlx::query_as(&format!(
-        "INSERT INTO shop_orders (id, account_id, recipient_id, item_id, item_name, amount_cents, currency)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
+        "INSERT INTO shop_orders (id, account_id, recipient_id, item_id, item_name, amount_cents, currency,
+                                  paddle_price_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING {ORDER}"
     ))
     .bind(new_id())
@@ -397,6 +403,7 @@ pub async fn create_order(
     .bind(&item.name)
     .bind(item.price_cents)
     .bind(&item.currency)
+    .bind(&item.paddle_price_id)
     .fetch_one(conn)
     .await?)
 }
@@ -405,13 +412,16 @@ pub async fn set_transaction(
     conn: &mut PgConnection,
     id: Uuid,
     transaction_id: &str,
+    currency: Option<&str>,
 ) -> DbResult<OrderRow> {
     sqlx::query_as(&format!(
-        "UPDATE shop_orders SET provider_transaction_id = $2, updated_at = now()
+        "UPDATE shop_orders SET provider_transaction_id = $2, provider_currency = $3,
+                updated_at = now()
          WHERE id = $1 RETURNING {ORDER}"
     ))
     .bind(id)
     .bind(transaction_id)
+    .bind(currency)
     .fetch_optional(conn)
     .await?
     .ok_or(DbError::NotFound)

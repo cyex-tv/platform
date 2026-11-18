@@ -288,12 +288,18 @@ pub struct Emote {
     pub channel_count: u32,
 }
 
-/// Multipart upload (REST only): the image file and its name.
+/// Multipart upload (REST only): the image file, its name, and optionally its tags and flags.
 #[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct UploadEmote {
     pub name: String,
     /// Comma-separated.
     pub tags: Option<String>,
+    /// `true` or `false` (also `1`/`0`, `on`/`off`); default `false`. Drawn over the emote before it.
+    pub zero_width: Option<String>,
+    /// As `zero_width`. Only its owner can add it to sets, and search leaves it out.
+    pub private: Option<String>,
+    /// As `zero_width`. Search leaves it out unless asked for NSFW.
+    pub nsfw: Option<String>,
     #[schema(value_type = String, format = Binary)]
     pub file: Vec<u8>,
 }
@@ -347,6 +353,48 @@ impl FromStr for SetKind {
     }
 }
 
+/// Who can find and open a set.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "lowercase")]
+pub enum SetVisibility {
+    /// Anyone can open it, and it is listed on its owner's profile. New channel sets start here.
+    #[default]
+    Listed,
+    /// Anyone with its link (its ID) can open it; it isn't listed. Personal sets start here.
+    Unlisted,
+    /// Only its owner, its editors and staff can open it, except while a channel shows it:
+    /// a channel's active set is public. Channel sets only.
+    Private,
+}
+
+impl SetVisibility {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Listed => "listed",
+            Self::Unlisted => "unlisted",
+            Self::Private => "private",
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[error("unknown set visibility: {0}")]
+pub struct UnknownSetVisibility(pub String);
+
+impl FromStr for SetVisibility {
+    type Err = UnknownSetVisibility;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "listed" => Ok(Self::Listed),
+            "unlisted" => Ok(Self::Unlisted),
+            "private" => Ok(Self::Private),
+            other => Err(UnknownSetVisibility(other.to_owned())),
+        }
+    }
+}
+
 /// An emote as it sits in a set: the name it is typed as there, and who added it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
@@ -368,6 +416,51 @@ pub struct EmoteSet {
     pub owner: Option<AccountSummary>,
     pub capacity: u32,
     pub emotes: Vec<SetEmote>,
+    /// Who can find and open it.
+    #[serde(default)]
+    pub visibility: SetVisibility,
+    /// `visibility` is `LISTED`: shown on the owner's profile.
+    #[serde(default)]
+    pub listed: bool,
+    /// How many of `capacity` the set uses. Counts every emote in it, also those this answer
+    /// doesn't show you (pending ones), so `capacity - slotsUsed` is what still fits.
+    #[serde(default)]
+    pub slots_used: u32,
+    #[serde(default)]
+    pub created_at: String,
+}
+
+/// A set as a card on a profile: its facts and the first few emotes (`accountSets`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct SetSummary {
+    pub id: String,
+    pub name: String,
+    pub kind: SetKind,
+    pub owner: Option<AccountSummary>,
+    pub visibility: SetVisibility,
+    pub listed: bool,
+    pub capacity: u32,
+    /// Every emote in the set counts; see `EmoteSet.slotsUsed`.
+    pub slots_used: u32,
+    /// A channel shows this set now.
+    pub active: bool,
+    /// The newest emotes you may see, at most the `preview` asked for.
+    pub preview: Vec<SetEmote>,
+    pub created_at: String,
+}
+
+/// What `cloneSet` made.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct ClonedSet {
+    /// The new channel set.
+    pub set: EmoteSet,
+    /// Emotes copied into it.
+    pub copied: u32,
+    /// Emotes left out: over capacity, private emotes of others, emotes not approved, or ones
+    /// you can't see.
+    pub skipped: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -380,6 +473,10 @@ pub struct CreateSet {
     /// Make the set for an account you edit with `sets` (ADR 0014). Empty: for yourself.
     #[serde(default)]
     pub owner_id: Option<String>,
+    /// Empty: `LISTED` for channel sets, `UNLISTED` for the personal set. Personal sets can't be
+    /// `PRIVATE`.
+    #[serde(default)]
+    pub visibility: Option<SetVisibility>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -389,6 +486,9 @@ pub struct UpdateSet {
     pub name: Option<String>,
     /// Needs `sets.edit_any` to raise above the default.
     pub capacity: Option<u32>,
+    /// Personal sets can't be `PRIVATE`; the global set is always listed.
+    #[serde(default)]
+    pub visibility: Option<SetVisibility>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -432,6 +532,33 @@ pub struct PersonalLookupResult {
 }
 
 // Search
+
+/// A linked Twitch or Kick account as anyone may see it: no IDs.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct PublicIdentity {
+    pub platform: Platform,
+    pub login: String,
+    pub display_name: String,
+}
+
+/// One `searchAccounts` hit: the account's public summary and its linked logins.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct AccountHit {
+    pub account: AccountSummary,
+    /// Twitch first.
+    pub identities: Vec<PublicIdentity>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct AccountResults {
+    pub items: Vec<AccountHit>,
+    pub total: u64,
+    pub page: u32,
+    pub per_page: u32,
+}
 
 /// How `searchEmotes` orders its results.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -551,6 +678,76 @@ pub struct AccountStatus {
     pub blocked: bool,
 }
 
+// Account activity (ADR 0016)
+
+/// What one line of an account's public activity feed says happened.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "snake_case")]
+pub enum ActivityKind {
+    SetEmoteAdded,
+    SetEmoteRemoved,
+    /// The emote's name in the set changed (`from_name`, `to_name`).
+    SetEmoteRenamed,
+    /// A channel's active set changed (`set` is the new one; `from_name`, `to_name`).
+    ActiveSetChanged,
+    /// The badge and/or paint shown changed (`badge`, `paint`).
+    CosmeticsSelected,
+    /// An emote of the account was approved and listed.
+    EmoteUploaded,
+    SetCreated,
+    /// A set was renamed (`from_name`, `to_name`).
+    SetRenamed,
+}
+
+/// A set, as a feed line names it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct ActivitySet {
+    pub id: String,
+    pub name: String,
+}
+
+/// An emote, as a feed line names it. `name` is what it was called in the set at the time.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct ActivityEmote {
+    pub id: String,
+    pub name: String,
+    /// For example `https://cdn.cyex.tv/emotes/<sha256>`.
+    pub host: String,
+    pub files: Vec<EmoteFile>,
+}
+
+/// A badge or paint change: what it was and what it is now. Empty ends mean none; names are
+/// empty when the cosmetic was deleted since.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct ActivityCosmeticChange {
+    pub from_id: Option<String>,
+    pub from_name: Option<String>,
+    pub to_id: Option<String>,
+    pub to_name: Option<String>,
+}
+
+/// One line of an account's public activity feed (7TV's "Activity" tab).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct ActivityEntry {
+    /// An audit row ID; page back with it.
+    pub id: String,
+    pub kind: ActivityKind,
+    /// Who did it: the account or one of its editors.
+    pub actor: AccountSummary,
+    pub set: Option<ActivitySet>,
+    pub emote: Option<ActivityEmote>,
+    pub from_name: Option<String>,
+    pub to_name: Option<String>,
+    pub badge: Option<ActivityCosmeticChange>,
+    pub paint: Option<ActivityCosmeticChange>,
+    pub created_at: String,
+}
+
 /// One audited change (ADR 0010). `before` and `after` are JSON, as text.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
@@ -607,6 +804,10 @@ pub enum EventType {
     PersonalUpdated,
     #[serde(rename = "emote.updated")]
     EmoteUpdated,
+    /// A listed set was made (`createSet`, `cloneSet`), on its owner's `user:` topics. Unlisted
+    /// and private sets make no event, so their IDs stay unknown.
+    #[serde(rename = "set.created")]
+    SetCreated,
     /// A badge or paint was made (topic `cosmetics`, ADR 0015).
     #[serde(rename = "cosmetic.created")]
     CosmeticCreated,
@@ -707,8 +908,18 @@ mod tests {
             let json = serde_json::to_string(&kind).unwrap();
             assert_eq!(json, format!("\"{}\"", kind.as_str()));
         }
+        for v in [
+            SetVisibility::Listed,
+            SetVisibility::Unlisted,
+            SetVisibility::Private,
+        ] {
+            assert_eq!(v.as_str().parse::<SetVisibility>().unwrap(), v);
+            let json = serde_json::to_string(&v).unwrap();
+            assert_eq!(json, format!("\"{}\"", v.as_str()));
+        }
         assert!("deleted".parse::<EmoteState>().is_err());
         assert!("Channel".parse::<SetKind>().is_err());
+        assert!("public".parse::<SetVisibility>().is_err());
     }
 
     #[test]

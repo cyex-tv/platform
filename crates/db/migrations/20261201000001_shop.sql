@@ -52,6 +52,10 @@ CREATE TABLE shop_orders (
     currency                text NOT NULL CHECK (currency ~ '^[A-Z]{3}$'),
     provider                text NOT NULL DEFAULT 'paddle' CHECK (provider IN ('paddle')),
     provider_transaction_id text UNIQUE,
+    -- What the transaction was made for, checked against Paddle's completion: the price, and
+    -- the currency Paddle gave the transaction.
+    paddle_price_id         text,
+    provider_currency       text,
     -- What Paddle says was paid (lowest denomination, tax included).
     paid_total_cents        bigint,
     paid_currency           text,

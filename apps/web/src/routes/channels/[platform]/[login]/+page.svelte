@@ -3,6 +3,7 @@
   import ChatPreview from '$lib/components/ChatPreview.svelte';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import { lookFor, NO_LOOK, type Look } from '$lib/cosmetics/store.svelte';
   import ProfileCard from '$lib/components/profile/ProfileCard.svelte';
   import State from '$lib/components/State.svelte';
   import { chatLines } from '$lib/components/profile/chat';
@@ -14,6 +15,13 @@
 
   let { data } = $props();
   const c = $derived(data.channel);
+  // The owner's badge and paint, from the batched chatter lookup (in the browser).
+  let look = $state<Look>(NO_LOOK);
+  $effect(() => {
+    const ch = c;
+    look = NO_LOOK;
+    if (ch) lookFor(ch.platform, ch.platformChannelId).then((l) => { if (c === ch) look = l; });
+  });
   const set = $derived(data.set);
   const key = $derived(c.platform === 'TWITCH' ? ('twitch' as const) : ('kick' as const));
   const platform = $derived(key === 'twitch' ? 'Twitch' : 'Kick');
@@ -75,12 +83,12 @@
   {#snippet rail()}
     <SideRail label="{who}'s channel" {groups} collapse="tabs">
       {#snippet head()}
-        <ProfileCard name={who} avatar={c.account.avatar} kind="{platform} channel" {meta} {actions} />
+        <ProfileCard name={who} avatar={c.account.avatar} kind="{platform} channel" {meta} {actions} {look} />
       {/snippet}
     </SideRail>
   {/snippet}
 
-  <div class="phone-card"><ProfileCard name={who} avatar={c.account.avatar} kind="{platform} channel" {meta} {actions} /></div>
+  <div class="phone-card"><ProfileCard name={who} avatar={c.account.avatar} kind="{platform} channel" {meta} {actions} {look} /></div>
 
   <section aria-labelledby="emotes-h">
     <div class="bar">

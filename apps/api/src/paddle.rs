@@ -132,6 +132,8 @@ pub enum PaddleError {
 pub struct Transaction {
     pub id: String,
     pub checkout_url: Option<String>,
+    /// The currency Paddle gave it, checked again when it completes.
+    pub currency_code: Option<String>,
 }
 
 pub struct Paddle {
@@ -203,6 +205,7 @@ impl Paddle {
         Ok(Transaction {
             id,
             checkout_url: data["checkout"]["url"].as_str().map(str::to_owned),
+            currency_code: data["currency_code"].as_str().map(str::to_owned),
         })
     }
 

@@ -1,0 +1,90 @@
+// The profile's Activity section (ADR 0016), behind a small adapter: the feed component only knows
+// `ActivityItem`, and `loadActivity` maps the API's `accountActivity` into it. The feed is public.
+import { gql } from '$lib/api';
+import type { Picture } from '$lib/emote';
+import type { AccountActivityQuery, ActivityKind as ApiKind } from '$lib/gql/graphql';
+import { ACCOUNT_ACTIVITY } from '$lib/queries';
+
+/** Whether the API has `accountActivity` (it does since PR 52). */
+export const ACTIVITY_READY = true;
+
+export type ActivityKind = 'added' | 'removed' | 'renamed' | 'active' | 'cosmetics' | 'uploaded' | 'created' | 'setRenamed';
+
+type Change = { fromId?: string | null; fromName?: string | null; toId?: string | null; toName?: string | null };
+
+export type ActivityItem = {
+  id: string;
+  kind: ActivityKind;
+  /** RFC 3339. */
+  at: string;
+  /** Who did it (the owner or one of their editors). */
+  actor: { id: string; displayName: string } | null;
+  set: { id: string; name: string } | null;
+  /** The emote, with the name it had in the set then, and its picture. */
+  emote: { id: string; name: string; picture: Picture } | null;
+  from: string | null;
+  to: string | null;
+  badge: Change | null;
+  paint: Change | null;
+};
+
+const KIND: Record<ApiKind, ActivityKind> = {
+  SET_EMOTE_ADDED: 'added',
+  SET_EMOTE_REMOVED: 'removed',
+  SET_EMOTE_RENAMED: 'renamed',
+  ACTIVE_SET_CHANGED: 'active',
+  COSMETICS_SELECTED: 'cosmetics',
+  EMOTE_UPLOADED: 'uploaded',
+  SET_CREATED: 'created',
+  SET_RENAMED: 'setRenamed',
+};
+
+type Entry = AccountActivityQuery['accountActivity'][number];
+
+/** One API entry as a feed item; unknown kinds are dropped. */
+export function toItem(e: Entry): ActivityItem | null {
+  const kind = KIND[e.kind];
+  if (!kind) return null;
+  return {
+    id: e.id,
+    kind,
+    at: e.createdAt,
+    actor: e.actor ?? null,
+    set: e.set ?? null,
+    emote: e.emote ? { id: e.emote.id, name: e.emote.name, picture: { host: e.emote.host, animated: false, files: e.emote.files } } : null,
+    from: e.fromName ?? null,
+    to: e.toName ?? null,
+    badge: e.badge ?? null,
+    paint: e.paint ?? null,
+  };
+}
+
+export const PAGE = 30;
+
+/** A page of the account's activity, newest first; `before` is the last item's id. */
+export async function loadActivity(accountId: string, before: string | null = null, fetcher: typeof fetch = fetch): Promise<ActivityItem[]> {
+  const r = await gql(ACCOUNT_ACTIVITY, { accountId, before, limit: PAGE }, fetcher);
+  return r.accountActivity.map(toItem).filter((i): i is ActivityItem => i !== null);
+}
+
+const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['year', 365 * 24 * 3600],
+  ['month', 30 * 24 * 3600],
+  ['week', 7 * 24 * 3600],
+  ['day', 24 * 3600],
+  ['hour', 3600],
+  ['minute', 60],
+];
+
+/** "3 minutes ago", "a month ago", "just now" (English, the site's language). */
+export function relative(iso: string, now = Date.now()): string {
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return '';
+  const secs = Math.max(0, Math.round((now - t) / 1000));
+  if (secs < 45) return 'just now';
+  for (const [unit, size] of UNITS) {
+    const n = Math.round(secs / size);
+    if (n >= 1 && secs >= size * 0.9) return n === 1 ? `${unit === 'hour' ? 'an' : 'a'} ${unit} ago` : `${n} ${unit}s ago`;
+  }
+  return 'a minute ago';
+}

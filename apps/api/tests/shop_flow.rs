@@ -57,7 +57,7 @@ async fn fake_paddle() -> (String, Arc<Fake>) {
         }
         let n = fake.next.fetch_add(1, Ordering::SeqCst);
         let data = if path == "/transactions" {
-            json!({ "id": format!("txn_test{n}"), "status": "ready",
+            json!({ "id": format!("txn_test{n}"), "status": "ready", "currency_code": "EUR",
                     "checkout": { "url": format!("https://pay.example.test/checkout?_ptxn=txn_test{n}") } })
         } else {
             json!({ "id": format!("adj_test{n}"), "status": "pending_approval", "action": "refund" })
@@ -381,7 +381,7 @@ fn adjustment(event_id: &str, txn: &str, action: &str, status: &str) -> Value {
         "event_id": event_id,
         "event_type": "adjustment.updated",
         "occurred_at": "2026-11-17T12:00:00Z",
-        "data": { "id": format!("adj_{event_id}"), "action": action, "status": status, "transaction_id": txn }
+        "data": { "id": format!("adj_{event_id}"), "action": action, "type": "full", "status": status, "transaction_id": txn }
     })
 }
 
@@ -791,6 +791,10 @@ async fn refunds_take_back_what_the_order_gave() {
         r["data"]["refundOrder"]["refundReason"],
         "asked by the buyer"
     );
+    // The reason is a staff note: the buyer doesn't see it.
+    let seen = w.gql(Some(&buyer), ORDER, json!({ "id": order })).await;
+    assert_eq!(seen["data"]["order"]["status"], "REFUNDED");
+    assert!(seen["data"]["order"]["refundReason"].is_null());
     {
         let calls = w.fake.calls.lock().unwrap();
         let (path, body) = calls.last().unwrap();
@@ -825,8 +829,16 @@ async fn refunds_take_back_what_the_order_gave() {
     );
     assert_eq!(w.audit_count("shop.order_refunded").await, 1);
 
-    // A chargeback from Paddle refunds the second purchase; a pending refund doesn't.
+    // A chargeback from Paddle refunds the second purchase; a pending or partial refund doesn't.
     let (txn2, order2) = buy("evt_c").await;
+    let mut partial = adjustment("evt_p", &txn2, "refund", "approved");
+    partial["data"]["type"] = json!("partial");
+    assert_eq!(w.hook(partial).await, StatusCode::OK);
+    assert_eq!(
+        w.gql(Some(&buyer), ORDER, json!({ "id": order2 })).await["data"]["order"]["status"],
+        "PAID"
+    );
+    assert_eq!(w.audit_count("shop.order_partial_refund").await, 1);
     assert_eq!(w.sources(buyer.id).await.len(), 2);
     assert_eq!(
         w.hook(adjustment("evt_d", &txn2, "refund", "pending_approval"))
@@ -1111,5 +1123,90 @@ async fn wrong_codes_lock_out_the_account_and_the_ip() {
         code(&w.gql(Some(&fresh), REDEEM, json!({ "code": good })).await),
         "locked_out"
     );
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn completions_that_dont_match_their_order_are_not_fulfilled() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let buyer = w.user("91").await;
+    let badge = w.badge("Rare").await;
+    let item = w
+        .item(&owner, bundle_input("Expensive", &[&badge], &[]))
+        .await;
+    let r = w
+        .gql(Some(&buyer), CHECKOUT, json!({ "itemId": item["id"] }))
+        .await;
+    let txn = r["data"]["startCheckout"]["transactionId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let order = r["data"]["startCheckout"]["order"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let pending = || async {
+        w.gql(Some(&buyer), ORDER, json!({ "id": order })).await["data"]["order"]["status"].clone()
+    };
+
+    // Another (cheaper) price, two of it, another currency, or an extra item: not ours to fulfil.
+    let mut cheap = completed("evt_m1", &txn, &order);
+    cheap["data"]["items"][0]["price"]["id"] = json!("pri_01cheap");
+    let mut many = completed("evt_m2", &txn, &order);
+    many["data"]["items"][0]["quantity"] = json!(2);
+    let mut usd = completed("evt_m3", &txn, &order);
+    usd["data"]["currency_code"] = json!("USD");
+    let mut extra = completed("evt_m4", &txn, &order);
+    extra["data"]["items"] = json!([{ "price": { "id": "pri_01testprice" }, "quantity": 1 }, { "price": { "id": "pri_01other" }, "quantity": 1 }]);
+    for event in [cheap, many, usd, extra] {
+        assert_eq!(w.hook(event).await, StatusCode::OK);
+        assert_eq!(pending().await, "PENDING");
+    }
+    assert_eq!(w.audit_count("shop.order_mismatch").await, 4);
+    assert!(w.sources(buyer.id).await.is_empty());
+
+    // A transaction we never made, tagged with our order (anyone can make one with the client
+    // token): ignored, even for a failed order.
+    let mut conn = w.db.conn().await;
+    sqlx::query("UPDATE shop_orders SET status = 'failed'")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    drop(conn);
+    assert_eq!(
+        w.hook(completed("evt_m5", "txn_someone_elses", &order))
+            .await,
+        StatusCode::OK
+    );
+    // A failed order isn't fulfilled even by its own transaction.
+    assert_eq!(
+        w.hook(completed("evt_m6", &txn, &order)).await,
+        StatusCode::OK
+    );
+    assert_eq!(pending().await, "FAILED");
+    assert!(w.sources(buyer.id).await.is_empty());
+
+    // An adjustment that arrives before its order is paid is answered 503, so Paddle retries
+    // it; once the order is paid, the same event goes through.
+    let mut conn = w.db.conn().await;
+    sqlx::query("UPDATE shop_orders SET status = 'pending'")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    drop(conn);
+    let early = adjustment("evt_m7", &txn, "chargeback", "approved");
+    assert_eq!(w.hook(early.clone()).await, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        w.hook(completed("evt_m8", &txn, &order)).await,
+        StatusCode::OK
+    );
+    assert_eq!(pending().await, "PAID");
+    assert_eq!(w.sources(buyer.id).await.len(), 1);
+    assert_eq!(w.hook(early).await, StatusCode::OK);
+    assert_eq!(pending().await, "REFUNDED");
+    assert!(w.sources(buyer.id).await.is_empty());
     w.db.close().await;
 }

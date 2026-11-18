@@ -1,5 +1,5 @@
 //! Redeem codes (ADR 0016): batches staff make, each code stored only as the sha256 of its
-//! normalized text, and who redeemed which. See the migration `20261122000001_shop.sql`.
+//! normalized text, and who redeemed which. See the migration `20261201000001_shop.sql`.
 
 use std::collections::HashMap;
 

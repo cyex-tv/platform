@@ -215,15 +215,22 @@ async fn review(
         EmoteState::Approved => "emote.approved",
         _ => "emote.rejected",
     };
-    write_audit(
+    // An approval is on the owner's public activity feed (as "uploaded"); the reviewer and the
+    // reason are not.
+    audit::write_for(
         &mut tx,
-        caller,
-        action,
-        id,
-        Some(json!({ "state": before.state })),
-        Some(json!({ "state": to, "reason": why })),
+        &audit::NewEntry {
+            actor: Some(caller.account_id),
+            action,
+            target_kind: "emote",
+            target_id: &ids::to_text(id),
+            before: Some(json!({ "state": before.state })),
+            after: Some(json!({ "state": to, "reason": why })),
+        },
+        before.owner.filter(|_| to == EmoteState::Approved),
     )
-    .await?;
+    .await
+    .map_err(db_error)?;
     // Sets that held it pending show it now; a rejected one stays hidden, so nothing to tell.
     if to == EmoteState::Approved {
         announce(&mut tx, id, EventType::EmoteUpdated).await?;

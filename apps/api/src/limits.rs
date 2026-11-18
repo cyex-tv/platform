@@ -2,7 +2,8 @@
 //! GraphQL. A request over a limit gets `429 rate_limited` with `Retry-After`.
 //!
 //! The upload's 20 an hour per account lives in `upload`, since it counts what was made. Editor
-//! changes are checked per account in `editors`, cosmetics writes in `cosmetics`.
+//! changes are checked per account in `editors`, cosmetics writes in `cosmetics`, set clones in
+//! `catalog`.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -42,6 +43,10 @@ pub struct Rates {
     pub checkout: Rate,
     /// Redeem tries, right or wrong, per account (ADR 0016).
     pub redeem: Rate,
+    /// `cloneSet`, per account: each copies up to a whole set.
+    pub set_clones: Rate,
+    /// `searchAccounts`, per account, or per IP when signed out.
+    pub account_search: Rate,
 }
 
 impl Default for Rates {
@@ -57,6 +62,8 @@ impl Default for Rates {
             cosmetics: Rate::per_hour(300),
             checkout: Rate::per_hour(30),
             redeem: Rate::per_hour(30),
+            set_clones: Rate::per_hour(30),
+            account_search: Rate::per_minute(60),
         }
     }
 }
@@ -74,6 +81,8 @@ pub struct Limits {
     pub redeem: Limiter,
     /// Wrong redeem codes lock an account and an IP out for a while (ADR 0016).
     pub redeem_lockout: RedeemLockout,
+    pub set_clones: Limiter,
+    pub account_search: Limiter,
     /// Take the client IP from `CF-Connecting-IP` (`CYEX_TV_TRUST_CLOUDFLARE=true`).
     pub trust_cloudflare: bool,
 }
@@ -92,6 +101,8 @@ impl Limits {
             checkout: Limiter::new(rates.checkout),
             redeem: Limiter::new(rates.redeem),
             redeem_lockout: RedeemLockout::default(),
+            set_clones: Limiter::new(rates.set_clones),
+            account_search: Limiter::new(rates.account_search),
             trust_cloudflare,
         }
     }
@@ -153,15 +164,15 @@ impl Default for RedeemLockout {
     }
 }
 
-/// The client IP the limits middleware worked out, for handlers that limit per IP themselves.
-#[derive(Clone, Debug)]
-pub struct ClientIp(pub String);
-
 impl Default for Limits {
     fn default() -> Self {
         Self::new(Rates::default(), false)
     }
 }
+
+/// The client's IP as the limits saw it, for limits applied inside GraphQL resolvers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClientIp(pub String);
 
 /// The 429 answer.
 pub fn too_many(wait: std::time::Duration) -> Response {
@@ -193,23 +204,20 @@ fn class<'a>(limits: &'a Limits, method: &Method, path: &str) -> Option<&'a Limi
     }
 }
 
-pub async fn middleware(
-    State(state): State<AppState>,
-    mut request: Request,
-    next: Next,
-) -> Response {
+pub async fn middleware(State(state): State<AppState>, request: Request, next: Next) -> Response {
     let peer = request
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
         .map(|c| c.0);
     let ip = client_ip(request.headers(), peer, state.limits.trust_cloudflare);
+    let mut request = request;
+    request.extensions_mut().insert(ClientIp(ip.clone()));
     if let Some(limiter) = class(&state.limits, request.method(), request.uri().path())
         && let Err(wait) = limiter.check(&ip)
     {
         tracing::info!(%ip, path = request.uri().path(), "rate limited");
         return too_many(wait);
     }
-    request.extensions_mut().insert(ClientIp(ip));
     next.run(request).await
 }
 

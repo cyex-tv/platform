@@ -25,6 +25,9 @@
     status?: Snippet<[CardEmote]>;
     /** Controls under each tile (rename, remove, add), outside the tile's link. */
     below?: Snippet<[CardEmote]>;
+    /** Select mode: picking toggles `id` in `picked` through `onpick`; tiles stop being links. */
+    picked?: ReadonlySet<string>;
+    onpick?: (e: CardEmote) => void;
   };
   let {
     items,
@@ -40,6 +43,8 @@
     note,
     status: corner,
     below,
+    picked,
+    onpick,
   }: Props = $props();
 </script>
 
@@ -54,7 +59,8 @@
             {#snippet status()}{@render corner(e)}{/snippet}
           </EmoteTile>
         {:else}
-          <EmoteTile emote={e} {density} {creator} {labels} eager={i < eager} href={href?.(e)} note={note?.(e)} />
+          <EmoteTile emote={e} {density} {creator} {labels} eager={i < eager} href={href?.(e)} note={note?.(e)}
+            onpick={onpick ? () => onpick(e) : undefined} selected={picked?.has(e.id) ?? false} />
         {/if}
         {#if below}<div class="below">{@render below(e)}</div>{/if}
       </li>

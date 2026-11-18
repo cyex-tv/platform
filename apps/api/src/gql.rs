@@ -20,13 +20,14 @@ use cyex_tv_hub::Message as HubMessage;
 use cyex_tv_hub::topics as hub_topics;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::model::{
-    AccountEditor, AccountStatus, AccountSummary, AddAccountEditor, AddSetEmote, AuditEntry, Badge,
-    Channel, CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge, CreateRole, CreateSet,
-    EditedAccount, EditorPermission, Emote, EmotePage, EmoteSet, EmoteSort, Entitlement,
-    EntitlementPage, Event, GrantCosmetic, Identity, Me, Notification, OwnedCosmetics, Paint,
-    PaintInput, PersonalSetEntry, Platform, Report, ReportAction, ReportQueue, ReviewQueue, Role,
-    SearchResults, SetEmote, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole,
-    UpdateSet, UpdateSetEmote, UserCosmetics,
+    AccountEditor, AccountResults, AccountStatus, AccountSummary, ActivityEntry, AddAccountEditor,
+    AddSetEmote, AuditEntry, Badge, Channel, ClonedSet, CosmeticCatalog, CosmeticImage,
+    CosmeticKind, CreateBadge, CreateRole, CreateSet, EditedAccount, EditorPermission, Emote,
+    EmotePage, EmoteSet, EmoteSort, Entitlement, EntitlementPage, Event, GrantCosmetic, Identity,
+    Me, Notification, OwnedCosmetics, Paint, PaintInput, PersonalSetEntry, Platform, Report,
+    ReportAction, ReportQueue, ReviewQueue, Role, SearchResults, SetEmote, SetSummary,
+    SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole, UpdateSet,
+    UpdateSetEmote, UserCosmetics,
 };
 use cyex_tv_shared::model::{
     Checkout, CodeBatch, CodeBatchInput, CodeBatchPage, CreatedCodeBatch, Order, OrderPage,
@@ -39,7 +40,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::state::AppState;
-use crate::{abuse, admin, catalog, codes, cosmetics, editors, moderation, search, shop};
+use crate::{abuse, activity, admin, catalog, codes, cosmetics, editors, moderation, search, shop};
 
 pub type ApiSchema = Schema<Query, Mutation, Subscription>;
 
@@ -234,9 +235,24 @@ impl Query {
             .map_err(api_error)
     }
 
-    /// A set with its emotes.
+    /// A set with its emotes. Null when there is none, or when it is `PRIVATE` and you are not
+    /// its owner, an editor or staff (a channel's active set is always public).
     async fn set(&self, ctx: &Context<'_>, id: String) -> Result<Option<EmoteSet>> {
         catalog::set(state(ctx), caller_opt(ctx), &id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// An account's `LISTED` sets as profile cards, oldest first, at most 50. `preview` is how
+    /// many of each set's newest emotes to include, 0 to 50, default 12. Empty when the account
+    /// is unknown, deleted or blocked.
+    async fn account_sets(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+        preview: Option<u32>,
+    ) -> Result<Vec<SetSummary>> {
+        catalog::account_sets(state(ctx), caller_opt(ctx), &account_id, preview)
             .await
             .map_err(api_error)
     }
@@ -287,9 +303,44 @@ impl Query {
         .map_err(api_error)
     }
 
+    /// Accounts by Twitch or Kick login or display name (a leading `@` is ignored): exact login
+    /// first, then login and name prefixes, then similar names. Public fields only; deleted and
+    /// blocked accounts are never listed. `perPage` is 1 to 50, default 20. 60 searches a minute
+    /// per account, or per IP signed out (`rate_limited`). An empty `query` finds nobody.
+    async fn search_accounts(
+        &self,
+        ctx: &Context<'_>,
+        query: String,
+        page: Option<u32>,
+        per_page: Option<u32>,
+    ) -> Result<AccountResults> {
+        let ip = ctx
+            .data_opt::<crate::limits::ClientIp>()
+            .map_or("", |ip| ip.0.as_str());
+        search::accounts(state(ctx), caller_opt(ctx), ip, &query, page, per_page)
+            .await
+            .map_err(api_error)
+    }
+
     /// An account's public summary. Null when the account is unknown, deleted or blocked.
     async fn account(&self, ctx: &Context<'_>, id: String) -> Result<Option<AccountSummary>> {
         catalog::account(state(ctx), &id).await.map_err(api_error)
+    }
+
+    /// An account's public activity, newest first, like 7TV's "Activity" tab: sets and emotes the
+    /// owner or their editors changed, the active set, badge and paint picks, approved uploads.
+    /// Page back with `before` (an entry ID); `limit` is 1 to 100, default 30. Empty when the
+    /// account is unknown, deleted or blocked. Nothing private or from moderation shows.
+    async fn account_activity(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+        before: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<Vec<ActivityEntry>> {
+        activity::account_activity(state(ctx), &account_id, before.as_deref(), limit)
+            .await
+            .map_err(api_error)
     }
 
     /// Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
@@ -694,7 +745,34 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Rename a set or change its capacity. Owner or editor; capacity needs `sets.edit_any`.
+    /// Copy a set you can open into a new channel set: yours, or with `ownerId` one for an account
+    /// you edit with `SETS`. Name defaults to the source's; visibility to `LISTED`. Emotes go in
+    /// as `addSetEmote` would put them, in order, keeping their names: up to the capacity,
+    /// approved ones only (your own pending ones too), never other people's private emotes.
+    /// 30 copies an hour. `rate_limited`, `not_found`, `forbidden`, `bad_name`.
+    async fn clone_set(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        name: Option<String>,
+        owner_id: Option<String>,
+        visibility: Option<SetVisibility>,
+    ) -> Result<ClonedSet> {
+        let caller = caller(ctx)?;
+        catalog::clone_set(
+            state(ctx),
+            caller,
+            &id,
+            name.as_deref(),
+            owner_id.as_deref(),
+            visibility,
+        )
+        .await
+        .map_err(api_error)
+    }
+
+    /// Rename a set, change who sees it (`visibility`: owner or account editors with `SETS`), or
+    /// change its capacity. Owner or editor; capacity needs `sets.edit_any`.
     async fn update_set(
         &self,
         ctx: &Context<'_>,

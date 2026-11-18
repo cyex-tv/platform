@@ -9,8 +9,10 @@
 //!
 //! Who may edit a set is the api's check; `can_edit` answers the owner-or-editor part.
 
+use std::collections::{HashMap, HashSet};
+
 use chrono::{DateTime, Utc};
-use cyex_tv_shared::model::{EmoteState, Platform, SetKind};
+use cyex_tv_shared::model::{EmoteState, Platform, SetKind, SetVisibility};
 use sqlx::{Connection, FromRow, PgConnection};
 use uuid::Uuid;
 
@@ -34,6 +36,7 @@ pub struct Set {
     pub capacity: i32,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub visibility: SetVisibility,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, FromRow)]
@@ -72,25 +75,59 @@ pub struct NewMember<'a> {
     pub added_by: Option<Uuid>,
 }
 
-const SET: &str = "id, owner_account_id, name, kind, capacity, created_at, updated_at";
+const SET: &str = "id, owner_account_id, name, kind, capacity, created_at, updated_at, visibility";
 const MEMBER: &str = "set_id, emote_id, name, zero_width, added_by, added_at";
 const EDITOR: &str = "set_id, account_id, granted_by, granted_at";
 
-/// Makes a channel or personal set with the default capacity. One personal set per account.
+/// Makes a channel or personal set with the default capacity and visibility. One personal set
+/// per account.
 pub async fn create(
     conn: &mut PgConnection,
     owner: Uuid,
     name: &str,
     kind: SetKind,
 ) -> DbResult<Set> {
+    create_with(conn, owner, name, kind, None).await
+}
+
+/// The visibility a new set of `kind` gets when none is asked for.
+pub fn default_visibility(kind: SetKind) -> SetVisibility {
+    match kind {
+        SetKind::Personal => SetVisibility::Unlisted,
+        SetKind::Channel | SetKind::Global => SetVisibility::Listed,
+    }
+}
+
+/// Whether a set of `kind` may have `visibility`: personal sets are shown in chat to everyone,
+/// so never private; the global set is always listed.
+pub fn visibility_allowed(kind: SetKind, visibility: SetVisibility) -> bool {
+    match kind {
+        SetKind::Channel => true,
+        SetKind::Personal => visibility != SetVisibility::Private,
+        SetKind::Global => visibility == SetVisibility::Listed,
+    }
+}
+
+/// [`create`] with a visibility (`None`: the default for the kind).
+pub async fn create_with(
+    conn: &mut PgConnection,
+    owner: Uuid,
+    name: &str,
+    kind: SetKind,
+    visibility: Option<SetVisibility>,
+) -> DbResult<Set> {
     let capacity = match kind {
         SetKind::Channel => CHANNEL_CAPACITY,
         SetKind::Personal => PERSONAL_CAPACITY,
         SetKind::Global => return Err(DbError::InvalidSetKind),
     };
+    let visibility = visibility.unwrap_or_else(|| default_visibility(kind));
+    if !visibility_allowed(kind, visibility) {
+        return Err(DbError::InvalidVisibility);
+    }
     sqlx::query_as(&format!(
-        "INSERT INTO emote_sets (id, owner_account_id, name, kind, capacity)
-         VALUES ($1, $2, $3, $4, $5)
+        "INSERT INTO emote_sets (id, owner_account_id, name, kind, capacity, visibility)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING {SET}"
     ))
     .bind(new_id())
@@ -98,6 +135,7 @@ pub async fn create(
     .bind(name)
     .bind(kind)
     .bind(capacity)
+    .bind(visibility)
     .fetch_one(conn)
     .await
     .map_err(|err| match unique_violation(&err) {
@@ -133,6 +171,16 @@ pub async fn get(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Set>> {
     )
 }
 
+/// Sets by ID, in no particular order. Unknown IDs are left out.
+pub async fn get_many(conn: &mut PgConnection, ids: &[Uuid]) -> DbResult<Vec<Set>> {
+    Ok(
+        sqlx::query_as(&format!("SELECT {SET} FROM emote_sets WHERE id = ANY($1)"))
+            .bind(ids)
+            .fetch_all(conn)
+            .await?,
+    )
+}
+
 /// The sets an account owns, oldest first.
 pub async fn list_for_owner(conn: &mut PgConnection, owner: Uuid) -> DbResult<Vec<Set>> {
     Ok(sqlx::query_as(&format!(
@@ -146,7 +194,8 @@ pub async fn list_for_owner(conn: &mut PgConnection, owner: Uuid) -> DbResult<Ve
 /// The sets an account was made editor of.
 pub async fn list_editable(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<Set>> {
     Ok(sqlx::query_as(
-        "SELECT s.id, s.owner_account_id, s.name, s.kind, s.capacity, s.created_at, s.updated_at
+        "SELECT s.id, s.owner_account_id, s.name, s.kind, s.capacity, s.created_at, s.updated_at,
+                s.visibility
          FROM emote_sets s
          JOIN set_editors e ON e.set_id = s.id
          WHERE e.account_id = $1
@@ -174,7 +223,8 @@ pub async fn personal_for_users(
 ) -> DbResult<Vec<PersonalSet>> {
     Ok(sqlx::query_as(
         "SELECT i.platform_user_id,
-                s.id, s.owner_account_id, s.name, s.kind, s.capacity, s.created_at, s.updated_at
+                s.id, s.owner_account_id, s.name, s.kind, s.capacity, s.created_at, s.updated_at,
+                s.visibility
          FROM identities i
          JOIN emote_sets s ON s.owner_account_id = i.account_id AND s.kind = 'personal'
          WHERE i.platform = $1
@@ -197,6 +247,63 @@ pub async fn rename(conn: &mut PgConnection, id: Uuid, name: &str) -> DbResult<S
     .fetch_optional(conn)
     .await?
     .ok_or(DbError::NotFound)
+}
+
+/// Changes who can find and open a set.
+pub async fn set_visibility(
+    conn: &mut PgConnection,
+    id: Uuid,
+    visibility: SetVisibility,
+) -> DbResult<Set> {
+    let mut tx = conn.begin().await?;
+    let set = lock_set(&mut tx, id).await?;
+    if !visibility_allowed(set.kind, visibility) {
+        return Err(DbError::InvalidVisibility);
+    }
+    let set = sqlx::query_as(&format!(
+        "UPDATE emote_sets SET visibility = $2, updated_at = now() WHERE id = $1 RETURNING {SET}"
+    ))
+    .bind(id)
+    .bind(visibility)
+    .fetch_one(&mut *tx)
+    .await?;
+    tx.commit().await?;
+    Ok(set)
+}
+
+/// An account's listed sets (not the global set), oldest first, at most `limit`.
+pub async fn list_listed(conn: &mut PgConnection, owner: Uuid, limit: i64) -> DbResult<Vec<Set>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {SET} FROM emote_sets
+         WHERE owner_account_id = $1 AND visibility = 'listed'
+         ORDER BY id LIMIT $2"
+    ))
+    .bind(owner)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// How many emotes each set holds (every member, whatever its state). Sets with none are missing.
+pub async fn counts(conn: &mut PgConnection, set_ids: &[Uuid]) -> DbResult<HashMap<Uuid, i64>> {
+    let rows: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT set_id, count(*) FROM emote_set_members WHERE set_id = ANY($1) GROUP BY set_id",
+    )
+    .bind(set_ids)
+    .fetch_all(conn)
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
+/// Which of `set_ids` a channel shows now.
+pub async fn active(conn: &mut PgConnection, set_ids: &[Uuid]) -> DbResult<HashSet<Uuid>> {
+    let rows: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT DISTINCT active_set_id FROM channels WHERE active_set_id = ANY($1)",
+    )
+    .bind(set_ids)
+    .fetch_all(conn)
+    .await?;
+    Ok(rows.into_iter().collect())
 }
 
 /// Changes a set's capacity (raising it needs `sets.edit_any`; that's the api's check). It can't go

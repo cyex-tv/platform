@@ -1,0 +1,188 @@
+<script lang="ts">
+  // Pick the badge and paint an account shows in chat (yours, or one you edit with PROFILE), from
+  // what it owns. Two radio groups (7TV's cosmetics page): None first, then each owned badge
+  // (picture + name) or paint (its name drawn in the paint, or your name with "Your name"). Each
+  // has a search and a grid / list switch. The current pick is bold with the accent radio, never a
+  // filled box. Picking saves at once (selectCosmetics); a failure puts the old pick back.
+  import { gql } from '$lib/api';
+  import Icon from '$lib/components/Icon.svelte';
+  import Segmented from '$lib/components/Segmented.svelte';
+  import State from '$lib/components/State.svelte';
+  import BadgeIcon from '$lib/cosmetics/BadgeIcon.svelte';
+  import PaintedName from '$lib/cosmetics/PaintedName.svelte';
+  import { loadOwned, picked, type Owned } from '$lib/cosmetics/store.svelte';
+  import { clean, iso } from '$lib/format';
+  import { SELECT_COSMETICS } from '$lib/queries';
+  import LoadGate from '$lib/tool/LoadGate.svelte';
+  import PageHead from '$lib/tool/PageHead.svelte';
+  import { loader } from '$lib/tool/loader.svelte';
+  import { fail, notify } from '$lib/tool/notices.svelte';
+
+  type Props = { accountId: string; mine: boolean; name: string };
+  let { accountId, mine, name }: Props = $props();
+
+  const L = loader(() => loadOwned(accountId, mine));
+
+  type View = 'grid' | 'list';
+  let badgeView = $state<View>('grid');
+  let paintView = $state<View>('grid');
+  let badgeFind = $state('');
+  let paintFind = $state('');
+  let preview = $state<'paint' | 'name'>('paint');
+  let saving = $state(false);
+
+  const match = (q: string) => (n: string) => n.toLowerCase().includes(q.trim().toLowerCase());
+
+  async function choose(owned: Owned, kind: 'badge' | 'paint', id: string | null) {
+    const before = { badgeId: owned.badgeId ?? null, paintId: owned.paintId ?? null };
+    const after = { ...before, [`${kind}Id`]: id };
+    if (after.badgeId === before.badgeId && after.paintId === before.paintId) return;
+    L.set(picked(accountId, owned, after.badgeId, after.paintId));
+    saving = true;
+    try {
+      const vars = kind === 'badge' ? { badgeId: id ?? '' } : { paintId: id ?? '' };
+      await gql(SELECT_COSMETICS, { ...vars, ownerId: mine ? null : accountId });
+      const label = kind === 'badge' ? owned.badges.find((b) => b.id === id)?.name : owned.paints.find((p) => p.id === id)?.name;
+      notify(id ? `${iso(label)} on.` : `No ${kind} now.`);
+    } catch (e) {
+      L.set(picked(accountId, owned, before.badgeId, before.paintId));
+      fail(e);
+    } finally {
+      saving = false;
+    }
+  }
+</script>
+
+{#snippet views(label: string, value: View, set: (v: View) => void)}
+  <div class="views" role="group" aria-label="{label} layout">
+    <button type="button" class="vb" aria-pressed={value === 'grid'} aria-label="Grid" title="Grid" onclick={() => set('grid')}><Icon name="grid" /></button>
+    <button type="button" class="vb" aria-pressed={value === 'list'} aria-label="List" title="List" onclick={() => set('list')}><Icon name="list" /></button>
+  </div>
+{/snippet}
+
+{#snippet find(label: string, value: string, set: (v: string) => void)}
+  <label class="find">
+    <span class="sr-only">Search {label}</span>
+    <Icon name="search" size={15} />
+    <input class="input" type="search" placeholder="Search" {value} oninput={(e) => set(e.currentTarget.value)} autocomplete="off" />
+  </label>
+{/snippet}
+
+<PageHead title="Cosmetics" line={mine ? 'The badge and paint you show next to your name in Twitch and Kick chat, for everyone with cyex.tv.' : `What ${iso(clean(name))} shows in chat. You edit their profile.`} />
+
+<LoadGate source={L} label="Loading cosmetics…">
+  {#snippet children(owned)}
+    {@const badges = owned.badges.filter((b) => match(badgeFind)(b.name))}
+    {@const paints = owned.paints.filter((p) => match(paintFind)(p.name))}
+    <section class="panel" aria-labelledby="badge-h">
+      <header class="bar">
+        <h2 id="badge-h">Badge</h2>
+        {#if owned.badges.length}
+          <div class="tools">
+            {@render find('badges', badgeFind, (v) => (badgeFind = v))}
+            {@render views('Badges', badgeView, (v) => (badgeView = v))}
+          </div>
+        {/if}
+      </header>
+      {#if !owned.badges.length}
+        <State bare title="No badges yet.">They’re granted by the cyex.tv team for now.</State>
+      {:else}
+        <div class="opts {badgeView}" role="radiogroup" aria-labelledby="badge-h" aria-busy={saving}>
+          {#if !badgeFind.trim()}
+            <label class="opt" class:on={!owned.badgeId}>
+              <input type="radio" name="badge" checked={!owned.badgeId} onchange={() => choose(owned, 'badge', null)} />
+              <span class="dot" aria-hidden="true"></span><Icon name="ban" size={18} /><span class="lb">None</span>
+            </label>
+          {/if}
+          {#each badges as b (b.id)}
+            <label class="opt" class:on={owned.badgeId === b.id}>
+              <input type="radio" name="badge" checked={owned.badgeId === b.id} onchange={() => choose(owned, 'badge', b.id)} />
+              <span class="dot" aria-hidden="true"></span><BadgeIcon badge={b} size={24} />
+              <span class="lb"><bdi>{clean(b.name)}</bdi>{#if badgeView === 'list' && b.tooltip}<span class="sub"><bdi>{clean(b.tooltip)}</bdi></span>{/if}</span>
+            </label>
+          {:else}
+            <p class="none">No badge matches “{badgeFind.trim()}”.</p>
+          {/each}
+        </div>
+      {/if}
+    </section>
+
+    <section class="panel" aria-labelledby="paint-h">
+      <header class="bar">
+        <h2 id="paint-h">Paint</h2>
+        {#if owned.paints.length}
+          <div class="tools">
+            <Segmented label="Preview" size="s" options={[{ value: 'paint', label: 'Paint name' }, { value: 'name', label: mine ? 'Your name' : 'Their name' }]}
+              value={preview} onchange={(v) => (preview = v)} />
+            {@render find('paints', paintFind, (v) => (paintFind = v))}
+            {@render views('Paints', paintView, (v) => (paintView = v))}
+          </div>
+        {/if}
+      </header>
+      {#if !owned.paints.length}
+        <State bare title="No paints yet.">They’re granted by the cyex.tv team for now.</State>
+      {:else}
+        <div class="opts {paintView}" role="radiogroup" aria-labelledby="paint-h" aria-busy={saving}>
+          {#if !paintFind.trim()}
+            <label class="opt" class:on={!owned.paintId}>
+              <input type="radio" name="paint" checked={!owned.paintId} onchange={() => choose(owned, 'paint', null)} />
+              <span class="dot" aria-hidden="true"></span><Icon name="ban" size={18} /><span class="lb">None</span>
+            </label>
+          {/if}
+          {#each paints as p (p.id)}
+            <label class="opt" class:on={owned.paintId === p.id}>
+              <input type="radio" name="paint" checked={owned.paintId === p.id} onchange={() => choose(owned, 'paint', p.id)} aria-label={p.name} />
+              <span class="dot" aria-hidden="true"></span>
+              <span class="lb paint" aria-hidden="true">
+                <PaintedName name={preview === 'paint' ? p.name : name} paint={p} />
+                {#if paintView === 'list'}<span class="sub">{preview === 'paint' ? '' : `${clean(p.name)} · `}{p.kind === 'IMAGE' ? 'Picture' : p.kind === 'RADIAL_GRADIENT' ? 'Radial' : 'Linear'}</span>{/if}
+              </span>
+            </label>
+          {:else}
+            <p class="none">No paint matches “{paintFind.trim()}”.</p>
+          {/each}
+        </div>
+      {/if}
+    </section>
+  {/snippet}
+</LoadGate>
+
+<style>
+  .panel { margin-bottom: 16px; padding: 14px 16px 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 12px; }
+  .bar h2 { flex: 1; margin: 0; font-size: 15px; font-weight: 600; }
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .find { position: relative; display: block; width: 200px; }
+  .find :global(svg) { position: absolute; left: 10px; top: 50%; translate: 0 -50%; color: var(--muted); pointer-events: none; }
+  .find .input { width: 100%; height: 34px; padding-left: 32px; font-size: var(--t-small); }
+  .views { display: flex; gap: 2px; }
+  .vb { display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid transparent; border-radius: var(--radius);
+    background: none; color: var(--dim); cursor: pointer; transition: color var(--fast), border-color var(--fast); }
+  .vb[aria-pressed='true'] { color: var(--text); border-color: var(--border-strong); }
+  @media (hover: hover) and (pointer: fine) { .vb:hover { color: var(--text); } }
+
+  .opts { display: grid; gap: 2px 8px; }
+  .opts.grid { grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); }
+  .opts.list { grid-template-columns: minmax(0, 1fr); }
+  .opt { position: relative; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 4px 10px; border-radius: var(--radius);
+    cursor: pointer; color: var(--muted); font-size: var(--t-small); font-weight: 500; transition: background-color var(--fast), color var(--fast); }
+  .opt input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none; }
+  .opt > :global(svg) { flex: none; color: var(--dim); }
+  .dot { flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--field-border); display: grid; place-items: center; }
+  .on { color: var(--text); font-weight: 700; }
+  .on .dot { border-color: var(--accent-text); }
+  .on .dot::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-text); }
+  .opt:has(input:focus-visible) { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .lb { display: grid; min-width: 0; line-height: 1.3; }
+  .lb > bdi { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .paint { font-size: var(--t-ui); }
+  .sub { font-size: var(--t-fine); font-weight: 400; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .none { margin: 0; padding: 10px; color: var(--dim); font-size: var(--t-small); }
+  @media (hover: hover) and (pointer: fine) { .opt:hover { background: var(--row-hover); color: var(--text); } }
+  @media (max-width: 640px) {
+    .tools { width: 100%; }
+    .find { order: 3; flex: 1 1 100%; width: auto; }
+    .views { margin-left: auto; }
+  }
+  @media (forced-colors: active) { .on .dot::after { background: Highlight; } .on .dot { border-color: Highlight; } }
+</style>

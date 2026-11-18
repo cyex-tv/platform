@@ -33,6 +33,8 @@ export interface DocsOptions {
   band?: [number, number];
   park?: number;
   langKey?: string;
+  /** false: the page filters its own index and body (/help); the filter block is left out. */
+  filter?: boolean;
 }
 
 export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): () => void {
@@ -287,7 +289,7 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
   if (toTop) on(toTop, 'click', () => scrollTo({ top: 0, behavior: reduced() ? 'auto' : 'smooth' }));
 
   // ---------- filter ----------
-  if (search && input) {
+  if (search && input && opts.filter !== false) {
     const kbd = search.querySelector('.nav-kbd');
     if (kbd) kbd.textContent = /Mac|iP(hone|ad|od)/.test(navigator.platform || navigator.userAgent) ? '⌘K' : 'Ctrl K';
     const empty = nav.querySelector<HTMLElement>('.nav-empty');

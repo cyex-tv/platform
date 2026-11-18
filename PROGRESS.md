@@ -6,7 +6,7 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 
 ADR 0016. A shop for cyex.tv's chat cosmetics and redeem codes, like 7TV's Store and Redeem (studied from what 7TV shows publicly; no code taken). Payments through cyex.tv's **own** Paddle Billing account, never cyex.app's; no card data reaches cyex.tv.
 
-- [x] Migration `20261122000001_shop.sql` (additive): `shop_items` (+ `shop_item_cosmetics` bundles), `shop_orders`, `paddle_events`, `code_batches` (+ `code_batch_cosmetics`), `redeem_codes` (sha256 only), `code_redemptions`; entitlements gain source `code` and `order_id`/`code_id`.
+- [x] Migration `20261201000001_shop.sql` (additive): `shop_items` (+ `shop_item_cosmetics` bundles), `shop_orders`, `paddle_events`, `code_batches` (+ `code_batch_cosmetics`), `redeem_codes` (sha256 only), `code_redemptions`; entitlements gain source `code` and `order_id`/`code_id`.
 - [x] Permissions `shop.manage`, `shop.orders`, `codes.manage` (the owner holds all).
 - [x] Paddle (`apps/api/src/paddle.rs`): env `CYEX_TV_PADDLE_ENV`, `_API_KEY`, `_CLIENT_TOKEN`, `_WEBHOOK_SECRET`; keys of the wrong environment refused at start. Checkout creates a Paddle transaction; fulfilment only from the signed webhook `POST /v1/shop/paddle/webhook` (HMAC, 5-minute window, `event_id` recorded once, idempotent by transaction); refunds and chargebacks revoke exactly the order's entitlements and clear the selection.
 - [x] GraphQL (additive): `shopItems`, `shopItem`, `myOrders`, `order`, `orders`, `codeBatches`; `createShopItem`, `updateShopItem`, `deleteShopItem`, `startCheckout`, `refundOrder`, `redeemCode`, `createCodeBatch`, `disableCodeBatch`. Schema, OpenAPI and web types regenerated.
@@ -22,6 +22,105 @@ ADR 0016. A shop for cyex.tv's chat cosmetics and redeem codes, like 7TV's Store
 #### GitHub write log
 - `gh pr create -R cyex-tv/infra --base main --head env/paddle`, `gh pr merge 7 -R cyex-tv/infra --merge`.
 - `gh pr create --base main --head feat/shop`.
+## Upload v2 and emote settings (branch `feat/upload-v2`)
+
+Gap list G5.
+
+- [x] API (additive): `POST /v1/emotes` takes `zero_width`, `private` and `nsfw` form fields (`true`/`false`, `1`/`0`, `on`/`off`, empty is off; anything else is `bad_form`). Without them nothing changes. OpenAPI regenerated; the GraphQL schema is unchanged.
+- [x] Tests: `upload::tests::flags_parse_like_a_form` (unit) and `upload_flow::flags_can_be_set_at_upload` against Postgres in CI (each flag alone, all on, explicit off, left out; stored rows match).
+- [x] `/me/upload`: up to 20 files at once (the hourly limit); the same file can't be queued twice. Each file: name from the file name until typed, tags, Visibility (Public / Private), Zero-width, NSFW (asks first), a preview at real sizes on dark, light and in chat lines (zero-width drawn over a stand-in). Checked in the browser first (type, 5 MB, 1000 × 1000 px), then sent one by one with a progress bar (XHR); refusals in words (`blocked`, `too_large`, `rate_limited`, ...), and the batch stops at `rate_limited`. One file opens its page as before; a batch stays with Open links. "Use the first one's tags and flags for all".
+- [x] `/me/emotes/[id]`: the same Visibility and flag controls (`EmoteFlags`), NSFW asks first. "Replace file" skipped: the API can't swap an emote's file.
+- [x] Dev mock: the upload reads the flags and tags; the names `blocked`, `ratelimited` and `broken` answer as the API's refusals.
+- Manual check: headless Edge at 375, 768, 1440, 2560, dark and light, with the dev mock: queue with good, too-big and wrong-type files, a batch with one refusal, NSFW confirmation by keyboard (focus goes to Mark NSFW and back to the switch), the edit page saving Private + zero-width + NSFW and showing them after a reload (`.claude/runs/2026-11-17-overnight/screens/g8g5`).
+
+## User search (branch `feat/account-search`)
+
+Gap list G10: find people by their Twitch or Kick name. API only; the `/search` Users tab comes next.
+
+- [x] Migration `20261130000002_account_search.sql` (additive): trigram indexes on `lower(login)` and `lower(display_name)` of identities.
+- [x] GraphQL (additive): `searchAccounts(query, page, perPage)` returning `AccountResults { items: [AccountHit { account: AccountSummary, identities: [PublicIdentity { platform, login, displayName }] }], total, page, perPage }`. Exact login first, then login and display-name prefixes, then similar names; a leading `@` is ignored; `%` and `_` mean themselves. Public fields only (no platform IDs). Deleted and blocked accounts are never listed. `perPage` 1 to 50, default 20.
+- [x] 60 searches a minute per account, or per IP when signed out (the limits middleware now hands the client IP to GraphQL resolvers).
+- [x] Tests: `apps/api/tests/account_search_flow.rs` against Postgres in CI (ranking, both platforms in one hit, no IDs, paging, wildcards, blocked and deleted never listed signed in or out, per-account and per-IP limits).
+- [x] Dev mock: `searchAccounts` over the mock's people (quietoak has a Kick login too).
+- [ ] Website: the Users tab on `/search` and people in the palette (another task).
+
+#### GitHub write log
+```
+git push -u origin feat/account-search
+gh pr create --base main --head feat/account-search
+```
+
+## Help, download and the cosmetics gallery (branch `web/help-download`)
+
+- [x] `/help`: 34 short answers in eight groups (getting started, the extension, uploading, sets and channels, editors, cosmetics, account and privacy, moderation and takedowns) on the docs layout. The filter narrows the index and the answers together (every word, question or answer), `/` focuses it, Escape clears it, `?q=` is kept in the address. Questions are data in `lib/help/faq.ts` (vitest: groups, unique anchors, every site link points at a route).
+- [x] `/download`: the extension for Chrome and Firefox as "early testing, coming to the stores", the test build (clone, `npm ci`, `npm run build`, then Load unpacked or Load Temporary Add-on), cyex deck "coming", a line for chat clients and bots. Your browser's card first.
+- [x] `/cosmetics`: every badge and paint from the public `cosmetics` query, badges with a chat-line sample, paints drawn live; signed in, "Paint name / Your name" draws your name in each paint. No ownership anywhere.
+- [x] Footer: Download, Cosmetics, Help (Terms, Privacy, Contact stay out until PR #33). Palette: Help, Download, Cosmetics pages. `initDocs` takes `filter: false` for pages that filter themselves.
+- Manual check: 375, 768, 1440, 2560, dark and light, keyboard (`/`, typing, Escape, index jump), with the dev mock (`.claude/runs/2026-11-17-overnight/screens/g8g5`).
+
+## Paint studio (branch `feat/paint-studio`, ADR 0018)
+- `apps/web/src/lib/paint-studio/`: the staff editor for name paints, built on the owner's cyex paints tool. Gradient paints (kind, angle or shape, repeat, 2 to 10 stops, up to 4 shadows, fallback colour) with the API's limits checked live; animated paints from the tool's engine (layers, effects, scene elements, presets) rendered and encoded in a Web Worker as WebP, APNG or GIF; previews on sample names on both grounds and in Twitch- and Kick-style chat; import of cyex.tv JSON, integer-colour paint JSON and tool project files, export as cyex.tv JSON, integer JSON, CSS, picture and project; Save to cyex.tv (createPaint / updatePaint; animated: render, upload, wait for ready, IMAGE paint); Open an existing paint.
+- Provenance: the tool's gradient CSS builder and integer-colour formatter were ports of the 7TV extension; neither came over (the gradient side is new code, the formatter was removed from the engine). The engine's custom-code items (`new Function`) were removed.
+- Admin: `/admin/cosmetics/paints/studio` (new; `?id=` still opens one) and `/admin/cosmetics/paints/<id>/studio` (edit; the Paints list's Edit links there), `cosmetics.manage`; after the first save the address becomes the paint's own (shallow routing) and the catalog cache is dropped. Previews go through `lib/cosmetics/paint.ts`. Dev page `/dev/paint-studio` (404 in production). Tests: `src/lib/paint-studio/studio.test.ts` (colours, limits, CSS, import/export, API mapping, engine render and GIF).
+- Manual check (2026/11/17): headless Edge against the dev mock at 1440 and 375, dark and light: a gradient paint saved, an animated paint rendered, uploaded, processed and saved as an IMAGE paint, an existing paint reopened (Open and `?id=`), integer JSON imported with its corrections listed, reduced motion pauses animated previews with a Play button; in the admin pages New paint → save → address moves to the paint, a second save updates it, Edit from the list opens it, an animated paint saves and lists. Screens in `.claude/runs/2026-11-17-web-v4/screens/studio/`.
+
+## Public emote sets (branch `feat/public-sets`)
+
+Gap list G1 (`.claude/runs/2026-11-17-overnight/gap-7tv.md`): sets you can share, list and copy, like 7TV's set pages (its public help pages and v3 schema studied; no code taken). API only; the pages come next.
+
+- [x] Migration `20261130000001_set_visibility.sql` (additive): `emote_sets.visibility` (`listed`, `unlisted`, `private`). Existing rows keep what they could do: channel sets and the global set start listed, personal sets unlisted, nothing private. CHECKs: personal sets never private (chat shows them to everyone), the global set always listed.
+- [x] ADR 0017 (set visibility). The activity feed (ADR 0016) now shows lines about listed sets only.
+- [x] Rule: anyone opens listed and unlisted sets; a private set only its owner, per-set editors, the owner's account editors and `sets.edit_any`, or anyone while a channel shows it. `set(id)` and `GET /v1/sets/{id}` answer null / 404 otherwise, as for a set that doesn't exist.
+- [x] GraphQL (additive): `SetVisibility`; `EmoteSet.visibility`, `listed`, `slotsUsed`, `createdAt`; `CreateSetInput.visibility`, `UpdateSetInput.visibility` (owner or account editors with `SETS`; per-set editors can't); `accountSets(accountId, preview)` (listed sets as `SetSummary` cards: facts, `active`, newest `preview` emotes; empty for unknown, blocked or deleted accounts); `cloneSet(id, name, ownerId, visibility)` returning `ClonedSet { set, copied, skipped }`; event type `set.created` (listed sets only, on the owner's `user:` topics). Schema, OpenAPI and web types regenerated.
+- [x] Clone rules: only sets the caller may open; for yourself or an account you edit with `SETS` (audited as `set.created` with `source_id`, `copied` and `skipped`, and `via: account_editor` through a grant, so copies show in the activity feed); emotes go in as `addSetEmote` would (capacity 1000, approved only plus your own pending, others' private emotes skipped, names and zero-width kept); 30 clones an hour per account (`rate_limited`).
+- [x] Tests: `apps/api/tests/public_sets_flow.rs` against Postgres in CI (defaults, private never readable by others over GraphQL and REST, active-set exception, account editors, `accountSets` of blocked and deleted accounts, clone of private and pending emotes, capacity with 1005 emotes, IDOR on `ownerId`, rate limit, audit row, `set.created`); unit tests of the visibility names.
+- [x] Dev mock: sets carry visibility; nora_byte has listed, private and personal sample sets; `accountSets`, `cloneSet`, `createSet`/`updateSet` visibility and the private rule on `set(id)`.
+- [ ] Website: `/sets/[id]`, profile set cards, clone and visibility controls (another task).
+
+#### GitHub write log
+```
+git push -u origin feat/public-sets
+gh pr create --base main --head feat/public-sets
+git push origin feat/public-sets   (merges of origin/main, a test fix)
+gh pr merge 53 --merge   (all checks green; public_sets_flow ran against Postgres in CI)
+```
+
+## Website v4: the profile is the dashboard, cosmetics, admin cosmetics (branch `web/v4`)
+
+7TV's signed-in structure, in the cyex design (one shell, one accent, selection = bold text + accent icon).
+
+- [x] `/users/<id>` is the one profile page. Everyone: Uploaded emotes. The owner and the account's editors also get Active emotes, Emote sets (cards: two rows of emotes, capacity meter, active set marked, New set), Cosmetics (owner, or editors with PROFILE) and Channels (owner). Rail head: avatar ringed in the paint, name in the paint with the badge, role chips, collapsible Connections and Editors; "Admin ›" pinned for staff. Phones: profile card on top, sections as a tab strip.
+- [x] `/me`, `/me/sets` and `/me/cosmetics` redirect to the profile sections; the other `/me` pages keep their routes and show the profile rail with their row marked.
+- [x] Account menu: Profile, Your emotes, Cosmetics, Account, Admin, Sign out; its head shows the name in the paint, the badge and the highest role.
+- [x] Paint renderer `lib/cosmetics/paint.ts` (strict colour check, clamped values, safe image urls, at most 4 shadows; vitest), `PaintedName`, `BadgeIcon`, a batched `userCosmetics` cache; paints on the profile, the account menu, channel pages, admin Users and admin lists.
+- [x] Cosmetics picker: badge and paint radio groups with None, search, grid/list and a "Paint name / Your name" preview; saves with `selectCosmetics` (with `ownerId` for edited accounts); empty states.
+- [x] Admin rail: Overview; Tickets (Review, Reports with counts); Cosmetics (Paints, Badges); People; System. Overview: welcome line and count cards. Paints: list with preview, owners, Give, Delete, Edit and New paint go to the paint studio placeholder (`/admin/cosmetics/paints/studio`, to be replaced by the ported paint tool). Badges: list, New/Edit dialog with picture upload and ready polling, Give, owners with Revoke. Users: owned cosmetics, Give with a reason, Revoke.
+- [x] Activity (public, ADR 0016): `accountActivity` through the adapter in `lib/profile/activity.ts`, rows with icon, sentence (emote picture, set, paints in the paint), who and how long ago, paged by 30.
+- Manual check: screenshots at 375 and 1440, dark and light, with the dev mock (`.claude/runs/2026-11-17-web-v4/screens`). Open questions: `.claude/runs/2026-11-17-web-v4/questions.md`.
+## Account activity feed (branch `feat/activity`)
+
+ADR 0016. A public activity feed per account, like 7TV's profile "Activity" tab.
+
+- [x] Migration `20261122000001_activity.sql` (additive): `audit_log.subject_account_id` and its index. The owner's own set, channel and cosmetics changes are now audited with the account as subject, and so is the approval of its emotes; staff actions never set it.
+- [x] GraphQL (additive): `accountActivity(accountId, before, limit)` returning `ActivityEntry` (kinds `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED`, `ACTIVE_SET_CHANGED`, `COSMETICS_SELECTED`, `EMOTE_UPLOADED`, `SET_CREATED`, `SET_RENAMED`). Public, 1 to 100 per page (default 30). `apps/api/src/activity.rs`. Schema and web types regenerated; the OpenAPI spec is unchanged.
+- [x] Privacy: no moderation, reasons or reviewers; no pending, private, rejected, taken-down or deleted emotes; blocked owner gives an empty list; blocked actors dropped; deleted sets dropped.
+- [x] Tests: `apps/api/tests/activity.rs` against Postgres in CI (kinds in order, paging, privacy filters, editor attribution, limit clamp). `catalog_flow` and `cosmetics_flow` adjusted for the owner's audit rows.
+- [x] Dev mock: `accountActivity` with sample activity for lumen_fox, quietoak and sunnyfern.
+- No website page yet (another task).
+
+### GitHub write log for PR 51 (`feat/cosmetics`, merged), added afterwards
+```
+git push -u origin feat/cosmetics
+gh pr create --base main --head feat/cosmetics
+gh pr merge 51 --merge
+```
+
+### GitHub write log for this PR (`feat/activity`)
+```
+git push -u origin feat/activity
+gh pr create --base main --head feat/activity
+gh pr merge <n> --merge   (only after all checks were green and the new database suite ran in the CI log)
+```
 
 ## Chat cosmetics (branch `feat/cosmetics`)
 
@@ -197,6 +296,7 @@ Work in `cyex-app/cyex-deck` goes on a feature branch with a PR the owner merges
 - [x] `searchEmotes(query, animated, owner, nsfw, page, perPage)`: 1 to 100 per page, default 50. With that, every GraphQL field in the contract is built.
 - [x] Browse data for the redesigned site (additive, `api/browse-data`): `searchEmotes(sort: RELEVANCE | TOP | NEW)`, `Emote.channelCount` (one grouped query per list), `Query.account(id)`, `Query.emoteChannels(id, limit)` (1 to 50, default 8); migration `20261119000001_channels_active_set.sql` (index); the mock API and the generated web types follow. There is no REST search endpoint, so REST only gets the optional `channel_count` on the emote shape. Tests in `search_flow.rs`.
 - [ ] Website redesign (`web/redesign`): new nav with Ctrl K palette, emote cards that play on hover, home (emote cluster, Top / New strip, chat previews, steps, install cards), browse with sort, filters and load more, emote page (preview stage, facts, used in, review, more from the creator), channel and new creator pages, signed-in pages brought to cyex-app. Research and plan in `.claude/runs/2026-11-17-web-redesign/`. Checked with the mock at 375 to 2560, dark and light; reduced motion only through headless rendering; not yet on a real phone.
+- [x] Browse parity (`feat/search-browse-parity`, web only): `/search` grid or table view (`view=`, remembered per device; Channels and Added headers sort like Top and New), exact-name match (`exact=1`, client side: the API has no arg for it), opt-in multi-select (`select=1`, Space toggles the focused tile) with a sticky bar that adds the picked emotes to one of your sets with the existing `addSetEmote`, one after another, respecting capacity. Trending is not offered: the API has no honest way to back it yet (no per-week adds). Creators' paints in the table come from the shared cosmetics cache, so only your own show (the API serves paints by platform id only). Checked with the mock at 375, 1440 and 2560, dark and light, keyboard; screens in `.claude/runs/2026-11-17-overnight/screens/g4/`.
 
 #### Tests
 - Unit: LIKE escaping.

@@ -1,0 +1,81 @@
+// @ts-nocheck
+/* cyex paints: search tags for the built-in layers and effects, and synonyms for the library search
+   (js/app/search.js). Pack items carry their own tags. Loads after the engine scripts. */
+export default function install(PL) {
+  'use strict';
+  const TAGS = {
+    // layers
+    linear: 'gradient ramp fade straight smooth colour', radial: 'gradient circle rings centre pulse round', conic: 'gradient wheel sweep angle spin circle',
+    diamond: 'gradient square rings centre geometric', solid: 'flat plain single colour base fill tint', rainbow: 'rainbow cycle hue spectrum colourful scroll loop',
+    stripes: 'stripes candy barber lines diagonal bands', checker: 'checkerboard squares grid chess tiles', dots: 'dots polka halftone circles grid pulse',
+    waves: 'waves wavy bands water sine flowing', zigzag: 'zigzag chevron stripes sharp pattern', grid: 'grid lines synthwave neon retro floor glow',
+    carbon: 'carbon fibre weave texture dark tech', clouds: 'clouds noise soft sky fog smoke drift', smoke: 'smoke wisps veins electric threads noise ridged',
+    plasma: 'plasma demoscene psychedelic retro colourful trippy', marble: 'marble stone veins luxury rock', aurora: 'aurora northern lights sky curtains night',
+    fire: 'fire flames burning hot heat orange', lava: 'lava lamp blobs metaballs retro liquid', voronoi: 'cells voronoi crystal ice stained glass scales',
+    caustics: 'caustics water pool light ripple underwater', sparkles: 'sparkles twinkle glints stars shiny magic', stars: 'stars starfield space night galaxy drift',
+    particles: 'snow rain bubbles embers falling particles weather', shine: 'shine sweep highlight gleam glossy light', rays: 'light rays sunburst beams sun spin',
+    glints: 'glitter sparkle foil flicker shiny bling', matrix: 'digital rain code hacker green tech', chrome: 'chrome metal mirror shiny silver reflective',
+    brushed: 'brushed metal steel silver grain', holo: 'holographic iridescent foil rainbow shiny', opal: 'opal gem stone pastel milky iridescent',
+    wood: 'wood grain timber rings natural brown', image: 'image picture photo upload texture own',
+    mesh: 'mesh gradient blobs soft blend modern', silk: 'silk fabric folds flowing satin smooth', spiral: 'spiral hypnotic swirl rotate psychedelic',
+    tiedye: 'tie dye hippie swirl colourful dye', hexgrid: 'hexagon honeycomb tiles geometric grid', scales: 'scales fish dragon mermaid pattern',
+    truchet: 'truchet tiles maze arcs geometric', plaid: 'plaid tartan check fabric flannel', liquid: 'liquid flow fluid melt wavy',
+    topo: 'topographic contour map lines terrain', galaxyArms: 'galaxy spiral space cosmos stars nebula',
+    flownoise: 'flow map noise swirl direction vector', flowfield: 'flow field streamlines wind map vector chart lines',
+    shape: 'shape heart star moon crown icon element', glyph: 'text emoji letters symbol element', sprite: 'picture sprite image element sticker',
+    ribbon: 'ribbon wave band streamer element', mountains: 'mountains landscape hills scene element', skyline: 'city skyline buildings night scene element',
+    lightning: 'lightning bolt storm electric flash element',
+    // effects
+    hue: 'hue shift rainbow cycle colour rotate', adjust: 'brightness contrast saturation gamma levels', gradientMap: 'gradient map recolour palette tone',
+    duotone: 'duotone two tone print colour', posterize: 'posterize levels flat cel shaded cartoon', invert: 'invert negative flash colour',
+    pulse: 'pulse breathe throb brightness fade', cylinder: '3d tube shading round depth', bevel: 'bevel emboss 3d relief lighting depth',
+    gloss: 'gloss glassy jelly shine glossy', vignette: 'vignette edges dark fade frame', edgeFade: 'edge fade transparent ends gradient',
+    glow: 'bloom glow light bleed soft neon', wave: 'wave distort ripple wobble', swirl: 'swirl twist twirl vortex distort',
+    mirror: 'mirror kaleidoscope reflect symmetry', pixelate: 'pixelate pixels blocks mosaic 8-bit', blur: 'blur soft smooth defocus',
+    chroma: 'chromatic aberration rgb split colour fringe', glitch: 'glitch digital error slices tear', scanlines: 'scanlines crt tv retro lines',
+    grain: 'film grain noise texture analog', halftone: 'halftone comic print dots', ripple: 'ripple water rings distort',
+    bulge: 'bulge pinch fisheye lens', haze: 'heat haze shimmer wobble mirage', zoomBlur: 'zoom blur radial speed motion',
+    motionBlur: 'motion blur speed streak', edgeGlow: 'edge glow outline neon lines', vhs: 'vhs tape retro analog glitch',
+    dither: 'dither pixel retro 8-bit pattern', vintage: 'vintage old film sepia faded retro', threshold: 'threshold black white contrast stencil',
+    sharpen: 'sharpen crisp detail', lightLeak: 'light leak film flare warm glow', colorBalance: 'colour balance tint grade shadows highlights',
+    shimmer: 'shimmer bands shine light sweep', outlineFx: 'border frame rim outline edge', flowwarp: 'flow warp smear ink liquid swirl distort',
+  };
+  // Words that mean much the same thing to someone searching. Each group is searched as one.
+  const SYNONYMS = [
+    ['metal', 'metallic', 'chrome', 'steel', 'silver', 'iron', 'gold', 'copper'],
+    ['shiny', 'glossy', 'shine', 'gleam', 'sparkle', 'glitter', 'bling', 'glint'],
+    ['glow', 'bloom', 'neon', 'light', 'luminous', 'radiant', 'bright'],
+    ['water', 'ocean', 'sea', 'liquid', 'aqua', 'pool', 'wave', 'waves', 'ripple'],
+    ['fire', 'flame', 'flames', 'burning', 'hot', 'heat', 'lava', 'ember', 'embers', 'magma'],
+    ['space', 'galaxy', 'cosmos', 'stars', 'nebula', 'universe', 'cosmic', 'planet'],
+    ['retro', 'vintage', 'old', '80s', 'synthwave', 'vaporwave', 'arcade', '8-bit'],
+    ['glitch', 'error', 'broken', 'corrupt', 'digital', 'datamosh', 'distorted'],
+    ['rainbow', 'spectrum', 'colourful', 'colorful', 'prism', 'iridescent', 'holographic'],
+    ['colour', 'color', 'hue', 'tint', 'tone'],
+    ['grey', 'gray'],
+    ['blur', 'soft', 'smooth', 'defocus', 'hazy'],
+    ['swirl', 'twist', 'twirl', 'vortex', 'spiral', 'spin'],
+    ['stone', 'rock', 'marble', 'granite', 'gem', 'crystal'],
+    ['fabric', 'textile', 'cloth', 'weave', 'woven', 'knit', 'silk', 'velvet'],
+    ['nature', 'natural', 'organic', 'earth', 'forest', 'leaf', 'plant'],
+    ['sky', 'cloud', 'clouds', 'weather', 'sunset', 'dawn', 'dusk'],
+    ['geometric', 'geometry', 'shapes', 'tiles', 'tiling', 'pattern', 'lattice'],
+    ['lines', 'stripes', 'bands', 'streaks'],
+    ['dots', 'spots', 'polka', 'circles', 'halftone'],
+    ['tv', 'crt', 'screen', 'monitor', 'scanlines', 'vhs'],
+    ['tech', 'cyber', 'code', 'hacker', 'circuit', 'computer', 'data'],
+    ['noise', 'grain', 'static', 'random', 'texture'],
+    ['psychedelic', 'trippy', 'hypnotic', 'acid', 'groovy'],
+    ['cute', 'pastel', 'kawaii', 'candy', 'soft'],
+    ['dark', 'night', 'shadow', 'black', 'gothic'],
+    ['ice', 'frost', 'frozen', 'snow', 'winter', 'cold'],
+    ['electric', 'lightning', 'energy', 'plasma', 'storm'],
+    ['3d', 'depth', 'relief', 'emboss', 'bevel'],
+    ['outline', 'edge', 'edges', 'border', 'rim', 'contour'],
+    ['warp', 'distort', 'bend', 'wobble', 'melt'],
+    ['animal', 'leopard', 'zebra', 'tiger', 'snake', 'snakeskin', 'scales'],
+    ['pixel', 'pixels', 'pixelated', 'blocky', 'mosaic', 'minecraft'],
+  ];
+  for (const store of [PL.LAYERS, PL.EFFECTS]) for (const [id, def] of Object.entries(store)) if (!def.tags && TAGS[id]) def.tags = TAGS[id].split(' ');
+  PL.SEARCH_SYNONYMS = SYNONYMS;
+}

@@ -52,6 +52,9 @@ pub enum DbError {
     /// A new redeem code's hash exists already (practically never: codes carry 80 random bits).
     #[error("a redeem code with this hash exists")]
     CodeTaken,
+    /// Personal sets can't be private, and the global set is always listed.
+    #[error("sets of this kind can't have that visibility")]
+    InvalidVisibility,
 }
 
 pub type DbResult<T> = Result<T, DbError>;
