@@ -55,6 +55,44 @@ pub async fn list(
     .await?)
 }
 
+/// Every notification of an account, newest first (for the data export).
+pub async fn all_for(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<Notification>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {NOTIFICATION} FROM notifications
+         WHERE account_id = $1 ORDER BY created_at DESC, id DESC"
+    ))
+    .bind(account_id)
+    .fetch_all(conn)
+    .await?)
+}
+
+pub async fn count_unread(conn: &mut PgConnection, account_id: Uuid) -> DbResult<i64> {
+    Ok(sqlx::query_scalar(
+        "SELECT count(*) FROM notifications WHERE account_id = $1 AND read_at IS NULL",
+    )
+    .bind(account_id)
+    .fetch_one(conn)
+    .await?)
+}
+
+/// Marks some of an account's notifications read; IDs of other accounts' are ignored. Returns how
+/// many changed.
+pub async fn mark_read_ids(
+    conn: &mut PgConnection,
+    account_id: Uuid,
+    ids: &[Uuid],
+) -> DbResult<u64> {
+    let done = sqlx::query(
+        "UPDATE notifications SET read_at = now()
+         WHERE account_id = $1 AND id = ANY($2) AND read_at IS NULL",
+    )
+    .bind(account_id)
+    .bind(ids)
+    .execute(conn)
+    .await?;
+    Ok(done.rows_affected())
+}
+
 /// Marks all of an account's notifications read. Returns how many changed.
 pub async fn mark_read(conn: &mut PgConnection, account_id: Uuid) -> DbResult<u64> {
     let done = sqlx::query(

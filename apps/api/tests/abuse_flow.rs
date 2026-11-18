@@ -559,7 +559,8 @@ async fn a_takedown_removes_the_image_everywhere_and_reaches_clients() {
     let marked = w
         .gql(&alice, "mutation { markNotificationsRead }", json!({}))
         .await;
-    assert_eq!(marked["data"]["markNotificationsRead"], 1);
+    // The takedown and, from before it, the approval (`emote.approved`).
+    assert_eq!(marked["data"]["markNotificationsRead"], 2);
     let unread = w
         .gql(
             &alice,
@@ -568,7 +569,8 @@ async fn a_takedown_removes_the_image_everywhere_and_reaches_clients() {
         )
         .await;
     assert_eq!(unread["data"]["myNotifications"], json!([]));
-    assert_eq!(w.count("SELECT count(*) FROM notifications").await, 2);
+    // Both owners: a takedown each, and each emote's approval before it.
+    assert_eq!(w.count("SELECT count(*) FROM notifications").await, 4);
 
     // The image can't come back, and a second takedown has nothing to do.
     let (status, body) = w.upload(&carol, "again", &image).await;

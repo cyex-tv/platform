@@ -70,6 +70,32 @@ type AccountResults {
 }
 
 """
+One place you are signed in. Never holds the token or anything made from it.
+"""
+type AccountSession {
+	"""
+	Pass to `revokeSession`.
+	"""
+	id: String!
+	kind: SessionKind!
+	"""
+	For example `Firefox on Windows`, `cyex.tv app` or `Unknown device`, from the user agent
+	that signed in.
+	"""
+	device: String!
+	createdAt: String!
+	"""
+	Updated at most once an hour.
+	"""
+	lastSeenAt: String!
+	expiresAt: String!
+	"""
+	The session this request came with.
+	"""
+	current: Boolean!
+}
+
+"""
 What an account may do (`users.restrict`).
 """
 type AccountStatus {
@@ -820,9 +846,36 @@ type Mutation {
 	"""
 	restrictAccount(accountId: String!, uploadsBlocked: Boolean, blocked: Boolean): AccountStatus!
 	"""
-	Mark all your notifications read. Returns how many were unread.
+	Mark your notifications read: those in `ids` (up to 100; others' IDs are ignored), or all
+	of them without `ids`. Returns how many were unread.
 	"""
-	markNotificationsRead: Int!
+	markNotificationsRead(ids: [String!]): Int!
+	"""
+	Sign out one of your sessions, the current one too (then the cookie is cleared). False
+	when you have none with that ID.
+	"""
+	revokeSession(id: String!): Boolean!
+	"""
+	Sign out everywhere but here. Returns how many sessions ended.
+	"""
+	revokeOtherSessions: Int!
+	"""
+	A copy of everything about your account, as JSON text (`format`, `version`, `account`,
+	`identities`, `sessions`, `channels`, `emotes`, `sets`, `set_editors`, `account_editors`,
+	`editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`). 5 an hour
+	(`rate_limited`). Audited.
+	"""
+	exportMyData: String!
+	"""
+	Delete your account now. `confirm` is one of your Twitch or Kick logins. Website only
+	(`website_only` with an app token); the owner's account can't be (`owner_protected`).
+	Your sessions, identities, channels, sets, editor grants, cosmetics and notifications go;
+	your approved emotes that are in other people's sets stay, shown as by a deleted user;
+	your other emotes are deleted. Signing in again later makes a new account. Audited.
+	`confirm_mismatch` when `confirm` isn't one of your logins; `restricted` while the account's
+	uploads or sign-in are blocked.
+	"""
+	deleteAccount(confirm: String!): Boolean!
 	"""
 	Create a role. You can only grant permissions you hold. Needs `roles.manage`. Audited.
 	"""
@@ -1262,17 +1315,29 @@ type Query {
 	"""
 	accountReports(accountId: String!): AccountReports!
 	"""
+	Where you are signed in: your live sessions, the most recently used first, with the one
+	this request came with marked `current`. Never shows tokens.
+	"""
+	mySessions: [AccountSession!]!
+	"""
 	An account as staff see it: identities, created time and restrictions. Needs
 	`users.view` or `users.restrict`.
 	"""
 	adminAccount(accountId: String!): AdminAccount!
+	"""
+	How many of your notifications are unread.
+	"""
+	unreadNotificationCount: Int!
 	"""
 	An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`
 	or `emotes.takedown`. `perPage` is 1 to 100, default 50.
 	"""
 	accountEmotes(accountId: String!, page: Int, perPage: Int): EmotePage!
 	"""
-	Your notifications, newest first (the latest 100).
+	Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
+	`emote.rejected`, `emote.taken_down`, `editor.added`, `editor.changed`, `editor.removed`,
+	`cosmetic.granted` and `cosmetic.revoked`; `payload` is JSON with the IDs and names it is
+	about (see the API reference).
 	"""
 	myNotifications(unreadOnly: Boolean): [Notification!]!
 	"""
@@ -1350,6 +1415,20 @@ type SearchResults {
 	total: Int!
 	page: Int!
 	perPage: Int!
+}
+
+"""
+How a session signed in.
+"""
+enum SessionKind {
+	"""
+	The cyex.tv website's cookie.
+	"""
+	SITE
+	"""
+	A Bearer token for an app (cyex deck, the extension).
+	"""
+	APP
 }
 
 """

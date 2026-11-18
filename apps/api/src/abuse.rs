@@ -606,13 +606,6 @@ pub async fn my_notifications(
     )
 }
 
-pub async fn mark_read(state: &AppState, caller: &Caller) -> ApiResult<u64> {
-    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    notifications::mark_read(&mut conn, caller.account_id)
-        .await
-        .map_err(db_error)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

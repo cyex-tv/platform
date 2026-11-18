@@ -61,6 +61,8 @@ pub struct Callback<'a> {
     pub code: Option<&'a str>,
     pub state: Option<&'a str>,
     pub error: Option<&'a str>,
+    /// The browser's `User-Agent`, kept with the session to name the device (`mySessions`).
+    pub user_agent: Option<&'a str>,
 }
 
 impl Auth {
@@ -239,12 +241,13 @@ impl Auth {
         // worth nothing after it.
         let token = tokens::random_token();
         let mut tx = conn.begin().await?;
-        sessions::create(
+        sessions::create_with(
             &mut tx,
             &tokens::hash(&token),
             account_id,
             SessionKind::Site,
             ttl(SessionKind::Site),
+            query.user_agent,
         )
         .await?;
         if let Some(old) = caller.filter(|c| c.via == Via::Cookie) {

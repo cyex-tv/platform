@@ -77,6 +77,25 @@ export type AccountResults = {
   total: Scalars['Int']['output'];
 };
 
+/** One place you are signed in. Never holds the token or anything made from it. */
+export type AccountSession = {
+  __typename?: 'AccountSession';
+  createdAt: Scalars['String']['output'];
+  /** The session this request came with. */
+  current: Scalars['Boolean']['output'];
+  /**
+   * For example `Firefox on Windows`, `cyex.tv app` or `Unknown device`, from the user agent
+   * that signed in.
+   */
+  device: Scalars['String']['output'];
+  expiresAt: Scalars['String']['output'];
+  /** Pass to `revokeSession`. */
+  id: Scalars['String']['output'];
+  kind: SessionKind;
+  /** Updated at most once an hour. */
+  lastSeenAt: Scalars['String']['output'];
+};
+
 /** What an account may do (`users.restrict`). */
 export type AccountStatus = {
   __typename?: 'AccountStatus';
@@ -565,6 +584,16 @@ export type Mutation = {
    */
   createSet: EmoteSet;
   /**
+   * Delete your account now. `confirm` is one of your Twitch or Kick logins. Website only
+   * (`website_only` with an app token); the owner's account can't be (`owner_protected`).
+   * Your sessions, identities, channels, sets, editor grants, cosmetics and notifications go;
+   * your approved emotes that are in other people's sets stay, shown as by a deleted user;
+   * your other emotes are deleted. Signing in again later makes a new account. Audited.
+   * `confirm_mismatch` when `confirm` isn't one of your logins; `restricted` while the account's
+   * uploads or sign-in are blocked.
+   */
+  deleteAccount: Scalars['Boolean']['output'];
+  /**
    * Delete a badge: everyone loses it and stops showing it. False when there was none. Needs
    * `cosmetics.manage`. Audited.
    */
@@ -583,9 +612,19 @@ export type Mutation = {
    * can't be deleted.
    */
   deleteSet: Scalars['Boolean']['output'];
+  /**
+   * A copy of everything about your account, as JSON text (`format`, `version`, `account`,
+   * `identities`, `sessions`, `channels`, `emotes`, `sets`, `set_editors`, `account_editors`,
+   * `editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`). 5 an hour
+   * (`rate_limited`). Audited.
+   */
+  exportMyData: Scalars['String']['output'];
   /** Give an account a badge or paint, with a reason. Needs `cosmetics.grant`. Audited. */
   grantCosmetic: Entitlement;
-  /** Mark all your notifications read. Returns how many were unread. */
+  /**
+   * Mark your notifications read: those in `ids` (up to 100; others' IDs are ignored), or all
+   * of them without `ids`. Returns how many were unread.
+   */
   markNotificationsRead: Scalars['Int']['output'];
   /** Reject a pending emote with a reason. Needs `emotes.review`. Audited. */
   rejectEmote: Emote;
@@ -615,6 +654,13 @@ export type Mutation = {
    * Needs `cosmetics.grant`. Audited.
    */
   revokeCosmetic: Scalars['Boolean']['output'];
+  /** Sign out everywhere but here. Returns how many sessions ended. */
+  revokeOtherSessions: Scalars['Int']['output'];
+  /**
+   * Sign out one of your sessions, the current one too (then the cookie is cleared). False
+   * when you have none with that ID.
+   */
+  revokeSession: Scalars['Boolean']['output'];
   /**
    * Pick the badge and paint you show, from what you own (ADR 0015). Leave a field out to keep
    * it; send null or an empty string to show none. With `ownerId`, for an account you edit
@@ -718,6 +764,11 @@ export type MutationCreateSetArgs = {
 };
 
 
+export type MutationDeleteAccountArgs = {
+  confirm: Scalars['String']['input'];
+};
+
+
 export type MutationDeleteBadgeArgs = {
   id: Scalars['String']['input'];
 };
@@ -745,6 +796,11 @@ export type MutationDeleteSetArgs = {
 
 export type MutationGrantCosmeticArgs = {
   input: GrantCosmeticInput;
+};
+
+
+export type MutationMarkNotificationsReadArgs = {
+  ids?: InputMaybe<Array<Scalars['String']['input']>>;
 };
 
 
@@ -797,6 +853,11 @@ export type MutationRevokeCosmeticArgs = {
   cosmeticId: Scalars['String']['input'];
   kind: CosmeticKind;
   reason?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationRevokeSessionArgs = {
+  id: Scalars['String']['input'];
 };
 
 
@@ -1140,8 +1201,18 @@ export type Query = {
   myCosmetics: OwnedCosmetics;
   /** Your own emotes in every state, newest first. `perPage` is 1 to 100, default 50. */
   myEmotes: EmotePage;
-  /** Your notifications, newest first (the latest 100). */
+  /**
+   * Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
+   * `emote.rejected`, `emote.taken_down`, `editor.added`, `editor.changed`, `editor.removed`,
+   * `cosmetic.granted` and `cosmetic.revoked`; `payload` is JSON with the IDs and names it is
+   * about (see the API reference).
+   */
   myNotifications: Array<Notification>;
+  /**
+   * Where you are signed in: your live sessions, the most recently used first, with the one
+   * this request came with marked `current`. Never shows tokens.
+   */
+  mySessions: Array<AccountSession>;
   /** The sets you own, then the ones you edit. Pending emotes included. */
   mySets: Array<EmoteSet>;
   /** Every permission name a role can hold. */
@@ -1177,6 +1248,8 @@ export type Query = {
   set?: Maybe<EmoteSet>;
   /** A set's editors. For its owner, its editors and `sets.edit_any`. */
   setEditors: Array<AccountSummary>;
+  /** How many of your notifications are unread. */
+  unreadNotificationCount: Scalars['Int']['output'];
   /**
    * The badge and paint up to 100 chatters show, as catalog IDs. Only chatters showing
    * something are listed.
@@ -1430,6 +1503,13 @@ export type SearchResults = {
   perPage: Scalars['Int']['output'];
   total: Scalars['Int']['output'];
 };
+
+/** How a session signed in. */
+export type SessionKind =
+  /** A Bearer token for an app (cyex deck, the extension). */
+  | 'APP'
+  /** The cyex.tv website's cookie. */
+  | 'SITE';
 
 /** An emote as it sits in a set: the name it is typed as there, and who added it. */
 export type SetEmote = {

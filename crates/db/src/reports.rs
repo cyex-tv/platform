@@ -24,6 +24,16 @@ pub struct Report {
 const REPORT: &str =
     "id, emote_id, reporter_id, reason, state, resolved_by, resolution, created_at, resolved_at";
 
+/// The reports an account filed, newest first (for the data export).
+pub async fn filed_by(conn: &mut PgConnection, reporter_id: Uuid) -> DbResult<Vec<Report>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {REPORT} FROM reports WHERE reporter_id = $1 ORDER BY created_at DESC, id DESC"
+    ))
+    .bind(reporter_id)
+    .fetch_all(conn)
+    .await?)
+}
+
 /// Files a report. `AlreadyInSet` stands for "this reporter has an open report on it".
 pub async fn create(
     conn: &mut PgConnection,
