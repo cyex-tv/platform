@@ -781,7 +781,8 @@ impl Query {
     /// Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
     /// `emote.rejected`, `emote.taken_down`, `editor.added`, `editor.changed`, `editor.removed`,
     /// `cosmetic.granted` and `cosmetic.revoked`; `payload` is JSON with the IDs and names it is
-    /// about (see the API reference).
+    /// about (see the API reference). Cosmetics from the shop and from codes carry `source`
+    /// (`purchase` or `code`), and from orders `order_id`.
     async fn my_notifications(
         &self,
         ctx: &Context<'_>,
@@ -1185,7 +1186,9 @@ impl Mutation {
 
     /// Start buying an item for yourself, or as a gift with `recipient`. Answers the Paddle
     /// transaction to open in Paddle's checkout; the order turns `PAID` once Paddle confirms.
-    /// `checkout_unavailable` while Paddle isn't set up or the item has no Paddle price.
+    /// `checkout_unavailable` while Paddle isn't set up or the item has no Paddle price. Asking
+    /// again for the same item and recipient within the hour hands out the same transaction
+    /// (one pending order each); `checkout_busy` while another request is starting it.
     async fn start_checkout(
         &self,
         ctx: &Context<'_>,
@@ -1199,7 +1202,9 @@ impl Mutation {
     }
 
     /// Refund a paid order: asks Paddle for a full refund when it is set up, and takes the
-    /// cosmetics back at once. Needs `shop.orders`. Audited.
+    /// cosmetics back at once (only those no other paid order, code or staff grant covers).
+    /// `already_refunded` when Paddle says it was refunded already; `refund_in_progress` while
+    /// another refund of it runs. Needs `shop.orders`. Audited.
     async fn refund_order(&self, ctx: &Context<'_>, id: String, reason: String) -> Result<Order> {
         let caller = caller(ctx)?;
         shop::refund_order(state(ctx), caller, &id, &reason)
@@ -1208,12 +1213,13 @@ impl Mutation {
     }
 
     /// Redeem a code (case, spaces and dashes don't matter). Wrong codes lock you out for a
-    /// while after a few tries (`locked_out`).
+    /// while after a few tries (`locked_out`). Each cosmetic it gives sends a `cosmetic.granted`
+    /// notification (`source` `code`).
     async fn redeem_code(&self, ctx: &Context<'_>, code: String) -> Result<RedeemResult> {
         let caller = caller(ctx)?;
         let ip = ctx
             .data_opt::<crate::limits::ClientIp>()
-            .map_or("unknown", |i| i.0.as_str());
+            .map(|i| i.0.as_str());
         codes::redeem(state(ctx), caller, ip, &code)
             .await
             .map_err(api_error)

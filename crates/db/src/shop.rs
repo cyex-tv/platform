@@ -253,23 +253,44 @@ pub async fn item_bundles(
     bundles(conn, "shop_item_cosmetics", "item_id", items).await
 }
 
-/// Copies taken per item: paid orders, and pending ones from the last hour.
+/// How long a pending checkout holds a copy of a limited item.
+pub const HOLD_MINUTES: i64 = 60;
+
+/// Copies taken per item: paid orders (and ones with a refund in flight), and pending ones from
+/// the last hour.
 pub async fn taken(conn: &mut PgConnection, items: &[Uuid]) -> DbResult<HashMap<Uuid, i64>> {
     let rows: Vec<(Uuid, i64)> = sqlx::query_as(
         "SELECT item_id, count(*) FROM shop_orders
          WHERE item_id = ANY($1)
-           AND (status = 'paid' OR (status = 'pending' AND created_at > now() - interval '1 hour'))
+           AND (status IN ('paid', 'refund_requested')
+                OR (status = 'pending' AND created_at > now() - make_interval(mins => $2::int)))
          GROUP BY item_id",
     )
     .bind(items)
+    .bind(HOLD_MINUTES as i32)
     .fetch_all(conn)
     .await?;
     Ok(rows.into_iter().collect())
 }
 
+/// Copies of an item sold: paid orders, and ones with a refund in flight.
+pub async fn sold(conn: &mut PgConnection, item: Uuid) -> DbResult<i64> {
+    Ok(sqlx::query_scalar(
+        "SELECT count(*) FROM shop_orders
+         WHERE item_id = $1 AND status IN ('paid', 'refund_requested')",
+    )
+    .bind(item)
+    .fetch_one(conn)
+    .await?)
+}
+
 // Entitlements made by the shop and by codes
 
 /// Gives `account` the cosmetic from an order or a code. False when they owned it already.
+///
+/// An existing entitlement is locked first, so a refund taking it back at the same time either
+/// finishes first (and this grants it again) or waits for this order to be paid (and then sees
+/// it covering the cosmetic).
 #[allow(clippy::too_many_arguments)]
 pub async fn grant_from(
     conn: &mut PgConnection,
@@ -282,6 +303,16 @@ pub async fn grant_from(
     code_id: Option<Uuid>,
 ) -> DbResult<bool> {
     let (table, column) = entitlement_table(kind);
+    let owned: Option<i32> = sqlx::query_scalar(&format!(
+        "SELECT 1 FROM {table} WHERE account_id = $1 AND {column} = $2 FOR UPDATE"
+    ))
+    .bind(account)
+    .bind(cosmetic)
+    .fetch_optional(&mut *conn)
+    .await?;
+    if owned.is_some() {
+        return Ok(false);
+    }
     let done = sqlx::query(&format!(
         "INSERT INTO {table} (account_id, {column}, source, reason, order_id, code_id)
          VALUES ($1, $2, $3, $4, $5, $6)
@@ -298,22 +329,133 @@ pub async fn grant_from(
     Ok(done.rows_affected() > 0)
 }
 
-/// Takes back every entitlement an order made, and returns them. Selections of them are cleared
-/// by the foreign keys.
+/// Records that `order` covers a cosmetic of `account`, whether it made the entitlement or found
+/// it owned already.
+pub async fn link_order(
+    conn: &mut PgConnection,
+    order: Uuid,
+    account: Uuid,
+    kind: CosmeticKind,
+    cosmetic: Uuid,
+) -> DbResult<()> {
+    sqlx::query(
+        "INSERT INTO shop_order_entitlements (order_id, account_id, kind, cosmetic_id)
+         VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+    )
+    .bind(order)
+    .bind(account)
+    .bind(kind.as_str())
+    .bind(cosmetic)
+    .execute(conn)
+    .await?;
+    Ok(())
+}
+
+/// A code `account` redeemed that gives the cosmetic (directly, or through its batch's item).
+async fn covering_code(
+    conn: &mut PgConnection,
+    kind: CosmeticKind,
+    account: Uuid,
+    cosmetic: Uuid,
+) -> DbResult<Option<Uuid>> {
+    let (_, column) = entitlement_table(kind);
+    Ok(sqlx::query_scalar(&format!(
+        "SELECT r.code_id FROM code_redemptions r
+           JOIN redeem_codes c ON c.id = r.code_id
+           JOIN code_batches b ON b.id = c.batch_id
+          WHERE r.account_id = $1
+            AND (EXISTS (SELECT 1 FROM code_batch_cosmetics bc
+                          WHERE bc.batch_id = b.id AND bc.{column} = $2)
+                 OR EXISTS (SELECT 1 FROM shop_item_cosmetics ic
+                             WHERE ic.item_id = b.item_id AND ic.{column} = $2))
+          ORDER BY r.redeemed_at LIMIT 1"
+    ))
+    .bind(account)
+    .bind(cosmetic)
+    .fetch_optional(conn)
+    .await?)
+}
+
+/// Takes back what an order covers, and returns what was taken. A cosmetic stays when its
+/// entitlement didn't come from a purchase (a staff grant, an event, a code), when another paid
+/// order covers it (the entitlement then names that order), or when a code the account redeemed
+/// gives it (the entitlement then becomes the code's). Selections of what was taken are cleared
+/// by the foreign keys. Entitlements are locked in a fixed order (badges, then paints, by ID).
 pub async fn revoke_order(
     conn: &mut PgConnection,
     order: Uuid,
 ) -> DbResult<Vec<(CosmeticKind, Uuid, Uuid)>> {
+    let links: Vec<(Uuid, String, Uuid)> = sqlx::query_as(
+        "SELECT account_id, kind, cosmetic_id FROM shop_order_entitlements
+          WHERE order_id = $1 ORDER BY kind, cosmetic_id",
+    )
+    .bind(order)
+    .fetch_all(&mut *conn)
+    .await?;
     let mut out = Vec::new();
-    for kind in [CosmeticKind::Badge, CosmeticKind::Paint] {
+    for (account, kind, cosmetic) in links {
+        let kind = if kind == "badge" {
+            CosmeticKind::Badge
+        } else {
+            CosmeticKind::Paint
+        };
         let (table, column) = entitlement_table(kind);
-        let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(&format!(
-            "DELETE FROM {table} WHERE order_id = $1 RETURNING account_id, {column}"
+        let source: Option<String> = sqlx::query_scalar(&format!(
+            "SELECT source FROM {table} WHERE account_id = $1 AND {column} = $2 FOR UPDATE"
         ))
-        .bind(order)
-        .fetch_all(&mut *conn)
+        .bind(account)
+        .bind(cosmetic)
+        .fetch_optional(&mut *conn)
         .await?;
-        out.extend(rows.into_iter().map(|(a, c)| (kind, a, c)));
+        if source.as_deref() != Some("purchase") {
+            continue;
+        }
+        let other: Option<Uuid> = sqlx::query_scalar(
+            "SELECT l.order_id FROM shop_order_entitlements l
+               JOIN shop_orders o ON o.id = l.order_id
+              WHERE l.account_id = $1 AND l.kind = $2 AND l.cosmetic_id = $3
+                AND l.order_id <> $4 AND o.status = 'paid'
+              ORDER BY l.order_id LIMIT 1",
+        )
+        .bind(account)
+        .bind(kind.as_str())
+        .bind(cosmetic)
+        .bind(order)
+        .fetch_optional(&mut *conn)
+        .await?;
+        if let Some(other) = other {
+            sqlx::query(&format!(
+                "UPDATE {table} SET order_id = $3, reason = $4
+                  WHERE account_id = $1 AND {column} = $2"
+            ))
+            .bind(account)
+            .bind(cosmetic)
+            .bind(other)
+            .bind(format!("Order {}", crate::ids::to_text(other)))
+            .execute(&mut *conn)
+            .await?;
+            continue;
+        }
+        if let Some(code) = covering_code(conn, kind, account, cosmetic).await? {
+            sqlx::query(&format!(
+                "UPDATE {table} SET source = 'code', order_id = NULL, code_id = $3
+                  WHERE account_id = $1 AND {column} = $2"
+            ))
+            .bind(account)
+            .bind(cosmetic)
+            .bind(code)
+            .execute(&mut *conn)
+            .await?;
+            continue;
+        }
+        sqlx::query(&format!(
+            "DELETE FROM {table} WHERE account_id = $1 AND {column} = $2"
+        ))
+        .bind(account)
+        .bind(cosmetic)
+        .execute(&mut *conn)
+        .await?;
+        out.push((kind, account, cosmetic));
     }
     Ok(out)
 }
@@ -356,7 +498,7 @@ pub struct OrderRow {
     pub recipient_id: Option<Uuid>,
     pub item_id: Uuid,
     pub item_name: String,
-    /// `pending`, `paid`, `refunded` or `failed`.
+    /// `pending`, `paid`, `refund_requested`, `refunded` or `failed`.
     pub status: String,
     pub amount_cents: i32,
     pub currency: String,
@@ -375,22 +517,58 @@ pub struct OrderRow {
     pub paid_at: Option<DateTime<Utc>>,
     pub refunded_at: Option<DateTime<Utc>>,
     pub failed_at: Option<DateTime<Utc>>,
+    /// Paddle's hosted checkout link for the transaction.
+    pub checkout_url: Option<String>,
+    /// Why a failed order failed (see [`failed`]).
+    pub failed_reason: Option<String>,
+    pub refund_requested_at: Option<DateTime<Utc>>,
+    /// Paddle rejected the refund after the cosmetics were taken back.
+    pub refund_rejected_at: Option<DateTime<Utc>>,
+}
+
+impl OrderRow {
+    /// A completed payment is still taken for it: pending, or failed by us (replaced by a newer
+    /// checkout, or expired) rather than cancelled at Paddle.
+    pub fn takes_payment(&self) -> bool {
+        self.status == "pending"
+            || (self.status == "failed"
+                && matches!(
+                    self.failed_reason.as_deref(),
+                    Some(failed::REPLACED | failed::EXPIRED)
+                ))
+    }
+}
+
+/// Why a failed order failed.
+pub mod failed {
+    /// Cancelled at Paddle.
+    pub const CANCELED: &str = "canceled";
+    /// Paddle didn't make the transaction.
+    pub const PROVIDER_ERROR: &str = "provider_error";
+    /// Paddle made the transaction, and saving its ID failed (the audit row holds it).
+    pub const TRANSACTION_NOT_SAVED: &str = "transaction_not_saved";
+    /// A newer checkout of the same buyer, item and recipient took its place.
+    pub const REPLACED: &str = "replaced";
+    /// Not paid within 24 hours.
+    pub const EXPIRED: &str = "expired";
 }
 
 const ORDER: &str = "id, account_id, recipient_id, item_id, item_name, status, amount_cents, \
                      currency, provider, provider_transaction_id, paddle_price_id, \
                      provider_currency, paid_total_cents, \
                      paid_currency, provider_adjustment_id, refund_reason, created_at, \
-                     updated_at, paid_at, refunded_at, failed_at";
+                     updated_at, paid_at, refunded_at, failed_at, checkout_url, failed_reason, \
+                     refund_requested_at, refund_rejected_at";
 
-/// A pending order for `item`, at its current price.
+/// A pending order for `item`, at its current price. `PendingOrder` when the buyer has a pending
+/// order for it (for the same recipient) already.
 pub async fn create_order(
     conn: &mut PgConnection,
     buyer: Uuid,
     recipient: Uuid,
     item: &ItemRow,
 ) -> DbResult<OrderRow> {
-    Ok(sqlx::query_as(&format!(
+    sqlx::query_as(&format!(
         "INSERT INTO shop_orders (id, account_id, recipient_id, item_id, item_name, amount_cents, currency,
                                   paddle_price_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -405,6 +583,29 @@ pub async fn create_order(
     .bind(&item.currency)
     .bind(&item.paddle_price_id)
     .fetch_one(conn)
+    .await
+    .map_err(|err| match err.as_database_error() {
+        Some(db) if db.is_unique_violation() => DbError::PendingOrder,
+        _ => err.into(),
+    })
+}
+
+/// The buyer's pending order for an item and recipient, locked.
+pub async fn lock_pending(
+    conn: &mut PgConnection,
+    buyer: Uuid,
+    item: Uuid,
+    recipient: Uuid,
+) -> DbResult<Option<OrderRow>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {ORDER} FROM shop_orders
+          WHERE account_id = $1 AND item_id = $2 AND recipient_id = $3 AND status = 'pending'
+          FOR UPDATE"
+    ))
+    .bind(buyer)
+    .bind(item)
+    .bind(recipient)
+    .fetch_optional(conn)
     .await?)
 }
 
@@ -413,15 +614,17 @@ pub async fn set_transaction(
     id: Uuid,
     transaction_id: &str,
     currency: Option<&str>,
+    checkout_url: Option<&str>,
 ) -> DbResult<OrderRow> {
     sqlx::query_as(&format!(
         "UPDATE shop_orders SET provider_transaction_id = $2, provider_currency = $3,
-                updated_at = now()
+                checkout_url = $4, updated_at = now()
          WHERE id = $1 RETURNING {ORDER}"
     ))
     .bind(id)
     .bind(transaction_id)
     .bind(currency)
+    .bind(checkout_url)
     .fetch_optional(conn)
     .await?
     .ok_or(DbError::NotFound)
@@ -478,6 +681,72 @@ pub async fn mark_paid(
     .ok_or(DbError::NotFound)
 }
 
+/// A staff refund is under way: Paddle is asked next, outside the order's lock.
+pub async fn mark_refund_requested(
+    conn: &mut PgConnection,
+    id: Uuid,
+    reason: &str,
+) -> DbResult<OrderRow> {
+    sqlx::query_as(&format!(
+        "UPDATE shop_orders SET status = 'refund_requested', refund_requested_at = now(),
+                refund_reason = $2, updated_at = now()
+         WHERE id = $1 RETURNING {ORDER}"
+    ))
+    .bind(id)
+    .bind(reason)
+    .fetch_optional(conn)
+    .await?
+    .ok_or(DbError::NotFound)
+}
+
+/// Paddle didn't take a requested refund: the order is paid again.
+pub async fn cancel_refund_request(conn: &mut PgConnection, id: Uuid) -> DbResult<OrderRow> {
+    sqlx::query_as(&format!(
+        "UPDATE shop_orders SET status = 'paid', refund_requested_at = NULL, refund_reason = NULL,
+                updated_at = now()
+         WHERE id = $1 RETURNING {ORDER}"
+    ))
+    .bind(id)
+    .fetch_optional(conn)
+    .await?
+    .ok_or(DbError::NotFound)
+}
+
+/// Paddle rejected the refund of an order whose cosmetics were taken back already.
+pub async fn mark_refund_rejected(
+    conn: &mut PgConnection,
+    id: Uuid,
+    adjustment_id: Option<&str>,
+) -> DbResult<OrderRow> {
+    sqlx::query_as(&format!(
+        "UPDATE shop_orders SET refund_rejected_at = now(),
+                provider_adjustment_id = coalesce($2, provider_adjustment_id), updated_at = now()
+         WHERE id = $1 RETURNING {ORDER}"
+    ))
+    .bind(id)
+    .bind(adjustment_id)
+    .fetch_optional(conn)
+    .await?
+    .ok_or(DbError::NotFound)
+}
+
+/// Stores the adjustment of a refund Paddle took, on an order its webhook refunded already.
+pub async fn set_adjustment(
+    conn: &mut PgConnection,
+    id: Uuid,
+    adjustment_id: &str,
+) -> DbResult<OrderRow> {
+    sqlx::query_as(&format!(
+        "UPDATE shop_orders SET provider_adjustment_id = $2, updated_at = now()
+         WHERE id = $1 RETURNING {ORDER}"
+    ))
+    .bind(id)
+    .bind(adjustment_id)
+    .fetch_optional(conn)
+    .await?
+    .ok_or(DbError::NotFound)
+}
+
 pub async fn mark_refunded(
     conn: &mut PgConnection,
     id: Uuid,
@@ -497,15 +766,39 @@ pub async fn mark_refunded(
     .ok_or(DbError::NotFound)
 }
 
-pub async fn mark_failed(conn: &mut PgConnection, id: Uuid) -> DbResult<OrderRow> {
+/// Fails an order, saying why (see [`failed`]).
+pub async fn mark_failed(conn: &mut PgConnection, id: Uuid, reason: &str) -> DbResult<OrderRow> {
     sqlx::query_as(&format!(
-        "UPDATE shop_orders SET status = 'failed', failed_at = now(), updated_at = now()
+        "UPDATE shop_orders SET status = 'failed', failed_at = now(), failed_reason = $2,
+                updated_at = now()
          WHERE id = $1 RETURNING {ORDER}"
     ))
     .bind(id)
+    .bind(reason)
     .fetch_optional(conn)
     .await?
     .ok_or(DbError::NotFound)
+}
+
+/// Fails pending orders made before `before` (reason `expired`; a late payment is still taken),
+/// at most `limit` at a time, and returns them.
+pub async fn expire_pending(
+    conn: &mut PgConnection,
+    before: DateTime<Utc>,
+    limit: i64,
+) -> DbResult<Vec<OrderRow>> {
+    Ok(sqlx::query_as(&format!(
+        "UPDATE shop_orders SET status = 'failed', failed_at = now(), failed_reason = 'expired',
+                updated_at = now()
+          WHERE id IN (SELECT id FROM shop_orders
+                        WHERE status = 'pending' AND created_at < $1
+                        ORDER BY id LIMIT $2 FOR UPDATE SKIP LOCKED)
+          RETURNING {ORDER}"
+    ))
+    .bind(before)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
 }
 
 /// Narrows `orders`. Empty fields match everything.
@@ -513,6 +806,7 @@ pub async fn mark_failed(conn: &mut PgConnection, id: Uuid) -> DbResult<OrderRow
 pub struct OrderFilter<'a> {
     /// Orders this account bought or received.
     pub account: Option<Uuid>,
+    /// `paid` also matches orders with a refund in flight.
     pub status: Option<&'a str>,
     pub item: Option<Uuid>,
 }
@@ -525,7 +819,8 @@ pub async fn orders(
     offset: i64,
 ) -> DbResult<(Vec<OrderRow>, i64)> {
     let filter_sql = "($1::uuid IS NULL OR account_id = $1 OR recipient_id = $1)
-                      AND ($2::text IS NULL OR status = $2)
+                      AND ($2::text IS NULL OR status = $2
+                           OR ($2 = 'paid' AND status = 'refund_requested'))
                       AND ($3::uuid IS NULL OR item_id = $3)";
     let rows = sqlx::query_as(&format!(
         "SELECT {ORDER} FROM shop_orders WHERE {filter_sql} ORDER BY id DESC LIMIT $4 OFFSET $5"
@@ -564,6 +859,16 @@ pub async fn record_event(
     .execute(conn)
     .await?;
     Ok(done.rows_affected() > 0)
+}
+
+/// Forgets handled webhook events received before `before` (Paddle stops redelivering long
+/// before then).
+pub async fn delete_events_before(conn: &mut PgConnection, before: DateTime<Utc>) -> DbResult<u64> {
+    let done = sqlx::query("DELETE FROM paddle_events WHERE received_at < $1")
+        .bind(before)
+        .execute(conn)
+        .await?;
+    Ok(done.rows_affected())
 }
 
 #[cfg(test)]

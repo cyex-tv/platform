@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use chrono::Utc;
 use cyex_tv_db::jobs::{self, Job};
-use cyex_tv_db::{event_sessions, oauth_states, outbox, search, sessions};
+use cyex_tv_db::{audit, event_sessions, ids, oauth_states, outbox, search, sessions, shop};
 use cyex_tv_shared::metrics::{self, Labels, Registry};
 use cyex_tv_storage::Store;
 use sqlx::PgPool;
@@ -251,9 +251,49 @@ pub async fn run_one(
     Ok(Some((id, outcome)))
 }
 
+/// Shop orders left pending this long are failed (`expired`); a late payment is still taken.
+pub const PENDING_ORDER_HOURS: i64 = 24;
+/// Handled Paddle webhook events are forgotten after this many days.
+pub const PADDLE_EVENT_DAYS: i64 = 90;
+
+/// Fails shop orders pending for more than a day, each with an audit row
+/// (`shop.order_expired`), in batches. Returns how many.
+pub async fn expire_orders(db: &PgPool) -> Result<u64, cyex_tv_db::DbError> {
+    let before = Utc::now() - chrono::Duration::hours(PENDING_ORDER_HOURS);
+    let mut n = 0;
+    loop {
+        let mut tx = db.begin().await?;
+        let expired = shop::expire_pending(&mut tx, before, 500).await?;
+        for order in &expired {
+            audit::write(
+                &mut tx,
+                &audit::NewEntry {
+                    actor: None,
+                    action: "shop.order_expired",
+                    target_kind: "shop_order",
+                    target_id: &ids::to_text(order.id),
+                    before: Some(serde_json::json!({ "status": "pending" })),
+                    after: Some(serde_json::json!({
+                        "status": "failed",
+                        "reason": shop::failed::EXPIRED,
+                        "provider_transaction_id": order.provider_transaction_id,
+                    })),
+                },
+            )
+            .await?;
+        }
+        tx.commit().await?;
+        n += expired.len() as u64;
+        if expired.len() < 500 {
+            return Ok(n);
+        }
+    }
+}
+
 /// Removes what has expired: sessions, sign-ins never finished, outbox events past the replay
-/// window (48 h, ADR 0005), event socket sessions after 24 h, and finished jobs after a week.
-/// Also refreshes the search ranking.
+/// window (48 h, ADR 0005), event socket sessions after 24 h, finished jobs after a week, shop
+/// orders pending for a day (failed, see [`expire_orders`]) and Paddle webhook events after 90
+/// days. Also refreshes the search ranking.
 pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
     let mut conn = db.acquire().await?;
     let sessions = sessions::delete_expired(&mut conn).await?;
@@ -264,14 +304,23 @@ pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
     let sockets =
         event_sessions::delete_older_than(&mut conn, Utc::now() - chrono::Duration::hours(24))
             .await?;
+    let paddle_events = shop::delete_events_before(
+        &mut conn,
+        Utc::now() - chrono::Duration::days(PADDLE_EVENT_DAYS),
+    )
+    .await?;
     // Search ranking (ADR 0004): channels showing each emote.
     let ranked = search::refresh_popularity(&mut conn).await?;
+    drop(conn);
+    let orders_expired = expire_orders(db).await?;
     tracing::info!(
         sessions,
         states,
         events,
         done,
         sockets,
+        paddle_events,
+        orders_expired,
         ranked,
         "cleaned up"
     );

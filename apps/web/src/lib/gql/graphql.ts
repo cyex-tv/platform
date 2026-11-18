@@ -707,12 +707,15 @@ export type Mutation = {
   markNotificationsRead: Scalars['Int']['output'];
   /**
    * Redeem a code (case, spaces and dashes don't matter). Wrong codes lock you out for a
-   * while after a few tries (`locked_out`).
+   * while after a few tries (`locked_out`). Each cosmetic it gives sends a `cosmetic.granted`
+   * notification (`source` `code`).
    */
   redeemCode: RedeemResult;
   /**
    * Refund a paid order: asks Paddle for a full refund when it is set up, and takes the
-   * cosmetics back at once. Needs `shop.orders`. Audited.
+   * cosmetics back at once (only those no other paid order, code or staff grant covers).
+   * `already_refunded` when Paddle says it was refunded already; `refund_in_progress` while
+   * another refund of it runs. Needs `shop.orders`. Audited.
    */
   refundOrder: Order;
   /** Reject a pending emote with a reason. Needs `emotes.review`. Audited. */
@@ -759,7 +762,9 @@ export type Mutation = {
   /**
    * Start buying an item for yourself, or as a gift with `recipient`. Answers the Paddle
    * transaction to open in Paddle's checkout; the order turns `PAID` once Paddle confirms.
-   * `checkout_unavailable` while Paddle isn't set up or the item has no Paddle price.
+   * `checkout_unavailable` while Paddle isn't set up or the item has no Paddle price. Asking
+   * again for the same item and recipient within the hour hands out the same transaction
+   * (one pending order each); `checkout_busy` while another request is starting it.
    */
   startCheckout: Checkout;
   /**
@@ -1116,6 +1121,11 @@ export type Order = {
   /** Who got the cosmetics. */
   recipient?: Maybe<AccountSummary>;
   refundReason?: Maybe<Scalars['String']['output']>;
+  /**
+   * When Paddle rejected this order's refund after the cosmetics were taken back (RFC 3339):
+   * look at it by hand. Only for holders of `shop.orders`.
+   */
+  refundRejectedAt?: Maybe<Scalars['String']['output']>;
   refundedAt?: Maybe<Scalars['String']['output']>;
   status: OrderStatus;
 };
@@ -1127,9 +1137,12 @@ export type OrderPage = {
 };
 
 export type OrderStatus =
-  /** Cancelled at Paddle. */
+  /**
+   * Cancelled at Paddle, not started there, or not paid within a day (a late payment is still
+   * taken).
+   */
   | 'FAILED'
-  /** Paid; the recipient owns the cosmetics. */
+  /** Paid; the recipient owns the cosmetics. Also while a staff refund is being sent to Paddle. */
   | 'PAID'
   /** Checkout started, not paid yet. */
   | 'PENDING'
@@ -1399,7 +1412,8 @@ export type Query = {
    * Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
    * `emote.rejected`, `emote.taken_down`, `editor.added`, `editor.changed`, `editor.removed`,
    * `cosmetic.granted` and `cosmetic.revoked`; `payload` is JSON with the IDs and names it is
-   * about (see the API reference).
+   * about (see the API reference). Cosmetics from the shop and from codes carry `source`
+   * (`purchase` or `code`), and from orders `order_id`.
    */
   myNotifications: Array<Notification>;
   /** Orders you bought or received (gifts), newest first. `perPage` 1 to 100, default 50. */
@@ -1839,6 +1853,7 @@ export type ShopItem = {
   name: Scalars['String']['output'];
   /** The caller owns every cosmetic in it (always false signed out). They can still gift it. */
   owned: Scalars['Boolean']['output'];
+  /** The Paddle price (`pri_…`). Only for holders of `shop.manage`; null for everyone else. */
   paddlePriceId?: Maybe<Scalars['String']['output']>;
   paints: Array<Paint>;
   /** The price shown, in cents. Paddle's price (`paddlePriceId`) is what is charged. */

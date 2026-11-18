@@ -1254,7 +1254,7 @@ pub async fn revoke(
 }
 
 /// A badge's or paint's name, for notifications. `None` when it is gone.
-async fn cosmetic_display_name(
+pub(crate) async fn cosmetic_display_name(
     conn: &mut PgConnection,
     kind: CosmeticKind,
     id: Uuid,

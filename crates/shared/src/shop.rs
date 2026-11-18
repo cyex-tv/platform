@@ -17,6 +17,7 @@ pub struct ShopItem {
     pub price_cents: u32,
     /// ISO 4217, for example `EUR`.
     pub currency: String,
+    /// The Paddle price (`pri_…`). Only for holders of `shop.manage`; null for everyone else.
     pub paddle_price_id: Option<String>,
     pub badges: Vec<Badge>,
     pub paints: Vec<Paint>,
@@ -82,11 +83,12 @@ pub struct ShopItemInput {
 pub enum OrderStatus {
     /// Checkout started, not paid yet.
     Pending,
-    /// Paid; the recipient owns the cosmetics.
+    /// Paid; the recipient owns the cosmetics. Also while a staff refund is being sent to Paddle.
     Paid,
     /// Refunded or charged back; the cosmetics were taken back.
     Refunded,
-    /// Cancelled at Paddle.
+    /// Cancelled at Paddle, not started there, or not paid within a day (a late payment is still
+    /// taken).
     Failed,
 }
 
@@ -136,6 +138,9 @@ pub struct Order {
     pub paid_at: Option<String>,
     pub refunded_at: Option<String>,
     pub failed_at: Option<String>,
+    /// When Paddle rejected this order's refund after the cosmetics were taken back (RFC 3339):
+    /// look at it by hand. Only for holders of `shop.orders`.
+    pub refund_rejected_at: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

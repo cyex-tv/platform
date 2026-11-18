@@ -32,8 +32,8 @@ use crate::{catalog, cosmetics, moderation, shop, upload};
 /// tags); anything beyond this is cut off before it is read.
 const UPLOAD_BODY_LIMIT: usize = 5 * 1024 * 1024 + 64 * 1024;
 
-/// Paddle's notifications are a few KB; this leaves room for large transactions.
-const WEBHOOK_BODY_LIMIT: usize = 1024 * 1024;
+/// Paddle's notifications are a few KB; anything over 64 KB is refused before it is read.
+const WEBHOOK_BODY_LIMIT: usize = 64 * 1024;
 
 pub fn router() -> OpenApiRouter<AppState> {
     let upload = OpenApiRouter::new()

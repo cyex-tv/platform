@@ -394,3 +394,93 @@ async fn outcomes_and_the_queue_are_measured() {
     );
     db.close().await;
 }
+
+#[tokio::test]
+async fn clean_up_expires_old_pending_orders_and_old_paddle_events() {
+    use cyex_tv_db::shop;
+    let Some(db) = TestDb::new().await else {
+        return;
+    };
+    let mut conn = db.conn().await;
+    let buyer = cyex_tv_db::accounts::sign_in(
+        &mut conn,
+        cyex_tv_db::accounts::Profile {
+            platform: cyex_tv_shared::model::Platform::Twitch,
+            platform_user_id: "7",
+            login: "buyer",
+            display_name: "buyer",
+            avatar: None,
+        },
+    )
+    .await
+    .unwrap()
+    .account;
+    let fields = shop::ItemFields {
+        name: "Pack",
+        description: "",
+        price_cents: 100,
+        currency: "EUR",
+        paddle_price_id: Some("pri_01x"),
+        active_from: None,
+        active_to: None,
+        stock_limit: None,
+        visible: true,
+        sort_order: 0,
+    };
+    let item = shop::create_item(&mut conn, &fields, &[], None)
+        .await
+        .unwrap();
+    let mut other = fields.clone();
+    other.name = "Other";
+    let item2 = shop::create_item(&mut conn, &other, &[], None)
+        .await
+        .unwrap();
+    let old = shop::create_order(&mut conn, buyer.id, buyer.id, &item)
+        .await
+        .unwrap();
+    let fresh = shop::create_order(&mut conn, buyer.id, buyer.id, &item2)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE shop_orders SET created_at = now() - interval '25 hours' WHERE id = $1")
+        .bind(old.id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    for (id, age) in [("evt_old", "91 days"), ("evt_new", "1 day")] {
+        sqlx::query(&format!(
+            "INSERT INTO paddle_events (event_id, event_type, received_at)
+             VALUES ($1, 'transaction.completed', now() - interval '{age}')"
+        ))
+        .bind(id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    }
+    drop(conn);
+
+    cyex_tv_worker::clean_up(&db.pool).await.unwrap();
+    let mut conn = db.conn().await;
+    let old = shop::get_order(&mut conn, old.id).await.unwrap().unwrap();
+    assert_eq!(
+        (old.status.as_str(), old.failed_reason.as_deref()),
+        ("failed", Some("expired"))
+    );
+    // An expired order still takes a late payment.
+    assert!(old.takes_payment());
+    let fresh = shop::get_order(&mut conn, fresh.id).await.unwrap().unwrap();
+    assert_eq!(fresh.status, "pending");
+    let audited: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM audit_log WHERE action = 'shop.order_expired'")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(audited, 1);
+    let events: Vec<String> =
+        sqlx::query_scalar("SELECT event_id FROM paddle_events ORDER BY event_id")
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(events, ["evt_new"]);
+    drop(conn);
+    db.close().await;
+}

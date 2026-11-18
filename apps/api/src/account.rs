@@ -205,8 +205,8 @@ fn to_json<T: serde::Serialize>(value: &T) -> ApiResult<Value> {
 
 /// Everything about the caller's account, as one JSON document: the account, identities,
 /// sessions (no tokens), channels, emotes in every state with their tags, sets with their emotes
-/// and editors, account editors both ways, cosmetics owned and shown, roles, reports filed and
-/// notifications. 5 an hour. Audited (`account.exported`, no content).
+/// and editors, account editors both ways, cosmetics owned and shown, roles, reports filed,
+/// notifications, shop orders (bought and received) and redeemed codes. 5 an hour. Audited (`account.exported`, no content).
 pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
     state
         .limits
@@ -357,6 +357,20 @@ pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
             })
         })
         .collect();
+    let orders_out = export_orders(&mut conn, account_id).await?;
+    let redemptions_out: Vec<Value> = cyex_tv_db::codes::redemptions_of(&mut conn, account_id)
+        .await
+        .map_err(db_error)?
+        .into_iter()
+        .map(|r| {
+            json!({
+                "code_id": ids::to_text(r.code_id),
+                "batch_id": ids::to_text(r.batch_id),
+                "batch_name": r.batch_name,
+                "redeemed_at": views::time(r.redeemed_at),
+            })
+        })
+        .collect();
     drop(conn);
     let cosmetics_out = to_json(&crate::cosmetics::my_cosmetics(state, caller, None).await?)?;
 
@@ -381,8 +395,8 @@ pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
         "roles": role_names,
         "reports_filed": reports_out,
         "notifications": notes,
-        // The shop isn't open yet; orders will be listed here when it is.
-        "orders": [],
+        "orders": orders_out,
+        "code_redemptions": redemptions_out,
     });
 
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
@@ -400,6 +414,51 @@ pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
     .await
     .map_err(db_error)?;
     serde_json::to_string(&doc).map_err(|_| ApiError::internal())
+}
+
+/// The account's orders, bought and received, newest first. Paddle's transaction ID is the only
+/// provider ID in them; staff refund notes aren't.
+async fn export_orders(conn: &mut PgConnection, account_id: Uuid) -> ApiResult<Vec<Value>> {
+    use cyex_tv_db::shop::{self as shop_db, OrderFilter};
+    let filter = OrderFilter {
+        account: Some(account_id),
+        ..OrderFilter::default()
+    };
+    let mut out = Vec::new();
+    let mut offset = 0;
+    loop {
+        let (rows, total) = shop_db::orders(conn, &filter, 100, offset)
+            .await
+            .map_err(db_error)?;
+        let n = rows.len() as i64;
+        for o in rows {
+            out.push(json!({
+                "id": ids::to_text(o.id),
+                "as_buyer": o.account_id == Some(account_id),
+                "as_recipient": o.recipient_id == Some(account_id),
+                "buyer_id": o.account_id.map(ids::to_text),
+                "recipient_id": o.recipient_id.map(ids::to_text),
+                "item_id": ids::to_text(o.item_id),
+                "item_name": o.item_name,
+                "status": crate::shop::order_status(&o.status).as_str(),
+                "amount_cents": o.amount_cents,
+                "currency": o.currency,
+                "paid_total_cents": o.paid_total_cents,
+                "paid_currency": o.paid_currency,
+                "provider": o.provider,
+                "provider_transaction_id": o.provider_transaction_id,
+                "created_at": views::time(o.created_at),
+                "paid_at": o.paid_at.map(views::time),
+                "refunded_at": o.refunded_at.map(views::time),
+                "failed_at": o.failed_at.map(views::time),
+            }));
+        }
+        offset += n;
+        if n == 0 || offset >= total {
+            break;
+        }
+    }
+    Ok(out)
 }
 
 // Deleting
