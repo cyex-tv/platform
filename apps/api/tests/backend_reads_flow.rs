@@ -426,10 +426,10 @@ async fn account_sets_read_only_the_preview() {
         )
         .await;
     assert_eq!(names(&r), ["Emote7", "Emote6", "Emote5"], "{r}");
-    // Nothing asked for, nothing read; the facts stay.
+    // Nothing asked for, nothing read; the facts stay (the pending one counts as a slot).
     let r = w.post(None, SETS, json!({ "a": fox.tid(), "p": 0 })).await;
     assert_eq!(names(&r), Vec::<String>::new(), "{r}");
-    assert_eq!(r["data"]["accountSets"][0]["slotsUsed"], 8, "{r}");
+    assert_eq!(r["data"]["accountSets"][0]["slotsUsed"], 9, "{r}");
     // The default is 12: all eight approved ones.
     let r = w.post(None, SETS, json!({ "a": fox.tid() })).await;
     assert_eq!(names(&r).len(), 8, "{r}");
@@ -449,7 +449,7 @@ async fn short_queries_find_nobody_and_hits_carry_their_identities() {
             fox.id,
             Profile {
                 platform: Platform::Kick,
-                platform_user_id: "k7401",
+                platform_user_id: "9407401",
                 login: "user7401kick",
                 display_name: "user7401kick",
                 avatar: None,
