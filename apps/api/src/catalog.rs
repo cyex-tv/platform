@@ -579,6 +579,70 @@ pub(crate) async fn may_view(
     holds(conn, caller, permissions::SETS_EDIT_ANY).await
 }
 
+/// A live account's public profile: linked logins, public roles, each channel's active set.
+/// `None` when the account is unknown, deleted or blocked.
+pub async fn account_profile(
+    state: &AppState,
+    account_id: &str,
+) -> ApiResult<Option<cyex_tv_shared::model::AccountProfile>> {
+    use cyex_tv_shared::model::{AccountProfile, ActiveChannelSet, PublicIdentity, PublicRole};
+    let Some(id) = ids::from_text(account_id.trim()) else {
+        return Ok(None);
+    };
+    let Some(summary) = account(state, &ids::to_text(id)).await? else {
+        return Ok(None);
+    };
+    let mut conn = conn(state).await?;
+    let created = accounts::get(&mut conn, id)
+        .await
+        .map_err(db_error)?
+        .map(|a| views::time(a.created_at))
+        .unwrap_or_default();
+    let identities = accounts::identities(&mut conn, id)
+        .await
+        .map_err(db_error)?
+        .into_iter()
+        .map(|i| PublicIdentity {
+            platform: i.platform,
+            login: i.login,
+            display_name: i.display_name,
+        })
+        .collect();
+    let roles = roles::public_roles_of(&mut conn, id)
+        .await
+        .map_err(db_error)?
+        .into_iter()
+        .map(|r| PublicRole {
+            id: ids::to_text(r.id),
+            name: r.name,
+        })
+        .collect();
+    let mut active_sets = Vec::new();
+    for ch in channels::list_for_account(&mut conn, id)
+        .await
+        .map_err(db_error)?
+    {
+        let Some(set_id) = ch.active_set_id else {
+            continue;
+        };
+        if let Some(set) = sets::get(&mut conn, set_id).await.map_err(db_error)? {
+            active_sets.push(ActiveChannelSet {
+                platform: ch.platform,
+                login: ch.login,
+                set_id: ids::to_text(set.id),
+                set_name: set.name,
+            });
+        }
+    }
+    Ok(Some(AccountProfile {
+        account: summary,
+        identities,
+        roles,
+        active_sets,
+        created_at: created,
+    }))
+}
+
 /// Cards per `accountSets` answer, and emotes per card.
 pub const ACCOUNT_SETS_MAX: i64 = 50;
 pub const SET_PREVIEW: u32 = 12;

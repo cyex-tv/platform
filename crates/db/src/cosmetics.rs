@@ -506,6 +506,23 @@ pub struct UserSelection {
 
 /// What the given chatters show, for those showing anything. Blocked and deleted accounts show
 /// nothing.
+/// What live accounts (not deleted, not blocked) show, for those showing something.
+pub async fn selections_for_accounts(
+    conn: &mut PgConnection,
+    account_ids: &[Uuid],
+) -> DbResult<Vec<(Uuid, Option<Uuid>, Option<Uuid>)>> {
+    Ok(sqlx::query_as(
+        "SELECT s.account_id, s.badge_id, s.paint_id
+         FROM cosmetic_selections s
+         JOIN accounts a ON a.id = s.account_id AND a.deleted_at IS NULL AND a.blocked_at IS NULL
+         WHERE s.account_id = ANY($1) AND (s.badge_id IS NOT NULL OR s.paint_id IS NOT NULL)
+         ORDER BY s.account_id",
+    )
+    .bind(account_ids)
+    .fetch_all(conn)
+    .await?)
+}
+
 pub async fn selections_for_users(
     conn: &mut PgConnection,
     platform: Platform,

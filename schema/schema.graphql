@@ -1,4 +1,13 @@
 """
+What one account shows, with the badge and paint themselves (`accountCosmetics`).
+"""
+type AccountCosmetics {
+	accountId: String!
+	badge: Badge
+	paint: Paint
+}
+
+"""
 Someone who edits an account, with what they may do.
 """
 type AccountEditor {
@@ -21,6 +30,27 @@ type AccountHit {
 	Twitch first.
 	"""
 	identities: [PublicIdentity!]!
+}
+
+"""
+An account's public profile, like 7TV's public user pages. Listed sets come from
+`accountSets`.
+"""
+type AccountProfile {
+	account: AccountSummary!
+	"""
+	Linked Twitch and Kick accounts: platform, login and display name only. Twitch first.
+	"""
+	identities: [PublicIdentity!]!
+	"""
+	Roles marked public, most senior first.
+	"""
+	roles: [PublicRole!]!
+	"""
+	Each channel's active set, for channels showing one.
+	"""
+	activeSets: [ActiveChannelSet!]!
+	createdAt: String!
 }
 
 type AccountResults {
@@ -78,6 +108,19 @@ type AccountSummary {
 	id: String!
 	displayName: String!
 	avatar: String
+}
+
+"""
+The set a channel shows now, on a profile ("Active emotes").
+"""
+type ActiveChannelSet {
+	platform: Platform!
+	"""
+	The channel's login.
+	"""
+	login: String!
+	setId: String!
+	setName: String!
 }
 
 """
@@ -327,6 +370,10 @@ input CreateRoleInput {
 	description: String
 	position: Int!
 	permissions: [String!]!
+	"""
+	Show it on its holders' public profiles. Default false.
+	"""
+	public: Boolean
 }
 
 input CreateSetInput {
@@ -1062,6 +1109,14 @@ type PublicIdentity {
 	displayName: String!
 }
 
+"""
+A role as anyone may see it on a profile.
+"""
+type PublicRole {
+	id: String!
+	name: String!
+}
+
 type Query {
 	"""
 	The signed-in account.
@@ -1108,6 +1163,18 @@ type Query {
 	per account, or per IP signed out (`rate_limited`). An empty `query` finds nobody.
 	"""
 	searchAccounts(query: String!, page: Int, perPage: Int): AccountResults!
+	"""
+	An account's public profile: linked Twitch and Kick logins (no IDs), roles marked public,
+	and each channel's active set ("Active emotes"). Listed sets: `accountSets`. Null when the
+	account is unknown, deleted or blocked.
+	"""
+	accountProfile(accountId: String!): AccountProfile
+	"""
+	The badge and paint up to 100 accounts show, with the badges and paints themselves, by
+	cyex.tv account ID (for names on profiles, tiles and lists). Only accounts showing
+	something are listed; blocked and deleted ones never. `too_many` over 100.
+	"""
+	accountCosmetics(accountIds: [String!]!): [AccountCosmetics!]!
 	"""
 	An account's public summary. Null when the account is unknown, deleted or blocked.
 	"""
@@ -1299,6 +1366,10 @@ type Role {
 	"""
 	position: Int!
 	permissions: [String!]!
+	"""
+	Shown on its holders' public profiles (`accountProfile`). Off by default.
+	"""
+	public: Boolean!
 }
 
 type SearchResults {
@@ -1428,6 +1499,10 @@ input UpdateRoleInput {
 	description: String
 	position: Int
 	permissions: [String!]
+	"""
+	Show it on its holders' public profiles.
+	"""
+	public: Boolean
 }
 
 input UpdateSetEmoteInput {

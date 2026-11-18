@@ -489,10 +489,11 @@ const REPORTS = [
   { id: 'R2', reason: 'Spam', reporterId: OTHERS[0].id, state: 'OPEN', createdAt: '2026-11-16T19:30:00.000Z', emote: ALL[8] },
 ];
 const ROLES = [
-  { id: 'ROLE1', name: 'Admin', description: 'Runs the platform.', position: 100, permissions: ['roles.manage', 'users.view', 'users.restrict', 'audit.view'] },
-  { id: 'ROLE2', name: 'Moderator', description: 'Reviews uploads and reports.', position: 50, permissions: ['emotes.review', 'emotes.takedown'] },
+  { id: 'ROLE1', name: 'Admin', description: 'Runs the platform.', position: 100, permissions: ['roles.manage', 'users.view', 'users.restrict', 'audit.view'], public: false },
+  { id: 'ROLE2', name: 'Moderator', description: 'Reviews uploads and reports.', position: 50, permissions: ['emotes.review', 'emotes.takedown'], public: true },
+  { id: 'ROLE3', name: 'Artist', description: 'Makes emotes people love.', position: 10, permissions: [], public: true },
 ];
-const ACCOUNT_ROLES = { [OTHERS[0].id]: ['ROLE2'] };
+const ACCOUNT_ROLES = { [OTHERS[0].id]: ['ROLE2', 'ROLE3'], [OTHERS[1].id]: ['ROLE3'], [ME_ID]: ['ROLE1'] };
 const STATUS = {};
 const AUDIT = Array.from({ length: 64 }, (_, i) => ({
   id: '01JD8XAUD' + String(1000 - i).padStart(17, '0'), actorId: i % 5 === 0 ? null : ME_ID,
@@ -1164,7 +1165,7 @@ function signedIn(body, v, ADMIN) {
     case 'AllRoles':
       return { data: { roles: ROLES } };
     case 'CreateRole': {
-      const r = { id: 'ROLE' + (ROLES.length + 1), ...v.input, description: v.input.description ?? null };
+      const r = { id: 'ROLE' + (ROLES.length + 1), ...v.input, description: v.input.description ?? null, public: v.input.public ?? false };
       ROLES.push(r);
       return { data: { createRole: r } };
     }
@@ -1233,6 +1234,38 @@ function searchAccounts(v) {
   return { data: { searchAccounts: { total: hits.length, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
 }
 
+// accountProfile(accountId): public logins (no IDs), roles marked public, each channel's active set.
+function accountProfile(id) {
+  const account = [ME_SUMMARY, ...OTHERS].find((a) => a.id === id);
+  if (!account || STATUS[id]?.blocked) return null;
+  const identities = id === ME_ID
+    ? IDENTITIES.map((i) => ({ platform: i.platform, login: i.login, displayName: i.displayName }))
+    : searchPeople().find((h) => h.account.id === id)?.identities ?? [];
+  const roles = (ACCOUNT_ROLES[id] ?? []).map((r) => ROLES.find((x) => x.id === r)).filter((r) => r?.public)
+    .sort((a, b) => b.position - a.position).map((r) => ({ id: r.id, name: r.name }));
+  const activeSets = [...CHANNELS, ...EDITOR_CHANNELS].filter((c) => c.account.id === id && c.activeSetId).map((c) => {
+    const set = findSet(c.activeSetId);
+    return set ? { platform: c.platform, login: c.login, setId: set.id, setName: set.name } : null;
+  }).filter(Boolean);
+  return { account, identities, roles, activeSets, createdAt: id === ME_ID ? '2026-11-10T12:00:00.000Z' : '2026-11-08T09:00:00.000Z' };
+}
+// accountCosmetics(accountIds): what each account shows, with the badge and paint themselves.
+function accountCosmetics(ids) {
+  if (!Array.isArray(ids)) return [];
+  if (ids.length > 100) return null;
+  const catalog = cosmeticCatalog();
+  const out = [];
+  for (const id of [...new Set(ids)]) {
+    if (STATUS[id]?.blocked) continue;
+    const pick = C_SELECTED[id];
+    if (!pick) continue;
+    const badge = catalog.badges.find((b) => b.id === pick.badgeId) ?? null;
+    const paint = catalog.paints.find((x) => x.id === pick.paintId) ?? null;
+    if (badge || paint) out.push({ accountId: id, badge, paint });
+  }
+  return out;
+}
+
 // Sessions (mySessions, revokeSession, revokeOtherSessions): where the mock account is signed in.
 const SESSIONS = [
   { id: '01JD8XSESS0000000000000001', kind: 'SITE', device: 'Firefox on Windows', createdAt: '2026-11-10T12:00:00.000Z', lastSeenAt: '2026-11-17T22:40:00.000Z', expiresAt: '2026-12-17T22:40:00.000Z', current: true },
@@ -1273,7 +1306,7 @@ function accountHub(q, v) {
     data.exportMyData = exportDoc();
   }
   if (/\bdeleteAccount\s*\(/.test(q)) {
-    const typed = String(v.confirm ?? Object.values(v).find((x) => typeof x === 'string') ?? '').trim().replace(/^@/, '').toLowerCase();
+    const typed = String(v.confirm ?? '').trim().replace(/^@/, '').toLowerCase();
     if (!IDENTITIES.some((i) => i.login.toLowerCase() === typed))
       return err('Type one of your Twitch or Kick logins to confirm.', 'confirm_mismatch');
     // The mock keeps its data (it would have nothing left to show); it signs you out like the API.
@@ -1292,15 +1325,26 @@ function accountHub(q, v) {
 // Fields added after the site's first queries, answered by field name so any operation name works.
 function newFields(q, v, session) {
   if (/\b(mySessions|unreadNotificationCount|revokeSession|revokeOtherSessions|exportMyData|deleteAccount|markNotificationsRead)\b/.test(q))
-    return session ? accountHub(q, v) ?? null : err('Sign in to use this.', 'signed_out');
-  if (/\bsearchAccounts\s*\(/.test(q)) return searchAccounts(v);
-  if (/\bcloneSet\s*\(/.test(q)) return session ? cloneSet(v, session) : err('Sign in to use this.', 'signed_out');
-  if (/\baccountSets\s*\(/.test(q)) {
-    const data = { accountSets: accountSets(v.accountId ?? v.id ?? '', v.preview) };
-    if (/\baccount\s*\(/.test(q)) data.account = publicAccount(v.accountId ?? v.id ?? '');
-    return { data };
+    if (!session) return err('Sign in to use this.', 'signed_out');
+  // Each handler answers one new field; an operation may ask for several, and for older ones too.
+  const id = v.accountId ?? v.id ?? '';
+  const parts = [];
+  const hub = session ? accountHub(q, v) : null;
+  if (hub?._cookie || hub?.errors) return hub;
+  if (hub) parts.push(hub);
+  const has = (name) => new RegExp(`\\b${name}\\s*\\(`).test(q);
+  if (has('accountProfile')) parts.push({ data: { accountProfile: accountProfile(id) } });
+  if (has('accountCosmetics')) {
+    const list = accountCosmetics(v.accountIds ?? v.ids);
+    parts.push(list === null ? err('Look up at most 100 accounts at once.', 'too_many') : { data: { accountCosmetics: list } });
   }
-  return null;
+  if (has('searchAccounts')) parts.push(searchAccounts(v));
+  if (has('cloneSet')) parts.push(session ? cloneSet(v, session) : err('Sign in to use this.', 'signed_out'));
+  if (has('accountSets')) parts.push({ data: { accountSets: accountSets(id, v.preview) } });
+  if (!parts.length) return null;
+  const failed = parts.find((p) => p.errors);
+  if (failed) return failed;
+  return { data: Object.assign({}, ...parts.map((p) => p.data)) };
 }
 
 // New fields merge with whatever else the same operation asks for (the older handlers below).
