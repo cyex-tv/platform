@@ -3,7 +3,7 @@
 import { gql } from '$lib/api';
 import type { Picture } from '$lib/emote';
 import type { AccountActivityQuery, ActivityKind as ApiKind } from '$lib/gql/graphql';
-import { ACCOUNT_ACTIVITY } from '$lib/queries';
+import { ACCOUNT_ACTIVITY, EMOTE_ACTIVITY } from '$lib/queries';
 
 /** Whether the API has `accountActivity` (it does since PR 52). */
 export const ACTIVITY_READY = true;
@@ -65,6 +65,12 @@ export const PAGE = 30;
 export async function loadActivity(accountId: string, before: string | null = null, fetcher: typeof fetch = fetch): Promise<ActivityItem[]> {
   const r = await gql(ACCOUNT_ACTIVITY, { accountId, before, limit: PAGE }, fetcher);
   return r.accountActivity.map(toItem).filter((i): i is ActivityItem => i !== null);
+}
+
+/** A page of the lines about one emote (the emote page's Activity tab); empty unless it is public. */
+export async function loadEmoteActivity(emoteId: string, before: string | null = null, fetcher: typeof fetch = fetch): Promise<ActivityItem[]> {
+  const r = await gql(EMOTE_ACTIVITY, { emoteId, before, limit: PAGE }, fetcher);
+  return r.emoteActivity.map(toItem).filter((i): i is ActivityItem => i !== null);
 }
 
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [

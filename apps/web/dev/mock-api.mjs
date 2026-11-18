@@ -341,9 +341,16 @@ const emote = (i, owner = OTHERS[i % OTHERS.length], state = 'APPROVED') => {
     // Made-up but stable: a few popular ones, a long tail, some in no channel.
     channelCount: i % 11 === 0 ? 0 : (i * 37) % 91 + (i % 5 === 0 ? 400 : 0),
     owner,
+    // As the worker writes them (ADR 0012): still emotes WebP and AVIF; animated ones moving WebP
+    // plus still WebP and AVIF (no animated AVIF).
     files: [1, 2, 3, 4].flatMap((k) => [
       { name: `${k}x.webp`, format: 'WEBP', scale: k, width: w * k, height: 32 * k, size: 900 * k, isStatic: false },
-      ...(s.animated ? [{ name: `${k}x_static.webp`, format: 'WEBP', scale: k, width: w * k, height: 32 * k, size: 400 * k, isStatic: true }] : []),
+      ...(s.animated
+        ? [
+            { name: `${k}x_static.webp`, format: 'WEBP', scale: k, width: w * k, height: 32 * k, size: 400 * k, isStatic: true },
+            { name: `${k}x_static.avif`, format: 'AVIF', scale: k, width: w * k, height: 32 * k, size: 300 * k, isStatic: true },
+          ]
+        : [{ name: `${k}x.avif`, format: 'AVIF', scale: k, width: w * k, height: 32 * k, size: 600 * k, isStatic: false }]),
     ]),
   };
 };
@@ -461,12 +468,21 @@ const twitchEmote = (n, owner = OTHERS[n % OTHERS.length]) => {
     owner,
     files: [1, 2, 3, 4].flatMap((k) => [
       { name: `${k}x.webp`, format: 'WEBP', scale: k, width: w * k, height: h * k, size: 900 * k, isStatic: false },
-      ...(animated ? [{ name: `${k}x_static.webp`, format: 'WEBP', scale: k, width: w * k, height: h * k, size: 400 * k, isStatic: true }] : []),
+      ...(animated
+        ? [
+            { name: `${k}x_static.webp`, format: 'WEBP', scale: k, width: w * k, height: h * k, size: 400 * k, isStatic: true },
+            { name: `${k}x_static.avif`, format: 'AVIF', scale: k, width: w * k, height: h * k, size: 300 * k, isStatic: true },
+          ]
+        : [{ name: `${k}x.avif`, format: 'AVIF', scale: k, width: w * k, height: h * k, size: 600 * k, isStatic: false }]),
     ]),
   };
 };
+// Edge cases for the emote page: a very long name (index 10).
+NAME_OF.set(10, 'AbsolutelyUnreasonablyLongEmoteNameThatKeepsGoing');
 const ALL = FACES ? Array.from({ length: 300 }, (_, i) => emote(i)) : TWITCH.map((_, n) => twitchEmote(n));
 // The mock account's own uploads: a few of each state.
+// Emote 11 is private (no activity, no tab).
+ALL[11].flags.private = true;
 const MINE = Array.from({ length: 9 }, (_, i) =>
   emote(600 + i, ME_SUMMARY, i < 2 ? 'PENDING' : i === 2 ? 'REJECTED' : 'APPROVED'));
 let uploads = 0;
@@ -870,7 +886,11 @@ function emoteActivityAnswer(v) {
   if (!e || e.state !== 'APPROVED' || e.flags.private) return { data: { emoteActivity: [] } };
   const own = Object.values(ACTIVITY).flat().filter((a) => a.emote?.id === e.id);
   const n = Number(e.id.slice(-3)) || 0;
+  if (n === 9) return { data: { emoteActivity: [] } }; // a public emote nobody has touched
+  // Emote 8 has 130 lines, to page through.
+  const many = n === 8 ? Array.from({ length: 130 }, (_, k) => act(4000 + k, 10 + k * 37, k % 3 === 0 ? 'SET_EMOTE_REMOVED' : 'SET_EMOTE_ADDED', OTHERS[k % OTHERS.length], { set: aSet(SETS[k % SETS.length]), emote: aEmote(e) })) : [];
   const made = [
+    ...many,
     act(900 + n * 4, 90 + n, 'SET_EMOTE_ADDED', OTHERS[n % OTHERS.length], { set: aSet(SETS[n % SETS.length]), emote: aEmote(e) }),
     act(901 + n * 4, 600 + n, 'SET_EMOTE_RENAMED', OTHERS[(n + 1) % OTHERS.length], { set: aSet(SETS[(n + 1) % SETS.length]), emote: aEmote(e, e.name + 'x'), fromName: e.name, toName: e.name + 'x' }),
     act(902 + n * 4, 3000 + n, 'SET_EMOTE_ADDED', OTHERS[(n + 2) % OTHERS.length], { set: aSet(SETS[(n + 2) % SETS.length]), emote: aEmote(e) }),
@@ -1461,7 +1481,7 @@ createServer(async (req, res) => {
     res.writeHead(302, { location: to, 'cache-control': 'max-age=3600' });
     return res.end();
   }
-  const img = url.pathname.match(/^\/emotes\/(\d+)\/(\d)x(_static)?\.webp$/);
+  const img = url.pathname.match(/^\/emotes\/(\d+)\/(\d)x(_static)?\.(?:webp|avif)$/);
   if (img) {
     res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' });
     return res.end(picture(Number(img[1]), Number(img[2]), Boolean(img[3])));

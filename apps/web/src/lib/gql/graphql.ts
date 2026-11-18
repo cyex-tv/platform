@@ -2195,6 +2195,15 @@ export type AccountActivityQueryVariables = Exact<{
 
 export type AccountActivityQuery = { __typename?: 'Query', accountActivity: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> };
 
+export type EmoteActivityQueryVariables = Exact<{
+  emoteId: Scalars['String']['input'];
+  before?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type EmoteActivityQuery = { __typename?: 'Query', emoteActivity: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> };
+
 export class TypedDocumentString<TResult, TVariables>
   extends String
   implements DocumentTypeDecoration<TResult, TVariables>
@@ -4198,3 +4207,46 @@ export const AccountActivityDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<AccountActivityQuery, AccountActivityQueryVariables>;
+export const EmoteActivityDocument = new TypedDocumentString(`
+    query EmoteActivity($emoteId: String!, $before: String, $limit: Int) {
+  emoteActivity(emoteId: $emoteId, before: $before, limit: $limit) {
+    id
+    kind
+    actor {
+      id
+      displayName
+      avatar
+    }
+    set {
+      id
+      name
+    }
+    emote {
+      id
+      name
+      host
+      files {
+        name
+        width
+        height
+        isStatic
+      }
+    }
+    fromName
+    toName
+    badge {
+      fromId
+      fromName
+      toId
+      toName
+    }
+    paint {
+      fromId
+      fromName
+      toId
+      toName
+    }
+    createdAt
+  }
+}
+    `) as unknown as TypedDocumentString<EmoteActivityQuery, EmoteActivityQueryVariables>;
