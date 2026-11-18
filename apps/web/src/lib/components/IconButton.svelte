@@ -73,6 +73,8 @@
   .ib[aria-pressed='true'] { color: var(--accent-text); } /* pressed = the accent icon: no fill, border change or bar */
   .ib:active { transform: scale(var(--press)); }
   .ib:focus-visible { color: var(--text); }
+  /* High contrast drops the accent icon: a pressed button keeps a system-colour outline. */
+  @media (forced-colors: active) { .ib[aria-pressed='true']:not(:focus-visible) { outline: 1px solid Highlight; outline-offset: -2px; } }
 
   .tip { position: absolute; left: 50%; z-index: var(--z-tip); padding: 5px 8px; border-radius: var(--radius-btn);
     background: var(--text); color: var(--bg); font-size: var(--t-fine); font-weight: 500; line-height: 1.2; white-space: nowrap;

@@ -62,7 +62,7 @@
 </svelte:head>
 
 {#snippet meta()}
-  {#if set}Active set: <bdi>{clean(set.name)}</bdi>{:else}No set picked yet{/if}
+  {#if set}Active set: {#if set.visibility === 'LISTED' || set.visibility === 'UNLISTED'}<a class="set-link" href="/sets/{set.id}"><bdi>{clean(set.name)}</bdi></a>{:else}<bdi>{clean(set.name)}</bdi>{/if}{:else}No set picked yet{/if}
 {/snippet}
 {#snippet actions()}
   <button class="btn btn-s copy" type="button" onclick={() => link.copy(location.origin + page.url.pathname)}>
@@ -158,6 +158,8 @@
 </RailLayout>
 
 <style>
+  .set-link { color: var(--text); font-weight: 500; text-decoration: none; }
+  .set-link:hover, .set-link:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
   .labels { display: inline-grid; }
   .labels > span { grid-area: 1 / 1; text-align: left; }
   .off { visibility: hidden; }
