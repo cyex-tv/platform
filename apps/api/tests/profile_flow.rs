@@ -164,7 +164,7 @@ async fn profiles_show_only_public_things() {
             alice.id,
             Profile {
                 platform: Platform::Kick,
-                platform_user_id: "7002",
+                platform_user_id: "987654321",
                 login: "alicekick",
                 display_name: "AliceKick",
                 avatar: None,
@@ -186,7 +186,12 @@ async fn profiles_show_only_public_things() {
             { "platform": "KICK", "login": "alicekick", "displayName": "AliceKick" }
         ])
     );
-    assert!(!r.to_string().contains("7002") && !r.to_string().contains(&alice.twitch_id));
+    // Logins and names only: no platform user IDs.
+    let text = r.to_string();
+    assert!(
+        !text.contains("987654321") && !text.contains("platformUserId"),
+        "{text}"
+    );
     assert_eq!(p["activeSets"], json!([]));
 
     // Only roles.manage can mark a role public; it is audited.
