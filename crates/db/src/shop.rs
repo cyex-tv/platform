@@ -524,19 +524,69 @@ pub struct OrderRow {
     pub refund_requested_at: Option<DateTime<Utc>>,
     /// Paddle rejected the refund after the cosmetics were taken back.
     pub refund_rejected_at: Option<DateTime<Utc>>,
+    /// The item's badges and paints when the checkout started (`None` on older orders).
+    pub badge_ids: Option<Vec<Uuid>>,
+    pub paint_ids: Option<Vec<Uuid>>,
+    /// Bought for another account, as decided at checkout.
+    pub is_gift: bool,
+    /// Its Paddle transaction was cancelled by us (a replaced or expired checkout).
+    pub provider_canceled_at: Option<DateTime<Utc>>,
+    /// Cancelling its Paddle transaction failed; a late payment is still taken.
+    pub cancel_failed_at: Option<DateTime<Utc>>,
 }
 
 impl OrderRow {
     /// A completed payment is still taken for it: pending, or failed by us (replaced by a newer
     /// checkout, or expired) rather than cancelled at Paddle.
+    /// Once its transaction is cancelled at Paddle, a failed order takes nothing.
     pub fn takes_payment(&self) -> bool {
         self.status == "pending"
             || (self.status == "failed"
+                && self.provider_canceled_at.is_none()
                 && matches!(
                     self.failed_reason.as_deref(),
                     Some(failed::REPLACED | failed::EXPIRED)
                 ))
     }
+
+    /// What the order sells, as snapshotted at checkout; `None` for orders made before the
+    /// snapshot existed.
+    pub fn bundle(&self) -> Option<Vec<(CosmeticKind, Uuid)>> {
+        if self.badge_ids.is_none() && self.paint_ids.is_none() {
+            return None;
+        }
+        let badges = self
+            .badge_ids
+            .iter()
+            .flatten()
+            .map(|id| (CosmeticKind::Badge, *id));
+        let paints = self
+            .paint_ids
+            .iter()
+            .flatten()
+            .map(|id| (CosmeticKind::Paint, *id));
+        Some(badges.chain(paints).collect())
+    }
+
+    /// Paid, or paid and refunded: what a gift's recipient may see of it.
+    pub fn shown_to_recipient(&self) -> bool {
+        matches!(
+            self.status.as_str(),
+            "paid" | "refund_requested" | "refunded"
+        )
+    }
+}
+
+/// Splits a bundle into its badge and paint IDs, in order.
+pub fn split_bundle(bundle: &Bundle) -> (Vec<Uuid>, Vec<Uuid>) {
+    let of = |k: CosmeticKind| -> Vec<Uuid> {
+        bundle
+            .iter()
+            .filter(|(kind, _)| *kind == k)
+            .map(|(_, id)| *id)
+            .collect()
+    };
+    (of(CosmeticKind::Badge), of(CosmeticKind::Paint))
 }
 
 /// Why a failed order failed.
@@ -558,20 +608,24 @@ const ORDER: &str = "id, account_id, recipient_id, item_id, item_name, status, a
                      provider_currency, paid_total_cents, \
                      paid_currency, provider_adjustment_id, refund_reason, created_at, \
                      updated_at, paid_at, refunded_at, failed_at, checkout_url, failed_reason, \
-                     refund_requested_at, refund_rejected_at";
+                     refund_requested_at, refund_rejected_at, badge_ids, paint_ids, is_gift, \
+                     provider_canceled_at, cancel_failed_at";
 
-/// A pending order for `item`, at its current price. `PendingOrder` when the buyer has a pending
-/// order for it (for the same recipient) already.
+/// A pending order for `item`, at its current price and with its current cosmetics (`bundle`,
+/// read under the item's lock). `PendingOrder` when the buyer has a pending order for it (for the
+/// same recipient) already.
 pub async fn create_order(
     conn: &mut PgConnection,
     buyer: Uuid,
     recipient: Uuid,
     item: &ItemRow,
+    bundle: &Bundle,
 ) -> DbResult<OrderRow> {
+    let (badges, paints) = split_bundle(bundle);
     sqlx::query_as(&format!(
         "INSERT INTO shop_orders (id, account_id, recipient_id, item_id, item_name, amount_cents, currency,
-                                  paddle_price_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                                  paddle_price_id, badge_ids, paint_ids, is_gift)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $2 <> $3)
          RETURNING {ORDER}"
     ))
     .bind(new_id())
@@ -582,6 +636,8 @@ pub async fn create_order(
     .bind(item.price_cents)
     .bind(&item.currency)
     .bind(&item.paddle_price_id)
+    .bind(&badges)
+    .bind(&paints)
     .fetch_one(conn)
     .await
     .map_err(|err| match err.as_database_error() {
@@ -801,11 +857,76 @@ pub async fn expire_pending(
     .await?)
 }
 
+/// The Paddle transaction of a replaced or expired order was cancelled.
+pub async fn mark_canceled(conn: &mut PgConnection, id: Uuid) -> DbResult<bool> {
+    let done = sqlx::query(
+        "UPDATE shop_orders SET provider_canceled_at = now(), updated_at = now()
+          WHERE id = $1 AND status = 'failed' AND provider_canceled_at IS NULL",
+    )
+    .bind(id)
+    .execute(conn)
+    .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// Cancelling the Paddle transaction of a replaced or expired order failed: it isn't tried
+/// again, and a late payment is still taken.
+pub async fn mark_cancel_failed(conn: &mut PgConnection, id: Uuid) -> DbResult<bool> {
+    let done = sqlx::query(
+        "UPDATE shop_orders SET cancel_failed_at = now(), updated_at = now()
+          WHERE id = $1 AND provider_canceled_at IS NULL AND cancel_failed_at IS NULL",
+    )
+    .bind(id)
+    .execute(conn)
+    .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// Replaced or expired orders whose Paddle transaction hasn't been cancelled or tried yet,
+/// oldest first.
+pub async fn to_cancel(conn: &mut PgConnection, limit: i64) -> DbResult<Vec<OrderRow>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {ORDER} FROM shop_orders
+          WHERE status = 'failed' AND failed_reason IN ('replaced', 'expired')
+            AND provider_transaction_id IS NOT NULL
+            AND provider_canceled_at IS NULL AND cancel_failed_at IS NULL
+          ORDER BY id LIMIT $1"
+    ))
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// Staff refunds stuck as requested since before `before` (the api stopped between asking
+/// Paddle and finishing) are paid again, at most `limit` at a time, and returned. A refund Paddle
+/// took still lands through its webhook.
+pub async fn revert_refund_requests(
+    conn: &mut PgConnection,
+    before: DateTime<Utc>,
+    limit: i64,
+) -> DbResult<Vec<OrderRow>> {
+    Ok(sqlx::query_as(&format!(
+        "UPDATE shop_orders SET status = 'paid', refund_requested_at = NULL,
+                refund_reason = NULL, updated_at = now()
+          WHERE id IN (SELECT id FROM shop_orders
+                        WHERE status = 'refund_requested' AND refund_requested_at < $1
+                        ORDER BY id LIMIT $2 FOR UPDATE SKIP LOCKED)
+          RETURNING {ORDER}"
+    ))
+    .bind(before)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
+}
+
 /// Narrows `orders`. Empty fields match everything.
 #[derive(Clone, Debug, Default)]
 pub struct OrderFilter<'a> {
-    /// Orders this account bought or received.
+    /// Orders this account bought or received (staff view).
     pub account: Option<Uuid>,
+    /// Orders as this account may see them: every order it bought, and gifts to it once paid
+    /// (paid, refund in flight, refunded).
+    pub party: Option<Uuid>,
     /// `paid` also matches orders with a refund in flight.
     pub status: Option<&'a str>,
     pub item: Option<Uuid>,
@@ -821,13 +942,17 @@ pub async fn orders(
     let filter_sql = "($1::uuid IS NULL OR account_id = $1 OR recipient_id = $1)
                       AND ($2::text IS NULL OR status = $2
                            OR ($2 = 'paid' AND status = 'refund_requested'))
-                      AND ($3::uuid IS NULL OR item_id = $3)";
+                      AND ($3::uuid IS NULL OR item_id = $3)
+                      AND ($4::uuid IS NULL OR account_id = $4
+                           OR (recipient_id = $4
+                               AND status IN ('paid', 'refund_requested', 'refunded')))";
     let rows = sqlx::query_as(&format!(
-        "SELECT {ORDER} FROM shop_orders WHERE {filter_sql} ORDER BY id DESC LIMIT $4 OFFSET $5"
+        "SELECT {ORDER} FROM shop_orders WHERE {filter_sql} ORDER BY id DESC LIMIT $5 OFFSET $6"
     ))
     .bind(filter.account)
     .bind(filter.status)
     .bind(filter.item)
+    .bind(filter.party)
     .bind(limit)
     .bind(offset)
     .fetch_all(&mut *conn)
@@ -838,6 +963,7 @@ pub async fn orders(
     .bind(filter.account)
     .bind(filter.status)
     .bind(filter.item)
+    .bind(filter.party)
     .fetch_one(conn)
     .await?;
     Ok((rows, total))

@@ -50,13 +50,21 @@ pub fn media_error(err: MediaError) -> ApiError {
             tracing::error!(%message, "encoder failed during an upload check");
             ApiError::internal()
         }
-        MediaError::Invalid(message) => ApiError::new(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "invalid_image",
-            format!("That file isn't a valid image ({message})."),
-        ),
+        // The decoder's own words stay in the logs: they can name internals.
+        MediaError::Invalid(message) => {
+            tracing::info!(%message, "upload refused: not a valid image");
+            ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_image",
+                INVALID_IMAGE,
+            )
+        }
     }
 }
+
+/// What a client hears about a file that doesn't decode.
+pub const INVALID_IMAGE: &str =
+    "That file isn't a valid image. Try a PNG, GIF or WebP that opens elsewhere.";
 
 pub fn too_large() -> ApiError {
     media_error(MediaError::TooLarge("the file is over 5 MB".into()))
@@ -186,7 +194,11 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
     )
     .await
     .map_err(db_error)?;
-    if created {
+    // The same bytes as a file a deleted account took along: store and transcode it again.
+    let revived = !created
+        && file.purged_at.is_some()
+        && files::revive(&mut tx, file.id).await.map_err(db_error)?;
+    if created || revived {
         store
             .put(
                 &key,
@@ -251,6 +263,16 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn decoder_errors_stay_in_the_logs() {
+        let err = media_error(MediaError::Invalid(
+            "png: chunk IDAT at offset 0x1f crc mismatch".into(),
+        ));
+        assert_eq!(err.code, "invalid_image");
+        assert_eq!(err.message, INVALID_IMAGE);
+        assert!(!err.message.contains("IDAT"));
+    }
 
     #[test]
     fn tags_split_on_commas() {

@@ -615,8 +615,9 @@ type EmoteSet {
 	"""
 	listed: Boolean!
 	"""
-	How many of `capacity` the set uses. Counts every emote in it, also those this answer
-	doesn't show you (pending ones), so `capacity - slotsUsed` is what still fits.
+	How many of `capacity` the set uses. For whoever may edit the set it counts every emote in
+	it, pending ones included, so `capacity - slotsUsed` is what still fits. For anyone else it
+	counts the emotes this answer may show them (approved ones, plus their own pending ones).
 	"""
 	slotsUsed: Int!
 	createdAt: String!
@@ -792,7 +793,8 @@ type Me {
 
 type Mutation {
 	"""
-	Unlink a platform from your account. The last identity can't be removed.
+	Unlink a platform from your account. The last identity can't be removed, and a
+	restricted or blocked account can't unlink (`restricted`).
 	"""
 	unlinkIdentity(platform: Platform!): Me!
 	"""
@@ -928,7 +930,9 @@ type Mutation {
 	Refund a paid order: asks Paddle for a full refund when it is set up, and takes the
 	cosmetics back at once (only those no other paid order, code or staff grant covers).
 	`already_refunded` when Paddle says it was refunded already; `refund_in_progress` while
-	another refund of it runs. Needs `shop.orders`. Audited.
+	another refund of it runs (it may be tried again after 10 minutes); `refund_unavailable`
+	when the order has a Paddle transaction and Paddle isn't set up. Needs `shop.orders`.
+	Audited.
 	"""
 	refundOrder(id: String!, reason: String!): Order!
 	"""
@@ -1063,7 +1067,7 @@ type Order {
 	"""
 	recipient: AccountSummary
 	"""
-	Bought for another account.
+	Bought for another account (decided at checkout; stays when either account is deleted).
 	"""
 	gift: Boolean!
 	itemId: String!
@@ -1073,12 +1077,14 @@ type Order {
 	itemName: String!
 	status: OrderStatus!
 	"""
-	The item's price when the checkout started, in cents.
+	The item's price when the checkout started, in cents. 0 when a gift's recipient (not its
+	buyer) looks at it.
 	"""
 	amountCents: Int!
 	currency: String!
 	"""
-	What Paddle says was paid, tax included, in the lowest unit. Set once paid.
+	What Paddle says was paid, tax included, in the lowest unit. Set once paid; null for a
+	gift's recipient, like `paidCurrency` and `providerTransactionId`.
 	"""
 	paidTotalCents: Int
 	paidCurrency: String
@@ -1527,12 +1533,13 @@ type Query {
 	"""
 	shopItem(id: String!): ShopItem
 	"""
-	Orders you bought or received (gifts), newest first. `perPage` 1 to 100, default 50.
+	Orders you bought, and gifts you got once paid (without what the buyer paid), newest
+	first. `perPage` 1 to 100, default 50.
 	"""
 	myOrders(page: Int, perPage: Int): OrderPage!
 	"""
-	One order, for its buyer, its recipient, or `shop.orders`. Poll it after `startCheckout`
-	until it is `PAID`.
+	One order, for its buyer, its recipient (once paid, without what the buyer paid), or
+	`shop.orders`. Poll it after `startCheckout` until it is `PAID`.
 	"""
 	order(id: String!): Order
 	"""
@@ -1729,7 +1736,7 @@ type SetSummary {
 	listed: Boolean!
 	capacity: Int!
 	"""
-	Every emote in the set counts; see `EmoteSet.slotsUsed`.
+	How many slots the set uses, as counted for you; see `EmoteSet.slotsUsed`.
 	"""
 	slotsUsed: Int!
 	"""

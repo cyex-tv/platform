@@ -344,6 +344,11 @@ impl Harness {
         .await
     }
 
+    async fn sql(&self, statement: &str) {
+        let mut conn = self.db.conn().await;
+        sqlx::query(statement).execute(&mut *conn).await.unwrap();
+    }
+
     /// Waits for the spawned token revoke to reach the fake platform.
     async fn wait_for_revoke(&self, platform: Platform, token: &str) {
         for _ in 0..100 {
@@ -901,6 +906,129 @@ async fn unlinking_keeps_the_last_identity() {
         h.me(&kick).await["data"]["me"]["id"],
         h.me(&s).await["data"]["me"]["id"]
     );
+    h.db.close().await;
+}
+
+#[tokio::test]
+async fn restricted_accounts_cant_unlink() {
+    let Some(h) = Harness::new().await else {
+        return;
+    };
+    let s = h.sign_in(Platform::Twitch, "9201", None, false).await;
+    let s = h.sign_in(Platform::Kick, "9202", Some(&s), true).await;
+    for column in ["restricted_at", "blocked_at"] {
+        h.sql(&format!("UPDATE accounts SET {column} = now()"))
+            .await;
+        let reply = h
+            .gql(
+                "mutation { unlinkIdentity(platform: KICK) { id } }",
+                Some(&s),
+            )
+            .await;
+        if column == "blocked_at" {
+            // A block ends the session too; either way nothing is unlinked.
+            assert!(
+                matches!(gql_code(&reply), "restricted" | "signed_out"),
+                "{reply}"
+            );
+        } else {
+            assert_eq!(gql_code(&reply), "restricted", "{reply}");
+            assert_eq!(
+                reply["errors"][0]["message"],
+                "A restricted account can't unlink a platform. Write to us if you need it changed."
+            );
+        }
+        h.sql(&format!("UPDATE accounts SET {column} = NULL")).await;
+    }
+    let mut conn = h.db.conn().await;
+    let kick: i64 = sqlx::query_scalar("SELECT count(*) FROM identities WHERE platform = 'kick'")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(kick, 1);
+    h.db.close().await;
+}
+
+#[tokio::test]
+async fn a_dropped_identity_brings_its_restriction_to_a_new_account() {
+    let Some(h) = Harness::new().await else {
+        return;
+    };
+    let s = h.sign_in(Platform::Twitch, "9301", None, false).await;
+    let _ = h.sign_in(Platform::Kick, "9302", Some(&s), true).await;
+    // The identity leaves the restricted account by any path (here straight in SQL): a hold is
+    // kept.
+    h.sql("UPDATE accounts SET restricted_at = now()").await;
+    h.sql("DELETE FROM identities WHERE platform = 'kick'")
+        .await;
+    let mut conn = h.db.conn().await;
+    let holds: i64 = sqlx::query_scalar("SELECT count(*) FROM identity_holds")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(holds, 1);
+    drop(conn);
+
+    // Signing in with it makes a new account that is restricted too.
+    let fresh = h.sign_in(Platform::Kick, "9302", None, false).await;
+    let fresh_id = h.me(&fresh).await["data"]["me"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut conn = h.db.conn().await;
+    let restricted: bool = sqlx::query_scalar(
+        "SELECT a.restricted_at IS NOT NULL FROM accounts a
+           JOIN identities i ON i.account_id = a.id
+          WHERE i.platform = 'kick' AND i.platform_user_id = '9302'",
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert!(restricted, "{fresh_id}");
+    let holds: i64 = sqlx::query_scalar("SELECT count(*) FROM identity_holds")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert_eq!(holds, 0, "the hold is used up");
+    drop(conn);
+
+    // A blocked account's identity: the next sign-in with it is refused.
+    let b = h.sign_in(Platform::Twitch, "9401", None, false).await;
+    let _ = h.sign_in(Platform::Kick, "9402", Some(&b), true).await;
+    h.sql(
+        "UPDATE accounts SET blocked_at = now() WHERE id = (SELECT account_id FROM identities
+          WHERE platform = 'twitch' AND platform_user_id = '9401')",
+    )
+    .await;
+    h.sql("DELETE FROM identities WHERE platform = 'kick' AND platform_user_id = '9402'")
+        .await;
+    let reply = h.sign_in_reply(Platform::Kick, "9402", None, false).await;
+    assert_eq!(reply.status, StatusCode::FORBIDDEN);
+    assert_eq!(reply.code(), "account_blocked");
+
+    // Linking a held identity onto a clean account copies the restriction there.
+    let c = h.sign_in(Platform::Twitch, "9501", None, false).await;
+    h.sql(
+        "INSERT INTO identity_holds (platform, platform_user_id, account_id, restricted_at)
+         VALUES ('kick', '9502', gen_random_uuid(), now())",
+    )
+    .await;
+    let c = h.sign_in(Platform::Kick, "9502", Some(&c), true).await;
+    let id = h.me(&c).await["data"]["me"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut conn = h.db.conn().await;
+    let restricted: bool = sqlx::query_scalar(
+        "SELECT restricted_at IS NOT NULL FROM accounts a
+           JOIN identities i ON i.account_id = a.id
+          WHERE i.platform = 'twitch' AND i.platform_user_id = '9501'",
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert!(restricted, "{id}");
+    drop(conn);
     h.db.close().await;
 }
 

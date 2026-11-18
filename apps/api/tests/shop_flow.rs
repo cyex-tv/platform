@@ -51,6 +51,12 @@ struct Fake {
     /// How long each answer waits, in milliseconds.
     delay_ms: AtomicU64,
     next: AtomicUsize,
+    /// Transactions asked to be cancelled (`PATCH /transactions/{id}`), in order.
+    cancels: Mutex<Vec<String>>,
+    /// Cancels are refused (the transaction was paid meanwhile).
+    cancel_fail: AtomicBool,
+    /// Transactions come with a checkout link on a host we don't hand out.
+    bad_url: AtomicBool,
 }
 
 async fn fake_paddle() -> (String, Arc<Fake>) {
@@ -77,8 +83,13 @@ async fn fake_paddle() -> (String, Arc<Fake>) {
         }
         let n = fake.next.fetch_add(1, Ordering::SeqCst);
         let data = if path == "/transactions" {
+            let url = if fake.bad_url.load(Ordering::SeqCst) {
+                format!("https://pay.example.test/checkout?_ptxn=txn_test{n}")
+            } else {
+                format!("https://sandbox-buy.paddle.com/checkout?_ptxn=txn_test{n}")
+            };
             json!({ "id": format!("txn_test{n}"), "status": "ready", "currency_code": "EUR",
-                    "checkout": { "url": format!("https://pay.example.test/checkout?_ptxn=txn_test{n}") } })
+                    "checkout": { "url": url } })
         } else {
             json!({ "id": format!("adj_test{n}"), "status": "pending_approval", "action": "refund" })
         };
@@ -90,6 +101,27 @@ async fn fake_paddle() -> (String, Arc<Fake>) {
             post(
                 |State(f): State<Arc<Fake>>, axum::Json(b): axum::Json<Value>| async move {
                     answer(&f, "/transactions", b).await
+                },
+            ),
+        )
+        .route(
+            "/transactions/{id}",
+            axum::routing::patch(
+                |State(f): State<Arc<Fake>>,
+                 axum::extract::Path(id): axum::extract::Path<String>,
+                 axum::Json(b): axum::Json<Value>| async move {
+                    assert_eq!(b, json!({ "status": "canceled" }));
+                    f.cancels.lock().unwrap().push(id.clone());
+                    if f.cancel_fail.load(Ordering::SeqCst) {
+                        return (
+                            StatusCode::BAD_REQUEST,
+                            axum::Json(json!({ "error": { "code": "transaction_immutable" } })),
+                        );
+                    }
+                    (
+                        StatusCode::OK,
+                        axum::Json(json!({ "data": { "id": id, "status": "canceled" } })),
+                    )
                 },
             ),
         )
@@ -1753,12 +1785,17 @@ async fn one_pending_order_per_buyer_item_and_recipient() {
     ))
     .await;
 
-    // Once its hold ran out, a new checkout replaces it.
+    // Once its hold ran out, a new checkout replaces it. Paddle refuses to cancel the old
+    // transaction here (it is being paid), so a late payment of it is still taken.
     w.sql(&format!(
         "UPDATE shop_orders SET created_at = now() - interval '2 hours' WHERE id = '{order_uuid}'"
     ))
     .await;
+    w.fake.cancel_fail.store(true, Ordering::SeqCst);
     let (txn3, order3) = w.checkout(&buyer, &item, None).await;
+    w.fake.cancel_fail.store(false, Ordering::SeqCst);
+    assert_eq!(*w.fake.cancels.lock().unwrap(), std::slice::from_ref(&txn));
+    assert_eq!(w.audit_count("shop.transaction_cancel_failed").await, 1);
     assert_ne!(order3, order);
     assert_eq!(w.status(&order).await, "failed");
     assert_eq!(w.audit_count("shop.order_replaced").await, 1);
@@ -2072,5 +2109,367 @@ async fn two_redemptions_of_a_single_use_code() {
     assert_eq!(outcomes, ["code_used_up", "ok"], "{ra} {rb}");
     let owners = w.owned(a.id).await.len() + w.owned(b.id).await.len();
     assert_eq!(owners, 2);
+    w.db.close().await;
+}
+
+// Sign-off fixes
+
+#[tokio::test]
+async fn replaced_checkouts_are_cancelled_and_take_no_late_payment() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let buyer = w.user("301").await;
+    let badge = w.badge("Early").await;
+    let item = w
+        .item(&owner, bundle_input("Starter", &[&badge], &[]))
+        .await;
+    let (txn, order) = w.checkout(&buyer, &item, None).await;
+    w.sql(&format!(
+        "UPDATE shop_orders SET created_at = now() - interval '2 hours' WHERE id = '{}'",
+        ids::from_text(&order).unwrap()
+    ))
+    .await;
+    let (txn2, order2) = w.checkout(&buyer, &item, None).await;
+    assert_ne!(order2, order);
+    // Paddle was asked to cancel the old transaction, and did.
+    assert_eq!(*w.fake.cancels.lock().unwrap(), std::slice::from_ref(&txn));
+    let mut conn = w.db.conn().await;
+    let canceled: bool = sqlx::query_scalar(
+        "SELECT provider_canceled_at IS NOT NULL FROM shop_orders WHERE id = $1",
+    )
+    .bind(ids::from_text(&order).unwrap())
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    drop(conn);
+    assert!(canceled);
+    assert_eq!(w.audit_count("shop.transaction_cancel_failed").await, 0);
+    // A completion for the cancelled transaction gives nothing and is audited for staff.
+    assert_eq!(
+        w.hook(completed("evt_rc1", &txn, &order)).await,
+        StatusCode::OK
+    );
+    assert_eq!(w.status(&order).await, "failed");
+    assert!(w.owned(buyer.id).await.is_empty());
+    let rows = w.audits("shop.order_paid_unfulfilled").await;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["reason"], "order_failed_replaced");
+    // An adjustment for it is not held back either (it can't be paid): answered 200.
+    assert_eq!(
+        w.hook(adjustment("evt_rc2", &txn, "refund", "approved"))
+            .await,
+        StatusCode::OK
+    );
+    // The new checkout is paid normally.
+    assert_eq!(
+        w.hook(completed("evt_rc3", &txn2, &order2)).await,
+        StatusCode::OK
+    );
+    assert_eq!(w.owned(buyer.id).await, std::slice::from_ref(&badge));
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn adjustments_wait_while_the_order_can_still_be_paid() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let buyer = w.user("311").await;
+    let badge = w.badge("Early").await;
+    let item = w
+        .item(&owner, bundle_input("Starter", &[&badge], &[]))
+        .await;
+    let (txn, order) = w.checkout(&buyer, &item, None).await;
+    // Expired by us, its cancel failed: a late payment is still taken, so a refund arriving
+    // first is answered 503 and Paddle sends it again.
+    w.sql(&format!(
+        "UPDATE shop_orders SET status = 'failed', failed_reason = 'expired', cancel_failed_at = now()
+          WHERE id = '{}'",
+        ids::from_text(&order).unwrap()
+    ))
+    .await;
+    assert_eq!(
+        w.hook(adjustment("evt_aw1", &txn, "refund", "approved"))
+            .await,
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    // The payment lands, then the refund again: taken back.
+    assert_eq!(
+        w.hook(completed("evt_aw2", &txn, &order)).await,
+        StatusCode::OK
+    );
+    assert_eq!(w.owned(buyer.id).await, std::slice::from_ref(&badge));
+    assert_eq!(
+        w.hook(adjustment("evt_aw3", &txn, "refund", "approved"))
+            .await,
+        StatusCode::OK
+    );
+    assert_eq!(w.status(&order).await, "refunded");
+    assert!(w.owned(buyer.id).await.is_empty());
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn checkout_links_outside_the_allowed_hosts_are_dropped() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let buyer = w.user("321").await;
+    let badge = w.badge("Early").await;
+    let item = w
+        .item(&owner, bundle_input("Starter", &[&badge], &[]))
+        .await;
+    w.fake.bad_url.store(true, Ordering::SeqCst);
+    let r = w
+        .gql(Some(&buyer), CHECKOUT, json!({ "itemId": item["id"] }))
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+    let checkout = &r["data"]["startCheckout"];
+    assert!(checkout["checkoutUrl"].is_null(), "{r}");
+    // Paddle.js still opens it by transaction ID.
+    assert!(
+        checkout["transactionId"]
+            .as_str()
+            .unwrap()
+            .starts_with("txn_")
+    );
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn fulfilment_grants_what_was_sold_at_checkout() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let buyer = w.user("331").await;
+    let early = w.badge("Early").await;
+    let later = w.badge("Later").await;
+    let item = w
+        .item(&owner, bundle_input("Starter", &[&early], &[]))
+        .await;
+    let (txn, order) = w.checkout(&buyer, &item, None).await;
+    // Staff swap the item's badge (same price) before the payment lands.
+    let r = w
+        .gql(
+            Some(&owner),
+            UPDATE_ITEM,
+            json!({ "id": item["id"], "input": bundle_input("Starter", &[&later], &[]) }),
+        )
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+    assert_eq!(
+        w.hook(completed("evt_sn1", &txn, &order)).await,
+        StatusCode::OK
+    );
+    // The buyer gets what they paid for, not what the item holds now.
+    assert_eq!(w.owned(buyer.id).await, std::slice::from_ref(&early));
+
+    // A pending checkout of the old bundle isn't handed out again: it is replaced.
+    let other = w.user("332").await;
+    let old = w.item(&owner, bundle_input("Swap", &[&early], &[])).await;
+    let (_, first) = w.checkout(&other, &old, None).await;
+    let r = w
+        .gql(
+            Some(&owner),
+            UPDATE_ITEM,
+            json!({ "id": old["id"], "input": bundle_input("Swap", &[&later], &[]) }),
+        )
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+    let (_, second) = w.checkout(&other, &old, None).await;
+    assert_ne!(second, first);
+    assert_eq!(w.status(&first).await, "failed");
+
+    // Every cosmetic it sold was deleted since: paid, nothing granted, audited `item_empty`.
+    let third = w.user("333").await;
+    let gone = w.badge("Gone").await;
+    let doomed = w.item(&owner, bundle_input("Doomed", &[&gone], &[])).await;
+    let (t3, o3) = w.checkout(&third, &doomed, None).await;
+    w.sql(&format!(
+        "DELETE FROM badges WHERE id = '{}'",
+        ids::from_text(&gone).unwrap()
+    ))
+    .await;
+    assert_eq!(w.hook(completed("evt_sn2", &t3, &o3)).await, StatusCode::OK);
+    assert_eq!(w.status(&o3).await, "paid");
+    assert!(w.owned(third.id).await.is_empty());
+    let rows = w.audits("shop.order_paid_unfulfilled").await;
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0]["reason"], "item_empty");
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn stuck_refunds_can_be_tried_again_after_ten_minutes() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let staff = w.staff("341", &["shop.orders"]).await;
+    let buyer = w.user("342").await;
+    let badge = w.badge("Early").await;
+    let item = w
+        .item(&owner, bundle_input("Starter", &[&badge], &[]))
+        .await;
+    let (txn, order) = w.checkout(&buyer, &item, None).await;
+    assert_eq!(
+        w.hook(completed("evt_st1", &txn, &order)).await,
+        StatusCode::OK
+    );
+    let order_uuid = ids::from_text(&order).unwrap();
+    // The api stopped after recording the request: five minutes on, still in progress.
+    w.sql(&format!(
+        "UPDATE shop_orders SET status = 'refund_requested', refund_reason = 'asked',
+                refund_requested_at = now() - interval '5 minutes' WHERE id = '{order_uuid}'"
+    ))
+    .await;
+    let r = w.gql(Some(&staff), REFUND, json!({ "id": order })).await;
+    assert_eq!(code(&r), "refund_in_progress", "{r}");
+    // Eleven minutes on, staff may try again: Paddle is asked, the cosmetics go.
+    w.sql(&format!(
+        "UPDATE shop_orders SET refund_requested_at = now() - interval '11 minutes'
+          WHERE id = '{order_uuid}'"
+    ))
+    .await;
+    let adjustments = |w: &World| {
+        w.fake
+            .calls
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|(p, _)| p == "/adjustments")
+            .count()
+    };
+    let r = w.gql(Some(&staff), REFUND, json!({ "id": order })).await;
+    assert!(r["errors"].is_null(), "{r}");
+    assert_eq!(r["data"]["refundOrder"]["status"], "REFUNDED");
+    assert_eq!(adjustments(&w), 1);
+    assert!(w.owned(buyer.id).await.is_empty());
+
+    // Paddle answers a retry of a refund it took as a duplicate: already_refunded.
+    let buyer2 = w.user("343").await;
+    let (txn, order) = w.checkout(&buyer2, &item, None).await;
+    assert_eq!(
+        w.hook(completed("evt_st2", &txn, &order)).await,
+        StatusCode::OK
+    );
+    w.sql(&format!(
+        "UPDATE shop_orders SET status = 'refund_requested', refund_reason = 'asked',
+                refund_requested_at = now() - interval '11 minutes' WHERE id = '{}'",
+        ids::from_text(&order).unwrap()
+    ))
+    .await;
+    w.fake.fail.store(true, Ordering::SeqCst);
+    *w.fake.fail_code.lock().unwrap() = Some("transaction_already_refunded".into());
+    let r = w.gql(Some(&staff), REFUND, json!({ "id": order })).await;
+    assert_eq!(code(&r), "already_refunded", "{r}");
+    w.fake.fail.store(false, Ordering::SeqCst);
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn staff_refunds_never_revoke_without_paddle() {
+    let Some(w) = World::new(false).await else {
+        return;
+    };
+    let staff = w.staff("351", &["shop.orders"]).await;
+    let owner = w.user(OWNER).await;
+    let buyer = w.user("352").await;
+    let badge = w.badge("Early").await;
+    let item = w
+        .item(&owner, bundle_input("Starter", &[&badge], &[]))
+        .await;
+    let item_id = ids::from_text(item["id"].as_str().unwrap()).unwrap();
+    let badge_id = ids::from_text(&badge).unwrap();
+    // A paid order with a Paddle transaction, made while Paddle was set up.
+    let order = ids::new_id();
+    w.sql(&format!(
+        "INSERT INTO shop_orders (id, account_id, recipient_id, item_id, item_name, status,
+                                  amount_cents, currency, provider_transaction_id, paid_at)
+         VALUES ('{order}', '{b}', '{b}', '{item_id}', 'Starter', 'paid', 499, 'EUR',
+                 'txn_nopaddle', now())",
+        b = buyer.id
+    ))
+    .await;
+    w.sql(&format!(
+        "INSERT INTO badge_entitlements (account_id, badge_id, source, reason, order_id)
+         VALUES ('{b}', '{badge_id}', 'purchase', 'Order', '{order}')",
+        b = buyer.id
+    ))
+    .await;
+    w.sql(&format!(
+        "INSERT INTO shop_order_entitlements (order_id, account_id, kind, cosmetic_id)
+         VALUES ('{order}', '{b}', 'badge', '{badge_id}')",
+        b = buyer.id
+    ))
+    .await;
+    let r = w
+        .gql(Some(&staff), REFUND, json!({ "id": ids::to_text(order) }))
+        .await;
+    assert_eq!(code(&r), "refund_unavailable", "{r}");
+    assert_eq!(w.status(&ids::to_text(order)).await, "paid");
+    assert_eq!(w.owned(buyer.id).await, std::slice::from_ref(&badge));
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn gift_recipients_see_paid_gifts_without_the_money() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let buyer = w.user("361").await;
+    let friend = w.user("362").await;
+    let staff = w.staff("363", &["shop.orders"]).await;
+    let badge = w.badge("Early").await;
+    let item = w
+        .item(&owner, bundle_input("Starter", &[&badge], &[]))
+        .await;
+    const FULL: &str = "query($id: String!) { order(id: $id) { id gift amountCents paidTotalCents paidCurrency providerTransactionId } }";
+    const LIST: &str =
+        "{ myOrders { total items { id gift amountCents paidTotalCents providerTransactionId } } }";
+    let (txn, order) = w.checkout(&buyer, &item, Some("user362")).await;
+    // Unpaid: the recipient sees nothing of it.
+    let r = w.gql(Some(&friend), FULL, json!({ "id": order })).await;
+    assert!(r["data"]["order"].is_null(), "{r}");
+    let r = w.gql(Some(&friend), LIST, json!({})).await;
+    assert_eq!(r["data"]["myOrders"]["total"], 0, "{r}");
+    assert_eq!(r["data"]["myOrders"]["items"], json!([]));
+
+    assert_eq!(
+        w.hook(completed("evt_gf1", &txn, &order)).await,
+        StatusCode::OK
+    );
+    // Paid: the recipient sees it, without what was paid or the transaction.
+    let r = w.gql(Some(&friend), FULL, json!({ "id": order })).await;
+    let seen = &r["data"]["order"];
+    assert_eq!(seen["gift"], true, "{r}");
+    assert_eq!(seen["amountCents"], 0);
+    assert!(seen["paidTotalCents"].is_null());
+    assert!(seen["paidCurrency"].is_null());
+    assert!(seen["providerTransactionId"].is_null());
+    let r = w.gql(Some(&friend), LIST, json!({})).await;
+    assert_eq!(r["data"]["myOrders"]["total"], 1);
+    assert_eq!(r["data"]["myOrders"]["items"][0]["amountCents"], 0);
+    assert!(r["data"]["myOrders"]["items"][0]["providerTransactionId"].is_null());
+    // The buyer sees the money.
+    let r = w.gql(Some(&buyer), FULL, json!({ "id": order })).await;
+    assert_eq!(r["data"]["order"]["amountCents"], 499);
+    assert_eq!(r["data"]["order"]["paidTotalCents"], 594);
+    assert_eq!(r["data"]["order"]["providerTransactionId"], txn.as_str());
+    // The gift flag was stored at checkout: it stays when the buyer's account is gone.
+    w.sql(&format!(
+        "UPDATE shop_orders SET account_id = NULL WHERE id = '{}'",
+        ids::from_text(&order).unwrap()
+    ))
+    .await;
+    let r = w.gql(Some(&staff), FULL, json!({ "id": order })).await;
+    assert_eq!(r["data"]["order"]["gift"], true, "{r}");
+    assert_eq!(r["data"]["order"]["amountCents"], 499);
     w.db.close().await;
 }

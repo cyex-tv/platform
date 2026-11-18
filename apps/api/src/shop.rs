@@ -470,13 +470,39 @@ fn summary(map: &HashMap<Uuid, reads::Summary>, id: Uuid) -> AccountSummary {
     }
 }
 
-/// Orders as the API shows them. Refund reasons are staff notes: only `staff` (holders of
-/// `shop.orders`) see them.
+/// Who is looking at an order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Viewer {
+    /// A holder of `shop.orders`: everything, staff notes included.
+    Staff,
+    /// A signed-in account: the buyer sees what they paid; a gift's recipient sees no money
+    /// fields and no transaction ID.
+    Account(Uuid),
+}
+
+impl Viewer {
+    fn staff(self) -> bool {
+        self == Self::Staff
+    }
+
+    /// Only the recipient of this order, not its buyer (nor staff).
+    fn recipient_only(self, order: &OrderRow) -> bool {
+        match self {
+            Self::Staff => false,
+            Self::Account(a) => order.account_id != Some(a),
+        }
+    }
+}
+
+/// Orders as the API shows them. Refund reasons are staff notes: only staff (holders of
+/// `shop.orders`) see them. A gift's recipient doesn't see what the buyer paid: `amountCents` is
+/// 0 and the paid total, its currency and the transaction ID are null.
 async fn order_views(
     conn: &mut PgConnection,
     rows: &[OrderRow],
-    staff: bool,
+    viewer: Viewer,
 ) -> ApiResult<Vec<Order>> {
+    let staff = viewer.staff();
     let people: Vec<Uuid> = rows
         .iter()
         .flat_map(|r| r.account_id.into_iter().chain(r.recipient_id))
@@ -484,26 +510,36 @@ async fn order_views(
     let summaries = reads::summaries(conn, &people).await.map_err(db_error)?;
     Ok(rows
         .iter()
-        .map(|r| Order {
-            id: ids::to_text(r.id),
-            buyer: r.account_id.map(|a| summary(&summaries, a)),
-            recipient: r.recipient_id.map(|a| summary(&summaries, a)),
-            gift: r.account_id != r.recipient_id,
-            item_id: ids::to_text(r.item_id),
-            item_name: r.item_name.clone(),
-            status: order_status(&r.status),
-            amount_cents: u32::try_from(r.amount_cents).unwrap_or(0),
-            currency: r.currency.clone(),
-            paid_total_cents: r.paid_total_cents.and_then(|v| u64::try_from(v).ok()),
-            paid_currency: r.paid_currency.clone(),
-            provider: r.provider.clone(),
-            provider_transaction_id: r.provider_transaction_id.clone(),
-            refund_reason: r.refund_reason.clone().filter(|_| staff),
-            created_at: time(r.created_at),
-            paid_at: opt_time(r.paid_at),
-            refunded_at: opt_time(r.refunded_at),
-            failed_at: opt_time(r.failed_at),
-            refund_rejected_at: opt_time(r.refund_rejected_at).filter(|_| staff),
+        .map(|r| {
+            let money = !viewer.recipient_only(r);
+            Order {
+                id: ids::to_text(r.id),
+                buyer: r.account_id.map(|a| summary(&summaries, a)),
+                recipient: r.recipient_id.map(|a| summary(&summaries, a)),
+                gift: r.is_gift,
+                item_id: ids::to_text(r.item_id),
+                item_name: r.item_name.clone(),
+                status: order_status(&r.status),
+                amount_cents: if money {
+                    u32::try_from(r.amount_cents).unwrap_or(0)
+                } else {
+                    0
+                },
+                currency: r.currency.clone(),
+                paid_total_cents: r
+                    .paid_total_cents
+                    .and_then(|v| u64::try_from(v).ok())
+                    .filter(|_| money),
+                paid_currency: r.paid_currency.clone().filter(|_| money),
+                provider: r.provider.clone(),
+                provider_transaction_id: r.provider_transaction_id.clone().filter(|_| money),
+                refund_reason: r.refund_reason.clone().filter(|_| staff),
+                created_at: time(r.created_at),
+                paid_at: opt_time(r.paid_at),
+                refunded_at: opt_time(r.refunded_at),
+                failed_at: opt_time(r.failed_at),
+                refund_rejected_at: opt_time(r.refund_rejected_at).filter(|_| staff),
+            }
         })
         .collect())
 }
@@ -516,8 +552,8 @@ pub fn order_status(raw: &str) -> OrderStatus {
     }
 }
 
-async fn one_order(conn: &mut PgConnection, row: &OrderRow, staff: bool) -> ApiResult<Order> {
-    order_views(conn, std::slice::from_ref(row), staff)
+async fn one_order(conn: &mut PgConnection, row: &OrderRow, viewer: Viewer) -> ApiResult<Order> {
+    order_views(conn, std::slice::from_ref(row), viewer)
         .await?
         .pop()
         .ok_or_else(ApiError::internal)
@@ -774,7 +810,21 @@ pub enum Reuse {
     Replace,
 }
 
-pub fn reuse_of(open: &OrderRow, item: &ItemRow, now: DateTime<Utc>) -> Reuse {
+/// Whether two bundles hold the same cosmetics, in any order.
+fn same_bundle(a: &[(CosmeticKind, Uuid)], b: &[(CosmeticKind, Uuid)]) -> bool {
+    let a: HashSet<_> = a.iter().collect();
+    let b: HashSet<_> = b.iter().collect();
+    a == b
+}
+
+/// `bundle` is the item's cosmetics now, read under its lock. An order that sells other
+/// cosmetics (or was made before orders kept theirs) is replaced, like one with another price.
+pub fn reuse_of(
+    open: &OrderRow,
+    item: &ItemRow,
+    bundle: &[(CosmeticKind, Uuid)],
+    now: DateTime<Utc>,
+) -> Reuse {
     let age = now - open.created_at;
     if open.provider_transaction_id.is_none() {
         return if age < chrono::Duration::seconds(STARTING_SECS) {
@@ -786,7 +836,8 @@ pub fn reuse_of(open: &OrderRow, item: &ItemRow, now: DateTime<Utc>) -> Reuse {
     let same_price = open.paddle_price_id == item.paddle_price_id
         && open.amount_cents == item.price_cents
         && open.currency == item.currency;
-    if same_price && age < chrono::Duration::minutes(db::HOLD_MINUTES) {
+    let same_cosmetics = open.bundle().is_some_and(|b| same_bundle(&b, bundle));
+    if same_price && same_cosmetics && age < chrono::Duration::minutes(db::HOLD_MINUTES) {
         Reuse::Again
     } else {
         Reuse::Replace
@@ -800,7 +851,12 @@ async fn checkout_of(
 ) -> ApiResult<Checkout> {
     let paddle = state.paddle.as_ref().ok_or_else(checkout_unavailable)?;
     Ok(Checkout {
-        order: one_order(conn, order, false).await?,
+        order: one_order(
+            conn,
+            order,
+            Viewer::Account(order.account_id.unwrap_or_default()),
+        )
+        .await?,
         transaction_id: order
             .provider_transaction_id
             .clone()
@@ -899,11 +955,12 @@ pub async fn start_checkout(
             },
         ));
     }
+    let mut replaced: Option<OrderRow> = None;
     if let Some(open) = db::lock_pending(&mut tx, caller.account_id, locked.id, recipient_id)
         .await
         .map_err(db_error)?
     {
-        match reuse_of(&open, &locked, Utc::now()) {
+        match reuse_of(&open, &locked, &bundle, Utc::now()) {
             Reuse::Again => {
                 let out = checkout_of(state, &mut tx, &open).await?;
                 tx.commit().await.map_err(sqlx_error)?;
@@ -924,6 +981,7 @@ pub async fn start_checkout(
                     Some(json!({ "status": "failed", "reason": db::failed::REPLACED })),
                 )
                 .await?;
+                replaced = Some(open);
             }
         }
     }
@@ -938,10 +996,16 @@ pub async fn start_checkout(
             return Err(conflict("sold_out", "That item is sold out."));
         }
     }
-    let order = db::create_order(&mut tx, caller.account_id, recipient_id, &locked)
+    let order = db::create_order(&mut tx, caller.account_id, recipient_id, &locked, &bundle)
         .await
         .map_err(db_error)?;
     tx.commit().await.map_err(sqlx_error)?;
+
+    // The replaced checkout can't be paid any more (best effort; the worker's sweep tries any
+    // left over).
+    if let Some(old) = replaced {
+        cancel_transaction(&paddle, &mut conn, &old).await?;
+    }
 
     // Paddle, without holding the lock.
     let order_text = ids::to_text(order.id);
@@ -996,9 +1060,50 @@ pub async fn start_checkout(
     checkout_of(state, &mut conn, &order).await
 }
 
+/// Cancels the Paddle transaction of a replaced or expired order, so its old checkout can't be
+/// paid. When Paddle says no (it was paid meanwhile, or Paddle is down), the order is flagged and
+/// audited (`shop.transaction_cancel_failed`), and a late payment is still taken.
+pub async fn cancel_transaction(
+    paddle: &paddle::Paddle,
+    conn: &mut PgConnection,
+    order: &OrderRow,
+) -> ApiResult<()> {
+    let Some(txn) = order.provider_transaction_id.as_deref() else {
+        return Ok(());
+    };
+    match paddle.cancel_transaction(txn).await {
+        Ok(()) => {
+            db::mark_canceled(conn, order.id).await.map_err(db_error)?;
+        }
+        Err(err) => {
+            tracing::warn!(error = %err, %txn, order = %ids::to_text(order.id), "cancelling an old paddle transaction failed; a late payment is still taken");
+            if db::mark_cancel_failed(conn, order.id)
+                .await
+                .map_err(db_error)?
+            {
+                write_audit(
+                    conn,
+                    None,
+                    "shop.transaction_cancel_failed",
+                    "shop_order",
+                    order.id,
+                    Some(order_json(order)),
+                    Some(json!({
+                        "provider_transaction_id": txn,
+                        "reason": order.failed_reason,
+                        "error": err.to_string(),
+                    })),
+                )
+                .await?;
+            }
+        }
+    }
+    Ok(())
+}
+
 // Orders
 
-/// Orders the caller bought or received, newest first.
+/// Orders the caller bought, and gifts they got once paid, newest first.
 pub async fn my_orders(
     state: &AppState,
     caller: &Caller,
@@ -1008,19 +1113,20 @@ pub async fn my_orders(
     let (limit, offset) = paging(page, per_page);
     let mut conn = acquire(state).await?;
     let filter = OrderFilter {
-        account: Some(caller.account_id),
+        party: Some(caller.account_id),
         ..OrderFilter::default()
     };
     let (rows, total) = db::orders(&mut conn, &filter, limit, offset)
         .await
         .map_err(db_error)?;
     Ok(OrderPage {
-        items: order_views(&mut conn, &rows, false).await?,
+        items: order_views(&mut conn, &rows, Viewer::Account(caller.account_id)).await?,
         total: u64::try_from(total).unwrap_or(0),
     })
 }
 
-/// One order, for its buyer, its recipient, or `shop.orders`. Poll it after a checkout.
+/// One order, for its buyer, its recipient (once paid), or `shop.orders`. Poll it after a
+/// checkout.
 pub async fn order(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Option<Order>> {
     let Some(id) = ids::from_text(id.trim()) else {
         return Ok(None);
@@ -1029,13 +1135,18 @@ pub async fn order(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Opt
     let Some(row) = db::get_order(&mut conn, id).await.map_err(db_error)? else {
         return Ok(None);
     };
-    let party =
-        row.account_id == Some(caller.account_id) || row.recipient_id == Some(caller.account_id);
+    let party = row.account_id == Some(caller.account_id)
+        || (row.recipient_id == Some(caller.account_id) && row.shown_to_recipient());
     let staff = holds(&mut conn, caller, permissions::SHOP_ORDERS).await?;
     if !party && !staff {
         return Ok(None);
     }
-    one_order(&mut conn, &row, staff).await.map(Some)
+    let viewer = if staff {
+        Viewer::Staff
+    } else {
+        Viewer::Account(caller.account_id)
+    };
+    one_order(&mut conn, &row, viewer).await.map(Some)
 }
 
 /// Every order, newest first, narrowed by status, account (bought or received) and item. Needs
@@ -1065,12 +1176,13 @@ pub async fn orders(
         account,
         status: status.map(OrderStatus::as_str),
         item,
+        party: None,
     };
     let (rows, total) = db::orders(&mut conn, &filter, limit, offset)
         .await
         .map_err(db_error)?;
     Ok(OrderPage {
-        items: order_views(&mut conn, &rows, true).await?,
+        items: order_views(&mut conn, &rows, Viewer::Staff).await?,
         total: u64::try_from(total).unwrap_or(0),
     })
 }
@@ -1201,6 +1313,10 @@ fn refund_error(err: &PaddleError) -> ApiError {
     }
 }
 
+/// A staff refund left as requested this long (the api stopped between asking Paddle and
+/// finishing) may be tried again. Paddle answers a duplicate as `already_refunded`.
+pub const REFUND_RETRY_MINUTES: i64 = 10;
+
 /// Refunds a paid order (needs `shop.orders`). The refund is recorded as requested first, then
 /// Paddle is asked for a full refund (when Paddle is set up and the order has a transaction)
 /// without holding the order's lock, then the cosmetics are taken back. When Paddle says no, the
@@ -1222,8 +1338,12 @@ pub async fn refund_order(
         .await
         .map_err(db_error)?
         .ok_or_else(not_found)?;
+    let stuck = order
+        .refund_requested_at
+        .is_some_and(|t| Utc::now() - t >= chrono::Duration::minutes(REFUND_RETRY_MINUTES));
     match order.status.as_str() {
         "paid" => {}
+        "refund_requested" if stuck => {}
         "refund_requested" => {
             return Err(conflict(
                 "refund_in_progress",
@@ -1237,6 +1357,15 @@ pub async fn refund_order(
             ));
         }
     }
+    // Never take the cosmetics back without refunding the payment.
+    let paddle = state.paddle.clone().filter(|p| p.checkout_ready());
+    if paddle.is_none() && order.provider_transaction_id.is_some() {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "refund_unavailable",
+            "Refunds through Paddle aren't available right now. Nothing was changed.",
+        ));
+    }
     db::mark_refund_requested(&mut tx, id, &why)
         .await
         .map_err(db_error)?;
@@ -1247,12 +1376,11 @@ pub async fn refund_order(
         "shop_order",
         id,
         Some(order_json(&order)),
-        Some(json!({ "status": "refund_requested", "reason": why })),
+        Some(json!({ "status": "refund_requested", "reason": why, "retry": stuck })),
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
 
-    let paddle = state.paddle.clone().filter(|p| p.checkout_ready());
     let adjustment = match (paddle, order.provider_transaction_id.as_deref()) {
         (Some(paddle), Some(txn)) => match paddle.refund(txn, &why).await {
             Ok(adjustment) => Some(adjustment),
@@ -1311,7 +1439,7 @@ pub async fn refund_order(
             _ => current,
         }
     };
-    let out = one_order(&mut tx, &row, true).await?;
+    let out = one_order(&mut tx, &row, Viewer::Staff).await?;
     tx.commit().await.map_err(sqlx_error)?;
     Ok(out)
 }
@@ -1482,11 +1610,26 @@ async fn fulfil(conn: &mut PgConnection, data: &Value) -> ApiResult<()> {
         )
         .await;
     }
-    let bundle = db::item_bundles(conn, &[order.item_id])
-        .await
-        .map_err(db_error)?
-        .remove(&order.item_id)
-        .unwrap_or_default();
+    // What was sold at checkout; orders from before the snapshot get the item's cosmetics now.
+    let sold_bundle = match order.bundle() {
+        Some(b) => b,
+        None => db::item_bundles(conn, &[order.item_id])
+            .await
+            .map_err(db_error)?
+            .remove(&order.item_id)
+            .unwrap_or_default(),
+    };
+    // Staff may have deleted a cosmetic since; what is left is granted.
+    let bundle = existing(conn, &sold_bundle).await?;
+    if bundle.is_empty() {
+        let total = data["details"]["totals"]["grand_total"]
+            .as_str()
+            .and_then(|s| s.parse::<i64>().ok());
+        let row = db::mark_paid(conn, order.id, total, data["currency_code"].as_str())
+            .await
+            .map_err(db_error)?;
+        return paid_unfulfilled(conn, &row, &data["id"], "paid", "item_empty").await;
+    }
     // Never to a deleted account.
     let recipient = match order.recipient_id {
         Some(r) => accounts::get(conn, r)
@@ -1613,6 +1756,34 @@ async fn fulfil(conn: &mut PgConnection, data: &Value) -> ApiResult<()> {
     Ok(())
 }
 
+/// Of `bundle`, the cosmetics that still exist, in order.
+async fn existing(
+    conn: &mut PgConnection,
+    bundle: &[(CosmeticKind, Uuid)],
+) -> ApiResult<Vec<(CosmeticKind, Uuid)>> {
+    let (badges, paints) = db::split_bundle(bundle);
+    let found_b: HashSet<Uuid> = cdb::badges(conn, Some(&badges))
+        .await
+        .map_err(db_error)?
+        .into_iter()
+        .map(|b| b.id)
+        .collect();
+    let found_p: HashSet<Uuid> = cdb::paints(conn, Some(&paints))
+        .await
+        .map_err(db_error)?
+        .into_iter()
+        .map(|p| p.id)
+        .collect();
+    Ok(bundle
+        .iter()
+        .filter(|(k, id)| match k {
+            CosmeticKind::Badge => found_b.contains(id),
+            CosmeticKind::Paint => found_p.contains(id),
+        })
+        .copied()
+        .collect())
+}
+
 /// A completed transaction no order stores, tagged with one of our orders that has no
 /// transaction: the checkout's save failed after Paddle made it. Never fulfilled from
 /// `custom_data` (anyone can tag a transaction); audited so staff can match it by hand.
@@ -1663,8 +1834,8 @@ async fn cancel(conn: &mut PgConnection, data: &Value) -> ApiResult<()> {
 }
 
 /// `adjustment.*`: an approved full refund or a chargeback takes the cosmetics back. A partial
-/// refund is recorded in the audit log only. One that arrives before its order is paid is
-/// answered 503, so Paddle sends it again later instead of it being dropped. A rejected refund
+/// refund is recorded in the audit log only. One that arrives before its order is paid (while
+/// the order can still take the payment) is answered 503, so Paddle sends it again later instead of it being dropped. A rejected refund
 /// of an order whose cosmetics were taken back already (a staff refund) flags the order for
 /// staff; the cosmetics stay taken back.
 async fn adjust(conn: &mut PgConnection, data: &Value) -> ApiResult<()> {
@@ -1706,7 +1877,9 @@ async fn adjust(conn: &mut PgConnection, data: &Value) -> ApiResult<()> {
     }
     match order.status.as_str() {
         "paid" | "refund_requested" => {}
-        "pending" => {
+        // Pending, or replaced/expired with a transaction that wasn't cancelled: its payment
+        // may still land, so Paddle sends this again later.
+        _ if order.takes_payment() => {
             return Err(ApiError::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 "order_not_ready",
@@ -1847,8 +2020,18 @@ mod tests {
             failed_reason: None,
             refund_requested_at: None,
             refund_rejected_at: None,
+            badge_ids: Some(vec![BADGE]),
+            paint_ids: Some(vec![PAINT]),
+            is_gift: false,
+            provider_canceled_at: None,
+            cancel_failed_at: None,
         }
     }
+
+    const BADGE: Uuid = Uuid::from_u128(1);
+    const PAINT: Uuid = Uuid::from_u128(2);
+    const SOLD: [(CosmeticKind, Uuid); 2] =
+        [(CosmeticKind::Paint, PAINT), (CosmeticKind::Badge, BADGE)];
 
     fn item_row() -> ItemRow {
         let now = Utc::now();
@@ -1916,21 +2099,84 @@ mod tests {
         let now = Utc::now();
         let item = item_row();
         let open = order_row();
-        assert_eq!(reuse_of(&open, &item, now), Reuse::Again);
+        assert_eq!(reuse_of(&open, &item, &SOLD, now), Reuse::Again);
         let mut starting = order_row();
         starting.provider_transaction_id = None;
-        assert_eq!(reuse_of(&starting, &item, now), Reuse::Busy);
+        assert_eq!(reuse_of(&starting, &item, &SOLD, now), Reuse::Busy);
         starting.created_at = now - chrono::Duration::minutes(5);
-        assert_eq!(reuse_of(&starting, &item, now), Reuse::Replace);
+        assert_eq!(reuse_of(&starting, &item, &SOLD, now), Reuse::Replace);
         let mut old = order_row();
         old.created_at = now - chrono::Duration::minutes(db::HOLD_MINUTES + 1);
-        assert_eq!(reuse_of(&old, &item, now), Reuse::Replace);
+        assert_eq!(reuse_of(&old, &item, &SOLD, now), Reuse::Replace);
         let mut repriced = item_row();
         repriced.price_cents = 599;
-        assert_eq!(reuse_of(&open, &repriced, now), Reuse::Replace);
+        assert_eq!(reuse_of(&open, &repriced, &SOLD, now), Reuse::Replace);
         let mut other_price = item_row();
         other_price.paddle_price_id = Some("pri_other".into());
-        assert_eq!(reuse_of(&open, &other_price, now), Reuse::Replace);
+        assert_eq!(reuse_of(&open, &other_price, &SOLD, now), Reuse::Replace);
+    }
+
+    #[test]
+    fn a_pending_order_is_replaced_when_the_bundle_changed() {
+        let now = Utc::now();
+        let item = item_row();
+        let open = order_row();
+        // Fewer, more or other cosmetics than were sold: a new order.
+        let fewer = [(CosmeticKind::Badge, BADGE)];
+        assert_eq!(reuse_of(&open, &item, &fewer, now), Reuse::Replace);
+        let more = [
+            (CosmeticKind::Badge, BADGE),
+            (CosmeticKind::Paint, PAINT),
+            (CosmeticKind::Paint, Uuid::from_u128(3)),
+        ];
+        assert_eq!(reuse_of(&open, &item, &more, now), Reuse::Replace);
+        // An order from before the snapshot is replaced too.
+        let mut legacy = order_row();
+        legacy.badge_ids = None;
+        legacy.paint_ids = None;
+        assert_eq!(legacy.bundle(), None);
+        assert_eq!(reuse_of(&legacy, &item, &SOLD, now), Reuse::Replace);
+        assert_eq!(
+            open.bundle(),
+            Some(vec![
+                (CosmeticKind::Badge, BADGE),
+                (CosmeticKind::Paint, PAINT)
+            ])
+        );
+    }
+
+    #[test]
+    fn a_cancelled_transaction_takes_no_late_payment() {
+        let mut o = order_row();
+        o.status = "failed".into();
+        o.failed_reason = Some(db::failed::REPLACED.into());
+        assert!(o.takes_payment());
+        o.cancel_failed_at = Some(Utc::now());
+        assert!(o.takes_payment(), "the cancel failed: still taken");
+        o.provider_canceled_at = Some(Utc::now());
+        assert!(!o.takes_payment());
+    }
+
+    #[test]
+    fn a_gift_recipient_sees_no_money() {
+        let buyer = Uuid::from_u128(10);
+        let recipient = Uuid::from_u128(11);
+        let mut o = order_row();
+        o.account_id = Some(buyer);
+        o.recipient_id = Some(recipient);
+        assert!(!Viewer::Account(buyer).recipient_only(&o));
+        assert!(Viewer::Account(recipient).recipient_only(&o));
+        assert!(!Viewer::Staff.recipient_only(&o));
+        for (status, shown) in [
+            ("pending", false),
+            ("failed", false),
+            ("paid", true),
+            ("refund_requested", true),
+            ("refunded", true),
+        ] {
+            o.status = status.into();
+            assert_eq!(o.shown_to_recipient(), shown, "{status}");
+        }
     }
 
     #[test]

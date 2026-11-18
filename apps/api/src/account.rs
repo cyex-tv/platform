@@ -15,8 +15,8 @@ use axum::http::StatusCode;
 use cyex_tv_auth::{Caller, Via};
 use cyex_tv_db::sessions::{self, SessionKind};
 use cyex_tv_db::{
-    accounts, audit, channels, cosmetics as cosmetics_db, editors as editors_db, emotes, ids,
-    notifications, outbox, privacy, reads, reports, roles, sets,
+    accounts, audit, channels, cosmetics as cosmetics_db, editors as editors_db, emotes, files,
+    ids, jobs, notifications, outbox, privacy, reads, reports, roles, sets,
 };
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{AccountSession, EventType, SessionKindView, SetKind};
@@ -420,8 +420,9 @@ pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
 /// provider ID in them; staff refund notes aren't.
 async fn export_orders(conn: &mut PgConnection, account_id: Uuid) -> ApiResult<Vec<Value>> {
     use cyex_tv_db::shop::{self as shop_db, OrderFilter};
+    // As `myOrders` shows them: a gift's recipient gets it once paid, without the money.
     let filter = OrderFilter {
-        account: Some(account_id),
+        party: Some(account_id),
         ..OrderFilter::default()
     };
     let mut out = Vec::new();
@@ -432,6 +433,7 @@ async fn export_orders(conn: &mut PgConnection, account_id: Uuid) -> ApiResult<V
             .map_err(db_error)?;
         let n = rows.len() as i64;
         for o in rows {
+            let money = o.account_id == Some(account_id);
             out.push(json!({
                 "id": ids::to_text(o.id),
                 "as_buyer": o.account_id == Some(account_id),
@@ -441,12 +443,13 @@ async fn export_orders(conn: &mut PgConnection, account_id: Uuid) -> ApiResult<V
                 "item_id": ids::to_text(o.item_id),
                 "item_name": o.item_name,
                 "status": crate::shop::order_status(&o.status).as_str(),
-                "amount_cents": o.amount_cents,
+                "gift": o.is_gift,
+                "amount_cents": money.then_some(o.amount_cents),
                 "currency": o.currency,
-                "paid_total_cents": o.paid_total_cents,
-                "paid_currency": o.paid_currency,
+                "paid_total_cents": o.paid_total_cents.filter(|_| money),
+                "paid_currency": o.paid_currency.filter(|_| money),
                 "provider": o.provider,
-                "provider_transaction_id": o.provider_transaction_id,
+                "provider_transaction_id": o.provider_transaction_id.filter(|_| money),
                 "created_at": views::time(o.created_at),
                 "paid_at": o.paid_at.map(views::time),
                 "refunded_at": o.refunded_at.map(views::time),
@@ -468,6 +471,8 @@ async fn export_orders(conn: &mut PgConnection, account_id: Uuid) -> ApiResult<V
 pub struct Deleted {
     pub emotes_kept: u64,
     pub emotes_deleted: u64,
+    /// Files queued for deletion from storage and the CDN.
+    pub files_deleted: u64,
     pub sets_deleted: u64,
     pub channels_deleted: u64,
 }
@@ -564,6 +569,24 @@ pub async fn delete_account(
         }
     }
     done.emotes_kept = privacy::disown_emotes(&mut tx, &keep)
+        .await
+        .map_err(db_error)?;
+    // Their files leave storage and the CDN, unless another live emote uses the same bytes.
+    for file_id in files::mark_orphans_purged(&mut tx, account_id)
+        .await
+        .map_err(db_error)?
+    {
+        jobs::enqueue(
+            &mut tx,
+            crate::abuse::DELETE_JOB,
+            &json!({ "file_id": ids::to_text(file_id), "reason": "account_deleted" }),
+            10,
+        )
+        .await
+        .map_err(db_error)?;
+        done.files_deleted += 1;
+    }
+    privacy::disown_deleted(&mut tx, account_id)
         .await
         .map_err(db_error)?;
 

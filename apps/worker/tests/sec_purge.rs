@@ -80,6 +80,7 @@ async fn purge_removes_every_possible_name_even_when_variants_is_empty() {
         db: db.pool.clone(),
         store: Some(store.clone()),
         purge: None,
+        paddle: None,
     };
     let handlers = Handlers::default().on(purge::KIND, purge::run);
     assert_eq!(
@@ -148,6 +149,7 @@ async fn a_transcode_of_a_blocked_file_leaves_nothing_behind() {
         db: db.pool.clone(),
         store: Some(store.clone()),
         purge: None,
+        paddle: None,
     };
     let handlers = Handlers::default().on(transcode::KIND, transcode::run);
     assert_eq!(
