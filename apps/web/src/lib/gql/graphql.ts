@@ -27,6 +27,14 @@ export type AccountEditor = {
   updatedAt: Scalars['String']['output'];
 };
 
+/** One `searchAccounts` hit: the account's public summary and its linked logins. */
+export type AccountHit = {
+  __typename?: 'AccountHit';
+  account: AccountSummary;
+  /** Twitch first. */
+  identities: Array<PublicIdentity>;
+};
+
 /**
  * Reports about an account's emotes and reports it filed (`emotes.review` or
  * `emotes.takedown`), newest first, at most 50 each.
@@ -35,6 +43,14 @@ export type AccountReports = {
   __typename?: 'AccountReports';
   about: Array<Report>;
   by: Array<Report>;
+};
+
+export type AccountResults = {
+  __typename?: 'AccountResults';
+  items: Array<AccountHit>;
+  page: Scalars['Int']['output'];
+  perPage: Scalars['Int']['output'];
+  total: Scalars['Int']['output'];
 };
 
 /** What an account may do (`users.restrict`). */
@@ -958,6 +974,14 @@ export type Platform =
   | 'KICK'
   | 'TWITCH';
 
+/** A linked Twitch or Kick account as anyone may see it: no IDs. */
+export type PublicIdentity = {
+  __typename?: 'PublicIdentity';
+  displayName: Scalars['String']['output'];
+  login: Scalars['String']['output'];
+  platform: Platform;
+};
+
 export type Query = {
   __typename?: 'Query';
   /** An account's public summary. Null when the account is unknown, deleted or blocked. */
@@ -1069,6 +1093,13 @@ export type Query = {
   reviewQueue: ReviewQueue;
   /** All roles. Needs `roles.manage`. */
   roles: Array<Role>;
+  /**
+   * Accounts by Twitch or Kick login or display name (a leading `@` is ignored): exact login
+   * first, then login and name prefixes, then similar names. Public fields only; deleted and
+   * blocked accounts are never listed. `perPage` is 1 to 50, default 20. 60 searches a minute
+   * per account, or per IP signed out (`rate_limited`). An empty `query` finds nobody.
+   */
+  searchAccounts: AccountResults;
   /**
    * Approved, listed emotes by name and tag, best match first, then the most used.
    * `perPage` is 1 to 100, default 50. NSFW emotes only with `nsfw: true`. `sort` is
@@ -1227,6 +1258,13 @@ export type QueryReportQueueArgs = {
 export type QueryReviewQueueArgs = {
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QuerySearchAccountsArgs = {
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+  query: Scalars['String']['input'];
 };
 
 

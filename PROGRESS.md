@@ -7,6 +7,31 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 - Web: `/admin/users/[accountId]` (profile, restrictions, roles, cosmetics, uploads, reports about and by, latest audit entries), `/admin/cosmetics/owners` (who owns what), audit log filters with links to targets and a Changes/JSON toggle, review queue keyboard flow (J, K, A, R) with a 1x/2x/4x comparison, reports grouped by emote.
 - Manual check (2026/11/18): headless Edge against the dev mock at 1440 and 375, dark and light, plus the keyboard flow (J, K, R, A) in the review queue; screens in .claude/runs/2026-11-17-overnight/screens/g9.
 
+## User search (branch `feat/account-search`)
+
+Gap list G10: find people by their Twitch or Kick name. API only; the `/search` Users tab comes next.
+
+- [x] Migration `20261130000002_account_search.sql` (additive): trigram indexes on `lower(login)` and `lower(display_name)` of identities.
+- [x] GraphQL (additive): `searchAccounts(query, page, perPage)` returning `AccountResults { items: [AccountHit { account: AccountSummary, identities: [PublicIdentity { platform, login, displayName }] }], total, page, perPage }`. Exact login first, then login and display-name prefixes, then similar names; a leading `@` is ignored; `%` and `_` mean themselves. Public fields only (no platform IDs). Deleted and blocked accounts are never listed. `perPage` 1 to 50, default 20.
+- [x] 60 searches a minute per account, or per IP when signed out (the limits middleware now hands the client IP to GraphQL resolvers).
+- [x] Tests: `apps/api/tests/account_search_flow.rs` against Postgres in CI (ranking, both platforms in one hit, no IDs, paging, wildcards, blocked and deleted never listed signed in or out, per-account and per-IP limits).
+- [x] Dev mock: `searchAccounts` over the mock's people (quietoak has a Kick login too).
+- [ ] Website: the Users tab on `/search` and people in the palette (another task).
+
+#### GitHub write log
+```
+git push -u origin feat/account-search
+gh pr create --base main --head feat/account-search
+```
+
+## Help, download and the cosmetics gallery (branch `web/help-download`)
+
+- [x] `/help`: 34 short answers in eight groups (getting started, the extension, uploading, sets and channels, editors, cosmetics, account and privacy, moderation and takedowns) on the docs layout. The filter narrows the index and the answers together (every word, question or answer), `/` focuses it, Escape clears it, `?q=` is kept in the address. Questions are data in `lib/help/faq.ts` (vitest: groups, unique anchors, every site link points at a route).
+- [x] `/download`: the extension for Chrome and Firefox as "early testing, coming to the stores", the test build (clone, `npm ci`, `npm run build`, then Load unpacked or Load Temporary Add-on), cyex deck "coming", a line for chat clients and bots. Your browser's card first.
+- [x] `/cosmetics`: every badge and paint from the public `cosmetics` query, badges with a chat-line sample, paints drawn live; signed in, "Paint name / Your name" draws your name in each paint. No ownership anywhere.
+- [x] Footer: Download, Cosmetics, Help (Terms, Privacy, Contact stay out until PR #33). Palette: Help, Download, Cosmetics pages. `initDocs` takes `filter: false` for pages that filter themselves.
+- Manual check: 375, 768, 1440, 2560, dark and light, keyboard (`/`, typing, Escape, index jump), with the dev mock (`.claude/runs/2026-11-17-overnight/screens/g8g5`).
+
 ## Paint studio (branch `feat/paint-studio`, ADR 0018)
 - `apps/web/src/lib/paint-studio/`: the staff editor for name paints, built on the owner's cyex paints tool. Gradient paints (kind, angle or shape, repeat, 2 to 10 stops, up to 4 shadows, fallback colour) with the API's limits checked live; animated paints from the tool's engine (layers, effects, scene elements, presets) rendered and encoded in a Web Worker as WebP, APNG or GIF; previews on sample names on both grounds and in Twitch- and Kick-style chat; import of cyex.tv JSON, integer-colour paint JSON and tool project files, export as cyex.tv JSON, integer JSON, CSS, picture and project; Save to cyex.tv (createPaint / updatePaint; animated: render, upload, wait for ready, IMAGE paint); Open an existing paint.
 - Provenance: the tool's gradient CSS builder and integer-colour formatter were ports of the 7TV extension; neither came over (the gradient side is new code, the formatter was removed from the engine). The engine's custom-code items (`new Function`) were removed.
@@ -25,6 +50,14 @@ Gap list G1 (`.claude/runs/2026-11-17-overnight/gap-7tv.md`): sets you can share
 - [x] Tests: `apps/api/tests/public_sets_flow.rs` against Postgres in CI (defaults, private never readable by others over GraphQL and REST, active-set exception, account editors, `accountSets` of blocked and deleted accounts, clone of private and pending emotes, capacity with 1005 emotes, IDOR on `ownerId`, rate limit, audit row, `set.created`); unit tests of the visibility names.
 - [x] Dev mock: sets carry visibility; nora_byte has listed, private and personal sample sets; `accountSets`, `cloneSet`, `createSet`/`updateSet` visibility and the private rule on `set(id)`.
 - [ ] Website: `/sets/[id]`, profile set cards, clone and visibility controls (another task).
+
+#### GitHub write log
+```
+git push -u origin feat/public-sets
+gh pr create --base main --head feat/public-sets
+git push origin feat/public-sets   (merges of origin/main, a test fix)
+gh pr merge 53 --merge   (all checks green; public_sets_flow ran against Postgres in CI)
+```
 
 ## Website v4: the profile is the dashboard, cosmetics, admin cosmetics (branch `web/v4`)
 

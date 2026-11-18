@@ -37,6 +37,8 @@ pub struct Rates {
     pub cosmetics: Rate,
     /// `cloneSet`, per account: each copies up to a whole set.
     pub set_clones: Rate,
+    /// `searchAccounts`, per account, or per IP when signed out.
+    pub account_search: Rate,
 }
 
 impl Default for Rates {
@@ -51,6 +53,7 @@ impl Default for Rates {
             editors: Rate::per_hour(60),
             cosmetics: Rate::per_hour(300),
             set_clones: Rate::per_hour(30),
+            account_search: Rate::per_minute(60),
         }
     }
 }
@@ -65,6 +68,7 @@ pub struct Limits {
     pub editors: Limiter,
     pub cosmetics: Limiter,
     pub set_clones: Limiter,
+    pub account_search: Limiter,
     /// Take the client IP from `CF-Connecting-IP` (`CYEX_TV_TRUST_CLOUDFLARE=true`).
     pub trust_cloudflare: bool,
 }
@@ -81,6 +85,7 @@ impl Limits {
             editors: Limiter::new(rates.editors),
             cosmetics: Limiter::new(rates.cosmetics),
             set_clones: Limiter::new(rates.set_clones),
+            account_search: Limiter::new(rates.account_search),
             trust_cloudflare,
         }
     }
@@ -91,6 +96,10 @@ impl Default for Limits {
         Self::new(Rates::default(), false)
     }
 }
+
+/// The client's IP as the limits saw it, for limits applied inside GraphQL resolvers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClientIp(pub String);
 
 /// The 429 answer.
 pub fn too_many(wait: std::time::Duration) -> Response {
@@ -128,6 +137,8 @@ pub async fn middleware(State(state): State<AppState>, request: Request, next: N
         .get::<ConnectInfo<SocketAddr>>()
         .map(|c| c.0);
     let ip = client_ip(request.headers(), peer, state.limits.trust_cloudflare);
+    let mut request = request;
+    request.extensions_mut().insert(ClientIp(ip.clone()));
     if let Some(limiter) = class(&state.limits, request.method(), request.uri().path())
         && let Err(wait) = limiter.check(&ip)
     {
