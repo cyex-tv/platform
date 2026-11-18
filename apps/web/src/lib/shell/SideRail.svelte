@@ -148,7 +148,7 @@
             <a class="row" href={i.href} aria-current={i.current ? 'page' : undefined} tabindex={i.href === stop ? 0 : -1} onclick={() => onpick?.()}>
               {#if i.icon}<Icon name={i.icon} />{/if}
               <span class="lbl">{i.label}</span>
-              {#if has(i.count)}<span class="count">{shown(i.count)}</span>{/if}
+              {#if has(i.count)}<span class="count" aria-hidden="true">{shown(i.count)}</span><span class="sr-only">, {shown(i.count)}</span>{/if}
             </a>
           </li>
         {/each}
@@ -170,7 +170,7 @@
   <nav class="strip" class:fade-start={fadeStart} class:fade-end={fadeEnd} aria-label={label} bind:this={strip} use:arrowNav={'horizontal'}>
     {#each strips as i (i.href)}
       <a class="tab" href={i.href} aria-current={i.current ? 'page' : undefined} tabindex={i.href === stop ? 0 : -1}>
-        {#if i.icon}<Icon name={i.icon} size={16} />{/if}{i.label}{#if has(i.count)}<span class="count">{shown(i.count)}</span>{/if}
+        {#if i.icon}<Icon name={i.icon} size={16} />{/if}{i.label}{#if has(i.count)}<span class="count" aria-hidden="true">{shown(i.count)}</span><span class="sr-only">, {shown(i.count)}</span>{/if}
       </a>
     {/each}
   </nav>

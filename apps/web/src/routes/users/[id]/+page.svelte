@@ -89,10 +89,9 @@
   {@const account = { id: data.id, displayName: data.creator.displayName, avatar: data.creator.avatar }}
   <RailLayout>
     {#snippet rail()}
-      <ProfileRail {account} {relation} current={section} activity={ACTIVITY_READY} {actions} profile={data.profile} seed={data.look} />
+      <ProfileRail {account} {relation} current={section} activity={ACTIVITY_READY} heading {actions} profile={data.profile} seed={data.look} />
     {/snippet}
 
-    <h1 class="sr-only"><bdi>{name}</bdi></h1>
     {#if waiting}
       <State kind="loading" title="Loading…" />
     {:else if section === 'active'}

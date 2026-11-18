@@ -27,12 +27,14 @@
     relation: Relation;
     current: RailKey;
     activity?: boolean;
+    /** The name is the page's h1 (the profile page; the /me pages have their own). */
+    heading?: boolean;
     actions?: Snippet;
     /** The public profile and look when the page loaded them; otherwise the rail asks (the /me pages). */
     profile?: PublicProfile | null;
     seed?: Look | null;
   };
-  let { account, relation, current, activity = false, actions, profile: given, seed = null }: Props = $props();
+  let { account, relation, current, activity = false, heading = false, actions, profile: given, seed = null }: Props = $props();
 
   const name = $derived(clean(account.displayName));
   const groups = $derived(profileRail(account.id, relation, current, activity));
@@ -89,7 +91,7 @@
     <span class="gap"><Avatar src={account.avatar} {name} {size} /></span>
   </span>
   <div class="id">
-    <p class="name"><PaintedName {name} paint={look.paint} badge={look.badge} badgeSize={20} /></p>
+    <svelte:element this={heading ? 'h1' : 'p'} class="name"><PaintedName {name} paint={look.paint} badge={look.badge} badgeSize={20} /></svelte:element>
     {@render extras()}
   </div>
 {/snippet}
@@ -170,6 +172,7 @@
 {/snippet}
 
 <div class="phone">
+  <svelte:element this={heading ? 'h1' : 'div'} class="ph">
   <button class="pcard" type="button" aria-expanded={more_open} aria-controls={panel} onclick={() => (more_open = !more_open)}>
     <span class="ring" style={paintRing(look.paint)}>
       <span class="gap"><Avatar src={account.avatar} {name} size={32} /></span>
@@ -177,6 +180,7 @@
     <span class="name"><PaintedName {name} paint={look.paint} badge={look.badge} badgeSize={18} /></span>
     <span class="chev"><Icon name="chevron-down" size={16} /></span>
   </button>
+  </svelte:element>
   <div class="pmore" id={panel} hidden={!more_open}>
     {@render extras()}
     {#if profile || editors}{@render more()}{/if}
@@ -202,6 +206,7 @@
   .ring { display: inline-grid; flex: none; padding: 2px; border-radius: 50%; background: var(--border); }
   .gap { display: inline-grid; padding: 2px; border-radius: 50%; background: var(--surface); }
   .phone .gap { background: var(--bg); }
+  .ph { margin: 0; font: inherit; }
   .pcard .ring { padding: 2px; }
   .roles { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
   .role { display: inline-flex; align-items: center; height: 22px; padding: 0 7px; border-radius: var(--radius);
