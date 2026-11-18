@@ -45,13 +45,13 @@
 
 <div class="actions-row {variant}">
   {#if viewer.who === 'out'}
-    <a class="btn btn-primary btn-s add" href={signIn}>
+    <a class="btn btn-primary btn-s btn-glow add" href={signIn}>
       <Icon name="enter" />Sign in to add
     </a>
   {:else}
     <Popover label="Add {iso(name)} to a set" bind:open={addOpen} sheet width="300px" align={variant === 'head' ? 'end' : 'start'}>
       {#snippet trigger(props)}
-        <button class="btn btn-primary btn-s add" type="button" {...props}><Icon name="plus" />Add to set</button>
+        <button class="btn btn-primary btn-s btn-glow add" type="button" {...props}><Icon name="plus" />Add to set</button>
       {/snippet}
       <div class="sets">
         <p class="sr-only" role="status">{addSaid}</p>

@@ -37,11 +37,15 @@ kbd { font: inherit; }
    the dense tools' .ui-btn.primary (tool.css) and the header's Upload (AppHeader) are flat by design. */
 .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink);
   box-shadow: 0 10px 30px -12px var(--accent-glow); }
+/* Only one glowing primary per page: the small ones (cards, dialogs, empty states) are flat; a page's
+   main action is the large .btn-primary, or opts in with .btn-glow. */
+.btn-s.btn-primary:not(.btn-glow) { box-shadow: none; }
 .btn .arrow { transition: transform var(--dur-move) var(--ease); }
 @media (hover: hover) and (pointer: fine) {
   .btn:hover { border-color: var(--muted); background: var(--surface-2); }
   .btn-primary:hover { background: var(--accent); border-color: var(--accent);
     filter: brightness(1.08); box-shadow: 0 14px 40px -10px var(--accent-glow); }
+  .btn-s.btn-primary:not(.btn-glow):hover { box-shadow: none; }
   .btn:hover .arrow { transform: translateX(3px); }
 }
 .btn-s { height: 40px; padding: 0 14px; }

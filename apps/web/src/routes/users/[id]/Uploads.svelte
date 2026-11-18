@@ -1,6 +1,7 @@
 <script lang="ts">
   // A creator's uploads: Top from the load, New and every page after from the browser.
   // The page keys this on the creator, so a new creator starts from scratch (no reset effect).
+  import { appendUnique } from '$lib/tool/paging';
   import { ApiError, gql } from '$lib/api';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
@@ -45,7 +46,7 @@
     try {
       const got = await ask(nextPage, s);
       if (s !== sort) return; // the order changed while this loaded
-      extra = [...extra, ...got];
+      extra = appendUnique(extra, got);
       nextPage += 1;
     } catch (e) {
       failed = message(e);

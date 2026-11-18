@@ -16,7 +16,7 @@
 
   const item = $derived(clean(flow.purchase?.itemName) || 'your item');
   const to = $derived(clean(flow.purchase?.to ?? flow.purchase?.gift?.login));
-  const gift = $derived(!!flow.purchase?.gift || !!flow.purchase?.to);
+  const gift = $derived(!!flow.purchase?.gift || !!flow.purchase?.to || !!flow.purchase?.resumedGift);
 </script>
 
 {#if flow.phase === 'paying'}

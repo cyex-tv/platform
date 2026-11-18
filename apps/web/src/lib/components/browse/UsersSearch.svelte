@@ -45,6 +45,7 @@
   let text = $state(untrack(() => data.view.q));
   let input = $state<HTMLInputElement>();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => () => clearTimeout(timer)); // a pause that outlives the page must not navigate
   $effect(() => {
     const v = view.q;
     if (document.activeElement !== input) text = v;

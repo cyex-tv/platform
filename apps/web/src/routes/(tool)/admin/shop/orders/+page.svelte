@@ -16,6 +16,7 @@
   import PageHead from '$lib/tool/PageHead.svelte';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
   import { loader } from '$lib/tool/loader.svelte';
+  import { appendUnique, pageToken } from '$lib/tool/paging';
   import { fail, notify } from '$lib/tool/notices.svelte';
 
   const PER = 25;
@@ -33,26 +34,32 @@
   let target = $state<Row | null>(null);
   let refund: ReasonDialog;
 
+  const token = pageToken();
   const items = loader(async ({ fetch }) => (await gql(SHOP_ITEMS, { all: true }, fetch)).shopItems);
   const L = loader(async ({ fetch }) => {
     const s = status || null;
     const i = itemId;
     const a = account?.id ?? '';
+    token.reset();
     more = [];
     page = 1;
+    loadingMore = false;
     return ask(s, i, a, 1, fetch);
   });
 
   async function next() {
+    if (loadingMore) return;
+    const live = token.begin();
     loadingMore = true;
     try {
       const r = await ask(status || null, itemId, account?.id ?? '', page + 1);
+      if (!live()) return; // the filter changed while this loaded
       page += 1;
-      more = [...more, ...r.items];
+      more = appendUnique(more, r.items);
     } catch (e) {
-      fail(e);
+      if (live()) fail(e);
     } finally {
-      loadingMore = false;
+      if (live()) loadingMore = false;
     }
   }
 
@@ -116,7 +123,7 @@
 
   <LoadGate source={L} label="Loading orders…">
     {#snippet children(r)}
-      {@const rows = [...r.items, ...more]}
+      {@const rows = appendUnique(r.items, more)}
       {#if !rows.length}
         <State title={filtered ? 'No orders match.' : 'No orders yet.'}>
           {filtered ? 'Try another state, item or account.' : 'Orders show up here when someone starts a checkout.'}

@@ -2,6 +2,7 @@
   // What happened on an account (7TV's activity feed): one row per change with an icon (added,
   // removed, renamed, paint or badge changed, …), a sentence with the emote's picture and the
   // names (paints drawn in the paint), who did it, and how long ago. Public. Pages back 30 at a time.
+  import { appendUnique } from '$lib/tool/paging';
   import { onMount } from 'svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
   import Problem from '$lib/components/Problem.svelte';
@@ -28,7 +29,7 @@
     problem = '';
     try {
       const got = await loadActivity(accountId, cursor);
-      items = [...items, ...got.items];
+      items = appendUnique(items, got.items);
       cursor = got.next;
     } catch (e) {
       problem = e instanceof Error ? e.message : 'That didn’t load.';

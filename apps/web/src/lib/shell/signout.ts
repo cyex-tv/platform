@@ -7,6 +7,7 @@ import { forgetLooks } from '$lib/cosmetics/store.svelte';
 import { forgetProfile } from '$lib/profile/data.svelte';
 import { forgetMe } from '$lib/tool/session.svelte';
 import { forgetInbox } from '$lib/account/inbox.svelte';
+import { dismiss as dismissCheckout } from '$lib/shop/checkout.svelte';
 
 export async function leave() {
   try {
@@ -24,5 +25,6 @@ export async function leftSession() {
   forgetLooks();
   forgetProfile();
   forgetInbox();
+  dismissCheckout(); // the next person on this tab must not see the last one's payment
   await goto('/', { invalidateAll: true });
 }

@@ -11,6 +11,7 @@
   import { fail } from '$lib/tool/notices.svelte';
   import { session } from '$lib/tool/session.svelte';
   import { loader } from '$lib/tool/loader.svelte';
+  import { appendUnique, pageToken } from '$lib/tool/paging';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import { orderStatusText, price, type OrderStatus } from './shop';
 
@@ -19,22 +20,28 @@
   let page = $state(1);
   let busy = $state(false);
 
+  const token = pageToken();
   const L = loader(async ({ fetch }) => {
+    token.reset();
     more = [];
     page = 1;
+    busy = false;
     return (await gql(MY_ORDERS, { page: 1, perPage: PER }, fetch)).myOrders;
   });
 
   async function next() {
+    if (busy) return;
+    const live = token.begin();
     busy = true;
     try {
       const r = (await gql(MY_ORDERS, { page: page + 1, perPage: PER })).myOrders;
+      if (!live()) return;
       page += 1;
-      more = [...more, ...r.items];
+      more = appendUnique(more, r.items);
     } catch (e) {
-      fail(e);
+      if (live()) fail(e);
     } finally {
-      busy = false;
+      if (live()) busy = false;
     }
   }
 
@@ -54,7 +61,7 @@
   </header>
   <LoadGate source={L} label="Loading your orders…">
     {#snippet children(r)}
-      {@const rows = [...r.items, ...more]}
+      {@const rows = appendUnique(r.items, more)}
       {#if !rows.length}
         <State bare title="No orders yet.">What you buy or are given in the shop is listed here.</State>
       {:else}

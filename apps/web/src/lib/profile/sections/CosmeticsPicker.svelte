@@ -30,26 +30,39 @@
   let paintFind = $state('');
   let preview = $state<'paint' | 'name'>('paint');
   let saving = $state(false);
+  // Picks go one after the other, and a failure puts back only its own field, and only while no
+  // later pick of that field has been made.
+  let queue: Promise<unknown> = Promise.resolve();
+  const latest = { badge: 0, paint: 0 };
+  let pending = 0;
 
   const match = (q: string) => (n: string) => n.toLowerCase().includes(q.trim().toLowerCase());
 
-  async function choose(owned: Owned, kind: 'badge' | 'paint', id: string | null) {
-    const before = { badgeId: owned.badgeId ?? null, paintId: owned.paintId ?? null };
-    const after = { ...before, [`${kind}Id`]: id };
-    if (after.badgeId === before.badgeId && after.paintId === before.paintId) return;
-    L.set(picked(accountId, owned, after.badgeId, after.paintId));
+  function choose(owned: Owned, kind: 'badge' | 'paint', id: string | null) {
+    const cur = L.data ?? owned;
+    const before = kind === 'badge' ? (cur.badgeId ?? null) : (cur.paintId ?? null);
+    if (before === id) return;
+    const mineSeq = ++latest[kind];
+    const set = (c: Owned, v: string | null) =>
+      kind === 'badge' ? picked(accountId, c, v, c.paintId ?? null) : picked(accountId, c, c.badgeId ?? null, v);
+    L.set(set(cur, id));
+    pending++;
     saving = true;
-    try {
-      const vars = kind === 'badge' ? { badgeId: id ?? '' } : { paintId: id ?? '' };
-      await gql(SELECT_COSMETICS, { ...vars, ownerId: mine ? null : accountId });
-      const label = kind === 'badge' ? owned.badges.find((b) => b.id === id)?.name : owned.paints.find((p) => p.id === id)?.name;
-      notify(id ? `${iso(label)} on.` : `No ${kind} now.`);
-    } catch (e) {
-      L.set(picked(accountId, owned, before.badgeId, before.paintId));
-      fail(e);
-    } finally {
-      saving = false;
-    }
+    queue = queue.then(async () => {
+      try {
+        const vars = kind === 'badge' ? { badgeId: id ?? '' } : { paintId: id ?? '' };
+        await gql(SELECT_COSMETICS, { ...vars, ownerId: mine ? null : accountId });
+        if (mineSeq === latest[kind]) {
+          const label = kind === 'badge' ? cur.badges.find((b) => b.id === id)?.name : cur.paints.find((p) => p.id === id)?.name;
+          notify(id ? `${iso(label)} on.` : `No ${kind} now.`);
+        }
+      } catch (e) {
+        if (mineSeq === latest[kind] && L.data) L.set(set(L.data, before));
+        fail(e);
+      } finally {
+        if (--pending === 0) saving = false;
+      }
+    });
   }
 </script>
 
@@ -94,13 +107,13 @@
         <div class="opts {badgeView}" role="radiogroup" aria-labelledby="badge-h" aria-busy={saving}>
           {#if !badgeFind.trim()}
             <label class="opt" class:on={!owned.badgeId}>
-              <input type="radio" name="badge" checked={!owned.badgeId} onchange={() => choose(owned, 'badge', null)} />
+              <input type="radio" name="badge" disabled={saving} checked={!owned.badgeId} onchange={() => choose(owned, 'badge', null)} />
               <span class="dot" aria-hidden="true"></span><Icon name="ban" size={18} /><span class="lb">None</span>
             </label>
           {/if}
           {#each badges as b (b.id)}
             <label class="opt" class:on={owned.badgeId === b.id}>
-              <input type="radio" name="badge" checked={owned.badgeId === b.id} onchange={() => choose(owned, 'badge', b.id)} />
+              <input type="radio" name="badge" disabled={saving} checked={owned.badgeId === b.id} onchange={() => choose(owned, 'badge', b.id)} />
               <span class="dot" aria-hidden="true"></span><BadgeIcon badge={b} size={24} />
               <span class="lb"><bdi>{clean(b.name)}</bdi>{#if badgeView === 'list' && b.tooltip}<span class="sub"><bdi>{clean(b.tooltip)}</bdi></span>{/if}</span>
             </label>
@@ -129,13 +142,13 @@
         <div class="opts {paintView}" role="radiogroup" aria-labelledby="paint-h" aria-busy={saving}>
           {#if !paintFind.trim()}
             <label class="opt" class:on={!owned.paintId}>
-              <input type="radio" name="paint" checked={!owned.paintId} onchange={() => choose(owned, 'paint', null)} />
+              <input type="radio" name="paint" disabled={saving} checked={!owned.paintId} onchange={() => choose(owned, 'paint', null)} />
               <span class="dot" aria-hidden="true"></span><Icon name="ban" size={18} /><span class="lb">None</span>
             </label>
           {/if}
           {#each paints as p (p.id)}
             <label class="opt" class:on={owned.paintId === p.id}>
-              <input type="radio" name="paint" checked={owned.paintId === p.id} onchange={() => choose(owned, 'paint', p.id)} aria-label={p.name} />
+              <input type="radio" name="paint" disabled={saving} checked={owned.paintId === p.id} onchange={() => choose(owned, 'paint', p.id)} aria-label={p.name} />
               <span class="dot" aria-hidden="true"></span>
               <span class="lb paint" aria-hidden="true">
                 <PaintedName name={preview === 'paint' ? p.name : name} paint={p} />

@@ -20,6 +20,7 @@
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
   import { loader } from '$lib/tool/loader.svelte';
+  import { appendUnique, pageToken } from '$lib/tool/paging';
   import { fail, notify } from '$lib/tool/notices.svelte';
   import { can } from '$lib/tool/session.svelte';
 
@@ -29,9 +30,12 @@
   let loadingMore = $state(false);
   let busy = $state(false);
 
+  const token = pageToken();
   const L = loader(async ({ fetch }) => {
+    token.reset();
     more = [];
     page = 1;
+    loadingMore = false;
     const [batches, items, catalog] = await Promise.all([gql(CODE_BATCHES, { page: 1, perPage: PER }, fetch), canItems() ? gql(SHOP_ITEMS, { all: true }, fetch) : null, loadCatalog()]);
     return { ...batches.codeBatches, shopItems: items?.shopItems ?? [], catalog };
   });
@@ -39,15 +43,18 @@
   const canItems = () => can('shop.manage');
 
   async function next() {
+    if (loadingMore) return;
+    const live = token.begin();
     loadingMore = true;
     try {
       const r = (await gql(CODE_BATCHES, { page: page + 1, perPage: PER })).codeBatches;
+      if (!live()) return; // the list was reloaded while this loaded
       page += 1;
-      more = [...more, ...r.items];
+      more = appendUnique(more, r.items);
     } catch (e) {
-      fail(e);
+      if (live()) fail(e);
     } finally {
-      loadingMore = false;
+      if (live()) loadingMore = false;
     }
   }
 
@@ -206,7 +213,7 @@
 
   <LoadGate source={L} label="Loading batches…">
     {#snippet children(d)}
-      {@const rows = [...d.items, ...more]}
+      {@const rows = appendUnique(d.items, more)}
       {#if !rows.length}
         <State title="No batches yet.">
           Make one for a giveaway: pick what it gives and how many codes you need.
