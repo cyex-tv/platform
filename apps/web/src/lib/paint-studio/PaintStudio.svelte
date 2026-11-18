@@ -451,7 +451,7 @@
   {/if}
 
   <div style:margin-bottom="16px">
-    <Seg big label="Paint type" value={mode} onchange={setMode} options={[{ value: 'static', label: 'Gradient' }, { value: 'animated', label: 'Animated or picture' }]} />
+    <Seg big label="Paint type" value={mode} onchange={setMode} options={[{ value: 'static', label: 'Gradient', icon: 'palette' }, { value: 'animated', label: 'Animated or picture', icon: 'image' }]} />
   </div>
 
   <div class="ps-mini" aria-hidden="true">
@@ -472,8 +472,8 @@
               value={source}
               onchange={(v) => (source = v)}
               options={[
-                { value: 'build', label: 'Build it here' },
-                { value: 'file', label: 'Upload a file' },
+                { value: 'build', label: 'Build it here', icon: 'brush' },
+                { value: 'file', label: 'Upload a file', icon: 'upload' },
                 ...(paint.image?.url ? [{ value: 'existing' as const, label: 'Keep the saved one' }] : []),
               ]}
             />

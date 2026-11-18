@@ -2,6 +2,7 @@
   // "Clone to my sets": asks for the new set's name, copies, then opens the copy in the editor.
   // What didn't come along (over the size, not approved, others' private emotes) is said in a
   // notice on the next page. Errors stay in the dialog, in words.
+  // The copy is made UNLISTED, so it doesn't show on the cloner's profile until they list it.
   //   <CloneDialog bind:this={dlg} id={set.id} name={set.name} />  dlg.open()
   import { goto } from '$app/navigation';
   import { ApiError, gql } from '$lib/api';
@@ -36,7 +37,7 @@
     if (!trimmed) return;
     busy = true;
     try {
-      const { cloneSet } = await gql(CLONE_SET, { id, name: trimmed });
+      const { cloneSet } = await gql(CLONE_SET, { id, name: trimmed, visibility: 'UNLISTED' });
       dialog.close();
       forgetProfile('library:');
       notify(cloneOutcome(cloneSet.copied, cloneSet.skipped));
@@ -59,7 +60,7 @@
           aria-invalid={nameError ? 'true' : undefined} aria-describedby="clone-set-hint{nameError ? ' clone-set-err' : ''}" />
         {#if nameError}<span class="ui-error" id="clone-set-err" role="alert">{nameError}</span>{/if}
         <span class="ui-hint" id="clone-set-hint">
-          Emotes that aren’t approved yet, and other people’s private emotes, stay out. The copy is yours to change.
+          Emotes that aren’t approved yet, and other people’s private emotes, stay out. The copy is unlisted: only people with the link see it. You can list it on your profile later.
         </span>
       </label>
     </div>

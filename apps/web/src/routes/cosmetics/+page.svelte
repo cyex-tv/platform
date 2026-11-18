@@ -66,7 +66,7 @@
         <input class="input" type="search" placeholder="Search" bind:value={find} autocomplete="off" data-page-search />
       </label>
       {#if me && data.paints.length}
-        <Segmented label="Paint preview" size="s" options={[{ value: 'paint', label: 'Paint name' }, { value: 'name', label: 'Your name' }]}
+        <Segmented label="Paint preview" size="s" options={[{ value: 'paint', label: 'Paint name', icon: 'brush' }, { value: 'name', label: 'Your name', icon: 'user' }]}
           value={preview} onchange={(v) => (preview = v)} />
       {/if}
     </div>

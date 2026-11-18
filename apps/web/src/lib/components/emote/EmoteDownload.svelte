@@ -81,6 +81,7 @@
       {/each}
     </fieldset>
 
+    {#if fmts.length > 1}
     <fieldset>
       <legend class="fine">Format</legend>
       {#each fmts as f (f)}
@@ -91,6 +92,7 @@
         </label>
       {/each}
     </fieldset>
+    {/if}
 
     <button class="btn btn-primary btn-s go" type="button" onclick={go} disabled={!file || saying === 'saving'}>
       <Icon name="download" />{saying === 'saving' ? 'Saving…' : 'Download'}{#if file && saying !== 'saving' && bytes(file.size)}<span class="sz">{bytes(file.size)}</span>{/if}

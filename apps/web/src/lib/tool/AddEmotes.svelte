@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Segmented from '$lib/components/Segmented.svelte';
   // Find emotes to add: public search, or your own uploads (pending ones too, except for a
   // personal set, which takes approved emotes only).
   import { tick } from 'svelte';
@@ -81,10 +82,7 @@
 <section class="ui-panel">
   <header>
     <h2>Add emotes</h2>
-    <div class="ui-seg" role="group" aria-label="Where from">
-      <button type="button" aria-pressed={source === 'search'} onclick={() => (source = 'search')}>Search</button>
-      <button type="button" aria-pressed={source === 'mine'} onclick={() => (source = 'mine')}>Your uploads</button>
-    </div>
+    <Segmented label="Where from" options={[{ value: 'search', label: 'Search', icon: 'search' }, { value: 'mine', label: 'Your uploads', icon: 'upload' }]} value={source} onchange={(v) => (source = v)} />
   </header>
   <div class="find">
     <input class="ui-input" type="search" bind:this={findEl} bind:value={query} placeholder={source === 'search' ? 'Search by name or tag…' : 'Filter your uploads…'} aria-label="Find emotes" />

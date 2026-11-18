@@ -146,7 +146,7 @@
   .row { display: grid; grid-template-columns: 150px minmax(140px, 1fr) minmax(0, 2fr) minmax(0, 1.2fr) 16px; gap: 12px; align-items: center; min-height: 40px;
     width: 100%; padding: 7px 14px; border: 0; border-bottom: 1px solid var(--border); background: none; color: var(--text);
     font: inherit; text-align: left; cursor: pointer; }
-  @media (hover: hover) and (pointer: fine) { button.row:hover { background: var(--row-hover); box-shadow: inset 2px 0 0 var(--border-strong); } }
+  @media (hover: hover) and (pointer: fine) { button.row:hover { color: var(--text); } }
   button.row:focus-visible { outline-offset: -2px; }
   .head { cursor: default; background: var(--row-alt); }
   .chev { color: var(--dim); transition: rotate var(--fast); }

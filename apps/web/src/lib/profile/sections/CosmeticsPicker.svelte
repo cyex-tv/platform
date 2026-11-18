@@ -112,7 +112,7 @@
         <h2 id="paint-h">Paint</h2>
         {#if owned.paints.length}
           <div class="tools">
-            <Segmented label="Preview" size="s" options={[{ value: 'paint', label: 'Paint name' }, { value: 'name', label: mine ? 'Your name' : 'Their name' }]}
+            <Segmented label="Preview" size="s" options={[{ value: 'paint', label: 'Paint name', icon: 'brush' }, { value: 'name', label: mine ? 'Your name' : 'Their name', icon: 'user' }]}
               value={preview} onchange={(v) => (preview = v)} />
             {@render find('paints', paintFind, (v) => (paintFind = v))}
             {@render views('Paints', paintView, (v) => (paintView = v))}
@@ -158,7 +158,7 @@
   .views { display: flex; gap: 2px; }
   .vb { display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid transparent; border-radius: var(--radius);
     background: none; color: var(--dim); cursor: pointer; transition: color var(--fast), border-color var(--fast); }
-  .vb[aria-pressed='true'] { color: var(--text); border-color: var(--border-strong); }
+  .vb[aria-pressed='true'] { color: var(--accent-text); } /* the accent icon, no box */
   @media (hover: hover) and (pointer: fine) { .vb:hover { color: var(--text); } }
 
   .opts { display: grid; gap: 2px 8px; }
@@ -178,7 +178,7 @@
   .paint { font-size: var(--t-ui); }
   .sub { font-size: var(--t-fine); font-weight: 400; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .none { margin: 0; padding: 10px; color: var(--dim); font-size: var(--t-small); }
-  @media (hover: hover) and (pointer: fine) { .opt:hover { background: var(--row-hover); color: var(--text); } }
+  @media (hover: hover) and (pointer: fine) { .opt:hover { color: var(--text); } }
   @media (max-width: 640px) {
     .tools { width: 100%; }
     .find { order: 3; flex: 1 1 100%; width: auto; }

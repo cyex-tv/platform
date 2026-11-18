@@ -1985,6 +1985,7 @@ export type PublicSetQuery = { __typename?: 'Query', set?: { __typename?: 'Emote
 export type CloneSetMutationVariables = Exact<{
   id: Scalars['String']['input'];
   name?: InputMaybe<Scalars['String']['input']>;
+  visibility?: InputMaybe<SetVisibility>;
 }>;
 
 
@@ -3166,8 +3167,8 @@ export const PublicSetDocument = new TypedDocumentString(`
   }
 }`) as unknown as TypedDocumentString<PublicSetQuery, PublicSetQueryVariables>;
 export const CloneSetDocument = new TypedDocumentString(`
-    mutation CloneSet($id: String!, $name: String) {
-  cloneSet(id: $id, name: $name) {
+    mutation CloneSet($id: String!, $name: String, $visibility: SetVisibility) {
+  cloneSet(id: $id, name: $name, visibility: $visibility) {
     copied
     skipped
     set {

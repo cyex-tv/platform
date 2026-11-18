@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Segmented from '$lib/components/Segmented.svelte';
   // A set's editors: the owner adds people by their Twitch or Kick login (they need to have
   // signed in to cyex.tv once) and removes them.
   import { gql } from '$lib/api';
@@ -75,10 +76,7 @@
   {/if}
   {#if owner}
     <form class="add" onsubmit={add}>
-      <div class="ui-seg" role="group" aria-label="Platform">
-        <button type="button" aria-pressed={platform === 'TWITCH'} onclick={() => (platform = 'TWITCH')}>Twitch</button>
-        <button type="button" aria-pressed={platform === 'KICK'} onclick={() => (platform = 'KICK')}>Kick</button>
-      </div>
+      <Segmented label="Platform" options={[{ value: 'TWITCH', label: 'Twitch', icon: 'twitch' }, { value: 'KICK', label: 'Kick', icon: 'kick' }]} value={platform} onchange={(v) => (platform = v)} />
       <div class="row">
         <input class="ui-input" bind:value={login} placeholder="Login" aria-label="Their login" autocomplete="off" spellcheck="false" />
         <button class="ui-btn secondary" type="submit" disabled={busy || !login.trim()}>Add</button>
@@ -94,5 +92,5 @@
   .add { display: grid; gap: 8px; padding: 10px; border-top: 1px solid var(--border); }
   .row { display: flex; gap: 8px; }
   .row .ui-input { background: var(--bg); }
-  .ui-seg { justify-self: start; }
+  .add :global(.seg) { justify-self: start; }
 </style>

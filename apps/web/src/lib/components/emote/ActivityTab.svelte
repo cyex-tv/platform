@@ -49,7 +49,7 @@
 {:else if !items.length}
   <State title="No activity yet.">Sets adding, renaming or removing this emote show up here.</State>
 {:else}
-  <ActivityRows {items} {catalog} />
+  <ActivityRows {items} {catalog} pictures={false} />
   <div class="foot"><LoadMore hasMore={more} {busy} error={problem} total={items.length} onmore={next} /></div>
 {/if}
 

@@ -162,7 +162,7 @@
             {needle ? `${count(shown.length)} of ${count(members.length)}` : count(members.length)}
             {members.length === 1 ? 'emote' : 'emotes'}
           </p>
-          <Segmented label="View" size="s" options={[{ value: 'grid', label: 'Grid' }, { value: 'list', label: 'List' }]} value={view} onchange={pick} />
+          <Segmented label="View" size="s" options={[{ value: 'grid', label: 'Grid', icon: 'grid' }, { value: 'list', label: 'List', icon: 'list' }]} value={view} onchange={pick} />
         </div>
         {/if}
 

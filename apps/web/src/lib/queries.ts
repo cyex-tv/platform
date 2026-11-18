@@ -147,8 +147,8 @@ export const PUBLIC_SET = graphql(`
 `);
 
 export const CLONE_SET = graphql(`
-  mutation CloneSet($id: String!, $name: String) {
-    cloneSet(id: $id, name: $name) {
+  mutation CloneSet($id: String!, $name: String, $visibility: SetVisibility) {
+    cloneSet(id: $id, name: $name, visibility: $visibility) {
       copied
       skipped
       set {

@@ -39,6 +39,13 @@ describe('help questions', () => {
     }
   });
 
+  it('describes account deletion as it ships: self-serve, at once, "Deleted user"', () => {
+    const del = ALL_QUESTIONS.find((q) => q.id === 'delete-account')!;
+    expect(del.hay).toMatch(/delete account/);
+    expect(del.hay).toMatch(/deleted user/);
+    expect(del.hay).not.toMatch(/abuse@|on its way/);
+  });
+
   it('matches every word, in the question or the answer, any case', () => {
     const del = ALL_QUESTIONS.find((q) => q.id === 'delete-account')!;
     expect(matches(del, 'delete account')).toBe(true);

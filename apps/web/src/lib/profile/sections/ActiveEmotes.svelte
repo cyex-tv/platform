@@ -32,7 +32,7 @@
       {/snippet}
       {#snippet actions()}
         {#if chans.length > 1}
-          <Segmented label="Channel" size="s" options={chans.map((c) => ({ value: c.platform, label: c.platform === 'KICK' ? 'Kick' : 'Twitch' }))}
+          <Segmented label="Channel" size="s" options={chans.map((c) => ({ value: c.platform, label: c.platform === 'KICK' ? 'Kick' : 'Twitch', icon: c.platform === 'KICK' ? ('kick' as const) : ('twitch' as const) }))}
             value={chan?.platform ?? 'TWITCH'} onchange={(v) => (pick = v)} />
         {/if}
         {#if set}<a class="ui-btn secondary" href="/me/sets/{set.id}"><Icon name="pencil" size={15} />Edit set</a>{/if}

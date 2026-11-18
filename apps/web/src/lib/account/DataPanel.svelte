@@ -26,16 +26,18 @@
   }
 </script>
 
-<section class="ui-card" aria-labelledby="data-h">
-  <h2 id="data-h">Your data</h2>
-  <p class="ui-hint">A copy of everything cyex.tv holds about your account (logins, emotes, sets, channels, editors, cosmetics, notifications), as one JSON file.</p>
-  <div class="ui-actions row">
+<section class="ui-panel" aria-labelledby="data-h">
+  <header><h2 id="data-h">Your data</h2></header>
+  <p class="ui-hint pad">A copy of everything cyex.tv holds about your account (logins, emotes, sets, channels, editors, cosmetics, notifications), as one JSON file.</p>
+  <div class="ui-actions row pad">
     <button class="ui-btn secondary" type="button" disabled={busy} onclick={run}><Icon name="download" size={16} />{busy ? 'Preparing…' : 'Export my data'}</button>
   </div>
-  {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
+  {#if problem}<p class="problem pad" role="alert">{problem}</p>{/if}
 </section>
 
 <style>
-  .row { margin-top: 12px; }
-  .problem { margin-top: 10px; font-size: var(--text-sub); color: var(--muted); }
+  .pad { padding: 10px 14px 12px; }
+  .row { padding-top: 0; }
+  .ui-hint.pad { padding-bottom: 12px; }
+  .problem { padding-top: 0; font-size: var(--text-sub); color: var(--muted); }
 </style>

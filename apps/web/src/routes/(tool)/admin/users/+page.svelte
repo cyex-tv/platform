@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Segmented from '$lib/components/Segmented.svelte';
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { gql } from '$lib/api';
@@ -124,11 +125,7 @@
 <div class="ui-head"><div><h1>Users</h1><p>Find someone by name, or by the exact login they signed in with.</p></div></div>
 
 <form class="find ui-panel" onsubmit={search}>
-  <div class="ui-seg" role="group" aria-label="Platform">
-    <button type="button" aria-pressed={platform === 'TWITCH'} onclick={() => (platform = 'TWITCH')}>Twitch</button>
-    <button type="button" aria-pressed={platform === 'KICK'} onclick={() => (platform = 'KICK')}>Kick</button>
-    <button type="button" aria-pressed={platform === 'NAME'} onclick={() => (platform = 'NAME')}>Any name</button>
-  </div>
+  <Segmented label="Platform" options={[{ value: 'TWITCH', label: 'Twitch', icon: 'twitch' }, { value: 'KICK', label: 'Kick', icon: 'kick' }, { value: 'NAME', label: 'Any name', icon: 'user' }]} value={platform} onchange={(v) => (platform = v)} />
   <input class="ui-input" bind:value={login} placeholder={platform === 'NAME' ? 'Name or login' : 'Login'} aria-label={platform === 'NAME' ? 'Name or login' : 'Login'} autocomplete="off" spellcheck="false" />
   <button class="ui-btn primary" type="submit" disabled={!login.trim()}>Find</button>
 </form>
