@@ -30,13 +30,13 @@
   // The selected tag stays listed even when the loaded emotes no longer count it.
   const shownTags = $derived(view.tag && !tags.some((t) => t.tag === view.tag) ? [{ tag: view.tag, count: 0 }, ...tags] : tags);
 
-  type Section = 'search' | 'type' | 'flags' | 'tags';
+  type Section = 'search' | 'match' | 'type' | 'flags' | 'tags';
   const KEY = 'cyex.browse.closed';
   let closed = $state<Section[]>([]);
   $effect(() => {
     try {
       const v = JSON.parse(localStorage.getItem(KEY) ?? '[]');
-      if (Array.isArray(v)) closed = v.filter((s) => ['search', 'type', 'flags', 'tags'].includes(s));
+      if (Array.isArray(v)) closed = v.filter((s) => ['search', 'match', 'type', 'flags', 'tags'].includes(s));
     } catch {
       /* private mode or junk: all open */
     }
@@ -62,6 +62,16 @@
 {/snippet}
 
 {#snippet searchBody()}{@render search?.()}{/snippet}
+
+{#snippet matchBody()}
+  <div class="opts">
+    <label class="opt check" class:on={view.exact}>
+      <input type="checkbox" checked={view.exact} onchange={(e) => onchange({ exact: e.currentTarget.checked })} />
+      <span class="box" aria-hidden="true"><Icon name="check" size={12} /></span>
+      <span class="lbl"><span>Exact name</span><small>The name equals what you typed</small></span>
+    </label>
+  </div>
+{/snippet}
 
 {#snippet typeBody()}
   <div class="opts" role="radiogroup" aria-label="Type">
@@ -103,6 +113,7 @@
 
 <div class="filters">
   {#if search}{@render section('search', 'Search', searchBody)}{/if}
+  {#if view.q}{@render section('match', 'Match', matchBody)}{/if}
   {@render section('type', 'Type', typeBody)}
   {@render section('flags', 'Flags', flagsBody)}
   {@render section('tags', 'Tags', tagsBody)}

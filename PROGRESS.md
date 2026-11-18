@@ -18,6 +18,17 @@ git push -u origin feat/emote-activity
 gh pr create --base main --head feat/emote-activity
 ```
 
+## Upload v2 and emote settings (branch `feat/upload-v2`)
+
+Gap list G5.
+
+- [x] API (additive): `POST /v1/emotes` takes `zero_width`, `private` and `nsfw` form fields (`true`/`false`, `1`/`0`, `on`/`off`, empty is off; anything else is `bad_form`). Without them nothing changes. OpenAPI regenerated; the GraphQL schema is unchanged.
+- [x] Tests: `upload::tests::flags_parse_like_a_form` (unit) and `upload_flow::flags_can_be_set_at_upload` against Postgres in CI (each flag alone, all on, explicit off, left out; stored rows match).
+- [x] `/me/upload`: up to 20 files at once (the hourly limit); the same file can't be queued twice. Each file: name from the file name until typed, tags, Visibility (Public / Private), Zero-width, NSFW (asks first), a preview at real sizes on dark, light and in chat lines (zero-width drawn over a stand-in). Checked in the browser first (type, 5 MB, 1000 × 1000 px), then sent one by one with a progress bar (XHR); refusals in words (`blocked`, `too_large`, `rate_limited`, ...), and the batch stops at `rate_limited`. One file opens its page as before; a batch stays with Open links. "Use the first one's tags and flags for all".
+- [x] `/me/emotes/[id]`: the same Visibility and flag controls (`EmoteFlags`), NSFW asks first. "Replace file" skipped: the API can't swap an emote's file.
+- [x] Dev mock: the upload reads the flags and tags; the names `blocked`, `ratelimited` and `broken` answer as the API's refusals.
+- Manual check: headless Edge at 375, 768, 1440, 2560, dark and light, with the dev mock: queue with good, too-big and wrong-type files, a batch with one refusal, NSFW confirmation by keyboard (focus goes to Mark NSFW and back to the switch), the edit page saving Private + zero-width + NSFW and showing them after a reload (`.claude/runs/2026-11-17-overnight/screens/g8g5`).
+
 ## User search (branch `feat/account-search`)
 
 Gap list G10: find people by their Twitch or Kick name. API only; the `/search` Users tab comes next.
@@ -281,6 +292,7 @@ Work in `cyex-app/cyex-deck` goes on a feature branch with a PR the owner merges
 - [x] `searchEmotes(query, animated, owner, nsfw, page, perPage)`: 1 to 100 per page, default 50. With that, every GraphQL field in the contract is built.
 - [x] Browse data for the redesigned site (additive, `api/browse-data`): `searchEmotes(sort: RELEVANCE | TOP | NEW)`, `Emote.channelCount` (one grouped query per list), `Query.account(id)`, `Query.emoteChannels(id, limit)` (1 to 50, default 8); migration `20261119000001_channels_active_set.sql` (index); the mock API and the generated web types follow. There is no REST search endpoint, so REST only gets the optional `channel_count` on the emote shape. Tests in `search_flow.rs`.
 - [ ] Website redesign (`web/redesign`): new nav with Ctrl K palette, emote cards that play on hover, home (emote cluster, Top / New strip, chat previews, steps, install cards), browse with sort, filters and load more, emote page (preview stage, facts, used in, review, more from the creator), channel and new creator pages, signed-in pages brought to cyex-app. Research and plan in `.claude/runs/2026-11-17-web-redesign/`. Checked with the mock at 375 to 2560, dark and light; reduced motion only through headless rendering; not yet on a real phone.
+- [x] Browse parity (`feat/search-browse-parity`, web only): `/search` grid or table view (`view=`, remembered per device; Channels and Added headers sort like Top and New), exact-name match (`exact=1`, client side: the API has no arg for it), opt-in multi-select (`select=1`, Space toggles the focused tile) with a sticky bar that adds the picked emotes to one of your sets with the existing `addSetEmote`, one after another, respecting capacity. Trending is not offered: the API has no honest way to back it yet (no per-week adds). Creators' paints in the table come from the shared cosmetics cache, so only your own show (the API serves paints by platform id only). Checked with the mock at 375, 1440 and 2560, dark and light, keyboard; screens in `.claude/runs/2026-11-17-overnight/screens/g4/`.
 
 #### Tests
 - Unit: LIKE escaping.
