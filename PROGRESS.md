@@ -2,6 +2,11 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Admin v2 (branch `feat/admin-v2`)
+- API (additive): `auditLog` takes `actorId`, `action`, `since`, `until` besides target and paging; new `adminAccount` (users.view or users.restrict), `accountEmotes` (users.view, emotes.review or emotes.takedown) and `accountReports` (moderators). Postgres tests: `staff_look_up_an_account` (apps/api/tests/abuse_flow.rs) and the audit filter cases in crates/db/tests/queries.rs. Not built: sessions on the account page (no sessions API on main yet).
+- Web: `/admin/users/[accountId]` (profile, restrictions, roles, cosmetics, uploads, reports about and by, latest audit entries), `/admin/cosmetics/owners` (who owns what), audit log filters with links to targets and a Changes/JSON toggle, review queue keyboard flow (J, K, A, R) with a 1x/2x/4x comparison, reports grouped by emote.
+- Manual check (2026/11/18): headless Edge against the dev mock at 1440 and 375, dark and light, plus the keyboard flow (J, K, R, A) in the review queue; screens in .claude/runs/2026-11-17-overnight/screens/g9.
+
 ## Paint studio (branch `feat/paint-studio`, ADR 0018)
 - `apps/web/src/lib/paint-studio/`: the staff editor for name paints, built on the owner's cyex paints tool. Gradient paints (kind, angle or shape, repeat, 2 to 10 stops, up to 4 shadows, fallback colour) with the API's limits checked live; animated paints from the tool's engine (layers, effects, scene elements, presets) rendered and encoded in a Web Worker as WebP, APNG or GIF; previews on sample names on both grounds and in Twitch- and Kick-style chat; import of cyex.tv JSON, integer-colour paint JSON and tool project files, export as cyex.tv JSON, integer JSON, CSS, picture and project; Save to cyex.tv (createPaint / updatePaint; animated: render, upload, wait for ready, IMAGE paint); Open an existing paint.
 - Provenance: the tool's gradient CSS builder and integer-colour formatter were ports of the 7TV extension; neither came over (the gradient side is new code, the formatter was removed from the engine). The engine's custom-code items (`new Function`) were removed.

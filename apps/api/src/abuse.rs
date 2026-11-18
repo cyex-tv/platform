@@ -21,8 +21,8 @@ use cyex_tv_db::{
 };
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
-    AccountStatus, Emote, EmoteState, EventType, Notification, Report, ReportAction, ReportQueue,
-    ReportState,
+    AccountReports, AccountStatus, AdminAccount, Emote, EmoteState, EventType, Notification,
+    Report, ReportAction, ReportQueue, ReportState,
 };
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
@@ -505,6 +505,78 @@ pub async fn status(
         .ok_or_else(not_found)?;
     Ok(AccountStatus {
         id: ids::to_text(account_id),
+        uploads_blocked: account.restricted_at.is_some(),
+        blocked: account.blocked_at.is_some(),
+    })
+}
+
+/// Reports about an account's emotes and reports it filed. For moderators.
+pub async fn account_reports(
+    state: &AppState,
+    caller: &Caller,
+    account_id: &str,
+) -> ApiResult<AccountReports> {
+    let account_id = parse_id(account_id)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    moderator(&mut conn, caller).await?;
+    let about = reports::about_owner(&mut conn, account_id, 50)
+        .await
+        .map_err(db_error)?;
+    let by = reports::by_reporter(&mut conn, account_id, 50)
+        .await
+        .map_err(db_error)?;
+    let mut out = AccountReports {
+        about: Vec::with_capacity(about.len()),
+        by: Vec::with_capacity(by.len()),
+    };
+    for r in &about {
+        out.about.push(report_view(state, &mut conn, r).await?);
+    }
+    for r in &by {
+        out.by.push(report_view(state, &mut conn, r).await?);
+    }
+    Ok(out)
+}
+
+/// An account with its identities and restrictions. Needs `users.view` or `users.restrict`.
+pub async fn admin_account(
+    state: &AppState,
+    caller: &Caller,
+    account_id: &str,
+) -> ApiResult<AdminAccount> {
+    let account_id = parse_id(account_id)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    if !holds(&mut conn, caller, permissions::USERS_VIEW).await?
+        && !holds(&mut conn, caller, permissions::USERS_RESTRICT).await?
+    {
+        return Err(forbidden("This needs users.view or users.restrict."));
+    }
+    let account = accounts::get(&mut conn, account_id)
+        .await
+        .map_err(db_error)?
+        .filter(|a| a.deleted_at.is_none())
+        .ok_or_else(not_found)?;
+    let identities: Vec<_> = accounts::identities(&mut conn, account_id)
+        .await
+        .map_err(db_error)?
+        .into_iter()
+        .map(|i| cyex_tv_shared::model::Identity {
+            platform: i.platform,
+            platform_user_id: i.platform_user_id,
+            login: i.login,
+            display_name: i.display_name,
+            avatar: i.avatar,
+        })
+        .collect();
+    Ok(AdminAccount {
+        id: ids::to_text(account_id),
+        display_name: identities
+            .first()
+            .map(|i| i.display_name.clone())
+            .unwrap_or_default(),
+        avatar: identities.iter().find_map(|i| i.avatar.clone()),
+        identities,
+        created_at: views::time(account.created_at),
         uploads_blocked: account.restricted_at.is_some(),
         blocked: account.blocked_at.is_some(),
     })

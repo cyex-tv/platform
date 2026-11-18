@@ -20,14 +20,14 @@ use cyex_tv_hub::Message as HubMessage;
 use cyex_tv_hub::topics as hub_topics;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::model::{
-    AccountEditor, AccountStatus, AccountSummary, ActivityEntry, AddAccountEditor, AddSetEmote,
-    AuditEntry, Badge, Channel, ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind,
-    CreateBadge, CreateRole, CreateSet, EditedAccount, EditorPermission, Emote, EmotePage,
-    EmoteSet, EmoteSort, Entitlement, EntitlementPage, Event, GrantCosmetic, Identity, Me,
-    Notification, OwnedCosmetics, Paint, PaintInput, PersonalSetEntry, Platform, Report,
-    ReportAction, ReportQueue, ReviewQueue, Role, SearchResults, SetEmote, SetSummary,
-    SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole, UpdateSet,
-    UpdateSetEmote, UserCosmetics,
+    AccountEditor, AccountReports, AccountStatus, AccountSummary, ActivityEntry, AddAccountEditor,
+    AddSetEmote, AdminAccount, AuditEntry, Badge, Channel, ClonedSet, CosmeticCatalog,
+    CosmeticImage, CosmeticKind, CreateBadge, CreateRole, CreateSet, EditedAccount,
+    EditorPermission, Emote, EmotePage, EmoteSet, EmoteSort, Entitlement, EntitlementPage, Event,
+    GrantCosmetic, Identity, Me, Notification, OwnedCosmetics, Paint, PaintInput, PersonalSetEntry,
+    Platform, Report, ReportAction, ReportQueue, ReviewQueue, Role, SearchResults, SetEmote,
+    SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole,
+    UpdateSet, UpdateSetEmote, UserCosmetics,
 };
 use cyex_tv_shared::permissions;
 use futures_util::Stream;
@@ -524,13 +524,19 @@ impl Query {
             .map_err(api_error)
     }
 
-    /// Audited changes, newest first. Needs `audit.view`. Page back with `before` (an entry ID);
-    /// `limit` is 1 to 100, default 50.
+    /// Audited changes, newest first. Needs `audit.view`. Narrow by target, `actorId`, an exact
+    /// `action`, and `since` (inclusive) / `until` (exclusive) as RFC 3339 times. Page back with
+    /// `before` (an entry ID); `limit` is 1 to 100, default 50.
+    #[allow(clippy::too_many_arguments)]
     async fn audit_log(
         &self,
         ctx: &Context<'_>,
         target_kind: Option<String>,
         target_id: Option<String>,
+        actor_id: Option<String>,
+        action: Option<String>,
+        since: Option<String>,
+        until: Option<String>,
         before: Option<String>,
         limit: Option<u32>,
     ) -> Result<Vec<AuditEntry>> {
@@ -538,8 +544,14 @@ impl Query {
         admin::audit_log(
             state(ctx),
             caller,
-            target_kind.as_deref(),
-            target_id.as_deref(),
+            &admin::AuditQuery {
+                target_kind: target_kind.as_deref(),
+                target_id: target_id.as_deref(),
+                actor_id: actor_id.as_deref(),
+                action: action.as_deref(),
+                since: since.as_deref(),
+                until: until.as_deref(),
+            },
             before.as_deref(),
             limit,
         )
@@ -556,6 +568,43 @@ impl Query {
     ) -> Result<ReportQueue> {
         let caller = caller(ctx)?;
         abuse::queue(state(ctx), caller, page, per_page)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Reports about an account's emotes and the ones it filed, newest first, at most 50 each.
+    /// Needs `emotes.review` or `emotes.takedown`.
+    async fn account_reports(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+    ) -> Result<AccountReports> {
+        let caller = caller(ctx)?;
+        abuse::account_reports(state(ctx), caller, &account_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// An account as staff see it: identities, created time and restrictions. Needs
+    /// `users.view` or `users.restrict`.
+    async fn admin_account(&self, ctx: &Context<'_>, account_id: String) -> Result<AdminAccount> {
+        let caller = caller(ctx)?;
+        abuse::admin_account(state(ctx), caller, &account_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`
+    /// or `emotes.takedown`. `perPage` is 1 to 100, default 50.
+    async fn account_emotes(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+        page: Option<u32>,
+        per_page: Option<u32>,
+    ) -> Result<EmotePage> {
+        let caller = caller(ctx)?;
+        moderation::account_emotes(state(ctx), caller, &account_id, page, per_page)
             .await
             .map_err(api_error)
     }
