@@ -38,7 +38,7 @@
     </div>
     <div class="ps-row" style:justify-content="space-between">
       <span class="ps-flabel">In chat</span>
-      <Seg label="Chat ground" value={ground} onchange={(v) => (ground = v)} options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }]} />
+      <Seg label="Chat ground" value={ground} onchange={(v) => (ground = v)} options={[{ value: 'dark', label: 'Dark', icon: 'moon' }, { value: 'light', label: 'Light', icon: 'sun' }]} />
     </div>
     {#each ['twitch', 'kick'] as platform (platform)}
       <figure class="ps-chat {platform} {ground}" aria-label="{platform === 'twitch' ? 'Twitch' : 'Kick'}-style chat preview">

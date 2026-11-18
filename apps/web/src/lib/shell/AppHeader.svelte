@@ -45,7 +45,7 @@
     <div class="start">
       <a class="brand" href="/" aria-label="cyex.tv home"><Mark /><span>cyex.tv</span></a>
       <nav class="links" aria-label="Main">
-        <a href={EMOTES.href} aria-current={EMOTES.match(path) ? 'page' : undefined}>{EMOTES.label}</a>
+        <a href={EMOTES.href} aria-current={EMOTES.match(path) ? 'page' : undefined}><Icon name={EMOTES.icon} size={16} /><span class="lb" data-t={EMOTES.label}>{EMOTES.label}</span></a>
       </nav>
     </div>
 
@@ -90,12 +90,14 @@
   .brand { flex: none; display: flex; align-items: center; gap: 9px; min-height: 40px;
     font-size: 16px; font-weight: 600; letter-spacing: -.01em; color: var(--text); }
   .links { display: flex; height: 100%; }
-  .links a { position: relative; display: flex; align-items: center; padding: 0 10px; font-size: var(--t-nav); font-weight: 500;
+  /* The current item is bold with an accent icon: no underline, bar or fill (owner rule). */
+  .links a { position: relative; display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: var(--t-nav); font-weight: 500;
     color: var(--muted); transition: color var(--fast); }
-  .links a::after { content: ''; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; background: var(--accent);
-    scale: 0 1; transition: scale var(--base) var(--ease); }
-  .links a[aria-current='page'] { color: var(--text); }
-  .links a[aria-current='page']::after { scale: 1 1; }
+  .links a :global(svg) { color: var(--dim); transition: color var(--fast); }
+  .lb { display: inline-grid; }
+  .lb::after { content: attr(data-t); font-weight: 700; height: 0; overflow: hidden; visibility: hidden; user-select: none; } /* bold width reserved: no shift */
+  .links a[aria-current='page'] { color: var(--text); font-weight: 700; }
+  .links a[aria-current='page'] :global(svg) { color: var(--accent-text); }
   .links a:active { opacity: .6; transition: none; }
   .links a:focus-visible { outline-offset: -2px; }
 
@@ -136,6 +138,5 @@
     .links, .search, .end { display: none; }
     .phone { display: flex; }
   }
-  @media (prefers-reduced-motion: reduce) { .links a::after { transition: none; } }
-  @media (forced-colors: active) { .app-header { border-bottom-color: CanvasText; } .links a[aria-current='page']::after { background: Highlight; } }
+  @media (forced-colors: active) { .app-header { border-bottom-color: CanvasText; } }
 </style>

@@ -220,7 +220,7 @@
     transition: background-color var(--fast), color var(--fast); touch-action: manipulation; }
   .tabbtn[aria-selected='true'] { color: var(--text); font-weight: 600; }
   .tabbtn :global(.icon) { color: var(--dim); }
-  .tabbtn[aria-selected='true'] :global(.icon) { color: var(--accent); }
+  .tabbtn[aria-selected='true'] :global(.icon) { color: var(--accent-text); }
   .n { color: var(--dim); font-variant-numeric: tabular-nums; font-size: var(--t-label); }
   .block-title .n { margin-left: 8px; font-size: var(--t-small); font-weight: 500; }
   .tabbed .block-head { margin-top: 4px; }
@@ -236,7 +236,7 @@
     .back:hover { color: var(--text); }
     .back:hover :global(.icon) { transform: translateX(-3px); }
     .creator:hover { border-color: var(--accent-border); background: var(--surface-hover); }
-    .tabbtn:hover:not([aria-selected='true']) { background: var(--row-hover); color: var(--text); }
+    .tabbtn:hover:not([aria-selected='true']) { color: var(--text); }
   }
 
   @media (max-width: 1000px) { .panels { grid-template-columns: minmax(0, 1fr); } }

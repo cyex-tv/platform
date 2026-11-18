@@ -105,7 +105,7 @@ export const HELP: HelpGroup[] = [
     ['sign-out-everywhere', 'How do I sign out?',
       'Account menu → Sign out. Your [account page](/me/account) also lets you unlink a platform you no longer use.'],
     ['delete-account', 'Can I delete my account?',
-      'Write to us at abuse@cyex.tv from the email you want us to answer, and say which account; we remove it. A button for it is on its way.'],
+      'Yes, yourself: Account, then Delete account, and type one of your logins to confirm. It happens at once and can’t be undone. Your emotes, sets, channels, cosmetics and notifications are deleted. Approved emotes that other people have in their sets stay there, shown as made by “Deleted user”.'],
   ]),
   group('moderation', 'Moderation and takedowns', [
     ['report-emote', 'How do I report an emote?',

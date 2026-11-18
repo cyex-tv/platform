@@ -5,6 +5,7 @@
   // motion they start paused, and before the script runs a <picture> source keeps them still.
   import ChatPreview from '$lib/components/ChatPreview.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
+  import type { IconName } from '$lib/components/Icon.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import { hasStill, ready } from '$lib/emote';
   import { chatLines, scaleFiles, type ChatPool, type PageEmote } from './emote-page';
@@ -12,11 +13,11 @@
   let { emote: e, pool = [] }: { emote: PageEmote; pool?: ChatPool } = $props();
 
   type Ground = 'dark' | 'light' | 'checker' | 'chat';
-  const grounds: { value: Ground; label: string }[] = [
-    { value: 'dark', label: 'Dark' },
-    { value: 'light', label: 'Light' },
-    { value: 'checker', label: 'Checker' },
-    { value: 'chat', label: 'Chat' },
+  const grounds: { value: Ground; label: string; icon: IconName }[] = [
+    { value: 'dark', label: 'Dark', icon: 'moon' },
+    { value: 'light', label: 'Light', icon: 'sun' },
+    { value: 'checker', label: 'Checker', icon: 'grid' },
+    { value: 'chat', label: 'Chat', icon: 'message-square' },
   ];
   let ground = $state<Ground>('dark');
 

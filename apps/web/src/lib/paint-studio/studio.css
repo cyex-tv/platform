@@ -57,17 +57,6 @@
 .ps-text { width: 100%; min-height: 40px; padding: 8px 12px; font: inherit; font-size: 16px; color: var(--text);
   background: var(--surface); border: 1px solid var(--field-border); border-radius: var(--radius-btn); }
 
-/* Tabs and segmented choices: bold text and an accent bar under the selected one. */
-.ps-seg { display: inline-flex; flex-wrap: wrap; gap: 2px; max-width: 100%; border-bottom: 1px solid var(--border); }
-.ps-seg button { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px; border: 0; background: none;
-  font: inherit; font-size: var(--text-sub); font-weight: 400; color: var(--muted); cursor: pointer; border-radius: var(--radius) var(--radius) 0 0; }
-.ps-seg button[aria-checked='true'] { font-weight: 600; color: var(--text); }
-.ps-seg button[aria-checked='true']::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; background: var(--accent); border-radius: 2px; }
-.ps-seg button[aria-checked='true'] svg { color: var(--accent-text); }
-.ps-seg button:focus-visible { outline-offset: -2px; }
-@media (hover: hover) and (pointer: fine) { .ps-seg button:hover { color: var(--text); } }
-.ps-seg.big button { min-height: 44px; font-size: var(--t-ui); padding: 0 14px; }
-
 /* Lists of layers, effects, stops and shadows. */
 .ps-list { list-style: none; margin: 0; padding: 0; display: grid; }
 .ps-item { display: flex; align-items: center; gap: 4px; min-height: 44px; padding: 2px 4px 2px 8px; border-bottom: 1px solid var(--border); }
@@ -149,9 +138,8 @@ textarea.ps-text { min-height: 180px; font-family: var(--font-mono); font-size: 
   background: repeating-conic-gradient(var(--checker-a) 0 25%, var(--checker-b) 0 50%) 0 0 / 12px 12px; }
 .ps-imgbox img { max-width: 100%; height: auto; max-height: 128px; image-rendering: auto; }
 
-@media (pointer: coarse) { .ps-seg button, .ps-item .ps-pick { min-height: 44px; } }
+@media (pointer: coarse) { .ps-item .ps-pick { min-height: 44px; } }
 @media (forced-colors: active) {
-  .ps-seg button[aria-checked='true']::after { background: Highlight; }
   .ps-painted { -webkit-text-fill-color: currentColor; background: none; }
 }
 .ps-stage.ps-chip { padding: 8px 10px; border-radius: var(--radius); }
