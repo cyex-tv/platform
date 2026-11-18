@@ -1182,8 +1182,33 @@ function signedIn(body, v, ADMIN) {
   }
 }
 
+// searchAccounts(query, page, perPage): the mock's people by login or display name, exact login
+// first, then prefixes, then anything containing the text. Blocked accounts are never listed.
+let accountSearches = 0;
+const searchPeople = () => [ME_SUMMARY, ...OTHERS].map((a) => ({
+  account: a,
+  identities: [
+    { platform: 'TWITCH', login: a.displayName.toLowerCase(), displayName: a.displayName },
+    ...(a.id === OTHERS[0].id ? [{ platform: 'KICK', login: 'quietoak_live', displayName: 'QuietOak' }] : []),
+  ],
+}));
+function searchAccounts(v) {
+  if (++accountSearches > 600) return err('That’s a lot of searches. Try again in a minute.', 'rate_limited');
+  const text = String(v.query ?? '').trim().replace(/^@/, '').toLowerCase();
+  const per = Math.min(50, Math.max(1, v.perPage ?? 20));
+  const page = Math.min(1000, Math.max(1, v.page ?? 1));
+  const tier = (h) => Math.max(...h.identities.map((i) =>
+    i.login === text ? 3 : i.login.startsWith(text) ? 2 : i.displayName.toLowerCase().startsWith(text) ? 1 : 0));
+  const hits = !text ? [] : searchPeople()
+    .filter((h) => !STATUS[h.account.id]?.blocked)
+    .filter((h) => h.identities.some((i) => i.login.includes(text) || i.displayName.toLowerCase().includes(text)))
+    .sort((a, b) => tier(b) - tier(a) || a.account.id.localeCompare(b.account.id));
+  return { data: { searchAccounts: { total: hits.length, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
+}
+
 // Fields added after the site's first queries, answered by field name so any operation name works.
 function newFields(q, v, session) {
+  if (/\bsearchAccounts\s*\(/.test(q)) return searchAccounts(v);
   if (/\bcloneSet\s*\(/.test(q)) return session ? cloneSet(v, session) : err('Sign in to use this.', 'signed_out');
   if (/\baccountSets\s*\(/.test(q)) {
     const data = { accountSets: accountSets(v.accountId ?? v.id ?? '', v.preview) };

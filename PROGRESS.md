@@ -13,6 +13,23 @@ Gap list G5.
 - [x] Dev mock: the upload reads the flags and tags; the names `blocked`, `ratelimited` and `broken` answer as the API's refusals.
 - Manual check: headless Edge at 375, 768, 1440, 2560, dark and light, with the dev mock: queue with good, too-big and wrong-type files, a batch with one refusal, NSFW confirmation by keyboard (focus goes to Mark NSFW and back to the switch), the edit page saving Private + zero-width + NSFW and showing them after a reload (`.claude/runs/2026-11-17-overnight/screens/g8g5`).
 
+## User search (branch `feat/account-search`)
+
+Gap list G10: find people by their Twitch or Kick name. API only; the `/search` Users tab comes next.
+
+- [x] Migration `20261130000002_account_search.sql` (additive): trigram indexes on `lower(login)` and `lower(display_name)` of identities.
+- [x] GraphQL (additive): `searchAccounts(query, page, perPage)` returning `AccountResults { items: [AccountHit { account: AccountSummary, identities: [PublicIdentity { platform, login, displayName }] }], total, page, perPage }`. Exact login first, then login and display-name prefixes, then similar names; a leading `@` is ignored; `%` and `_` mean themselves. Public fields only (no platform IDs). Deleted and blocked accounts are never listed. `perPage` 1 to 50, default 20.
+- [x] 60 searches a minute per account, or per IP when signed out (the limits middleware now hands the client IP to GraphQL resolvers).
+- [x] Tests: `apps/api/tests/account_search_flow.rs` against Postgres in CI (ranking, both platforms in one hit, no IDs, paging, wildcards, blocked and deleted never listed signed in or out, per-account and per-IP limits).
+- [x] Dev mock: `searchAccounts` over the mock's people (quietoak has a Kick login too).
+- [ ] Website: the Users tab on `/search` and people in the palette (another task).
+
+#### GitHub write log
+```
+git push -u origin feat/account-search
+gh pr create --base main --head feat/account-search
+```
+
 ## Help, download and the cosmetics gallery (branch `web/help-download`)
 
 - [x] `/help`: 34 short answers in eight groups (getting started, the extension, uploading, sets and channels, editors, cosmetics, account and privacy, moderation and takedowns) on the docs layout. The filter narrows the index and the answers together (every word, question or answer), `/` focuses it, Escape clears it, `?q=` is kept in the address. Questions are data in `lib/help/faq.ts` (vitest: groups, unique anchors, every site link points at a route).
@@ -39,6 +56,14 @@ Gap list G1 (`.claude/runs/2026-11-17-overnight/gap-7tv.md`): sets you can share
 - [x] Tests: `apps/api/tests/public_sets_flow.rs` against Postgres in CI (defaults, private never readable by others over GraphQL and REST, active-set exception, account editors, `accountSets` of blocked and deleted accounts, clone of private and pending emotes, capacity with 1005 emotes, IDOR on `ownerId`, rate limit, audit row, `set.created`); unit tests of the visibility names.
 - [x] Dev mock: sets carry visibility; nora_byte has listed, private and personal sample sets; `accountSets`, `cloneSet`, `createSet`/`updateSet` visibility and the private rule on `set(id)`.
 - [ ] Website: `/sets/[id]`, profile set cards, clone and visibility controls (another task).
+
+#### GitHub write log
+```
+git push -u origin feat/public-sets
+gh pr create --base main --head feat/public-sets
+git push origin feat/public-sets   (merges of origin/main, a test fix)
+gh pr merge 53 --merge   (all checks green; public_sets_flow ran against Postgres in CI)
+```
 
 ## Website v4: the profile is the dashboard, cosmetics, admin cosmetics (branch `web/v4`)
 

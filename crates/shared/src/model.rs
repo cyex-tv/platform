@@ -532,6 +532,33 @@ pub struct PersonalLookupResult {
 
 // Search
 
+/// A linked Twitch or Kick account as anyone may see it: no IDs.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct PublicIdentity {
+    pub platform: Platform,
+    pub login: String,
+    pub display_name: String,
+}
+
+/// One `searchAccounts` hit: the account's public summary and its linked logins.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct AccountHit {
+    pub account: AccountSummary,
+    /// Twitch first.
+    pub identities: Vec<PublicIdentity>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct AccountResults {
+    pub items: Vec<AccountHit>,
+    pub total: u64,
+    pub page: u32,
+    pub per_page: u32,
+}
+
 /// How `searchEmotes` orders its results.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
