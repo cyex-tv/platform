@@ -52,7 +52,13 @@ type Documents = {
     "\n  mutation RemoveAccountEditor($ownerId: String, $accountId: String!) {\n    removeAccountEditor(ownerId: $ownerId, accountId: $accountId)\n  }\n": typeof types.RemoveAccountEditorDocument,
     "\n  mutation Unlink($platform: Platform!) {\n    unlinkIdentity(platform: $platform) {\n      id\n    }\n  }\n": typeof types.UnlinkDocument,
     "\n  query MyNotifications {\n    myNotifications {\n      id\n      kind\n      payload\n      createdAt\n      read\n    }\n  }\n": typeof types.MyNotificationsDocument,
-    "\n  mutation MarkRead {\n    markNotificationsRead\n  }\n": typeof types.MarkReadDocument,
+    "\n  mutation MarkRead($ids: [String!]) {\n    markNotificationsRead(ids: $ids)\n  }\n": typeof types.MarkReadDocument,
+    "\n  query UnreadCount {\n    unreadNotificationCount\n  }\n": typeof types.UnreadCountDocument,
+    "\n  query MySessions {\n    mySessions {\n      id\n      kind\n      device\n      createdAt\n      lastSeenAt\n      expiresAt\n      current\n    }\n  }\n": typeof types.MySessionsDocument,
+    "\n  mutation RevokeSession($id: String!) {\n    revokeSession(id: $id)\n  }\n": typeof types.RevokeSessionDocument,
+    "\n  mutation RevokeOtherSessions {\n    revokeOtherSessions\n  }\n": typeof types.RevokeOtherSessionsDocument,
+    "\n  mutation ExportMyData {\n    exportMyData\n  }\n": typeof types.ExportMyDataDocument,
+    "\n  mutation DeleteAccount($confirm: String!) {\n    deleteAccount(confirm: $confirm)\n  }\n": typeof types.DeleteAccountDocument,
     "\n  query AdminCounts($review: Boolean!, $reports: Boolean!) {\n    reviewQueue(page: 1, perPage: 1) @include(if: $review) {\n      total\n    }\n    reportQueue(page: 1, perPage: 1) @include(if: $reports) {\n      total\n    }\n    globalSet {\n      id\n    }\n  }\n": typeof types.AdminCountsDocument,
     "\n  query ReviewQueue($page: Int, $perPage: Int) {\n    reviewQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.ReviewQueueDocument,
     "\n  mutation Approve($id: String!) {\n    approveEmote(id: $id) {\n      id\n      state\n    }\n  }\n": typeof types.ApproveDocument,
@@ -137,7 +143,13 @@ const documents: Documents = {
     "\n  mutation RemoveAccountEditor($ownerId: String, $accountId: String!) {\n    removeAccountEditor(ownerId: $ownerId, accountId: $accountId)\n  }\n": types.RemoveAccountEditorDocument,
     "\n  mutation Unlink($platform: Platform!) {\n    unlinkIdentity(platform: $platform) {\n      id\n    }\n  }\n": types.UnlinkDocument,
     "\n  query MyNotifications {\n    myNotifications {\n      id\n      kind\n      payload\n      createdAt\n      read\n    }\n  }\n": types.MyNotificationsDocument,
-    "\n  mutation MarkRead {\n    markNotificationsRead\n  }\n": types.MarkReadDocument,
+    "\n  mutation MarkRead($ids: [String!]) {\n    markNotificationsRead(ids: $ids)\n  }\n": types.MarkReadDocument,
+    "\n  query UnreadCount {\n    unreadNotificationCount\n  }\n": types.UnreadCountDocument,
+    "\n  query MySessions {\n    mySessions {\n      id\n      kind\n      device\n      createdAt\n      lastSeenAt\n      expiresAt\n      current\n    }\n  }\n": types.MySessionsDocument,
+    "\n  mutation RevokeSession($id: String!) {\n    revokeSession(id: $id)\n  }\n": types.RevokeSessionDocument,
+    "\n  mutation RevokeOtherSessions {\n    revokeOtherSessions\n  }\n": types.RevokeOtherSessionsDocument,
+    "\n  mutation ExportMyData {\n    exportMyData\n  }\n": types.ExportMyDataDocument,
+    "\n  mutation DeleteAccount($confirm: String!) {\n    deleteAccount(confirm: $confirm)\n  }\n": types.DeleteAccountDocument,
     "\n  query AdminCounts($review: Boolean!, $reports: Boolean!) {\n    reviewQueue(page: 1, perPage: 1) @include(if: $review) {\n      total\n    }\n    reportQueue(page: 1, perPage: 1) @include(if: $reports) {\n      total\n    }\n    globalSet {\n      id\n    }\n  }\n": types.AdminCountsDocument,
     "\n  query ReviewQueue($page: Int, $perPage: Int) {\n    reviewQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.ReviewQueueDocument,
     "\n  mutation Approve($id: String!) {\n    approveEmote(id: $id) {\n      id\n      state\n    }\n  }\n": types.ApproveDocument,
@@ -336,7 +348,31 @@ export function graphql(source: "\n  query MyNotifications {\n    myNotification
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  mutation MarkRead {\n    markNotificationsRead\n  }\n"): typeof import('./graphql').MarkReadDocument;
+export function graphql(source: "\n  mutation MarkRead($ids: [String!]) {\n    markNotificationsRead(ids: $ids)\n  }\n"): typeof import('./graphql').MarkReadDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query UnreadCount {\n    unreadNotificationCount\n  }\n"): typeof import('./graphql').UnreadCountDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query MySessions {\n    mySessions {\n      id\n      kind\n      device\n      createdAt\n      lastSeenAt\n      expiresAt\n      current\n    }\n  }\n"): typeof import('./graphql').MySessionsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation RevokeSession($id: String!) {\n    revokeSession(id: $id)\n  }\n"): typeof import('./graphql').RevokeSessionDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation RevokeOtherSessions {\n    revokeOtherSessions\n  }\n"): typeof import('./graphql').RevokeOtherSessionsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation ExportMyData {\n    exportMyData\n  }\n"): typeof import('./graphql').ExportMyDataDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteAccount($confirm: String!) {\n    deleteAccount(confirm: $confirm)\n  }\n"): typeof import('./graphql').DeleteAccountDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

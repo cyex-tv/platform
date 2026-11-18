@@ -1815,10 +1815,46 @@ export type MyNotificationsQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type MyNotificationsQuery = { __typename?: 'Query', myNotifications: Array<{ __typename?: 'Notification', id: string, kind: string, payload: string, createdAt: string, read: boolean }> };
 
-export type MarkReadMutationVariables = Exact<{ [key: string]: never; }>;
+export type MarkReadMutationVariables = Exact<{
+  ids?: InputMaybe<Array<Scalars['String']['input']> | Scalars['String']['input']>;
+}>;
 
 
 export type MarkReadMutation = { __typename?: 'Mutation', markNotificationsRead: number };
+
+export type UnreadCountQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type UnreadCountQuery = { __typename?: 'Query', unreadNotificationCount: number };
+
+export type MySessionsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type MySessionsQuery = { __typename?: 'Query', mySessions: Array<{ __typename?: 'AccountSession', id: string, kind: SessionKind, device: string, createdAt: string, lastSeenAt: string, expiresAt: string, current: boolean }> };
+
+export type RevokeSessionMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type RevokeSessionMutation = { __typename?: 'Mutation', revokeSession: boolean };
+
+export type RevokeOtherSessionsMutationVariables = Exact<{ [key: string]: never; }>;
+
+
+export type RevokeOtherSessionsMutation = { __typename?: 'Mutation', revokeOtherSessions: number };
+
+export type ExportMyDataMutationVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ExportMyDataMutation = { __typename?: 'Mutation', exportMyData: string };
+
+export type DeleteAccountMutationVariables = Exact<{
+  confirm: Scalars['String']['input'];
+}>;
+
+
+export type DeleteAccountMutation = { __typename?: 'Mutation', deleteAccount: boolean };
 
 export type AdminCountsQueryVariables = Exact<{
   review: Scalars['Boolean']['input'];
@@ -3171,10 +3207,48 @@ export const MyNotificationsDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<MyNotificationsQuery, MyNotificationsQueryVariables>;
 export const MarkReadDocument = new TypedDocumentString(`
-    mutation MarkRead {
-  markNotificationsRead
+    mutation MarkRead($ids: [String!]) {
+  markNotificationsRead(ids: $ids)
 }
     `) as unknown as TypedDocumentString<MarkReadMutation, MarkReadMutationVariables>;
+export const UnreadCountDocument = new TypedDocumentString(`
+    query UnreadCount {
+  unreadNotificationCount
+}
+    `) as unknown as TypedDocumentString<UnreadCountQuery, UnreadCountQueryVariables>;
+export const MySessionsDocument = new TypedDocumentString(`
+    query MySessions {
+  mySessions {
+    id
+    kind
+    device
+    createdAt
+    lastSeenAt
+    expiresAt
+    current
+  }
+}
+    `) as unknown as TypedDocumentString<MySessionsQuery, MySessionsQueryVariables>;
+export const RevokeSessionDocument = new TypedDocumentString(`
+    mutation RevokeSession($id: String!) {
+  revokeSession(id: $id)
+}
+    `) as unknown as TypedDocumentString<RevokeSessionMutation, RevokeSessionMutationVariables>;
+export const RevokeOtherSessionsDocument = new TypedDocumentString(`
+    mutation RevokeOtherSessions {
+  revokeOtherSessions
+}
+    `) as unknown as TypedDocumentString<RevokeOtherSessionsMutation, RevokeOtherSessionsMutationVariables>;
+export const ExportMyDataDocument = new TypedDocumentString(`
+    mutation ExportMyData {
+  exportMyData
+}
+    `) as unknown as TypedDocumentString<ExportMyDataMutation, ExportMyDataMutationVariables>;
+export const DeleteAccountDocument = new TypedDocumentString(`
+    mutation DeleteAccount($confirm: String!) {
+  deleteAccount(confirm: $confirm)
+}
+    `) as unknown as TypedDocumentString<DeleteAccountMutation, DeleteAccountMutationVariables>;
 export const AdminCountsDocument = new TypedDocumentString(`
     query AdminCounts($review: Boolean!, $reports: Boolean!) {
   reviewQueue(page: 1, perPage: 1) @include(if: $review) {

@@ -34,6 +34,14 @@ export function date(iso: string): string {
   return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())}`;
 }
 
+/** An RFC 3339 time as `2026/11/17 22:40`, in the reader's time zone, 24-hour. */
+export function dateTime(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const p = (v: number) => v.toString().padStart(2, '0');
+  return `${date(iso)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 /**
  * A name or text from someone else, safe to show: the bidi embedding, override and isolate
  * controls (U+202A-202E, U+2066-2069) are removed, so a name can't flip the text around it.

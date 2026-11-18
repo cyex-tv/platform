@@ -16,6 +16,8 @@
   import { openPalette } from '$lib/components/palette.svelte';
   import { clean } from '$lib/format';
   import { session } from '$lib/tool/session.svelte';
+  import NotificationBell from '$lib/account/NotificationBell.svelte';
+  import { inbox, watchInbox } from '$lib/account/inbox.svelte';
   import AccountLinks from './AccountLinks.svelte';
   import AccountMenu from './AccountMenu.svelte';
   import { EMOTES } from './account';
@@ -28,6 +30,9 @@
   const path = $derived(page.url.pathname);
   // Back to where you were after signing in (the sign-in page itself sends you to /me).
   const signin = $derived(path === '/signin' ? '/signin' : `/signin?back=${encodeURIComponent(path)}`);
+
+  // Keep the unread count fresh while signed in (the bell and the phone menu both show it).
+  $effect(() => (me ? watchInbox() : undefined));
 
   function search() {
     menu = false;
@@ -59,13 +64,14 @@
         <span class="hb-hold" aria-hidden="true"></span>
       {/if}
       <ThemeToggle />
+      {#if me}<NotificationBell />{/if}
       <AccountMenu bind:open={account} />
     </div>
 
     <div class="phone">
       <IconButton icon="search" label="Search" tip="none" onclick={search} />
-      <button class="menu-btn" type="button" aria-label="Menu" aria-expanded={menu} aria-haspopup="dialog" onclick={() => (menu = true)}>
-        {#if me}<Avatar src={who?.avatar} name={clean(who?.displayName)} size={28} />{:else}<Icon name="menu" size={18} />{/if}
+      <button class="menu-btn" type="button" aria-label={me && inbox.count ? 'Menu, you have unread notifications' : 'Menu'} aria-expanded={menu} aria-haspopup="dialog" onclick={() => (menu = true)}>
+        {#if me}<Avatar src={who?.avatar} name={clean(who?.displayName)} size={28} />{#if inbox.count}<span class="dot" aria-hidden="true"></span>{/if}{:else}<Icon name="menu" size={18} />{/if}
       </button>
     </div>
   </div>
@@ -107,6 +113,8 @@
   .phone { display: none; align-items: center; justify-content: flex-end; gap: 4px; }
   .menu-btn { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--radius-btn);
     background: none; color: var(--muted); cursor: pointer; transition: transform var(--dur-press) ease-out; }
+  .menu-btn { position: relative; }
+  .dot { position: absolute; top: 6px; right: 5px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--bg); }
   .menu-btn:active { transform: scale(var(--press)); }
   @media (pointer: coarse) {
     .menu-btn { width: 44px; height: 44px; }

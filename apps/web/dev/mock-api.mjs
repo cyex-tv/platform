@@ -516,6 +516,14 @@ const NOTES = [
   { id: 'N1', kind: 'emote.rejected', payload: JSON.stringify({ emote_id: MINE[2].id, name: MINE[2].name, reason: 'Looks like a copy of a well-known emote.' }), createdAt: '2026-11-16T21:00:00.000Z', read: false },
 ];
 NOTES.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+// MOCK_NOTES=none: no notifications; MOCK_NOTES=120: that many unread ones (the API lists the latest 100).
+if (process.env.MOCK_NOTES === 'none') NOTES.length = 0;
+else if (Number(process.env.MOCK_NOTES) > NOTES.length) {
+  const kinds = ['emote.approved', 'emote.rejected', 'cosmetic.granted', 'editor.added'];
+  for (let i = NOTES.length; i < Number(process.env.MOCK_NOTES); i++)
+    NOTES.push({ id: `01JD8XBULK${String(i).padStart(16, '0')}`, kind: kinds[i % 4], payload: JSON.stringify({ emote_id: MINE[i % MINE.length].id, name: `Bulk${i}`, kind: 'paint', role: 'editor', owner_name: 'Ana', reason: 'Sample' }), createdAt: new Date(Date.parse('2026-11-14T00:00:00Z') - i * 3_600_000).toISOString(), read: false });
+  NOTES.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
 // Account editors (ADR 0014): two people work on the mock account, and it works on two others'.
 const EDITOR_FLAGS = ['EMOTES', 'SETS', 'EDITORS', 'PROFILE'];
 const ACCOUNT_EDITORS = [
@@ -1135,12 +1143,7 @@ function signedIn(body, v, ADMIN) {
       return { data: { unlinkIdentity: { id: ME_ID } } };
     }
     case 'MyNotifications':
-      return { data: { myNotifications: NOTES } };
-    case 'MarkRead': {
-      const n = NOTES.filter((x) => !x.read).length;
-      NOTES.forEach((x) => (x.read = true));
-      return { data: { markNotificationsRead: n } };
-    }
+      return { data: { myNotifications: NOTES.slice(0, 100) } };
     case 'Emote':
       return { data: { emote: findEmote(v.id) ?? PENDING.find((e) => e.id === v.id) ?? null } };
     case 'AdminCounts':
@@ -1274,6 +1277,8 @@ const SESSIONS = [
   { id: '01JD8XSESS0000000000000004', kind: 'SITE', device: 'Chrome on Android', createdAt: '2026-11-02T10:00:00.000Z', lastSeenAt: '2026-11-03T10:00:00.000Z', expiresAt: '2026-12-03T10:00:00.000Z', current: false },
 ];
 let exports = 0;
+if (process.env.MOCK_LONG === '1') SESSIONS[1].device = 'Mozilla Firefox Developer Edition on Windows 11 Enterprise N with a rather long device name that keeps going and going';
+
 // exportMyData: the API's document shape, filled from the mock's data.
 const exportDoc = () => JSON.stringify({
   format: 'cyex.tv account export', version: 1, exported_at: new Date().toISOString(),

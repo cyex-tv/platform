@@ -443,8 +443,52 @@ export const MY_NOTIFICATIONS = graphql(`
 `);
 
 export const MARK_READ = graphql(`
-  mutation MarkRead {
-    markNotificationsRead
+  mutation MarkRead($ids: [String!]) {
+    markNotificationsRead(ids: $ids)
+  }
+`);
+
+export const UNREAD_COUNT = graphql(`
+  query UnreadCount {
+    unreadNotificationCount
+  }
+`);
+
+export const MY_SESSIONS = graphql(`
+  query MySessions {
+    mySessions {
+      id
+      kind
+      device
+      createdAt
+      lastSeenAt
+      expiresAt
+      current
+    }
+  }
+`);
+
+export const REVOKE_SESSION = graphql(`
+  mutation RevokeSession($id: String!) {
+    revokeSession(id: $id)
+  }
+`);
+
+export const REVOKE_OTHER_SESSIONS = graphql(`
+  mutation RevokeOtherSessions {
+    revokeOtherSessions
+  }
+`);
+
+export const EXPORT_MY_DATA = graphql(`
+  mutation ExportMyData {
+    exportMyData
+  }
+`);
+
+export const DELETE_ACCOUNT = graphql(`
+  mutation DeleteAccount($confirm: String!) {
+    deleteAccount(confirm: $confirm)
   }
 `);
 
