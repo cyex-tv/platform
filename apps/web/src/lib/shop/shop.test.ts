@@ -58,7 +58,7 @@ describe('redeem codes', () => {
 describe('error messages', () => {
   const e = (code: string, message = 'raw') => new ApiError(message, code);
   it('maps every shop code to a sentence of its own', () => {
-    for (const code of ['signed_out', 'item_unavailable', 'sold_out', 'already_owned', 'recipient_not_found', 'checkout_unavailable', 'payment_provider_error', 'rate_limited', 'offline']) {
+    for (const code of ['signed_out', 'item_unavailable', 'sold_out', 'already_owned', 'recipient_not_found', 'checkout_unavailable', 'payment_provider_error', 'checkout_busy', 'checkout_failed', 'unknown_client', 'rate_limited', 'offline']) {
       const m = shopMessage(e(code));
       expect(m).not.toBe('raw');
       expect(m.length).toBeGreaterThan(10);
@@ -87,6 +87,7 @@ describe('error messages', () => {
   it('maps staff codes', () => {
     expect(staffMessage(e('bad_price_id'))).toContain('pri_');
     expect(staffMessage(e('not_refundable'))).toContain('paid');
+    for (const code of ['already_refunded', 'refund_in_progress']) expect(staffMessage(e(code))).not.toBe('raw');
     expect(staffMessage(e('unknown_thing', 'As the API says.'))).toBe('As the API says.');
     expect(staffMessage(new Error('x'))).toBe('That didn’t work. Nothing was changed.');
   });

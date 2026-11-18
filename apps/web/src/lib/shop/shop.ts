@@ -52,6 +52,9 @@ const SHOP: Record<string, string> = {
   recipient_not_found: 'No cyex.tv account has that login on that platform. They need to have signed in to cyex.tv once.',
   checkout_unavailable: 'Buying isn’t available yet. Try again later.',
   payment_provider_error: 'The payment provider didn’t answer as expected. Nothing was charged. Try again in a moment.',
+  checkout_busy: 'A checkout for this is still starting. Try again in a minute.',
+  checkout_failed: 'The checkout couldn’t be started. Nothing was charged. Try again in a moment.',
+  unknown_client: 'This browser isn’t one cyex.tv can sell to. Reload the page and try again.',
   rate_limited: 'That’s a lot of tries. Wait a while, then try again.',
   not_found: 'That doesn’t exist any more.',
   offline: 'cyex.tv can’t be reached right now. Check your connection and try again.',
@@ -95,6 +98,8 @@ export function redeemMessage(err: unknown): string {
 
 const STAFF: Record<string, string> = {
   not_refundable: 'Only paid orders can be refunded, and only once.',
+  already_refunded: 'That order was refunded already.',
+  refund_in_progress: 'A refund for that order is already in progress. Check again in a minute.',
   refund_failed: 'The payment provider refused the refund. Nothing changed here. Try again, or refund it in Paddle.',
   bad_reason: 'Give a reason of 1 to 500 characters.',
   bad_name: 'Names are 1 to 64 characters.',
