@@ -20,6 +20,7 @@
   let description = $state('');
   let position = $state(10);
   let picked = $state<string[]>([]);
+  let shown = $state(false);
   let saving = $state(false);
   let tried = $state(false);
   const nameError = $derived(tried && !name.trim() ? 'Give it a name.' : null);
@@ -37,6 +38,7 @@
     description = role?.description ?? '';
     position = role?.position ?? 10;
     picked = [...(role?.permissions ?? [])];
+    shown = role?.public ?? false;
     dialog.showModal();
   }
 
@@ -54,12 +56,12 @@
       if (editing) {
         await gql(UPDATE_ROLE, {
           id: editing.id,
-          input: { name: name.trim(), description: description.trim(), position, permissions: picked },
+          input: { name: name.trim(), description: description.trim(), position, permissions: picked, public: shown },
         });
         notify(`${name.trim()} saved.`);
       } else {
         await gql(CREATE_ROLE, {
-          input: { name: name.trim(), description: description.trim() || null, position, permissions: picked },
+          input: { name: name.trim(), description: description.trim() || null, position, permissions: picked, public: shown },
         });
         notify(`${name.trim()} created.`);
       }
@@ -104,7 +106,7 @@
         <li class="row">
           <span class="pos ui-mono" title="Position">{r.position}</span>
           <span class="what">
-            <strong><Name value={r.name} /></strong>
+            <strong><Name value={r.name} />{#if r.public}<span class="ui-chip shown" title="Shown on the profiles of the people who hold it">On profiles</span>{/if}</strong>
             {#if r.description}<span class="ui-hint"><Name value={r.description} /></span>{/if}
           </span>
           <span class="perms">{#each r.permissions as p}<span class="ui-chip">{p}</span>{:else}<span class="ui-hint">No permissions</span>{/each}</span>
@@ -140,6 +142,10 @@
         <span class="ui-label">Description</span>
         <input class="ui-input" bind:value={description} maxlength="200" />
       </label>
+      <label class="ui-check">
+        <input type="checkbox" bind:checked={shown} />
+        <span>Shown on profiles<span class="ui-hint"> Everyone sees this role on the profile of anyone who holds it.</span></span>
+      </label>
       <fieldset class="ui-field">
         <legend class="ui-label">Permissions</legend>
         <div class="grid">
@@ -166,6 +172,7 @@
   .ui-list > li.row { padding-block: 12px; }
   .head { align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--row-alt); }
   .actions-h { text-align: right; }
+  .shown { margin-left: 8px; vertical-align: middle; }
   .pos { color: var(--dim); padding-top: 1px; }
   .what { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
   .perms { display: flex; flex-wrap: wrap; gap: 4px; }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Segmented from '$lib/components/Segmented.svelte';
   // Account editors (ADR 0014): the people who work on your sets and channels, with what each one
   // may do, and the accounts you edit yourself. Adding is by Twitch or Kick login (they need to
   // have signed in to cyex.tv once).
@@ -176,10 +177,7 @@
       {:else}
         <div class="ui-field">
           <span class="ui-label" id="platform-label">Their login on</span>
-          <div class="ui-seg" role="group" aria-labelledby="platform-label">
-            <button type="button" aria-pressed={platform === 'TWITCH'} onclick={() => (platform = 'TWITCH')}>Twitch</button>
-            <button type="button" aria-pressed={platform === 'KICK'} onclick={() => (platform = 'KICK')}>Kick</button>
-          </div>
+          <Segmented label="Their login on" options={[{ value: 'TWITCH', label: 'Twitch', icon: 'twitch' }, { value: 'KICK', label: 'Kick', icon: 'kick' }]} value={platform} onchange={(v) => (platform = v)} />
           <input class="ui-input" bind:value={login} placeholder="Login" aria-label="Their login" autocomplete="off" spellcheck="false"
             maxlength="64" aria-invalid={problem ? 'true' : undefined} aria-describedby={problem ? 'add-err' : undefined} />
           {#if problem}<span class="ui-error" id="add-err">{problem}</span>{/if}
@@ -248,7 +246,7 @@
   .ui-list .ui-actions { flex: none; }
   .add { display: grid; gap: 16px; }
   .add > h2 + * { margin-top: 0; }
-  .ui-seg { justify-self: start; }
+  .ui-field :global(.seg) { justify-self: start; }
   .perms { display: grid; gap: 2px; margin: 0; padding: 0; border: 0; min-width: 0; }
   .perms legend { padding: 0; margin-bottom: 6px; }
   .perm { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; padding: 6px 0; cursor: pointer; }

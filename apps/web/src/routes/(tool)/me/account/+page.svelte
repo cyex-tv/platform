@@ -10,7 +10,6 @@
   import { UNLINK } from '$lib/queries';
   import Avatar from '$lib/components/Avatar.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
-  import { leave } from '$lib/shell/signout';
   import { loadMe, session } from '$lib/tool/session.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
@@ -79,12 +78,6 @@
 
     <DataPanel />
 
-    <section class="ui-card">
-      <h2>Sign out</h2>
-      <p class="ui-hint">Ends this session on this device. Your sets and channels stay as they are.</p>
-      <div class="ui-actions gap"><button class="ui-btn secondary" type="button" onclick={leave}>Sign out</button></div>
-    </section>
-
     <DeleteAccount />
   </div>
 </div>
@@ -96,5 +89,4 @@
   .pad { padding: 10px 14px 12px; }
   .perms { display: flex; flex-wrap: wrap; gap: 6px; text-transform: none; }
   .perms .ui-chip { text-transform: none; letter-spacing: 0; font-family: var(--font-mono); font-weight: 600; }
-  .gap { margin-top: 12px; }
 </style>

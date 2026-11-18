@@ -14,7 +14,7 @@
 </script>
 
 <div class="lp">
-  <Segmented label="Preview background" size="s" options={[{ value: 'dark', label: 'Dark' }, { value: 'light', label: 'Light' }, { value: 'chat', label: 'Chat' }]}
+  <Segmented label="Preview background" size="s" options={[{ value: 'dark', label: 'Dark', icon: 'moon' }, { value: 'light', label: 'Light', icon: 'sun' }, { value: 'chat', label: 'Chat', icon: 'message-square' }]}
     value={ground} onchange={(v) => (ground = v)} />
   {#if ground === 'chat'}
     <div class="chat" aria-label="{name} in chat">

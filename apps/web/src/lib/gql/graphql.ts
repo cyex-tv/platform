@@ -64,7 +64,10 @@ export type AccountResults = {
   items: Array<AccountHit>;
   page: Scalars['Int']['output'];
   perPage: Scalars['Int']['output'];
+  /** How many accounts match, counted up to 1000. */
   total: Scalars['Int']['output'];
+  /** More than `total` match: show it as "1000+". */
+  totalCapped: Scalars['Boolean']['output'];
 };
 
 /** One place you are signed in. Never holds the token or anything made from it. */
@@ -168,6 +171,17 @@ export type ActivityKind =
   | 'SET_EMOTE_RENAMED'
   /** A set was renamed (`from_name`, `to_name`). */
   | 'SET_RENAMED';
+
+/**
+ * A page of an activity feed. A page can hold fewer lines than asked for without being the last
+ * one: the feed skips what isn't public.
+ */
+export type ActivityPage = {
+  __typename?: 'ActivityPage';
+  entries: Array<ActivityEntry>;
+  /** Pass as `before` to get the next page; null when there is none. */
+  next?: Maybe<Scalars['String']['output']>;
+};
 
 /** A set, as a feed line names it. */
 export type ActivitySet = {
@@ -648,7 +662,7 @@ export type Mutation = {
    * your approved emotes that are in other people's sets stay, shown as by a deleted user;
    * your other emotes are deleted. Signing in again later makes a new account. Audited.
    * `confirm_mismatch` when `confirm` isn't one of your logins; `restricted` while the account's
-   * uploads or sign-in are blocked.
+   * uploads or sign-in are blocked. 3 tries an hour (`rate_limited`).
    */
   deleteAccount: Scalars['Boolean']['output'];
   /**
@@ -1269,9 +1283,17 @@ export type Query = {
    * An account's public activity, newest first, like 7TV's "Activity" tab: sets and emotes the
    * owner or their editors changed, the active set, badge and paint picks, approved uploads.
    * Page back with `before` (an entry ID); `limit` is 1 to 100, default 30. Empty when the
-   * account is unknown, deleted or blocked. Nothing private or from moderation shows.
+   * account is unknown, deleted or blocked. Nothing private or from moderation shows. A page
+   * can be shorter than `limit` and still not the last: use `accountActivityPage` to know.
+   * A heavy read: 120 a minute per account, or per IP signed out (`rate_limited`).
    */
   accountActivity: Array<ActivityEntry>;
+  /**
+   * `accountActivity` with a cursor: `next` is the `before` for the following page, null when
+   * there is none. A page can hold fewer than `limit` entries and still have a `next`, because
+   * the feed skips what isn't public.
+   */
+  accountActivityPage: ActivityPage;
   /**
    * The badge and paint up to 100 accounts show, with the badges and paints themselves, by
    * cyex.tv account ID (for names on profiles, tiles and lists). Only accounts showing
@@ -1294,7 +1316,8 @@ export type Query = {
   /**
    * An account's `LISTED` sets as profile cards, oldest first, at most 50. `preview` is how
    * many of each set's newest emotes to include, 0 to 50, default 12. Empty when the account
-   * is unknown, deleted or blocked.
+   * is unknown, deleted or blocked. Counts as a heavy read: 120 a minute per account, or per IP
+   * signed out (`rate_limited`), and a high query cost.
    */
   accountSets: Array<SetSummary>;
   /**
@@ -1344,9 +1367,16 @@ export type Query = {
    * as by its owner) and `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED` in listed
    * sets, by their owners and account editors. Page back with `before` (an entry ID); `limit`
    * is 1 to 100, default 30. Empty when the emote is unknown or not public. Nothing private or
-   * from moderation shows.
+   * from moderation shows. A page can be shorter than `limit` and still not the last: use
+   * `emoteActivityPage` to know. A heavy read: 120 a minute per account, or per IP signed out
+   * (`rate_limited`).
    */
   emoteActivity: Array<ActivityEntry>;
+  /**
+   * `emoteActivity` with a cursor: `next` is the `before` for the following page, null when
+   * there is none. A page can hold fewer than `limit` entries and still have a `next`.
+   */
+  emoteActivityPage: ActivityPage;
   /**
    * Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
    * default 8. Empty when the emote is unknown or not public.
@@ -1407,7 +1437,9 @@ export type Query = {
    * Accounts by Twitch or Kick login or display name (a leading `@` is ignored): exact login
    * first, then login and name prefixes, then similar names. Public fields only; deleted and
    * blocked accounts are never listed. `perPage` is 1 to 50, default 20. 60 searches a minute
-   * per account, or per IP signed out (`rate_limited`). An empty `query` finds nobody.
+   * per account, or per IP signed out (`rate_limited`). A `query` under 2 characters (after the
+   * `@`) finds nobody. Matches are counted up to 1000: `totalCapped` says there are more, and
+   * the pages end there.
    */
   searchAccounts: AccountResults;
   /**
@@ -1448,6 +1480,13 @@ export type QueryAccountArgs = {
 
 
 export type QueryAccountActivityArgs = {
+  accountId: Scalars['String']['input'];
+  before?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryAccountActivityPageArgs = {
   accountId: Scalars['String']['input'];
   before?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -1531,6 +1570,13 @@ export type QueryEmoteArgs = {
 
 
 export type QueryEmoteActivityArgs = {
+  before?: InputMaybe<Scalars['String']['input']>;
+  emoteId: Scalars['String']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryEmoteActivityPageArgs = {
   before?: InputMaybe<Scalars['String']['input']>;
   emoteId: Scalars['String']['input'];
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -1985,6 +2031,7 @@ export type PublicSetQuery = { __typename?: 'Query', set?: { __typename?: 'Emote
 export type CloneSetMutationVariables = Exact<{
   id: Scalars['String']['input'];
   name?: InputMaybe<Scalars['String']['input']>;
+  visibility?: InputMaybe<SetVisibility>;
 }>;
 
 
@@ -2263,19 +2310,19 @@ export type TakedownMutationVariables = Exact<{
 
 export type TakedownMutation = { __typename?: 'Mutation', takedownEmote: { __typename?: 'Emote', id: string, state: EmoteState } };
 
-export type RoleFieldsFragment = { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> };
+export type RoleFieldsFragment = { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean };
 
 export type RolesQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type RolesQuery = { __typename?: 'Query', permissions: Array<string>, roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> }> };
+export type RolesQuery = { __typename?: 'Query', permissions: Array<string>, roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean }> };
 
 export type CreateRoleMutationVariables = Exact<{
   input: CreateRoleInput;
 }>;
 
 
-export type CreateRoleMutation = { __typename?: 'Mutation', createRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> } };
+export type CreateRoleMutation = { __typename?: 'Mutation', createRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean } };
 
 export type UpdateRoleMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -2283,7 +2330,7 @@ export type UpdateRoleMutationVariables = Exact<{
 }>;
 
 
-export type UpdateRoleMutation = { __typename?: 'Mutation', updateRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> } };
+export type UpdateRoleMutation = { __typename?: 'Mutation', updateRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean } };
 
 export type DeleteRoleMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -2307,12 +2354,12 @@ export type UserDetailsQueryVariables = Exact<{
 }>;
 
 
-export type UserDetailsQuery = { __typename?: 'Query', accountStatus?: { __typename?: 'AccountStatus', uploadsBlocked: boolean, blocked: boolean }, accountRoles?: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> }> };
+export type UserDetailsQuery = { __typename?: 'Query', accountStatus?: { __typename?: 'AccountStatus', uploadsBlocked: boolean, blocked: boolean }, accountRoles?: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean }> };
 
 export type AllRolesQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type AllRolesQuery = { __typename?: 'Query', roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> }> };
+export type AllRolesQuery = { __typename?: 'Query', roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean }> };
 
 export type RestrictMutationVariables = Exact<{
   accountId: Scalars['String']['input'];
@@ -2405,6 +2452,20 @@ export type UserCosmeticsQueryVariables = Exact<{
 
 
 export type UserCosmeticsQuery = { __typename?: 'Query', userCosmetics: Array<{ __typename?: 'UserCosmetics', platformUserId: string, badgeId?: string | null, paintId?: string | null }> };
+
+export type AccountCosmeticsQueryVariables = Exact<{
+  accountIds: Array<Scalars['String']['input']> | Scalars['String']['input'];
+}>;
+
+
+export type AccountCosmeticsQuery = { __typename?: 'Query', accountCosmetics: Array<{ __typename?: 'AccountCosmetics', accountId: string, badge?: { __typename?: 'Badge', id: string, name: string, tooltip: string, image: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } } | null, paint?: { __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null } | null }> };
+
+export type AccountProfileQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type AccountProfileQuery = { __typename?: 'Query', accountProfile?: { __typename?: 'AccountProfile', createdAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }>, roles: Array<{ __typename?: 'PublicRole', id: string, name: string }>, activeSets: Array<{ __typename?: 'ActiveChannelSet', platform: Platform, login: string, setId: string, setName: string }> } | null };
 
 export type MyCosmeticsQueryVariables = Exact<{
   accountId?: InputMaybe<Scalars['String']['input']>;
@@ -2529,7 +2590,7 @@ export type AccountActivityQueryVariables = Exact<{
 }>;
 
 
-export type AccountActivityQuery = { __typename?: 'Query', accountActivity: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> };
+export type AccountActivityQuery = { __typename?: 'Query', accountActivityPage: { __typename?: 'ActivityPage', next?: string | null, entries: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> } };
 
 export type EmoteActivityQueryVariables = Exact<{
   emoteId: Scalars['String']['input'];
@@ -2538,7 +2599,7 @@ export type EmoteActivityQueryVariables = Exact<{
 }>;
 
 
-export type EmoteActivityQuery = { __typename?: 'Query', emoteActivity: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> };
+export type EmoteActivityQuery = { __typename?: 'Query', emoteActivityPage: { __typename?: 'ActivityPage', next?: string | null, entries: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> } };
 
 export type ShopItemFieldsFragment = { __typename?: 'ShopItem', id: string, name: string, description: string, priceCents: number, currency: string, paddlePriceId?: string | null, activeFrom?: string | null, activeTo?: string | null, stockLimit?: number | null, stockLeft?: number | null, visible: boolean, sortOrder: number, available: boolean, owned: boolean, deleted: boolean, badges: Array<{ __typename?: 'Badge', id: string, name: string, tooltip: string, image: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } }>, paints: Array<{ __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null }> };
 
@@ -2820,6 +2881,7 @@ export const RoleFieldsFragmentDoc = new TypedDocumentString(`
   description
   position
   permissions
+  public
 }
     `, {"fragmentName":"RoleFields"}) as unknown as TypedDocumentString<RoleFieldsFragment, unknown>;
 export const CosmeticImageFieldsFragmentDoc = new TypedDocumentString(`
@@ -3391,8 +3453,8 @@ export const PublicSetDocument = new TypedDocumentString(`
   }
 }`) as unknown as TypedDocumentString<PublicSetQuery, PublicSetQueryVariables>;
 export const CloneSetDocument = new TypedDocumentString(`
-    mutation CloneSet($id: String!, $name: String) {
-  cloneSet(id: $id, name: $name) {
+    mutation CloneSet($id: String!, $name: String, $visibility: SetVisibility) {
+  cloneSet(id: $id, name: $name, visibility: $visibility) {
     copied
     skipped
     set {
@@ -4063,6 +4125,7 @@ export const RolesDocument = new TypedDocumentString(`
   description
   position
   permissions
+  public
 }`) as unknown as TypedDocumentString<RolesQuery, RolesQueryVariables>;
 export const CreateRoleDocument = new TypedDocumentString(`
     mutation CreateRole($input: CreateRoleInput!) {
@@ -4076,6 +4139,7 @@ export const CreateRoleDocument = new TypedDocumentString(`
   description
   position
   permissions
+  public
 }`) as unknown as TypedDocumentString<CreateRoleMutation, CreateRoleMutationVariables>;
 export const UpdateRoleDocument = new TypedDocumentString(`
     mutation UpdateRole($id: String!, $input: UpdateRoleInput!) {
@@ -4089,6 +4153,7 @@ export const UpdateRoleDocument = new TypedDocumentString(`
   description
   position
   permissions
+  public
 }`) as unknown as TypedDocumentString<UpdateRoleMutation, UpdateRoleMutationVariables>;
 export const DeleteRoleDocument = new TypedDocumentString(`
     mutation DeleteRole($id: String!) {
@@ -4125,6 +4190,7 @@ export const UserDetailsDocument = new TypedDocumentString(`
   description
   position
   permissions
+  public
 }`) as unknown as TypedDocumentString<UserDetailsQuery, UserDetailsQueryVariables>;
 export const AllRolesDocument = new TypedDocumentString(`
     query AllRoles {
@@ -4138,6 +4204,7 @@ export const AllRolesDocument = new TypedDocumentString(`
   description
   position
   permissions
+  public
 }`) as unknown as TypedDocumentString<AllRolesQuery, AllRolesQueryVariables>;
 export const RestrictDocument = new TypedDocumentString(`
     mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {
@@ -4333,6 +4400,90 @@ export const UserCosmeticsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<UserCosmeticsQuery, UserCosmeticsQueryVariables>;
+export const AccountCosmeticsDocument = new TypedDocumentString(`
+    query AccountCosmetics($accountIds: [String!]!) {
+  accountCosmetics(accountIds: $accountIds) {
+    accountId
+    badge {
+      ...BadgeFields
+    }
+    paint {
+      ...PaintFields
+    }
+  }
+}
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}
+fragment BadgeFields on Badge {
+  id
+  name
+  tooltip
+  image {
+    ...CosmeticImageFields
+  }
+}
+fragment PaintFields on Paint {
+  id
+  name
+  kind
+  angle
+  repeat
+  shape
+  color
+  stops {
+    at
+    color
+  }
+  shadows {
+    x
+    y
+    radius
+    color
+  }
+  image {
+    ...CosmeticImageFields
+  }
+}`) as unknown as TypedDocumentString<AccountCosmeticsQuery, AccountCosmeticsQueryVariables>;
+export const AccountProfileDocument = new TypedDocumentString(`
+    query AccountProfile($accountId: String!) {
+  accountProfile(accountId: $accountId) {
+    account {
+      id
+      displayName
+      avatar
+    }
+    identities {
+      platform
+      login
+      displayName
+    }
+    roles {
+      id
+      name
+    }
+    activeSets {
+      platform
+      login
+      setId
+      setName
+    }
+    createdAt
+  }
+}
+    `) as unknown as TypedDocumentString<AccountProfileQuery, AccountProfileQueryVariables>;
 export const MyCosmeticsDocument = new TypedDocumentString(`
     query MyCosmetics($accountId: String) {
   myCosmetics(accountId: $accountId) {
@@ -4742,87 +4893,93 @@ fragment SetFields on EmoteSet {
 }`) as unknown as TypedDocumentString<ProfileEditedQuery, ProfileEditedQueryVariables>;
 export const AccountActivityDocument = new TypedDocumentString(`
     query AccountActivity($accountId: String!, $before: String, $limit: Int) {
-  accountActivity(accountId: $accountId, before: $before, limit: $limit) {
-    id
-    kind
-    actor {
+  accountActivityPage(accountId: $accountId, before: $before, limit: $limit) {
+    entries {
       id
-      displayName
-      avatar
-    }
-    set {
-      id
-      name
-    }
-    emote {
-      id
-      name
-      host
-      files {
-        name
-        width
-        height
-        isStatic
+      kind
+      actor {
+        id
+        displayName
+        avatar
       }
-    }
-    fromName
-    toName
-    badge {
-      fromId
+      set {
+        id
+        name
+      }
+      emote {
+        id
+        name
+        host
+        files {
+          name
+          width
+          height
+          isStatic
+        }
+      }
       fromName
-      toId
       toName
+      badge {
+        fromId
+        fromName
+        toId
+        toName
+      }
+      paint {
+        fromId
+        fromName
+        toId
+        toName
+      }
+      createdAt
     }
-    paint {
-      fromId
-      fromName
-      toId
-      toName
-    }
-    createdAt
+    next
   }
 }
     `) as unknown as TypedDocumentString<AccountActivityQuery, AccountActivityQueryVariables>;
 export const EmoteActivityDocument = new TypedDocumentString(`
     query EmoteActivity($emoteId: String!, $before: String, $limit: Int) {
-  emoteActivity(emoteId: $emoteId, before: $before, limit: $limit) {
-    id
-    kind
-    actor {
+  emoteActivityPage(emoteId: $emoteId, before: $before, limit: $limit) {
+    entries {
       id
-      displayName
-      avatar
-    }
-    set {
-      id
-      name
-    }
-    emote {
-      id
-      name
-      host
-      files {
-        name
-        width
-        height
-        isStatic
+      kind
+      actor {
+        id
+        displayName
+        avatar
       }
-    }
-    fromName
-    toName
-    badge {
-      fromId
+      set {
+        id
+        name
+      }
+      emote {
+        id
+        name
+        host
+        files {
+          name
+          width
+          height
+          isStatic
+        }
+      }
       fromName
-      toId
       toName
+      badge {
+        fromId
+        fromName
+        toId
+        toName
+      }
+      paint {
+        fromId
+        fromName
+        toId
+        toName
+      }
+      createdAt
     }
-    paint {
-      fromId
-      fromName
-      toId
-      toName
-    }
-    createdAt
+    next
   }
 }
     `) as unknown as TypedDocumentString<EmoteActivityQuery, EmoteActivityQueryVariables>;

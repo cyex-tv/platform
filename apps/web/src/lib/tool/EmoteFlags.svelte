@@ -35,7 +35,7 @@
 <div class="flags">
   <div class="vis">
     <span class="ui-label" id="{id}-vis">Visibility</span>
-    <Segmented label="Visibility" size="s" options={[{ value: 'public', label: 'Public' }, { value: 'private', label: 'Private' }]}
+    <Segmented label="Visibility" size="s" options={[{ value: 'public', label: 'Public', icon: 'users' }, { value: 'private', label: 'Private', icon: 'shield' }]}
       value={hidden ? 'private' : 'public'} onchange={(v) => !disabled && (hidden = v === 'private')} />
     <span class="ui-hint">{hidden ? 'Only you (and editors you allow) can add it to sets, and search leaves it out. It still shows in chat where your sets are active.' : 'Anyone can find it and add it to their sets once a moderator approves it.'}</span>
   </div>

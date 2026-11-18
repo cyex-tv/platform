@@ -95,22 +95,11 @@ select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
 .ui-switch:checked::after { translate: 16px 0; background: var(--accent-ink); }
 .ui-switch:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 
-/* Segmented control (links or buttons). */
-.ui-seg { display: inline-flex; gap: 2px; padding: 2px; max-width: 100%; overflow-x: auto; scrollbar-width: none;
-  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); }
-.ui-seg > * { position: relative; display: inline-flex; align-items: center; height: 36px; padding: 0 10px; border: 0; border-radius: var(--radius-sm);
-  background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; text-decoration: none; white-space: nowrap; }
-@media (hover: hover) and (pointer: fine) { .ui-seg > *:hover { color: var(--text); } }
-.ui-seg > *:focus-visible { outline-offset: -2px; }
-.ui-seg > *::after { content: ''; position: absolute; inset: -2px 0; } /* 40px to hit inside the 2px frame */
-.ui-seg > [aria-current='page'], .ui-seg > [aria-pressed='true'] { background: var(--accent-dim); color: var(--accent-text); }
-
 /* Touch: 44px targets (cyex-design floor on the web, mobile-native). */
 @media (pointer: coarse) {
   .ui-icon { width: 44px; height: 44px; }
   .ui-btn { min-height: 44px; }
   .ui-btn.small::after { inset: -6px 0; }
-  .ui-seg > * { height: 44px; }
   .ui-check { min-height: 44px; }
   .ui-switch { width: 44px; height: 44px; }
   .ui-switch::before { top: 12px; left: 4px; }
@@ -118,7 +107,6 @@ select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
 }
 /* Forced colours drop backgrounds, so the selected option gets a system outline instead. */
 @media (forced-colors: active) {
-  .ui-seg > [aria-current], .ui-seg > [aria-pressed='true'] { outline: 2px solid Highlight; outline-offset: -2px; }
   .ui-switch::before { forced-color-adjust: none; background-color: Canvas; box-shadow: inset 0 0 0 1px CanvasText; }
   .ui-switch::after { forced-color-adjust: none; background: CanvasText; }
   .ui-switch:checked::before { background-color: Highlight; background-image: none; box-shadow: none; }
@@ -146,7 +134,7 @@ select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
 .ui-list > li { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--border); }
 .ui-list > li:last-child { border-bottom: 0; }
 @media (hover: hover) and (pointer: fine) {
-  .ui-list > li:hover { background: var(--row-hover); box-shadow: inset 2px 0 0 var(--border-strong); }
+  .ui-list > li:hover { color: var(--text); }
 }
 
 /* Chips: neutral, or a status tint. */

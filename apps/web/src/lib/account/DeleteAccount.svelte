@@ -41,12 +41,12 @@
   }
 </script>
 
-<section class="ui-card danger-zone" aria-labelledby="delete-h">
-  <h2 id="delete-h">Delete account</h2>
-  <p class="ui-hint">
+<section class="ui-panel" aria-labelledby="delete-h">
+  <header><h2 id="delete-h">Delete account</h2></header>
+  <p class="ui-hint pad">
     This happens at once and can’t be undone: your emotes, sets, channels, cosmetics and notifications are deleted. Approved emotes that other people have in their sets stay, shown as made by “Deleted user”.
   </p>
-  <div class="ui-actions row"><button class="ui-btn danger" type="button" onclick={open}>Delete account…</button></div>
+  <div class="ui-actions row pad"><button class="ui-btn danger" type="button" onclick={open}>Delete account…</button></div>
 </section>
 
 <dialog class="ui-dialog" bind:this={dialog} aria-labelledby="delete-title" aria-describedby="delete-desc">
@@ -77,5 +77,7 @@
 </dialog>
 
 <style>
-  .row { margin-top: 12px; }
+  .pad { padding: 10px 14px 12px; }
+  .ui-hint.pad { padding-bottom: 12px; }
+  .row { padding-top: 0; }
 </style>

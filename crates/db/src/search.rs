@@ -28,7 +28,14 @@ pub struct Query<'a> {
 pub struct Hits {
     pub ids: Vec<Uuid>,
     pub total: i64,
+    /// `total` stopped counting at `ACCOUNT_TOTAL_CAP` (account search only).
+    pub capped: bool,
 }
+
+/// `accounts` counts matches up to this many; more are reported as this, `capped`.
+pub const ACCOUNT_TOTAL_CAP: i64 = 1000;
+/// Shorter queries (in characters, after trimming) match nobody: one letter is every account.
+pub const ACCOUNT_QUERY_MIN: usize = 2;
 
 #[allow(async_fn_in_trait)]
 pub trait EmoteSearch {
@@ -95,11 +102,13 @@ pub async fn search(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<Hits> {
     Ok(Hits {
         ids: rows.into_iter().map(|(id, _)| id).collect(),
         total,
+        capped: false,
     })
 }
 
 /// Live accounts (not deleted, not blocked) whose Twitch or Kick login or display name matches
-/// `text` (lowercase, trimmed, at most 64 characters), in rank order, and how many match in all.
+/// `text` (lowercase, trimmed, at most 64 characters, at least `ACCOUNT_QUERY_MIN`), in rank order,
+/// and how many match (counted up to `ACCOUNT_TOTAL_CAP`).
 /// Ranking: exact login, then login prefix, then display name prefix, then similarity.
 pub async fn accounts(
     conn: &mut PgConnection,
@@ -108,10 +117,11 @@ pub async fn accounts(
     offset: i64,
 ) -> DbResult<Hits> {
     let text: String = text.trim().to_lowercase().chars().take(64).collect();
-    if text.is_empty() {
+    if text.chars().count() < ACCOUNT_QUERY_MIN {
         return Ok(Hits {
             ids: Vec::new(),
             total: 0,
+            capped: false,
         });
     }
     let pattern = like_escape(&text);
@@ -133,8 +143,13 @@ pub async fn accounts(
                 OR lower(i.display_name) % $1
              GROUP BY i.account_id
          )
+         , ranked AS (
+             SELECT account_id, tier, score FROM hits
+             ORDER BY tier DESC, score DESC, account_id
+             LIMIT $5
+         )
          SELECT account_id, count(*) OVER () AS total
-         FROM hits
+         FROM ranked
          ORDER BY tier DESC, score DESC, account_id
          LIMIT $3 OFFSET $4",
     )
@@ -142,12 +157,14 @@ pub async fn accounts(
     .bind(&pattern)
     .bind(limit)
     .bind(offset)
+    .bind(ACCOUNT_TOTAL_CAP + 1)
     .fetch_all(conn)
     .await?;
-    let total = rows.first().map_or(0, |(_, t)| *t);
+    let counted = rows.first().map_or(0, |(_, t)| *t);
     Ok(Hits {
         ids: rows.into_iter().map(|(id, _)| id).collect(),
-        total,
+        total: counted.min(ACCOUNT_TOTAL_CAP),
+        capped: counted > ACCOUNT_TOTAL_CAP,
     })
 }
 

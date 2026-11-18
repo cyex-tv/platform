@@ -32,7 +32,7 @@
   --accent-text: #7ea4ff;
   --accent-ink: #ffffff;
   --accent-glow: rgb(20 90 255 / .35);
-  --accent-dim: rgb(20 90 255 / .16);   /* a selected row or option */
+  --accent-dim: rgb(20 90 255 / .16);   /* a count badge: never a selected row or option (those are bold + accent icon) */
   --accent-wash: rgb(20 90 255 / .24);
   --accent-border: rgb(20 90 255 / .6);
 

@@ -146,11 +146,12 @@
   .tick { display: inline-flex; color: var(--accent-text); opacity: 0; }
   .opt:not(.check).on { color: var(--text); font-weight: 600; }
   .opt.on .tick { opacity: 1; }
-  .opt.check.on { color: var(--text); }
+  .opt.check.on { color: var(--text); font-weight: 600; }
+  .opt.check.on small { font-weight: 400; }
   .box { flex: none; display: inline-grid; place-items: center; width: 16px; height: 16px; border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm); color: transparent; background: var(--bg);
     transition: background-color var(--fast), border-color var(--fast); }
-  .on .box { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .on .box { border-color: var(--accent-text); color: var(--accent-text); } /* the tick is the accent icon; no fill */
   .opt:active { opacity: .6; transition: none; }
 
   .tags { display: flex; flex-wrap: wrap; gap: 8px 6px; padding: 4px 2px; min-width: 0; }
@@ -163,22 +164,23 @@
   .tag bdi { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .tag .n { flex: none; }
   .tag .n { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
-  .tag[aria-pressed='true'] { background: var(--accent-dim); border-color: var(--accent-border); color: var(--accent-text); }
-  .tag[aria-pressed='true'] .n { color: currentColor; }
+  .tag[aria-pressed='true'] { color: var(--text); font-weight: 700; } /* bold, no fill or accent border */
   .tag:active { opacity: .6; transition: none; }
   .tag:focus-visible { outline-offset: 1px; }
+  /* High contrast drops bold, the tick colour and the border cue: the selected option keeps a system-colour outline. */
+  @media (forced-colors: active) {
+    .tag[aria-pressed='true'] { outline: 1px solid Highlight; outline-offset: -2px; }
+    .opt.on:not(:has(input:focus-visible)) { outline: 1px solid Highlight; outline-offset: -2px; }
+    .on .box { border-color: Highlight; }
+  }
   .none { margin: 0; padding: 0 10px; font-size: var(--t-fine); color: var(--dim); }
 
   @media (pointer: coarse) { .opt { min-height: 44px; } .tag { height: 36px; } .tags { row-gap: 8px; } summary { min-height: 44px; } }
   @media (hover: hover) and (pointer: fine) {
     summary:hover { color: var(--text); }
-    .opt:hover { background: var(--row-hover); color: var(--text); }
+    .opt:hover { color: var(--text); }
     .opt:not(.check).on:hover { color: var(--text); }
     .tag:hover { border-color: var(--border-strong); color: var(--text); }
-    .tag[aria-pressed='true']:hover { color: var(--accent-text); }
-  }
-  @media (forced-colors: active) {
-    .opt.on, .tag[aria-pressed='true'] { outline: 2px solid Highlight; outline-offset: -2px; }
   }
   @media (prefers-reduced-motion: reduce) { summary :global(svg) { transition: none; } }
 </style>

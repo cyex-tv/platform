@@ -71,7 +71,7 @@
     <div class="block-head">
       <h2 class="block-title" id="emotes-title">{sort === 'top' ? 'Top emotes' : 'New emotes'}</h2>
       <div class="tools">
-        <Segmented label="Sort" size="s" options={[{ value: 'top', label: 'Top' }, { value: 'new', label: 'New' }]} value={sort} onchange={(v) => (sort = v)} />
+        <Segmented label="Sort" size="s" options={[{ value: 'top', label: 'Top', icon: 'arrow-up' }, { value: 'new', label: 'New', icon: 'sparkles' }]} value={sort} onchange={(v) => (sort = v)} />
         <a class="link" href={sort === 'new' ? '/search?sort=new' : '/search'}>
           Browse all{data.total ? ` ${count(data.total)}` : ''}
           <span class="arrow"><Icon name="arrow-right" /></span>

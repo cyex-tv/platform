@@ -33,6 +33,7 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::editors::has_flag;
+use crate::errors::{bad, conflict, rate_limited, sqlx_error};
 use crate::moderation::{QUEUE_PAGE, QUEUE_PAGE_MAX};
 use crate::state::AppState;
 use crate::views::{self, Viewer};
@@ -41,14 +42,6 @@ use crate::views::{self, Viewer};
 pub const LOOKUP_LIMIT: usize = 100;
 
 // Errors
-
-fn bad(code: &'static str, message: &str) -> ApiError {
-    ApiError::new(StatusCode::BAD_REQUEST, code, message)
-}
-
-fn conflict(code: &'static str, message: &str) -> ApiError {
-    ApiError::new(StatusCode::CONFLICT, code, message)
-}
 
 pub fn not_found() -> ApiError {
     ApiError::new(StatusCode::NOT_FOUND, "not_found", "Not found.")
@@ -109,10 +102,6 @@ pub fn db_error(err: DbError) -> ApiError {
             ApiError::internal()
         }
     }
-}
-
-fn sqlx_error(err: sqlx::Error) -> ApiError {
-    db_error(DbError::Sqlx(err))
 }
 
 pub(crate) async fn conn(
@@ -479,11 +468,7 @@ pub async fn account(state: &AppState, id: &str) -> ApiResult<Option<AccountSumm
         return Ok(None);
     }
     let summaries = reads::summaries(&mut conn, &[id]).await.map_err(db_error)?;
-    Ok(summaries.get(&id).map(|s| AccountSummary {
-        id: ids::to_text(s.account_id),
-        display_name: s.display_name.clone(),
-        avatar: s.avatar.clone(),
-    }))
+    Ok(summaries.get(&id).map(AccountSummary::from))
 }
 
 pub const EMOTE_CHANNELS: u32 = 8;
@@ -601,15 +586,21 @@ pub async fn account_profile(
     let Some(id) = ids::from_text(account_id.trim()) else {
         return Ok(None);
     };
-    let Some(summary) = account(state, &ids::to_text(id)).await? else {
+    let mut conn = conn(state).await?;
+    let Some(row) = accounts::get(&mut conn, id).await.map_err(db_error)? else {
         return Ok(None);
     };
-    let mut conn = conn(state).await?;
-    let created = accounts::get(&mut conn, id)
+    if row.deleted_at.is_some() || row.blocked_at.is_some() {
+        return Ok(None);
+    }
+    let Some(summary) = reads::summaries(&mut conn, &[id])
         .await
         .map_err(db_error)?
-        .map(|a| views::time(a.created_at))
-        .unwrap_or_default();
+        .get(&id)
+        .map(AccountSummary::from)
+    else {
+        return Ok(None);
+    };
     let identities = accounts::identities(&mut conn, id)
         .await
         .map_err(db_error)?
@@ -629,29 +620,40 @@ pub async fn account_profile(
             name: r.name,
         })
         .collect();
-    let mut active_sets = Vec::new();
-    for ch in channels::list_for_account(&mut conn, id)
+    let channel_rows: Vec<_> = channels::list_for_account(&mut conn, id)
         .await
         .map_err(db_error)?
-    {
-        let Some(set_id) = ch.active_set_id else {
-            continue;
-        };
-        if let Some(set) = sets::get(&mut conn, set_id).await.map_err(db_error)? {
-            active_sets.push(ActiveChannelSet {
+        .into_iter()
+        .filter(|ch| ch.active_set_id.is_some())
+        .collect();
+    let set_ids: Vec<Uuid> = channel_rows
+        .iter()
+        .filter_map(|c| c.active_set_id)
+        .collect();
+    let by_id: std::collections::HashMap<Uuid, Set> = sets::get_many(&mut conn, &set_ids)
+        .await
+        .map_err(db_error)?
+        .into_iter()
+        .map(|s| (s.id, s))
+        .collect();
+    let active_sets = channel_rows
+        .into_iter()
+        .filter_map(|ch| {
+            let set = by_id.get(&ch.active_set_id?)?;
+            Some(ActiveChannelSet {
                 platform: ch.platform,
                 login: ch.login,
                 set_id: ids::to_text(set.id),
-                set_name: set.name,
-            });
-        }
-    }
+                set_name: set.name.clone(),
+            })
+        })
+        .collect();
     Ok(Some(AccountProfile {
         account: summary,
         identities,
         roles,
         active_sets,
-        created_at: created,
+        created_at: views::time(row.created_at),
     }))
 }
 
@@ -924,13 +926,7 @@ pub async fn clone_set(
         .limits
         .set_clones
         .check(&ids::to_text(caller.account_id))
-        .map_err(|_| {
-            ApiError::new(
-                StatusCode::TOO_MANY_REQUESTS,
-                "rate_limited",
-                "That's a lot of copied sets. Try again in a while.",
-            )
-        })?;
+        .map_err(|_| rate_limited("That's a lot of copied sets. Try again in a while."))?;
     let mut conn = conn(state).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let source = load_set(&mut tx, source_id).await?;

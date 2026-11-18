@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Segmented from '$lib/components/Segmented.svelte';
   // Give an account a badge or paint, with a reason for the audit log (cosmetics.grant). Either
   // the cosmetic is fixed (from its admin row) and you find the account by its Twitch or Kick
   // login, or the account is fixed (admin Users) and you pick from what it doesn't own yet.
@@ -79,10 +80,7 @@
         <div class="ui-field">
           <span class="ui-label" id="grant-plat">Account</span>
           <div class="who">
-            <div class="ui-seg" role="group" aria-labelledby="grant-plat">
-              <button type="button" aria-pressed={platform === 'TWITCH'} onclick={() => (platform = 'TWITCH')}>Twitch</button>
-              <button type="button" aria-pressed={platform === 'KICK'} onclick={() => (platform = 'KICK')}>Kick</button>
-            </div>
+            <Segmented label="Account platform" options={[{ value: 'TWITCH', label: 'Twitch', icon: 'twitch' }, { value: 'KICK', label: 'Kick', icon: 'kick' }]} value={platform} onchange={(v) => (platform = v)} />
             <input class="ui-input" bind:value={login} placeholder="Login" aria-label="Login" autocomplete="off" spellcheck="false" />
           </div>
         </div>

@@ -21,13 +21,13 @@ use cyex_tv_hub::topics as hub_topics;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::model::{
     AccountEditor, AccountResults, AccountSession, AccountStatus, AccountSummary, ActivityEntry,
-    AddAccountEditor, AddSetEmote, AuditEntry, Badge, Channel, ClonedSet, CosmeticCatalog,
-    CosmeticImage, CosmeticKind, CreateBadge, CreateRole, CreateSet, EditedAccount,
-    EditorPermission, Emote, EmotePage, EmoteSet, EmoteSort, Entitlement, EntitlementPage, Event,
-    GrantCosmetic, Identity, Me, Notification, OwnedCosmetics, Paint, PaintInput, PersonalSetEntry,
-    Platform, Report, ReportAction, ReportQueue, ReviewQueue, Role, SearchResults, SetEmote,
-    SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole,
-    UpdateSet, UpdateSetEmote, UserCosmetics,
+    ActivityPage, AddAccountEditor, AddSetEmote, AuditEntry, Badge, Channel, ClonedSet,
+    CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge, CreateRole, CreateSet,
+    EditedAccount, EditorPermission, Emote, EmotePage, EmoteSet, EmoteSort, Entitlement,
+    EntitlementPage, Event, GrantCosmetic, Identity, Me, Notification, OwnedCosmetics, Paint,
+    PaintInput, PersonalSetEntry, Platform, Report, ReportAction, ReportQueue, ReviewQueue, Role,
+    SearchResults, SetEmote, SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings,
+    UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote, UserCosmetics,
 };
 use cyex_tv_shared::model::{
     Checkout, CodeBatch, CodeBatchInput, CodeBatchPage, CreatedCodeBatch, Order, OrderPage,
@@ -148,6 +148,17 @@ fn api_error(err: ApiError) -> async_graphql::Error {
     async_graphql::Error::new(err.message).extend_with(move |_, e| e.set("code", err.code))
 }
 
+/// The client's IP as the limits saw it; empty when unknown (a test without the middleware).
+fn client_ip<'a>(ctx: &Context<'a>) -> &'a str {
+    ctx.data_opt::<crate::limits::ClientIp>()
+        .map_or("", |ip| ip.0.as_str())
+}
+
+/// Takes one token of the heavy-reads limit for the public read being resolved.
+fn heavy_read(ctx: &Context<'_>) -> Result<()> {
+    crate::limits::heavy_read(state(ctx), caller_opt(ctx), client_ip(ctx)).map_err(api_error)
+}
+
 fn caller_opt<'a>(ctx: &Context<'a>) -> Option<&'a Caller> {
     ctx.data_opt::<Option<Caller>>().and_then(Option::as_ref)
 }
@@ -247,13 +258,16 @@ impl Query {
 
     /// An account's `LISTED` sets as profile cards, oldest first, at most 50. `preview` is how
     /// many of each set's newest emotes to include, 0 to 50, default 12. Empty when the account
-    /// is unknown, deleted or blocked.
+    /// is unknown, deleted or blocked. Counts as a heavy read: 120 a minute per account, or per IP
+    /// signed out (`rate_limited`), and a high query cost.
+    #[graphql(complexity = "100 + child_complexity")]
     async fn account_sets(
         &self,
         ctx: &Context<'_>,
         account_id: String,
         preview: Option<u32>,
     ) -> Result<Vec<SetSummary>> {
+        heavy_read(ctx)?;
         catalog::account_sets(state(ctx), caller_opt(ctx), &account_id, preview)
             .await
             .map_err(api_error)
@@ -308,7 +322,9 @@ impl Query {
     /// Accounts by Twitch or Kick login or display name (a leading `@` is ignored): exact login
     /// first, then login and name prefixes, then similar names. Public fields only; deleted and
     /// blocked accounts are never listed. `perPage` is 1 to 50, default 20. 60 searches a minute
-    /// per account, or per IP signed out (`rate_limited`). An empty `query` finds nobody.
+    /// per account, or per IP signed out (`rate_limited`). A `query` under 2 characters (after the
+    /// `@`) finds nobody. Matches are counted up to 1000: `totalCapped` says there are more, and
+    /// the pages end there.
     async fn search_accounts(
         &self,
         ctx: &Context<'_>,
@@ -316,9 +332,7 @@ impl Query {
         page: Option<u32>,
         per_page: Option<u32>,
     ) -> Result<AccountResults> {
-        let ip = ctx
-            .data_opt::<crate::limits::ClientIp>()
-            .map_or("", |ip| ip.0.as_str());
+        let ip = client_ip(ctx);
         search::accounts(state(ctx), caller_opt(ctx), ip, &query, page, per_page)
             .await
             .map_err(api_error)
@@ -358,7 +372,10 @@ impl Query {
     /// An account's public activity, newest first, like 7TV's "Activity" tab: sets and emotes the
     /// owner or their editors changed, the active set, badge and paint picks, approved uploads.
     /// Page back with `before` (an entry ID); `limit` is 1 to 100, default 30. Empty when the
-    /// account is unknown, deleted or blocked. Nothing private or from moderation shows.
+    /// account is unknown, deleted or blocked. Nothing private or from moderation shows. A page
+    /// can be shorter than `limit` and still not the last: use `accountActivityPage` to know.
+    /// A heavy read: 120 a minute per account, or per IP signed out (`rate_limited`).
+    #[graphql(complexity = "100 + child_complexity")]
     async fn account_activity(
         &self,
         ctx: &Context<'_>,
@@ -366,7 +383,25 @@ impl Query {
         before: Option<String>,
         limit: Option<u32>,
     ) -> Result<Vec<ActivityEntry>> {
+        heavy_read(ctx)?;
         activity::account_activity(state(ctx), &account_id, before.as_deref(), limit)
+            .await
+            .map_err(api_error)
+    }
+
+    /// `accountActivity` with a cursor: `next` is the `before` for the following page, null when
+    /// there is none. A page can hold fewer than `limit` entries and still have a `next`, because
+    /// the feed skips what isn't public.
+    #[graphql(complexity = "100 + child_complexity")]
+    async fn account_activity_page(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+        before: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<ActivityPage> {
+        heavy_read(ctx)?;
+        activity::account_activity_page(state(ctx), &account_id, before.as_deref(), limit)
             .await
             .map_err(api_error)
     }
@@ -375,7 +410,10 @@ impl Query {
     /// as by its owner) and `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED` in listed
     /// sets, by their owners and account editors. Page back with `before` (an entry ID); `limit`
     /// is 1 to 100, default 30. Empty when the emote is unknown or not public. Nothing private or
-    /// from moderation shows.
+    /// from moderation shows. A page can be shorter than `limit` and still not the last: use
+    /// `emoteActivityPage` to know. A heavy read: 120 a minute per account, or per IP signed out
+    /// (`rate_limited`).
+    #[graphql(complexity = "100 + child_complexity")]
     async fn emote_activity(
         &self,
         ctx: &Context<'_>,
@@ -383,7 +421,24 @@ impl Query {
         before: Option<String>,
         limit: Option<u32>,
     ) -> Result<Vec<ActivityEntry>> {
+        heavy_read(ctx)?;
         activity::emote_activity(state(ctx), &emote_id, before.as_deref(), limit)
+            .await
+            .map_err(api_error)
+    }
+
+    /// `emoteActivity` with a cursor: `next` is the `before` for the following page, null when
+    /// there is none. A page can hold fewer than `limit` entries and still have a `next`.
+    #[graphql(complexity = "100 + child_complexity")]
+    async fn emote_activity_page(
+        &self,
+        ctx: &Context<'_>,
+        emote_id: String,
+        before: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<ActivityPage> {
+        heavy_read(ctx)?;
+        activity::emote_activity_page(state(ctx), &emote_id, before.as_deref(), limit)
             .await
             .map_err(api_error)
     }
@@ -1321,7 +1376,7 @@ impl Mutation {
     /// your approved emotes that are in other people's sets stay, shown as by a deleted user;
     /// your other emotes are deleted. Signing in again later makes a new account. Audited.
     /// `confirm_mismatch` when `confirm` isn't one of your logins; `restricted` while the account's
-    /// uploads or sign-in are blocked.
+    /// uploads or sign-in are blocked. 3 tries an hour (`rate_limited`).
     async fn delete_account(&self, ctx: &Context<'_>, confirm: String) -> Result<bool> {
         let caller = caller(ctx)?;
         account::delete_account(state(ctx), caller, &confirm)

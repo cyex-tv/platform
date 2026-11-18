@@ -147,8 +147,8 @@ export const PUBLIC_SET = graphql(`
 `);
 
 export const CLONE_SET = graphql(`
-  mutation CloneSet($id: String!, $name: String) {
-    cloneSet(id: $id, name: $name) {
+  mutation CloneSet($id: String!, $name: String, $visibility: SetVisibility) {
+    cloneSet(id: $id, name: $name, visibility: $visibility) {
       copied
       skipped
       set {
@@ -622,6 +622,7 @@ export const ROLE_FIELDS = graphql(`
     description
     position
     permissions
+    public
   }
 `);
 
@@ -869,6 +870,50 @@ export const USER_COSMETICS = graphql(`
   }
 `);
 
+// What accounts show (badge and paint, in full), by account id: public, up to 100 at once.
+export const ACCOUNT_COSMETICS = graphql(`
+  query AccountCosmetics($accountIds: [String!]!) {
+    accountCosmetics(accountIds: $accountIds) {
+      accountId
+      badge {
+        ...BadgeFields
+      }
+      paint {
+        ...PaintFields
+      }
+    }
+  }
+`);
+
+// An account's public profile: logins, public roles, each channel's active set, member since.
+export const ACCOUNT_PROFILE = graphql(`
+  query AccountProfile($accountId: String!) {
+    accountProfile(accountId: $accountId) {
+      account {
+        id
+        displayName
+        avatar
+      }
+      identities {
+        platform
+        login
+        displayName
+      }
+      roles {
+        id
+        name
+      }
+      activeSets {
+        platform
+        login
+        setId
+        setName
+      }
+      createdAt
+    }
+  }
+`);
+
 export const MY_COSMETICS = graphql(`
   query MyCosmetics($accountId: String) {
     myCosmetics(accountId: $accountId) {
@@ -1060,91 +1105,98 @@ export const PROFILE_EDITED = graphql(`
   }
 `);
 
-// An account's public activity feed (ADR 0016), newest first; page back with `before`.
+// An account's public activity feed (ADR 0016), newest first; page back with `before` set to the
+// answer's `next` (a page can be short and still have one).
 export const ACCOUNT_ACTIVITY = graphql(`
   query AccountActivity($accountId: String!, $before: String, $limit: Int) {
-    accountActivity(accountId: $accountId, before: $before, limit: $limit) {
-      id
-      kind
-      actor {
+    accountActivityPage(accountId: $accountId, before: $before, limit: $limit) {
+      entries {
         id
-        displayName
-        avatar
-      }
-      set {
-        id
-        name
-      }
-      emote {
-        id
-        name
-        host
-        files {
-          name
-          width
-          height
-          isStatic
+        kind
+        actor {
+          id
+          displayName
+          avatar
         }
-      }
-      fromName
-      toName
-      badge {
-        fromId
+        set {
+          id
+          name
+        }
+        emote {
+          id
+          name
+          host
+          files {
+            name
+            width
+            height
+            isStatic
+          }
+        }
         fromName
-        toId
         toName
+        badge {
+          fromId
+          fromName
+          toId
+          toName
+        }
+        paint {
+          fromId
+          fromName
+          toId
+          toName
+        }
+        createdAt
       }
-      paint {
-        fromId
-        fromName
-        toId
-        toName
-      }
-      createdAt
+      next
     }
   }
 `);
 
 export const EMOTE_ACTIVITY = graphql(`
   query EmoteActivity($emoteId: String!, $before: String, $limit: Int) {
-    emoteActivity(emoteId: $emoteId, before: $before, limit: $limit) {
-      id
-      kind
-      actor {
+    emoteActivityPage(emoteId: $emoteId, before: $before, limit: $limit) {
+      entries {
         id
-        displayName
-        avatar
-      }
-      set {
-        id
-        name
-      }
-      emote {
-        id
-        name
-        host
-        files {
-          name
-          width
-          height
-          isStatic
+        kind
+        actor {
+          id
+          displayName
+          avatar
         }
-      }
-      fromName
-      toName
-      badge {
-        fromId
+        set {
+          id
+          name
+        }
+        emote {
+          id
+          name
+          host
+          files {
+            name
+            width
+            height
+            isStatic
+          }
+        }
         fromName
-        toId
         toName
+        badge {
+          fromId
+          fromName
+          toId
+          toName
+        }
+        paint {
+          fromId
+          fromName
+          toId
+          toName
+        }
+        createdAt
       }
-      paint {
-        fromId
-        fromName
-        toId
-        toName
-      }
-      createdAt
+      next
     }
   }
 `);
