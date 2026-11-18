@@ -2,6 +2,22 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Public profiles and account cosmetics (branch `feat/public-profile`)
+
+For the website's public user pages (like 7TV's) and painted names everywhere. API only.
+
+- [x] Migration `20261130000005_public_roles.sql` (additive): `roles.public` (default false), so staff-only roles stay hidden unless someone with `roles.manage` marks a role public. `Role.public`, `CreateRoleInput.public`, `UpdateRoleInput.public`; the change is in the `role.created` / `role.updated` audit snapshots.
+- [x] GraphQL (additive): `accountProfile(accountId): AccountProfile` (`account`, `identities: [PublicIdentity]` with platform, login and display name only, `roles: [PublicRole { id name }]` (public roles, most senior first), `activeSets: [ActiveChannelSet { platform login setId setName }]`, `createdAt`); null for unknown, blocked or deleted accounts. Listed sets stay in `accountSets`.
+- [x] `accountCosmetics(accountIds): [AccountCosmetics { accountId badge paint }]`: what up to 100 accounts show, with the badge and paint themselves, by cyex.tv account ID; only live accounts showing something; `too_many` over 100.
+- [x] Tests: `apps/api/tests/profile_flow.rs` against Postgres in CI (no platform IDs, only public roles, roles.manage needed and audited, active set shown, blocked and deleted have no profile; cosmetics only for live accounts showing something, duplicates once, the 100 limit).
+- [x] Dev mock: `accountProfile` for the mock's people (Moderator and Artist marked public), `accountCosmetics` from the sample picks; new fields in one operation are answered together.
+- [ ] Website: role chips, "Active emotes", painted names (another task); a "public" checkbox in the roles editor.
+
+#### GitHub write log
+```
+git push -u origin feat/public-profile
+gh pr create --base main --head feat/public-profile
+
 ## Emote activity (branch `feat/emote-activity`)
 
 Gap list G2 (API side): an emote page's Activity tab, from the account activity store (ADR 0016).

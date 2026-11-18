@@ -20,6 +20,8 @@ pub struct Role {
     pub position: i32,
     pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
+    /// Shown on its holders' public profiles.
+    pub public: bool,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -39,7 +41,7 @@ pub struct RolePatch<'a> {
     pub position: Option<i32>,
 }
 
-const ROLE: &str = "id, name, description, position, created_by, created_at";
+const ROLE: &str = "id, name, description, position, created_by, created_at, public";
 
 fn check_known(perms: &[&str]) -> DbResult<()> {
     match perms.iter().find(|p| !permissions::is_known(p)) {
@@ -202,7 +204,7 @@ pub async fn unassign(conn: &mut PgConnection, account_id: Uuid, role_id: Uuid) 
 /// An account's roles, most senior first.
 pub async fn roles_of(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<Role>> {
     Ok(sqlx::query_as(
-        "SELECT r.id, r.name, r.description, r.position, r.created_by, r.created_at
+        "SELECT r.id, r.name, r.description, r.position, r.created_by, r.created_at, r.public
          FROM roles r
          JOIN account_roles ar ON ar.role_id = r.id
          WHERE ar.account_id = $1
@@ -211,6 +213,27 @@ pub async fn roles_of(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec
     .bind(account_id)
     .fetch_all(conn)
     .await?)
+}
+
+/// Shows a role on its holders' public profiles, or stops.
+pub async fn set_public(conn: &mut PgConnection, id: Uuid, public: bool) -> DbResult<Role> {
+    sqlx::query_as(&format!(
+        "UPDATE roles SET public = $2 WHERE id = $1 RETURNING {ROLE}"
+    ))
+    .bind(id)
+    .bind(public)
+    .fetch_optional(conn)
+    .await?
+    .ok_or(DbError::NotFound)
+}
+
+/// An account's public roles, most senior first.
+pub async fn public_roles_of(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<Role>> {
+    Ok(roles_of(conn, account_id)
+        .await?
+        .into_iter()
+        .filter(|r| r.public)
+        .collect())
 }
 
 /// The union of an account's roles' permissions, sorted.
