@@ -52,9 +52,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if purge.is_none() {
         tracing::warn!("CYEX_TV_CLOUDFLARE_PURGE_TOKEN not set; takedowns won't purge the CDN");
     }
+    // The same CYEX_TV_PADDLE_* as the api: old checkouts are cancelled with the API key.
+    let paddle_cfg = cyex_tv_paddle::PaddleConfig::from_source(|name| std::env::var(name).ok())?;
+    let paddle = if paddle_cfg.api_key.is_some() {
+        Some(std::sync::Arc::new(cyex_tv_paddle::Paddle::new(
+            paddle_cfg,
+        )?))
+    } else {
+        tracing::warn!("CYEX_TV_PADDLE_API_KEY not set; old checkouts aren't cancelled at Paddle");
+        None
+    };
     tracing::info!(kinds = ?handlers.kinds(), "worker started");
     cyex_tv_worker::run(
-        Ctx { db, store, purge },
+        Ctx {
+            db,
+            store,
+            purge,
+            paddle,
+        },
         handlers,
         Limits::default(),
         Duration::from_secs(3600),

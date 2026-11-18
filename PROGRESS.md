@@ -2,6 +2,27 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Sign-off fixes: API (branch `fix/signoff-api`)
+
+The second security review and the sign-off code review (overnight run 2026-11-17). Additive; nothing was deployed.
+
+- [x] `unlinkIdentity` refuses `restricted` (403) while the account is restricted or blocked. Migration `20261206000001_identity_holds.sql`: a trigger keeps a hold (platform ID + restriction) for every identity that leaves a restricted or blocked account; sign-in and linking with it copy the restriction or block onto the account and use the hold up.
+- [x] Linking takes the account row `FOR SHARE` and needs it live (a link racing a deletion answers `account_deleted`).
+- [x] Shop: replaced and expired checkouts get their Paddle transaction cancelled (`PATCH /transactions/{id}`; the api on replace, the worker's hourly sweep for the rest); a failed cancel is audited (`shop.transaction_cancel_failed`) and only then is a late payment still taken. The Paddle client moved to `crates/paddle` so the worker can use it.
+- [x] Shop: `checkoutUrl` only when it is https on cyex.tv, buy.paddle.com or sandbox-buy.paddle.com. Adjustments for an order that can still take payment answer 503. Orders keep the badges and paints they sold (migration `20261206000002_shop_signoff.sql`), fulfil from them, and are replaced when the item's bundle changed; nothing left to grant is paid and audited `item_empty`. Staff may retry a refund stuck as requested after 10 minutes; the worker puts ones older than an hour back to paid (`shop.refund_request_reverted`). A staff refund of an order with a transaction needs Paddle (`refund_unavailable`). Gift recipients see a gift only once paid, without money fields or the transaction ID (orders list, `order`, export); `gift` is stored at checkout (`is_gift`).
+- [x] Webhook timestamps near i64's ends are `stale_signature`, not an overflow. Upload decoder errors stay in the logs; the client gets one sentence.
+- [x] Account deletion queues `files.delete` for each file only its deleted emotes used (migration `20261206000003_files_purged.sql`, `files.purged_at`); the worker deletes under the file's lock unless it is in use again; an upload of the same bytes stores and transcodes it again. Deleted emote rows lose their owner.
+- [x] Activity lines of uploads no longer need the approver's account; `next` is null after a short batch; `searchAccounts` past the last page is empty with the right total; edits on sets the caller can't view answer `not_found`; `slotsUsed` counts visible members for non-editors; `sets.edit_any` goes before the editor rule for visibility.
+- Tests: `apps/api/tests/{auth_flow,shop_flow,account_hub_flow,upload_flow,backend_reads_flow,account_search_flow,public_sets_flow}.rs`, `apps/worker/tests/jobs.rs`, `crates/db/tests/queries.rs`, unit tests in `shop.rs`, `upload.rs`, `crates/paddle`.
+
+### GitHub write log for this PR
+
+```
+git push -u origin fix/signoff-api
+gh pr create --base main --head fix/signoff-api --title "api: sign-off security and correctness fixes" --body-file <file>
+gh pr merge <n> --merge
+```
+
 ## Design harmony pass (branch `polish/harmony`)
 
 Contact sheets of every route at 1440 and 375, dark and light, read as one product (overnight run 2026-11-17). Web only; nothing was deployed.

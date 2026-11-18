@@ -637,7 +637,8 @@ impl Query {
             .map_err(api_error)
     }
 
-    /// Orders you bought or received (gifts), newest first. `perPage` 1 to 100, default 50.
+    /// Orders you bought, and gifts you got once paid (without what the buyer paid), newest
+    /// first. `perPage` 1 to 100, default 50.
     async fn my_orders(
         &self,
         ctx: &Context<'_>,
@@ -650,8 +651,8 @@ impl Query {
             .map_err(api_error)
     }
 
-    /// One order, for its buyer, its recipient, or `shop.orders`. Poll it after `startCheckout`
-    /// until it is `PAID`.
+    /// One order, for its buyer, its recipient (once paid, without what the buyer paid), or
+    /// `shop.orders`. Poll it after `startCheckout` until it is `PAID`.
     async fn order(&self, ctx: &Context<'_>, id: String) -> Result<Option<Order>> {
         let caller = caller(ctx)?;
         shop::order(state(ctx), caller, &id)
@@ -814,11 +815,29 @@ pub struct Mutation;
 
 #[Object]
 impl Mutation {
-    /// Unlink a platform from your account. The last identity can't be removed.
+    /// Unlink a platform from your account. The last identity can't be removed, and a
+    /// restricted or blocked account can't unlink (`restricted`).
     async fn unlink_identity(&self, ctx: &Context<'_>, platform: Platform) -> Result<Me> {
         let caller = caller(ctx)?;
         let mut conn = state(ctx).db.acquire().await.map_err(internal)?;
         let mut tx = conn.begin().await.map_err(internal)?;
+        // Locked, so a restriction landing at the same time is seen. Signing in again with the
+        // dropped identity would otherwise make a fresh, unrestricted account.
+        let restricted: Option<bool> = sqlx::query_scalar(
+            "SELECT restricted_at IS NOT NULL OR blocked_at IS NOT NULL
+               FROM accounts WHERE id = $1 FOR SHARE",
+        )
+        .bind(caller.account_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(internal)?;
+        if restricted == Some(true) {
+            return Err(api_error(ApiError::new(
+                axum::http::StatusCode::FORBIDDEN,
+                "restricted",
+                "A restricted account can't unlink a platform. Write to us if you need it changed.",
+            )));
+        }
         match accounts::unlink(&mut tx, caller.account_id, platform).await {
             Ok(_) => {}
             Err(DbError::NotFound) => {
@@ -1204,7 +1223,9 @@ impl Mutation {
     /// Refund a paid order: asks Paddle for a full refund when it is set up, and takes the
     /// cosmetics back at once (only those no other paid order, code or staff grant covers).
     /// `already_refunded` when Paddle says it was refunded already; `refund_in_progress` while
-    /// another refund of it runs. Needs `shop.orders`. Audited.
+    /// another refund of it runs (it may be tried again after 10 minutes); `refund_unavailable`
+    /// when the order has a Paddle transaction and Paddle isn't set up. Needs `shop.orders`.
+    /// Audited.
     async fn refund_order(&self, ctx: &Context<'_>, id: String, reason: String) -> Result<Order> {
         let caller = caller(ctx)?;
         shop::refund_order(state(ctx), caller, &id, &reason)

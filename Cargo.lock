@@ -616,6 +616,7 @@ dependencies = [
  "cyex-tv-db",
  "cyex-tv-hub",
  "cyex-tv-media",
+ "cyex-tv-paddle",
  "cyex-tv-shared",
  "cyex-tv-storage",
  "futures-util",
@@ -724,6 +725,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "cyex-tv-paddle"
+version = "0.1.0"
+dependencies = [
+ "cyex-tv-shared",
+ "hmac",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
 name = "cyex-tv-shared"
 version = "0.1.0"
 dependencies = [
@@ -765,6 +781,7 @@ dependencies = [
  "chrono",
  "cyex-tv-db",
  "cyex-tv-media",
+ "cyex-tv-paddle",
  "cyex-tv-shared",
  "cyex-tv-storage",
  "image",

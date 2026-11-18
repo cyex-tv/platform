@@ -406,6 +406,54 @@ async fn a_duplicate_reuses_the_file() {
 }
 
 #[tokio::test]
+async fn the_bytes_of_a_purged_file_are_stored_again() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let alice = w.user("41").await;
+    let bob = w.user("42").await;
+    let file = png(64, 64, 41);
+    assert_eq!(
+        w.upload(&alice, "first", &file).await.status,
+        StatusCode::ACCEPTED
+    );
+    // Alice's account went, and its file with it (the worker deleted the objects).
+    {
+        let mut conn = w.db.conn().await;
+        sqlx::query("UPDATE emotes SET deleted_at = now()")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE files SET purged_at = now(), variants = '[]'")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+    }
+    for key in w.store.keys() {
+        w.store.delete(&key).await.unwrap();
+    }
+    assert!(w.store.keys().is_empty());
+    // Bob uploads the same bytes: the original is stored again and transcoded again.
+    assert_eq!(
+        w.upload(&bob, "again", &file).await.status,
+        StatusCode::ACCEPTED
+    );
+    assert_eq!(w.count("SELECT count(*) FROM files").await, 1);
+    assert_eq!(
+        w.count("SELECT count(*) FROM files WHERE purged_at IS NULL")
+            .await,
+        1
+    );
+    assert_eq!(
+        w.count("SELECT count(*) FROM jobs WHERE kind = 'emote.transcode'")
+            .await,
+        2
+    );
+    assert_eq!(w.store.keys().len(), 1);
+    w.db.close().await;
+}
+
+#[tokio::test]
 async fn bad_files_are_refused() {
     let Some(w) = World::new(true).await else {
         return;
@@ -453,6 +501,14 @@ async fn bad_files_are_refused() {
         let r = w.upload(&alice, "nope", &file).await;
         assert_eq!(r.status, status, "{case}: {:?}", r.body);
         assert_eq!(r.body["error"], code, "{case}");
+        if code == "invalid_image" {
+            // The decoder's own words stay in the logs.
+            assert_eq!(
+                r.body["message"],
+                "That file isn't a valid image. Try a PNG, GIF or WebP that opens elsewhere.",
+                "{case}"
+            );
+        }
     }
     // Nothing was kept from any of them.
     assert!(w.store.keys().is_empty());

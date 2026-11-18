@@ -903,6 +903,11 @@ const shopItemOut = (item, session) => ({
 });
 const summaryOf = (id) => (id ? publicAccount(id) ?? { id, displayName: '', avatar: null } : null);
 const orderOut = (o) => ({ ...o, buyer: summaryOf(o.buyerId), recipient: summaryOf(o.recipientId) });
+// As the API: a gift's recipient sees it once paid, without what the buyer paid or the transaction.
+const shownToRecipient = (o) => o.status === 'PAID' || o.status === 'REFUNDED';
+const partyOf = (o) => o.buyerId === ME_ID || (o.recipientId === ME_ID && shownToRecipient(o));
+const partyOut = (o) => (o.buyerId === ME_ID ? orderOut(o)
+  : { ...orderOut(o), amountCents: 0, paidTotalCents: null, paidCurrency: null, providerTransactionId: null });
 const batchCosmetics = (b) => {
   const item = b.itemId ? itemOf(b.itemId) : null;
   return { badgeIds: [...new Set([...(item?.badgeIds ?? []), ...b.badgeIds])], paintIds: [...new Set([...(item?.paintIds ?? []), ...b.paintIds])] };
@@ -969,8 +974,8 @@ function shopAnswer(q, v, session, admin) {
       if (f === 'myOrders') {
         const denied = signedOut();
         if (denied) return denied;
-        const rows = ORDERS.filter((o) => o.buyerId === ME_ID || o.recipientId === ME_ID).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-        data.myOrders = pageOf(rows, v, orderOut);
+        const rows = ORDERS.filter(partyOf).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+        data.myOrders = pageOf(rows, v, partyOut);
       }
       if (f === 'order') {
         const o = ORDERS.find((x) => x.id === v.id);
@@ -979,7 +984,7 @@ function shopAnswer(q, v, session, admin) {
           const it = itemOf(o.itemId);
           if (it) grantAll(o.recipientId, it.badgeIds, it.paintIds, 'PURCHASE', `Order ${o.id} (mock data)`);
         }
-        data.order = o && session && (admin || o.buyerId === ME_ID || o.recipientId === ME_ID) ? orderOut(o) : null;
+        data.order = !o || !session ? null : admin ? orderOut(o) : partyOf(o) ? partyOut(o) : null;
       }
       if (f === 'orders') {
         const denied = staff('shop.orders');
@@ -1861,7 +1866,7 @@ createServer(async (req, res) => {
     // Names that stand in for the API's refusals, to see how the upload form explains them.
     if (name === 'blocked') return json(res, 422, { error: 'blocked', message: 'This image can’t be uploaded to cyex.tv.' });
     if (name === 'ratelimited') return json(res, 429, { error: 'rate_limited', message: 'That’s a lot of uploads. Try again in an hour.' });
-    if (name === 'broken') return json(res, 422, { error: 'invalid_image', message: 'That file isn’t a valid image (truncated).' });
+    if (name === 'broken') return json(res, 422, { error: 'invalid_image', message: 'That file isn’t a valid image. Try a PNG, GIF or WebP that opens elsewhere.' });
     // The flags, as the API reads them (POST /v1/emotes): true/1/on, false/0/off/empty.
     const flag = (k) => {
       const v = (field(k) ?? '').trim().toLowerCase();

@@ -218,7 +218,19 @@ impl Auth {
         let mut conn = db.acquire().await?;
         let (account_id, created, linked) = match stored.link_account_id {
             Some(account_id) => {
-                accounts::link(&mut conn, account_id, profile).await?;
+                // The account was deleted while the link was under way.
+                match accounts::link(&mut conn, account_id, profile).await {
+                    Err(cyex_tv_db::DbError::NotFound) => return Err(AuthError::AccountDeleted),
+                    other => other?,
+                };
+                // A hold the identity carried may have blocked the account.
+                if accounts::get(&mut conn, account_id)
+                    .await?
+                    .is_some_and(|a| a.blocked_at.is_some())
+                {
+                    sessions::delete_for_account(&mut conn, account_id, None).await?;
+                    return Err(AuthError::AccountBlocked);
+                }
                 (account_id, false, true)
             }
             None => {

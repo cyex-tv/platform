@@ -30,3 +30,11 @@ D17 and ADR 0011 keep cyex.tv apart from cyex.app. cyex.app already sells cyex d
 - Stock is held by a pending checkout for an hour; abandoned checkouts free it after that.
 - Lockouts and limits reset when the api restarts and apply per instance (v1 runs one).
 - Covered by Postgres tests in CI with a fake Paddle server (`apps/api/tests/shop_flow.rs`) and unit tests of the checks, the signature, the code format and the lockout.
+
+## Amendment (sign-off review, 2026/11/18)
+
+- An order keeps the badges and paints it sold (`shop_orders.badge_ids`, `paint_ids`); fulfilment grants those that still exist, not the item's current bundle. A pending order whose item changed its bundle is replaced at the next checkout. A payment with nothing left to grant is paid and audited `shop.order_paid_unfulfilled` (`item_empty`).
+- A replaced or expired order's Paddle transaction is cancelled (`PATCH /transactions/{id}` to `canceled`): by the api when it replaces one, by the worker's hourly sweep for the rest (the client is in `crates/paddle`, shared). Only an order whose cancel failed (`cancel_failed_at`, audited `shop.transaction_cancel_failed`) still takes a late payment. An adjustment for any order that can still take a payment is answered 503.
+- Paddle's `checkout.url` is handed out only when it is https on `cyex.tv`, `buy.paddle.com` or `sandbox-buy.paddle.com`.
+- A staff refund stuck as `refund_requested` may be retried after 10 minutes; the worker puts ones older than an hour back to paid (`shop.refund_request_reverted`). A refund of an order with a Paddle transaction needs Paddle configured (`refund_unavailable`), so cosmetics are never taken back without the refund.
+- A gift's recipient sees it only once paid (or refunded), with `amountCents` 0 and no paid total, paid currency or transaction ID. `gift` comes from `is_gift`, stored at checkout.

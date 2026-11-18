@@ -19,7 +19,7 @@ use cyex_tv_auth::{Auth, AuthConfig, tokens};
 use cyex_tv_db::accounts::{self, Profile};
 use cyex_tv_db::emotes::{self, NewEmote};
 use cyex_tv_db::sessions::{self, SessionKind};
-use cyex_tv_db::{audit, channels, editors, ids, outbox};
+use cyex_tv_db::{audit, channels, editors, ids, outbox, roles};
 use cyex_tv_shared::model::{EmoteState, Platform};
 use cyex_tv_shared::ratelimit::Rate;
 use http_body_util::BodyExt;
@@ -208,6 +208,25 @@ impl World {
         assert!(r["errors"].is_null(), "{r}");
     }
 
+    async fn grant(&self, user: &User, permission: &str) {
+        let mut conn = self.db.conn().await;
+        let role = roles::create(
+            &mut conn,
+            &roles::NewRole {
+                name: &format!("{permission} holders {}", user.tid()),
+                description: None,
+                position: 10,
+                permissions: &[permission],
+                created_by: None,
+            },
+        )
+        .await
+        .unwrap();
+        roles::assign(&mut conn, user.id, role.id, None)
+            .await
+            .unwrap();
+    }
+
     async fn audit_rows(&self) -> Vec<audit::Entry> {
         let mut conn = self.db.conn().await;
         let mut rows = audit::list(&mut conn, &audit::Filter::default(), 100)
@@ -285,7 +304,7 @@ async fn visibility_defaults_and_rules() {
         .await;
     assert_eq!(code(&r), "bad_visibility", "{r}");
 
-    // slotsUsed counts what's in the set.
+    // slots_used_counts_visible_members: slotsUsed counts what the viewer may see.
     let main = set["id"].as_str().unwrap().to_owned();
     let ok = w
         .emote(&alice, "aliceOk", EmoteState::Approved, false)
@@ -297,13 +316,16 @@ async fn visibility_defaults_and_rules() {
     w.add(&alice, &main, &pending).await;
     let stranger = w.user("2002").await;
     let r = w.gql(&stranger, READ, json!({ "id": main })).await;
-    // A stranger sees one emote, but both slots are used.
+    // A stranger sees one emote and is told about that one.
     assert_eq!(
         r["data"]["set"]["emotes"].as_array().unwrap().len(),
         1,
         "{r}"
     );
-    assert_eq!(r["data"]["set"]["slotsUsed"], 2);
+    assert_eq!(r["data"]["set"]["slotsUsed"], 1, "{r}");
+    // The owner sees both, and both slots are used.
+    let r = w.gql(&alice, READ, json!({ "id": main })).await;
+    assert_eq!(r["data"]["set"]["slotsUsed"], 2, "{r}");
 
     w.db.close().await;
 }
@@ -788,5 +810,91 @@ async fn private_sets_publish_no_set_topic() {
         rows.iter().flatten().all(|t| t != &topic(&shown)),
         "{rows:?}"
     );
+    w.db.close().await;
+}
+
+const UPDATE_NAME: &str = "mutation($id: String!, $n: String) {
+    updateSet(id: $id, input: { name: $n }) { id }
+}";
+const REMOVE_EMOTE: &str =
+    "mutation($s: String!, $e: String!) { removeSetEmote(setId: $s, emoteId: $e) }";
+const DELETE_SET: &str = "mutation($id: String!) { deleteSet(id: $id) }";
+
+#[tokio::test]
+async fn edits_on_unviewable_sets_are_not_found() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("2301").await;
+    let bob = w.user("2302").await;
+    let hidden = w.set(&alice, "Secret", Some("PRIVATE")).await;
+    let shown = w.set(&alice, "Open", Some("LISTED")).await;
+    let emote = w.emote(&alice, "inside", EmoteState::Approved, false).await;
+    w.add(&alice, &hidden, &emote).await;
+    w.add(&alice, &shown, &emote).await;
+    let mine = w.emote(&bob, "bobs", EmoteState::Approved, false).await;
+
+    // Every edit on the private set answers as if it didn't exist; on a set bob can see, the
+    // same edits are forbidden. Told apart, that would be an oracle for private sets.
+    for (set, expected) in [(&hidden, "not_found"), (&shown, "forbidden")] {
+        let calls = [
+            (UPDATE_NAME, json!({ "id": set, "n": "x" })),
+            (UPDATE, json!({ "id": set, "v": "UNLISTED" })),
+            (ADD_EMOTE, json!({ "s": set, "e": mine, "n": null })),
+            (RENAME, json!({ "s": set, "e": emote, "n": "y" })),
+            (REMOVE_EMOTE, json!({ "s": set, "e": emote })),
+            (DELETE_SET, json!({ "id": set })),
+            (ADD_SET_EDITOR, json!({ "s": set, "a": bob.tid() })),
+        ];
+        for (query, vars) in calls {
+            let r = w.gql(&bob, query, vars).await;
+            assert_eq!(code(&r), expected, "{query}: {r}");
+        }
+    }
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn slots_used_counts_visible_members() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("2311").await;
+    let bob = w.user("2312").await;
+    let set = w.set(&alice, "Counted", Some("LISTED")).await;
+    let ok = w.emote(&alice, "ok", EmoteState::Approved, false).await;
+    let pending = w.emote(&alice, "waiting", EmoteState::Pending, false).await;
+    w.add(&alice, &set, &ok).await;
+    w.add(&alice, &set, &pending).await;
+    let r = w.gql(&bob, READ, json!({ "id": set })).await;
+    assert_eq!(r["data"]["set"]["slotsUsed"], 1, "{r}");
+    let r = w.post(None, READ, json!({ "id": set })).await;
+    assert_eq!(r["data"]["set"]["slotsUsed"], 1, "{r}");
+    let r = w.gql(&alice, READ, json!({ "id": set })).await;
+    assert_eq!(r["data"]["set"]["slotsUsed"], 2, "{r}");
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn edit_any_beats_editor_rule_for_visibility() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("2321").await;
+    let staff = w.user("2322").await;
+    let set = w.set(&alice, "Mine", Some("LISTED")).await;
+    let r = w
+        .gql(
+            &alice,
+            ADD_SET_EDITOR,
+            json!({ "s": set, "a": staff.tid() }),
+        )
+        .await;
+    assert_eq!(r["data"]["addSetEditor"], true, "{r}");
+    // A plain per-set editor can't change who sees the set.
+    let r = w
+        .gql(&staff, UPDATE, json!({ "id": set, "v": "UNLISTED" }))
+        .await;
+    assert_eq!(code(&r), "forbidden", "{r}");
+    // With sets.edit_any the same call goes through.
+    w.grant(&staff, "sets.edit_any").await;
+    let r = w
+        .gql(&staff, UPDATE, json!({ "id": set, "v": "UNLISTED" }))
+        .await;
+    assert_eq!(r["data"]["updateSet"]["visibility"], "UNLISTED", "{r}");
     w.db.close().await;
 }

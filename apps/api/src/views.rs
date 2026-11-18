@@ -225,7 +225,21 @@ async fn build_sets(
         .collect();
     let summaries = reads::summaries(conn, &accounts).await?;
     let counts = reads::channel_counts(conn, &emote_ids).await?;
-    let used = sets::counts(conn, &set_ids).await?;
+    // Editors count every member; everyone else, the members they can see.
+    let edit_sets: Vec<Uuid> = edits.iter().copied().collect();
+    let mut used = reads::visible_counts(
+        conn,
+        &set_ids,
+        &reads::MemberAccess {
+            account: viewer.account_id,
+            reviewer: viewer.reviewer,
+            edit_sets: &edit_sets,
+        },
+    )
+    .await?;
+    if !edit_sets.is_empty() {
+        used.extend(sets::counts(conn, &edit_sets).await?);
+    }
 
     let mut by_set: HashMap<Uuid, Vec<SetEmote>> = HashMap::new();
     for row in &rows {

@@ -452,8 +452,9 @@ pub struct EmoteSet {
     /// `visibility` is `LISTED`: shown on the owner's profile.
     #[serde(default)]
     pub listed: bool,
-    /// How many of `capacity` the set uses. Counts every emote in it, also those this answer
-    /// doesn't show you (pending ones), so `capacity - slotsUsed` is what still fits.
+    /// How many of `capacity` the set uses. For whoever may edit the set it counts every emote in
+    /// it, pending ones included, so `capacity - slotsUsed` is what still fits. For anyone else it
+    /// counts the emotes this answer may show them (approved ones, plus their own pending ones).
     #[serde(default)]
     pub slots_used: u32,
     #[serde(default)]
@@ -471,7 +472,7 @@ pub struct SetSummary {
     pub visibility: SetVisibility,
     pub listed: bool,
     pub capacity: u32,
-    /// Every emote in the set counts; see `EmoteSet.slotsUsed`.
+    /// How many slots the set uses, as counted for you; see `EmoteSet.slotsUsed`.
     pub slots_used: u32,
     /// A channel shows this set now.
     pub active: bool,

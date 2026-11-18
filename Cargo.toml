@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["apps/api", "apps/events", "apps/worker", "crates/auth", "crates/db", "crates/hub", "crates/media", "crates/shared", "crates/storage"]
+members = ["apps/api", "apps/events", "apps/worker", "crates/auth", "crates/db", "crates/hub", "crates/media", "crates/paddle", "crates/shared", "crates/storage"]
 
 [workspace.package]
 version = "0.1.0"
@@ -15,6 +15,7 @@ cyex-tv-auth = { path = "crates/auth" }
 cyex-tv-db = { path = "crates/db" }
 cyex-tv-hub = { path = "crates/hub" }
 cyex-tv-media = { path = "crates/media" }
+cyex-tv-paddle = { path = "crates/paddle" }
 cyex-tv-shared = { path = "crates/shared" }
 cyex-tv-storage = { path = "crates/storage" }
 

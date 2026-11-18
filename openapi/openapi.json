@@ -1196,7 +1196,7 @@
           "slots_used": {
             "type": "integer",
             "format": "int32",
-            "description": "How many of `capacity` the set uses. Counts every emote in it, also those this answer\ndoesn't show you (pending ones), so `capacity - slotsUsed` is what still fits.",
+            "description": "How many of `capacity` the set uses. For whoever may edit the set it counts every emote in\nit, pending ones included, so `capacity - slotsUsed` is what still fits. For anyone else it\ncounts the emotes this answer may show them (approved ones, plus their own pending ones).",
             "minimum": 0
           },
           "visibility": {

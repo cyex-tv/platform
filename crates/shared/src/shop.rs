@@ -117,16 +117,18 @@ pub struct Order {
     pub buyer: Option<AccountSummary>,
     /// Who got the cosmetics.
     pub recipient: Option<AccountSummary>,
-    /// Bought for another account.
+    /// Bought for another account (decided at checkout; stays when either account is deleted).
     pub gift: bool,
     pub item_id: String,
     /// The item's name when it was bought.
     pub item_name: String,
     pub status: OrderStatus,
-    /// The item's price when the checkout started, in cents.
+    /// The item's price when the checkout started, in cents. 0 when a gift's recipient (not its
+    /// buyer) looks at it.
     pub amount_cents: u32,
     pub currency: String,
-    /// What Paddle says was paid, tax included, in the lowest unit. Set once paid.
+    /// What Paddle says was paid, tax included, in the lowest unit. Set once paid; null for a
+    /// gift's recipient, like `paidCurrency` and `providerTransactionId`.
     pub paid_total_cents: Option<u64>,
     pub paid_currency: Option<String>,
     /// `paddle`.

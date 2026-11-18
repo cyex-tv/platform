@@ -116,6 +116,24 @@ pub async fn accounts(
     limit: i64,
     offset: i64,
 ) -> DbResult<Hits> {
+    let hits = accounts_window(conn, text, limit, offset).await?;
+    // A page past the last one has no rows to carry the count; ask for the first row instead.
+    if hits.ids.is_empty() && offset > 0 {
+        let first = accounts_window(conn, text, 1, 0).await?;
+        return Ok(Hits {
+            ids: Vec::new(),
+            ..first
+        });
+    }
+    Ok(hits)
+}
+
+async fn accounts_window(
+    conn: &mut PgConnection,
+    text: &str,
+    limit: i64,
+    offset: i64,
+) -> DbResult<Hits> {
     let text: String = text.trim().to_lowercase().chars().take(64).collect();
     if text.chars().count() < ACCOUNT_QUERY_MIN {
         return Ok(Hits {

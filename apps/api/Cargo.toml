@@ -31,6 +31,7 @@ cyex-tv-auth.workspace = true
 cyex-tv-db.workspace = true
 cyex-tv-hub.workspace = true
 cyex-tv-media.workspace = true
+cyex-tv-paddle.workspace = true
 cyex-tv-shared = { workspace = true, features = ["graphql"] }
 cyex-tv-storage.workspace = true
 futures-util.workspace = true

@@ -463,6 +463,98 @@ async fn emotes_states_patches_and_tags() {
 }
 
 #[tokio::test]
+async fn linking_to_a_deleted_account_is_refused() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let alice = account(&mut c, "71").await;
+    sqlx::query("UPDATE accounts SET deleted_at = now() WHERE id = $1")
+        .bind(alice)
+        .execute(&mut *c)
+        .await
+        .unwrap();
+    assert!(matches!(
+        accounts::link(&mut c, alice, kick("72", "late")).await,
+        Err(DbError::NotFound)
+    ));
+    assert_eq!(
+        accounts::find_identity(&mut c, Platform::Kick, "72")
+            .await
+            .unwrap(),
+        None
+    );
+    drop(c);
+    db.close().await;
+}
+
+async fn file_row(conn: &mut PgConnection, n: u8) -> Uuid {
+    let sha = [n; 32];
+    let key = format!("originals/{n}");
+    let new = files::NewFile {
+        sha256: &sha,
+        dhash: None,
+        mime: "image/png",
+        width: 32,
+        height: 32,
+        frame_count: 1,
+        storage_key: &key,
+    };
+    files::insert_or_get(conn, &new).await.unwrap().0.id
+}
+
+#[tokio::test]
+async fn files_only_deleted_emotes_use_are_purged_and_revived() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let gone = account(&mut c, "81").await;
+    let other = account(&mut c, "82").await;
+    let shared = file_row(&mut c, 61).await;
+    let only_theirs = file_row(&mut c, 62).await;
+    let mut make = async |owner: Uuid, file_id: Uuid, name: &str| {
+        emotes::create(
+            &mut c,
+            &NewEmote {
+                owner_account_id: owner,
+                file_id: Some(file_id),
+                name,
+                ..NewEmote::default()
+            },
+        )
+        .await
+        .unwrap()
+        .id
+    };
+    let a = make(gone, shared, "a").await;
+    let b = make(gone, only_theirs, "b").await;
+    let _live = make(other, shared, "c").await;
+    for id in [a, b] {
+        assert!(emotes::delete(&mut c, id).await.unwrap());
+    }
+    // The shared file stays: another account's live emote uses the same bytes.
+    assert_eq!(
+        files::mark_orphans_purged(&mut c, gone).await.unwrap(),
+        [only_theirs]
+    );
+    // Once only.
+    assert!(
+        files::mark_orphans_purged(&mut c, gone)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(files::in_use(&mut c, shared).await.unwrap());
+    assert!(!files::in_use(&mut c, only_theirs).await.unwrap());
+    let purged = files::get(&mut c, only_theirs).await.unwrap().unwrap();
+    assert!(purged.purged_at.is_some());
+    // An upload of the same bytes brings it back, once.
+    assert!(files::revive(&mut c, only_theirs).await.unwrap());
+    assert!(!files::revive(&mut c, only_theirs).await.unwrap());
+    let back = files::get(&mut c, only_theirs).await.unwrap().unwrap();
+    assert_eq!(back.purged_at, None);
+    drop(c);
+    db.close().await;
+}
+
+#[tokio::test]
 async fn files_are_shared_by_hash() {
     let db = db!();
     let mut c = db.conn().await;

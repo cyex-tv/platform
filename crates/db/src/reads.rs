@@ -196,6 +196,32 @@ pub async fn newest_members(
     .await?)
 }
 
+/// How many members of each given set `access` shows (the rule of `newest_members`). Sets with
+/// none are missing.
+pub async fn visible_counts(
+    conn: &mut PgConnection,
+    set_ids: &[Uuid],
+    access: &MemberAccess<'_>,
+) -> DbResult<HashMap<Uuid, i64>> {
+    let rows: Vec<(Uuid, i64)> = sqlx::query_as(
+        "SELECT m.set_id, count(*)
+         FROM emote_set_members m
+         JOIN emotes e ON e.id = m.emote_id AND e.deleted_at IS NULL
+         WHERE m.set_id = ANY($1)
+           AND (e.state = 'approved'
+                OR (e.state = 'pending'
+                    AND ($2 OR m.set_id = ANY($3) OR e.owner_account_id = $4)))
+         GROUP BY m.set_id",
+    )
+    .bind(set_ids)
+    .bind(access.reviewer)
+    .bind(access.edit_sets)
+    .bind(access.account)
+    .fetch_all(conn)
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
 /// The members of the given sets, oldest first within each set.
 pub async fn members(conn: &mut PgConnection, set_ids: &[Uuid]) -> DbResult<Vec<MemberRow>> {
     Ok(sqlx::query_as(&format!(

@@ -84,6 +84,7 @@ async fn a_badge_picture_is_transcoded_under_cosmetics() {
         db: db.pool.clone(),
         store: Some(store.clone()),
         purge: None,
+        paddle: None,
     };
     let handlers = Handlers::default().on(job::KIND, job::run);
     let (_, outcome) = run_one(&ctx, &handlers, limits()).await.unwrap().unwrap();

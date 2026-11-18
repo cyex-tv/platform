@@ -477,8 +477,9 @@ export type EmoteSet = {
   name: Scalars['String']['output'];
   owner?: Maybe<AccountSummary>;
   /**
-   * How many of `capacity` the set uses. Counts every emote in it, also those this answer
-   * doesn't show you (pending ones), so `capacity - slotsUsed` is what still fits.
+   * How many of `capacity` the set uses. For whoever may edit the set it counts every emote in
+   * it, pending ones included, so `capacity - slotsUsed` is what still fits. For anyone else it
+   * counts the emotes this answer may show them (approved ones, plus their own pending ones).
    */
   slotsUsed: Scalars['Int']['output'];
   /** Who can find and open it. */
@@ -715,7 +716,9 @@ export type Mutation = {
    * Refund a paid order: asks Paddle for a full refund when it is set up, and takes the
    * cosmetics back at once (only those no other paid order, code or staff grant covers).
    * `already_refunded` when Paddle says it was refunded already; `refund_in_progress` while
-   * another refund of it runs. Needs `shop.orders`. Audited.
+   * another refund of it runs (it may be tried again after 10 minutes); `refund_unavailable`
+   * when the order has a Paddle transaction and Paddle isn't set up. Needs `shop.orders`.
+   * Audited.
    */
   refundOrder: Order;
   /** Reject a pending emote with a reason. Needs `emotes.review`. Audited. */
@@ -777,7 +780,10 @@ export type Mutation = {
    * Needs `roles.manage`. Audited.
    */
   unassignRole: Scalars['Boolean']['output'];
-  /** Unlink a platform from your account. The last identity can't be removed. */
+  /**
+   * Unlink a platform from your account. The last identity can't be removed, and a
+   * restricted or blocked account can't unlink (`restricted`).
+   */
   unlinkIdentity: Me;
   /**
    * Change an account editor's permissions. `ownerId` is the account edited; empty for yours.
@@ -1097,14 +1103,17 @@ export type Notification = {
 
 export type Order = {
   __typename?: 'Order';
-  /** The item's price when the checkout started, in cents. */
+  /**
+   * The item's price when the checkout started, in cents. 0 when a gift's recipient (not its
+   * buyer) looks at it.
+   */
   amountCents: Scalars['Int']['output'];
   /** Who paid. None once their account is gone. */
   buyer?: Maybe<AccountSummary>;
   createdAt: Scalars['String']['output'];
   currency: Scalars['String']['output'];
   failedAt?: Maybe<Scalars['String']['output']>;
-  /** Bought for another account. */
+  /** Bought for another account (decided at checkout; stays when either account is deleted). */
   gift: Scalars['Boolean']['output'];
   id: Scalars['String']['output'];
   itemId: Scalars['String']['output'];
@@ -1112,7 +1121,10 @@ export type Order = {
   itemName: Scalars['String']['output'];
   paidAt?: Maybe<Scalars['String']['output']>;
   paidCurrency?: Maybe<Scalars['String']['output']>;
-  /** What Paddle says was paid, tax included, in the lowest unit. Set once paid. */
+  /**
+   * What Paddle says was paid, tax included, in the lowest unit. Set once paid; null for a
+   * gift's recipient, like `paidCurrency` and `providerTransactionId`.
+   */
   paidTotalCents?: Maybe<Scalars['Int']['output']>;
   /** `paddle`. */
   provider: Scalars['String']['output'];
@@ -1416,7 +1428,10 @@ export type Query = {
    * (`purchase` or `code`), and from orders `order_id`.
    */
   myNotifications: Array<Notification>;
-  /** Orders you bought or received (gifts), newest first. `perPage` 1 to 100, default 50. */
+  /**
+   * Orders you bought, and gifts you got once paid (without what the buyer paid), newest
+   * first. `perPage` 1 to 100, default 50.
+   */
   myOrders: OrderPage;
   /**
    * Where you are signed in: your live sessions, the most recently used first, with the one
@@ -1426,8 +1441,8 @@ export type Query = {
   /** The sets you own, then the ones you edit. Pending emotes included. */
   mySets: Array<EmoteSet>;
   /**
-   * One order, for its buyer, its recipient, or `shop.orders`. Poll it after `startCheckout`
-   * until it is `PAID`.
+   * One order, for its buyer, its recipient (once paid, without what the buyer paid), or
+   * `shop.orders`. Poll it after `startCheckout` until it is `PAID`.
    */
   order?: Maybe<Order>;
   /**
@@ -1816,7 +1831,7 @@ export type SetSummary = {
   owner?: Maybe<AccountSummary>;
   /** The newest emotes you may see, at most the `preview` asked for. */
   preview: Array<SetEmote>;
-  /** Every emote in the set counts; see `EmoteSet.slotsUsed`. */
+  /** How many slots the set uses, as counted for you; see `EmoteSet.slotsUsed`. */
   slotsUsed: Scalars['Int']['output'];
   visibility: SetVisibility;
 };

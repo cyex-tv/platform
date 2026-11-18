@@ -1,6 +1,10 @@
 //! The `files.delete` job (PLAN.md Phase 7, takedown): a taken-down file's objects are deleted
 //! from storage, and their CDN URLs purged from Cloudflare's cache.
 //!
+//! An account deletion queues it too (`"reason": "account_deleted"`) for files no live emote
+//! uses. Those run under the file's row lock and only while the file is still marked purged and
+//! unused: an upload of the same bytes in the meantime revives the file instead.
+//!
 //! Purging needs a Cloudflare API token with Cache Purge on the `cyex.tv` zone
 //! (`CYEX_TV_CLOUDFLARE_ZONE_ID`, `CYEX_TV_CLOUDFLARE_PURGE_TOKEN`). Without one the objects are
 //! still deleted, and the cached copies expire on their own; a warning says so.
@@ -104,13 +108,58 @@ pub async fn run(ctx: Ctx, job: Job) -> Result<(), JobError> {
         .store
         .clone()
         .ok_or_else(|| JobError::Retry("storage isn't configured".into()))?;
+    if job.payload.get("reason").and_then(Value::as_str) == Some("account_deleted") {
+        return orphan(ctx, store, file_id).await;
+    }
     let mut conn = ctx.db.acquire().await.map_err(retry)?;
     let file = files::get(&mut conn, file_id)
         .await
         .map_err(retry)?
         .ok_or_else(|| JobError::Permanent("the file is gone".into()))?;
     drop(conn);
+    delete_objects(&ctx, &store, &file).await?;
+    let mut conn = ctx.db.acquire().await.map_err(retry)?;
+    files::set_variants(&mut conn, file.id, &json!([]))
+        .await
+        .map_err(retry)?;
+    Ok(())
+}
 
+/// A file a deleted account left: deleted under its lock, unless it was revived or is in use.
+async fn orphan(
+    ctx: Ctx,
+    store: cyex_tv_storage::Store,
+    file_id: sqlx::types::Uuid,
+) -> Result<(), JobError> {
+    let mut tx = ctx.db.begin().await.map_err(retry)?;
+    let file = files::lock(&mut tx, file_id)
+        .await
+        .map_err(retry)?
+        .ok_or_else(|| JobError::Permanent("the file is gone".into()))?;
+    if file.purged_at.is_none() {
+        tracing::info!(file = %cyex_tv_db::ids::to_text(file.id), "file uploaded again; not deleted");
+        return Ok(());
+    }
+    if files::in_use(&mut tx, file.id).await.map_err(retry)? {
+        files::revive(&mut tx, file.id).await.map_err(retry)?;
+        tx.commit().await.map_err(retry)?;
+        tracing::info!(file = %cyex_tv_db::ids::to_text(file.id), "file in use again; not deleted");
+        return Ok(());
+    }
+    delete_objects(&ctx, &store, &file).await?;
+    files::set_variants(&mut tx, file.id, &json!([]))
+        .await
+        .map_err(retry)?;
+    tx.commit().await.map_err(retry)?;
+    Ok(())
+}
+
+/// Deletes every object of a file and purges its CDN URLs.
+async fn delete_objects(
+    ctx: &Ctx,
+    store: &cyex_tv_storage::Store,
+    file: &files::File,
+) -> Result<(), JobError> {
     let sha_hex = sigv4::hex(&file.sha256);
     // The recorded names, plus every name the encoder can make: a transcode that was queued or
     // running at takedown time writes files the record doesn't know about yet.
@@ -151,10 +200,6 @@ pub async fn run(ctx: Ctx, job: Job) -> Result<(), JobError> {
             "no Cloudflare purge token; cached copies expire on their own"
         ),
     }
-    let mut conn = ctx.db.acquire().await.map_err(retry)?;
-    files::set_variants(&mut conn, file.id, &json!([]))
-        .await
-        .map_err(retry)?;
-    tracing::info!(file = %cyex_tv_db::ids::to_text(file.id), objects = names.len() + 1, "taken-down files deleted");
+    tracing::info!(file = %cyex_tv_db::ids::to_text(file.id), objects = names.len() + 1, "files deleted");
     Ok(())
 }
