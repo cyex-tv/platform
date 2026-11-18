@@ -35,6 +35,18 @@ const replay = /** @type {const} */ (`sha256-${createHash('sha256').update('this
 // Hosts of the profile pictures the API passes through from Twitch and Kick.
 const AVATARS = ['https://static-cdn.jtvnw.net', 'https://files.kick.com'];
 
+// The shop's checkout (Paddle.js, loaded only when someone starts a purchase; ADR 0016). Paddle
+// publishes no list of hosts for a Content Security Policy, so these were found by loading Paddle.js
+// and opening a checkout with this policy on, in both environments, and allowing exactly what it
+// asked for: the script from cdn.paddle.com (https://developer.paddle.com/paddlejs/include-paddlejs),
+// its overlay stylesheet from cdn.paddle.com (live) or sandbox-cdn.paddle.com (sandbox), and the
+// checkout itself in a frame from buy.paddle.com (live) or sandbox-buy.paddle.com (sandbox). The
+// page never makes a request of its own to Paddle, so connect-src is unchanged. The API says which
+// environment is in use, so both are allowed.
+const PADDLE_SCRIPT = ['https://cdn.paddle.com'];
+const PADDLE_STYLE = ['https://cdn.paddle.com', 'https://sandbox-cdn.paddle.com'];
+const PADDLE_FRAME = ['https://buy.paddle.com', 'https://sandbox-buy.paddle.com'];
+
 /** @type {import('@sveltejs/kit').Config} */
 export default {
   preprocess: vitePreprocess(),
@@ -46,15 +58,16 @@ export default {
       mode: 'auto',
       directives: {
         'default-src': ['self'],
-        'script-src': ['self', ...inline, 'unsafe-hashes', replay],
+        'script-src': ['self', ...inline, 'unsafe-hashes', replay, ...PADDLE_SCRIPT],
         // Inline style attributes (Svelte's style: directives and static style="" in templates)
         // need 'unsafe-inline'; <style> elements don't, so they get their own, stricter list.
         'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
-        'style-src-elem': ['self', 'https://fonts.googleapis.com'],
+        'style-src-elem': ['self', 'https://fonts.googleapis.com', ...PADDLE_STYLE],
         'style-src-attr': ['unsafe-inline'],
         'font-src': ['self', 'https://fonts.gstatic.com'],
         'img-src': ['self', 'data:', 'blob:', 'https://cdn.cyex.tv', ...AVATARS, api, ...mock],
         'connect-src': ['self', api, ...mock],
+        'frame-src': ['self', ...PADDLE_FRAME],
         'form-action': ['self'],
         'base-uri': ['self'],
         'object-src': ['none'],

@@ -110,6 +110,24 @@ type Documents = {
     "\n  query ProfileEdited {\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorSets {\n      ...SetFields\n    }\n  }\n": typeof types.ProfileEditedDocument,
     "\n  query AccountActivity($accountId: String!, $before: String, $limit: Int) {\n    accountActivityPage(accountId: $accountId, before: $before, limit: $limit) {\n      entries {\n        id\n        kind\n        actor {\n          id\n          displayName\n          avatar\n        }\n        set {\n          id\n          name\n        }\n        emote {\n          id\n          name\n          host\n          files {\n            name\n            width\n            height\n            isStatic\n          }\n        }\n        fromName\n        toName\n        badge {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        paint {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        createdAt\n      }\n      next\n    }\n  }\n": typeof types.AccountActivityDocument,
     "\n  query EmoteActivity($emoteId: String!, $before: String, $limit: Int) {\n    emoteActivityPage(emoteId: $emoteId, before: $before, limit: $limit) {\n      entries {\n        id\n        kind\n        actor {\n          id\n          displayName\n          avatar\n        }\n        set {\n          id\n          name\n        }\n        emote {\n          id\n          name\n          host\n          files {\n            name\n            width\n            height\n            isStatic\n          }\n        }\n        fromName\n        toName\n        badge {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        paint {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        createdAt\n      }\n      next\n    }\n  }\n": typeof types.EmoteActivityDocument,
+    "\n  fragment ShopItemFields on ShopItem {\n    id\n    name\n    description\n    priceCents\n    currency\n    paddlePriceId\n    badges {\n      ...BadgeFields\n    }\n    paints {\n      ...PaintFields\n    }\n    activeFrom\n    activeTo\n    stockLimit\n    stockLeft\n    visible\n    sortOrder\n    available\n    owned\n    deleted\n  }\n": typeof types.ShopItemFieldsFragmentDoc,
+    "\n  query ShopItems($all: Boolean) {\n    shopItems(all: $all) {\n      ...ShopItemFields\n    }\n  }\n": typeof types.ShopItemsDocument,
+    "\n  query ShopItem($id: String!) {\n    shopItem(id: $id) {\n      ...ShopItemFields\n    }\n  }\n": typeof types.ShopItemDocument,
+    "\n  fragment OrderFields on Order {\n    id\n    buyer {\n      id\n      displayName\n      avatar\n    }\n    recipient {\n      id\n      displayName\n      avatar\n    }\n    gift\n    itemId\n    itemName\n    status\n    amountCents\n    currency\n    paidTotalCents\n    paidCurrency\n    refundReason\n    createdAt\n    paidAt\n    refundedAt\n    failedAt\n  }\n": typeof types.OrderFieldsFragmentDoc,
+    "\n  mutation StartCheckout($itemId: String!, $recipient: RecipientInput) {\n    startCheckout(itemId: $itemId, recipient: $recipient) {\n      order {\n        ...OrderFields\n      }\n      transactionId\n      checkoutUrl\n      clientToken\n      environment\n    }\n  }\n": typeof types.StartCheckoutDocument,
+    "\n  query Order($id: String!) {\n    order(id: $id) {\n      ...OrderFields\n    }\n  }\n": typeof types.OrderDocument,
+    "\n  query MyOrders($page: Int, $perPage: Int) {\n    myOrders(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...OrderFields\n      }\n    }\n  }\n": typeof types.MyOrdersDocument,
+    "\n  mutation RedeemCode($code: String!) {\n    redeemCode(code: $code) {\n      name\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n    }\n  }\n": typeof types.RedeemCodeDocument,
+    "\n  mutation CreateShopItem($input: ShopItemInput!) {\n    createShopItem(input: $input) {\n      ...ShopItemFields\n    }\n  }\n": typeof types.CreateShopItemDocument,
+    "\n  mutation UpdateShopItem($id: String!, $input: ShopItemInput!) {\n    updateShopItem(id: $id, input: $input) {\n      ...ShopItemFields\n    }\n  }\n": typeof types.UpdateShopItemDocument,
+    "\n  mutation DeleteShopItem($id: String!) {\n    deleteShopItem(id: $id)\n  }\n": typeof types.DeleteShopItemDocument,
+    "\n  query AdminOrders($status: OrderStatus, $accountId: String, $itemId: String, $page: Int, $perPage: Int) {\n    orders(status: $status, accountId: $accountId, itemId: $itemId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...OrderFields\n        providerTransactionId\n      }\n    }\n  }\n": typeof types.AdminOrdersDocument,
+    "\n  mutation RefundOrder($id: String!, $reason: String!) {\n    refundOrder(id: $id, reason: $reason) {\n      ...OrderFields\n      providerTransactionId\n    }\n  }\n": typeof types.RefundOrderDocument,
+    "\n  fragment CodeBatchFields on CodeBatch {\n    id\n    name\n    prefix\n    itemId\n    itemName\n    badgeIds\n    paintIds\n    codeCount\n    usesPerCode\n    redemptions\n    expiresAt\n    disabledAt\n    createdBy {\n      id\n      displayName\n    }\n    createdAt\n  }\n": typeof types.CodeBatchFieldsFragmentDoc,
+    "\n  query CodeBatches($page: Int, $perPage: Int) {\n    codeBatches(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...CodeBatchFields\n      }\n    }\n  }\n": typeof types.CodeBatchesDocument,
+    "\n  mutation CreateCodeBatch($input: CodeBatchInput!) {\n    createCodeBatch(input: $input) {\n      batch {\n        ...CodeBatchFields\n      }\n      codes\n    }\n  }\n": typeof types.CreateCodeBatchDocument,
+    "\n  mutation DisableCodeBatch($id: String!) {\n    disableCodeBatch(id: $id) {\n      ...CodeBatchFields\n    }\n  }\n": typeof types.DisableCodeBatchDocument,
+    "\n  query ShopCounts($items: Boolean!, $orders: Boolean!, $codes: Boolean!) {\n    shopItems(all: true) @include(if: $items) {\n      id\n    }\n    orders(page: 1, perPage: 1) @include(if: $orders) {\n      total\n    }\n    codeBatches(page: 1, perPage: 1) @include(if: $codes) {\n      total\n    }\n  }\n": typeof types.ShopCountsDocument,
 };
 const documents: Documents = {
     "\n  fragment StudioPaintFields on Paint {\n    id\n    name\n    kind\n    angle\n    repeat\n    shape\n    color\n    stops {\n      at\n      color\n    }\n    shadows {\n      x\n      y\n      radius\n      color\n    }\n    image {\n      id\n      host\n      ready\n      width\n      height\n      animated\n      files {\n        name\n        format\n        scale\n        width\n        height\n        isStatic\n      }\n    }\n    updatedAt\n  }\n": types.StudioPaintFieldsFragmentDoc,
@@ -207,6 +225,24 @@ const documents: Documents = {
     "\n  query ProfileEdited {\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorSets {\n      ...SetFields\n    }\n  }\n": types.ProfileEditedDocument,
     "\n  query AccountActivity($accountId: String!, $before: String, $limit: Int) {\n    accountActivityPage(accountId: $accountId, before: $before, limit: $limit) {\n      entries {\n        id\n        kind\n        actor {\n          id\n          displayName\n          avatar\n        }\n        set {\n          id\n          name\n        }\n        emote {\n          id\n          name\n          host\n          files {\n            name\n            width\n            height\n            isStatic\n          }\n        }\n        fromName\n        toName\n        badge {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        paint {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        createdAt\n      }\n      next\n    }\n  }\n": types.AccountActivityDocument,
     "\n  query EmoteActivity($emoteId: String!, $before: String, $limit: Int) {\n    emoteActivityPage(emoteId: $emoteId, before: $before, limit: $limit) {\n      entries {\n        id\n        kind\n        actor {\n          id\n          displayName\n          avatar\n        }\n        set {\n          id\n          name\n        }\n        emote {\n          id\n          name\n          host\n          files {\n            name\n            width\n            height\n            isStatic\n          }\n        }\n        fromName\n        toName\n        badge {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        paint {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        createdAt\n      }\n      next\n    }\n  }\n": types.EmoteActivityDocument,
+    "\n  fragment ShopItemFields on ShopItem {\n    id\n    name\n    description\n    priceCents\n    currency\n    paddlePriceId\n    badges {\n      ...BadgeFields\n    }\n    paints {\n      ...PaintFields\n    }\n    activeFrom\n    activeTo\n    stockLimit\n    stockLeft\n    visible\n    sortOrder\n    available\n    owned\n    deleted\n  }\n": types.ShopItemFieldsFragmentDoc,
+    "\n  query ShopItems($all: Boolean) {\n    shopItems(all: $all) {\n      ...ShopItemFields\n    }\n  }\n": types.ShopItemsDocument,
+    "\n  query ShopItem($id: String!) {\n    shopItem(id: $id) {\n      ...ShopItemFields\n    }\n  }\n": types.ShopItemDocument,
+    "\n  fragment OrderFields on Order {\n    id\n    buyer {\n      id\n      displayName\n      avatar\n    }\n    recipient {\n      id\n      displayName\n      avatar\n    }\n    gift\n    itemId\n    itemName\n    status\n    amountCents\n    currency\n    paidTotalCents\n    paidCurrency\n    refundReason\n    createdAt\n    paidAt\n    refundedAt\n    failedAt\n  }\n": types.OrderFieldsFragmentDoc,
+    "\n  mutation StartCheckout($itemId: String!, $recipient: RecipientInput) {\n    startCheckout(itemId: $itemId, recipient: $recipient) {\n      order {\n        ...OrderFields\n      }\n      transactionId\n      checkoutUrl\n      clientToken\n      environment\n    }\n  }\n": types.StartCheckoutDocument,
+    "\n  query Order($id: String!) {\n    order(id: $id) {\n      ...OrderFields\n    }\n  }\n": types.OrderDocument,
+    "\n  query MyOrders($page: Int, $perPage: Int) {\n    myOrders(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...OrderFields\n      }\n    }\n  }\n": types.MyOrdersDocument,
+    "\n  mutation RedeemCode($code: String!) {\n    redeemCode(code: $code) {\n      name\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n    }\n  }\n": types.RedeemCodeDocument,
+    "\n  mutation CreateShopItem($input: ShopItemInput!) {\n    createShopItem(input: $input) {\n      ...ShopItemFields\n    }\n  }\n": types.CreateShopItemDocument,
+    "\n  mutation UpdateShopItem($id: String!, $input: ShopItemInput!) {\n    updateShopItem(id: $id, input: $input) {\n      ...ShopItemFields\n    }\n  }\n": types.UpdateShopItemDocument,
+    "\n  mutation DeleteShopItem($id: String!) {\n    deleteShopItem(id: $id)\n  }\n": types.DeleteShopItemDocument,
+    "\n  query AdminOrders($status: OrderStatus, $accountId: String, $itemId: String, $page: Int, $perPage: Int) {\n    orders(status: $status, accountId: $accountId, itemId: $itemId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...OrderFields\n        providerTransactionId\n      }\n    }\n  }\n": types.AdminOrdersDocument,
+    "\n  mutation RefundOrder($id: String!, $reason: String!) {\n    refundOrder(id: $id, reason: $reason) {\n      ...OrderFields\n      providerTransactionId\n    }\n  }\n": types.RefundOrderDocument,
+    "\n  fragment CodeBatchFields on CodeBatch {\n    id\n    name\n    prefix\n    itemId\n    itemName\n    badgeIds\n    paintIds\n    codeCount\n    usesPerCode\n    redemptions\n    expiresAt\n    disabledAt\n    createdBy {\n      id\n      displayName\n    }\n    createdAt\n  }\n": types.CodeBatchFieldsFragmentDoc,
+    "\n  query CodeBatches($page: Int, $perPage: Int) {\n    codeBatches(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...CodeBatchFields\n      }\n    }\n  }\n": types.CodeBatchesDocument,
+    "\n  mutation CreateCodeBatch($input: CodeBatchInput!) {\n    createCodeBatch(input: $input) {\n      batch {\n        ...CodeBatchFields\n      }\n      codes\n    }\n  }\n": types.CreateCodeBatchDocument,
+    "\n  mutation DisableCodeBatch($id: String!) {\n    disableCodeBatch(id: $id) {\n      ...CodeBatchFields\n    }\n  }\n": types.DisableCodeBatchDocument,
+    "\n  query ShopCounts($items: Boolean!, $orders: Boolean!, $codes: Boolean!) {\n    shopItems(all: true) @include(if: $items) {\n      id\n    }\n    orders(page: 1, perPage: 1) @include(if: $orders) {\n      total\n    }\n    codeBatches(page: 1, perPage: 1) @include(if: $codes) {\n      total\n    }\n  }\n": types.ShopCountsDocument,
 };
 
 /**
@@ -589,6 +625,78 @@ export function graphql(source: "\n  query AccountActivity($accountId: String!, 
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query EmoteActivity($emoteId: String!, $before: String, $limit: Int) {\n    emoteActivityPage(emoteId: $emoteId, before: $before, limit: $limit) {\n      entries {\n        id\n        kind\n        actor {\n          id\n          displayName\n          avatar\n        }\n        set {\n          id\n          name\n        }\n        emote {\n          id\n          name\n          host\n          files {\n            name\n            width\n            height\n            isStatic\n          }\n        }\n        fromName\n        toName\n        badge {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        paint {\n          fromId\n          fromName\n          toId\n          toName\n        }\n        createdAt\n      }\n      next\n    }\n  }\n"): typeof import('./graphql').EmoteActivityDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment ShopItemFields on ShopItem {\n    id\n    name\n    description\n    priceCents\n    currency\n    paddlePriceId\n    badges {\n      ...BadgeFields\n    }\n    paints {\n      ...PaintFields\n    }\n    activeFrom\n    activeTo\n    stockLimit\n    stockLeft\n    visible\n    sortOrder\n    available\n    owned\n    deleted\n  }\n"): typeof import('./graphql').ShopItemFieldsFragmentDoc;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query ShopItems($all: Boolean) {\n    shopItems(all: $all) {\n      ...ShopItemFields\n    }\n  }\n"): typeof import('./graphql').ShopItemsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query ShopItem($id: String!) {\n    shopItem(id: $id) {\n      ...ShopItemFields\n    }\n  }\n"): typeof import('./graphql').ShopItemDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment OrderFields on Order {\n    id\n    buyer {\n      id\n      displayName\n      avatar\n    }\n    recipient {\n      id\n      displayName\n      avatar\n    }\n    gift\n    itemId\n    itemName\n    status\n    amountCents\n    currency\n    paidTotalCents\n    paidCurrency\n    refundReason\n    createdAt\n    paidAt\n    refundedAt\n    failedAt\n  }\n"): typeof import('./graphql').OrderFieldsFragmentDoc;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation StartCheckout($itemId: String!, $recipient: RecipientInput) {\n    startCheckout(itemId: $itemId, recipient: $recipient) {\n      order {\n        ...OrderFields\n      }\n      transactionId\n      checkoutUrl\n      clientToken\n      environment\n    }\n  }\n"): typeof import('./graphql').StartCheckoutDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query Order($id: String!) {\n    order(id: $id) {\n      ...OrderFields\n    }\n  }\n"): typeof import('./graphql').OrderDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query MyOrders($page: Int, $perPage: Int) {\n    myOrders(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...OrderFields\n      }\n    }\n  }\n"): typeof import('./graphql').MyOrdersDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation RedeemCode($code: String!) {\n    redeemCode(code: $code) {\n      name\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n    }\n  }\n"): typeof import('./graphql').RedeemCodeDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateShopItem($input: ShopItemInput!) {\n    createShopItem(input: $input) {\n      ...ShopItemFields\n    }\n  }\n"): typeof import('./graphql').CreateShopItemDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UpdateShopItem($id: String!, $input: ShopItemInput!) {\n    updateShopItem(id: $id, input: $input) {\n      ...ShopItemFields\n    }\n  }\n"): typeof import('./graphql').UpdateShopItemDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteShopItem($id: String!) {\n    deleteShopItem(id: $id)\n  }\n"): typeof import('./graphql').DeleteShopItemDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AdminOrders($status: OrderStatus, $accountId: String, $itemId: String, $page: Int, $perPage: Int) {\n    orders(status: $status, accountId: $accountId, itemId: $itemId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...OrderFields\n        providerTransactionId\n      }\n    }\n  }\n"): typeof import('./graphql').AdminOrdersDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation RefundOrder($id: String!, $reason: String!) {\n    refundOrder(id: $id, reason: $reason) {\n      ...OrderFields\n      providerTransactionId\n    }\n  }\n"): typeof import('./graphql').RefundOrderDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment CodeBatchFields on CodeBatch {\n    id\n    name\n    prefix\n    itemId\n    itemName\n    badgeIds\n    paintIds\n    codeCount\n    usesPerCode\n    redemptions\n    expiresAt\n    disabledAt\n    createdBy {\n      id\n      displayName\n    }\n    createdAt\n  }\n"): typeof import('./graphql').CodeBatchFieldsFragmentDoc;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query CodeBatches($page: Int, $perPage: Int) {\n    codeBatches(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...CodeBatchFields\n      }\n    }\n  }\n"): typeof import('./graphql').CodeBatchesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateCodeBatch($input: CodeBatchInput!) {\n    createCodeBatch(input: $input) {\n      batch {\n        ...CodeBatchFields\n      }\n      codes\n    }\n  }\n"): typeof import('./graphql').CreateCodeBatchDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DisableCodeBatch($id: String!) {\n    disableCodeBatch(id: $id) {\n      ...CodeBatchFields\n    }\n  }\n"): typeof import('./graphql').DisableCodeBatchDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query ShopCounts($items: Boolean!, $orders: Boolean!, $codes: Boolean!) {\n    shopItems(all: true) @include(if: $items) {\n      id\n    }\n    orders(page: 1, perPage: 1) @include(if: $orders) {\n      total\n    }\n    codeBatches(page: 1, perPage: 1) @include(if: $codes) {\n      total\n    }\n  }\n"): typeof import('./graphql').ShopCountsDocument;
 
 
 export function graphql(source: string) {

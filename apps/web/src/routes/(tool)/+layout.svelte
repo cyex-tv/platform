@@ -17,6 +17,7 @@
   import SideRail from '$lib/shell/SideRail.svelte';
   import { markCurrent, type RailGroup } from '$lib/shell/rail';
   import State from '$lib/components/State.svelte';
+  import { loadShopCounts, shopCounts } from '$lib/shop/counts.svelte';
   import { can, isAdmin, loadMe, session } from '$lib/tool/session.svelte';
 
   let { children } = $props();
@@ -45,11 +46,14 @@
       .catch(() => {});
   });
 
+  $effect(() => {
+    if (admin) loadShopCounts();
+  });
+
   const adminRail = $derived.by<RailGroup[]>(() => {
     void session.me; // permissions come from the account
     const tickets = can('emotes.review') || can('emotes.takedown');
     const cosmetics = can('cosmetics.manage') || can('cosmetics.grant');
-    // Reserved for later (another branch): a "Shop" group with Items, Orders and Codes.
     const groups: RailGroup[] = [
       { items: row('/admin', 'Overview', 'gauge') },
       {
@@ -64,6 +68,14 @@
         items: [
           ...row('/admin/cosmetics/paints', 'Paints', 'brush', cosmetics),
           ...row('/admin/cosmetics/badges', 'Badges', 'badge', cosmetics),
+        ],
+      },
+      {
+        toggle: { label: 'Shop', icon: 'shopping-bag' },
+        items: [
+          ...row('/admin/shop/items', 'Items', 'tag', can('shop.manage'), shopCounts.items),
+          ...row('/admin/shop/orders', 'Orders', 'list', can('shop.orders'), shopCounts.orders),
+          ...row('/admin/shop/codes', 'Codes', 'key', can('codes.manage'), shopCounts.codes),
         ],
       },
       {

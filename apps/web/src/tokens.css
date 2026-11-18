@@ -4,7 +4,7 @@
    Components use only these values. There is no second palette: tool density comes from
    components (tool.css), never from a different ground or font. */
 
-:root {
+:root, [data-theme="dark"] {
   color-scheme: dark;
 
   /* Ground and surfaces: height is a colour step (bg → surface → elevated). */

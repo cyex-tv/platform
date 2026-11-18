@@ -16,6 +16,9 @@ const BASE = `http://localhost:${PORT}`;
 const OPEN_ENV = process.env.MOCK_OPEN === '1';
 const ADMIN_ENV = process.env.MOCK_ADMIN === '1' || OPEN_ENV;
 const FACES = process.env.MOCK_FACES === '1';
+// MOCK_PADDLE=1: checkout leaves orders PENDING with a client token (for Paddle.js, or a stand-in for it in tests).
+const PADDLE_MOCK = process.env.MOCK_PADDLE === '1';
+const PADDLE_DELAY = Number(process.env.MOCK_PADDLE_DELAY ?? 5000);
 
 const ME_ID = '01JD8X0000000000000000MEME';
 const OWNER_DEFS = [
@@ -596,7 +599,7 @@ const editorChannels = () => EDITOR_CHANNELS.filter((c) => EDITOR_OF.some((g) =>
 const flagsOn = (ownerId) => (ownerId === ME_ID ? EDITOR_FLAGS : EDITOR_OF.find((g) => g.account.id === ownerId)?.permissions ?? []);
 const editorOfOut = () => EDITOR_OF.map((g) => ({ ...g }));
 
-const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view', 'cosmetics.manage', 'cosmetics.grant'];
+const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view', 'cosmetics.manage', 'cosmetics.grant', 'shop.manage', 'shop.orders', 'codes.manage'];
 
 // ---- Chat cosmetics (ADR 0015) ----------------------------------------------------------
 // SAMPLE DATA ONLY: two made-up badges (simple SVG drawn here) and three sample paints, so the
@@ -967,6 +970,11 @@ function shopAnswer(q, v, session, admin) {
       }
       if (f === 'order') {
         const o = ORDERS.find((x) => x.id === v.id);
+        if (o && o.status === 'PENDING' && PADDLE_MOCK && Date.now() - Date.parse(o.createdAt) > PADDLE_DELAY) {
+          Object.assign(o, { status: 'PAID', paidAt: new Date().toISOString(), paidTotalCents: o.amountCents, paidCurrency: o.currency });
+          const it = itemOf(o.itemId);
+          if (it) grantAll(o.recipientId, it.badgeIds, it.paintIds, 'PURCHASE', `Order ${o.id} (mock data)`);
+        }
         data.order = o && session && (admin || o.buyerId === ME_ID || o.recipientId === ME_ID) ? orderOut(o) : null;
       }
       if (f === 'orders') {
@@ -1070,10 +1078,18 @@ function shopAnswer(q, v, session, admin) {
     if (stockLeftOf(item) === 0) return err('This item is sold out.', 'sold_out');
     if (!isAvailable(item)) return err('This item is not on sale.', 'item_unavailable');
     const login = String(v.recipient?.login ?? '').toLowerCase();
-    const recipient = login ? OWNERS.find((a) => a.displayName.toLowerCase() === login) : null;
+    // No recipient: for the buyer themselves, as the real API does.
+    const recipient = v.recipient ? (login ? OWNERS.find((a) => a.displayName.toLowerCase() === login) : null) : ME_SUMMARY;
     if (!recipient) return err('No cyex.tv account with that name.', 'recipient_not_found');
     if (ownsAll(recipient.id, item.badgeIds, item.paintIds)) return err('They own all of that already.', 'already_owned');
     const now = new Date().toISOString();
+    if (PADDLE_MOCK) {
+      // MOCK_PADDLE=1: like the real thing, the order waits for payment (PENDING) and a client token
+      // is given; it turns PAID PADDLE_DELAY ms later, when `order` is asked for (the webhook).
+      const pending = mkOrder(ME_ID, recipient.id, item, 'PENDING', now, { paidTotalCents: null, paidCurrency: null, paidAt: null });
+      ORDERS.push(pending);
+      return { data: { startCheckout: { order: orderOut(pending), transactionId: pending.providerTransactionId, checkoutUrl: null, clientToken: 'test_mockmockmockmock', environment: 'sandbox' } } };
+    }
     const order = mkOrder(ME_ID, recipient.id, item, 'PAID', now);
     ORDERS.push(order);
     grantAll(recipient.id, item.badgeIds, item.paintIds, 'PURCHASE', `Order ${order.id} (mock data)`);

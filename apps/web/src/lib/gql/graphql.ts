@@ -2616,6 +2616,128 @@ export type EmoteActivityQueryVariables = Exact<{
 
 export type EmoteActivityQuery = { __typename?: 'Query', emoteActivityPage: { __typename?: 'ActivityPage', next?: string | null, entries: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> } };
 
+export type ShopItemFieldsFragment = { __typename?: 'ShopItem', id: string, name: string, description: string, priceCents: number, currency: string, paddlePriceId?: string | null, activeFrom?: string | null, activeTo?: string | null, stockLimit?: number | null, stockLeft?: number | null, visible: boolean, sortOrder: number, available: boolean, owned: boolean, deleted: boolean, badges: Array<{ __typename?: 'Badge', id: string, name: string, tooltip: string, image: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } }>, paints: Array<{ __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null }> };
+
+export type ShopItemsQueryVariables = Exact<{
+  all?: InputMaybe<Scalars['Boolean']['input']>;
+}>;
+
+
+export type ShopItemsQuery = { __typename?: 'Query', shopItems: Array<{ __typename?: 'ShopItem', id: string, name: string, description: string, priceCents: number, currency: string, paddlePriceId?: string | null, activeFrom?: string | null, activeTo?: string | null, stockLimit?: number | null, stockLeft?: number | null, visible: boolean, sortOrder: number, available: boolean, owned: boolean, deleted: boolean, badges: Array<{ __typename?: 'Badge', id: string, name: string, tooltip: string, image: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } }>, paints: Array<{ __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null }> }> };
+
+export type ShopItemQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type ShopItemQuery = { __typename?: 'Query', shopItem?: { __typename?: 'ShopItem', id: string, name: string, description: string, priceCents: number, currency: string, paddlePriceId?: string | null, activeFrom?: string | null, activeTo?: string | null, stockLimit?: number | null, stockLeft?: number | null, visible: boolean, sortOrder: number, available: boolean, owned: boolean, deleted: boolean, badges: Array<{ __typename?: 'Badge', id: string, name: string, tooltip: string, image: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } }>, paints: Array<{ __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null }> } | null };
+
+export type OrderFieldsFragment = { __typename?: 'Order', id: string, gift: boolean, itemId: string, itemName: string, status: OrderStatus, amountCents: number, currency: string, paidTotalCents?: number | null, paidCurrency?: string | null, refundReason?: string | null, createdAt: string, paidAt?: string | null, refundedAt?: string | null, failedAt?: string | null, buyer?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, recipient?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null };
+
+export type StartCheckoutMutationVariables = Exact<{
+  itemId: Scalars['String']['input'];
+  recipient?: InputMaybe<RecipientInput>;
+}>;
+
+
+export type StartCheckoutMutation = { __typename?: 'Mutation', startCheckout: { __typename?: 'Checkout', transactionId: string, checkoutUrl?: string | null, clientToken?: string | null, environment: string, order: { __typename?: 'Order', id: string, gift: boolean, itemId: string, itemName: string, status: OrderStatus, amountCents: number, currency: string, paidTotalCents?: number | null, paidCurrency?: string | null, refundReason?: string | null, createdAt: string, paidAt?: string | null, refundedAt?: string | null, failedAt?: string | null, buyer?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, recipient?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null } } };
+
+export type OrderQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type OrderQuery = { __typename?: 'Query', order?: { __typename?: 'Order', id: string, gift: boolean, itemId: string, itemName: string, status: OrderStatus, amountCents: number, currency: string, paidTotalCents?: number | null, paidCurrency?: string | null, refundReason?: string | null, createdAt: string, paidAt?: string | null, refundedAt?: string | null, failedAt?: string | null, buyer?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, recipient?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null } | null };
+
+export type MyOrdersQueryVariables = Exact<{
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type MyOrdersQuery = { __typename?: 'Query', myOrders: { __typename?: 'OrderPage', total: number, items: Array<{ __typename?: 'Order', id: string, gift: boolean, itemId: string, itemName: string, status: OrderStatus, amountCents: number, currency: string, paidTotalCents?: number | null, paidCurrency?: string | null, refundReason?: string | null, createdAt: string, paidAt?: string | null, refundedAt?: string | null, failedAt?: string | null, buyer?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, recipient?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null }> } };
+
+export type RedeemCodeMutationVariables = Exact<{
+  code: Scalars['String']['input'];
+}>;
+
+
+export type RedeemCodeMutation = { __typename?: 'Mutation', redeemCode: { __typename?: 'RedeemResult', name: string, badges: Array<{ __typename?: 'Badge', id: string, name: string, tooltip: string, image: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } }>, paints: Array<{ __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null }> } };
+
+export type CreateShopItemMutationVariables = Exact<{
+  input: ShopItemInput;
+}>;
+
+
+export type CreateShopItemMutation = { __typename?: 'Mutation', createShopItem: { __typename?: 'ShopItem', id: string, name: string, description: string, priceCents: number, currency: string, paddlePriceId?: string | null, activeFrom?: string | null, activeTo?: string | null, stockLimit?: number | null, stockLeft?: number | null, visible: boolean, sortOrder: number, available: boolean, owned: boolean, deleted: boolean, badges: Array<{ __typename?: 'Badge', id: string, name: string, tooltip: string, image: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } }>, paints: Array<{ __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null }> } };
+
+export type UpdateShopItemMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: ShopItemInput;
+}>;
+
+
+export type UpdateShopItemMutation = { __typename?: 'Mutation', updateShopItem: { __typename?: 'ShopItem', id: string, name: string, description: string, priceCents: number, currency: string, paddlePriceId?: string | null, activeFrom?: string | null, activeTo?: string | null, stockLimit?: number | null, stockLeft?: number | null, visible: boolean, sortOrder: number, available: boolean, owned: boolean, deleted: boolean, badges: Array<{ __typename?: 'Badge', id: string, name: string, tooltip: string, image: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } }>, paints: Array<{ __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null }> } };
+
+export type DeleteShopItemMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DeleteShopItemMutation = { __typename?: 'Mutation', deleteShopItem: boolean };
+
+export type AdminOrdersQueryVariables = Exact<{
+  status?: InputMaybe<OrderStatus>;
+  accountId?: InputMaybe<Scalars['String']['input']>;
+  itemId?: InputMaybe<Scalars['String']['input']>;
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type AdminOrdersQuery = { __typename?: 'Query', orders: { __typename?: 'OrderPage', total: number, items: Array<{ __typename?: 'Order', providerTransactionId?: string | null, id: string, gift: boolean, itemId: string, itemName: string, status: OrderStatus, amountCents: number, currency: string, paidTotalCents?: number | null, paidCurrency?: string | null, refundReason?: string | null, createdAt: string, paidAt?: string | null, refundedAt?: string | null, failedAt?: string | null, buyer?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, recipient?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null }> } };
+
+export type RefundOrderMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  reason: Scalars['String']['input'];
+}>;
+
+
+export type RefundOrderMutation = { __typename?: 'Mutation', refundOrder: { __typename?: 'Order', providerTransactionId?: string | null, id: string, gift: boolean, itemId: string, itemName: string, status: OrderStatus, amountCents: number, currency: string, paidTotalCents?: number | null, paidCurrency?: string | null, refundReason?: string | null, createdAt: string, paidAt?: string | null, refundedAt?: string | null, failedAt?: string | null, buyer?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, recipient?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null } };
+
+export type CodeBatchFieldsFragment = { __typename?: 'CodeBatch', id: string, name: string, prefix: string, itemId?: string | null, itemName?: string | null, badgeIds: Array<string>, paintIds: Array<string>, codeCount: number, usesPerCode: number, redemptions: number, expiresAt?: string | null, disabledAt?: string | null, createdAt: string, createdBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null };
+
+export type CodeBatchesQueryVariables = Exact<{
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type CodeBatchesQuery = { __typename?: 'Query', codeBatches: { __typename?: 'CodeBatchPage', total: number, items: Array<{ __typename?: 'CodeBatch', id: string, name: string, prefix: string, itemId?: string | null, itemName?: string | null, badgeIds: Array<string>, paintIds: Array<string>, codeCount: number, usesPerCode: number, redemptions: number, expiresAt?: string | null, disabledAt?: string | null, createdAt: string, createdBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null }> } };
+
+export type CreateCodeBatchMutationVariables = Exact<{
+  input: CodeBatchInput;
+}>;
+
+
+export type CreateCodeBatchMutation = { __typename?: 'Mutation', createCodeBatch: { __typename?: 'CreatedCodeBatch', codes: Array<string>, batch: { __typename?: 'CodeBatch', id: string, name: string, prefix: string, itemId?: string | null, itemName?: string | null, badgeIds: Array<string>, paintIds: Array<string>, codeCount: number, usesPerCode: number, redemptions: number, expiresAt?: string | null, disabledAt?: string | null, createdAt: string, createdBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null } } };
+
+export type DisableCodeBatchMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DisableCodeBatchMutation = { __typename?: 'Mutation', disableCodeBatch: { __typename?: 'CodeBatch', id: string, name: string, prefix: string, itemId?: string | null, itemName?: string | null, badgeIds: Array<string>, paintIds: Array<string>, codeCount: number, usesPerCode: number, redemptions: number, expiresAt?: string | null, disabledAt?: string | null, createdAt: string, createdBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null } };
+
+export type ShopCountsQueryVariables = Exact<{
+  items: Scalars['Boolean']['input'];
+  orders: Scalars['Boolean']['input'];
+  codes: Scalars['Boolean']['input'];
+}>;
+
+
+export type ShopCountsQuery = { __typename?: 'Query', shopItems?: Array<{ __typename?: 'ShopItem', id: string }>, orders?: { __typename?: 'OrderPage', total: number }, codeBatches?: { __typename?: 'CodeBatchPage', total: number } };
+
 export class TypedDocumentString<TResult, TVariables>
   extends String
   implements DocumentTypeDecoration<TResult, TVariables>
@@ -2856,6 +2978,124 @@ export const PaintFieldsFragmentDoc = new TypedDocumentString(`
     isStatic
   }
 }`, {"fragmentName":"PaintFields"}) as unknown as TypedDocumentString<PaintFieldsFragment, unknown>;
+export const ShopItemFieldsFragmentDoc = new TypedDocumentString(`
+    fragment ShopItemFields on ShopItem {
+  id
+  name
+  description
+  priceCents
+  currency
+  paddlePriceId
+  badges {
+    ...BadgeFields
+  }
+  paints {
+    ...PaintFields
+  }
+  activeFrom
+  activeTo
+  stockLimit
+  stockLeft
+  visible
+  sortOrder
+  available
+  owned
+  deleted
+}
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}
+fragment BadgeFields on Badge {
+  id
+  name
+  tooltip
+  image {
+    ...CosmeticImageFields
+  }
+}
+fragment PaintFields on Paint {
+  id
+  name
+  kind
+  angle
+  repeat
+  shape
+  color
+  stops {
+    at
+    color
+  }
+  shadows {
+    x
+    y
+    radius
+    color
+  }
+  image {
+    ...CosmeticImageFields
+  }
+}`, {"fragmentName":"ShopItemFields"}) as unknown as TypedDocumentString<ShopItemFieldsFragment, unknown>;
+export const OrderFieldsFragmentDoc = new TypedDocumentString(`
+    fragment OrderFields on Order {
+  id
+  buyer {
+    id
+    displayName
+    avatar
+  }
+  recipient {
+    id
+    displayName
+    avatar
+  }
+  gift
+  itemId
+  itemName
+  status
+  amountCents
+  currency
+  paidTotalCents
+  paidCurrency
+  refundReason
+  createdAt
+  paidAt
+  refundedAt
+  failedAt
+}
+    `, {"fragmentName":"OrderFields"}) as unknown as TypedDocumentString<OrderFieldsFragment, unknown>;
+export const CodeBatchFieldsFragmentDoc = new TypedDocumentString(`
+    fragment CodeBatchFields on CodeBatch {
+  id
+  name
+  prefix
+  itemId
+  itemName
+  badgeIds
+  paintIds
+  codeCount
+  usesPerCode
+  redemptions
+  expiresAt
+  disabledAt
+  createdBy {
+    id
+    displayName
+  }
+  createdAt
+}
+    `, {"fragmentName":"CodeBatchFields"}) as unknown as TypedDocumentString<CodeBatchFieldsFragment, unknown>;
 export const StudioPaintsDocument = new TypedDocumentString(`
     query StudioPaints {
   cosmetics {
@@ -4758,3 +4998,635 @@ export const EmoteActivityDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<EmoteActivityQuery, EmoteActivityQueryVariables>;
+export const ShopItemsDocument = new TypedDocumentString(`
+    query ShopItems($all: Boolean) {
+  shopItems(all: $all) {
+    ...ShopItemFields
+  }
+}
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}
+fragment BadgeFields on Badge {
+  id
+  name
+  tooltip
+  image {
+    ...CosmeticImageFields
+  }
+}
+fragment PaintFields on Paint {
+  id
+  name
+  kind
+  angle
+  repeat
+  shape
+  color
+  stops {
+    at
+    color
+  }
+  shadows {
+    x
+    y
+    radius
+    color
+  }
+  image {
+    ...CosmeticImageFields
+  }
+}
+fragment ShopItemFields on ShopItem {
+  id
+  name
+  description
+  priceCents
+  currency
+  paddlePriceId
+  badges {
+    ...BadgeFields
+  }
+  paints {
+    ...PaintFields
+  }
+  activeFrom
+  activeTo
+  stockLimit
+  stockLeft
+  visible
+  sortOrder
+  available
+  owned
+  deleted
+}`) as unknown as TypedDocumentString<ShopItemsQuery, ShopItemsQueryVariables>;
+export const ShopItemDocument = new TypedDocumentString(`
+    query ShopItem($id: String!) {
+  shopItem(id: $id) {
+    ...ShopItemFields
+  }
+}
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}
+fragment BadgeFields on Badge {
+  id
+  name
+  tooltip
+  image {
+    ...CosmeticImageFields
+  }
+}
+fragment PaintFields on Paint {
+  id
+  name
+  kind
+  angle
+  repeat
+  shape
+  color
+  stops {
+    at
+    color
+  }
+  shadows {
+    x
+    y
+    radius
+    color
+  }
+  image {
+    ...CosmeticImageFields
+  }
+}
+fragment ShopItemFields on ShopItem {
+  id
+  name
+  description
+  priceCents
+  currency
+  paddlePriceId
+  badges {
+    ...BadgeFields
+  }
+  paints {
+    ...PaintFields
+  }
+  activeFrom
+  activeTo
+  stockLimit
+  stockLeft
+  visible
+  sortOrder
+  available
+  owned
+  deleted
+}`) as unknown as TypedDocumentString<ShopItemQuery, ShopItemQueryVariables>;
+export const StartCheckoutDocument = new TypedDocumentString(`
+    mutation StartCheckout($itemId: String!, $recipient: RecipientInput) {
+  startCheckout(itemId: $itemId, recipient: $recipient) {
+    order {
+      ...OrderFields
+    }
+    transactionId
+    checkoutUrl
+    clientToken
+    environment
+  }
+}
+    fragment OrderFields on Order {
+  id
+  buyer {
+    id
+    displayName
+    avatar
+  }
+  recipient {
+    id
+    displayName
+    avatar
+  }
+  gift
+  itemId
+  itemName
+  status
+  amountCents
+  currency
+  paidTotalCents
+  paidCurrency
+  refundReason
+  createdAt
+  paidAt
+  refundedAt
+  failedAt
+}`) as unknown as TypedDocumentString<StartCheckoutMutation, StartCheckoutMutationVariables>;
+export const OrderDocument = new TypedDocumentString(`
+    query Order($id: String!) {
+  order(id: $id) {
+    ...OrderFields
+  }
+}
+    fragment OrderFields on Order {
+  id
+  buyer {
+    id
+    displayName
+    avatar
+  }
+  recipient {
+    id
+    displayName
+    avatar
+  }
+  gift
+  itemId
+  itemName
+  status
+  amountCents
+  currency
+  paidTotalCents
+  paidCurrency
+  refundReason
+  createdAt
+  paidAt
+  refundedAt
+  failedAt
+}`) as unknown as TypedDocumentString<OrderQuery, OrderQueryVariables>;
+export const MyOrdersDocument = new TypedDocumentString(`
+    query MyOrders($page: Int, $perPage: Int) {
+  myOrders(page: $page, perPage: $perPage) {
+    total
+    items {
+      ...OrderFields
+    }
+  }
+}
+    fragment OrderFields on Order {
+  id
+  buyer {
+    id
+    displayName
+    avatar
+  }
+  recipient {
+    id
+    displayName
+    avatar
+  }
+  gift
+  itemId
+  itemName
+  status
+  amountCents
+  currency
+  paidTotalCents
+  paidCurrency
+  refundReason
+  createdAt
+  paidAt
+  refundedAt
+  failedAt
+}`) as unknown as TypedDocumentString<MyOrdersQuery, MyOrdersQueryVariables>;
+export const RedeemCodeDocument = new TypedDocumentString(`
+    mutation RedeemCode($code: String!) {
+  redeemCode(code: $code) {
+    name
+    badges {
+      ...BadgeFields
+    }
+    paints {
+      ...PaintFields
+    }
+  }
+}
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}
+fragment BadgeFields on Badge {
+  id
+  name
+  tooltip
+  image {
+    ...CosmeticImageFields
+  }
+}
+fragment PaintFields on Paint {
+  id
+  name
+  kind
+  angle
+  repeat
+  shape
+  color
+  stops {
+    at
+    color
+  }
+  shadows {
+    x
+    y
+    radius
+    color
+  }
+  image {
+    ...CosmeticImageFields
+  }
+}`) as unknown as TypedDocumentString<RedeemCodeMutation, RedeemCodeMutationVariables>;
+export const CreateShopItemDocument = new TypedDocumentString(`
+    mutation CreateShopItem($input: ShopItemInput!) {
+  createShopItem(input: $input) {
+    ...ShopItemFields
+  }
+}
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}
+fragment BadgeFields on Badge {
+  id
+  name
+  tooltip
+  image {
+    ...CosmeticImageFields
+  }
+}
+fragment PaintFields on Paint {
+  id
+  name
+  kind
+  angle
+  repeat
+  shape
+  color
+  stops {
+    at
+    color
+  }
+  shadows {
+    x
+    y
+    radius
+    color
+  }
+  image {
+    ...CosmeticImageFields
+  }
+}
+fragment ShopItemFields on ShopItem {
+  id
+  name
+  description
+  priceCents
+  currency
+  paddlePriceId
+  badges {
+    ...BadgeFields
+  }
+  paints {
+    ...PaintFields
+  }
+  activeFrom
+  activeTo
+  stockLimit
+  stockLeft
+  visible
+  sortOrder
+  available
+  owned
+  deleted
+}`) as unknown as TypedDocumentString<CreateShopItemMutation, CreateShopItemMutationVariables>;
+export const UpdateShopItemDocument = new TypedDocumentString(`
+    mutation UpdateShopItem($id: String!, $input: ShopItemInput!) {
+  updateShopItem(id: $id, input: $input) {
+    ...ShopItemFields
+  }
+}
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}
+fragment BadgeFields on Badge {
+  id
+  name
+  tooltip
+  image {
+    ...CosmeticImageFields
+  }
+}
+fragment PaintFields on Paint {
+  id
+  name
+  kind
+  angle
+  repeat
+  shape
+  color
+  stops {
+    at
+    color
+  }
+  shadows {
+    x
+    y
+    radius
+    color
+  }
+  image {
+    ...CosmeticImageFields
+  }
+}
+fragment ShopItemFields on ShopItem {
+  id
+  name
+  description
+  priceCents
+  currency
+  paddlePriceId
+  badges {
+    ...BadgeFields
+  }
+  paints {
+    ...PaintFields
+  }
+  activeFrom
+  activeTo
+  stockLimit
+  stockLeft
+  visible
+  sortOrder
+  available
+  owned
+  deleted
+}`) as unknown as TypedDocumentString<UpdateShopItemMutation, UpdateShopItemMutationVariables>;
+export const DeleteShopItemDocument = new TypedDocumentString(`
+    mutation DeleteShopItem($id: String!) {
+  deleteShopItem(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeleteShopItemMutation, DeleteShopItemMutationVariables>;
+export const AdminOrdersDocument = new TypedDocumentString(`
+    query AdminOrders($status: OrderStatus, $accountId: String, $itemId: String, $page: Int, $perPage: Int) {
+  orders(
+    status: $status
+    accountId: $accountId
+    itemId: $itemId
+    page: $page
+    perPage: $perPage
+  ) {
+    total
+    items {
+      ...OrderFields
+      providerTransactionId
+    }
+  }
+}
+    fragment OrderFields on Order {
+  id
+  buyer {
+    id
+    displayName
+    avatar
+  }
+  recipient {
+    id
+    displayName
+    avatar
+  }
+  gift
+  itemId
+  itemName
+  status
+  amountCents
+  currency
+  paidTotalCents
+  paidCurrency
+  refundReason
+  createdAt
+  paidAt
+  refundedAt
+  failedAt
+}`) as unknown as TypedDocumentString<AdminOrdersQuery, AdminOrdersQueryVariables>;
+export const RefundOrderDocument = new TypedDocumentString(`
+    mutation RefundOrder($id: String!, $reason: String!) {
+  refundOrder(id: $id, reason: $reason) {
+    ...OrderFields
+    providerTransactionId
+  }
+}
+    fragment OrderFields on Order {
+  id
+  buyer {
+    id
+    displayName
+    avatar
+  }
+  recipient {
+    id
+    displayName
+    avatar
+  }
+  gift
+  itemId
+  itemName
+  status
+  amountCents
+  currency
+  paidTotalCents
+  paidCurrency
+  refundReason
+  createdAt
+  paidAt
+  refundedAt
+  failedAt
+}`) as unknown as TypedDocumentString<RefundOrderMutation, RefundOrderMutationVariables>;
+export const CodeBatchesDocument = new TypedDocumentString(`
+    query CodeBatches($page: Int, $perPage: Int) {
+  codeBatches(page: $page, perPage: $perPage) {
+    total
+    items {
+      ...CodeBatchFields
+    }
+  }
+}
+    fragment CodeBatchFields on CodeBatch {
+  id
+  name
+  prefix
+  itemId
+  itemName
+  badgeIds
+  paintIds
+  codeCount
+  usesPerCode
+  redemptions
+  expiresAt
+  disabledAt
+  createdBy {
+    id
+    displayName
+  }
+  createdAt
+}`) as unknown as TypedDocumentString<CodeBatchesQuery, CodeBatchesQueryVariables>;
+export const CreateCodeBatchDocument = new TypedDocumentString(`
+    mutation CreateCodeBatch($input: CodeBatchInput!) {
+  createCodeBatch(input: $input) {
+    batch {
+      ...CodeBatchFields
+    }
+    codes
+  }
+}
+    fragment CodeBatchFields on CodeBatch {
+  id
+  name
+  prefix
+  itemId
+  itemName
+  badgeIds
+  paintIds
+  codeCount
+  usesPerCode
+  redemptions
+  expiresAt
+  disabledAt
+  createdBy {
+    id
+    displayName
+  }
+  createdAt
+}`) as unknown as TypedDocumentString<CreateCodeBatchMutation, CreateCodeBatchMutationVariables>;
+export const DisableCodeBatchDocument = new TypedDocumentString(`
+    mutation DisableCodeBatch($id: String!) {
+  disableCodeBatch(id: $id) {
+    ...CodeBatchFields
+  }
+}
+    fragment CodeBatchFields on CodeBatch {
+  id
+  name
+  prefix
+  itemId
+  itemName
+  badgeIds
+  paintIds
+  codeCount
+  usesPerCode
+  redemptions
+  expiresAt
+  disabledAt
+  createdBy {
+    id
+    displayName
+  }
+  createdAt
+}`) as unknown as TypedDocumentString<DisableCodeBatchMutation, DisableCodeBatchMutationVariables>;
+export const ShopCountsDocument = new TypedDocumentString(`
+    query ShopCounts($items: Boolean!, $orders: Boolean!, $codes: Boolean!) {
+  shopItems(all: true) @include(if: $items) {
+    id
+  }
+  orders(page: 1, perPage: 1) @include(if: $orders) {
+    total
+  }
+  codeBatches(page: 1, perPage: 1) @include(if: $codes) {
+    total
+  }
+}
+    `) as unknown as TypedDocumentString<ShopCountsQuery, ShopCountsQueryVariables>;

@@ -39,6 +39,20 @@ ADR 0016. A shop for cyex.tv's chat cosmetics and redeem codes, like 7TV's Store
 - `gh pr create -R cyex-tv/infra --base main --head env/paddle`, `gh pr merge 7 -R cyex-tv/infra --merge`.
 - `gh pr create --base main --head feat/shop`.
 
+## Shop and redeem pages on the website (branch `feat/shop-web`)
+
+The website side of ADR 0016, on the shop API (PR 58). Nothing changes in the API.
+
+- [x] `/shop`: items as cards, each drawn on your own name (a made-up one signed out) in the dark and the light chat ground and as a chat line; price in the cyex number format, copies left, sale end, "Owned". An item opens in a dialog at `/shop?item=<id>` (shareable; signed out, "Sign in to buy" comes back to it): every paint and badge (chat size and 2x), buy for yourself or give to a Twitch or Kick login.
+- [x] Checkout: `startCheckout`, then Paddle.js loaded only at that moment (`Environment.set`, `Initialize({ token })`, `Checkout.open({ transactionId })`; `checkoutUrl` when the script can't load), then `order(id)` polled until PAID, REFUNDED or FAILED. The dialog closes when the payment opens (a modal would cover Paddle's window); the page shows a calm state: waiting, confirming, still confirming, window closed (open it again), paid (link to equip it) or failed. Every API error code has its own sentence.
+- [x] `/redeem`: one field (case, spaces and dashes ignored), shows what the code gave with a link to equip it; the lockout says in how many minutes to try again.
+- [x] Orders: a panel in `/me/account` (item, state, amount paid, date, gift from or to). The refund reason is never shown to buyers.
+- [x] Admin, under a "Shop" group of the admin rail with counts: Shop items (list with state, create and edit with a cosmetics picker, price, currency, Paddle price ID, sale window, copies, sort order, visibility; soft delete), Orders (filter by state, item, account; detail; refund with a reason), Codes (batches; a new batch shows its codes once with Copy all and Download .txt; turn a batch off). Each page needs its own permission (`shop.manage`, `shop.orders`, `codes.manage`).
+- [x] Entry points: Cosmetics ("Get more in the shop"), the footer ("Shop"). The header is unchanged.
+- [x] CSP (`apps/web/svelte.config.js`): `script-src` + `https://cdn.paddle.com`; `style-src-elem` + `https://cdn.paddle.com` and `https://sandbox-cdn.paddle.com`; new `frame-src 'self' https://buy.paddle.com https://sandbox-buy.paddle.com`. Found by loading Paddle.js and opening a checkout under the policy in both environments; Paddle's optional ProfitWell script stays blocked.
+- [x] Tests: `src/lib/shop/shop.test.ts` (prices, price fields, redeem codes, every error map, lockout minutes, order states, item states, code files). Dev mock: no recipient means yourself, staff permissions, `MOCK_PADDLE=1` leaves orders pending like the real checkout.
+- [ ] Not checked: a real Paddle sandbox payment (needs the owner's sandbox account and token).
+
 ## Account hub: sessions, notifications, export, deletion (branch `feat/account-hub`)
 
 Gap list G6. API only; `/me/account` (Connections, Sessions, Data) and `/me/inbox` with the header bell come next.
