@@ -1251,7 +1251,7 @@ function accountHub(q, v) {
     data.exportMyData = exportDoc();
   }
   if (/\bdeleteAccount\s*\(/.test(q)) {
-    const typed = String(v.confirm ?? '').trim().replace(/^@/, '').toLowerCase();
+    const typed = String(v.confirm ?? Object.values(v).find((x) => typeof x === 'string') ?? '').trim().replace(/^@/, '').toLowerCase();
     if (!IDENTITIES.some((i) => i.login.toLowerCase() === typed))
       return err('Type one of your Twitch or Kick logins to confirm.', 'confirm_mismatch');
     // The mock keeps its data (it would have nothing left to show); it signs you out like the API.
