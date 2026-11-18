@@ -1,6 +1,6 @@
 <script lang="ts">
   // An emote's actions: add it to one of your sets, copy its link and, in the page head, a menu
-  // with Copy name and Report. Signed out, "Add to set" becomes "Sign in to add". `variant="bar"`
+  // with Copy name and Report. With `picture`, a Download button sits before it. Signed out, "Add to set" becomes "Sign in to add". `variant="bar"`
   // is the phone's sticky bar (bigger targets, Add to set takes the width). Pass the page's `viewer` so every
   // copy of the actions shares one sign-in check; without it the component makes its own.
   import { onMount } from 'svelte';
@@ -10,11 +10,13 @@
   import Icon from './Icon.svelte';
   import Name from './Name.svelte';
   import Popover from './Popover.svelte';
+  import EmoteDownload from './emote/EmoteDownload.svelte';
+  import type { PageEmote } from './emote/emote-page';
   import ReportForm from './emote/ReportForm.svelte';
   import { Viewer } from './emote/viewer.svelte';
 
-  type Props = { emoteId: string; name: string; viewer?: Viewer; variant?: 'head' | 'bar' };
-  let { emoteId, name, viewer: given, variant = 'head' }: Props = $props();
+  type Props = { emoteId: string; name: string; viewer?: Viewer; variant?: 'head' | 'bar'; picture?: Pick<PageEmote, 'host' | 'animated' | 'files'> };
+  let { emoteId, name, viewer: given, variant = 'head', picture }: Props = $props();
 
   // svelte-ignore state_referenced_locally
   const viewer = given ?? new Viewer(emoteId);
@@ -98,6 +100,8 @@
   </button>
   <span class="sr-only" role="status">{said}</span>
 
+  {#if picture && picture.files.length}<EmoteDownload emote={{ ...picture, name }} {variant} />{/if}
+
   <Popover label="More actions" bind:open={moreOpen} align="end" width={mode === 'report' ? '340px' : '220px'} sheet onclose={() => (mode = 'menu')}>
       {#snippet trigger(props)}
         <button class="btn btn-s more" type="button" aria-label="More actions" {...props}><Icon name="more" size={18} /></button>
@@ -151,7 +155,7 @@
   .set[aria-disabled='true'] .set-name { color: var(--muted); }
   .state { display: inline-flex; align-items: center; gap: 4px; flex: none; }
   .set:focus-visible, .item:focus-visible { outline-offset: -2px; }
-  @media (max-width: 360px) {
+  @media (max-width: 480px) {
     .bar .copy .stack { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .bar .copy { width: 44px; padding: 0; justify-content: center; }
   }

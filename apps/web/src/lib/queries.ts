@@ -1104,3 +1104,47 @@ export const ACCOUNT_ACTIVITY = graphql(`
     }
   }
 `);
+
+export const EMOTE_ACTIVITY = graphql(`
+  query EmoteActivity($emoteId: String!, $before: String, $limit: Int) {
+    emoteActivity(emoteId: $emoteId, before: $before, limit: $limit) {
+      id
+      kind
+      actor {
+        id
+        displayName
+        avatar
+      }
+      set {
+        id
+        name
+      }
+      emote {
+        id
+        name
+        host
+        files {
+          name
+          width
+          height
+          isStatic
+        }
+      }
+      fromName
+      toName
+      badge {
+        fromId
+        fromName
+        toId
+        toName
+      }
+      paint {
+        fromId
+        fromName
+        toId
+        toName
+      }
+      createdAt
+    }
+  }
+`);
