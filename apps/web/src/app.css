@@ -33,6 +33,8 @@ kbd { font: inherit; }
   transition: background-color var(--dur-hover), border-color var(--dur-hover),
     box-shadow var(--dur-hover), filter var(--dur-hover), transform var(--dur-press) ease-out; }
 .btn:active { transform: scale(var(--press)); }
+/* One rule for the primary's glow: a page's one main action (.btn-primary) has it, as cyex-web allows;
+   the dense tools' .ui-btn.primary (tool.css) and the header's Upload (AppHeader) are flat by design. */
 .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink);
   box-shadow: 0 10px 30px -12px var(--accent-glow); }
 .btn .arrow { transition: transform var(--dur-move) var(--ease); }
@@ -84,3 +86,15 @@ kbd { font: inherit; }
 .fine { font-size: var(--t-fine); color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Touch (the one pass for the whole site): every control reaches 44px, by min-height (it wins over
+   any height a component sets) or by the ::after hit area the components use where the look stays
+   smaller, and text fields are 16px so iOS doesn't zoom the page. !important only on the font
+   size, because a component's own scoped size would otherwise win. */
+@media (pointer: coarse) {
+  .btn:not(.btn-s) { min-height: 44px; min-width: 44px; }
+  .btn-s { min-width: 44px; } /* the 40px look keeps its ::after hit area in height; icon-only ones need the width */
+  .link { min-height: 44px; margin-block: -12px; }
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color']), select, textarea { min-height: 44px; font-size: 16px !important; }
+  summary { min-height: 44px; }
+}

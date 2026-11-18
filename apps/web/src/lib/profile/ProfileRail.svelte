@@ -3,9 +3,11 @@
   // /me pages that belong to it, so managing your emotes never feels like another area. Head:
   // avatar ringed in the paint, the name in the paint with the badge, public role chips; then the
   // collapsible Connections (everyone's, each linking to the platform), Active on (channel and its set), Editors (yours, or with EDITORS) and Member since; then the sections;
-  // "Admin ›" pinned at the bottom for staff on their own profile. Under 900px the head becomes a
-  // card above the content and the rows a tab strip (SideRail).
+  // "Admin ›" pinned at the bottom for staff on their own profile. Under 900px the head becomes one
+  // compact row (avatar, painted name, a disclosure that opens roles, actions, connections and the
+  // rest of this same content) and the rows a tab strip (SideRail), so the page starts right below.
   import type { Snippet } from 'svelte';
+  import { page } from '$app/state';
   import Avatar from '$lib/components/Avatar.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
@@ -17,7 +19,7 @@
   import { isAdmin, session } from '$lib/tool/session.svelte';
   import { editorsOf, profileOf, type Editor, type PublicProfile } from './data.svelte';
   import { connectionUrl } from './public';
-  import { canEditors, canProfile, profileRail, type RailKey, type Relation } from './rows';
+  import { canEditors, canProfile, profileRail, stripExtra, stripTabs, type RailKey, type Relation } from './rows';
 
   type Account = { id: string; displayName: string; avatar?: string | null };
   type Props = {
@@ -36,6 +38,11 @@
   const groups = $derived(profileRail(account.id, relation, current, activity));
   const look = $derived(looks[account.id] ?? seed ?? NO_LOOK);
   const staff = $derived(relation.mine && isAdmin(session.me));
+  // The /me pages without a row of their own (Upload, Notifications, Account) add their tab to the phone strip.
+  const tabs = $derived(relation.mine ? stripTabs(groups, stripExtra(page.url.pathname)) : undefined);
+  let more_open = $state(false);
+  const uid = $props.id();
+  const panel = `${uid}-id`;
 
   let fetched = $state<{ id: string; profile: PublicProfile | null } | null>(null);
   const profile = $derived(given ?? (fetched?.id === account.id ? fetched.profile : null));
@@ -83,13 +90,17 @@
   </span>
   <div class="id">
     <p class="name"><PaintedName {name} paint={look.paint} badge={look.badge} badgeSize={20} /></p>
-    {#if roles.length}
-      <ul class="roles" aria-label="Roles">
-        {#each roles as r (r.id)}<li class="role"><bdi>{clean(r.name)}</bdi></li>{/each}
-      </ul>
-    {/if}
-    {#if actions}<div class="acts">{@render actions()}</div>{/if}
+    {@render extras()}
   </div>
+{/snippet}
+
+{#snippet extras()}
+  {#if roles.length}
+    <ul class="roles" aria-label="Roles">
+      {#each roles as r (r.id)}<li class="role"><bdi>{clean(r.name)}</bdi></li>{/each}
+    </ul>
+  {/if}
+  {#if actions}<div class="acts">{@render actions()}</div>{/if}
 {/snippet}
 
 {#snippet more()}
@@ -159,11 +170,20 @@
 {/snippet}
 
 <div class="phone">
-  <div class="pcard">{@render who(56)}</div>
-  {#if profile || editors}<div class="pmore">{@render more()}</div>{/if}
+  <button class="pcard" type="button" aria-expanded={more_open} aria-controls={panel} onclick={() => (more_open = !more_open)}>
+    <span class="ring" style={paintRing(look.paint)}>
+      <span class="gap"><Avatar src={account.avatar} {name} size={32} /></span>
+    </span>
+    <span class="name"><PaintedName {name} paint={look.paint} badge={look.badge} badgeSize={18} /></span>
+    <span class="chev"><Icon name="chevron-down" size={16} /></span>
+  </button>
+  <div class="pmore" id={panel} hidden={!more_open}>
+    {@render extras()}
+    {#if profile || editors}{@render more()}{/if}
+  </div>
 </div>
 
-<SideRail label="{name}'s profile" {groups} collapse="tabs">
+<SideRail label="{name}'s profile" {groups} {tabs} collapse="tabs">
   {#snippet head()}
     <div class="head">{@render who(72)}</div>
     {#if profile || editors}<div class="more">{@render more()}</div>{/if}
@@ -182,6 +202,7 @@
   .ring { display: inline-grid; flex: none; padding: 2px; border-radius: 50%; background: var(--border); }
   .gap { display: inline-grid; padding: 2px; border-radius: 50%; background: var(--surface); }
   .phone .gap { background: var(--bg); }
+  .pcard .ring { padding: 2px; }
   .roles { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
   .role { display: inline-flex; align-items: center; height: 22px; padding: 0 7px; border-radius: var(--radius);
     background: var(--neutral-chip); color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
@@ -199,7 +220,7 @@
   .lbl { flex: 1; min-width: 0; text-align: left; }
   .n { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
   .chev { display: inline-grid; transition: rotate var(--base) var(--ease); }
-  .dis[open] .chev { rotate: 180deg; }
+  .dis[open] .chev, [aria-expanded='true'] > .chev { rotate: 180deg; }
   .dis[open] .drow { color: var(--text); }
   .dis { min-width: 0; }
   .inner { list-style: none; margin: 0 0 6px; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; }
@@ -225,10 +246,16 @@
 
   .phone { display: none; }
   @media (max-width: 899.98px) {
-    .phone { display: block; padding: 16px 0 8px; }
-    .pcard { display: flex; align-items: center; gap: 14px; min-width: 0; }
-    .pcard .roles { justify-content: flex-start; }
-    .pmore { margin-top: 10px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; }
+    .phone { display: block; padding: 4px 0; }
+    /* One compact row: the page's own content starts right below the header and the strip. */
+    .pcard { display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; min-height: 48px; padding: 4px 0; border: 0; background: none;
+      color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+    .pcard .name { flex: 1; font-size: var(--t-ui); }
+    .pcard .chev { flex: none; color: var(--muted); }
+    .pcard:focus-visible { outline-offset: 2px; }
+    .pmore { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; padding-bottom: 8px; }
+    .pmore[hidden] { display: none; }
+    .pmore .roles, .pmore .acts { justify-content: flex-start; margin-bottom: 8px; }
     .pmore .drow, .pmore .since { padding-left: 0; }
     .pmore .item { padding-left: 12px; }
   }

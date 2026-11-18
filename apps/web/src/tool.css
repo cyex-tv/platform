@@ -96,7 +96,10 @@ select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
 .ui-switch:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 
 /* Touch: 44px targets (cyex-design floor on the web, mobile-native). */
+/* One height with .ui-btn (40px), whatever the line height: a Find button beside it lines up. */
+input.ui-input, select.ui-input { height: 40px; }
 @media (pointer: coarse) {
+  input.ui-input, select.ui-input { height: 44px; }
   .ui-icon { width: 44px; height: 44px; }
   .ui-btn { min-height: 44px; }
   .ui-btn.small::after { inset: -6px 0; }

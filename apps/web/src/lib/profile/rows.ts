@@ -84,3 +84,23 @@ export function profileRail(accountId: string, r: Relation, current: RailKey, ac
   const more = keys.filter((k) => k === 'cosmetics' || k === 'activity').map(item);
   return [{ items: emotes }, ...(more.length ? [{ items: more }] : [])];
 }
+
+/**
+ * The /me pages that have no row of their own in the profile rail (Upload, Notifications,
+ * Account, Editors), as the extra tab the phone strip shows while you are on one, so the strip
+ * always says where you are. Null on every other page.
+ */
+export function stripExtra(path: string): RailItem | null {
+  const at = (base: string) => path === base || path.startsWith(`${base}/`);
+  if (at('/me/upload')) return { href: '/me/upload', label: 'Upload', icon: 'upload', current: true };
+  if (at('/me/notifications')) return { href: '/me/notifications', label: 'Notifications', icon: 'bell', current: true };
+  if (at('/me/account')) return { href: '/me/account', label: 'Account', icon: 'user', current: true };
+  if (at('/me/editors')) return { href: '/me/editors', label: 'Editors', icon: 'circle-user', current: true };
+  return null;
+}
+
+/** The strip's tabs: the rail's rows, plus `extra` marked current (and then no other tab is). */
+export function stripTabs(groups: RailGroup[], extra: RailItem | null): RailItem[] {
+  const flat = groups.flatMap((g) => g.items);
+  return extra ? [...flat.map((i) => ({ ...i, current: false })), extra] : flat;
+}
