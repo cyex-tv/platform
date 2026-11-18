@@ -65,8 +65,8 @@
       </label>
     </div>
     <footer>
-      <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="ui-btn primary" type="submit" disabled={busy}>{busy ? 'Copying…' : 'Clone'}</button>
+      <button class="btn btn-s" type="button" onclick={() => dialog.close()}>Cancel</button>
+      <button class="btn btn-s btn-primary" type="submit" disabled={busy}>{busy ? 'Copying…' : 'Clone'}</button>
     </footer>
   </form>
 </dialog>

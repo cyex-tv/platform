@@ -16,6 +16,11 @@ export function capacityText(used: number, capacity: number): string {
   return `${count(used)} / ${count(capacity)}`;
 }
 
+/** `12 of 1.000 emotes used`: the same figure for a screen reader. */
+export function capacityLabel(used: number, capacity: number): string {
+  return `${count(used)} of ${count(capacity)} emotes used`;
+}
+
 /** How full, 0 to 100 (whole numbers; 0 when there is no capacity). */
 export function fillPercent(used: number, capacity: number): number {
   if (!(capacity > 0) || !(used > 0)) return 0;

@@ -27,7 +27,8 @@
 .ui-num { font-variant-numeric: tabular-nums; } /* counts and dates: Geist, not mono */
 .ui-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
-/* Buttons (web-tool density). */
+/* Buttons (web-tool density). The rule: the signed-in tool pages (/me, /admin) use .ui-btn, every public page uses
+   .btn.btn-s (app.css), and a page never mixes them; see lib/components/btn.ts for shared components. */
 /* One button system with the site's .btn: same colours, weight, 3px corners and hover; only the
    height is the tool's (40px, the web floor; 32px small with a 40px hit area) where .btn is the
    48px landing button. */

@@ -1,6 +1,7 @@
 // Talking to api.cyex.tv. The browser sends the session cookie itself (credentials: 'include';
 // the API allows it for this site's origin). Server-side rendering only asks for public data.
 import { env } from '$env/dynamic/public';
+import { serverMessage, unreachableMessage } from './components/problem';
 import type { TypedDocumentString } from './gql/graphql';
 
 /** Where the API is: `PUBLIC_API_URL`, or production. */
@@ -40,18 +41,18 @@ export async function gql<TResult, TVariables>(
       body: JSON.stringify({ query: doc.toString(), variables }),
     });
   } catch {
-    throw new ApiError('cyex.tv can’t be reached right now.', 'offline');
+    throw new ApiError(unreachableMessage(), 'offline');
   }
   if (response.status === 429) throw new ApiError('Too many requests. Try again in a moment.', 'rate_limited');
   let body: { data?: TResult; errors?: { message: string; extensions?: { code?: string } }[] };
   try {
     body = await response.json();
   } catch {
-    throw new ApiError('cyex.tv answered in a way the site didn’t expect.', 'bad_answer');
+    throw new ApiError(serverMessage(), 'bad_answer');
   }
   const first = body.errors?.[0];
   if (first) throw new ApiError(first.message, first.extensions?.code ?? 'error');
-  if (!body.data) throw new ApiError('cyex.tv sent no data.', 'bad_answer');
+  if (!body.data) throw new ApiError(serverMessage(), 'bad_answer');
   return body.data;
 }
 
@@ -78,7 +79,7 @@ async function restError(response: Response): Promise<ApiError> {
     const body = (await response.json()) as { error?: string; message?: string };
     return new ApiError(body.message ?? 'That didn’t work.', body.error ?? 'error');
   } catch {
-    return new ApiError('cyex.tv answered in a way the site didn’t expect.', 'bad_answer');
+    return new ApiError(serverMessage(), 'bad_answer');
   }
 }
 
@@ -118,14 +119,14 @@ export function uploadEmote(
     xhr.withCredentials = true;
     xhr.responseType = 'text';
     if (progress) xhr.upload.onprogress = (e) => e.lengthComputable && progress(e.loaded / e.total);
-    xhr.onerror = () => reject(new ApiError('cyex.tv can’t be reached right now.', 'offline'));
+    xhr.onerror = () => reject(new ApiError(unreachableMessage(), 'offline'));
     xhr.onload = async () => {
       const response = new Response(xhr.responseText || null, { status: xhr.status });
       if (xhr.status < 200 || xhr.status >= 300) return reject(await restError(response));
       try {
         resolve(JSON.parse(xhr.responseText) as Uploaded);
       } catch {
-        reject(new ApiError('cyex.tv answered in a way the site didn’t expect.', 'bad_answer'));
+        reject(new ApiError(serverMessage(), 'bad_answer'));
       }
     };
     xhr.send(form);
@@ -138,7 +139,7 @@ export async function signOut(): Promise<void> {
   try {
     response = await fetch(`${apiUrl()}/v1/auth/logout`, { method: 'POST', credentials: 'include' });
   } catch {
-    throw new ApiError('cyex.tv can’t be reached right now.', 'offline');
+    throw new ApiError(unreachableMessage(), 'offline');
   }
   if (!response.ok && response.status !== 401) throw await restError(response);
 }
@@ -155,7 +156,7 @@ export async function uploadCosmeticImage(file: File, kind: 'badge' | 'paint'): 
   try {
     response = await fetch(`${apiUrl()}/v1/cosmetics/images`, { method: 'POST', credentials: 'include', body: form });
   } catch {
-    throw new ApiError('cyex.tv can’t be reached right now.', 'offline');
+    throw new ApiError(unreachableMessage(), 'offline');
   }
   if (!response.ok) throw await restError(response);
   return (await response.json()) as CosmeticUpload;

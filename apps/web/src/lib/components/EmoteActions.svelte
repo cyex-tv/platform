@@ -8,6 +8,7 @@
   import { clean, iso } from '$lib/format';
   import { useCopied } from '$lib/clipboard.svelte';
   import Icon from './Icon.svelte';
+  import { unreachableMessage } from './problem';
   import Name from './Name.svelte';
   import Popover from './Popover.svelte';
   import EmoteDownload from './emote/EmoteDownload.svelte';
@@ -57,7 +58,7 @@
         {#if viewer.who === 'loading'}
           <p class="note fine">Checking your sets…</p>
         {:else if viewer.who === 'none'}
-          <p class="note fine">cyex.tv can’t be reached right now. Try again in a moment.</p>
+          <p class="note fine">{unreachableMessage()}</p>
         {:else if viewer.own.length === 0}
           <p class="note fine">You have no sets yet. <a class="link" href="/me/sets">Make one</a></p>
         {:else}

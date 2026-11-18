@@ -143,11 +143,11 @@
         {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
       </div>
       <footer>
-        <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Close</button>
+        <button class="btn btn-s" type="button" onclick={() => dialog.close()}>Close</button>
         {#if !signedIn}
-          <a class="ui-btn primary" href={back}>Sign in to buy</a>
+          <a class="btn btn-s btn-primary" href={back}>Sign in to buy</a>
         {:else}
-          <button class="ui-btn primary" type="submit" disabled={busy || !item.available || (mode === 'me' && item.owned)}>{busy ? 'Starting…' : label}</button>
+          <button class="btn btn-s btn-primary" type="submit" disabled={busy || !item.available || (mode === 'me' && item.owned)}>{busy ? 'Starting…' : label}</button>
         {/if}
       </footer>
     </form>

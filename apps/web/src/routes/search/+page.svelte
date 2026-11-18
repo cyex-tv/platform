@@ -307,7 +307,7 @@
           <IconButton icon="grid-dense" label="Compact grid" size="s" variant="outline" pressed={layout === 'grid' && density === 'compact'} onclick={() => setDensity('compact')} />
           <IconButton icon="list" label="Table" size="s" variant="outline" pressed={layout === 'table'} onclick={() => setLayout('table')} />
         </div>
-        <button class="ui-btn secondary small selbtn" type="button" aria-pressed={selecting} onclick={() => setSelecting(!selecting)}><Icon name="check" size={15} />Select</button>
+        <button class="btn btn-s selbtn" type="button" aria-pressed={selecting} onclick={() => setSelecting(!selecting)}><Icon name="check" size={15} />Select</button>
       </div>
     </div>
 
@@ -336,9 +336,9 @@
           {/if}
           {#snippet actions()}
             {#if filters.length}
-              <button class="ui-btn secondary" type="button" onclick={() => go({ ...CLEARED })}>Clear filters</button>
+              <button class="btn btn-s" type="button" onclick={() => go({ ...CLEARED })}>Clear filters</button>
             {:else if view.q}
-              <button class="ui-btn secondary" type="button" onclick={clearText}>Clear search</button>
+              <button class="btn btn-s" type="button" onclick={clearText}>Clear search</button>
             {/if}
           {/snippet}
         </State>

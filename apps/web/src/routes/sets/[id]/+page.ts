@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { ApiError, gql } from '$lib/api';
 import { PUBLIC_SET } from '$lib/queries';
+import { unreachableMessage } from '$lib/components/problem';
 import type { PageLoad } from './$types';
 
 export const load: PageLoad = async ({ fetch, params }) => {
@@ -10,6 +11,6 @@ export const load: PageLoad = async ({ fetch, params }) => {
     // the page asks again from the browser before it says the set isn't there.
     return { id: params.id, set: set ?? null };
   } catch (e) {
-    error(503, e instanceof ApiError ? e.message : 'cyex.tv can’t be reached right now.');
+    error(503, e instanceof ApiError ? e.message : unreachableMessage());
   }
 };

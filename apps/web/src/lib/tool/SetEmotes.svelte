@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
+  import Capacity from '$lib/components/Capacity.svelte';
   import { gql } from '$lib/api';
   import type { SetFieldsFragment } from '$lib/gql/graphql';
   import { REMOVE_SET_EMOTE, UPDATE_SET_EMOTE } from '$lib/queries';
@@ -90,9 +91,9 @@
     <h2 bind:this={heading} tabindex="-1">In this set</h2>
     <input class="ui-input filter" type="search" bind:value={filter} placeholder="Filter…" aria-label="Filter the set’s emotes" />
   </header>
-  <div class="meter" role="meter" aria-label="Slots used" aria-valuemin={0} aria-valuemax={set.capacity} aria-valuenow={set.emotes.length}>
+  <div class="meter">
     <span class="bar"><span style:width="{slots}%"></span></span>
-    <span class="ui-hint ui-num">{count(set.emotes.length)} / {count(set.capacity)}</span>
+    <span class="ui-hint ui-num"><Capacity used={set.emotes.length} capacity={set.capacity} /></span>
   </div>
   {#if set.emotes.length === 0}
     <State bare title="Nothing in this set yet">Add emotes from the panel below.</State>

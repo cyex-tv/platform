@@ -2,6 +2,7 @@
 // (POST /v1/cosmetics/images kind=paint, then cosmeticImage until its files are made).
 // The studio talks to an interface, so the demo page and tests can run it without the API.
 import { ApiError, apiUrl, gql } from '$lib/api';
+import { unreachableMessage } from '$lib/components/problem';
 import type { PaintInput, StudioPaintFieldsFragment } from '$lib/gql/graphql';
 import type { StudioPaint } from './format';
 import { STUDIO_COSMETIC_IMAGE, STUDIO_CREATE_PAINT, STUDIO_PAINTS, STUDIO_UPDATE_PAINT } from './queries';
@@ -97,7 +98,7 @@ export function apiBackend(opts: { pollMs?: number; timeoutMs?: number } = {}): 
         response = await fetch(`${apiUrl()}/v1/cosmetics/images`, { method: 'POST', credentials: 'include', body: form, signal });
       } catch {
         if (signal?.aborted) throw new ApiError('Stopped.', 'aborted');
-        throw new ApiError('cyex.tv can’t be reached right now.', 'offline');
+        throw new ApiError(unreachableMessage(), 'offline');
       }
       if (!response.ok) {
         let body: { error?: string; message?: string } = {};

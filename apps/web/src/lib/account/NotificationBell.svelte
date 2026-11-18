@@ -39,7 +39,7 @@
   {/snippet}
   <div class="head">
     <h2>Notifications</h2>
-    {#if inbox.count}<button class="ui-btn ghost small" type="button" disabled={inbox.marking} onclick={() => markRead()}>Mark all read</button>{/if}
+    {#if inbox.count}<button class="btn btn-s btn-ghost" type="button" disabled={inbox.marking} onclick={() => markRead()}>Mark all read</button>{/if}
   </div>
   {#if inbox.items === null && inbox.error}
     <Problem bare cause="server" onretry={() => loadInbox()} home={null} />

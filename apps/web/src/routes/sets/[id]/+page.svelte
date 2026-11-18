@@ -13,7 +13,8 @@
   import CopyLink from '$lib/components/CopyLink.svelte';
   import { clean, count } from '$lib/format';
   import { PUBLIC_SET } from '$lib/queries';
-  import { capacityText, filterMembers, fillPercent } from '$lib/sets/public';
+  import Capacity from '$lib/components/Capacity.svelte';
+  import { filterMembers, fillPercent } from '$lib/sets/public';
   import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
   import { session } from '$lib/tool/session.svelte';
   import type { PublicSetQuery } from '$lib/gql/graphql';
@@ -121,8 +122,7 @@
                 <span class="mark" title="Only people with the link can find it"><Icon name="link" size={15} />Unlisted</span>
               {/if}
               <span class="cap">
-                <span class="n" aria-hidden="true">{capacityText(used, s.capacity)}</span>
-                <span class="sr-only">{count(used)} of {count(s.capacity)} places used</span>
+                <span class="n"><Capacity {used} capacity={s.capacity} /></span>
                 <span class="bar" role="meter" aria-label="How full" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
                   <span class="fill" class:full={pct >= 90} style:width="{pct}%"></span>
                 </span>
@@ -131,14 +131,14 @@
           </div>
           <div class="actions">
             {#if session.me}
-              <button class="ui-btn primary" type="button" onclick={() => dlg?.open()}><Icon name="layers" size={16} />Clone to my sets</button>
+              <button class="btn btn-s btn-primary" type="button" onclick={() => dlg?.open()}><Icon name="layers" size={16} />Clone to my sets</button>
             {:else if session.known}
-              <a class="ui-btn primary" href={back}><Icon name="layers" size={16} />Sign in to clone</a>
+              <a class="btn btn-s btn-primary" href={back}><Icon name="layers" size={16} />Sign in to clone</a>
             {:else}
-              <button class="ui-btn primary" type="button" disabled><Icon name="layers" size={16} />Clone to my sets</button>
+              <button class="btn btn-s btn-primary" type="button" disabled><Icon name="layers" size={16} />Clone to my sets</button>
             {/if}
-            <CopyLink kind="tool" url={() => page.url.origin + page.url.pathname} />
-            {#if mine}<a class="ui-btn secondary" href="/me/sets/{s.id}"><Icon name="pencil" size={16} />Edit set</a>{/if}
+            <CopyLink url={() => page.url.origin + page.url.pathname} />
+            {#if mine}<a class="btn btn-s" href="/me/sets/{s.id}"><Icon name="pencil" size={16} />Edit set</a>{/if}
           </div>
         </header>
 
@@ -161,14 +161,14 @@
           <State title="No emotes in this set yet.">
             {#if mine}Add some from the set’s editor.{:else}Nothing has been added to it yet.{/if}
             {#snippet actions()}
-              {#if mine}<a class="ui-btn primary" href="/me/sets/{s.id}">Add emotes</a>{:else}<a class="ui-btn secondary" href="/search">Browse emotes</a>{/if}
+              {#if mine}<a class="btn btn-s btn-primary" href="/me/sets/{s.id}">Add emotes</a>{:else}<a class="btn btn-s" href="/search">Browse emotes</a>{/if}
             {/snippet}
           </State>
         {:else if shown.length === 0}
           <State title="Nothing matches “{needle}”.">
             No emote in this set has that in its name.
             {#snippet actions()}
-              <button class="ui-btn secondary" type="button" onclick={() => (query = '')}>Clear search</button>
+              <button class="btn btn-s" type="button" onclick={() => (query = '')}>Clear search</button>
             {/snippet}
           </State>
         {:else if view === 'list'}
@@ -191,8 +191,8 @@
       <State level={1} role="status" title="No set here.">
         It may be private, its owner may have deleted it, or the link is missing a character.
         {#snippet actions()}
-          <a class="ui-btn primary" href="/search">Browse emotes</a>
-          <a class="ui-btn secondary" href="/">Front page</a>
+          <a class="btn btn-s btn-primary" href="/search">Browse emotes</a>
+          <a class="btn btn-s" href="/">Front page</a>
         {/snippet}
       </State>
     </div>

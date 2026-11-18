@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/state';
+  import Capacity from '$lib/components/Capacity.svelte';
   import ChatPreview from '$lib/components/ChatPreview.svelte';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -98,7 +99,7 @@
           {who} hasn't chosen an emote set for {platform}, so there is nothing to show here. Their
           emotes appear in chat as soon as they do.
           {#snippet actions()}
-            <a class="ui-btn secondary" href="/search">Browse emotes</a>
+            <a class="btn btn-s" href="/search">Browse emotes</a>
           {/snippet}
         </State>
       </div>
@@ -107,13 +108,13 @@
         <State title="The set is empty.">
           {who} has a set, with room for {count(set.capacity)} emotes, but hasn't added any yet.
           {#snippet actions()}
-            <a class="ui-btn secondary" href="/search">Browse emotes</a>
+            <a class="btn btn-s" href="/search">Browse emotes</a>
           {/snippet}
         </State>
       </div>
     {:else}
       <p class="fine slots">
-        {#if needle}{count(matches.length)} of {count(items.length)} match · {/if}{count(items.length)} of {count(set.capacity)} slots
+        {#if needle}{count(matches.length)} of {count(items.length)} match · {/if}<Capacity used={items.length} capacity={set.capacity} /> emotes
         {#if fill >= 4}<span class="meter" aria-hidden="true"><span style:width="{fill}%"></span></span>{/if}
       </p>
       <p class="sr-only" role="status">{needle ? `${count(matches.length)} of ${count(items.length)} match` : ''}</p>
@@ -121,7 +122,7 @@
         <State title="Nothing matches “{filter.trim()}”.">
           Check the spelling, or clear the filter to see all {count(items.length)} emotes.
           {#snippet actions()}
-            <button class="ui-btn secondary" type="button" onclick={() => (filter = '')}>Clear filter</button>
+            <button class="btn btn-s" type="button" onclick={() => (filter = '')}>Clear filter</button>
           {/snippet}
         </State>
       {:else}

@@ -70,7 +70,7 @@
 
 <PageHead title="Cosmetics" line={mine ? 'The badge and paint you show next to your name in Twitch and Kick chat, for everyone with cyex.tv.' : `What ${iso(clean(name))} shows in chat. You edit their profile.`}>
   {#snippet actions()}
-    {#if mine}<a class="ui-btn secondary" href="/shop"><Icon name="shopping-bag" size={15} />Get more in the shop</a>{/if}
+    {#if mine}<a class="btn btn-s" href="/shop"><Icon name="shopping-bag" size={15} />Get more in the shop</a>{/if}
   {/snippet}
 </PageHead>
 

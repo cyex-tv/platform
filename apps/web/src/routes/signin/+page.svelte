@@ -17,7 +17,7 @@
       <h1 class="page-title" id="signin-h">Sign in</h1>
       <p class="lead">With the account you stream or chat with. You can link the other one afterwards.</p>
       <div class="choices">
-        <a class="ui-btn secondary choice" href={signInUrl('twitch', back)}>
+        <a class="btn btn-s choice" href={signInUrl('twitch', back)}>
           <span class="mark twitch" aria-hidden="true"
             ><svg viewBox="0 0 24 24" width="16" height="16"
               ><path d="M4.3 3 3 6.4v13.8h4.7V23h2.6l2.7-2.8h3.9L22 15V3H4.3Zm15.9 11.2-3 3h-4.7l-2.6 2.6v-2.6H5.9V4.8h14.3v9.4Zm-3-6.2v5.2h-1.8V8h1.8Zm-4.8 0v5.2h-1.8V8h1.8Z" /></svg
@@ -25,7 +25,7 @@
           >
           Continue with Twitch
         </a>
-        <a class="ui-btn secondary choice" href={signInUrl('kick', back)}>
+        <a class="btn btn-s choice" href={signInUrl('kick', back)}>
           <span class="mark kick" aria-hidden="true"
             ><svg viewBox="0 0 24 24" width="16" height="16"><path d="M3 3h6v4h2V5h2V3h8v6h-2v2h-2v2h2v2h2v6h-8v-2h-2v-2H9v4H3V3Z" /></svg></span
           >

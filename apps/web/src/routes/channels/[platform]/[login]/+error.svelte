@@ -30,8 +30,8 @@
       Nobody has set up a {platform} channel called <bdi>{login}</bdi> here. A channel shows up once its owner signs in
       with {platform} and picks an emote set. Check the spelling, or look for another channel.
       {#snippet actions()}
-        <button class="ui-btn primary" type="button" onclick={() => openPalette(login)}>Search channels</button>
-        <a class="ui-btn secondary" href="/search">Browse emotes</a>
+        <button class="btn btn-s btn-primary" type="button" onclick={() => openPalette(login)}>Search channels</button>
+        <a class="btn btn-s" href="/search">Browse emotes</a>
       {/snippet}
     </State>
   {:else}

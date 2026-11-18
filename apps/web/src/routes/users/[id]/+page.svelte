@@ -70,7 +70,7 @@
         There is no account at this address, or its owner has deleted it. Check the link, or look through what
         everyone has made.
         {#snippet actions()}
-          <a class="ui-btn primary" href="/search">Browse emotes</a>
+          <a class="btn btn-s btn-primary" href="/search">Browse emotes</a>
         {/snippet}
       </State>
     </div>

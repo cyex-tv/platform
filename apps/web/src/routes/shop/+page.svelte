@@ -86,7 +86,7 @@
       <h1 class="page-title">Shop</h1>
       <p class="lead">Badges and name paints for your chat name, seen by everyone with the cyex.tv extension on Twitch and Kick. Buy one for yourself or give it to someone.</p>
     </div>
-    <a class="ui-btn secondary" href="/redeem">Redeem a code</a>
+    <a class="btn btn-s" href="/redeem">Redeem a code</a>
   </header>
 
   <CheckoutStatus />
@@ -96,7 +96,7 @@
   {:else if !items.length}
     <State title="Nothing is on sale right now.">
       New items show up here when they’re ready. Got a code?
-      {#snippet actions()}<a class="ui-btn secondary" href="/redeem">Redeem a code</a>{/snippet}
+      {#snippet actions()}<a class="btn btn-s" href="/redeem">Redeem a code</a>{/snippet}
     </State>
   {:else}
     <ul class="grid" aria-label="Items on sale">

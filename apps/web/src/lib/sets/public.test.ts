@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { capacityText, cloneError, cloneOutcome, fillPercent, filterMembers } from './public';
+import { capacityLabel, capacityText, cloneError, cloneOutcome, fillPercent, filterMembers } from './public';
 
 const m = (name: string, own: string) => ({ name, emote: { name: own } });
 
@@ -20,6 +20,10 @@ describe('filterMembers', () => {
 
 describe('capacity', () => {
   it('writes n / cap with dots', () => expect(capacityText(1234, 5000)).toBe('1.234 / 5.000'));
+  it('says the same figure in words for a screen reader', () => {
+    expect(capacityLabel(24, 1000)).toBe('24 of 1.000 emotes used');
+    expect(capacityLabel(0, 250)).toBe('0 of 250 emotes used');
+  });
   it('rounds the fill and clamps it', () => {
     expect(fillPercent(1, 3)).toBe(33);
     expect(fillPercent(2000, 1000)).toBe(100);

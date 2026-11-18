@@ -91,8 +91,8 @@
         It may have been taken down, its creator may have deleted it, or the link is missing a character. Pending emotes are
         only visible to their creator.
         {#snippet actions()}
-          <a class="ui-btn primary" href="/search">Browse emotes</a>
-          <a class="ui-btn secondary" href="/">Front page</a>
+          <a class="btn btn-s btn-primary" href="/search">Browse emotes</a>
+          <a class="btn btn-s" href="/">Front page</a>
         {/snippet}
       </State>
     </div>
