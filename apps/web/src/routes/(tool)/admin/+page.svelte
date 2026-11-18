@@ -75,7 +75,7 @@
 
 <style>
   .welcome { margin-bottom: 24px; }
-  .welcome h1 { margin: 0; font-size: var(--t-page); font-weight: 600; line-height: 1.2; letter-spacing: -.02em; overflow-wrap: anywhere; }
+  .welcome h1 { margin: 0; font-size: var(--t-page); font-weight: 600; line-height: 1.25; letter-spacing: -.02em; overflow-wrap: anywhere; }
   .welcome p { margin: 8px 0 0; color: var(--muted); font-size: var(--t-ui); }
   .cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 12px; }
   .card { display: flex; align-items: flex-start; gap: 12px; height: 100%; padding: 14px; color: var(--text); text-decoration: none;

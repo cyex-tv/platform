@@ -10,6 +10,8 @@
   import { ADMIN_COUNTS } from '$lib/queries';
   import { relationTo } from '$lib/profile/data.svelte';
   import ProfileRail from '$lib/profile/ProfileRail.svelte';
+  import { ACTIVITY_READY } from '$lib/profile/activity';
+  import CopyLink from '$lib/components/CopyLink.svelte';
   import { railKeyForPath } from '$lib/profile/rows';
   import Icon from '$lib/components/Icon.svelte';
   import type { IconName } from '$lib/components/Icon.svelte';
@@ -121,7 +123,10 @@
         {/snippet}
       </SideRail>
     {:else if meAccount}
-      <ProfileRail account={meAccount} relation={meRelation} current={railKeyForPath(path)} />
+      <!-- The same rail as your public profile (/users/<id>): same rows, same Copy link, so moving between them never shifts it. -->
+      <ProfileRail account={meAccount} relation={meRelation} current={railKeyForPath(path)} activity={ACTIVITY_READY}>
+        {#snippet actions()}<CopyLink url={() => `${location.origin}/users/${meAccount.id}`} />{/snippet}
+      </ProfileRail>
     {:else}
       <SideRail label="Your account">
         {#snippet head()}

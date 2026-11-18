@@ -38,7 +38,7 @@
   @media (hover: hover) and (pointer: fine) { .back:hover { color: var(--text); } }
   .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
   .text { min-width: 0; flex: 1 1 280px; }
-  .title { margin: 0; font-size: var(--t-page); font-weight: 600; line-height: 1.1; letter-spacing: -.03em; overflow-wrap: anywhere; text-wrap: balance; }
+  .title { margin: 0; font-size: var(--t-page); font-weight: 600; line-height: 1.25; letter-spacing: -.02em; overflow-wrap: anywhere; text-wrap: balance; }
   .line { margin: 8px 0 0; max-width: 64ch; font-size: var(--t-ui); line-height: 1.5; color: var(--muted); font-variant-numeric: tabular-nums; text-wrap: pretty; overflow-wrap: anywhere; }
   .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 </style>

@@ -140,3 +140,14 @@ describe('code files', () => {
     expect(codesFilename('../..')).toBe('cyex-tv-codes.txt');
   });
 });
+
+describe('the site’s one error wording', () => {
+  it('words a dropped network and an unplaceable failure as problem.ts does', async () => {
+    const { COPY } = await import('$lib/components/problem');
+    expect(shopMessage(new Error('boom'))).toBe(`${COPY.server.title} Nothing was charged.`);
+    expect(redeemMessage(new Error('boom'))).toBe(`${COPY.server.title} Try again in a moment.`);
+    const offline = new ApiError('cyex.tv can’t be reached right now.', 'offline');
+    expect(shopMessage(offline)).toBe(`${COPY.offline.title} ${COPY.offline.body}`);
+    expect(redeemMessage(offline)).toBe(`${COPY.offline.title} ${COPY.offline.body}`);
+  });
+});

@@ -14,9 +14,10 @@
 .ui-page .narrow { max-width: var(--measure-form); }
 
 /* Page head: a title, an optional line under it, actions on the right. */
-.ui-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 20px; }
+/* Same measures as PageHead (lib/tool/PageHead.svelte): the line 8px under the title at --t-ui, 24px to the content. */
+.ui-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin-bottom: 24px; }
 .ui-head > div { min-width: 0; }
-.ui-head p { margin-top: 4px; color: var(--muted); font-size: var(--text-sub); }
+.ui-head p { margin-top: 8px; color: var(--muted); font-size: var(--t-ui); line-height: 1.5; }
 .ui-head .ui-actions { margin-left: auto; }
 
 /* The one uppercase style. */
@@ -34,7 +35,7 @@
   height: 40px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--radius-btn);
   font: inherit; font-size: var(--t-nav); font-weight: 500; letter-spacing: -.005em; line-height: 1.1; white-space: nowrap; cursor: pointer;
   text-decoration: none; color: var(--text);
-  transition: background-color var(--fast), border-color var(--fast), color var(--fast), filter var(--fast); }
+  transition: background-color var(--fast), border-color var(--fast), color var(--fast), filter var(--fast), transform var(--dur-press) ease-out; }
 .ui-btn svg { flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ui-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .ui-btn.secondary { background: var(--surface); border-color: var(--border-strong); }
@@ -48,7 +49,8 @@
 .ui-btn.danger.armed { background: color-mix(in srgb, var(--red) 14%, transparent); border-color: var(--red); }
 .ui-btn.small { height: 32px; padding: 0 12px; font-size: var(--t-fine); }
 .ui-btn.small::after { content: ''; position: absolute; inset: -4px 0; } /* 40px to hit, 32px to see */
-.ui-btn:active { opacity: .6; transition: none; }
+/* The site's one press for a labelled button (the same as .btn): it gives under the finger. Icon-only buttons and links keep the dim press. */
+.ui-btn:active { transform: scale(var(--press)); }
 .ui-btn:disabled { opacity: .5; cursor: not-allowed; }
 a.ui-btn { box-sizing: border-box; }
 .ui-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

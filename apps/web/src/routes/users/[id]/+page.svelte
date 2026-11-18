@@ -6,11 +6,10 @@
   import { setContext } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
-  import Icon from '$lib/components/Icon.svelte';
   import Problem from '$lib/components/Problem.svelte';
   import { problemTitle } from '$lib/components/problem';
   import State from '$lib/components/State.svelte';
-  import { useCopied } from '$lib/clipboard.svelte';
+  import CopyLink from '$lib/components/CopyLink.svelte';
   import { clean } from '$lib/format';
   import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
   import RailLayout from '$lib/shell/RailLayout.svelte';
@@ -47,19 +46,10 @@
   const waiting = $derived(!!asked && asked !== section && (!session.known || (!!session.me && !granted)));
 
   const TITLE: Record<SectionKey, string> = { uploads: 'Uploaded emotes', active: 'Active emotes', sets: 'Emote sets', cosmetics: 'Cosmetics', activity: 'Activity' };
-  const link = useCopied();
 </script>
 
 {#snippet actions()}
-  <button class="btn btn-s copy" type="button" onclick={() => link.copy(location.origin + page.url.pathname)}>
-    <Icon name={link.copied ? 'check' : 'copy'} size={16} />
-    <span class="labels">
-      <span class:off={link.state !== 'idle'}>Copy page link</span>
-      <span class:off={!link.copied} aria-hidden="true">Link copied</span>
-      <span class:off={!link.failed} aria-hidden="true">Couldn’t copy</span>
-    </span>
-  </button>
-  <span class="sr-only" role="status">{link.copied ? 'Link copied' : link.failed ? 'Couldn’t copy' : ''}</span>
+  <CopyLink url={() => location.origin + page.url.pathname} />
 {/snippet}
 
 <svelte:head>
@@ -114,7 +104,4 @@
 
 <style>
   .pad { padding-top: var(--rail-gap); }
-  .labels { display: inline-grid; }
-  .labels > span { grid-area: 1 / 1; text-align: left; }
-  .off { visibility: hidden; }
 </style>

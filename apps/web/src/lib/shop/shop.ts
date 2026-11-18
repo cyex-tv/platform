@@ -2,6 +2,7 @@
 // codes as people type them, what each error code says to a person, what an order's state reads
 // as. Nothing here talks to the network.
 import { ApiError } from '$lib/api';
+import { COPY } from '$lib/components/problem';
 import { count, date } from '$lib/format';
 
 const SYMBOL: Record<string, string> = { EUR: '€', USD: '$', GBP: '£' };
@@ -42,6 +43,10 @@ export function tidyCode(raw: string): string {
   return raw.toUpperCase().replace(/\s+/g, '-').replace(/-{2,}/g, '-');
 }
 
+// The site's one wording for a dropped network and an unplaceable failure (problem.ts), with the shop's own reassurance.
+const OFFLINE = `${COPY.offline.title} ${COPY.offline.body}`;
+const SERVER = COPY.server.title;
+
 /** What each error of the shop's operations says. Anything else falls back to the API's own sentence. */
 const SHOP: Record<string, string> = {
   signed_out: 'Sign in to buy.',
@@ -57,12 +62,12 @@ const SHOP: Record<string, string> = {
   unknown_client: 'This browser isn’t one cyex.tv can sell to. Reload the page and try again.',
   rate_limited: 'That’s a lot of tries. Wait a while, then try again.',
   not_found: 'That doesn’t exist any more.',
-  offline: 'cyex.tv can’t be reached right now. Check your connection and try again.',
+  offline: OFFLINE,
 };
 
 /** The sentence for an error from startCheckout (and the other shop reads). `gift` tunes already_owned. */
 export function shopMessage(err: unknown, gift = false): string {
-  if (!(err instanceof ApiError)) return 'Something went wrong. Nothing was charged.';
+  if (!(err instanceof ApiError)) return `${SERVER} Nothing was charged.`;
   if (err.code === 'already_owned' && gift) return 'They own everything in it already.';
   return SHOP[err.code] ?? err.message;
 }
@@ -75,7 +80,7 @@ const REDEEM: Record<string, string> = {
   code_used_up: 'That code has been used up.',
   signed_out: 'Sign in to redeem a code.',
   rate_limited: 'That’s a lot of tries. Wait a while, then try again.',
-  offline: 'cyex.tv can’t be reached right now. Check your connection and try again.',
+  offline: OFFLINE,
 };
 
 /** Minutes out of the API's "Try again in 7 min." for a lockout, or null. */
@@ -86,7 +91,7 @@ export function lockoutMinutes(message: string): number | null {
 
 /** The sentence for a failed redeem; a lockout says when to try again. */
 export function redeemMessage(err: unknown): string {
-  if (!(err instanceof ApiError)) return 'Something went wrong. Try again in a moment.';
+  if (!(err instanceof ApiError)) return `${SERVER} Try again in a moment.`;
   if (err.code === 'locked_out') {
     const n = lockoutMinutes(err.message);
     return n === null

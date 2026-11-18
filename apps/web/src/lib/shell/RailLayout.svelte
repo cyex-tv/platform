@@ -19,6 +19,6 @@
   .content { min-width: 0; }
   @media (max-width: 899.98px) {
     .rail-layout { grid-template-columns: minmax(0, 1fr); gap: 0; padding-top: 0; }
-    .content { padding-top: 16px; }
+    .content { padding-top: var(--rail-gap); } /* the one page top, with or without the tab strip above */
   }
 </style>
