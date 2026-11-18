@@ -13,6 +13,7 @@
   import { loader } from '$lib/tool/loader.svelte';
   import { can, session } from '$lib/tool/session.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
+  import AccountSearch from '$lib/admin/AccountSearch.svelte';
   import UserCosmetics from '$lib/admin/UserCosmetics.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { lookFor, NO_LOOK, type Look } from '$lib/cosmetics/store.svelte';
@@ -24,8 +25,12 @@
   const canRoles = can('roles.manage') || can('users.view');
   const manageRoles = can('roles.manage');
 
-  let platform = $state<Platform>((page.url.searchParams.get('platform')?.toUpperCase() as Platform) || 'TWITCH');
-  let login = $state(page.url.searchParams.get('login') ?? '');
+  // "Name" searches every account by display name or login; Twitch and Kick look up one exact login.
+  const nameQuery = $derived((page.url.searchParams.get('name') ?? '').trim());
+  let platform = $state<Platform | 'NAME'>(
+    page.url.searchParams.has('name') ? 'NAME' : (page.url.searchParams.get('platform')?.toUpperCase() as Platform) || 'TWITCH',
+  );
+  let login = $state(page.url.searchParams.get('name') ?? page.url.searchParams.get('login') ?? '');
   let found = $state<Found | null>(null);
   let status = $state<{ uploadsBlocked: boolean; blocked: boolean } | null>(null);
   let roles = $state<RoleFieldsFragment[]>([]);
@@ -48,6 +53,7 @@
   const L = loader(async ({ fetch }) => {
     const p = (page.url.searchParams.get('platform')?.toUpperCase() as Platform) || 'TWITCH';
     const name = (page.url.searchParams.get('login') ?? '').trim().toLowerCase();
+    if (page.url.searchParams.has('name')) return { missing: false };
     const mine = page.url.search;
     found = null;
     status = null;
@@ -70,6 +76,7 @@
   function search(e: SubmitEvent) {
     e.preventDefault();
     const name = login.trim().replace(/^@/, '').toLowerCase();
+    if (platform === 'NAME') return void goto(`?name=${encodeURIComponent(login.trim().replace(/^@/, ''))}`, { keepFocus: true });
     goto(`?platform=${platform.toLowerCase()}&login=${encodeURIComponent(name)}`, { keepFocus: true });
   }
 
@@ -114,18 +121,21 @@
 
 <svelte:head><title>Users - cyex.tv</title></svelte:head>
 
-<div class="ui-head"><div><h1>Users</h1><p>Find someone by the login they signed in with.</p></div></div>
+<div class="ui-head"><div><h1>Users</h1><p>Find someone by name, or by the exact login they signed in with.</p></div></div>
 
 <form class="find ui-panel" onsubmit={search}>
   <div class="ui-seg" role="group" aria-label="Platform">
     <button type="button" aria-pressed={platform === 'TWITCH'} onclick={() => (platform = 'TWITCH')}>Twitch</button>
     <button type="button" aria-pressed={platform === 'KICK'} onclick={() => (platform = 'KICK')}>Kick</button>
+    <button type="button" aria-pressed={platform === 'NAME'} onclick={() => (platform = 'NAME')}>Any name</button>
   </div>
-  <input class="ui-input" bind:value={login} placeholder="Login" aria-label="Login" autocomplete="off" spellcheck="false" />
+  <input class="ui-input" bind:value={login} placeholder={platform === 'NAME' ? 'Name or login' : 'Login'} aria-label={platform === 'NAME' ? 'Name or login' : 'Login'} autocomplete="off" spellcheck="false" />
   <button class="ui-btn primary" type="submit" disabled={!login.trim()}>Find</button>
 </form>
 
-{#if page.url.searchParams.get('login')}
+{#if page.url.searchParams.has('name')}
+  {#if nameQuery}{#key nameQuery}<AccountSearch query={nameQuery} />{/key}{/if}
+{:else if page.url.searchParams.get('login')}
 <LoadGate source={L} label="Looking them up…">
 {#snippet children(result)}
 {#if result.missing}
