@@ -76,6 +76,9 @@ const ADD_EMOTE: &str = "mutation($s: String!, $e: String!, $n: String) {
 }";
 const ADD_SET_EDITOR: &str =
     "mutation($s: String!, $a: String!) { addSetEditor(setId: $s, accountId: $a) }";
+const RENAME: &str = "mutation($s: String!, $e: String!, $n: String) {
+    updateSetEmote(setId: $s, emoteId: $e, input: { name: $n }) { name }
+}";
 const ACTIVE: &str = "mutation($c: String!, $s: String) {
     updateChannelSettings(platform: TWITCH, id: $c, input: { activeSetId: $s }) { activeSetId }
 }";
@@ -715,5 +718,76 @@ async fn activity_shows_listed_sets_only() {
     assert_eq!(r["data"]["updateSet"]["visibility"], "PRIVATE", "{r}");
     let r = w.post(None, FEED, json!({ "a": alice.tid() })).await;
     assert!(!r.to_string().contains(&listed), "{r}");
+    w.db.close().await;
+}
+
+/// Security review M-B: every topic is public, so a private set's member events must not be
+/// published on `set:<id>`; listed and unlisted sets still are.
+#[tokio::test]
+async fn private_sets_publish_no_set_topic() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("2701").await;
+    let listed = w.set(&alice, "Out loud", None).await;
+    let unlisted = w.set(&alice, "By link", Some("UNLISTED")).await;
+    let hidden = w.set(&alice, "Quiet", Some("PRIVATE")).await;
+    let shown = w.set(&alice, "Live", Some("PRIVATE")).await;
+    let e = w
+        .emote(&alice, "aliceOk", EmoteState::Approved, false)
+        .await;
+    for set in [&listed, &unlisted, &hidden, &shown] {
+        w.add(&alice, set, &e).await;
+    }
+    let topics_of = |set: &str| {
+        let set = set.to_owned();
+        async {
+            let mut conn = w.db.conn().await;
+            let rows: Vec<Vec<String>> = sqlx::query_scalar(
+                "SELECT topics FROM events_outbox WHERE payload->>'set_id' = $1 ORDER BY id",
+            )
+            .bind(set)
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+            rows
+        }
+    };
+    let topic = |set: &str| format!("set:{set}");
+
+    for set in [&listed, &unlisted] {
+        let rows = topics_of(set).await;
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].contains(&topic(set)), "{rows:?}");
+    }
+    assert!(topics_of(&hidden).await.is_empty());
+    assert!(topics_of(&shown).await.is_empty());
+
+    // Renames and removals of a private set stay quiet too.
+    let r = w
+        .gql(
+            &alice,
+            RENAME,
+            json!({ "s": hidden, "e": e, "n": "renamed" }),
+        )
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+    assert!(topics_of(&hidden).await.is_empty());
+
+    // A private set a channel shows is public: its channel topic still gets the change.
+    let r = w
+        .gql(&alice, ACTIVE, json!({ "c": alice.twitch_id, "s": shown }))
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+    let other = w
+        .emote(&alice, "aliceTwo", EmoteState::Approved, false)
+        .await;
+    w.add(&alice, &shown, &other).await;
+    let rows = topics_of(&shown).await;
+    let channel = format!("channel:twitch:{}", alice.twitch_id);
+    let last = rows.iter().rev().find(|t| t.contains(&channel));
+    assert!(last.is_some(), "{rows:?}");
+    assert!(
+        rows.iter().flatten().all(|t| t != &topic(&shown)),
+        "{rows:?}"
+    );
     w.db.close().await;
 }

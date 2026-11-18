@@ -312,9 +312,14 @@ async fn write_audit_for(
 // Events
 
 /// The topics a change to `set` is published on: the set, the channels showing it, and for a
-/// personal set its owner's identities.
+/// personal set its owner's identities. A private set gets no `set:` topic (ADR 0017: it answers
+/// like a set that doesn't exist, and every topic is public); unlisted sets keep it, since their
+/// ID is already enough to open them. A channel showing the set makes it public, so those stay.
 pub(crate) async fn set_topics(conn: &mut PgConnection, set: &Set) -> ApiResult<Vec<String>> {
-    let mut topics = vec![outbox::set_topic(set.id)];
+    let mut topics = Vec::new();
+    if set.visibility != SetVisibility::Private {
+        topics.push(outbox::set_topic(set.id));
+    }
     for ch in channels::using_set(conn, set.id).await.map_err(db_error)? {
         topics.push(outbox::channel_topic(ch.platform, &ch.platform_channel_id));
     }
@@ -350,6 +355,9 @@ pub(crate) async fn publish_member_event(
         }
     }
     let topics = set_topics(conn, set).await?;
+    if topics.is_empty() {
+        return Ok(());
+    }
     // ADR 0005: clients watch personal sets through `personal.updated`.
     let event_type = if set.kind == SetKind::Personal {
         EventType::PersonalUpdated
