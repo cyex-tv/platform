@@ -102,7 +102,7 @@
 
         {#if st !== 'on_sale' || !item.available}
           <p class="note" role="status">
-            {#if staff && st !== 'on_sale'}{ITEM_STATE_TEXT[st]}: only staff can open this.{:else}This item isn’t on sale right now.{/if}
+            {#if staff && (st === 'hidden' || st === 'deleted')}{ITEM_STATE_TEXT[st]}: only staff can open this.{:else if st === 'sold_out'}This item is sold out.{:else if st === 'scheduled'}This item isn’t on sale yet.{:else if st === 'ended'}This sale has ended.{:else}This item isn’t on sale right now.{/if}
           </p>
         {/if}
 
