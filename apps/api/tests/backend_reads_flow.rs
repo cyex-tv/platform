@@ -407,7 +407,8 @@ async fn account_sets_read_only_the_preview() {
     // Signed out: the newest three approved ones; the pending one isn't shown.
     let r = w.post(None, SETS, json!({ "a": fox.tid(), "p": 3 })).await;
     assert_eq!(names(&r), ["Emote7", "Emote6", "Emote5"], "{r}");
-    assert_eq!(r["data"]["accountSets"][0]["slotsUsed"], 9, "{r}");
+    // The count follows what the viewer may see: eight approved ones, not the pending one.
+    assert_eq!(r["data"]["accountSets"][0]["slotsUsed"], 8, "{r}");
     // The owner sees it, newest first.
     let r = w
         .post(
@@ -426,9 +427,18 @@ async fn account_sets_read_only_the_preview() {
         )
         .await;
     assert_eq!(names(&r), ["Emote7", "Emote6", "Emote5"], "{r}");
-    // Nothing asked for, nothing read; the facts stay (the pending one counts as a slot).
+    // Nothing asked for, nothing read; the facts stay.
     let r = w.post(None, SETS, json!({ "a": fox.tid(), "p": 0 })).await;
     assert_eq!(names(&r), Vec::<String>::new(), "{r}");
+    assert_eq!(r["data"]["accountSets"][0]["slotsUsed"], 8, "{r}");
+    // The owner's count has the pending one too.
+    let r = w
+        .post(
+            Some((&fox.token, false)),
+            SETS,
+            json!({ "a": fox.tid(), "p": 0 }),
+        )
+        .await;
     assert_eq!(r["data"]["accountSets"][0]["slotsUsed"], 9, "{r}");
     // The default is 12: all eight approved ones.
     let r = w.post(None, SETS, json!({ "a": fox.tid() })).await;
@@ -637,5 +647,75 @@ async fn deleting_an_account_is_limited_to_three_tries_an_hour() {
         )
         .await;
     assert_eq!(r["data"]["deleteAccount"], true, "{r}");
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn activity_next_is_null_after_a_short_batch() {
+    let Some(w) = World::new(Rates::default()).await else {
+        return;
+    };
+    let fox = w.user("7401").await;
+    let public = w.emote(&fox, "Visible", EmoteState::Approved).await;
+    let main = w.set(&fox, "Main", SetVisibility::Listed).await;
+    for _ in 0..3 {
+        w.added_row(&fox, main, public).await;
+    }
+    // The page is exactly full, and so is the feed: no cursor to an empty page.
+    let r = w.post(None, PAGE, json!({ "a": fox.tid(), "l": 3 })).await;
+    assert_eq!(entries(&r, "accountActivityPage"), 3, "{r}");
+    assert!(r["data"]["accountActivityPage"]["next"].is_null(), "{r}");
+    let r = w
+        .post(
+            None,
+            EMOTE_PAGE,
+            json!({ "e": ids::to_text(public), "l": 3 }),
+        )
+        .await;
+    assert_eq!(entries(&r, "emoteActivityPage"), 3, "{r}");
+    assert!(r["data"]["emoteActivityPage"]["next"].is_null(), "{r}");
+    // One short of the end still has one.
+    let r = w.post(None, PAGE, json!({ "a": fox.tid(), "l": 2 })).await;
+    assert!(r["data"]["accountActivityPage"]["next"].is_string(), "{r}");
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn uploaded_lines_survive_a_deleted_approver() {
+    let Some(w) = World::new(Rates::default()).await else {
+        return;
+    };
+    let fox = w.user("7501").await;
+    let reviewer = w.user("7502").await;
+    let emote = w.emote(&fox, "Wave", EmoteState::Approved).await;
+    {
+        let mut conn = w.db.conn().await;
+        audit::write_for(
+            &mut conn,
+            &audit::NewEntry {
+                actor: Some(reviewer.id),
+                action: "emote.approved",
+                target_kind: "emote",
+                target_id: &ids::to_text(emote),
+                before: None,
+                after: None,
+            },
+            Some(fox.id),
+        )
+        .await
+        .unwrap();
+        sqlx::query("UPDATE accounts SET deleted_at = now() WHERE id = $1")
+            .bind(reviewer.id)
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+    }
+    // The upload is the owner's; the approver being gone doesn't hide it.
+    let r = w.post(None, PAGE, json!({ "a": fox.tid() })).await;
+    assert_eq!(entries(&r, "accountActivityPage"), 1, "{r}");
+    assert_eq!(
+        r["data"]["accountActivityPage"]["entries"][0]["kind"], "EMOTE_UPLOADED",
+        "{r}"
+    );
     w.db.close().await;
 }

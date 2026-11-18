@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use cyex_tv_auth::Caller;
-use cyex_tv_db::search::{ACCOUNT_QUERY_MIN, ACCOUNT_TOTAL_CAP, EmoteSearch, PgSearch, Query};
+use cyex_tv_db::search::{ACCOUNT_QUERY_MIN, EmoteSearch, PgSearch, Query};
 use cyex_tv_db::{ids, reads};
 use cyex_tv_shared::error::ApiResult;
 use cyex_tv_shared::model::{
@@ -35,7 +35,7 @@ pub const ACCOUNTS_PER_PAGE_MAX: u32 = 50;
 
 /// `searchAccounts`: live accounts by Twitch or Kick login or display name, public fields only.
 /// A leading `@` is ignored; a query under two characters finds nobody. Limited per account, or
-/// per IP when signed out. Matches are counted up to 1000 (`total_capped`), so the pages end there.
+/// per IP when signed out. Matches are counted up to 1000 (`total_capped`), so the pages end there; a page past the last is empty.
 pub async fn accounts(
     state: &AppState,
     caller: Option<&Caller>,
@@ -47,11 +47,8 @@ pub async fn accounts(
     let per_page = per_page
         .unwrap_or(ACCOUNTS_PER_PAGE)
         .clamp(1, ACCOUNTS_PER_PAGE_MAX);
-    // Past the counted window there is nothing to page to.
-    let last_page = u32::try_from(ACCOUNT_TOTAL_CAP)
-        .unwrap_or(1000)
-        .div_ceil(per_page);
-    let page = page.unwrap_or(1).clamp(1, last_page);
+    // A page past the last one comes back empty (with the real total), not as the last page.
+    let page = page.unwrap_or(1).max(1);
     let empty = || AccountResults {
         items: Vec::new(),
         total: 0,

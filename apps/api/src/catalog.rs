@@ -171,6 +171,11 @@ async fn edit_grant(
     need: EditorPermission,
 ) -> ApiResult<Grant> {
     let account = caller.account_id;
+    // A set the caller can't open answers like one that doesn't exist, whatever the change
+    // (ADR 0017): forbidden here would say it exists.
+    if !may_view(conn, Some(caller), set).await? {
+        return Err(not_found());
+    }
     if set.kind == SetKind::Global {
         return if holds(conn, caller, permissions::GLOBAL_SET_EDIT).await? {
             Ok(Grant::Permission(permissions::GLOBAL_SET_EDIT))
@@ -1088,6 +1093,14 @@ pub async fn update_set(
         if set.kind == SetKind::Global {
             return Err(db_error(DbError::InvalidVisibility));
         }
+        // Staff with `sets.edit_any` may change it even when they are also a per-set editor.
+        let grant = if grant == Grant::Editor
+            && holds(&mut tx, caller, permissions::SETS_EDIT_ANY).await?
+        {
+            Grant::Permission(permissions::SETS_EDIT_ANY)
+        } else {
+            grant
+        };
         if grant == Grant::Editor {
             return Err(forbidden(
                 "Only the set's owner and their editors with the sets permission can change who sees it.",

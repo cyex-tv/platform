@@ -220,10 +220,18 @@ fn change(
 /// The feed line a row stands for, or `None` when it must not show.
 fn entry(row: &audit::Entry, owner: Uuid, look: &Lookup) -> Option<ActivityEntry> {
     let target = ids::from_text(&row.target_id);
+    // An upload is shown as the owner's: the approver (the audit actor) isn't shown and may
+    // be gone. Every other line needs its own actor.
+    let actor = if row.action == "emote.approved" {
+        look.people.get(&owner)?
+    } else {
+        look.people.get(&row.actor_account_id?)?
+    }
+    .clone();
     let mut out = ActivityEntry {
         id: ids::to_text(row.id),
         kind: ActivityKind::SetCreated,
-        actor: look.people.get(&row.actor_account_id?)?.clone(),
+        actor,
         set: None,
         emote: None,
         from_name: None,
@@ -306,8 +314,6 @@ fn entry(row: &audit::Entry, owner: Uuid, look: &Lookup) -> Option<ActivityEntry
         "emote.approved" => {
             out.kind = ActivityKind::EmoteUploaded;
             out.emote = Some(look.emote_named(target?, None)?);
-            // The reviewer isn't shown: the owner uploaded it.
-            out.actor = look.people.get(&owner)?.clone();
         }
         _ => return None,
     }
@@ -453,13 +459,16 @@ impl Page {
     ) {
         self.rounds += 1;
         let mut last = None;
-        for (id, line) in lines {
+        let mut lines = lines.peekable();
+        while let Some((id, line)) = lines.next() {
             last = Some(id);
             if let Some(line) = line {
                 self.out.push(line);
                 if self.out.len() == self.limit {
-                    // Resume right after the line that filled the page.
-                    self.more_after = Some(id);
+                    // Resume right after the line that filled the page, unless that was the
+                    // last row of a short batch: nothing is left to read then.
+                    let exhausted = lines.peek().is_none() && fetched < BATCH as usize;
+                    self.more_after = if exhausted { None } else { Some(id) };
                     self.done = true;
                     return;
                 }
