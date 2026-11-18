@@ -31,6 +31,7 @@
   import type { Snippet } from 'svelte';
   import { hasStill, isWide, ready, size, src, srcsetW } from '$lib/emote';
   import { clean } from '$lib/format';
+  import Icon from './Icon.svelte';
 
   type Props = {
     emote: CardEmote;
@@ -43,8 +44,11 @@
     note?: string;
     /** Your own corner content instead of `note`. */
     status?: Snippet;
+    /** Select mode: the tile toggles instead of opening. `selected` says whether it is picked. */
+    onpick?: () => void;
+    selected?: boolean;
   };
-  let { emote: e, density = 'comfortable', creator = true, labels = true, href, eager = false, note, status }: Props = $props();
+  let { emote: e, density = 'comfortable', creator = true, labels = true, href, eager = false, note, status, onpick, selected = false }: Props = $props();
 
   let hot = $state(false);
   let loaded = $state(false);
@@ -78,6 +82,11 @@
 <a
   class="tile {density}"
   class:wide
+  class:picked={selected}
+  role={onpick ? 'checkbox' : undefined}
+  aria-checked={onpick ? selected : undefined}
+  onclick={onpick ? (ev) => { ev.preventDefault(); onpick(); } : undefined}
+  onkeydown={onpick ? (ev) => { if (ev.key === ' ') { ev.preventDefault(); onpick(); } } : undefined}
   href={href ?? `/emotes/${e.id}`}
   {title}
   onpointerenter={(ev) => ev.pointerType === 'mouse' && heat(true)}
@@ -85,6 +94,9 @@
   onfocus={() => heat(true)}
   onblur={() => heat(false)}
 >
+  {#if onpick}
+    <span class="tick" aria-hidden="true"><Icon name="check" size={14} /></span>
+  {/if}
   {#if status || note}
     <span class="status">
       {#if status}{@render status()}{:else if note}<span class="ui-chip {noteTone(note)}">{note}</span>{/if}
@@ -157,6 +169,12 @@
     padding: 0 6px; border-radius: var(--radius);
     background: var(--elevated-2); color: var(--muted); font-size: 12px; font-weight: 500; line-height: 16px; white-space: nowrap;
     opacity: 0; transition: opacity var(--fast) ease-out; pointer-events: none; }
+  /* Picked: bold name, accent border and a tick; never a filled box. */
+  .tick { position: absolute; top: 6px; right: 6px; display: inline-grid; place-items: center; width: 20px; height: 20px;
+    border: 1px solid var(--border-strong); border-radius: var(--radius); color: transparent; background: var(--bg); }
+  .picked { border-color: var(--accent); }
+  .picked .tick { border-color: var(--accent); color: var(--accent-text); }
+  .picked .name { font-weight: 700; }
   .tile:focus-visible .kinds { opacity: 1; }
   @media (hover: hover) and (pointer: fine) {
     .tile:hover { background: var(--surface-hover); border-color: var(--border-strong); }
