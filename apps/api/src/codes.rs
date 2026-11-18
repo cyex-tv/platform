@@ -5,7 +5,9 @@
 //!
 //! Guessing is held back three ways: codes carry 80 random bits; tries are limited per account;
 //! and wrong codes lock an account (5 in 15 minutes) and an IP (20 in 15 minutes) out for the
-//! rest of that window.
+//! rest of that window. A request whose IP isn't known can't redeem (it would share one lockout
+//! with every other such request). Codes are looked up by their sha256, so no comparison of the
+//! code itself takes place.
 
 use std::collections::HashSet;
 
@@ -82,11 +84,6 @@ pub fn normalize(raw: &str) -> Option<String> {
 
 pub fn hash(normalized: &str) -> [u8; 32] {
     Sha256::digest(normalized.as_bytes()).into()
-}
-
-/// Constant-time equality, so a comparison takes as long however much matches.
-pub fn same(a: &[u8], b: &[u8]) -> bool {
-    a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
 pub fn prefix(raw: &str) -> ApiResult<String> {
@@ -324,13 +321,29 @@ fn locked_out(wait: std::time::Duration) -> ApiError {
     )
 }
 
+fn unknown_client() -> ApiError {
+    ApiError::new(
+        StatusCode::FORBIDDEN,
+        "unknown_client",
+        "This request can't redeem codes: where it came from isn't known.",
+    )
+}
+
+/// The IP a redeem is locked out by: `None` when it isn't known (no address, or the shared
+/// stand-in the limits use when there is none).
+pub fn known_ip(ip: Option<&str>) -> Option<&str> {
+    ip.map(str::trim)
+        .filter(|i| !i.is_empty() && *i != "unknown")
+}
+
 /// Redeems a code for the caller, from `ip`.
 pub async fn redeem(
     state: &AppState,
     caller: &Caller,
-    ip: &str,
+    ip: Option<&str>,
     raw: &str,
 ) -> ApiResult<RedeemResult> {
+    let ip = known_ip(ip).ok_or_else(unknown_client)?;
     let account_key = ids::to_text(caller.account_id);
     let lock = &state.limits.redeem_lockout;
     if let Some(wait) = lock
@@ -352,9 +365,8 @@ pub async fn redeem(
     let digest = hash(&normalized);
     let mut conn = acquire(state).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    let code = match db::lock_code(&mut tx, &digest).await.map_err(db_error)? {
-        Some(code) if same(&code.code_hash, &digest) => code,
-        _ => return Err(failed()),
+    let Some(code) = db::lock_code(&mut tx, &digest).await.map_err(db_error)? else {
+        return Err(failed());
     };
     let batch = db::get_batch(&mut tx, code.batch_id)
         .await
@@ -392,6 +404,9 @@ pub async fn redeem(
             }
         }
     }
+    // Entitlements are always locked badges first, then paints, each by ID (as orders and
+    // refunds do), so two grants can't wait on each other.
+    gives.sort_by_key(|(kind, id)| (*kind == CosmeticKind::Paint, *id));
     let owned = shop_db::owned_of(&mut tx, caller.account_id, &gives)
         .await
         .map_err(db_error)?;
@@ -439,6 +454,16 @@ pub async fn redeem(
         })),
     )
     .await?;
+    crate::shop::notify_cosmetics(
+        &mut tx,
+        caller.account_id,
+        "cosmetic.granted",
+        &granted,
+        "code",
+        &format!("Redeemed a code ({})", batch.name),
+        None,
+    )
+    .await?;
     let cosmetics = Cosmetics::load(state, &mut tx, granted.iter()).await?;
     let (badges, paints) = cosmetics.of(&granted);
     tx.commit().await.map_err(sqlx_error)?;
@@ -476,11 +501,18 @@ mod tests {
     }
 
     #[test]
-    fn hashes_compare_in_constant_time() {
+    fn hashes_differ_per_code() {
         let a = hash("GIFTABCDEFGHJKMNPQRS");
-        assert!(same(&a, &hash("GIFTABCDEFGHJKMNPQRS")));
-        assert!(!same(&a, &hash("GIFTABCDEFGHJKMNPQRT")));
-        assert!(!same(&a, &a[..31]));
+        assert_eq!(a, hash("GIFTABCDEFGHJKMNPQRS"));
+        assert_ne!(a, hash("GIFTABCDEFGHJKMNPQRT"));
+    }
+
+    #[test]
+    fn redeeming_needs_a_known_ip() {
+        assert_eq!(known_ip(Some("203.0.113.9")), Some("203.0.113.9"));
+        assert_eq!(known_ip(Some("unknown")), None);
+        assert_eq!(known_ip(Some(" ")), None);
+        assert_eq!(known_ip(None), None);
     }
 
     #[test]

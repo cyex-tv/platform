@@ -862,7 +862,7 @@ const mkOrder = (buyerId, recipientId, item, status, at, rest = {}) => ({
   id: shopId('01JD8XORD', ++orderSeq), buyerId, recipientId, gift: buyerId !== recipientId, itemId: item.id, itemName: item.name, status,
   amountCents: item.priceCents, currency: item.currency, paidTotalCents: status === 'FAILED' ? null : item.priceCents,
   paidCurrency: status === 'FAILED' ? null : item.currency, provider: 'paddle', providerTransactionId: `txn_mock_${orderSeq}`,
-  refundReason: null, createdAt: at, paidAt: status === 'FAILED' ? null : at, refundedAt: null, failedAt: null, ...rest });
+  refundReason: null, createdAt: at, paidAt: status === 'FAILED' ? null : at, refundedAt: null, failedAt: null, refundRejectedAt: null, ...rest });
 const ORDERS = [
   mkOrder(ME_ID, ME_ID, SHOP_ITEMS[0], 'PAID', '2026-11-14T10:00:00.000Z'),
   mkOrder(ME_ID, ME_ID, SHOP_ITEMS[1], 'REFUNDED', '2026-11-12T09:00:00.000Z', { refundReason: 'Sample refund (mock data)', refundedAt: '2026-11-13T09:00:00.000Z' }),

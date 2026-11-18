@@ -97,6 +97,10 @@ pub fn db_error(err: DbError) -> ApiError {
             tracing::error!("a new redeem code collided with an existing one");
             ApiError::internal()
         }
+        DbError::PendingOrder => conflict(
+            "checkout_busy",
+            "A checkout for this is starting already. Try again in a moment.",
+        ),
         DbError::InvalidVisibility => bad(
             "bad_visibility",
             "Personal sets can't be private, and the global set is always listed.",

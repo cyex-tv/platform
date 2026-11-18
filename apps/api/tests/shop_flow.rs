@@ -8,11 +8,13 @@
 
 mod common;
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::net::SocketAddr;
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use axum::Router;
 use axum::body::Body;
+use axum::extract::ConnectInfo;
 use axum::http::{Request, StatusCode};
 use chrono::{Duration, Utc};
 use common::TestDb;
@@ -33,6 +35,10 @@ use uuid::Uuid;
 /// The owner's Twitch ID in this test (`CYEX_TV_OWNER_IDS`); a made-up number.
 const OWNER: &str = "900";
 const SECRET: &str = "pdl_ntfset_test_only_secret";
+const PEER: SocketAddr = SocketAddr::new(
+    std::net::IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1)),
+    40000,
+);
 
 // A fake Paddle API: answers transactions and adjustments, remembers what it was sent.
 
@@ -40,6 +46,10 @@ const SECRET: &str = "pdl_ntfset_test_only_secret";
 struct Fake {
     calls: Mutex<Vec<(String, Value)>>,
     fail: AtomicBool,
+    /// The error code a failing answer carries (default `bad_request`).
+    fail_code: Mutex<Option<String>>,
+    /// How long each answer waits, in milliseconds.
+    delay_ms: AtomicU64,
     next: AtomicUsize,
 }
 
@@ -49,10 +59,20 @@ async fn fake_paddle() -> (String, Arc<Fake>) {
     let fake = Arc::new(Fake::default());
     async fn answer(fake: &Fake, path: &str, body: Value) -> (StatusCode, axum::Json<Value>) {
         fake.calls.lock().unwrap().push((path.to_owned(), body));
+        let delay = fake.delay_ms.load(Ordering::SeqCst);
+        if delay > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+        }
         if fake.fail.load(Ordering::SeqCst) {
+            let code = fake
+                .fail_code
+                .lock()
+                .unwrap()
+                .clone()
+                .unwrap_or_else(|| "bad_request".into());
             return (
                 StatusCode::BAD_REQUEST,
-                axum::Json(json!({ "error": { "code": "bad_request", "type": "request_error" } })),
+                axum::Json(json!({ "error": { "code": code, "type": "request_error" } })),
             );
         }
         let n = fake.next.fetch_add(1, Ordering::SeqCst);
@@ -224,16 +244,31 @@ impl World {
         user
     }
 
+    /// A GraphQL request from 127.0.0.1 (every request of a test comes from the same peer).
     async fn gql(&self, user: Option<&User>, query: &str, variables: Value) -> Value {
+        self.gql_from(Some(PEER), user, query, variables).await
+    }
+
+    /// A GraphQL request from `peer`, or with no peer address at all.
+    async fn gql_from(
+        &self,
+        peer: Option<SocketAddr>,
+        user: Option<&User>,
+        query: &str,
+        variables: Value,
+    ) -> Value {
         let mut request = Request::post("/v1/gql").header("content-type", "application/json");
         if let Some(user) = user {
             request = request.header("authorization", format!("Bearer {}", user.token));
         }
-        let request = request
+        let mut request = request
             .body(Body::from(
                 json!({ "query": query, "variables": variables }).to_string(),
             ))
             .unwrap();
+        if let Some(peer) = peer {
+            request.extensions_mut().insert(ConnectInfo(peer));
+        }
         let response = self.app.clone().oneshot(request).await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
@@ -1107,8 +1142,8 @@ async fn wrong_codes_lock_out_the_account_and_the_ip() {
         code(&w.gql(Some(&guesser), REDEEM, json!({ "code": good })).await),
         "locked_out"
     );
-    // Twenty from one IP (here every test request comes from the same "unknown" peer) lock it for
-    // everyone there. 5 + 4 + 4 + 4 + 3 = 20.
+    // Twenty from one IP (here every test request comes from 127.0.0.1) lock it for everyone
+    // there. 5 + 4 + 4 + 4 + 3 = 20.
     for (n, tries) in [("82", 4), ("83", 4), ("84", 4), ("85", 3)] {
         let u = w.user(n).await;
         for _ in 0..tries {
@@ -1208,5 +1243,834 @@ async fn completions_that_dont_match_their_order_are_not_fulfilled() {
     assert_eq!(w.hook(early).await, StatusCode::OK);
     assert_eq!(pending().await, "REFUNDED");
     assert!(w.sources(buyer.id).await.is_empty());
+    w.db.close().await;
+}
+
+// Hardening (B1-B3, M1-M3, L1): each of these fails without its fix.
+
+impl World {
+    async fn sql(&self, query: &str) {
+        let mut conn = self.db.conn().await;
+        sqlx::query(query).execute(&mut *conn).await.unwrap();
+    }
+
+    /// Starts a checkout that has to work; gives the transaction and the order.
+    async fn checkout(&self, by: &User, item: &Value, recipient: Option<&str>) -> (String, String) {
+        let mut vars = json!({ "itemId": item["id"] });
+        if let Some(login) = recipient {
+            vars["recipient"] = json!({ "platform": "TWITCH", "login": login });
+        }
+        let r = self.gql(Some(by), CHECKOUT, vars).await;
+        let c = &r["data"]["startCheckout"];
+        assert!(r["errors"].is_null(), "{r}");
+        (
+            c["transactionId"].as_str().unwrap().to_owned(),
+            c["order"]["id"].as_str().unwrap().to_owned(),
+        )
+    }
+
+    async fn status(&self, order: &str) -> String {
+        let mut conn = self.db.conn().await;
+        sqlx::query_scalar("SELECT status FROM shop_orders WHERE id = $1")
+            .bind(ids::from_text(order).unwrap())
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap()
+    }
+
+    /// The `after_json` of each audit row with this action, oldest first.
+    async fn audits(&self, action: &str) -> Vec<Value> {
+        let mut conn = self.db.conn().await;
+        sqlx::query_scalar(
+            "SELECT coalesce(after_json, 'null'::jsonb) FROM audit_log WHERE action = $1 ORDER BY id",
+        )
+        .bind(action)
+        .fetch_all(&mut *conn)
+        .await
+        .unwrap()
+    }
+
+    async fn notes(&self, account: Uuid) -> Vec<(String, Value)> {
+        let mut conn = self.db.conn().await;
+        sqlx::query_as("SELECT kind, payload FROM notifications WHERE account_id = $1 ORDER BY id")
+            .bind(account)
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap()
+    }
+
+    /// Owned cosmetic IDs, sorted.
+    async fn owned(&self, account: Uuid) -> Vec<String> {
+        let mut conn = self.db.conn().await;
+        let mut out: Vec<String> = sqlx::query_scalar::<_, Uuid>(
+            "SELECT badge_id FROM badge_entitlements WHERE account_id = $1
+             UNION ALL SELECT paint_id FROM paint_entitlements WHERE account_id = $1",
+        )
+        .bind(account)
+        .fetch_all(&mut *conn)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(ids::to_text)
+        .collect();
+        out.sort();
+        out
+    }
+
+    async fn code_for(&self, by: &User, badges: &[&str], uses: u32) -> String {
+        let r = self
+            .gql(
+                Some(by),
+                CREATE_BATCH,
+                json!({ "input": { "name": "Giveaway", "prefix": "GIVE", "count": 1, "usesPerCode": uses, "badgeIds": badges } }),
+            )
+            .await;
+        r["data"]["createCodeBatch"]["codes"][0]
+            .as_str()
+            .unwrap_or_else(|| panic!("{r}"))
+            .to_owned()
+    }
+}
+
+fn sorted(ids: &[&str]) -> Vec<String> {
+    let mut v: Vec<String> = ids.iter().map(|s| (*s).to_owned()).collect();
+    v.sort();
+    v
+}
+
+#[tokio::test]
+async fn refunding_one_order_keeps_what_other_orders_and_codes_cover() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let buyer = w.user("101").await;
+    let refunder = w.staff("102", &["shop.orders"]).await;
+    let (a, b, c, d) = (
+        w.badge("A").await,
+        w.badge("B").await,
+        w.badge("C").await,
+        w.badge("D").await,
+    );
+    let x = w.item(&owner, bundle_input("X", &[&a, &b], &[])).await;
+    let y = w.item(&owner, bundle_input("Y", &[&b, &c], &[])).await;
+    let (tx_x, order_x) = w.checkout(&buyer, &x, None).await;
+    assert_eq!(
+        w.hook(completed("evt_x", &tx_x, &order_x)).await,
+        StatusCode::OK
+    );
+    let (tx_y, order_y) = w.checkout(&buyer, &y, None).await;
+    assert_eq!(
+        w.hook(completed("evt_y", &tx_y, &order_y)).await,
+        StatusCode::OK
+    );
+    assert_eq!(w.owned(buyer.id).await, sorted(&[&a, &b, &c]));
+
+    // Refunding X takes a back; b stays, because Y covers it, and now names Y.
+    let r = w
+        .gql(Some(&refunder), REFUND, json!({ "id": order_x }))
+        .await;
+    assert_eq!(r["data"]["refundOrder"]["status"], "REFUNDED", "{r}");
+    assert_eq!(w.owned(buyer.id).await, sorted(&[&b, &c]));
+    let y_uuid = ids::from_text(&order_y).unwrap();
+    let mut conn = w.db.conn().await;
+    let b_order: Option<Uuid> = sqlx::query_scalar(
+        "SELECT order_id FROM badge_entitlements WHERE account_id = $1 AND badge_id = $2",
+    )
+    .bind(buyer.id)
+    .bind(ids::from_text(&b).unwrap())
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    drop(conn);
+    assert_eq!(b_order, Some(y_uuid));
+
+    // A code that gives c (and d) covers c from now on: refunding Y takes only b.
+    let the_code = w.code_for(&owner, &[&c, &d], 1).await;
+    let r = w
+        .gql(Some(&buyer), REDEEM, json!({ "code": the_code }))
+        .await;
+    assert_eq!(
+        r["data"]["redeemCode"]["badges"][0]["id"],
+        d.as_str(),
+        "{r}"
+    );
+    let r = w
+        .gql(Some(&refunder), REFUND, json!({ "id": order_y }))
+        .await;
+    assert_eq!(r["data"]["refundOrder"]["status"], "REFUNDED", "{r}");
+    assert_eq!(w.owned(buyer.id).await, sorted(&[&c, &d]));
+    let sources: Vec<String> = w
+        .sources(buyer.id)
+        .await
+        .into_iter()
+        .map(|(s, _)| s)
+        .collect();
+    assert!(sources.iter().all(|s| s == "code"), "{sources:?}");
+
+    // Notifications: granted with source purchase (a, b; then c), taken back (a; then b), and
+    // the code's d with source code.
+    let notes = w.notes(buyer.id).await;
+    let of = |kind: &str, source: &str| {
+        notes
+            .iter()
+            .filter(|(k, p)| k == kind && p["source"] == source)
+            .count()
+    };
+    assert_eq!(of("cosmetic.granted", "purchase"), 3, "{notes:?}");
+    assert_eq!(of("cosmetic.revoked", "purchase"), 2, "{notes:?}");
+    assert_eq!(of("cosmetic.granted", "code"), 1, "{notes:?}");
+    let revoked: Vec<&Value> = notes
+        .iter()
+        .filter(|(k, _)| k == "cosmetic.revoked")
+        .map(|(_, p)| p)
+        .collect();
+    assert_eq!(revoked[0]["cosmetic_id"], a.as_str());
+    assert_eq!(revoked[0]["order_id"], order_x.as_str());
+    assert_eq!(revoked[0]["name"], "A");
+    // The staff reason is a staff note, not in the buyer's notification.
+    assert!(
+        !notes
+            .iter()
+            .any(|(_, p)| p.to_string().contains("asked by the buyer"))
+    );
+
+    // The export lists both orders and the code (no Paddle price, no staff note).
+    let r = w
+        .gql(Some(&buyer), "mutation { exportMyData }", json!({}))
+        .await;
+    let text = r["data"]["exportMyData"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{r}"));
+    let doc: Value = serde_json::from_str(text).unwrap();
+    let orders = doc["orders"].as_array().unwrap();
+    assert_eq!(orders.len(), 2);
+    assert!(
+        orders
+            .iter()
+            .all(|o| o["status"] == "refunded" && o["as_buyer"] == true)
+    );
+    assert!(
+        orders
+            .iter()
+            .any(|o| o["provider_transaction_id"] == tx_x.as_str())
+    );
+    assert_eq!(doc["code_redemptions"].as_array().unwrap().len(), 1);
+    assert_eq!(doc["code_redemptions"][0]["batch_name"], "Giveaway");
+    assert!(!text.contains("pri_01testprice") && !text.contains("asked by the buyer"));
+    assert!(!text.contains(&the_code));
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn payments_that_give_nothing_are_audited() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let buyer = w.user("111").await;
+    let friend = w.user("112").await;
+    let other = w.user("113").await;
+    let badge = w.badge("Early").await;
+    let item = w
+        .item(&owner, bundle_input("Starter", &[&badge], &[]))
+        .await;
+
+    // (a) Cancelled at Paddle, then paid anyway: nothing given, audited with the transaction.
+    let (txn, order) = w.checkout(&buyer, &item, None).await;
+    let mut canceled = completed("evt_c1", &txn, &order);
+    canceled["event_type"] = json!("transaction.canceled");
+    assert_eq!(w.hook(canceled).await, StatusCode::OK);
+    assert_eq!(
+        w.hook(completed("evt_c2", &txn, &order)).await,
+        StatusCode::OK
+    );
+    assert_eq!(w.status(&order).await, "failed");
+    assert!(w.owned(buyer.id).await.is_empty());
+    let rows = w.audits("shop.order_paid_unfulfilled").await;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["provider_transaction_id"], txn.as_str());
+    assert_eq!(rows[0]["status"], "failed");
+    assert_eq!(rows[0]["reason"], "order_failed_canceled");
+
+    // An order we failed ourselves (expired) still takes a late payment.
+    let (txn, order) = w.checkout(&buyer, &item, None).await;
+    w.sql(&format!(
+        "UPDATE shop_orders SET status = 'failed', failed_reason = 'expired' WHERE id = '{}'",
+        ids::from_text(&order).unwrap()
+    ))
+    .await;
+    assert_eq!(
+        w.hook(completed("evt_c3", &txn, &order)).await,
+        StatusCode::OK
+    );
+    assert_eq!(w.status(&order).await, "paid");
+    assert_eq!(w.owned(buyer.id).await, std::slice::from_ref(&badge));
+
+    // (b) A gift whose recipient deleted their account before paying: paid, nothing granted to
+    // the deleted account, audited.
+    let (txn, order) = w.checkout(&buyer, &item, Some("user112")).await;
+    w.sql(&format!(
+        "UPDATE accounts SET deleted_at = now() WHERE id = '{}'",
+        friend.id
+    ))
+    .await;
+    assert_eq!(
+        w.hook(completed("evt_c4", &txn, &order)).await,
+        StatusCode::OK
+    );
+    assert_eq!(w.status(&order).await, "paid");
+    assert!(w.owned(friend.id).await.is_empty());
+    let rows = w.audits("shop.order_paid_unfulfilled").await;
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[1]["reason"], "recipient_deleted");
+    assert_eq!(rows[1]["provider_transaction_id"], txn.as_str());
+
+    // A recipient that is gone entirely (NULL).
+    let (txn, order) = w.checkout(&other, &item, None).await;
+    w.sql(&format!(
+        "UPDATE shop_orders SET recipient_id = NULL WHERE id = '{}'",
+        ids::from_text(&order).unwrap()
+    ))
+    .await;
+    assert_eq!(
+        w.hook(completed("evt_c5", &txn, &order)).await,
+        StatusCode::OK
+    );
+    let rows = w.audits("shop.order_paid_unfulfilled").await;
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[2]["reason"], "recipient_gone");
+
+    // Two checkouts for the same recipient paid one after the other (a gift and their own):
+    // the second gives nothing new, audited.
+    let late = w.user("114").await;
+    let (t1, o1) = w.checkout(&late, &item, None).await;
+    let (t2, o2) = w.checkout(&other, &item, Some("user114")).await;
+    assert_eq!(w.hook(completed("evt_c6", &t1, &o1)).await, StatusCode::OK);
+    assert_eq!(w.hook(completed("evt_c7", &t2, &o2)).await, StatusCode::OK);
+    assert_eq!(w.status(&o2).await, "paid");
+    let rows = w.audits("shop.order_paid_no_grant").await;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["provider_transaction_id"], t2.as_str());
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn a_transaction_that_cant_be_saved_is_retried_then_audited_with_its_id() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let buyer = w.user("121").await;
+    let badge = w.badge("Early").await;
+    let item = w
+        .item(&owner, bundle_input("Starter", &[&badge], &[]))
+        .await;
+    // Saving a transaction ID fails while the sequence is at or under the budget.
+    for q in [
+        "CREATE SEQUENCE test_txn_fail",
+        "CREATE TABLE test_txn_budget (n bigint NOT NULL)",
+        "INSERT INTO test_txn_budget VALUES (1)",
+        "CREATE FUNCTION test_txn_fail() RETURNS trigger LANGUAGE plpgsql AS $$
+         BEGIN
+           IF NEW.provider_transaction_id IS DISTINCT FROM OLD.provider_transaction_id
+              AND nextval('test_txn_fail') <= (SELECT n FROM test_txn_budget) THEN
+             RAISE EXCEPTION 'test: saving the transaction fails';
+           END IF;
+           RETURN NEW;
+         END $$",
+        "CREATE TRIGGER test_txn_fail BEFORE UPDATE ON shop_orders
+         FOR EACH ROW EXECUTE FUNCTION test_txn_fail()",
+    ] {
+        w.sql(q).await;
+    }
+
+    // One failure: the retry saves it.
+    let (txn, order) = w.checkout(&buyer, &item, None).await;
+    assert_eq!(w.status(&order).await, "pending");
+    assert_eq!(
+        w.hook(completed("evt_s1", &txn, &order)).await,
+        StatusCode::OK
+    );
+    assert_eq!(w.status(&order).await, "paid");
+
+    // Always failing: the checkout fails, and the audit row has Paddle's transaction ID.
+    w.sql("UPDATE test_txn_budget SET n = 1000000").await;
+    let gift_to = w.user("122").await;
+    let r = w
+        .gql(
+            Some(&buyer),
+            CHECKOUT,
+            json!({ "itemId": item["id"], "recipient": { "platform": "TWITCH", "login": "user122" } }),
+        )
+        .await;
+    assert_eq!(code(&r), "checkout_failed", "{r}");
+    let rows = w.audits("shop.checkout_failed").await;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["reason"], "transaction_not_saved");
+    let lost = rows[0]["provider_transaction_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(lost.starts_with("txn_test"), "{lost}");
+    let mut conn = w.db.conn().await;
+    let (lost_order, status): (Uuid, String) =
+        sqlx::query_as("SELECT id, status FROM shop_orders WHERE recipient_id = $1")
+            .bind(gift_to.id)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    drop(conn);
+    assert_eq!(status, "failed");
+    // If it is paid anyway, it isn't fulfilled from custom_data; staff see it.
+    assert_eq!(
+        w.hook(completed("evt_s2", &lost, &ids::to_text(lost_order)))
+            .await,
+        StatusCode::OK
+    );
+    assert!(w.owned(gift_to.id).await.is_empty());
+    let rows = w.audits("shop.order_paid_unfulfilled").await;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["reason"], "transaction_not_saved");
+    assert_eq!(rows[0]["provider_transaction_id"], lost.as_str());
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn checkout_reads_the_item_again_under_its_lock() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let buyer = w.user("131").await;
+    let badge = w.badge("Early").await;
+    let item = w
+        .item(&owner, bundle_input("Starter", &[&badge], &[]))
+        .await;
+    let item_id = ids::from_text(item["id"].as_str().unwrap()).unwrap();
+
+    // Staff hold the item's row and change it while the checkout waits for the lock.
+    let change = |set: &'static str| {
+        let pool = w.db.pool.clone();
+        async move {
+            let mut tx = pool.begin().await.unwrap();
+            sqlx::query("SELECT 1 FROM shop_items WHERE id = $1 FOR UPDATE")
+                .bind(item_id)
+                .execute(&mut *tx)
+                .await
+                .unwrap();
+            (tx, set)
+        }
+    };
+    let finish = |tx: sqlx::Transaction<'static, sqlx::Postgres>, set: &'static str| async move {
+        let mut tx = tx;
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        sqlx::query(&format!("UPDATE shop_items SET {set} WHERE id = $1"))
+            .bind(item_id)
+            .execute(&mut *tx)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+    };
+
+    // A new Paddle price: Paddle gets the locked row's price, and the order stores it.
+    let (tx, set) = change("paddle_price_id = 'pri_01newprice'").await;
+    let (r, ()) = tokio::join!(
+        w.gql(Some(&buyer), CHECKOUT, json!({ "itemId": item["id"] })),
+        finish(tx, set)
+    );
+    assert!(r["errors"].is_null(), "{r}");
+    let price_sent = w.fake.calls.lock().unwrap().last().unwrap().1["items"][0]["price_id"].clone();
+    assert_eq!(price_sent, "pri_01newprice");
+    let order = r["data"]["startCheckout"]["order"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut conn = w.db.conn().await;
+    let stored: Option<String> =
+        sqlx::query_scalar("SELECT paddle_price_id FROM shop_orders WHERE id = $1")
+            .bind(ids::from_text(&order).unwrap())
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    drop(conn);
+    assert_eq!(stored.as_deref(), Some("pri_01newprice"));
+
+    // Hidden while the checkout waited: it can't be bought.
+    let other = w.user("132").await;
+    let calls = w.fake.calls.lock().unwrap().len();
+    let (tx, set) = change("visible = false").await;
+    let (r, ()) = tokio::join!(
+        w.gql(Some(&other), CHECKOUT, json!({ "itemId": item["id"] })),
+        finish(tx, set)
+    );
+    assert_eq!(code(&r), "item_unavailable", "{r}");
+    assert_eq!(w.fake.calls.lock().unwrap().len(), calls);
+    let mut conn = w.db.conn().await;
+    let theirs: i64 = sqlx::query_scalar("SELECT count(*) FROM shop_orders WHERE account_id = $1")
+        .bind(other.id)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    drop(conn);
+    assert_eq!(theirs, 0);
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn one_pending_order_per_buyer_item_and_recipient() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let buyer = w.user("141").await;
+    let badge = w.badge("Early").await;
+    let mut input = bundle_input("Limited", &[&badge], &[]);
+    input["stockLimit"] = json!(2);
+    let item = w.item(&owner, input).await;
+
+    // Asking again hands out the same order and transaction; Paddle is asked once.
+    let (txn, order) = w.checkout(&buyer, &item, None).await;
+    let (txn2, order2) = w.checkout(&buyer, &item, None).await;
+    assert_eq!((&txn2, &order2), (&txn, &order));
+    assert_eq!(w.fake.calls.lock().unwrap().len(), 1);
+    // So the buyer holds one copy, not two.
+    let list = w.gql(None, ITEMS, json!({})).await;
+    assert_eq!(list["data"]["shopItems"][0]["stockLeft"], 1);
+
+    // While another request is still making the transaction: busy.
+    let order_uuid = ids::from_text(&order).unwrap();
+    w.sql(&format!(
+        "UPDATE shop_orders SET provider_transaction_id = NULL WHERE id = '{order_uuid}'"
+    ))
+    .await;
+    let r = w
+        .gql(Some(&buyer), CHECKOUT, json!({ "itemId": item["id"] }))
+        .await;
+    assert_eq!(code(&r), "checkout_busy", "{r}");
+    w.sql(&format!(
+        "UPDATE shop_orders SET provider_transaction_id = '{txn}' WHERE id = '{order_uuid}'"
+    ))
+    .await;
+
+    // Once its hold ran out, a new checkout replaces it.
+    w.sql(&format!(
+        "UPDATE shop_orders SET created_at = now() - interval '2 hours' WHERE id = '{order_uuid}'"
+    ))
+    .await;
+    let (txn3, order3) = w.checkout(&buyer, &item, None).await;
+    assert_ne!(order3, order);
+    assert_eq!(w.status(&order).await, "failed");
+    assert_eq!(w.audit_count("shop.order_replaced").await, 1);
+    let mut conn = w.db.conn().await;
+    let pending: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM shop_orders WHERE account_id = $1 AND status = 'pending'",
+    )
+    .bind(buyer.id)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    drop(conn);
+    assert_eq!(pending, 1);
+
+    // The old tab is paid after all: taken (late payment); the new one then gives nothing new.
+    assert_eq!(
+        w.hook(completed("evt_p1", &txn, &order)).await,
+        StatusCode::OK
+    );
+    assert_eq!(w.status(&order).await, "paid");
+    assert_eq!(w.owned(buyer.id).await, std::slice::from_ref(&badge));
+    assert_eq!(
+        w.hook(completed("evt_p2", &txn3, &order3)).await,
+        StatusCode::OK
+    );
+    assert_eq!(w.audit_count("shop.order_paid_no_grant").await, 1);
+    // Two sold of two: nothing oversold yet.
+    assert_eq!(w.audit_count("shop.order_oversold").await, 0);
+
+    // A pending order whose hold ran out lets another buyer take the copy; when it is paid
+    // late, it is still taken, and the oversell is audited.
+    let mut input = bundle_input("One", &[&badge], &[]);
+    input["stockLimit"] = json!(1);
+    let one = w.item(&owner, input).await;
+    let slow = w.user("142").await;
+    let quick = w.user("143").await;
+    let (slow_txn, slow_order) = w.checkout(&slow, &one, None).await;
+    w.sql(&format!(
+        "UPDATE shop_orders SET created_at = now() - interval '2 hours' WHERE id = '{}'",
+        ids::from_text(&slow_order).unwrap()
+    ))
+    .await;
+    let (quick_txn, quick_order) = w.checkout(&quick, &one, None).await;
+    assert_eq!(
+        w.hook(completed("evt_p3", &quick_txn, &quick_order)).await,
+        StatusCode::OK
+    );
+    assert_eq!(
+        w.hook(completed("evt_p4", &slow_txn, &slow_order)).await,
+        StatusCode::OK
+    );
+    assert_eq!(w.status(&slow_order).await, "paid");
+    assert_eq!(w.owned(slow.id).await, std::slice::from_ref(&badge));
+    let rows = w.audits("shop.order_oversold").await;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        (rows[0]["stock_limit"].as_i64(), rows[0]["sold"].as_i64()),
+        (Some(1), Some(2))
+    );
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn refunds_ask_paddle_outside_the_lock_and_rejections_are_flagged() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let buyer = w.user("151").await;
+    let refunder = w.staff("152", &["shop.orders"]).await;
+    let badge = w.badge("Early").await;
+    let paint = w.paint("Sunset").await;
+    let item = w
+        .item(&owner, bundle_input("Starter", &[&badge], &[&paint]))
+        .await;
+    let (txn, order) = w.checkout(&buyer, &item, None).await;
+    assert_eq!(
+        w.hook(completed("evt_r1", &txn, &order)).await,
+        StatusCode::OK
+    );
+    let order_uuid = ids::from_text(&order).unwrap();
+
+    // Paddle says it was refunded already: a clear message, and nothing changes.
+    w.fake.fail.store(true, Ordering::SeqCst);
+    *w.fake.fail_code.lock().unwrap() = Some("adjustment_amount_above_remaining_allowed".into());
+    let r = w.gql(Some(&refunder), REFUND, json!({ "id": order })).await;
+    assert_eq!(code(&r), "already_refunded", "{r}");
+    assert_eq!(w.status(&order).await, "paid");
+    assert_eq!(w.owned(buyer.id).await.len(), 2);
+    assert_eq!(w.audit_count("shop.refund_failed").await, 1);
+    w.fake.fail.store(false, Ordering::SeqCst);
+
+    // While Paddle is asked, the order isn't locked (it shows the refund as requested).
+    w.fake.delay_ms.store(700, Ordering::SeqCst);
+    let probe = async {
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+        let mut tx = w.db.pool.begin().await.unwrap();
+        let status: Result<String, sqlx::Error> =
+            sqlx::query_scalar("SELECT status FROM shop_orders WHERE id = $1 FOR UPDATE NOWAIT")
+                .bind(order_uuid)
+                .fetch_one(&mut *tx)
+                .await;
+        tx.rollback().await.unwrap();
+        status
+    };
+    let (r, during) = tokio::join!(
+        w.gql(Some(&refunder), REFUND, json!({ "id": order })),
+        probe
+    );
+    w.fake.delay_ms.store(0, Ordering::SeqCst);
+    assert_eq!(
+        during.expect("the order is free while Paddle is asked"),
+        "refund_requested"
+    );
+    assert_eq!(r["data"]["refundOrder"]["status"], "REFUNDED", "{r}");
+    assert!(w.owned(buyer.id).await.is_empty());
+    assert_eq!(w.audit_count("shop.refund_requested").await, 2);
+
+    // Paddle rejects the refund later: audited, the order is flagged for staff, and the
+    // cosmetics stay taken back.
+    const STAFF_ORDER: &str = "query($id: String!) { order(id: $id) { status refundRejectedAt } }";
+    let staff_view = w
+        .gql(Some(&refunder), STAFF_ORDER, json!({ "id": order }))
+        .await;
+    assert!(staff_view["data"]["order"]["refundRejectedAt"].is_null());
+    assert_eq!(
+        w.hook(adjustment("evt_r2", &txn, "refund", "rejected"))
+            .await,
+        StatusCode::OK
+    );
+    let rows = w.audits("shop.refund_rejected").await;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["flagged"], true);
+    let staff_view = w
+        .gql(Some(&refunder), STAFF_ORDER, json!({ "id": order }))
+        .await;
+    assert!(
+        staff_view["data"]["order"]["refundRejectedAt"].is_string(),
+        "{staff_view}"
+    );
+    assert_eq!(staff_view["data"]["order"]["status"], "REFUNDED");
+    let buyer_view = w
+        .gql(Some(&buyer), STAFF_ORDER, json!({ "id": order }))
+        .await;
+    assert!(buyer_view["data"]["order"]["refundRejectedAt"].is_null());
+    assert!(w.owned(buyer.id).await.is_empty());
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn price_ids_redeem_ips_and_webhook_size() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let manager = w.staff("161", &["shop.manage", "codes.manage"]).await;
+    let viewer = w.user("162").await;
+    let badge = w.badge("Early").await;
+    w.item(&manager, bundle_input("Starter", &[&badge], &[]))
+        .await;
+
+    // Paddle price IDs only for shop.manage.
+    const PRICES: &str = "{ shopItems { paddlePriceId } }";
+    for who in [None, Some(&viewer)] {
+        let r = w.gql(who, PRICES, json!({})).await;
+        assert!(r["data"]["shopItems"][0]["paddlePriceId"].is_null(), "{r}");
+    }
+    let r = w.gql(Some(&manager), PRICES, json!({})).await;
+    assert_eq!(
+        r["data"]["shopItems"][0]["paddlePriceId"],
+        "pri_01testprice"
+    );
+
+    // A redeem whose IP isn't known is refused, not counted under a shared "unknown".
+    let the_code = w.code_for(&manager, &[&badge], 5).await;
+    let r = w
+        .gql_from(None, Some(&viewer), REDEEM, json!({ "code": the_code }))
+        .await;
+    assert_eq!(code(&r), "unknown_client", "{r}");
+    let r = w
+        .gql(Some(&viewer), REDEEM, json!({ "code": the_code }))
+        .await;
+    assert_eq!(
+        r["data"]["redeemCode"]["badges"][0]["id"],
+        badge.as_str(),
+        "{r}"
+    );
+
+    // The webhook refuses bodies over 64 KB before reading them.
+    let big = json!({ "event_id": "evt_big", "event_type": "x", "data": { "pad": "x".repeat(70 * 1024) } })
+        .to_string();
+    let sig = sign(SECRET, big.as_bytes(), Utc::now().timestamp());
+    let (status, _) = w.hook_raw(&big, Some(sig)).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    w.db.close().await;
+}
+
+// Concurrency
+
+#[tokio::test]
+async fn two_checkouts_of_the_last_copy() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let badge = w.badge("Rare").await;
+    let mut input = bundle_input("Last", &[&badge], &[]);
+    input["stockLimit"] = json!(1);
+    let item = w.item(&owner, input).await;
+    let (a, b) = (w.user("171").await, w.user("172").await);
+    w.fake.delay_ms.store(100, Ordering::SeqCst);
+    let (ra, rb) = tokio::join!(
+        w.gql(Some(&a), CHECKOUT, json!({ "itemId": item["id"] })),
+        w.gql(Some(&b), CHECKOUT, json!({ "itemId": item["id"] }))
+    );
+    let mut outcomes = [
+        if ra["errors"].is_null() {
+            "ok"
+        } else {
+            code(&ra)
+        },
+        if rb["errors"].is_null() {
+            "ok"
+        } else {
+            code(&rb)
+        },
+    ];
+    outcomes.sort_unstable();
+    assert_eq!(outcomes, ["ok", "sold_out"], "{ra} {rb}");
+    let mut conn = w.db.conn().await;
+    let pending: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM shop_orders WHERE status = 'pending'")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    drop(conn);
+    assert_eq!(pending, 1);
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn a_completion_and_a_staff_refund_at_once_stay_consistent() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let refunder = w.staff("181", &["shop.orders"]).await;
+    let badge = w.badge("Early").await;
+    let item = w
+        .item(&owner, bundle_input("Starter", &[&badge], &[]))
+        .await;
+    for n in 0..6 {
+        let buyer = w.user(&format!("18{}", n + 2)).await;
+        let (txn, order) = w.checkout(&buyer, &item, None).await;
+        let (status, r) = tokio::join!(
+            w.hook(completed(&format!("evt_race{n}"), &txn, &order)),
+            w.gql(Some(&refunder), REFUND, json!({ "id": order }))
+        );
+        assert_eq!(status, StatusCode::OK);
+        let owned = w.owned(buyer.id).await;
+        if r["errors"].is_null() {
+            // The refund went after the payment: refunded, nothing left.
+            assert_eq!(w.status(&order).await, "refunded", "{r}");
+            assert!(owned.is_empty(), "{owned:?}");
+        } else {
+            // The refund came first: the order wasn't paid yet, and then the payment gave it.
+            assert_eq!(code(&r), "not_refundable", "{r}");
+            assert_eq!(w.status(&order).await, "paid");
+            assert_eq!(owned, std::slice::from_ref(&badge));
+        }
+    }
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn two_redemptions_of_a_single_use_code() {
+    let Some(w) = World::new(false).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let badge = w.badge("Early").await;
+    let paint = w.paint("Sunset").await;
+    let r = w
+        .gql(
+            Some(&owner),
+            CREATE_BATCH,
+            json!({ "input": { "name": "One", "prefix": "ONE", "count": 1, "badgeIds": [badge], "paintIds": [paint] } }),
+        )
+        .await;
+    let the_code = r["data"]["createCodeBatch"]["codes"][0]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let (a, b) = (w.user("191").await, w.user("192").await);
+    let (ra, rb) = tokio::join!(
+        w.gql(Some(&a), REDEEM, json!({ "code": the_code })),
+        w.gql(Some(&b), REDEEM, json!({ "code": the_code }))
+    );
+    let mut outcomes = [
+        if ra["errors"].is_null() {
+            "ok"
+        } else {
+            code(&ra)
+        },
+        if rb["errors"].is_null() {
+            "ok"
+        } else {
+            code(&rb)
+        },
+    ];
+    outcomes.sort_unstable();
+    assert_eq!(outcomes, ["code_used_up", "ok"], "{ra} {rb}");
+    let owners = w.owned(a.id).await.len() + w.owned(b.id).await.len();
+    assert_eq!(owners, 2);
     w.db.close().await;
 }

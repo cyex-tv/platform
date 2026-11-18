@@ -194,3 +194,27 @@ pub async fn record_redemption(conn: &mut PgConnection, code: Uuid, account: Uui
         .await?;
     Ok(())
 }
+
+/// A code an account redeemed, for its data export (never the code or its hash).
+#[derive(Clone, Debug, PartialEq, Eq, FromRow)]
+pub struct Redemption {
+    pub code_id: Uuid,
+    pub batch_id: Uuid,
+    pub batch_name: String,
+    pub redeemed_at: DateTime<Utc>,
+}
+
+/// Every code an account redeemed, oldest first.
+pub async fn redemptions_of(conn: &mut PgConnection, account: Uuid) -> DbResult<Vec<Redemption>> {
+    Ok(sqlx::query_as(
+        "SELECT r.code_id, c.batch_id, b.name AS batch_name, r.redeemed_at
+           FROM code_redemptions r
+           JOIN redeem_codes c ON c.id = r.code_id
+           JOIN code_batches b ON b.id = c.batch_id
+          WHERE r.account_id = $1
+          ORDER BY r.redeemed_at, r.code_id",
+    )
+    .bind(account)
+    .fetch_all(conn)
+    .await?)
+}

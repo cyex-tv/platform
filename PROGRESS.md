@@ -2,6 +2,22 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Shop hardening (branch `fix/shop-hardening`)
+
+The backend audit of the shop (overnight run 2026-11-17, findings B1-B3, M1-M3, L1-L3). Additive; nothing was deployed.
+
+- [x] Migration `20261202000001_shop_hardening.sql`: status `refund_requested`; `shop_orders.checkout_url`, `failed_reason`, `refund_requested_at`, `refund_rejected_at`; `shop_order_entitlements` (every cosmetic an order covers, backfilled from `order_id`); one pending order per buyer, item and recipient (partial unique index); `paddle_events (received_at)` index.
+- [x] Refunds take back only what no other paid order, redeemed code or staff grant covers (B1).
+- [x] Payments that give nothing are audited: `shop.order_paid_unfulfilled` (cancelled or failed order, deleted or gone recipient, transaction not saved), `shop.order_paid_no_grant` (owned already). Never granted to a deleted account. A transaction ID that can't be saved is retried once, then named in `shop.checkout_failed` (B2).
+- [x] Checkout re-reads the item under its lock and uses that row's price (B3).
+- [x] A repeated checkout hands out the same open transaction (`checkout_busy` while one starts); a late payment after the hold is taken (`shop.order_oversold` when it sells one too many) (M1).
+- [x] Staff refunds: `refund_requested` committed, Paddle asked without the lock, then finished; `already_refunded`; a rejected refund flags the order (`Order.refundRejectedAt`, staff only) and audits `shop.refund_rejected` (M2).
+- [x] Notifications `cosmetic.granted` / `cosmetic.revoked` with `source` (`purchase`, `code`) and `order_id`; the export lists orders and code redemptions (M3).
+- [x] Redeem sorts its grants, needs a known client IP (`unknown_client`); webhook body limit 64 KB; `paddlePriceId` only for `shop.manage` (L1).
+- [x] Worker clean-up: pending orders older than 24 h fail (`expired`, audited `shop.order_expired`), Paddle events older than 90 days go (L2).
+- [x] `TestDb` panics in CI (`CI=true`) without `CYEX_TV_TEST_DATABASE_URL` (L3).
+- [x] Tests: `apps/api/tests/shop_flow.rs` (B1-B3, M1-M3, L1, and three `tokio::join!` races), `apps/worker/tests/jobs.rs` (expiry and retention), unit tests in `shop.rs`, `codes.rs`, `testing.rs`.
+
 ## Cosmetics shop and redeem codes (branch `feat/shop`)
 
 ADR 0016. A shop for cyex.tv's chat cosmetics and redeem codes, like 7TV's Store and Redeem (studied from what 7TV shows publicly; no code taken). Payments through cyex.tv's **own** Paddle Billing account, never cyex.app's; no card data reaches cyex.tv.
