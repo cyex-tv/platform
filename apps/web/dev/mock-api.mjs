@@ -870,6 +870,10 @@ const ORDERS = [
   mkOrder(ME_ID, ME_ID, SHOP_ITEMS[0], 'PAID', '2026-11-14T10:00:00.000Z'),
   mkOrder(ME_ID, ME_ID, SHOP_ITEMS[1], 'REFUNDED', '2026-11-12T09:00:00.000Z', { refundReason: 'Sample refund (mock data)', refundedAt: '2026-11-13T09:00:00.000Z' }),
   mkOrder(OTHERS[0].id, ME_ID, SHOP_ITEMS[2], 'PAID', '2026-11-15T18:00:00.000Z'),
+  // Paddle rejected this refund after the cosmetics were taken back (the staff flag).
+  mkOrder(OTHERS[1].id, OTHERS[1].id, SHOP_ITEMS[0], 'REFUNDED', '2026-11-10T09:00:00.000Z', { refundReason: 'Sample refund (mock data)', refundedAt: '2026-11-11T09:00:00.000Z', refundRejectedAt: '2026-11-11T09:05:00.000Z' }),
+  // A refund already running: the first try answers refund_in_progress, the second goes through.
+  mkOrder(OTHERS[2].id, OTHERS[2].id, SHOP_ITEMS[1], 'PAID', '2026-11-16T09:00:00.000Z', { refundBusy: true }),
 ];
 const normCode = (c) => String(c ?? '').toUpperCase().replace(/[\s-]/g, '').replace(/O/g, '0').replace(/[IL]/g, '1');
 const mkBatch = (n, rest) => ({ id: shopId('01JD8XCBT', n), itemId: null, expiresAt: null, disabledAt: null, createdBy: ME_SUMMARY, createdAt: C_TIME, ...rest });
@@ -1021,6 +1025,9 @@ function shopAnswer(q, v, session, admin) {
         const o = ORDERS.find((x) => x.id === v.id);
         if (!o) return err('Not found.', 'not_found');
         if (typeof v.reason !== 'string' || !v.reason.trim()) return err('Give a reason of 1 to 500 characters.', 'bad_reason');
+        if (v.reason.trim().length > 500) return err('Give a reason of 1 to 500 characters.', 'bad_reason');
+        if (o.status === 'REFUNDED') return err('That order was refunded already.', 'already_refunded');
+        if (o.refundBusy) { o.refundBusy = false; return err('A refund for that order is already in progress.', 'refund_in_progress'); }
         if (o.status !== 'PAID') return err('Only paid orders can be refunded.', 'not_refundable');
         o.status = 'REFUNDED';
         o.refundReason = v.reason.trim();

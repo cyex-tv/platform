@@ -121,8 +121,8 @@ type Documents = {
     "\n  mutation CreateShopItem($input: ShopItemInput!) {\n    createShopItem(input: $input) {\n      ...ShopItemFields\n    }\n  }\n": typeof types.CreateShopItemDocument,
     "\n  mutation UpdateShopItem($id: String!, $input: ShopItemInput!) {\n    updateShopItem(id: $id, input: $input) {\n      ...ShopItemFields\n    }\n  }\n": typeof types.UpdateShopItemDocument,
     "\n  mutation DeleteShopItem($id: String!) {\n    deleteShopItem(id: $id)\n  }\n": typeof types.DeleteShopItemDocument,
-    "\n  query AdminOrders($status: OrderStatus, $accountId: String, $itemId: String, $page: Int, $perPage: Int) {\n    orders(status: $status, accountId: $accountId, itemId: $itemId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...OrderFields\n        providerTransactionId\n      }\n    }\n  }\n": typeof types.AdminOrdersDocument,
-    "\n  mutation RefundOrder($id: String!, $reason: String!) {\n    refundOrder(id: $id, reason: $reason) {\n      ...OrderFields\n      providerTransactionId\n    }\n  }\n": typeof types.RefundOrderDocument,
+    "\n  query AdminOrders($status: OrderStatus, $accountId: String, $itemId: String, $page: Int, $perPage: Int) {\n    orders(status: $status, accountId: $accountId, itemId: $itemId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...OrderFields\n        providerTransactionId\n        refundRejectedAt\n      }\n    }\n  }\n": typeof types.AdminOrdersDocument,
+    "\n  mutation RefundOrder($id: String!, $reason: String!) {\n    refundOrder(id: $id, reason: $reason) {\n      ...OrderFields\n      providerTransactionId\n      refundRejectedAt\n    }\n  }\n": typeof types.RefundOrderDocument,
     "\n  fragment CodeBatchFields on CodeBatch {\n    id\n    name\n    prefix\n    itemId\n    itemName\n    badgeIds\n    paintIds\n    codeCount\n    usesPerCode\n    redemptions\n    expiresAt\n    disabledAt\n    createdBy {\n      id\n      displayName\n    }\n    createdAt\n  }\n": typeof types.CodeBatchFieldsFragmentDoc,
     "\n  query CodeBatches($page: Int, $perPage: Int) {\n    codeBatches(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...CodeBatchFields\n      }\n    }\n  }\n": typeof types.CodeBatchesDocument,
     "\n  mutation CreateCodeBatch($input: CodeBatchInput!) {\n    createCodeBatch(input: $input) {\n      batch {\n        ...CodeBatchFields\n      }\n      codes\n    }\n  }\n": typeof types.CreateCodeBatchDocument,
@@ -236,8 +236,8 @@ const documents: Documents = {
     "\n  mutation CreateShopItem($input: ShopItemInput!) {\n    createShopItem(input: $input) {\n      ...ShopItemFields\n    }\n  }\n": types.CreateShopItemDocument,
     "\n  mutation UpdateShopItem($id: String!, $input: ShopItemInput!) {\n    updateShopItem(id: $id, input: $input) {\n      ...ShopItemFields\n    }\n  }\n": types.UpdateShopItemDocument,
     "\n  mutation DeleteShopItem($id: String!) {\n    deleteShopItem(id: $id)\n  }\n": types.DeleteShopItemDocument,
-    "\n  query AdminOrders($status: OrderStatus, $accountId: String, $itemId: String, $page: Int, $perPage: Int) {\n    orders(status: $status, accountId: $accountId, itemId: $itemId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...OrderFields\n        providerTransactionId\n      }\n    }\n  }\n": types.AdminOrdersDocument,
-    "\n  mutation RefundOrder($id: String!, $reason: String!) {\n    refundOrder(id: $id, reason: $reason) {\n      ...OrderFields\n      providerTransactionId\n    }\n  }\n": types.RefundOrderDocument,
+    "\n  query AdminOrders($status: OrderStatus, $accountId: String, $itemId: String, $page: Int, $perPage: Int) {\n    orders(status: $status, accountId: $accountId, itemId: $itemId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...OrderFields\n        providerTransactionId\n        refundRejectedAt\n      }\n    }\n  }\n": types.AdminOrdersDocument,
+    "\n  mutation RefundOrder($id: String!, $reason: String!) {\n    refundOrder(id: $id, reason: $reason) {\n      ...OrderFields\n      providerTransactionId\n      refundRejectedAt\n    }\n  }\n": types.RefundOrderDocument,
     "\n  fragment CodeBatchFields on CodeBatch {\n    id\n    name\n    prefix\n    itemId\n    itemName\n    badgeIds\n    paintIds\n    codeCount\n    usesPerCode\n    redemptions\n    expiresAt\n    disabledAt\n    createdBy {\n      id\n      displayName\n    }\n    createdAt\n  }\n": types.CodeBatchFieldsFragmentDoc,
     "\n  query CodeBatches($page: Int, $perPage: Int) {\n    codeBatches(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...CodeBatchFields\n      }\n    }\n  }\n": types.CodeBatchesDocument,
     "\n  mutation CreateCodeBatch($input: CodeBatchInput!) {\n    createCodeBatch(input: $input) {\n      batch {\n        ...CodeBatchFields\n      }\n      codes\n    }\n  }\n": types.CreateCodeBatchDocument,
@@ -672,11 +672,11 @@ export function graphql(source: "\n  mutation DeleteShopItem($id: String!) {\n  
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query AdminOrders($status: OrderStatus, $accountId: String, $itemId: String, $page: Int, $perPage: Int) {\n    orders(status: $status, accountId: $accountId, itemId: $itemId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...OrderFields\n        providerTransactionId\n      }\n    }\n  }\n"): typeof import('./graphql').AdminOrdersDocument;
+export function graphql(source: "\n  query AdminOrders($status: OrderStatus, $accountId: String, $itemId: String, $page: Int, $perPage: Int) {\n    orders(status: $status, accountId: $accountId, itemId: $itemId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...OrderFields\n        providerTransactionId\n        refundRejectedAt\n      }\n    }\n  }\n"): typeof import('./graphql').AdminOrdersDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  mutation RefundOrder($id: String!, $reason: String!) {\n    refundOrder(id: $id, reason: $reason) {\n      ...OrderFields\n      providerTransactionId\n    }\n  }\n"): typeof import('./graphql').RefundOrderDocument;
+export function graphql(source: "\n  mutation RefundOrder($id: String!, $reason: String!) {\n    refundOrder(id: $id, reason: $reason) {\n      ...OrderFields\n      providerTransactionId\n      refundRejectedAt\n    }\n  }\n"): typeof import('./graphql').RefundOrderDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

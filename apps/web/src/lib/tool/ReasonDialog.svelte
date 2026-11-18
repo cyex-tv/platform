@@ -6,6 +6,8 @@
     action,
     danger = false,
     optional = false,
+    max = 1000,
+    describe,
     onsubmit,
   }: {
     title: string;
@@ -13,15 +15,21 @@
     action: string;
     danger?: boolean;
     optional?: boolean;
+    /** The longest reason in characters (the server's limit for what this is used for). */
+    max?: number;
+    /** Turns a failed submit into a sentence shown in the dialog; without it the page shows why. */
+    describe?: (e: unknown) => string;
     onsubmit: (reason: string) => Promise<void> | void;
   } = $props();
 
   let dialog: HTMLDialogElement;
   let reason = $state('');
   let busy = $state(false);
+  let problem = $state('');
 
   export function open() {
     reason = '';
+    problem = '';
     dialog.showModal();
   }
 
@@ -29,11 +37,13 @@
     e.preventDefault();
     if (busy || (!optional && !reason.trim())) return;
     busy = true;
+    problem = '';
     try {
       await onsubmit(reason.trim());
       dialog.close();
-    } catch {
-      // The page already showed why; the dialog stays open to try again.
+    } catch (err) {
+      // The dialog stays open to try again; it says why when it was given the words for it.
+      if (describe) problem = describe(err);
     } finally {
       busy = false;
     }
@@ -46,9 +56,10 @@
       <h2>{title}</h2>
       <label class="ui-field">
         <span class="ui-label">{optional ? 'Note (optional)' : 'Reason'}</span>
-        <textarea class="ui-input" rows="3" maxlength="1000" bind:value={reason}></textarea>
-        <span class="ui-hint">{hint}</span>
+        <textarea class="ui-input" rows="3" maxlength={max} bind:value={reason} aria-describedby="rd-hint"></textarea>
+        <span class="ui-hint" id="rd-hint">{hint}</span>
       </label>
+      {#if problem}<p class="ui-error" role="alert">{problem}</p>{/if}
     </div>
     <footer>
       <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>

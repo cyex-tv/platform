@@ -139,7 +139,8 @@ export function paintRing(p: PaintLike | null | undefined): string {
 // ── Readability floor ────────────────────────────────────────────────────────────────────────
 // A pale paint vanishes on the light ground and a very dark one on the dark ground. The paint
 // keeps its look; PaintedName adds a faint outline (a soft drop-shadow) only where the paint falls
-// under 3:1 against the ground, and only in the theme where that holds.
+// under 3:1 against the ground, and only in the theme where that holds. A paint that has shadows of
+// its own gets none (the floor on top of them reads as mud).
 
 /** The two grounds names are drawn on (tokens.css `--bg`). */
 export const GROUND = { light: '#ffffff', dark: '#08090c' } as const;
@@ -186,6 +187,8 @@ function paintColors(p: PaintLike): string[] {
  */
 export function paintFloor(p: PaintLike | null | undefined): 'light' | 'dark' | 'both' | null {
   if (!p) return null;
+  // A paint with shadows of its own already carries its outline: adding the floor over them muddies it.
+  if (p.shadows?.length) return null;
   const cs = paintColors(p);
   if (!cs.length) return null;
   const light = cs.some((c) => contrast(c, GROUND.light) < FLOOR_RATIO);
