@@ -1,11 +1,11 @@
 <script lang="ts">
   // People found by name, as profile rows (the Users tab on /search): avatar, name, the logins
-  // they signed in with, each row one link to their page. The name is drawn in their paint when
-  // this browser knows it (`looks`, the shared cosmetics cache holds yours; the API shows nobody
-  // else's by account). The API gives no emote count, so none is shown.
+  // they signed in with, each row one link to their page. The name is drawn in their paint and badge,
+  // asked for by account id in one batch (`wantLooks`, the shared cosmetics cache). The API gives no
+  // emote count, so none is shown.
   import Avatar from '$lib/components/Avatar.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
-  import { NO_LOOK, type Look } from '$lib/cosmetics/store.svelte';
+  import { NO_LOOK, wantLooks, type Look } from '$lib/cosmetics/store.svelte';
   import { clean } from '$lib/format';
   import type { FindPeopleQuery } from '$lib/gql/graphql';
 
@@ -15,6 +15,8 @@
     looks: Record<string, Look>;
   };
   let { items, looks }: Props = $props();
+
+  $effect(() => wantLooks(items.map((h) => h.account.id)));
 
   const where = (p: string) => (p === 'KICK' ? 'Kick' : 'Twitch');
 </script>
