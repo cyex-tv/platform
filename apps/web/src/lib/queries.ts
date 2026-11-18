@@ -1350,6 +1350,7 @@ export const ADMIN_ORDERS = graphql(`
       items {
         ...OrderFields
         providerTransactionId
+        refundRejectedAt
       }
     }
   }
@@ -1360,6 +1361,7 @@ export const REFUND_ORDER = graphql(`
     refundOrder(id: $id, reason: $reason) {
       ...OrderFields
       providerTransactionId
+      refundRejectedAt
     }
   }
 `);

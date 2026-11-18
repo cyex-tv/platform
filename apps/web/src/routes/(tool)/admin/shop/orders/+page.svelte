@@ -3,7 +3,7 @@
   // to its detail: who paid, who got it, the amounts, Paddle's transaction, the dates and the refund
   // reason staff gave. A paid order can be refunded with a reason: Paddle is asked for a full
   // refund and the cosmetics are taken back at once. Buyers never see that reason.
-  import { gql } from '$lib/api';
+  import { ApiError, gql } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import State from '$lib/components/State.svelte';
   import { clean, count, dateTime, iso } from '$lib/format';
@@ -65,7 +65,8 @@
       replace(r.refundOrder);
       loadShopCounts();
     } catch (e) {
-      notify(staffMessage(e), true);
+      // The dialog says why. When the order changed under us (refunded already, a refund running), show its real state.
+      if (e instanceof ApiError && (e.code === 'already_refunded' || e.code === 'refund_in_progress')) void L.reload();
       throw e;
     }
   }
@@ -151,6 +152,7 @@
                     {#if o.paidAt}<div><dt>Paid</dt><dd class="ui-num">{dateTime(o.paidAt)}</dd></div>{/if}
                     {#if o.refundedAt}<div><dt>Refunded</dt><dd class="ui-num">{dateTime(o.refundedAt)}</dd></div>{/if}
                     {#if o.failedAt}<div><dt>Not completed</dt><dd class="ui-num">{dateTime(o.failedAt)}</dd></div>{/if}
+                    {#if o.refundRejectedAt}<div class="wide"><dt>Refund rejected</dt><dd class="flag" role="note"><Icon name="flag" size={14} />Paddle rejected this refund on {dateTime(o.refundRejectedAt)}; the cosmetics stay revoked. Look at it in Paddle.</dd></div>{/if}
                     {#if o.refundReason}<div class="wide"><dt>Refund reason (staff only)</dt><dd><bdi>{clean(o.refundReason)}</bdi></dd></div>{/if}
                   </dl>
                   {#if o.status === 'PAID'}
@@ -174,7 +176,7 @@
     {/snippet}
   </LoadGate>
 
-  <ReasonDialog bind:this={refund} title={target ? `Refund ${iso(target.itemName)}` : 'Refund'} hint="Staff only. The buyer is not shown it. 1 to 500 characters." action="Refund" danger onsubmit={doRefund} />
+  <ReasonDialog bind:this={refund} title={target ? `Refund ${iso(target.itemName)}` : 'Refund'} hint="Staff only. The buyer is not shown it. 1 to 500 characters." action="Refund" danger max={500} describe={staffMessage} onsubmit={doRefund} />
 </Gate>
 
 <style>
@@ -197,6 +199,8 @@
   dl .wide { grid-column: 1 / -1; }
   dt { font-size: var(--t-fine); color: var(--dim); }
   dd { margin: 2px 0 0; font-size: var(--t-small); overflow-wrap: anywhere; }
+  .flag { display: flex; align-items: flex-start; gap: 8px; font-weight: 600; color: var(--text); }
+  .flag :global(svg) { flex: none; margin-top: 2px; color: var(--red); }
   .link { padding: 0; border: 0; background: none; font: inherit; color: var(--accent-text); cursor: pointer; text-align: left; }
   .foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
   @media (max-width: 640px) { .st { min-width: 0; } .row { flex-wrap: wrap; } .what { flex: 1 1 100%; } .amt { margin-left: auto; } }
