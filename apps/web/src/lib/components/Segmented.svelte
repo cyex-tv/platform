@@ -83,6 +83,8 @@
   button:disabled { opacity: .45; cursor: not-allowed; }
   button:active:not(:disabled) { transform: scale(var(--press)); }
   button:focus-visible { outline-offset: -2px; }
+  /* High contrast drops bold and the accent icon: the selected option keeps a system-colour outline. */
+  @media (forced-colors: active) { button[aria-checked='true']:not(:focus-visible) { outline: 1px solid Highlight; outline-offset: -2px; } }
   /* Phones: tighter options so four icon + label options still fit a card without scrolling. */
   @media (max-width: 480px) { .seg { gap: 0; } button { gap: 4px; padding: 0 7px; } .m button { padding: 0 10px; } }
   @media (pointer: coarse) { button { min-height: 44px; } }
