@@ -26,6 +26,8 @@ type Documents = {
     "\n  query Emote($id: String!) {\n    emote(id: $id) {\n      ...EmoteFields\n    }\n  }\n": typeof types.EmoteDocument,
     "\n  query Channel($platform: Platform!, $login: String!) {\n    channelByLogin(platform: $platform, login: $login) {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      allowPersonalEmotes\n      account {\n        id\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.ChannelDocument,
     "\n  query Set($id: String!) {\n    set(id: $id) {\n      id\n      name\n      kind\n      capacity\n      owner {\n        id\n        displayName\n      }\n      emotes {\n        name\n        zeroWidth\n        addedAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": typeof types.SetDocument,
+    "\n  query PublicSet($id: String!) {\n    set(id: $id) {\n      id\n      name\n      kind\n      visibility\n      capacity\n      slotsUsed\n      createdAt\n      owner {\n        id\n        displayName\n        avatar\n      }\n      emotes {\n        name\n        zeroWidth\n        addedAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": typeof types.PublicSetDocument,
+    "\n  mutation CloneSet($id: String!, $name: String) {\n    cloneSet(id: $id, name: $name) {\n      copied\n      skipped\n      set {\n        id\n        name\n      }\n    }\n  }\n": typeof types.CloneSetDocument,
     "\n  query GlobalSet {\n    globalSet {\n      id\n      name\n      emotes {\n        name\n        zeroWidth\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": typeof types.GlobalSetDocument,
     "\n  query Me {\n    me {\n      id\n      createdAt\n      permissions\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.MeDocument,
     "\n  query MyEmotes($page: Int, $perPage: Int) {\n    myEmotes(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.MyEmotesDocument,
@@ -95,6 +97,7 @@ type Documents = {
     "\n  query AccountRoles($accountId: String!) {\n    accountRoles(accountId: $accountId) {\n      id\n      name\n      position\n    }\n  }\n": typeof types.AccountRolesDocument,
     "\n  query AccountEditors($accountId: String) {\n    accountEditors(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n    }\n  }\n": typeof types.AccountEditorsDocument,
     "\n  query EditorOf {\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n    }\n  }\n": typeof types.EditorOfDocument,
+    "\n  query AccountSets($accountId: String!) {\n    accountSets(accountId: $accountId, preview: 12) {\n      id\n      name\n      kind\n      capacity\n      slotsUsed\n      active\n      preview {\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": typeof types.AccountSetsDocument,
     "\n  query ProfileMine {\n    myChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n    }\n    mySets {\n      ...SetFields\n    }\n  }\n": typeof types.ProfileMineDocument,
     "\n  query ProfileEdited {\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorSets {\n      ...SetFields\n    }\n  }\n": typeof types.ProfileEditedDocument,
     "\n  query AccountActivity($accountId: String!, $before: String, $limit: Int) {\n    accountActivity(accountId: $accountId, before: $before, limit: $limit) {\n      id\n      kind\n      actor {\n        id\n        displayName\n        avatar\n      }\n      set {\n        id\n        name\n      }\n      emote {\n        id\n        name\n        host\n        files {\n          name\n          width\n          height\n          isStatic\n        }\n      }\n      fromName\n      toName\n      badge {\n        fromId\n        fromName\n        toId\n        toName\n      }\n      paint {\n        fromId\n        fromName\n        toId\n        toName\n      }\n      createdAt\n    }\n  }\n": typeof types.AccountActivityDocument,
@@ -111,6 +114,8 @@ const documents: Documents = {
     "\n  query Emote($id: String!) {\n    emote(id: $id) {\n      ...EmoteFields\n    }\n  }\n": types.EmoteDocument,
     "\n  query Channel($platform: Platform!, $login: String!) {\n    channelByLogin(platform: $platform, login: $login) {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      allowPersonalEmotes\n      account {\n        id\n        displayName\n        avatar\n      }\n    }\n  }\n": types.ChannelDocument,
     "\n  query Set($id: String!) {\n    set(id: $id) {\n      id\n      name\n      kind\n      capacity\n      owner {\n        id\n        displayName\n      }\n      emotes {\n        name\n        zeroWidth\n        addedAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": types.SetDocument,
+    "\n  query PublicSet($id: String!) {\n    set(id: $id) {\n      id\n      name\n      kind\n      visibility\n      capacity\n      slotsUsed\n      createdAt\n      owner {\n        id\n        displayName\n        avatar\n      }\n      emotes {\n        name\n        zeroWidth\n        addedAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": types.PublicSetDocument,
+    "\n  mutation CloneSet($id: String!, $name: String) {\n    cloneSet(id: $id, name: $name) {\n      copied\n      skipped\n      set {\n        id\n        name\n      }\n    }\n  }\n": types.CloneSetDocument,
     "\n  query GlobalSet {\n    globalSet {\n      id\n      name\n      emotes {\n        name\n        zeroWidth\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": types.GlobalSetDocument,
     "\n  query Me {\n    me {\n      id\n      createdAt\n      permissions\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n": types.MeDocument,
     "\n  query MyEmotes($page: Int, $perPage: Int) {\n    myEmotes(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.MyEmotesDocument,
@@ -180,6 +185,7 @@ const documents: Documents = {
     "\n  query AccountRoles($accountId: String!) {\n    accountRoles(accountId: $accountId) {\n      id\n      name\n      position\n    }\n  }\n": types.AccountRolesDocument,
     "\n  query AccountEditors($accountId: String) {\n    accountEditors(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n    }\n  }\n": types.AccountEditorsDocument,
     "\n  query EditorOf {\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n    }\n  }\n": types.EditorOfDocument,
+    "\n  query AccountSets($accountId: String!) {\n    accountSets(accountId: $accountId, preview: 12) {\n      id\n      name\n      kind\n      capacity\n      slotsUsed\n      active\n      preview {\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": types.AccountSetsDocument,
     "\n  query ProfileMine {\n    myChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n    }\n    mySets {\n      ...SetFields\n    }\n  }\n": types.ProfileMineDocument,
     "\n  query ProfileEdited {\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorSets {\n      ...SetFields\n    }\n  }\n": types.ProfileEditedDocument,
     "\n  query AccountActivity($accountId: String!, $before: String, $limit: Int) {\n    accountActivity(accountId: $accountId, before: $before, limit: $limit) {\n      id\n      kind\n      actor {\n        id\n        displayName\n        avatar\n      }\n      set {\n        id\n        name\n      }\n      emote {\n        id\n        name\n        host\n        files {\n          name\n          width\n          height\n          isStatic\n        }\n      }\n      fromName\n      toName\n      badge {\n        fromId\n        fromName\n        toId\n        toName\n      }\n      paint {\n        fromId\n        fromName\n        toId\n        toName\n      }\n      createdAt\n    }\n  }\n": types.AccountActivityDocument,
@@ -229,6 +235,14 @@ export function graphql(source: "\n  query Channel($platform: Platform!, $login:
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query Set($id: String!) {\n    set(id: $id) {\n      id\n      name\n      kind\n      capacity\n      owner {\n        id\n        displayName\n      }\n      emotes {\n        name\n        zeroWidth\n        addedAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n"): typeof import('./graphql').SetDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query PublicSet($id: String!) {\n    set(id: $id) {\n      id\n      name\n      kind\n      visibility\n      capacity\n      slotsUsed\n      createdAt\n      owner {\n        id\n        displayName\n        avatar\n      }\n      emotes {\n        name\n        zeroWidth\n        addedAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n"): typeof import('./graphql').PublicSetDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CloneSet($id: String!, $name: String) {\n    cloneSet(id: $id, name: $name) {\n      copied\n      skipped\n      set {\n        id\n        name\n      }\n    }\n  }\n"): typeof import('./graphql').CloneSetDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -505,6 +519,10 @@ export function graphql(source: "\n  query AccountEditors($accountId: String) {\
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query EditorOf {\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n    }\n  }\n"): typeof import('./graphql').EditorOfDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AccountSets($accountId: String!) {\n    accountSets(accountId: $accountId, preview: 12) {\n      id\n      name\n      kind\n      capacity\n      slotsUsed\n      active\n      preview {\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n"): typeof import('./graphql').AccountSetsDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

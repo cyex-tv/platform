@@ -538,6 +538,14 @@ const PUBLIC_SETS = [
     emotes: ALL.slice(80, 84).map((e) => member(e)), editors: [], visibility: 'PRIVATE', createdAt: '2026-11-16T08:00:00.000Z' },
   { id: '01JD8XSET0000000000000NORA4', name: 'nora personal', kind: 'PERSONAL', capacity: 5, owner: OTHERS[1],
     emotes: ALL.slice(90, 93).map((e) => member(e)), editors: [], visibility: 'UNLISTED', createdAt: '2026-11-11T11:00:00.000Z' },
+  // Edge cases for /sets/<id>: a listed set with no emotes, and an unlisted one with a very long
+  // name and a very long owner name.
+  { id: '01JD8XSET0000000000000EMPTY', name: 'empty shelf', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[1],
+    emotes: [], editors: [], visibility: 'LISTED', createdAt: '2026-11-17T08:00:00.000Z' },
+  { id: '01JD8XSET0000000000000LONGN', kind: 'CHANNEL', capacity: 1000, visibility: 'UNLISTED', editors: [], createdAt: '2026-11-12T08:00:00.000Z',
+    name: 'The complete and unabridged collection of every single emote I have ever collected, sorted by mood, season and how loud chat gets',
+    owner: { id: '01JD8X0000000000000000LONG', displayName: 'a_streamer_with_an_extremely_long_display_name_that_never_ends', avatar: `${BASE}/avatars/3.svg` },
+    emotes: ALL.slice(8, 52).map((e) => member(e)) },
 ];
 const EDITOR_CHANNELS = [
   { platform: 'TWITCH', platformChannelId: '55500001', login: 'quietoak', activeSetId: SETS[2].id, allowPersonalEmotes: true, account: OTHERS[0] },
@@ -1331,9 +1339,9 @@ function baseAnswer(body, session, admin) {
     return { data: { channelByLogin: c } };
   }
   if (q.includes('query Set(') || /\bset\s*\(\s*id:/.test(q)) {
-    // Unknown ids fall back to the first set, as before; private ones you can't see are null.
-    const s = findSet(v.id) ?? SETS[0];
-    return { data: { set: mayView(s, session) ? setOut(s) : null } };
+    // Unknown ids and private sets you can't see are null.
+    const s = findSet(v.id);
+    return { data: { set: s && mayView(s, session) ? setOut(s) : null } };
   }
   return err('Not in the mock.', 'not_implemented');
 }

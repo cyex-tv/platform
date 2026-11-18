@@ -1559,6 +1559,21 @@ export type SetQueryVariables = Exact<{
 
 export type SetQuery = { __typename?: 'Query', set?: { __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, capacity: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> } | null };
 
+export type PublicSetQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type PublicSetQuery = { __typename?: 'Query', set?: { __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, slotsUsed: number, createdAt: string, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> } | null };
+
+export type CloneSetMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  name?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type CloneSetMutation = { __typename?: 'Mutation', cloneSet: { __typename?: 'ClonedSet', copied: number, skipped: number, set: { __typename?: 'EmoteSet', id: string, name: string } } };
+
 export type GlobalSetQueryVariables = Exact<{ [key: string]: never; }>;
 
 
@@ -2037,6 +2052,13 @@ export type EditorOfQueryVariables = Exact<{ [key: string]: never; }>;
 
 
 export type EditorOfQuery = { __typename?: 'Query', editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } }> };
+
+export type AccountSetsQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type AccountSetsQuery = { __typename?: 'Query', accountSets: Array<{ __typename?: 'SetSummary', id: string, name: string, kind: SetKind, capacity: number, slotsUsed: number, active: boolean, preview: Array<{ __typename?: 'SetEmote', emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> }> };
 
 export type ProfileMineQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -2613,6 +2635,72 @@ export const SetDocument = new TypedDocumentString(`
     isStatic
   }
 }`) as unknown as TypedDocumentString<SetQuery, SetQueryVariables>;
+export const PublicSetDocument = new TypedDocumentString(`
+    query PublicSet($id: String!) {
+  set(id: $id) {
+    id
+    name
+    kind
+    visibility
+    capacity
+    slotsUsed
+    createdAt
+    owner {
+      id
+      displayName
+      avatar
+    }
+    emotes {
+      name
+      zeroWidth
+      addedAt
+      emote {
+        ...EmoteFields
+      }
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  flags {
+    zeroWidth
+    nsfw
+    private
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<PublicSetQuery, PublicSetQueryVariables>;
+export const CloneSetDocument = new TypedDocumentString(`
+    mutation CloneSet($id: String!, $name: String) {
+  cloneSet(id: $id, name: $name) {
+    copied
+    skipped
+    set {
+      id
+      name
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<CloneSetMutation, CloneSetMutationVariables>;
 export const GlobalSetDocument = new TypedDocumentString(`
     query GlobalSet {
   globalSet {
@@ -3745,6 +3833,51 @@ export const EditorOfDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<EditorOfQuery, EditorOfQueryVariables>;
+export const AccountSetsDocument = new TypedDocumentString(`
+    query AccountSets($accountId: String!) {
+  accountSets(accountId: $accountId, preview: 12) {
+    id
+    name
+    kind
+    capacity
+    slotsUsed
+    active
+    preview {
+      emote {
+        ...EmoteFields
+      }
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  flags {
+    zeroWidth
+    nsfw
+    private
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<AccountSetsQuery, AccountSetsQueryVariables>;
 export const ProfileMineDocument = new TypedDocumentString(`
     query ProfileMine {
   myChannels {

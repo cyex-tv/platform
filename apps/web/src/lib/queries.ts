@@ -117,6 +117,48 @@ export const SET = graphql(`
   }
 `);
 
+// The public set page (/sets/<id>): listed and unlisted sets open for anyone; a private one only
+// for its owner and editors, and for everyone else it answers as if it did not exist.
+export const PUBLIC_SET = graphql(`
+  query PublicSet($id: String!) {
+    set(id: $id) {
+      id
+      name
+      kind
+      visibility
+      capacity
+      slotsUsed
+      createdAt
+      owner {
+        id
+        displayName
+        avatar
+      }
+      emotes {
+        name
+        zeroWidth
+        addedAt
+        emote {
+          ...EmoteFields
+        }
+      }
+    }
+  }
+`);
+
+export const CLONE_SET = graphql(`
+  mutation CloneSet($id: String!, $name: String) {
+    cloneSet(id: $id, name: $name) {
+      copied
+      skipped
+      set {
+        id
+        name
+      }
+    }
+  }
+`);
+
 export const GLOBAL_SET = graphql(`
   query GlobalSet {
     globalSet {
@@ -920,6 +962,25 @@ export const EDITOR_OF = graphql(`
         avatar
       }
       permissions
+    }
+  }
+`);
+
+// A profile's listed sets as cards, for anyone (the Emote sets section of someone else's profile).
+export const ACCOUNT_SETS = graphql(`
+  query AccountSets($accountId: String!) {
+    accountSets(accountId: $accountId, preview: 12) {
+      id
+      name
+      kind
+      capacity
+      slotsUsed
+      active
+      preview {
+        emote {
+          ...EmoteFields
+        }
+      }
     }
   }
 `);

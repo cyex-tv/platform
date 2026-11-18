@@ -53,7 +53,10 @@
     {#if ready(i.emote.picture)}<img class="pic" src={src(i.emote.picture, 1)} srcset={srcset(i.emote.picture)} alt="" loading="lazy" />{/if}
   {/if}
 {/snippet}
-{#snippet setName(i: ActivityItem)}<strong><bdi>{clean(i.set?.name ?? i.to ?? 'a set')}</bdi></strong>{/snippet}
+{#snippet setName(i: ActivityItem)}
+  {#if i.set}<a href="/sets/{i.set.id}"><strong><bdi>{clean(i.set.name)}</bdi></strong></a>
+  {:else}<strong><bdi>{clean(i.to ?? 'a set')}</bdi></strong>{/if}
+{/snippet}
 {#snippet paint(id: string | null | undefined, name: string | null | undefined)}
   {@const p = id ? catalog?.paints.get(id) : null}
   {#if p}<strong><PaintedName name={p.name} paint={p} /></strong>{:else if name}<strong><bdi>{clean(name)}</bdi></strong>{:else}<strong>none</strong>{/if}

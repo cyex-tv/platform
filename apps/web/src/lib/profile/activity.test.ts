@@ -36,9 +36,9 @@ describe('toItem', () => {
 });
 
 describe('profile rows', () => {
-  it('gives the public the uploads and the activity', () => {
-    expect(sectionsFor(NOBODY, false)).toEqual(['uploads']);
-    expect(sectionsFor(NOBODY, true)).toEqual(['uploads', 'activity']);
+  it('gives the public the uploads, the listed sets and the activity', () => {
+    expect(sectionsFor(NOBODY, false)).toEqual(['uploads', 'sets']);
+    expect(sectionsFor(NOBODY, true)).toEqual(['uploads', 'sets', 'activity']);
   });
   it('gives the owner everything, activity only when the API has it', () => {
     expect(sectionsFor(mine, false)).toEqual(['active', 'uploads', 'sets', 'cosmetics']);
