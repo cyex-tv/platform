@@ -1,15 +1,18 @@
 <script lang="ts">
   import { goto, invalidateAll, replaceState } from '$app/navigation';
-  import { navigating } from '$app/state';
+  import { navigating, page } from '$app/state';
   import { tick, untrack } from 'svelte';
   import { ApiError, gql } from '$lib/api';
   import Chip from '$lib/components/Chip.svelte';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
-  import Icon from '$lib/components/Icon.svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import BrowseFilters from '$lib/components/browse/BrowseFilters.svelte';
+  import BulkAdd from '$lib/components/browse/BulkAdd.svelte';
+  import EmoteTable from '$lib/components/browse/EmoteTable.svelte';
+  import { looks, loadOwned } from '$lib/cosmetics/store.svelte';
+  import { session } from '$lib/tool/session.svelte';
   import State from '$lib/components/State.svelte';
   import {
     apiQuery,
@@ -21,15 +24,20 @@
     active as activeOf,
     change,
     matches,
+    parse,
     toSearch,
     topTags,
     type Browse,
+    type Layout,
     type Sort,
   } from '$lib/components/browse/params';
   import RailLayout from '$lib/shell/RailLayout.svelte';
   import SideRail from '$lib/shell/SideRail.svelte';
   import { clean, count, iso } from '$lib/format';
   import { SEARCH } from '$lib/queries';
+  import SearchField from '$lib/components/browse/SearchField.svelte';
+  import SearchTabs from '$lib/components/browse/SearchTabs.svelte';
+  import UsersSearch from '$lib/components/browse/UsersSearch.svelte';
 
   let { data } = $props();
 
@@ -71,8 +79,19 @@
     if (document.activeElement !== input) text = q;
   });
 
+  // The view's local parts (layout, select mode) are in the URL too, set without a reload.
+  let layoutPick = $state<Layout>(untrack(() => data.view.layout));
+  let selecting = $state(untrack(() => data.view.select));
+  // Follows the address (which `sync` and every navigation keep in step with these two).
+  $effect.pre(() => {
+    const now = parse(page.url.searchParams);
+    layoutPick = now.layout;
+    selecting = now.select;
+  });
+  const here = $derived<Browse>({ ...view, layout: layoutPick, select: selecting });
+
   function go(over: Partial<Browse>, replace = false) {
-    const next = change(view, over);
+    const next = change(here, over);
     return goto(`/search${toSearch(next)}`, { replaceState: replace, keepFocus: true, noScroll: true });
   }
   let clearAll = $state<HTMLButtonElement>();
@@ -116,25 +135,61 @@
     return () => mq.removeEventListener('change', on);
   });
 
-  // ---- Density, remembered on this device.
+  // ---- Density and grid or table, remembered on this device (the URL wins when it says view=).
   type Density = 'comfortable' | 'compact';
   let density = $state<Density>('comfortable');
+  let savedLayout = $state<'grid' | 'table'>('grid');
+  const layout = $derived<'grid' | 'table'>(layoutPick || savedLayout);
   $effect(() => {
     try {
       const d = localStorage.getItem('cyex.browse.density');
       if (d === 'compact' || d === 'comfortable') density = d;
+      const l = localStorage.getItem('cyex.browse.layout');
+      if (l === 'grid' || l === 'table') savedLayout = l;
     } catch {
       /* private mode: keep the default */
     }
   });
-  function setDensity(d: Density) {
-    density = d;
+  function remember(key: string, v: string) {
     try {
-      localStorage.setItem('cyex.browse.density', d);
+      localStorage.setItem(key, v);
     } catch {
       /* not remembered */
     }
   }
+  function setDensity(d: Density) {
+    density = d;
+    remember('cyex.browse.density', d);
+    setLayout('grid');
+  }
+  function setLayout(l: 'grid' | 'table') {
+    layoutPick = l;
+    savedLayout = l;
+    remember('cyex.browse.layout', l);
+    sync();
+  }
+  /** Puts the local view state into the address without loading anything again. */
+  function sync() {
+    replaceState(`/search${toSearch({ ...here, pages: Math.min(pageNo, MAX_PAGES) })}`, page.state);
+  }
+
+  // ---- Multi-select: picked ids (in the order picked), kept while filters change.
+  let picked = $state.raw<string[]>([]);
+  const pickedSet = $derived(new Set(picked));
+  function toggle(e: { id: string }) {
+    picked = pickedSet.has(e.id) ? picked.filter((id) => id !== e.id) : [...picked, e.id];
+  }
+  function setSelecting(on: boolean) {
+    selecting = on;
+    if (!on) picked = [];
+    sync();
+  }
+  // The painted name of your own emotes comes from the shared cosmetics cache (the API shows
+  // other creators' paints by platform id only, so theirs stay plain).
+  $effect(() => {
+    if (layout === 'table' && session.me) loadOwned(session.me.id, true).catch(() => {});
+  });
+  const signin = $derived(`/signin?back=${encodeURIComponent(page.url.pathname + page.url.search)}`);
 
   // ---- Load more: button, and automatically when the end comes near. The page count goes into
   // the URL (n=) only for loads the reader asked for: the button, or scrolling down to the end.
@@ -161,7 +216,7 @@
       const seen = new Set(loaded.map((e) => e.id));
       loaded = [...loaded, ...r.searchEmotes.items.filter((e) => !seen.has(e.id))];
       pageNo += 1;
-      if (asked || scrollY > 0) replaceState(`/search${toSearch({ ...view, pages: Math.min(pageNo, MAX_PAGES) })}`, {});
+      if (asked || scrollY > 0) replaceState(`/search${toSearch({ ...here, pages: Math.min(pageNo, MAX_PAGES) })}`, page.state);
     } catch (e) {
       moreError = e instanceof ApiError ? e.message : 'Couldn’t load more emotes.';
     } finally {
@@ -196,7 +251,7 @@
       (clientFiltered ? shown.length : data.total) === 1 ? 'emote' : 'emotes'
     }`,
   );
-  const moreHref = $derived(`/search${toSearch({ ...view, pages: Math.min(pageNo + 1, MAX_PAGES) })}`);
+  const moreHref = $derived(`/search${toSearch({ ...here, pages: Math.min(pageNo + 1, MAX_PAGES) })}`);
 </script>
 
 <svelte:head>
@@ -205,27 +260,7 @@
 </svelte:head>
 
 {#snippet field()}
-  <form class="search" role="search" onsubmit={submit}>
-    <Icon name="search" size={16} />
-    <label class="sr-only" for="q">Emote name or tag</label>
-    <input
-      id="q"
-      bind:this={input}
-      bind:value={text}
-      oninput={typed}
-      type="search"
-      name="q"
-      placeholder="Name or tag"
-      autocomplete="off"
-      autocapitalize="off"
-      spellcheck="false"
-      enterkeyhint="search"
-      data-page-search
-    />
-    {#if text}
-      <span class="clear"><IconButton icon="x" label="Clear search" size="s" tip="none" onclick={clearText} type="button" /></span>
-    {/if}
-  </form>
+  <SearchField bind:value={text} bind:input label="Emote name or tag" placeholder="Name or tag" oninput={typed} onsubmit={submit} onclear={clearText} />
 {/snippet}
 
 {#snippet railHead()}
@@ -239,6 +274,9 @@
   </div>
 {/snippet}
 
+{#if view.tab === 'users'}
+  <UsersSearch {data} />
+{:else}
 <RailLayout>
   {#snippet rail()}
     <!-- In the sheet its title already says Filters: the head is only there to Reset. -->
@@ -261,11 +299,14 @@
         {#if !data.error}<p class="total" aria-live="polite">{countText}</p>{/if}
       </div>
       <div class="tools">
+        <SearchTabs {view} />
         <Segmented label="Sort" size="s" options={sorts} value={view.sort} onchange={(v) => go({ sort: v }, true)} />
-        <div class="dens" role="group" aria-label="Density">
-          <IconButton icon="grid" label="Comfortable" size="s" variant="outline" pressed={density === 'comfortable'} onclick={() => setDensity('comfortable')} />
-          <IconButton icon="grid-dense" label="Compact" size="s" variant="outline" pressed={density === 'compact'} onclick={() => setDensity('compact')} />
+        <div class="dens" role="group" aria-label="View">
+          <IconButton icon="grid" label="Comfortable grid" size="s" variant="outline" pressed={layout === 'grid' && density === 'comfortable'} onclick={() => setDensity('comfortable')} />
+          <IconButton icon="grid-dense" label="Compact grid" size="s" variant="outline" pressed={layout === 'grid' && density === 'compact'} onclick={() => setDensity('compact')} />
+          <IconButton icon="list" label="Table" size="s" variant="outline" pressed={layout === 'table'} onclick={() => setLayout('table')} />
         </div>
+        <button class="ui-btn secondary small selbtn" type="button" aria-pressed={selecting} onclick={() => setSelecting(!selecting)}>Select</button>
       </div>
     </div>
 
@@ -308,14 +349,47 @@
       </div>
     {:else}
       <div class="results" class:dim={switching}>
-        <EmoteGrid items={shown} {density} eager={12} loading={busy || (switching && shown.length === 0)} skeletons={density === 'compact' ? 16 : 10} label="Emotes" />
+        {#if layout === 'table'}
+          <EmoteTable
+            items={shown}
+            sort={view.sort}
+            onsort={(s) => go({ sort: s }, true)}
+            {looks}
+            picked={selecting ? pickedSet : undefined}
+            onpick={selecting ? toggle : undefined}
+            eager={12}
+          />
+        {:else}
+          <EmoteGrid
+            items={shown}
+            {density}
+            eager={12}
+            loading={busy || (switching && shown.length === 0)}
+            skeletons={density === 'compact' ? 16 : 10}
+            label="Emotes"
+            picked={selecting ? pickedSet : undefined}
+            onpick={selecting ? toggle : undefined}
+          />
+        {/if}
       </div>
       <div class="more" bind:this={end}>
         <LoadMore {hasMore} {busy} error={moreError} total={shown.length > 0 ? (clientFiltered ? shown.length : data.total) : 0} onmore={loadMore} href={moreHref} />
       </div>
+      {#if selecting}
+        <BulkAdd
+          ids={picked}
+          shown={shown.length}
+          {signin}
+          onall={() => (picked = [...new Set([...picked, ...shown.map((e) => e.id)])])}
+          onclear={() => (picked = [])}
+          onexit={() => setSelecting(false)}
+          onadded={(ids) => (picked = picked.filter((id) => !ids.includes(id)))}
+        />
+      {/if}
     {/if}
   </div>
 </RailLayout>
+{/if}
 
 <style>
   /* Rail head: the rail's title, the number of filters on, and Reset. */
@@ -328,20 +402,6 @@
     font: inherit; font-size: var(--t-fine); font-weight: 500; cursor: pointer; }
   .reset:active { opacity: .6; }
 
-  /* The search field: in the rail on wide screens, above the toolbar on narrow ones. */
-  .search { position: relative; display: flex; align-items: center; min-width: 0; color: var(--muted); }
-  .search > :global(svg) { position: absolute; left: 10px; pointer-events: none; }
-  .search input { width: 100%; min-width: 0; height: 40px; padding: 0 40px 0 32px; font: inherit; font-size: 16px; color: var(--text);
-    background: var(--bg); border: 1px solid var(--field-border); border-radius: var(--radius-btn);
-    transition: border-color var(--fast); -webkit-appearance: none; appearance: none; }
-  .search input::-webkit-search-cancel-button { display: none; }
-  .search input::placeholder { color: var(--dim); }
-  .search input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-  .clear { position: absolute; right: 4px; display: inline-flex; }
-  @media (hover: hover) and (pointer: fine) { .search input:hover { border-color: var(--muted); } }
-  /* Narrow: the field sits in the sticky Filters bar, beside the button, at its height. */
-  :global(.bar-extra) .search input { height: 40px; background: var(--surface); }
-
   /* Toolbar: title and count left; sort and density right; one 40px row like the header's. */
   .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; min-height: 40px; }
   @media (max-width: 899.98px) { .toolbar { padding-top: 4px; } }
@@ -351,8 +411,8 @@
   .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
   .dens { display: inline-flex; gap: 4px; }
   .dens :global(.ib) { width: 40px; height: 40px; }
-  /* The smallest phones: density gives way, sort keeps the row. */
-  @media (max-width: 360px) { .dens { display: none; } }
+  .selbtn { height: 34px; }
+  .selbtn[aria-pressed='true'] { font-weight: 700; color: var(--accent-text); border-color: var(--accent-border); }
 
   .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
   .clearall { background: none; border: 0; padding: 0 8px; font: inherit; font-size: var(--t-small); cursor: pointer; min-height: 40px; margin-block: 0; }

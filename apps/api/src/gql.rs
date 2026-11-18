@@ -318,6 +318,32 @@ impl Query {
             .map_err(api_error)
     }
 
+    /// An account's public profile: linked Twitch and Kick logins (no IDs), roles marked public,
+    /// and each channel's active set ("Active emotes"). Listed sets: `accountSets`. Null when the
+    /// account is unknown, deleted or blocked.
+    async fn account_profile(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+    ) -> Result<Option<cyex_tv_shared::model::AccountProfile>> {
+        catalog::account_profile(state(ctx), &account_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// The badge and paint up to 100 accounts show, with the badges and paints themselves, by
+    /// cyex.tv account ID (for names on profiles, tiles and lists). Only accounts showing
+    /// something are listed; blocked and deleted ones never. `too_many` over 100.
+    async fn account_cosmetics(
+        &self,
+        ctx: &Context<'_>,
+        account_ids: Vec<String>,
+    ) -> Result<Vec<cyex_tv_shared::model::AccountCosmetics>> {
+        cosmetics::account_cosmetics(state(ctx), &account_ids)
+            .await
+            .map_err(api_error)
+    }
+
     /// An account's public summary. Null when the account is unknown, deleted or blocked.
     async fn account(&self, ctx: &Context<'_>, id: String) -> Result<Option<AccountSummary>> {
         catalog::account(state(ctx), &id).await.map_err(api_error)
@@ -335,6 +361,23 @@ impl Query {
         limit: Option<u32>,
     ) -> Result<Vec<ActivityEntry>> {
         activity::account_activity(state(ctx), &account_id, before.as_deref(), limit)
+            .await
+            .map_err(api_error)
+    }
+
+    /// An emote's public activity, newest first: `EMOTE_UPLOADED` (when it was approved, shown
+    /// as by its owner) and `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED` in listed
+    /// sets, by their owners and account editors. Page back with `before` (an entry ID); `limit`
+    /// is 1 to 100, default 30. Empty when the emote is unknown or not public. Nothing private or
+    /// from moderation shows.
+    async fn emote_activity(
+        &self,
+        ctx: &Context<'_>,
+        emote_id: String,
+        before: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<Vec<ActivityEntry>> {
+        activity::emote_activity(state(ctx), &emote_id, before.as_deref(), limit)
             .await
             .map_err(api_error)
     }

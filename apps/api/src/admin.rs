@@ -129,6 +129,7 @@ async fn view(conn: &mut PgConnection, role: &roles::Role) -> ApiResult<Role> {
         description: role.description.clone(),
         position: role.position,
         permissions: roles::permissions(conn, role.id).await.map_err(db_error)?,
+        public: role.public,
     })
 }
 
@@ -138,6 +139,7 @@ fn snapshot(role: &Role) -> Value {
         "description": role.description,
         "position": role.position,
         "permissions": role.permissions,
+        "public": role.public,
     })
 }
 
@@ -333,6 +335,13 @@ pub async fn create(state: &AppState, caller: &Caller, input: &CreateRole) -> Ap
     )
     .await
     .map_err(db_error)?;
+    let role = if input.public == Some(true) {
+        roles::set_public(&mut tx, role.id, true)
+            .await
+            .map_err(db_error)?
+    } else {
+        role
+    };
     let out = view(&mut tx, &role).await?;
     write_audit(
         &mut tx,
@@ -395,6 +404,12 @@ pub async fn update(
             .await
             .map_err(db_error)?;
     }
+    let updated = match input.public {
+        Some(public) if public != updated.public => roles::set_public(&mut tx, id, public)
+            .await
+            .map_err(db_error)?,
+        _ => updated,
+    };
     let managers_after = managers(state, &mut tx).await?;
     actor
         .keeps_a_manager(&managers_before, &managers_after)

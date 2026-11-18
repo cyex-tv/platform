@@ -257,6 +257,98 @@ async fn a_png_becomes_a_pending_emote_with_a_job() {
 }
 
 #[tokio::test]
+async fn flags_can_be_set_at_upload() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let alice = w.user("11").await;
+
+    // Each flag on its own, in the spellings a form sends.
+    for (field, value, key) in [
+        ("zero_width", "true", "zero_width"),
+        ("private", "on", "private"),
+        ("nsfw", "1", "nsfw"),
+    ] {
+        let file = png(40, 40, field.len() as u8 + 30);
+        let r = w
+            .post(
+                Some(&alice),
+                form(&[("name", field), (field, value)], Some(&file)),
+            )
+            .await;
+        assert_eq!(r.status, StatusCode::ACCEPTED, "{field}: {:?}", r.body);
+        for other in ["zero_width", "private", "nsfw"] {
+            assert_eq!(
+                r.body["flags"][other],
+                other == key,
+                "{field} sets only {key}"
+            );
+        }
+        let id = r.body["id"].as_str().unwrap().to_owned();
+        let stored: (bool, bool, bool) = {
+            let mut conn = w.db.conn().await;
+            sqlx::query_as(
+                "SELECT zero_width, private, nsfw FROM emotes WHERE id = (SELECT id FROM emotes WHERE name = $1)",
+            )
+            .bind(field)
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap()
+        };
+        let want = (key == "zero_width", key == "private", key == "nsfw");
+        assert_eq!(stored, want, "{field} ({id}) is stored");
+    }
+
+    // All three at once; explicit false and an empty field are off.
+    let r = w
+        .post(
+            Some(&alice),
+            form(
+                &[
+                    ("name", "allOn"),
+                    ("zero_width", "TRUE"),
+                    ("private", "1"),
+                    ("nsfw", "on"),
+                ],
+                Some(&png(40, 40, 50)),
+            ),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
+    assert_eq!(
+        r.body["flags"],
+        json!({ "zero_width": true, "private": true, "nsfw": true })
+    );
+    let r = w
+        .post(
+            Some(&alice),
+            form(
+                &[
+                    ("name", "allOff"),
+                    ("zero_width", "false"),
+                    ("private", ""),
+                    ("nsfw", "0"),
+                ],
+                Some(&png(40, 40, 51)),
+            ),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
+    assert_eq!(
+        r.body["flags"],
+        json!({ "zero_width": false, "private": false, "nsfw": false })
+    );
+
+    // Without the fields, nothing changes from before: all off.
+    let r = w.upload(&alice, "plain", &png(40, 40, 52)).await;
+    assert_eq!(
+        r.body["flags"],
+        json!({ "zero_width": false, "private": false, "nsfw": false })
+    );
+    w.db.close().await;
+}
+
+#[tokio::test]
 async fn animated_and_webp_uploads() {
     let Some(w) = World::new(true).await else {
         return;
@@ -387,6 +479,11 @@ async fn bad_forms_and_callers() {
         (vec![("name", "x")], None, "bad_form"),
         (
             vec![("name", "x"), ("colour", "red")],
+            Some(file.as_slice()),
+            "bad_form",
+        ),
+        (
+            vec![("name", "x"), ("nsfw", "yes")],
             Some(file.as_slice()),
             "bad_form",
         ),

@@ -16,6 +16,14 @@ export type Scalars = {
   Float: { input: number; output: number; }
 };
 
+/** What one account shows, with the badge and paint themselves (`accountCosmetics`). */
+export type AccountCosmetics = {
+  __typename?: 'AccountCosmetics';
+  accountId: Scalars['String']['output'];
+  badge?: Maybe<Badge>;
+  paint?: Maybe<Paint>;
+};
+
 /** Someone who edits an account, with what they may do. */
 export type AccountEditor = {
   __typename?: 'AccountEditor';
@@ -33,6 +41,22 @@ export type AccountHit = {
   account: AccountSummary;
   /** Twitch first. */
   identities: Array<PublicIdentity>;
+};
+
+/**
+ * An account's public profile, like 7TV's public user pages. Listed sets come from
+ * `accountSets`.
+ */
+export type AccountProfile = {
+  __typename?: 'AccountProfile';
+  account: AccountSummary;
+  /** Each channel's active set, for channels showing one. */
+  activeSets: Array<ActiveChannelSet>;
+  createdAt: Scalars['String']['output'];
+  /** Linked Twitch and Kick accounts: platform, login and display name only. Twitch first. */
+  identities: Array<PublicIdentity>;
+  /** Roles marked public, most senior first. */
+  roles: Array<PublicRole>;
 };
 
 /**
@@ -69,6 +93,16 @@ export type AccountSummary = {
   avatar?: Maybe<Scalars['String']['output']>;
   displayName: Scalars['String']['output'];
   id: Scalars['String']['output'];
+};
+
+/** The set a channel shows now, on a profile ("Active emotes"). */
+export type ActiveChannelSet = {
+  __typename?: 'ActiveChannelSet';
+  /** The channel's login. */
+  login: Scalars['String']['output'];
+  platform: Platform;
+  setId: Scalars['String']['output'];
+  setName: Scalars['String']['output'];
 };
 
 /**
@@ -264,6 +298,8 @@ export type CreateRoleInput = {
   name: Scalars['String']['input'];
   permissions: Array<Scalars['String']['input']>;
   position: Scalars['Int']['input'];
+  /** Show it on its holders' public profiles. Default false. */
+  public?: InputMaybe<Scalars['Boolean']['input']>;
 };
 
 export type CreateSetInput = {
@@ -982,6 +1018,13 @@ export type PublicIdentity = {
   platform: Platform;
 };
 
+/** A role as anyone may see it on a profile. */
+export type PublicRole = {
+  __typename?: 'PublicRole';
+  id: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+};
+
 export type Query = {
   __typename?: 'Query';
   /** An account's public summary. Null when the account is unknown, deleted or blocked. */
@@ -994,6 +1037,12 @@ export type Query = {
    */
   accountActivity: Array<ActivityEntry>;
   /**
+   * The badge and paint up to 100 accounts show, with the badges and paints themselves, by
+   * cyex.tv account ID (for names on profiles, tiles and lists). Only accounts showing
+   * something are listed; blocked and deleted ones never. `too_many` over 100.
+   */
+  accountCosmetics: Array<AccountCosmetics>;
+  /**
    * An account's editors (ADR 0014): yours, or, with `accountId`, those of an account you edit
    * with the `EDITORS` permission.
    */
@@ -1003,6 +1052,12 @@ export type Query = {
    * or `emotes.takedown`. `perPage` is 1 to 100, default 50.
    */
   accountEmotes: EmotePage;
+  /**
+   * An account's public profile: linked Twitch and Kick logins (no IDs), roles marked public,
+   * and each channel's active set ("Active emotes"). Listed sets: `accountSets`. Null when the
+   * account is unknown, deleted or blocked.
+   */
+  accountProfile?: Maybe<AccountProfile>;
   /**
    * Reports about an account's emotes and the ones it filed, newest first, at most 50 each.
    * Needs `emotes.review` or `emotes.takedown`.
@@ -1059,6 +1114,14 @@ export type Query = {
   editorSets: Array<EmoteSet>;
   /** An emote. Pending ones are visible to their owner and to moderators only. */
   emote?: Maybe<Emote>;
+  /**
+   * An emote's public activity, newest first: `EMOTE_UPLOADED` (when it was approved, shown
+   * as by its owner) and `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED` in listed
+   * sets, by their owners and account editors. Page back with `before` (an entry ID); `limit`
+   * is 1 to 100, default 30. Empty when the emote is unknown or not public. Nothing private or
+   * from moderation shows.
+   */
+  emoteActivity: Array<ActivityEntry>;
   /**
    * Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
    * default 8. Empty when the emote is unknown or not public.
@@ -1134,6 +1197,11 @@ export type QueryAccountActivityArgs = {
 };
 
 
+export type QueryAccountCosmeticsArgs = {
+  accountIds: Array<Scalars['String']['input']>;
+};
+
+
 export type QueryAccountEditorsArgs = {
   accountId?: InputMaybe<Scalars['String']['input']>;
 };
@@ -1143,6 +1211,11 @@ export type QueryAccountEmotesArgs = {
   accountId: Scalars['String']['input'];
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryAccountProfileArgs = {
+  accountId: Scalars['String']['input'];
 };
 
 
@@ -1212,6 +1285,13 @@ export type QueryCosmeticImageArgs = {
 
 export type QueryEmoteArgs = {
   id: Scalars['String']['input'];
+};
+
+
+export type QueryEmoteActivityArgs = {
+  before?: InputMaybe<Scalars['String']['input']>;
+  emoteId: Scalars['String']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -1339,6 +1419,8 @@ export type Role = {
   permissions: Array<Scalars['String']['output']>;
   /** Higher means more senior. You can only manage roles below your own highest one. */
   position: Scalars['Int']['output'];
+  /** Shown on its holders' public profiles (`accountProfile`). Off by default. */
+  public: Scalars['Boolean']['output'];
 };
 
 export type SearchResults = {
@@ -1437,6 +1519,8 @@ export type UpdateRoleInput = {
   name?: InputMaybe<Scalars['String']['input']>;
   permissions?: InputMaybe<Array<Scalars['String']['input']>>;
   position?: InputMaybe<Scalars['Int']['input']>;
+  /** Show it on its holders' public profiles. */
+  public?: InputMaybe<Scalars['Boolean']['input']>;
 };
 
 export type UpdateSetEmoteInput = {
@@ -1502,6 +1586,15 @@ export type SearchQueryVariables = Exact<{
 
 
 export type SearchQuery = { __typename?: 'Query', searchEmotes: { __typename?: 'SearchResults', total: number, page: number, perPage: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+
+export type FindPeopleQueryVariables = Exact<{
+  query: Scalars['String']['input'];
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type FindPeopleQuery = { __typename?: 'Query', searchAccounts: { __typename?: 'AccountResults', total: number, page: number, perPage: number, items: Array<{ __typename?: 'AccountHit', account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }> }> } };
 
 export type EmoteQueryVariables = Exact<{
   id: Scalars['String']['input'];
@@ -2528,6 +2621,27 @@ export const SearchDocument = new TypedDocumentString(`
     isStatic
   }
 }`) as unknown as TypedDocumentString<SearchQuery, SearchQueryVariables>;
+export const FindPeopleDocument = new TypedDocumentString(`
+    query FindPeople($query: String!, $page: Int, $perPage: Int) {
+  searchAccounts(query: $query, page: $page, perPage: $perPage) {
+    total
+    page
+    perPage
+    items {
+      account {
+        id
+        displayName
+        avatar
+      }
+      identities {
+        platform
+        login
+        displayName
+      }
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<FindPeopleQuery, FindPeopleQueryVariables>;
 export const EmoteDocument = new TypedDocumentString(`
     query Emote($id: String!) {
   emote(id: $id) {

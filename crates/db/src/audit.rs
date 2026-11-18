@@ -130,6 +130,54 @@ pub const ACTIVITY_ACTIONS: [&str; 8] = [
 /// account itself or through an account editor grant (never by staff acting on their own
 /// permissions), by an actor who isn't blocked or deleted, and an emote's approval counts once.
 /// The api drops what's still private (pending emotes, deleted sets and so on).
+/// An activity row with the account whose feed it belongs to.
+#[derive(Clone, Debug, PartialEq, FromRow)]
+pub struct SubjectEntry {
+    #[sqlx(flatten)]
+    pub entry: Entry,
+    pub subject_account_id: Uuid,
+}
+
+/// Public activity rows about one emote, newest first: its approval (once) and the set changes
+/// naming it, written by the owner of the set or their account editors. Rows about accounts that
+/// are blocked or deleted, and rows by blocked or deleted actors, are left out. The api drops what
+/// is still private (unlisted and private sets, deleted sets).
+pub async fn emote_activity_rows(
+    conn: &mut PgConnection,
+    emote_id: &str,
+    before_id: Option<Uuid>,
+    limit: i64,
+) -> DbResult<Vec<SubjectEntry>> {
+    Ok(sqlx::query_as(
+        "SELECT a.id, a.actor_account_id, a.action, a.target_kind, a.target_id, a.before_json,
+                a.after_json, a.created_at, a.subject_account_id
+         FROM audit_log a
+         JOIN accounts s ON s.id = a.subject_account_id
+                        AND s.deleted_at IS NULL AND s.blocked_at IS NULL
+         LEFT JOIN accounts act ON act.id = a.actor_account_id
+         WHERE a.subject_account_id IS NOT NULL
+           AND ($2::uuid IS NULL OR a.id < $2)
+           AND (
+               (a.action = 'emote.approved' AND a.target_kind = 'emote' AND a.target_id = $1
+                AND NOT EXISTS (SELECT 1 FROM audit_log p
+                                WHERE p.action = 'emote.approved'
+                                  AND p.target_id = a.target_id AND p.id < a.id))
+               OR (a.action IN ('set.emote_added', 'set.emote_removed', 'set.emote_updated')
+                   AND coalesce(a.after_json ->> 'emote_id', a.before_json ->> 'emote_id') = $1
+                   AND act.id IS NOT NULL AND act.blocked_at IS NULL AND act.deleted_at IS NULL
+                   AND (a.actor_account_id = a.subject_account_id
+                        OR a.after_json ->> 'via' = 'account_editor'))
+           )
+         ORDER BY a.id DESC
+         LIMIT $3",
+    )
+    .bind(emote_id)
+    .bind(before_id)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
+}
+
 pub async fn activity_rows(
     conn: &mut PgConnection,
     subject: Uuid,

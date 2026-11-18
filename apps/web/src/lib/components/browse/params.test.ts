@@ -63,3 +63,47 @@ describe('apiSort', () => {
     expect(apiSort(parse(new URLSearchParams('sort=relevance')).sort)).toBe('TOP');
   });
 });
+
+describe('view, exact and select', () => {
+  it('round-trips through the URL, leaving defaults out', () => {
+    const b = u('q=cat&view=table&exact=1&select=1');
+    expect(b).toMatchObject({ layout: 'table', exact: true, select: true });
+    expect(toSearch(b)).toBe('?q=cat&view=table&exact=1&select=1');
+    expect(u('').layout).toBe('');
+    expect(toSearch(u(''))).toBe('');
+  });
+  it('exact needs a query', () => {
+    expect(u('exact=1').exact).toBe(false);
+    expect(change(u('q=cat&exact=1'), { q: '' }).exact).toBe(false);
+  });
+  it('exact keeps only names that equal the query, in any case', () => {
+    const b = u('q=KEKW&exact=1');
+    expect(matches(b, { name: 'kekw', files: [] })).toBe(true);
+    expect(matches(b, { name: 'KEKW2', files: [] })).toBe(false);
+    expect(clientSide(b)).toBe(true);
+    expect(active(b).map((a) => a.key)).toEqual(['exact']);
+  });
+  it('a change keeps the layout and select mode but starts at page one', () => {
+    const next = change(u('view=table&select=1&n=3'), { kind: 'animated' });
+    expect(next).toMatchObject({ layout: 'table', select: true, pages: 1 });
+  });
+});
+
+describe('browse params: the Users tab', () => {
+  it('is emotes unless the address says users', () => {
+    expect(u('').tab).toBe('emotes');
+    expect(u('tab=zzz').tab).toBe('emotes');
+    expect(u('tab=users').tab).toBe('users');
+  });
+  it('keeps only the name and pages in the address', () => {
+    const b = u('tab=users&q=fox&kind=animated&nsfw=1&sort=new&n=2');
+    expect(toSearch(b)).toBe('?tab=users&q=fox&n=2');
+    expect(toSearch(u('tab=users'))).toBe('?tab=users');
+  });
+  it('switching tab keeps the name and starts at the first page', () => {
+    const users = change(u('q=fox&n=3'), { tab: 'users' });
+    expect(users).toMatchObject({ tab: 'users', q: 'fox', pages: 1, select: false });
+    const back = change(users, { tab: 'emotes' });
+    expect(toSearch(back)).toBe('?q=fox');
+  });
+});

@@ -495,10 +495,11 @@ const CLOSED_REPORTS = [
   { id: 'R0', reason: 'Wrong tag.', reporterId: OTHERS[1].id, state: 'DISMISSED', resolution: 'Fine as is.', createdAt: '2026-11-14T10:00:00.000Z', resolvedAt: '2026-11-14T12:00:00.000Z', emote: ALL[5] },
 ];
 const ROLES = [
-  { id: 'ROLE1', name: 'Admin', description: 'Runs the platform.', position: 100, permissions: ['roles.manage', 'users.view', 'users.restrict', 'audit.view'] },
-  { id: 'ROLE2', name: 'Moderator', description: 'Reviews uploads and reports.', position: 50, permissions: ['emotes.review', 'emotes.takedown'] },
+  { id: 'ROLE1', name: 'Admin', description: 'Runs the platform.', position: 100, permissions: ['roles.manage', 'users.view', 'users.restrict', 'audit.view'], public: false },
+  { id: 'ROLE2', name: 'Moderator', description: 'Reviews uploads and reports.', position: 50, permissions: ['emotes.review', 'emotes.takedown'], public: true },
+  { id: 'ROLE3', name: 'Artist', description: 'Makes emotes people love.', position: 10, permissions: [], public: true },
 ];
-const ACCOUNT_ROLES = { [OTHERS[0].id]: ['ROLE2'] };
+const ACCOUNT_ROLES = { [OTHERS[0].id]: ['ROLE2', 'ROLE3'], [OTHERS[1].id]: ['ROLE3'], [ME_ID]: ['ROLE1'] };
 const STATUS = {};
 const AUDIT = Array.from({ length: 64 }, (_, i) => ({
   id: '01JD8XAUD' + String(1000 - i).padStart(17, '0'), actorId: i % 5 === 0 ? null : i % 3 === 0 ? OWNERS[1].id : ME_ID,
@@ -848,6 +849,28 @@ function activityAnswer(v) {
   return { data: { accountActivity: rows.slice(0, limit) } };
 }
 
+// `emoteActivity(emoteId, before, limit)`: the sample lines about this emote from every account's
+// feed, plus an upload line and a few adds for any public emote, newest first.
+function emoteActivityAnswer(v) {
+  const e = findEmote(v.emoteId ?? v.id);
+  if (!e || e.state !== 'APPROVED' || e.flags.private) return { data: { emoteActivity: [] } };
+  const own = Object.values(ACTIVITY).flat().filter((a) => a.emote?.id === e.id);
+  const n = Number(e.id.slice(-3)) || 0;
+  const made = [
+    act(900 + n * 4, 90 + n, 'SET_EMOTE_ADDED', OTHERS[n % OTHERS.length], { set: aSet(SETS[n % SETS.length]), emote: aEmote(e) }),
+    act(901 + n * 4, 600 + n, 'SET_EMOTE_RENAMED', OTHERS[(n + 1) % OTHERS.length], { set: aSet(SETS[(n + 1) % SETS.length]), emote: aEmote(e, e.name + 'x'), fromName: e.name, toName: e.name + 'x' }),
+    act(902 + n * 4, 3000 + n, 'SET_EMOTE_ADDED', OTHERS[(n + 2) % OTHERS.length], { set: aSet(SETS[(n + 2) % SETS.length]), emote: aEmote(e) }),
+    act(903 + n * 4, 6000 + n, 'EMOTE_UPLOADED', e.owner ?? ME_SUMMARY, { emote: aEmote(e) }),
+  ];
+  let rows = [...own, ...made].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  if (v.before) {
+    const at = rows.findIndex((a) => a.id === v.before);
+    rows = at >= 0 ? rows.slice(at + 1) : rows;
+  }
+  const limit = Math.min(100, Math.max(1, v.limit ?? 30));
+  return { data: { emoteActivity: rows.slice(0, limit) } };
+}
+
 // A public account for `account(id)`. Unknown ids, and the one for a blocked account, give null.
 const FAKE_LOGINS = ['quietoak', 'nora_byte', 'lumen_fox', 'pixelmoth', 'sipteaTV', 'byteNod', 'foxlook', 'moonhi'];
 const publicAccount = (id) => {
@@ -1165,7 +1188,7 @@ function signedIn(body, v, ADMIN) {
     case 'AllRoles':
       return { data: { roles: ROLES } };
     case 'CreateRole': {
-      const r = { id: 'ROLE' + (ROLES.length + 1), ...v.input, description: v.input.description ?? null };
+      const r = { id: 'ROLE' + (ROLES.length + 1), ...v.input, description: v.input.description ?? null, public: v.input.public ?? false };
       ROLES.push(r);
       return { data: { createRole: r } };
     }
@@ -1239,16 +1262,56 @@ function searchAccounts(v) {
   return { data: { searchAccounts: { total: hits.length, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
 }
 
+// accountProfile(accountId): public logins (no IDs), roles marked public, each channel's active set.
+function accountProfile(id) {
+  const account = [ME_SUMMARY, ...OTHERS].find((a) => a.id === id);
+  if (!account || STATUS[id]?.blocked) return null;
+  const identities = id === ME_ID
+    ? IDENTITIES.map((i) => ({ platform: i.platform, login: i.login, displayName: i.displayName }))
+    : searchPeople().find((h) => h.account.id === id)?.identities ?? [];
+  const roles = (ACCOUNT_ROLES[id] ?? []).map((r) => ROLES.find((x) => x.id === r)).filter((r) => r?.public)
+    .sort((a, b) => b.position - a.position).map((r) => ({ id: r.id, name: r.name }));
+  const activeSets = [...CHANNELS, ...EDITOR_CHANNELS].filter((c) => c.account.id === id && c.activeSetId).map((c) => {
+    const set = findSet(c.activeSetId);
+    return set ? { platform: c.platform, login: c.login, setId: set.id, setName: set.name } : null;
+  }).filter(Boolean);
+  return { account, identities, roles, activeSets, createdAt: id === ME_ID ? '2026-11-10T12:00:00.000Z' : '2026-11-08T09:00:00.000Z' };
+}
+// accountCosmetics(accountIds): what each account shows, with the badge and paint themselves.
+function accountCosmetics(ids) {
+  if (!Array.isArray(ids)) return [];
+  if (ids.length > 100) return null;
+  const catalog = cosmeticCatalog();
+  const out = [];
+  for (const id of [...new Set(ids)]) {
+    if (STATUS[id]?.blocked) continue;
+    const pick = C_SELECTED[id];
+    if (!pick) continue;
+    const badge = catalog.badges.find((b) => b.id === pick.badgeId) ?? null;
+    const paint = catalog.paints.find((x) => x.id === pick.paintId) ?? null;
+    if (badge || paint) out.push({ accountId: id, badge, paint });
+  }
+  return out;
+}
+
 // Fields added after the site's first queries, answered by field name so any operation name works.
 function newFields(q, v, session) {
-  if (/\bsearchAccounts\s*\(/.test(q)) return searchAccounts(v);
-  if (/\bcloneSet\s*\(/.test(q)) return session ? cloneSet(v, session) : err('Sign in to use this.', 'signed_out');
-  if (/\baccountSets\s*\(/.test(q)) {
-    const data = { accountSets: accountSets(v.accountId ?? v.id ?? '', v.preview) };
-    if (/\baccount\s*\(/.test(q)) data.account = publicAccount(v.accountId ?? v.id ?? '');
-    return { data };
+  // Each handler answers one new field; an operation may ask for several, and for older ones too.
+  const id = v.accountId ?? v.id ?? '';
+  const parts = [];
+  const has = (name) => new RegExp(`\\b${name}\\s*\\(`).test(q);
+  if (has('accountProfile')) parts.push({ data: { accountProfile: accountProfile(id) } });
+  if (has('accountCosmetics')) {
+    const list = accountCosmetics(v.accountIds ?? v.ids);
+    parts.push(list === null ? err('Look up at most 100 accounts at once.', 'too_many') : { data: { accountCosmetics: list } });
   }
-  return null;
+  if (has('searchAccounts')) parts.push(searchAccounts(v));
+  if (has('cloneSet')) parts.push(session ? cloneSet(v, session) : err('Sign in to use this.', 'signed_out'));
+  if (has('accountSets')) parts.push({ data: { accountSets: accountSets(id, v.preview) } });
+  if (!parts.length) return null;
+  const failed = parts.find((p) => p.errors);
+  if (failed) return failed;
+  return { data: Object.assign({}, ...parts.map((p) => p.data)) };
 }
 
 // New fields merge with whatever else the same operation asks for (the older handlers below).
@@ -1266,6 +1329,7 @@ function baseAnswer(body, session, admin) {
   const cosmetic = cosmeticsAnswer(q, v, session, admin);
   if (cosmetic) return cosmetic;
   if (/accountActivity\s*\(/.test(q)) return activityAnswer(v);
+  if (/emoteActivity\s*\(/.test(q)) return emoteActivityAnswer(v);
   if (session) {
     const out = signedIn(body, v, admin);
     if (out) return out;
@@ -1405,10 +1469,26 @@ createServer(async (req, res) => {
   if (req.method === 'POST' && url.pathname === '/v1/emotes') {
     const raw = (await read(req)).toString('latin1');
     if (!session) return json(res, 401, { error: 'signed_out', message: 'Sign in to upload.' });
-    const name = raw.match(/name="name"\r\n\r\n([^\r]*)/)?.[1] ?? 'upload';
-    if (name === 'blocked') return json(res, 422, { error: 'blocked', message: 'This image was taken down before and can’t be uploaded again.' });
+    const field = (k) => raw.match(new RegExp(`name="${k}"\\r\\n\\r\\n([^\\r]*)`))?.[1];
+    const name = field('name') ?? 'upload';
+    // Names that stand in for the API's refusals, to see how the upload form explains them.
+    if (name === 'blocked') return json(res, 422, { error: 'blocked', message: 'This image can’t be uploaded to cyex.tv.' });
+    if (name === 'ratelimited') return json(res, 429, { error: 'rate_limited', message: 'That’s a lot of uploads. Try again in an hour.' });
+    if (name === 'broken') return json(res, 422, { error: 'invalid_image', message: 'That file isn’t a valid image (truncated).' });
+    // The flags, as the API reads them (POST /v1/emotes): true/1/on, false/0/off/empty.
+    const flag = (k) => {
+      const v = (field(k) ?? '').trim().toLowerCase();
+      if (['true', '1', 'on'].includes(v)) return true;
+      if (['false', '0', 'off', ''].includes(v)) return false;
+      return null;
+    };
+    const flags = { zeroWidth: flag('zero_width'), private: flag('private'), nsfw: flag('nsfw') };
+    if (Object.values(flags).includes(null)) return json(res, 400, { error: 'bad_form', message: 'A flag is true or false.' });
+    await new Promise((r) => setTimeout(r, 700)); // long enough to see the progress
     const e = emote(700 + uploads++, ME_SUMMARY, 'PENDING');
     e.name = name;
+    e.flags = flags;
+    e.tags = (field('tags') ?? '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
     e.host = '';
     e.files = [];
     e.createdAt = new Date().toISOString();

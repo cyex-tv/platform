@@ -30,3 +30,24 @@ describe('rules', () => {
     expect(fileProblem({ type: 'image/gif', size: 6 * 1024 * 1024 })).toBe('At most 5 MB.');
   });
 });
+
+describe('upload batches', () => {
+  it('knows the same file picked twice', async () => {
+    const { sameFile } = await import('./rules');
+    const a = { name: 'cat.png', size: 10, lastModified: 1 };
+    expect(sameFile(a, { ...a })).toBe(true);
+    expect(sameFile(a, { ...a, size: 11 })).toBe(false);
+    expect(sameFile(a, { ...a, name: 'dog.png' })).toBe(false);
+  });
+
+  it('explains every refusal the API names, and keeps its own words for names and tags', async () => {
+    const { uploadProblem } = await import('./rules');
+    expect(uploadProblem('blocked', 'x')).toMatch(/taken down/);
+    expect(uploadProblem('too_large', 'the file is over 5 MB')).toMatch(/5 MB, 1000 × 1000 px/);
+    expect(uploadProblem('unsupported_format', 'x')).toMatch(/PNG, APNG, GIF or WebP/);
+    expect(uploadProblem('rate_limited', 'x')).toMatch(/20 uploads/);
+    expect(uploadProblem('bad_name', 'Names have no spaces.')).toBe('Names have no spaces.');
+    expect(uploadProblem('something_new', 'As the API said.')).toBe('As the API said.');
+    expect(uploadProblem('something_new', '')).toBe('The upload didn’t go through.');
+  });
+});
