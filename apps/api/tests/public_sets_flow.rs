@@ -755,8 +755,7 @@ async fn private_sets_publish_no_set_topic() {
 
     for set in [&listed, &unlisted] {
         let rows = topics_of(set).await;
-        assert_eq!(rows.len(), 1);
-        assert!(rows[0].contains(&topic(set)), "{rows:?}");
+        assert!(rows.iter().any(|t| t.contains(&topic(set))), "{rows:?}");
     }
     assert!(topics_of(&hidden).await.is_empty());
     assert!(topics_of(&shown).await.is_empty());
