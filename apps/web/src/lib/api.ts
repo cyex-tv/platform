@@ -85,20 +85,51 @@ async function restError(response: Response): Promise<ApiError> {
 /** The upload's answer: the new emote, pending while its files are made. */
 export type Uploaded = { id: string; name: string; state: string };
 
-/** Uploads an emote (`POST /v1/emotes`, multipart). Throws `ApiError` with the API's code. */
-export async function uploadEmote(file: File, name: string, tags: string[]): Promise<Uploaded> {
+/** The flags an upload may set at once (all off when left out). */
+export type UploadFlags = { zeroWidth: boolean; private: boolean; nsfw: boolean };
+
+/** The multipart form of an upload: name, tags (comma-separated), the flags that are on, the file. */
+export function uploadForm(file: Blob, name: string, tags: string[], flags?: Partial<UploadFlags>): FormData {
   const form = new FormData();
   form.set('name', name);
   if (tags.length) form.set('tags', tags.join(','));
+  if (flags?.zeroWidth) form.set('zero_width', 'true');
+  if (flags?.private) form.set('private', 'true');
+  if (flags?.nsfw) form.set('nsfw', 'true');
   form.set('file', file);
-  let response: Response;
-  try {
-    response = await fetch(`${apiUrl()}/v1/emotes`, { method: 'POST', credentials: 'include', body: form });
-  } catch {
-    throw new ApiError('cyex.tv can’t be reached right now.', 'offline');
-  }
-  if (!response.ok) throw await restError(response);
-  return (await response.json()) as Uploaded;
+  return form;
+}
+
+/**
+ * Uploads an emote (`POST /v1/emotes`, multipart). Throws `ApiError` with the API's code.
+ * `progress` gets the share of bytes sent (0 to 1); XHR, since fetch can't report an upload's progress.
+ */
+export function uploadEmote(
+  file: File,
+  name: string,
+  tags: string[],
+  flags?: Partial<UploadFlags>,
+  progress?: (share: number) => void,
+): Promise<Uploaded> {
+  const form = uploadForm(file, name, tags, flags);
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${apiUrl()}/v1/emotes`);
+    xhr.withCredentials = true;
+    xhr.responseType = 'text';
+    if (progress) xhr.upload.onprogress = (e) => e.lengthComputable && progress(e.loaded / e.total);
+    xhr.onerror = () => reject(new ApiError('cyex.tv can’t be reached right now.', 'offline'));
+    xhr.onload = async () => {
+      const response = new Response(xhr.responseText || null, { status: xhr.status });
+      if (xhr.status < 200 || xhr.status >= 300) return reject(await restError(response));
+      try {
+        resolve(JSON.parse(xhr.responseText) as Uploaded);
+      } catch {
+        reject(new ApiError('cyex.tv answered in a way the site didn’t expect.', 'bad_answer'));
+      }
+    };
+    xhr.send(form);
+  });
 }
 
 /** Ends the session (`POST /v1/auth/logout`). */

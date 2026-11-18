@@ -66,7 +66,26 @@ pub fn too_large() -> ApiError {
 pub struct Upload {
     pub name: String,
     pub tags: Vec<String>,
+    pub flags: Flags,
     pub file: Bytes,
+}
+
+/// The flags an upload may set at once; all off unless the form says otherwise.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Flags {
+    pub zero_width: bool,
+    pub private: bool,
+    pub nsfw: bool,
+}
+
+/// A form flag: `true`/`false`, `1`/`0` or `on`/`off` (any case, spaces trimmed). An empty field
+/// is `false`, as an unticked box would be. Anything else is refused.
+pub fn parse_flag(raw: &str) -> Option<bool> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "true" | "1" | "on" => Some(true),
+        "false" | "0" | "off" | "" => Some(false),
+        _ => None,
+    }
 }
 
 /// Comma-separated tags from the form field.
@@ -198,7 +217,9 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
             file_id: Some(file.id),
             name: &name,
             animated: probe.animated,
-            ..NewEmote::default()
+            zero_width: input.flags.zero_width,
+            private: input.flags.private,
+            nsfw: input.flags.nsfw,
         },
     )
     .await
@@ -238,6 +259,26 @@ mod tests {
             ["pog", "funny", "cat"]
         );
         assert!(split_tags(None).is_empty());
+    }
+
+    #[test]
+    fn flags_parse_like_a_form() {
+        for on in ["true", "TRUE", " 1 ", "on"] {
+            assert_eq!(parse_flag(on), Some(true), "{on}");
+        }
+        for off in ["false", "0", "off", "", "  "] {
+            assert_eq!(parse_flag(off), Some(false), "{off:?}");
+        }
+        assert_eq!(parse_flag("yes"), None);
+        assert_eq!(parse_flag("2"), None);
+        assert_eq!(
+            Flags::default(),
+            Flags {
+                zero_width: false,
+                private: false,
+                nsfw: false
+            }
+        );
     }
 
     #[test]

@@ -1372,10 +1372,26 @@ createServer(async (req, res) => {
   if (req.method === 'POST' && url.pathname === '/v1/emotes') {
     const raw = (await read(req)).toString('latin1');
     if (!session) return json(res, 401, { error: 'signed_out', message: 'Sign in to upload.' });
-    const name = raw.match(/name="name"\r\n\r\n([^\r]*)/)?.[1] ?? 'upload';
-    if (name === 'blocked') return json(res, 422, { error: 'blocked', message: 'This image was taken down before and can’t be uploaded again.' });
+    const field = (k) => raw.match(new RegExp(`name="${k}"\\r\\n\\r\\n([^\\r]*)`))?.[1];
+    const name = field('name') ?? 'upload';
+    // Names that stand in for the API's refusals, to see how the upload form explains them.
+    if (name === 'blocked') return json(res, 422, { error: 'blocked', message: 'This image can’t be uploaded to cyex.tv.' });
+    if (name === 'ratelimited') return json(res, 429, { error: 'rate_limited', message: 'That’s a lot of uploads. Try again in an hour.' });
+    if (name === 'broken') return json(res, 422, { error: 'invalid_image', message: 'That file isn’t a valid image (truncated).' });
+    // The flags, as the API reads them (POST /v1/emotes): true/1/on, false/0/off/empty.
+    const flag = (k) => {
+      const v = (field(k) ?? '').trim().toLowerCase();
+      if (['true', '1', 'on'].includes(v)) return true;
+      if (['false', '0', 'off', ''].includes(v)) return false;
+      return null;
+    };
+    const flags = { zeroWidth: flag('zero_width'), private: flag('private'), nsfw: flag('nsfw') };
+    if (Object.values(flags).includes(null)) return json(res, 400, { error: 'bad_form', message: 'A flag is true or false.' });
+    await new Promise((r) => setTimeout(r, 700)); // long enough to see the progress
     const e = emote(700 + uploads++, ME_SUMMARY, 'PENDING');
     e.name = name;
+    e.flags = flags;
+    e.tags = (field('tags') ?? '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
     e.host = '';
     e.files = [];
     e.createdAt = new Date().toISOString();
