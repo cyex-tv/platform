@@ -1637,7 +1637,7 @@ export type QueryShopItemArgs = {
 
 
 export type QueryShopItemsArgs = {
-  all?: Scalars['Boolean']['input'];
+  all?: InputMaybe<Scalars['Boolean']['input']>;
 };
 
 

@@ -569,12 +569,8 @@ impl Query {
     /// Shop items on sale now, by sort order (ADR 0016). Public; signed in, `owned` says whether
     /// you own everything in each. With `all: true`, every item that isn't deleted, hidden and
     /// scheduled ones too (needs `shop.manage`).
-    async fn shop_items(
-        &self,
-        ctx: &Context<'_>,
-        #[graphql(default = false)] all: bool,
-    ) -> Result<Vec<ShopItem>> {
-        shop::items(state(ctx), caller_opt(ctx), all)
+    async fn shop_items(&self, ctx: &Context<'_>, all: Option<bool>) -> Result<Vec<ShopItem>> {
+        shop::items(state(ctx), caller_opt(ctx), all.unwrap_or(false))
             .await
             .map_err(api_error)
     }

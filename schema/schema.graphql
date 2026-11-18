@@ -1473,7 +1473,7 @@ type Query {
 	you own everything in each. With `all: true`, every item that isn't deleted, hidden and
 	scheduled ones too (needs `shop.manage`).
 	"""
-	shopItems(all: Boolean! = false): [ShopItem!]!
+	shopItems(all: Boolean): [ShopItem!]!
 	"""
 	One shop item: on sale for everyone; any, deleted ones too, with `shop.manage`.
 	"""
