@@ -68,7 +68,7 @@ type Documents = {
     "\n  query ReportQueue($page: Int, $perPage: Int) {\n    reportQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        id\n        reason\n        reporterId\n        state\n        createdAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": typeof types.ReportQueueDocument,
     "\n  mutation ResolveReport($id: String!, $action: ReportAction!, $note: String) {\n    resolveReport(id: $id, action: $action, note: $note) {\n      id\n      state\n    }\n  }\n": typeof types.ResolveReportDocument,
     "\n  mutation Takedown($id: String!, $reason: String!) {\n    takedownEmote(id: $id, reason: $reason) {\n      id\n      state\n    }\n  }\n": typeof types.TakedownDocument,
-    "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n  }\n": typeof types.RoleFieldsFragmentDoc,
+    "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    public\n  }\n": typeof types.RoleFieldsFragmentDoc,
     "\n  query Roles {\n    roles {\n      ...RoleFields\n    }\n    permissions\n  }\n": typeof types.RolesDocument,
     "\n  mutation CreateRole($input: CreateRoleInput!) {\n    createRole(input: $input) {\n      ...RoleFields\n    }\n  }\n": typeof types.CreateRoleDocument,
     "\n  mutation UpdateRole($id: String!, $input: UpdateRoleInput!) {\n    updateRole(id: $id, input: $input) {\n      ...RoleFields\n    }\n  }\n": typeof types.UpdateRoleDocument,
@@ -90,6 +90,8 @@ type Documents = {
     "\n  fragment PaintFields on Paint {\n    id\n    name\n    kind\n    angle\n    repeat\n    shape\n    color\n    stops {\n      at\n      color\n    }\n    shadows {\n      x\n      y\n      radius\n      color\n    }\n    image {\n      ...CosmeticImageFields\n    }\n  }\n": typeof types.PaintFieldsFragmentDoc,
     "\n  query Cosmetics {\n    cosmetics {\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n    }\n  }\n": typeof types.CosmeticsDocument,
     "\n  query UserCosmetics($platform: Platform!, $userIds: [String!]!) {\n    userCosmetics(platform: $platform, userIds: $userIds) {\n      platformUserId\n      badgeId\n      paintId\n    }\n  }\n": typeof types.UserCosmeticsDocument,
+    "\n  query AccountCosmetics($accountIds: [String!]!) {\n    accountCosmetics(accountIds: $accountIds) {\n      accountId\n      badge {\n        ...BadgeFields\n      }\n      paint {\n        ...PaintFields\n      }\n    }\n  }\n": typeof types.AccountCosmeticsDocument,
+    "\n  query AccountProfile($accountId: String!) {\n    accountProfile(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      identities {\n        platform\n        login\n        displayName\n      }\n      roles {\n        id\n        name\n      }\n      activeSets {\n        platform\n        login\n        setId\n        setName\n      }\n      createdAt\n    }\n  }\n": typeof types.AccountProfileDocument,
     "\n  query MyCosmetics($accountId: String) {\n    myCosmetics(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n      badgeId\n      paintId\n    }\n  }\n": typeof types.MyCosmeticsDocument,
     "\n  mutation SelectCosmetics($badgeId: String, $paintId: String, $ownerId: String) {\n    selectCosmetics(badgeId: $badgeId, paintId: $paintId, ownerId: $ownerId) {\n      badgeId\n      paintId\n    }\n  }\n": typeof types.SelectCosmeticsDocument,
     "\n  query CosmeticImage($id: String!) {\n    cosmeticImage(id: $id) {\n      ...CosmeticImageFields\n    }\n  }\n": typeof types.CosmeticImageDocument,
@@ -162,7 +164,7 @@ const documents: Documents = {
     "\n  query ReportQueue($page: Int, $perPage: Int) {\n    reportQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        id\n        reason\n        reporterId\n        state\n        createdAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": types.ReportQueueDocument,
     "\n  mutation ResolveReport($id: String!, $action: ReportAction!, $note: String) {\n    resolveReport(id: $id, action: $action, note: $note) {\n      id\n      state\n    }\n  }\n": types.ResolveReportDocument,
     "\n  mutation Takedown($id: String!, $reason: String!) {\n    takedownEmote(id: $id, reason: $reason) {\n      id\n      state\n    }\n  }\n": types.TakedownDocument,
-    "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n  }\n": types.RoleFieldsFragmentDoc,
+    "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    public\n  }\n": types.RoleFieldsFragmentDoc,
     "\n  query Roles {\n    roles {\n      ...RoleFields\n    }\n    permissions\n  }\n": types.RolesDocument,
     "\n  mutation CreateRole($input: CreateRoleInput!) {\n    createRole(input: $input) {\n      ...RoleFields\n    }\n  }\n": types.CreateRoleDocument,
     "\n  mutation UpdateRole($id: String!, $input: UpdateRoleInput!) {\n    updateRole(id: $id, input: $input) {\n      ...RoleFields\n    }\n  }\n": types.UpdateRoleDocument,
@@ -184,6 +186,8 @@ const documents: Documents = {
     "\n  fragment PaintFields on Paint {\n    id\n    name\n    kind\n    angle\n    repeat\n    shape\n    color\n    stops {\n      at\n      color\n    }\n    shadows {\n      x\n      y\n      radius\n      color\n    }\n    image {\n      ...CosmeticImageFields\n    }\n  }\n": types.PaintFieldsFragmentDoc,
     "\n  query Cosmetics {\n    cosmetics {\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n    }\n  }\n": types.CosmeticsDocument,
     "\n  query UserCosmetics($platform: Platform!, $userIds: [String!]!) {\n    userCosmetics(platform: $platform, userIds: $userIds) {\n      platformUserId\n      badgeId\n      paintId\n    }\n  }\n": types.UserCosmeticsDocument,
+    "\n  query AccountCosmetics($accountIds: [String!]!) {\n    accountCosmetics(accountIds: $accountIds) {\n      accountId\n      badge {\n        ...BadgeFields\n      }\n      paint {\n        ...PaintFields\n      }\n    }\n  }\n": types.AccountCosmeticsDocument,
+    "\n  query AccountProfile($accountId: String!) {\n    accountProfile(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      identities {\n        platform\n        login\n        displayName\n      }\n      roles {\n        id\n        name\n      }\n      activeSets {\n        platform\n        login\n        setId\n        setName\n      }\n      createdAt\n    }\n  }\n": types.AccountProfileDocument,
     "\n  query MyCosmetics($accountId: String) {\n    myCosmetics(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n      badgeId\n      paintId\n    }\n  }\n": types.MyCosmeticsDocument,
     "\n  mutation SelectCosmetics($badgeId: String, $paintId: String, $ownerId: String) {\n    selectCosmetics(badgeId: $badgeId, paintId: $paintId, ownerId: $ownerId) {\n      badgeId\n      paintId\n    }\n  }\n": types.SelectCosmeticsDocument,
     "\n  query CosmeticImage($id: String!) {\n    cosmeticImage(id: $id) {\n      ...CosmeticImageFields\n    }\n  }\n": types.CosmeticImageDocument,
@@ -418,7 +422,7 @@ export function graphql(source: "\n  mutation Takedown($id: String!, $reason: St
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n  }\n"): typeof import('./graphql').RoleFieldsFragmentDoc;
+export function graphql(source: "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    public\n  }\n"): typeof import('./graphql').RoleFieldsFragmentDoc;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -503,6 +507,14 @@ export function graphql(source: "\n  query Cosmetics {\n    cosmetics {\n      b
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query UserCosmetics($platform: Platform!, $userIds: [String!]!) {\n    userCosmetics(platform: $platform, userIds: $userIds) {\n      platformUserId\n      badgeId\n      paintId\n    }\n  }\n"): typeof import('./graphql').UserCosmeticsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AccountCosmetics($accountIds: [String!]!) {\n    accountCosmetics(accountIds: $accountIds) {\n      accountId\n      badge {\n        ...BadgeFields\n      }\n      paint {\n        ...PaintFields\n      }\n    }\n  }\n"): typeof import('./graphql').AccountCosmeticsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AccountProfile($accountId: String!) {\n    accountProfile(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      identities {\n        platform\n        login\n        displayName\n      }\n      roles {\n        id\n        name\n      }\n      activeSets {\n        platform\n        login\n        setId\n        setName\n      }\n      createdAt\n    }\n  }\n"): typeof import('./graphql').AccountProfileDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

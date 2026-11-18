@@ -1927,19 +1927,19 @@ export type TakedownMutationVariables = Exact<{
 
 export type TakedownMutation = { __typename?: 'Mutation', takedownEmote: { __typename?: 'Emote', id: string, state: EmoteState } };
 
-export type RoleFieldsFragment = { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> };
+export type RoleFieldsFragment = { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean };
 
 export type RolesQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type RolesQuery = { __typename?: 'Query', permissions: Array<string>, roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> }> };
+export type RolesQuery = { __typename?: 'Query', permissions: Array<string>, roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean }> };
 
 export type CreateRoleMutationVariables = Exact<{
   input: CreateRoleInput;
 }>;
 
 
-export type CreateRoleMutation = { __typename?: 'Mutation', createRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> } };
+export type CreateRoleMutation = { __typename?: 'Mutation', createRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean } };
 
 export type UpdateRoleMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -1947,7 +1947,7 @@ export type UpdateRoleMutationVariables = Exact<{
 }>;
 
 
-export type UpdateRoleMutation = { __typename?: 'Mutation', updateRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> } };
+export type UpdateRoleMutation = { __typename?: 'Mutation', updateRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean } };
 
 export type DeleteRoleMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -1971,12 +1971,12 @@ export type UserDetailsQueryVariables = Exact<{
 }>;
 
 
-export type UserDetailsQuery = { __typename?: 'Query', accountStatus?: { __typename?: 'AccountStatus', uploadsBlocked: boolean, blocked: boolean }, accountRoles?: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> }> };
+export type UserDetailsQuery = { __typename?: 'Query', accountStatus?: { __typename?: 'AccountStatus', uploadsBlocked: boolean, blocked: boolean }, accountRoles?: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean }> };
 
 export type AllRolesQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type AllRolesQuery = { __typename?: 'Query', roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string> }> };
+export type AllRolesQuery = { __typename?: 'Query', roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean }> };
 
 export type RestrictMutationVariables = Exact<{
   accountId: Scalars['String']['input'];
@@ -2069,6 +2069,20 @@ export type UserCosmeticsQueryVariables = Exact<{
 
 
 export type UserCosmeticsQuery = { __typename?: 'Query', userCosmetics: Array<{ __typename?: 'UserCosmetics', platformUserId: string, badgeId?: string | null, paintId?: string | null }> };
+
+export type AccountCosmeticsQueryVariables = Exact<{
+  accountIds: Array<Scalars['String']['input']> | Scalars['String']['input'];
+}>;
+
+
+export type AccountCosmeticsQuery = { __typename?: 'Query', accountCosmetics: Array<{ __typename?: 'AccountCosmetics', accountId: string, badge?: { __typename?: 'Badge', id: string, name: string, tooltip: string, image: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } } | null, paint?: { __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null } | null }> };
+
+export type AccountProfileQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type AccountProfileQuery = { __typename?: 'Query', accountProfile?: { __typename?: 'AccountProfile', createdAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }>, roles: Array<{ __typename?: 'PublicRole', id: string, name: string }>, activeSets: Array<{ __typename?: 'ActiveChannelSet', platform: Platform, login: string, setId: string, setName: string }> } | null };
 
 export type MyCosmeticsQueryVariables = Exact<{
   accountId?: InputMaybe<Scalars['String']['input']>;
@@ -2353,6 +2367,7 @@ export const RoleFieldsFragmentDoc = new TypedDocumentString(`
   description
   position
   permissions
+  public
 }
     `, {"fragmentName":"RoleFields"}) as unknown as TypedDocumentString<RoleFieldsFragment, unknown>;
 export const CosmeticImageFieldsFragmentDoc = new TypedDocumentString(`
@@ -3478,6 +3493,7 @@ export const RolesDocument = new TypedDocumentString(`
   description
   position
   permissions
+  public
 }`) as unknown as TypedDocumentString<RolesQuery, RolesQueryVariables>;
 export const CreateRoleDocument = new TypedDocumentString(`
     mutation CreateRole($input: CreateRoleInput!) {
@@ -3491,6 +3507,7 @@ export const CreateRoleDocument = new TypedDocumentString(`
   description
   position
   permissions
+  public
 }`) as unknown as TypedDocumentString<CreateRoleMutation, CreateRoleMutationVariables>;
 export const UpdateRoleDocument = new TypedDocumentString(`
     mutation UpdateRole($id: String!, $input: UpdateRoleInput!) {
@@ -3504,6 +3521,7 @@ export const UpdateRoleDocument = new TypedDocumentString(`
   description
   position
   permissions
+  public
 }`) as unknown as TypedDocumentString<UpdateRoleMutation, UpdateRoleMutationVariables>;
 export const DeleteRoleDocument = new TypedDocumentString(`
     mutation DeleteRole($id: String!) {
@@ -3540,6 +3558,7 @@ export const UserDetailsDocument = new TypedDocumentString(`
   description
   position
   permissions
+  public
 }`) as unknown as TypedDocumentString<UserDetailsQuery, UserDetailsQueryVariables>;
 export const AllRolesDocument = new TypedDocumentString(`
     query AllRoles {
@@ -3553,6 +3572,7 @@ export const AllRolesDocument = new TypedDocumentString(`
   description
   position
   permissions
+  public
 }`) as unknown as TypedDocumentString<AllRolesQuery, AllRolesQueryVariables>;
 export const RestrictDocument = new TypedDocumentString(`
     mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {
@@ -3748,6 +3768,90 @@ export const UserCosmeticsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<UserCosmeticsQuery, UserCosmeticsQueryVariables>;
+export const AccountCosmeticsDocument = new TypedDocumentString(`
+    query AccountCosmetics($accountIds: [String!]!) {
+  accountCosmetics(accountIds: $accountIds) {
+    accountId
+    badge {
+      ...BadgeFields
+    }
+    paint {
+      ...PaintFields
+    }
+  }
+}
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}
+fragment BadgeFields on Badge {
+  id
+  name
+  tooltip
+  image {
+    ...CosmeticImageFields
+  }
+}
+fragment PaintFields on Paint {
+  id
+  name
+  kind
+  angle
+  repeat
+  shape
+  color
+  stops {
+    at
+    color
+  }
+  shadows {
+    x
+    y
+    radius
+    color
+  }
+  image {
+    ...CosmeticImageFields
+  }
+}`) as unknown as TypedDocumentString<AccountCosmeticsQuery, AccountCosmeticsQueryVariables>;
+export const AccountProfileDocument = new TypedDocumentString(`
+    query AccountProfile($accountId: String!) {
+  accountProfile(accountId: $accountId) {
+    account {
+      id
+      displayName
+      avatar
+    }
+    identities {
+      platform
+      login
+      displayName
+    }
+    roles {
+      id
+      name
+    }
+    activeSets {
+      platform
+      login
+      setId
+      setName
+    }
+    createdAt
+  }
+}
+    `) as unknown as TypedDocumentString<AccountProfileQuery, AccountProfileQueryVariables>;
 export const MyCosmeticsDocument = new TypedDocumentString(`
     query MyCosmetics($accountId: String) {
   myCosmetics(accountId: $accountId) {

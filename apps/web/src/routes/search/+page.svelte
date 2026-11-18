@@ -11,8 +11,7 @@
   import BrowseFilters from '$lib/components/browse/BrowseFilters.svelte';
   import BulkAdd from '$lib/components/browse/BulkAdd.svelte';
   import EmoteTable from '$lib/components/browse/EmoteTable.svelte';
-  import { looks, loadOwned } from '$lib/cosmetics/store.svelte';
-  import { session } from '$lib/tool/session.svelte';
+  import { looks } from '$lib/cosmetics/store.svelte';
   import State from '$lib/components/State.svelte';
   import {
     apiQuery,
@@ -184,11 +183,6 @@
     if (!on) picked = [];
     sync();
   }
-  // The painted name of your own emotes comes from the shared cosmetics cache (the API shows
-  // other creators' paints by platform id only, so theirs stay plain).
-  $effect(() => {
-    if (layout === 'table' && session.me) loadOwned(session.me.id, true).catch(() => {});
-  });
   const signin = $derived(`/signin?back=${encodeURIComponent(page.url.pathname + page.url.search)}`);
 
   // ---- Load more: button, and automatically when the end comes near. The page count goes into

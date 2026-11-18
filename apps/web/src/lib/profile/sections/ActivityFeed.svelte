@@ -7,7 +7,7 @@
   import LoadMore from '$lib/components/LoadMore.svelte';
   import State from '$lib/components/State.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
-  import { loadCatalog, type Catalog } from '$lib/cosmetics/store.svelte';
+  import { looks, loadCatalog, NO_LOOK, wantLooks, type Catalog } from '$lib/cosmetics/store.svelte';
   import { ready, src, srcset } from '$lib/emote';
   import { clean } from '$lib/format';
   import PageHead from '$lib/tool/PageHead.svelte';
@@ -37,6 +37,8 @@
       first = false;
     }
   }
+  // The names of who did each change, in their paint (shared cosmetics cache, one batch per page).
+  $effect(() => wantLooks(items.map((i) => i.actor?.id)));
   onMount(() => {
     next();
     loadCatalog().then((c) => (catalog = c)).catch(() => {});
@@ -95,7 +97,7 @@
             {:else if i.kind === 'uploaded'}Published {@render emote(i)}
             {:else if i.kind === 'created'}Made the set {@render setName(i)}
             {:else}Renamed the set <strong><bdi>{clean(i.from)}</bdi></strong> to <strong><bdi>{clean(i.to ?? i.set?.name)}</bdi></strong>{/if}
-            {#if i.actor} by <a href="/users/{encodeURIComponent(i.actor.id)}"><bdi>{clean(i.actor.displayName)}</bdi></a>{/if}
+            {#if i.actor} by <a href="/users/{encodeURIComponent(i.actor.id)}"><PaintedName name={i.actor.displayName} paint={(looks[i.actor.id] ?? NO_LOOK).paint} badge={(looks[i.actor.id] ?? NO_LOOK).badge} badgeSize={16} /></a>{/if}
           </span>
           <time datetime={i.at} title={new Date(i.at).toLocaleString()}>{relative(i.at)}</time>
         </span>

@@ -25,6 +25,11 @@ const OWNER_DEFS = [
 const OWNERS = OWNER_DEFS.map(([displayName, id], n) => ({
   id: id ?? `01JD8X0000000000000000U${String(n).padStart(3, '0')}`, displayName, avatar: `${BASE}/avatars/${n}.svg`,
 }));
+// MOCK_LONG=1: a very long name and an unbreakable one, to look at how names and role chips wrap.
+if (process.env.MOCK_LONG === '1') {
+  OWNERS[1].displayName = 'Quietoak the Wandering Bard of the Northern Reaches and Keeper of Many Small Emotes';
+  OWNERS[2].displayName = 'N'.repeat(60);
+}
 const ME_SUMMARY = OWNERS[0];
 const OTHERS = OWNERS.slice(1);
 
@@ -494,6 +499,10 @@ const ROLES = [
   { id: 'ROLE3', name: 'Artist', description: 'Makes emotes people love.', position: 10, permissions: [], public: true },
 ];
 const ACCOUNT_ROLES = { [OTHERS[0].id]: ['ROLE2', 'ROLE3'], [OTHERS[1].id]: ['ROLE3'], [ME_ID]: ['ROLE1'] };
+if (process.env.MOCK_LONG === '1') {
+  for (const n of ['Founder', 'Translator of the Many Tongues', 'Beta tester', 'Community helper', 'Event host', 'Supporter', 'Emote reviewer', 'Contest winner'])
+    { const id = 'ROLEX' + ROLES.length; ROLES.push({ id, name: n, description: null, position: 5 + ROLES.length, permissions: [], public: true }); ACCOUNT_ROLES[OTHERS[0].id].push(id); }
+}
 const STATUS = {};
 const AUDIT = Array.from({ length: 64 }, (_, i) => ({
   id: '01JD8XAUD' + String(1000 - i).padStart(17, '0'), actorId: i % 5 === 0 ? null : ME_ID,

@@ -9,12 +9,11 @@
   import { ApiError, gql } from '$lib/api';
   import LoadMore from '$lib/components/LoadMore.svelte';
   import State from '$lib/components/State.svelte';
-  import { looks, loadOwned } from '$lib/cosmetics/store.svelte';
+  import { looks } from '$lib/cosmetics/store.svelte';
   import { clean, count, iso } from '$lib/format';
   import { SEARCH_ACCOUNTS } from '$lib/queries';
   import RailLayout from '$lib/shell/RailLayout.svelte';
   import SideRail from '$lib/shell/SideRail.svelte';
-  import { session } from '$lib/tool/session.svelte';
   import { change, MAX_PAGES, toSearch, USERS_PER_PAGE, type Browse } from './params';
   import SearchField from './SearchField.svelte';
   import SearchTabs from './SearchTabs.svelte';
@@ -40,12 +39,6 @@
   });
   const hasMore = $derived(pageNo < Math.ceil(data.total / USERS_PER_PAGE) && pageNo < MAX_PAGES);
   const switching = $derived(!!navigating.to);
-
-  // Your own paint, when you are among the results (the cosmetics cache holds yours only).
-  $effect(() => {
-    const me = session.me?.id;
-    if (me && loaded.some((h) => h.account.id === me)) loadOwned(me, true).catch(() => {});
-  });
 
   // ---- Search field: the address follows the typing (replaced, not pushed, after a pause).
   let text = $state(untrack(() => data.view.q));

@@ -622,6 +622,7 @@ export const ROLE_FIELDS = graphql(`
     description
     position
     permissions
+    public
   }
 `);
 
@@ -865,6 +866,50 @@ export const USER_COSMETICS = graphql(`
       platformUserId
       badgeId
       paintId
+    }
+  }
+`);
+
+// What accounts show (badge and paint, in full), by account id: public, up to 100 at once.
+export const ACCOUNT_COSMETICS = graphql(`
+  query AccountCosmetics($accountIds: [String!]!) {
+    accountCosmetics(accountIds: $accountIds) {
+      accountId
+      badge {
+        ...BadgeFields
+      }
+      paint {
+        ...PaintFields
+      }
+    }
+  }
+`);
+
+// An account's public profile: logins, public roles, each channel's active set, member since.
+export const ACCOUNT_PROFILE = graphql(`
+  query AccountProfile($accountId: String!) {
+    accountProfile(accountId: $accountId) {
+      account {
+        id
+        displayName
+        avatar
+      }
+      identities {
+        platform
+        login
+        displayName
+      }
+      roles {
+        id
+        name
+      }
+      activeSets {
+        platform
+        login
+        setId
+        setName
+      }
+      createdAt
     }
   }
 `);
