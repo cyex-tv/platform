@@ -113,11 +113,6 @@ pub const ACTIVITY_ACTIONS: [&str; 8] = [
     "emote.approved",
 ];
 
-/// Candidate rows for `subject`'s public activity feed, newest first. The rows pass the checks
-/// that fit in SQL: they are about the account, are one of `ACTIVITY_ACTIONS`, were made by the
-/// account itself or through an account editor grant (never by staff acting on their own
-/// permissions), by an actor who isn't blocked or deleted, and an emote's approval counts once.
-/// The api drops what's still private (pending emotes, deleted sets and so on).
 /// An activity row with the account whose feed it belongs to.
 #[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct SubjectEntry {
@@ -126,17 +121,26 @@ pub struct SubjectEntry {
     pub subject_account_id: Uuid,
 }
 
+/// The set actions of the feed: they only show for a set its subject owns and lists
+/// (ADR 0017), checked in SQL so hidden rows don't use up the api's read rounds.
+const LISTED_SET_ONLY: &str = "(a.action NOT IN ('set.created', 'set.renamed', 'set.emote_added',
+                                              'set.emote_removed', 'set.emote_updated')
+               OR EXISTS (SELECT 1 FROM emote_sets st
+                          WHERE st.id = ulid_to_uuid(a.target_id)
+                            AND st.owner_account_id = a.subject_account_id
+                            AND st.visibility = 'listed'))";
+
 /// Public activity rows about one emote, newest first: its approval (once) and the set changes
 /// naming it, written by the owner of the set or their account editors. Rows about accounts that
-/// are blocked or deleted, and rows by blocked or deleted actors, are left out. The api drops what
-/// is still private (unlisted and private sets, deleted sets).
+/// are blocked or deleted, rows by blocked or deleted actors and rows about sets that aren't
+/// listed are left out. The api drops what is still private in ways SQL can't tell (deleted sets).
 pub async fn emote_activity_rows(
     conn: &mut PgConnection,
     emote_id: &str,
     before_id: Option<Uuid>,
     limit: i64,
 ) -> DbResult<Vec<SubjectEntry>> {
-    Ok(sqlx::query_as(
+    Ok(sqlx::query_as(&format!(
         "SELECT a.id, a.actor_account_id, a.action, a.target_kind, a.target_id, a.before_json,
                 a.after_json, a.created_at, a.subject_account_id
          FROM audit_log a
@@ -148,7 +152,7 @@ pub async fn emote_activity_rows(
            AND (
                (a.action = 'emote.approved' AND a.target_kind = 'emote' AND a.target_id = $1
                 AND NOT EXISTS (SELECT 1 FROM audit_log p
-                                WHERE p.action = 'emote.approved'
+                                WHERE p.action = 'emote.approved' AND p.target_kind = 'emote'
                                   AND p.target_id = a.target_id AND p.id < a.id))
                OR (a.action IN ('set.emote_added', 'set.emote_removed', 'set.emote_updated')
                    AND coalesce(a.after_json ->> 'emote_id', a.before_json ->> 'emote_id') = $1
@@ -156,9 +160,10 @@ pub async fn emote_activity_rows(
                    AND (a.actor_account_id = a.subject_account_id
                         OR a.after_json ->> 'via' = 'account_editor'))
            )
+           AND {LISTED_SET_ONLY}
          ORDER BY a.id DESC
-         LIMIT $3",
-    )
+         LIMIT $3"
+    ))
     .bind(emote_id)
     .bind(before_id)
     .bind(limit)
@@ -166,6 +171,12 @@ pub async fn emote_activity_rows(
     .await?)
 }
 
+/// Candidate rows for `subject`'s public activity feed, newest first. The rows pass the checks
+/// that fit in SQL: they are about the account, are one of `ACTIVITY_ACTIONS`, were made by the
+/// account itself or through an account editor grant (never by staff acting on their own
+/// permissions), by an actor who isn't blocked or deleted, an emote's approval counts once, and
+/// set changes are about a set the account lists. The api drops what's still private (pending
+/// emotes, deleted sets and so on).
 pub async fn activity_rows(
     conn: &mut PgConnection,
     subject: Uuid,
@@ -173,7 +184,7 @@ pub async fn activity_rows(
     limit: i64,
 ) -> DbResult<Vec<Entry>> {
     let actions: Vec<&str> = ACTIVITY_ACTIONS.to_vec();
-    Ok(sqlx::query_as(
+    Ok(sqlx::query_as(&format!(
         "SELECT a.id, a.actor_account_id, a.action, a.target_kind, a.target_id, a.before_json,
                 a.after_json, a.created_at
          FROM audit_log a
@@ -184,16 +195,17 @@ pub async fn activity_rows(
            AND (
                (a.action = 'emote.approved'
                 AND NOT EXISTS (SELECT 1 FROM audit_log p
-                                WHERE p.action = 'emote.approved'
+                                WHERE p.action = 'emote.approved' AND p.target_kind = 'emote'
                                   AND p.target_id = a.target_id AND p.id < a.id))
                OR (a.action <> 'emote.approved'
                    AND act.id IS NOT NULL AND act.blocked_at IS NULL AND act.deleted_at IS NULL
                    AND (a.actor_account_id = a.subject_account_id
                         OR a.after_json ->> 'via' = 'account_editor'))
            )
+           AND {LISTED_SET_ONLY}
          ORDER BY a.id DESC
-         LIMIT $4",
-    )
+         LIMIT $4"
+    ))
     .bind(subject)
     .bind(before_id)
     .bind(&actions)

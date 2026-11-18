@@ -1154,14 +1154,39 @@ function activityAnswer(v) {
   return { data: { accountActivity: rows.slice(0, limit) } };
 }
 
+// A page with its cursor, as the API answers `accountActivityPage` and `emoteActivityPage`: `next`
+// is the entry to carry on after, or null at the end. `shortFirst` makes the first page come back
+// short with a `next`, like a real feed that skipped rows nobody may see.
+function activityPageOf(rows, v, shortFirst = 0) {
+  const limit = Math.min(100, Math.max(1, v.limit ?? 30));
+  let from = rows;
+  if (v.before) from = from.filter((a) => a.id < v.before);
+  const take = !v.before && shortFirst ? Math.min(limit, shortFirst) : limit;
+  const entries = from.slice(0, take);
+  const more = from.length > entries.length;
+  return { entries, next: more ? entries.at(-1)?.id ?? v.before ?? null : null };
+}
+function activityPageAnswer(v) {
+  if (STATUS[v.accountId]?.blocked) return { data: { accountActivityPage: { entries: [], next: null } } };
+  return { data: { accountActivityPage: activityPageOf(ACTIVITY[v.accountId] ?? [], v, v.accountId === ME_ID ? 4 : 0) } };
+}
+
 // `emoteActivity(emoteId, before, limit)`: the sample lines about this emote from every account's
 // feed, plus an upload line and a few adds for any public emote, newest first.
 function emoteActivityAnswer(v) {
+  const rows = emoteActivityRows(v);
+  return { data: { emoteActivity: rows.slice(0, Math.min(100, Math.max(1, v.limit ?? 30))) } };
+}
+function emoteActivityPageAnswer(v) {
+  return { data: { emoteActivityPage: activityPageOf(emoteActivityRows(v), v) } };
+}
+// Every line about the emote (before paging), newest first; none unless it is public.
+function emoteActivityRows(v) {
   const e = findEmote(v.emoteId ?? v.id);
-  if (!e || e.state !== 'APPROVED' || e.flags.private) return { data: { emoteActivity: [] } };
+  if (!e || e.state !== 'APPROVED' || e.flags.private) return [];
   const own = Object.values(ACTIVITY).flat().filter((a) => a.emote?.id === e.id);
   const n = Number(e.id.slice(-3)) || 0;
-  if (n === 9) return { data: { emoteActivity: [] } }; // a public emote nobody has touched
+  if (n === 9) return []; // a public emote nobody has touched
   // Emote 8 has 130 lines, to page through.
   const many = n === 8 ? Array.from({ length: 130 }, (_, k) => act(4000 + k, 10 + k * 37, k % 3 === 0 ? 'SET_EMOTE_REMOVED' : 'SET_EMOTE_ADDED', OTHERS[k % OTHERS.length], { set: aSet(SETS[k % SETS.length]), emote: aEmote(e) })) : [];
   const made = [
@@ -1171,13 +1196,7 @@ function emoteActivityAnswer(v) {
     act(902 + n * 4, 3000 + n, 'SET_EMOTE_ADDED', OTHERS[(n + 2) % OTHERS.length], { set: aSet(SETS[(n + 2) % SETS.length]), emote: aEmote(e) }),
     act(903 + n * 4, 6000 + n, 'EMOTE_UPLOADED', e.owner ?? ME_SUMMARY, { emote: aEmote(e) }),
   ];
-  let rows = [...own, ...made].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  if (v.before) {
-    const at = rows.findIndex((a) => a.id === v.before);
-    rows = at >= 0 ? rows.slice(at + 1) : rows;
-  }
-  const limit = Math.min(100, Math.max(1, v.limit ?? 30));
-  return { data: { emoteActivity: rows.slice(0, limit) } };
+  return [...own, ...made].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 // A public account for `account(id)`. Unknown ids, and the one for a blocked account, give null.
@@ -1528,16 +1547,16 @@ const searchPeople = () => [ME_SUMMARY, ...OTHERS].map((a) => ({
 }));
 function searchAccounts(v) {
   if (++accountSearches > 600) return err('That’s a lot of searches. Try again in a minute.', 'rate_limited');
-  const text = String(v.query ?? '').trim().replace(/^@/, '').toLowerCase();
+  const text = String(v.query ?? '').trim().replace(/^@/, '').trim().toLowerCase();
   const per = Math.min(50, Math.max(1, v.perPage ?? 20));
-  const page = Math.min(1000, Math.max(1, v.page ?? 1));
+  const page = Math.min(Math.ceil(1000 / per), Math.max(1, v.page ?? 1));
   const tier = (h) => Math.max(...h.identities.map((i) =>
     i.login === text ? 3 : i.login.startsWith(text) ? 2 : i.displayName.toLowerCase().startsWith(text) ? 1 : 0));
-  const hits = !text ? [] : searchPeople()
+  const hits = [...text].length < 2 ? [] : searchPeople()
     .filter((h) => !STATUS[h.account.id]?.blocked)
     .filter((h) => h.identities.some((i) => i.login.includes(text) || i.displayName.toLowerCase().includes(text)))
     .sort((a, b) => tier(b) - tier(a) || a.account.id.localeCompare(b.account.id));
-  return { data: { searchAccounts: { total: hits.length, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
+  return { data: { searchAccounts: { total: hits.length, totalCapped: false, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
 }
 
 // accountProfile(accountId): public logins (no IDs), roles marked public, each channel's active set.
@@ -1671,6 +1690,8 @@ function baseAnswer(body, session, admin) {
   if (cosmetic) return cosmetic;
   const shop = shopAnswer(q, v, session, admin);
   if (shop) return shop;
+  if (/accountActivityPage\s*\(/.test(q)) return activityPageAnswer(v);
+  if (/emoteActivityPage\s*\(/.test(q)) return emoteActivityPageAnswer(v);
   if (/accountActivity\s*\(/.test(q)) return activityAnswer(v);
   if (/emoteActivity\s*\(/.test(q)) return emoteActivityAnswer(v);
   if (session) {
