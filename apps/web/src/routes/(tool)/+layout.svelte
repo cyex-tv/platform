@@ -3,6 +3,7 @@
   // draws the one AppHeader and Footer; this layout only signs you in (or sends you to /signin)
   // and puts the page in a RailLayout with the /me rail or, under /admin, the admin rail.
   import { onMount } from 'svelte';
+  import { useToolButtons } from '$lib/components/btn';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { ApiError, gql } from '$lib/api';
@@ -26,6 +27,7 @@
   import { can, isAdmin, loadMe, session } from '$lib/tool/session.svelte';
 
   let { children } = $props();
+  useToolButtons(); // the tool pages' buttons are .ui-btn; shared components follow
   let problem = $state(false);
 
   const path = $derived(page.url.pathname);
@@ -84,13 +86,13 @@
         ],
       },
       {
-        caption: 'People',
+        toggle: { label: 'People', icon: 'users' },
         items: [
           ...row('/admin/users', 'Users', 'users', can('users.view') || can('users.restrict') || can('roles.manage') || can('cosmetics.grant')),
           ...row('/admin/roles', 'Roles', 'key', can('roles.manage')),
         ],
       },
-      { caption: 'System', items: row('/admin/audit', 'Audit log', 'scroll', can('audit.view')) },
+      { toggle: { label: 'System', icon: 'settings' }, items: row('/admin/audit', 'Audit log', 'scroll', can('audit.view')) },
     ];
     return markCurrent(groups.filter((g) => g.items.length), path, ['/admin']);
   });

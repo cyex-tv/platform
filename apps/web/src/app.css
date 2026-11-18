@@ -45,6 +45,12 @@ kbd { font: inherit; }
   .btn:hover .arrow { transform: translateX(3px); }
 }
 .btn-s { height: 40px; padding: 0 14px; }
+/* Variants of the one public button: .btn-primary above, plus a quiet one and a destructive one. */
+.btn-ghost { background: none; border-color: transparent; color: var(--muted); }
+.btn-danger { color: var(--red); }
+@media (hover: hover) and (pointer: fine) {
+  .btn-ghost:hover { background: var(--surface-hover); border-color: transparent; color: var(--text); }
+}
 /* Touch: the small button keeps its 40px look, its hit area grows to 44px. */
 @media (pointer: coarse) { .btn-s { position: relative; } .btn-s::after { content: ''; position: absolute; inset: -2px 0; } }
 .btn[disabled] { opacity: 1; color: var(--muted); cursor: default; pointer-events: none; }

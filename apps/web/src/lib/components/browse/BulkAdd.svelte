@@ -4,6 +4,7 @@
   // mutation the set editor uses, one after another, with progress and a summary; a full set
   // takes what fits). Signed out, the button asks you to sign in.
   import { ApiError, gql } from '$lib/api';
+  import Capacity from '$lib/components/Capacity.svelte';
   import { session } from '$lib/tool/session.svelte';
   import { grantOn } from '$lib/tool/editors';
   import { ADD_SET_EMOTE, MY_SETS } from '$lib/queries';
@@ -98,11 +99,11 @@
     {#if !run && ids.length < shown}<button class="link" type="button" onclick={onall}>Select all {count(shown)}</button>{/if}
     {#if ids.length && !run}<button class="link" type="button" onclick={() => { result = ''; onclear(); }}>Clear</button>{/if}
     {#if !session.me && session.known}
-      <a class="ui-btn primary small" href={signin}>Sign in to add</a>
+      <a class="btn btn-s btn-primary" href={signin}>Sign in to add</a>
     {:else if ids.length}
       <Popover label="Add to a set" sheet align="end" width="320px" bind:open>
         {#snippet trigger(props)}
-          <button class="ui-btn primary small" type="button" disabled={!!run || !session.me} {...props}>
+          <button class="btn btn-s btn-primary" type="button" disabled={!!run || !session.me} {...props}>
             Add {count(ids.length)} to a set <Icon name="chevron-down" size={14} />
           </button>
         {/snippet}
@@ -119,7 +120,7 @@
                 <label class="set" class:on={chosen === t.id}>
                   <input type="radio" name="bulk-set" value={t.id} bind:group={chosen} />
                   <span class="nm"><bdi>{clean(t.name)}</bdi></span>
-                  <span class="cap">{count(t.held.size)} / {count(t.capacity)}</span>
+                  <span class="cap"><Capacity used={t.held.size} capacity={t.capacity} /></span>
                   <span class="tick" aria-hidden="true"><Icon name="check" size={14} /></span>
                 </label>
               {/each}
@@ -135,7 +136,7 @@
                   .join(' ')}
               </p>
             {/if}
-            <button class="ui-btn primary" type="button" disabled={!preview || preview.add.length === 0} onclick={add}>
+            <button class="btn btn-s btn-primary" type="button" disabled={!preview || preview.add.length === 0} onclick={add}>
               Add {preview ? count(preview.add.length) : ''}
             </button>
           {/if}

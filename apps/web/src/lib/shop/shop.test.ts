@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '$lib/api';
 import {
   centsFrom, centsText, codesFilename, codesText, fromLocalInput, itemState, lockoutMinutes, normaliseCode, orderStatusText, plausibleCode, price,
@@ -146,8 +146,15 @@ describe('the site’s one error wording', () => {
     const { COPY } = await import('$lib/components/problem');
     expect(shopMessage(new Error('boom'))).toBe(`${COPY.server.title} Nothing was charged.`);
     expect(redeemMessage(new Error('boom'))).toBe(`${COPY.server.title} Try again in a moment.`);
-    const offline = new ApiError('cyex.tv can’t be reached right now.', 'offline');
-    expect(shopMessage(offline)).toBe(`${COPY.offline.title} ${COPY.offline.body}`);
-    expect(redeemMessage(offline)).toBe(`${COPY.offline.title} ${COPY.offline.body}`);
+    const offline = new ApiError('whatever the request said', 'offline');
+    // With a network the server didn't answer; with none the browser is offline.
+    expect(shopMessage(offline)).toBe(`${COPY.server.title} ${COPY.server.body}`);
+    vi.stubGlobal('navigator', { onLine: false });
+    try {
+      expect(shopMessage(offline)).toBe(`${COPY.offline.title} ${COPY.offline.body}`);
+      expect(redeemMessage(offline)).toBe(`${COPY.offline.title} ${COPY.offline.body}`);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

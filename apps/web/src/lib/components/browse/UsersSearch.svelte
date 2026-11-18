@@ -161,7 +161,7 @@
         <State title={`No one matches “${iso(q)}”.`}>
           Check the spelling, or try the login. Only people who have signed in to cyex.tv are listed.
           {#snippet actions()}
-            <button class="ui-btn secondary" type="button" onclick={clearText}>Clear search</button>
+            <button class="btn btn-s" type="button" onclick={clearText}>Clear search</button>
           {/snippet}
         </State>
       </div>

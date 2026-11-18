@@ -169,6 +169,19 @@ export async function buy(purchase: Purchase): Promise<string | null> {
   }
 }
 
+/** Tries a purchase that failed once more, with the same item and recipient. */
+export async function retry(): Promise<void> {
+  const purchase = flow.purchase;
+  if (flow.phase !== 'failed' || !purchase) return;
+  const said = await buy(purchase);
+  // The order couldn't start this time either: keep the failure on the page with the reason.
+  if (said) {
+    flow.purchase = purchase;
+    flow.error = said;
+    flow.phase = 'failed';
+  }
+}
+
 /** Opens the payment window again after it was closed. */
 export function again() {
   if (flow.phase !== 'cancelled' || !reopen) return;

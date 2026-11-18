@@ -65,8 +65,8 @@
       </div>
     </div>
     <footer>
-      <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="ui-btn primary" type="submit" disabled={creating}>{creating ? 'Creating…' : 'Create'}</button>
+      <button class="btn btn-s" type="button" onclick={() => dialog.close()}>Cancel</button>
+      <button class="btn btn-s btn-primary" type="submit" disabled={creating}>{creating ? 'Creating…' : 'Create'}</button>
     </footer>
   </form>
 </dialog>

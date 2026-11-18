@@ -51,7 +51,7 @@
 </script>
 
 <PageHead title="Uploaded emotes" line={first ? ' ' : `${count(total)} ${total === 1 ? 'emote' : 'emotes'}. Pending ones only show to you until a moderator looks at them.`}>
-  {#snippet actions()}<a class="ui-btn secondary" href="/me/upload"><Icon name="upload" size={15} />Upload</a>{/snippet}
+  {#snippet actions()}<a class="btn btn-s" href="/me/upload"><Icon name="upload" size={15} />Upload</a>{/snippet}
 </PageHead>
 
 {#if first}
@@ -61,7 +61,7 @@
 {:else if !items.length}
   <State title="No emotes yet">
     Upload one and it shows up here, ready to add to a set.
-    {#snippet actions()}<a class="ui-btn primary" href="/me/upload"><Icon name="upload" size={15} />Upload an emote</a>{/snippet}
+    {#snippet actions()}<a class="btn btn-s btn-primary" href="/me/upload"><Icon name="upload" size={15} />Upload an emote</a>{/snippet}
   </State>
 {:else}
   <EmoteGrid {items} creator={false} eager={12} label="Your emotes" href={(e) => `/me/emotes/${e.id}`} {note} loading={busy} skeletons={6} />

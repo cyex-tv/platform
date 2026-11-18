@@ -1,7 +1,7 @@
 <script lang="ts">
   // The one vertical rail (7TV's side bar, cyex styling): context for the page's subject, never a
   // second top bar. 240px on a surface card, sticky under the header with its own scroll. Groups
-  // have a quiet caption and a hairline between them; rows are icon + label + optional count;
+  // have a hairline between them (a group is a collapsible row with a count, or a plain caption); rows are icon + label + optional count;
   // the current row is full-contrast and bold with an accent icon (aria-current="page"), no fill or bar. The rows
   // are one Tab stop (the current row); arrow keys move between them. Fewer than two rows: no
   // nav at all, only the head (a profile card needs no one-tab strip).
@@ -43,6 +43,8 @@
 
   // Collapsible groups the reader closed, by their label. A group holding the current row stays open.
   let closed = $state<Record<string, boolean>>({});
+  // A closed group still shows its open tickets: the sum of its rows' numbers.
+  const total = (g: RailGroup) => g.items.reduce((n, i) => n + (typeof i.count === 'number' ? i.count : 0), 0);
   const isOpen = (g: RailGroup) => !g.toggle || g.items.some((i) => i.current) || !closed[g.toggle.label];
 
   let narrow = $state(false);
@@ -138,6 +140,7 @@
           disabled={open && g.items.some((i) => i.current)}>
           {#if g.toggle.icon}<Icon name={g.toggle.icon} />{/if}
           <span class="lbl">{g.toggle.label}</span>
+          {#if !open && total(g) > 0}<span class="count" aria-hidden="true">{fmt(total(g))}</span><span class="sr-only">, {fmt(total(g))}</span>{/if}
           <span class="chev" class:up={open}><Icon name="chevron-down" size={14} /></span>
         </button>
       {/if}

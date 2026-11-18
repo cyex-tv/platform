@@ -1,5 +1,6 @@
 <script lang="ts">
   import { MediaQuery } from 'svelte/reactivity';
+  import Capacity from '$lib/components/Capacity.svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { ApiError, gql } from '$lib/api';
@@ -140,7 +141,7 @@
   >
     {#snippet line()}
       {set!.kind === 'GLOBAL' ? 'The global set' : set!.kind === 'PERSONAL' ? 'Personal set' : 'Channel set'} ·
-      <span>{count(set!.emotes.length)} / {count(set!.capacity)}</span> emotes
+      <Capacity used={set!.emotes.length} capacity={set!.capacity} /> emotes
       {#if !owner && set!.owner}· by <Name value={set!.owner.displayName} />{/if}
       {#if held.size}· you edit this account: {permissionLabels([...held])}{/if}
     {/snippet}

@@ -1,6 +1,8 @@
 // The API's rules for names, tags and uploads, checked in the browser first so a mistake shows
 // next to the field. The API checks them again; these only save a round trip.
 
+import { unreachableMessage } from './components/problem';
+
 export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 export const UPLOAD_TYPES = ['image/png', 'image/apng', 'image/gif', 'image/webp'];
 
@@ -76,7 +78,7 @@ export function uploadProblem(code: string, message: string): string {
     case 'too_many_tags':
       return message;
     case 'offline':
-      return 'cyex.tv can’t be reached right now. Check your connection and try again.';
+      return unreachableMessage();
     case 'unavailable':
       return 'Uploads are paused for a moment. Try again in a minute.';
     default:

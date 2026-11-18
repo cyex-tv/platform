@@ -40,12 +40,12 @@
   <div class="act">
     {#if item.owned}
       <span class="own"><Icon name="check" size={15} />Owned</span>
-      <button class="ui-btn secondary" type="button" disabled={soldOut} onclick={() => onopen(item, true)}>Gift</button>
+      <button class="btn btn-s" type="button" disabled={soldOut} onclick={() => onopen(item, true)}>Gift</button>
     {:else if soldOut}
       <span class="muted">Sold out</span>
     {:else}
-      <button class="ui-btn primary" type="button" onclick={() => onopen(item, false)}>Buy</button>
-      <button class="ui-btn secondary" type="button" onclick={() => onopen(item, true)}>Gift</button>
+      <button class="btn btn-s btn-primary" type="button" onclick={() => onopen(item, false)}>Buy</button>
+      <button class="btn btn-s" type="button" onclick={() => onopen(item, true)}>Gift</button>
     {/if}
   </div>
 </li>

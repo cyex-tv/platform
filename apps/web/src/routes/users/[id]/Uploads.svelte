@@ -95,7 +95,7 @@
     <State title="Nothing matches “{filter.trim()}”.">
       Nothing loaded so far matches{#if more}; load more to look further{/if}.
       {#snippet actions()}
-        <button class="ui-btn secondary" type="button" onclick={() => (filter = '')}>Clear filter</button>
+        <button class="btn btn-s" type="button" onclick={() => (filter = '')}>Clear filter</button>
       {/snippet}
     </State>
     {#if more}<div class="foot"><LoadMore hasMore={more} busy={loading} error={failed} {total} onmore={loadMore} /></div>{/if}

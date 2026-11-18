@@ -214,7 +214,7 @@
 
   .acts { display: flex; flex-wrap: wrap; gap: 8px; }
   .head .acts { justify-content: center; }
-  .acts :global(.btn) { height: 32px; padding: 0 10px; gap: 6px; font-size: var(--t-fine); font-weight: 500; color: var(--muted); }
+  .acts :global(.btn), .acts :global(.ui-btn) { height: 32px; padding: 0 10px; gap: 6px; font-size: var(--t-fine); font-weight: 500; color: var(--muted); }
   @media (hover: hover) and (pointer: fine) { .acts :global(.btn:hover) { color: var(--text); } }
   .more { margin-top: 10px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; }
   .dis summary { list-style: none; }

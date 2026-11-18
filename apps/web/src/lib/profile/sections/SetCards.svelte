@@ -4,6 +4,7 @@
   // in the editor and get "New set" (with SETS); everyone else sees the listed ones, which open
   // the public set page (/sets/<id>).
   import EmoteThumbs from './EmoteThumbs.svelte';
+  import Capacity from '$lib/components/Capacity.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import State from '$lib/components/State.svelte';
   import { clean, count } from '$lib/format';
@@ -45,14 +46,14 @@
       ? `${count(lib.cards.length)} ${lib.cards.length === 1 ? 'set' : 'sets'}. A channel shows one set; a personal set goes with ${mine ? 'you' : 'them'} to every channel that allows it.`
       : `${count(lib.cards.length)} ${lib.cards.length === 1 ? 'set' : 'sets'} anyone can open.`}>
       {#snippet actions()}
-        {#if canCreate}<button class="ui-btn primary" type="button" onclick={() => dlg?.open()}><Icon name="plus" size={15} />New set</button>{/if}
+        {#if canCreate}<button class="btn btn-s btn-primary" type="button" onclick={() => dlg?.open()}><Icon name="plus" size={15} />New set</button>{/if}
       {/snippet}
     </PageHead>
     {#if !lib.cards.length}
       <State title="No sets yet">
         {#if managed}Make one for {mine ? 'your' : 'the'} channel, then pick it in Channels.{:else}<bdi>{name || 'This account'}</bdi> hasn’t listed a set.{/if}
         {#snippet actions()}
-          {#if canCreate}<button class="ui-btn primary" type="button" onclick={() => dlg?.open()}><Icon name="plus" size={15} />New set</button>{/if}
+          {#if canCreate}<button class="btn btn-s btn-primary" type="button" onclick={() => dlg?.open()}><Icon name="plus" size={15} />New set</button>{/if}
         {/snippet}
       </State>
     {:else}
@@ -66,7 +67,7 @@
                 <strong class="nm"><bdi>{clean(s.name)}</bdi></strong>
                 {#if s.chat}<span class="on" title={s.chat === 'chat' ? 'Shown in chat' : `Active in ${s.chat} chat`}><Icon name="zap" size={15} /><span class="sr-only">{s.chat === 'chat' ? 'Shown in chat' : `Active in ${s.chat} chat`}</span></span>{/if}
               </span>
-              <span class="meta">{kindLabel(s.kind)} · {count(s.used)} / {count(s.capacity)}</span>
+              <span class="meta">{kindLabel(s.kind)} · <Capacity used={s.used} capacity={s.capacity} /></span>
               <span class="cap" role="meter" aria-label="How full" aria-valuemin={0} aria-valuemax={100} aria-valuenow={p}>
                 <span class="fill" class:full={p >= 90} style:width="{p}%"></span>
                 <span class="pc">{p}%</span>

@@ -88,7 +88,7 @@
   {:else if !me}
     <State title="Sign in to redeem a code.">
       Codes are added to your account.
-      {#snippet actions()}<a class="ui-btn primary" href="/signin?back={encodeURIComponent('/redeem')}">Sign in</a>{/snippet}
+      {#snippet actions()}<a class="btn btn-s btn-primary" href="/signin?back={encodeURIComponent('/redeem')}">Sign in</a>{/snippet}
     </State>
   {:else}
     <form class="form" onsubmit={submit} novalidate>
@@ -98,9 +98,9 @@
           spellcheck="false" maxlength="80" placeholder="ABCD-1234-EFGH" disabled={locked} aria-invalid={problem ? 'true' : undefined} aria-describedby={problem ? 'redeem-problem' : undefined} />
       </label>
       {#if problem}<p class="problem" id="redeem-problem" role="alert">{problem}</p>{/if}
-      <div class="ui-actions">
-        <button class="ui-btn primary" type="submit" disabled={busy || locked}>{busy ? 'Checking…' : 'Redeem'}</button>
-        <a class="ui-btn ghost" href="/shop">Back to the shop</a>
+      <div class="actions">
+        <button class="btn btn-s btn-primary" type="submit" disabled={busy || locked}>{busy ? 'Checking…' : 'Redeem'}</button>
+        <a class="btn btn-s btn-ghost" href="/shop">Back to the shop</a>
       </div>
     </form>
 
@@ -117,7 +117,7 @@
               <li><span class="pt"><PaintedName name={p.name} paint={p} /></span><span class="kind">Paint</span></li>
             {/each}
           </ul>
-          <div class="ui-actions"><a class="ui-btn primary" href={sectionHref(me.id, 'cosmetics')}>Equip {gave === 1 ? 'it' : 'them'} in Cosmetics</a></div>
+          <div class="actions"><a class="btn btn-s btn-primary" href={sectionHref(me.id, 'cosmetics')}>Equip {gave === 1 ? 'it' : 'them'} in Cosmetics</a></div>
         {:else}
           <h2 id="gave-h">You have all of it already</h2>
           <p class="sub">That code worked, but <bdi>{clean(result.name)}</bdi> only holds things you already own.</p>
