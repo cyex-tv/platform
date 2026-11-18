@@ -5,7 +5,6 @@
   import { ApiError, gql } from '$lib/api';
   import Chip from '$lib/components/Chip.svelte';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
-  import Icon from '$lib/components/Icon.svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
@@ -36,6 +35,9 @@
   import SideRail from '$lib/shell/SideRail.svelte';
   import { clean, count, iso } from '$lib/format';
   import { SEARCH } from '$lib/queries';
+  import SearchField from '$lib/components/browse/SearchField.svelte';
+  import SearchTabs from '$lib/components/browse/SearchTabs.svelte';
+  import UsersSearch from '$lib/components/browse/UsersSearch.svelte';
 
   let { data } = $props();
 
@@ -258,27 +260,7 @@
 </svelte:head>
 
 {#snippet field()}
-  <form class="search" role="search" onsubmit={submit}>
-    <Icon name="search" size={16} />
-    <label class="sr-only" for="q">Emote name or tag</label>
-    <input
-      id="q"
-      bind:this={input}
-      bind:value={text}
-      oninput={typed}
-      type="search"
-      name="q"
-      placeholder="Name or tag"
-      autocomplete="off"
-      autocapitalize="off"
-      spellcheck="false"
-      enterkeyhint="search"
-      data-page-search
-    />
-    {#if text}
-      <span class="clear"><IconButton icon="x" label="Clear search" size="s" tip="none" onclick={clearText} type="button" /></span>
-    {/if}
-  </form>
+  <SearchField bind:value={text} bind:input label="Emote name or tag" placeholder="Name or tag" oninput={typed} onsubmit={submit} onclear={clearText} />
 {/snippet}
 
 {#snippet railHead()}
@@ -292,6 +274,9 @@
   </div>
 {/snippet}
 
+{#if view.tab === 'users'}
+  <UsersSearch {data} />
+{:else}
 <RailLayout>
   {#snippet rail()}
     <!-- In the sheet its title already says Filters: the head is only there to Reset. -->
@@ -314,6 +299,7 @@
         {#if !data.error}<p class="total" aria-live="polite">{countText}</p>{/if}
       </div>
       <div class="tools">
+        <SearchTabs {view} />
         <Segmented label="Sort" size="s" options={sorts} value={view.sort} onchange={(v) => go({ sort: v }, true)} />
         <div class="dens" role="group" aria-label="View">
           <IconButton icon="grid" label="Comfortable grid" size="s" variant="outline" pressed={layout === 'grid' && density === 'comfortable'} onclick={() => setDensity('comfortable')} />
@@ -403,6 +389,7 @@
     {/if}
   </div>
 </RailLayout>
+{/if}
 
 <style>
   /* Rail head: the rail's title, the number of filters on, and Reset. */
@@ -414,20 +401,6 @@
   .reset { height: 40px; padding: 0 10px; border: 0; border-radius: var(--radius); background: none; color: var(--accent-text);
     font: inherit; font-size: var(--t-fine); font-weight: 500; cursor: pointer; }
   .reset:active { opacity: .6; }
-
-  /* The search field: in the rail on wide screens, above the toolbar on narrow ones. */
-  .search { position: relative; display: flex; align-items: center; min-width: 0; color: var(--muted); }
-  .search > :global(svg) { position: absolute; left: 10px; pointer-events: none; }
-  .search input { width: 100%; min-width: 0; height: 40px; padding: 0 40px 0 32px; font: inherit; font-size: 16px; color: var(--text);
-    background: var(--bg); border: 1px solid var(--field-border); border-radius: var(--radius-btn);
-    transition: border-color var(--fast); -webkit-appearance: none; appearance: none; }
-  .search input::-webkit-search-cancel-button { display: none; }
-  .search input::placeholder { color: var(--dim); }
-  .search input:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-  .clear { position: absolute; right: 4px; display: inline-flex; }
-  @media (hover: hover) and (pointer: fine) { .search input:hover { border-color: var(--muted); } }
-  /* Narrow: the field sits in the sticky Filters bar, beside the button, at its height. */
-  :global(.bar-extra) .search input { height: 40px; background: var(--surface); }
 
   /* Toolbar: title and count left; sort and density right; one 40px row like the header's. */
   .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; min-height: 40px; }
