@@ -528,11 +528,11 @@ async fn search_counts_up_to_a_cap() {
     assert_eq!(page["total"], 1000, "{r}");
     assert_eq!(page["totalCapped"], true, "{r}");
     assert_eq!(page["items"].as_array().unwrap().len(), 50, "{r}");
-    // The last counted page is 20; asking further lands on it rather than past the window.
+    // The last counted page is 20 and full; a page past it is empty (not page 20 again), with
+    // the same total.
     let r = w
-        .post(None, SEARCH, json!({ "q": "bulkname", "n": 50, "p": 999 }))
+        .post(None, SEARCH, json!({ "q": "bulkname", "n": 50, "p": 20 }))
         .await;
-    assert_eq!(r["data"]["searchAccounts"]["page"], 20, "{r}");
     assert_eq!(
         r["data"]["searchAccounts"]["items"]
             .as_array()
@@ -541,6 +541,12 @@ async fn search_counts_up_to_a_cap() {
         50,
         "{r}"
     );
+    let r = w
+        .post(None, SEARCH, json!({ "q": "bulkname", "n": 50, "p": 999 }))
+        .await;
+    assert_eq!(r["data"]["searchAccounts"]["page"], 999, "{r}");
+    assert_eq!(r["data"]["searchAccounts"]["items"], json!([]), "{r}");
+    assert_eq!(r["data"]["searchAccounts"]["total"], 1000, "{r}");
     w.db.close().await;
 }
 
