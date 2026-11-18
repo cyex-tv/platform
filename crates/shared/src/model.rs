@@ -585,7 +585,10 @@ pub struct AccountHit {
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct AccountResults {
     pub items: Vec<AccountHit>,
+    /// How many accounts match, counted up to 1000.
     pub total: u64,
+    /// More than `total` match: show it as "1000+".
+    pub total_capped: bool,
     pub page: u32,
     pub per_page: u32,
 }
@@ -795,6 +798,16 @@ pub struct ActivityCosmeticChange {
     pub from_name: Option<String>,
     pub to_id: Option<String>,
     pub to_name: Option<String>,
+}
+
+/// A page of an activity feed. A page can hold fewer lines than asked for without being the last
+/// one: the feed skips what isn't public.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct ActivityPage {
+    pub entries: Vec<ActivityEntry>,
+    /// Pass as `before` to get the next page; null when there is none.
+    pub next: Option<String>,
 }
 
 /// One line of an account's public activity feed (7TV's "Activity" tab).

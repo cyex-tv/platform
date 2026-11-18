@@ -15,9 +15,12 @@ use axum::http::header::RETRY_AFTER;
 use axum::http::{HeaderValue, Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use cyex_tv_shared::error::ApiError;
+use cyex_tv_auth::Caller;
+use cyex_tv_db::ids;
+use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::ratelimit::{Limiter, Rate, client_ip};
 
+use crate::errors::rate_limited;
 use crate::state::AppState;
 
 #[derive(Clone, Copy, Debug)]
@@ -49,6 +52,11 @@ pub struct Rates {
     pub data_export: Rate,
     /// `searchAccounts`, per account, or per IP when signed out.
     pub account_search: Rate,
+    /// The public reads that fan out into many lookups (`accountActivity`, `emoteActivity`,
+    /// `accountSets`), per account, or per IP when signed out.
+    pub heavy_reads: Rate,
+    /// `deleteAccount`, per account, tries with a wrong confirmation included.
+    pub delete_account: Rate,
 }
 
 impl Default for Rates {
@@ -67,6 +75,8 @@ impl Default for Rates {
             set_clones: Rate::per_hour(30),
             data_export: Rate::per_hour(5),
             account_search: Rate::per_minute(60),
+            heavy_reads: Rate::per_minute(120),
+            delete_account: Rate::per_hour(3),
         }
     }
 }
@@ -87,6 +97,8 @@ pub struct Limits {
     pub set_clones: Limiter,
     pub data_export: Limiter,
     pub account_search: Limiter,
+    pub heavy_reads: Limiter,
+    pub delete_account: Limiter,
     /// Take the client IP from `CF-Connecting-IP` (`CYEX_TV_TRUST_CLOUDFLARE=true`).
     pub trust_cloudflare: bool,
 }
@@ -108,6 +120,8 @@ impl Limits {
             set_clones: Limiter::new(rates.set_clones),
             data_export: Limiter::new(rates.data_export),
             account_search: Limiter::new(rates.account_search),
+            heavy_reads: Limiter::new(rates.heavy_reads),
+            delete_account: Limiter::new(rates.delete_account),
             trust_cloudflare,
         }
     }
@@ -178,6 +192,32 @@ impl Default for Limits {
 /// The client's IP as the limits saw it, for limits applied inside GraphQL resolvers.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ClientIp(pub String);
+
+/// The key a per-person limit counts under: the account when signed in, else the client's IP.
+fn person_key(caller: Option<&Caller>, ip: &str) -> String {
+    match caller {
+        Some(c) => format!("a:{}", ids::to_text(c.account_id)),
+        None => format!("ip:{ip}"),
+    }
+}
+
+/// Takes one token of the `heavy_reads` limit for a public read that fans out into many lookups.
+pub fn heavy_read(state: &AppState, caller: Option<&Caller>, ip: &str) -> ApiResult<()> {
+    state
+        .limits
+        .heavy_reads
+        .check(&person_key(caller, ip))
+        .map_err(|_| rate_limited("That's a lot of reads. Try again in a minute."))
+}
+
+/// Takes one token of the `account_search` limit.
+pub fn account_search(state: &AppState, caller: Option<&Caller>, ip: &str) -> ApiResult<()> {
+    state
+        .limits
+        .account_search
+        .check(&person_key(caller, ip))
+        .map_err(|_| rate_limited("That's a lot of searches. Try again in a minute."))
+}
 
 /// The 429 answer.
 pub fn too_many(wait: std::time::Duration) -> Response {

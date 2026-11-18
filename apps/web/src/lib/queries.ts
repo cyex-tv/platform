@@ -1105,91 +1105,98 @@ export const PROFILE_EDITED = graphql(`
   }
 `);
 
-// An account's public activity feed (ADR 0016), newest first; page back with `before`.
+// An account's public activity feed (ADR 0016), newest first; page back with `before` set to the
+// answer's `next` (a page can be short and still have one).
 export const ACCOUNT_ACTIVITY = graphql(`
   query AccountActivity($accountId: String!, $before: String, $limit: Int) {
-    accountActivity(accountId: $accountId, before: $before, limit: $limit) {
-      id
-      kind
-      actor {
+    accountActivityPage(accountId: $accountId, before: $before, limit: $limit) {
+      entries {
         id
-        displayName
-        avatar
-      }
-      set {
-        id
-        name
-      }
-      emote {
-        id
-        name
-        host
-        files {
-          name
-          width
-          height
-          isStatic
+        kind
+        actor {
+          id
+          displayName
+          avatar
         }
-      }
-      fromName
-      toName
-      badge {
-        fromId
+        set {
+          id
+          name
+        }
+        emote {
+          id
+          name
+          host
+          files {
+            name
+            width
+            height
+            isStatic
+          }
+        }
         fromName
-        toId
         toName
+        badge {
+          fromId
+          fromName
+          toId
+          toName
+        }
+        paint {
+          fromId
+          fromName
+          toId
+          toName
+        }
+        createdAt
       }
-      paint {
-        fromId
-        fromName
-        toId
-        toName
-      }
-      createdAt
+      next
     }
   }
 `);
 
 export const EMOTE_ACTIVITY = graphql(`
   query EmoteActivity($emoteId: String!, $before: String, $limit: Int) {
-    emoteActivity(emoteId: $emoteId, before: $before, limit: $limit) {
-      id
-      kind
-      actor {
+    emoteActivityPage(emoteId: $emoteId, before: $before, limit: $limit) {
+      entries {
         id
-        displayName
-        avatar
-      }
-      set {
-        id
-        name
-      }
-      emote {
-        id
-        name
-        host
-        files {
-          name
-          width
-          height
-          isStatic
+        kind
+        actor {
+          id
+          displayName
+          avatar
         }
-      }
-      fromName
-      toName
-      badge {
-        fromId
+        set {
+          id
+          name
+        }
+        emote {
+          id
+          name
+          host
+          files {
+            name
+            width
+            height
+            isStatic
+          }
+        }
         fromName
-        toId
         toName
+        badge {
+          fromId
+          fromName
+          toId
+          toName
+        }
+        paint {
+          fromId
+          fromName
+          toId
+          toName
+        }
+        createdAt
       }
-      paint {
-        fromId
-        fromName
-        toId
-        toName
-      }
-      createdAt
+      next
     }
   }
 `);

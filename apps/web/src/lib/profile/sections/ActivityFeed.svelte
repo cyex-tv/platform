@@ -7,7 +7,7 @@
   import State from '$lib/components/State.svelte';
   import { loadCatalog, type Catalog } from '$lib/cosmetics/store.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
-  import { loadActivity, PAGE, type ActivityItem } from '../activity';
+  import { loadActivity, type ActivityItem } from '../activity';
   import ActivityRows from '../ActivityRows.svelte';
 
   let { accountId }: { accountId: string } = $props();
@@ -15,7 +15,9 @@
   let items = $state<ActivityItem[]>([]);
   let first = $state(true);
   let busy = $state(false);
-  let more = $state(false);
+  /** Where the next page starts; null once the feed has ended. */
+  let cursor = $state<string | null>(null);
+  const more = $derived(cursor !== null);
   let problem = $state('');
   let catalog = $state<Catalog | null>(null);
 
@@ -24,9 +26,9 @@
     busy = true;
     problem = '';
     try {
-      const got = await loadActivity(accountId, items.at(-1)?.id ?? null);
-      items = [...items, ...got];
-      more = got.length === PAGE;
+      const got = await loadActivity(accountId, cursor);
+      items = [...items, ...got.items];
+      cursor = got.next;
     } catch (e) {
       problem = e instanceof Error ? e.message : 'That didn’t load.';
     } finally {

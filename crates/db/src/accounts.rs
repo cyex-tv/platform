@@ -146,6 +146,25 @@ pub async fn identities(conn: &mut PgConnection, account_id: Uuid) -> DbResult<V
     .await?)
 }
 
+/// The identities of many accounts at once, Twitch first, by account.
+pub async fn identities_many(
+    conn: &mut PgConnection,
+    account_ids: &[Uuid],
+) -> DbResult<std::collections::HashMap<Uuid, Vec<Identity>>> {
+    let rows: Vec<Identity> = sqlx::query_as(&format!(
+        "SELECT {IDENTITY} FROM identities WHERE account_id = ANY($1)
+         ORDER BY account_id, platform DESC"
+    ))
+    .bind(account_ids)
+    .fetch_all(conn)
+    .await?;
+    let mut out: std::collections::HashMap<Uuid, Vec<Identity>> = std::collections::HashMap::new();
+    for row in rows {
+        out.entry(row.account_id).or_default().push(row);
+    }
+    Ok(out)
+}
+
 pub async fn find_identity(
     conn: &mut PgConnection,
     platform: Platform,

@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
-use cyex_tv_shared::model::EmoteState;
+use cyex_tv_shared::model::{AccountSummary, EmoteState};
 use serde_json::Value;
 use sqlx::{FromRow, PgConnection};
 use uuid::Uuid;
@@ -133,16 +133,68 @@ pub async fn emotes_by_owner(
     Ok((items, total))
 }
 
-const MEMBER_ROW: &str =
-    "SELECT m.set_id, m.emote_id, m.name, m.zero_width, m.added_by, m.added_at,
+macro_rules! member_columns {
+    () => {
+        "m.set_id, m.emote_id, m.name, m.zero_width, m.added_by, m.added_at,
                 e.owner_account_id AS emote_owner, e.name AS emote_name,
                 e.zero_width AS emote_zero_width, e.private, e.nsfw,
                 e.animated, e.state, e.created_at AS emote_created_at,
-                f.sha256, f.variants
+                f.sha256, f.variants"
+    };
+}
+
+const MEMBER_ROW: &str = concat!(
+    "SELECT ",
+    member_columns!(),
+    "
          FROM emote_set_members m
          JOIN emotes e ON e.id = m.emote_id AND e.deleted_at IS NULL
          LEFT JOIN files f ON f.id = e.file_id
-";
+"
+);
+
+/// Who may see which members: approved ones always; pending ones for a reviewer, in the sets
+/// `edit_sets` (the viewer owns or edits) and the viewer's own emotes.
+#[derive(Clone, Debug, Default)]
+pub struct MemberAccess<'a> {
+    pub account: Option<Uuid>,
+    pub reviewer: bool,
+    pub edit_sets: &'a [Uuid],
+}
+
+/// The newest `per_set` members each of the given sets shows `access`, newest first within each
+/// set (by when they were added). Only that many rows are read, whatever the sets hold.
+pub async fn newest_members(
+    conn: &mut PgConnection,
+    set_ids: &[Uuid],
+    access: &MemberAccess<'_>,
+    per_set: i64,
+) -> DbResult<Vec<MemberRow>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT * FROM (
+             SELECT {},
+                    row_number() OVER (PARTITION BY m.set_id
+                                       ORDER BY m.added_at DESC, m.emote_id DESC) AS rn
+             FROM emote_set_members m
+             JOIN emotes e ON e.id = m.emote_id AND e.deleted_at IS NULL
+             LEFT JOIN files f ON f.id = e.file_id
+             WHERE m.set_id = ANY($1)
+               AND (e.state = 'approved'
+                    OR (e.state = 'pending'
+                        AND ($2 OR m.set_id = ANY($3) OR e.owner_account_id = $4)))
+         ) t
+         WHERE rn <= $5
+         ORDER BY set_id, rn",
+        member_columns!()
+    ))
+    .bind(set_ids)
+    .bind(access.reviewer)
+    .bind(access.edit_sets)
+    .bind(access.account)
+    .bind(per_set)
+    .fetch_all(conn)
+    .await?)
+}
 
 /// The members of the given sets, oldest first within each set.
 pub async fn members(conn: &mut PgConnection, set_ids: &[Uuid]) -> DbResult<Vec<MemberRow>> {
@@ -193,6 +245,16 @@ pub struct Summary {
     pub account_id: Uuid,
     pub display_name: String,
     pub avatar: Option<String>,
+}
+
+impl From<&Summary> for AccountSummary {
+    fn from(s: &Summary) -> Self {
+        Self {
+            id: crate::ids::to_text(s.account_id),
+            display_name: s.display_name.clone(),
+            avatar: s.avatar.clone(),
+        }
+    }
 }
 
 /// Summaries of live accounts. Deleted accounts and accounts with no identity are left out.

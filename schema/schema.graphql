@@ -55,7 +55,14 @@ type AccountProfile {
 
 type AccountResults {
 	items: [AccountHit!]!
+	"""
+	How many accounts match, counted up to 1000.
+	"""
 	total: Int!
+	"""
+	More than `total` match: show it as "1000+".
+	"""
+	totalCapped: Boolean!
 	page: Int!
 	perPage: Int!
 }
@@ -196,6 +203,18 @@ enum ActivityKind {
 	A set was renamed (`from_name`, `to_name`).
 	"""
 	SET_RENAMED
+}
+
+"""
+A page of an activity feed. A page can hold fewer lines than asked for without being the last
+one: the feed skips what isn't public.
+"""
+type ActivityPage {
+	entries: [ActivityEntry!]!
+	"""
+	Pass as `before` to get the next page; null when there is none.
+	"""
+	next: String
 }
 
 """
@@ -985,7 +1004,7 @@ type Mutation {
 	your approved emotes that are in other people's sets stay, shown as by a deleted user;
 	your other emotes are deleted. Signing in again later makes a new account. Audited.
 	`confirm_mismatch` when `confirm` isn't one of your logins; `restricted` while the account's
-	uploads or sign-in are blocked.
+	uploads or sign-in are blocked. 3 tries an hour (`rate_limited`).
 	"""
 	deleteAccount(confirm: String!): Boolean!
 	"""
@@ -1341,7 +1360,8 @@ type Query {
 	"""
 	An account's `LISTED` sets as profile cards, oldest first, at most 50. `preview` is how
 	many of each set's newest emotes to include, 0 to 50, default 12. Empty when the account
-	is unknown, deleted or blocked.
+	is unknown, deleted or blocked. Counts as a heavy read: 120 a minute per account, or per IP
+	signed out (`rate_limited`), and a high query cost.
 	"""
 	accountSets(accountId: String!, preview: Int): [SetSummary!]!
 	"""
@@ -1363,7 +1383,9 @@ type Query {
 	Accounts by Twitch or Kick login or display name (a leading `@` is ignored): exact login
 	first, then login and name prefixes, then similar names. Public fields only; deleted and
 	blocked accounts are never listed. `perPage` is 1 to 50, default 20. 60 searches a minute
-	per account, or per IP signed out (`rate_limited`). An empty `query` finds nobody.
+	per account, or per IP signed out (`rate_limited`). A `query` under 2 characters (after the
+	`@`) finds nobody. Matches are counted up to 1000: `totalCapped` says there are more, and
+	the pages end there.
 	"""
 	searchAccounts(query: String!, page: Int, perPage: Int): AccountResults!
 	"""
@@ -1386,17 +1408,32 @@ type Query {
 	An account's public activity, newest first, like 7TV's "Activity" tab: sets and emotes the
 	owner or their editors changed, the active set, badge and paint picks, approved uploads.
 	Page back with `before` (an entry ID); `limit` is 1 to 100, default 30. Empty when the
-	account is unknown, deleted or blocked. Nothing private or from moderation shows.
+	account is unknown, deleted or blocked. Nothing private or from moderation shows. A page
+	can be shorter than `limit` and still not the last: use `accountActivityPage` to know.
+	A heavy read: 120 a minute per account, or per IP signed out (`rate_limited`).
 	"""
 	accountActivity(accountId: String!, before: String, limit: Int): [ActivityEntry!]!
+	"""
+	`accountActivity` with a cursor: `next` is the `before` for the following page, null when
+	there is none. A page can hold fewer than `limit` entries and still have a `next`, because
+	the feed skips what isn't public.
+	"""
+	accountActivityPage(accountId: String!, before: String, limit: Int): ActivityPage!
 	"""
 	An emote's public activity, newest first: `EMOTE_UPLOADED` (when it was approved, shown
 	as by its owner) and `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED` in listed
 	sets, by their owners and account editors. Page back with `before` (an entry ID); `limit`
 	is 1 to 100, default 30. Empty when the emote is unknown or not public. Nothing private or
-	from moderation shows.
+	from moderation shows. A page can be shorter than `limit` and still not the last: use
+	`emoteActivityPage` to know. A heavy read: 120 a minute per account, or per IP signed out
+	(`rate_limited`).
 	"""
 	emoteActivity(emoteId: String!, before: String, limit: Int): [ActivityEntry!]!
+	"""
+	`emoteActivity` with a cursor: `next` is the `before` for the following page, null when
+	there is none. A page can hold fewer than `limit` entries and still have a `next`.
+	"""
+	emoteActivityPage(emoteId: String!, before: String, limit: Int): ActivityPage!
 	"""
 	Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
 	default 8. Empty when the emote is unknown or not public.

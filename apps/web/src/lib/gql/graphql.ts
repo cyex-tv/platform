@@ -64,7 +64,10 @@ export type AccountResults = {
   items: Array<AccountHit>;
   page: Scalars['Int']['output'];
   perPage: Scalars['Int']['output'];
+  /** How many accounts match, counted up to 1000. */
   total: Scalars['Int']['output'];
+  /** More than `total` match: show it as "1000+". */
+  totalCapped: Scalars['Boolean']['output'];
 };
 
 /** One place you are signed in. Never holds the token or anything made from it. */
@@ -168,6 +171,17 @@ export type ActivityKind =
   | 'SET_EMOTE_RENAMED'
   /** A set was renamed (`from_name`, `to_name`). */
   | 'SET_RENAMED';
+
+/**
+ * A page of an activity feed. A page can hold fewer lines than asked for without being the last
+ * one: the feed skips what isn't public.
+ */
+export type ActivityPage = {
+  __typename?: 'ActivityPage';
+  entries: Array<ActivityEntry>;
+  /** Pass as `before` to get the next page; null when there is none. */
+  next?: Maybe<Scalars['String']['output']>;
+};
 
 /** A set, as a feed line names it. */
 export type ActivitySet = {
@@ -648,7 +662,7 @@ export type Mutation = {
    * your approved emotes that are in other people's sets stay, shown as by a deleted user;
    * your other emotes are deleted. Signing in again later makes a new account. Audited.
    * `confirm_mismatch` when `confirm` isn't one of your logins; `restricted` while the account's
-   * uploads or sign-in are blocked.
+   * uploads or sign-in are blocked. 3 tries an hour (`rate_limited`).
    */
   deleteAccount: Scalars['Boolean']['output'];
   /**
@@ -1269,9 +1283,17 @@ export type Query = {
    * An account's public activity, newest first, like 7TV's "Activity" tab: sets and emotes the
    * owner or their editors changed, the active set, badge and paint picks, approved uploads.
    * Page back with `before` (an entry ID); `limit` is 1 to 100, default 30. Empty when the
-   * account is unknown, deleted or blocked. Nothing private or from moderation shows.
+   * account is unknown, deleted or blocked. Nothing private or from moderation shows. A page
+   * can be shorter than `limit` and still not the last: use `accountActivityPage` to know.
+   * A heavy read: 120 a minute per account, or per IP signed out (`rate_limited`).
    */
   accountActivity: Array<ActivityEntry>;
+  /**
+   * `accountActivity` with a cursor: `next` is the `before` for the following page, null when
+   * there is none. A page can hold fewer than `limit` entries and still have a `next`, because
+   * the feed skips what isn't public.
+   */
+  accountActivityPage: ActivityPage;
   /**
    * The badge and paint up to 100 accounts show, with the badges and paints themselves, by
    * cyex.tv account ID (for names on profiles, tiles and lists). Only accounts showing
@@ -1294,7 +1316,8 @@ export type Query = {
   /**
    * An account's `LISTED` sets as profile cards, oldest first, at most 50. `preview` is how
    * many of each set's newest emotes to include, 0 to 50, default 12. Empty when the account
-   * is unknown, deleted or blocked.
+   * is unknown, deleted or blocked. Counts as a heavy read: 120 a minute per account, or per IP
+   * signed out (`rate_limited`), and a high query cost.
    */
   accountSets: Array<SetSummary>;
   /**
@@ -1344,9 +1367,16 @@ export type Query = {
    * as by its owner) and `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED` in listed
    * sets, by their owners and account editors. Page back with `before` (an entry ID); `limit`
    * is 1 to 100, default 30. Empty when the emote is unknown or not public. Nothing private or
-   * from moderation shows.
+   * from moderation shows. A page can be shorter than `limit` and still not the last: use
+   * `emoteActivityPage` to know. A heavy read: 120 a minute per account, or per IP signed out
+   * (`rate_limited`).
    */
   emoteActivity: Array<ActivityEntry>;
+  /**
+   * `emoteActivity` with a cursor: `next` is the `before` for the following page, null when
+   * there is none. A page can hold fewer than `limit` entries and still have a `next`.
+   */
+  emoteActivityPage: ActivityPage;
   /**
    * Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
    * default 8. Empty when the emote is unknown or not public.
@@ -1407,7 +1437,9 @@ export type Query = {
    * Accounts by Twitch or Kick login or display name (a leading `@` is ignored): exact login
    * first, then login and name prefixes, then similar names. Public fields only; deleted and
    * blocked accounts are never listed. `perPage` is 1 to 50, default 20. 60 searches a minute
-   * per account, or per IP signed out (`rate_limited`). An empty `query` finds nobody.
+   * per account, or per IP signed out (`rate_limited`). A `query` under 2 characters (after the
+   * `@`) finds nobody. Matches are counted up to 1000: `totalCapped` says there are more, and
+   * the pages end there.
    */
   searchAccounts: AccountResults;
   /**
@@ -1448,6 +1480,13 @@ export type QueryAccountArgs = {
 
 
 export type QueryAccountActivityArgs = {
+  accountId: Scalars['String']['input'];
+  before?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryAccountActivityPageArgs = {
   accountId: Scalars['String']['input'];
   before?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -1531,6 +1570,13 @@ export type QueryEmoteArgs = {
 
 
 export type QueryEmoteActivityArgs = {
+  before?: InputMaybe<Scalars['String']['input']>;
+  emoteId: Scalars['String']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryEmoteActivityPageArgs = {
   before?: InputMaybe<Scalars['String']['input']>;
   emoteId: Scalars['String']['input'];
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -2544,7 +2590,7 @@ export type AccountActivityQueryVariables = Exact<{
 }>;
 
 
-export type AccountActivityQuery = { __typename?: 'Query', accountActivity: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> };
+export type AccountActivityQuery = { __typename?: 'Query', accountActivityPage: { __typename?: 'ActivityPage', next?: string | null, entries: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> } };
 
 export type EmoteActivityQueryVariables = Exact<{
   emoteId: Scalars['String']['input'];
@@ -2553,7 +2599,7 @@ export type EmoteActivityQueryVariables = Exact<{
 }>;
 
 
-export type EmoteActivityQuery = { __typename?: 'Query', emoteActivity: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> };
+export type EmoteActivityQuery = { __typename?: 'Query', emoteActivityPage: { __typename?: 'ActivityPage', next?: string | null, entries: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> } };
 
 export class TypedDocumentString<TResult, TVariables>
   extends String
@@ -4607,87 +4653,93 @@ fragment SetFields on EmoteSet {
 }`) as unknown as TypedDocumentString<ProfileEditedQuery, ProfileEditedQueryVariables>;
 export const AccountActivityDocument = new TypedDocumentString(`
     query AccountActivity($accountId: String!, $before: String, $limit: Int) {
-  accountActivity(accountId: $accountId, before: $before, limit: $limit) {
-    id
-    kind
-    actor {
+  accountActivityPage(accountId: $accountId, before: $before, limit: $limit) {
+    entries {
       id
-      displayName
-      avatar
-    }
-    set {
-      id
-      name
-    }
-    emote {
-      id
-      name
-      host
-      files {
-        name
-        width
-        height
-        isStatic
+      kind
+      actor {
+        id
+        displayName
+        avatar
       }
-    }
-    fromName
-    toName
-    badge {
-      fromId
+      set {
+        id
+        name
+      }
+      emote {
+        id
+        name
+        host
+        files {
+          name
+          width
+          height
+          isStatic
+        }
+      }
       fromName
-      toId
       toName
+      badge {
+        fromId
+        fromName
+        toId
+        toName
+      }
+      paint {
+        fromId
+        fromName
+        toId
+        toName
+      }
+      createdAt
     }
-    paint {
-      fromId
-      fromName
-      toId
-      toName
-    }
-    createdAt
+    next
   }
 }
     `) as unknown as TypedDocumentString<AccountActivityQuery, AccountActivityQueryVariables>;
 export const EmoteActivityDocument = new TypedDocumentString(`
     query EmoteActivity($emoteId: String!, $before: String, $limit: Int) {
-  emoteActivity(emoteId: $emoteId, before: $before, limit: $limit) {
-    id
-    kind
-    actor {
+  emoteActivityPage(emoteId: $emoteId, before: $before, limit: $limit) {
+    entries {
       id
-      displayName
-      avatar
-    }
-    set {
-      id
-      name
-    }
-    emote {
-      id
-      name
-      host
-      files {
-        name
-        width
-        height
-        isStatic
+      kind
+      actor {
+        id
+        displayName
+        avatar
       }
-    }
-    fromName
-    toName
-    badge {
-      fromId
+      set {
+        id
+        name
+      }
+      emote {
+        id
+        name
+        host
+        files {
+          name
+          width
+          height
+          isStatic
+        }
+      }
       fromName
-      toId
       toName
+      badge {
+        fromId
+        fromName
+        toId
+        toName
+      }
+      paint {
+        fromId
+        fromName
+        toId
+        toName
+      }
+      createdAt
     }
-    paint {
-      fromId
-      fromName
-      toId
-      toName
-    }
-    createdAt
+    next
   }
 }
     `) as unknown as TypedDocumentString<EmoteActivityQuery, EmoteActivityQueryVariables>;

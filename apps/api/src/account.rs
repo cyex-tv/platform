@@ -25,16 +25,9 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::catalog::{db_error, my_sets, not_found, publish_member_event};
+use crate::errors::{bad, rate_limited, sqlx_error};
 use crate::state::AppState;
 use crate::views;
-
-fn sqlx_error(err: sqlx::Error) -> ApiError {
-    db_error(err.into())
-}
-
-fn bad(code: &'static str, message: &str) -> ApiError {
-    ApiError::new(StatusCode::BAD_REQUEST, code, message)
-}
 
 /// A short, human name for the device a session signed in from, from its user agent. Only the
 /// browser family and the system are named; versions and everything else are dropped.
@@ -428,7 +421,7 @@ pub fn confirms(confirm: &str, logins: &[String]) -> bool {
 
 /// Deletes the caller's account at once, as the module says. `confirm` must be one of its Twitch
 /// or Kick logins, and the request must come from the website (the cookie session), not an app
-/// token. The owner's account can't be deleted.
+/// token. The owner's account can't be deleted. 3 tries an hour per account (`rate_limited`).
 pub async fn delete_account(
     state: &AppState,
     caller: &Caller,
@@ -448,6 +441,14 @@ pub async fn delete_account(
             "The owner's account can't be deleted.",
         ));
     }
+    // Counts every try, so a wrong confirmation can't be guessed at.
+    state
+        .limits
+        .delete_account
+        .check(&ids::to_text(caller.account_id))
+        .map_err(|_| {
+            rate_limited("That's a lot of tries to delete the account. Try again in an hour.")
+        })?;
     let account_id = caller.account_id;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
