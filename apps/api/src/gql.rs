@@ -365,6 +365,23 @@ impl Query {
             .map_err(api_error)
     }
 
+    /// An emote's public activity, newest first: `EMOTE_UPLOADED` (when it was approved, shown
+    /// as by its owner) and `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED` in listed
+    /// sets, by their owners and account editors. Page back with `before` (an entry ID); `limit`
+    /// is 1 to 100, default 30. Empty when the emote is unknown or not public. Nothing private or
+    /// from moderation shows.
+    async fn emote_activity(
+        &self,
+        ctx: &Context<'_>,
+        emote_id: String,
+        before: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<Vec<ActivityEntry>> {
+        activity::emote_activity(state(ctx), &emote_id, before.as_deref(), limit)
+            .await
+            .map_err(api_error)
+    }
+
     /// Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
     /// default 8. Empty when the emote is unknown or not public.
     async fn emote_channels(

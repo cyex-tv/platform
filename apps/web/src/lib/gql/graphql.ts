@@ -1077,6 +1077,14 @@ export type Query = {
   /** An emote. Pending ones are visible to their owner and to moderators only. */
   emote?: Maybe<Emote>;
   /**
+   * An emote's public activity, newest first: `EMOTE_UPLOADED` (when it was approved, shown
+   * as by its owner) and `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED` in listed
+   * sets, by their owners and account editors. Page back with `before` (an entry ID); `limit`
+   * is 1 to 100, default 30. Empty when the emote is unknown or not public. Nothing private or
+   * from moderation shows.
+   */
+  emoteActivity: Array<ActivityEntry>;
+  /**
    * Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
    * default 8. Empty when the emote is unknown or not public.
    */
@@ -1218,6 +1226,13 @@ export type QueryCosmeticImageArgs = {
 
 export type QueryEmoteArgs = {
   id: Scalars['String']['input'];
+};
+
+
+export type QueryEmoteActivityArgs = {
+  before?: InputMaybe<Scalars['String']['input']>;
+  emoteId: Scalars['String']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 

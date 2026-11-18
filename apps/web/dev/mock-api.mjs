@@ -842,6 +842,28 @@ function activityAnswer(v) {
   return { data: { accountActivity: rows.slice(0, limit) } };
 }
 
+// `emoteActivity(emoteId, before, limit)`: the sample lines about this emote from every account's
+// feed, plus an upload line and a few adds for any public emote, newest first.
+function emoteActivityAnswer(v) {
+  const e = findEmote(v.emoteId ?? v.id);
+  if (!e || e.state !== 'APPROVED' || e.flags.private) return { data: { emoteActivity: [] } };
+  const own = Object.values(ACTIVITY).flat().filter((a) => a.emote?.id === e.id);
+  const n = Number(e.id.slice(-3)) || 0;
+  const made = [
+    act(900 + n * 4, 90 + n, 'SET_EMOTE_ADDED', OTHERS[n % OTHERS.length], { set: aSet(SETS[n % SETS.length]), emote: aEmote(e) }),
+    act(901 + n * 4, 600 + n, 'SET_EMOTE_RENAMED', OTHERS[(n + 1) % OTHERS.length], { set: aSet(SETS[(n + 1) % SETS.length]), emote: aEmote(e, e.name + 'x'), fromName: e.name, toName: e.name + 'x' }),
+    act(902 + n * 4, 3000 + n, 'SET_EMOTE_ADDED', OTHERS[(n + 2) % OTHERS.length], { set: aSet(SETS[(n + 2) % SETS.length]), emote: aEmote(e) }),
+    act(903 + n * 4, 6000 + n, 'EMOTE_UPLOADED', e.owner ?? ME_SUMMARY, { emote: aEmote(e) }),
+  ];
+  let rows = [...own, ...made].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  if (v.before) {
+    const at = rows.findIndex((a) => a.id === v.before);
+    rows = at >= 0 ? rows.slice(at + 1) : rows;
+  }
+  const limit = Math.min(100, Math.max(1, v.limit ?? 30));
+  return { data: { emoteActivity: rows.slice(0, limit) } };
+}
+
 // A public account for `account(id)`. Unknown ids, and the one for a blocked account, give null.
 const FAKE_LOGINS = ['quietoak', 'nora_byte', 'lumen_fox', 'pixelmoth', 'sipteaTV', 'byteNod', 'foxlook', 'moonhi'];
 const publicAccount = (id) => {
@@ -1274,6 +1296,7 @@ function baseAnswer(body, session, admin) {
   const cosmetic = cosmeticsAnswer(q, v, session, admin);
   if (cosmetic) return cosmetic;
   if (/accountActivity\s*\(/.test(q)) return activityAnswer(v);
+  if (/emoteActivity\s*\(/.test(q)) return emoteActivityAnswer(v);
   if (session) {
     const out = signedIn(body, v, admin);
     if (out) return out;

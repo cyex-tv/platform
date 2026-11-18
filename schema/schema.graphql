@@ -1134,6 +1134,14 @@ type Query {
 	"""
 	accountActivity(accountId: String!, before: String, limit: Int): [ActivityEntry!]!
 	"""
+	An emote's public activity, newest first: `EMOTE_UPLOADED` (when it was approved, shown
+	as by its owner) and `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED` in listed
+	sets, by their owners and account editors. Page back with `before` (an entry ID); `limit`
+	is 1 to 100, default 30. Empty when the emote is unknown or not public. Nothing private or
+	from moderation shows.
+	"""
+	emoteActivity(emoteId: String!, before: String, limit: Int): [ActivityEntry!]!
+	"""
 	Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
 	default 8. Empty when the emote is unknown or not public.
 	"""

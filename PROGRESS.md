@@ -17,6 +17,21 @@ For the website's public user pages (like 7TV's) and painted names everywhere. A
 ```
 git push -u origin feat/public-profile
 gh pr create --base main --head feat/public-profile
+
+## Emote activity (branch `feat/emote-activity`)
+
+Gap list G2 (API side): an emote page's Activity tab, from the account activity store (ADR 0016).
+
+- [x] Migration `20261130000004_emote_activity.sql` (additive): an index on the emote ID in activity rows' JSON.
+- [x] GraphQL (additive): `emoteActivity(emoteId, before, limit): [ActivityEntry!]!`. Kinds `EMOTE_UPLOADED` (its approval, shown as by the owner), `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED`, each built exactly as on the set owner's own feed: listed sets only (ADR 0017), no moderation, reviewers or reasons, nothing by or about blocked or deleted accounts. Empty unless the emote is approved, not private and not deleted. Paged by entry ID like `accountActivity`; `limit` 1 to 100, default 30.
+- [x] Tests: `apps/api/tests/emote_activity_flow.rs` against Postgres in CI (pending emotes have no feed, kinds in order, owner shown for the upload, no reviewer, unlisted and private sets hidden, paging, blocked accounts' lines gone, private emote empty).
+- [x] Dev mock: `emoteActivity` for any public emote (the sample feed lines about it plus an upload and a few set changes).
+- [ ] Website: the Activity tab on `/emotes/[id]` (another task).
+
+#### GitHub write log
+```
+git push -u origin feat/emote-activity
+gh pr create --base main --head feat/emote-activity
 ```
 
 ## Upload v2 and emote settings (branch `feat/upload-v2`)
