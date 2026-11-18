@@ -16,12 +16,12 @@ import { ORDER, START_CHECKOUT } from '$lib/queries';
 import type { OrderFieldsFragment, Platform } from '$lib/gql/graphql';
 import { notify } from '$lib/tool/notices.svelte';
 import { openPaddle, type PaddleEvent } from './paddle';
-import { settled, shopMessage, type OrderStatus } from './shop';
+import { safeCheckoutUrl, settled, shopMessage, type OrderStatus } from './shop';
 
 export type Phase = 'idle' | 'starting' | 'paying' | 'confirming' | 'slow' | 'cancelled' | 'paid' | 'failed';
 export type Recipient = { platform: Platform; login: string } | null;
 /** `to`: who a gift goes to, for the sentence (their login, or their name after a resume). */
-export type Purchase = { itemId: string; itemName: string; gift: Recipient; to: string | null };
+export type Purchase = { itemId: string; itemName: string; gift: Recipient; to: string | null; /** A resumed order carries no recipient, only whether it was a gift. */ resumedGift?: boolean };
 
 export const flow = $state<{ phase: Phase; purchase: Purchase | null; order: OrderFieldsFragment | null; error: string | null }>({
   phase: 'idle',
@@ -124,6 +124,8 @@ export async function buy(purchase: Purchase): Promise<string | null> {
       if (e.name === 'checkout.completed') {
         flow.phase = 'confirming';
         since = Date.now();
+        // The poll may have given up (a window left open past the cutoff): ask again from now.
+        poll(co.order.id, mine);
       } else if (e.name === 'checkout.closed' && flow.phase === 'paying') {
         // Closed without paying (a completed checkout moved the phase on already).
         flow.phase = 'cancelled';
@@ -134,13 +136,15 @@ export async function buy(purchase: Purchase): Promise<string | null> {
       }
     };
 
+    const hosted = safeCheckoutUrl(co.checkoutUrl);
+    const unsafe = !!co.checkoutUrl && !hosted;
     if (co.clientToken) {
       const open = () => {
         flow.phase = 'paying';
         openPaddle({ transactionId: co.transactionId, clientToken: co.clientToken!, environment: co.environment }, onevent).catch(() => {
           if (mine !== gen) return;
           // Paddle.js didn't load (blocked, offline): the hosted page is the fallback.
-          if (co.checkoutUrl) window.location.assign(co.checkoutUrl);
+          if (hosted) window.location.assign(hosted);
           else {
             flow.phase = 'failed';
             flow.error = 'The payment window couldn’t load. Check that nothing blocks cdn.paddle.com, then try again.';
@@ -151,9 +155,13 @@ export async function buy(purchase: Purchase): Promise<string | null> {
       reopen = open;
       open();
       poll(co.order.id, mine);
-    } else if (co.checkoutUrl) {
+    } else if (unsafe) {
+      // A payment page we don't recognise is never opened.
+      flow.phase = 'failed';
+      flow.error = 'The payment page couldn’t be opened safely. Nothing was charged. Try again in a moment.';
+    } else if (hosted) {
       flow.phase = 'confirming';
-      window.location.assign(co.checkoutUrl);
+      window.location.assign(hosted);
     } else {
       // Nothing to open: the order may complete without a payment page (a free item, the dev mock).
       flow.phase = 'confirming';
@@ -186,6 +194,11 @@ export async function retry(): Promise<void> {
 export function again() {
   if (flow.phase !== 'cancelled' || !reopen) return;
   reopen();
+  // The window was closed for a while: the poll may have stopped, and a payment can still land.
+  if (!timer && flow.order) {
+    since = Date.now();
+    poll(flow.order.id, gen);
+  }
 }
 
 /** Clears the state (Dismiss, or the next purchase). */
@@ -218,7 +231,7 @@ export async function resume(): Promise<void> {
     const { order } = await gql(ORDER, { id });
     if (mine !== gen) return;
     if (!order) return keep(null);
-    flow.purchase = { itemId: order.itemId, itemName: order.itemName, gift: null, to: order.gift ? (order.recipient?.displayName ?? null) : null };
+    flow.purchase = { itemId: order.itemId, itemName: order.itemName, gift: null, to: order.gift ? (order.recipient?.displayName ?? null) : null, resumedGift: order.gift };
     flow.order = order;
     since = Date.now();
     if (settled(order.status as OrderStatus)) return finish(order);

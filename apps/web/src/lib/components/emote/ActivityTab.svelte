@@ -2,6 +2,7 @@
   // The emote page's Activity tab: who uploaded it and which sets added, renamed or removed it,
   // newest first, 30 at a time. Only listed (public) emotes have any, and the page doesn't mount
   // this for the others, so nothing is asked for them. Rows are the profile feed's.
+  import { appendUnique } from '$lib/tool/paging';
   import { onMount } from 'svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
   import Problem from '$lib/components/Problem.svelte';
@@ -27,7 +28,7 @@
     problem = '';
     try {
       const got = await loadEmoteActivity(emoteId, cursor);
-      items = [...items, ...got.items];
+      items = appendUnique(items, got.items);
       cursor = got.next;
     } catch (e) {
       problem = e instanceof Error ? e.message : 'That didn’t load.';

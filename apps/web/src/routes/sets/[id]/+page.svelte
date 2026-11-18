@@ -131,11 +131,11 @@
           </div>
           <div class="actions">
             {#if session.me}
-              <button class="btn btn-s btn-primary" type="button" onclick={() => dlg?.open()}><Icon name="layers" size={16} />Clone to my sets</button>
+              <button class="btn btn-s btn-primary btn-glow" type="button" onclick={() => dlg?.open()}><Icon name="layers" size={16} />Clone to my sets</button>
             {:else if session.known}
-              <a class="btn btn-s btn-primary" href={back}><Icon name="layers" size={16} />Sign in to clone</a>
+              <a class="btn btn-s btn-primary btn-glow" href={back}><Icon name="layers" size={16} />Sign in to clone</a>
             {:else}
-              <button class="btn btn-s btn-primary" type="button" disabled><Icon name="layers" size={16} />Clone to my sets</button>
+              <button class="btn btn-s btn-primary btn-glow" type="button" disabled><Icon name="layers" size={16} />Clone to my sets</button>
             {/if}
             <CopyLink url={() => page.url.origin + page.url.pathname} />
             {#if mine}<a class="btn btn-s" href="/me/sets/{s.id}"><Icon name="pencil" size={16} />Edit set</a>{/if}

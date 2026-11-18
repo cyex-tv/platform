@@ -210,3 +210,16 @@ export function fromLocalInput(value: string): string | null {
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
+
+const CHECKOUT_HOSTS = new Set(['cyex.tv', 'buy.paddle.com', 'sandbox-buy.paddle.com']);
+
+/** The hosted checkout page, only when it is https on cyex.tv or Paddle's checkout hosts; else null. */
+export function safeCheckoutUrl(u: string | null | undefined): string | null {
+  if (!u) return null;
+  try {
+    const url = new URL(u);
+    return url.protocol === 'https:' && !url.username && !url.password && CHECKOUT_HOSTS.has(url.hostname) ? url.href : null;
+  } catch {
+    return null;
+  }
+}

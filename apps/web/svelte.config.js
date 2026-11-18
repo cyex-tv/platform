@@ -43,7 +43,7 @@ const AVATARS = ['https://static-cdn.jtvnw.net', 'https://files.kick.com'];
 // checkout itself in a frame from buy.paddle.com (live) or sandbox-buy.paddle.com (sandbox). The
 // page never makes a request of its own to Paddle, so connect-src is unchanged. The API says which
 // environment is in use, so both are allowed.
-const PADDLE_SCRIPT = ['https://cdn.paddle.com'];
+const PADDLE_SCRIPT = ['https://cdn.paddle.com/paddle/v2/paddle.js'];
 const PADDLE_STYLE = ['https://cdn.paddle.com', 'https://sandbox-cdn.paddle.com'];
 const PADDLE_FRAME = ['https://buy.paddle.com', 'https://sandbox-buy.paddle.com'];
 

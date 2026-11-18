@@ -10,6 +10,7 @@
   import { clean } from '$lib/format';
   import type { ShopItemFieldsFragment } from '$lib/gql/graphql';
   import { can } from '$lib/tool/session.svelte';
+  import { notify } from '$lib/tool/notices.svelte';
   import { buy } from './checkout.svelte';
   import ItemPreview from './ItemPreview.svelte';
   import { ITEM_STATE_TEXT, itemState, price, saleEndText, stockText } from './shop';
@@ -80,8 +81,11 @@
     const to = mode === 'gift' ? { platform, login: cleanLogin } : null;
     const error = await buy({ itemId: item.id, itemName: item.name, gift: to, to: to?.login ?? null });
     busy = false;
-    if (error) problem = error;
-    else dialog.close();
+    if (error) {
+      // The dialog may have closed meanwhile (Escape, or the item changed): say it where they are.
+      if (dialog?.open) problem = error;
+      else notify(error, true);
+    } else if (dialog?.open) dialog.close();
   }
 
   const back = $derived(item ? `/signin?back=${encodeURIComponent(`/shop?item=${item.id}`)}` : '/signin');

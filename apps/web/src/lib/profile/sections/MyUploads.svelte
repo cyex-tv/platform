@@ -1,6 +1,7 @@
 <script lang="ts">
   // Your uploads on your own profile: every state (pending, rejected and taken-down ones carry a
   // note in the tile's corner), each tile opening its edit page. Others see the public Uploads.
+  import { appendUnique } from '$lib/tool/paging';
   import { onMount } from 'svelte';
   import { gql } from '$lib/api';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
@@ -31,7 +32,7 @@
     problem = '';
     try {
       const r = await gql(MY_EMOTES, { page: next, perPage: PER_PAGE });
-      items = [...items, ...r.myEmotes.items];
+      items = appendUnique(items, r.myEmotes.items);
       total = r.myEmotes.total;
       next += 1;
     } catch (e) {
