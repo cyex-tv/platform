@@ -234,6 +234,23 @@ export type Channel = {
   platformChannelId: Scalars['String']['output'];
 };
 
+/**
+ * What `startCheckout` gives: open Paddle's checkout for this transaction (Paddle.js
+ * `Paddle.Checkout.open({ transactionId })` with `clientToken`, or go to `checkoutUrl`). The
+ * order turns `PAID` when Paddle's webhook says so; poll `order(id)`.
+ */
+export type Checkout = {
+  __typename?: 'Checkout';
+  /** Paddle's hosted checkout link, when the Paddle account has a default payment link. */
+  checkoutUrl?: Maybe<Scalars['String']['output']>;
+  /** The Paddle.js client-side token, when configured. */
+  clientToken?: Maybe<Scalars['String']['output']>;
+  /** `sandbox` or `production`: pass to `Paddle.Environment.set`. */
+  environment: Scalars['String']['output'];
+  order: Order;
+  transactionId: Scalars['String']['output'];
+};
+
 /** What `cloneSet` made. */
 export type ClonedSet = {
   __typename?: 'ClonedSet';
@@ -246,6 +263,51 @@ export type ClonedSet = {
    * you can't see.
    */
   skipped: Scalars['Int']['output'];
+};
+
+export type CodeBatch = {
+  __typename?: 'CodeBatch';
+  /** Cosmetics a code gives besides the item's. */
+  badgeIds: Array<Scalars['String']['output']>;
+  codeCount: Scalars['Int']['output'];
+  createdAt: Scalars['String']['output'];
+  createdBy?: Maybe<AccountSummary>;
+  disabledAt?: Maybe<Scalars['String']['output']>;
+  expiresAt?: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  /** The item whose cosmetics a code gives, if any. */
+  itemId?: Maybe<Scalars['String']['output']>;
+  itemName?: Maybe<Scalars['String']['output']>;
+  name: Scalars['String']['output'];
+  paintIds: Array<Scalars['String']['output']>;
+  /** Codes look like `PREFIX-XXXX-XXXX-XXXX-XXXX`. */
+  prefix: Scalars['String']['output'];
+  /** Uses so far, over every code. */
+  redemptions: Scalars['Int']['output'];
+  usesPerCode: Scalars['Int']['output'];
+};
+
+export type CodeBatchInput = {
+  badgeIds?: Array<Scalars['String']['input']>;
+  /** 1 to 1000 codes. */
+  count: Scalars['Int']['input'];
+  /** RFC 3339, in the future. */
+  expiresAt?: InputMaybe<Scalars['String']['input']>;
+  /** A shop item whose cosmetics a code gives. */
+  itemId?: InputMaybe<Scalars['String']['input']>;
+  /** For staff, 1 to 64 characters. */
+  name: Scalars['String']['input'];
+  paintIds?: Array<Scalars['String']['input']>;
+  /** 1 to 12 letters or digits (upper-cased). */
+  prefix: Scalars['String']['input'];
+  /** 1 to 10000, default 1. Each account can use a code once. */
+  usesPerCode?: InputMaybe<Scalars['Int']['input']>;
+};
+
+export type CodeBatchPage = {
+  __typename?: 'CodeBatchPage';
+  items: Array<CodeBatch>;
+  total: Scalars['Int']['output'];
 };
 
 /** Every badge and paint, for clients to cache (`GET /v1/cosmetics`). */
@@ -310,6 +372,13 @@ export type CreateSetInput = {
    * `PRIVATE`.
    */
   visibility?: InputMaybe<SetVisibility>;
+};
+
+/** A new batch and its codes in plain text. This is the only time they are shown. */
+export type CreatedCodeBatch = {
+  __typename?: 'CreatedCodeBatch';
+  batch: CodeBatch;
+  codes: Array<Scalars['String']['output']>;
 };
 
 /** An account you edit, with what you may do there. */
@@ -435,8 +504,12 @@ export type EntitlementPage = {
   total: Scalars['Int']['output'];
 };
 
-/** How an account came to own a cosmetic. Only `GRANT` is used for now. */
+/**
+ * How an account came to own a cosmetic: given by staff, bought in the shop (ADR 0016), from an
+ * event, or from a redeem code.
+ */
 export type EntitlementSource =
+  | 'CODE'
   | 'EVENT'
   | 'GRANT'
   | 'PURCHASE';
@@ -552,6 +625,11 @@ export type Mutation = {
    * `cosmetics.manage`. Audited; publishes `cosmetic.created`.
    */
   createBadge: Badge;
+  /**
+   * Make a batch of 1 to 1000 redeem codes. The answer holds the codes in plain text; this is
+   * the only time they are shown. Needs `codes.manage`. Audited.
+   */
+  createCodeBatch: CreatedCodeBatch;
   /** Make a paint. Needs `cosmetics.manage`. Audited; publishes `cosmetic.created`. */
   createPaint: Paint;
   /** Create a role. You can only grant permissions you hold. Needs `roles.manage`. Audited. */
@@ -561,6 +639,8 @@ export type Mutation = {
    * account you edit with `SETS`.
    */
   createSet: EmoteSet;
+  /** Make a shop item: a bundle of 1 to 10 badges and paints. Needs `shop.manage`. Audited. */
+  createShopItem: ShopItem;
   /**
    * Delete your account now. `confirm` is one of your Twitch or Kick logins. Website only
    * (`website_only` with an app token); the owner's account can't be (`owner_protected`).
@@ -591,6 +671,13 @@ export type Mutation = {
    */
   deleteSet: Scalars['Boolean']['output'];
   /**
+   * Delete a shop item: never listed or sold again; its orders stay. False when there was
+   * none. Needs `shop.manage`. Audited.
+   */
+  deleteShopItem: Scalars['Boolean']['output'];
+  /** Turn off every code of a batch. Needs `codes.manage`. Audited. */
+  disableCodeBatch: CodeBatch;
+  /**
    * A copy of everything about your account, as JSON text (`format`, `version`, `account`,
    * `identities`, `sessions`, `channels`, `emotes`, `sets`, `set_editors`, `account_editors`,
    * `editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`). 5 an hour
@@ -604,6 +691,16 @@ export type Mutation = {
    * of them without `ids`. Returns how many were unread.
    */
   markNotificationsRead: Scalars['Int']['output'];
+  /**
+   * Redeem a code (case, spaces and dashes don't matter). Wrong codes lock you out for a
+   * while after a few tries (`locked_out`).
+   */
+  redeemCode: RedeemResult;
+  /**
+   * Refund a paid order: asks Paddle for a full refund when it is set up, and takes the
+   * cosmetics back at once. Needs `shop.orders`. Audited.
+   */
+  refundOrder: Order;
   /** Reject a pending emote with a reason. Needs `emotes.review`. Audited. */
   rejectEmote: Emote;
   /**
@@ -646,6 +743,12 @@ export type Mutation = {
    */
   selectCosmetics: OwnedCosmetics;
   /**
+   * Start buying an item for yourself, or as a gift with `recipient`. Answers the Paddle
+   * transaction to open in Paddle's checkout; the order turns `PAID` once Paddle confirms.
+   * `checkout_unavailable` while Paddle isn't set up or the item has no Paddle price.
+   */
+  startCheckout: Checkout;
+  /**
    * Take an emote's image down everywhere: out of every set, its file blocked and deleted,
    * its owners told. Needs `emotes.takedown`. Audited.
    */
@@ -682,6 +785,11 @@ export type Mutation = {
   updateSet: EmoteSet;
   /** Rename an emote in a set, or change its zero-width flag there. */
   updateSetEmote: SetEmote;
+  /**
+   * Replace every field of a shop item. Orders made already keep their price. Needs
+   * `shop.manage`. Audited.
+   */
+  updateShopItem: ShopItem;
 };
 
 
@@ -727,6 +835,11 @@ export type MutationCreateBadgeArgs = {
 };
 
 
+export type MutationCreateCodeBatchArgs = {
+  input: CodeBatchInput;
+};
+
+
 export type MutationCreatePaintArgs = {
   input: PaintInput;
 };
@@ -739,6 +852,11 @@ export type MutationCreateRoleArgs = {
 
 export type MutationCreateSetArgs = {
   input: CreateSetInput;
+};
+
+
+export type MutationCreateShopItemArgs = {
+  input: ShopItemInput;
 };
 
 
@@ -772,6 +890,16 @@ export type MutationDeleteSetArgs = {
 };
 
 
+export type MutationDeleteShopItemArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type MutationDisableCodeBatchArgs = {
+  id: Scalars['String']['input'];
+};
+
+
 export type MutationGrantCosmeticArgs = {
   input: GrantCosmeticInput;
 };
@@ -779,6 +907,17 @@ export type MutationGrantCosmeticArgs = {
 
 export type MutationMarkNotificationsReadArgs = {
   ids?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+
+export type MutationRedeemCodeArgs = {
+  code: Scalars['String']['input'];
+};
+
+
+export type MutationRefundOrderArgs = {
+  id: Scalars['String']['input'];
+  reason: Scalars['String']['input'];
 };
 
 
@@ -843,6 +982,12 @@ export type MutationSelectCosmeticsArgs = {
   badgeId?: InputMaybe<Scalars['String']['input']>;
   ownerId?: InputMaybe<Scalars['String']['input']>;
   paintId?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationStartCheckoutArgs = {
+  itemId: Scalars['String']['input'];
+  recipient?: InputMaybe<RecipientInput>;
 };
 
 
@@ -913,6 +1058,12 @@ export type MutationUpdateSetEmoteArgs = {
   setId: Scalars['String']['input'];
 };
 
+
+export type MutationUpdateShopItemArgs = {
+  id: Scalars['String']['input'];
+  input: ShopItemInput;
+};
+
 /** Something the platform tells you, such as a takedown of your emote. */
 export type Notification = {
   __typename?: 'Notification';
@@ -924,6 +1075,52 @@ export type Notification = {
   payload: Scalars['String']['output'];
   read: Scalars['Boolean']['output'];
 };
+
+export type Order = {
+  __typename?: 'Order';
+  /** The item's price when the checkout started, in cents. */
+  amountCents: Scalars['Int']['output'];
+  /** Who paid. None once their account is gone. */
+  buyer?: Maybe<AccountSummary>;
+  createdAt: Scalars['String']['output'];
+  currency: Scalars['String']['output'];
+  failedAt?: Maybe<Scalars['String']['output']>;
+  /** Bought for another account. */
+  gift: Scalars['Boolean']['output'];
+  id: Scalars['String']['output'];
+  itemId: Scalars['String']['output'];
+  /** The item's name when it was bought. */
+  itemName: Scalars['String']['output'];
+  paidAt?: Maybe<Scalars['String']['output']>;
+  paidCurrency?: Maybe<Scalars['String']['output']>;
+  /** What Paddle says was paid, tax included, in the lowest unit. Set once paid. */
+  paidTotalCents?: Maybe<Scalars['Int']['output']>;
+  /** `paddle`. */
+  provider: Scalars['String']['output'];
+  /** Paddle's transaction ID (`txn_…`). */
+  providerTransactionId?: Maybe<Scalars['String']['output']>;
+  /** Who got the cosmetics. */
+  recipient?: Maybe<AccountSummary>;
+  refundReason?: Maybe<Scalars['String']['output']>;
+  refundedAt?: Maybe<Scalars['String']['output']>;
+  status: OrderStatus;
+};
+
+export type OrderPage = {
+  __typename?: 'OrderPage';
+  items: Array<Order>;
+  total: Scalars['Int']['output'];
+};
+
+export type OrderStatus =
+  /** Cancelled at Paddle. */
+  | 'FAILED'
+  /** Paid; the recipient owns the cosmetics. */
+  | 'PAID'
+  /** Checkout started, not paid yet. */
+  | 'PENDING'
+  /** Refunded or charged back; the cosmetics were taken back. */
+  | 'REFUNDED';
 
 /** An account's cosmetics: what it owns and what it shows. */
 export type OwnedCosmetics = {
@@ -1115,6 +1312,11 @@ export type Query = {
   /** A channel by its login or slug. Logins change; store the ID, not the login. */
   channelByLogin?: Maybe<Channel>;
   /**
+   * Redeem code batches, newest first. Needs `codes.manage`. The codes themselves are shown
+   * only once, by `createCodeBatch`.
+   */
+  codeBatches: CodeBatchPage;
+  /**
    * Who owns which badges or paints, newest first; narrow it with `accountId` and/or
    * `cosmeticId`. `perPage` is 1 to 100, default 50. Needs `cosmetics.grant`.
    */
@@ -1170,6 +1372,8 @@ export type Query = {
    * about (see the API reference).
    */
   myNotifications: Array<Notification>;
+  /** Orders you bought or received (gifts), newest first. `perPage` 1 to 100, default 50. */
+  myOrders: OrderPage;
   /**
    * Where you are signed in: your live sessions, the most recently used first, with the one
    * this request came with marked `current`. Never shows tokens.
@@ -1177,6 +1381,16 @@ export type Query = {
   mySessions: Array<AccountSession>;
   /** The sets you own, then the ones you edit. Pending emotes included. */
   mySets: Array<EmoteSet>;
+  /**
+   * One order, for its buyer, its recipient, or `shop.orders`. Poll it after `startCheckout`
+   * until it is `PAID`.
+   */
+  order?: Maybe<Order>;
+  /**
+   * Every order, newest first; narrow by status, account (bought or received) and item.
+   * Needs `shop.orders`.
+   */
+  orders: OrderPage;
   /** Every permission name a role can hold. */
   permissions: Array<Scalars['String']['output']>;
   /** One user's personal set. */
@@ -1210,6 +1424,14 @@ export type Query = {
   set?: Maybe<EmoteSet>;
   /** A set's editors. For its owner, its editors and `sets.edit_any`. */
   setEditors: Array<AccountSummary>;
+  /** One shop item: on sale for everyone; any, deleted ones too, with `shop.manage`. */
+  shopItem?: Maybe<ShopItem>;
+  /**
+   * Shop items on sale now, by sort order (ADR 0016). Public; signed in, `owned` says whether
+   * you own everything in each. With `all: true`, every item that isn't deleted, hidden and
+   * scheduled ones too (needs `shop.manage`).
+   */
+  shopItems: Array<ShopItem>;
   /** How many of your notifications are unread. */
   unreadNotificationCount: Scalars['Int']['output'];
   /**
@@ -1283,6 +1505,12 @@ export type QueryChannelByLoginArgs = {
 };
 
 
+export type QueryCodeBatchesArgs = {
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
 export type QueryCosmeticEntitlementsArgs = {
   accountId?: InputMaybe<Scalars['String']['input']>;
   cosmeticId?: InputMaybe<Scalars['String']['input']>;
@@ -1328,6 +1556,26 @@ export type QueryMyEmotesArgs = {
 
 export type QueryMyNotificationsArgs = {
   unreadOnly?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+
+export type QueryMyOrdersArgs = {
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryOrderArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type QueryOrdersArgs = {
+  accountId?: InputMaybe<Scalars['String']['input']>;
+  itemId?: InputMaybe<Scalars['String']['input']>;
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<OrderStatus>;
 };
 
 
@@ -1383,9 +1631,35 @@ export type QuerySetEditorsArgs = {
 };
 
 
+export type QueryShopItemArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type QueryShopItemsArgs = {
+  all?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+
 export type QueryUserCosmeticsArgs = {
   platform: Platform;
   userIds: Array<Scalars['String']['input']>;
+};
+
+/** Who gets a gift: their Twitch or Kick login. */
+export type RecipientInput = {
+  login: Scalars['String']['input'];
+  platform: Platform;
+};
+
+/** What a redeemed code gave. */
+export type RedeemResult = {
+  __typename?: 'RedeemResult';
+  /** Newly owned. */
+  badges: Array<Badge>;
+  /** The batch's name. */
+  name: Scalars['String']['output'];
+  paints: Array<Paint>;
 };
 
 export type Report = {
@@ -1498,6 +1772,68 @@ export type SetVisibility =
   | 'PRIVATE'
   /** Anyone with its link (its ID) can open it; it isn't listed. Personal sets start here. */
   | 'UNLISTED';
+
+/** Something staff sell: one or more badges and paints as a bundle. */
+export type ShopItem = {
+  __typename?: 'ShopItem';
+  /** On sale from (RFC 3339); none: already. */
+  activeFrom?: Maybe<Scalars['String']['output']>;
+  /** On sale until (RFC 3339); none: no end. */
+  activeTo?: Maybe<Scalars['String']['output']>;
+  /** Can be bought now: visible, on sale, in stock, has cosmetics. */
+  available: Scalars['Boolean']['output'];
+  badges: Array<Badge>;
+  createdAt: Scalars['String']['output'];
+  /** ISO 4217, for example `EUR`. */
+  currency: Scalars['String']['output'];
+  /** Deleted: only staff see it, in lists with `all: true`. */
+  deleted: Scalars['Boolean']['output'];
+  description: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+  name: Scalars['String']['output'];
+  /** The caller owns every cosmetic in it (always false signed out). They can still gift it. */
+  owned: Scalars['Boolean']['output'];
+  paddlePriceId?: Maybe<Scalars['String']['output']>;
+  paints: Array<Paint>;
+  /** The price shown, in cents. Paddle's price (`paddlePriceId`) is what is charged. */
+  priceCents: Scalars['Int']['output'];
+  /** Lower first. */
+  sortOrder: Scalars['Int']['output'];
+  /** Copies left (pending checkouts of the last hour hold one each); none: no limit. */
+  stockLeft?: Maybe<Scalars['Int']['output']>;
+  /** Most copies sold; none: no limit. */
+  stockLimit?: Maybe<Scalars['Int']['output']>;
+  updatedAt: Scalars['String']['output'];
+  /** Listed in the public shop (still only while on sale). */
+  visible: Scalars['Boolean']['output'];
+};
+
+/** A whole item: `createShopItem` makes one, `updateShopItem` replaces every field. */
+export type ShopItemInput = {
+  /** RFC 3339. */
+  activeFrom?: InputMaybe<Scalars['String']['input']>;
+  /** RFC 3339, after `activeFrom`. */
+  activeTo?: InputMaybe<Scalars['String']['input']>;
+  /** 1 to 10 cosmetics in all. */
+  badgeIds?: Array<Scalars['String']['input']>;
+  /** ISO 4217, default `EUR`. */
+  currency?: InputMaybe<Scalars['String']['input']>;
+  /** Up to 500 characters; new lines allowed. */
+  description?: InputMaybe<Scalars['String']['input']>;
+  /** 1 to 64 characters. */
+  name: Scalars['String']['input'];
+  /** The Paddle price (`pri_…`). Without one, checkout says it isn't available. */
+  paddlePriceId?: InputMaybe<Scalars['String']['input']>;
+  paintIds?: Array<Scalars['String']['input']>;
+  /** 0 to 100000 (1000.00). */
+  priceCents: Scalars['Int']['input'];
+  /** Default 0. */
+  sortOrder?: InputMaybe<Scalars['Int']['input']>;
+  /** 1 or more; none: no limit. */
+  stockLimit?: InputMaybe<Scalars['Int']['input']>;
+  /** Default false. */
+  visible?: InputMaybe<Scalars['Boolean']['input']>;
+};
 
 export type Subscription = {
   __typename?: 'Subscription';

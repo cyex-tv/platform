@@ -9,6 +9,7 @@ pub mod metrics;
 pub mod model;
 pub mod permissions;
 pub mod ratelimit;
+pub mod shop;
 pub mod shutdown;
 #[cfg(feature = "sqlx")]
 mod sql;

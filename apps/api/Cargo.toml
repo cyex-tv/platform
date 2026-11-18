@@ -34,12 +34,17 @@ cyex-tv-media.workspace = true
 cyex-tv-shared = { workspace = true, features = ["graphql"] }
 cyex-tv-storage.workspace = true
 futures-util.workspace = true
+getrandom.workspace = true
+hmac.workspace = true
+reqwest.workspace = true
+rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 sqlx.workspace = true
 tokio.workspace = true
 tower-http.workspace = true
+thiserror.workspace = true
 tracing.workspace = true
 utoipa.workspace = true
 utoipa-axum.workspace = true

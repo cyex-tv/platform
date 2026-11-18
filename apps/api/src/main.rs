@@ -42,6 +42,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(s3) => state = state.with_store(cyex_tv_storage::Store::s3(s3)?),
         None => tracing::warn!("CYEX_TV_S3_ENDPOINT not set; uploads answer 503"),
     }
+    let paddle = cyex_tv_api::paddle::PaddleConfig::from_source(|name| std::env::var(name).ok())?;
+    if paddle.api_key.is_none() {
+        tracing::warn!(
+            "CYEX_TV_PADDLE_API_KEY not set; the shop lists items but checkout is unavailable"
+        );
+    }
+    if paddle.webhook_secret.is_none() {
+        tracing::warn!("CYEX_TV_PADDLE_WEBHOOK_SECRET not set; the Paddle webhook answers 503");
+    }
+    tracing::info!(env = paddle.env.as_str(), "paddle");
+    state = state.with_paddle(cyex_tv_api::paddle::Paddle::new(paddle)?);
     // The GraphQL `events` subscription reads the outbox through its own feeder.
     let (stop_tx, mut stop_rx) = tokio::sync::watch::channel(false);
     let feeder = tokio::spawn(cyex_tv_hub::feeder::run(

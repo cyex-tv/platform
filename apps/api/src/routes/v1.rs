@@ -1,7 +1,8 @@
 //! The REST part of v1 (ADR 0008). Everything else is GraphQL at `/v1/gql`. REST covers only:
 //! - sign-in redirects (Phase 2, built);
 //! - the upload (Phase 3, built; transcoding is the worker's);
-//! - the small, cacheable reads chat clients poll (built).
+//! - the small, cacheable reads chat clients poll (built);
+//! - Paddle's webhook for the shop (ADR 0016), which needs the raw body for its signature.
 //!
 //! The others answer `501 not_implemented` until their phase builds them.
 
@@ -25,19 +26,26 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
 use crate::state::{AppState, MaybeCaller};
-use crate::{catalog, cosmetics, moderation, upload};
+use crate::{catalog, cosmetics, moderation, shop, upload};
 
 /// The upload body may be a little over the 5 MB file limit (multipart framing, the name and
 /// tags); anything beyond this is cut off before it is read.
 const UPLOAD_BODY_LIMIT: usize = 5 * 1024 * 1024 + 64 * 1024;
+
+/// Paddle's notifications are a few KB; this leaves room for large transactions.
+const WEBHOOK_BODY_LIMIT: usize = 1024 * 1024;
 
 pub fn router() -> OpenApiRouter<AppState> {
     let upload = OpenApiRouter::new()
         .routes(routes!(upload_emote))
         .routes(routes!(upload_cosmetic_image))
         .layer(DefaultBodyLimit::max(UPLOAD_BODY_LIMIT));
+    let webhook = OpenApiRouter::new()
+        .routes(routes!(paddle_webhook))
+        .layer(DefaultBodyLimit::max(WEBHOOK_BODY_LIMIT));
     OpenApiRouter::new()
         .merge(upload)
+        .merge(webhook)
         .routes(routes!(login))
         .routes(routes!(callback))
         .routes(routes!(logout))
@@ -569,4 +577,38 @@ async fn get_user_cosmetics(
         .collect();
     let users = cosmetics::user_cosmetics(&state, query.platform, &ids).await?;
     cached(&headers, &UserCosmeticsResult { users }, READ_MAX_AGE)
+}
+
+// Shop
+
+/// Paddle's webhook for cyex.tv's own Paddle account (ADR 0016). Not for clients.
+///
+/// The raw body is checked against `Paddle-Signature` (HMAC-SHA256 of `"<ts>:<body>"` with the
+/// endpoint's secret; `ts` within 5 minutes). Each event is handled once, by its `event_id`.
+/// `transaction.completed` fulfils an order, `transaction.canceled` fails a pending one, and an
+/// approved `refund` or `chargeback` adjustment takes the cosmetics back. Other events are
+/// acknowledged and ignored.
+#[utoipa::path(
+    post,
+    path = "/v1/shop/paddle/webhook",
+    tag = "shop",
+    request_body(content = String, content_type = "application/json", description = "A Paddle notification."),
+    params(("Paddle-Signature" = String, Header, description = "`ts=<unix>;h1=<hex>`.")),
+    responses(
+        (status = 200, description = "Handled, seen before, or not used."),
+        (status = 400, description = "`bad_payload`.", body = ErrorBody),
+        (status = 401, description = "`bad_signature` or `stale_signature`.", body = ErrorBody),
+        (status = 503, description = "`unavailable`: the webhook secret isn't set.", body = ErrorBody)
+    )
+)]
+async fn paddle_webhook(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: bytes::Bytes,
+) -> ApiResult<Response> {
+    let signature = headers
+        .get("paddle-signature")
+        .and_then(|v| v.to_str().ok());
+    shop::webhook(&state, signature, &body).await?;
+    Ok(([(CONTENT_TYPE, "application/json")], r#"{"ok":true}"#).into_response())
 }

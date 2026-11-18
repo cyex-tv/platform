@@ -6,6 +6,7 @@ use cyex_tv_auth::{Auth, Caller};
 use cyex_tv_hub::Hub;
 
 use crate::limits::Limits;
+use crate::paddle::Paddle;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::metrics::Registry;
 use cyex_tv_storage::Store;
@@ -28,6 +29,9 @@ pub struct AppState {
     pub limits: Arc<Limits>,
     /// Request counts and durations, served on `CYEX_TV_METRICS_BIND` when set.
     pub metrics: Registry,
+    /// cyex.tv's Paddle account for the shop (ADR 0016). `None`, or a key unset: checkout answers
+    /// `checkout_unavailable`, the webhook 503.
+    pub paddle: Option<Arc<Paddle>>,
 }
 
 impl AppState {
@@ -40,6 +44,7 @@ impl AppState {
             hub: Hub::new(),
             limits: Arc::new(Limits::default()),
             metrics: Registry::new(),
+            paddle: None,
         }
     }
 
@@ -50,6 +55,11 @@ impl AppState {
 
     pub fn with_store(mut self, store: Store) -> Self {
         self.store = Some(store);
+        self
+    }
+
+    pub fn with_paddle(mut self, paddle: Paddle) -> Self {
+        self.paddle = Some(Arc::new(paddle));
         self
     }
 

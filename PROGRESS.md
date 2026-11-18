@@ -2,6 +2,27 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Cosmetics shop and redeem codes (branch `feat/shop`)
+
+ADR 0016. A shop for cyex.tv's chat cosmetics and redeem codes, like 7TV's Store and Redeem (studied from what 7TV shows publicly; no code taken). Payments through cyex.tv's **own** Paddle Billing account, never cyex.app's; no card data reaches cyex.tv.
+
+- [x] Migration `20261201000001_shop.sql` (additive): `shop_items` (+ `shop_item_cosmetics` bundles), `shop_orders`, `paddle_events`, `code_batches` (+ `code_batch_cosmetics`), `redeem_codes` (sha256 only), `code_redemptions`; entitlements gain source `code` and `order_id`/`code_id`.
+- [x] Permissions `shop.manage`, `shop.orders`, `codes.manage` (the owner holds all).
+- [x] Paddle (`apps/api/src/paddle.rs`): env `CYEX_TV_PADDLE_ENV`, `_API_KEY`, `_CLIENT_TOKEN`, `_WEBHOOK_SECRET`; keys of the wrong environment refused at start. Checkout creates a Paddle transaction; fulfilment only from the signed webhook `POST /v1/shop/paddle/webhook` (HMAC, 5-minute window, `event_id` recorded once, idempotent by transaction); refunds and chargebacks revoke exactly the order's entitlements and clear the selection.
+- [x] GraphQL (additive): `shopItems`, `shopItem`, `myOrders`, `order`, `orders`, `codeBatches`; `createShopItem`, `updateShopItem`, `deleteShopItem`, `startCheckout`, `refundOrder`, `redeemCode`, `createCodeBatch`, `disableCodeBatch`. Schema, OpenAPI and web types regenerated.
+- [x] Codes: `PREFIX-XXXX-XXXX-XXXX-XXXX` (80 bits), shown once; constant-time compare; 30 tries an hour, lockout after 5 wrong per account / 20 per IP in 15 minutes.
+- [x] Every staff action, fulfilment, refund and redeem audited.
+- [x] Tests: `apps/api/tests/shop_flow.rs` against Postgres in CI with a fake Paddle server; unit tests of the checks, signature, config, code format and lockout.
+- [x] Dev mock: sample items, immediate fake checkout, sample orders, code batches with the known code `SAMPLE-CODE-0001`.
+- [x] Infra: `env/api.env.example` gets the four names, empty (cyex-tv/infra PR 7, merged).
+- [ ] Owner: Paddle account, products, keys and webhook (`docs/setup/owner-steps.md`, "Paddle for the cyex.tv shop").
+- [ ] Website pages (another task).
+- Open questions (defaults taken): `.claude/runs/2026-11-17-shop/questions.md`.
+
+#### GitHub write log
+- `gh pr create -R cyex-tv/infra --base main --head env/paddle`, `gh pr merge 7 -R cyex-tv/infra --merge`.
+- `gh pr create --base main --head feat/shop`.
+
 ## Account hub: sessions, notifications, export, deletion (branch `feat/account-hub`)
 
 Gap list G6. API only; `/me/account` (Connections, Sessions, Data) and `/me/inbox` with the header bell come next.

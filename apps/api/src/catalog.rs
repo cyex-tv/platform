@@ -93,6 +93,10 @@ pub fn db_error(err: DbError) -> ApiError {
             "A badge or paint with that name exists already.",
         ),
         DbError::NotOwned => conflict("not_owned", "You can only show cosmetics the account owns."),
+        DbError::CodeTaken => {
+            tracing::error!("a new redeem code collided with an existing one");
+            ApiError::internal()
+        }
         DbError::InvalidVisibility => bad(
             "bad_visibility",
             "Personal sets can't be private, and the global set is always listed.",
