@@ -2,6 +2,27 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Design harmony pass (branch `polish/harmony`)
+
+Contact sheets of every route at 1440 and 375, dark and light, read as one product (overnight run 2026-11-17). Web only; nothing was deployed.
+
+- [x] One page top: every page title sits at the same height under the header (shop, download and redeem were 44px lower, help and the API docs 14px lower; phones too).
+- [x] One page-title metric (size, line height, tracking) and one line under it (15px, 8px gap) for PageHead, the admin `.ui-head` pages and the admin overview.
+- [x] Whole-page states (not-found, error pages, the signed-in pages' error) no longer pick up the global `.page` column class, which inset them by the page padding a second time.
+- [x] The shop's load error is the one Problem pattern; the shop and redeem messages use problem.ts's words for offline and unknown failures (test).
+- [x] One Copy link button (`CopyLink.svelte`): profile, channel and set pages say "Copy link", then "Copied". The channel page said "Copy set link" but copied the channel's address.
+- [x] The signed-in pages' rail is the public profile's rail (Activity row, Copy link), so it no longer shifts between /me/* and /users/<id>.
+- [x] Labelled tool buttons press like the site's buttons (scale), not by dimming.
+- Manual check: every route re-shot at 375 and 1440 in both themes (contact sheets in the run folder, screens/polish); svelte-check 0/0, vitest, build.
+
+### GitHub write log for this PR
+
+```
+git push -u origin polish/harmony
+gh pr create --base main --head polish/harmony --title "web: design harmony pass" --body-file <file>
+gh pr merge <n> --merge
+```
+
 ## Shop hardening (branch `fix/shop-hardening`)
 
 The backend audit of the shop (overnight run 2026-11-17, findings B1-B3, M1-M3, L1-L3). Additive; nothing was deployed.

@@ -8,7 +8,7 @@
   import State from '$lib/components/State.svelte';
   import { chatLines } from '$lib/components/profile/chat';
   import { currentSection, sectionRail, type Section } from '$lib/components/profile/sections';
-  import { useCopied } from '$lib/clipboard.svelte';
+  import CopyLink from '$lib/components/CopyLink.svelte';
   import { clean, count } from '$lib/format';
   import RailLayout from '$lib/shell/RailLayout.svelte';
   import SideRail from '$lib/shell/SideRail.svelte';
@@ -30,7 +30,6 @@
   const STEP = 120;
   let filter = $state('');
   let shown = $state(STEP);
-  const link = useCopied();
   const who = $derived(clean(c.account.displayName));
 
   const needle = $derived(filter.trim().toLowerCase());
@@ -65,15 +64,7 @@
   {#if set}Active set: {#if set.visibility === 'LISTED' || set.visibility === 'UNLISTED'}<a class="set-link" href="/sets/{set.id}"><bdi>{clean(set.name)}</bdi></a>{:else}<bdi>{clean(set.name)}</bdi>{/if}{:else}No set picked yet{/if}
 {/snippet}
 {#snippet actions()}
-  <button class="btn btn-s copy" type="button" onclick={() => link.copy(location.origin + page.url.pathname)}>
-    <Icon name={link.copied ? 'check' : 'copy'} size={16} />
-    <span class="labels">
-      <span class:off={link.state !== 'idle'}>Copy set link</span>
-      <span class:off={!link.copied} aria-hidden="true">Link copied</span>
-      <span class:off={!link.failed} aria-hidden="true">Couldn’t copy</span>
-    </span>
-  </button>
-  <span class="sr-only" role="status">{link.copied ? 'Link copied' : link.failed ? 'Couldn’t copy' : ''}</span>
+  <CopyLink url={() => location.origin + page.url.pathname} />
   <a class="btn btn-s" href="/users/{c.account.id}">
     <Icon name="user" size={16} />Creator page
   </a>
@@ -162,9 +153,6 @@
   .set-link:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
   /* Hover only where there is a pointer to hover with (a tap would leave it stuck). */
   @media (hover: hover) and (pointer: fine) { .set-link:hover { text-decoration: underline; text-underline-offset: 3px; } }
-  .labels { display: inline-grid; }
-  .labels > span { grid-area: 1 / 1; text-align: left; }
-  .off { visibility: hidden; }
   .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
   .n { margin-left: 6px; font-size: var(--t-small); font-weight: 500; color: var(--dim); }
   .find { position: relative; display: block; flex: 0 1 320px; min-width: 0; }

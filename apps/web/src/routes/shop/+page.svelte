@@ -6,6 +6,7 @@
   import { goto, invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
   import { gql } from '$lib/api';
+  import Problem from '$lib/components/Problem.svelte';
   import State from '$lib/components/State.svelte';
   import { loadOwned } from '$lib/cosmetics/store.svelte';
   import { clean } from '$lib/format';
@@ -28,7 +29,6 @@
   // (owned flags), and again after a purchase.
   let fresh = $state<ShopItemFieldsFragment[] | null>(null);
   const items = $derived(fresh ?? data.items);
-  let retrying = $state(false);
 
   async function refresh() {
     try {
@@ -71,12 +71,7 @@
     if (page.url.searchParams.has('item')) goto('/shop', { noScroll: true, keepFocus: true, replaceState: true });
   }
 
-  async function retry() {
-    retrying = true;
-    await invalidateAll();
-    retrying = false;
-  }
-  const failed = $derived(data.error && !items.length ? data.error : null);
+  const failed = $derived(data.error && !items.length);
 </script>
 
 <svelte:head>
@@ -97,10 +92,7 @@
   <CheckoutStatus />
 
   {#if failed}
-    <State kind="error" title="The shop didn’t load.">
-      {failed}
-      {#snippet actions()}<button type="button" class="ui-btn secondary" onclick={retry} disabled={retrying}>{retrying ? 'Trying…' : 'Try again'}</button>{/snippet}
-    </State>
+    <Problem cause={data.error === 'offline' ? 'offline' : 'server'} onretry={() => invalidateAll()} />
   {:else if !items.length}
     <State title="Nothing is on sale right now.">
       New items show up here when they’re ready. Got a code?

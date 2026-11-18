@@ -10,7 +10,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
-  import { useCopied } from '$lib/clipboard.svelte';
+  import CopyLink from '$lib/components/CopyLink.svelte';
   import { clean, count } from '$lib/format';
   import { PUBLIC_SET } from '$lib/queries';
   import { capacityText, filterMembers, fillPercent } from '$lib/sets/public';
@@ -83,7 +83,6 @@
     }
   }
 
-  const link = useCopied();
   let dlg = $state<CloneDialog>();
   const back = $derived(`/signin?back=${encodeURIComponent(page.url.pathname)}`);
 </script>
@@ -138,16 +137,8 @@
             {:else}
               <button class="ui-btn primary" type="button" disabled><Icon name="layers" size={16} />Clone to my sets</button>
             {/if}
-            <button class="ui-btn secondary" type="button" onclick={() => link.copy(page.url.origin + page.url.pathname)}>
-              <Icon name={link.copied ? 'check' : 'copy'} size={16} />
-              <span class="labels">
-                <span class:off={link.state !== 'idle'}>Copy link</span>
-                <span class:off={!link.copied} aria-hidden="true">Link copied</span>
-                <span class:off={!link.failed} aria-hidden="true">Couldn’t copy</span>
-              </span>
-            </button>
+            <CopyLink kind="tool" url={() => page.url.origin + page.url.pathname} />
             {#if mine}<a class="ui-btn secondary" href="/me/sets/{s.id}"><Icon name="pencil" size={16} />Edit set</a>{/if}
-            <span class="sr-only" role="status">{link.copied ? 'Link copied' : link.failed ? 'Couldn’t copy' : ''}</span>
           </div>
         </header>
 
@@ -227,9 +218,6 @@
   .fill.full { background: var(--yellow); }
   @media (forced-colors: active) { .fill { background: Highlight; } }
   .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  .labels { display: inline-grid; }
-  .labels > span { grid-area: 1 / 1; text-align: left; }
-  .off { visibility: hidden; }
   .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-bottom: 20px; }
   .tools :global([role='radiogroup']) { margin-left: auto; }
   .total { margin: 0; font-size: var(--t-small); color: var(--muted); font-variant-numeric: tabular-nums; }

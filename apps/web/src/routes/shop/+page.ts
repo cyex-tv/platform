@@ -8,6 +8,7 @@ export const load: PageLoad = async ({ fetch }) => {
     const { shopItems } = await gql(SHOP_ITEMS, { all: false }, fetch);
     return { items: shopItems, error: null };
   } catch (e) {
-    return { items: [], error: e instanceof ApiError ? e.message : 'The shop didn’t load.' };
+    // The one error pattern (Problem) words it; only whether the network was down is kept.
+    return { items: [], error: e instanceof ApiError && e.code === 'offline' ? ('offline' as const) : ('server' as const) };
   }
 };

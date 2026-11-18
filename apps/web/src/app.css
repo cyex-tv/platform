@@ -64,8 +64,8 @@ kbd { font: inherit; }
 
 /* A page that isn't the landing page: a title under the nav */
 /* The nav is sticky and in the flow, so pages start right under it (no --nav-h offset). */
-.page-head { padding: clamp(32px, 5vw, 64px) 0 32px; }
-.page-head h1 { font-size: var(--t-page); line-height: 1.25; letter-spacing: -.02em; }
+/* The same top as the rail and column layouts (--rail-gap under the header), so every title sits at one height. */
+.page-head { padding: var(--rail-gap) 0 24px; }
 /* The title of every page but the home hero: one size (--t-page), wherever the page's h1 sits. */
 .page-title { margin: 0; font-size: var(--t-page); font-weight: 600; line-height: 1.25; letter-spacing: -.02em; min-width: 0; overflow-wrap: anywhere; }
 .page-head .lead { margin-top: 12px; }

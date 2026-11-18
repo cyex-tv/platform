@@ -132,7 +132,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 [data-theme='light'] .docs .auth-chip:not(.neutral) { color: color-mix(in srgb, var(--yellow) 80%, #000); }
 
 /* ---------- Body ---------- */
-.docs .docs-body { min-width: 0; padding: 14px 0 20px; }
+.docs .docs-body { min-width: 0; padding: 0 0 20px; } /* the title at the site's one page top (--rail-gap) */
 .docs .docs-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; max-width: var(--measure); margin-bottom: 30px; }
 .docs .docs-title h1 { font-size: var(--t-page); margin: 0 0 6px; font-weight: 600; line-height: 1.25; letter-spacing: -.02em; }
 .docs .docs-title p { color: var(--muted); font-size: .97rem; margin: 0; }
