@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { Look } from '$lib/cosmetics/store.svelte';
+  import { wantLooks, type Look } from '$lib/cosmetics/store.svelte';
   import type { CardEmote } from '../EmoteTile.svelte';
 
   /** What a table row shows beyond a tile: when it was added and how many channels use it. */
@@ -35,6 +35,8 @@
     eager?: number;
   };
   let { items, sort = 'relevance', onsort, looks = {}, picked, onpick, label = 'Emotes', eager = 0 }: Props = $props();
+  // The creators' paints and badges, one batched ask for the whole table (shared cosmetics cache).
+  $effect(() => wantLooks(items.map((e) => e.owner?.id)));
 
   const kinds = (e: RowEmote) =>
     [e.animated ? 'Animated' : 'Still', e.flags?.zeroWidth && 'zero-width', isWide(e) && 'wide'].filter(Boolean).join(', ');

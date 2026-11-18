@@ -69,7 +69,7 @@
 
 <svelte:head>
   <title>{data.creator ? `${section === 'uploads' ? name : `${TITLE[section]} · ${name}`} - cyex.tv` : data.error ? 'Something went wrong - cyex.tv' : 'Nothing here - cyex.tv'}</title>
-  {#if name}<meta name="description" content="{name}'s emotes on cyex.tv." />{/if}
+  {#if name}<meta name="description" content="{name} on cyex.tv: emotes, sets and cosmetics." />{/if}
 </svelte:head>
 
 {#if data.error}
@@ -86,9 +86,9 @@
 {:else if !data.creator}
   <ColumnLayout>
     <div class="pad">
-      <State level={1} role="status" title="No public emotes here.">
-        This account hasn't published an emote, or there is no account with this address. Check the link, or
-        look through what everyone has made.
+      <State level={1} role="status" title="No profile here.">
+        There is no account at this address, or its owner has deleted it. Check the link, or look through what
+        everyone has made.
         {#snippet actions()}
           <a class="ui-btn primary" href="/search">Browse emotes</a>
         {/snippet}
@@ -99,7 +99,7 @@
   {@const account = { id: data.id, displayName: data.creator.displayName, avatar: data.creator.avatar }}
   <RailLayout>
     {#snippet rail()}
-      <ProfileRail {account} {relation} current={section} activity={ACTIVITY_READY} {actions} />
+      <ProfileRail {account} {relation} current={section} activity={ACTIVITY_READY} {actions} profile={data.profile} seed={data.look} />
     {/snippet}
 
     {#if waiting}

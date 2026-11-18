@@ -4,12 +4,15 @@
   // paint, sets and people as links), and how long ago (the exact time on hover).
   import Icon, { type IconName } from '$lib/components/Icon.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
-  import type { Catalog } from '$lib/cosmetics/store.svelte';
+  import { looks, NO_LOOK, wantLooks, type Catalog } from '$lib/cosmetics/store.svelte';
   import { ready, src, srcset } from '$lib/emote';
   import { clean } from '$lib/format';
   import { relative, type ActivityItem, type ActivityKind } from './activity';
 
   let { items, catalog = null }: { items: ActivityItem[]; catalog?: Catalog | null } = $props();
+
+  // Who did each change, in their paint and badge: the shared cosmetics cache, one batch per list.
+  $effect(() => wantLooks(items.map((i) => i.actor?.id)));
 
   const ICON: Record<ActivityKind, IconName> = {
     added: 'plus', removed: 'minus', renamed: 'pencil', active: 'zap', cosmetics: 'brush', uploaded: 'upload', created: 'folder', setRenamed: 'pencil',
@@ -52,7 +55,7 @@
           {:else if i.kind === 'uploaded'}Published {@render emote(i)}
           {:else if i.kind === 'created'}Made the set {@render setName(i)}
           {:else}Renamed the set <strong><bdi>{clean(i.from)}</bdi></strong> to <strong><bdi>{clean(i.to ?? i.set?.name)}</bdi></strong>{/if}
-          {#if i.actor} by <a href="/users/{encodeURIComponent(i.actor.id)}"><bdi>{clean(i.actor.displayName)}</bdi></a>{/if}
+          {#if i.actor} by <a href="/users/{encodeURIComponent(i.actor.id)}"><PaintedName name={i.actor.displayName} paint={(looks[i.actor.id] ?? NO_LOOK).paint} badge={(looks[i.actor.id] ?? NO_LOOK).badge} badgeSize={16} /></a>{/if}
         </span>
         <time datetime={i.at} title={new Date(i.at).toLocaleString()}>{relative(i.at)}</time>
       </span>

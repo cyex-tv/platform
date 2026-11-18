@@ -2,12 +2,16 @@
 //   - The catalog (`cosmetics`, public) is asked for once per visit.
 //   - Chatters by platform id (`userCosmetics`) are batched: every lookup made in the same tick
 //     goes out as one request of up to 100 ids, and each id is asked for once (no N+1).
+//   - Anyone's account by id (`accountCosmetics`, public): `wantLooks(ids)` batches like chatters
+//     and fills the same `looks`, so a name anywhere (profile, editors, search, activity) is drawn
+//     in its paint from one cache, each account asked for once.
 //   - An account's own selection (`myCosmetics`: yours, or one you edit with PROFILE) lives in
 //     `looks`, a reactive map by account id, so the account menu and the profile change together
 //     when a badge or paint is picked.
 import { gql } from '$lib/api';
 import type { BadgeFieldsFragment, MyCosmeticsQuery, PaintFieldsFragment, Platform } from '$lib/gql/graphql';
-import { COSMETICS, MY_COSMETICS, USER_COSMETICS } from '$lib/queries';
+import { ACCOUNT_COSMETICS, COSMETICS, MY_COSMETICS, USER_COSMETICS } from '$lib/queries';
+import { batches, mergeLooks, toAsk } from './merge';
 
 export type Badge = BadgeFieldsFragment;
 export type Paint = PaintFieldsFragment;
@@ -99,6 +103,49 @@ export function lookFor(platform: Platform, platformUserId: string): Promise<Loo
 export const looks = $state<Record<string, Look>>({});
 
 const ownedAsk = new Map<string, Promise<Owned>>();
+/** Accounts whose look is known or being asked for (so each is asked once). */
+const askedAccounts = new Set<string>();
+let accountQueue = new Set<string>();
+let accountsFlushing = false;
+
+function flushAccounts() {
+  accountsFlushing = false;
+  const ids = [...accountQueue];
+  accountQueue = new Set();
+  for (const chunk of batches(ids)) {
+    gql(ACCOUNT_COSMETICS, { accountIds: chunk })
+      .then(({ accountCosmetics }) => {
+        // An account's own selection (loadOwned) is newer than this answer.
+        const known = mergeLooks(chunk, accountCosmetics, new Set(chunk.filter((id) => ownedAsk.has(id))));
+        for (const [id, l] of Object.entries(known)) looks[id] = l;
+      })
+      .catch(() => {
+        // Names still show, just plain; a later page can ask again.
+        for (const id of chunk) askedAccounts.delete(id);
+      });
+  }
+}
+
+/** Ask for what these accounts show; their `looks` fill in. Lookups in the same tick share one request. */
+export function wantLooks(ids: readonly (string | null | undefined)[]) {
+  const fresh = toAsk(ids, askedAccounts);
+  if (!fresh.length) return;
+  for (const id of fresh) {
+    askedAccounts.add(id);
+    accountQueue.add(id);
+  }
+  if (!accountsFlushing) {
+    accountsFlushing = true;
+    queueMicrotask(flushAccounts);
+  }
+}
+
+/** A look the page already has (loaded with it): shared like any other, and not asked for again. */
+export function seedLook(accountId: string, look: Look) {
+  if (askedAccounts.has(accountId) && looks[accountId]) return;
+  askedAccounts.add(accountId);
+  looks[accountId] = look;
+}
 
 function lookOf(o: Pick<Owned, 'badges' | 'paints' | 'badgeId' | 'paintId'>): Look {
   return {
@@ -115,6 +162,7 @@ export function loadOwned(accountId: string, mine: boolean, fresh = false): Prom
   const known = ownedAsk.get(accountId);
   if (known && !fresh) return known;
   const p = gql(MY_COSMETICS, { accountId: mine ? null : accountId }).then(({ myCosmetics }) => {
+    askedAccounts.add(accountId);
     looks[accountId] = lookOf(myCosmetics);
     return myCosmetics;
   });
@@ -136,5 +184,6 @@ export function picked(accountId: string, owned: Owned, badgeId: string | null, 
 /** Forget everything account-bound (signing out). */
 export function forgetLooks() {
   ownedAsk.clear();
+  askedAccounts.clear();
   for (const k of Object.keys(looks)) delete looks[k];
 }
