@@ -6,7 +6,7 @@
   import Avatar from '$lib/components/Avatar.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import Popover from '$lib/components/Popover.svelte';
-  import { clean, iso } from '$lib/format';
+  import { clean } from '$lib/format';
   import { session } from '$lib/tool/session.svelte';
   import AccountLinks from './AccountLinks.svelte';
 
@@ -19,9 +19,10 @@
 {#if session.me}
   <Popover label="Your account" kind="disclosure" align="end" width="260px" bind:open>
     {#snippet trigger(props)}
-      <button class="who" type="button" {...props} aria-label="Your account: {iso(name)}">
+      <button class="who" type="button" {...props}>
         <Avatar src={who?.avatar} {name} size={24} />
-        <span class="name"><bdi>{name}</bdi></span>
+        <span class="sr-only">Your account: <bdi>{name}</bdi></span>
+        <span class="name" aria-hidden="true"><bdi>{name}</bdi></span>
         <Icon name="chevron-down" size={14} />
       </button>
     {/snippet}

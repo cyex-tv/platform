@@ -6,7 +6,7 @@
   import { nameProblem } from '$lib/rules';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import type { CardEmote } from '$lib/components/EmoteTile.svelte';
-  import { count, iso } from '$lib/format';
+  import { clean, count, iso } from '$lib/format';
   import State from '$lib/components/State.svelte';
   import { session } from './session.svelte';
   import { STATE_LABEL } from './state';
@@ -34,6 +34,7 @@
 
   type Member = SetFieldsFragment['emotes'][number];
   const byId = $derived(new Map(set.emotes.map((m) => [m.emote.id, m])));
+  const aliasFor = $derived(clean(byId.get(editing ?? '')?.emote.name ?? ''));
   /** An emote as this set shows it: its set name when renamed, zero-width as set here. */
   const tiles = $derived<CardEmote[]>(
     shown.map((m) => ({ ...m.emote, shownName: m.name !== m.emote.name ? m.name : undefined, flags: { ...m.emote.flags, zeroWidth: m.zeroWidth } })),
@@ -129,7 +130,7 @@
 <dialog class="ui-dialog" bind:this={dialog} aria-labelledby="alias-title">
   <form onsubmit={save}>
     <div class="body">
-      <h2 id="alias-title">In this set</h2>
+      <h2 id="alias-title">Rename {#if aliasFor}<bdi>{aliasFor}</bdi>{:else}the emote{/if} in this set</h2>
       <label class="ui-field">
         <span class="ui-label">Name here</span>
         <input class="ui-input" bind:value={alias} maxlength="100" spellcheck="false" aria-invalid={aliasError ? 'true' : undefined} />

@@ -13,6 +13,7 @@
   import BulkAdd from '$lib/components/browse/BulkAdd.svelte';
   import EmoteTable from '$lib/components/browse/EmoteTable.svelte';
   import { looks } from '$lib/cosmetics/store.svelte';
+  import Problem from '$lib/components/Problem.svelte';
   import State from '$lib/components/State.svelte';
   import {
     apiQuery,
@@ -43,6 +44,11 @@
 
   const view = $derived(data.view);
   const q = $derived(clean(view.q));
+  // The query as it goes in the tab title: no control characters, cut short, and nothing at all when nothing is left.
+  const titleQ = $derived.by(() => {
+    const t = [...q.replace(/[\p{Cc}\p{Cf}]/gu, '').trim()];
+    return t.length > 40 ? `${t.slice(0, 40).join('')}…` : t.join('');
+  });
   const filters = $derived(activeOf(view));
 
   // ---- Results: the pages the server rendered, plus the ones loaded here.
@@ -250,7 +256,7 @@
 </script>
 
 <svelte:head>
-  <title>{q ? `${[...q].length > 40 ? [...q].slice(0, 40).join('') + '…' : q} - ` : ''}Emotes - cyex.tv</title>
+  <title>{titleQ ? `${titleQ} - ` : ''}Emotes - cyex.tv</title>
   <meta name="description" content="Search approved cyex.tv emotes by name and tag." />
 </svelte:head>
 
@@ -283,7 +289,7 @@
       sheetCount={filters.length}
       head={narrow && !filters.length ? undefined : railHead}
     >
-      <BrowseFilters {view} {tags} onchange={(o) => go(o)} search={narrow ? undefined : field} />
+      <BrowseFilters {view} {tags} failed={!!data.error} onchange={(o) => go(o)} search={narrow ? undefined : field} />
     </SideRail>
   {/snippet}
 
@@ -316,12 +322,7 @@
 
     {#if data.error}
       <div class="state">
-        <State kind="error" title="Couldn’t load emotes.">
-          {data.error}
-          {#snippet actions()}
-            <button class="ui-btn secondary" type="button" onclick={() => invalidateAll()}>Try again</button>
-          {/snippet}
-        </State>
+        <Problem cause="server" onretry={() => invalidateAll()} />
       </div>
     {:else if shown.length === 0 && !hasMore && !switching}
       <div class="state">

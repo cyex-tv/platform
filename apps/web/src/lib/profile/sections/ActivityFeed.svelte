@@ -4,6 +4,7 @@
   // names (paints drawn in the paint), who did it, and how long ago. Public. Pages back 30 at a time.
   import { onMount } from 'svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
+  import Problem from '$lib/components/Problem.svelte';
   import State from '$lib/components/State.svelte';
   import { loadCatalog, type Catalog } from '$lib/cosmetics/store.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
@@ -49,10 +50,7 @@
 {#if first}
   <State kind="loading" title="Loading activity…" />
 {:else if problem && !items.length}
-  <State kind="error" title="Activity didn’t load">
-    {problem}
-    {#snippet actions()}<button class="ui-btn secondary" type="button" onclick={next}>Try again</button>{/snippet}
-  </State>
+  <Problem cause="server" onretry={next} />
 {:else if !items.length}
   <State title="Nothing yet.">Changes to the sets, emotes and cosmetics show up here.</State>
 {:else}

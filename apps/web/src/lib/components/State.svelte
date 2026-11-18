@@ -9,6 +9,8 @@
   type Props = {
     kind?: 'empty' | 'loading' | 'error';
     title?: string;
+    /** A headline with markup in it (a name in <bdi>); used instead of `title`. */
+    heading?: Snippet;
     children?: Snippet;
     actions?: Snippet;
     bare?: boolean;
@@ -17,7 +19,7 @@
     /** Overrides the role the kind implies (a not-found page is a status, not an alert). */
     role?: 'status' | 'alert' | null;
   };
-  let { kind = 'empty', title, children, actions, bare = false, level = 2, role: own }: Props = $props();
+  let { kind = 'empty', title, heading, children, actions, bare = false, level = 2, role: own }: Props = $props();
   const role = $derived(own !== undefined ? (own ?? undefined) : kind === 'error' ? 'alert' : kind === 'loading' ? 'status' : undefined);
   const tag = $derived(kind === 'loading' ? 'p' : level === 1 ? 'h1' : 'h2');
 </script>
@@ -30,7 +32,7 @@
   {:else}
     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3" /><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01" /></svg>
   {/if}
-  {#if title}<svelte:element this={tag} class="t">{title}</svelte:element>{/if}
+  {#if heading}<svelte:element this={tag} class="t">{@render heading()}</svelte:element>{:else if title}<svelte:element this={tag} class="t">{title}</svelte:element>{/if}
   {#if children}<p>{@render children()}</p>{/if}
   {#if actions}<div class="actions">{@render actions()}</div>{/if}
 </div>

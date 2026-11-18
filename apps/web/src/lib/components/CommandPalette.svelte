@@ -175,7 +175,7 @@
 
 <svelte:window onkeydown={onwindowkey} />
 
-<dialog class="palette" bind:this={dialog} aria-label="Search cyex.tv" {onclose} {onclick}>
+<dialog class="palette" bind:this={dialog} aria-modal="true" aria-label="Search cyex.tv" {onclose} {onclick}>
   <div class="box">
     <div class="pal-field">
       <Icon name="search" size={18} />

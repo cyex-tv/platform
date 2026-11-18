@@ -4,6 +4,7 @@
   // this for the others, so nothing is asked for them. Rows are the profile feed's.
   import { onMount } from 'svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
+  import Problem from '$lib/components/Problem.svelte';
   import State from '$lib/components/State.svelte';
   import { loadCatalog, type Catalog } from '$lib/cosmetics/store.svelte';
   import { loadEmoteActivity, type ActivityItem } from '$lib/profile/activity';
@@ -44,10 +45,7 @@
 {#if first}
   <State kind="loading" title="Loading activity…" />
 {:else if problem && !items.length}
-  <State kind="error" title="Activity didn’t load">
-    {problem}
-    {#snippet actions()}<button class="ui-btn secondary" type="button" onclick={next}>Try again</button>{/snippet}
-  </State>
+  <Problem cause="server" onretry={next} home={{ href: '/search', label: 'Browse emotes' }} />
 {:else if !items.length}
   <State title="No activity yet.">Sets adding, renaming or removing this emote show up here.</State>
 {:else}

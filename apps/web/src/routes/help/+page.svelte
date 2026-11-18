@@ -84,7 +84,7 @@
     </aside>
     {/snippet}
 
-    <div class="docs-body" id="help-answers">
+    <div class="docs-body" id="help-answers" tabindex="-1">
       <header class="docs-title">
         <div>
           <h1>Help</h1>

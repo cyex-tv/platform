@@ -3,9 +3,12 @@
   // renders the public page (Uploaded emotes); in the browser, the owner and the account's editors
   // also get Active emotes, Emote sets, Cosmetics (owner, or editors with PROFILE) and Activity
   // (when the API has it), plus edit controls. Sections are ?s= tabs in the ProfileRail.
+  import { setContext } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
   import Icon from '$lib/components/Icon.svelte';
+  import Problem from '$lib/components/Problem.svelte';
+  import { problemTitle } from '$lib/components/problem';
   import State from '$lib/components/State.svelte';
   import { useCopied } from '$lib/clipboard.svelte';
   import { clean } from '$lib/format';
@@ -24,17 +27,9 @@
   import Uploads from './Uploads.svelte';
 
   let { data } = $props();
+  // The page's h1 is the person's name (below); the sections are h2s.
+  setContext('heading-level', 2);
   const name = $derived(clean(data.creator?.displayName ?? ''));
-  let retrying = $state(false);
-  async function retry() {
-    retrying = true;
-    try {
-      await invalidateAll();
-    } finally {
-      retrying = false;
-    }
-  }
-
   const rel = relationState(() => data.id);
   const relation = $derived(rel.value);
   const allowed = $derived(sectionsFor(relation, ACTIVITY_READY));
@@ -68,19 +63,14 @@
 {/snippet}
 
 <svelte:head>
-  <title>{data.creator ? `${section === 'uploads' ? name : `${TITLE[section]} · ${name}`} - cyex.tv` : data.error ? 'Something went wrong - cyex.tv' : 'Nothing here - cyex.tv'}</title>
+  <title>{data.creator ? `${section === 'uploads' ? name : `${TITLE[section]} · ${name}`} - cyex.tv` : data.error ? problemTitle('server') : 'Nothing here - cyex.tv'}</title>
   {#if name}<meta name="description" content="{name} on cyex.tv: emotes, sets and cosmetics." />{/if}
 </svelte:head>
 
 {#if data.error}
   <ColumnLayout>
     <div class="pad">
-      <State kind="error" level={1} title="This page can’t load right now.">
-        {data.error}
-        {#snippet actions()}
-          <button class="ui-btn primary" type="button" onclick={retry} disabled={retrying}>{retrying ? 'Trying…' : 'Try again'}</button>
-        {/snippet}
-      </State>
+      <Problem cause="server" level={1} onretry={() => invalidateAll()} />
     </div>
   </ColumnLayout>
 {:else if !data.creator}
@@ -102,6 +92,7 @@
       <ProfileRail {account} {relation} current={section} activity={ACTIVITY_READY} {actions} profile={data.profile} seed={data.look} />
     {/snippet}
 
+    <h1 class="sr-only"><bdi>{name}</bdi></h1>
     {#if waiting}
       <State kind="loading" title="Loading…" />
     {:else if section === 'active'}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clean, iso } from './format';
+import { clean, iso, isoParts } from './format';
 
 describe('clean', () => {
   it('removes bidi embeddings, overrides and isolates', () => {
@@ -32,5 +32,18 @@ describe('iso', () => {
     // A name that brings its own pop-isolate and an override: both are dropped first.
     expect(iso('a⁩‮b')).toBe('⁨ab⁩');
     expect(`${iso('‮gnp.exe')} added.`).toBe('⁨gnp.exe⁩ added.');
+  });
+});
+
+describe('isoParts', () => {
+  it('splits a sentence into text and isolated names, without the marks', () => {
+    expect(isoParts(`${iso('lumen_fox')} made you an editor.`)).toEqual([
+      { text: 'lumen_fox', name: true },
+      { text: ' made you an editor.', name: false },
+    ]);
+    expect(isoParts(`You got the ${iso('Aurora')} paint. Reason: ${iso('x')}`).map((p) => p.text).join('')).toBe('You got the Aurora paint. Reason: x');
+  });
+  it('leaves a sentence without names whole', () => {
+    expect(isoParts('Your emote was approved.')).toEqual([{ text: 'Your emote was approved.', name: false }]);
   });
 });
