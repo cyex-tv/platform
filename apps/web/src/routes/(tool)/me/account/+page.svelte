@@ -3,6 +3,7 @@
   import DataPanel from '$lib/account/DataPanel.svelte';
   import DeleteAccount from '$lib/account/DeleteAccount.svelte';
   import SessionsPanel from '$lib/account/SessionsPanel.svelte';
+  import OrdersPanel from '$lib/shop/OrdersPanel.svelte';
   import { date } from '$lib/format';
   import Name from '$lib/components/Name.svelte';
   import type { Platform } from '$lib/gql/graphql';
@@ -64,6 +65,8 @@
       </ul>
       <p class="ui-hint pad">Link both to sign in with either. cyex.tv keeps the user ID, login, display name and picture.</p>
     </section>
+
+    <OrdersPanel />
 
     <SessionsPanel />
 

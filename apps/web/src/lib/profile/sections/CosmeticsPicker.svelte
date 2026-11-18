@@ -68,7 +68,11 @@
   </label>
 {/snippet}
 
-<PageHead title="Cosmetics" line={mine ? 'The badge and paint you show next to your name in Twitch and Kick chat, for everyone with cyex.tv.' : `What ${iso(clean(name))} shows in chat. You edit their profile.`} />
+<PageHead title="Cosmetics" line={mine ? 'The badge and paint you show next to your name in Twitch and Kick chat, for everyone with cyex.tv.' : `What ${iso(clean(name))} shows in chat. You edit their profile.`}>
+  {#snippet actions()}
+    {#if mine}<a class="ui-btn secondary" href="/shop"><Icon name="shopping-bag" size={15} />Get more in the shop</a>{/if}
+  {/snippet}
+</PageHead>
 
 <LoadGate source={L} label="Loading cosmetics…">
   {#snippet children(owned)}
@@ -85,7 +89,7 @@
         {/if}
       </header>
       {#if !owned.badges.length}
-        <State bare title="No badges yet.">They’re granted by the cyex.tv team for now.</State>
+        <State bare title="No badges yet.">{#if mine}Find them in <a href="/shop">the shop</a>, or redeem a <a href="/redeem">code</a>.{:else}They’re granted by the cyex.tv team for now.{/if}</State>
       {:else}
         <div class="opts {badgeView}" role="radiogroup" aria-labelledby="badge-h" aria-busy={saving}>
           {#if !badgeFind.trim()}
@@ -120,7 +124,7 @@
         {/if}
       </header>
       {#if !owned.paints.length}
-        <State bare title="No paints yet.">They’re granted by the cyex.tv team for now.</State>
+        <State bare title="No paints yet.">{#if mine}Find them in <a href="/shop">the shop</a>, or redeem a <a href="/redeem">code</a>.{:else}They’re granted by the cyex.tv team for now.{/if}</State>
       {:else}
         <div class="opts {paintView}" role="radiogroup" aria-labelledby="paint-h" aria-busy={saving}>
           {#if !paintFind.trim()}

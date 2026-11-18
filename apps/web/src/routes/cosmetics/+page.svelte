@@ -46,7 +46,7 @@
   <header class="page-head head">
     <div>
       <h1 class="page-title">Cosmetics</h1>
-      <p class="lead">Badges sit before a name in chat, paints colour the name itself. Everyone with the cyex.tv extension sees them on Twitch and Kick. For now the cyex.tv team hands them out.</p>
+      <p class="lead">Badges sit before a name in chat, paints colour the name itself. Everyone with the cyex.tv extension sees them on Twitch and Kick. Get them in the <a class="link inline" href="/shop">shop</a> or with a <a class="link inline" href="/redeem">code</a>.</p>
     </div>
     {#if me}<a class="ui-btn secondary" href={sectionHref(me.id, 'cosmetics')}>Pick yours</a>{/if}
   </header>
