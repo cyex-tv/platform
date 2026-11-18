@@ -531,7 +531,8 @@ export type Mutation = {
    * Your sessions, identities, channels, sets, editor grants, cosmetics and notifications go;
    * your approved emotes that are in other people's sets stay, shown as by a deleted user;
    * your other emotes are deleted. Signing in again later makes a new account. Audited.
-   * `confirm_mismatch` when `confirm` isn't one of your logins.
+   * `confirm_mismatch` when `confirm` isn't one of your logins; `restricted` while the account's
+   * uploads or sign-in are blocked.
    */
   deleteAccount: Scalars['Boolean']['output'];
   /**
@@ -598,8 +599,8 @@ export type Mutation = {
   /** Sign out everywhere but here. Returns how many sessions ended. */
   revokeOtherSessions: Scalars['Int']['output'];
   /**
-   * Sign out one of your sessions, the current one too. False when you have none with that
-   * ID.
+   * Sign out one of your sessions, the current one too (then the cookie is cleared). False
+   * when you have none with that ID.
    */
   revokeSession: Scalars['Boolean']['output'];
   /**
