@@ -83,6 +83,36 @@ pub struct Me {
     pub created_at: String,
 }
 
+/// How a session signed in.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[cfg_attr(feature = "graphql", graphql(name = "SessionKind"))]
+#[serde(rename_all = "lowercase")]
+pub enum SessionKindView {
+    /// The cyex.tv website's cookie.
+    Site,
+    /// A Bearer token for an app (cyex deck, the extension).
+    App,
+}
+
+/// One place you are signed in. Never holds the token or anything made from it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct AccountSession {
+    /// Pass to `revokeSession`.
+    pub id: String,
+    pub kind: SessionKindView,
+    /// For example `Firefox on Windows`, `cyex.tv app` or `Unknown device`, from the user agent
+    /// that signed in.
+    pub device: String,
+    pub created_at: String,
+    /// Updated at most once an hour.
+    pub last_seen_at: String,
+    pub expires_at: String,
+    /// The session this request came with.
+    pub current: bool,
+}
+
 /// A short reference to an account, for owners and editors.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]

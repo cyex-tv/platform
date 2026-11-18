@@ -231,6 +231,19 @@ async fn review(
     )
     .await
     .map_err(db_error)?;
+    if let Some(owner) = before.owner {
+        let (kind, payload) = match to {
+            EmoteState::Approved => (
+                "emote.approved",
+                json!({ "emote_id": ids::to_text(id), "name": before.name }),
+            ),
+            _ => (
+                "emote.rejected",
+                json!({ "emote_id": ids::to_text(id), "name": before.name, "reason": why }),
+            ),
+        };
+        crate::account::notify(&mut tx, owner, kind, &payload).await?;
+    }
     // Sets that held it pending show it now; a rejected one stays hidden, so nothing to tell.
     if to == EmoteState::Approved {
         announce(&mut tx, id, EventType::EmoteUpdated).await?;

@@ -330,6 +330,42 @@ async fn view_of(conn: &mut PgConnection, grant: &Grant) -> ApiResult<AccountEdi
         .ok_or_else(not_found)
 }
 
+/// `editor.added`, `editor.changed` and `editor.removed`: the editor hears unless they did it
+/// themselves, the owner hears unless they did it. The payload names both accounts and who acted,
+/// with display names as they read now, and the permissions after the change.
+async fn notify_grant(
+    conn: &mut PgConnection,
+    caller: &Caller,
+    kind: &str,
+    owner: Uuid,
+    editor: Uuid,
+    permissions: &[String],
+) -> ApiResult<()> {
+    let names = reads::summaries(conn, &[owner, editor, caller.account_id])
+        .await
+        .map_err(db_error)?;
+    let name = |id: Uuid| names.get(&id).map(|s| s.display_name.clone());
+    let payload = |role: &str| {
+        json!({
+            "role": role,
+            "owner_id": ids::to_text(owner),
+            "owner_name": name(owner),
+            "editor_id": ids::to_text(editor),
+            "editor_name": name(editor),
+            "actor_id": ids::to_text(caller.account_id),
+            "actor_name": name(caller.account_id),
+            "permissions": permissions,
+        })
+    };
+    if caller.account_id != editor {
+        crate::account::notify(conn, editor, kind, &payload("editor")).await?;
+    }
+    if caller.account_id != owner {
+        crate::account::notify(conn, owner, kind, &payload("owner")).await?;
+    }
+    Ok(())
+}
+
 pub async fn add(
     state: &AppState,
     caller: &Caller,
@@ -377,6 +413,15 @@ pub async fn add(
         Some(&grant),
     )
     .await?;
+    notify_grant(
+        &mut tx,
+        caller,
+        "editor.added",
+        owner,
+        editor,
+        &grant.permissions,
+    )
+    .await?;
     let view = view_of(&mut tx, &grant).await?;
     tx.commit().await.map_err(sqlx_error)?;
     Ok(view)
@@ -414,6 +459,17 @@ pub async fn update(
         Some(&after),
     )
     .await?;
+    if after.permissions != before.permissions {
+        notify_grant(
+            &mut tx,
+            caller,
+            "editor.changed",
+            owner,
+            editor,
+            &after.permissions,
+        )
+        .await?;
+    }
     let view = view_of(&mut tx, &after).await?;
     tx.commit().await.map_err(sqlx_error)?;
     Ok(view)
@@ -454,6 +510,7 @@ pub async fn remove(
             None,
         )
         .await?;
+        notify_grant(&mut tx, caller, "editor.removed", owner, editor, &[]).await?;
     }
     tx.commit().await.map_err(sqlx_error)?;
     Ok(removed.is_some())

@@ -146,6 +146,9 @@ async fn callback(
                 code: query.code.as_deref(),
                 state: query.state.as_deref(),
                 error: query.error.as_deref(),
+                user_agent: headers
+                    .get(axum::http::header::USER_AGENT)
+                    .and_then(|v| v.to_str().ok()),
             },
             cookie_state.as_deref(),
             caller.as_ref(),
