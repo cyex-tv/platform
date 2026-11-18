@@ -38,6 +38,14 @@ git push -u origin feat/account-search
 gh pr create --base main --head feat/account-search
 ```
 
+## Help, download and the cosmetics gallery (branch `web/help-download`)
+
+- [x] `/help`: 34 short answers in eight groups (getting started, the extension, uploading, sets and channels, editors, cosmetics, account and privacy, moderation and takedowns) on the docs layout. The filter narrows the index and the answers together (every word, question or answer), `/` focuses it, Escape clears it, `?q=` is kept in the address. Questions are data in `lib/help/faq.ts` (vitest: groups, unique anchors, every site link points at a route).
+- [x] `/download`: the extension for Chrome and Firefox as "early testing, coming to the stores", the test build (clone, `npm ci`, `npm run build`, then Load unpacked or Load Temporary Add-on), cyex deck "coming", a line for chat clients and bots. Your browser's card first.
+- [x] `/cosmetics`: every badge and paint from the public `cosmetics` query, badges with a chat-line sample, paints drawn live; signed in, "Paint name / Your name" draws your name in each paint. No ownership anywhere.
+- [x] Footer: Download, Cosmetics, Help (Terms, Privacy, Contact stay out until PR #33). Palette: Help, Download, Cosmetics pages. `initDocs` takes `filter: false` for pages that filter themselves.
+- Manual check: 375, 768, 1440, 2560, dark and light, keyboard (`/`, typing, Escape, index jump), with the dev mock (`.claude/runs/2026-11-17-overnight/screens/g8g5`).
+
 ## Paint studio (branch `feat/paint-studio`, ADR 0018)
 - `apps/web/src/lib/paint-studio/`: the staff editor for name paints, built on the owner's cyex paints tool. Gradient paints (kind, angle or shape, repeat, 2 to 10 stops, up to 4 shadows, fallback colour) with the API's limits checked live; animated paints from the tool's engine (layers, effects, scene elements, presets) rendered and encoded in a Web Worker as WebP, APNG or GIF; previews on sample names on both grounds and in Twitch- and Kick-style chat; import of cyex.tv JSON, integer-colour paint JSON and tool project files, export as cyex.tv JSON, integer JSON, CSS, picture and project; Save to cyex.tv (createPaint / updatePaint; animated: render, upload, wait for ready, IMAGE paint); Open an existing paint.
 - Provenance: the tool's gradient CSS builder and integer-colour formatter were ports of the 7TV extension; neither came over (the gradient side is new code, the formatter was removed from the engine). The engine's custom-code items (`new Function`) were removed.
