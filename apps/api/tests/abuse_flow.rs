@@ -459,7 +459,8 @@ async fn a_takedown_removes_the_image_everywhere_and_reaches_clients() {
     let marked = w
         .gql(&alice, "mutation { markNotificationsRead }", json!({}))
         .await;
-    assert_eq!(marked["data"]["markNotificationsRead"], 1);
+    // The takedown and, from before it, the approval (`emote.approved`).
+    assert_eq!(marked["data"]["markNotificationsRead"], 2);
     let unread = w
         .gql(
             &alice,
