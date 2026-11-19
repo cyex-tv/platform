@@ -119,7 +119,8 @@ fn net_adds(days: i32) -> String {
 /// `$12` exact. Each costly check comes after a cheap test that skips it when it isn't asked
 /// for (Postgres stops an `OR` at the first true), and the name match finds its candidates
 /// through the name, word and tag indexes instead of testing every emote.
-const SEARCH_WHERE: &str = "e.state = 'approved' AND e.deleted_at IS NULL AND NOT e.private
+#[doc(hidden)]
+pub const SEARCH_WHERE: &str = "e.state = 'approved' AND e.deleted_at IS NULL AND NOT e.private
            AND NOT e.unlisted
            AND NOT EXISTS (SELECT 1 FROM accounts oa
                            WHERE oa.id = e.owner_account_id AND oa.deleted_at IS NOT NULL)
