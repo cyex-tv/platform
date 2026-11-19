@@ -108,7 +108,9 @@ describe('gradient CSS (through the site renderer)', () => {
     const s = paintStyleText(img);
     expect(s).toContain('background-image: url("https://cdn.example/a%22b.webp")');
     expect(s).toContain('background-size: cover');
-    expect(paintStyleText({ ...img, repeat: true })).toContain('background-repeat: repeat;');
+    expect(paintStyleText({ ...img, repeat: true })).toContain('background-repeat: repeat, no-repeat;');
+    // a flat layer in the text colour under the picture, so a picture that fails to load leaves the name readable
+    expect(s).toContain(', linear-gradient(currentColor, currentColor)');
     expect(paintStyleText(img, 'blob:http://localhost/x')).toContain('url("blob:http://localhost/x")');
     expect(paintStyleText({ ...img, image: null })).not.toContain('background-image');
   });
