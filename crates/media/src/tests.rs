@@ -510,3 +510,76 @@ mod encoding {
         }
     }
 }
+
+/// A valid PNG of `w`×`h` padded to `total` bytes with a private ancillary chunk after IHDR, so a
+/// file can be big without being a big picture (decoders skip unknown ancillary chunks).
+pub(crate) fn padded_png(w: u32, h: u32, total: usize) -> Vec<u8> {
+    let small = png(w, h);
+    // Signature (8) and IHDR (25) come first; the padding chunk has 12 bytes of framing.
+    let data_len = total.saturating_sub(small.len() + 12);
+    let mut chunk = Vec::with_capacity(data_len + 12);
+    chunk.extend_from_slice(&u32::try_from(data_len).unwrap().to_be_bytes());
+    chunk.extend_from_slice(b"prVt");
+    chunk.resize(8 + data_len, 0x5a);
+    let crc = crc32(&chunk[4..]);
+    chunk.extend_from_slice(&crc.to_be_bytes());
+    let mut out = small[..33].to_vec();
+    out.extend_from_slice(&chunk);
+    out.extend_from_slice(&small[33..]);
+    assert_eq!(out.len(), total);
+    out
+}
+
+pub(crate) fn jpeg(w: u32, h: u32) -> Vec<u8> {
+    let mut out = Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(gradient(w, h, 0))
+        .to_rgb8()
+        .write_to(&mut out, ImageFormat::Jpeg)
+        .unwrap();
+    out.into_inner()
+}
+
+#[test]
+fn a_jpeg_is_a_still_image() {
+    let file = jpeg(96, 64);
+    assert_eq!(sniff(&file), Some(Format::Jpeg));
+    assert_eq!(Format::Jpeg.mime(), "image/jpeg");
+    let p = ok(&file);
+    assert_eq!(
+        (p.format, p.width, p.height, p.frames, p.animated),
+        (Format::Jpeg, 96, 64, 1, false)
+    );
+    // Its files are made like any still: WebP and AVIF at every scale.
+    let made = encode::transcode(&file, &Limits::emote()).unwrap();
+    assert!(!made.animated);
+    assert!(!made.webp.is_empty());
+    // A JPEG cut short doesn't decode.
+    let mut cut = jpeg(96, 64);
+    cut.truncate(cut.len() / 3);
+    assert!(matches!(
+        probe(&cut, &Limits::default()),
+        Err(MediaError::Invalid(_))
+    ));
+}
+
+#[test]
+fn emotes_may_be_up_to_8_mb() {
+    assert_eq!(Limits::emote().max_bytes, 8 * 1024 * 1024);
+    assert_eq!(Limits::default().max_bytes, 5 * 1024 * 1024);
+    assert_eq!(Limits::emote().max_side, Limits::default().max_side);
+    let six = padded_png(64, 64, 6 * 1024 * 1024);
+    // Over the default (cosmetics), inside an emote's limit, and it decodes.
+    assert!(matches!(
+        probe(&six, &Limits::default()),
+        Err(MediaError::TooLarge(_))
+    ));
+    let p = probe(&six, &Limits::emote()).unwrap();
+    assert_eq!((p.format, p.width, p.height), (Format::Png, 64, 64));
+    let exactly = padded_png(64, 64, EMOTE_MAX_BYTES);
+    assert!(probe(&exactly, &Limits::emote()).is_ok());
+    let over = padded_png(64, 64, EMOTE_MAX_BYTES + 1);
+    let Err(MediaError::TooLarge(message)) = probe(&over, &Limits::emote()) else {
+        panic!("an 8 MB + 1 byte file is refused");
+    };
+    assert_eq!(message, "The file is over 8 MB, the most an upload can be.");
+}
