@@ -2,6 +2,22 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Account editors' emote permissions (branch `feat/editor-emote-perms`, ADR 0014 amendment of 2026/11/19)
+
+The owner asked for `EMOTE_UPLOAD`, `EMOTE_MANAGE` and `EMOTE_TRANSFER` to work (billing flags stay stored only).
+- [x] API (additive): `owner_id` on `POST /v1/emotes` (upload as an account you edit; `emotes.uploaded_by`, migration `20261207000080`); `updateEmote`, `deleteEmote`, `emote` and `accountEmotes` for editors with `EMOTE_MANAGE`; `transferEmote(id, toAccountId)`. All three need a grant on every set; an uploads hold on the editor or the owner refuses them; uploads count against both (20 an hour each side). Audited with the editor as actor, `"via": "account_editor"`, subject the owner; the owner's feed shows an editor's upload "by" them.
+- [x] Transfer decision: no accept step. The receiver must be the caller or an account where the caller holds `EMOTE_UPLOAD` on every set (it already trusts them with uploads); the owner follows the same rule; both owners are notified; 60 an hour.
+- [x] Website: Upload as picker in the upload form and dialog (you by default, `?for=` preselects); Edit on `/emotes/[id]` and a working edit page (details, delete, Give to another account) for managers; the managed account's Uploaded emotes in every state on its profile; "You edit" rows link Emotes and Upload and say when a set limit switches the emote permissions off; the permissions dialog drops "Saved now; used once…" for Emotes and notes that they need All sets.
+- [x] Tests: `apps/api/tests/editor_emotes_flow.rs` (Postgres in CI: allow, no flag, wrong account, set-limited, restricted editor and owner, audit rows, the feed line, both upload limits, transfer receivers and notifications); vitest `editors.test.ts`, `api.test.ts`. Dev mock: OTHERS[0] grants upload, manage and transfer.
+- [x] Manual (CDP, `screens/editor-emotes/check.mjs`, 1440 and 375): Edit shows on a managed account's emote and not on another's; the edit page has Details, Give and Delete; Upload as lists you and the managed account, `?for=` picks it; You edit shows Emotes and Upload; the dialog has no "Saved now" note.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/editor-emote-perms
+gh pr create --base main --head feat/editor-emote-perms --title "Account editors: emote upload, manage and transfer" --body-file <file>
+```
+
 ## Final pass of the 2026/11/19 feedback round (branch `fix/final-pass`)
 
 Known fixes, each with a test that fails before and passes after:
