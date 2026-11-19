@@ -1262,3 +1262,77 @@ async fn outbox_ids_topics_and_notify() {
     drop(listener);
     db.close().await;
 }
+
+#[tokio::test]
+async fn name_words_and_initials_are_generated() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let owner = account(&mut c, "1").await;
+    for (name, words, initials) in [
+        ("PepePoint", "pepe point", "pp"),
+        ("KEKWait", "kek wait", "kw"),
+        ("Emote2Fast", "emote 2 fast", "e2f"),
+        ("snake_case-name.x", "snake case name x", "scnx"),
+        ("pog", "pog", "p"),
+    ] {
+        let id = emote(&mut c, owner, name, EmoteState::Approved).await;
+        let got: (String, String) =
+            sqlx::query_as("SELECT name_words, name_initials FROM emotes WHERE id = $1")
+                .bind(id)
+                .fetch_one(&mut *c)
+                .await
+                .unwrap();
+        assert_eq!(got, (words.to_owned(), initials.to_owned()), "{name}");
+    }
+}
+
+#[tokio::test]
+async fn quick_search_ranks_by_tier_then_use() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let owner = account(&mut c, "1").await;
+    let mut by_name = std::collections::HashMap::new();
+    for name in [
+        "xpogx",
+        "KEKPog",
+        "PogChamp",
+        "POG",
+        "pog",
+        "PepePoint",
+        "Hidden",
+    ] {
+        let state = if name == "Hidden" {
+            EmoteState::Pending
+        } else {
+            EmoteState::Approved
+        };
+        by_name.insert(name, emote(&mut c, owner, name, state).await);
+    }
+    let names = |ids: Vec<Uuid>| -> Vec<&'static str> {
+        ids.iter()
+            .map(|id| *by_name.iter().find(|(_, v)| *v == id).unwrap().0)
+            .collect()
+    };
+    let got = cyex_tv_db::search::quick(&mut c, "pog", 10).await.unwrap();
+    assert_eq!(names(got), ["pog", "POG", "PogChamp", "KEKPog", "xpogx"]);
+    let got = cyex_tv_db::search::quick(&mut c, "pp", 10).await.unwrap();
+    assert_eq!(names(got), ["PepePoint"]);
+    let got = cyex_tv_db::search::quick(&mut c, "PepePiont", 10)
+        .await
+        .unwrap();
+    assert_eq!(names(got), ["PepePoint"]);
+    let got = cyex_tv_db::search::quick(&mut c, "pog", 2).await.unwrap();
+    assert_eq!(got.len(), 2);
+    assert!(
+        cyex_tv_db::search::quick(&mut c, "  ", 5)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        cyex_tv_db::search::quick(&mut c, "hidden", 5)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}

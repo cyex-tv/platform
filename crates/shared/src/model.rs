@@ -171,6 +171,27 @@ pub struct AccountEditor {
     pub updated_at: String,
 }
 
+/// Who you are on a channel you can manage, highest first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "snake_case")]
+pub enum ChannelRole {
+    /// The channel is yours.
+    Owner,
+    /// You are an editor of the channel's account.
+    AccountEditor,
+    /// You edit at least one set of the channel's account.
+    SetEditor,
+}
+
+/// A channel you can manage, with your highest role on it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct EditableChannel {
+    pub role: ChannelRole,
+    pub channel: Channel,
+}
+
 /// An account you edit, with what you may do there.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
@@ -615,6 +636,14 @@ pub struct SearchResults {
     pub total: u64,
     pub page: u32,
     pub per_page: u32,
+}
+
+/// The header search: the best emotes and accounts for one query.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct QuickSearch {
+    pub emotes: Vec<Emote>,
+    pub users: Vec<AccountHit>,
 }
 
 // Moderation and roles

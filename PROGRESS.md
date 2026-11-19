@@ -2,6 +2,28 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Header search, nav, notifications and mark (branch `feat/header-search`)
+
+Owner feedback 2026/11/19, section A. Additive API; nothing was deployed.
+
+- [x] The Ctrl K command palette is gone. The header field is the search: typing drops a list under it (ARIA combobox: ↑ ↓, Enter, Escape, Tab) with the top 5 emotes and top 3 people from the new `quickSearch(query)`; Enter with no row picked opens `/search?q=`. Requests wait 150ms and a newer one aborts the older. `/` outside a field focuses it (a page field marked `data-page-search` keeps it). Phones: the search button turns the header row into the field, no modal.
+- [x] `quickSearch` ranks names in tiers: exact, exact ignoring case, prefix, word or initials prefix (`point` and `pp` find `PepePoint`), substring, then near misses (pg_trgm similarity, 3+ characters); most used (channel count) first inside a tier. Migration `20261207000001_quick_search.sql` adds the stored `emotes.name_words` / `name_initials` columns and their indexes. 240 a minute per account or IP (`rate_limited`).
+- [x] Focusing the empty field lists `myEditableChannels`: your channels, then those of accounts you edit, then those whose sets you edit, A to Z inside a role, each channel once under its highest role. Signed out: a hint line.
+- [x] Header links signed in: Emotes, Store (/shop), Subscription (only with an active subscription: `hasSubscription()` is false until subscriptions exist; placeholder `/me/subscription`), Admin for staff. Signed out unchanged. Under 1080px the links keep their icons. The account menu no longer repeats Admin.
+- [x] Notifications: the bell is in the header on every width (a sheet on phones), and new ones pop up as toasts under it (NotificationToasts; only ones newer than the page's first count).
+- [x] The mark is the owner's logo: three outlined bars, the middle one offset and lit with a soft glow (an SVG filter, left out under 20px and with more contrast or forced colours). Header, footer, eyebrows; favicon.svg / -dark / -light (the tab icon follows the site theme), favicon.png and apple-touch-icon.png.
+- [x] Account menu: the name row at the top opens your profile dashboard (`/users/<id>`; the separate Profile row is gone). Sign out ends this session only (`POST /v1/auth/logout`).
+- Tests: `apps/api/tests/quick_search_flow.rs` and `crates/db/tests/queries.rs` (Postgres, CI): tier order, popularity tie-break, camelCase and initials, typo, hidden emotes, rate limit, editable channel roles and order. Vitest: `lib/shell/nav.test.ts` (nav visibility, role sort), `lib/shell/search.test.ts`, `lib/account/toasts.test.ts`.
+- Manual check: 375, 768, 1440 and 2560, dark and light, keyboard (screens in the 2026-11-19-feedback run folder, screens/a).
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/header-search
+gh pr create --base main --head feat/header-search --title "Header search, nav, notifications and the new mark" --body-file <file>
+gh pr merge <n> --merge
+```
+
 ## Sign-off fixes: API (branch `fix/signoff-api`)
 
 The second security review and the sign-off code review (overnight run 2026-11-17). Additive; nothing was deployed.

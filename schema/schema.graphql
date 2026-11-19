@@ -307,6 +307,24 @@ type Channel {
 }
 
 """
+Who you are on a channel you can manage, highest first.
+"""
+enum ChannelRole {
+	"""
+	The channel is yours.
+	"""
+	OWNER
+	"""
+	You are an editor of the channel's account.
+	"""
+	ACCOUNT_EDITOR
+	"""
+	You edit at least one set of the channel's account.
+	"""
+	SET_EDITOR
+}
+
+"""
 What `startCheckout` gives: open Paddle's checkout for this transaction (Paddle.js
 `Paddle.Checkout.open({ transactionId })` with `clientToken`, or go to `checkoutUrl`). The
 order turns `PAID` when Paddle's webhook says so; poll `order(id)`.
@@ -503,6 +521,14 @@ A new batch and its codes in plain text. This is the only time they are shown.
 type CreatedCodeBatch {
 	batch: CodeBatch!
 	codes: [String!]!
+}
+
+"""
+A channel you can manage, with your highest role on it.
+"""
+type EditableChannel {
+	role: ChannelRole!
+	channel: Channel!
 }
 
 """
@@ -1406,6 +1432,15 @@ type Query {
 	"""
 	searchAccounts(query: String!, page: Int, perPage: Int): AccountResults!
 	"""
+	The header search: the top 5 emotes for `query` by the name matcher (exact name, same
+	ignoring case, name prefix, word or initials prefix such as `point` or `pp` for
+	`PepePoint`, substring, then similar names for 3+ characters; most used first within a
+	tier), and the top 3 accounts (`searchAccounts` ranking, a leading `@` ignored, under 2
+	characters finds none). Approved, listed, non-NSFW emotes only. 240 searches a minute per
+	account, or per IP signed out (`rate_limited`).
+	"""
+	quickSearch(query: String!): QuickSearch!
+	"""
 	An account's public profile: linked Twitch and Kick logins (no IDs), roles marked public,
 	and each channel's active set ("Active emotes"). Listed sets: `accountSets`. Null when the
 	account is unknown, deleted or blocked.
@@ -1480,6 +1515,13 @@ type Query {
 	Your channels: one per linked platform you have signed in with.
 	"""
 	myChannels: [Channel!]!
+	"""
+	Channels you can manage: yours (`OWNER`), those of accounts you are an account editor of
+	(`ACCOUNT_EDITOR`), and those of accounts where you edit at least one set (`SET_EDITOR`).
+	Each channel once, under your highest role; sorted by role (`OWNER`, `ACCOUNT_EDITOR`,
+	`SET_EDITOR`), then login (ignoring case), then platform. Signed-in only.
+	"""
+	myEditableChannels: [EditableChannel!]!
 	"""
 	An account's editors (ADR 0014): yours, or, with `accountId`, those of an account you edit
 	with the `EDITORS` permission.
@@ -1599,6 +1641,14 @@ type Query {
 	All roles. Needs `roles.manage`.
 	"""
 	roles: [Role!]!
+}
+
+"""
+The header search: the best emotes and accounts for one query.
+"""
+type QuickSearch {
+	emotes: [Emote!]!
+	users: [AccountHit!]!
 }
 
 """
