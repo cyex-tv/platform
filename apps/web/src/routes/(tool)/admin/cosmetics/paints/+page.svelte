@@ -17,8 +17,8 @@
   import { fail, notify } from '$lib/tool/notices.svelte';
   import { can, session } from '$lib/tool/session.svelte';
 
-  const manage = can('cosmetics.manage');
-  const grant = can('cosmetics.grant');
+  const manage = $derived(can('cosmetics.manage'));
+  const grant = $derived(can('cosmetics.grant'));
   const sample = $derived(session.me?.identities[0]?.displayName ?? 'cyex.tv');
 
   const L = loader(async () => {

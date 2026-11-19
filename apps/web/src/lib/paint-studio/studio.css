@@ -92,6 +92,9 @@
 .ps-painted { display: inline-block; max-width: 100%; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: clip;
   -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
 .ps-big { font-size: 30px; line-height: 1.25; letter-spacing: -.01em; }
+/* The readability floor (a halo on the finished name, as the site draws it): a wrapper so it filters the paint's own shadows too. */
+.ps-floor { display: block; min-width: 0; max-width: 100%; }
+.ps-chat .ps-floor { display: inline; }
 .ps-mid { font-size: 18px; line-height: 1.3; }
 
 /* Chat frames. */

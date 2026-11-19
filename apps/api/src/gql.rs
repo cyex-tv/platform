@@ -263,15 +263,33 @@ async fn me_of(ctx: &Context<'_>, caller: &Caller) -> Result<Me> {
     let display_platform = accounts::display_platform(&mut conn, account.id)
         .await
         .map_err(internal)?;
-    let roles = cyex_tv_db::roles::roles_of(&mut conn, account.id)
-        .await
-        .map_err(internal)?
+    // The owners hold the top role without an assignment row; their own profile lists it, hidden
+    // (never public, and `accountProfile` never shows it to anyone else).
+    let top = if caller.owner {
+        cyex_tv_db::roles::system(&mut conn, cyex_tv_db::roles::SYSTEM_ROOT)
+            .await
+            .map_err(internal)?
+    } else {
+        None
+    };
+    let roles = top
         .into_iter()
         .map(|r| cyex_tv_shared::model::OwnRole {
             id: ids::to_text(r.id),
             name: r.name,
-            public: r.public,
+            public: false,
         })
+        .chain(
+            cyex_tv_db::roles::roles_of(&mut conn, account.id)
+                .await
+                .map_err(internal)?
+                .into_iter()
+                .map(|r| cyex_tv_shared::model::OwnRole {
+                    id: ids::to_text(r.id),
+                    name: r.name,
+                    public: r.public,
+                }),
+        )
         .collect();
     Ok(Me {
         id: ids::to_text(account.id),
