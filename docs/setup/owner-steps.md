@@ -176,3 +176,62 @@ curl -sI https://cyex.tv/ | grep -i content-security
 The first shows all six headers. The second still shows the long policy with
 `script-src 'self' 'sha256-…' … 'nonce-…'` and `frame-ancestors 'none'` at the end, which means
 rule 2 didn't catch it.
+
+# Owner steps 2026/11/17: Paddle for the cyex.tv shop
+
+ADR 0016. cyex.tv gets its **own** Paddle account. Don't reuse or change anything in cyex.app's
+Paddle setup (its products, keys or webhooks), and nothing here touches cyex-api. Until these
+steps are done the shop lists items and checkout says it isn't available yet.
+
+Do it in the **sandbox** first (https://sandbox-vendors.paddle.com), with `CYEX_TV_PADDLE_ENV=sandbox`,
+and test with Paddle's test cards. Repeat in the live account (https://vendors.paddle.com) only
+when the sandbox works, then switch to `production`.
+
+## 1. The account
+- Sign up for a new Paddle Billing account for cyex.tv (a sandbox one, and later the live one).
+- Live only: in **Checkout → Website approval**, add `cyex.tv` and let Paddle review it.
+- **Checkout → Checkout settings → Default payment link:** `https://cyex.tv/shop`.
+
+## 2. Products and prices
+- **Catalog → Products → New product**, one per shop item (or one "cyex.tv chat cosmetics"
+  product with one price per item). Tax category: **Standard digital goods**.
+- On each, **New price**: one-time (not recurring), EUR, the amount you want. Copy its ID
+  (`pri_…`); it goes into the item's "Paddle price ID" on the cyex.tv admin page.
+
+## 3. Keys
+- **Developer tools → Authentication → API keys → New API key**, named `cyex.tv api`, with
+  write and read access to **Transactions** and **Adjustments** (nothing else needed). Sandbox
+  keys start with `pdl_sdbx_`, live ones with `pdl_live_`; the api refuses a key of the wrong
+  environment.
+- **Developer tools → Authentication → Client-side tokens → New client-side token**, named
+  `cyex.tv website` (sandbox ones start with `test_`, live ones with `live_`).
+
+## 4. The webhook
+- **Developer tools → Notifications → New destination**:
+  - Description: `cyex.tv api`
+  - Type: **Webhook**, URL `https://api.cyex.tv/v1/shop/paddle/webhook`
+  - Usage type: platform
+  - Events: `transaction.completed`, `transaction.canceled`, `adjustment.created`,
+    `adjustment.updated`
+- Save, then copy the destination's **secret key** (`pdl_ntfset_…`).
+- Cloudflare: make sure no WAF or bot rule challenges `POST api.cyex.tv/v1/shop/paddle/webhook`
+  (Paddle can't solve a challenge). The api checks the signature itself.
+
+## 5. Env values
+In `/srv/cyex-tv/infra/env/api.env` on the server (never in a repo):
+```
+CYEX_TV_PADDLE_ENV=sandbox
+CYEX_TV_PADDLE_API_KEY=<the API key>
+CYEX_TV_PADDLE_CLIENT_TOKEN=<the client-side token>
+CYEX_TV_PADDLE_WEBHOOK_SECRET=<the destination's secret key>
+```
+Restart the api (`docker compose up -d api`). Its log says `paddle` with the environment, and
+warns for anything still unset.
+
+## 6. Check (sandbox)
+- On cyex.tv, as staff, make an item with the sandbox price ID and make it visible.
+- Buy it with Paddle's test card `4242 4242 4242 4242` (any future expiry, any CVC). The order
+  turns paid within seconds and the badge or paint shows up under your cosmetics.
+- In **Developer tools → Notifications → Logs**, the deliveries show `200`.
+- Refund the order from the admin orders page: Paddle shows a refund adjustment, the cosmetics
+  are gone.

@@ -3,8 +3,10 @@
   // it works without scripts), an error with a retry, or the one closing line. The two button
   // labels share one grid cell, so "Loading…" never changes the width.
   import { count } from '$lib/format';
+  import { btnClass, btnFamily } from './btn';
 
   type Props = { hasMore: boolean; busy?: boolean; error?: string; total: number; onmore: () => void; href?: string };
+  const bc = btnClass(btnFamily());
   let { hasMore, busy = false, error = '', total, onmore, href }: Props = $props();
 
   function click(e: MouseEvent) {
@@ -16,14 +18,14 @@
 <div class="more">
   {#if error}
     <p class="muted fine" role="alert">{error}</p>
-    <button class="btn btn-s" type="button" onclick={onmore}>Try again</button>
+    <button class={bc} type="button" onclick={onmore}>Try again</button>
   {:else if hasMore}
     {#if href}
-      <a class="btn btn-s go" {href} onclick={click} aria-disabled={busy}>
+      <a class="{bc} go" {href} onclick={click} aria-disabled={busy}>
         <span class="lab" class:off={busy}>Load more</span><span class="lab" class:off={!busy} aria-hidden={!busy}>Loading…</span>
       </a>
     {:else}
-      <button class="btn btn-s go" type="button" onclick={onmore} disabled={busy} aria-busy={busy}>
+      <button class="{bc} go" type="button" onclick={onmore} disabled={busy} aria-busy={busy}>
         <span class="lab" class:off={busy}>Load more</span><span class="lab" class:off={!busy} aria-hidden={!busy}>Loading…</span>
       </button>
     {/if}

@@ -9,6 +9,7 @@
   import EmoteTile from '$lib/components/EmoteTile.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
+  import Problem from '$lib/components/Problem.svelte';
   import HeroCluster from '$lib/components/home/HeroCluster.svelte';
   import { browserOf, chat, cluster, strip, type Browser, type Sort } from '$lib/components/home/pick';
   import { count } from '$lib/format';
@@ -34,13 +35,6 @@
   onMount(() => {
     if (matchMedia('(max-width: 900px)').matches) rows = 4;
   });
-
-  let retrying = $state(false);
-  async function retry() {
-    retrying = true;
-    await invalidateAll();
-    retrying = false;
-  }
 
   const SAMPLE = `curl -s https://api.cyex.tv/v1/gql \\
   -H 'content-type: application/json' \\
@@ -71,7 +65,7 @@
     <div class="block-head">
       <h2 class="block-title" id="emotes-title">{sort === 'top' ? 'Top emotes' : 'New emotes'}</h2>
       <div class="tools">
-        <Segmented label="Sort" size="s" options={[{ value: 'top', label: 'Top' }, { value: 'new', label: 'New' }]} value={sort} onchange={(v) => (sort = v)} />
+        <Segmented label="Sort" size="s" options={[{ value: 'top', label: 'Top', icon: 'arrow-up' }, { value: 'new', label: 'New', icon: 'sparkles' }]} value={sort} onchange={(v) => (sort = v)} />
         <a class="link" href={sort === 'new' ? '/search?sort=new' : '/search'}>
           Browse all{data.total ? ` ${count(data.total)}` : ''}
           <span class="arrow"><Icon name="arrow-right" /></span>
@@ -87,8 +81,7 @@
     {:else}
       <div class="empty">
         {#if data.failed}
-          <p><strong>The emotes didn't load.</strong> The API didn't answer; it's usually back within a minute.</p>
-          <button class="btn btn-s" type="button" onclick={retry} disabled={retrying}>{retrying ? 'Trying' : 'Try again'}</button>
+          <Problem bare cause="server" home={null} onretry={() => invalidateAll()} />
         {:else}
           <p><strong>No emotes yet.</strong> The library is empty. The first upload gets this whole row.</p>
           <a class="btn btn-s" href="/me/upload">Upload one</a>

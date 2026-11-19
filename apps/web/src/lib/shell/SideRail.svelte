@@ -1,7 +1,7 @@
 <script lang="ts">
   // The one vertical rail (7TV's side bar, cyex styling): context for the page's subject, never a
   // second top bar. 240px on a surface card, sticky under the header with its own scroll. Groups
-  // have a quiet caption and a hairline between them; rows are icon + label + optional count;
+  // have a hairline between them (a group is a collapsible row with a count, or a plain caption); rows are icon + label + optional count;
   // the current row is full-contrast and bold with an accent icon (aria-current="page"), no fill or bar. The rows
   // are one Tab stop (the current row); arrow keys move between them. Fewer than two rows: no
   // nav at all, only the head (a profile card needs no one-tab strip).
@@ -36,11 +36,15 @@
     bar?: Snippet;
     /** collapse="sheet" only: a number on the sheet button (filters that are on); hidden at 0. */
     sheetCount?: number;
+    /** collapse="tabs" only: the phone strip's tabs when they are not just the rows (a page without a row of its own adds its tab). */
+    tabs?: RailItem[];
   };
-  let { label, groups = [], head, children, foot, collapse = 'tabs', sheetLabel = 'Menu', bar, sheetCount = 0 }: Props = $props();
+  let { label, groups = [], head, children, foot, collapse = 'tabs', sheetLabel = 'Menu', bar, sheetCount = 0, tabs }: Props = $props();
 
   // Collapsible groups the reader closed, by their label. A group holding the current row stays open.
   let closed = $state<Record<string, boolean>>({});
+  // A closed group still shows its open tickets: the sum of its rows' numbers.
+  const total = (g: RailGroup) => g.items.reduce((n, i) => n + (typeof i.count === 'number' ? i.count : 0), 0);
   const isOpen = (g: RailGroup) => !g.toggle || g.items.some((i) => i.current) || !closed[g.toggle.label];
 
   let narrow = $state(false);
@@ -81,7 +85,7 @@
   // Keep the current tab in view when the strip is narrower than its tabs.
   $effect(() => {
     if (!narrow || !strip) return;
-    void groups;
+    void groups; void tabs;
     const tab = strip.querySelector<HTMLElement>('[aria-current="page"]');
     if (!tab) return;
     // Scroll only as far as needed, so the first tabs stay readable when the current one already shows.
@@ -93,10 +97,34 @@
     edges();
   });
 
+  // The desktop rail scrolls inside itself when the window is short: a soft fade at its bottom
+  // edge says there is more, and only while there is.
+  let aside = $state<HTMLElement>();
+  let more = $state(false);
+  function below() {
+    if (aside) more = aside.scrollTop + aside.clientHeight < aside.scrollHeight - 2;
+  }
+  $effect(() => {
+    if (!aside) return;
+    const el = aside;
+    below();
+    const ro = new ResizeObserver(below);
+    ro.observe(el);
+    const mo = new MutationObserver(below);
+    mo.observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ['open', 'hidden'] });
+    el.addEventListener('scroll', below, { passive: true });
+    return () => {
+      ro.disconnect();
+      mo.disconnect();
+      el.removeEventListener('scroll', below);
+    };
+  });
+
   const flat = $derived(groups.flatMap((g) => g.items));
+  const strips = $derived(tabs ?? flat);
   const navigable = $derived(flat.length >= 2);
   // The one Tab stop: the current row, else the first.
-  const stop = $derived(flat.find((i) => i.current)?.href ?? flat[0]?.href);
+  const stop = $derived((narrow && collapse === 'tabs' ? strips : flat).find((i) => i.current)?.href ?? flat[0]?.href);
   const current = $derived(flat.find((i) => i.current));
   const shown = (c: RailItem['count']) => (typeof c === 'number' ? fmt(c) : c);
   const has = (c: RailItem['count']) => c != null && c !== '';
@@ -112,6 +140,7 @@
           disabled={open && g.items.some((i) => i.current)}>
           {#if g.toggle.icon}<Icon name={g.toggle.icon} />{/if}
           <span class="lbl">{g.toggle.label}</span>
+          {#if !open && total(g) > 0}<span class="count" aria-hidden="true">{fmt(total(g))}</span><span class="sr-only">, {fmt(total(g))}</span>{/if}
           <span class="chev" class:up={open}><Icon name="chevron-down" size={14} /></span>
         </button>
       {/if}
@@ -122,7 +151,7 @@
             <a class="row" href={i.href} aria-current={i.current ? 'page' : undefined} tabindex={i.href === stop ? 0 : -1} onclick={() => onpick?.()}>
               {#if i.icon}<Icon name={i.icon} />{/if}
               <span class="lbl">{i.label}</span>
-              {#if has(i.count)}<span class="count">{shown(i.count)}</span>{/if}
+              {#if has(i.count)}<span class="count" aria-hidden="true">{shown(i.count)}</span><span class="sr-only">, {shown(i.count)}</span>{/if}
             </a>
           </li>
         {/each}
@@ -142,9 +171,9 @@
 {#if narrow && collapse === 'tabs'}
   {#if navigable}
   <nav class="strip" class:fade-start={fadeStart} class:fade-end={fadeEnd} aria-label={label} bind:this={strip} use:arrowNav={'horizontal'}>
-    {#each flat as i (i.href)}
+    {#each strips as i (i.href)}
       <a class="tab" href={i.href} aria-current={i.current ? 'page' : undefined} tabindex={i.href === stop ? 0 : -1}>
-        {i.label}{#if has(i.count)}<span class="count">{shown(i.count)}</span>{/if}
+        {#if i.icon}<Icon name={i.icon} size={16} />{/if}{i.label}{#if has(i.count)}<span class="count" aria-hidden="true">{shown(i.count)}</span><span class="sr-only">, {shown(i.count)}</span>{/if}
       </a>
     {/each}
   </nav>
@@ -162,7 +191,10 @@
     <div class="in-sheet">{@render body(() => (sheet = false))}</div>
   </BottomSheet>
 {:else}
-  <aside class="rail" class:footed={!!foot} aria-label={label}>{@render body()}</aside>
+  <aside class="rail" class:footed={!!foot} aria-label={label} bind:this={aside}>
+    {@render body()}
+    {#if more}<div class="cue" aria-hidden="true"></div>{/if}
+  </aside>
 {/if}
 
 <style>
@@ -170,6 +202,10 @@
     width: var(--rail-w); max-height: calc(100dvh - var(--nav-h) - env(safe-area-inset-top, 0px) - 2 * var(--rail-gap));
     overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent;
     padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
+  /* A zero-height element pinned to the rail's bottom edge, its fade drawn upward over the last rows. */
+  .cue { position: sticky; bottom: 0; flex: none; height: 0; pointer-events: none; }
+  .cue::before { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 36px;
+    background: linear-gradient(to top, var(--surface), transparent); }
   /* Before hydration on a narrow screen: no full rail above the content, the strip follows. */
   @media (max-width: 899.98px) { .rail { display: none; } }
   .head { padding: 2px 2px 12px; margin-bottom: 10px; border-bottom: 1px solid var(--border); }
@@ -220,7 +256,9 @@
   .tab { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px; scroll-snap-align: start;
     border-radius: var(--radius); font-size: var(--t-nav); font-weight: 500; color: var(--muted); white-space: nowrap;
     transition: background-color var(--fast), color var(--fast); }
+  .tab :global(svg) { color: var(--dim); }
   .tab[aria-current='page'] { color: var(--text); font-weight: 600; }
+  .tab[aria-current='page'] :global(svg) { color: var(--accent-text); }
   .tab[aria-current='page'] .count { color: var(--muted); }
   @media (pointer: coarse) { .tab { height: 44px; } .row { min-height: 44px; } }
 

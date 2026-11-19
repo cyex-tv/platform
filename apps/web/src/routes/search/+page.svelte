@@ -7,12 +7,13 @@
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
+  import Icon, { type IconName } from '$lib/components/Icon.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import BrowseFilters from '$lib/components/browse/BrowseFilters.svelte';
   import BulkAdd from '$lib/components/browse/BulkAdd.svelte';
   import EmoteTable from '$lib/components/browse/EmoteTable.svelte';
-  import { looks, loadOwned } from '$lib/cosmetics/store.svelte';
-  import { session } from '$lib/tool/session.svelte';
+  import { looks } from '$lib/cosmetics/store.svelte';
+  import Problem from '$lib/components/Problem.svelte';
   import State from '$lib/components/State.svelte';
   import {
     apiQuery,
@@ -43,6 +44,11 @@
 
   const view = $derived(data.view);
   const q = $derived(clean(view.q));
+  // The query as it goes in the tab title: no control characters, cut short, and nothing at all when nothing is left.
+  const titleQ = $derived.by(() => {
+    const t = [...q.replace(/[\p{Cc}\p{Cf}]/gu, '').trim()];
+    return t.length > 40 ? `${t.slice(0, 40).join('')}…` : t.join('');
+  });
   const filters = $derived(activeOf(view));
 
   // ---- Results: the pages the server rendered, plus the ones loaded here.
@@ -63,10 +69,10 @@
   const tags = $derived(topTags(loaded));
   const switching = $derived(!!navigating.to);
 
-  const sorts = $derived<{ value: Sort; label: string }[]>([
-    ...(view.q ? [{ value: 'relevance' as const, label: 'Relevance' }] : []),
-    { value: 'top', label: 'Top' },
-    { value: 'new', label: 'New' },
+  const sorts = $derived<{ value: Sort; label: string; icon: IconName }[]>([
+    ...(view.q ? [{ value: 'relevance' as const, label: 'Relevance', icon: 'search' as const }] : []),
+    { value: 'top', label: 'Top', icon: 'arrow-up' },
+    { value: 'new', label: 'New', icon: 'sparkles' },
   ]);
 
   // ---- Search field: the URL follows the typing (replaced, not pushed, after a short pause).
@@ -184,11 +190,6 @@
     if (!on) picked = [];
     sync();
   }
-  // The painted name of your own emotes comes from the shared cosmetics cache (the API shows
-  // other creators' paints by platform id only, so theirs stay plain).
-  $effect(() => {
-    if (layout === 'table' && session.me) loadOwned(session.me.id, true).catch(() => {});
-  });
   const signin = $derived(`/signin?back=${encodeURIComponent(page.url.pathname + page.url.search)}`);
 
   // ---- Load more: button, and automatically when the end comes near. The page count goes into
@@ -255,7 +256,7 @@
 </script>
 
 <svelte:head>
-  <title>{q ? `${[...q].length > 40 ? [...q].slice(0, 40).join('') + '…' : q} - ` : ''}Emotes - cyex.tv</title>
+  <title>{titleQ ? `${titleQ} - ` : ''}Emotes - cyex.tv</title>
   <meta name="description" content="Search approved cyex.tv emotes by name and tag." />
 </svelte:head>
 
@@ -288,7 +289,7 @@
       sheetCount={filters.length}
       head={narrow && !filters.length ? undefined : railHead}
     >
-      <BrowseFilters {view} {tags} onchange={(o) => go(o)} search={narrow ? undefined : field} />
+      <BrowseFilters {view} {tags} failed={!!data.error} onchange={(o) => go(o)} search={narrow ? undefined : field} />
     </SideRail>
   {/snippet}
 
@@ -306,7 +307,7 @@
           <IconButton icon="grid-dense" label="Compact grid" size="s" variant="outline" pressed={layout === 'grid' && density === 'compact'} onclick={() => setDensity('compact')} />
           <IconButton icon="list" label="Table" size="s" variant="outline" pressed={layout === 'table'} onclick={() => setLayout('table')} />
         </div>
-        <button class="ui-btn secondary small selbtn" type="button" aria-pressed={selecting} onclick={() => setSelecting(!selecting)}>Select</button>
+        <button class="btn btn-s selbtn" type="button" aria-pressed={selecting} onclick={() => setSelecting(!selecting)}><Icon name="check" size={15} />Select</button>
       </div>
     </div>
 
@@ -321,12 +322,7 @@
 
     {#if data.error}
       <div class="state">
-        <State kind="error" title="Couldn’t load emotes.">
-          {data.error}
-          {#snippet actions()}
-            <button class="ui-btn secondary" type="button" onclick={() => invalidateAll()}>Try again</button>
-          {/snippet}
-        </State>
+        <Problem cause="server" onretry={() => invalidateAll()} />
       </div>
     {:else if shown.length === 0 && !hasMore && !switching}
       <div class="state">
@@ -340,9 +336,9 @@
           {/if}
           {#snippet actions()}
             {#if filters.length}
-              <button class="ui-btn secondary" type="button" onclick={() => go({ ...CLEARED })}>Clear filters</button>
+              <button class="btn btn-s" type="button" onclick={() => go({ ...CLEARED })}>Clear filters</button>
             {:else if view.q}
-              <button class="ui-btn secondary" type="button" onclick={clearText}>Clear search</button>
+              <button class="btn btn-s" type="button" onclick={clearText}>Clear search</button>
             {/if}
           {/snippet}
         </State>
@@ -412,7 +408,9 @@
   .dens { display: inline-flex; gap: 4px; }
   .dens :global(.ib) { width: 40px; height: 40px; }
   .selbtn { height: 34px; }
-  .selbtn[aria-pressed='true'] { font-weight: 700; color: var(--accent-text); border-color: var(--accent-border); }
+  .selbtn[aria-pressed='true'] { font-weight: 700; }
+  .selbtn :global(svg) { color: var(--dim); }
+  .selbtn[aria-pressed='true'] :global(svg) { color: var(--accent-text); }
 
   .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
   .clearall { background: none; border: 0; padding: 0 8px; font: inherit; font-size: var(--t-small); cursor: pointer; min-height: 40px; margin-block: 0; }

@@ -5,6 +5,7 @@
   import { invalidateAll } from '$app/navigation';
   import Icon from '$lib/components/Icon.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
+  import Problem from '$lib/components/Problem.svelte';
   import State from '$lib/components/State.svelte';
   import BadgeIcon from '$lib/cosmetics/BadgeIcon.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
@@ -18,7 +19,6 @@
 
   let find = $state('');
   let preview = $state<'paint' | 'name'>('paint');
-  let retrying = $state(false);
 
   const me = $derived(session.me);
   const myName = $derived(clean(me?.identities[0]?.displayName) || 'you');
@@ -29,11 +29,6 @@
   const kind = { LINEAR_GRADIENT: 'Linear', RADIAL_GRADIENT: 'Radial', IMAGE: 'Picture' } as Record<string, string>;
   const empty = $derived(!data.badges.length && !data.paints.length);
 
-  async function retry() {
-    retrying = true;
-    await invalidateAll();
-    retrying = false;
-  }
 </script>
 
 <svelte:head>
@@ -42,20 +37,17 @@
   <meta property="og:title" content="Cosmetics" />
 </svelte:head>
 
-<ColumnLayout>
-  <header class="page-head head">
+<ColumnLayout top>
+  <header class="head">
     <div>
       <h1 class="page-title">Cosmetics</h1>
-      <p class="lead">Badges sit before a name in chat, paints colour the name itself. Everyone with the cyex.tv extension sees them on Twitch and Kick. For now the cyex.tv team hands them out.</p>
+      <p class="lead">Badges sit before a name in chat, paints colour the name itself. Everyone with the cyex.tv extension sees them on Twitch and Kick. Get them in the <a class="link inline" href="/shop">shop</a> or with a <a class="link inline" href="/redeem">code</a>.</p>
     </div>
-    {#if me}<a class="ui-btn secondary" href={sectionHref(me.id, 'cosmetics')}>Pick yours</a>{/if}
+    {#if me}<a class="btn btn-s" href={sectionHref(me.id, 'cosmetics')}>Pick yours</a>{/if}
   </header>
 
   {#if data.error}
-    <State kind="error" title="The cosmetics didn’t load.">
-      {data.error}
-      {#snippet actions()}<button type="button" class="ui-btn" onclick={retry} disabled={retrying}>{retrying ? 'Trying…' : 'Try again'}</button>{/snippet}
-    </State>
+    <Problem cause="server" onretry={() => invalidateAll()} />
   {:else if empty}
     <State title="No cosmetics yet.">The first badges and paints are on their way.</State>
   {:else}
@@ -66,13 +58,13 @@
         <input class="input" type="search" placeholder="Search" bind:value={find} autocomplete="off" data-page-search />
       </label>
       {#if me && data.paints.length}
-        <Segmented label="Paint preview" size="s" options={[{ value: 'paint', label: 'Paint name' }, { value: 'name', label: 'Your name' }]}
+        <Segmented label="Paint preview" size="s" options={[{ value: 'paint', label: 'Paint name', icon: 'brush' }, { value: 'name', label: 'Your name', icon: 'user' }]}
           value={preview} onchange={(v) => (preview = v)} />
       {/if}
     </div>
 
     <section class="group" aria-labelledby="badges-h">
-      <h2 class="block-title" id="badges-h">Badges <span class="n">{count(badges.length)}</span></h2>
+      <h2 class="block-title" id="badges-h">Badges<span class="n" aria-hidden="true">{count(badges.length)}</span><span class="sr-only">, {count(badges.length)}</span></h2>
       {#if !data.badges.length}
         <State bare title="No badges yet." />
       {:else if !badges.length}
@@ -94,7 +86,7 @@
     </section>
 
     <section class="group" aria-labelledby="paints-h">
-      <h2 class="block-title" id="paints-h">Paints <span class="n">{count(paints.length)}</span></h2>
+      <h2 class="block-title" id="paints-h">Paints<span class="n" aria-hidden="true">{count(paints.length)}</span><span class="sr-only">, {count(paints.length)}</span></h2>
       {#if !data.paints.length}
         <State bare title="No paints yet." />
       {:else if !paints.length}
@@ -117,7 +109,7 @@
 </ColumnLayout>
 
 <style>
-  .head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 24px; }
+  .head { margin-bottom: 24px; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px 24px; }
   .lead { margin: 12px 0 0; max-width: 62ch; font-size: var(--t-body, 16px); line-height: 1.6; color: var(--muted); }
 
   .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 24px; }
@@ -127,7 +119,7 @@
 
   .group + .group { margin-top: clamp(32px, 4vw, 48px); }
   .block-title { display: flex; align-items: baseline; gap: 10px; margin-bottom: 16px; }
-  .n { font-size: var(--t-small); font-weight: 500; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .n { margin-left: 6px; font-size: var(--t-small); font-weight: 500; color: var(--dim); font-variant-numeric: tabular-nums; }
 
   .grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr)); }
   .item { display: grid; align-content: start; gap: 8px; min-width: 0; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }

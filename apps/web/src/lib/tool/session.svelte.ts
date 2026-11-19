@@ -65,6 +65,9 @@ export const ADMIN_PERMISSIONS = [
   'global_set.edit',
   'cosmetics.manage',
   'cosmetics.grant',
+  'shop.manage',
+  'shop.orders',
+  'codes.manage',
 ];
 
 /** Whether the account may open any part of the admin pages. */

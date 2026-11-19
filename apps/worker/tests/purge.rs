@@ -144,6 +144,7 @@ async fn files_are_deleted_and_purged() {
             token: "purge-token".to_owned(),
             cdn_url: "https://cdn.example.test".to_owned(),
         }),
+        paddle: None,
     };
     let handlers = Handlers::default().on(purge::KIND, purge::run);
 
@@ -211,6 +212,7 @@ async fn without_a_token_files_are_still_deleted() {
         db: db.pool.clone(),
         store: Some(store.clone()),
         purge: None,
+        paddle: None,
     };
     let handlers = Handlers::default().on(purge::KIND, purge::run);
     assert_eq!(

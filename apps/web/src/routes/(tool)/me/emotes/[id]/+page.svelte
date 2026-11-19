@@ -1,11 +1,13 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { gql } from '$lib/api';
+  import { ApiError, gql } from '$lib/api';
+  import { problemTitle } from '$lib/components/problem';
   import { ready } from '$lib/emote';
   import { clean, date, iso } from '$lib/format';
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
   import { ADD_SET_EMOTE, DELETE_EMOTE, EMOTE, MY_SETS, UPDATE_EMOTE } from '$lib/queries';
+  import { sectionHref } from '$lib/profile/rows';
   import { nameProblem, parseTags, tagsProblem } from '$lib/rules';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import { loader } from '$lib/tool/loader.svelte';
@@ -60,7 +62,7 @@
     const id = page.params.id ?? '';
     slow = false;
     const r = await gql(EMOTE, { id }, fetch);
-    if (!r.emote) throw new Error('This emote doesn’t exist, or isn’t yours to see.');
+    if (!r.emote) throw new ApiError('This emote doesn’t exist, or isn’t yours to see.', 'not_found');
     if (id === page.params.id) fill(r.emote);
     return r.emote;
   });
@@ -145,9 +147,15 @@
   }
 </script>
 
-<svelte:head><title>{emote?.name ?? 'Emote'} - cyex.tv</title></svelte:head>
+<svelte:head><title>{L.cause ? problemTitle(L.cause, true, 'No emote here') : `${emote?.name ?? 'Emote'} - cyex.tv`}</title></svelte:head>
 
-<LoadGate source={L} label="Loading the emote…">
+<LoadGate
+  source={L}
+  label="Loading the emote…"
+  level={1}
+  home={{ href: sectionHref(session.me?.id ?? '', 'uploads'), label: 'Your emotes' }}
+  missing={{ title: 'No emote here.', body: 'It may have been deleted, or it isn’t yours to see.' }}
+>
 {#snippet children()}
 {#if emote}
   <PageHead

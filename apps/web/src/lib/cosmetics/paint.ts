@@ -135,3 +135,63 @@ export function paintRing(p: PaintLike | null | undefined): string {
   const c = paintColor(p);
   return c ? `background: ${c}` : '';
 }
+
+// ── Readability floor ────────────────────────────────────────────────────────────────────────
+// A pale paint vanishes on the light ground and a very dark one on the dark ground. The paint
+// keeps its look; PaintedName adds a faint outline (a soft drop-shadow) only where the paint falls
+// under 3:1 against the ground, and only in the theme where that holds. A paint that has shadows of
+// its own gets none (the floor on top of them reads as mud).
+
+/** The two grounds names are drawn on (tokens.css `--bg`). */
+export const GROUND = { light: '#ffffff', dark: '#08090c' } as const;
+/** Contrast a painted name should reach against its ground (WCAG large-text / graphics floor). */
+export const FLOOR_RATIO = 3;
+
+function channels(hex: string): [number, number, number, number] {
+  const n = (i: number) => parseInt(hex.slice(i, i + 2), 16);
+  return [n(1), n(3), n(5), hex.length === 9 ? n(7) / 255 : 1];
+}
+
+/** WCAG relative luminance of a `#RRGGBB` colour (0 black … 1 white). */
+export function luminance(hex: string): number {
+  const [r, g, b] = channels(hex).slice(0, 3).map((v) => {
+    const s = v / 255;
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+}
+
+/** WCAG contrast ratio between two colours, 1..21. A translucent `fg` is blended onto `bg` first. */
+export function contrast(fg: string, bg: string): number {
+  const [r, g, b, a] = channels(fg);
+  const [br, bg_, bb] = channels(bg);
+  const mix = (f: number, k: number) => Math.round(f * a + k * (1 - a));
+  const flat = `#${[mix(r, br), mix(g, bg_), mix(b, bb)].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+  const [l1, l2] = [luminance(flat), luminance(bg)].sort((x, y) => y - x);
+  return (l1! + 0.05) / (l2! + 0.05);
+}
+
+/** The colours a paint is drawn in: its stops, else its plain colour. Empty for an image paint without one. */
+function paintColors(p: PaintLike): string[] {
+  const stops = p.kind !== 'IMAGE' ? p.stops.map((s) => safeColor(s.color)).filter((c): c is string => !!c) : [];
+  if (stops.length >= 2) return stops;
+  const c = paintColor(p);
+  return c ? [c] : [];
+}
+
+/**
+ * Which theme a paint needs a readability floor in: 'light' when any of its colours is under 3:1
+ * on the white ground, 'dark' when under 3:1 on the dark one, null when it reads on both (or has
+ * no known colour, like an image paint without a fallback). A paint can't be both: no colour is
+ * under 3:1 on both grounds, but a gradient from pale to near-black can; then 'both'.
+ */
+export function paintFloor(p: PaintLike | null | undefined): 'light' | 'dark' | 'both' | null {
+  if (!p) return null;
+  // A paint with shadows of its own already carries its outline: adding the floor over them muddies it.
+  if (p.shadows?.length) return null;
+  const cs = paintColors(p);
+  if (!cs.length) return null;
+  const light = cs.some((c) => contrast(c, GROUND.light) < FLOOR_RATIO);
+  const dark = cs.some((c) => contrast(c, GROUND.dark) < FLOOR_RATIO);
+  return light && dark ? 'both' : light ? 'light' : dark ? 'dark' : null;
+}

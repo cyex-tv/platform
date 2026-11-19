@@ -33,16 +33,28 @@ kbd { font: inherit; }
   transition: background-color var(--dur-hover), border-color var(--dur-hover),
     box-shadow var(--dur-hover), filter var(--dur-hover), transform var(--dur-press) ease-out; }
 .btn:active { transform: scale(var(--press)); }
+/* One rule for the primary's glow: a page's one main action (.btn-primary) has it, as cyex-web allows;
+   the dense tools' .ui-btn.primary (tool.css) and the header's Upload (AppHeader) are flat by design. */
 .btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink);
   box-shadow: 0 10px 30px -12px var(--accent-glow); }
+/* Only one glowing primary per page: the small ones (cards, dialogs, empty states) are flat; a page's
+   main action is the large .btn-primary, or opts in with .btn-glow. */
+.btn-s.btn-primary:not(.btn-glow) { box-shadow: none; }
 .btn .arrow { transition: transform var(--dur-move) var(--ease); }
 @media (hover: hover) and (pointer: fine) {
   .btn:hover { border-color: var(--muted); background: var(--surface-2); }
   .btn-primary:hover { background: var(--accent); border-color: var(--accent);
     filter: brightness(1.08); box-shadow: 0 14px 40px -10px var(--accent-glow); }
+  .btn-s.btn-primary:not(.btn-glow):hover { box-shadow: none; }
   .btn:hover .arrow { transform: translateX(3px); }
 }
 .btn-s { height: 40px; padding: 0 14px; }
+/* Variants of the one public button: .btn-primary above, plus a quiet one and a destructive one. */
+.btn-ghost { background: none; border-color: transparent; color: var(--muted); }
+.btn-danger { color: var(--red); }
+@media (hover: hover) and (pointer: fine) {
+  .btn-ghost:hover { background: var(--surface-hover); border-color: transparent; color: var(--text); }
+}
 /* Touch: the small button keeps its 40px look, its hit area grows to 44px. */
 @media (pointer: coarse) { .btn-s { position: relative; } .btn-s::after { content: ''; position: absolute; inset: -2px 0; } }
 .btn[disabled] { opacity: 1; color: var(--muted); cursor: default; pointer-events: none; }
@@ -62,8 +74,8 @@ kbd { font: inherit; }
 
 /* A page that isn't the landing page: a title under the nav */
 /* The nav is sticky and in the flow, so pages start right under it (no --nav-h offset). */
-.page-head { padding: clamp(32px, 5vw, 64px) 0 32px; }
-.page-head h1 { font-size: var(--t-page); line-height: 1.25; letter-spacing: -.02em; }
+/* The same top as the rail and column layouts (--rail-gap under the header), so every title sits at one height. */
+.page-head { padding: var(--rail-gap) 0 24px; }
 /* The title of every page but the home hero: one size (--t-page), wherever the page's h1 sits. */
 .page-title { margin: 0; font-size: var(--t-page); font-weight: 600; line-height: 1.25; letter-spacing: -.02em; min-width: 0; overflow-wrap: anywhere; }
 .page-head .lead { margin-top: 12px; }
@@ -84,3 +96,15 @@ kbd { font: inherit; }
 .fine { font-size: var(--t-fine); color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
   clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Touch (the one pass for the whole site): every control reaches 44px, by min-height (it wins over
+   any height a component sets) or by the ::after hit area the components use where the look stays
+   smaller, and text fields are 16px so iOS doesn't zoom the page. !important only on the font
+   size, because a component's own scoped size would otherwise win. */
+@media (pointer: coarse) {
+  .btn:not(.btn-s) { min-height: 44px; min-width: 44px; }
+  .btn-s { min-width: 44px; } /* the 40px look keeps its ::after hit area in height; icon-only ones need the width */
+  .link { min-height: 44px; margin-block: -12px; }
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color']), select, textarea { min-height: 44px; font-size: 16px !important; }
+  summary { min-height: 44px; }
+}

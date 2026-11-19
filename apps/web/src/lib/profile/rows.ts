@@ -1,7 +1,7 @@
 // The profile's rail (your profile is your dashboard, the 7TV model): which rows a viewer gets on
 // an account's page, where each goes, and which one is current. Pure, so it is tested.
-//   - Everyone: Uploaded emotes.
-//   - The owner, and editors of the account: Active emotes and Emote sets; the owner also Channels.
+//   - Everyone: Uploaded emotes and Emote sets (the account's listed sets, ADR 0017).
+//   - The owner, and editors of the account: Active emotes, and all their sets; the owner also Channels.
 //   - The owner, and editors with PROFILE: Cosmetics.
 //   - Everyone: Activity (public, ADR 0016), when the API has it.
 // Sections are query-param tabs on /users/<id> (?s=sets); Uploaded emotes is the default (no
@@ -37,7 +37,7 @@ export function sectionsFor(r: Relation, activity: boolean): SectionKey[] {
   const out: SectionKey[] = [];
   if (manages(r)) out.push('active');
   out.push('uploads');
-  if (manages(r)) out.push('sets');
+  out.push('sets');
   if (canProfile(r)) out.push('cosmetics');
   if (activity) out.push('activity');
   return out;
@@ -83,4 +83,24 @@ export function profileRail(accountId: string, r: Relation, current: RailKey, ac
   if (r.mine) emotes.push({ href: '/me/channels', label: 'Channels', icon: 'tv', current: current === 'channels' });
   const more = keys.filter((k) => k === 'cosmetics' || k === 'activity').map(item);
   return [{ items: emotes }, ...(more.length ? [{ items: more }] : [])];
+}
+
+/**
+ * The /me pages that have no row of their own in the profile rail (Upload, Notifications,
+ * Account, Editors), as the extra tab the phone strip shows while you are on one, so the strip
+ * always says where you are. Null on every other page.
+ */
+export function stripExtra(path: string): RailItem | null {
+  const at = (base: string) => path === base || path.startsWith(`${base}/`);
+  if (at('/me/upload')) return { href: '/me/upload', label: 'Upload', icon: 'upload', current: true };
+  if (at('/me/notifications')) return { href: '/me/notifications', label: 'Notifications', icon: 'bell', current: true };
+  if (at('/me/account')) return { href: '/me/account', label: 'Account', icon: 'user', current: true };
+  if (at('/me/editors')) return { href: '/me/editors', label: 'Editors', icon: 'circle-user', current: true };
+  return null;
+}
+
+/** The strip's tabs: the rail's rows, plus `extra` marked current (and then no other tab is). */
+export function stripTabs(groups: RailGroup[], extra: RailItem | null): RailItem[] {
+  const flat = groups.flatMap((g) => g.items);
+  return extra ? [...flat.map((i) => ({ ...i, current: false })), extra] : flat;
 }

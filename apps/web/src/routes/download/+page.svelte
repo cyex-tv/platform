@@ -67,7 +67,7 @@
     <p class="sub">Build it from the source: you need git and Node 22.12 or newer. It takes a minute.</p>
     <div class="code">
       <pre><code>{BUILD}</code></pre>
-      <button type="button" class="ui-btn secondary copy" onclick={copyBuild} aria-describedby="copy-state">{copied === 'copied' ? 'Copied' : 'Copy'}</button>
+      <button type="button" class="btn btn-s copy" onclick={copyBuild} aria-describedby="copy-state">{copied === 'copied' ? 'Copied' : 'Copy'}</button>
       <span class="sr-only" id="copy-state" role="status">{copied === 'copied' ? 'Copied' : copied === 'failed' ? 'Couldn’t copy' : ''}</span>
     </div>
     <div class="steps">

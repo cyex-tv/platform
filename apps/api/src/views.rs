@@ -42,12 +42,7 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 fn summary(summaries: &HashMap<Uuid, Summary>, id: Option<Uuid>) -> Option<AccountSummary> {
-    let s = summaries.get(&id?)?;
-    Some(AccountSummary {
-        id: ids::to_text(s.account_id),
-        display_name: s.display_name.clone(),
-        avatar: s.avatar.clone(),
-    })
+    summaries.get(&id?).map(AccountSummary::from)
 }
 
 /// The files of an emote, from `files.variants` (written by the Phase 3 pipeline in this
@@ -181,13 +176,43 @@ pub async fn sets(
     viewer: &Viewer,
     cdn_url: &str,
 ) -> DbResult<Vec<EmoteSet>> {
+    build_sets(conn, sets, viewer, cdn_url, None).await
+}
+
+/// `sets`, or with `preview` only the newest that many emotes of each set, newest first and
+/// read as such, however large the sets are.
+async fn build_sets(
+    conn: &mut PgConnection,
+    sets: &[Set],
+    viewer: &Viewer,
+    cdn_url: &str,
+    preview: Option<usize>,
+) -> DbResult<Vec<EmoteSet>> {
     let set_ids: Vec<Uuid> = sets.iter().map(|s| s.id).collect();
     let edits = editable(conn, sets, viewer).await?;
-    let rows: Vec<MemberRow> = reads::members(conn, &set_ids)
-        .await?
-        .into_iter()
-        .filter(|row| visible(row, viewer, &edits))
-        .collect();
+    let rows: Vec<MemberRow> = match preview {
+        None => reads::members(conn, &set_ids)
+            .await?
+            .into_iter()
+            .filter(|row| visible(row, viewer, &edits))
+            .collect(),
+        Some(0) => Vec::new(),
+        Some(n) => {
+            let edit_sets: Vec<Uuid> = edits.iter().copied().collect();
+            let access = reads::MemberAccess {
+                account: viewer.account_id,
+                reviewer: viewer.reviewer,
+                edit_sets: &edit_sets,
+            };
+            reads::newest_members(
+                conn,
+                &set_ids,
+                &access,
+                i64::try_from(n).unwrap_or(i64::MAX),
+            )
+            .await?
+        }
+    };
 
     let emote_ids: Vec<Uuid> = rows.iter().map(|r| r.emote_id).collect();
     let tags = reads::tags(conn, &emote_ids).await?;
@@ -200,7 +225,21 @@ pub async fn sets(
         .collect();
     let summaries = reads::summaries(conn, &accounts).await?;
     let counts = reads::channel_counts(conn, &emote_ids).await?;
-    let used = sets::counts(conn, &set_ids).await?;
+    // Editors count every member; everyone else, the members they can see.
+    let edit_sets: Vec<Uuid> = edits.iter().copied().collect();
+    let mut used = reads::visible_counts(
+        conn,
+        &set_ids,
+        &reads::MemberAccess {
+            account: viewer.account_id,
+            reviewer: viewer.reviewer,
+            edit_sets: &edit_sets,
+        },
+    )
+    .await?;
+    if !edit_sets.is_empty() {
+        used.extend(sets::counts(conn, &edit_sets).await?);
+    }
 
     let mut by_set: HashMap<Uuid, Vec<SetEmote>> = HashMap::new();
     for row in &rows {
@@ -239,15 +278,11 @@ pub async fn set_summaries(
 ) -> DbResult<Vec<SetSummary>> {
     let ids: Vec<Uuid> = rows.iter().map(|s| s.id).collect();
     let active = sets::active(conn, &ids).await?;
-    let built = sets(conn, rows, viewer, cdn_url).await?;
+    let built = build_sets(conn, rows, viewer, cdn_url, Some(preview)).await?;
     Ok(built
         .into_iter()
         .zip(rows)
         .map(|(set, row)| {
-            let mut emotes = set.emotes;
-            // Oldest first as built; the card shows the newest.
-            emotes.reverse();
-            emotes.truncate(preview);
             SetSummary {
                 id: set.id,
                 name: set.name,
@@ -258,7 +293,8 @@ pub async fn set_summaries(
                 capacity: set.capacity,
                 slots_used: set.slots_used,
                 active: active.contains(&row.id),
-                preview: emotes,
+                // Newest first, as read.
+                preview: set.emotes,
                 created_at: set.created_at,
             }
         })

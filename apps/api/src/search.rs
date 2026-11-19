@@ -2,16 +2,17 @@
 
 use std::collections::HashMap;
 
-use axum::http::StatusCode;
 use cyex_tv_auth::Caller;
-use cyex_tv_db::search::{EmoteSearch, PgSearch, Query};
+use cyex_tv_db::search::{ACCOUNT_QUERY_MIN, EmoteSearch, PgSearch, Query};
 use cyex_tv_db::{ids, reads};
-use cyex_tv_shared::error::{ApiError, ApiResult};
+use cyex_tv_shared::error::ApiResult;
 use cyex_tv_shared::model::{
     AccountHit, AccountResults, AccountSummary, EmoteSort, PublicIdentity, SearchResults,
 };
 
 use crate::catalog::db_error;
+use crate::errors::sqlx_error;
+use crate::limits;
 use crate::state::AppState;
 use crate::views;
 
@@ -33,7 +34,8 @@ pub const ACCOUNTS_PER_PAGE: u32 = 20;
 pub const ACCOUNTS_PER_PAGE_MAX: u32 = 50;
 
 /// `searchAccounts`: live accounts by Twitch or Kick login or display name, public fields only.
-/// A leading `@` is ignored. Limited per account, or per IP when signed out.
+/// A leading `@` is ignored; a query under two characters finds nobody. Limited per account, or
+/// per IP when signed out. Matches are counted up to 1000 (`total_capped`), so the pages end there; a page past the last is empty.
 pub async fn accounts(
     state: &AppState,
     caller: Option<&Caller>,
@@ -42,23 +44,24 @@ pub async fn accounts(
     page: Option<u32>,
     per_page: Option<u32>,
 ) -> ApiResult<AccountResults> {
-    let key = match caller {
-        Some(c) => format!("a:{}", ids::to_text(c.account_id)),
-        None => format!("ip:{ip}"),
-    };
-    state.limits.account_search.check(&key).map_err(|_| {
-        ApiError::new(
-            StatusCode::TOO_MANY_REQUESTS,
-            "rate_limited",
-            "That's a lot of searches. Try again in a minute.",
-        )
-    })?;
     let per_page = per_page
         .unwrap_or(ACCOUNTS_PER_PAGE)
         .clamp(1, ACCOUNTS_PER_PAGE_MAX);
-    let page = page.unwrap_or(1).clamp(1, 1000);
-    let text = text.trim().trim_start_matches('@');
-    let mut conn = state.db.acquire().await.map_err(|e| db_error(e.into()))?;
+    // A page past the last one comes back empty (with the real total), not as the last page.
+    let page = page.unwrap_or(1).max(1);
+    let empty = || AccountResults {
+        items: Vec::new(),
+        total: 0,
+        total_capped: false,
+        page,
+        per_page,
+    };
+    let text = text.trim().trim_start_matches('@').trim();
+    if text.chars().count() < ACCOUNT_QUERY_MIN {
+        return Ok(empty());
+    }
+    limits::account_search(state, caller, ip)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let hits = cyex_tv_db::search::accounts(
         &mut conn,
         text,
@@ -70,31 +73,33 @@ pub async fn accounts(
     let summaries = reads::summaries(&mut conn, &hits.ids)
         .await
         .map_err(db_error)?;
-    let mut items = Vec::with_capacity(hits.ids.len());
-    for id in &hits.ids {
-        let Some(s) = summaries.get(id) else { continue };
-        let identities = cyex_tv_db::accounts::identities(&mut conn, *id)
-            .await
-            .map_err(db_error)?
-            .into_iter()
-            .map(|i| PublicIdentity {
-                platform: i.platform,
-                login: i.login,
-                display_name: i.display_name,
+    let mut identities = cyex_tv_db::accounts::identities_many(&mut conn, &hits.ids)
+        .await
+        .map_err(db_error)?;
+    let items = hits
+        .ids
+        .iter()
+        .filter_map(|id| {
+            let s = summaries.get(id)?;
+            Some(AccountHit {
+                account: AccountSummary::from(s),
+                identities: identities
+                    .remove(id)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|i| PublicIdentity {
+                        platform: i.platform,
+                        login: i.login,
+                        display_name: i.display_name,
+                    })
+                    .collect(),
             })
-            .collect();
-        items.push(AccountHit {
-            account: AccountSummary {
-                id: ids::to_text(s.account_id),
-                display_name: s.display_name.clone(),
-                avatar: s.avatar.clone(),
-            },
-            identities,
-        });
-    }
+        })
+        .collect();
     Ok(AccountResults {
         items,
         total: u64::try_from(hits.total).unwrap_or(0),
+        total_capped: hits.capped,
         page,
         per_page,
     })

@@ -70,9 +70,11 @@
   /* Touch: 44px whatever the size (mobile-native). */
   @media (pointer: coarse) { .m, .s { width: 44px; height: 44px; } .s::after { inset: 0; } }
   .outline { border-color: var(--border); }
-  .ib[aria-pressed='true'] { color: var(--text); background: var(--surface-2); border-color: var(--border-strong); }
+  .ib[aria-pressed='true'] { color: var(--accent-text); } /* pressed = the accent icon: no fill, border change or bar */
   .ib:active { transform: scale(var(--press)); }
   .ib:focus-visible { color: var(--text); }
+  /* High contrast drops the accent icon: a pressed button keeps a system-colour outline. */
+  @media (forced-colors: active) { .ib[aria-pressed='true']:not(:focus-visible) { outline: 1px solid Highlight; outline-offset: -2px; } }
 
   .tip { position: absolute; left: 50%; z-index: var(--z-tip); padding: 5px 8px; border-radius: var(--radius-btn);
     background: var(--text); color: var(--bg); font-size: var(--t-fine); font-weight: 500; line-height: 1.2; white-space: nowrap;
@@ -83,14 +85,12 @@
   .ib:focus-visible .tip { opacity: 1; transform: translateX(-50%); }
 
   @media (hover: hover) and (pointer: fine) {
-    .ib:hover { color: var(--text); background: var(--surface-2); }
+    .ib:hover { color: var(--text); }
+    .ib[aria-pressed='true']:hover { color: var(--accent-text); }
     .outline:hover { border-color: var(--border-strong); }
     .ib:hover .tip { opacity: 1; transform: translateX(-50%); transition-delay: var(--delay-tip); }
     /* Warm: another tooltip just hid, so this one shows at once and without the scale. */
     .ib.warm:hover .tip { transition-delay: 0s; transition-duration: 0s; }
-  }
-  @media (forced-colors: active) {
-    .ib[aria-pressed='true'] { outline: 2px solid Highlight; outline-offset: -2px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .tip, .ib:focus-visible .tip { transform: translateX(-50%); }

@@ -30,26 +30,39 @@
   let paintFind = $state('');
   let preview = $state<'paint' | 'name'>('paint');
   let saving = $state(false);
+  // Picks go one after the other, and a failure puts back only its own field, and only while no
+  // later pick of that field has been made.
+  let queue: Promise<unknown> = Promise.resolve();
+  const latest = { badge: 0, paint: 0 };
+  let pending = 0;
 
   const match = (q: string) => (n: string) => n.toLowerCase().includes(q.trim().toLowerCase());
 
-  async function choose(owned: Owned, kind: 'badge' | 'paint', id: string | null) {
-    const before = { badgeId: owned.badgeId ?? null, paintId: owned.paintId ?? null };
-    const after = { ...before, [`${kind}Id`]: id };
-    if (after.badgeId === before.badgeId && after.paintId === before.paintId) return;
-    L.set(picked(accountId, owned, after.badgeId, after.paintId));
+  function choose(owned: Owned, kind: 'badge' | 'paint', id: string | null) {
+    const cur = L.data ?? owned;
+    const before = kind === 'badge' ? (cur.badgeId ?? null) : (cur.paintId ?? null);
+    if (before === id) return;
+    const mineSeq = ++latest[kind];
+    const set = (c: Owned, v: string | null) =>
+      kind === 'badge' ? picked(accountId, c, v, c.paintId ?? null) : picked(accountId, c, c.badgeId ?? null, v);
+    L.set(set(cur, id));
+    pending++;
     saving = true;
-    try {
-      const vars = kind === 'badge' ? { badgeId: id ?? '' } : { paintId: id ?? '' };
-      await gql(SELECT_COSMETICS, { ...vars, ownerId: mine ? null : accountId });
-      const label = kind === 'badge' ? owned.badges.find((b) => b.id === id)?.name : owned.paints.find((p) => p.id === id)?.name;
-      notify(id ? `${iso(label)} on.` : `No ${kind} now.`);
-    } catch (e) {
-      L.set(picked(accountId, owned, before.badgeId, before.paintId));
-      fail(e);
-    } finally {
-      saving = false;
-    }
+    queue = queue.then(async () => {
+      try {
+        const vars = kind === 'badge' ? { badgeId: id ?? '' } : { paintId: id ?? '' };
+        await gql(SELECT_COSMETICS, { ...vars, ownerId: mine ? null : accountId });
+        if (mineSeq === latest[kind]) {
+          const label = kind === 'badge' ? cur.badges.find((b) => b.id === id)?.name : cur.paints.find((p) => p.id === id)?.name;
+          notify(id ? `${iso(label)} on.` : `No ${kind} now.`);
+        }
+      } catch (e) {
+        if (mineSeq === latest[kind] && L.data) L.set(set(L.data, before));
+        fail(e);
+      } finally {
+        if (--pending === 0) saving = false;
+      }
+    });
   }
 </script>
 
@@ -68,7 +81,11 @@
   </label>
 {/snippet}
 
-<PageHead title="Cosmetics" line={mine ? 'The badge and paint you show next to your name in Twitch and Kick chat, for everyone with cyex.tv.' : `What ${iso(clean(name))} shows in chat. You edit their profile.`} />
+<PageHead title="Cosmetics" line={mine ? 'The badge and paint you show next to your name in Twitch and Kick chat, for everyone with cyex.tv.' : `What ${iso(clean(name))} shows in chat. You edit their profile.`}>
+  {#snippet actions()}
+    {#if mine}<a class="btn btn-s" href="/shop"><Icon name="shopping-bag" size={15} />Get more in the shop</a>{/if}
+  {/snippet}
+</PageHead>
 
 <LoadGate source={L} label="Loading cosmetics…">
   {#snippet children(owned)}
@@ -85,18 +102,18 @@
         {/if}
       </header>
       {#if !owned.badges.length}
-        <State bare title="No badges yet.">They’re granted by the cyex.tv team for now.</State>
+        <State bare title="No badges yet.">{#if mine}Find them in <a href="/shop">the shop</a>, or redeem a <a href="/redeem">code</a>.{:else}They’re granted by the cyex.tv team for now.{/if}</State>
       {:else}
         <div class="opts {badgeView}" role="radiogroup" aria-labelledby="badge-h" aria-busy={saving}>
           {#if !badgeFind.trim()}
             <label class="opt" class:on={!owned.badgeId}>
-              <input type="radio" name="badge" checked={!owned.badgeId} onchange={() => choose(owned, 'badge', null)} />
+              <input type="radio" name="badge" disabled={saving} checked={!owned.badgeId} onchange={() => choose(owned, 'badge', null)} />
               <span class="dot" aria-hidden="true"></span><Icon name="ban" size={18} /><span class="lb">None</span>
             </label>
           {/if}
           {#each badges as b (b.id)}
             <label class="opt" class:on={owned.badgeId === b.id}>
-              <input type="radio" name="badge" checked={owned.badgeId === b.id} onchange={() => choose(owned, 'badge', b.id)} />
+              <input type="radio" name="badge" disabled={saving} checked={owned.badgeId === b.id} onchange={() => choose(owned, 'badge', b.id)} />
               <span class="dot" aria-hidden="true"></span><BadgeIcon badge={b} size={24} />
               <span class="lb"><bdi>{clean(b.name)}</bdi>{#if badgeView === 'list' && b.tooltip}<span class="sub"><bdi>{clean(b.tooltip)}</bdi></span>{/if}</span>
             </label>
@@ -112,7 +129,7 @@
         <h2 id="paint-h">Paint</h2>
         {#if owned.paints.length}
           <div class="tools">
-            <Segmented label="Preview" size="s" options={[{ value: 'paint', label: 'Paint name' }, { value: 'name', label: mine ? 'Your name' : 'Their name' }]}
+            <Segmented label="Preview" size="s" options={[{ value: 'paint', label: 'Paint name', icon: 'brush' }, { value: 'name', label: mine ? 'Your name' : 'Their name', icon: 'user' }]}
               value={preview} onchange={(v) => (preview = v)} />
             {@render find('paints', paintFind, (v) => (paintFind = v))}
             {@render views('Paints', paintView, (v) => (paintView = v))}
@@ -120,18 +137,18 @@
         {/if}
       </header>
       {#if !owned.paints.length}
-        <State bare title="No paints yet.">They’re granted by the cyex.tv team for now.</State>
+        <State bare title="No paints yet.">{#if mine}Find them in <a href="/shop">the shop</a>, or redeem a <a href="/redeem">code</a>.{:else}They’re granted by the cyex.tv team for now.{/if}</State>
       {:else}
         <div class="opts {paintView}" role="radiogroup" aria-labelledby="paint-h" aria-busy={saving}>
           {#if !paintFind.trim()}
             <label class="opt" class:on={!owned.paintId}>
-              <input type="radio" name="paint" checked={!owned.paintId} onchange={() => choose(owned, 'paint', null)} />
+              <input type="radio" name="paint" disabled={saving} checked={!owned.paintId} onchange={() => choose(owned, 'paint', null)} />
               <span class="dot" aria-hidden="true"></span><Icon name="ban" size={18} /><span class="lb">None</span>
             </label>
           {/if}
           {#each paints as p (p.id)}
             <label class="opt" class:on={owned.paintId === p.id}>
-              <input type="radio" name="paint" checked={owned.paintId === p.id} onchange={() => choose(owned, 'paint', p.id)} aria-label={p.name} />
+              <input type="radio" name="paint" disabled={saving} checked={owned.paintId === p.id} onchange={() => choose(owned, 'paint', p.id)} aria-label={p.name} />
               <span class="dot" aria-hidden="true"></span>
               <span class="lb paint" aria-hidden="true">
                 <PaintedName name={preview === 'paint' ? p.name : name} paint={p} />
@@ -158,8 +175,9 @@
   .views { display: flex; gap: 2px; }
   .vb { display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 1px solid transparent; border-radius: var(--radius);
     background: none; color: var(--dim); cursor: pointer; transition: color var(--fast), border-color var(--fast); }
-  .vb[aria-pressed='true'] { color: var(--text); border-color: var(--border-strong); }
+  .vb[aria-pressed='true'] { color: var(--accent-text); } /* the accent icon, no box */
   @media (hover: hover) and (pointer: fine) { .vb:hover { color: var(--text); } }
+  @media (pointer: coarse) { .vb { width: 44px; height: 44px; } }
 
   .opts { display: grid; gap: 2px 8px; }
   .opts.grid { grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); }
@@ -178,7 +196,7 @@
   .paint { font-size: var(--t-ui); }
   .sub { font-size: var(--t-fine); font-weight: 400; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .none { margin: 0; padding: 10px; color: var(--dim); font-size: var(--t-small); }
-  @media (hover: hover) and (pointer: fine) { .opt:hover { background: var(--row-hover); color: var(--text); } }
+  @media (hover: hover) and (pointer: fine) { .opt:hover { color: var(--text); } }
   @media (max-width: 640px) {
     .tools { width: 100%; }
     .find { order: 3; flex: 1 1 100%; width: auto; }

@@ -5,4 +5,5 @@ export const prerender = true;
 
 export const load: PageLoad = () => ({
   footer: 'slim' as const, // the docs layout ends where its last section does
+  skipTo: 'help-answers', // the second skip link: past the index, to the answers
 });

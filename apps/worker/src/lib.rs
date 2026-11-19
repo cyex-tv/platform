@@ -16,7 +16,7 @@ use std::time::Duration;
 
 use chrono::Utc;
 use cyex_tv_db::jobs::{self, Job};
-use cyex_tv_db::{event_sessions, oauth_states, outbox, search, sessions};
+use cyex_tv_db::{audit, event_sessions, ids, oauth_states, outbox, search, sessions, shop};
 use cyex_tv_shared::metrics::{self, Labels, Registry};
 use cyex_tv_storage::Store;
 use sqlx::PgPool;
@@ -45,6 +45,9 @@ pub struct Ctx {
     pub store: Option<Store>,
     /// Cloudflare cache purging for takedowns; `None` without a token.
     pub purge: Option<purge::Purge>,
+    /// cyex.tv's Paddle account, for cancelling stale checkouts; `None` (or no API key) skips
+    /// that.
+    pub paddle: Option<Arc<cyex_tv_paddle::Paddle>>,
 }
 
 pub type JobFuture = Pin<Box<dyn Future<Output = Result<(), JobError>> + Send>>;
@@ -251,9 +254,143 @@ pub async fn run_one(
     Ok(Some((id, outcome)))
 }
 
+/// Shop orders left pending this long are failed (`expired`); a late payment is still taken.
+pub const PENDING_ORDER_HOURS: i64 = 24;
+/// Handled Paddle webhook events are forgotten after this many days.
+pub const PADDLE_EVENT_DAYS: i64 = 90;
+
+/// Fails shop orders pending for more than a day, each with an audit row
+/// (`shop.order_expired`), in batches. Returns how many.
+pub async fn expire_orders(db: &PgPool) -> Result<u64, cyex_tv_db::DbError> {
+    let before = Utc::now() - chrono::Duration::hours(PENDING_ORDER_HOURS);
+    let mut n = 0;
+    loop {
+        let mut tx = db.begin().await?;
+        let expired = shop::expire_pending(&mut tx, before, 500).await?;
+        for order in &expired {
+            audit::write(
+                &mut tx,
+                &audit::NewEntry {
+                    actor: None,
+                    action: "shop.order_expired",
+                    target_kind: "shop_order",
+                    target_id: &ids::to_text(order.id),
+                    before: Some(serde_json::json!({ "status": "pending" })),
+                    after: Some(serde_json::json!({
+                        "status": "failed",
+                        "reason": shop::failed::EXPIRED,
+                        "provider_transaction_id": order.provider_transaction_id,
+                    })),
+                },
+            )
+            .await?;
+        }
+        tx.commit().await?;
+        n += expired.len() as u64;
+        if expired.len() < 500 {
+            return Ok(n);
+        }
+    }
+}
+
+/// A staff refund left as requested this long is put back to paid (see [`revert_refunds`]).
+pub const REFUND_REQUEST_HOURS: i64 = 1;
+/// Old checkouts cancelled at Paddle per clean-up.
+pub const CANCEL_BATCH: i64 = 200;
+
+/// Staff refunds stuck as requested for over an hour (the api stopped between asking Paddle
+/// and finishing) are paid again, each with an audit row (`shop.refund_request_reverted`), so
+/// staff can refund them again. A refund Paddle did take still arrives through its webhook.
+pub async fn revert_refunds(db: &PgPool) -> Result<u64, cyex_tv_db::DbError> {
+    let before = Utc::now() - chrono::Duration::hours(REFUND_REQUEST_HOURS);
+    let mut n = 0;
+    loop {
+        let mut tx = db.begin().await?;
+        let reverted = shop::revert_refund_requests(&mut tx, before, 500).await?;
+        for order in &reverted {
+            audit::write(
+                &mut tx,
+                &audit::NewEntry {
+                    actor: None,
+                    action: "shop.refund_request_reverted",
+                    target_kind: "shop_order",
+                    target_id: &ids::to_text(order.id),
+                    before: Some(serde_json::json!({ "status": "refund_requested" })),
+                    after: Some(serde_json::json!({
+                        "status": "paid",
+                        "provider_transaction_id": order.provider_transaction_id,
+                    })),
+                },
+            )
+            .await?;
+        }
+        tx.commit().await?;
+        n += reverted.len() as u64;
+        if reverted.len() < 500 {
+            return Ok(n);
+        }
+    }
+}
+
+/// Cancels at Paddle the transactions of replaced and expired orders not tried yet, so their old
+/// checkouts can't be paid. A cancel Paddle refuses flags the order (it is not tried again; a
+/// late payment is still taken) with an audit row (`shop.transaction_cancel_failed`). Returns
+/// how many were cancelled.
+pub async fn cancel_stale_checkouts(
+    db: &PgPool,
+    paddle: &cyex_tv_paddle::Paddle,
+) -> Result<u64, cyex_tv_db::DbError> {
+    if !paddle.checkout_ready() {
+        return Ok(0);
+    }
+    let mut conn = db.acquire().await?;
+    let orders = shop::to_cancel(&mut conn, CANCEL_BATCH).await?;
+    drop(conn);
+    let mut n = 0;
+    for order in orders {
+        let Some(txn) = order.provider_transaction_id.as_deref() else {
+            continue;
+        };
+        let result = paddle.cancel_transaction(txn).await;
+        let mut tx = db.begin().await?;
+        match result {
+            Ok(()) => {
+                if shop::mark_canceled(&mut tx, order.id).await? {
+                    n += 1;
+                }
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, %txn, "cancelling an old paddle transaction failed; a late payment is still taken");
+                if shop::mark_cancel_failed(&mut tx, order.id).await? {
+                    audit::write(
+                        &mut tx,
+                        &audit::NewEntry {
+                            actor: None,
+                            action: "shop.transaction_cancel_failed",
+                            target_kind: "shop_order",
+                            target_id: &ids::to_text(order.id),
+                            before: None,
+                            after: Some(serde_json::json!({
+                                "provider_transaction_id": txn,
+                                "reason": order.failed_reason,
+                                "error": err.to_string(),
+                            })),
+                        },
+                    )
+                    .await?;
+                }
+            }
+        }
+        tx.commit().await?;
+    }
+    Ok(n)
+}
+
 /// Removes what has expired: sessions, sign-ins never finished, outbox events past the replay
-/// window (48 h, ADR 0005), event socket sessions after 24 h, and finished jobs after a week.
-/// Also refreshes the search ranking.
+/// window (48 h, ADR 0005), event socket sessions after 24 h, finished jobs after a week, shop
+/// orders pending for a day (failed, see [`expire_orders`]) and Paddle webhook events after 90
+/// days. Puts staff refunds stuck for an hour back to paid ([`revert_refunds`]). Also refreshes
+/// the search ranking. The worker's loop also runs [`cancel_stale_checkouts`] after it.
 pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
     let mut conn = db.acquire().await?;
     let sessions = sessions::delete_expired(&mut conn).await?;
@@ -264,14 +401,25 @@ pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
     let sockets =
         event_sessions::delete_older_than(&mut conn, Utc::now() - chrono::Duration::hours(24))
             .await?;
+    let paddle_events = shop::delete_events_before(
+        &mut conn,
+        Utc::now() - chrono::Duration::days(PADDLE_EVENT_DAYS),
+    )
+    .await?;
     // Search ranking (ADR 0004): channels showing each emote.
     let ranked = search::refresh_popularity(&mut conn).await?;
+    drop(conn);
+    let orders_expired = expire_orders(db).await?;
+    let refunds_reverted = revert_refunds(db).await?;
     tracing::info!(
         sessions,
         states,
         events,
         done,
         sockets,
+        paddle_events,
+        orders_expired,
+        refunds_reverted,
         ranked,
         "cleaned up"
     );
@@ -307,6 +455,12 @@ pub async fn run(
             _ = cleaner.tick() => {
                 if let Err(err) = clean_up(&ctx.db).await {
                     tracing::error!(error = %err, "clean-up failed");
+                }
+                if let Some(paddle) = &ctx.paddle {
+                    match cancel_stale_checkouts(&ctx.db, paddle).await {
+                        Ok(n) => tracing::info!(cancelled = n, "old checkouts cancelled at paddle"),
+                        Err(err) => tracing::error!(error = %err, "cancelling old checkouts failed"),
+                    }
                 }
             }
             note = listener.recv() => {

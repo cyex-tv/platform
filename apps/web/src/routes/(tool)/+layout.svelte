@@ -3,6 +3,7 @@
   // draws the one AppHeader and Footer; this layout only signs you in (or sends you to /signin)
   // and puts the page in a RailLayout with the /me rail or, under /admin, the admin rail.
   import { onMount } from 'svelte';
+  import { useToolButtons } from '$lib/components/btn';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { ApiError, gql } from '$lib/api';
@@ -10,17 +11,24 @@
   import { ADMIN_COUNTS } from '$lib/queries';
   import { relationTo } from '$lib/profile/data.svelte';
   import ProfileRail from '$lib/profile/ProfileRail.svelte';
+  import { ACTIVITY_READY } from '$lib/profile/activity';
+  import CopyLink from '$lib/components/CopyLink.svelte';
   import { railKeyForPath } from '$lib/profile/rows';
   import Icon from '$lib/components/Icon.svelte';
   import type { IconName } from '$lib/components/Icon.svelte';
   import RailLayout from '$lib/shell/RailLayout.svelte';
   import SideRail from '$lib/shell/SideRail.svelte';
   import { markCurrent, type RailGroup } from '$lib/shell/rail';
+  import PageTitle from '$lib/components/PageTitle.svelte';
+  import Problem from '$lib/components/Problem.svelte';
+  import { problemTitle } from '$lib/components/problem';
   import State from '$lib/components/State.svelte';
+  import { loadShopCounts, shopCounts } from '$lib/shop/counts.svelte';
   import { can, isAdmin, loadMe, session } from '$lib/tool/session.svelte';
 
   let { children } = $props();
-  let problem = $state<string | null>(null);
+  useToolButtons(); // the tool pages' buttons are .ui-btn; shared components follow
+  let problem = $state(false);
 
   const path = $derived(page.url.pathname);
   const who = $derived(session.me?.identities[0]);
@@ -45,11 +53,14 @@
       .catch(() => {});
   });
 
+  $effect(() => {
+    if (admin) loadShopCounts();
+  });
+
   const adminRail = $derived.by<RailGroup[]>(() => {
     void session.me; // permissions come from the account
     const tickets = can('emotes.review') || can('emotes.takedown');
     const cosmetics = can('cosmetics.manage') || can('cosmetics.grant');
-    // Reserved for later (another branch): a "Shop" group with Items, Orders and Codes.
     const groups: RailGroup[] = [
       { items: row('/admin', 'Overview', 'gauge') },
       {
@@ -68,31 +79,36 @@
         ],
       },
       {
-        caption: 'People',
+        toggle: { label: 'Shop', icon: 'shopping-bag' },
+        items: [
+          ...row('/admin/shop/items', 'Items', 'tag', can('shop.manage'), shopCounts.items),
+          ...row('/admin/shop/orders', 'Orders', 'list', can('shop.orders'), shopCounts.orders),
+          ...row('/admin/shop/codes', 'Codes', 'key', can('codes.manage'), shopCounts.codes),
+        ],
+      },
+      {
+        toggle: { label: 'People', icon: 'users' },
         items: [
           ...row('/admin/users', 'Users', 'users', can('users.view') || can('users.restrict') || can('roles.manage') || can('cosmetics.grant')),
           ...row('/admin/roles', 'Roles', 'key', can('roles.manage')),
         ],
       },
-      { caption: 'System', items: row('/admin/audit', 'Audit log', 'scroll', can('audit.view')) },
+      { toggle: { label: 'System', icon: 'settings' }, items: row('/admin/audit', 'Audit log', 'scroll', can('audit.view')) },
     ];
     return markCurrent(groups.filter((g) => g.items.length), path, ['/admin']);
   });
 
-  let trying = $state(false);
+  // A retry keeps the problem on screen until the answer is in, so the page's Try again button can tell it worked.
   async function signIn(fresh = false) {
-    trying = true;
-    problem = null;
     try {
       await loadMe({ fresh });
+      problem = false;
     } catch (e) {
       if (e instanceof ApiError && e.code === 'signed_out') {
         await goto(`/signin?back=${encodeURIComponent(page.url.pathname + page.url.search)}`, { replaceState: true });
         return;
       }
-      problem = 'cyex.tv didn’t answer, so your account couldn’t load. It’s usually back within a minute.';
-    } finally {
-      trying = false;
+      problem = true;
     }
   }
   onMount(() => signIn());
@@ -110,17 +126,17 @@
         {/snippet}
       </SideRail>
     {:else if meAccount}
-      <ProfileRail account={meAccount} relation={meRelation} current={railKeyForPath(path)} />
+      <!-- The same rail as your public profile (/users/<id>): same rows, same Copy link, so moving between them never shifts it. -->
+      <ProfileRail account={meAccount} relation={meRelation} current={railKeyForPath(path)} activity={ACTIVITY_READY}>
+        {#snippet actions()}<CopyLink url={() => `${location.origin}/users/${meAccount.id}`} />{/snippet}
+      </ProfileRail>
     {:else}
       <SideRail label="Your account">
         {#snippet head()}
           <div class="me">
             {#if problem}
               <span class="ph-av" aria-hidden="true"></span>
-              <span class="id">
-                <strong>Not loaded</strong>
-                <button class="retry" type="button" onclick={() => signIn(true)} disabled={trying}>{trying ? 'Trying…' : 'Try again'}</button>
-              </span>
+              <strong class="plain">Your account</strong>
             {:else}
               <span class="ph-av ui-skeleton" aria-hidden="true"></span>
               <span class="ph-line ui-skeleton" aria-hidden="true"></span>
@@ -132,13 +148,10 @@
   {/snippet}
   <div class="ui-page">
     {#if problem}
-      <State kind="error" level={1} title="This page can’t load right now.">
-        {problem}
-        {#snippet actions()}
-          <button class="ui-btn primary" type="button" onclick={() => signIn(true)} disabled={trying}>{trying ? 'Trying…' : 'Try again'}</button>
-        {/snippet}
-      </State>
+      <PageTitle title={problemTitle('server')} />
+      <Problem cause="server" level={1} onretry={() => signIn(true)} />
     {:else if !session.me}
+      <PageTitle title="Loading - cyex.tv" />
       <State kind="loading" title="Loading your account…" />
     {:else}
       {@render children()}
@@ -148,13 +161,9 @@
 
 <style>
   .me { display: flex; align-items: center; gap: 12px; min-height: 40px; }
-  .id { display: grid; min-width: 0; line-height: 1.3; }
-  .id strong { font-size: var(--t-ui); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .plain { font-size: var(--t-ui); font-weight: 600; color: var(--muted); }
   .title { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding-left: 8px; }
   .title strong { font-size: var(--t-ui); font-weight: 600; }
   .ph-av { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--surface-hover); }
-  .retry { justify-self: start; display: inline-flex; align-items: center; min-height: 40px; margin-block: -10px; padding: 0;
-    border: 0; background: none; font: inherit; font-size: var(--t-fine); font-weight: 500; color: var(--accent-text); cursor: pointer; }
-  .retry:disabled { color: var(--muted); cursor: default; }
   .ph-line { display: block; width: 110px; height: 12px; border-radius: var(--radius); }
 </style>

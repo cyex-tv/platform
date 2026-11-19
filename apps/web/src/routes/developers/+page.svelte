@@ -144,7 +144,7 @@
     </aside>
     {/snippet}
 
-    <div class="docs-body">
+    <div class="docs-body" id="api-contents" tabindex="-1">
       <header class="docs-title">
         <div>
           <h1>API</h1>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { paintColor, paintFilter, paintImage, paintRing, paintStyle, safeColor, safeUrl, type PaintLike } from './paint';
+import { contrast, luminance, paintColor, paintFloor, paintFilter, paintImage, paintRing, paintStyle, safeColor, safeUrl, type PaintLike } from './paint';
 
 const base: PaintLike = { kind: 'LINEAR_GRADIENT', angle: 90, repeat: false, shape: 'CIRCLE', color: '#FF7A45', stops: [], shadows: [] };
 const stops = [
@@ -98,5 +98,35 @@ describe('paintColor and paintRing', () => {
     expect(paintRing({ ...base, repeat: true, stops })).toBe('background: linear-gradient(90deg, #ff7a45 0%, #8f5bff 100%)');
     expect(paintRing({ ...base, kind: 'IMAGE', image: img })).toBe('background: #ff7a45');
     expect(paintRing(undefined)).toBe('');
+  });
+});
+
+describe('readability floor', () => {
+  const paint = (colors: string[]): PaintLike => ({ ...base, color: colors[0]!, stops: colors.map((color, i) => ({ at: i / Math.max(1, colors.length - 1), color })) });
+
+  it('computes WCAG contrast', () => {
+    expect(contrast('#000000', '#ffffff')).toBeCloseTo(21, 1);
+    expect(contrast('#ffffff', '#ffffff')).toBeCloseTo(1, 5);
+    expect(contrast('#777777', '#ffffff')).toBeCloseTo(4.48, 1);
+    expect(luminance('#ffffff')).toBeCloseTo(1, 5);
+  });
+  it('blends a translucent colour onto the ground first', () => {
+    expect(contrast('#00000000', '#ffffff')).toBeCloseTo(1, 5);
+    expect(contrast('#000000ff', '#ffffff')).toBeCloseTo(21, 1);
+  });
+  it('flags pale paints for light and dark paints for dark', () => {
+    expect(paintFloor(paint(['#ffb020', '#ff5a1f']))).toBe('light'); // Ember: pale amber
+    expect(paintFloor(paint(['#ff7a45', '#ff3d7f', '#8f5bff']))).toBe('light'); // Sunset
+    expect(paintFloor(paint(['#0b1d4a', '#101217']))).toBe('dark');
+    expect(paintFloor(paint(['#0f7bd9', '#c2410c']))).toBeNull();
+    expect(paintFloor(paint(['#fff3b0', '#10131a']))).toBe('both');
+  });
+  it('leaves a paint with shadows of its own alone', () => {
+    const shadowed = { ...paint(['#ffb020', '#ff5a1f']), shadows: [{ x: 0, y: 1, radius: 2, color: '#00000099' }] };
+    expect(paintFloor(shadowed)).toBeNull();
+  });
+  it('has no opinion about unknown colours', () => {
+    expect(paintFloor(null)).toBeNull();
+    expect(paintFloor({ ...base, kind: 'IMAGE', color: null, stops: [] })).toBeNull();
   });
 });

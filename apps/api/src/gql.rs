@@ -21,13 +21,17 @@ use cyex_tv_hub::topics as hub_topics;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::model::{
     AccountEditor, AccountReports, AccountResults, AccountSession, AccountStatus, AccountSummary,
-    ActivityEntry, AddAccountEditor, AddSetEmote, AdminAccount, AuditEntry, Badge, Channel,
-    ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge, CreateRole, CreateSet,
-    EditedAccount, EditorPermission, Emote, EmotePage, EmoteSet, EmoteSort, Entitlement,
+    ActivityEntry, ActivityPage, AddAccountEditor, AddSetEmote, AdminAccount, AuditEntry, Badge,
+    Channel, ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge, CreateRole,
+    CreateSet, EditedAccount, EditorPermission, Emote, EmotePage, EmoteSet, EmoteSort, Entitlement,
     EntitlementPage, Event, GrantCosmetic, Identity, Me, Notification, OwnedCosmetics, Paint,
     PaintInput, PersonalSetEntry, Platform, Report, ReportAction, ReportQueue, ReviewQueue, Role,
     SearchResults, SetEmote, SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings,
     UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote, UserCosmetics,
+};
+use cyex_tv_shared::model::{
+    Checkout, CodeBatch, CodeBatchInput, CodeBatchPage, CreatedCodeBatch, Order, OrderPage,
+    OrderStatus, Recipient, RedeemResult, ShopItem, ShopItemInput,
 };
 use cyex_tv_shared::permissions;
 use futures_util::Stream;
@@ -36,7 +40,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::state::AppState;
-use crate::{abuse, account, activity, admin, catalog, cosmetics, editors, moderation, search};
+use crate::{
+    abuse, account, activity, admin, catalog, codes, cosmetics, editors, moderation, search, shop,
+};
 
 pub type ApiSchema = Schema<Query, Mutation, Subscription>;
 
@@ -142,6 +148,17 @@ fn api_error(err: ApiError) -> async_graphql::Error {
     async_graphql::Error::new(err.message).extend_with(move |_, e| e.set("code", err.code))
 }
 
+/// The client's IP as the limits saw it; empty when unknown (a test without the middleware).
+fn client_ip<'a>(ctx: &Context<'a>) -> &'a str {
+    ctx.data_opt::<crate::limits::ClientIp>()
+        .map_or("", |ip| ip.0.as_str())
+}
+
+/// Takes one token of the heavy-reads limit for the public read being resolved.
+fn heavy_read(ctx: &Context<'_>) -> Result<()> {
+    crate::limits::heavy_read(state(ctx), caller_opt(ctx), client_ip(ctx)).map_err(api_error)
+}
+
 fn caller_opt<'a>(ctx: &Context<'a>) -> Option<&'a Caller> {
     ctx.data_opt::<Option<Caller>>().and_then(Option::as_ref)
 }
@@ -241,13 +258,16 @@ impl Query {
 
     /// An account's `LISTED` sets as profile cards, oldest first, at most 50. `preview` is how
     /// many of each set's newest emotes to include, 0 to 50, default 12. Empty when the account
-    /// is unknown, deleted or blocked.
+    /// is unknown, deleted or blocked. Counts as a heavy read: 120 a minute per account, or per IP
+    /// signed out (`rate_limited`), and a high query cost.
+    #[graphql(complexity = "100 + child_complexity")]
     async fn account_sets(
         &self,
         ctx: &Context<'_>,
         account_id: String,
         preview: Option<u32>,
     ) -> Result<Vec<SetSummary>> {
+        heavy_read(ctx)?;
         catalog::account_sets(state(ctx), caller_opt(ctx), &account_id, preview)
             .await
             .map_err(api_error)
@@ -302,7 +322,9 @@ impl Query {
     /// Accounts by Twitch or Kick login or display name (a leading `@` is ignored): exact login
     /// first, then login and name prefixes, then similar names. Public fields only; deleted and
     /// blocked accounts are never listed. `perPage` is 1 to 50, default 20. 60 searches a minute
-    /// per account, or per IP signed out (`rate_limited`). An empty `query` finds nobody.
+    /// per account, or per IP signed out (`rate_limited`). A `query` under 2 characters (after the
+    /// `@`) finds nobody. Matches are counted up to 1000: `totalCapped` says there are more, and
+    /// the pages end there.
     async fn search_accounts(
         &self,
         ctx: &Context<'_>,
@@ -310,9 +332,7 @@ impl Query {
         page: Option<u32>,
         per_page: Option<u32>,
     ) -> Result<AccountResults> {
-        let ip = ctx
-            .data_opt::<crate::limits::ClientIp>()
-            .map_or("", |ip| ip.0.as_str());
+        let ip = client_ip(ctx);
         search::accounts(state(ctx), caller_opt(ctx), ip, &query, page, per_page)
             .await
             .map_err(api_error)
@@ -352,7 +372,10 @@ impl Query {
     /// An account's public activity, newest first, like 7TV's "Activity" tab: sets and emotes the
     /// owner or their editors changed, the active set, badge and paint picks, approved uploads.
     /// Page back with `before` (an entry ID); `limit` is 1 to 100, default 30. Empty when the
-    /// account is unknown, deleted or blocked. Nothing private or from moderation shows.
+    /// account is unknown, deleted or blocked. Nothing private or from moderation shows. A page
+    /// can be shorter than `limit` and still not the last: use `accountActivityPage` to know.
+    /// A heavy read: 120 a minute per account, or per IP signed out (`rate_limited`).
+    #[graphql(complexity = "100 + child_complexity")]
     async fn account_activity(
         &self,
         ctx: &Context<'_>,
@@ -360,7 +383,25 @@ impl Query {
         before: Option<String>,
         limit: Option<u32>,
     ) -> Result<Vec<ActivityEntry>> {
+        heavy_read(ctx)?;
         activity::account_activity(state(ctx), &account_id, before.as_deref(), limit)
+            .await
+            .map_err(api_error)
+    }
+
+    /// `accountActivity` with a cursor: `next` is the `before` for the following page, null when
+    /// there is none. A page can hold fewer than `limit` entries and still have a `next`, because
+    /// the feed skips what isn't public.
+    #[graphql(complexity = "100 + child_complexity")]
+    async fn account_activity_page(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+        before: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<ActivityPage> {
+        heavy_read(ctx)?;
+        activity::account_activity_page(state(ctx), &account_id, before.as_deref(), limit)
             .await
             .map_err(api_error)
     }
@@ -369,7 +410,10 @@ impl Query {
     /// as by its owner) and `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED` in listed
     /// sets, by their owners and account editors. Page back with `before` (an entry ID); `limit`
     /// is 1 to 100, default 30. Empty when the emote is unknown or not public. Nothing private or
-    /// from moderation shows.
+    /// from moderation shows. A page can be shorter than `limit` and still not the last: use
+    /// `emoteActivityPage` to know. A heavy read: 120 a minute per account, or per IP signed out
+    /// (`rate_limited`).
+    #[graphql(complexity = "100 + child_complexity")]
     async fn emote_activity(
         &self,
         ctx: &Context<'_>,
@@ -377,7 +421,24 @@ impl Query {
         before: Option<String>,
         limit: Option<u32>,
     ) -> Result<Vec<ActivityEntry>> {
+        heavy_read(ctx)?;
         activity::emote_activity(state(ctx), &emote_id, before.as_deref(), limit)
+            .await
+            .map_err(api_error)
+    }
+
+    /// `emoteActivity` with a cursor: `next` is the `before` for the following page, null when
+    /// there is none. A page can hold fewer than `limit` entries and still have a `next`.
+    #[graphql(complexity = "100 + child_complexity")]
+    async fn emote_activity_page(
+        &self,
+        ctx: &Context<'_>,
+        emote_id: String,
+        before: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<ActivityPage> {
+        heavy_read(ctx)?;
+        activity::emote_activity_page(state(ctx), &emote_id, before.as_deref(), limit)
             .await
             .map_err(api_error)
     }
@@ -560,6 +621,85 @@ impl Query {
         .map_err(api_error)
     }
 
+    /// Shop items on sale now, by sort order (ADR 0016). Public; signed in, `owned` says whether
+    /// you own everything in each. With `all: true`, every item that isn't deleted, hidden and
+    /// scheduled ones too (needs `shop.manage`).
+    async fn shop_items(&self, ctx: &Context<'_>, all: Option<bool>) -> Result<Vec<ShopItem>> {
+        shop::items(state(ctx), caller_opt(ctx), all.unwrap_or(false))
+            .await
+            .map_err(api_error)
+    }
+
+    /// One shop item: on sale for everyone; any, deleted ones too, with `shop.manage`.
+    async fn shop_item(&self, ctx: &Context<'_>, id: String) -> Result<Option<ShopItem>> {
+        shop::item(state(ctx), caller_opt(ctx), &id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Orders you bought, and gifts you got once paid (without what the buyer paid), newest
+    /// first. `perPage` 1 to 100, default 50.
+    async fn my_orders(
+        &self,
+        ctx: &Context<'_>,
+        page: Option<u32>,
+        per_page: Option<u32>,
+    ) -> Result<OrderPage> {
+        let caller = caller(ctx)?;
+        shop::my_orders(state(ctx), caller, page, per_page)
+            .await
+            .map_err(api_error)
+    }
+
+    /// One order, for its buyer, its recipient (once paid, without what the buyer paid), or
+    /// `shop.orders`. Poll it after `startCheckout` until it is `PAID`.
+    async fn order(&self, ctx: &Context<'_>, id: String) -> Result<Option<Order>> {
+        let caller = caller(ctx)?;
+        shop::order(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Every order, newest first; narrow by status, account (bought or received) and item.
+    /// Needs `shop.orders`.
+    #[allow(clippy::too_many_arguments)]
+    async fn orders(
+        &self,
+        ctx: &Context<'_>,
+        status: Option<OrderStatus>,
+        account_id: Option<String>,
+        item_id: Option<String>,
+        page: Option<u32>,
+        per_page: Option<u32>,
+    ) -> Result<OrderPage> {
+        let caller = caller(ctx)?;
+        shop::orders(
+            state(ctx),
+            caller,
+            status,
+            account_id.as_deref(),
+            item_id.as_deref(),
+            page,
+            per_page,
+        )
+        .await
+        .map_err(api_error)
+    }
+
+    /// Redeem code batches, newest first. Needs `codes.manage`. The codes themselves are shown
+    /// only once, by `createCodeBatch`.
+    async fn code_batches(
+        &self,
+        ctx: &Context<'_>,
+        page: Option<u32>,
+        per_page: Option<u32>,
+    ) -> Result<CodeBatchPage> {
+        let caller = caller(ctx)?;
+        codes::batches(state(ctx), caller, page, per_page)
+            .await
+            .map_err(api_error)
+    }
+
     /// Every permission name a role can hold.
     async fn permissions(&self) -> Vec<String> {
         permissions::ALL.iter().map(|p| (*p).to_owned()).collect()
@@ -691,7 +831,8 @@ impl Query {
     /// Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
     /// `emote.rejected`, `emote.taken_down`, `editor.added`, `editor.changed`, `editor.removed`,
     /// `cosmetic.granted` and `cosmetic.revoked`; `payload` is JSON with the IDs and names it is
-    /// about (see the API reference).
+    /// about (see the API reference). Cosmetics from the shop and from codes carry `source`
+    /// (`purchase` or `code`), and from orders `order_id`.
     async fn my_notifications(
         &self,
         ctx: &Context<'_>,
@@ -723,11 +864,29 @@ pub struct Mutation;
 
 #[Object]
 impl Mutation {
-    /// Unlink a platform from your account. The last identity can't be removed.
+    /// Unlink a platform from your account. The last identity can't be removed, and a
+    /// restricted or blocked account can't unlink (`restricted`).
     async fn unlink_identity(&self, ctx: &Context<'_>, platform: Platform) -> Result<Me> {
         let caller = caller(ctx)?;
         let mut conn = state(ctx).db.acquire().await.map_err(internal)?;
         let mut tx = conn.begin().await.map_err(internal)?;
+        // Locked, so a restriction landing at the same time is seen. Signing in again with the
+        // dropped identity would otherwise make a fresh, unrestricted account.
+        let restricted: Option<bool> = sqlx::query_scalar(
+            "SELECT restricted_at IS NOT NULL OR blocked_at IS NOT NULL
+               FROM accounts WHERE id = $1 FOR SHARE",
+        )
+        .bind(caller.account_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(internal)?;
+        if restricted == Some(true) {
+            return Err(api_error(ApiError::new(
+                axum::http::StatusCode::FORBIDDEN,
+                "restricted",
+                "A restricted account can't unlink a platform. Write to us if you need it changed.",
+            )));
+        }
         match accounts::unlink(&mut tx, caller.account_id, platform).await {
             Ok(_) => {}
             Err(DbError::NotFound) => {
@@ -1062,6 +1221,101 @@ impl Mutation {
         .map_err(api_error)
     }
 
+    /// Make a shop item: a bundle of 1 to 10 badges and paints. Needs `shop.manage`. Audited.
+    async fn create_shop_item(&self, ctx: &Context<'_>, input: ShopItemInput) -> Result<ShopItem> {
+        let caller = caller(ctx)?;
+        shop::create_item(state(ctx), caller, &input)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Replace every field of a shop item. Orders made already keep their price. Needs
+    /// `shop.manage`. Audited.
+    async fn update_shop_item(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        input: ShopItemInput,
+    ) -> Result<ShopItem> {
+        let caller = caller(ctx)?;
+        shop::update_item(state(ctx), caller, &id, &input)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Delete a shop item: never listed or sold again; its orders stay. False when there was
+    /// none. Needs `shop.manage`. Audited.
+    async fn delete_shop_item(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
+        let caller = caller(ctx)?;
+        shop::delete_item(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Start buying an item for yourself, or as a gift with `recipient`. Answers the Paddle
+    /// transaction to open in Paddle's checkout; the order turns `PAID` once Paddle confirms.
+    /// `checkout_unavailable` while Paddle isn't set up or the item has no Paddle price. Asking
+    /// again for the same item and recipient within the hour hands out the same transaction
+    /// (one pending order each); `checkout_busy` while another request is starting it.
+    async fn start_checkout(
+        &self,
+        ctx: &Context<'_>,
+        item_id: String,
+        recipient: Option<Recipient>,
+    ) -> Result<Checkout> {
+        let caller = caller(ctx)?;
+        shop::start_checkout(state(ctx), caller, &item_id, recipient.as_ref())
+            .await
+            .map_err(api_error)
+    }
+
+    /// Refund a paid order: asks Paddle for a full refund when it is set up, and takes the
+    /// cosmetics back at once (only those no other paid order, code or staff grant covers).
+    /// `already_refunded` when Paddle says it was refunded already; `refund_in_progress` while
+    /// another refund of it runs (it may be tried again after 10 minutes); `refund_unavailable`
+    /// when the order has a Paddle transaction and Paddle isn't set up. Needs `shop.orders`.
+    /// Audited.
+    async fn refund_order(&self, ctx: &Context<'_>, id: String, reason: String) -> Result<Order> {
+        let caller = caller(ctx)?;
+        shop::refund_order(state(ctx), caller, &id, &reason)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Redeem a code (case, spaces and dashes don't matter). Wrong codes lock you out for a
+    /// while after a few tries (`locked_out`). Each cosmetic it gives sends a `cosmetic.granted`
+    /// notification (`source` `code`).
+    async fn redeem_code(&self, ctx: &Context<'_>, code: String) -> Result<RedeemResult> {
+        let caller = caller(ctx)?;
+        let ip = ctx
+            .data_opt::<crate::limits::ClientIp>()
+            .map(|i| i.0.as_str());
+        codes::redeem(state(ctx), caller, ip, &code)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Make a batch of 1 to 1000 redeem codes. The answer holds the codes in plain text; this is
+    /// the only time they are shown. Needs `codes.manage`. Audited.
+    async fn create_code_batch(
+        &self,
+        ctx: &Context<'_>,
+        input: CodeBatchInput,
+    ) -> Result<CreatedCodeBatch> {
+        let caller = caller(ctx)?;
+        codes::create_batch(state(ctx), caller, &input)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Turn off every code of a batch. Needs `codes.manage`. Audited.
+    async fn disable_code_batch(&self, ctx: &Context<'_>, id: String) -> Result<CodeBatch> {
+        let caller = caller(ctx)?;
+        codes::disable_batch(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
+    }
+
     /// Change an emote's name, tags or flags. Owner, or `emotes.edit_any`.
     async fn update_emote(
         &self,
@@ -1198,7 +1452,7 @@ impl Mutation {
     /// your approved emotes that are in other people's sets stay, shown as by a deleted user;
     /// your other emotes are deleted. Signing in again later makes a new account. Audited.
     /// `confirm_mismatch` when `confirm` isn't one of your logins; `restricted` while the account's
-    /// uploads or sign-in are blocked.
+    /// uploads or sign-in are blocked. 3 tries an hour (`rate_limited`).
     async fn delete_account(&self, ctx: &Context<'_>, confirm: String) -> Result<bool> {
         let caller = caller(ctx)?;
         account::delete_account(state(ctx), caller, &confirm)

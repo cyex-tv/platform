@@ -2,7 +2,7 @@
   // The one header of every signed-in page: an optional back link, the title (the public pages'
   // h1 size), a short line under it, and the page's primary action on the right. Under 640px the
   // action drops below the text. The line can be plain text or your own markup.
-  import type { Snippet } from 'svelte';
+  import { getContext, type Snippet } from 'svelte';
   import Icon from '$lib/components/Icon.svelte';
 
   type Props = {
@@ -14,6 +14,8 @@
     name?: boolean;
   };
   let { title, line, back, actions, name = false }: Props = $props();
+  // A page that already has its own h1 (the profile: the person's name) sets 'heading-level' to 2.
+  const level = getContext<2 | undefined>('heading-level') === 2 ? 'h2' : 'h1';
 </script>
 
 <header class="head">
@@ -22,7 +24,7 @@
   {/if}
   <div class="row">
     <div class="text">
-      <h1>{#if name}<bdi>{title}</bdi>{:else}{title}{/if}</h1>
+      <svelte:element this={level} class="title">{#if name}<bdi>{title}</bdi>{:else}{title}{/if}</svelte:element>
       {#if line}<p class="line">{#if typeof line === 'string'}{line}{:else}{@render line()}{/if}</p>{/if}
     </div>
     {#if actions}<div class="actions">{@render actions()}</div>{/if}
@@ -36,7 +38,7 @@
   @media (hover: hover) and (pointer: fine) { .back:hover { color: var(--text); } }
   .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
   .text { min-width: 0; flex: 1 1 280px; }
-  h1 { margin: 0; font-size: var(--t-page); font-weight: 600; line-height: 1.1; letter-spacing: -.03em; overflow-wrap: anywhere; text-wrap: balance; }
+  .title { margin: 0; font-size: var(--t-page); font-weight: 600; line-height: 1.25; letter-spacing: -.02em; overflow-wrap: anywhere; text-wrap: balance; }
   .line { margin: 8px 0 0; max-width: 64ch; font-size: var(--t-ui); line-height: 1.5; color: var(--muted); font-variant-numeric: tabular-nums; text-wrap: pretty; overflow-wrap: anywhere; }
   .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 </style>

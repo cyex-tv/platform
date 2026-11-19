@@ -5,16 +5,22 @@
 //! changes are checked per account in `editors`, cosmetics writes in `cosmetics`, set clones in
 //! `catalog`.
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::{Mutex, PoisonError};
+use std::time::{Duration, Instant};
 
 use axum::extract::{ConnectInfo, Request, State};
 use axum::http::header::RETRY_AFTER;
 use axum::http::{HeaderValue, Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
-use cyex_tv_shared::error::ApiError;
+use cyex_tv_auth::Caller;
+use cyex_tv_db::ids;
+use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::ratelimit::{Limiter, Rate, client_ip};
 
+use crate::errors::rate_limited;
 use crate::state::AppState;
 
 #[derive(Clone, Copy, Debug)]
@@ -33,14 +39,24 @@ pub struct Rates {
     pub socket: Rate,
     /// Adding, changing and removing account editors, per account (ADR 0014).
     pub editors: Rate,
-    /// Cosmetics writes (staff changes, grants, selections), per account (ADR 0015).
+    /// Cosmetics writes (staff changes, grants, selections), per account (ADR 0015); staff shop
+    /// and code writes count here too (ADR 0016).
     pub cosmetics: Rate,
+    /// Starting a checkout, per account (ADR 0016).
+    pub checkout: Rate,
+    /// Redeem tries, right or wrong, per account (ADR 0016).
+    pub redeem: Rate,
     /// `cloneSet`, per account: each copies up to a whole set.
     pub set_clones: Rate,
     /// `exportMyData`, per account: each reads everything about the account.
     pub data_export: Rate,
     /// `searchAccounts`, per account, or per IP when signed out.
     pub account_search: Rate,
+    /// The public reads that fan out into many lookups (`accountActivity`, `emoteActivity`,
+    /// `accountSets`), per account, or per IP when signed out.
+    pub heavy_reads: Rate,
+    /// `deleteAccount`, per account, tries with a wrong confirmation included.
+    pub delete_account: Rate,
 }
 
 impl Default for Rates {
@@ -54,9 +70,13 @@ impl Default for Rates {
             socket: Rate::per_minute(60),
             editors: Rate::per_hour(60),
             cosmetics: Rate::per_hour(300),
+            checkout: Rate::per_hour(30),
+            redeem: Rate::per_hour(30),
             set_clones: Rate::per_hour(30),
             data_export: Rate::per_hour(5),
             account_search: Rate::per_minute(60),
+            heavy_reads: Rate::per_minute(120),
+            delete_account: Rate::per_hour(3),
         }
     }
 }
@@ -70,9 +90,15 @@ pub struct Limits {
     pub socket: Limiter,
     pub editors: Limiter,
     pub cosmetics: Limiter,
+    pub checkout: Limiter,
+    pub redeem: Limiter,
+    /// Wrong redeem codes lock an account and an IP out for a while (ADR 0016).
+    pub redeem_lockout: RedeemLockout,
     pub set_clones: Limiter,
     pub data_export: Limiter,
     pub account_search: Limiter,
+    pub heavy_reads: Limiter,
+    pub delete_account: Limiter,
     /// Take the client IP from `CF-Connecting-IP` (`CYEX_TV_TRUST_CLOUDFLARE=true`).
     pub trust_cloudflare: bool,
 }
@@ -88,10 +114,71 @@ impl Limits {
             socket: Limiter::new(rates.socket),
             editors: Limiter::new(rates.editors),
             cosmetics: Limiter::new(rates.cosmetics),
+            checkout: Limiter::new(rates.checkout),
+            redeem: Limiter::new(rates.redeem),
+            redeem_lockout: RedeemLockout::default(),
             set_clones: Limiter::new(rates.set_clones),
             data_export: Limiter::new(rates.data_export),
             account_search: Limiter::new(rates.account_search),
+            heavy_reads: Limiter::new(rates.heavy_reads),
+            delete_account: Limiter::new(rates.delete_account),
             trust_cloudflare,
+        }
+    }
+}
+
+/// Counts failures per key; `max` of them inside `window` (from the first) lock the key until the
+/// window ends. In memory, like the other limits.
+pub struct Lockout {
+    max: u32,
+    window: Duration,
+    entries: Mutex<HashMap<String, (u32, Instant)>>,
+}
+
+impl Lockout {
+    pub fn new(max: u32, window: Duration) -> Self {
+        Self {
+            max,
+            window,
+            entries: Mutex::default(),
+        }
+    }
+
+    /// How long `key` is still locked out, if it is.
+    pub fn locked(&self, key: &str) -> Option<Duration> {
+        let entries = self.entries.lock().unwrap_or_else(PoisonError::into_inner);
+        let (count, since) = entries.get(key)?;
+        let left = self.window.checked_sub(since.elapsed())?;
+        (*count >= self.max).then_some(left)
+    }
+
+    pub fn fail(&self, key: &str) {
+        let now = Instant::now();
+        let mut entries = self.entries.lock().unwrap_or_else(PoisonError::into_inner);
+        if entries.len() >= 10_000 {
+            let window = self.window;
+            entries.retain(|_, (_, since)| now.duration_since(*since) < window);
+        }
+        let entry = entries.entry(key.to_owned()).or_insert((0, now));
+        if now.duration_since(entry.1) >= self.window {
+            *entry = (0, now);
+        }
+        entry.0 += 1;
+    }
+}
+
+/// Wrong redeem codes: 5 per account or 20 per IP within 15 minutes lock it out until the 15
+/// minutes are over.
+pub struct RedeemLockout {
+    pub account: Lockout,
+    pub ip: Lockout,
+}
+
+impl Default for RedeemLockout {
+    fn default() -> Self {
+        Self {
+            account: Lockout::new(5, Duration::from_secs(15 * 60)),
+            ip: Lockout::new(20, Duration::from_secs(15 * 60)),
         }
     }
 }
@@ -105,6 +192,32 @@ impl Default for Limits {
 /// The client's IP as the limits saw it, for limits applied inside GraphQL resolvers.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ClientIp(pub String);
+
+/// The key a per-person limit counts under: the account when signed in, else the client's IP.
+fn person_key(caller: Option<&Caller>, ip: &str) -> String {
+    match caller {
+        Some(c) => format!("a:{}", ids::to_text(c.account_id)),
+        None => format!("ip:{ip}"),
+    }
+}
+
+/// Takes one token of the `heavy_reads` limit for a public read that fans out into many lookups.
+pub fn heavy_read(state: &AppState, caller: Option<&Caller>, ip: &str) -> ApiResult<()> {
+    state
+        .limits
+        .heavy_reads
+        .check(&person_key(caller, ip))
+        .map_err(|_| rate_limited("That's a lot of reads. Try again in a minute."))
+}
+
+/// Takes one token of the `account_search` limit.
+pub fn account_search(state: &AppState, caller: Option<&Caller>, ip: &str) -> ApiResult<()> {
+    state
+        .limits
+        .account_search
+        .check(&person_key(caller, ip))
+        .map_err(|_| rate_limited("That's a lot of searches. Try again in a minute."))
+}
 
 /// The 429 answer.
 pub fn too_many(wait: std::time::Duration) -> Response {
@@ -183,6 +296,23 @@ mod tests {
             &l.reads
         ));
         assert!(class(&l, &Method::GET, "/health").is_none());
+    }
+
+    #[test]
+    fn lockouts_hold_for_the_window() {
+        let l = Lockout::new(3, Duration::from_millis(200));
+        for _ in 0..2 {
+            l.fail("a");
+        }
+        assert!(l.locked("a").is_none());
+        l.fail("a");
+        assert!(l.locked("a").is_some());
+        assert!(l.locked("b").is_none());
+        std::thread::sleep(Duration::from_millis(220));
+        assert!(l.locked("a").is_none());
+        // A new window starts over.
+        l.fail("a");
+        assert!(l.locked("a").is_none());
     }
 
     #[test]

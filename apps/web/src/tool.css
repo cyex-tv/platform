@@ -14,9 +14,10 @@
 .ui-page .narrow { max-width: var(--measure-form); }
 
 /* Page head: a title, an optional line under it, actions on the right. */
-.ui-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 20px; }
+/* Same measures as PageHead (lib/tool/PageHead.svelte): the line 8px under the title at --t-ui, 24px to the content. */
+.ui-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; margin-bottom: 24px; }
 .ui-head > div { min-width: 0; }
-.ui-head p { margin-top: 4px; color: var(--muted); font-size: var(--text-sub); }
+.ui-head p { margin-top: 8px; color: var(--muted); font-size: var(--t-ui); line-height: 1.5; }
 .ui-head .ui-actions { margin-left: auto; }
 
 /* The one uppercase style. */
@@ -26,7 +27,8 @@
 .ui-num { font-variant-numeric: tabular-nums; } /* counts and dates: Geist, not mono */
 .ui-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
-/* Buttons (web-tool density). */
+/* Buttons (web-tool density). The rule: the signed-in tool pages (/me, /admin) use .ui-btn, every public page uses
+   .btn.btn-s (app.css), and a page never mixes them; see lib/components/btn.ts for shared components. */
 /* One button system with the site's .btn: same colours, weight, 3px corners and hover; only the
    height is the tool's (40px, the web floor; 32px small with a 40px hit area) where .btn is the
    48px landing button. */
@@ -34,7 +36,7 @@
   height: 40px; padding: 0 16px; border: 1px solid transparent; border-radius: var(--radius-btn);
   font: inherit; font-size: var(--t-nav); font-weight: 500; letter-spacing: -.005em; line-height: 1.1; white-space: nowrap; cursor: pointer;
   text-decoration: none; color: var(--text);
-  transition: background-color var(--fast), border-color var(--fast), color var(--fast), filter var(--fast); }
+  transition: background-color var(--fast), border-color var(--fast), color var(--fast), filter var(--fast), transform var(--dur-press) ease-out; }
 .ui-btn svg { flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ui-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .ui-btn.secondary { background: var(--surface); border-color: var(--border-strong); }
@@ -48,7 +50,8 @@
 .ui-btn.danger.armed { background: color-mix(in srgb, var(--red) 14%, transparent); border-color: var(--red); }
 .ui-btn.small { height: 32px; padding: 0 12px; font-size: var(--t-fine); }
 .ui-btn.small::after { content: ''; position: absolute; inset: -4px 0; } /* 40px to hit, 32px to see */
-.ui-btn:active { opacity: .6; transition: none; }
+/* The site's one press for a labelled button (the same as .btn): it gives under the finger. Icon-only buttons and links keep the dim press. */
+.ui-btn:active { transform: scale(var(--press)); }
 .ui-btn:disabled { opacity: .5; cursor: not-allowed; }
 a.ui-btn { box-sizing: border-box; }
 .ui-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
@@ -95,22 +98,14 @@ select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
 .ui-switch:checked::after { translate: 16px 0; background: var(--accent-ink); }
 .ui-switch:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 
-/* Segmented control (links or buttons). */
-.ui-seg { display: inline-flex; gap: 2px; padding: 2px; max-width: 100%; overflow-x: auto; scrollbar-width: none;
-  background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius); }
-.ui-seg > * { position: relative; display: inline-flex; align-items: center; height: 36px; padding: 0 10px; border: 0; border-radius: var(--radius-sm);
-  background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--muted); cursor: pointer; text-decoration: none; white-space: nowrap; }
-@media (hover: hover) and (pointer: fine) { .ui-seg > *:hover { color: var(--text); } }
-.ui-seg > *:focus-visible { outline-offset: -2px; }
-.ui-seg > *::after { content: ''; position: absolute; inset: -2px 0; } /* 40px to hit inside the 2px frame */
-.ui-seg > [aria-current='page'], .ui-seg > [aria-pressed='true'] { background: var(--accent-dim); color: var(--accent-text); }
-
 /* Touch: 44px targets (cyex-design floor on the web, mobile-native). */
+/* One height with .ui-btn (40px), whatever the line height: a Find button beside it lines up. */
+input.ui-input, select.ui-input { height: 40px; }
 @media (pointer: coarse) {
+  input.ui-input, select.ui-input { height: 44px; }
   .ui-icon { width: 44px; height: 44px; }
   .ui-btn { min-height: 44px; }
   .ui-btn.small::after { inset: -6px 0; }
-  .ui-seg > * { height: 44px; }
   .ui-check { min-height: 44px; }
   .ui-switch { width: 44px; height: 44px; }
   .ui-switch::before { top: 12px; left: 4px; }
@@ -118,7 +113,6 @@ select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
 }
 /* Forced colours drop backgrounds, so the selected option gets a system outline instead. */
 @media (forced-colors: active) {
-  .ui-seg > [aria-current], .ui-seg > [aria-pressed='true'] { outline: 2px solid Highlight; outline-offset: -2px; }
   .ui-switch::before { forced-color-adjust: none; background-color: Canvas; box-shadow: inset 0 0 0 1px CanvasText; }
   .ui-switch::after { forced-color-adjust: none; background: CanvasText; }
   .ui-switch:checked::before { background-color: Highlight; background-image: none; box-shadow: none; }
@@ -146,7 +140,7 @@ select.ui-input { appearance: none; padding-right: 34px; cursor: pointer;
 .ui-list > li { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--border); }
 .ui-list > li:last-child { border-bottom: 0; }
 @media (hover: hover) and (pointer: fine) {
-  .ui-list > li:hover { background: var(--row-hover); box-shadow: inset 2px 0 0 var(--border-strong); }
+  .ui-list > li:hover { color: var(--text); }
 }
 
 /* Chips: neutral, or a status tint. */

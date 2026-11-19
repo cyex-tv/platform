@@ -5,6 +5,7 @@
   // motion they start paused, and before the script runs a <picture> source keeps them still.
   import ChatPreview from '$lib/components/ChatPreview.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
+  import type { IconName } from '$lib/components/Icon.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import { hasStill, ready } from '$lib/emote';
   import { chatLines, scaleFiles, type ChatPool, type PageEmote } from './emote-page';
@@ -12,11 +13,11 @@
   let { emote: e, pool = [] }: { emote: PageEmote; pool?: ChatPool } = $props();
 
   type Ground = 'dark' | 'light' | 'checker' | 'chat';
-  const grounds: { value: Ground; label: string }[] = [
-    { value: 'dark', label: 'Dark' },
-    { value: 'light', label: 'Light' },
-    { value: 'checker', label: 'Checker' },
-    { value: 'chat', label: 'Chat' },
+  const grounds: { value: Ground; label: string; icon: IconName }[] = [
+    { value: 'dark', label: 'Dark', icon: 'moon' },
+    { value: 'light', label: 'Light', icon: 'sun' },
+    { value: 'checker', label: 'Checker', icon: 'grid' },
+    { value: 'chat', label: 'Chat', icon: 'message-square' },
   ];
   let ground = $state<Ground>('dark');
 
@@ -42,7 +43,7 @@
 <section class="preview">
   <h2 class="sr-only">Preview</h2>
   <div class="tools">
-    <Segmented label="Background" size="s" options={grounds} value={ground} onchange={(v) => (ground = v)} />
+    <Segmented label="Background" size="s" compact options={grounds} value={ground} onchange={(v) => (ground = v)} />
     {#if canPause}
       <IconButton
         icon={still ? 'play' : 'pause'}
@@ -92,8 +93,8 @@
 
 <style>
   p { margin: 0; }
-  .preview { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 16px; min-width: 0; height: 100%; }
-  .tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .preview { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); gap: 16px; min-width: 0; height: 100%; }
+  .tools { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; min-width: 0; }
   .stage { position: relative; display: grid; place-items: center; min-height: clamp(220px, 22vw, 300px);
     padding: clamp(24px, 4vw, 40px); border: 1px solid var(--border); border-radius: var(--radius-btn);
     overflow: hidden; --ink: var(--stage-dark-ink); background: var(--stage-dark); }

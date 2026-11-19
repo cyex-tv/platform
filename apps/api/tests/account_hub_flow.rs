@@ -638,6 +638,49 @@ async fn deleting_an_account_removes_it_and_keeps_what_others_use() {
     w.add(&alice, &own_set, &lonely).await;
     w.add(&alice, &own_set, &pending).await;
     w.add(&bob, &bobs_set, &shared).await;
+    // Their files (deduped by sha256): lonely's and an emote she deleted earlier are only hers;
+    // pending's bytes Bob uploaded too; the kept emote's file stays with it.
+    let bobs_copy = w.emote(&bob, "bobsCopy", EmoteState::Approved, false).await;
+    let old = w
+        .emote(&alice, "aliceOld", EmoteState::Approved, false)
+        .await;
+    let mut file_ids = Vec::new();
+    {
+        let mut conn = w.db.conn().await;
+        for n in 1..=4u8 {
+            let id = ids::new_id();
+            sqlx::query(
+                "INSERT INTO files (id, sha256, mime, width, height, storage_key)
+                 VALUES ($1, $2, 'image/png', 32, 32, $3)",
+            )
+            .bind(id)
+            .bind(vec![n; 32])
+            .bind(format!("originals/del{n}"))
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+            file_ids.push(id);
+        }
+        for (emote, file) in [
+            (&lonely, 0),
+            (&pending, 1),
+            (&bobs_copy, 1),
+            (&shared, 2),
+            (&old, 3),
+        ] {
+            sqlx::query("UPDATE emotes SET file_id = $2 WHERE id = $1")
+                .bind(ids::from_text(emote).unwrap())
+                .bind(file_ids[file])
+                .execute(&mut *conn)
+                .await
+                .unwrap();
+        }
+        sqlx::query("UPDATE emotes SET deleted_at = now() WHERE id = $1")
+            .bind(ids::from_text(&old).unwrap())
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+    }
     // Alice edits Bob's account and Bob edits hers.
     for (by, who) in [(&alice, &bob), (&bob, &alice)] {
         let r = w
@@ -792,6 +835,40 @@ async fn deleting_an_account_removes_it_and_keeps_what_others_use() {
     assert_eq!(after["emotes_kept"], 1);
     assert_eq!(after["emotes_deleted"], 2);
     assert_eq!(after["sets_deleted"], 1);
+    assert_eq!(after["files_deleted"], 2);
+    // Files only her deleted emotes used are queued for deletion; shared and kept ones aren't.
+    {
+        let mut conn = w.db.conn().await;
+        let mut queued: Vec<(String, Option<String>)> = sqlx::query_as(
+            "SELECT payload->>'file_id', payload->>'reason' FROM jobs WHERE kind = 'files.delete'",
+        )
+        .fetch_all(&mut *conn)
+        .await
+        .unwrap();
+        queued.sort();
+        let mut want: Vec<(String, Option<String>)> = [file_ids[0], file_ids[3]]
+            .iter()
+            .map(|f| (ids::to_text(*f), Some("account_deleted".to_owned())))
+            .collect();
+        want.sort();
+        assert_eq!(queued, want);
+        let purged: Vec<Uuid> =
+            sqlx::query_scalar("SELECT id FROM files WHERE purged_at IS NOT NULL ORDER BY id")
+                .fetch_all(&mut *conn)
+                .await
+                .unwrap();
+        let mut want_purged = vec![file_ids[0], file_ids[3]];
+        want_purged.sort();
+        assert_eq!(purged, want_purged);
+        // Her deleted emote rows no longer name her.
+        let still_hers: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM emotes WHERE owner_account_id = $1")
+                .bind(alice.id)
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+        assert_eq!(still_hers, 0);
+    }
     assert!(
         !after.to_string().contains(&alice.login),
         "no names in the audit row"

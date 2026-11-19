@@ -3,7 +3,7 @@
 import { gql } from '$lib/api';
 import type { Picture } from '$lib/emote';
 import type { AccountActivityQuery, ActivityKind as ApiKind } from '$lib/gql/graphql';
-import { ACCOUNT_ACTIVITY } from '$lib/queries';
+import { ACCOUNT_ACTIVITY, EMOTE_ACTIVITY } from '$lib/queries';
 
 /** Whether the API has `accountActivity` (it does since PR 52). */
 export const ACTIVITY_READY = true;
@@ -39,7 +39,7 @@ const KIND: Record<ApiKind, ActivityKind> = {
   SET_RENAMED: 'setRenamed',
 };
 
-type Entry = AccountActivityQuery['accountActivity'][number];
+type Entry = AccountActivityQuery['accountActivityPage']['entries'][number];
 
 /** One API entry as a feed item; unknown kinds are dropped. */
 export function toItem(e: Entry): ActivityItem | null {
@@ -61,10 +61,39 @@ export function toItem(e: Entry): ActivityItem | null {
 
 export const PAGE = 30;
 
-/** A page of the account's activity, newest first; `before` is the last item's id. */
-export async function loadActivity(accountId: string, before: string | null = null, fetcher: typeof fetch = fetch): Promise<ActivityItem[]> {
-  const r = await gql(ACCOUNT_ACTIVITY, { accountId, before, limit: PAGE }, fetcher);
-  return r.accountActivity.map(toItem).filter((i): i is ActivityItem => i !== null);
+/** A page of activity: its lines, and where to carry on from (`null`: that was the end). */
+export type ActivityPage = { items: ActivityItem[]; next: string | null };
+
+/** Rounds one "page" may take when the API answers empty-handed but says there is more. */
+const SKIPS = 5;
+
+type Answer = { entries: Entry[]; next?: string | null };
+
+/**
+ * Asks until a page has something to show. The API drops what isn't public, so a page can come
+ * back short, even empty, while `next` says the feed goes on; follow it a few times, then hand the
+ * cursor back so "Load more" carries on.
+ */
+async function fill(ask: (before: string | null) => Promise<Answer>, before: string | null): Promise<ActivityPage> {
+  const items: ActivityItem[] = [];
+  let next: string | null = before;
+  for (let n = 0; n < SKIPS; n++) {
+    const r = await ask(next);
+    items.push(...r.entries.map(toItem).filter((i): i is ActivityItem => i !== null));
+    next = r.next ?? null;
+    if (items.length || next === null) break;
+  }
+  return { items, next };
+}
+
+/** A page of the account's activity, newest first; `before` is the previous page's `next`. */
+export function loadActivity(accountId: string, before: string | null = null, fetcher: typeof fetch = fetch): Promise<ActivityPage> {
+  return fill((b) => gql(ACCOUNT_ACTIVITY, { accountId, before: b, limit: PAGE }, fetcher).then((r) => r.accountActivityPage), before);
+}
+
+/** A page of the lines about one emote (the emote page's Activity tab); empty unless it is public. */
+export function loadEmoteActivity(emoteId: string, before: string | null = null, fetcher: typeof fetch = fetch): Promise<ActivityPage> {
+  return fill((b) => gql(EMOTE_ACTIVITY, { emoteId, before: b, limit: PAGE }, fetcher).then((r) => r.emoteActivityPage), before);
 }
 
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [

@@ -8,13 +8,13 @@
   import { untrack } from 'svelte';
   import { ApiError, gql } from '$lib/api';
   import LoadMore from '$lib/components/LoadMore.svelte';
+  import Problem from '$lib/components/Problem.svelte';
   import State from '$lib/components/State.svelte';
-  import { looks, loadOwned } from '$lib/cosmetics/store.svelte';
+  import { looks } from '$lib/cosmetics/store.svelte';
   import { clean, count, iso } from '$lib/format';
   import { SEARCH_ACCOUNTS } from '$lib/queries';
   import RailLayout from '$lib/shell/RailLayout.svelte';
   import SideRail from '$lib/shell/SideRail.svelte';
-  import { session } from '$lib/tool/session.svelte';
   import { change, MAX_PAGES, toSearch, USERS_PER_PAGE, type Browse } from './params';
   import SearchField from './SearchField.svelte';
   import SearchTabs from './SearchTabs.svelte';
@@ -33,24 +33,21 @@
   let pageNo = $state(untrack(() => data.pages));
   let busy = $state(false);
   let moreError = $state('');
+  let exhausted = $state(false); // an empty page came back: there is no more, whatever the total says
   $effect.pre(() => {
     loaded = data.people;
     pageNo = data.pages;
     moreError = '';
+    exhausted = false;
   });
-  const hasMore = $derived(pageNo < Math.ceil(data.total / USERS_PER_PAGE) && pageNo < MAX_PAGES);
+  const hasMore = $derived(!exhausted && pageNo < Math.ceil(data.total / USERS_PER_PAGE) && pageNo < MAX_PAGES);
   const switching = $derived(!!navigating.to);
-
-  // Your own paint, when you are among the results (the cosmetics cache holds yours only).
-  $effect(() => {
-    const me = session.me?.id;
-    if (me && loaded.some((h) => h.account.id === me)) loadOwned(me, true).catch(() => {});
-  });
 
   // ---- Search field: the address follows the typing (replaced, not pushed, after a pause).
   let text = $state(untrack(() => data.view.q));
   let input = $state<HTMLInputElement>();
   let timer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => () => clearTimeout(timer)); // a pause that outlives the page must not navigate
   $effect(() => {
     const v = view.q;
     if (document.activeElement !== input) text = v;
@@ -95,6 +92,10 @@
     try {
       const r = await gql(SEARCH_ACCOUNTS, { query: view.q, page: pageNo + 1, perPage: USERS_PER_PAGE }, fetch);
       if (from !== data) return; // the view changed while this loaded
+      if (!r.searchAccounts.items.length) {
+        exhausted = true;
+        return;
+      }
       const seen = new Set(loaded.map((h) => h.account.id));
       loaded = [...loaded, ...r.searchAccounts.items.filter((h) => !seen.has(h.account.id))];
       pageNo += 1;
@@ -154,12 +155,7 @@
 
     {#if data.error}
       <div class="state">
-        <State kind="error" title="Couldn’t search for people.">
-          {data.error}
-          {#snippet actions()}
-            <button class="ui-btn secondary" type="button" onclick={() => invalidateAll()}>Try again</button>
-          {/snippet}
-        </State>
+        <Problem cause="server" onretry={() => invalidateAll()} />
       </div>
     {:else if !view.q}
       <div class="state">
@@ -172,7 +168,7 @@
         <State title={`No one matches “${iso(q)}”.`}>
           Check the spelling, or try the login. Only people who have signed in to cyex.tv are listed.
           {#snippet actions()}
-            <button class="ui-btn secondary" type="button" onclick={clearText}>Clear search</button>
+            <button class="btn btn-s" type="button" onclick={clearText}>Clear search</button>
           {/snippet}
         </State>
       </div>

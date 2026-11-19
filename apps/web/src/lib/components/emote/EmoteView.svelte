@@ -9,9 +9,10 @@
   import EmoteActions from '$lib/components/EmoteActions.svelte';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
-  import Icon from '$lib/components/Icon.svelte';
+  import Icon, { type IconName } from '$lib/components/Icon.svelte';
   import { clean, count } from '$lib/format';
   import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
+  import ActivityTab from './ActivityTab.svelte';
   import EmoteFacts from './EmoteFacts.svelte';
   import PreviewStage from './PreviewStage.svelte';
   import TrustBlock from './TrustBlock.svelte';
@@ -39,13 +40,23 @@
   const name = $derived(clean(e.name));
   const ownerName = $derived(e.owner ? clean(e.owner.displayName) : '');
 
-  type TabId = 'channels' | 'more';
-  const tabs = $derived<{ id: TabId; label: string; n?: string }[]>([
-    ...(channels ? [{ id: 'channels' as const, label: 'Channels', n: channelCount !== null ? count(channelCount) : undefined }] : []),
-    ...(more.length && e.owner ? [{ id: 'more' as const, label: 'More from creator' }] : []),
+  // Activity is only for listed emotes: pending, rejected, taken-down and private ones have none,
+  // so the tab isn't there and nothing is asked.
+  const listed = $derived(public_ && !e.flags.private);
+
+  type TabId = 'channels' | 'more' | 'activity';
+  const tabs = $derived<{ id: TabId; label: string; short?: string; icon: IconName; n?: string }[]>([
+    ...(channels ? [{ id: 'channels' as const, label: 'Channels', icon: 'tv' as const, n: channelCount !== null ? count(channelCount) : undefined }] : []),
+    ...(more.length && e.owner ? [{ id: 'more' as const, label: 'More from creator', short: 'More', icon: 'grid' as const }] : []),
+    ...(listed ? [{ id: 'activity' as const, label: 'Activity', icon: 'activity' as const }] : []),
   ]);
   let picked = $state<TabId | null>(null);
   const tab = $derived(tabs.find((x) => x.id === picked)?.id ?? tabs[0]?.id);
+  // The Activity tab loads when it is first opened, then keeps its rows while you switch tabs.
+  let seen = $state(false);
+  $effect(() => {
+    if (tab === 'activity') seen = true;
+  });
 
   // Arrow keys move between the tabs, Home and End jump (one tab stop for the list).
   function tabKey(ev: KeyboardEvent) {
@@ -88,12 +99,12 @@
         </div>
       </div>
       {#if public_}
-        <div class="head-actions"><EmoteActions emoteId={e.id} {name} {viewer} /></div>
+        <div class="head-actions"><EmoteActions emoteId={e.id} {name} {viewer} picture={e} /></div>
       {/if}
     </header>
 
     {#if public_}
-      <div class="bar"><EmoteActions emoteId={e.id} {name} {viewer} variant="bar" /></div>
+      <div class="bar"><EmoteActions emoteId={e.id} {name} {viewer} variant="bar" picture={e} /></div>
     {/if}
 
     {#if !public_}
@@ -122,12 +133,14 @@
         </div>
         {#if only.id === 'channels' && channels}
           <UsedIn {channels} total={channelCount} />
+        {:else if only.id === 'activity'}
+          <ActivityTab emoteId={e.id} />
         {:else}
           <EmoteGrid items={more} creator={false} skeletons={0} label="More from {ownerName}" />
         {/if}
       </section>
     {:else if tabs.length}
-      <section class="panel tabbed" aria-label="Channels and more from the creator">
+      <section class="panel tabbed" aria-label="Channels, more from the creator and activity">
         <div class="tabbar">
           <div class="tablist" role="tablist" aria-label="Sections">
             {#each tabs as x (x.id)}
@@ -141,7 +154,7 @@
                 tabindex={tab === x.id ? 0 : -1}
                 onclick={() => (picked = x.id)}
                 onkeydown={tabKey}
-              >{x.label}{#if x.n}<span class="n">{x.n}</span>{/if}</button>
+              ><Icon name={x.icon} size={16} />{#if x.short}<span class="long">{x.label}</span><span class="short">{x.short}</span>{:else}{x.label}{/if}{#if x.n}<span class="n">{x.n}</span>{/if}</button>
             {/each}
           </div>
           {#if tab === 'more' && e.owner}
@@ -159,6 +172,11 @@
         {#if more.length && e.owner}
           <div role="tabpanel" id="panel-more" aria-labelledby="tab-more" hidden={tab !== 'more'}>
             <EmoteGrid items={more} creator={false} skeletons={0} label="More from {ownerName}" />
+          </div>
+        {/if}
+        {#if listed && seen}
+          <div role="tabpanel" id="panel-activity" aria-labelledby="tab-activity" hidden={tab !== 'activity'}>
+            <ActivityTab emoteId={e.id} />
           </div>
         {/if}
       </section>
@@ -180,7 +198,7 @@
   .creator { position: relative; display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 10px 0 6px; max-width: 100%; min-width: 0;
     border: 1px solid var(--border-strong); border-radius: var(--radius-btn); background: var(--surface); color: var(--text);
     font-size: var(--t-small); font-weight: 500; transition: border-color var(--fast), background-color var(--fast); }
-  .creator::after { content: ''; position: absolute; inset: -4px 0; } /* 40px to hit */
+  .creator::after { content: ''; position: absolute; inset: -6px 0; } /* 44px to hit */
   .creator > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .labels { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
   .label { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border: 1px solid var(--border);
@@ -201,6 +219,8 @@
     background: none; color: var(--muted); font: inherit; font-size: var(--t-small); font-weight: 500; white-space: nowrap; cursor: pointer;
     transition: background-color var(--fast), color var(--fast); touch-action: manipulation; }
   .tabbtn[aria-selected='true'] { color: var(--text); font-weight: 600; }
+  .tabbtn :global(.icon) { color: var(--dim); }
+  .tabbtn[aria-selected='true'] :global(.icon) { color: var(--accent-text); }
   .n { color: var(--dim); font-variant-numeric: tabular-nums; font-size: var(--t-label); }
   .block-title .n { margin-left: 8px; font-size: var(--t-small); font-weight: 500; }
   .tabbed .block-head { margin-top: 4px; }
@@ -210,16 +230,25 @@
   svg.arrow { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
   .bar { display: none; }
+  .short { display: none; }
 
   @media (hover: hover) and (pointer: fine) {
     .back:hover { color: var(--text); }
     .back:hover :global(.icon) { transform: translateX(-3px); }
     .creator:hover { border-color: var(--accent-border); background: var(--surface-hover); }
-    .tabbtn:hover:not([aria-selected='true']) { background: var(--row-hover); color: var(--text); }
+    .tabbtn:hover:not([aria-selected='true']) { color: var(--text); }
   }
 
+  @media (pointer: coarse) { .back, .tabbtn { min-height: 44px; } }
+
   @media (max-width: 1000px) { .panels { grid-template-columns: minmax(0, 1fr); } }
-  @media (max-width: 560px) { .panel { padding: 16px; } }
+  @media (max-width: 560px) {
+    .panel { padding: 16px; }
+    .long { display: none; }
+    .short { display: inline; }
+    .tablist { gap: 0; }
+    .tabbtn { padding: 0 8px; gap: 6px; }
+  }
 
   /* Phones: the actions move to a bar fixed to the bottom of the screen, above the home indicator.
      The page ends 72px higher, so the bar never covers the footer. */

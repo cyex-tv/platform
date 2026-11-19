@@ -7,14 +7,18 @@ pub mod account;
 pub mod activity;
 pub mod admin;
 pub mod catalog;
+pub mod codes;
 pub mod cors;
 pub mod cosmetics;
 pub mod editors;
+pub mod errors;
 pub mod gql;
 pub mod limits;
 pub mod moderation;
+pub mod paddle;
 pub mod routes;
 pub mod search;
+pub mod shop;
 pub mod state;
 pub mod upload;
 pub mod views;
@@ -45,6 +49,7 @@ use crate::state::{AppState, MaybeCaller};
         (name = "auth", description = "Signing in with Twitch or Kick."),
         (name = "emotes", description = "Uploading emotes."),
         (name = "cosmetics", description = "cyex.tv chat badges and name paints (ADR 0015): the catalog, chatters' picks, and staff picture uploads."),
+        (name = "shop", description = "The cosmetics shop (ADR 0016): Paddle's webhook. Items, checkout, orders and codes are GraphQL."),
         (name = "reads", description = "Public, cacheable reads for chat clients.")
     )
 )]

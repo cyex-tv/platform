@@ -261,3 +261,38 @@ async fn searches_are_rate_limited() {
     assert_eq!(code(&r), "rate_limited", "{r}");
     w.db.close().await;
 }
+
+#[tokio::test]
+async fn search_past_the_last_page_is_empty() {
+    let Some(w) = World::new(Rates::default()).await else {
+        return;
+    };
+    for i in 0..3 {
+        w.account(
+            Platform::Twitch,
+            &format!("340{i}"),
+            &format!("pagefan{i}"),
+            &format!("PageFan{i}"),
+        )
+        .await;
+    }
+    // The last page holds one; the one after it holds none, and the total stays right.
+    let r = w
+        .search(None, json!({ "q": "pagefan", "p": 2, "n": 2 }))
+        .await;
+    assert_eq!(ids_of(&r).len(), 1, "{r}");
+    let r = w
+        .search(None, json!({ "q": "pagefan", "p": 3, "n": 2 }))
+        .await;
+    let page = &r["data"]["searchAccounts"];
+    assert_eq!(page["items"].as_array().unwrap().len(), 0, "{r}");
+    assert_eq!(page["total"], 3, "{r}");
+    assert_eq!(page["page"], 3, "{r}");
+    // Far past the counted window too: nothing, not the last page again.
+    let r = w
+        .search(None, json!({ "q": "pagefan", "p": 100000, "n": 50 }))
+        .await;
+    assert_eq!(ids_of(&r).len(), 0, "{r}");
+    assert_eq!(r["data"]["searchAccounts"]["total"], 3, "{r}");
+    w.db.close().await;
+}

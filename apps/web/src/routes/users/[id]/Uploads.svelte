@@ -1,6 +1,7 @@
 <script lang="ts">
   // A creator's uploads: Top from the load, New and every page after from the browser.
   // The page keys this on the creator, so a new creator starts from scratch (no reset effect).
+  import { appendUnique } from '$lib/tool/paging';
   import { ApiError, gql } from '$lib/api';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
@@ -45,7 +46,7 @@
     try {
       const got = await ask(nextPage, s);
       if (s !== sort) return; // the order changed while this loaded
-      extra = [...extra, ...got];
+      extra = appendUnique(extra, got);
       nextPage += 1;
     } catch (e) {
       failed = message(e);
@@ -76,7 +77,7 @@
 
 <section aria-labelledby="up-h">
   <div class="bar">
-    <h1 class="page-title" id="up-h">Uploaded emotes <span class="n">{count(total)}</span></h1>
+    <h2 class="page-title" id="up-h">Uploaded emotes<span class="n" aria-hidden="true">{count(total)}</span><span class="sr-only">, {count(total)}</span></h2>
     <label class="find">
       <span class="sr-only">Filter uploads</span>
       <Icon name="search" size={16} />
@@ -95,7 +96,7 @@
     <State title="Nothing matches “{filter.trim()}”.">
       Nothing loaded so far matches{#if more}; load more to look further{/if}.
       {#snippet actions()}
-        <button class="ui-btn secondary" type="button" onclick={() => (filter = '')}>Clear filter</button>
+        <button class="btn btn-s" type="button" onclick={() => (filter = '')}>Clear filter</button>
       {/snippet}
     </State>
     {#if more}<div class="foot"><LoadMore hasMore={more} busy={loading} error={failed} {total} onmore={loadMore} /></div>{/if}

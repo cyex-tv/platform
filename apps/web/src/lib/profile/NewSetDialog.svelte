@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Segmented from '$lib/components/Segmented.svelte';
   // Make a set for an account: yours, or one you edit with SETS. Opens its editor when made.
   //   <NewSetDialog bind:this={dlg} ownerId={id} mine hasPersonal={false} oncreated={…} />  dlg.open()
   import { goto } from '$app/navigation';
@@ -57,22 +58,18 @@
       </label>
       <div class="ui-field">
         <span class="ui-label" id="kind-label">Kind</span>
-        <div class="ui-seg" role="group" aria-labelledby="kind-label">
-          <button type="button" aria-pressed={kind === 'CHANNEL'} onclick={() => (kind = 'CHANNEL')}>Channel</button>
-          <button type="button" aria-pressed={kind === 'PERSONAL'} disabled={hasPersonal} onclick={() => (kind = 'PERSONAL')}>Personal</button>
-        </div>
+        <Segmented label="Kind" options={[{ value: 'CHANNEL', label: 'Channel', icon: 'tv' }, { value: 'PERSONAL', label: 'Personal', icon: 'user', disabled: hasPersonal }]} value={kind} onchange={(v) => (kind = v)} />
         <span class="ui-hint">
           {#if hasPersonal}{mine ? 'You have' : 'This account has'} a personal set already; there’s one per account.{:else if kind === 'PERSONAL'}Approved emotes only, shown wherever {mine ? 'you chat' : 'they chat'}.{:else}For a channel’s chat. Pick it as the active set in Channels.{/if}
         </span>
       </div>
     </div>
     <footer>
-      <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="ui-btn primary" type="submit" disabled={creating}>{creating ? 'Creating…' : 'Create'}</button>
+      <button class="btn btn-s" type="button" onclick={() => dialog.close()}>Cancel</button>
+      <button class="btn btn-s btn-primary" type="submit" disabled={creating}>{creating ? 'Creating…' : 'Create'}</button>
     </footer>
   </form>
 </dialog>
 
 <style>
-  .ui-seg button:disabled { opacity: .45; cursor: not-allowed; }
 </style>

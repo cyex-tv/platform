@@ -117,6 +117,48 @@ export const SET = graphql(`
   }
 `);
 
+// The public set page (/sets/<id>): listed and unlisted sets open for anyone; a private one only
+// for its owner and editors, and for everyone else it answers as if it did not exist.
+export const PUBLIC_SET = graphql(`
+  query PublicSet($id: String!) {
+    set(id: $id) {
+      id
+      name
+      kind
+      visibility
+      capacity
+      slotsUsed
+      createdAt
+      owner {
+        id
+        displayName
+        avatar
+      }
+      emotes {
+        name
+        zeroWidth
+        addedAt
+        emote {
+          ...EmoteFields
+        }
+      }
+    }
+  }
+`);
+
+export const CLONE_SET = graphql(`
+  mutation CloneSet($id: String!, $name: String, $visibility: SetVisibility) {
+    cloneSet(id: $id, name: $name, visibility: $visibility) {
+      copied
+      skipped
+      set {
+        id
+        name
+      }
+    }
+  }
+`);
+
 export const GLOBAL_SET = graphql(`
   query GlobalSet {
     globalSet {
@@ -443,8 +485,52 @@ export const MY_NOTIFICATIONS = graphql(`
 `);
 
 export const MARK_READ = graphql(`
-  mutation MarkRead {
-    markNotificationsRead
+  mutation MarkRead($ids: [String!]) {
+    markNotificationsRead(ids: $ids)
+  }
+`);
+
+export const UNREAD_COUNT = graphql(`
+  query UnreadCount {
+    unreadNotificationCount
+  }
+`);
+
+export const MY_SESSIONS = graphql(`
+  query MySessions {
+    mySessions {
+      id
+      kind
+      device
+      createdAt
+      lastSeenAt
+      expiresAt
+      current
+    }
+  }
+`);
+
+export const REVOKE_SESSION = graphql(`
+  mutation RevokeSession($id: String!) {
+    revokeSession(id: $id)
+  }
+`);
+
+export const REVOKE_OTHER_SESSIONS = graphql(`
+  mutation RevokeOtherSessions {
+    revokeOtherSessions
+  }
+`);
+
+export const EXPORT_MY_DATA = graphql(`
+  mutation ExportMyData {
+    exportMyData
+  }
+`);
+
+export const DELETE_ACCOUNT = graphql(`
+  mutation DeleteAccount($confirm: String!) {
+    deleteAccount(confirm: $confirm)
   }
 `);
 
@@ -551,6 +637,7 @@ export const ROLE_FIELDS = graphql(`
     description
     position
     permissions
+    public
   }
 `);
 
@@ -861,6 +948,50 @@ export const USER_COSMETICS = graphql(`
   }
 `);
 
+// What accounts show (badge and paint, in full), by account id: public, up to 100 at once.
+export const ACCOUNT_COSMETICS = graphql(`
+  query AccountCosmetics($accountIds: [String!]!) {
+    accountCosmetics(accountIds: $accountIds) {
+      accountId
+      badge {
+        ...BadgeFields
+      }
+      paint {
+        ...PaintFields
+      }
+    }
+  }
+`);
+
+// An account's public profile: logins, public roles, each channel's active set, member since.
+export const ACCOUNT_PROFILE = graphql(`
+  query AccountProfile($accountId: String!) {
+    accountProfile(accountId: $accountId) {
+      account {
+        id
+        displayName
+        avatar
+      }
+      identities {
+        platform
+        login
+        displayName
+      }
+      roles {
+        id
+        name
+      }
+      activeSets {
+        platform
+        login
+        setId
+        setName
+      }
+      createdAt
+    }
+  }
+`);
+
 export const MY_COSMETICS = graphql(`
   query MyCosmetics($accountId: String) {
     myCosmetics(accountId: $accountId) {
@@ -1002,6 +1133,25 @@ export const EDITOR_OF = graphql(`
   }
 `);
 
+// A profile's listed sets as cards, for anyone (the Emote sets section of someone else's profile).
+export const ACCOUNT_SETS = graphql(`
+  query AccountSets($accountId: String!) {
+    accountSets(accountId: $accountId, preview: 12) {
+      id
+      name
+      kind
+      capacity
+      slotsUsed
+      active
+      preview {
+        emote {
+          ...EmoteFields
+        }
+      }
+    }
+  }
+`);
+
 export const PROFILE_MINE = graphql(`
   query ProfileMine {
     myChannels {
@@ -1033,47 +1183,329 @@ export const PROFILE_EDITED = graphql(`
   }
 `);
 
-// An account's public activity feed (ADR 0016), newest first; page back with `before`.
+// An account's public activity feed (ADR 0016), newest first; page back with `before` set to the
+// answer's `next` (a page can be short and still have one).
 export const ACCOUNT_ACTIVITY = graphql(`
   query AccountActivity($accountId: String!, $before: String, $limit: Int) {
-    accountActivity(accountId: $accountId, before: $before, limit: $limit) {
-      id
-      kind
-      actor {
+    accountActivityPage(accountId: $accountId, before: $before, limit: $limit) {
+      entries {
         id
-        displayName
-        avatar
-      }
-      set {
-        id
-        name
-      }
-      emote {
-        id
-        name
-        host
-        files {
-          name
-          width
-          height
-          isStatic
+        kind
+        actor {
+          id
+          displayName
+          avatar
         }
-      }
-      fromName
-      toName
-      badge {
-        fromId
+        set {
+          id
+          name
+        }
+        emote {
+          id
+          name
+          host
+          files {
+            name
+            width
+            height
+            isStatic
+          }
+        }
         fromName
-        toId
         toName
+        badge {
+          fromId
+          fromName
+          toId
+          toName
+        }
+        paint {
+          fromId
+          fromName
+          toId
+          toName
+        }
+        createdAt
       }
-      paint {
-        fromId
+      next
+    }
+  }
+`);
+
+export const EMOTE_ACTIVITY = graphql(`
+  query EmoteActivity($emoteId: String!, $before: String, $limit: Int) {
+    emoteActivityPage(emoteId: $emoteId, before: $before, limit: $limit) {
+      entries {
+        id
+        kind
+        actor {
+          id
+          displayName
+          avatar
+        }
+        set {
+          id
+          name
+        }
+        emote {
+          id
+          name
+          host
+          files {
+            name
+            width
+            height
+            isStatic
+          }
+        }
         fromName
-        toId
         toName
+        badge {
+          fromId
+          fromName
+          toId
+          toName
+        }
+        paint {
+          fromId
+          fromName
+          toId
+          toName
+        }
+        createdAt
       }
-      createdAt
+      next
+    }
+  }
+`);
+
+// The shop, redeem codes and orders (ADR 0016).
+
+export const SHOP_ITEM_FIELDS = graphql(`
+  fragment ShopItemFields on ShopItem {
+    id
+    name
+    description
+    priceCents
+    currency
+    paddlePriceId
+    badges {
+      ...BadgeFields
+    }
+    paints {
+      ...PaintFields
+    }
+    activeFrom
+    activeTo
+    stockLimit
+    stockLeft
+    visible
+    sortOrder
+    available
+    owned
+    deleted
+  }
+`);
+
+export const SHOP_ITEMS = graphql(`
+  query ShopItems($all: Boolean) {
+    shopItems(all: $all) {
+      ...ShopItemFields
+    }
+  }
+`);
+
+export const SHOP_ITEM = graphql(`
+  query ShopItem($id: String!) {
+    shopItem(id: $id) {
+      ...ShopItemFields
+    }
+  }
+`);
+
+export const ORDER_FIELDS = graphql(`
+  fragment OrderFields on Order {
+    id
+    buyer {
+      id
+      displayName
+      avatar
+    }
+    recipient {
+      id
+      displayName
+      avatar
+    }
+    gift
+    itemId
+    itemName
+    status
+    amountCents
+    currency
+    paidTotalCents
+    paidCurrency
+    refundReason
+    createdAt
+    paidAt
+    refundedAt
+    failedAt
+  }
+`);
+
+export const START_CHECKOUT = graphql(`
+  mutation StartCheckout($itemId: String!, $recipient: RecipientInput) {
+    startCheckout(itemId: $itemId, recipient: $recipient) {
+      order {
+        ...OrderFields
+      }
+      transactionId
+      checkoutUrl
+      clientToken
+      environment
+    }
+  }
+`);
+
+export const ORDER = graphql(`
+  query Order($id: String!) {
+    order(id: $id) {
+      ...OrderFields
+    }
+  }
+`);
+
+export const MY_ORDERS = graphql(`
+  query MyOrders($page: Int, $perPage: Int) {
+    myOrders(page: $page, perPage: $perPage) {
+      total
+      items {
+        ...OrderFields
+      }
+    }
+  }
+`);
+
+export const REDEEM_CODE = graphql(`
+  mutation RedeemCode($code: String!) {
+    redeemCode(code: $code) {
+      name
+      badges {
+        ...BadgeFields
+      }
+      paints {
+        ...PaintFields
+      }
+    }
+  }
+`);
+
+export const CREATE_SHOP_ITEM = graphql(`
+  mutation CreateShopItem($input: ShopItemInput!) {
+    createShopItem(input: $input) {
+      ...ShopItemFields
+    }
+  }
+`);
+
+export const UPDATE_SHOP_ITEM = graphql(`
+  mutation UpdateShopItem($id: String!, $input: ShopItemInput!) {
+    updateShopItem(id: $id, input: $input) {
+      ...ShopItemFields
+    }
+  }
+`);
+
+export const DELETE_SHOP_ITEM = graphql(`
+  mutation DeleteShopItem($id: String!) {
+    deleteShopItem(id: $id)
+  }
+`);
+
+export const ADMIN_ORDERS = graphql(`
+  query AdminOrders($status: OrderStatus, $accountId: String, $itemId: String, $page: Int, $perPage: Int) {
+    orders(status: $status, accountId: $accountId, itemId: $itemId, page: $page, perPage: $perPage) {
+      total
+      items {
+        ...OrderFields
+        providerTransactionId
+        refundRejectedAt
+      }
+    }
+  }
+`);
+
+export const REFUND_ORDER = graphql(`
+  mutation RefundOrder($id: String!, $reason: String!) {
+    refundOrder(id: $id, reason: $reason) {
+      ...OrderFields
+      providerTransactionId
+      refundRejectedAt
+    }
+  }
+`);
+
+export const CODE_BATCH_FIELDS = graphql(`
+  fragment CodeBatchFields on CodeBatch {
+    id
+    name
+    prefix
+    itemId
+    itemName
+    badgeIds
+    paintIds
+    codeCount
+    usesPerCode
+    redemptions
+    expiresAt
+    disabledAt
+    createdBy {
+      id
+      displayName
+    }
+    createdAt
+  }
+`);
+
+export const CODE_BATCHES = graphql(`
+  query CodeBatches($page: Int, $perPage: Int) {
+    codeBatches(page: $page, perPage: $perPage) {
+      total
+      items {
+        ...CodeBatchFields
+      }
+    }
+  }
+`);
+
+export const CREATE_CODE_BATCH = graphql(`
+  mutation CreateCodeBatch($input: CodeBatchInput!) {
+    createCodeBatch(input: $input) {
+      batch {
+        ...CodeBatchFields
+      }
+      codes
+    }
+  }
+`);
+
+export const DISABLE_CODE_BATCH = graphql(`
+  mutation DisableCodeBatch($id: String!) {
+    disableCodeBatch(id: $id) {
+      ...CodeBatchFields
+    }
+  }
+`);
+
+export const SHOP_COUNTS = graphql(`
+  query ShopCounts($items: Boolean!, $orders: Boolean!, $codes: Boolean!) {
+    shopItems(all: true) @include(if: $items) {
+      id
+    }
+    orders(page: 1, perPage: 1) @include(if: $orders) {
+      total
+    }
+    codeBatches(page: 1, perPage: 1) @include(if: $codes) {
+      total
     }
   }
 `);

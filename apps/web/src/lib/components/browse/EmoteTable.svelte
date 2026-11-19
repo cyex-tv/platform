@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import type { Look } from '$lib/cosmetics/store.svelte';
+  import { wantLooks, type Look } from '$lib/cosmetics/store.svelte';
   import type { CardEmote } from '../EmoteTile.svelte';
 
   /** What a table row shows beyond a tile: when it was added and how many channels use it. */
@@ -25,15 +25,18 @@
 
   type Props = {
     items: RowEmote[];
-    sort: TableSort;
-    onsort: (s: 'top' | 'new') => void;
+    sort?: TableSort;
+    /** Without it the Channels and Added headers are plain text (a list that has one fixed order). */
+    onsort?: (s: 'top' | 'new') => void;
     looks?: Record<string, Look>;
     picked?: ReadonlySet<string>;
     onpick?: (e: RowEmote) => void;
     label?: string;
     eager?: number;
   };
-  let { items, sort, onsort, looks = {}, picked, onpick, label = 'Emotes', eager = 0 }: Props = $props();
+  let { items, sort = 'relevance', onsort, looks = {}, picked, onpick, label = 'Emotes', eager = 0 }: Props = $props();
+  // The creators' paints and badges, one batched ask for the whole table (shared cosmetics cache).
+  $effect(() => wantLooks(items.map((e) => e.owner?.id)));
 
   const kinds = (e: RowEmote) =>
     [e.animated ? 'Animated' : 'Still', e.flags?.zeroWidth && 'zero-width', isWide(e) && 'wide'].filter(Boolean).join(', ');
@@ -50,11 +53,11 @@
         <th class="nm">Name</th>
         <th class="by">Creator</th>
         <th class="ty">Type</th>
-        <th class="num" aria-sort={aria('channels')}>
-          <button type="button" class:on={sort === 'top'} onclick={() => onsort('top')}>Channels{#if sort === 'top'}<Icon name="arrow-down" size={14} />{/if}</button>
+        <th class="num" aria-sort={onsort ? aria('channels') : undefined}>
+          {#if onsort}<button type="button" class:on={sort === 'top'} onclick={() => onsort('top')}>Channels{#if sort === 'top'}<Icon name="arrow-down" size={14} />{/if}</button>{:else}Channels{/if}
         </th>
-        <th class="when" aria-sort={aria('added')}>
-          <button type="button" class:on={sort === 'new'} onclick={() => onsort('new')}>Added{#if sort === 'new'}<Icon name="arrow-down" size={14} />{/if}</button>
+        <th class="when" aria-sort={onsort ? aria('added') : undefined}>
+          {#if onsort}<button type="button" class:on={sort === 'new'} onclick={() => onsort('new')}>Added{#if sort === 'new'}<Icon name="arrow-down" size={14} />{/if}</button>{:else}Added{/if}
         </th>
       </tr>
     </thead>

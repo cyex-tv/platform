@@ -1,16 +1,18 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
-  import { gql, linkUrl, signOut } from '$lib/api';
-  import { date, iso } from '$lib/format';
+  import { gql, linkUrl } from '$lib/api';
+  import { unlinkMessage } from '$lib/account/errors';
+  import DataPanel from '$lib/account/DataPanel.svelte';
+  import DeleteAccount from '$lib/account/DeleteAccount.svelte';
+  import SessionsPanel from '$lib/account/SessionsPanel.svelte';
+  import OrdersPanel from '$lib/shop/OrdersPanel.svelte';
+  import { date } from '$lib/format';
   import Name from '$lib/components/Name.svelte';
   import type { Platform } from '$lib/gql/graphql';
-  import { MARK_READ, MY_NOTIFICATIONS, UNLINK } from '$lib/queries';
+  import { UNLINK } from '$lib/queries';
   import Avatar from '$lib/components/Avatar.svelte';
-  import LoadGate from '$lib/tool/LoadGate.svelte';
-  import { loader } from '$lib/tool/loader.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
-  import { forgetMe, loadMe, session } from '$lib/tool/session.svelte';
-  import { fail, notify } from '$lib/tool/notices.svelte';
+  import { loadMe, session } from '$lib/tool/session.svelte';
+  import { notify } from '$lib/tool/notices.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
 
   const PLATFORMS: { id: Platform; name: string; slug: 'twitch' | 'kick' }[] = [
@@ -18,10 +20,7 @@
     { id: 'KICK', name: 'Kick', slug: 'kick' },
   ];
 
-  const L = loader(async ({ fetch }) => (await gql(MY_NOTIFICATIONS, {}, fetch)).myNotifications);
-  const notes = $derived(L.data);
   const me = $derived(session.me!);
-  const unread = $derived(notes?.filter((n) => !n.read).length ?? 0);
 
   async function unlink(p: Platform, name: string) {
     try {
@@ -29,41 +28,8 @@
       await loadMe({ fresh: true });
       notify(`${name} unlinked.`);
     } catch (err) {
-      fail(err);
+      notify(unlinkMessage(err), true);
     }
-  }
-
-  async function markRead() {
-    try {
-      await gql(MARK_READ, {});
-      L.set(notes?.map((n) => ({ ...n, read: true })) ?? null);
-    } catch (err) {
-      fail(err);
-    }
-  }
-
-  async function leave() {
-    try {
-      await signOut();
-      forgetMe();
-      await goto('/');
-    } catch (err) {
-      fail(err);
-    }
-  }
-
-  /** A notification in words. Payloads are JSON; unknown kinds show their kind. */
-  function describe(kind: string, payload: string): string {
-    let data: Record<string, unknown> = {};
-    try {
-      data = JSON.parse(payload);
-    } catch {}
-    const name = typeof data.name === 'string' ? iso(data.name) : 'An emote';
-    const reason = typeof data.reason === 'string' ? ` Reason: ${iso(data.reason)}` : '';
-    if (kind === 'emote.taken_down') return `${name} was taken down.${reason}`;
-    if (kind === 'emote.rejected') return `${name} was rejected.${reason}`;
-    if (kind === 'emote.approved') return `${name} was approved.`;
-    return kind;
   }
 </script>
 
@@ -100,27 +66,9 @@
       <p class="ui-hint pad">Link both to sign in with either. cyex.tv keeps the user ID, login, display name and picture.</p>
     </section>
 
-    <section class="ui-panel">
-      <header>
-        <h2>Notifications</h2>
-        {#if unread}<button class="ui-btn ghost small" type="button" onclick={markRead}>Mark {unread} read</button>{/if}
-      </header>
-      <LoadGate source={L} label="Loading notifications…">
-      {#snippet children(notes)}
-      {#if notes.length === 0}
-        <p class="ui-hint pad">Nothing yet. Moderation decisions about your emotes show up here.</p>
-      {:else}
-        <ul class="ui-list">
-          {#each notes as n (n.id)}
-            <li class:unread={!n.read}>
-              <span class="what"><span>{describe(n.kind, n.payload)}</span><span class="ui-hint ui-num">{date(n.createdAt)}</span></span>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-      {/snippet}
-      </LoadGate>
-    </section>
+    <OrdersPanel />
+
+    <SessionsPanel />
 
     {#if me.permissions.length}
       <section class="ui-panel">
@@ -129,11 +77,9 @@
       </section>
     {/if}
 
-    <section class="ui-card">
-      <h2>Sign out</h2>
-      <p class="ui-hint">Ends this session. Your sets and channels stay as they are.</p>
-      <div class="ui-actions gap"><button class="ui-btn secondary" type="button" onclick={leave}>Sign out</button></div>
-    </section>
+    <DataPanel />
+
+    <DeleteAccount />
   </div>
 </div>
 
@@ -142,8 +88,6 @@
   .what strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .blank { width: 28px; height: 28px; border-radius: 50%; border: 1px dashed var(--border-strong); flex: none; }
   .pad { padding: 10px 14px 12px; }
-  .unread { box-shadow: inset 2px 0 0 var(--accent); }
   .perms { display: flex; flex-wrap: wrap; gap: 6px; text-transform: none; }
   .perms .ui-chip { text-transform: none; letter-spacing: 0; font-family: var(--font-mono); font-weight: 600; }
-  .gap { margin-top: 12px; }
 </style>

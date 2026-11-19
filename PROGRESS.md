@@ -7,6 +7,99 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 - Web: `/admin/users/[accountId]` (profile, restrictions, roles, cosmetics, uploads, reports about and by, latest audit entries), `/admin/cosmetics/owners` (who owns what), audit log filters with links to targets and a Changes/JSON toggle, review queue keyboard flow (J, K, A, R) with a 1x/2x/4x comparison, reports grouped by emote.
 - Manual check (2026/11/18): headless Edge against the dev mock at 1440 and 375, dark and light, plus the keyboard flow (J, K, R, A) in the review queue; screens in .claude/runs/2026-11-17-overnight/screens/g9.
 
+## Sign-off fixes: API (branch `fix/signoff-api`)
+
+The second security review and the sign-off code review (overnight run 2026-11-17). Additive; nothing was deployed.
+
+- [x] `unlinkIdentity` refuses `restricted` (403) while the account is restricted or blocked. Migration `20261206000001_identity_holds.sql`: a trigger keeps a hold (platform ID + restriction) for every identity that leaves a restricted or blocked account; sign-in and linking with it copy the restriction or block onto the account and use the hold up.
+- [x] Linking takes the account row `FOR SHARE` and needs it live (a link racing a deletion answers `account_deleted`).
+- [x] Shop: replaced and expired checkouts get their Paddle transaction cancelled (`PATCH /transactions/{id}`; the api on replace, the worker's hourly sweep for the rest); a failed cancel is audited (`shop.transaction_cancel_failed`) and only then is a late payment still taken. The Paddle client moved to `crates/paddle` so the worker can use it.
+- [x] Shop: `checkoutUrl` only when it is https on cyex.tv, buy.paddle.com or sandbox-buy.paddle.com. Adjustments for an order that can still take payment answer 503. Orders keep the badges and paints they sold (migration `20261206000002_shop_signoff.sql`), fulfil from them, and are replaced when the item's bundle changed; nothing left to grant is paid and audited `item_empty`. Staff may retry a refund stuck as requested after 10 minutes; the worker puts ones older than an hour back to paid (`shop.refund_request_reverted`). A staff refund of an order with a transaction needs Paddle (`refund_unavailable`). Gift recipients see a gift only once paid, without money fields or the transaction ID (orders list, `order`, export); `gift` is stored at checkout (`is_gift`).
+- [x] Webhook timestamps near i64's ends are `stale_signature`, not an overflow. Upload decoder errors stay in the logs; the client gets one sentence.
+- [x] Account deletion queues `files.delete` for each file only its deleted emotes used (migration `20261206000003_files_purged.sql`, `files.purged_at`); the worker deletes under the file's lock unless it is in use again; an upload of the same bytes stores and transcodes it again. Deleted emote rows lose their owner.
+- [x] Activity lines of uploads no longer need the approver's account; `next` is null after a short batch; `searchAccounts` past the last page is empty with the right total; edits on sets the caller can't view answer `not_found`; `slotsUsed` counts visible members for non-editors; `sets.edit_any` goes before the editor rule for visibility.
+- Tests: `apps/api/tests/{auth_flow,shop_flow,account_hub_flow,upload_flow,backend_reads_flow,account_search_flow,public_sets_flow}.rs`, `apps/worker/tests/jobs.rs`, `crates/db/tests/queries.rs`, unit tests in `shop.rs`, `upload.rs`, `crates/paddle`.
+
+### GitHub write log for this PR
+
+```
+git push -u origin fix/signoff-api
+gh pr create --base main --head fix/signoff-api --title "api: sign-off security and correctness fixes" --body-file <file>
+gh pr merge <n> --merge
+```
+
+## Design harmony pass (branch `polish/harmony`)
+
+Contact sheets of every route at 1440 and 375, dark and light, read as one product (overnight run 2026-11-17). Web only; nothing was deployed.
+
+- [x] One page top: every page title sits at the same height under the header (shop, download and redeem were 44px lower, help and the API docs 14px lower; phones too).
+- [x] One page-title metric (size, line height, tracking) and one line under it (15px, 8px gap) for PageHead, the admin `.ui-head` pages and the admin overview.
+- [x] Whole-page states (not-found, error pages, the signed-in pages' error) no longer pick up the global `.page` column class, which inset them by the page padding a second time.
+- [x] The shop's load error is the one Problem pattern; the shop and redeem messages use problem.ts's words for offline and unknown failures (test).
+- [x] One Copy link button (`CopyLink.svelte`): profile, channel and set pages say "Copy link", then "Copied". The channel page said "Copy set link" but copied the channel's address.
+- [x] The signed-in pages' rail is the public profile's rail (Activity row, Copy link), so it no longer shifts between /me/* and /users/<id>.
+- [x] Labelled tool buttons press like the site's buttons (scale), not by dimming.
+- Manual check: every route re-shot at 375 and 1440 in both themes (contact sheets in the run folder, screens/polish); svelte-check 0/0, vitest, build.
+
+### GitHub write log for this PR
+
+```
+git push -u origin polish/harmony
+gh pr create --base main --head polish/harmony --title "web: design harmony pass" --body-file <file>
+gh pr merge <n> --merge
+```
+
+## Shop hardening (branch `fix/shop-hardening`)
+
+The backend audit of the shop (overnight run 2026-11-17, findings B1-B3, M1-M3, L1-L3). Additive; nothing was deployed.
+
+- [x] Migration `20261202000001_shop_hardening.sql`: status `refund_requested`; `shop_orders.checkout_url`, `failed_reason`, `refund_requested_at`, `refund_rejected_at`; `shop_order_entitlements` (every cosmetic an order covers, backfilled from `order_id`); one pending order per buyer, item and recipient (partial unique index); `paddle_events (received_at)` index.
+- [x] Refunds take back only what no other paid order, redeemed code or staff grant covers (B1).
+- [x] Payments that give nothing are audited: `shop.order_paid_unfulfilled` (cancelled or failed order, deleted or gone recipient, transaction not saved), `shop.order_paid_no_grant` (owned already). Never granted to a deleted account. A transaction ID that can't be saved is retried once, then named in `shop.checkout_failed` (B2).
+- [x] Checkout re-reads the item under its lock and uses that row's price (B3).
+- [x] A repeated checkout hands out the same open transaction (`checkout_busy` while one starts); a late payment after the hold is taken (`shop.order_oversold` when it sells one too many) (M1).
+- [x] Staff refunds: `refund_requested` committed, Paddle asked without the lock, then finished; `already_refunded`; a rejected refund flags the order (`Order.refundRejectedAt`, staff only) and audits `shop.refund_rejected` (M2).
+- [x] Notifications `cosmetic.granted` / `cosmetic.revoked` with `source` (`purchase`, `code`) and `order_id`; the export lists orders and code redemptions (M3).
+- [x] Redeem sorts its grants, needs a known client IP (`unknown_client`); webhook body limit 64 KB; `paddlePriceId` only for `shop.manage` (L1).
+- [x] Worker clean-up: pending orders older than 24 h fail (`expired`, audited `shop.order_expired`), Paddle events older than 90 days go (L2).
+- [x] `TestDb` panics in CI (`CI=true`) without `CYEX_TV_TEST_DATABASE_URL` (L3).
+- [x] Tests: `apps/api/tests/shop_flow.rs` (B1-B3, M1-M3, L1, and three `tokio::join!` races), `apps/worker/tests/jobs.rs` (expiry and retention), unit tests in `shop.rs`, `codes.rs`, `testing.rs`.
+
+## Cosmetics shop and redeem codes (branch `feat/shop`)
+
+ADR 0016. A shop for cyex.tv's chat cosmetics and redeem codes, like 7TV's Store and Redeem (studied from what 7TV shows publicly; no code taken). Payments through cyex.tv's **own** Paddle Billing account, never cyex.app's; no card data reaches cyex.tv.
+
+- [x] Migration `20261201000001_shop.sql` (additive): `shop_items` (+ `shop_item_cosmetics` bundles), `shop_orders`, `paddle_events`, `code_batches` (+ `code_batch_cosmetics`), `redeem_codes` (sha256 only), `code_redemptions`; entitlements gain source `code` and `order_id`/`code_id`.
+- [x] Permissions `shop.manage`, `shop.orders`, `codes.manage` (the owner holds all).
+- [x] Paddle (`apps/api/src/paddle.rs`): env `CYEX_TV_PADDLE_ENV`, `_API_KEY`, `_CLIENT_TOKEN`, `_WEBHOOK_SECRET`; keys of the wrong environment refused at start. Checkout creates a Paddle transaction; fulfilment only from the signed webhook `POST /v1/shop/paddle/webhook` (HMAC, 5-minute window, `event_id` recorded once, idempotent by transaction); refunds and chargebacks revoke exactly the order's entitlements and clear the selection.
+- [x] GraphQL (additive): `shopItems`, `shopItem`, `myOrders`, `order`, `orders`, `codeBatches`; `createShopItem`, `updateShopItem`, `deleteShopItem`, `startCheckout`, `refundOrder`, `redeemCode`, `createCodeBatch`, `disableCodeBatch`. Schema, OpenAPI and web types regenerated.
+- [x] Codes: `PREFIX-XXXX-XXXX-XXXX-XXXX` (80 bits), shown once; constant-time compare; 30 tries an hour, lockout after 5 wrong per account / 20 per IP in 15 minutes.
+- [x] Every staff action, fulfilment, refund and redeem audited.
+- [x] Tests: `apps/api/tests/shop_flow.rs` against Postgres in CI with a fake Paddle server; unit tests of the checks, signature, config, code format and lockout.
+- [x] Dev mock: sample items, immediate fake checkout, sample orders, code batches with the known code `SAMPLE-CODE-0001`.
+- [x] Infra: `env/api.env.example` gets the four names, empty (cyex-tv/infra PR 7, merged).
+- [ ] Owner: Paddle account, products, keys and webhook (`docs/setup/owner-steps.md`, "Paddle for the cyex.tv shop").
+- [ ] Website pages (another task).
+- Open questions (defaults taken): `.claude/runs/2026-11-17-shop/questions.md`.
+
+#### GitHub write log
+- `gh pr create -R cyex-tv/infra --base main --head env/paddle`, `gh pr merge 7 -R cyex-tv/infra --merge`.
+- `gh pr create --base main --head feat/shop`.
+
+## Shop and redeem pages on the website (branch `feat/shop-web`)
+
+The website side of ADR 0016, on the shop API (PR 58). Nothing changes in the API.
+
+- [x] `/shop`: items as cards, each drawn on your own name (a made-up one signed out) in the dark and the light chat ground and as a chat line; price in the cyex number format, copies left, sale end, "Owned". An item opens in a dialog at `/shop?item=<id>` (shareable; signed out, "Sign in to buy" comes back to it): every paint and badge (chat size and 2x), buy for yourself or give to a Twitch or Kick login.
+- [x] Checkout: `startCheckout`, then Paddle.js loaded only at that moment (`Environment.set`, `Initialize({ token })`, `Checkout.open({ transactionId })`; `checkoutUrl` when the script can't load), then `order(id)` polled until PAID, REFUNDED or FAILED. The dialog closes when the payment opens (a modal would cover Paddle's window); the page shows a calm state: waiting, confirming, still confirming, window closed (open it again), paid (link to equip it) or failed. Every API error code has its own sentence.
+- [x] `/redeem`: one field (case, spaces and dashes ignored), shows what the code gave with a link to equip it; the lockout says in how many minutes to try again.
+- [x] Orders: a panel in `/me/account` (item, state, amount paid, date, gift from or to). The refund reason is never shown to buyers.
+- [x] Admin, under a "Shop" group of the admin rail with counts: Shop items (list with state, create and edit with a cosmetics picker, price, currency, Paddle price ID, sale window, copies, sort order, visibility; soft delete), Orders (filter by state, item, account; detail; refund with a reason), Codes (batches; a new batch shows its codes once with Copy all and Download .txt; turn a batch off). Each page needs its own permission (`shop.manage`, `shop.orders`, `codes.manage`).
+- [x] Entry points: Cosmetics ("Get more in the shop"), the footer ("Shop"). The header is unchanged.
+- [x] CSP (`apps/web/svelte.config.js`): `script-src` + `https://cdn.paddle.com`; `style-src-elem` + `https://cdn.paddle.com` and `https://sandbox-cdn.paddle.com`; new `frame-src 'self' https://buy.paddle.com https://sandbox-buy.paddle.com`. Found by loading Paddle.js and opening a checkout under the policy in both environments; Paddle's optional ProfitWell script stays blocked.
+- [x] Tests: `src/lib/shop/shop.test.ts` (prices, price fields, redeem codes, every error map, lockout minutes, order states, item states, code files). Dev mock: no recipient means yourself, staff permissions, `MOCK_PADDLE=1` leaves orders pending like the real checkout.
+- [ ] Not checked: a real Paddle sandbox payment (needs the owner's sandbox account and token).
+
 ## Account hub: sessions, notifications, export, deletion (branch `feat/account-hub`)
 
 Gap list G6. API only; `/me/account` (Connections, Sessions, Data) and `/me/inbox` with the header bell come next.

@@ -15,8 +15,8 @@ use axum::http::StatusCode;
 use cyex_tv_auth::{Caller, Via};
 use cyex_tv_db::sessions::{self, SessionKind};
 use cyex_tv_db::{
-    accounts, audit, channels, cosmetics as cosmetics_db, editors as editors_db, emotes, ids,
-    notifications, outbox, privacy, reads, reports, roles, sets,
+    accounts, audit, channels, cosmetics as cosmetics_db, editors as editors_db, emotes, files,
+    ids, jobs, notifications, outbox, privacy, reads, reports, roles, sets,
 };
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{AccountSession, EventType, SessionKindView, SetKind};
@@ -25,16 +25,9 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::catalog::{db_error, my_sets, not_found, publish_member_event};
+use crate::errors::{bad, rate_limited, sqlx_error};
 use crate::state::AppState;
 use crate::views;
-
-fn sqlx_error(err: sqlx::Error) -> ApiError {
-    db_error(err.into())
-}
-
-fn bad(code: &'static str, message: &str) -> ApiError {
-    ApiError::new(StatusCode::BAD_REQUEST, code, message)
-}
 
 /// A short, human name for the device a session signed in from, from its user agent. Only the
 /// browser family and the system are named; versions and everything else are dropped.
@@ -212,8 +205,8 @@ fn to_json<T: serde::Serialize>(value: &T) -> ApiResult<Value> {
 
 /// Everything about the caller's account, as one JSON document: the account, identities,
 /// sessions (no tokens), channels, emotes in every state with their tags, sets with their emotes
-/// and editors, account editors both ways, cosmetics owned and shown, roles, reports filed and
-/// notifications. 5 an hour. Audited (`account.exported`, no content).
+/// and editors, account editors both ways, cosmetics owned and shown, roles, reports filed,
+/// notifications, shop orders (bought and received) and redeemed codes. 5 an hour. Audited (`account.exported`, no content).
 pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
     state
         .limits
@@ -364,6 +357,20 @@ pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
             })
         })
         .collect();
+    let orders_out = export_orders(&mut conn, account_id).await?;
+    let redemptions_out: Vec<Value> = cyex_tv_db::codes::redemptions_of(&mut conn, account_id)
+        .await
+        .map_err(db_error)?
+        .into_iter()
+        .map(|r| {
+            json!({
+                "code_id": ids::to_text(r.code_id),
+                "batch_id": ids::to_text(r.batch_id),
+                "batch_name": r.batch_name,
+                "redeemed_at": views::time(r.redeemed_at),
+            })
+        })
+        .collect();
     drop(conn);
     let cosmetics_out = to_json(&crate::cosmetics::my_cosmetics(state, caller, None).await?)?;
 
@@ -388,8 +395,8 @@ pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
         "roles": role_names,
         "reports_filed": reports_out,
         "notifications": notes,
-        // The shop isn't open yet; orders will be listed here when it is.
-        "orders": [],
+        "orders": orders_out,
+        "code_redemptions": redemptions_out,
     });
 
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
@@ -409,6 +416,54 @@ pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
     serde_json::to_string(&doc).map_err(|_| ApiError::internal())
 }
 
+/// The account's orders, bought and received, newest first. Paddle's transaction ID is the only
+/// provider ID in them; staff refund notes aren't.
+async fn export_orders(conn: &mut PgConnection, account_id: Uuid) -> ApiResult<Vec<Value>> {
+    use cyex_tv_db::shop::{self as shop_db, OrderFilter};
+    // As `myOrders` shows them: a gift's recipient gets it once paid, without the money.
+    let filter = OrderFilter {
+        party: Some(account_id),
+        ..OrderFilter::default()
+    };
+    let mut out = Vec::new();
+    let mut offset = 0;
+    loop {
+        let (rows, total) = shop_db::orders(conn, &filter, 100, offset)
+            .await
+            .map_err(db_error)?;
+        let n = rows.len() as i64;
+        for o in rows {
+            let money = o.account_id == Some(account_id);
+            out.push(json!({
+                "id": ids::to_text(o.id),
+                "as_buyer": o.account_id == Some(account_id),
+                "as_recipient": o.recipient_id == Some(account_id),
+                "buyer_id": o.account_id.map(ids::to_text),
+                "recipient_id": o.recipient_id.map(ids::to_text),
+                "item_id": ids::to_text(o.item_id),
+                "item_name": o.item_name,
+                "status": crate::shop::order_status(&o.status).as_str(),
+                "gift": o.is_gift,
+                "amount_cents": money.then_some(o.amount_cents),
+                "currency": o.currency,
+                "paid_total_cents": o.paid_total_cents.filter(|_| money),
+                "paid_currency": o.paid_currency.filter(|_| money),
+                "provider": o.provider,
+                "provider_transaction_id": o.provider_transaction_id.filter(|_| money),
+                "created_at": views::time(o.created_at),
+                "paid_at": o.paid_at.map(views::time),
+                "refunded_at": o.refunded_at.map(views::time),
+                "failed_at": o.failed_at.map(views::time),
+            }));
+        }
+        offset += n;
+        if n == 0 || offset >= total {
+            break;
+        }
+    }
+    Ok(out)
+}
+
 // Deleting
 
 /// What deleting an account did, as counts (the audit row holds the same, and no names).
@@ -416,6 +471,8 @@ pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
 pub struct Deleted {
     pub emotes_kept: u64,
     pub emotes_deleted: u64,
+    /// Files queued for deletion from storage and the CDN.
+    pub files_deleted: u64,
     pub sets_deleted: u64,
     pub channels_deleted: u64,
 }
@@ -428,7 +485,7 @@ pub fn confirms(confirm: &str, logins: &[String]) -> bool {
 
 /// Deletes the caller's account at once, as the module says. `confirm` must be one of its Twitch
 /// or Kick logins, and the request must come from the website (the cookie session), not an app
-/// token. The owner's account can't be deleted.
+/// token. The owner's account can't be deleted. 3 tries an hour per account (`rate_limited`).
 pub async fn delete_account(
     state: &AppState,
     caller: &Caller,
@@ -448,6 +505,14 @@ pub async fn delete_account(
             "The owner's account can't be deleted.",
         ));
     }
+    // Counts every try, so a wrong confirmation can't be guessed at.
+    state
+        .limits
+        .delete_account
+        .check(&ids::to_text(caller.account_id))
+        .map_err(|_| {
+            rate_limited("That's a lot of tries to delete the account. Try again in an hour.")
+        })?;
     let account_id = caller.account_id;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
@@ -504,6 +569,24 @@ pub async fn delete_account(
         }
     }
     done.emotes_kept = privacy::disown_emotes(&mut tx, &keep)
+        .await
+        .map_err(db_error)?;
+    // Their files leave storage and the CDN, unless another live emote uses the same bytes.
+    for file_id in files::mark_orphans_purged(&mut tx, account_id)
+        .await
+        .map_err(db_error)?
+    {
+        jobs::enqueue(
+            &mut tx,
+            crate::abuse::DELETE_JOB,
+            &json!({ "file_id": ids::to_text(file_id), "reason": "account_deleted" }),
+            10,
+        )
+        .await
+        .map_err(db_error)?;
+        done.files_deleted += 1;
+    }
+    privacy::disown_deleted(&mut tx, account_id)
         .await
         .map_err(db_error)?;
 

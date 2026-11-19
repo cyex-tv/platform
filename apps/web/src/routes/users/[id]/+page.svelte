@@ -3,11 +3,13 @@
   // renders the public page (Uploaded emotes); in the browser, the owner and the account's editors
   // also get Active emotes, Emote sets, Cosmetics (owner, or editors with PROFILE) and Activity
   // (when the API has it), plus edit controls. Sections are ?s= tabs in the ProfileRail.
+  import { setContext } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
-  import Icon from '$lib/components/Icon.svelte';
+  import Problem from '$lib/components/Problem.svelte';
+  import { problemTitle } from '$lib/components/problem';
   import State from '$lib/components/State.svelte';
-  import { useCopied } from '$lib/clipboard.svelte';
+  import CopyLink from '$lib/components/CopyLink.svelte';
   import { clean } from '$lib/format';
   import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
   import RailLayout from '$lib/shell/RailLayout.svelte';
@@ -24,17 +26,9 @@
   import Uploads from './Uploads.svelte';
 
   let { data } = $props();
+  // The page's h1 is the person's name (below); the sections are h2s.
+  setContext('heading-level', 2);
   const name = $derived(clean(data.creator?.displayName ?? ''));
-  let retrying = $state(false);
-  async function retry() {
-    retrying = true;
-    try {
-      await invalidateAll();
-    } finally {
-      retrying = false;
-    }
-  }
-
   const rel = relationState(() => data.id);
   const relation = $derived(rel.value);
   const allowed = $derived(sectionsFor(relation, ACTIVITY_READY));
@@ -52,45 +46,31 @@
   const waiting = $derived(!!asked && asked !== section && (!session.known || (!!session.me && !granted)));
 
   const TITLE: Record<SectionKey, string> = { uploads: 'Uploaded emotes', active: 'Active emotes', sets: 'Emote sets', cosmetics: 'Cosmetics', activity: 'Activity' };
-  const link = useCopied();
 </script>
 
 {#snippet actions()}
-  <button class="btn btn-s copy" type="button" onclick={() => link.copy(location.origin + page.url.pathname)}>
-    <Icon name={link.copied ? 'check' : 'copy'} size={16} />
-    <span class="labels">
-      <span class:off={link.state !== 'idle'}>Copy page link</span>
-      <span class:off={!link.copied} aria-hidden="true">Link copied</span>
-      <span class:off={!link.failed} aria-hidden="true">Couldn’t copy</span>
-    </span>
-  </button>
-  <span class="sr-only" role="status">{link.copied ? 'Link copied' : link.failed ? 'Couldn’t copy' : ''}</span>
+  <CopyLink url={() => location.origin + page.url.pathname} />
 {/snippet}
 
 <svelte:head>
-  <title>{data.creator ? `${section === 'uploads' ? name : `${TITLE[section]} · ${name}`} - cyex.tv` : data.error ? 'Something went wrong - cyex.tv' : 'Nothing here - cyex.tv'}</title>
-  {#if name}<meta name="description" content="{name}'s emotes on cyex.tv." />{/if}
+  <title>{data.creator ? `${section === 'uploads' ? name : `${TITLE[section]} · ${name}`} - cyex.tv` : data.error ? problemTitle('server') : 'Nothing here - cyex.tv'}</title>
+  {#if name}<meta name="description" content="{name} on cyex.tv: emotes, sets and cosmetics." />{/if}
 </svelte:head>
 
 {#if data.error}
   <ColumnLayout>
     <div class="pad">
-      <State kind="error" level={1} title="This page can’t load right now.">
-        {data.error}
-        {#snippet actions()}
-          <button class="ui-btn primary" type="button" onclick={retry} disabled={retrying}>{retrying ? 'Trying…' : 'Try again'}</button>
-        {/snippet}
-      </State>
+      <Problem cause="server" level={1} onretry={() => invalidateAll()} />
     </div>
   </ColumnLayout>
 {:else if !data.creator}
   <ColumnLayout>
     <div class="pad">
-      <State level={1} role="status" title="No public emotes here.">
-        This account hasn't published an emote, or there is no account with this address. Check the link, or
-        look through what everyone has made.
+      <State level={1} role="status" title="No profile here.">
+        There is no account at this address, or its owner has deleted it. Check the link, or look through what
+        everyone has made.
         {#snippet actions()}
-          <a class="ui-btn primary" href="/search">Browse emotes</a>
+          <a class="btn btn-s btn-primary" href="/search">Browse emotes</a>
         {/snippet}
       </State>
     </div>
@@ -99,7 +79,7 @@
   {@const account = { id: data.id, displayName: data.creator.displayName, avatar: data.creator.avatar }}
   <RailLayout>
     {#snippet rail()}
-      <ProfileRail {account} {relation} current={section} activity={ACTIVITY_READY} {actions} />
+      <ProfileRail {account} {relation} current={section} activity={ACTIVITY_READY} heading {actions} profile={data.profile} seed={data.look} />
     {/snippet}
 
     {#if waiting}
@@ -107,7 +87,7 @@
     {:else if section === 'active'}
       {#key data.id}<ActiveEmotes accountId={data.id} mine={relation.mine} />{/key}
     {:else if section === 'sets'}
-      {#key data.id}<SetCards accountId={data.id} mine={relation.mine} canCreate={canSets(relation)} />{/key}
+      {#key data.id}<SetCards accountId={data.id} mine={relation.mine} canCreate={canSets(relation)} {name} />{/key}
     {:else if section === 'cosmetics'}
       {#key data.id}<CosmeticsPicker accountId={data.id} mine={relation.mine} {name} />{/key}
     {:else if section === 'activity'}
@@ -124,7 +104,4 @@
 
 <style>
   .pad { padding-top: var(--rail-gap); }
-  .labels { display: inline-grid; }
-  .labels > span { grid-area: 1 / 1; text-align: left; }
-  .off { visibility: hidden; }
 </style>

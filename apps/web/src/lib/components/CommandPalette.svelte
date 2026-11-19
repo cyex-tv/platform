@@ -175,7 +175,7 @@
 
 <svelte:window onkeydown={onwindowkey} />
 
-<dialog class="palette" bind:this={dialog} aria-label="Search cyex.tv" {onclose} {onclick}>
+<dialog class="palette" bind:this={dialog} aria-modal="true" aria-label="Search cyex.tv" {onclose} {onclick}>
   <div class="box">
     <div class="pal-field">
       <Icon name="search" size={18} />
@@ -332,7 +332,9 @@
   .state { font-weight: 400; font-variant-numeric: tabular-nums; }
   .row { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 6px 10px; border-radius: var(--radius-btn);
     color: var(--text); font-size: var(--t-ui); cursor: pointer; }
-  .row[aria-selected='true'] { background: var(--surface-2); box-shadow: 0 0 0 1px var(--border-strong) inset; }
+  /* The row under the cursor: bold with an accent icon, no fill or border (owner rule). */
+  .row[aria-selected='true'] .label { font-weight: 700; }
+  .row[aria-selected='true'] .art { color: var(--accent-text); }
   .art { flex: none; display: inline-grid; place-items: center; min-width: 32px; height: 28px; color: var(--muted); }
   .art img { display: block; height: 28px; width: auto; max-width: 64px; }
   .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }

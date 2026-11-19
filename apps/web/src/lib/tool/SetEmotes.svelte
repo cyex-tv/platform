@@ -1,12 +1,13 @@
 <script lang="ts">
   import { tick } from 'svelte';
+  import Capacity from '$lib/components/Capacity.svelte';
   import { gql } from '$lib/api';
   import type { SetFieldsFragment } from '$lib/gql/graphql';
   import { REMOVE_SET_EMOTE, UPDATE_SET_EMOTE } from '$lib/queries';
   import { nameProblem } from '$lib/rules';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import type { CardEmote } from '$lib/components/EmoteTile.svelte';
-  import { count, iso } from '$lib/format';
+  import { clean, count, iso } from '$lib/format';
   import State from '$lib/components/State.svelte';
   import { session } from './session.svelte';
   import { STATE_LABEL } from './state';
@@ -34,6 +35,7 @@
 
   type Member = SetFieldsFragment['emotes'][number];
   const byId = $derived(new Map(set.emotes.map((m) => [m.emote.id, m])));
+  const aliasFor = $derived(clean(byId.get(editing ?? '')?.emote.name ?? ''));
   /** An emote as this set shows it: its set name when renamed, zero-width as set here. */
   const tiles = $derived<CardEmote[]>(
     shown.map((m) => ({ ...m.emote, shownName: m.name !== m.emote.name ? m.name : undefined, flags: { ...m.emote.flags, zeroWidth: m.zeroWidth } })),
@@ -89,9 +91,9 @@
     <h2 bind:this={heading} tabindex="-1">In this set</h2>
     <input class="ui-input filter" type="search" bind:value={filter} placeholder="Filter…" aria-label="Filter the set’s emotes" />
   </header>
-  <div class="meter" role="meter" aria-label="Slots used" aria-valuemin={0} aria-valuemax={set.capacity} aria-valuenow={set.emotes.length}>
+  <div class="meter">
     <span class="bar"><span style:width="{slots}%"></span></span>
-    <span class="ui-hint ui-num">{count(set.emotes.length)} / {count(set.capacity)}</span>
+    <span class="ui-hint ui-num"><Capacity used={set.emotes.length} capacity={set.capacity} /></span>
   </div>
   {#if set.emotes.length === 0}
     <State bare title="Nothing in this set yet">Add emotes from the panel below.</State>
@@ -129,7 +131,7 @@
 <dialog class="ui-dialog" bind:this={dialog} aria-labelledby="alias-title">
   <form onsubmit={save}>
     <div class="body">
-      <h2 id="alias-title">In this set</h2>
+      <h2 id="alias-title">Rename {#if aliasFor}<bdi>{aliasFor}</bdi>{:else}the emote{/if} in this set</h2>
       <label class="ui-field">
         <span class="ui-label">Name here</span>
         <input class="ui-input" bind:value={alias} maxlength="100" spellcheck="false" aria-invalid={aliasError ? 'true' : undefined} />

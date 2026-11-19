@@ -63,6 +63,18 @@ pub async fn disown_emotes(conn: &mut PgConnection, ids: &[Uuid]) -> DbResult<u6
     Ok(done.rows_affected())
 }
 
+/// The account's deleted emotes (those deleted now and before) lose their owner.
+pub async fn disown_deleted(conn: &mut PgConnection, account_id: Uuid) -> DbResult<u64> {
+    let done = sqlx::query(
+        "UPDATE emotes SET owner_account_id = NULL, updated_at = now()
+          WHERE owner_account_id = $1 AND deleted_at IS NOT NULL",
+    )
+    .bind(account_id)
+    .execute(conn)
+    .await?;
+    Ok(done.rows_affected())
+}
+
 /// Removes everything else that belongs to or names the account, then marks it deleted. The
 /// caller has taken the account's emotes out of sets and deleted or disowned them, and deleted
 /// its sets and channels, publishing their events first.

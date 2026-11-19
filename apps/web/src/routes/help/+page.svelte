@@ -84,7 +84,7 @@
     </aside>
     {/snippet}
 
-    <div class="docs-body" id="help-answers">
+    <div class="docs-body" id="help-answers" tabindex="-1">
       <header class="docs-title">
         <div>
           <h1>Help</h1>
@@ -108,7 +108,7 @@
       {#if !shown.size}
         <State title="No answer matches “{query.trim()}”.">
           Try fewer words, or ask in the <a class="link" href="https://github.com/cyex-tv/platform/issues">issue tracker</a>.
-          {#snippet actions()}<button type="button" class="ui-btn" onclick={clear}>Clear search</button>{/snippet}
+          {#snippet actions()}<button type="button" class="btn btn-s" onclick={clear}>Clear search</button>{/snippet}
         </State>
       {/if}
 

@@ -1,12 +1,14 @@
 <script lang="ts">
   // Your uploads on your own profile: every state (pending, rejected and taken-down ones carry a
   // note in the tile's corner), each tile opening its edit page. Others see the public Uploads.
+  import { appendUnique } from '$lib/tool/paging';
   import { onMount } from 'svelte';
   import { gql } from '$lib/api';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import type { CardEmote } from '$lib/components/EmoteCard.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
+  import Problem from '$lib/components/Problem.svelte';
   import State from '$lib/components/State.svelte';
   import { count } from '$lib/format';
   import type { MyEmotesQuery } from '$lib/gql/graphql';
@@ -30,7 +32,7 @@
     problem = '';
     try {
       const r = await gql(MY_EMOTES, { page: next, perPage: PER_PAGE });
-      items = [...items, ...r.myEmotes.items];
+      items = appendUnique(items, r.myEmotes.items);
       total = r.myEmotes.total;
       next += 1;
     } catch (e) {
@@ -50,20 +52,17 @@
 </script>
 
 <PageHead title="Uploaded emotes" line={first ? ' ' : `${count(total)} ${total === 1 ? 'emote' : 'emotes'}. Pending ones only show to you until a moderator looks at them.`}>
-  {#snippet actions()}<a class="ui-btn secondary" href="/me/upload"><Icon name="upload" size={15} />Upload</a>{/snippet}
+  {#snippet actions()}<a class="btn btn-s" href="/me/upload"><Icon name="upload" size={15} />Upload</a>{/snippet}
 </PageHead>
 
 {#if first}
   <EmoteGrid items={[]} loading skeletons={12} creator={false} />
 {:else if problem && !items.length}
-  <State kind="error" title="Your emotes didn’t load">
-    {problem}
-    {#snippet actions()}<button class="ui-btn secondary" type="button" onclick={more}>Try again</button>{/snippet}
-  </State>
+  <Problem cause="server" onretry={more} />
 {:else if !items.length}
   <State title="No emotes yet">
     Upload one and it shows up here, ready to add to a set.
-    {#snippet actions()}<a class="ui-btn primary" href="/me/upload"><Icon name="upload" size={15} />Upload an emote</a>{/snippet}
+    {#snippet actions()}<a class="btn btn-s btn-primary" href="/me/upload"><Icon name="upload" size={15} />Upload an emote</a>{/snippet}
   </State>
 {:else}
   <EmoteGrid {items} creator={false} eager={12} label="Your emotes" href={(e) => `/me/emotes/${e.id}`} {note} loading={busy} skeletons={6} />

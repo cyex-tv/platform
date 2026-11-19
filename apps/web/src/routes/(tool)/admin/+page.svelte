@@ -8,6 +8,7 @@
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { loadCatalog, loadOwned, looks, NO_LOOK } from '$lib/cosmetics/store.svelte';
   import { fail } from '$lib/tool/notices.svelte';
+  import { loadShopCounts, shopCounts } from '$lib/shop/counts.svelte';
 
   let counts = $state<AdminCountsQuery | null>(null);
   const review = can('emotes.review');
@@ -26,6 +27,9 @@
     if (cosmetics) loadCatalog().then((c) => (catalog = { paints: c.paints.size, badges: c.badges.size })).catch(() => {});
     if (session.me) loadOwned(session.me.id, true).catch(() => {});
   });
+  $effect(() => {
+    loadShopCounts();
+  });
   const me = $derived(session.me);
   const look = $derived((me && looks[me.id]) || NO_LOOK);
 
@@ -36,6 +40,9 @@
       { href: '/admin/reports', title: 'Reports', icon: 'flag' as const, text: 'Open reports. Dismiss them or take the emote down.', figure: counts?.reportQueue?.total, show: reports },
       { href: '/admin/cosmetics/paints', title: 'Paints', icon: 'brush' as const, text: 'Name paints: who owns them, give and take away.', figure: catalog?.paints, show: cosmetics },
       { href: '/admin/cosmetics/badges', title: 'Badges', icon: 'badge' as const, text: 'Chat badges: make, edit, give and take away.', figure: catalog?.badges, show: cosmetics },
+      { href: '/admin/shop/items', title: 'Shop items', icon: 'tag' as const, text: 'What is on sale: bundles of badges and paints, prices, sale windows, stock.', figure: shopCounts.items, show: can('shop.manage') },
+      { href: '/admin/shop/orders', title: 'Orders', icon: 'list' as const, text: 'Every purchase and gift. Refund a paid order.', figure: shopCounts.orders, show: can('shop.orders') },
+      { href: '/admin/shop/codes', title: 'Codes', icon: 'key' as const, text: 'Batches of redeem codes: make, hand out, turn off.', figure: shopCounts.codes, show: can('codes.manage') },
       { href: '/admin/users', title: 'Users', icon: 'users' as const, text: 'Find someone by login; block uploads or sign-in; give roles.', show: can('users.view') || can('users.restrict') || can('roles.manage') },
       { href: '/admin/roles', title: 'Roles', icon: 'key' as const, text: 'Who may do what. You manage roles below your own.', show: can('roles.manage') },
       { href: '/admin/audit', title: 'Audit log', icon: 'scroll' as const, text: 'Every audited change, newest first.', show: can('audit.view') },
@@ -60,7 +67,7 @@
           <strong>{c.title}</strong>
           <span class="ui-hint">{c.text}</span>
         </span>
-        {#if c.figure !== undefined}<span class="ui-mono figure" class:some={c.figure > 0 && (c.href === '/admin/review' || c.href === '/admin/reports')}>{count(c.figure)}</span>{/if}
+        {#if c.figure !== undefined}<span class="ui-mono figure" aria-hidden="true" class:some={c.figure > 0 && (c.href === '/admin/review' || c.href === '/admin/reports')}>{count(c.figure)}</span><span class="sr-only">, {count(c.figure)}</span>{/if}
       </a>
     </li>
   {/each}
@@ -68,7 +75,7 @@
 
 <style>
   .welcome { margin-bottom: 24px; }
-  .welcome h1 { margin: 0; font-size: var(--t-page); font-weight: 600; line-height: 1.2; letter-spacing: -.02em; overflow-wrap: anywhere; }
+  .welcome h1 { margin: 0; font-size: var(--t-page); font-weight: 600; line-height: 1.25; letter-spacing: -.02em; overflow-wrap: anywhere; }
   .welcome p { margin: 8px 0 0; color: var(--muted); font-size: var(--t-ui); }
   .cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 12px; }
   .card { display: flex; align-items: flex-start; gap: 12px; height: 100%; padding: 14px; color: var(--text); text-decoration: none;

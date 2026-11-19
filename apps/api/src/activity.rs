@@ -18,7 +18,7 @@ use cyex_tv_db::{accounts, audit, channels, ids, sets};
 use cyex_tv_shared::error::ApiResult;
 use cyex_tv_shared::model::{
     AccountSummary, ActivityCosmeticChange, ActivityEmote, ActivityEntry, ActivityKind,
-    ActivitySet, EmoteState, SetVisibility,
+    ActivityPage, ActivitySet, EmoteState, SetVisibility,
 };
 use serde_json::Value;
 use sqlx::PgConnection;
@@ -31,10 +31,11 @@ use crate::views;
 /// The most entries one page returns.
 pub const ACTIVITY_PAGE_MAX: u32 = 100;
 pub const ACTIVITY_PAGE: u32 = 30;
-/// Candidate rows read per round. Rows can be dropped after the SQL filter, so a page may take a
-/// few rounds.
+/// Candidate rows read per round. Rows can be dropped after the SQL filter (what it can't tell:
+/// deleted sets, emotes that aren't public), so a page may take a few rounds. A page that runs out
+/// of rounds comes back short with a `next` cursor to carry on from.
 const BATCH: i64 = 100;
-const ROUNDS: usize = 10;
+const ROUNDS: usize = 4;
 
 /// Everything the rows of one round refer to.
 struct Lookup {
@@ -163,16 +164,7 @@ async fn lookup(
         .await
         .map_err(db_error)?
         .into_values()
-        .map(|s| {
-            (
-                s.account_id,
-                AccountSummary {
-                    id: ids::to_text(s.account_id),
-                    display_name: s.display_name,
-                    avatar: s.avatar,
-                },
-            )
-        })
+        .map(|s| (s.account_id, AccountSummary::from(&s)))
         .collect();
     Ok(Lookup {
         sets,
@@ -228,10 +220,18 @@ fn change(
 /// The feed line a row stands for, or `None` when it must not show.
 fn entry(row: &audit::Entry, owner: Uuid, look: &Lookup) -> Option<ActivityEntry> {
     let target = ids::from_text(&row.target_id);
+    // An upload is shown as the owner's: the approver (the audit actor) isn't shown and may
+    // be gone. Every other line needs its own actor.
+    let actor = if row.action == "emote.approved" {
+        look.people.get(&owner)?
+    } else {
+        look.people.get(&row.actor_account_id?)?
+    }
+    .clone();
     let mut out = ActivityEntry {
         id: ids::to_text(row.id),
         kind: ActivityKind::SetCreated,
-        actor: look.people.get(&row.actor_account_id?)?.clone(),
+        actor,
         set: None,
         emote: None,
         from_name: None,
@@ -314,8 +314,6 @@ fn entry(row: &audit::Entry, owner: Uuid, look: &Lookup) -> Option<ActivityEntry
         "emote.approved" => {
             out.kind = ActivityKind::EmoteUploaded;
             out.emote = Some(look.emote_named(target?, None)?);
-            // The reviewer isn't shown: the owner uploaded it.
-            out.actor = look.people.get(&owner)?.clone();
         }
         _ => return None,
     }
@@ -330,42 +328,40 @@ pub async fn account_activity(
     before: Option<&str>,
     limit: Option<u32>,
 ) -> ApiResult<Vec<ActivityEntry>> {
+    Ok(account_activity_page(state, account_id, before, limit)
+        .await?
+        .entries)
+}
+
+/// `account_activity` with the cursor for the next page.
+pub async fn account_activity_page(
+    state: &AppState,
+    account_id: &str,
+    before: Option<&str>,
+    limit: Option<u32>,
+) -> ApiResult<ActivityPage> {
     let before_id = before.map(parse_id).transpose()?;
     let limit = limit.unwrap_or(ACTIVITY_PAGE).clamp(1, ACTIVITY_PAGE_MAX) as usize;
     let Some(owner) = ids::from_text(account_id.trim()) else {
-        return Ok(Vec::new());
+        return Ok(ActivityPage::default());
     };
     let mut conn = conn(state).await?;
     let Some(account) = accounts::get(&mut conn, owner).await.map_err(db_error)? else {
-        return Ok(Vec::new());
+        return Ok(ActivityPage::default());
     };
     if account.deleted_at.is_some() || account.blocked_at.is_some() {
-        return Ok(Vec::new());
+        return Ok(ActivityPage::default());
     }
-
-    let mut out = Vec::new();
-    let mut cursor = before_id;
-    for _ in 0..ROUNDS {
-        let rows = audit::activity_rows(&mut conn, owner, cursor, BATCH)
+    let mut page = Page::new(limit, before_id);
+    while page.wants_more() {
+        let rows = audit::activity_rows(&mut conn, owner, page.cursor, BATCH)
             .await
             .map_err(db_error)?;
-        let Some(last) = rows.last() else { break };
-        cursor = Some(last.id);
-        let exhausted = rows.len() < BATCH as usize;
         let look = lookup(&mut conn, &rows, &[owner], &state.cdn_url).await?;
-        for row in &rows {
-            if let Some(line) = entry(row, owner, &look) {
-                out.push(line);
-                if out.len() == limit {
-                    return Ok(out);
-                }
-            }
-        }
-        if exhausted {
-            break;
-        }
+        let lines = rows.iter().map(|row| (row.id, entry(row, owner, &look)));
+        page.round(rows.len(), lines);
     }
-    Ok(out)
+    Ok(page.finish())
 }
 
 /// One emote's public activity, newest first (gap list G2): when it was uploaded (approved), and
@@ -379,10 +375,22 @@ pub async fn emote_activity(
     before: Option<&str>,
     limit: Option<u32>,
 ) -> ApiResult<Vec<ActivityEntry>> {
+    Ok(emote_activity_page(state, emote_id, before, limit)
+        .await?
+        .entries)
+}
+
+/// `emote_activity` with the cursor for the next page.
+pub async fn emote_activity_page(
+    state: &AppState,
+    emote_id: &str,
+    before: Option<&str>,
+    limit: Option<u32>,
+) -> ApiResult<ActivityPage> {
     let before_id = before.map(parse_id).transpose()?;
     let limit = limit.unwrap_or(ACTIVITY_PAGE).clamp(1, ACTIVITY_PAGE_MAX) as usize;
     let Some(emote) = ids::from_text(emote_id.trim()) else {
-        return Ok(Vec::new());
+        return Ok(ActivityPage::default());
     };
     let mut conn = conn(state).await?;
     let public = reads::emotes(&mut conn, &[emote])
@@ -391,18 +399,14 @@ pub async fn emote_activity(
         .first()
         .is_some_and(|e| e.state == EmoteState::Approved && !e.private);
     if !public {
-        return Ok(Vec::new());
+        return Ok(ActivityPage::default());
     }
     let key = ids::to_text(emote);
-    let mut out = Vec::new();
-    let mut cursor = before_id;
-    for _ in 0..ROUNDS {
-        let rows = audit::emote_activity_rows(&mut conn, &key, cursor, BATCH)
+    let mut page = Page::new(limit, before_id);
+    while page.wants_more() {
+        let rows = audit::emote_activity_rows(&mut conn, &key, page.cursor, BATCH)
             .await
             .map_err(db_error)?;
-        let Some(last) = rows.last() else { break };
-        cursor = Some(last.entry.id);
-        let exhausted = rows.len() < BATCH as usize;
         let entries: Vec<audit::Entry> = rows.iter().map(|r| r.entry.clone()).collect();
         let owners: Vec<Uuid> = rows
             .iter()
@@ -411,17 +415,81 @@ pub async fn emote_activity(
             .into_iter()
             .collect();
         let look = lookup(&mut conn, &entries, &owners, &state.cdn_url).await?;
-        for row in &rows {
-            if let Some(line) = entry(&row.entry, row.subject_account_id, &look) {
-                out.push(line);
-                if out.len() == limit {
-                    return Ok(out);
+        let lines = rows
+            .iter()
+            .map(|r| (r.entry.id, entry(&r.entry, r.subject_account_id, &look)));
+        page.round(rows.len(), lines);
+    }
+    Ok(page.finish())
+}
+
+/// The paging loop's state: lines so far, where the next round reads from, and whether the
+/// feed has more.
+struct Page {
+    limit: usize,
+    rounds: usize,
+    cursor: Option<Uuid>,
+    out: Vec<ActivityEntry>,
+    /// The last row looked at, when the page ended before the feed did.
+    more_after: Option<Uuid>,
+    done: bool,
+}
+
+impl Page {
+    fn new(limit: usize, cursor: Option<Uuid>) -> Self {
+        Self {
+            limit,
+            rounds: 0,
+            cursor,
+            out: Vec::new(),
+            more_after: None,
+            done: false,
+        }
+    }
+
+    fn wants_more(&self) -> bool {
+        !self.done && self.rounds < ROUNDS
+    }
+
+    /// Takes one round's rows (their IDs, newest first, with the line each makes if any).
+    fn round(
+        &mut self,
+        fetched: usize,
+        lines: impl Iterator<Item = (Uuid, Option<ActivityEntry>)>,
+    ) {
+        self.rounds += 1;
+        let mut last = None;
+        let mut lines = lines.peekable();
+        while let Some((id, line)) = lines.next() {
+            last = Some(id);
+            if let Some(line) = line {
+                self.out.push(line);
+                if self.out.len() == self.limit {
+                    // Resume right after the line that filled the page, unless that was the
+                    // last row of a short batch: nothing is left to read then.
+                    let exhausted = lines.peek().is_none() && fetched < BATCH as usize;
+                    self.more_after = if exhausted { None } else { Some(id) };
+                    self.done = true;
+                    return;
                 }
             }
         }
-        if exhausted {
-            break;
+        match last {
+            Some(id) if fetched >= BATCH as usize => {
+                self.cursor = Some(id);
+                self.more_after = Some(id);
+            }
+            _ => {
+                self.more_after = None;
+                self.done = true;
+            }
         }
     }
-    Ok(out)
+
+    fn finish(self) -> ActivityPage {
+        ActivityPage {
+            entries: self.out,
+            next: self.more_after.map(ids::to_text),
+        }
+    }
 }

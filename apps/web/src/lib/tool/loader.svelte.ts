@@ -2,6 +2,7 @@
 // a request that is replaced (the page's inputs changed, or the page closed) is aborted.
 import { untrack } from 'svelte';
 import { ApiError } from '$lib/api';
+import { causeOfCode, type Cause } from '$lib/components/problem';
 import { fail, notify } from './notices.svelte';
 
 export type LoadCtx = { signal: AbortSignal; fetch: typeof fetch };
@@ -9,6 +10,8 @@ export type LoadCtx = { signal: AbortSignal; fetch: typeof fetch };
 export type Loader<T> = {
   readonly data: T | null;
   readonly error: string | null;
+  /** Why it failed, for the one error pattern: the server, a missing or a forbidden thing. */
+  readonly cause: Cause | null;
   readonly loading: boolean;
   /** Asks again. The old data stays on screen while it loads. */
   reload(): Promise<void>;
@@ -23,6 +26,7 @@ export type Loader<T> = {
 export function loader<T>(fn: (ctx: LoadCtx) => Promise<T>): Loader<T> {
   let data = $state<T | null>(null) as T | null;
   let error = $state<string | null>(null);
+  let cause = $state<Cause | null>(null);
   let loading = $state(true);
   let seq = 0;
   let ctl: AbortController | null = null;
@@ -31,8 +35,12 @@ export function loader<T>(fn: (ctx: LoadCtx) => Promise<T>): Loader<T> {
     ctl?.abort();
     const mine = ++seq;
     const c = (ctl = new AbortController());
-    if (!keep) data = null;
-    error = null;
+    // A retry keeps what is on screen (the data, or the error) until the new answer is in.
+    if (!keep) {
+      data = null;
+      error = null;
+      cause = null;
+    }
     loading = true;
     const f: typeof fetch = (input, init) => fetch(input, { ...init, signal: c.signal });
     let run: Promise<T>;
@@ -45,6 +53,8 @@ export function loader<T>(fn: (ctx: LoadCtx) => Promise<T>): Loader<T> {
       (v) => {
         if (mine !== seq) return;
         data = v;
+        error = null;
+        cause = null;
         loading = false;
       },
       (e) => {
@@ -52,6 +62,7 @@ export function loader<T>(fn: (ctx: LoadCtx) => Promise<T>): Loader<T> {
         error = e instanceof Error && !(e instanceof ApiError && e.code === 'offline' && c.signal.aborted)
           ? e.message
           : 'That didn’t load.';
+        cause = causeOfCode(e instanceof ApiError ? e.code : null);
         loading = false;
       },
     );
@@ -68,6 +79,7 @@ export function loader<T>(fn: (ctx: LoadCtx) => Promise<T>): Loader<T> {
   return {
     get data() { return data; },
     get error() { return error; },
+    get cause() { return cause; },
     get loading() { return loading; },
     reload: () => untrack(() => start(true)),
     set(next) { data = next; },

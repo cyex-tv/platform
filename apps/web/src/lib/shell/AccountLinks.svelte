@@ -13,6 +13,8 @@
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { loadOwned, looks, NO_LOOK } from '$lib/cosmetics/store.svelte';
   import { rolesOf, type Role } from '$lib/profile/data.svelte';
+  import { badge } from '$lib/account/notifications';
+  import { inbox } from '$lib/account/inbox.svelte';
   import { leave } from './signout';
   import { theme, toggleTheme } from './theme.svelte';
 
@@ -76,7 +78,12 @@
     {#if me}
       {@render row(profileLink(me.id))}
       {#each menuLinks(me.id) as l (l.href)}{@render row(l)}{/each}
-      {#if touch}{@render row(UPLOAD)}{/if}
+      {#if touch}
+        {@render row(UPLOAD)}
+        <a href="/me/notifications" aria-current={path.startsWith('/me/notifications') ? 'page' : undefined} onclick={() => onpick?.()}>
+          <Icon name="bell" /><span>Notifications</span>{#if badge(inbox.count)}<span class="value" aria-label="{inbox.count} unread">{badge(inbox.count)}</span>{/if}
+        </a>
+      {/if}
       <hr />
       {#each settings as l (l.href)}{@render row(l)}{/each}
       <hr />

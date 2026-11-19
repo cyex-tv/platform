@@ -83,6 +83,8 @@ pub async fn sign_in(conn: &mut PgConnection, profile: Profile<'_>) -> DbResult<
 
     match identity {
         Some(identity) => {
+            // An identity that left a restricted or blocked account brings that along.
+            let account = apply_hold(&mut tx, account, profile).await?;
             tx.commit().await?;
             Ok(SignIn {
                 account,
@@ -146,6 +148,25 @@ pub async fn identities(conn: &mut PgConnection, account_id: Uuid) -> DbResult<V
     .await?)
 }
 
+/// The identities of many accounts at once, Twitch first, by account.
+pub async fn identities_many(
+    conn: &mut PgConnection,
+    account_ids: &[Uuid],
+) -> DbResult<std::collections::HashMap<Uuid, Vec<Identity>>> {
+    let rows: Vec<Identity> = sqlx::query_as(&format!(
+        "SELECT {IDENTITY} FROM identities WHERE account_id = ANY($1)
+         ORDER BY account_id, platform DESC"
+    ))
+    .bind(account_ids)
+    .fetch_all(conn)
+    .await?;
+    let mut out: std::collections::HashMap<Uuid, Vec<Identity>> = std::collections::HashMap::new();
+    for row in rows {
+        out.entry(row.account_id).or_default().push(row);
+    }
+    Ok(out)
+}
+
 pub async fn find_identity(
     conn: &mut PgConnection,
     platform: Platform,
@@ -179,20 +200,64 @@ pub async fn find_by_login(
     .await?)
 }
 
+/// Copies the hold an identity left behind (see the migration `identity_holds`) onto `account`,
+/// and uses it up. The account as it is afterwards.
+async fn apply_hold(
+    conn: &mut PgConnection,
+    account: Account,
+    profile: Profile<'_>,
+) -> DbResult<Account> {
+    type Times = (Option<DateTime<Utc>>, Option<DateTime<Utc>>);
+    let hold: Option<Times> = sqlx::query_as(
+        "DELETE FROM identity_holds WHERE platform = $1 AND platform_user_id = $2
+         RETURNING restricted_at, blocked_at",
+    )
+    .bind(profile.platform)
+    .bind(profile.platform_user_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    let Some((restricted_at, blocked_at)) = hold else {
+        return Ok(account);
+    };
+    Ok(sqlx::query_as(&format!(
+        "UPDATE accounts
+         SET restricted_at = coalesce(restricted_at, $2), blocked_at = coalesce(blocked_at, $3)
+         WHERE id = $1
+         RETURNING {ACCOUNT}"
+    ))
+    .bind(account.id)
+    .bind(restricted_at)
+    .bind(blocked_at)
+    .fetch_one(conn)
+    .await?)
+}
+
 /// Links another platform's identity to a signed-in account. Linking one that's already on this
-/// account just refreshes it.
+/// account just refreshes it. The account row is held (`FOR SHARE`) and has to be live, so a
+/// deletion running at the same time can't end up with an identity on a deleted account
+/// (`NotFound`). A hold the identity left behind is copied onto the account.
 pub async fn link(
     conn: &mut PgConnection,
     account_id: Uuid,
     profile: Profile<'_>,
 ) -> DbResult<Identity> {
-    if let Some(found) = find_identity(conn, profile.platform, profile.platform_user_id).await? {
+    let mut tx = conn.begin().await?;
+    let account: Account = sqlx::query_as(&format!(
+        "SELECT {ACCOUNT} FROM accounts WHERE id = $1 AND deleted_at IS NULL FOR SHARE"
+    ))
+    .bind(account_id)
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(DbError::NotFound)?;
+    if let Some(found) = find_identity(&mut tx, profile.platform, profile.platform_user_id).await? {
         if found.account_id != account_id {
             return Err(DbError::IdentityTaken);
         }
-        return refresh(conn, profile).await?.ok_or(DbError::NotFound);
+        let identity = refresh(&mut tx, profile).await?.ok_or(DbError::NotFound)?;
+        tx.commit().await?;
+        return Ok(identity);
     }
-    sqlx::query_as(&format!(
+    let identity: Identity = sqlx::query_as(&format!(
         "INSERT INTO identities (platform, platform_user_id, account_id, login, display_name, avatar)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING {IDENTITY}"
@@ -203,13 +268,16 @@ pub async fn link(
     .bind(profile.login)
     .bind(profile.display_name)
     .bind(profile.avatar)
-    .fetch_one(conn)
+    .fetch_one(&mut *tx)
     .await
     .map_err(|err| match unique_violation(&err) {
         Some("identities_pkey") => DbError::IdentityTaken,
         Some("identities_account_id_platform_key") => DbError::PlatformAlreadyLinked,
         _ => err.into(),
-    })
+    })?;
+    apply_hold(&mut tx, account, profile).await?;
+    tx.commit().await?;
+    Ok(identity)
 }
 
 /// Unlinks the account's identity on `platform`. The last identity stays.

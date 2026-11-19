@@ -5,13 +5,14 @@
 import { gql } from '$lib/api';
 import type {
   AccountEditorsQuery,
+  AccountProfileQuery,
   AccountRolesQuery,
   EditorOfQuery,
   EditorPermission,
   ProfileEditedQuery,
   ProfileMineQuery,
 } from '$lib/gql/graphql';
-import { ACCOUNT_EDITORS, ACCOUNT_ROLES, EDITOR_OF, PROFILE_EDITED, PROFILE_MINE } from '$lib/queries';
+import { ACCOUNT_EDITORS, ACCOUNT_PROFILE, ACCOUNT_ROLES, ACCOUNT_SETS, EDITOR_OF, PROFILE_EDITED, PROFILE_MINE } from '$lib/queries';
 import { session, type Me } from '$lib/tool/session.svelte';
 import { NOBODY, type Relation } from './rows';
 
@@ -58,9 +59,19 @@ export const rolesOf = (accountId: string) =>
       .catch(() => [] as Role[]),
   );
 
+export type PublicProfile = NonNullable<AccountProfileQuery['accountProfile']>;
+
+/** An account's public profile (logins, public roles, active sets, member since); null when there is none. Anyone may ask. */
+export const profileOf = (accountId: string) =>
+  once(`profile:${accountId}`, () => gql(ACCOUNT_PROFILE, { accountId }).then((r) => r.accountProfile ?? null));
+
 /** An account's editors: yours, or those of an account you edit with EDITORS. */
 export const editorsOf = (accountId: string, mine: boolean) =>
   once(`editors:${accountId}`, () => gql(ACCOUNT_EDITORS, { accountId: mine ? null : accountId }).then((r) => r.accountEditors));
+
+/** An account's listed sets as cards: what anyone sees on its profile. */
+export const publicSetsOf = (accountId: string) =>
+  once(`library:public:${accountId}`, () => gql(ACCOUNT_SETS, { accountId }).then((r) => r.accountSets));
 
 /** The account's channels and sets: your own, or (from what you edit) the account's. */
 export function libraryOf(accountId: string, mine: boolean): Promise<{ channels: Channel[]; sets: ProfileSet[] }> {

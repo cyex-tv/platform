@@ -1,9 +1,12 @@
 <script lang="ts">
   import { MediaQuery } from 'svelte/reactivity';
+  import Capacity from '$lib/components/Capacity.svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { ApiError, gql } from '$lib/api';
+  import { problemTitle } from '$lib/components/problem';
   import { clean, count, iso } from '$lib/format';
+  import { sectionHref } from '$lib/profile/rows';
   import Name from '$lib/components/Name.svelte';
   import type { EditSetQuery, EditorPermission } from '$lib/gql/graphql';
   import { EDIT_SET, DELETE_SET, REMOVE_SET_EDITOR, UPDATE_SET } from '$lib/queries';
@@ -42,10 +45,10 @@
     try {
       r = await gql(EDIT_SET, { id: want }, fetch);
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'forbidden') throw new Error('Only the set’s owner and editors can change it.');
+      if (e instanceof ApiError && e.code === 'forbidden') throw new ApiError('Only the set’s owner and editors can change it.', 'forbidden');
       throw e;
     }
-    if (!r.set) throw new Error('This set doesn’t exist.');
+    if (!r.set) throw new ApiError('This set doesn’t exist.', 'not_found');
     if (want === page.params.id) {
       set = r.set;
       editors = r.setEditors;
@@ -100,7 +103,7 @@
   const full = $derived(set ? set.emotes.length >= set.capacity : false);
 </script>
 
-<svelte:head><title>{set?.name ?? 'Set'} - cyex.tv</title></svelte:head>
+<svelte:head><title>{L.cause ? problemTitle(L.cause, true, 'No set here') : `${set?.name ?? 'Set'} - cyex.tv`}</title></svelte:head>
 
 {#snippet editorsBlock()}
   {#if set}<EditorsPanel setId={set.id} owner={canManageEditors} bind:editors />{/if}
@@ -122,7 +125,13 @@
   {/if}
 {/snippet}
 
-<LoadGate source={L} label="Loading the set…">
+<LoadGate
+  source={L}
+  label="Loading the set…"
+  level={1}
+  home={{ href: sectionHref(session.me?.id ?? '', 'sets'), label: 'Your sets' }}
+  missing={{ title: 'No set here.', body: 'It may have been deleted, or the address is off.' }}
+>
 {#snippet children()}
 {#if set}
   <PageHead
@@ -132,7 +141,7 @@
   >
     {#snippet line()}
       {set!.kind === 'GLOBAL' ? 'The global set' : set!.kind === 'PERSONAL' ? 'Personal set' : 'Channel set'} ·
-      <span>{count(set!.emotes.length)} / {count(set!.capacity)}</span> emotes
+      <Capacity used={set!.emotes.length} capacity={set!.capacity} /> emotes
       {#if !owner && set!.owner}· by <Name value={set!.owner.displayName} />{/if}
       {#if held.size}· you edit this account: {permissionLabels([...held])}{/if}
     {/snippet}

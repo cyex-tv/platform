@@ -49,6 +49,12 @@ pub enum DbError {
     /// A selection named a cosmetic the account doesn't own.
     #[error("the account doesn't own that cosmetic")]
     NotOwned,
+    /// A new redeem code's hash exists already (practically never: codes carry 80 random bits).
+    #[error("a redeem code with this hash exists")]
+    CodeTaken,
+    /// The buyer has a pending order for this item and recipient already.
+    #[error("a pending order for this exists")]
+    PendingOrder,
     /// Personal sets can't be private, and the global set is always listed.
     #[error("sets of this kind can't have that visibility")]
     InvalidVisibility,

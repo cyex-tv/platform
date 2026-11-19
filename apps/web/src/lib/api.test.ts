@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { safeBack, signInUrl } from './api';
+import { describe, expect, it, vi } from 'vitest';
+import { ApiError, gql, safeBack, signInUrl } from './api';
+import { COPY } from './components/problem';
 
 describe('safeBack', () => {
   it('keeps paths on this site', () => {
@@ -31,5 +32,35 @@ describe('uploadForm', () => {
     expect(f.get('file')).toBeInstanceOf(Blob);
     const plain = uploadForm(new Blob(['x']), 'a', []);
     expect([...plain.keys()]).toEqual(['name', 'file']);
+  });
+});
+
+describe('ApiError messages for a request with no answer', () => {
+  const failing = (() => Promise.reject(new TypeError('network'))) as unknown as typeof fetch;
+  const doc = { toString: () => 'query { x }' } as never;
+
+  it('uses the server wording from COPY while the browser says it is online', async () => {
+    const e = (await gql(doc, {}, failing).catch((x) => x)) as ApiError;
+    expect(e).toBeInstanceOf(ApiError);
+    expect(e.code).toBe('offline');
+    expect(e.message).toBe(`${COPY.server.title} ${COPY.server.body}`);
+  });
+
+  it('says You’re offline. when the browser has no network', async () => {
+    vi.stubGlobal('navigator', { onLine: false });
+    try {
+      const e = (await gql(doc, {}, failing).catch((x) => x)) as ApiError;
+      expect(e.message).toBe(`${COPY.offline.title} ${COPY.offline.body}`);
+      expect(e.message).not.toContain('can’t be reached');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('words an unreadable answer as the server’s too', async () => {
+    const bad = (() => Promise.resolve(new Response('<html>', { status: 502 }))) as unknown as typeof fetch;
+    const e = (await gql(doc, {}, bad).catch((x) => x)) as ApiError;
+    expect(e.code).toBe('bad_answer');
+    expect(e.message).toBe(`${COPY.server.title} ${COPY.server.body}`);
   });
 });
