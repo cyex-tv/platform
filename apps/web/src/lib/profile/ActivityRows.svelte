@@ -10,7 +10,7 @@
   import EmotePicture from '$lib/components/EmotePicture.svelte';
   import { ready } from '$lib/emote';
   import { clean, dateTime } from '$lib/format';
-  import { relative, type ActivityItem, type ActivityKind } from './activity';
+  import { namesActor, relative, type ActivityItem, type ActivityKind } from './activity';
 
   /** `pictures: false` drops the emote's picture from each row (the emote's own page already shows it). */
   type Props = { items: ActivityItem[]; catalog?: Catalog | null; pictures?: boolean; subject?: string | null };
@@ -66,7 +66,7 @@
           {:else if i.kind === 'editorAdded'}{#if i.editor}Added {@render person(i.editor)} as an editor{:else}Added an editor{/if}
           {:else if i.kind === 'editorRemoved'}{#if i.editor && i.actor?.id === i.editor.id}{@render person(i.editor)} stopped being an editor{:else if i.editor}Removed {@render person(i.editor)} as an editor{:else}Removed an editor{/if}
           {:else}Renamed the set <strong><bdi>{clean(i.from)}</bdi></strong> to <strong><bdi>{clean(i.to ?? i.set?.name)}</bdi></strong>{/if}
-          {#if i.actor && i.actor.id !== subject && !(i.kind === 'editorRemoved' && i.actor.id === i.editor?.id)} by {@render person(i.actor)}{/if}
+          {#if i.actor && i.actor.id !== subject && namesActor(i, null)} by {@render person(i.actor)}{/if}
         </span>
         <span class="when"><time datetime={i.at}>{dateTime(i.at)}</time><span class="ago">{relative(i.at)}</span></span>
       </span>

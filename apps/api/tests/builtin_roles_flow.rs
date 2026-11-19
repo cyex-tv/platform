@@ -188,6 +188,17 @@ async fn the_built_in_roles_exist_and_the_top_one_is_hidden() {
         "User is implicit, not listed: {r}"
     );
 
+    // The owner's own `me.roles` lists the top role, hidden, first; an admin's does not.
+    let q = "{ me { roles { name public } } }";
+    let r = w.gql(&owner, q, json!({})).await;
+    assert_eq!(
+        r["data"]["me"]["roles"][0],
+        json!({ "name": "Owner", "public": false }),
+        "{r}"
+    );
+    let r = w.gql(&admin, q, json!({})).await;
+    assert!(!r.to_string().contains("Owner"), "{r}");
+
     // Nobody grants, edits or deletes the top role; not even the owner through the API.
     for (who, query, vars) in [
         (&owner, ASSIGN, json!({ "a": admin.tid(), "r": root })),

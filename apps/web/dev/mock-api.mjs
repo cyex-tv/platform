@@ -10,7 +10,8 @@
 // Development only; nothing here ships.
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-
+import { Kind, parse } from 'graphql';
+import { quickTier, similar, personMatch } from './search.mjs';
 const PORT = Number(process.env.PORT ?? 8787);
 const ORIGIN = process.env.SITE_ORIGIN ?? 'http://localhost:5173';
 const BASE = `http://localhost:${PORT}`;
@@ -346,7 +347,7 @@ const emote = (i, owner = OTHERS[i % OTHERS.length], state = 'APPROVED') => {
     tags: [...s.tags],
     host: `${BASE}/emotes/${i}`,
     createdAt: new Date(NOW - idx * 0.2 * DAY - Math.floor(rngFor(i, 3)() * 0.18 * DAY)).toISOString(),
-    flags: { zeroWidth: s.zero, nsfw: false, private: false },
+    flags: { zeroWidth: s.zero, nsfw: false, private: false, wide: s.wide },
     visibility: 'PUBLIC',
     // Made-up but stable: a few popular ones, a long tail, some in no channel.
     channelCount: i % 11 === 0 ? 0 : (i * 37) % 91 + (i % 5 === 0 ? 400 : 0),
@@ -506,8 +507,12 @@ MINE[4].visibility = 'UNLISTED';
 // restoreAccount. Signing in while it is set gives the mock_restore cookie, not a session.
 let PENDING_DELETION = null;
 let RESTORE_COOKIE = false;
-const MY_ROLES = () => (ACCOUNT_ROLES[ME_ID] ?? []).map((id) => ROLES.find((r) => r.id === id)).filter(Boolean)
-  .sort((a, b) => b.position - a.position).map((r) => ({ id: r.id, name: r.name, public: r.public }));
+// As the API's me.roles: with every permission (the mock's owner) the top role comes first, hidden.
+const MY_ROLES = (admin) => [
+  ...(admin ? [{ id: ROLES.find((r) => r.builtIn === 'ROOT')?.id ?? 'owner', name: 'Owner', public: false }] : []),
+  ...(ACCOUNT_ROLES[ME_ID] ?? []).map((id) => ROLES.find((r) => r.id === id)).filter(Boolean)
+    .sort((a, b) => b.position - a.position).filter((r) => r.builtIn !== 'ROOT').map((r) => ({ id: r.id, name: r.name, public: r.public })),
+];
 let uploads = 0;
 const wideOf = (e) => {
   const one = e.files.find((f) => f.name === '1x.webp');
@@ -803,6 +808,7 @@ const cImage = (key, kind = 'BADGE') => ({
   width: 72, height: 72, ready: true, createdAt: C_TIME,
   files: [1, 2, 4].map((k) => ({ name: `${k}x.webp`, format: 'WEBP', scale: k, width: 18 * k, height: 18 * k, size: 300 * k, isStatic: false })),
 });
+const UPLOADED = new Map(); // SHA-256 of an uploaded file -> its picture
 const C_IMAGES = [cImage('sample-star'), cImage('sample-shield')];
 const BADGES = [
   { id: '01JD8XBDG000000000000000001', name: 'Sample: Early', tooltip: 'Sample badge (mock data)', image: C_IMAGES[0], createdAt: C_TIME, updatedAt: C_TIME },
@@ -1535,7 +1541,7 @@ function signedIn(body, v, ADMIN) {
   const op = (body.query.match(/(?:query|mutation)\s+(\w+)/) ?? [])[1];
   switch (op) {
     case 'Me':
-      return { data: { me: { id: ME_ID, createdAt: '2026-11-10T12:00:00.000Z', permissions: ADMIN ? PERMISSIONS : ROLES.find((r) => r.builtIn === 'USER').permissions, identities: myIdentities(), displayPlatform: DISPLAY_PLATFORM, roles: MY_ROLES() } } };
+      return { data: { me: { id: ME_ID, createdAt: '2026-11-10T12:00:00.000Z', permissions: ADMIN ? PERMISSIONS : ROLES.find((r) => r.builtIn === 'USER').permissions, identities: myIdentities(), displayPlatform: DISPLAY_PLATFORM, roles: MY_ROLES(ADMIN) } } };
     case 'SetDisplayPlatform': {
       if (!IDENTITIES.some((i) => i.platform === v.platform)) return err('That platform isn’t linked to your account.', 'not_found');
       DISPLAY_PLATFORM = v.platform;
@@ -1543,7 +1549,7 @@ function signedIn(body, v, ADMIN) {
       return { data: { setDisplayPlatform: { id: ME_ID, displayPlatform: DISPLAY_PLATFORM } } };
     }
     case 'MyRoles':
-      return { data: { me: { id: ME_ID, roles: MY_ROLES() } } };
+      return { data: { me: { id: ME_ID, roles: MY_ROLES(ADMIN) } } };
     case 'MyEmotes': {
       const per = v.perPage ?? 50;
       const page = v.page ?? 1;
@@ -1795,6 +1801,17 @@ function signedIn(body, v, ADMIN) {
       logEmote(e.id, op === 'Approve' ? 'emote.approved' : 'emote.rejected', { state: e.state.toLowerCase(), reason: v.reason ?? null, visibility: e.visibility.toLowerCase() });
       return { data: { [op === 'Approve' ? 'approveEmote' : 'rejectEmote']: { id: e.id, state: e.state, visibility: e.visibility } } };
     }
+    case 'Takedown': {
+      if (!ADMIN) return err('This needs emotes.takedown.', 'forbidden');
+      const e = anyEmote(v.id);
+      if (!e) return err('Not found.', 'not_found');
+      if (e.state === 'TAKEN_DOWN') return err('That emote is taken down already.', 'already_taken_down');
+      if (!String(v.reason ?? '').trim()) return err('Say why.', 'bad_reason');
+      e.state = 'TAKEN_DOWN';
+      for (const set of ALL_SETS()) set.emotes = set.emotes.filter((m) => m.id !== e.id);
+      logEmote(e.id, 'emote.taken_down', { state: 'taken_down', reason: v.reason });
+      return { data: { takedownEmote: e } };
+    }
     case 'EmoteHistory': {
       const e = PENDING.find((x) => x.id === v.emoteId) ?? RESOLVED.find((x) => x.id === v.emoteId);
       const tagged = e?.tags.length ? [{ id: 'ELOGTG' + e.id.slice(-4), actorId: e.owner?.id ?? null, action: 'emote.updated', before: JSON.stringify({ tags: [] }), after: JSON.stringify({ tags: e.tags }), createdAt: new Date(Date.parse(e.createdAt) + 90_000).toISOString() }] : [];
@@ -2029,24 +2046,29 @@ function signedIn(body, v, ADMIN) {
 // searchAccounts(query, page, perPage): the mock's people by login or display name, exact login
 // first, then prefixes, then anything containing the text. Blocked accounts are never listed.
 let accountSearches = 0;
-const searchPeople = () => [ME_SUMMARY, ...OTHERS].map((a) => ({
-  account: a,
-  identities: [
-    { platform: 'TWITCH', login: a.displayName.toLowerCase(), displayName: a.displayName },
-    ...(a.id === OTHERS[0].id ? [{ platform: 'KICK', login: 'quietoak_live', displayName: 'QuietOak' }] : []),
-  ],
-}));
+// Every login the account has linked: the signed-in account's own identities, the channels the mock
+// knows for others (EDITOR_CHANNELS), and a Twitch login made from the display name when none is
+// known. The people search matches any of them, not only the display name.
+const searchPeople = () => [ME_SUMMARY, ...OTHERS].map((a) => {
+  const list = a.id === ME_ID
+    ? IDENTITIES.map((i) => ({ platform: i.platform, login: i.login, displayName: i.displayName }))
+    : EDITOR_CHANNELS.filter((c) => c.account.id === a.id).map((c) => ({ platform: c.platform, login: c.login, displayName: a.displayName }));
+  if (!list.some((i) => i.platform === 'TWITCH')) list.unshift({ platform: 'TWITCH', login: a.displayName.toLowerCase(), displayName: a.displayName });
+  if (a.id === OTHERS[0].id) list.push({ platform: 'KICK', login: 'quietoak_live', displayName: 'QuietOak' });
+  const seen = new Set();
+  return { account: a, identities: list.filter((i) => !seen.has(`${i.platform}/${i.login}`) && seen.add(`${i.platform}/${i.login}`)) };
+});
 function searchAccounts(v) {
   if (++accountSearches > 600) return err('That’s a lot of searches. Try again in a minute.', 'rate_limited');
   const text = String(v.query ?? '').trim().replace(/^@/, '').trim().toLowerCase();
   const per = Math.min(50, Math.max(1, v.perPage ?? 20));
   const page = Math.min(Math.ceil(1000 / per), Math.max(1, v.page ?? 1));
-  const tier = (h) => Math.max(...h.identities.map((i) =>
-    i.login === text ? 3 : i.login.startsWith(text) ? 2 : i.displayName.toLowerCase().startsWith(text) ? 1 : 0));
   const hits = [...text].length < 2 ? [] : searchPeople()
     .filter((h) => !statusOf(h.account.id).blocked)
-    .filter((h) => h.identities.some((i) => i.login.includes(text) || i.displayName.toLowerCase().includes(text)))
-    .sort((a, b) => tier(b) - tier(a) || a.account.id.localeCompare(b.account.id));
+    .map((h) => ({ h, m: personMatch(h.identities, text) }))
+    .filter((x) => x.m.tier >= 0)
+    .sort((a, b) => b.m.tier - a.m.tier || b.m.score - a.m.score || a.h.account.id.localeCompare(b.h.account.id))
+    .map((x) => x.h);
   return { data: { searchAccounts: { total: hits.length, totalCapped: false, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
 }
 
@@ -2187,22 +2209,6 @@ function newFields(q, v, session) {
 // quickSearch(query): the header search. The same tiers as the API's matcher (crates/db
 // search::quick): exact, exact ignoring case, prefix, word or initials prefix, substring, then a
 // near miss (shared trigrams, 3+ letters); most used first within a tier. 5 emotes, 3 people.
-const nameWords = (n) => n.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
-  .replace(/([A-Za-z])([0-9])/g, '$1 $2').replace(/([0-9])([A-Za-z])/g, '$1 $2').toLowerCase().split(/[\s_.\-]+/).filter(Boolean);
-const grams = (t) => { const p = `  ${t.toLowerCase()} `; const g = new Set(); for (let i = 0; i + 3 <= p.length; i++) g.add(p.slice(i, i + 3)); return g; };
-const similar = (a, b) => { const x = grams(a); const y = grams(b); let n = 0; for (const g of x) if (y.has(g)) n++; return n / (x.size + y.size - n); };
-function quickTier(name, q) {
-  const l = name.toLowerCase();
-  const ql = q.toLowerCase();
-  if (name === q) return 1;
-  if (l === ql) return 2;
-  if (l.startsWith(ql)) return 3;
-  const words = nameWords(name);
-  if (words.some((w) => w.startsWith(ql)) || words.map((w) => w[0]).join('').startsWith(ql)) return 4;
-  if (l.includes(ql)) return 5;
-  if ([...ql].length >= 3 && similar(name, q) >= 0.3) return 6;
-  return 0;
-}
 function quickSearch(v) {
   const q = String(v.query ?? '').trim().slice(0, 100);
   if (!q) return { data: { quickSearch: { emotes: [], users: [] } } };
@@ -2214,8 +2220,11 @@ function quickSearch(v) {
     .map((h) => h.e);
   const text = q.replace(/^@/, '').toLowerCase();
   const users = [...text].length < 2 ? [] : searchPeople()
-    .filter((h) => h.identities.some((i) => i.login.toLowerCase().includes(text) || i.displayName.toLowerCase().includes(text)) || h.account.displayName.toLowerCase().includes(text))
-    .slice(0, 3);
+    .map((h) => ({ h, m: personMatch(h.identities, text) }))
+    .filter((x) => x.m.tier >= 0)
+    .sort((a, b) => b.m.tier - a.m.tier || b.m.score - a.m.score || a.h.account.id.localeCompare(b.h.account.id))
+    .slice(0, 3)
+    .map((x) => x.h);
   return { data: { quickSearch: { emotes, users } } };
 }
 // myEditableChannels: yours, the accounts you edit, then accounts whose sets you edit (here: none
@@ -2313,7 +2322,7 @@ function baseAnswer(body, session, admin) {
 }
 
 // Uploaded cosmetic pictures (image id -> bytes), served under /cosmetics/uploads/<id>/<n>x.webp.
-const UPLOADED = new Map();
+const UPLOAD_FILES = new Map();
 
 /** A multipart/form-data body as { name: { data: Buffer, type } }, or null when it isn't one. */
 function multipart(body, contentType = '') {
@@ -2425,9 +2434,7 @@ createServer(async (req, res) => {
   }
   if (req.method === 'GET' && url.pathname === '/v1/cosmetics') {
     const c = cosmeticCatalog();
-    const toRest = (x) => JSON.parse(JSON.stringify(x, (k, val) => (typeof val === 'string' && /^[A-Z_]+$/.test(val) && ['kind', 'shape', 'format'].includes(k) ? val.toLowerCase() : val))
-      .replace(/"([a-z]+)([A-Z][a-zA-Z]*)":/g, (_, a, b) => `"${a}${b.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase())}":`));
-    return json(res, 200, toRest(c));
+    return json(res, 200, restOf(c));
   }
   if (req.method === 'GET' && url.pathname === '/v1/cosmetics/users') {
     const ids = (url.searchParams.get('ids') ?? '').split(',').filter(Boolean);
@@ -2442,6 +2449,7 @@ createServer(async (req, res) => {
     const parts = multipart(body, req.headers['content-type']);
     if (!parts) return json(res, 400, { error: 'bad_form', message: 'The form couldn’t be read.' });
     const kind = parts.kind?.data.toString('utf8').trim();
+    if (kind === undefined) return json(res, 400, { error: 'bad_form', message: 'Say what it is for: kind=badge or kind=paint.' });
     if (kind !== 'badge' && kind !== 'paint') return json(res, 400, { error: 'bad_kind', message: 'kind is badge or paint.' });
     const file = parts.file?.data;
     if (!file?.length) return json(res, 400, { error: 'bad_form', message: 'Attach the image as `file`.' });
@@ -2453,13 +2461,11 @@ createServer(async (req, res) => {
     if (kind === 'badge' && !(probe.width === probe.height && probe.width >= 72))
       return json(res, 422, { error: 'bad_dimensions', message: 'Badge pictures are square and at least 72×72 px.' });
     if (kind === 'paint' && probe.height < 64) return json(res, 422, { error: 'bad_dimensions', message: 'Paint pictures are at least 64 px tall.' });
-    // The real POST answers in the REST shape (snake_case, lower-case kind and format), and the
-    // same bytes give the same picture again, already ready.
-    const rest = (i) => ({ id: i.id, kind: i.kind.toLowerCase(), host: i.host, animated: i.animated, width: i.width, height: i.height, ready: i.ready, created_at: i.createdAt,
-      files: i.files.map((f) => ({ name: f.name, format: f.format.toLowerCase(), scale: f.scale, width: f.width, height: f.height, size: f.size, is_static: f.isStatic })) });
+    // The real POST answers in the REST shape, and the same bytes give the same picture again
+    // (the API keys pictures by their SHA-256), already ready.
     const sha = createHash('sha256').update(file).digest('hex');
-    const again = C_IMAGES.find((i) => i.sha === sha && i.kind === kind.toUpperCase());
-    if (again) return json(res, 202, rest(again));
+    const again = UPLOADED.get(sha);
+    if (again) return json(res, 202, restOf(again));
     const id = `01JD8XIMG${String(100 + cosmeticSeq++).padStart(17, '0')}`;
     const base = kind === 'badge' ? 18 : 64;
     const files = [1, 2, 4].flatMap((k) => {
@@ -2467,18 +2473,18 @@ createServer(async (req, res) => {
       const w = Math.round((probe.width / probe.height) * h);
       return (probe.animated ? [false, true] : [false]).map((still) => ({ name: `${k}x${still ? '_static' : ''}.webp`, format: 'WEBP', scale: k, width: w, height: h, size: file.length, isStatic: still }));
     });
-    UPLOADED.set(id, { bytes: file, mime: probe.mime });
+    UPLOAD_FILES.set(id, { bytes: file, mime: probe.mime });
     const img = { id, kind: kind.toUpperCase(), host: `${BASE}/cosmetics/uploads/${id}`, animated: probe.animated, width: probe.width, height: probe.height,
       ready: false, files: [], createdAt: new Date().toISOString() };
-    Object.defineProperty(img, 'sha', { value: sha }); // not part of any answer
     C_IMAGES.push(img);
+    UPLOADED.set(sha, img);
     // The files are "made" a moment later, as the worker would.
     setTimeout(() => Object.assign(img, { ready: true, files }), Number(process.env.MOCK_IMAGE_DELAY ?? 2000));
-    return json(res, 202, rest(img));
+    return json(res, 202, restOf(img));
   }
   const uploaded = url.pathname.match(/^\/cosmetics\/uploads\/([0-9A-Z]+)\/[124]x(?:_static)?\.(?:webp|avif)$/);
   if (uploaded) {
-    const u = UPLOADED.get(uploaded[1]);
+    const u = UPLOAD_FILES.get(uploaded[1]);
     if (!u) return res.writeHead(404).end();
     res.writeHead(200, { 'content-type': u.mime, 'cache-control': 'no-store' });
     return res.end(u.bytes);
@@ -2551,7 +2557,7 @@ createServer(async (req, res) => {
       Object.assign(e, { host: emote(700).host, files: emote(700).files });
       e.flags.wide = wideOf(e);
     }, 4000);
-    return json(res, 202, e);
+    return json(res, 202, restOf(e));
   }
   if (req.method === 'POST' && url.pathname === '/v1/gql') {
     const raw = (await read(req)).toString('utf8');
@@ -2564,13 +2570,57 @@ createServer(async (req, res) => {
         res.setHeader('set-cookie', out._cookie);
         delete out._cookie;
       }
-      return json(res, 200, out);
+      return json(res, 200, pruneAnswer(body.query, out));
     } catch (e) {
       return json(res, 400, { data: null, errors: [{ message: String(e?.message ?? e), extensions: { code: 'bad_request' } }] });
     }
   }
   res.writeHead(404).end();
 }).listen(PORT, process.env.MOCK_HOST ?? 'localhost', () => console.log(`mock api on ${BASE}${OPEN_ENV ? ' (open: everyone is staff)' : ADMIN_ENV ? ' (admin)' : ''}`));
+
+// The REST API's JSON: snake_case keys and lower-case enum values (the GraphQL shapes are camelCase
+// with upper-case enums).
+const REST_ENUM_KEYS = new Set(['kind', 'shape', 'format', 'state', 'visibility']);
+function restOf(x, key = '') {
+  if (Array.isArray(x)) return x.map((v) => restOf(v, key));
+  if (x && typeof x === 'object') {
+    return Object.fromEntries(Object.entries(x).map(([k, v]) => [k.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase()), restOf(v, k)]));
+  }
+  return typeof x === 'string' && REST_ENUM_KEYS.has(key) && /^[A-Z_]+$/.test(x) ? x.toLowerCase() : x;
+}
+
+// Cuts an answer down to what the query selected, as a GraphQL server does: the mock's objects carry
+// more than any one query asks for.
+function prune(value, sets, frags) {
+  if (Array.isArray(value)) return value.map((v) => prune(v, sets, frags));
+  if (value === null || typeof value !== 'object' || !sets.length) return value;
+  const fields = new Map();
+  const collect = (set) => {
+    for (const sel of set.selections) {
+      if (sel.kind === Kind.FIELD) {
+        const key = sel.alias?.value ?? sel.name.value;
+        const f = fields.get(key) ?? { name: sel.name.value, sets: [] };
+        if (sel.selectionSet) f.sets.push(sel.selectionSet);
+        fields.set(key, f);
+      } else if (sel.kind === Kind.INLINE_FRAGMENT) collect(sel.selectionSet);
+      else if (frags.has(sel.name.value)) collect(frags.get(sel.name.value));
+    }
+  };
+  sets.forEach(collect);
+  const out = {};
+  for (const [key, f] of fields) {
+    const src = key in value ? value[key] : value[f.name];
+    if (src !== undefined) out[key] = prune(src, f.sets, frags);
+  }
+  return out;
+}
+function pruneAnswer(query, out) {
+  if (!out?.data || typeof out.data !== 'object') return out;
+  const doc = parse(query);
+  const frags = new Map(doc.definitions.filter((d) => d.kind === Kind.FRAGMENT_DEFINITION).map((d) => [d.name.value, d.selectionSet]));
+  const op = doc.definitions.find((d) => d.kind === Kind.OPERATION_DEFINITION);
+  return op ? { ...out, data: prune(out.data, [op.selectionSet], frags) } : out;
+}
 
 function json(res, status, body) {
   res.writeHead(status, { 'content-type': 'application/json' });
