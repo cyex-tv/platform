@@ -18,7 +18,6 @@ See them all with live data at `/dev/components` (dev server only; a 404 in prod
 |---|---|---|
 | `EmoteGrid` | `items: CardEmote[]`, `density?: 'comfortable' \| 'compact'`, `creator? = true`, `labels? = true`, `loading?`, `skeletons? = 12`, `empty?`, `eager? = 0`, `label?`, `href?(e)`, `ranked?` | `<EmoteGrid items={data.results.items} loading={more} eager={12} />`. One size: `compact` is only for small pickers, never a switch. `ranked` numbers the tiles (#1, #2 …) for Trending. |
 | `EmotePicture` | `emote: Picture`, `sizes?`, `eager?`, `alt?`, `class?`, `use?` | Every emote picture in a list: animated ones play without hover; under reduced motion a `<picture>` source picks the still frame. Lazy and async by default. |
-| `EmoteCard` | `emote: CardEmote`, `density?`, `creator?`, `labels?`, `href?`, `eager?` | `<EmoteCard emote={e} />` (for strips and rows outside a grid) |
 | `EmoteSkeleton` | `density?`, `creator?` | `<EmoteSkeleton />` (same box as a card) |
 
 - `CardEmote` is the API's `EmoteFields` (or a set member spread with `shownName`): `host`, `animated`, `files`, `id`, `name`, `owner?`, `flags?`, `shownName?`.

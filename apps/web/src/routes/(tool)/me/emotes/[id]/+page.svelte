@@ -17,7 +17,7 @@
   import { STATE_HINT, STATE_LABEL } from '$lib/tool/state';
   import { fail, notify } from '$lib/tool/notices.svelte';
   import EmoteFacts from '$lib/components/emote/EmoteFacts.svelte';
-  import PreviewStage from '$lib/components/emote/PreviewStage.svelte';
+  import SizeRow from '$lib/components/emote/SizeRow.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
   import EmoteFlags from '$lib/tool/EmoteFlags.svelte';
@@ -179,10 +179,13 @@
   </PageHead>
   <div class="layout">
     <div class="ui-stack">
-      <PreviewStage {emote} />
-      {#if !ready(emote)}
-        <p class="ui-hint">{slow ? 'The files are taking longer than usual. Reload in a minute.' : 'The files are still being made. This takes a few seconds.'}</p>
-      {/if}
+      <section class="ui-card sizes" aria-label="Picture">
+        {#if ready(emote)}
+          <SizeRow {emote} />
+        {:else}
+          <p class="ui-hint">{slow ? 'The files are taking longer than usual. Reload in a minute.' : 'The files are still being made. This takes a few seconds.'}</p>
+        {/if}
+      </section>
       <section class="ui-card" aria-label="Status">
         <div class="ui-row"><div><strong>State</strong><span class="ui-hint">{STATE_HINT[emote.state]}</span></div></div>
         <div class="ui-row"><div><strong>ID</strong></div><span class="ui-mono id">{emote.id}</span></div>
@@ -251,5 +254,6 @@
   .add { display: flex; gap: 8px; }
   .add select { flex: 1; }
   .gap { margin-top: 12px; }
+  .sizes { display: grid; place-items: center; padding: 32px 16px 24px; min-width: 0; }
   @media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } }
 </style>

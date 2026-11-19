@@ -66,7 +66,7 @@
               <span class="what">
                 <strong><bdi>{s.device}</bdi></strong>
                 <span class="ui-hint meta">
-                  {#if s.current}<span class="here">This device</span>{' · '}{/if}{s.kind === 'APP' ? 'App' : 'Website'} · Last seen <time datetime={s.lastSeenAt} title={dateTime(s.lastSeenAt)}>{relative(s.lastSeenAt)}</time>
+                  {#if s.current}<span class="here">This device</span>{' · '}{/if}{s.kind === 'APP' ? 'App' : 'Website'} · Last seen <time datetime={s.lastSeenAt} title={relative(s.lastSeenAt)}>{dateTime(s.lastSeenAt)}</time>
                 </span>
               </span>
               {#if s.current}

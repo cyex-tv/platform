@@ -53,7 +53,7 @@ describe('tags in the URL', () => {
     expect(u('tag=%23CAT&tag=cat&tag=&tag=%20Dog%20').tags).toEqual(['cat', 'dog']);
     const many = Array.from({ length: 14 }, (_, i) => `tag=t${i}`).join('&');
     expect(u(many).tags).toHaveLength(10);
-    expect(cleanTags(['a'.repeat(40)])[0]).toHaveLength(30);
+    expect(cleanTags(['a'.repeat(40)])[0]).toHaveLength(32);
   });
   it('change cleans tags too', () => {
     expect(change(u(''), { tags: ['#Pog', 'pog', 'Kek'] }).tags).toEqual(['pog', 'kek']);

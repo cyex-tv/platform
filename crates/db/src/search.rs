@@ -75,9 +75,11 @@ pub(crate) fn like_escape(text: &str) -> String {
 
 /// Most tags `search` looks at.
 pub const TAGS_MAX: usize = 10;
+/// A tag's length at most, in characters (as uploads take them).
+pub const TAG_LEN_MAX: usize = 32;
 
 /// The tags as stored: trimmed, lowercase, no leading `#`, no empties or repeats, the first 10.
-/// None when one can never be on an emote (they are `[a-z0-9_]{1,30}`).
+/// None when one can never be on an emote (they are 1 to 32 letters, digits, `-` or `_`).
 fn clean_tags(tags: &[String]) -> Option<Vec<String>> {
     let mut out: Vec<String> = Vec::new();
     for raw in tags {
@@ -91,10 +93,11 @@ fn clean_tags(tags: &[String]) -> Option<Vec<String>> {
         }
         out.push(tag.to_owned());
     }
+    // The same rule uploads and edits store tags by (1 to 32 letters, digits, `-` or `_`), so
+    // every stored tag can be searched for.
     let valid = |t: &String| {
-        t.len() <= 30
-            && t.bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+        t.chars().count() <= TAG_LEN_MAX
+            && t.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
     };
     out.iter().all(valid).then_some(out)
 }
@@ -459,7 +462,13 @@ mod tests {
             Some(tags(&["pog", "a_1"]))
         );
         assert_eq!(clean_tags(&tags(&["a b"])), None);
-        assert_eq!(clean_tags(&["a".repeat(31)]), None);
+        assert_eq!(clean_tags(&tags(&["a!"])), None);
+        assert_eq!(clean_tags(&["a".repeat(33)]), None);
+        // Every tag an upload may carry can be searched for: dashes, non-Latin letters, 32 long.
+        assert_eq!(
+            clean_tags(&tags(&["Pepe-the-frog", "猫ダンス", &"a".repeat(32)])),
+            Some(tags(&["pepe-the-frog", "猫ダンス", &"a".repeat(32)]))
+        );
         assert_eq!(clean_tags(&[]), Some(Vec::new()));
         let many: Vec<String> = (0..15).map(|i| format!("t{i}")).collect();
         assert_eq!(clean_tags(&many).map(|t| t.len()), Some(TAGS_MAX));

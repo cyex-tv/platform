@@ -65,8 +65,8 @@
   const dims = $derived(size(e));
   // The picture fills 80% of the box height; `sizes` lets the browser pick the right file.
   const shownW = $derived(Math.round((TILE_ART[density] * 0.8 * dims.width) / dims.height));
-  // Type marks stay out of the tile's flow (every tile the same height): they show in the art's
-  // corner on hover or keyboard focus, and are always in the link's name.
+  // Type marks (animated, zero-width, wide) are in the link's name only; nothing is drawn over the
+  // picture (every emote plays anyway, and a label over the art read as a stray tag).
   const kinds = $derived(
     (labels ? [e.animated && 'animated', e.flags?.zeroWidth && 'zero-width', wide && 'wide'] : []).filter(Boolean) as string[],
   );
@@ -99,7 +99,6 @@
     {:else}
       <span class="processing">Processing</span>
     {/if}
-    {#if kinds.length}<span class="kinds" aria-hidden="true">{kinds.join(' · ')}</span>{/if}
   </span>
   <span class="name"><bdi>{name}</bdi></span>
   {#if creator && owner}<span class="by"><bdi>{owner}</bdi></span>{/if}
@@ -133,20 +132,14 @@
   .compact .name { font-size: var(--t-fine); }
   .by { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font-size: 12px; line-height: 1.4; color: var(--muted); }
-  .kinds { position: absolute; left: 50%; bottom: 0; translate: -50% 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis;
-    padding: 0 6px; border-radius: var(--radius);
-    background: var(--elevated-2); color: var(--muted); font-size: 12px; font-weight: 500; line-height: 16px; white-space: nowrap;
-    opacity: 0; transition: opacity var(--fast) ease-out; pointer-events: none; }
   /* Picked: an accent hairline, an accent tick and a bold name; never a filled box. */
   .tick { position: absolute; top: 6px; right: 6px; display: inline-grid; place-items: center; width: 20px; height: 20px;
     border: 1px solid var(--border-strong); border-radius: var(--radius); color: transparent; background: var(--bg); }
   .picked, .picked .tick { border-color: var(--accent-border); }
   .picked .tick { color: var(--accent-text); }
   .picked .name { font-weight: 700; }
-  .tile:focus-visible .kinds { opacity: 1; }
   @media (hover: hover) and (pointer: fine) {
     .tile:hover { background: var(--surface-hover); border-color: var(--border-strong); }
-    .tile:hover .kinds { opacity: 1; }
     .tile.picked:hover { border-color: var(--accent-text); }
   }
   @media (prefers-contrast: more) { .tile { border-color: var(--border-strong); } }

@@ -33,8 +33,6 @@
     { key: 'wide', label: 'Wide', icon: 'wide', hint: 'About twice as wide as tall or more' },
     { key: 'nsfw', label: 'NSFW', icon: 'eye-off', hint: 'Only NSFW emotes; they are hidden otherwise' },
   ];
-  // Tags as the API stores them: a-z, 0-9 and _, spaces become _.
-  const tagClean = (raw: string) => cleanTag(raw).replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
 
   type Section = 'search' | 'match' | 'type' | 'flags' | 'tags';
   const KEY = 'cyex.browse.closed';
@@ -110,7 +108,7 @@
       label="Tags the emotes must have"
       placeholder="Type a tag, press Enter"
       max={MAX_TAGS}
-      clean={tagClean}
+      clean={cleanTag}
     />
     {#if tags.length && view.tags.length < MAX_TAGS}
       <div class="tags" role="group" aria-label="Common tags in these results">

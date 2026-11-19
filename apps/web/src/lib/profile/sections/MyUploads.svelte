@@ -5,7 +5,7 @@
   import { onMount } from 'svelte';
   import { gql } from '$lib/api';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
-  import type { CardEmote } from '$lib/components/EmoteCard.svelte';
+  import type { CardEmote } from '$lib/components/EmoteTile.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
   import Problem from '$lib/components/Problem.svelte';
