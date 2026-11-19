@@ -66,7 +66,7 @@
     <header>
       <Icon name="tv" />
       <h2 id="ov-ch">Channels</h2>
-      <a class="more" href="/me/channels">Channels<Icon name="chevron-right" size={14} /></a>
+      <a class="more" href="/me/channels">Manage<Icon name="chevron-right" size={14} /></a>
     </header>
     {#if library.data}
       {#if library.data.channels.length}
@@ -101,7 +101,7 @@
     <header>
       <Icon name="upload" />
       <h2 id="ov-up">Recent uploads{#if uploads.data}<span class="n ui-num">{count(uploads.data.total)}</span>{/if}</h2>
-      <a class="more" href={sectionHref(accountId, 'uploads')}>Your emotes<Icon name="chevron-right" size={14} /></a>
+      <a class="more" href={sectionHref(accountId, 'uploads')}>All emotes<Icon name="chevron-right" size={14} /></a>
     </header>
     {#if uploads.data}
       {#if uploads.data.items.length}
@@ -124,7 +124,7 @@
     <header>
       <Icon name="activity" />
       <h2 id="ov-ac">Recent activity</h2>
-      <a class="more" href={sectionHref(accountId, 'activity')}>Activity<Icon name="chevron-right" size={14} /></a>
+      <a class="more" href={sectionHref(accountId, 'activity')}>See all<Icon name="chevron-right" size={14} /></a>
     </header>
     {#if activity.data}
       {#if activity.data.length}<div class="feed"><ActivityRows items={activity.data} subject={accountId} /></div>

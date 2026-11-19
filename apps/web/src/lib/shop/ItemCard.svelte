@@ -64,4 +64,6 @@
   .own { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding-right: 8px; font-size: var(--t-small); font-weight: 700; color: var(--text); }
   .own :global(svg) { color: var(--accent-text); }
   .muted { min-height: 40px; display: inline-flex; align-items: center; font-size: var(--t-small); color: var(--muted); }
+  /* a touch target of at least 24px (WCAG 2.5.8) */
+  .nm a { display: inline-flex; align-items: center; min-height: 24px; }
 </style>

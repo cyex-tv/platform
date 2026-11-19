@@ -55,6 +55,6 @@
 
 <style>
   .what { display: grid; flex: 1; min-width: 0; }
-  .what a { font-weight: 600; font-size: var(--text-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .what a { display: block; min-height: 24px; line-height: 24px; font-weight: 600; font-size: var(--text-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .empty { margin: 0; padding: 10px 14px 12px; }
 </style>

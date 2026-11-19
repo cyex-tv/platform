@@ -20,7 +20,7 @@
   import ChannelsTab from './ChannelsTab.svelte';
   import Pager from './Pager.svelte';
   import SizeRow from './SizeRow.svelte';
-  import { flagsOf, formats, scaleFiles, trust, type EmoteChannel, type PageEmote } from './emote-page';
+  import { canReport, flagsOf, formats, scaleFiles, trust, type EmoteChannel, type PageEmote } from './emote-page';
   import type { PagerState } from './pager';
   import { Viewer } from './viewer.svelte';
   import { bottomBar } from '$lib/tool/bottom-bars.svelte';
@@ -177,12 +177,12 @@
       </dl>
 
       <div class="head-actions">
-        <EmoteActions emoteId={e.id} {name} {viewer} picture={e} {editHref} addable={public_} reportable={public_} />
+        <EmoteActions emoteId={e.id} {name} {viewer} picture={e} {editHref} addable={public_} reportable={canReport(e, session.me?.id)} />
       </div>
     </article>
 
     <div class="bar" use:bottomBar>
-      <EmoteActions emoteId={e.id} {name} {viewer} variant="bar" picture={e} {editHref} addable={public_} reportable={public_} />
+      <EmoteActions emoteId={e.id} {name} {viewer} variant="bar" picture={e} {editHref} addable={public_} reportable={canReport(e, session.me?.id)} />
     </div>
 
     {#if tabs.length}

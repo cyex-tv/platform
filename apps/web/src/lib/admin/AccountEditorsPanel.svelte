@@ -161,7 +161,7 @@
 <style>
   .row { flex-wrap: wrap; }
   .what { display: grid; flex: 1; min-width: 0; }
-  .what a { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .what a { display: block; min-height: 24px; line-height: 24px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .what .ui-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .acts { display: flex; gap: 6px; }
   .edit { flex-basis: 100%; display: grid; gap: 6px; }

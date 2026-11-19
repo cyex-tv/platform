@@ -56,18 +56,18 @@ export const PERMISSIONS: PermissionInfo[] = GROUPS.flatMap((g) => g.items);
 
 const ORDER = PERMISSIONS.map((p) => p.key);
 
-/** Short names for lists ("Set emotes, Sets and Editors"). */
+/** What each permission lets someone do, as a verb phrase ("edit set emotes, manage sets and manage editors"). */
 const SHORT: Record<EditorPermission, string> = {
-  EMOTES: 'Set emotes',
-  SETS: 'Sets',
-  CHANNELS: 'Channels',
-  EMOTE_UPLOAD: 'Uploads',
-  EMOTE_MANAGE: 'Emotes',
-  EMOTE_TRANSFER: 'Transfers',
-  PROFILE: 'Profile',
-  BILLING_PAYMENT: 'Payment',
-  BILLING_SUBSCRIPTION: 'Subscription',
-  EDITORS: 'Editors',
+  EMOTES: 'edit set emotes',
+  SETS: 'manage sets',
+  CHANNELS: 'change channel settings',
+  EMOTE_UPLOAD: 'upload emotes',
+  EMOTE_MANAGE: 'manage emotes',
+  EMOTE_TRANSFER: 'transfer emotes',
+  PROFILE: 'change the profile',
+  BILLING_PAYMENT: 'manage payment',
+  BILLING_SUBSCRIPTION: 'manage the subscription',
+  EDITORS: 'manage editors',
 };
 
 /** Permissions in the dialog's order, without repeats. */
@@ -75,13 +75,21 @@ export function ordered(perms: readonly EditorPermission[]): EditorPermission[] 
   return ORDER.filter((k) => perms.includes(k));
 }
 
-/** "Set emotes and Sets" for a list of permissions. Channels is left out when Sets brings it. */
-export function permissionLabels(perms: readonly EditorPermission[]): string {
+/** "edit set emotes and manage sets" for a list of permissions; channel settings are left out when Sets brings them. */
+export function permissionPhrase(perms: readonly EditorPermission[]): string {
   const list = ordered(perms).filter((k) => !(k === 'CHANNELS' && perms.includes('SETS')));
-  if (list.length === ORDER.length - 1 && perms.includes('SETS')) return 'Everything';
+  if (list.length === ORDER.length - 1 && perms.includes('SETS')) return 'do everything';
   const names = list.map((k) => SHORT[k]);
-  if (names.length < 2) return names[0] ?? 'Nothing';
+  if (names.length < 2) return names[0] ?? 'do nothing';
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/** The same, to start a line: "Edit set emotes and manage sets", "Everything" or "Nothing". */
+export function permissionLabels(perms: readonly EditorPermission[]): string {
+  const p = permissionPhrase(perms);
+  if (p === 'do everything') return 'Everything';
+  if (p === 'do nothing') return 'Nothing';
+  return p.charAt(0).toUpperCase() + p.slice(1);
 }
 
 /** `SETS` comes with `CHANNELS` (the API grants both). */
@@ -236,3 +244,22 @@ export function transferTargets(
 
 /** The most editors an account can have (the API's `too_many_editors`). */
 export const MAX_EDITORS = 50;
+
+/** The page of an account you edit, in your own set list (`/me/sets` reads `?owner=`, not a #hash). */
+export function ownerSetsHref(ownerId: string): string {
+  return `/me/sets?owner=${encodeURIComponent(ownerId)}`;
+}
+
+/**
+ * What you may do with one set, as the API checks it: the owner everything; staff with
+ * `sets.edit_any` (or `global_set.edit` for the global set) everything; an account editor with
+ * Sets everything on the sets their grant covers; with Emotes, the emotes; a per-set editor the
+ * emotes and the name. Visibility and delete are the owner's and Sets', not a per-set editor's.
+ */
+export type SetAccess = { emotes: boolean; rename: boolean; manage: boolean };
+
+export function setAccess(a: { owner: boolean; setEditor: boolean; staff: boolean; held: ReadonlySet<EditorPermission> }): SetAccess {
+  const manage = a.owner || a.staff || a.held.has('SETS');
+  const rename = manage || a.setEditor;
+  return { manage, rename, emotes: rename || a.held.has('EMOTES') };
+}

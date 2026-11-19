@@ -155,4 +155,6 @@
     .row { grid-template-columns: 56px minmax(0, 1fr); gap: 8px 12px; }
     .row .ui-actions { grid-column: 1 / -1; justify-content: flex-start; }
   }
+  /* a touch target of at least 24px (WCAG 2.5.8) */
+  a:not(.ui-btn) { display: inline-flex; align-items: center; min-height: 24px; }
 </style>

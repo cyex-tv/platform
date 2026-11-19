@@ -11,7 +11,8 @@
   import { loader } from '$lib/tool/loader.svelte';
 
   const SHOWN = 50;
-  let { query }: { query: string } = $props();
+  /** With `onpick` the rows pick the account instead of opening it, and the list is compact (a filter's lookup). */
+  let { query, onpick }: { query: string; onpick?: (account: { id: string; displayName: string }) => void } = $props();
 
   const L = loader(async ({ fetch }) => {
     const text = query.trim();
@@ -28,20 +29,24 @@
     {#if r.items.length === 0}
       <State title={`No one matches “${iso(r.text)}”.`}>Only people who have signed in are listed, and blocked accounts are not: find one by its exact login.</State>
     {:else}
-      <p class="ui-hint total" aria-live="polite">
+      <p class="ui-hint total" class:compact={!!onpick} aria-live="polite">
         {count(r.total)} {r.total === 1 ? 'account' : 'accounts'}{#if r.total > r.items.length}, the first {count(r.items.length)} shown. Narrow the name to see the rest.{/if}
       </p>
-      <ul class="ui-panel ui-list result" aria-label="Accounts">
+      <ul class="ui-panel ui-list result" class:compact={!!onpick} aria-label="Accounts">
         {#each r.items as h (h.account.id)}
           <li>
             <Avatar src={h.account.avatar} name={h.account.displayName} size={40} tone="tool" />
             <span class="what">
-              <a class="name" href={open(h)}><bdi>{clean(h.account.displayName)}</bdi></a>
+              {#if onpick}<span class="name"><bdi>{clean(h.account.displayName)}</bdi></span>{:else}<a class="name" href={open(h)}><bdi>{clean(h.account.displayName)}</bdi></a>{/if}
               <span class="ui-hint logins">
                 {#each h.identities as i (i.platform + i.login)}<span class="login"><bdi>{clean(i.login)}</bdi> on {where(i.platform)}</span>{/each}
               </span>
             </span>
-            <a class="ui-btn secondary small" href={open(h)}>Open account</a>
+            {#if onpick}
+              <button class="ui-btn secondary small" type="button" onclick={() => onpick(h.account)}>Pick</button>
+            {:else}
+              <a class="ui-btn secondary small" href={open(h)}>Open account</a>
+            {/if}
           </li>
         {/each}
       </ul>
@@ -52,6 +57,7 @@
 <style>
   .total { margin: 0 0 8px; }
   .result { max-width: var(--measure-form); }
+  .result.compact { max-height: 260px; overflow-y: auto; }
   .what { display: grid; flex: 1; min-width: 0; }
   .logins { display: flex; flex-wrap: wrap; gap: 0 12px; }
   .login { overflow-wrap: anywhere; }

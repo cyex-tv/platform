@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { actionText, changes, dayAfter, dayStart, looksLikeId, targetHref } from './audit';
+import { actionText, changes, dayAfter, dayLabel, dayStart, looksLikeId, targetHref } from './audit';
 
 describe('audit helpers', () => {
+  it('shows a day in the cyex format', () => {
+    expect(dayLabel('2026-11-20')).toBe('2026/11/20');
+    expect(dayLabel('')).toBe('');
+    expect(dayLabel('20.11.2026')).toBe('');
+  });
+
   it('words an action', () => {
     expect(actionText('role.updated')).toBe('Role updated');
     expect(actionText('set.emote_added')).toBe('Set emote added');

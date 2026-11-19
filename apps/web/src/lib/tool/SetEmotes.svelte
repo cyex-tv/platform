@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import Capacity from '$lib/components/Capacity.svelte';
-  import { gql } from '$lib/api';
+  import { ApiError, gql } from '$lib/api';
   import type { SetFieldsFragment } from '$lib/gql/graphql';
   import { REMOVE_SET_EMOTE, UPDATE_SET_EMOTE } from '$lib/queries';
   import { nameProblem } from '$lib/rules';
@@ -23,6 +23,10 @@
   let editing = $state<string | null>(null);
   let alias = $state('');
   let zeroWidth = $state(false);
+  /** The rename is on its way: a second press sends nothing. */
+  let saving = $state(false);
+  /** Why the rename failed, in the dialog (a toast would sit behind it). */
+  let failure = $state('');
   let dialog: HTMLDialogElement;
   const aliasError = $derived(nameProblem(alias));
 
@@ -46,19 +50,24 @@
     editing = m.emote.id;
     alias = m.name;
     zeroWidth = m.zeroWidth;
+    failure = '';
     dialog.showModal();
   }
 
   async function save(e: SubmitEvent) {
     e.preventDefault();
-    if (!editing || aliasError) return;
+    if (!editing || aliasError || saving) return;
+    saving = true;
+    failure = '';
     try {
       await gql(UPDATE_SET_EMOTE, { setId: set.id, emoteId: editing, input: { name: alias.trim(), zeroWidth } });
       dialog.close();
       notify('Saved.');
       onchange();
     } catch (err) {
-      fail(err);
+      failure = err instanceof ApiError && err.message ? err.message : 'That didn’t work. Try again.';
+    } finally {
+      saving = false;
     }
   }
 
@@ -135,7 +144,7 @@
       <label class="ui-field">
         <span class="ui-label">Name here</span>
         <input class="ui-input" bind:value={alias} maxlength="100" spellcheck="false" aria-invalid={aliasError ? 'true' : undefined} />
-        {#if aliasError}<span class="ui-error">{aliasError}</span>{:else}<span class="ui-hint">Only this set; the emote keeps its own name.</span>{/if}
+        {#if aliasError}<span class="ui-error">{aliasError}</span>{:else if failure}<span class="ui-error" role="alert">{failure}</span>{:else}<span class="ui-hint">Only this set; the emote keeps its own name.</span>{/if}
       </label>
       <label class="ui-row">
         <div><strong>Zero-width</strong><span class="ui-hint">Drawn over the emote before it.</span></div>
@@ -144,7 +153,7 @@
     </div>
     <footer>
       <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="ui-btn primary" type="submit" disabled={!!aliasError}>Save</button>
+      <button class="ui-btn primary" type="submit" disabled={!!aliasError || saving}>{saving ? 'Saving…' : 'Save'}</button>
     </footer>
   </form>
 </dialog>

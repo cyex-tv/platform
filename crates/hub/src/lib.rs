@@ -52,10 +52,14 @@ struct Inner {
     by_topic: HashMap<String, HashSet<u64>>,
 }
 
+/// Called with every published event, whatever its topics (for example to drop cached reads).
+pub type Tap = Arc<dyn Fn(&Event) + Send + Sync>;
+
 /// The fan-out. Cheap to clone.
 #[derive(Clone, Default)]
 pub struct Hub {
     inner: Arc<Mutex<Inner>>,
+    taps: Arc<Mutex<Vec<Tap>>>,
 }
 
 fn lock(inner: &Mutex<Inner>) -> MutexGuard<'_, Inner> {
@@ -91,8 +95,24 @@ impl Hub {
         }
     }
 
+    /// Calls `tap` with every event published from now on, before subscribers get it.
+    pub fn tap(&self, tap: Tap) {
+        self.taps
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(tap);
+    }
+
     /// Hands `event` to every subscriber of any of its topics, once each.
     pub fn publish(&self, event: Arc<Event>) {
+        let taps: Vec<Tap> = self
+            .taps
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone();
+        for tap in &taps {
+            tap(&event);
+        }
         let inner = lock(&self.inner);
         let mut seen: HashSet<u64> = HashSet::new();
         for topic in &event.topics {

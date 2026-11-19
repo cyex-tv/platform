@@ -63,6 +63,31 @@
   const setFrame = (t: Timeframe) => set({ d: null, m: null, ...toQuery(t) });
   const reset = () => set({ k: null, by: null, d: null, m: null });
 
+  // On a phone the five groups scroll sideways; an edge fades where there is more to reach.
+  let strip = $state<HTMLDivElement>();
+  let fadeStart = $state(false);
+  let fadeEnd = $state(false);
+  // The Segmented control is what scrolls (it caps itself at the width it has).
+  const scroller = () => strip?.firstElementChild as HTMLElement | null | undefined;
+  function edges() {
+    const el = scroller();
+    if (!el) return;
+    fadeStart = el.scrollLeft > 1;
+    fadeEnd = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+  }
+  $effect(() => {
+    const el = strip && scroller();
+    if (!el) return;
+    const ro = new ResizeObserver(edges);
+    ro.observe(el);
+    el.addEventListener('scroll', edges, { passive: true });
+    edges();
+    return () => {
+      ro.disconnect();
+      el.removeEventListener('scroll', edges);
+    };
+  });
+
   let items = $state<ActivityItem[]>([]);
   let first = $state(true);
   let busy = $state(false);
@@ -108,7 +133,7 @@
 <PageHead title="Activity" line="Changes to the sets, emotes, cosmetics and editors, newest first." />
 
 <div class="bar" role="group" aria-label="Filter activity">
-  <div class="groups"><Segmented label="Show" size="s" options={GROUPS} value={group} onchange={(v) => set({ k: v === 'all' ? null : v })} /></div>
+  <div class="groups" class:fade-start={fadeStart} class:fade-end={fadeEnd} bind:this={strip}><Segmented label="Show" size="s" options={GROUPS} value={group} onchange={(v) => set({ k: v === 'all' ? null : v })} /></div>
   <div class="by">
     <label class="lbl" for="activity-by">By</label>
     <select id="activity-by" class="ui-input small" value={actor} onchange={(e) => set({ by: e.currentTarget.value || null })}>
@@ -117,7 +142,7 @@
       {#if actor && !people.some((p) => p.id === actor)}<option value={actor}>Someone else</option>{/if}
     </select>
   </div>
-  <TimeframePicker value={frame} shown={items.map((i) => i.at)} onchange={setFrame} />
+  <TimeframePicker value={frame} onchange={setFrame} />
 </div>
 
 {#if first}
@@ -150,6 +175,10 @@
     .groups { width: calc(100% + 2 * var(--page-pad)); margin-inline: calc(-1 * var(--page-pad)); padding-inline: var(--page-pad);
       overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain; }
     .groups::-webkit-scrollbar { display: none; }
+    .groups { -webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--fs, 0px), #000 calc(100% - var(--fe, 0px)), transparent);
+      mask-image: linear-gradient(90deg, transparent, #000 var(--fs, 0px), #000 calc(100% - var(--fe, 0px)), transparent); }
+    .groups.fade-start { --fs: 28px; }
+    .groups.fade-end { --fe: 28px; }
     .groups :global([role='radiogroup']) { width: max-content; }
   }
 </style>

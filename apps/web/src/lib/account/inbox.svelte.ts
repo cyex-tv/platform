@@ -7,6 +7,9 @@ import { session } from '$lib/tool/session.svelte';
 
 export type Note = { id: string; kind: string; payload: string; createdAt: string; read: boolean };
 
+/** Transfer requests answered here: the bell and /me/notifications both show the answer, not the buttons. */
+export const answered = $state<Record<string, string>>({});
+
 export const inbox = $state<{ count: number; known: boolean; items: Note[] | null; loading: boolean; error: string | null; marking: boolean }>({
   count: 0,
   /** The count came from the API at least once (until then 0 means "not asked yet"). */

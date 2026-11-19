@@ -66,6 +66,7 @@
 <style>
   .what { display: grid; flex: 1; min-width: 0; }
   .what strong { font-weight: 600; }
+  .more a { display: inline-flex; align-items: center; min-height: 24px; }
   .pad { margin: 0; padding: 10px 14px; }
   .more { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 0; padding: 10px 14px; border-top: 1px solid var(--border); font-size: var(--t-small); }
 </style>

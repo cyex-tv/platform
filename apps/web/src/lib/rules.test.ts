@@ -27,11 +27,13 @@ describe('rules', () => {
 
   it('checks files: the types the API decodes, up to 8 MB', () => {
     for (const type of ['image/png', 'image/apng', 'image/gif', 'image/webp', 'image/jpeg']) expect(fileProblem({ type, size: 1000 })).toBeNull();
-    expect(fileProblem({ type: 'image/avif', size: 1000 })).toBe('PNG, APNG, GIF, WebP or JPEG only.');
+    expect(fileProblem({ type: 'image/avif', size: 1000 })).toBe('AVIF isn’t accepted yet. Save it as PNG, WebP or JPEG.');
+    expect(fileProblem({ type: '', size: 1000, name: 'x.AVIF' })).toMatch(/^AVIF/);
     expect(fileProblem({ type: 'image/svg+xml', size: 1000 })).toBe('PNG, APNG, GIF, WebP or JPEG only.');
     expect(fileProblem({ type: 'image/gif', size: 6 * 1024 * 1024 })).toBeNull();
     expect(fileProblem({ type: 'image/gif', size: MAX_UPLOAD_BYTES })).toBeNull();
-    expect(fileProblem({ type: 'image/gif', size: MAX_UPLOAD_BYTES + 1 })).toBe('It’s 8,1 MB; at most 8 MB.');
+    expect(fileProblem({ type: 'image/gif', size: MAX_UPLOAD_BYTES + 1 })).toBe('It’s just over 8 MB; at most 8 MB.'); // the row says 8 MB (format.bytes), so never "8,1"
+    expect(fileProblem({ type: 'image/gif', size: 8.3 * 1024 * 1024 })).toBe('It’s 8,3 MB; at most 8 MB.');
     expect(fileProblem({ type: 'image/webp', size: 9.25 * 1024 * 1024 })).toBe('It’s 9,3 MB; at most 8 MB.');
     // No type from the browser: the extension decides.
     expect(fileProblem({ type: '', size: 10, name: 'catJAM.APNG' })).toBeNull();
