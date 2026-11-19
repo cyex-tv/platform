@@ -19,6 +19,20 @@ git push -u origin perf/scale-1
 gh pr create --base main --head perf/scale-1 --title "Scale: hot reads, indexes and a shared chat-read cache" --body-file <file>
 gh pr create --repo cyex-tv/extension --base main --head fix/personal-lookup-batches --title "Personal emote lookups: every queued chatter, 100 a request" --body-file <file>
 gh pr merge 33 --repo cyex-tv/extension --merge
+## API coverage suite (branch `test/api-coverage`)
+
+Goal: every endpoint exists and works as the website calls it. Tests only, in one new test binary `apps/api/tests/api_coverage/` (Postgres in CI).
+- [x] `contract`: reads every GraphQL operation from `apps/web/src/lib/queries.ts` and `paint-studio/queries.ts` (with the fragments each uses), and runs all of them through the real router as the site sends them (cookie and `Origin`) with seeded data: an operation or field the API doesn't have fails, and so does any error except the two listed (checkout and refund need Paddle). An operation added to the site and not run by the test fails it. Also the site's REST calls: emote upload, cosmetic picture upload (and the same bytes again), the Twitch and Kick sign-in redirects, sign-out.
+- [x] `authz`: every root field from introspection, called signed out (all but the public reads answer `signed_out`) and, for staff fields, by an account without roles (`forbidden`).
+- [x] `live`: one `addSetEmote` reaches both a `/v1/gql/ws` subscriber and a `/v1/events` client (events service as a dev-dependency), each fed from the same outbox.
+- [x] `validation`: input rules no other test sent a bad value to (badge, paint, shop item, code batch, grant reason, lookups over 100, review search, reject reason, note body, tags, restriction end, editor sets, role name), and nothing changed.
+- [x] Inventory with before and after counts: `.claude/runs/2026-11-20-overnight/api-coverage.md`.
+
+### GitHub write log for this PR
+
+```
+git push -u origin test/api-coverage
+gh pr create --base main --head test/api-coverage --title "Tests: API coverage suite (website contract, auth sweep, both sockets, input rules)" --body-file <file>
 ```
 
 ## Cosmetics for real: badge upload and studio paints (branch `fix/cosmetics-real`)
