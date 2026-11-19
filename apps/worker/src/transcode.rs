@@ -110,15 +110,14 @@ pub async fn run(ctx: Ctx, job: Job) -> Result<(), JobError> {
         .ok_or_else(|| JobError::Permanent(format!("{} is missing", file.storage_key)))?;
 
     let bytes = original.bytes.clone();
-    let encoded =
-        tokio::task::spawn_blocking(move || encode::transcode(&bytes, &Limits::default()))
-            .await
-            .map_err(retry)?
-            .map_err(|err| match err {
-                // The upload passed these checks; failing now means the file can't be made.
-                MediaError::Encode(message) => JobError::Retry(message),
-                other => JobError::Permanent(other.to_string()),
-            })?;
+    let encoded = tokio::task::spawn_blocking(move || encode::transcode(&bytes, &Limits::emote()))
+        .await
+        .map_err(retry)?
+        .map_err(|err| match err {
+            // The upload passed these checks; failing now means the file can't be made.
+            MediaError::Encode(message) => JobError::Retry(message),
+            other => JobError::Permanent(other.to_string()),
+        })?;
 
     let sha_hex = sigv4::hex(&file.sha256);
     if is_blocked(&ctx, &file).await? {

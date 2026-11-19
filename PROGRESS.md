@@ -2,6 +2,25 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Upload v3 (branch `feat/upload-v3`, owner feedback 2026/11/19 section C)
+
+Additive API; no migration; nothing was deployed.
+
+- [x] Upload is a dialog that opens from anywhere (`lib/upload`): the root layout holds one `UploadDialog`, and every same-site link to `/me/upload` or `/upload` opens it on a plain click (Ctrl/⌘-click, middle click and new tabs still open the page). Its queue stays while you browse; it can't close while files are being sent. `/me/upload` renders the same `UploadForm` as a page for old links; `/upload` redirects there. Phones: the dialog fills the screen.
+- [x] Tags are `TagInput` chips (Enter or a comma adds one, Backspace on an empty field removes the last, × removes any, pasting a list works, repeats and the 11th are refused with a note), cleaned to what the API takes (`cleanTag`: lower case, spaces as `-`, letters, digits, `-` and `_`, 32 characters). Used on upload and on the emote edit page. `TagInput.svelte` and `tag-input.ts` are byte for byte the ones in the browse PR (#91), so the two merge cleanly; /search's filters are left to that PR.
+- [x] More file types and 8 MB: JPEG is decoded now (the `image` crate's pure-Rust `jpeg` feature, zune-jpeg); APNG, GIF and animated WebP already were; AVIF is still refused (decoding needs dav1d). Emote files may be 8 MB (`cyex_tv_media::Limits::emote()`, used by the API's upload and by the worker's transcode, so the two agree); cosmetic pictures stay at 5 MB. Over the limit the API answers 413 `too_large`, "The file is over 8 MB, the most an upload can be.", while the file is read; the website names the size before uploading ("It’s 9,3 MB; at most 8 MB.").
+- [x] Flags at upload: visibility, zero-width and NSFW (as before) plus a Wide line worked out from the picture with the same 1.75:1 rule as `EmoteFlags.wide` in #91 (derived, not set by the uploader). Zero-width in chat: the extension already stacks a cyex.tv set member with `zero_width: true` over the emote before it (`src/chat/tokenize.ts`, `tests/providers.test.ts`), so no extension change.
+- [x] A required "I accept the emote guidelines" box, linking to the new `/guidelines` page in a new tab (our own text: your own work, no hate, sexual content only behind NSFW and never explicit, no personal information, no impersonation, nothing dangerous or flashing, readable at chat size, honest names and tags). Footer and the Help answer link it.
+- Tests: Postgres `apps/api/tests/upload_flow.rs` (`files_up_to_8_mb_and_jpeg_are_taken`: 6 MB and exactly 8 MB taken, 8 MB + 1 refused with the message, JPEG stored as image/jpeg; `the_upload_dialog_flags_arrive_together`; the oversized case at 8 MB), `crates/media` (`a_jpeg_is_a_still_image`, `emotes_may_be_up_to_8_mb`), unit tests in `apps/api/src/upload.rs`; vitest `lib/rules.test.ts` (types, 8 MB, `cleanTag`, `isWide`), `lib/components/tag-input.test.ts`, `lib/upload/upload.test.ts` (which clicks open the dialog, the guidelines box). Checked in the running app (dev mock) at 375 and 1440 in dark and light.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/upload-v3
+gh pr create --base main --head feat/upload-v3 --title "Upload v3: upload dialog, tag chips, JPEG and 8 MB, guidelines" --body-file <file>
+gh pr merge <n> --merge
+```
+
 ## Admin user dashboard and entitlement graph (branch `feat/admin-dashboard`, ADR 0010 amendment part 2)
 - Owner feedback F (2026/11/19, later additions): "an entitlement graph like 7tv has" and "a large admin dashboard" per user.
 - API (additive): migration `20261207000022_staff_notes.sql` (staff notes, an index for the graph's audit reads); `staffNotes`, `addStaffNote`, `deleteStaffNote` (users.notes, audited), `accountSessions` (users.sessions), `accountSubscriptions` (empty until subscriptions exist), `entitlementGraph`, `entitlementHolders` (entitlements.view or cosmetics.grant); `orders(accountId)` also for billing.view. ADR 0010 and ADR 0016 amended.

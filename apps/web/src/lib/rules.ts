@@ -3,8 +3,20 @@
 
 import { unreachableMessage } from './components/problem';
 
-export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
-export const UPLOAD_TYPES = ['image/png', 'image/apng', 'image/gif', 'image/webp'];
+/** An emote file's size cap, as the API's (8 MB; `cyex_tv_media::EMOTE_MAX_BYTES`). */
+export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+/** The types the API decodes. AVIF is left out until the API takes it. */
+export const UPLOAD_TYPES = ['image/png', 'image/apng', 'image/gif', 'image/webp', 'image/jpeg'];
+/** The same by extension, for a browser that names no type (some systems don't know .apng). */
+const UPLOAD_EXTENSIONS = /\.(png|apng|gif|webp|jpe?g)$/i;
+/** What the file picker offers. */
+export const UPLOAD_ACCEPT = [...UPLOAD_TYPES, '.png', '.apng', '.gif', '.webp', '.jpg', '.jpeg'].join(',');
+/** The formats in words, for hints and errors. */
+export const UPLOAD_FORMATS = 'PNG, APNG, GIF, WebP or JPEG';
+
+/** Tags per emote, and characters per tag, as the API allows. */
+export const TAG_MAX = 10;
+export const TAG_LENGTH = 32;
 
 /** An emote name's problem, or null when it's fine: 1 to 100 characters, no spaces. */
 export function nameProblem(raw: string): string | null {
@@ -33,16 +45,36 @@ export function parseTags(raw: string): string[] {
 
 /** The tags' problem, or null: at most 10, each 1 to 32 letters, digits, - or _. */
 export function tagsProblem(tags: string[]): string | null {
-  if (tags.length > 10) return 'At most 10 tags.';
-  const bad = tags.find((t) => [...t].length > 32 || !/^[\p{L}\p{N}_-]+$/u.test(t));
+  if (tags.length > TAG_MAX) return `At most ${TAG_MAX} tags.`;
+  const bad = tags.find((t) => [...t].length > TAG_LENGTH || !/^[\p{L}\p{N}_-]+$/u.test(t));
   return bad ? `“${bad}” isn’t a tag: 1 to 32 letters, digits, - or _.` : null;
 }
 
-/** A file's problem for upload, or null: PNG, APNG, GIF or WebP, at most 5 MB. */
-export function fileProblem(file: Pick<File, 'type' | 'size'>): string | null {
-  if (!UPLOAD_TYPES.includes(file.type)) return 'PNG, APNG, GIF or WebP only.';
-  if (file.size > MAX_UPLOAD_BYTES) return 'At most 5 MB.';
+/** A file's problem for upload, or null: PNG, APNG, GIF, WebP or JPEG, at most 8 MB. */
+export function fileProblem(file: Pick<File, 'type' | 'size'> & { name?: string }): string | null {
+  const known = UPLOAD_TYPES.includes(file.type) || (!file.type && !!file.name && UPLOAD_EXTENSIONS.test(file.name));
+  if (!known) return `${UPLOAD_FORMATS} only.`;
+  if (file.size > MAX_UPLOAD_BYTES) return `It’s ${mb(file.size)}; at most 8 MB.`;
   return null;
+}
+
+/** Megabytes the cyex way, one decimal, rounded up so 8,01 MB never reads as 8 MB: 9,3 MB. */
+function mb(size: number): string {
+  return `${(Math.ceil((size / (1024 * 1024)) * 10) / 10).toFixed(1).replace('.', ',')} MB`;
+}
+
+/**
+ * A typed tag as the API takes it: trimmed, lower case, no leading #, spaces as -, only letters,
+ * digits, - and _, at most 32 characters. '' when nothing is left (the tag field drops it).
+ */
+export function cleanTag(raw: string): string {
+  const t = raw.trim().replace(/^#+/, '').toLowerCase().replace(/\s+/g, '-').replace(/[^\p{L}\p{N}_-]/gu, '');
+  return [...t].slice(0, TAG_LENGTH).join('');
+}
+
+/** About twice as wide as tall or more (1.75:1), as the API's `wide` flag is worked out. */
+export function isWide(width: number, height: number): boolean {
+  return height > 0 && width >= height * 1.75;
 }
 
 /** At most this many files in one upload batch: the API takes 20 uploads an hour per account. */
@@ -62,9 +94,9 @@ export function uploadProblem(code: string, message: string): string {
     case 'blocked':
       return 'This image was taken down before (or is too close to one that was), so it can’t be uploaded again.';
     case 'too_large':
-      return 'Too big: at most 5 MB, 1000 × 1000 px and 1000 frames.';
+      return 'Too big: at most 8 MB, 1000 × 1000 px and 1000 frames.';
     case 'unsupported_format':
-      return 'Not a format cyex.tv takes: PNG, APNG, GIF or WebP.';
+      return `Not a format cyex.tv takes: ${UPLOAD_FORMATS}.`;
     case 'invalid_image':
       return 'The file doesn’t open as an image; it may be damaged. Save it again and retry.';
     case 'rate_limited':
