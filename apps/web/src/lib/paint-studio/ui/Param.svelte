@@ -72,7 +72,7 @@
   <div class="ps-field">
     <label for="{uid}-f">{def.l}</label>
     {#if value}<div class="ps-imgbox"><img src={String(value)} alt="Chosen for this layer" /></div>{/if}
-    <input id="{uid}-f" type="file" accept="image/png,image/jpeg,image/gif,image/webp" onchange={(e) => pickPicture(e.currentTarget.files?.[0])} />
+    <input id="{uid}-f" type="file" accept="image/png,image/jpeg,image/gif,image/webp" onchange={(e) => { const f = e.currentTarget.files?.[0]; e.currentTarget.value = ''; pickPicture(f); }} />
     {#if pictureError}<p class="ps-msg" role="alert">{pictureError}</p>{:else}<p class="ps-hint">Large pictures are scaled to 512 px. The picture stays in this paint.</p>{/if}
   </div>
 {:else if def.t === 'stops'}

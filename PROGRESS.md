@@ -18,6 +18,23 @@ git push -u origin test/api-coverage
 gh pr create --base main --head test/api-coverage --title "Tests: API coverage suite (website contract, auth sweep, both sockets, input rules)" --body-file <file>
 ```
 
+## Cosmetics for real: badge upload and studio paints (branch `fix/cosmetics-real`)
+
+Owner (round K): "uploading a badge doesnt even work and it doesn't even make a request to the api" and "paints are still broken". Reproduced in headless Edge on main (ab834a6) against the dev mock, through the UI.
+- [x] Badge upload. Causes found: "Make badge" pressed while the picture was still uploading or processing refused locally ("Add a picture and wait until it is ready") and sent no createBadge; picking the same file again after a failure sent nothing (the file input kept its value); the mock swapped every uploaded picture for the sample star, so the new badge never showed what was uploaded. Now: the dialog waits for a picture on its way and then saves; a fresh picture field per open; the input is cleared after each pick; drop and paste work; type, 5 MB and the API's size rules (square, 72 px; paints 64 px tall) are checked before sending and say why; the wait is 2 minutes and stops at once on signed out, forbidden or bad_origin with that message (`lib/cosmetics/upload.ts`).
+- [x] Studio uploads (from the API-contract audit): `POST /v1/cosmetics/images` answers in the REST shape, and bytes the API already has come back ready at once; the studio took that as the GraphQL picture and picked the wrong file. It now always reads the picture back through `cosmeticImage`. Same-file re-pick fixed in the studio's file inputs too.
+- [x] Paints. The website drew every kind, but in the mock the studio's render never reached it: the mock served the sample star for every paint picture. The mock now keeps the uploaded bytes and serves them at `/cosmetics/uploads/<id>/<n>x[_static].webp` (no transcoding; the same file for every size), answers uploads in the real REST shape, gives the same picture for the same bytes, and checks the API's sizes. One renderer: the studio's previews and CSS export now call the site's `paintStyle` (with the local picture as `imageUrl`), and the studio preview shows the site's readability floor on each ground. CSP: `worker-src 'self' blob:` (the studio's render worker was blocked in dev and fell back to the page).
+- [x] Profile Cosmetics: the grid / list switch is gone. Badge and paint admin pages read their permissions reactively.
+- [x] Extension (cyex-tv/extension PR 34): picture paints get the same flat under-layer, so a failed or see-through picture leaves the chat name readable.
+- [x] Tests: `lib/cosmetics/upload.test.ts` (checks, the wait, the studio's read-back against the REST answer), `lib/cosmetics/paint.test.ts` (every paint kind: drawn, and the studio draws exactly what the site draws; local previews; floor per ground). Browser: `apps/web/dev/e2e/cosmetics.mjs` (27 checks, real UI, both themes; on main 11 of them fail).
+
+### GitHub write log for this PR
+
+```
+git push -u origin fix/cosmetics-real
+gh pr create --base main --head fix/cosmetics-real --title "Cosmetics: badge upload and studio paints work end to end" --body-file <file>
+```
+
 ## Emote transfers: the owner must accept (branch `fix/transfer-accept`, ADR 0014 amendment)
 
 Owner decision after #100: an editor's transfer waits for the owner.

@@ -5,10 +5,8 @@
   import { page } from '$app/state';
   import { gql } from '$lib/api';
   import Avatar from '$lib/components/Avatar.svelte';
-  import EmoteTable from '$lib/components/browse/EmoteTable.svelte';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import Icon from '$lib/components/Icon.svelte';
-  import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
   import CopyLink from '$lib/components/CopyLink.svelte';
   import { clean, count } from '$lib/format';
@@ -60,29 +58,8 @@
   let query = $state('');
   const needle = $derived(query.trim());
   const shown = $derived(filterMembers(members, query));
-  // Tiles show the name in the set (and the emote's own name stays in its page); rows say when it
-  // was added to the set.
+  // Tiles show the name in the set (and the emote's own name stays in its page).
   const cards = $derived(shown.map((m) => ({ ...m.emote, shownName: m.name !== m.emote.name ? m.name : undefined })));
-  const rows = $derived(shown.map((m) => ({ ...m.emote, name: m.name, createdAt: m.addedAt })));
-
-  type View = 'grid' | 'list';
-  let view = $state<View>('grid');
-  $effect(() => {
-    try {
-      const v = localStorage.getItem('cyex.set.view');
-      if (v === 'grid' || v === 'list') view = v;
-    } catch {
-      // Storage blocked: the grid it is.
-    }
-  });
-  function pick(v: View) {
-    view = v;
-    try {
-      localStorage.setItem('cyex.set.view', v);
-    } catch {
-      // Not remembered, still shown.
-    }
-  }
 
   let dlg = $state<CloneDialog>();
   const back = $derived(`/signin?back=${encodeURIComponent(page.url.pathname)}`);
@@ -153,7 +130,6 @@
             {needle ? `${count(shown.length)} of ${count(members.length)}` : count(members.length)}
             {members.length === 1 ? 'emote' : 'emotes'}
           </p>
-          <Segmented label="View" size="s" options={[{ value: 'grid', label: 'Grid', icon: 'grid' }, { value: 'list', label: 'List', icon: 'list' }]} value={view} onchange={pick} />
         </div>
         {/if}
 
@@ -171,8 +147,6 @@
               <button class="btn btn-s" type="button" onclick={() => (query = '')}>Clear search</button>
             {/snippet}
           </State>
-        {:else if view === 'list'}
-          <EmoteTable items={rows} label="Emotes in {name}" eager={12} />
         {:else}
           <EmoteGrid items={cards} eager={12} label="Emotes in {name}" />
         {/if}
@@ -219,12 +193,11 @@
   @media (forced-colors: active) { .fill { background: Highlight; } }
   .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-bottom: 20px; }
-  .tools :global([role='radiogroup']) { margin-left: auto; }
   .total { margin: 0; font-size: var(--t-small); color: var(--muted); font-variant-numeric: tabular-nums; }
   .find { position: relative; display: block; flex: 0 1 280px; min-width: 0; }
   .find :global(svg) { position: absolute; left: 12px; top: 50%; translate: 0 -50%; color: var(--muted); pointer-events: none; }
   .find .input { width: 100%; height: 40px; padding-left: 36px; }
-  @media (max-width: 520px) { .find { flex-basis: 100%; } .tools :global([role='radiogroup']) { margin-left: 0; } }
+  @media (max-width: 520px) { .find { flex-basis: 100%; } }
   .missing { display: grid; gap: 16px; min-height: 50svh; align-content: start; padding-bottom: 40px; }
   .back { justify-self: start; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; color: var(--muted); font-size: var(--t-small); }
   @media (hover: hover) and (pointer: fine) { .back:hover { color: var(--text); } }

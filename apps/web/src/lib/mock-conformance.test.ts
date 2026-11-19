@@ -567,7 +567,8 @@ describe('mock-api conformance with the real schema', () => {
 
   it('REST answers match openapi/openapi.json', async () => {
     const out: string[] = [];
-    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+    // 72 × 72: the smallest badge picture the API takes (a smaller one is refused with bad_dimensions).
+    const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAEgAAABICAYAAABV7bNHAAAAcklEQVR42u3QIQEAAAgDMEKQjv49TgI8YmIFVj0Jt5IgSJAgQYIECRKEIEGCBAkSJEgQggQJEiRIkCBBCBIkSJAgQYIECUKQIEGCBAkSJAhBggQJEiRIkCAECRIkSJAgQYIEIUiQIEGCBAkShCBBggR9scJjDeAk4TZIAAAAAElFTkSuQmCC', 'base64');
     const form = (fields: Record<string, string>, bytes = png) => {
       const f = new FormData();
       for (const [k, v] of Object.entries(fields)) f.set(k, v);
