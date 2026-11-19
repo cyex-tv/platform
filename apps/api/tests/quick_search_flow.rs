@@ -379,7 +379,7 @@ async fn editable_channels_are_ranked_by_role_then_login() {
     {
         let mut c = w.db.conn().await;
         // A second channel of mine; Kick sorts before Twitch.
-        channels::upsert(&mut c, me, Platform::Kick, "k1", "zed")
+        channels::upsert(&mut c, me, Platform::Kick, "9001", "zed")
             .await
             .unwrap();
         let flags = ["emotes".to_owned()];
