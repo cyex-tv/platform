@@ -114,6 +114,34 @@ fn net_adds(days: i32) -> String {
     )
 }
 
+/// The filters every emote search applies. `$1` text, `$2` animated, `$3` owner, `$4` nsfw,
+/// `$5` the lowercase LIKE pattern, `$8` zero-width, `$9` wide, `$10` NSFW only, `$11` tags,
+/// `$12` exact. Each costly check comes after a cheap test that skips it when it isn't asked
+/// for (Postgres stops an `OR` at the first true), and the name match finds its candidates
+/// through the name, word and tag indexes instead of testing every emote.
+const SEARCH_WHERE: &str = "e.state = 'approved' AND e.deleted_at IS NULL AND NOT e.private
+           AND NOT e.unlisted
+           AND NOT EXISTS (SELECT 1 FROM accounts oa
+                           WHERE oa.id = e.owner_account_id AND oa.deleted_at IS NOT NULL)
+           AND ($2::boolean IS NULL OR e.animated = $2)
+           AND ($3::uuid IS NULL OR e.owner_account_id = $3)
+           AND ($4 OR $10 OR NOT e.nsfw)
+           AND (NOT $10 OR e.nsfw)
+           AND (NOT $8 OR e.zero_width)
+           AND (NOT $9 OR EXISTS (SELECT 1 FROM files f
+                                  WHERE f.id = e.file_id AND f.width * 4 >= f.height * 7))
+           AND (cardinality($11::text[]) = 0
+                OR (SELECT count(*) FROM emote_tags t
+                    WHERE t.emote_id = e.id AND t.tag = ANY($11::text[])) = cardinality($11::text[]))
+           AND ($1 = ''
+                OR ($12 AND lower(e.name) = lower($1))
+                OR (NOT $12
+                    AND e.id IN (SELECT n.id FROM emotes n WHERE n.name ILIKE '%' || $5 || '%'
+                                 UNION
+                                 SELECT n.id FROM emotes n WHERE n.name % $1
+                                 UNION
+                                 SELECT t.emote_id FROM emote_tags t WHERE t.tag LIKE $5 || '%')))";
+
 pub async fn search(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<Hits> {
     let Some(tags) = clean_tags(q.tags) else {
         return Ok(Hits {
@@ -125,9 +153,11 @@ pub async fn search(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<Hits> {
     let wants = |f: EmoteFlag| q.flags.contains(&f);
     let text: String = q.text.trim().chars().take(100).collect();
     let pattern = like_escape(&text.to_lowercase());
-    // The order and the join are fixed strings, never user text.
-    let mut join = String::new();
+    // The order and the join are fixed strings, never user text. Without text, the relevance
+    // order is popularity then ID (the text terms are the same for every row), which an index
+    // reads in order.
     let order = match q.sort {
+        EmoteSort::Relevance if text.is_empty() => "e.popularity DESC, e.id",
         EmoteSort::Relevance => {
             "($1 <> '' AND lower(e.name) = lower($1)) DESC,
                   ($1 <> '' AND lower(e.name) LIKE $5 || '%') DESC,
@@ -137,58 +167,67 @@ pub async fn search(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<Hits> {
         }
         EmoteSort::Top => "e.popularity DESC, lower(e.name), e.id",
         EmoteSort::New => "e.created_at DESC, e.id DESC",
-        EmoteSort::Trending => {
-            join = format!(
+        EmoteSort::Trending => "tr.net DESC, e.popularity DESC, e.id",
+    };
+    // Trending ranks every emote with adds anyway, so it counts in the same pass. The other
+    // orders read just the page (in index order where there is no text) and count apart.
+    let trending = matches!(q.sort, EmoteSort::Trending);
+    let (join, total_col) = if trending {
+        (
+            format!(
                 "JOIN ({}) tr ON tr.emote_id = e.id",
                 net_adds(q.window.days())
-            );
-            "tr.net DESC, e.popularity DESC, e.id"
-        }
+            ),
+            "count(*) OVER ()",
+        )
+    } else {
+        (String::new(), "0::bigint")
     };
-    let rows: Vec<(Uuid, i64)> = sqlx::query_as(&format!(
-        "SELECT e.id, count(*) OVER () AS total
+    macro_rules! bind_all {
+        ($query:expr) => {
+            $query
+                .bind(&text)
+                .bind(q.animated)
+                .bind(q.owner)
+                .bind(q.nsfw)
+                .bind(&pattern)
+                .bind(q.limit)
+                .bind(q.offset)
+                .bind(wants(EmoteFlag::ZeroWidth))
+                .bind(wants(EmoteFlag::Wide))
+                .bind(wants(EmoteFlag::Nsfw))
+                .bind(&tags)
+                .bind(q.exact)
+        };
+    }
+    let rows: Vec<(Uuid, i64)> = bind_all!(sqlx::query_as(&format!(
+        "SELECT e.id, {total_col} AS total
          FROM emotes e
          {join}
-         WHERE e.state = 'approved' AND e.deleted_at IS NULL AND NOT e.private
-           AND NOT e.unlisted
-           AND NOT EXISTS (SELECT 1 FROM accounts oa
-                           WHERE oa.id = e.owner_account_id AND oa.deleted_at IS NOT NULL)
-           AND ($2::boolean IS NULL OR e.animated = $2)
-           AND ($3::uuid IS NULL OR e.owner_account_id = $3)
-           AND ($4 OR $10 OR NOT e.nsfw)
-           AND (NOT $10 OR e.nsfw)
-           AND (NOT $8 OR e.zero_width)
-           AND (NOT $9 OR EXISTS (SELECT 1 FROM files f
-                                  WHERE f.id = e.file_id AND f.width * 4 >= f.height * 7))
-           AND (SELECT count(*) FROM emote_tags t
-                WHERE t.emote_id = e.id AND t.tag = ANY($11::text[])) = cardinality($11::text[])
-           AND ($1 = ''
-                OR ($12 AND lower(e.name) = lower($1))
-                OR (NOT $12
-                    AND (lower(e.name) LIKE '%' || $5 || '%'
-                         OR e.name % $1
-                         OR EXISTS (SELECT 1 FROM emote_tags t
-                                    WHERE t.emote_id = e.id AND t.tag LIKE $5 || '%'))))
+         WHERE {SEARCH_WHERE}
          ORDER BY {order}
          LIMIT $6 OFFSET $7"
-    ))
-    .bind(&text)
-    .bind(q.animated)
-    .bind(q.owner)
-    .bind(q.nsfw)
-    .bind(&pattern)
-    .bind(q.limit)
-    .bind(q.offset)
-    .bind(wants(EmoteFlag::ZeroWidth))
-    .bind(wants(EmoteFlag::Wide))
-    .bind(wants(EmoteFlag::Nsfw))
-    .bind(&tags)
-    .bind(q.exact)
-    .fetch_all(conn)
+    )))
+    .fetch_all(&mut *conn)
     .await?;
-    let total = rows.first().map_or(0, |(_, t)| *t);
+    let ids: Vec<Uuid> = rows.iter().map(|(id, _)| *id).collect();
+    // A page past the last one has no rows and, as before, a total of 0. A short page is the
+    // last one, so its total needs no count.
+    let total = if trending || ids.is_empty() {
+        rows.first().map_or(0, |(_, t)| *t)
+    } else if (ids.len() as i64) < q.limit {
+        q.offset + ids.len() as i64
+    } else {
+        bind_all!(sqlx::query_scalar(&format!(
+            "SELECT count(*) FROM emotes e
+             WHERE {SEARCH_WHERE}
+               AND $6::bigint IS NOT NULL AND $7::bigint IS NOT NULL"
+        )))
+        .fetch_one(&mut *conn)
+        .await?
+    };
     Ok(Hits {
-        ids: rows.into_iter().map(|(id, _)| id).collect(),
+        ids,
         total,
         capped: false,
     })
@@ -219,7 +258,7 @@ pub async fn quick(conn: &mut PgConnection, text: &str, limit: i64) -> DbResult<
                     similarity(e.name, $1) AS sim
              FROM emotes e
              WHERE e.state = 'approved' AND e.deleted_at IS NULL AND NOT e.private
-               AND NOT e.nsfw
+               AND NOT e.unlisted AND NOT e.nsfw
                AND (e.name ILIKE '%' || $3 || '%'
                     OR (' ' || e.name_words) LIKE '% ' || $3 || '%'
                     OR e.name_initials LIKE $3 || '%'
