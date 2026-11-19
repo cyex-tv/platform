@@ -12,6 +12,8 @@ export type Line = {
   text: string;
   /** A page it makes sense to open, or null. */
   href: string | null;
+  /** A transfer request the reader can accept or decline right there (ADR 0014). */
+  request?: string | null;
 };
 
 /** The payload as an object, or an empty one when it isn't JSON or isn't an object. */
@@ -85,6 +87,38 @@ export function describe(kind: string, payload: string | null | undefined): Line
       return asEditor
         ? { icon: 'users', text: `You’re no longer an editor of ${owner}’s account.`, href: null }
         : { icon: 'users', text: `${editor} is no longer an editor of your account.`, href: '/me/editors' };
+    case 'emote.transfer_requested': {
+      const what = name ? iso(name) : 'your emote';
+      return {
+        icon: 'arrow-right',
+        text: `${who('actor_name')} asks to give ${what} to ${id(d, 'to_id') && id(d, 'to_id') === id(d, 'actor_id') ? 'themselves' : who('to_name')}. It moves only if you accept.`,
+        href: emote ? `/me/emotes/${emote}#transfer` : null,
+        request: id(d, 'request_id'),
+      };
+    }
+    case 'emote.transferred': {
+      const what = name ? iso(name) : 'An emote';
+      const role = str(d, 'role', 10);
+      const text =
+        role === 'to'
+          ? `${what} is yours now, from ${who('from_name')}.`
+          : role === 'editor'
+            ? `${who('from_name')} accepted: ${what} went to ${who('to_name')}.`
+            : `${what} went to ${who('to_name')}.`;
+      return { icon: 'arrow-right', text, href: emote && role !== 'from' ? `/emotes/${emote}` : null };
+    }
+    case 'emote.transfer_declined':
+      return {
+        icon: 'x',
+        text: `${who('from_name')} declined giving ${name ? iso(name) : 'their emote'} to ${who('to_name')}.`,
+        href: emote ? `/emotes/${emote}` : null,
+      };
+    case 'emote.transfer_cancelled':
+      return {
+        icon: 'x',
+        text: `${who('actor_name')} withdrew the request to give ${name ? iso(name) : 'your emote'} away.`,
+        href: emote ? `/me/emotes/${emote}` : null,
+      };
     case 'cosmetic.granted': {
       const n = noun(str(d, 'kind', 20));
       return { icon: 'brush', text: withReason(`You got ${name ? `the ${iso(name)} ${n}` : `a new ${n}`}.`, reason), href: '/me/cosmetics' };

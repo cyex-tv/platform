@@ -99,6 +99,11 @@ type Documents = {
     "\n  query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: \"\", owner: $owner, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.SearchByOwnerDocument,
     "\n  query AdminAccount($accountId: String!) {\n    adminAccount(accountId: $accountId) {\n      id\n      displayName\n      avatar\n      createdAt\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.AdminAccountDocument,
     "\n  mutation TransferEmote($id: String!, $toAccountId: String!) {\n    transferEmote(id: $id, toAccountId: $toAccountId) {\n      ...EmoteFields\n    }\n  }\n": typeof types.TransferEmoteDocument,
+    "\n  fragment TransferRequestFields on EmoteTransferRequest {\n    id\n    emoteId\n    emoteName\n    state\n    createdAt\n    expiresAt\n    from {\n      id\n      displayName\n    }\n    to {\n      id\n      displayName\n    }\n    requestedBy {\n      id\n      displayName\n    }\n  }\n": typeof types.TransferRequestFieldsFragmentDoc,
+    "\n  query EmoteTransferRequests($emoteId: String) {\n    emoteTransferRequests(emoteId: $emoteId) {\n      ...TransferRequestFields\n    }\n  }\n": typeof types.EmoteTransferRequestsDocument,
+    "\n  mutation AcceptEmoteTransfer($id: String!) {\n    acceptEmoteTransfer(id: $id) {\n      ...EmoteFields\n    }\n  }\n": typeof types.AcceptEmoteTransferDocument,
+    "\n  mutation DeclineEmoteTransfer($id: String!) {\n    declineEmoteTransfer(id: $id) {\n      ...TransferRequestFields\n    }\n  }\n": typeof types.DeclineEmoteTransferDocument,
+    "\n  mutation CancelEmoteTransfer($id: String!) {\n    cancelEmoteTransfer(id: $id) {\n      ...TransferRequestFields\n    }\n  }\n": typeof types.CancelEmoteTransferDocument,
     "\n  query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {\n    accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.AccountEmotesDocument,
     "\n  query AccountReports($accountId: String!) {\n    accountReports(accountId: $accountId) {\n      about {\n        ...ReportFields\n      }\n      by {\n        ...ReportFields\n      }\n    }\n  }\n": typeof types.AccountReportsDocument,
     "\n  query PublicAccount($id: String!) {\n    account(id: $id) {\n      id\n      displayName\n      avatar\n    }\n  }\n": typeof types.PublicAccountDocument,
@@ -242,6 +247,11 @@ const documents: Documents = {
     "\n  query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: \"\", owner: $owner, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.SearchByOwnerDocument,
     "\n  query AdminAccount($accountId: String!) {\n    adminAccount(accountId: $accountId) {\n      id\n      displayName\n      avatar\n      createdAt\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n": types.AdminAccountDocument,
     "\n  mutation TransferEmote($id: String!, $toAccountId: String!) {\n    transferEmote(id: $id, toAccountId: $toAccountId) {\n      ...EmoteFields\n    }\n  }\n": types.TransferEmoteDocument,
+    "\n  fragment TransferRequestFields on EmoteTransferRequest {\n    id\n    emoteId\n    emoteName\n    state\n    createdAt\n    expiresAt\n    from {\n      id\n      displayName\n    }\n    to {\n      id\n      displayName\n    }\n    requestedBy {\n      id\n      displayName\n    }\n  }\n": types.TransferRequestFieldsFragmentDoc,
+    "\n  query EmoteTransferRequests($emoteId: String) {\n    emoteTransferRequests(emoteId: $emoteId) {\n      ...TransferRequestFields\n    }\n  }\n": types.EmoteTransferRequestsDocument,
+    "\n  mutation AcceptEmoteTransfer($id: String!) {\n    acceptEmoteTransfer(id: $id) {\n      ...EmoteFields\n    }\n  }\n": types.AcceptEmoteTransferDocument,
+    "\n  mutation DeclineEmoteTransfer($id: String!) {\n    declineEmoteTransfer(id: $id) {\n      ...TransferRequestFields\n    }\n  }\n": types.DeclineEmoteTransferDocument,
+    "\n  mutation CancelEmoteTransfer($id: String!) {\n    cancelEmoteTransfer(id: $id) {\n      ...TransferRequestFields\n    }\n  }\n": types.CancelEmoteTransferDocument,
     "\n  query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {\n    accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.AccountEmotesDocument,
     "\n  query AccountReports($accountId: String!) {\n    accountReports(accountId: $accountId) {\n      about {\n        ...ReportFields\n      }\n      by {\n        ...ReportFields\n      }\n    }\n  }\n": types.AccountReportsDocument,
     "\n  query PublicAccount($id: String!) {\n    account(id: $id) {\n      id\n      displayName\n      avatar\n    }\n  }\n": types.PublicAccountDocument,
@@ -637,6 +647,26 @@ export function graphql(source: "\n  query AdminAccount($accountId: String!) {\n
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation TransferEmote($id: String!, $toAccountId: String!) {\n    transferEmote(id: $id, toAccountId: $toAccountId) {\n      ...EmoteFields\n    }\n  }\n"): typeof import('./graphql').TransferEmoteDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment TransferRequestFields on EmoteTransferRequest {\n    id\n    emoteId\n    emoteName\n    state\n    createdAt\n    expiresAt\n    from {\n      id\n      displayName\n    }\n    to {\n      id\n      displayName\n    }\n    requestedBy {\n      id\n      displayName\n    }\n  }\n"): typeof import('./graphql').TransferRequestFieldsFragmentDoc;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query EmoteTransferRequests($emoteId: String) {\n    emoteTransferRequests(emoteId: $emoteId) {\n      ...TransferRequestFields\n    }\n  }\n"): typeof import('./graphql').EmoteTransferRequestsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation AcceptEmoteTransfer($id: String!) {\n    acceptEmoteTransfer(id: $id) {\n      ...EmoteFields\n    }\n  }\n"): typeof import('./graphql').AcceptEmoteTransferDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeclineEmoteTransfer($id: String!) {\n    declineEmoteTransfer(id: $id) {\n      ...TransferRequestFields\n    }\n  }\n"): typeof import('./graphql').DeclineEmoteTransferDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CancelEmoteTransfer($id: String!) {\n    cancelEmoteTransfer(id: $id) {\n      ...TransferRequestFields\n    }\n  }\n"): typeof import('./graphql').CancelEmoteTransferDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

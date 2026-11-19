@@ -700,11 +700,26 @@ const ACCOUNT_EDITORS = [
   { account: OTHERS[1], permissions: ['EMOTES'], allSets: false, setIds: ['01JD8XSET00000000000000MAIN'], grantedBy: ME_SUMMARY, grantedAt: '2026-11-12T10:00:00.000Z', updatedAt: '2026-11-12T10:00:00.000Z' },
   { account: OTHERS[2], permissions: ['EMOTES', 'SETS', 'EDITORS', 'CHANNELS'], allSets: true, setIds: [], grantedBy: ME_SUMMARY, grantedAt: '2026-11-14T18:30:00.000Z', updatedAt: '2026-11-14T18:30:00.000Z' },
 ];
+// Emote transfer requests (ADR 0014): an editor's transfer waits for the owner. One is seeded: an
+// editor of the mock account asks to give one of its emotes to themselves.
+const TRANSFERS = [];
+const transferOut = (t) => ({ ...t, emoteName: anyEmote(t.emoteId)?.name ?? '' });
+const openTransfers = () => TRANSFERS.filter((t) => t.state === 'PENDING' && Date.parse(t.expiresAt) > Date.now());
 const EDITOR_OF = [
   // The emote permissions (ADR 0014): upload as, manage and transfer OTHERS[0]'s emotes.
   { account: OTHERS[0], permissions: ['EMOTES', 'SETS', 'CHANNELS', 'EMOTE_UPLOAD', 'EMOTE_MANAGE', 'EMOTE_TRANSFER'], allSets: true, setIds: [], grantedAt: '2026-11-13T09:00:00.000Z' },
   { account: OTHERS[4], permissions: ['EMOTES', 'PROFILE'], allSets: true, setIds: [], grantedAt: '2026-11-15T20:00:00.000Z' },
 ];
+{
+  const e = MINE[5];
+  const by = ACCOUNT_EDITORS[1].account;
+  const t = { id: '01JD8XTRANSFER000000000001', emoteId: e.id, state: 'PENDING', createdAt: '2026-11-19T09:00:00.000Z',
+    expiresAt: new Date(Date.now() + 6 * 86_400_000).toISOString(), resolvedAt: null, from: ME_SUMMARY, to: by, requestedBy: by };
+  TRANSFERS.push(t);
+  NOTES.unshift({ id: '01JD8XNOTE0000000000000009', kind: 'emote.transfer_requested', read: false, createdAt: '2026-11-19T09:00:00.000Z',
+    payload: JSON.stringify({ role: 'owner', emote_id: e.id, name: e.name, request_id: t.id, from_id: ME_ID, from_name: ME_SUMMARY.displayName,
+      to_id: by.id, to_name: by.displayName, actor_id: by.id, actor_name: by.displayName }) });
+}
 // MOCK_EDITORS=50: the account is at the editor limit.
 if (process.env.MOCK_EDITORS === '50') {
   for (let i = ACCOUNT_EDITORS.length; i < MAX_EDITORS; i++) {
@@ -1818,6 +1833,14 @@ function signedIn(body, v, ADMIN) {
       if (v.toAccountId !== ME_ID && !emoteGrant(v.toAccountId, 'EMOTE_UPLOAD'))
         return err('You can give it to yourself, or to an account you edit with the upload permission on every set.', 'forbidden');
       const to = v.toAccountId === ME_ID ? ME_SUMMARY : EDITOR_OF.find((g) => g.account.id === v.toAccountId).account;
+      if (!mine) {
+        // An editor's transfer waits for the owner (one open request per emote).
+        if (openTransfers().some((t) => t.emoteId === e.id)) return err('A transfer of this emote is already waiting for its owner. Cancel that one first.', 'transfer_pending');
+        TRANSFERS.push({ id: `01JD8XTRANSFER${String(TRANSFERS.length + 1).padStart(12, '0')}`, emoteId: e.id, state: 'PENDING', createdAt: new Date().toISOString(),
+          expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString(), resolvedAt: null, from: e.owner, to, requestedBy: ME_SUMMARY });
+        return { data: { transferEmote: e } };
+      }
+      for (const t of openTransfers()) if (t.emoteId === e.id) Object.assign(t, { state: 'CANCELLED', resolvedAt: new Date().toISOString() });
       if (mine) {
         MINE.splice(MINE.indexOf(e), 1);
         ALL.unshift(e);
@@ -1828,6 +1851,31 @@ function signedIn(body, v, ADMIN) {
       }
       e.owner = to;
       return { data: { transferEmote: e } };
+    }
+    case 'EmoteTransferRequests':
+      return { data: { emoteTransferRequests: openTransfers()
+        .filter((t) => (t.from.id === ME_ID || t.requestedBy.id === ME_ID) && (!v.emoteId || t.emoteId === v.emoteId)).map(transferOut) } };
+    case 'AcceptEmoteTransfer':
+    case 'DeclineEmoteTransfer':
+    case 'CancelEmoteTransfer': {
+      const t = TRANSFERS.find((x) => x.id === v.id);
+      if (!t) return err('Not found.', 'not_found');
+      if (!openTransfers().includes(t)) return err('That transfer request isn’t open any more.', 'not_pending');
+      const cancel = op === 'CancelEmoteTransfer';
+      if (cancel ? t.requestedBy.id !== ME_ID : t.from.id !== ME_ID)
+        return err(cancel ? 'Only the editor who asked can cancel the request.' : 'Only the emote’s owner can answer its transfer.', 'forbidden');
+      const at = new Date().toISOString();
+      if (op === 'AcceptEmoteTransfer') {
+        const e = anyEmote(t.emoteId);
+        const i = MINE.indexOf(e);
+        if (i >= 0) MINE.splice(i, 1);
+        ALL.unshift(e);
+        e.owner = t.to;
+        Object.assign(t, { state: 'ACCEPTED', resolvedAt: at });
+        return { data: { acceptEmoteTransfer: e } };
+      }
+      Object.assign(t, { state: cancel ? 'CANCELLED' : 'DECLINED', resolvedAt: at });
+      return { data: { [cancel ? 'cancelEmoteTransfer' : 'declineEmoteTransfer']: transferOut(t) } };
     }
     case 'AccountEmotes': {
       if (!ADMIN && v.accountId !== ME_ID && !emoteGrant(v.accountId, 'EMOTE_MANAGE'))

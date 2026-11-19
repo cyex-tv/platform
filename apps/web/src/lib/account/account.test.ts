@@ -51,6 +51,21 @@ suite('describe', () => {
     expect(strip(describe('cosmetic.revoked', j({ kind: 'badge', name: 'Early' })).text)).toBe('The Early badge was taken away.');
     expect(describe('cosmetic.granted', j({ kind: 'paint' })).href).toBe('/me/cosmetics');
   });
+  it('transfer requests can be answered, and every step reads as a sentence', () => {
+    const p = { emote_id: 'E1', name: 'Pog', request_id: 'R1', from_name: 'Ana', to_name: 'Bo', actor_name: 'Bo' };
+    const asked = describe('emote.transfer_requested', j({ ...p, role: 'owner' }));
+    expect(strip(asked.text)).toBe('Bo asks to give Pog to Bo. It moves only if you accept.');
+    expect(asked.href).toBe('/me/emotes/E1#transfer');
+    expect(asked.request).toBe('R1');
+    expect(strip(describe('emote.transfer_requested', j({ ...p, to_id: 'B1', actor_id: 'B1' })).text)).toBe('Bo asks to give Pog to themselves. It moves only if you accept.');
+    expect(describe('emote.transfer_requested', j({ ...p, request_id: '../x' })).request).toBeNull();
+    expect(strip(describe('emote.transferred', j({ ...p, role: 'to' })).text)).toBe('Pog is yours now, from Ana.');
+    expect(strip(describe('emote.transferred', j({ ...p, role: 'editor' })).text)).toBe('Ana accepted: Pog went to Bo.');
+    expect(describe('emote.transferred', j({ ...p, role: 'from' })).href).toBeNull();
+    expect(strip(describe('emote.transfer_declined', j(p)).text)).toBe('Ana declined giving Pog to Bo.');
+    expect(strip(describe('emote.transfer_cancelled', j(p)).text)).toBe('Bo withdrew the request to give Pog away.');
+    expect(describe('emote.approved', j(p)).request).toBeUndefined();
+  });
   it('missing fields still give a sentence', () => {
     expect(describe('emote.approved', '{}').text).toBe('Your emote was approved.');
     expect(describe('emote.approved', '{}').href).toBeNull();

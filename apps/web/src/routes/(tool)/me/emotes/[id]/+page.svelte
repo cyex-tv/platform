@@ -6,7 +6,19 @@
   import { ready } from '$lib/emote';
   import { clean, date, iso } from '$lib/format';
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
-  import { ADD_SET_EMOTE, DELETE_EMOTE, EMOTE, MY_SETS, TRANSFER_EMOTE, UPDATE_EMOTE } from '$lib/queries';
+  import {
+    ACCEPT_EMOTE_TRANSFER,
+    ADD_SET_EMOTE,
+    CANCEL_EMOTE_TRANSFER,
+    DECLINE_EMOTE_TRANSFER,
+    DELETE_EMOTE,
+    EMOTE,
+    EMOTE_TRANSFER_REQUESTS,
+    MY_SETS,
+    TRANSFER_EMOTE,
+    UPDATE_EMOTE,
+  } from '$lib/queries';
+  import type { TransferRequestFieldsFragment } from '$lib/gql/graphql';
   import { editorOf, forgetProfile, type Grant } from '$lib/profile/data.svelte';
   import { emoteCan, transferTargets } from '$lib/tool/editors';
   import { sectionHref } from '$lib/profile/rows';
@@ -42,6 +54,20 @@
   let grants = $state<readonly Grant[] | null>(null);
   let giveTo = $state('');
   let giving = $state(false);
+  // Transfer requests on this emote (ADR 0014): an editor's waits for the owner to accept.
+  let requests = $state<TransferRequestFieldsFragment[]>([]);
+  let answering = $state<string | null>(null);
+  async function loadRequests(id: string) {
+    try {
+      requests = (await gql(EMOTE_TRANSFER_REQUESTS, { emoteId: id })).emoteTransferRequests;
+    } catch {
+      requests = [];
+    }
+  }
+  $effect(() => {
+    const id = page.params.id ?? '';
+    if (session.me && id) loadRequests(id);
+  });
 
   const nameError = $derived(nameProblem(name));
   const tagError = $derived(tagsProblem(tags));
@@ -161,6 +187,12 @@
     giving = true;
     try {
       const r = await gql(TRANSFER_EMOTE, { id: emote.id, toAccountId: giveTo });
+      if (!mine) {
+        // An editor's transfer waits for the owner.
+        notify(`Asked ${iso(clean(emote.owner?.displayName ?? 'the owner'))} to accept. ${iso(emote.name)} moves once they do.`);
+        await loadRequests(emote.id);
+        return;
+      }
       forgetProfile('library');
       notify(`${iso(emote.name)} now belongs to ${to ? (to.self ? 'you' : iso(clean(to.displayName))) : 'that account'}.`);
       if (emoteCan(grants, r.transferEmote.owner?.id, session.me?.id, 'EMOTE_MANAGE')) fill(r.transferEmote);
@@ -169,6 +201,31 @@
       fail(err);
     } finally {
       giving = false;
+    }
+  }
+
+  async function answer(r: TransferRequestFieldsFragment, how: 'accept' | 'decline' | 'cancel') {
+    answering = r.id;
+    try {
+      if (how === 'accept') {
+        const done = await gql(ACCEPT_EMOTE_TRANSFER, { id: r.id });
+        forgetProfile('library');
+        notify(`${iso(r.emoteName)} now belongs to ${iso(clean(r.to.displayName))}.`);
+        if (emoteCan(grants, done.acceptEmoteTransfer.owner?.id, session.me?.id, 'EMOTE_MANAGE')) fill(done.acceptEmoteTransfer);
+        else return void (await goto('/me'));
+      } else if (how === 'decline') {
+        await gql(DECLINE_EMOTE_TRANSFER, { id: r.id });
+        notify('Declined. It stays yours.');
+      } else {
+        await gql(CANCEL_EMOTE_TRANSFER, { id: r.id });
+        notify('Request withdrawn.');
+      }
+      await loadRequests(r.emoteId);
+    } catch (err) {
+      fail(err);
+      await loadRequests(r.emoteId);
+    } finally {
+      answering = null;
     }
   }
 
@@ -270,11 +327,35 @@
         </section>
       {/if}
 
-      {#if canGive && (receivers.length || !mine)}
-        <section class="ui-card">
+      {#if (canGive && (receivers.length || !mine)) || requests.length}
+        <section class="ui-card" id="transfer">
           <h2>Give to another account</h2>
-          {#if receivers.length}
-            <p class="ui-hint">It moves with its name, tags and sets. Only you, or accounts where you can upload, can take it.</p>
+          {#if requests.length}
+            <ul class="requests">
+              {#each requests as r (r.id)}
+                {@const owner = r.from.id === session.me?.id}
+                <li>
+                  <p>
+                    {#if r.requestedBy.id === session.me?.id}You asked{:else}<bdi>{clean(r.requestedBy.displayName)}</bdi> asks{/if}
+                    to give it to {#if r.to.id === session.me?.id}you{:else}<bdi>{clean(r.to.displayName)}</bdi>{/if}.
+                    <span class="ui-hint">{owner ? 'It moves only if you accept' : `Waiting for ${clean(r.from.displayName)} to accept`}; open until <span class="ui-num">{date(r.expiresAt)}</span>.</span>
+                  </p>
+                  <div class="ui-actions">
+                    {#if owner}
+                      <Confirm small label="Accept" confirm="Click again to give it away" busy={answering === r.id} onconfirm={() => answer(r, 'accept')} />
+                      <button class="ui-btn secondary small" type="button" disabled={answering === r.id} onclick={() => answer(r, 'decline')}>Decline</button>
+                    {:else if r.requestedBy.id === session.me?.id}
+                      <button class="ui-btn secondary small" type="button" disabled={answering === r.id} onclick={() => answer(r, 'cancel')}>Cancel request</button>
+                    {/if}
+                  </div>
+                </li>
+              {/each}
+            </ul>
+          {/if}
+          {#if !canGive || (!mine && requests.length)}
+            <!-- One open request per emote: the editor waits, or cancels it first. -->
+          {:else if receivers.length}
+            <p class="ui-hint">It moves with its name, tags and sets. Only you, or accounts where you can upload, can take it.{mine ? '' : ` ${clean(emote.owner?.displayName ?? 'The owner')} has to accept first.`}</p>
             <div class="add gap">
               <select class="ui-input" bind:value={giveTo} aria-label="Give to">
                 {#each receivers as r (r.id)}<option value={r.id}>{r.self ? `${clean(r.displayName)} (you)` : clean(r.displayName)}</option>{/each}
@@ -308,6 +389,11 @@
   .id { font-size: .78rem; color: var(--muted); overflow-wrap: anywhere; text-align: right; }
   .add { display: flex; gap: 8px; }
   .add select { flex: 1; }
+  .requests { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 10px; }
+  .requests li { display: grid; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .requests li:last-child { border-bottom: 0; padding-bottom: 0; }
+  .requests p { margin: 0; overflow-wrap: anywhere; }
+  .requests .ui-hint { display: block; }
   .gap { margin-top: 12px; }
   .sizes { display: grid; place-items: center; padding: 32px 16px 24px; min-width: 0; }
   @media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } }
