@@ -16,6 +16,8 @@ From the 2026/11/20 security review (findings A4). Each with a test that fails b
 - [x] LOW activity: an unlisted emote's own feed shows its lines; emotes of pending-deletion owners leave every feed. Test `unlisted_and_leaving_emotes_in_feeds` (emote_activity_flow.rs).
 - [x] LOW tags: NFC on both sides, combining marks allowed (`text::normalize_tag`, `text::is_tag_char`; web `rules.ts`). Unit tests in shared text.rs, moderation.rs and rules.test.ts.
 - [x] LOW transfer answers are `not_found` to anyone but the two parties. Test in `editor_transfers_wait_for_the_owner_and_go_only_to_trusting_accounts`.
+- [x] Code review: erase also clears `emotes.uploaded_by`, deletes `oauth_states` and closes open transfer requests the account is a party to. Tests `every_reference_to_an_account_is_handled_by_erase` (every FK to accounts from information_schema, handled or kept with a reason) and `erasure_clears_uploader_and_closes_its_transfer_requests` (queries.rs).
+- [x] Code review: `acceptEmoteTransfer` locks the emote before the request, as `transferEmote` does (no deadlock). Test `accept_and_owner_transfer_at_once_dont_deadlock` (editor_emotes_flow.rs).
 - [x] Dev mock: `quickSearch` public only; transfers `not_found` to non-parties and the editor re-check on accept (the seeded requester holds `EMOTE_TRANSFER`).
 
 ### GitHub write log for this PR
@@ -23,6 +25,7 @@ From the 2026/11/20 security review (findings A4). Each with a test that fails b
 ```
 git push -u origin fix/security-s1
 gh pr create --base main --head fix/security-s1 --title "Security fixes S1: search visibility, staff editor rank, User role, transfers, erasure, app tokens" --body-file <file>
+git push
 ```
 
 ## API coverage suite (branch `test/api-coverage`)

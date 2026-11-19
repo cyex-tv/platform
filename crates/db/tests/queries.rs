@@ -1737,3 +1737,239 @@ async fn erasure_scrubs_notes_reasons_and_audit_text() {
     drop(c);
     db.close().await;
 }
+
+/// Erasing keeps the account row, so no foreign key's ON DELETE ever fires: erase has to deal
+/// with every column that points at an account itself. Each one in the schema is either handled
+/// by erase (with what it does) or kept on purpose, with the reason. A new column that
+/// references accounts fails this test until it is put in one of the two lists.
+#[tokio::test]
+async fn every_reference_to_an_account_is_handled_by_erase() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let found: Vec<(String, String)> = sqlx::query_as(
+        "SELECT kcu.table_name::text, kcu.column_name::text
+           FROM information_schema.referential_constraints rc
+           JOIN information_schema.key_column_usage kcu
+             ON kcu.constraint_name = rc.constraint_name
+            AND kcu.constraint_schema = rc.constraint_schema
+           JOIN information_schema.constraint_column_usage ccu
+             ON ccu.constraint_name = rc.unique_constraint_name
+            AND ccu.constraint_schema = rc.unique_constraint_schema
+          WHERE ccu.table_name = 'accounts' AND ccu.column_name = 'id'
+          ORDER BY 1, 2",
+    )
+    .fetch_all(&mut *c)
+    .await
+    .unwrap();
+    // Erased by `privacy::erase_account`: deleted, set to NULL, or the row closed.
+    let handled: &[(&str, &str, &str)] = &[
+        ("identities", "account_id", "deleted"),
+        ("sessions", "account_id", "deleted"),
+        ("emotes", "owner_account_id", "deleted or disowned (NULL)"),
+        ("emotes", "uploaded_by", "set to NULL"),
+        ("emote_sets", "owner_account_id", "the sets are deleted"),
+        ("emote_set_members", "added_by", "set to NULL"),
+        ("set_editors", "account_id", "deleted"),
+        ("channels", "account_id", "deleted"),
+        ("account_roles", "account_id", "deleted"),
+        ("notifications", "account_id", "deleted"),
+        ("account_editors", "account_id", "deleted"),
+        ("account_editors", "editor_id", "deleted"),
+        ("badge_entitlements", "account_id", "deleted"),
+        ("paint_entitlements", "account_id", "deleted"),
+        ("cosmetic_selections", "account_id", "deleted"),
+        ("staff_notes", "account_id", "deleted"),
+        ("reports", "reporter_id", "set to NULL"),
+        ("oauth_states", "link_account_id", "deleted"),
+        (
+            "emote_transfer_requests",
+            "from_account_id",
+            "open ones closed",
+        ),
+        (
+            "emote_transfer_requests",
+            "to_account_id",
+            "open ones closed",
+        ),
+        (
+            "emote_transfer_requests",
+            "requested_by",
+            "open ones closed",
+        ),
+        ("audit_log", "subject_account_id", "free text removed"),
+        ("account_restrictions", "account_id", "reasons removed"),
+    ];
+    // Kept on purpose: they record what someone did (the erased account shows as a deleted
+    // user, with no name), or are records that must outlive the account.
+    let kept: &[(&str, &str, &str)] = &[
+        (
+            "audit_log",
+            "actor_account_id",
+            "who did it; the trail stays",
+        ),
+        (
+            "account_editors",
+            "granted_by",
+            "who granted an editor of another account",
+        ),
+        (
+            "account_roles",
+            "granted_by",
+            "who gave another account a role",
+        ),
+        (
+            "set_editors",
+            "granted_by",
+            "who made someone an editor of another set",
+        ),
+        ("roles", "created_by", "who made a role"),
+        ("emotes", "reviewed_by", "who reviewed an upload"),
+        ("blocked_images", "created_by", "who blocked an image"),
+        ("reports", "resolved_by", "who resolved a report"),
+        (
+            "cosmetic_images",
+            "created_by",
+            "who uploaded a cosmetic image",
+        ),
+        ("badges", "created_by", "who made a badge"),
+        ("paints", "created_by", "who made a paint"),
+        (
+            "badge_entitlements",
+            "granted_by",
+            "who gave another account a badge",
+        ),
+        (
+            "paint_entitlements",
+            "granted_by",
+            "who gave another account a paint",
+        ),
+        ("shop_items", "created_by", "who made a shop item"),
+        (
+            "shop_orders",
+            "account_id",
+            "orders are kept for the accounts (payments)",
+        ),
+        (
+            "shop_orders",
+            "recipient_id",
+            "orders are kept for the accounts (payments)",
+        ),
+        (
+            "shop_order_entitlements",
+            "account_id",
+            "what an order delivered, kept with the order",
+        ),
+        ("code_batches", "created_by", "who made a code batch"),
+        ("code_batches", "disabled_by", "who disabled a code batch"),
+        (
+            "code_redemptions",
+            "account_id",
+            "a code is redeemed once; the record stays",
+        ),
+        (
+            "account_restrictions",
+            "created_by",
+            "who placed a hold on another account",
+        ),
+        (
+            "account_restrictions",
+            "lifted_by",
+            "who lifted a hold on another account",
+        ),
+        (
+            "staff_notes",
+            "author_id",
+            "who wrote a note on another account",
+        ),
+        ("staff_notes", "deleted_by", "who deleted a note"),
+        ("emote_notes", "author_id", "who wrote a review note"),
+        ("emote_notes", "deleted_by", "who deleted a review note"),
+        (
+            "emote_transfer_requests",
+            "resolved_by",
+            "who answered a request",
+        ),
+    ];
+    let known = |list: &[(&str, &str, &str)], table: &str, column: &str| {
+        list.iter().any(|(t, c, _)| *t == table && *c == column)
+    };
+    let missing: Vec<String> = found
+        .iter()
+        .filter(|(t, c)| !known(handled, t, c) && !known(kept, t, c))
+        .map(|(t, c)| format!("{t}.{c}"))
+        .collect();
+    assert!(
+        missing.is_empty(),
+        "references to accounts that erase neither handles nor keeps on purpose: {missing:?}"
+    );
+    // And no stale entries: every listed column exists.
+    for (t, col, _) in handled.iter().chain(kept) {
+        assert!(
+            found.iter().any(|(ft, fc)| ft == t && fc == col),
+            "{t}.{col} is listed but references no account"
+        );
+    }
+    drop(c);
+    db.close().await;
+}
+
+/// The columns erase now clears: emotes it uploaded for others lose `uploaded_by`, and open
+/// transfer requests it is a party to are closed (audited), while others' stay open.
+#[tokio::test]
+async fn erasure_clears_uploader_and_closes_its_transfer_requests() {
+    use sqlx::Connection;
+    let db = db!();
+    let mut c = db.conn().await;
+    let gone = account(&mut c, "1").await;
+    let owner = account(&mut c, "2").await;
+    let other = account(&mut c, "3").await;
+    let uploaded = emote(&mut c, owner, "byeditor", EmoteState::Approved).await;
+    emotes::set_uploader(&mut c, uploaded, gone).await.unwrap();
+    let asked = emote(&mut c, owner, "asked", EmoteState::Approved).await;
+    let untouched = emote(&mut c, owner, "untouched", EmoteState::Approved).await;
+    let later = Utc::now() + Duration::days(7);
+    let mine = cyex_tv_db::transfers::create(&mut c, asked, owner, gone, gone, later)
+        .await
+        .unwrap()
+        .unwrap();
+    let theirs = cyex_tv_db::transfers::create(&mut c, untouched, owner, other, other, later)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let mut tx = c.begin().await.unwrap();
+    cyex_tv_db::privacy::erase_account(&mut tx, gone)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+
+    let uploader: Option<Uuid> = sqlx::query_scalar("SELECT uploaded_by FROM emotes WHERE id = $1")
+        .bind(uploaded)
+        .fetch_one(&mut *c)
+        .await
+        .unwrap();
+    assert_eq!(uploader, None);
+    let state = |id: Uuid| {
+        sqlx::query_scalar::<_, String>("SELECT state FROM emote_transfer_requests WHERE id = $1")
+            .bind(id)
+    };
+    assert_eq!(
+        state(mine.id).fetch_one(&mut *c).await.unwrap(),
+        "cancelled"
+    );
+    assert_eq!(
+        state(theirs.id).fetch_one(&mut *c).await.unwrap(),
+        "pending"
+    );
+    let audited: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM audit_log WHERE action = 'emote.transfer_cancelled'
+            AND after_json->>'reason' = 'account_deleted' AND target_id = $1",
+    )
+    .bind(ids::to_text(asked))
+    .fetch_one(&mut *c)
+    .await
+    .unwrap();
+    assert_eq!(audited, 1);
+    drop(c);
+    db.close().await;
+}

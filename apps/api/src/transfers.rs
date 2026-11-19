@@ -455,11 +455,19 @@ pub async fn accept(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Em
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     expire_now(&mut conn).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    // Locks in the order `transferEmote` takes them, the emote and then its requests, so the two
+    // can't wait on each other (a deadlock would be a 500).
+    let emote_id = transfers::get(&mut tx, id)
+        .await
+        .map_err(db_error)?
+        .filter(|r| caller.account_id == r.from_account_id || caller.account_id == r.requested_by)
+        .ok_or_else(not_found)?
+        .emote_id;
+    emotes::lock(&mut tx, emote_id).await.map_err(db_error)?;
     let r = open_request(&mut tx, caller, id).await?;
     if r.from_account_id != caller.account_id {
         return Err(forbidden("Only the emote's owner can accept its transfer."));
     }
-    emotes::lock(&mut tx, r.emote_id).await.map_err(db_error)?;
     let emote = row(&mut tx, r.emote_id).await?;
     let Some(emote) = emote.filter(|e| e.owner == Some(r.from_account_id)) else {
         // It moved or went away since: the request is moot.

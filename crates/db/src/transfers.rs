@@ -65,6 +65,16 @@ pub async fn expire_due(conn: &mut PgConnection, emote: Option<Uuid>) -> DbResul
     .await?)
 }
 
+/// One request, not locked: for finding its emote before taking locks in order.
+pub async fn get(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Request>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {REQUEST} FROM emote_transfer_requests WHERE id = $1"
+    ))
+    .bind(id)
+    .fetch_optional(conn)
+    .await?)
+}
+
 /// One request, locked for the rest of the transaction.
 pub async fn lock(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Request>> {
     Ok(sqlx::query_as(&format!(

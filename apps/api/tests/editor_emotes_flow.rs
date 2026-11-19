@@ -857,3 +857,43 @@ async fn accepting_rechecks_the_editors_transfer_permission() {
     assert!(w.audits("emote.transferred").await.is_empty());
     w.db.close().await;
 }
+
+/// Accepting a request and the owner's own transfer of the same emote at once take their locks
+/// in the same order (the emote, then its requests), so neither deadlocks into a 500: one wins,
+/// the other is refused cleanly, and the emote ends with one owner.
+#[tokio::test]
+async fn accept_and_owner_transfer_at_once_dont_deadlock() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("7501").await; // the owner
+    let bob = w.user("7502").await; // EMOTE_TRANSFER on Alice
+    let carol = w.user("7503").await; // trusts Alice with uploads
+    w.grant(&alice, &bob, &["EMOTE_TRANSFER"], &[]).await;
+    w.grant(&carol, &alice, &["EMOTE_UPLOAD"], &[]).await;
+    for round in 0..8 {
+        let emote = w
+            .emote(&alice, &format!("race{round}"), EmoteState::Approved, false)
+            .await;
+        ok(&w
+            .gql(&bob, TRANSFER, json!({ "id": emote, "to": bob.tid() }))
+            .await);
+        let request = w.open(&alice, &emote).await;
+        let (accepted, moved) = tokio::join!(
+            w.gql(&alice, ACCEPT, json!({ "id": request })),
+            w.gql(&alice, TRANSFER, json!({ "id": emote, "to": carol.tid() })),
+        );
+        for r in [&accepted, &moved] {
+            assert_ne!(code(r), "internal", "round {round}: {r}");
+        }
+        let wins = [&accepted, &moved]
+            .iter()
+            .filter(|r| r["errors"].is_null())
+            .count();
+        assert!(wins >= 1, "round {round}: {accepted} {moved}");
+        let owner = w.owner_and_uploader(&emote).await.0;
+        assert!(
+            owner == Some(bob.id) || owner == Some(carol.id),
+            "round {round}: {owner:?}"
+        );
+    }
+    w.db.close().await;
+}

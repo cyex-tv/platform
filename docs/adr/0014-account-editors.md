@@ -80,4 +80,5 @@ This replaces "There is no accept step" in the amendment above.
 ## Amendment (security review, 2026/11/20)
 - Accepting a transfer request also checks that the editor who asked still holds `emote_transfer` on every set of the owner (their grant can have been narrowed or removed since). If not, the request is closed as cancelled (`emote.transfer_cancelled` with `"reason": "editor_permission"`) and the owner gets `409 not_pending`.
 - `acceptEmoteTransfer`, `declineEmoteTransfer` and `cancelEmoteTransfer` answer `not_found` to anyone but the owner and the editor who asked, whatever state the request is in, so request IDs can't be probed. The two parties keep the `forbidden` answers for the step that isn't theirs.
+- Accepting takes its locks in the order `transferEmote` does (the emote, then its requests), so an accept and the owner's own transfer of the same emote at once can't deadlock.
 - Staff with `editors.manage_any` act only on accounts below them and never on the owners' (ADR 0010, amendment 2026/11/20).

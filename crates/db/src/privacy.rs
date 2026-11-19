@@ -113,8 +113,43 @@ pub async fn erase(conn: &mut PgConnection, account_id: Uuid) -> DbResult<()> {
     .bind(AUDIT_TEXT_KEYS)
     .execute(&mut *conn)
     .await?;
+    // Open transfer requests the account is a party to can't go ahead: each is closed as
+    // cancelled, audited with no actor (nobody did it), like an expiry.
+    let closed: Vec<(Uuid, Uuid, Uuid, Uuid, Uuid)> = sqlx::query_as(
+        "UPDATE emote_transfer_requests
+            SET state = 'cancelled', resolved_at = now(), resolved_by = NULL
+          WHERE state = 'pending'
+            AND (from_account_id = $1 OR to_account_id = $1 OR requested_by = $1)
+          RETURNING id, emote_id, from_account_id, to_account_id, requested_by",
+    )
+    .bind(account_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    for (id, emote, from, to, by) in closed {
+        audit::write_for(
+            conn,
+            &audit::NewEntry {
+                actor: None,
+                action: "emote.transfer_cancelled",
+                target_kind: "emote",
+                target_id: &ids::to_text(emote),
+                before: Some(json!({
+                    "request_id": ids::to_text(id),
+                    "from_id": ids::to_text(from),
+                    "to_id": ids::to_text(to),
+                    "requested_by": ids::to_text(by),
+                })),
+                after: Some(json!({ "reason": "account_deleted" })),
+            },
+            // The owner's feed, unless the owner is the one going.
+            (from != account_id).then_some(from),
+        )
+        .await?;
+    }
     for sql in [
         "DELETE FROM staff_notes WHERE account_id = $1",
+        "UPDATE emotes SET uploaded_by = NULL WHERE uploaded_by = $1",
+        "DELETE FROM oauth_states WHERE link_account_id = $1",
         "UPDATE account_restrictions SET reason = NULL WHERE account_id = $1",
         "DELETE FROM set_editors WHERE account_id = $1",
         "DELETE FROM account_editors WHERE account_id = $1 OR editor_id = $1",
