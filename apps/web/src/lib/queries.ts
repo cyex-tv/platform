@@ -296,10 +296,21 @@ export const MY_SETS = graphql(`
   }
 `);
 
+// A set without its emotes (a set can hold a thousand): the editor reads those a page at a time.
 export const EDIT_SET = graphql(`
   query EditSet($id: String!) {
     set(id: $id) {
-      ...SetFields
+      id
+      name
+      kind
+      visibility
+      capacity
+      slotsUsed
+      owner {
+        id
+        displayName
+        avatar
+      }
     }
     setEditors(setId: $id) {
       id
@@ -330,6 +341,38 @@ export const EDIT_SET = graphql(`
       activeSetId
       account {
         id
+      }
+    }
+  }
+`);
+
+// One page of a set's emotes, oldest first, narrowed by the filter on the server.
+export const SET_EMOTES = graphql(`
+  query SetEmotes($id: String!, $query: String, $page: Int, $perPage: Int) {
+    setEmotes(id: $id, query: $query, page: $page, perPage: $perPage) {
+      total
+      items {
+        name
+        zeroWidth
+        addedAt
+        emote {
+          ...EmoteFields
+        }
+      }
+    }
+  }
+`);
+
+// Who is in the set, no pictures: ids and names, for "Added" and name clashes in Add emotes.
+export const SET_MEMBERS = graphql(`
+  query SetMembers($id: String!, $page: Int, $perPage: Int) {
+    setEmotes(id: $id, page: $page, perPage: $perPage) {
+      total
+      items {
+        name
+        emote {
+          id
+        }
       }
     }
   }
@@ -567,6 +610,7 @@ export const MY_NOTIFICATIONS = graphql(`
       payload
       createdAt
       read
+      transferState
     }
   }
 `);
