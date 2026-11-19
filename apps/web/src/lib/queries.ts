@@ -260,6 +260,7 @@ export const SET_FIELDS = graphql(`
     id
     name
     kind
+    visibility
     capacity
     owner {
       id
@@ -347,6 +348,7 @@ export const UPDATE_SET = graphql(`
     updateSet(id: $id, input: $input) {
       id
       name
+      visibility
     }
   }
 `);

@@ -11,7 +11,7 @@
   import { ADD_ACCOUNT_EDITOR, EDITORS, REMOVE_ACCOUNT_EDITOR, SEARCH_ACCOUNTS, UPDATE_ACCOUNT_EDITOR } from '$lib/queries';
   import Confirm from '$lib/tool/Confirm.svelte';
   import EditorDialog from '$lib/tool/EditorDialog.svelte';
-  import { ALL_SETS, MAX_EDITORS, effective, emotePermissionsIdle, grantOn, permissionLabels, scopeInput, scopeLabel, scopeOf, type Scope } from '$lib/tool/editors';
+  import { ALL_SETS, MAX_EDITORS, effective, emotePermissionsIdle, grantOn, ownerSetsHref, permissionLabels, permissionPhrase, scopeInput, scopeLabel, scopeOf, type Scope } from '$lib/tool/editors';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
@@ -31,6 +31,8 @@
   let results = $state<Person[] | null>(null);
   let searching = $state(false);
   let searchError = $state<string | null>(null);
+  /** One letter typed: said under the field, not as an error card. */
+  let shortHint = $state(false);
   let token = 0;
 
   let dialog = $state<EditorDialog>();
@@ -40,13 +42,14 @@
     e.preventDefault();
     const text = query.trim().replace(/^@/, '');
     if ([...text].length < 2) {
-      searchError = 'Type at least two letters of their name.';
+      shortHint = true;
       results = null;
       return;
     }
     const mine = ++token;
     searching = true;
     searchError = null;
+    shortHint = false;
     try {
       const r = await gql(SEARCH_ACCOUNTS, { query: text, page: 1, perPage: 20 });
       if (mine === token) {
@@ -92,7 +95,7 @@
       const r = await gql(UPDATE_ACCOUNT_EDITOR, { accountId: who.id, permissions, setIds: scopeInput(scope) });
       const next = r.updateAccountEditor;
       L.set({ ...L.data, accountEditors: L.data.accountEditors.map((x) => (x.account.id === next.account.id ? next : x)) });
-      notify(`Saved. ${iso(next.account.displayName)} can now: ${permissionLabels(next.permissions)}.`);
+      notify(`Saved. ${iso(next.account.displayName)} can now ${permissionPhrase(next.permissions)}.`);
     } else {
       const r = await gql(ADD_ACCOUNT_EDITOR, { input: { accountId: who.id, permissions, setIds: scopeInput(scope) } });
       const added = r.addAccountEditor;
@@ -151,10 +154,14 @@
       {:else}
         <form class="find" role="search" onsubmit={search}>
           <input id="find-editor" class="ui-input" type="search" bind:value={query} placeholder="Search by name" autocomplete="off" spellcheck="false"
-            maxlength="64" enterkeyhint="search" aria-describedby="find-hint" aria-invalid={searchError ? 'true' : undefined} />
+            maxlength="64" enterkeyhint="search" aria-describedby="find-hint" aria-invalid={shortHint || searchError ? 'true' : undefined} />
           <button class="ui-btn secondary" type="submit" disabled={searching}><Icon name="search" size={15} />{searching ? 'Searching…' : 'Search'}</button>
         </form>
-        <p class="ui-hint" id="find-hint">Their Twitch or Kick name. They need to have signed in to cyex.tv once. Press Enter to search.</p>
+        {#if shortHint}
+          <p class="ui-error" id="find-hint" role="alert">Type at least two letters of their name.</p>
+        {:else}
+          <p class="ui-hint" id="find-hint">Their Twitch or Kick name. They need to have signed in to cyex.tv once. Press Enter to search.</p>
+        {/if}
         {#if searchError}
           <State bare kind="error" title="Couldn’t search">{searchError}</State>
         {:else if results && results.length === 0}
@@ -217,20 +224,20 @@
               <Avatar src={acc.account.avatar} name={acc.account.displayName} size={32} tone="tool" />
               <span class="who">
                 <strong><bdi>{clean(acc.account.displayName)}</bdi></strong>
-                <span class="ui-hint">You can: {permissionLabels(acc.permissions)}{acc.allSets ? '' : ` · ${acc.setIds.length === 1 ? '1 set' : `${acc.setIds.length} sets`}`}{emotePermissionsIdle(acc) ? '. Uploads, emote managing and transfers need all sets, so they’re off' : ''}</span>
+                <span class="ui-hint">You can {permissionPhrase(acc.permissions)}{acc.allSets ? '' : ` · ${acc.setIds.length === 1 ? '1 set' : `${acc.setIds.length} sets`}`}{emotePermissionsIdle(acc) ? '. Uploads, emote managing and transfers need all sets, so they’re off' : ''}</span>
               </span>
               <span class="ui-actions">
                 {#if acc.permissions.includes('EMOTES') || acc.permissions.includes('SETS') || acc.permissions.includes('EDITORS')}
-                  <a class="ui-btn ghost small" href="/me/sets#of-{acc.account.id}">Sets</a>
+                  <a class="ui-btn secondary small" href={ownerSetsHref(acc.account.id)}>Sets</a>
                 {/if}
                 {#if acc.permissions.includes('CHANNELS') || acc.permissions.includes('SETS')}
-                  <a class="ui-btn ghost small" href="/me/channels#of-{acc.account.id}">Channels</a>
+                  <a class="ui-btn secondary small" href="/me/channels#of-{acc.account.id}">Channels</a>
                 {/if}
                 {#if can.includes('EMOTE_MANAGE')}
-                  <a class="ui-btn ghost small" href="/users/{encodeURIComponent(acc.account.id)}">Emotes</a>
+                  <a class="ui-btn secondary small" href="/users/{encodeURIComponent(acc.account.id)}">Emotes</a>
                 {/if}
                 {#if can.includes('EMOTE_UPLOAD')}
-                  <a class="ui-btn ghost small" href="/me/upload?for={encodeURIComponent(acc.account.id)}">Upload</a>
+                  <a class="ui-btn secondary small" href="/me/upload?for={encodeURIComponent(acc.account.id)}">Upload</a>
                 {/if}
                 <Confirm small label="Leave" confirm="Click again to leave" busy={busyId === acc.account.id}
                   onconfirm={() => leave(acc.account.id, acc.account.displayName)} />
@@ -253,7 +260,7 @@
   .who { display: grid; flex: 1; min-width: 0; line-height: 1.35; }
   .who strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .who .ui-hint { overflow-wrap: anywhere; }
-  .ui-list .ui-actions { flex: none; }
+  .ui-list .ui-actions { flex: none; flex-wrap: wrap; row-gap: 6px; }
   .add { display: grid; gap: 12px; }
   .add > h2 + * { margin-top: 0; }
   .find { display: flex; gap: 8px; }

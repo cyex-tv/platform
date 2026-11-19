@@ -9,7 +9,7 @@
   import { ACCEPT_EMOTE_TRANSFER, DECLINE_EMOTE_TRANSFER } from '$lib/queries';
   import { fail, notify } from '$lib/tool/notices.svelte';
   import { describe } from './notifications';
-  import type { Note } from './inbox.svelte';
+  import { answered, type Note } from './inbox.svelte';
 
   type Props = { note: Note; onpick?: (n: Note) => void };
   let { note, onpick }: Props = $props();
@@ -17,19 +17,19 @@
 
   // A transfer request is answered here too (ADR 0014); the emote's edit page lists it as well.
   let busy = $state(false);
-  let answered = $state<string | null>(null);
   async function answer(accept: boolean) {
-    if (!line.request || busy) return;
+    const req = line.request;
+    if (!req || busy) return;
     busy = true;
     try {
-      if (accept) await gql(ACCEPT_EMOTE_TRANSFER, { id: line.request });
-      else await gql(DECLINE_EMOTE_TRANSFER, { id: line.request });
-      answered = accept ? 'Accepted: it moved.' : 'Declined: it stays yours.';
-      notify(answered);
+      if (accept) await gql(ACCEPT_EMOTE_TRANSFER, { id: req });
+      else await gql(DECLINE_EMOTE_TRANSFER, { id: req });
+      answered[req] = accept ? 'Accepted: it moved.' : 'Declined: it stays yours.';
+      notify(answered[req]);
     } catch (err) {
       // Closed already (expired, withdrawn or answered): say so once, then leave it.
       fail(err);
-      answered = 'This request is closed.';
+      answered[req] = 'This request is closed.';
     } finally {
       busy = false;
     }
@@ -51,7 +51,7 @@
 {/if}
 {#if line.request}
   <div class="answer">
-    {#if answered}<span class="ui-hint" role="status">{answered}</span>
+    {#if answered[line.request]}<span class="ui-hint" role="status">{answered[line.request]}</span>
     {:else}
       <button class="ui-btn primary small" type="button" disabled={busy} onclick={() => answer(true)}>Accept</button>
       <button class="ui-btn secondary small" type="button" disabled={busy} onclick={() => answer(false)}>Decline</button>

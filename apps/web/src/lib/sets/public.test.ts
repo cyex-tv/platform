@@ -38,6 +38,11 @@ describe('cloneOutcome', () => {
     expect(cloneOutcome(18, 0)).toBe('18 emotes copied.');
   });
   it('says how many were left out', () => expect(cloneOutcome(1200, 3)).toContain('3 left out'));
+  it('names the one reason that fits, not all of them', () => {
+    expect(cloneOutcome(1000, 20)).toContain('20 left out: the set is full.');
+    expect(cloneOutcome(18, 2)).toBe('18 emotes copied. 2 left out: not approved yet, or private to someone else.');
+    expect(cloneOutcome(18, 2)).not.toContain('size');
+  });
 });
 
 describe('cloneError', () => {

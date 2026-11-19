@@ -34,11 +34,11 @@ type Documents = {
     "\n  query MyEmotes($page: Int, $perPage: Int) {\n    myEmotes(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.MyEmotesDocument,
     "\n  mutation UpdateEmote($id: String!, $input: UpdateEmoteInput!) {\n    updateEmote(id: $id, input: $input) {\n      ...EmoteFields\n    }\n  }\n": typeof types.UpdateEmoteDocument,
     "\n  mutation DeleteEmote($id: String!) {\n    deleteEmote(id: $id)\n  }\n": typeof types.DeleteEmoteDocument,
-    "\n  fragment SetFields on EmoteSet {\n    id\n    name\n    kind\n    capacity\n    owner {\n      id\n      displayName\n      avatar\n    }\n    emotes {\n      name\n      zeroWidth\n      addedAt\n      emote {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.SetFieldsFragmentDoc,
+    "\n  fragment SetFields on EmoteSet {\n    id\n    name\n    kind\n    visibility\n    capacity\n    owner {\n      id\n      displayName\n      avatar\n    }\n    emotes {\n      name\n      zeroWidth\n      addedAt\n      emote {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.SetFieldsFragmentDoc,
     "\n  query MySets {\n    mySets {\n      ...SetFields\n    }\n    editorSets {\n      ...SetFields\n    }\n    editorOf {\n      account {\n        id\n        displayName\n      }\n      permissions\n    }\n  }\n": typeof types.MySetsDocument,
     "\n  query EditSet($id: String!) {\n    set(id: $id) {\n      ...SetFields\n    }\n    setEditors(setId: $id) {\n      id\n      displayName\n      avatar\n    }\n    editorOf {\n      account {\n        id\n      }\n      permissions\n      allSets\n      setIds\n    }\n    myChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n  }\n": typeof types.EditSetDocument,
     "\n  mutation CreateSet($input: CreateSetInput!) {\n    createSet(input: $input) {\n      id\n    }\n  }\n": typeof types.CreateSetDocument,
-    "\n  mutation UpdateSet($id: String!, $input: UpdateSetInput!) {\n    updateSet(id: $id, input: $input) {\n      id\n      name\n    }\n  }\n": typeof types.UpdateSetDocument,
+    "\n  mutation UpdateSet($id: String!, $input: UpdateSetInput!) {\n    updateSet(id: $id, input: $input) {\n      id\n      name\n      visibility\n    }\n  }\n": typeof types.UpdateSetDocument,
     "\n  mutation DeleteSet($id: String!) {\n    deleteSet(id: $id)\n  }\n": typeof types.DeleteSetDocument,
     "\n  mutation AddSetEmote($setId: String!, $emoteId: String!, $input: AddSetEmoteInput) {\n    addSetEmote(setId: $setId, emoteId: $emoteId, input: $input) {\n      name\n    }\n  }\n": typeof types.AddSetEmoteDocument,
     "\n  mutation UpdateSetEmote($setId: String!, $emoteId: String!, $input: UpdateSetEmoteInput!) {\n    updateSetEmote(setId: $setId, emoteId: $emoteId, input: $input) {\n      name\n      zeroWidth\n    }\n  }\n": typeof types.UpdateSetEmoteDocument,
@@ -182,11 +182,11 @@ const documents: Documents = {
     "\n  query MyEmotes($page: Int, $perPage: Int) {\n    myEmotes(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.MyEmotesDocument,
     "\n  mutation UpdateEmote($id: String!, $input: UpdateEmoteInput!) {\n    updateEmote(id: $id, input: $input) {\n      ...EmoteFields\n    }\n  }\n": types.UpdateEmoteDocument,
     "\n  mutation DeleteEmote($id: String!) {\n    deleteEmote(id: $id)\n  }\n": types.DeleteEmoteDocument,
-    "\n  fragment SetFields on EmoteSet {\n    id\n    name\n    kind\n    capacity\n    owner {\n      id\n      displayName\n      avatar\n    }\n    emotes {\n      name\n      zeroWidth\n      addedAt\n      emote {\n        ...EmoteFields\n      }\n    }\n  }\n": types.SetFieldsFragmentDoc,
+    "\n  fragment SetFields on EmoteSet {\n    id\n    name\n    kind\n    visibility\n    capacity\n    owner {\n      id\n      displayName\n      avatar\n    }\n    emotes {\n      name\n      zeroWidth\n      addedAt\n      emote {\n        ...EmoteFields\n      }\n    }\n  }\n": types.SetFieldsFragmentDoc,
     "\n  query MySets {\n    mySets {\n      ...SetFields\n    }\n    editorSets {\n      ...SetFields\n    }\n    editorOf {\n      account {\n        id\n        displayName\n      }\n      permissions\n    }\n  }\n": types.MySetsDocument,
     "\n  query EditSet($id: String!) {\n    set(id: $id) {\n      ...SetFields\n    }\n    setEditors(setId: $id) {\n      id\n      displayName\n      avatar\n    }\n    editorOf {\n      account {\n        id\n      }\n      permissions\n      allSets\n      setIds\n    }\n    myChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n  }\n": types.EditSetDocument,
     "\n  mutation CreateSet($input: CreateSetInput!) {\n    createSet(input: $input) {\n      id\n    }\n  }\n": types.CreateSetDocument,
-    "\n  mutation UpdateSet($id: String!, $input: UpdateSetInput!) {\n    updateSet(id: $id, input: $input) {\n      id\n      name\n    }\n  }\n": types.UpdateSetDocument,
+    "\n  mutation UpdateSet($id: String!, $input: UpdateSetInput!) {\n    updateSet(id: $id, input: $input) {\n      id\n      name\n      visibility\n    }\n  }\n": types.UpdateSetDocument,
     "\n  mutation DeleteSet($id: String!) {\n    deleteSet(id: $id)\n  }\n": types.DeleteSetDocument,
     "\n  mutation AddSetEmote($setId: String!, $emoteId: String!, $input: AddSetEmoteInput) {\n    addSetEmote(setId: $setId, emoteId: $emoteId, input: $input) {\n      name\n    }\n  }\n": types.AddSetEmoteDocument,
     "\n  mutation UpdateSetEmote($setId: String!, $emoteId: String!, $input: UpdateSetEmoteInput!) {\n    updateSetEmote(setId: $setId, emoteId: $emoteId, input: $input) {\n      name\n      zeroWidth\n    }\n  }\n": types.UpdateSetEmoteDocument,
@@ -390,7 +390,7 @@ export function graphql(source: "\n  mutation DeleteEmote($id: String!) {\n    d
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  fragment SetFields on EmoteSet {\n    id\n    name\n    kind\n    capacity\n    owner {\n      id\n      displayName\n      avatar\n    }\n    emotes {\n      name\n      zeroWidth\n      addedAt\n      emote {\n        ...EmoteFields\n      }\n    }\n  }\n"): typeof import('./graphql').SetFieldsFragmentDoc;
+export function graphql(source: "\n  fragment SetFields on EmoteSet {\n    id\n    name\n    kind\n    visibility\n    capacity\n    owner {\n      id\n      displayName\n      avatar\n    }\n    emotes {\n      name\n      zeroWidth\n      addedAt\n      emote {\n        ...EmoteFields\n      }\n    }\n  }\n"): typeof import('./graphql').SetFieldsFragmentDoc;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -406,7 +406,7 @@ export function graphql(source: "\n  mutation CreateSet($input: CreateSetInput!)
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  mutation UpdateSet($id: String!, $input: UpdateSetInput!) {\n    updateSet(id: $id, input: $input) {\n      id\n      name\n    }\n  }\n"): typeof import('./graphql').UpdateSetDocument;
+export function graphql(source: "\n  mutation UpdateSet($id: String!, $input: UpdateSetInput!) {\n    updateSet(id: $id, input: $input) {\n      id\n      name\n      visibility\n    }\n  }\n"): typeof import('./graphql').UpdateSetDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

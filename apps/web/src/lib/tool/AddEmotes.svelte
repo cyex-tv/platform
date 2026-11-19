@@ -14,7 +14,8 @@
   import { session } from './session.svelte';
   import { STATE_LABEL } from './state';
   import { fail, notify } from './notices.svelte';
-  import { mergeResults } from './add-emotes';
+  import { nameProblem } from '$lib/rules';
+  import { freeName, mergeResults } from './add-emotes';
 
   let {
     setId,
@@ -33,6 +34,19 @@
   let searching = $state(false);
   let problem = $state<string | null>(null);
   let busy = $state<string | null>(null);
+  /** The emote whose name is taken here, being added under another name. */
+  let renaming = $state<string | null>(null);
+  let alias = $state('');
+  const aliasProblem = $derived(nameProblem(alias) ?? (names.has(alias.trim()) ? 'Another emote here has that name.' : null));
+
+  function askName(e: EmoteFieldsFragment) {
+    if (renaming === e.id) {
+      renaming = null;
+      return;
+    }
+    renaming = e.id;
+    alias = freeName(e.name, names);
+  }
   let token = 0;
 
   async function search(e?: SubmitEvent) {
@@ -63,14 +77,15 @@
     }
   }
 
-  async function add(e: EmoteFieldsFragment) {
+  async function add(e: EmoteFieldsFragment, as?: string) {
     if (busy) return;
     busy = e.id;
     // The pressed button turns into "Added" (disabled): focus moves on to the next Add.
     const at = (results ?? []).findIndex((r) => r.id === e.id);
     try {
-      await gql(ADD_SET_EMOTE, { setId, emoteId: e.id });
-      notify(`${iso(e.name)} added.`);
+      await gql(ADD_SET_EMOTE, { setId, emoteId: e.id, input: as ? { name: as } : null });
+      notify(`${iso(as ?? e.name)} added.`);
+      renaming = null;
       await onadded();
       busy = null;
       await tick();
@@ -117,11 +132,26 @@
               {#if mine}Yours{:else if e.owner}by <bdi>{clean(e.owner.displayName)}</bdi>{/if}{#if e.state !== 'APPROVED'} · {STATE_LABEL[e.state].toLowerCase()}{/if}
             </span>
           </a>
-          <button class="ui-btn small add {inSet ? 'ghost' : 'secondary'}" type="button" disabled={inSet || clash || full || busy === e.id}
-            title={clash ? 'Another emote here has this name. Rename that one first.' : undefined}
-            aria-label="{inSet ? 'Added' : clash ? 'Name taken' : 'Add'} {iso(e.name)}" onclick={() => add(e)}>
-            {inSet ? 'Added' : clash ? 'Name taken' : busy === e.id ? 'Adding…' : 'Add'}
-          </button>
+          {#if clash}
+            <button class="ui-btn small add secondary" type="button" disabled={full || busy === e.id} aria-expanded={renaming === e.id}
+              aria-label="Name taken: add {iso(e.name)} under another name" onclick={() => askName(e)}>Add as…</button>
+          {:else}
+            <button class="ui-btn small add {inSet ? 'ghost' : 'secondary'}" type="button" disabled={inSet || full || busy === e.id}
+              aria-label="{inSet ? 'Added' : 'Add'} {iso(e.name)}" onclick={() => add(e)}>
+              {inSet ? 'Added' : busy === e.id ? 'Adding…' : 'Add'}
+            </button>
+          {/if}
+          {#if clash && renaming === e.id}
+            <form class="alias" onsubmit={(ev) => { ev.preventDefault(); if (!aliasProblem) add(e, alias.trim()); }}>
+              <p class="ui-hint">Another emote in this set is called <bdi>{iso(e.name)}</bdi>. Add this one as:</p>
+              <div class="alias-row">
+                <input class="ui-input" bind:value={alias} maxlength="100" spellcheck="false" aria-label="Name in this set"
+                  aria-invalid={aliasProblem ? 'true' : undefined} />
+                <button class="ui-btn small primary" type="submit" disabled={!!aliasProblem || busy === e.id}>{busy === e.id ? 'Adding…' : 'Add'}</button>
+              </div>
+              {#if aliasProblem}<span class="ui-error" role="alert">{aliasProblem}</span>{/if}
+            </form>
+          {/if}
         </li>
       {/each}
     </ul>
@@ -134,7 +164,11 @@
   .field input { flex: 1; }
   .field .ui-btn { flex: none; }
   .results { max-height: 360px; overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--border); }
-  .results > li { padding: 6px 16px; }
+  .results > li { padding: 6px 16px; flex-wrap: wrap; }
+  .alias { flex-basis: 100%; display: grid; gap: 6px; padding: 4px 0 8px 52px; }
+  .alias .ui-hint { margin: 0; }
+  .alias-row { display: flex; gap: 8px; }
+  .alias-row input { flex: 1; min-width: 0; }
   .who { display: grid; flex: 1; min-width: 0; line-height: 1.3; color: inherit; text-decoration: none; }
   .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   @media (hover: hover) and (pointer: fine) { .who:hover .name { text-decoration: underline; } }
