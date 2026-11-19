@@ -506,7 +506,7 @@
           "emotes"
         ],
         "summary": "Upload an emote. It starts `pending`: usable in your own sets, hidden from everyone else until a\nmoderator approves it. Manage it afterwards through GraphQL.",
-        "description": "PNG, APNG, GIF or WebP; at most 5 MB, 1000×1000 px and 1000 frames. Sign in first (with the\ncookie, from `https://cyex.tv`). At most 20 uploads an hour. The flags `zero_width`, `private`\nand `nsfw` may be set at once (each `true` or `false`, default `false`), and `visibility`\n(`public`, `unlisted` or `private`; with `private` too, they must agree); `updateEmote` changes\nthem later.",
+        "description": "PNG, APNG, GIF, WebP (still or animated) or JPEG; at most 8 MB, 1000×1000 px and 1000\nframes. Sign in first (with the cookie, from `https://cyex.tv`). At most 20 uploads an hour.\nThe flags `zero_width`, `private` and `nsfw` may be set at once (each `true` or `false`,\ndefault `false`), and `visibility` (`public`, `unlisted` or `private`; with `private` too,\nthey must agree); `updateEmote` changes them later.",
         "operationId": "upload_emote",
         "requestBody": {
           "content": {
@@ -560,7 +560,7 @@
             }
           },
           "413": {
-            "description": "`too_large`: over 5 MB, 1000×1000 px or 1000 frames.",
+            "description": "`too_large`: over 8 MB, 1000×1000 px or 1000 frames.",
             "content": {
               "application/json": {
                 "schema": {
@@ -570,7 +570,7 @@
             }
           },
           "415": {
-            "description": "`unsupported_format`: not PNG, APNG, GIF or WebP.",
+            "description": "`unsupported_format`: not PNG, APNG, GIF, WebP or JPEG (AVIF isn't taken yet).",
             "content": {
               "application/json": {
                 "schema": {

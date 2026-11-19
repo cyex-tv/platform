@@ -15,6 +15,7 @@
     { href: '/cosmetics', label: 'Cosmetics' },
     { href: '/shop', label: 'Shop' },
     { href: '/help', label: 'Help' },
+    { href: '/guidelines', label: 'Guidelines' },
     { href: '/developers', label: 'Developers' },
     { href: 'https://github.com/cyex-tv/platform', label: 'Source' },
     // Terms, Privacy and Contact come back when their pages exist.

@@ -28,9 +28,10 @@ use utoipa_axum::routes;
 use crate::state::{AppState, MaybeCaller};
 use crate::{catalog, cosmetics, moderation, shop, upload};
 
-/// The upload body may be a little over the 5 MB file limit (multipart framing, the name and
-/// tags); anything beyond this is cut off before it is read.
-const UPLOAD_BODY_LIMIT: usize = 5 * 1024 * 1024 + 64 * 1024;
+/// The upload body may be a little over the 8 MB emote file limit (multipart framing, the name
+/// and tags); anything beyond this is cut off before it is read. Cosmetic pictures stop at 5 MB
+/// while they are read (`file_field`).
+const UPLOAD_BODY_LIMIT: usize = cyex_tv_media::EMOTE_MAX_BYTES + 64 * 1024;
 
 /// Paddle's notifications are a few KB; anything over 64 KB is refused before it is read.
 const WEBHOOK_BODY_LIMIT: usize = 64 * 1024;
@@ -214,11 +215,11 @@ async fn logout(
 /// Upload an emote. It starts `pending`: usable in your own sets, hidden from everyone else until a
 /// moderator approves it. Manage it afterwards through GraphQL.
 ///
-/// PNG, APNG, GIF or WebP; at most 5 MB, 1000×1000 px and 1000 frames. Sign in first (with the
-/// cookie, from `https://cyex.tv`). At most 20 uploads an hour. The flags `zero_width`, `private`
-/// and `nsfw` may be set at once (each `true` or `false`, default `false`), and `visibility`
-/// (`public`, `unlisted` or `private`; with `private` too, they must agree); `updateEmote` changes
-/// them later.
+/// PNG, APNG, GIF, WebP (still or animated) or JPEG; at most 8 MB, 1000×1000 px and 1000
+/// frames. Sign in first (with the cookie, from `https://cyex.tv`). At most 20 uploads an hour.
+/// The flags `zero_width`, `private` and `nsfw` may be set at once (each `true` or `false`,
+/// default `false`), and `visibility` (`public`, `unlisted` or `private`; with `private` too,
+/// they must agree); `updateEmote` changes them later.
 #[utoipa::path(
     post,
     path = "/v1/emotes",
@@ -229,8 +230,8 @@ async fn logout(
         (status = 400, description = "`bad_name`, `bad_tag`, `too_many_tags` or `bad_form`.", body = ErrorBody),
         (status = 401, description = "`signed_out`.", body = ErrorBody),
         (status = 403, description = "`restricted`, or `bad_origin` for a cookie from another site.", body = ErrorBody),
-        (status = 413, description = "`too_large`: over 5 MB, 1000×1000 px or 1000 frames.", body = ErrorBody),
-        (status = 415, description = "`unsupported_format`: not PNG, APNG, GIF or WebP.", body = ErrorBody),
+        (status = 413, description = "`too_large`: over 8 MB, 1000×1000 px or 1000 frames.", body = ErrorBody),
+        (status = 415, description = "`unsupported_format`: not PNG, APNG, GIF, WebP or JPEG (AVIF isn't taken yet).", body = ErrorBody),
         (status = 422, description = "`invalid_image` (doesn't decode) or `blocked`.", body = ErrorBody),
         (status = 429, description = "`rate_limited`.", body = ErrorBody),
         (status = 503, description = "`unavailable`: storage isn't reachable.", body = ErrorBody)
@@ -264,7 +265,7 @@ async fn upload_emote(
                         bad_form("The file couldn't be read.")
                     }
                 })? {
-                    if bytes.len() + chunk.len() > cyex_tv_media::Limits::default().max_bytes {
+                    if bytes.len() + chunk.len() > cyex_tv_media::EMOTE_MAX_BYTES {
                         return Err(upload::too_large());
                     }
                     bytes.extend_from_slice(&chunk);
@@ -336,21 +337,22 @@ async fn upload_emote(
     Ok((StatusCode::ACCEPTED, Json(emote)))
 }
 
-/// Reads a multipart file field under the 5 MB limit.
+/// Reads a multipart file field under the 5 MB limit of cosmetic pictures.
 async fn file_field(
     field: &mut axum::extract::multipart::Field<'_>,
     bad_form: impl Fn(&str) -> ApiError,
 ) -> ApiResult<Vec<u8>> {
+    let limits = cyex_tv_media::Limits::default();
     let mut bytes = Vec::new();
     while let Some(chunk) = field.chunk().await.map_err(|err| {
         if err.status() == StatusCode::PAYLOAD_TOO_LARGE {
-            upload::too_large()
+            upload::too_large_for(&limits)
         } else {
             bad_form("The file couldn't be read.")
         }
     })? {
-        if bytes.len() + chunk.len() > cyex_tv_media::Limits::default().max_bytes {
-            return Err(upload::too_large());
+        if bytes.len() + chunk.len() > limits.max_bytes {
+            return Err(upload::too_large_for(&limits));
         }
         bytes.extend_from_slice(&chunk);
     }

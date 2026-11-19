@@ -54,7 +54,7 @@ describe('help questions', () => {
     expect(matches(del, 'delete account')).toBe(true);
     expect(matches(del, 'DELETE')).toBe(true);
     expect(matches(del, 'delete paint')).toBe(false);
-    expect(matches(ALL_QUESTIONS.find((q) => q.id === 'what-files')!, '5 mb')).toBe(true);
+    expect(matches(ALL_QUESTIONS.find((q) => q.id === 'what-files')!, '8 mb')).toBe(true);
     expect(matches(del, '   ')).toBe(true);
   });
 });
