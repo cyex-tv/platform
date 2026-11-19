@@ -13,7 +13,8 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     label: 'Emotes',
     items: [
       p('emotes.review', 'Review uploads', 'Approve or reject emotes waiting in the review queue.'),
-      p('emotes.edit_any', 'Edit any emote', "Change the name, tags and flags of emotes other people uploaded."),
+      p('emotes.edit_any', 'Edit any emote', "Change the name, tags, flags and visibility of emotes other people uploaded."),
+      p('emotes.delete_any', 'Delete any emote', 'Delete emotes other people uploaded, as their owner can. They leave every set they are in.'),
       p('emotes.takedown', 'Take down emotes', 'Remove an emote everywhere it is used and stop its image from being uploaded again.'),
     ],
   },
@@ -32,6 +33,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       p('users.view', 'Look up users', 'Open user pages: linked accounts, restrictions, uploads and roles.'),
       p('users.sessions', 'See sign-in sessions', 'See where a user is signed in and when each session was last used. Never shows tokens.'),
       p('users.notes', 'Staff notes', 'Read and write notes about a user that only staff can see.'),
+      p('editors.manage_any', "Manage anyone's editors", "Add, change and remove the editors of any user's account on their behalf, as the owner can."),
     ],
   },
   {
@@ -144,6 +146,9 @@ export const USER_PAGE_PERMISSIONS = [
   'users.block',
   'users.sessions',
   'users.notes',
+  'editors.manage_any',
+  'emotes.edit_any',
+  'emotes.delete_any',
   'roles.manage',
   'roles.assign',
   'cosmetics.grant',

@@ -12,6 +12,7 @@
   import AccountSessions from '$lib/admin/AccountSessions.svelte';
   import AccountBilling from '$lib/admin/AccountBilling.svelte';
   import AccountSetsPanel from '$lib/admin/AccountSetsPanel.svelte';
+  import AccountEditorsPanel from '$lib/admin/AccountEditorsPanel.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import { permissionLabel } from '$lib/admin/permissions';
   import Avatar from '$lib/components/Avatar.svelte';
@@ -36,7 +37,8 @@
   const canStatus = ['users.view', 'users.restrict', 'users.restrict_uploads', 'users.restrict_tickets', 'users.block'].some(can);
   const manageRoles = can('roles.manage') || can('roles.assign');
   const canRoles = manageRoles || can('users.view');
-  const canUploads = can('users.view') || can('emotes.review') || can('emotes.takedown');
+  const canUploads = ['users.view', 'emotes.review', 'emotes.takedown', 'emotes.edit_any', 'emotes.delete_any'].some(can);
+  const canEditors = can('editors.manage_any');
   const canReports = can('emotes.review') || can('emotes.takedown');
 
   let status = $state<Loaded['status']>(null);
@@ -121,7 +123,7 @@
       { id: 'g-moderation', label: 'Moderation', show: !!status || canNotes || canSessions },
       { id: 'g-roles', label: 'Roles and cosmetics', show: canRoles || can('cosmetics.grant') },
       { id: 'g-billing', label: 'Billing', show: canBilling },
-      { id: 'g-content', label: 'Content', show: canUploads || canReports },
+      { id: 'g-content', label: 'Content', show: canUploads || canReports || canEditors },
       { id: 'g-activity', label: 'Activity', show: can('audit.view') },
     ].filter((g) => g.show),
   );
@@ -235,13 +237,14 @@
       </div>
       {/if}
 
-      {#if canUploads || canReports}
+      {#if canUploads || canReports || canEditors}
       <div class="group" id="g-content">
         <h2 class="cap ui-label">Content</h2>
         <div class="cols">
           {#if canUploads}<AccountUploads accountId={account.id} />{/if}
           <AccountSetsPanel accountId={account.id} />
         </div>
+        {#if canEditors}<AccountEditorsPanel accountId={account.id} name={account.displayName} />{/if}
         {#if canReports}<AccountReports accountId={account.id} />{/if}
       </div>
       {/if}

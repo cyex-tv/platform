@@ -722,7 +722,8 @@ const flagsOn = (ownerId) => (ownerId === ME_ID ? EDITOR_FLAGS : withImplied(EDI
 const editorOfOut = () => EDITOR_OF.map((g) => ({ ...g }));
 
 const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view', 'cosmetics.manage', 'cosmetics.grant', 'shop.manage', 'shop.orders', 'codes.manage',
-  'roles.assign', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets', 'users.block', 'users.sessions', 'users.notes', 'entitlements.view', 'billing.view', 'subscriptions.manage'];
+  'roles.assign', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets', 'users.block', 'users.sessions', 'users.notes', 'entitlements.view', 'billing.view', 'subscriptions.manage',
+  'emotes.delete_any', 'editors.manage_any'];
 
 // ---- Chat cosmetics (ADR 0015) ----------------------------------------------------------
 // SAMPLE DATA ONLY: two made-up badges (simple SVG drawn here) and three sample paints, so the
@@ -1400,6 +1401,8 @@ const sorted = (hits, sort, window = 'WEEK') => {
   return hits;
 };
 
+// Editors of other accounts, as staff with editors.manage_any manage them (the mock admin).
+const STAFF_EDITORS = {};
 const findEmote = (id) => MINE.find((e) => e.id === id) ?? ALL.find((e) => e.id === id);
 const findSet = (id) => SETS.find((s) => s.id === id) ?? SHARED_SETS.find((s) => s.id === id) ?? PUBLIC_SETS.find((s) => s.id === id);
 const ALL_SETS = () => [...SETS, ...SHARED_SETS, ...PUBLIC_SETS];
@@ -1458,7 +1461,8 @@ function signedIn(body, v, ADMIN) {
       return { data: { myEmotes: { total: MINE.length, items: MINE.slice((page - 1) * per, page * per) } } };
     }
     case 'UpdateEmote': {
-      const e = MINE.find((x) => x.id === v.id);
+      // Staff with emotes.edit_any (the mock admin) change anyone's.
+      const e = MINE.find((x) => x.id === v.id) ?? (ADMIN ? findEmote(v.id) : null);
       if (!e) return err('Only the emote’s owner can change it.', 'forbidden');
       if (v.input.name !== undefined) e.name = v.input.name;
       if (v.input.tags) e.tags = v.input.tags;
@@ -1476,8 +1480,11 @@ function signedIn(body, v, ADMIN) {
     }
     case 'DeleteEmote': {
       const i = MINE.findIndex((x) => x.id === v.id);
-      if (i < 0) return err('Not found.', 'not_found');
-      MINE.splice(i, 1);
+      // Staff with emotes.delete_any (the mock admin) delete anyone's.
+      const j = i < 0 && ADMIN ? ALL.findIndex((x) => x.id === v.id) : -1;
+      if (i < 0 && j < 0) return err(findEmote(v.id) ? 'Only the emote’s owner can delete it.' : 'Not found.', findEmote(v.id) ? 'forbidden' : 'not_found');
+      if (i >= 0) MINE.splice(i, 1);
+      else ALL.splice(j, 1);
       for (const s of SETS) s.emotes = s.emotes.filter((m) => m.emote.id !== v.id);
       return { data: { deleteEmote: true } };
     }
@@ -1591,6 +1598,7 @@ function signedIn(body, v, ADMIN) {
       return { data: { editorOf: editorOfOut() } };
     case 'AccountEditors': {
       if (!v.accountId || v.accountId === ME_ID) return { data: { accountEditors: ACCOUNT_EDITORS } };
+      if (ADMIN) return { data: { accountEditors: (STAFF_EDITORS[v.accountId] ??= []) } }; // editors.manage_any
       if (!flagsOn(v.accountId).includes('EDITORS')) return err('This needs the editors permission on that account.', 'forbidden');
       return { data: { accountEditors: [] } };
     }
@@ -1604,6 +1612,21 @@ function signedIn(body, v, ADMIN) {
       return { data: { accountEditors: ACCOUNT_EDITORS, editorOf: editorOfOut(), mySets: SETS.map((x) => ({ id: x.id, name: x.name, kind: x.kind, owner: x.owner ? { id: x.owner.id } : null })) } };
     case 'AddAccountEditor': {
       const { login, accountId, permissions } = v.input;
+      if (v.input.ownerId && v.input.ownerId !== ME_ID) {
+        // Someone else's account: staff with editors.manage_any (the mock admin) only.
+        if (!ADMIN) return err('Only the account’s owner and its editors with the editors permission can manage its editors.', 'forbidden');
+        if (!permissions?.length) return err('Pick at least one permission.', 'no_permissions');
+        const list = (STAFF_EDITORS[v.input.ownerId] ??= []);
+        const who = String(login ?? '').trim().replace(/^@/, '').toLowerCase();
+        const a = [ME_SUMMARY, ...OTHERS].find((o) => (accountId ? o.id === accountId : o.displayName.toLowerCase() === who));
+        if (!a) return err('Not found.', 'not_found');
+        if (a.id === v.input.ownerId) return err('The account’s owner can do all of this already.', 'already_owner');
+        if (list.some((e) => e.account.id === a.id)) return err('They are an editor already.', 'already_editor');
+        const now = new Date().toISOString();
+        const ed = { account: a, permissions: withImplied(permissions), allSets: true, setIds: [], grantedBy: ME_SUMMARY, grantedAt: now, updatedAt: now };
+        list.push(ed);
+        return { data: { addAccountEditor: ed } };
+      }
       if (!permissions?.length) return err('Pick at least one permission.', 'no_permissions');
       if (ACCOUNT_EDITORS.length >= MAX_EDITORS) return err('An account can have at most 50 editors. Remove one to add someone else.', 'too_many_editors');
       const scope = scopeFrom(v.input.setIds);
@@ -1619,7 +1642,8 @@ function signedIn(body, v, ADMIN) {
       return { data: { addAccountEditor: ed } };
     }
     case 'UpdateAccountEditor': {
-      const ed = ACCOUNT_EDITORS.find((e) => e.account.id === v.accountId);
+      if (v.ownerId && v.ownerId !== ME_ID && !ADMIN) return err('Only the account’s owner and its editors with the editors permission can manage its editors.', 'forbidden');
+      const ed = (v.ownerId && v.ownerId !== ME_ID ? (STAFF_EDITORS[v.ownerId] ?? []) : ACCOUNT_EDITORS).find((e) => e.account.id === v.accountId);
       if (!ed) return err('Not found.', 'not_found');
       if (!v.permissions?.length) return err('Pick at least one permission.', 'no_permissions');
       if (v.setIds) {
@@ -1632,6 +1656,12 @@ function signedIn(body, v, ADMIN) {
       return { data: { updateAccountEditor: ed } };
     }
     case 'RemoveAccountEditor': {
+      if (v.ownerId && v.ownerId !== ME_ID && v.accountId !== ME_ID && ADMIN) {
+        const list = STAFF_EDITORS[v.ownerId] ?? [];
+        const i = list.findIndex((e) => e.account.id === v.accountId);
+        if (i >= 0) list.splice(i, 1);
+        return { data: { removeAccountEditor: i >= 0 } };
+      }
       if (v.ownerId && v.ownerId !== ME_ID) {
         const i = EDITOR_OF.findIndex((g) => g.account.id === v.ownerId);
         if (i >= 0 && v.accountId === ME_ID) EDITOR_OF.splice(i, 1);

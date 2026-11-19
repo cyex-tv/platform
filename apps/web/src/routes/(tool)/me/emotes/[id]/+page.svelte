@@ -41,6 +41,9 @@
   const nameError = $derived(nameProblem(name));
   const tagError = $derived(tagsProblem(tags));
   const mine = $derived(emote?.owner?.id === session.me?.id);
+  // Staff edit and delete anyone's emote with emotes.edit_any / emotes.delete_any (the API checks and audits).
+  const canEdit = $derived(mine || can('emotes.edit_any'));
+  const canDelete = $derived(mine || can('emotes.delete_any'));
   const changed = $derived(
     emote !== null &&
       (name.trim() !== emote.name ||
@@ -124,7 +127,7 @@
     try {
       await gql(DELETE_EMOTE, { id: emote.id });
       notify(`${iso(emote.name)} deleted.`);
-      await goto('/me');
+      await goto(mine || !emote.owner ? '/me' : `/admin/users/${encodeURIComponent(emote.owner.id)}`);
     } catch (err) {
       fail(err);
       deleting = false;
@@ -188,7 +191,7 @@
     </div>
 
     <div class="ui-stack">
-      {#if mine}
+      {#if canEdit}
         <form class="ui-card ui-form" onsubmit={save} novalidate>
           <h2>Details and visibility</h2>
           <label class="ui-field">
@@ -226,7 +229,7 @@
         </section>
       {/if}
 
-      {#if mine}
+      {#if canDelete}
         <section class="ui-card">
           <h2>Delete</h2>
           <p class="ui-hint">It leaves every set it’s in. This can’t be undone.</p>

@@ -3,7 +3,8 @@
 # Configuration at run time: PUBLIC_API_URL (default https://api.cyex.tv), ORIGIN (the site's own
 # URL, https://cyex.tv in production), PORT (3000). No secrets; the site holds none.
 # The Content-Security-Policy is fixed at build time and allows the API origin PUBLIC_API_URL has
-# then: for an API other than https://api.cyex.tv, also pass --build-arg PUBLIC_API_URL=<origin>.
+# then: for an API other than https://api.cyex.tv, also pass --build-arg PUBLIC_API_URL=<origin>,
+# and for pictures served from somewhere other than https://cdn.cyex.tv, --build-arg PUBLIC_CDN_URL=<url>.
 
 FROM node:22-bookworm-slim AS build
 WORKDIR /repo/apps/web
@@ -14,6 +15,7 @@ COPY openapi /repo/openapi
 COPY schema /repo/schema
 COPY apps/web ./
 ARG PUBLIC_API_URL=
+ARG PUBLIC_CDN_URL=
 RUN npm run build
 
 FROM node:22-bookworm-slim AS web

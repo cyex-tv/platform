@@ -109,11 +109,24 @@ export function paintStyle(p: PaintLike | null | undefined, still = false): stri
   const image = paintImage(p, still);
   const out: string[] = [];
   if (fallback) out.push(`color: ${fallback}`);
-  if (image) {
+  if (image && p.kind === 'IMAGE') {
+    // The text itself is transparent, so a picture that doesn't load (blocked by the CSP, missing
+    // on the CDN, still on its way) would leave the name invisible. A flat layer in the plain
+    // colour (or the surrounding text colour) sits under the picture and shows wherever it doesn't.
+    out.push(
+      `background-image: ${image}, linear-gradient(currentColor, currentColor)`,
+      `background-size: ${p.repeat ? 'auto 100%' : 'cover'}, 100% 100%`,
+      `background-repeat: ${p.repeat ? 'repeat' : 'no-repeat'}, no-repeat`,
+      'background-position: center',
+      '-webkit-background-clip: text',
+      'background-clip: text',
+      '-webkit-text-fill-color: transparent',
+    );
+  } else if (image) {
     out.push(
       `background-image: ${image}`,
-      p.kind === 'IMAGE' ? `background-size: ${p.repeat ? 'auto 100%' : 'cover'}` : 'background-size: 100% 100%',
-      `background-repeat: ${p.kind === 'IMAGE' && p.repeat ? 'repeat' : 'no-repeat'}`,
+      'background-size: 100% 100%',
+      'background-repeat: no-repeat',
       'background-position: center',
       '-webkit-background-clip: text',
       'background-clip: text',

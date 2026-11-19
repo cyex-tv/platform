@@ -2,6 +2,22 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Paint render fix and global emote/editor permissions (branch `fix/paints-and-global-perms`, ADR 0010 amendment part 3)
+- Owner feedback I (2026/11/19): "paints seem to not render properly on the website" (an image paint, "Icy Wave", showed as an empty radio in the cosmetics picker) and "perms to edit someones emotes and editors globally for a role".
+- Paint cause: a painted name is transparent text (`-webkit-text-fill-color: transparent`) showing its background through `background-clip: text`. For an image paint the only background was the picture, so whenever the picture didn't load (blocked by the CSP's `img-src`, missing on the CDN, still on its way) the name drew nothing. A local stack serves pictures from `CYEX_TV_CDN_URL` (the S3 server), which the CSP never allowed; the studio previews render locally, so they looked fine. Fix: `paintStyle` (and the studio's `paintStyleText`) put a flat layer in the text colour under the picture; `PUBLIC_CDN_URL` adds the pictures' origin to `img-src` (svelte.config.js, Dockerfile build arg, .env.example).
+- Permissions (additive): `emotes.delete_any` (delete anyone's emote, audited `emote.deleted` with `via`) and `editors.manage_any` (list, add, change, remove anyone's editors with every flag, audited with `via`); `emotes.edit_any` already covered name, tags, flags and visibility and is unchanged. Migration `20261207000051_global_emote_editor_perms.sql` gives both to the built-in Admin role. `accountEmotes` also takes `emotes.edit_any` / `emotes.delete_any`.
+- Web: role editor labels, tooltips and groups (`lib/admin/permissions.ts`); admin account page Editors panel (`lib/admin/AccountEditorsPanel.svelte`); emote page shows the edit form and delete to holders; dev mock updated.
+- Tests: vitest `paint.test.ts` (fails before the fix: no layer under the picture), `studio.test.ts`; Postgres `apps/api/tests/global_perms_flow.rs` (allow and deny for each, audit rows, owner's own actions unmarked).
+- Manual check (2026/11/19): headless Edge against the dev mock, `.claude/runs/2026-11-17-overnight/screens/i-paint/paint-visible.mjs` clones the image-painted name with a CSP-blocked and a 404 picture and counts visible pixels: 0.0% before, 29% after, dark and light. Editors panel at 1440 dark and 375 light.
+
+### GitHub write log for this PR
+
+```
+git push -u origin fix/paints-and-global-perms
+gh pr create --base main --head fix/paints-and-global-perms --title "Paint render fix and global emote/editor permissions" --body-file <file>
+gh pr merge 94 --merge
+```
+
 ## Emote browse: animated everywhere, one grid, flags and tags filters, trending (branch `feat/emote-browse`)
 
 Owner feedback 2026/11/19, section G. Additive API; nothing was deployed.
@@ -13,6 +29,7 @@ Owner feedback 2026/11/19, section G. Additive API; nothing was deployed.
 - [x] Dev mock: flags, tags, exact, NSFW emotes, `wide`, trending windows and `emoteTrending`.
 - Tests: `apps/api/tests/browse_flow.rs` (flags, tags, exact, trending windows, `emoteTrending`), `crates/db/tests/queries.rs` (rollup: distinct channels per hour, idempotent), unit tests for tag cleaning; vitest `tag-input.test.ts` (rules and markup) and `params.test.ts` (filter and trending URL state, API variables).
 - Manual check: /search, Trending (3 windows), filters, the filter sheet, emote page at 375, 768, 1440 and 2560 in both themes; keyboard (tag field Enter/Backspace/paste/×, flag chips with Space, window with arrow keys); reduced motion shows the still frames (screens in the run folder, `2026-11-19-feedback/screens/g`).
+
 ## Front page, round 2: a real 3D hero and the zig-zag (branch `feat/front-page-2`)
 
 Owner feedback 2026/11/19, part I ("not 3d enough", "animation too subtle", "stacked more vertically ... zig zag"). Web only; nothing was deployed.

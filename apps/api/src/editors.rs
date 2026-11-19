@@ -24,11 +24,12 @@ use cyex_tv_shared::model::{
     AccountEditor, AccountSummary, AddAccountEditor, Channel, ChannelRole, EditableChannel,
     EditedAccount, EditorPermission, EmoteSet,
 };
+use cyex_tv_shared::permissions;
 use serde_json::json;
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
-use crate::catalog::{db_error, forbidden, not_found, parse_id, viewer};
+use crate::catalog::{db_error, forbidden, holds, not_found, parse_id, viewer};
 use crate::state::AppState;
 use crate::views;
 
@@ -217,19 +218,48 @@ pub async fn has_flag(
         .is_some_and(|names| flags_of(&names).contains(&flag)))
 }
 
-/// The flags and sets the caller may manage editors of `owner` with: all of them for the owner,
-/// theirs for an editor holding `editors`.
+/// Who may manage an account's editors, and with what.
+struct Manager {
+    flags: Flags,
+    scope: Scope,
+    /// Through `editors.manage_any` rather than as the owner or through an account grant: a staff
+    /// action, marked as such in the audit log.
+    staff: bool,
+}
+
+/// The flags and sets the caller may manage editors of `owner` with: all of them for the owner
+/// and for staff with `editors.manage_any`, theirs for an editor holding `editors`.
 async fn manager_access(
     conn: &mut PgConnection,
     caller: &Caller,
     owner: Uuid,
-) -> ApiResult<(Flags, Scope)> {
-    match access_on(conn, owner, caller.account_id).await? {
-        Some((flags, scope)) if flags.contains(&EditorPermission::Editors) => Ok((flags, scope)),
-        _ => Err(forbidden(
-            "Only the account's owner and its editors with the editors permission can manage its editors.",
-        )),
+) -> ApiResult<Manager> {
+    if let Some((flags, scope)) = access_on(conn, owner, caller.account_id).await?
+        && flags.contains(&EditorPermission::Editors)
+    {
+        return Ok(Manager {
+            flags,
+            scope,
+            staff: false,
+        });
     }
+    if holds(conn, caller, permissions::EDITORS_MANAGE_ANY).await? {
+        if accounts::get(conn, owner)
+            .await
+            .map_err(db_error)?
+            .is_none()
+        {
+            return Err(not_found());
+        }
+        return Ok(Manager {
+            flags: all_flags(),
+            scope: Scope::All,
+            staff: true,
+        });
+    }
+    Err(forbidden(
+        "Only the account's owner and its editors with the editors permission can manage its editors.",
+    ))
 }
 
 fn requested(permissions: &[EditorPermission]) -> ApiResult<Flags> {
@@ -391,6 +421,7 @@ async fn audit(
     owner: Uuid,
     before: Option<(&Grant, &Scope)>,
     after: Option<(&Grant, &Scope)>,
+    staff: bool,
 ) -> ApiResult<()> {
     let shape = |(g, scope): (&Grant, &Scope)| {
         json!({
@@ -400,6 +431,15 @@ async fn audit(
             "set_ids": scope.ids(),
         })
     };
+    // A change made through `editors.manage_any` says so (a removal has no `after`; it gets one).
+    let after = match (after.map(shape), staff) {
+        (Some(mut v), true) => {
+            v["via"] = json!(permissions::EDITORS_MANAGE_ANY);
+            Some(v)
+        }
+        (None, true) => Some(json!({ "via": permissions::EDITORS_MANAGE_ANY })),
+        (v, false) => v,
+    };
     cyex_tv_db::audit::write(
         conn,
         &cyex_tv_db::audit::NewEntry {
@@ -408,7 +448,7 @@ async fn audit(
             target_kind: "account",
             target_id: &ids::to_text(owner),
             before: before.map(shape),
-            after: after.map(shape),
+            after,
         },
     )
     .await
@@ -418,7 +458,8 @@ async fn audit(
 
 // Reads
 
-/// An account's editors: yours, or those of an account you edit with `editors`.
+/// An account's editors: yours, those of an account you edit with `editors`, or anyone's with
+/// `editors.manage_any`.
 pub async fn account_editors(
     state: &AppState,
     caller: &Caller,
@@ -670,10 +711,10 @@ pub async fn add(
     rate_limited(state, caller)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    let (manager, manager_scope) = manager_access(&mut tx, caller, owner).await?;
-    no_escalation(&manager, &flags)?;
+    let m = manager_access(&mut tx, caller, owner).await?;
+    no_escalation(&m.flags, &flags)?;
     let scope = requested_scope(&mut tx, owner, input.set_ids.as_deref()).await?;
-    no_wider_scope(&manager_scope, &scope)?;
+    no_wider_scope(&m.scope, &scope)?;
     let editor = target(&mut tx, input).await?;
     if editor == owner {
         return Err(bad(
@@ -713,6 +754,7 @@ pub async fn add(
         owner,
         None,
         Some((&grant, &scope)),
+        m.staff,
     )
     .await?;
     notify_grant(
@@ -744,20 +786,20 @@ pub async fn update(
     rate_limited(state, caller)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    let (manager, manager_scope) = manager_access(&mut tx, caller, owner).await?;
+    let m = manager_access(&mut tx, caller, owner).await?;
     let before = editors::get(&mut tx, owner, editor)
         .await
         .map_err(db_error)?
         .ok_or_else(not_found)?;
     let before_scope = scope_of(&mut tx, owner, editor).await?;
-    outranked(&manager, &flags_of(&before.permissions))?;
-    outscoped(&manager_scope, &before_scope)?;
-    no_escalation(&manager, &flags)?;
+    outranked(&m.flags, &flags_of(&before.permissions))?;
+    outscoped(&m.scope, &before_scope)?;
+    no_escalation(&m.flags, &flags)?;
     let scope = match set_ids {
         Some(ids) => requested_scope(&mut tx, owner, Some(ids)).await?,
         None => before_scope.clone(),
     };
-    no_wider_scope(&manager_scope, &scope)?;
+    no_wider_scope(&m.scope, &scope)?;
     let mut after = editors::update(&mut tx, owner, editor, &names_of(&flags))
         .await
         .map_err(db_error)?;
@@ -777,6 +819,7 @@ pub async fn update(
         owner,
         Some((&before, &before_scope)),
         Some((&after, &scope)),
+        m.staff,
     )
     .await?;
     if after.permissions != before.permissions || scope != before_scope {
@@ -809,14 +852,16 @@ pub async fn remove(
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let current_scope = scope_of(&mut tx, owner, editor).await?;
+    let mut staff = false;
     if editor != caller.account_id {
-        let (manager, manager_scope) = manager_access(&mut tx, caller, owner).await?;
+        let m = manager_access(&mut tx, caller, owner).await?;
+        staff = m.staff;
         if let Some(current) = editors::get(&mut tx, owner, editor)
             .await
             .map_err(db_error)?
         {
-            outranked(&manager, &flags_of(&current.permissions))?;
-            outscoped(&manager_scope, &current_scope)?;
+            outranked(&m.flags, &flags_of(&current.permissions))?;
+            outscoped(&m.scope, &current_scope)?;
         }
     }
     let removed = editors::remove(&mut tx, owner, editor)
@@ -830,6 +875,7 @@ pub async fn remove(
             owner,
             Some((grant, &current_scope)),
             None,
+            staff,
         )
         .await?;
         notify_grant(&mut tx, caller, "editor.removed", owner, editor, &[]).await?;

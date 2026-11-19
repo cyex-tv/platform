@@ -623,7 +623,7 @@ impl Query {
     }
 
     /// An account's editors (ADR 0014): yours, or, with `accountId`, those of an account you edit
-    /// with the `EDITORS` permission.
+    /// with the `EDITORS` permission, or anyone's with `editors.manage_any`.
     async fn account_editors(
         &self,
         ctx: &Context<'_>,
@@ -918,8 +918,8 @@ impl Query {
             .map_err(api_error)
     }
 
-    /// An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`
-    /// or `emotes.takedown`. `perPage` is 1 to 100, default 50.
+    /// An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`,
+    /// `emotes.takedown`, `emotes.edit_any` or `emotes.delete_any`. `perPage` is 1 to 100, default 50.
     async fn account_emotes(
         &self,
         ctx: &Context<'_>,
@@ -1245,8 +1245,8 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Make someone an editor of your account, or of an account you edit with `EDITORS` (ADR
-    /// 0014). Give their account ID, or a platform and login. You can only grant permissions you
+    /// Make someone an editor of your account, of an account you edit with `EDITORS` (ADR
+    /// 0014), or of anyone's with `editors.manage_any` (audited with `via`). Give their account ID, or a platform and login. You can only grant permissions you
     /// hold. `setIds` limits them to some of the account's sets; leave it out for every set, new
     /// ones included. At most 50 editors per account (`too_many_editors`). Audited.
     async fn add_account_editor(
@@ -1261,6 +1261,7 @@ impl Mutation {
     }
 
     /// Change an account editor's permissions. `ownerId` is the account edited; empty for yours.
+    /// The owner, an editor with `EDITORS`, or `editors.manage_any`.
     /// `setIds` changes which sets they work on: empty for every set, left out to keep them.
     /// Audited.
     async fn update_account_editor(
@@ -1284,7 +1285,7 @@ impl Mutation {
         .map_err(api_error)
     }
 
-    /// Remove an account editor: the owner, an editor with `EDITORS`, or the editor themselves
+    /// Remove an account editor: the owner, an editor with `EDITORS`, `editors.manage_any`, or the editor themselves
     /// (with `ownerId` set to the account they leave). False when they weren't one. Audited.
     async fn remove_account_editor(
         &self,
@@ -1525,7 +1526,8 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Delete your emote. It is removed from every set.
+    /// Delete your emote, or anyone's with `emotes.delete_any` (audited). It is removed from
+    /// every set.
     async fn delete_emote(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
         let caller = caller(ctx)?;
         moderation::delete(state(ctx), caller, &id)
