@@ -59,6 +59,16 @@ export type AccountProfile = {
   roles: Array<PublicRole>;
 };
 
+/**
+ * Reports about an account's emotes and reports it filed (`emotes.review` or
+ * `emotes.takedown`), newest first, at most 50 each.
+ */
+export type AccountReports = {
+  __typename?: 'AccountReports';
+  about: Array<Report>;
+  by: Array<Report>;
+};
+
 export type AccountResults = {
   __typename?: 'AccountResults';
   items: Array<AccountHit>;
@@ -206,6 +216,18 @@ export type AddSetEmoteInput = {
   /** Rename it in this set. Defaults to the emote's own name. */
   name?: InputMaybe<Scalars['String']['input']>;
   zeroWidth?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+/** An account as staff see it (`users.view` or `users.restrict`). */
+export type AdminAccount = {
+  __typename?: 'AdminAccount';
+  avatar?: Maybe<Scalars['String']['output']>;
+  blocked: Scalars['Boolean']['output'];
+  createdAt: Scalars['String']['output'];
+  displayName: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+  identities: Array<Identity>;
+  uploadsBlocked: Scalars['Boolean']['output'];
 };
 
 /** One audited change (ADR 0010). `before` and `after` are JSON, as text. */
@@ -1384,11 +1406,21 @@ export type Query = {
    */
   accountEditors: Array<AccountEditor>;
   /**
+   * An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`
+   * or `emotes.takedown`. `perPage` is 1 to 100, default 50.
+   */
+  accountEmotes: EmotePage;
+  /**
    * An account's public profile: linked Twitch and Kick logins (no IDs), roles marked public,
    * and each channel's active set ("Active emotes"). Listed sets: `accountSets`. Null when the
    * account is unknown, deleted or blocked.
    */
   accountProfile?: Maybe<AccountProfile>;
+  /**
+   * Reports about an account's emotes and the ones it filed, newest first, at most 50 each.
+   * Needs `emotes.review` or `emotes.takedown`.
+   */
+  accountReports: AccountReports;
   /** An account's roles. Yours, or anyone's with `roles.manage` or `users.view`. */
   accountRoles: Array<Role>;
   /**
@@ -1404,8 +1436,14 @@ export type Query = {
    */
   accountStatus: AccountStatus;
   /**
-   * Audited changes, newest first. Needs `audit.view`. Page back with `before` (an entry ID);
-   * `limit` is 1 to 100, default 50.
+   * An account as staff see it: identities, created time and restrictions. Needs
+   * `users.view` or `users.restrict`.
+   */
+  adminAccount: AdminAccount;
+  /**
+   * Audited changes, newest first. Needs `audit.view`. Narrow by target, `actorId`, an exact
+   * `action`, and `since` (inclusive) / `until` (exclusive) as RFC 3339 times. Page back with
+   * `before` (an entry ID); `limit` is 1 to 100, default 50.
    */
   auditLog: Array<AuditEntry>;
   /** A channel by its platform ID. */
@@ -1591,7 +1629,19 @@ export type QueryAccountEditorsArgs = {
 };
 
 
+export type QueryAccountEmotesArgs = {
+  accountId: Scalars['String']['input'];
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
 export type QueryAccountProfileArgs = {
+  accountId: Scalars['String']['input'];
+};
+
+
+export type QueryAccountReportsArgs = {
   accountId: Scalars['String']['input'];
 };
 
@@ -1612,11 +1662,20 @@ export type QueryAccountStatusArgs = {
 };
 
 
+export type QueryAdminAccountArgs = {
+  accountId: Scalars['String']['input'];
+};
+
+
 export type QueryAuditLogArgs = {
+  action?: InputMaybe<Scalars['String']['input']>;
+  actorId?: InputMaybe<Scalars['String']['input']>;
   before?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
+  since?: InputMaybe<Scalars['String']['input']>;
   targetId?: InputMaybe<Scalars['String']['input']>;
   targetKind?: InputMaybe<Scalars['String']['input']>;
+  until?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -2398,6 +2457,8 @@ export type RejectMutationVariables = Exact<{
 
 export type RejectMutation = { __typename?: 'Mutation', rejectEmote: { __typename?: 'Emote', id: string, state: EmoteState } };
 
+export type ReportFieldsFragment = { __typename?: 'Report', id: string, reason: string, reporterId?: string | null, state: ReportState, resolution?: string | null, createdAt: string, resolvedAt?: string | null, emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null };
+
 export type ReportQueueQueryVariables = Exact<{
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
@@ -2502,6 +2563,10 @@ export type UnassignRoleMutation = { __typename?: 'Mutation', unassignRole: bool
 export type AuditQueryVariables = Exact<{
   targetKind?: InputMaybe<Scalars['String']['input']>;
   targetId?: InputMaybe<Scalars['String']['input']>;
+  actorId?: InputMaybe<Scalars['String']['input']>;
+  action?: InputMaybe<Scalars['String']['input']>;
+  since?: InputMaybe<Scalars['String']['input']>;
+  until?: InputMaybe<Scalars['String']['input']>;
   before?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
 }>;
@@ -2531,6 +2596,29 @@ export type SearchByOwnerQueryVariables = Exact<{
 
 
 export type SearchByOwnerQuery = { __typename?: 'Query', searchEmotes: { __typename?: 'SearchResults', total: number, page: number, perPage: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+
+export type AdminAccountQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type AdminAccountQuery = { __typename?: 'Query', adminAccount: { __typename?: 'AdminAccount', id: string, displayName: string, avatar?: string | null, createdAt: string, uploadsBlocked: boolean, blocked: boolean, identities: Array<{ __typename?: 'Identity', platform: Platform, platformUserId: string, login: string, displayName: string, avatar?: string | null }> } };
+
+export type AccountEmotesQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type AccountEmotesQuery = { __typename?: 'Query', accountEmotes: { __typename?: 'EmotePage', total: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+
+export type AccountReportsQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type AccountReportsQuery = { __typename?: 'Query', accountReports: { __typename?: 'AccountReports', about: Array<{ __typename?: 'Report', id: string, reason: string, reporterId?: string | null, state: ReportState, resolution?: string | null, createdAt: string, resolvedAt?: string | null, emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null }>, by: Array<{ __typename?: 'Report', id: string, reason: string, reporterId?: string | null, state: ReportState, resolution?: string | null, createdAt: string, resolvedAt?: string | null, emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null }> } };
 
 export type PublicAccountQueryVariables = Exact<{
   id: Scalars['String']['input'];
@@ -2989,6 +3077,49 @@ export const AccountEditorFieldsFragmentDoc = new TypedDocumentString(`
   grantedAt
 }
     `, {"fragmentName":"AccountEditorFields"}) as unknown as TypedDocumentString<AccountEditorFieldsFragment, unknown>;
+export const ReportFieldsFragmentDoc = new TypedDocumentString(`
+    fragment ReportFields on Report {
+  id
+  reason
+  reporterId
+  state
+  resolution
+  createdAt
+  resolvedAt
+  emote {
+    ...EmoteFields
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    nsfw
+    private
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`, {"fragmentName":"ReportFields"}) as unknown as TypedDocumentString<ReportFieldsFragment, unknown>;
 export const RoleFieldsFragmentDoc = new TypedDocumentString(`
     fragment RoleFields on Role {
   id
@@ -4382,10 +4513,14 @@ export const UnassignRoleDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<UnassignRoleMutation, UnassignRoleMutationVariables>;
 export const AuditDocument = new TypedDocumentString(`
-    query Audit($targetKind: String, $targetId: String, $before: String, $limit: Int) {
+    query Audit($targetKind: String, $targetId: String, $actorId: String, $action: String, $since: String, $until: String, $before: String, $limit: Int) {
   auditLog(
     targetKind: $targetKind
     targetId: $targetId
+    actorId: $actorId
+    action: $action
+    since: $since
+    until: $until
     before: $before
     limit: $limit
   ) {
@@ -4468,6 +4603,117 @@ export const SearchByOwnerDocument = new TypedDocumentString(`
     isStatic
   }
 }`) as unknown as TypedDocumentString<SearchByOwnerQuery, SearchByOwnerQueryVariables>;
+export const AdminAccountDocument = new TypedDocumentString(`
+    query AdminAccount($accountId: String!) {
+  adminAccount(accountId: $accountId) {
+    id
+    displayName
+    avatar
+    createdAt
+    uploadsBlocked
+    blocked
+    identities {
+      platform
+      platformUserId
+      login
+      displayName
+      avatar
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<AdminAccountQuery, AdminAccountQueryVariables>;
+export const AccountEmotesDocument = new TypedDocumentString(`
+    query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {
+  accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {
+    total
+    items {
+      ...EmoteFields
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    nsfw
+    private
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<AccountEmotesQuery, AccountEmotesQueryVariables>;
+export const AccountReportsDocument = new TypedDocumentString(`
+    query AccountReports($accountId: String!) {
+  accountReports(accountId: $accountId) {
+    about {
+      ...ReportFields
+    }
+    by {
+      ...ReportFields
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    nsfw
+    private
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}
+fragment ReportFields on Report {
+  id
+  reason
+  reporterId
+  state
+  resolution
+  createdAt
+  resolvedAt
+  emote {
+    ...EmoteFields
+  }
+}`) as unknown as TypedDocumentString<AccountReportsQuery, AccountReportsQueryVariables>;
 export const PublicAccountDocument = new TypedDocumentString(`
     query PublicAccount($id: String!) {
   account(id: $id) {

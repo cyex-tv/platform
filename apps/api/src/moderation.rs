@@ -12,7 +12,7 @@ use cyex_tv_db::emotes::{self, EmotePatch};
 use cyex_tv_db::{DbError, accounts, audit, ids, reads, sets};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
-    Emote, EmoteState, EmoteVisibility, EventType, ReviewQueue, UpdateEmote,
+    Emote, EmotePage, EmoteState, EmoteVisibility, EventType, ReviewQueue, UpdateEmote,
 };
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
@@ -200,6 +200,36 @@ pub async fn review_queue(
             .await
             .map_err(db_error)?;
     Ok(ReviewQueue {
+        items: views::emotes(&mut conn, &rows, &state.cdn_url)
+            .await
+            .map_err(db_error)?,
+        total: u64::try_from(total).unwrap_or(0),
+    })
+}
+
+/// An account's emotes in every state, newest first. For `users.view` and moderators.
+pub async fn account_emotes(
+    state: &AppState,
+    caller: &Caller,
+    account_id: &str,
+    page: Option<u32>,
+    per_page: Option<u32>,
+) -> ApiResult<EmotePage> {
+    let owner = parse_id(account_id)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    if !holds(&mut conn, caller, permissions::USERS_VIEW).await?
+        && !holds(&mut conn, caller, permissions::EMOTES_REVIEW).await?
+        && !holds(&mut conn, caller, permissions::EMOTES_TAKEDOWN).await?
+    {
+        return Err(forbidden("This needs users.view or emotes.review."));
+    }
+    let per_page = per_page.unwrap_or(QUEUE_PAGE).clamp(1, QUEUE_PAGE_MAX);
+    let page = page.unwrap_or(1).max(1);
+    let offset = i64::from(page - 1) * i64::from(per_page);
+    let (rows, total) = reads::emotes_by_owner(&mut conn, owner, i64::from(per_page), offset)
+        .await
+        .map_err(db_error)?;
+    Ok(EmotePage {
         items: views::emotes(&mut conn, &rows, &state.cdn_url)
             .await
             .map_err(db_error)?,

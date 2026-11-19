@@ -12,6 +12,30 @@ Additive API; two new migrations; nothing was deployed.
 - [x] Website: Account → Delete account copy, the Help answers (deletion, unlisted/private), the `/restore` page, the Public / Unlisted / Private control on upload and edit, the "Unlisted" mark on the emote page, hidden roles on your own profile ("Hidden" with an eye-off icon), and "Clone to my sets" makes a listed copy again. Dev mock follows all of it.
 - Tests: `apps/api/tests/auth_flow.rs` (restore within 30 days, past the window, blocked, restriction kept through restore and erase), `apps/api/tests/account_hub_flow.rs` (hidden at once, then erased), `apps/api/tests/visibility_flow.rs` (unlisted, own roles), `apps/worker/tests/erase.rs` (only due accounts erased), unit tests in `crates/shared` (visibility rules), web `visibility.test.ts`, `api.test.ts`, `faq.test.ts`.
 
+## Front page: 3D logo hero and four boxes (branch `feat/front-page`)
+
+Owner feedback 2026/11/19, part B. Web only; nothing was deployed.
+
+- [x] Hero: the cyex.tv logo (three open bars, the middle one offset and lit) as a three.js object (`apps/web/src/lib/home/logo-scene.ts`, three 0.187.0 pinned). It turns slowly on its own and tilts back as the hero scrolls away; never follows the pointer. The flat SVG (`LogoMark.svelte`) paints first and stays for reduced motion, no WebGL, data saver, under 4 GB memory or under 4 cores. three.js is its own chunk, asked for only after the load event and an idle moment (`LogoHero.svelte`); it draws at 30 fps and only while the hero is on screen.
+- [x] Below the hero: no emotes any more (no strip, cluster or chat previews), and one row of four boxes, each with a small picture in the logo's language (`ShowcaseArt.svelte`): the extension (a menu of Chrome, Edge, Firefox, Opera, Brave; URLs in `apps/web/src/lib/home/stores.ts`, `/download#<browser>` until the store listings exist), cyex deck (direct download of the newest installer), the API and cosmetics.
+- [x] cyex deck download works like cyex.app/deck: the newest `cyex-deck_<v>_x64-setup.exe` of `github.com/cyex-app/cyex-deck` releases (pre-releases counted, drafts skipped, only that repo's download URLs accepted), read from GitHub's release list in the browser after load at most once an hour (`cyexDeckRelease` in localStorage), falling back to a pinned installer (`deck-release.ts`, move it with each release). CSP `connect-src` gained `https://api.github.com` for that one request.
+- [x] /download has anchors for each browser (`#chrome`, `#edge`, `#firefox`, `#opera`, `#brave`).
+- Tests: `apps/web/src/lib/home/home.test.ts` (release picking, installer URL checks, version order, kept answer, browser detection, the 3D gate).
+- Checked in the running app (vite preview + mock): 375, 768, 1440, 2560, dark and light, reduced motion, Edge with WebGL off, the menu by mouse and keyboard; LCP is the hero text before three.js is asked for, CLS 0 from the page.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/front-page
+gh pr create --base main --head feat/front-page --title "web: front page with a 3D logo hero and four boxes" --body-file <file>
+gh pr merge <n> --merge
+```
+
+## Admin v2 (branch `feat/admin-v2`)
+- API (additive): `auditLog` takes `actorId`, `action`, `since`, `until` besides target and paging; new `adminAccount` (users.view or users.restrict), `accountEmotes` (users.view, emotes.review or emotes.takedown) and `accountReports` (moderators). Postgres tests: `staff_look_up_an_account` (apps/api/tests/abuse_flow.rs) and the audit filter cases in crates/db/tests/queries.rs. Not built: sessions on the account page (no sessions API on main yet).
+- Web: `/admin/users/[accountId]` (profile, restrictions, roles, cosmetics, uploads, reports about and by, latest audit entries), `/admin/cosmetics/owners` (who owns what), audit log filters with links to targets and a Changes/JSON toggle, review queue keyboard flow (J, K, A, R) with a 1x/2x/4x comparison, reports grouped by emote.
+- Manual check (2026/11/18): headless Edge against the dev mock at 1440 and 375, dark and light, plus the keyboard flow (J, K, R, A) in the review queue; screens in .claude/runs/2026-11-17-overnight/screens/g9.
+
 ## Sign-off fixes: API (branch `fix/signoff-api`)
 
 The second security review and the sign-off code review (overnight run 2026-11-17). Additive; nothing was deployed.

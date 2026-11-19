@@ -68,6 +68,7 @@ type Documents = {
     "\n  query ReviewQueue($page: Int, $perPage: Int) {\n    reviewQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.ReviewQueueDocument,
     "\n  mutation Approve($id: String!) {\n    approveEmote(id: $id) {\n      id\n      state\n    }\n  }\n": typeof types.ApproveDocument,
     "\n  mutation Reject($id: String!, $reason: String!) {\n    rejectEmote(id: $id, reason: $reason) {\n      id\n      state\n    }\n  }\n": typeof types.RejectDocument,
+    "\n  fragment ReportFields on Report {\n    id\n    reason\n    reporterId\n    state\n    resolution\n    createdAt\n    resolvedAt\n    emote {\n      ...EmoteFields\n    }\n  }\n": typeof types.ReportFieldsFragmentDoc,
     "\n  query ReportQueue($page: Int, $perPage: Int) {\n    reportQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        id\n        reason\n        reporterId\n        state\n        createdAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": typeof types.ReportQueueDocument,
     "\n  mutation ResolveReport($id: String!, $action: ReportAction!, $note: String) {\n    resolveReport(id: $id, action: $action, note: $note) {\n      id\n      state\n    }\n  }\n": typeof types.ResolveReportDocument,
     "\n  mutation Takedown($id: String!, $reason: String!) {\n    takedownEmote(id: $id, reason: $reason) {\n      id\n      state\n    }\n  }\n": typeof types.TakedownDocument,
@@ -82,10 +83,13 @@ type Documents = {
     "\n  mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {\n    restrictAccount(accountId: $accountId, uploadsBlocked: $uploadsBlocked, blocked: $blocked) {\n      uploadsBlocked\n      blocked\n    }\n  }\n": typeof types.RestrictDocument,
     "\n  mutation AssignRole($accountId: String!, $roleId: String!) {\n    assignRole(accountId: $accountId, roleId: $roleId)\n  }\n": typeof types.AssignRoleDocument,
     "\n  mutation UnassignRole($accountId: String!, $roleId: String!) {\n    unassignRole(accountId: $accountId, roleId: $roleId)\n  }\n": typeof types.UnassignRoleDocument,
-    "\n  query Audit($targetKind: String, $targetId: String, $before: String, $limit: Int) {\n    auditLog(targetKind: $targetKind, targetId: $targetId, before: $before, limit: $limit) {\n      id\n      actorId\n      action\n      targetKind\n      targetId\n      before\n      after\n      createdAt\n    }\n  }\n": typeof types.AuditDocument,
+    "\n  query Audit(\n    $targetKind: String\n    $targetId: String\n    $actorId: String\n    $action: String\n    $since: String\n    $until: String\n    $before: String\n    $limit: Int\n  ) {\n    auditLog(\n      targetKind: $targetKind\n      targetId: $targetId\n      actorId: $actorId\n      action: $action\n      since: $since\n      until: $until\n      before: $before\n      limit: $limit\n    ) {\n      id\n      actorId\n      action\n      targetKind\n      targetId\n      before\n      after\n      createdAt\n    }\n  }\n": typeof types.AuditDocument,
     "\n  mutation ReportEmote($id: String!, $reason: String!) {\n    reportEmote(id: $id, reason: $reason) {\n      id\n    }\n  }\n": typeof types.ReportEmoteDocument,
     "\n  query MySetNames {\n    mySets {\n      id\n      name\n      kind\n      emotes {\n        emote {\n          id\n        }\n      }\n    }\n  }\n": typeof types.MySetNamesDocument,
     "\n  query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: \"\", owner: $owner, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.SearchByOwnerDocument,
+    "\n  query AdminAccount($accountId: String!) {\n    adminAccount(accountId: $accountId) {\n      id\n      displayName\n      avatar\n      createdAt\n      uploadsBlocked\n      blocked\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.AdminAccountDocument,
+    "\n  query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {\n    accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.AccountEmotesDocument,
+    "\n  query AccountReports($accountId: String!) {\n    accountReports(accountId: $accountId) {\n      about {\n        ...ReportFields\n      }\n      by {\n        ...ReportFields\n      }\n    }\n  }\n": typeof types.AccountReportsDocument,
     "\n  query PublicAccount($id: String!) {\n    account(id: $id) {\n      id\n      displayName\n      avatar\n    }\n  }\n": typeof types.PublicAccountDocument,
     "\n  query EmoteChannels($id: String!, $limit: Int) {\n    emoteChannels(id: $id, limit: $limit) {\n      platform\n      login\n      account {\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.EmoteChannelsDocument,
     "\n  fragment CosmeticImageFields on CosmeticImage {\n    id\n    kind\n    host\n    animated\n    ready\n    width\n    height\n    files {\n      name\n      width\n      height\n      isStatic\n    }\n  }\n": typeof types.CosmeticImageFieldsFragmentDoc,
@@ -186,6 +190,7 @@ const documents: Documents = {
     "\n  query ReviewQueue($page: Int, $perPage: Int) {\n    reviewQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.ReviewQueueDocument,
     "\n  mutation Approve($id: String!) {\n    approveEmote(id: $id) {\n      id\n      state\n    }\n  }\n": types.ApproveDocument,
     "\n  mutation Reject($id: String!, $reason: String!) {\n    rejectEmote(id: $id, reason: $reason) {\n      id\n      state\n    }\n  }\n": types.RejectDocument,
+    "\n  fragment ReportFields on Report {\n    id\n    reason\n    reporterId\n    state\n    resolution\n    createdAt\n    resolvedAt\n    emote {\n      ...EmoteFields\n    }\n  }\n": types.ReportFieldsFragmentDoc,
     "\n  query ReportQueue($page: Int, $perPage: Int) {\n    reportQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        id\n        reason\n        reporterId\n        state\n        createdAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": types.ReportQueueDocument,
     "\n  mutation ResolveReport($id: String!, $action: ReportAction!, $note: String) {\n    resolveReport(id: $id, action: $action, note: $note) {\n      id\n      state\n    }\n  }\n": types.ResolveReportDocument,
     "\n  mutation Takedown($id: String!, $reason: String!) {\n    takedownEmote(id: $id, reason: $reason) {\n      id\n      state\n    }\n  }\n": types.TakedownDocument,
@@ -200,10 +205,13 @@ const documents: Documents = {
     "\n  mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {\n    restrictAccount(accountId: $accountId, uploadsBlocked: $uploadsBlocked, blocked: $blocked) {\n      uploadsBlocked\n      blocked\n    }\n  }\n": types.RestrictDocument,
     "\n  mutation AssignRole($accountId: String!, $roleId: String!) {\n    assignRole(accountId: $accountId, roleId: $roleId)\n  }\n": types.AssignRoleDocument,
     "\n  mutation UnassignRole($accountId: String!, $roleId: String!) {\n    unassignRole(accountId: $accountId, roleId: $roleId)\n  }\n": types.UnassignRoleDocument,
-    "\n  query Audit($targetKind: String, $targetId: String, $before: String, $limit: Int) {\n    auditLog(targetKind: $targetKind, targetId: $targetId, before: $before, limit: $limit) {\n      id\n      actorId\n      action\n      targetKind\n      targetId\n      before\n      after\n      createdAt\n    }\n  }\n": types.AuditDocument,
+    "\n  query Audit(\n    $targetKind: String\n    $targetId: String\n    $actorId: String\n    $action: String\n    $since: String\n    $until: String\n    $before: String\n    $limit: Int\n  ) {\n    auditLog(\n      targetKind: $targetKind\n      targetId: $targetId\n      actorId: $actorId\n      action: $action\n      since: $since\n      until: $until\n      before: $before\n      limit: $limit\n    ) {\n      id\n      actorId\n      action\n      targetKind\n      targetId\n      before\n      after\n      createdAt\n    }\n  }\n": types.AuditDocument,
     "\n  mutation ReportEmote($id: String!, $reason: String!) {\n    reportEmote(id: $id, reason: $reason) {\n      id\n    }\n  }\n": types.ReportEmoteDocument,
     "\n  query MySetNames {\n    mySets {\n      id\n      name\n      kind\n      emotes {\n        emote {\n          id\n        }\n      }\n    }\n  }\n": types.MySetNamesDocument,
     "\n  query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: \"\", owner: $owner, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.SearchByOwnerDocument,
+    "\n  query AdminAccount($accountId: String!) {\n    adminAccount(accountId: $accountId) {\n      id\n      displayName\n      avatar\n      createdAt\n      uploadsBlocked\n      blocked\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n": types.AdminAccountDocument,
+    "\n  query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {\n    accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.AccountEmotesDocument,
+    "\n  query AccountReports($accountId: String!) {\n    accountReports(accountId: $accountId) {\n      about {\n        ...ReportFields\n      }\n      by {\n        ...ReportFields\n      }\n    }\n  }\n": types.AccountReportsDocument,
     "\n  query PublicAccount($id: String!) {\n    account(id: $id) {\n      id\n      displayName\n      avatar\n    }\n  }\n": types.PublicAccountDocument,
     "\n  query EmoteChannels($id: String!, $limit: Int) {\n    emoteChannels(id: $id, limit: $limit) {\n      platform\n      login\n      account {\n        displayName\n        avatar\n      }\n    }\n  }\n": types.EmoteChannelsDocument,
     "\n  fragment CosmeticImageFields on CosmeticImage {\n    id\n    kind\n    host\n    animated\n    ready\n    width\n    height\n    files {\n      name\n      width\n      height\n      isStatic\n    }\n  }\n": types.CosmeticImageFieldsFragmentDoc,
@@ -466,6 +474,10 @@ export function graphql(source: "\n  mutation Reject($id: String!, $reason: Stri
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "\n  fragment ReportFields on Report {\n    id\n    reason\n    reporterId\n    state\n    resolution\n    createdAt\n    resolvedAt\n    emote {\n      ...EmoteFields\n    }\n  }\n"): typeof import('./graphql').ReportFieldsFragmentDoc;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "\n  query ReportQueue($page: Int, $perPage: Int) {\n    reportQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        id\n        reason\n        reporterId\n        state\n        createdAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n"): typeof import('./graphql').ReportQueueDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -522,7 +534,7 @@ export function graphql(source: "\n  mutation UnassignRole($accountId: String!, 
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query Audit($targetKind: String, $targetId: String, $before: String, $limit: Int) {\n    auditLog(targetKind: $targetKind, targetId: $targetId, before: $before, limit: $limit) {\n      id\n      actorId\n      action\n      targetKind\n      targetId\n      before\n      after\n      createdAt\n    }\n  }\n"): typeof import('./graphql').AuditDocument;
+export function graphql(source: "\n  query Audit(\n    $targetKind: String\n    $targetId: String\n    $actorId: String\n    $action: String\n    $since: String\n    $until: String\n    $before: String\n    $limit: Int\n  ) {\n    auditLog(\n      targetKind: $targetKind\n      targetId: $targetId\n      actorId: $actorId\n      action: $action\n      since: $since\n      until: $until\n      before: $before\n      limit: $limit\n    ) {\n      id\n      actorId\n      action\n      targetKind\n      targetId\n      before\n      after\n      createdAt\n    }\n  }\n"): typeof import('./graphql').AuditDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -535,6 +547,18 @@ export function graphql(source: "\n  query MySetNames {\n    mySets {\n      id\
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: \"\", owner: $owner, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n"): typeof import('./graphql').SearchByOwnerDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AdminAccount($accountId: String!) {\n    adminAccount(accountId: $accountId) {\n      id\n      displayName\n      avatar\n      createdAt\n      uploadsBlocked\n      blocked\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n"): typeof import('./graphql').AdminAccountDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {\n    accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n"): typeof import('./graphql').AccountEmotesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AccountReports($accountId: String!) {\n    accountReports(accountId: $accountId) {\n      about {\n        ...ReportFields\n      }\n      by {\n        ...ReportFields\n      }\n    }\n  }\n"): typeof import('./graphql').AccountReportsDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
