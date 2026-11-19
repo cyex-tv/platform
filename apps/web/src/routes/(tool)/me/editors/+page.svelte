@@ -1,17 +1,17 @@
 <script lang="ts">
-  import Segmented from '$lib/components/Segmented.svelte';
   // Account editors (ADR 0014): the people who work on your sets and channels, with what each one
-  // may do, and the accounts you edit yourself. Adding is by Twitch or Kick login (they need to
-  // have signed in to cyex.tv once).
+  // may do and on which sets, and the accounts you edit yourself. Find someone by name, pick them,
+  // and choose their permissions in the dialog; changing an editor opens the same dialog.
   import { ApiError, gql } from '$lib/api';
   import Avatar from '$lib/components/Avatar.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import State from '$lib/components/State.svelte';
   import { clean, iso } from '$lib/format';
-  import type { EditorPermission, EditorsQuery, Platform } from '$lib/gql/graphql';
-  import { ADD_ACCOUNT_EDITOR, EDITORS, REMOVE_ACCOUNT_EDITOR, UPDATE_ACCOUNT_EDITOR } from '$lib/queries';
+  import type { EditorPermission, EditorsQuery, FindPeopleQuery } from '$lib/gql/graphql';
+  import { ADD_ACCOUNT_EDITOR, EDITORS, REMOVE_ACCOUNT_EDITOR, SEARCH_ACCOUNTS, UPDATE_ACCOUNT_EDITOR } from '$lib/queries';
   import Confirm from '$lib/tool/Confirm.svelte';
-  import { PERMISSIONS, ordered, permissionLabels } from '$lib/tool/editors';
+  import EditorDialog from '$lib/tool/EditorDialog.svelte';
+  import { ALL_SETS, MAX_EDITORS, grantOn, permissionLabels, scopeInput, scopeLabel, scopeOf, type Scope } from '$lib/tool/editors';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
@@ -19,74 +19,85 @@
   import { session } from '$lib/tool/session.svelte';
 
   type Editor = EditorsQuery['accountEditors'][number];
-  const MAX = 20;
+  type Person = FindPeopleQuery['searchAccounts']['items'][number];
 
   const L = loader(({ fetch }) => gql(EDITORS, {}, fetch));
+  const held = $derived(grantOn([], session.me?.id, session.me?.id));
+  const ownSets = $derived((L.data?.mySets ?? []).filter((s) => s.owner?.id === session.me?.id));
 
-  // Adding
-  let platform = $state<Platform>('TWITCH');
-  let login = $state('');
-  let picked = $state<EditorPermission[]>(['EMOTES']);
-  let adding = $state(false);
-  let problem = $state<string | null>(null);
+  // Finding someone: nothing until Enter (or the button).
+  let query = $state('');
+  let searched = $state('');
+  let results = $state<Person[] | null>(null);
+  let searching = $state(false);
+  let searchError = $state<string | null>(null);
+  let token = 0;
 
-  // Changing one editor's permissions
-  let dialog: HTMLDialogElement;
-  let editing = $state<Editor | null>(null);
-  let editPicked = $state<EditorPermission[]>([]);
-  let saving = $state(false);
+  let dialog = $state<EditorDialog>();
   let busyId = $state<string | null>(null);
 
-  const toggle = (list: EditorPermission[], key: EditorPermission, on: boolean) =>
-    on ? ordered([...list, key]) : list.filter((k) => k !== key);
-
-  function replace(next: EditorsQuery) {
-    L.set(next);
-  }
-
-  async function add(e: SubmitEvent) {
+  async function search(e: SubmitEvent) {
     e.preventDefault();
-    const name = login.trim().replace(/^@/, '');
-    if (adding || !name || !picked.length || !L.data) return;
-    adding = true;
-    problem = null;
+    const text = query.trim().replace(/^@/, '');
+    if ([...text].length < 2) {
+      searchError = 'Type at least two letters of their name.';
+      results = null;
+      return;
+    }
+    const mine = ++token;
+    searching = true;
+    searchError = null;
     try {
-      const r = await gql(ADD_ACCOUNT_EDITOR, { input: { platform, login: name, permissions: picked } });
-      const added = r.addAccountEditor;
-      replace({ ...L.data, accountEditors: [...L.data.accountEditors, added] });
-      notify(`${iso(added.account.displayName)} can now work on your account.`);
-      login = '';
+      const r = await gql(SEARCH_ACCOUNTS, { query: text, page: 1, perPage: 20 });
+      if (mine === token) {
+        results = r.searchAccounts.items;
+        searched = text;
+      }
     } catch (err) {
-      const code = err instanceof ApiError ? err.code : null;
-      if (code === 'not_found') problem = `No one called ${name} has signed in to cyex.tv with ${platform === 'TWITCH' ? 'Twitch' : 'Kick'}.`;
-      else if (code === 'already_owner') problem = 'That’s you. You can do all of this already.';
-      else if (code === 'already_editor') problem = `${name} is an editor already. Change their permissions in the list.`;
-      else fail(err);
+      if (mine === token) {
+        results = null;
+        searchError = err instanceof ApiError && err.code === 'rate_limited' ? err.message : 'Searching didn’t work. Try again in a moment.';
+      }
     } finally {
-      adding = false;
+      if (mine === token) searching = false;
     }
   }
 
-  function edit(ed: Editor) {
-    editing = ed;
-    editPicked = ordered(ed.permissions);
-    dialog.showModal();
+  const editorById = $derived(new Map((L.data?.accountEditors ?? []).map((e) => [e.account.id, e])));
+
+  function pick(p: Person) {
+    const existing = editorById.get(p.account.id);
+    if (existing) return change(existing);
+    dialog?.open(p.account, { permissions: ['EMOTES'], scope: ALL_SETS }, 'add');
   }
 
-  async function save(e: SubmitEvent) {
-    e.preventDefault();
-    if (!editing || saving || !editPicked.length || !L.data) return;
-    saving = true;
-    try {
-      const r = await gql(UPDATE_ACCOUNT_EDITOR, { accountId: editing.account.id, permissions: editPicked });
+  function change(ed: Editor) {
+    dialog?.open(ed.account, { permissions: ed.permissions, scope: scopeOf(ed) }, 'edit');
+  }
+
+  function describe(err: unknown): string {
+    const code = err instanceof ApiError ? err.code : null;
+    if (code === 'already_owner') return 'That’s you. You can do all of this already.';
+    if (code === 'already_editor') return 'They’re an editor already. Close this and change them in the list.';
+    if (code === 'too_many_editors') return `You have ${MAX_EDITORS} editors, the most an account can have. Remove one to add someone else.`;
+    if (code === 'not_found') return 'That account isn’t available any more.';
+    if (err instanceof ApiError) return err.message;
+    return 'Saving didn’t work. Check your connection and try again.';
+  }
+
+  async function save(who: { id: string; displayName: string }, permissions: EditorPermission[], scope: Scope) {
+    if (!L.data) return;
+    const existing = editorById.get(who.id);
+    if (existing) {
+      const r = await gql(UPDATE_ACCOUNT_EDITOR, { accountId: who.id, permissions, setIds: scopeInput(scope) });
       const next = r.updateAccountEditor;
-      replace({ ...L.data, accountEditors: L.data.accountEditors.map((x) => (x.account.id === next.account.id ? next : x)) });
-      dialog.close();
+      L.set({ ...L.data, accountEditors: L.data.accountEditors.map((x) => (x.account.id === next.account.id ? next : x)) });
       notify(`Saved. ${iso(next.account.displayName)} can now: ${permissionLabels(next.permissions)}.`);
-    } catch (err) {
-      fail(err);
-    } finally {
-      saving = false;
+    } else {
+      const r = await gql(ADD_ACCOUNT_EDITOR, { input: { accountId: who.id, permissions, setIds: scopeInput(scope) } });
+      const added = r.addAccountEditor;
+      L.set({ ...L.data, accountEditors: [...L.data.accountEditors, added] });
+      notify(`${iso(added.account.displayName)} can now work on your account.`);
     }
   }
 
@@ -95,7 +106,7 @@
     busyId = ed.account.id;
     try {
       await gql(REMOVE_ACCOUNT_EDITOR, { accountId: ed.account.id });
-      replace({ ...L.data, accountEditors: L.data.accountEditors.filter((x) => x.account.id !== ed.account.id) });
+      L.set({ ...L.data, accountEditors: L.data.accountEditors.filter((x) => x.account.id !== ed.account.id) });
       notify(`${iso(ed.account.displayName)} no longer works on your account.`);
     } catch (err) {
       fail(err);
@@ -109,7 +120,7 @@
     busyId = ownerId;
     try {
       await gql(REMOVE_ACCOUNT_EDITOR, { ownerId, accountId: session.me.id });
-      replace({ ...L.data, editorOf: L.data.editorOf.filter((x) => x.account.id !== ownerId) });
+      L.set({ ...L.data, editorOf: L.data.editorOf.filter((x) => x.account.id !== ownerId) });
       notify(`You no longer edit ${iso(name)}’s account.`);
     } catch (err) {
       fail(err);
@@ -117,35 +128,61 @@
       busyId = null;
     }
   }
+
+  const logins = (p: Person) => p.identities.map((i) => `${i.platform === 'TWITCH' ? 'Twitch' : 'Kick'} ${i.login}`).join(' · ');
+  const scopeText = (g: { allSets: boolean; setIds: readonly string[] }, sets: readonly { id: string; name: string }[]) =>
+    g.allSets ? 'all sets' : scopeLabel(scopeOf(g), sets);
 </script>
 
 <svelte:head><title>Editors - cyex.tv</title></svelte:head>
 
-{#snippet checks(list: EditorPermission[], set: (next: EditorPermission[]) => void, prefix: string)}
-  <fieldset class="perms">
-    <legend class="ui-label">Can</legend>
-    {#each PERMISSIONS as p (p.key)}
-      <label class="perm">
-        <input type="checkbox" checked={list.includes(p.key)} onchange={(e) => set(toggle(list, p.key, e.currentTarget.checked))}
-          aria-describedby="{prefix}-{p.key}" />
-        <span class="text">
-          <strong>{p.label}</strong>
-          <span class="ui-hint" id="{prefix}-{p.key}">{p.line}</span>
-        </span>
-      </label>
-    {/each}
-  </fieldset>
-{/snippet}
-
 <div class="narrow">
-  <PageHead title="Editors" line="People who work on your sets and channels for you. You choose what each one can do, and can take it back at any time." />
+  <PageHead title="Editors" line="People who work on your sets and channels for you. You choose what each one can do and on which sets, and can take it back at any time." />
 
   <LoadGate source={L} label="Loading your editors…">
   {#snippet children(data)}
   {@const editors = data.accountEditors}
+  {@const full = editors.length >= MAX_EDITORS}
   <div class="ui-stack">
+    <section class="ui-card add">
+      <h2><label for="find-editor">Add an editor</label></h2>
+      {#if full}
+        <p class="ui-hint">You have {MAX_EDITORS} editors, the most an account can have. Remove one to add someone else.</p>
+      {:else}
+        <form class="find" role="search" onsubmit={search}>
+          <input id="find-editor" class="ui-input" type="search" bind:value={query} placeholder="Search by name" autocomplete="off" spellcheck="false"
+            maxlength="64" enterkeyhint="search" aria-describedby="find-hint" aria-invalid={searchError ? 'true' : undefined} />
+          <button class="ui-btn secondary" type="submit" disabled={searching}><Icon name="search" size={15} />{searching ? 'Searching…' : 'Search'}</button>
+        </form>
+        <p class="ui-hint" id="find-hint">Their Twitch or Kick name. They need to have signed in to cyex.tv once. Press Enter to search.</p>
+        {#if searchError}
+          <State bare kind="error" title="Couldn’t search">{searchError}</State>
+        {:else if results && results.length === 0}
+          <State bare title="No one found">No one called {searched} has signed in to cyex.tv yet.</State>
+        {:else if results}
+          <ul class="ui-list results" aria-label="People found">
+            {#each results as p (p.account.id)}
+              {@const self = p.account.id === session.me?.id}
+              {@const already = editorById.has(p.account.id)}
+              <li>
+                <Avatar src={p.account.avatar} name={p.account.displayName} size={32} tone="tool" />
+                <span class="who">
+                  <strong><bdi>{clean(p.account.displayName)}</bdi></strong>
+                  <span class="ui-hint">{logins(p)}</span>
+                </span>
+                <button class="ui-btn small {already ? 'ghost' : 'secondary'}" type="button" disabled={self} onclick={() => pick(p)}
+                  aria-label="{self ? 'That’s you' : already ? 'Change' : 'Add'} {iso(p.account.displayName)}">
+                  {self ? 'You' : already ? 'Change' : 'Add'}
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      {/if}
+    </section>
+
     <section class="ui-panel">
-      <header><h2>Your editors</h2><span class="ui-hint ui-num">{editors.length} / {MAX}</span></header>
+      <header><h2>Your editors</h2><span class="ui-hint ui-num">{editors.length} / {MAX_EDITORS}</span></header>
       {#if editors.length}
         <ul class="ui-list">
           {#each editors as ed (ed.account.id)}
@@ -154,11 +191,11 @@
               <span class="who">
                 <strong><bdi>{clean(ed.account.displayName)}</bdi></strong>
                 <span class="ui-hint">
-                  {permissionLabels(ed.permissions)}{#if ed.grantedBy && ed.grantedBy.id !== session.me?.id} · added by <bdi>{clean(ed.grantedBy.displayName)}</bdi>{/if}
+                  {permissionLabels(ed.permissions)} · {scopeText(ed, ownSets)}{#if ed.grantedBy && ed.grantedBy.id !== session.me?.id} · added by <bdi>{clean(ed.grantedBy.displayName)}</bdi>{/if}
                 </span>
               </span>
               <span class="ui-actions">
-                <button class="ui-btn secondary small" type="button" onclick={() => edit(ed)}
+                <button class="ui-btn secondary small" type="button" onclick={() => change(ed)}
                   aria-label="Change what {iso(ed.account.displayName)} can do">Change</button>
                 <Confirm small label="Remove" confirm="Click again to remove" busy={busyId === ed.account.id} onconfirm={() => remove(ed)} />
               </span>
@@ -166,31 +203,9 @@
           {/each}
         </ul>
       {:else}
-        <State bare title="No editors yet">Add a moderator or manager below, and pick what they can do.</State>
+        <State bare title="No editors yet">Find a moderator or manager above, and pick what they can do.</State>
       {/if}
     </section>
-
-    <form class="ui-card add" onsubmit={add} novalidate>
-      <h2>Add an editor</h2>
-      {#if editors.length >= MAX}
-        <p class="ui-hint">You have {MAX} editors, the most an account can have. Remove one to add someone else.</p>
-      {:else}
-        <div class="ui-field">
-          <span class="ui-label" id="platform-label">Their login on</span>
-          <Segmented label="Their login on" options={[{ value: 'TWITCH', label: 'Twitch', icon: 'twitch' }, { value: 'KICK', label: 'Kick', icon: 'kick' }]} value={platform} onchange={(v) => (platform = v)} />
-          <input class="ui-input" bind:value={login} placeholder="Login" aria-label="Their login" autocomplete="off" spellcheck="false"
-            maxlength="64" aria-invalid={problem ? 'true' : undefined} aria-describedby={problem ? 'add-err' : undefined} />
-          {#if problem}<span class="ui-error" id="add-err">{problem}</span>{/if}
-        </div>
-        {@render checks(picked, (next) => (picked = next), 'add')}
-        {#if !picked.length}<p class="ui-hint">Pick at least one.</p>{/if}
-        <div class="ui-actions">
-          <button class="ui-btn primary" type="submit" disabled={adding || !login.trim() || !picked.length}>
-            <Icon name="plus" size={15} />{adding ? 'Adding…' : 'Add editor'}
-          </button>
-        </div>
-      {/if}
-    </form>
 
     <section class="ui-panel">
       <header><h2>You edit</h2><span class="ui-hint ui-num">{data.editorOf.length}</span></header>
@@ -201,13 +216,13 @@
               <Avatar src={acc.account.avatar} name={acc.account.displayName} size={32} tone="tool" />
               <span class="who">
                 <strong><bdi>{clean(acc.account.displayName)}</bdi></strong>
-                <span class="ui-hint">You can: {permissionLabels(acc.permissions)}</span>
+                <span class="ui-hint">You can: {permissionLabels(acc.permissions)}{acc.allSets ? '' : ` · ${acc.setIds.length === 1 ? '1 set' : `${acc.setIds.length} sets`}`}</span>
               </span>
               <span class="ui-actions">
                 {#if acc.permissions.includes('EMOTES') || acc.permissions.includes('SETS') || acc.permissions.includes('EDITORS')}
                   <a class="ui-btn ghost small" href="/me/sets#of-{acc.account.id}">Sets</a>
                 {/if}
-                {#if acc.permissions.includes('SETS')}
+                {#if acc.permissions.includes('CHANNELS') || acc.permissions.includes('SETS')}
                   <a class="ui-btn ghost small" href="/me/channels#of-{acc.account.id}">Channels</a>
                 {/if}
                 <Confirm small label="Leave" confirm="Click again to leave" busy={busyId === acc.account.id}
@@ -225,37 +240,22 @@
   </LoadGate>
 </div>
 
-<dialog class="ui-dialog" bind:this={dialog} aria-labelledby="edit-title" onclose={() => (editing = null)}>
-  <form onsubmit={save} novalidate>
-    <div class="body">
-      <h2 id="edit-title">{#if editing}What <bdi>{clean(editing.account.displayName)}</bdi> can do{/if}</h2>
-      {@render checks(editPicked, (next) => (editPicked = next), 'edit')}
-      {#if !editPicked.length}<p class="ui-hint">Pick at least one, or remove them instead.</p>{/if}
-    </div>
-    <footer>
-      <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="ui-btn primary" type="submit" disabled={saving || !editPicked.length}>{saving ? 'Saving…' : 'Save'}</button>
-    </footer>
-  </form>
-</dialog>
+<EditorDialog bind:this={dialog} {held} sets={ownSets} onsave={save} {describe} />
 
 <style>
   .who { display: grid; flex: 1; min-width: 0; line-height: 1.35; }
   .who strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .who .ui-hint { overflow-wrap: anywhere; }
   .ui-list .ui-actions { flex: none; }
-  .add { display: grid; gap: 16px; }
+  .add { display: grid; gap: 12px; }
   .add > h2 + * { margin-top: 0; }
-  .ui-field :global(.seg) { justify-self: start; }
-  .perms { display: grid; gap: 2px; margin: 0; padding: 0; border: 0; min-width: 0; }
-  .perms legend { padding: 0; margin-bottom: 6px; }
-  .perm { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; padding: 6px 0; cursor: pointer; }
-  .perm input { flex: none; width: 16px; height: 16px; margin: 3px 0 0; accent-color: var(--accent); }
-  .perm .text { display: grid; gap: 2px; min-width: 0; }
-  .perm strong { font-weight: 600; }
-  .ui-dialog .body { min-width: min(420px, calc(100vw - 48px)); }
+  .find { display: flex; gap: 8px; }
+  .find input { flex: 1; }
+  .find .ui-btn { flex: none; }
+  .results { max-height: 320px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid var(--border); border-radius: var(--radius-card); }
+  .results > li { padding: 8px 12px; }
   @media (max-width: 560px) {
-    .ui-list > li { flex-wrap: wrap; }
-    .ui-list .ui-actions { width: 100%; padding-left: 44px; }
+    .ui-list:not(.results) > li { flex-wrap: wrap; }
+    .ui-list:not(.results) .ui-actions { width: 100%; padding-left: 44px; }
   }
 </style>

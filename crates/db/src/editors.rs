@@ -1,9 +1,12 @@
 //! Account editors (ADR 0014): who may act on an account's sets and channels, with which flags.
 //!
-//! Flags are stored as their names (`emotes`, `sets`, `editors`, `profile`); the table's check
-//! refuses anything else. Grants of a blocked or deleted editor, and grants on a blocked or deleted
+//! Flags are stored as their names (`emotes`, `sets`, `editors`, `profile`, `channels` and the
+//! reserved emote and billing flags); the table's check refuses anything else. A grant covers
+//! every set of the owner (`all_sets`), or only those in `account_editor_sets`. Grants of a blocked or deleted editor, and grants on a blocked or deleted
 //! owner, are ignored by `permissions_of` and `list_for_editor`. Who may change a grant is the
 //! api's check.
+
+use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use sqlx::{Connection, FromRow, PgConnection};
@@ -12,7 +15,10 @@ use uuid::Uuid;
 use crate::error::{DbError, DbResult, unique_violation};
 
 /// The most editors one account can have.
-pub const MAX_PER_ACCOUNT: i64 = 20;
+pub const MAX_PER_ACCOUNT: i64 = 50;
+
+/// The most sets one grant can be limited to.
+pub const MAX_SCOPED_SETS: usize = 200;
 
 #[derive(Clone, Debug, PartialEq, Eq, FromRow)]
 pub struct Grant {
@@ -23,9 +29,12 @@ pub struct Grant {
     pub granted_by: Option<Uuid>,
     pub granted_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Every set of the owner, new ones included. False: only the sets in `account_editor_sets`.
+    pub all_sets: bool,
 }
 
-const GRANT: &str = "account_id, editor_id, permissions, granted_by, granted_at, updated_at";
+const GRANT: &str =
+    "account_id, editor_id, permissions, granted_by, granted_at, updated_at, all_sets";
 
 /// The flags `editor` holds on `account`, when both accounts are live (not deleted or blocked).
 pub async fn permissions_of(
@@ -70,7 +79,8 @@ pub async fn list_for_account(conn: &mut PgConnection, account: Uuid) -> DbResul
 /// The live accounts `editor` edits, oldest grant first.
 pub async fn list_for_editor(conn: &mut PgConnection, editor: Uuid) -> DbResult<Vec<Grant>> {
     Ok(sqlx::query_as(
-        "SELECT e.account_id, e.editor_id, e.permissions, e.granted_by, e.granted_at, e.updated_at
+        "SELECT e.account_id, e.editor_id, e.permissions, e.granted_by, e.granted_at, e.updated_at,
+                e.all_sets
          FROM account_editors e
          JOIN accounts o ON o.id = e.account_id AND o.deleted_at IS NULL AND o.blocked_at IS NULL
          WHERE e.editor_id = $1
@@ -153,5 +163,141 @@ pub async fn remove(
     .bind(account)
     .bind(editor)
     .fetch_optional(conn)
+    .await?)
+}
+
+/// Whether `editor`'s live grant on `account` covers `set`: every set, or a list naming it.
+/// False without a live grant.
+pub async fn covers_set(
+    conn: &mut PgConnection,
+    account: Uuid,
+    editor: Uuid,
+    set: Uuid,
+) -> DbResult<bool> {
+    Ok(sqlx::query_scalar(
+        "SELECT e.all_sets OR EXISTS (
+                SELECT 1 FROM account_editor_sets s
+                WHERE s.account_id = e.account_id AND s.editor_id = e.editor_id AND s.set_id = $3
+            )
+         FROM account_editors e
+         JOIN accounts o ON o.id = e.account_id AND o.deleted_at IS NULL AND o.blocked_at IS NULL
+         JOIN accounts x ON x.id = e.editor_id AND x.deleted_at IS NULL AND x.blocked_at IS NULL
+         WHERE e.account_id = $1 AND e.editor_id = $2",
+    )
+    .bind(account)
+    .bind(editor)
+    .bind(set)
+    .fetch_optional(conn)
+    .await?
+    .unwrap_or(false))
+}
+
+/// The sets a limited grant names, by editor, for grants on `account`. Grants on every set are
+/// missing from the map.
+pub async fn scoped_sets_of_account(
+    conn: &mut PgConnection,
+    account: Uuid,
+) -> DbResult<HashMap<Uuid, Vec<Uuid>>> {
+    let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT editor_id, set_id FROM account_editor_sets WHERE account_id = $1
+         ORDER BY editor_id, set_id",
+    )
+    .bind(account)
+    .fetch_all(conn)
+    .await?;
+    let mut out: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+    for (editor, set) in rows {
+        out.entry(editor).or_default().push(set);
+    }
+    Ok(out)
+}
+
+/// The sets a limited grant names, by owner, for grants held by `editor`.
+pub async fn scoped_sets_of_editor(
+    conn: &mut PgConnection,
+    editor: Uuid,
+) -> DbResult<HashMap<Uuid, Vec<Uuid>>> {
+    let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT account_id, set_id FROM account_editor_sets WHERE editor_id = $1
+         ORDER BY account_id, set_id",
+    )
+    .bind(editor)
+    .fetch_all(conn)
+    .await?;
+    let mut out: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+    for (account, set) in rows {
+        out.entry(account).or_default().push(set);
+    }
+    Ok(out)
+}
+
+/// Limits a grant to `sets`, or opens it to every set (`None`). The caller checks that each set
+/// is the owner's. Returns the grant as it is now.
+pub async fn set_scope(
+    conn: &mut PgConnection,
+    account: Uuid,
+    editor: Uuid,
+    sets: Option<&[Uuid]>,
+) -> DbResult<Grant> {
+    let mut tx = conn.begin().await?;
+    let grant: Grant = sqlx::query_as(&format!(
+        "UPDATE account_editors SET all_sets = $3, updated_at = now()
+         WHERE account_id = $1 AND editor_id = $2
+         RETURNING {GRANT}"
+    ))
+    .bind(account)
+    .bind(editor)
+    .bind(sets.is_none())
+    .fetch_optional(&mut *tx)
+    .await?
+    .ok_or(DbError::NotFound)?;
+    sqlx::query("DELETE FROM account_editor_sets WHERE account_id = $1 AND editor_id = $2")
+        .bind(account)
+        .bind(editor)
+        .execute(&mut *tx)
+        .await?;
+    if let Some(sets) = sets {
+        sqlx::query(
+            "INSERT INTO account_editor_sets (account_id, editor_id, set_id)
+             SELECT $1, $2, unnest($3::uuid[])
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(account)
+        .bind(editor)
+        .bind(sets)
+        .execute(&mut *tx)
+        .await?;
+    }
+    tx.commit().await?;
+    Ok(grant)
+}
+
+/// Accounts editing `account`, live ones only, oldest grant first: the public list (no flags).
+pub async fn live_editors_of(conn: &mut PgConnection, account: Uuid) -> DbResult<Vec<Uuid>> {
+    Ok(sqlx::query_scalar(
+        "SELECT e.editor_id
+         FROM account_editors e
+         JOIN accounts x ON x.id = e.editor_id AND x.deleted_at IS NULL AND x.blocked_at IS NULL
+         WHERE e.account_id = $1
+         ORDER BY e.granted_at, e.editor_id",
+    )
+    .bind(account)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// The sets one limited grant names; empty for a grant on every set.
+pub async fn scoped_sets(
+    conn: &mut PgConnection,
+    account: Uuid,
+    editor: Uuid,
+) -> DbResult<Vec<Uuid>> {
+    Ok(sqlx::query_scalar(
+        "SELECT set_id FROM account_editor_sets WHERE account_id = $1 AND editor_id = $2
+         ORDER BY set_id",
+    )
+    .bind(account)
+    .bind(editor)
+    .fetch_all(conn)
     .await?)
 }

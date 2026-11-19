@@ -19,6 +19,14 @@ type AccountEditor {
 	grantedBy: AccountSummary
 	grantedAt: String!
 	updatedAt: String!
+	"""
+	They may work on every set of the account, new ones included. False: only `setIds`.
+	"""
+	allSets: Boolean!
+	"""
+	The sets they may work on when `allSets` is false. Empty when it is true.
+	"""
+	setIds: [String!]!
 }
 
 """
@@ -51,6 +59,10 @@ type AccountProfile {
 	"""
 	activeSets: [ActiveChannelSet!]!
 	createdAt: String!
+	"""
+	The account's editors, oldest first: who they are only, never what they may do.
+	"""
+	editors: [AccountSummary!]!
 }
 
 type AccountResults {
@@ -243,6 +255,10 @@ input AddAccountEditorInput {
 	At least one.
 	"""
 	permissions: [EditorPermission!]!
+	"""
+	Limit them to these sets of the account. Empty or missing: every set, new ones included.
+	"""
+	setIds: [String!]
 }
 
 input AddSetEmoteInput {
@@ -512,6 +528,11 @@ type EditedAccount {
 	account: AccountSummary!
 	permissions: [EditorPermission!]!
 	grantedAt: String!
+	"""
+	You may work on every set of the account. False: only `setIds`.
+	"""
+	allSets: Boolean!
+	setIds: [String!]!
 }
 
 """
@@ -523,8 +544,7 @@ enum EditorPermission {
 	"""
 	EMOTES
 	"""
-	Create, rename and delete sets, change their capacity, and change the owner's channels'
-	active set and settings.
+	Create, rename and delete sets and change their capacity. Always comes with `Channels`.
 	"""
 	SETS
 	"""
@@ -535,6 +555,30 @@ enum EditorPermission {
 	Pick the badge and paint the owner shows (ADR 0015). Never grants.
 	"""
 	PROFILE
+	"""
+	Change the owner's channels' active set and settings. Granting `Sets` grants this too.
+	"""
+	CHANNELS
+	"""
+	Upload emotes for the owner. Stored for the feature that will check it; grants nothing yet.
+	"""
+	EMOTE_UPLOAD
+	"""
+	Rename, retag and delete the owner's emotes. Stored; grants nothing yet.
+	"""
+	EMOTE_MANAGE
+	"""
+	Hand the owner's emotes to another account. Stored; grants nothing yet.
+	"""
+	EMOTE_TRANSFER
+	"""
+	Manage the owner's payment methods. Stored; grants nothing yet.
+	"""
+	BILLING_PAYMENT
+	"""
+	Manage the owner's subscription. Stored; grants nothing yet.
+	"""
+	BILLING_SUBSCRIPTION
 }
 
 type Emote {
@@ -849,14 +893,16 @@ type Mutation {
 	"""
 	Make someone an editor of your account, or of an account you edit with `EDITORS` (ADR
 	0014). Give their account ID, or a platform and login. You can only grant permissions you
-	hold. At most 20 editors per account. Audited.
+	hold. `setIds` limits them to some of the account's sets; leave it out for every set, new
+	ones included. At most 50 editors per account (`too_many_editors`). Audited.
 	"""
 	addAccountEditor(input: AddAccountEditorInput!): AccountEditor!
 	"""
 	Change an account editor's permissions. `ownerId` is the account edited; empty for yours.
+	`setIds` changes which sets they work on: empty for every set, left out to keep them.
 	Audited.
 	"""
-	updateAccountEditor(ownerId: String, accountId: String!, permissions: [EditorPermission!]!): AccountEditor!
+	updateAccountEditor(ownerId: String, accountId: String!, permissions: [EditorPermission!]!, setIds: [String!]): AccountEditor!
 	"""
 	Remove an account editor: the owner, an editor with `EDITORS`, or the editor themselves
 	(with `ownerId` set to the account they leave). False when they weren't one. Audited.

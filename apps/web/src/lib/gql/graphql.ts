@@ -28,10 +28,14 @@ export type AccountCosmetics = {
 export type AccountEditor = {
   __typename?: 'AccountEditor';
   account: AccountSummary;
+  /** They may work on every set of the account, new ones included. False: only `setIds`. */
+  allSets: Scalars['Boolean']['output'];
   grantedAt: Scalars['String']['output'];
   /** Who added them: the owner, or an editor with `editors`. */
   grantedBy?: Maybe<AccountSummary>;
   permissions: Array<EditorPermission>;
+  /** The sets they may work on when `allSets` is false. Empty when it is true. */
+  setIds: Array<Scalars['String']['output']>;
   updatedAt: Scalars['String']['output'];
 };
 
@@ -53,6 +57,8 @@ export type AccountProfile = {
   /** Each channel's active set, for channels showing one. */
   activeSets: Array<ActiveChannelSet>;
   createdAt: Scalars['String']['output'];
+  /** The account's editors, oldest first: who they are only, never what they may do. */
+  editors: Array<AccountSummary>;
   /** Linked Twitch and Kick accounts: platform, login and display name only. Twitch first. */
   identities: Array<PublicIdentity>;
   /** Roles marked public, most senior first. */
@@ -200,6 +206,8 @@ export type AddAccountEditorInput = {
   /** At least one. */
   permissions: Array<EditorPermission>;
   platform?: InputMaybe<Platform>;
+  /** Limit them to these sets of the account. Empty or missing: every set, new ones included. */
+  setIds?: InputMaybe<Array<Scalars['String']['input']>>;
 };
 
 export type AddSetEmoteInput = {
@@ -399,22 +407,34 @@ export type CreatedCodeBatch = {
 export type EditedAccount = {
   __typename?: 'EditedAccount';
   account: AccountSummary;
+  /** You may work on every set of the account. False: only `setIds`. */
+  allSets: Scalars['Boolean']['output'];
   grantedAt: Scalars['String']['output'];
   permissions: Array<EditorPermission>;
+  setIds: Array<Scalars['String']['output']>;
 };
 
 /** What an account editor may do on the account they edit. The account's owner has all of them. */
 export type EditorPermission =
+  /** Manage the owner's payment methods. Stored; grants nothing yet. */
+  | 'BILLING_PAYMENT'
+  /** Manage the owner's subscription. Stored; grants nothing yet. */
+  | 'BILLING_SUBSCRIPTION'
+  /** Change the owner's channels' active set and settings. Granting `Sets` grants this too. */
+  | 'CHANNELS'
   /** Add, change and remove editors, never granting more than you hold. */
   | 'EDITORS'
   /** Add, remove, rename and alias emotes in the owner's sets, the active channel sets too. */
   | 'EMOTES'
+  /** Rename, retag and delete the owner's emotes. Stored; grants nothing yet. */
+  | 'EMOTE_MANAGE'
+  /** Hand the owner's emotes to another account. Stored; grants nothing yet. */
+  | 'EMOTE_TRANSFER'
+  /** Upload emotes for the owner. Stored for the feature that will check it; grants nothing yet. */
+  | 'EMOTE_UPLOAD'
   /** Pick the badge and paint the owner shows (ADR 0015). Never grants. */
   | 'PROFILE'
-  /**
-   * Create, rename and delete sets, change their capacity, and change the owner's channels'
-   * active set and settings.
-   */
+  /** Create, rename and delete sets and change their capacity. Always comes with `Channels`. */
   | 'SETS';
 
 export type Emote = {
@@ -613,7 +633,8 @@ export type Mutation = {
   /**
    * Make someone an editor of your account, or of an account you edit with `EDITORS` (ADR
    * 0014). Give their account ID, or a platform and login. You can only grant permissions you
-   * hold. At most 20 editors per account. Audited.
+   * hold. `setIds` limits them to some of the account's sets; leave it out for every set, new
+   * ones included. At most 50 editors per account (`too_many_editors`). Audited.
    */
   addAccountEditor: AccountEditor;
   /**
@@ -787,6 +808,7 @@ export type Mutation = {
   unlinkIdentity: Me;
   /**
    * Change an account editor's permissions. `ownerId` is the account edited; empty for yours.
+   * `setIds` changes which sets they work on: empty for every set, left out to keep them.
    * Audited.
    */
   updateAccountEditor: AccountEditor;
@@ -1037,6 +1059,7 @@ export type MutationUpdateAccountEditorArgs = {
   accountId: Scalars['String']['input'];
   ownerId?: InputMaybe<Scalars['String']['input']>;
   permissions: Array<EditorPermission>;
+  setIds?: InputMaybe<Array<Scalars['String']['input']>>;
 };
 
 
@@ -2112,7 +2135,7 @@ export type EditSetQueryVariables = Exact<{
 }>;
 
 
-export type EditSetQuery = { __typename?: 'Query', set?: { __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, capacity: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> } | null, setEditors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }>, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, account: { __typename?: 'AccountSummary', id: string } }> };
+export type EditSetQuery = { __typename?: 'Query', set?: { __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, capacity: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> } | null, setEditors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }>, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, account: { __typename?: 'AccountSummary', id: string } }>, myChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }>, editorChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }> };
 
 export type CreateSetMutationVariables = Exact<{
   input: CreateSetInput;
@@ -2200,28 +2223,29 @@ export type UpdateChannelMutationVariables = Exact<{
 
 export type UpdateChannelMutation = { __typename?: 'Mutation', updateChannelSettings: { __typename?: 'Channel', activeSetId?: string | null, allowPersonalEmotes: boolean } };
 
-export type AccountEditorFieldsFragment = { __typename?: 'AccountEditor', permissions: Array<EditorPermission>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null };
+export type AccountEditorFieldsFragment = { __typename?: 'AccountEditor', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null };
 
 export type EditorsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type EditorsQuery = { __typename?: 'Query', accountEditors: Array<{ __typename?: 'AccountEditor', permissions: Array<EditorPermission>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null }>, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } }> };
+export type EditorsQuery = { __typename?: 'Query', accountEditors: Array<{ __typename?: 'AccountEditor', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null }>, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } }>, mySets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, owner?: { __typename?: 'AccountSummary', id: string } | null }> };
 
 export type AddAccountEditorMutationVariables = Exact<{
   input: AddAccountEditorInput;
 }>;
 
 
-export type AddAccountEditorMutation = { __typename?: 'Mutation', addAccountEditor: { __typename?: 'AccountEditor', permissions: Array<EditorPermission>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null } };
+export type AddAccountEditorMutation = { __typename?: 'Mutation', addAccountEditor: { __typename?: 'AccountEditor', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null } };
 
 export type UpdateAccountEditorMutationVariables = Exact<{
   ownerId?: InputMaybe<Scalars['String']['input']>;
   accountId: Scalars['String']['input'];
   permissions: Array<EditorPermission> | EditorPermission;
+  setIds?: InputMaybe<Array<Scalars['String']['input']> | Scalars['String']['input']>;
 }>;
 
 
-export type UpdateAccountEditorMutation = { __typename?: 'Mutation', updateAccountEditor: { __typename?: 'AccountEditor', permissions: Array<EditorPermission>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null } };
+export type UpdateAccountEditorMutation = { __typename?: 'Mutation', updateAccountEditor: { __typename?: 'AccountEditor', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null } };
 
 export type RemoveAccountEditorMutationVariables = Exact<{
   ownerId?: InputMaybe<Scalars['String']['input']>;
@@ -2897,6 +2921,8 @@ export const AccountEditorFieldsFragmentDoc = new TypedDocumentString(`
     avatar
   }
   permissions
+  allSets
+  setIds
   grantedBy {
     id
     displayName
@@ -3710,6 +3736,26 @@ export const EditSetDocument = new TypedDocumentString(`
       id
     }
     permissions
+    allSets
+    setIds
+  }
+  myChannels {
+    platform
+    platformChannelId
+    login
+    activeSetId
+    account {
+      id
+    }
+  }
+  editorChannels {
+    platform
+    platformChannelId
+    login
+    activeSetId
+    account {
+      id
+    }
   }
 }
     fragment EmoteFields on Emote {
@@ -3890,7 +3936,17 @@ export const EditorsDocument = new TypedDocumentString(`
       avatar
     }
     permissions
+    allSets
+    setIds
     grantedAt
+  }
+  mySets {
+    id
+    name
+    kind
+    owner {
+      id
+    }
   }
 }
     fragment AccountEditorFields on AccountEditor {
@@ -3900,6 +3956,8 @@ export const EditorsDocument = new TypedDocumentString(`
     avatar
   }
   permissions
+  allSets
+  setIds
   grantedBy {
     id
     displayName
@@ -3919,6 +3977,8 @@ export const AddAccountEditorDocument = new TypedDocumentString(`
     avatar
   }
   permissions
+  allSets
+  setIds
   grantedBy {
     id
     displayName
@@ -3926,11 +3986,12 @@ export const AddAccountEditorDocument = new TypedDocumentString(`
   grantedAt
 }`) as unknown as TypedDocumentString<AddAccountEditorMutation, AddAccountEditorMutationVariables>;
 export const UpdateAccountEditorDocument = new TypedDocumentString(`
-    mutation UpdateAccountEditor($ownerId: String, $accountId: String!, $permissions: [EditorPermission!]!) {
+    mutation UpdateAccountEditor($ownerId: String, $accountId: String!, $permissions: [EditorPermission!]!, $setIds: [String!]) {
   updateAccountEditor(
     ownerId: $ownerId
     accountId: $accountId
     permissions: $permissions
+    setIds: $setIds
   ) {
     ...AccountEditorFields
   }
@@ -3942,6 +4003,8 @@ export const UpdateAccountEditorDocument = new TypedDocumentString(`
     avatar
   }
   permissions
+  allSets
+  setIds
   grantedBy {
     id
     displayName

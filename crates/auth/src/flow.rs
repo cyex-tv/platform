@@ -11,9 +11,9 @@ use std::sync::Arc;
 
 use chrono::Duration;
 use cyex_tv_db::accounts::{self, Profile};
-use cyex_tv_db::channels;
 use cyex_tv_db::oauth_states::{self, NewOAuthState};
 use cyex_tv_db::sessions::{self, SessionKind};
+use cyex_tv_db::{channels, sets};
 use cyex_tv_shared::model::Platform;
 use sqlx::{Connection, PgPool};
 use uuid::Uuid;
@@ -240,6 +240,14 @@ impl Auth {
                 }
                 if signed_in.account.blocked_at.is_some() {
                     return Err(AuthError::AccountBlocked);
+                }
+                // A new account starts with a channel set named after it (ADR 0017).
+                if signed_in.created {
+                    let name = match user.display_name.trim() {
+                        "" => user.login.trim(),
+                        name => name,
+                    };
+                    sets::create_default(&mut conn, signed_in.account.id, name).await?;
                 }
                 (signed_in.account.id, signed_in.created, false)
             }

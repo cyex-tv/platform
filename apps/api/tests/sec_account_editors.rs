@@ -889,7 +889,8 @@ async fn blocked_accounts_cant_be_or_use_editors() {
 }
 
 #[tokio::test]
-async fn at_most_twenty_editors_and_a_rate_limit() {
+async fn editor_changes_are_rate_limited() {
+    // The 50-editor limit is `sets_editors_flow::at_most_fifty_editors`.
     let Some(w) = World::with_rates(Rates {
         editors: Rate::per_hour(24),
         ..Rates::default()
@@ -911,10 +912,8 @@ async fn at_most_twenty_editors_and_a_rate_limit() {
         }
     }
     let extra = w.user("1700").await;
-    assert_eq!(
-        code(&w.add(&alice, None, &extra, &["EMOTES"]).await),
-        "too_many_editors"
-    );
+    let r = w.add(&alice, None, &extra, &["EMOTES"]).await;
+    assert!(r["errors"].is_null(), "the 21st editor fits now: {r}");
     // 24 changes so far; the 25th within the hour is refused.
     w.add(&alice, None, &extra, &["EMOTES"]).await;
     w.add(&alice, None, &extra, &["EMOTES"]).await;
