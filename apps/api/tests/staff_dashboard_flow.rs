@@ -122,9 +122,12 @@ impl World {
         serde_json::from_slice(&bytes).unwrap()
     }
 
+    /// Runs one or more statements, separated by `;`.
     async fn sql(&self, sql: &str) {
         let mut conn = self.db.conn().await;
-        sqlx::query(sql).execute(&mut *conn).await.unwrap();
+        for statement in sql.split(';').map(str::trim).filter(|s| !s.is_empty()) {
+            sqlx::query(statement).execute(&mut *conn).await.unwrap();
+        }
     }
 
     async fn count(&self, sql: &str) -> i64 {
