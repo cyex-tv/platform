@@ -650,9 +650,13 @@ export const ADMIN_COUNTS = graphql(`
 `);
 
 export const REVIEW_QUEUE = graphql(`
-  query ReviewQueue($page: Int, $perPage: Int) {
-    reviewQueue(page: $page, perPage: $perPage) {
+  query ReviewQueue($page: Int, $perPage: Int, $filter: ReviewQueueFilter) {
+    reviewQueue(page: $page, perPage: $perPage, filter: $filter) {
       total
+      counts {
+        public
+        limited
+      }
       items {
         ...EmoteFields
       }
@@ -661,11 +665,53 @@ export const REVIEW_QUEUE = graphql(`
 `);
 
 export const APPROVE = graphql(`
-  mutation Approve($id: String!) {
-    approveEmote(id: $id) {
+  mutation Approve($id: String!, $visibility: EmoteVisibility) {
+    approveEmote(id: $id, visibility: $visibility) {
       id
       state
+      visibility
     }
+  }
+`);
+
+export const EMOTE_HISTORY = graphql(`
+  query EmoteHistory($emoteId: String!) {
+    emoteHistory(emoteId: $emoteId) {
+      id
+      actorId
+      action
+      before
+      after
+      createdAt
+    }
+  }
+`);
+
+export const EMOTE_NOTES = graphql(`
+  query EmoteNotes($emoteId: String!) {
+    emoteNotes(emoteId: $emoteId) {
+      id
+      authorId
+      body
+      createdAt
+    }
+  }
+`);
+
+export const ADD_EMOTE_NOTE = graphql(`
+  mutation AddEmoteNote($emoteId: String!, $body: String!) {
+    addEmoteNote(emoteId: $emoteId, body: $body) {
+      id
+      authorId
+      body
+      createdAt
+    }
+  }
+`);
+
+export const DELETE_EMOTE_NOTE = graphql(`
+  mutation DeleteEmoteNote($id: String!) {
+    deleteEmoteNote(id: $id)
   }
 `);
 

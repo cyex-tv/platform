@@ -9,10 +9,11 @@ use std::collections::BTreeSet;
 use axum::http::StatusCode;
 use cyex_tv_auth::Caller;
 use cyex_tv_db::emotes::{self, EmotePatch};
-use cyex_tv_db::{DbError, accounts, audit, ids, reads, sets};
+use cyex_tv_db::{DbError, accounts, audit, ids, reads, sets, staff};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
-    Emote, EmotePage, EmoteState, EmoteVisibility, EventType, ReviewQueue, UpdateEmote,
+    AuditEntry, Emote, EmoteNote, EmotePage, EmoteState, EmoteVisibility, EventType, ReviewCounts,
+    ReviewQueue, ReviewQueueFilter, ReviewSort, ReviewTab, UpdateEmote,
 };
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
@@ -34,6 +35,12 @@ pub const MAX_REASON_LEN: usize = 500;
 /// Review queue page size: default and most.
 pub const QUEUE_PAGE: u32 = 50;
 pub const QUEUE_PAGE_MAX: u32 = 100;
+/// The longest review queue search, and the longest emote note.
+pub const MAX_QUEUE_SEARCH: usize = 100;
+pub const MAX_NOTE_LEN: usize = 2000;
+/// Notes and history entries one read returns at most.
+const NOTES_LIMIT: i64 = 200;
+const HISTORY_LIMIT: i64 = 100;
 
 fn bad(code: &'static str, message: &str) -> ApiError {
     ApiError::new(StatusCode::BAD_REQUEST, code, message)
@@ -182,12 +189,14 @@ pub async fn emote(
     build(state, &mut conn, &found).await.map(Some)
 }
 
-/// Pending emotes, oldest first. Needs `emotes.review`.
+/// The review queue: pending emotes (all, public or unlisted and private) or the resolved ones,
+/// searched by name or uploader and sorted. Needs `emotes.review`.
 pub async fn review_queue(
     state: &AppState,
     caller: &Caller,
     page: Option<u32>,
     per_page: Option<u32>,
+    filter: Option<&ReviewQueueFilter>,
 ) -> ApiResult<ReviewQueue> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     if !holds(&mut conn, caller, permissions::EMOTES_REVIEW).await? {
@@ -196,16 +205,78 @@ pub async fn review_queue(
     let per_page = per_page.unwrap_or(QUEUE_PAGE).clamp(1, QUEUE_PAGE_MAX);
     let page = page.unwrap_or(1).max(1);
     let offset = i64::from(page - 1) * i64::from(per_page);
-    let (rows, total) =
-        reads::emotes_in_state(&mut conn, EmoteState::Pending, i64::from(per_page), offset)
-            .await
-            .map_err(db_error)?;
+    let query = QueueRead::from_filter(filter.cloned().unwrap_or_default())?;
+    let (rows, total) = reads::review_queue(
+        &mut conn,
+        &reads::QueueQuery {
+            tab: query.tab,
+            search: query.search.as_deref(),
+            sort: query.sort,
+            descending: query.descending,
+        },
+        i64::from(per_page),
+        offset,
+    )
+    .await
+    .map_err(db_error)?;
+    let counts = reads::queue_counts(&mut conn).await.map_err(db_error)?;
     Ok(ReviewQueue {
         items: views::emotes(&mut conn, &rows, &state.cdn_url)
             .await
             .map_err(db_error)?,
         total: u64::try_from(total).unwrap_or(0),
+        counts: ReviewCounts {
+            public: u64::try_from(counts.public).unwrap_or(0),
+            limited: u64::try_from(counts.limited).unwrap_or(0),
+        },
     })
+}
+
+/// A review queue read with the defaults filled in.
+#[derive(Debug, PartialEq, Eq)]
+struct QueueRead {
+    tab: reads::QueueTab,
+    search: Option<String>,
+    sort: reads::QueueSort,
+    descending: bool,
+}
+
+impl QueueRead {
+    fn from_filter(f: ReviewQueueFilter) -> ApiResult<Self> {
+        let tab = f.tab.unwrap_or_default();
+        let search = f
+            .search
+            .map(|s| s.trim().to_owned())
+            .filter(|s| !s.is_empty());
+        if search
+            .as_deref()
+            .is_some_and(|s| s.chars().count() > MAX_QUEUE_SEARCH || text::has_unsafe(s, false))
+        {
+            return Err(bad("bad_search", "Search for at most 100 characters."));
+        }
+        let resolved = tab == ReviewTab::Resolved;
+        let sort = f.sort.unwrap_or(if resolved {
+            ReviewSort::Reviewed
+        } else {
+            ReviewSort::Uploaded
+        });
+        Ok(Self {
+            tab: match tab {
+                ReviewTab::Pending => reads::QueueTab::Pending,
+                ReviewTab::Public => reads::QueueTab::Public,
+                ReviewTab::Limited => reads::QueueTab::Limited,
+                ReviewTab::Resolved => reads::QueueTab::Resolved,
+            },
+            search,
+            sort: match sort {
+                ReviewSort::Uploaded => reads::QueueSort::Uploaded,
+                ReviewSort::Reviewed => reads::QueueSort::Reviewed,
+                ReviewSort::Uploader => reads::QueueSort::Uploader,
+                ReviewSort::Name => reads::QueueSort::Name,
+            },
+            descending: f.descending.unwrap_or(resolved),
+        })
+    }
 }
 
 /// An account's emotes in every state, newest first. For `users.view` and moderators.
@@ -251,6 +322,7 @@ async fn review(
     id: &str,
     to: EmoteState,
     why: Option<&str>,
+    visibility: Option<EmoteVisibility>,
 ) -> ApiResult<Emote> {
     let id = parse_id(id)?;
     let why = why.map(reason).transpose()?;
@@ -271,6 +343,23 @@ async fn review(
             "Only pending emotes can be approved or rejected.",
         ));
     }
+    // Approving as unlisted or private (or public again) sets the visibility in the same step.
+    let was = EmoteVisibility::of(before.private, before.unlisted);
+    let now = visibility.unwrap_or(was);
+    if now != was {
+        let (private, unlisted) = now.flags();
+        emotes::update(
+            &mut tx,
+            id,
+            &EmotePatch {
+                private: Some(private),
+                unlisted: Some(unlisted),
+                ..EmotePatch::default()
+            },
+        )
+        .await
+        .map_err(db_error)?;
+    }
     let action = match to {
         EmoteState::Approved => "emote.approved",
         _ => "emote.rejected",
@@ -284,8 +373,8 @@ async fn review(
             action,
             target_kind: "emote",
             target_id: &ids::to_text(id),
-            before: Some(json!({ "state": before.state })),
-            after: Some(json!({ "state": to, "reason": why })),
+            before: Some(json!({ "state": before.state, "visibility": was })),
+            after: Some(json!({ "state": to, "reason": why, "visibility": now })),
         },
         before.owner.filter(|_| to == EmoteState::Approved),
     )
@@ -295,7 +384,7 @@ async fn review(
         let (kind, payload) = match to {
             EmoteState::Approved => (
                 "emote.approved",
-                json!({ "emote_id": ids::to_text(id), "name": before.name }),
+                json!({ "emote_id": ids::to_text(id), "name": before.name, "visibility": now }),
             ),
             _ => (
                 "emote.rejected",
@@ -314,12 +403,148 @@ async fn review(
     build(state, &mut conn, &after).await
 }
 
-pub async fn approve(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Emote> {
-    review(state, caller, id, EmoteState::Approved, None).await
+/// Approves a pending emote; with `visibility`, also makes it public, unlisted or private.
+pub async fn approve(
+    state: &AppState,
+    caller: &Caller,
+    id: &str,
+    visibility: Option<EmoteVisibility>,
+) -> ApiResult<Emote> {
+    review(state, caller, id, EmoteState::Approved, None, visibility).await
 }
 
 pub async fn reject(state: &AppState, caller: &Caller, id: &str, why: &str) -> ApiResult<Emote> {
-    review(state, caller, id, EmoteState::Rejected, Some(why)).await
+    review(state, caller, id, EmoteState::Rejected, Some(why), None).await
+}
+
+// Review notes and history
+
+fn note_body(raw: &str) -> ApiResult<String> {
+    let body = raw.trim();
+    let len = body.chars().count();
+    if len == 0 || len > MAX_NOTE_LEN || text::has_unsafe(body, true) {
+        return Err(bad("bad_note", "Notes are 1 to 2000 characters."));
+    }
+    Ok(body.to_owned())
+}
+
+fn note_view(n: &staff::EmoteNote) -> EmoteNote {
+    EmoteNote {
+        id: ids::to_text(n.id),
+        emote_id: ids::to_text(n.emote_id),
+        author_id: n.author_id.map(ids::to_text),
+        body: n.body.clone(),
+        created_at: views::time(n.created_at),
+    }
+}
+
+async fn require_review(conn: &mut PgConnection, caller: &Caller) -> ApiResult<()> {
+    if holds(conn, caller, permissions::EMOTES_REVIEW).await? {
+        Ok(())
+    } else {
+        Err(forbidden("This needs emotes.review."))
+    }
+}
+
+/// Reviewers' notes on an emote, newest first (the latest 200). Needs `emotes.review`.
+pub async fn notes(state: &AppState, caller: &Caller, emote_id: &str) -> ApiResult<Vec<EmoteNote>> {
+    let emote_id = parse_id(emote_id)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    require_review(&mut conn, caller).await?;
+    Ok(staff::emote_notes(&mut conn, emote_id, NOTES_LIMIT)
+        .await
+        .map_err(db_error)?
+        .iter()
+        .map(note_view)
+        .collect())
+}
+
+/// Adds a note to an emote. Needs `emotes.review`. Audited.
+pub async fn add_note(
+    state: &AppState,
+    caller: &Caller,
+    emote_id: &str,
+    body: &str,
+) -> ApiResult<EmoteNote> {
+    let emote_id = parse_id(emote_id)?;
+    let body = note_body(body)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    require_review(&mut tx, caller).await?;
+    row(&mut tx, emote_id).await?.ok_or_else(not_found)?;
+    let note = staff::add_emote_note(&mut tx, emote_id, caller.account_id, &body)
+        .await
+        .map_err(db_error)?;
+    write_audit(
+        &mut tx,
+        caller,
+        "emote.note_added",
+        emote_id,
+        None,
+        Some(json!({ "note_id": ids::to_text(note.id), "body": body })),
+    )
+    .await?;
+    tx.commit().await.map_err(sqlx_error)?;
+    Ok(note_view(&note))
+}
+
+/// Deletes an emote note: its author may, and the owner. False if it was gone. Audited.
+pub async fn delete_note(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bool> {
+    let id = parse_id(id)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    require_review(&mut tx, caller).await?;
+    let Some(note) = staff::emote_note(&mut tx, id).await.map_err(db_error)? else {
+        return Ok(false);
+    };
+    if note.author_id != Some(caller.account_id) && !caller.owner {
+        return Err(forbidden("Only the note's author can delete it."));
+    }
+    let done = staff::delete_emote_note(&mut tx, id, caller.account_id)
+        .await
+        .map_err(db_error)?;
+    if done {
+        write_audit(
+            &mut tx,
+            caller,
+            "emote.note_deleted",
+            note.emote_id,
+            Some(json!({ "note_id": ids::to_text(note.id), "body": note.body })),
+            None,
+        )
+        .await?;
+    }
+    tx.commit().await.map_err(sqlx_error)?;
+    Ok(done)
+}
+
+/// What happened to one emote, newest first (the latest 100 audit entries: upload, edits,
+/// reviews, notes, takedowns). Needs `emotes.review`.
+pub async fn history(
+    state: &AppState,
+    caller: &Caller,
+    emote_id: &str,
+) -> ApiResult<Vec<AuditEntry>> {
+    let emote_id = parse_id(emote_id)?;
+    let key = ids::to_text(emote_id);
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    require_review(&mut conn, caller).await?;
+    let entries = audit::list(
+        &mut conn,
+        &audit::Filter {
+            actor: None,
+            target_kind: Some("emote"),
+            target_id: Some(&key),
+            action: None,
+            since: None,
+            until: None,
+            before_id: None,
+        },
+        HISTORY_LIMIT,
+    )
+    .await
+    .map_err(db_error)?;
+    Ok(entries.into_iter().map(crate::admin::audit_view).collect())
 }
 
 /// The owner, or `emotes.edit_any` (audited). A restricted owner can't edit. When an owner
@@ -491,6 +716,38 @@ mod tests {
         }
         let many: Vec<String> = (0..11).map(|i| format!("t{i}")).collect();
         assert_eq!(clean_tags(&many).unwrap_err().code, "too_many_tags");
+    }
+
+    #[test]
+    fn queue_reads_fill_in_their_defaults() {
+        use cyex_tv_shared::model::{ReviewQueueFilter, ReviewSort, ReviewTab};
+        let plain = QueueRead::from_filter(ReviewQueueFilter::default()).unwrap();
+        assert_eq!(plain.tab, reads::QueueTab::Pending);
+        assert_eq!(plain.sort, reads::QueueSort::Uploaded);
+        assert!(!plain.descending && plain.search.is_none());
+        let resolved = QueueRead::from_filter(ReviewQueueFilter {
+            tab: Some(ReviewTab::Resolved),
+            search: Some("  ab  ".into()),
+            ..ReviewQueueFilter::default()
+        })
+        .unwrap();
+        assert_eq!(resolved.sort, reads::QueueSort::Reviewed);
+        assert!(resolved.descending);
+        assert_eq!(resolved.search.as_deref(), Some("ab"));
+        let named = QueueRead::from_filter(ReviewQueueFilter {
+            tab: Some(ReviewTab::Resolved),
+            sort: Some(ReviewSort::Name),
+            descending: Some(false),
+            search: Some("   ".into()),
+        })
+        .unwrap();
+        assert_eq!(named.sort, reads::QueueSort::Name);
+        assert!(!named.descending && named.search.is_none());
+        let long = ReviewQueueFilter {
+            search: Some("x".repeat(101)),
+            ..ReviewQueueFilter::default()
+        };
+        assert_eq!(QueueRead::from_filter(long).unwrap_err().code, "bad_search");
     }
 
     #[test]

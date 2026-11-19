@@ -572,6 +572,17 @@ export type EmoteFlags = {
   zeroWidth: Scalars['Boolean']['output'];
 };
 
+/** A note reviewers keep on one emote (`emotes.review`). The uploader never sees it. */
+export type EmoteNote = {
+  __typename?: 'EmoteNote';
+  /** Empty when the author's account is gone. */
+  authorId?: Maybe<Scalars['String']['output']>;
+  body: Scalars['String']['output'];
+  createdAt: Scalars['String']['output'];
+  emoteId: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+};
+
 /** A page of emotes and how many there are in all. */
 export type EmotePage = {
   __typename?: 'EmotePage';
@@ -815,6 +826,8 @@ export type Mutation = {
    * ones included. At most 50 editors per account (`too_many_editors`). Audited.
    */
   addAccountEditor: AccountEditor;
+  /** Add a reviewers' note to an emote (1 to 2000 characters). Needs `emotes.review`. Audited. */
+  addEmoteNote: EmoteNote;
   /**
    * Make someone an editor of a set. Its owner, or their account editors with `EDITORS` and
    * `EMOTES`.
@@ -824,7 +837,11 @@ export type Mutation = {
   addSetEmote: SetEmote;
   /** Add a staff note to an account (1 to 2000 characters). Needs `users.notes`. Audited. */
   addStaffNote: StaffNote;
-  /** Approve a pending emote. Needs `emotes.review`. Audited. */
+  /**
+   * Approve a pending emote. Needs `emotes.review`. Audited. With `visibility`, it is also
+   * made public, unlisted or private in the same step (for example, approved for personal use
+   * only).
+   */
   approveEmote: Emote;
   /**
    * Give an account a role below your highest one that grants only what you hold. Needs
@@ -883,6 +900,8 @@ export type Mutation = {
    * every set.
    */
   deleteEmote: Scalars['Boolean']['output'];
+  /** Delete an emote note: its author may, and the owner. False if it was gone. Audited. */
+  deleteEmoteNote: Scalars['Boolean']['output'];
   /**
    * Delete a paint: everyone loses it and stops showing it. False when there was none. Needs
    * `cosmetics.manage`. Audited.
@@ -1064,6 +1083,12 @@ export type MutationAddAccountEditorArgs = {
 };
 
 
+export type MutationAddEmoteNoteArgs = {
+  body: Scalars['String']['input'];
+  emoteId: Scalars['String']['input'];
+};
+
+
 export type MutationAddSetEditorArgs = {
   accountId: Scalars['String']['input'];
   setId: Scalars['String']['input'];
@@ -1085,6 +1110,7 @@ export type MutationAddStaffNoteArgs = {
 
 export type MutationApproveEmoteArgs = {
   id: Scalars['String']['input'];
+  visibility?: InputMaybe<EmoteVisibility>;
 };
 
 
@@ -1143,6 +1169,11 @@ export type MutationDeleteBadgeArgs = {
 
 
 export type MutationDeleteEmoteArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type MutationDeleteEmoteNoteArgs = {
   id: Scalars['String']['input'];
 };
 
@@ -1728,6 +1759,13 @@ export type Query = {
    */
   emoteChannels: Array<Channel>;
   /**
+   * What happened to one emote, newest first: the latest 100 audit entries about it
+   * (upload, edits, reviews, notes, takedowns). Needs `emotes.review`.
+   */
+  emoteHistory: Array<AuditEntry>;
+  /** Reviewers' notes on an emote, newest first (the latest 200). Needs `emotes.review`. */
+  emoteNotes: Array<EmoteNote>;
+  /**
    * Where an emote stands among the 100 most added in `window` (`DAY`, `WEEK` by default or
    * `MONTH`): its rank and the channels that added it, net of removals. Null when `id` isn't
    * an emote ID, the emote isn't approved and listed, or it is not in the top 100.
@@ -1819,7 +1857,11 @@ export type Query = {
   quickSearch: QuickSearch;
   /** Open reports, oldest first. Needs `emotes.review` or `emotes.takedown`. */
   reportQueue: ReportQueue;
-  /** Pending emotes, oldest first. Needs `emotes.review`. `perPage` is 1 to 100, default 50. */
+  /**
+   * Pending emotes, oldest first. Needs `emotes.review`. `perPage` is 1 to 100, default 50.
+   * With `filter`: one tab (public, unlisted and private, or resolved), a search by name or
+   * uploader, and an order.
+   */
   reviewQueue: ReviewQueue;
   /**
    * All roles, most senior first, each with whether you may edit or assign it. Needs
@@ -2027,6 +2069,16 @@ export type QueryEmoteChannelsArgs = {
 };
 
 
+export type QueryEmoteHistoryArgs = {
+  emoteId: Scalars['String']['input'];
+};
+
+
+export type QueryEmoteNotesArgs = {
+  emoteId: Scalars['String']['input'];
+};
+
+
 export type QueryEmoteTrendingArgs = {
   id: Scalars['String']['input'];
   window?: InputMaybe<TrendingWindow>;
@@ -2104,6 +2156,7 @@ export type QueryReportQueueArgs = {
 
 
 export type QueryReviewQueueArgs = {
+  filter?: InputMaybe<ReviewQueueFilter>;
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
 };
@@ -2252,11 +2305,55 @@ export type RestrictionKind =
   /** Uploading emotes (`users.restrict_uploads`). */
   | 'UPLOADS';
 
+/** How many emotes wait for review, by tab. */
+export type ReviewCounts = {
+  __typename?: 'ReviewCounts';
+  /** Pending and unlisted or private. */
+  limited: Scalars['Int']['output'];
+  /** Pending and public. */
+  public: Scalars['Int']['output'];
+};
+
 export type ReviewQueue = {
   __typename?: 'ReviewQueue';
+  /** How many wait in each pending tab, whatever the read asked for. */
+  counts: ReviewCounts;
   items: Array<Emote>;
+  /** How many match the read in all (its tab and search). */
   total: Scalars['Int']['output'];
 };
+
+/** What `reviewQueue` lists. Every field is optional: none is every pending emote, oldest first. */
+export type ReviewQueueFilter = {
+  /** Newest (or Z) first. Default: oldest first, except `RESOLVED`, latest review first. */
+  descending?: InputMaybe<Scalars['Boolean']['input']>;
+  /** Part of the emote's name or of its uploader's login or display name, any case. */
+  search?: InputMaybe<Scalars['String']['input']>;
+  sort?: InputMaybe<ReviewSort>;
+  tab?: InputMaybe<ReviewTab>;
+};
+
+/** How the review queue is ordered. Ties go by upload time. */
+export type ReviewSort =
+  /** The emote's name. */
+  | 'NAME'
+  /** Review time. The default for `RESOLVED`. */
+  | 'REVIEWED'
+  /** Upload time. The default for the pending tabs. */
+  | 'UPLOADED'
+  /** The uploader's display name. */
+  | 'UPLOADER';
+
+/** A part of the review queue. */
+export type ReviewTab =
+  /** Pending and unlisted or private. */
+  | 'LIMITED'
+  /** Every pending emote. The default. */
+  | 'PENDING'
+  /** Pending and public: search shows it once approved. */
+  | 'PUBLIC'
+  /** Approved or rejected by a reviewer. */
+  | 'RESOLVED';
 
 export type Role = {
   __typename?: 'Role';
@@ -2854,17 +2951,48 @@ export type AdminCountsQuery = { __typename?: 'Query', reviewQueue?: { __typenam
 export type ReviewQueueQueryVariables = Exact<{
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
+  filter?: InputMaybe<ReviewQueueFilter>;
 }>;
 
 
-export type ReviewQueueQuery = { __typename?: 'Query', reviewQueue: { __typename?: 'ReviewQueue', total: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+export type ReviewQueueQuery = { __typename?: 'Query', reviewQueue: { __typename?: 'ReviewQueue', total: number, counts: { __typename?: 'ReviewCounts', public: number, limited: number }, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
 
 export type ApproveMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  visibility?: InputMaybe<EmoteVisibility>;
+}>;
+
+
+export type ApproveMutation = { __typename?: 'Mutation', approveEmote: { __typename?: 'Emote', id: string, state: EmoteState, visibility: EmoteVisibility } };
+
+export type EmoteHistoryQueryVariables = Exact<{
+  emoteId: Scalars['String']['input'];
+}>;
+
+
+export type EmoteHistoryQuery = { __typename?: 'Query', emoteHistory: Array<{ __typename?: 'AuditEntry', id: string, actorId?: string | null, action: string, before?: string | null, after?: string | null, createdAt: string }> };
+
+export type EmoteNotesQueryVariables = Exact<{
+  emoteId: Scalars['String']['input'];
+}>;
+
+
+export type EmoteNotesQuery = { __typename?: 'Query', emoteNotes: Array<{ __typename?: 'EmoteNote', id: string, authorId?: string | null, body: string, createdAt: string }> };
+
+export type AddEmoteNoteMutationVariables = Exact<{
+  emoteId: Scalars['String']['input'];
+  body: Scalars['String']['input'];
+}>;
+
+
+export type AddEmoteNoteMutation = { __typename?: 'Mutation', addEmoteNote: { __typename?: 'EmoteNote', id: string, authorId?: string | null, body: string, createdAt: string } };
+
+export type DeleteEmoteNoteMutationVariables = Exact<{
   id: Scalars['String']['input'];
 }>;
 
 
-export type ApproveMutation = { __typename?: 'Mutation', approveEmote: { __typename?: 'Emote', id: string, state: EmoteState } };
+export type DeleteEmoteNoteMutation = { __typename?: 'Mutation', deleteEmoteNote: boolean };
 
 export type RejectMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -4874,9 +5002,13 @@ export const AdminCountsDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<AdminCountsQuery, AdminCountsQueryVariables>;
 export const ReviewQueueDocument = new TypedDocumentString(`
-    query ReviewQueue($page: Int, $perPage: Int) {
-  reviewQueue(page: $page, perPage: $perPage) {
+    query ReviewQueue($page: Int, $perPage: Int, $filter: ReviewQueueFilter) {
+  reviewQueue(page: $page, perPage: $perPage, filter: $filter) {
     total
+    counts {
+      public
+      limited
+    }
     items {
       ...EmoteFields
     }
@@ -4914,13 +5046,51 @@ export const ReviewQueueDocument = new TypedDocumentString(`
   }
 }`) as unknown as TypedDocumentString<ReviewQueueQuery, ReviewQueueQueryVariables>;
 export const ApproveDocument = new TypedDocumentString(`
-    mutation Approve($id: String!) {
-  approveEmote(id: $id) {
+    mutation Approve($id: String!, $visibility: EmoteVisibility) {
+  approveEmote(id: $id, visibility: $visibility) {
     id
     state
+    visibility
   }
 }
     `) as unknown as TypedDocumentString<ApproveMutation, ApproveMutationVariables>;
+export const EmoteHistoryDocument = new TypedDocumentString(`
+    query EmoteHistory($emoteId: String!) {
+  emoteHistory(emoteId: $emoteId) {
+    id
+    actorId
+    action
+    before
+    after
+    createdAt
+  }
+}
+    `) as unknown as TypedDocumentString<EmoteHistoryQuery, EmoteHistoryQueryVariables>;
+export const EmoteNotesDocument = new TypedDocumentString(`
+    query EmoteNotes($emoteId: String!) {
+  emoteNotes(emoteId: $emoteId) {
+    id
+    authorId
+    body
+    createdAt
+  }
+}
+    `) as unknown as TypedDocumentString<EmoteNotesQuery, EmoteNotesQueryVariables>;
+export const AddEmoteNoteDocument = new TypedDocumentString(`
+    mutation AddEmoteNote($emoteId: String!, $body: String!) {
+  addEmoteNote(emoteId: $emoteId, body: $body) {
+    id
+    authorId
+    body
+    createdAt
+  }
+}
+    `) as unknown as TypedDocumentString<AddEmoteNoteMutation, AddEmoteNoteMutationVariables>;
+export const DeleteEmoteNoteDocument = new TypedDocumentString(`
+    mutation DeleteEmoteNote($id: String!) {
+  deleteEmoteNote(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeleteEmoteNoteMutation, DeleteEmoteNoteMutationVariables>;
 export const RejectDocument = new TypedDocumentString(`
     mutation Reject($id: String!, $reason: String!) {
   rejectEmote(id: $id, reason: $reason) {

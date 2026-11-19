@@ -111,6 +111,114 @@ pub async fn emotes_in_state(
     Ok((items, total))
 }
 
+/// Which part of the review queue a read lists.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum QueueTab {
+    /// Every pending emote.
+    #[default]
+    Pending,
+    /// Pending and public: it would show in search once approved.
+    Public,
+    /// Pending and unlisted or private: link-only or for its owner's own sets.
+    Limited,
+    /// Approved or rejected by a reviewer.
+    Resolved,
+}
+
+/// How a review queue read is ordered. Ties go by upload time, then ID.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum QueueSort {
+    #[default]
+    Uploaded,
+    Reviewed,
+    Uploader,
+    Name,
+}
+
+/// A review queue read: a part, an optional search over the emote's name and its uploader's
+/// login and display name, an order.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct QueueQuery<'a> {
+    pub tab: QueueTab,
+    pub search: Option<&'a str>,
+    pub sort: QueueSort,
+    pub descending: bool,
+}
+
+/// How many emotes wait in each pending part of the queue.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, FromRow)]
+pub struct QueueCounts {
+    pub public: i64,
+    pub limited: i64,
+}
+
+/// The uploader's name the queue sorts and searches by: the Twitch identity first, as the API
+/// shows it.
+const UPLOADER: &str =
+    "(SELECT i.display_name FROM identities i WHERE i.account_id = e.owner_account_id
+       ORDER BY i.platform DESC LIMIT 1)";
+
+/// A page of the review queue and how many match in all.
+pub async fn review_queue(
+    conn: &mut PgConnection,
+    q: &QueueQuery<'_>,
+    limit: i64,
+    offset: i64,
+) -> DbResult<(Vec<EmoteRow>, i64)> {
+    let tab = match q.tab {
+        QueueTab::Pending => "e.state = 'pending'",
+        QueueTab::Public => "e.state = 'pending' AND NOT e.private AND NOT e.unlisted",
+        QueueTab::Limited => "e.state = 'pending' AND (e.private OR e.unlisted)",
+        QueueTab::Resolved => "e.state IN ('approved', 'rejected') AND e.reviewed_at IS NOT NULL",
+    };
+    let dir = if q.descending { "DESC" } else { "ASC" };
+    let order = match q.sort {
+        QueueSort::Uploaded => format!("e.created_at {dir}, e.id {dir}"),
+        QueueSort::Reviewed => {
+            format!("e.reviewed_at {dir} NULLS LAST, e.created_at {dir}, e.id {dir}")
+        }
+        QueueSort::Uploader => {
+            format!("lower({UPLOADER}) {dir} NULLS LAST, e.created_at, e.id")
+        }
+        QueueSort::Name => format!("lower(e.name) {dir}, e.created_at, e.id"),
+    };
+    let pattern = q
+        .search
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| format!("%{}%", crate::search::like_escape(s)));
+    let matches = "($1::text IS NULL OR e.name ILIKE $1 OR EXISTS (
+            SELECT 1 FROM identities i WHERE i.account_id = e.owner_account_id
+              AND (i.login ILIKE $1 OR i.display_name ILIKE $1)))";
+    let items = sqlx::query_as(&format!(
+        "{EMOTE_ROW} WHERE {tab} AND e.deleted_at IS NULL AND {matches}
+         ORDER BY {order} LIMIT $2 OFFSET $3"
+    ))
+    .bind(pattern.as_deref())
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&mut *conn)
+    .await?;
+    let total = sqlx::query_scalar(&format!(
+        "SELECT count(*) FROM emotes e WHERE {tab} AND e.deleted_at IS NULL AND {matches}"
+    ))
+    .bind(pattern.as_deref())
+    .fetch_one(conn)
+    .await?;
+    Ok((items, total))
+}
+
+/// How many pending emotes are public, and how many unlisted or private.
+pub async fn queue_counts(conn: &mut PgConnection) -> DbResult<QueueCounts> {
+    Ok(sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE NOT private AND NOT unlisted) AS public,
+                count(*) FILTER (WHERE private OR unlisted) AS limited
+         FROM emotes WHERE state = 'pending' AND deleted_at IS NULL",
+    )
+    .fetch_one(conn)
+    .await?)
+}
+
 /// An account's own emotes in every state, newest first, and how many there are.
 pub async fn emotes_by_owner(
     conn: &mut PgConnection,

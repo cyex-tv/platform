@@ -8,6 +8,7 @@
     optional = false,
     max = 1000,
     describe,
+    presets = [],
     onsubmit,
   }: {
     title: string;
@@ -19,8 +20,11 @@
     max?: number;
     /** Turns a failed submit into a sentence shown in the dialog; without it the page shows why. */
     describe?: (e: unknown) => string;
+    /** Ready reasons: one click fills the field (and can still be edited). */
+    presets?: string[];
     onsubmit: (reason: string) => Promise<void> | void;
   } = $props();
+  let field = $state<HTMLTextAreaElement>();
 
   let dialog: HTMLDialogElement;
   let reason = $state('');
@@ -56,9 +60,16 @@
       <h2>{title}</h2>
       <label class="ui-field">
         <span class="ui-label">{optional ? 'Note (optional)' : 'Reason'}</span>
-        <textarea class="ui-input" rows="3" maxlength={max} bind:value={reason} aria-describedby="rd-hint"></textarea>
+        <textarea class="ui-input" rows="3" maxlength={max} bind:value={reason} bind:this={field} aria-describedby="rd-hint"></textarea>
         <span class="ui-hint" id="rd-hint">{hint}</span>
       </label>
+      {#if presets.length}
+        <div class="presets" role="group" aria-label="Common reasons">
+          {#each presets as p (p)}
+            <button class="ui-btn secondary small" type="button" aria-pressed={reason.trim() === p} onclick={() => { reason = p; field?.focus(); }}>{p}</button>
+          {/each}
+        </div>
+      {/if}
       {#if problem}<p class="ui-error" role="alert">{problem}</p>{/if}
     </div>
     <footer>
@@ -70,4 +81,6 @@
 
 <style>
   textarea { resize: vertical; min-height: 72px; }
+  .presets { display: flex; flex-wrap: wrap; gap: 6px; }
+  .presets [aria-pressed='true'] { font-weight: 700; color: var(--text); }
 </style>

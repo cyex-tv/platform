@@ -769,6 +769,20 @@ type EmoteFlags {
 }
 
 """
+A note reviewers keep on one emote (`emotes.review`). The uploader never sees it.
+"""
+type EmoteNote {
+	id: String!
+	emoteId: String!
+	"""
+	Empty when the author's account is gone.
+	"""
+	authorId: String
+	body: String!
+	createdAt: String!
+}
+
+"""
 A page of emotes and how many there are in all.
 """
 type EmotePage {
@@ -1273,9 +1287,19 @@ type Mutation {
 	"""
 	deleteEmote(id: String!): Boolean!
 	"""
-	Approve a pending emote. Needs `emotes.review`. Audited.
+	Approve a pending emote. Needs `emotes.review`. Audited. With `visibility`, it is also
+	made public, unlisted or private in the same step (for example, approved for personal use
+	only).
 	"""
-	approveEmote(id: String!): Emote!
+	approveEmote(id: String!, visibility: EmoteVisibility): Emote!
+	"""
+	Add a reviewers' note to an emote (1 to 2000 characters). Needs `emotes.review`. Audited.
+	"""
+	addEmoteNote(emoteId: String!, body: String!): EmoteNote!
+	"""
+	Delete an emote note: its author may, and the owner. False if it was gone. Audited.
+	"""
+	deleteEmoteNote(id: String!): Boolean!
 	"""
 	Reject a pending emote with a reason. Needs `emotes.review`. Audited.
 	"""
@@ -1973,8 +1997,19 @@ type Query {
 	permissions: [String!]!
 	"""
 	Pending emotes, oldest first. Needs `emotes.review`. `perPage` is 1 to 100, default 50.
+	With `filter`: one tab (public, unlisted and private, or resolved), a search by name or
+	uploader, and an order.
 	"""
-	reviewQueue(page: Int, perPage: Int): ReviewQueue!
+	reviewQueue(page: Int, perPage: Int, filter: ReviewQueueFilter): ReviewQueue!
+	"""
+	Reviewers' notes on an emote, newest first (the latest 200). Needs `emotes.review`.
+	"""
+	emoteNotes(emoteId: String!): [EmoteNote!]!
+	"""
+	What happened to one emote, newest first: the latest 100 audit entries about it
+	(upload, edits, reviews, notes, takedowns). Needs `emotes.review`.
+	"""
+	emoteHistory(emoteId: String!): [AuditEntry!]!
 	"""
 	An account's roles. Yours, or anyone's with `roles.manage` or `users.view`.
 	"""
@@ -2200,9 +2235,90 @@ enum RestrictionKind {
 	ACCOUNT
 }
 
+"""
+How many emotes wait for review, by tab.
+"""
+type ReviewCounts {
+	"""
+	Pending and public.
+	"""
+	public: Int!
+	"""
+	Pending and unlisted or private.
+	"""
+	limited: Int!
+}
+
 type ReviewQueue {
 	items: [Emote!]!
+	"""
+	How many match the read in all (its tab and search).
+	"""
 	total: Int!
+	"""
+	How many wait in each pending tab, whatever the read asked for.
+	"""
+	counts: ReviewCounts!
+}
+
+"""
+What `reviewQueue` lists. Every field is optional: none is every pending emote, oldest first.
+"""
+input ReviewQueueFilter {
+	tab: ReviewTab
+	"""
+	Part of the emote's name or of its uploader's login or display name, any case.
+	"""
+	search: String
+	sort: ReviewSort
+	"""
+	Newest (or Z) first. Default: oldest first, except `RESOLVED`, latest review first.
+	"""
+	descending: Boolean
+}
+
+"""
+How the review queue is ordered. Ties go by upload time.
+"""
+enum ReviewSort {
+	"""
+	Upload time. The default for the pending tabs.
+	"""
+	UPLOADED
+	"""
+	Review time. The default for `RESOLVED`.
+	"""
+	REVIEWED
+	"""
+	The uploader's display name.
+	"""
+	UPLOADER
+	"""
+	The emote's name.
+	"""
+	NAME
+}
+
+"""
+A part of the review queue.
+"""
+enum ReviewTab {
+	"""
+	Every pending emote. The default.
+	"""
+	PENDING
+	"""
+	Pending and public: search shows it once approved.
+	"""
+	PUBLIC
+	"""
+	Pending and unlisted or private.
+	"""
+	LIMITED
+	"""
+	Approved or rejected by a reviewer.
+	"""
+	RESOLVED
 }
 
 type Role {

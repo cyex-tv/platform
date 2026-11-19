@@ -66,8 +66,12 @@ type Documents = {
     "\n  mutation RestoreAccount {\n    restoreAccount\n  }\n": typeof types.RestoreAccountDocument,
     "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n      }\n    }\n  }\n": typeof types.MyRolesDocument,
     "\n  query AdminCounts($review: Boolean!, $reports: Boolean!) {\n    reviewQueue(page: 1, perPage: 1) @include(if: $review) {\n      total\n    }\n    reportQueue(page: 1, perPage: 1) @include(if: $reports) {\n      total\n    }\n    globalSet {\n      id\n    }\n  }\n": typeof types.AdminCountsDocument,
-    "\n  query ReviewQueue($page: Int, $perPage: Int) {\n    reviewQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.ReviewQueueDocument,
-    "\n  mutation Approve($id: String!) {\n    approveEmote(id: $id) {\n      id\n      state\n    }\n  }\n": typeof types.ApproveDocument,
+    "\n  query ReviewQueue($page: Int, $perPage: Int, $filter: ReviewQueueFilter) {\n    reviewQueue(page: $page, perPage: $perPage, filter: $filter) {\n      total\n      counts {\n        public\n        limited\n      }\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.ReviewQueueDocument,
+    "\n  mutation Approve($id: String!, $visibility: EmoteVisibility) {\n    approveEmote(id: $id, visibility: $visibility) {\n      id\n      state\n      visibility\n    }\n  }\n": typeof types.ApproveDocument,
+    "\n  query EmoteHistory($emoteId: String!) {\n    emoteHistory(emoteId: $emoteId) {\n      id\n      actorId\n      action\n      before\n      after\n      createdAt\n    }\n  }\n": typeof types.EmoteHistoryDocument,
+    "\n  query EmoteNotes($emoteId: String!) {\n    emoteNotes(emoteId: $emoteId) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n": typeof types.EmoteNotesDocument,
+    "\n  mutation AddEmoteNote($emoteId: String!, $body: String!) {\n    addEmoteNote(emoteId: $emoteId, body: $body) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n": typeof types.AddEmoteNoteDocument,
+    "\n  mutation DeleteEmoteNote($id: String!) {\n    deleteEmoteNote(id: $id)\n  }\n": typeof types.DeleteEmoteNoteDocument,
     "\n  mutation Reject($id: String!, $reason: String!) {\n    rejectEmote(id: $id, reason: $reason) {\n      id\n      state\n    }\n  }\n": typeof types.RejectDocument,
     "\n  fragment ReportFields on Report {\n    id\n    reason\n    reporterId\n    state\n    resolution\n    createdAt\n    resolvedAt\n    emote {\n      ...EmoteFields\n    }\n  }\n": typeof types.ReportFieldsFragmentDoc,
     "\n  query ReportQueue($page: Int, $perPage: Int) {\n    reportQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        id\n        reason\n        reporterId\n        state\n        createdAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": typeof types.ReportQueueDocument,
@@ -202,8 +206,12 @@ const documents: Documents = {
     "\n  mutation RestoreAccount {\n    restoreAccount\n  }\n": types.RestoreAccountDocument,
     "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n      }\n    }\n  }\n": types.MyRolesDocument,
     "\n  query AdminCounts($review: Boolean!, $reports: Boolean!) {\n    reviewQueue(page: 1, perPage: 1) @include(if: $review) {\n      total\n    }\n    reportQueue(page: 1, perPage: 1) @include(if: $reports) {\n      total\n    }\n    globalSet {\n      id\n    }\n  }\n": types.AdminCountsDocument,
-    "\n  query ReviewQueue($page: Int, $perPage: Int) {\n    reviewQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.ReviewQueueDocument,
-    "\n  mutation Approve($id: String!) {\n    approveEmote(id: $id) {\n      id\n      state\n    }\n  }\n": types.ApproveDocument,
+    "\n  query ReviewQueue($page: Int, $perPage: Int, $filter: ReviewQueueFilter) {\n    reviewQueue(page: $page, perPage: $perPage, filter: $filter) {\n      total\n      counts {\n        public\n        limited\n      }\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.ReviewQueueDocument,
+    "\n  mutation Approve($id: String!, $visibility: EmoteVisibility) {\n    approveEmote(id: $id, visibility: $visibility) {\n      id\n      state\n      visibility\n    }\n  }\n": types.ApproveDocument,
+    "\n  query EmoteHistory($emoteId: String!) {\n    emoteHistory(emoteId: $emoteId) {\n      id\n      actorId\n      action\n      before\n      after\n      createdAt\n    }\n  }\n": types.EmoteHistoryDocument,
+    "\n  query EmoteNotes($emoteId: String!) {\n    emoteNotes(emoteId: $emoteId) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n": types.EmoteNotesDocument,
+    "\n  mutation AddEmoteNote($emoteId: String!, $body: String!) {\n    addEmoteNote(emoteId: $emoteId, body: $body) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n": types.AddEmoteNoteDocument,
+    "\n  mutation DeleteEmoteNote($id: String!) {\n    deleteEmoteNote(id: $id)\n  }\n": types.DeleteEmoteNoteDocument,
     "\n  mutation Reject($id: String!, $reason: String!) {\n    rejectEmote(id: $id, reason: $reason) {\n      id\n      state\n    }\n  }\n": types.RejectDocument,
     "\n  fragment ReportFields on Report {\n    id\n    reason\n    reporterId\n    state\n    resolution\n    createdAt\n    resolvedAt\n    emote {\n      ...EmoteFields\n    }\n  }\n": types.ReportFieldsFragmentDoc,
     "\n  query ReportQueue($page: Int, $perPage: Int) {\n    reportQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        id\n        reason\n        reporterId\n        state\n        createdAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": types.ReportQueueDocument,
@@ -494,11 +502,27 @@ export function graphql(source: "\n  query AdminCounts($review: Boolean!, $repor
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query ReviewQueue($page: Int, $perPage: Int) {\n    reviewQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n"): typeof import('./graphql').ReviewQueueDocument;
+export function graphql(source: "\n  query ReviewQueue($page: Int, $perPage: Int, $filter: ReviewQueueFilter) {\n    reviewQueue(page: $page, perPage: $perPage, filter: $filter) {\n      total\n      counts {\n        public\n        limited\n      }\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n"): typeof import('./graphql').ReviewQueueDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  mutation Approve($id: String!) {\n    approveEmote(id: $id) {\n      id\n      state\n    }\n  }\n"): typeof import('./graphql').ApproveDocument;
+export function graphql(source: "\n  mutation Approve($id: String!, $visibility: EmoteVisibility) {\n    approveEmote(id: $id, visibility: $visibility) {\n      id\n      state\n      visibility\n    }\n  }\n"): typeof import('./graphql').ApproveDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query EmoteHistory($emoteId: String!) {\n    emoteHistory(emoteId: $emoteId) {\n      id\n      actorId\n      action\n      before\n      after\n      createdAt\n    }\n  }\n"): typeof import('./graphql').EmoteHistoryDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query EmoteNotes($emoteId: String!) {\n    emoteNotes(emoteId: $emoteId) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n"): typeof import('./graphql').EmoteNotesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation AddEmoteNote($emoteId: String!, $body: String!) {\n    addEmoteNote(emoteId: $emoteId, body: $body) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n"): typeof import('./graphql').AddEmoteNoteDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteEmoteNote($id: String!) {\n    deleteEmoteNote(id: $id)\n  }\n"): typeof import('./graphql').DeleteEmoteNoteDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

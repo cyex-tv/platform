@@ -1,0 +1,249 @@
+<script lang="ts">
+  // One upload in the review queue, up close: "n / total" with previous and next (the arrow
+  // keys), its kind, name, uploader, flags and tags, the picture at every size chat uses with its
+  // dimensions and weight, and two tabs: Activity (what happened to it, with date and time) and
+  // Notes (what reviewers tell each other). Reject and Approve sit at the bottom with the smaller
+  // verdicts (approve as unlisted, approve for its owner only) between them. A approves, R
+  // rejects, U and P approve unlisted and private; after a verdict the page opens the next one.
+  import { gql } from '$lib/api';
+  import { ready, src } from '$lib/emote';
+  import { bytes, clean, count, dateTime } from '$lib/format';
+  import type { EmoteFieldsFragment, EmoteHistoryQuery, EmoteVisibility } from '$lib/gql/graphql';
+  import { ADD_EMOTE_NOTE, DELETE_EMOTE_NOTE, EMOTE_HISTORY, EMOTE_NOTES } from '$lib/queries';
+  import IconButton from '$lib/components/IconButton.svelte';
+  import Icon from '$lib/components/Icon.svelte';
+  import Segmented from '$lib/components/Segmented.svelte';
+  import State from '$lib/components/State.svelte';
+  import { useCopied } from '$lib/clipboard.svelte';
+  import AccountLink from './AccountLink.svelte';
+  import NoteList from './NoteList.svelte';
+  import { describe, kindOf, sizes } from './queue';
+
+  type Props = {
+    emote: EmoteFieldsFragment | null;
+    /** 1-based place in the whole filtered queue, and its size. */
+    place: number;
+    total: number;
+    busy: boolean;
+    /** Resolved uploads: nothing to decide, only to read. */
+    resolved: boolean;
+    hasPrev: boolean;
+    hasNext: boolean;
+    onprev: () => void;
+    onnext: () => void;
+    onapprove: (visibility?: EmoteVisibility) => void;
+    onreject: () => void;
+    onclose: () => void;
+  };
+  let { emote, place, total, busy, resolved, hasPrev, hasNext, onprev, onnext, onapprove, onreject, onclose }: Props = $props();
+
+  let dialog: HTMLDialogElement;
+  let tab = $state<'activity' | 'notes'>('activity');
+  let noteCount = $state<number | null>(null);
+  let history = $state<EmoteHistoryQuery['emoteHistory'] | null>(null);
+  let historyProblem = $state(false);
+  let seq = 0;
+  const idCopy = useCopied();
+
+  export function open() {
+    if (!dialog.open) dialog.showModal();
+  }
+  export function close() {
+    if (dialog.open) dialog.close();
+  }
+  export function isOpen() {
+    return dialog?.open ?? false;
+  }
+
+  async function loadHistory(id: string) {
+    const mine = ++seq;
+    history = null;
+    historyProblem = false;
+    try {
+      const r = (await gql(EMOTE_HISTORY, { emoteId: id })).emoteHistory;
+      if (mine === seq) history = r;
+    } catch {
+      if (mine === seq) historyProblem = true;
+    }
+  }
+  $effect(() => {
+    const id = emote?.id;
+    noteCount = null;
+    if (id) loadHistory(id);
+  });
+
+  function onkeydown(ev: KeyboardEvent) {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.defaultPrevented || !emote) return;
+    const t = ev.target as HTMLElement | null;
+    if (t?.closest('input, textarea, select, [contenteditable]')) return;
+    // A dialog opened over this one (the reject reason) takes its own keys.
+    if (t?.closest('dialog') !== dialog) return;
+    if (ev.key === 'ArrowLeft' && !t?.closest('[role="radiogroup"]')) {
+      ev.preventDefault();
+      if (hasPrev) onprev();
+      return;
+    }
+    if (ev.key === 'ArrowRight' && !t?.closest('[role="radiogroup"]')) {
+      ev.preventDefault();
+      if (hasNext) onnext();
+      return;
+    }
+    if (resolved || busy || ev.repeat) return;
+    const k = ev.key.toLowerCase();
+    if (k === 'a' && ready(emote)) (ev.preventDefault(), onapprove());
+    else if (k === 'u' && ready(emote)) (ev.preventDefault(), onapprove('UNLISTED'));
+    else if (k === 'p' && ready(emote)) (ev.preventDefault(), onapprove('PRIVATE'));
+    else if (k === 'r') (ev.preventDefault(), onreject());
+  }
+
+  const files = $derived(emote ? sizes(emote.files) : []);
+  const VIS: Record<EmoteVisibility, string> = { PUBLIC: 'Public', UNLISTED: 'Unlisted', PRIVATE: 'Private (owner only)' };
+</script>
+
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<dialog class="ui-dialog detail" bind:this={dialog} aria-labelledby="rd-name" {onkeydown} onclose={onclose}>
+  {#if emote}
+    {@const e = emote}
+    <div class="top">
+      <IconButton label="Previous" icon="arrow-left" size="s" disabled={!hasPrev} onclick={onprev} />
+      <span class="place ui-num" aria-live="polite">{count(place)} / {count(total)}</span>
+      <IconButton label="Next" icon="arrow-right" size="s" disabled={!hasNext} onclick={onnext} />
+      <span class="grow"></span>
+      <IconButton label="Close" icon="x" size="s" onclick={close} />
+    </div>
+
+    <div class="main">
+      <section class="pics" aria-label="Sizes">
+        {#if ready(e) && files.length}
+          <div class="sizes">
+            {#each files as f (f.name)}
+              <figure>
+                <span class="frame" style:width="{f.width}px" style:height="{f.height}px">
+                  <img src={src(e, f.scale as 1 | 2 | 3 | 4)} width={f.width} height={f.height} alt={f.scale === 4 ? clean(e.name) : ''} decoding="async" />
+                </span>
+                <figcaption class="ui-mono"><b>{f.scale}x</b><span>{f.width}×{f.height}</span><span>{bytes(f.size)}</span></figcaption>
+              </figure>
+            {/each}
+          </div>
+        {:else}
+          <State bare kind="loading" title="Files not made yet" />
+        {/if}
+      </section>
+
+      <section class="facts">
+        <span class="ui-label">{kindOf(e)}</span>
+        <h2 id="rd-name"><bdi>{clean(e.name)}</bdi></h2>
+        <p class="who"><Icon name="user" size={14} /> <AccountLink id={e.owner?.id} name={e.owner?.displayName} /></p>
+        <dl>
+          <dt>Uploaded</dt><dd class="ui-num">{dateTime(e.createdAt)}</dd>
+          <dt>Visibility</dt><dd>{VIS[e.visibility]}</dd>
+          <dt>State</dt><dd><span class="ui-chip {e.state.toLowerCase()}">{e.state === 'TAKEN_DOWN' ? 'Taken down' : e.state.charAt(0) + e.state.slice(1).toLowerCase()}</span></dd>
+          {#if e.flags.nsfw || e.flags.zeroWidth || e.flags.wide}
+            <dt>Flags</dt>
+            <dd class="chips">{#if e.flags.nsfw}<span class="ui-chip">NSFW</span>{/if}{#if e.flags.zeroWidth}<span class="ui-chip">Zero-width</span>{/if}{#if e.flags.wide}<span class="ui-chip">Wide</span>{/if}</dd>
+          {/if}
+          <dt>Tags</dt>
+          <dd class="chips">{#each e.tags as t (t)}<span class="ui-chip" title={t}><bdi>{t}</bdi></span>{:else}<span class="ui-hint">None</span>{/each}</dd>
+          <dt>ID</dt><dd class="id"><span class="ui-mono">{e.id}</span> <IconButton label={idCopy.copied ? 'Copied' : 'Copy ID'} icon={idCopy.copied ? 'check' : 'copy'} size="s" onclick={() => idCopy.copy(e.id)} /></dd>
+        </dl>
+      </section>
+    </div>
+
+    <div class="tabs">
+      <Segmented label="Show" size="s" value={tab} onchange={(v) => (tab = v)}
+        options={[{ value: 'activity', label: history ? `Activity (${history.length + 1})` : 'Activity' }, { value: 'notes', label: noteCount === null ? 'Notes' : `Notes (${noteCount})` }]} />
+    </div>
+    <div class="pane">
+      <div hidden={tab !== 'activity'}>
+        {#if historyProblem}
+          <State bare kind="error" title="That didn’t load">
+            {#snippet actions()}<button class="ui-btn secondary small" type="button" onclick={() => loadHistory(e.id)}>Try again</button>{/snippet}
+          </State>
+        {:else if !history}
+          <State bare kind="loading" title="Loading activity…" />
+        {:else}
+          <ol class="ui-list log">
+            {#each history as h (h.id)}
+              {@const d = describe(h)}
+              <li>
+                <span class="line">
+                  <span>{d.text} · <AccountLink id={h.actorId} /></span>
+                  {#if d.detail}<span class="more">{d.detail}</span>{/if}
+                </span>
+                <time class="ui-mono" datetime={h.createdAt}>{dateTime(h.createdAt)}</time>
+              </li>
+            {/each}
+            <li>
+              <span class="line"><span>Uploaded · <AccountLink id={e.owner?.id} name={e.owner?.displayName} /></span></span>
+              <time class="ui-mono" datetime={e.createdAt}>{dateTime(e.createdAt)}</time>
+            </li>
+          </ol>
+        {/if}
+      </div>
+      <div hidden={tab !== 'notes'}>
+        <NoteList
+          key={e.id}
+          load={async () => (await gql(EMOTE_NOTES, { emoteId: e.id })).emoteNotes}
+          add={async (body) => (await gql(ADD_EMOTE_NOTE, { emoteId: e.id, body })).addEmoteNote}
+          remove={(id) => gql(DELETE_EMOTE_NOTE, { id })}
+          placeholder="A note for other reviewers: why you held it, what to compare it with."
+          oncount={(n) => (noteCount = n)}
+        />
+      </div>
+    </div>
+
+    {#if !resolved}
+      <footer>
+        <button class="ui-btn danger" type="button" disabled={busy} onclick={onreject}><Icon name="x" size={15} />Reject</button>
+        <span class="small">
+          <IconButton label="Approve as unlisted" icon="eye-off" variant="outline" tip="top" disabled={busy || !ready(e)} onclick={() => onapprove('UNLISTED')} />
+          <IconButton label="Approve for its owner only" icon="user" variant="outline" tip="top" disabled={busy || !ready(e)} onclick={() => onapprove('PRIVATE')} />
+          <IconButton label="Open the uploader’s account" icon="circle-user" variant="outline" tip="top" href={e.owner ? `/admin/users/${encodeURIComponent(e.owner.id)}` : undefined} disabled={!e.owner} />
+        </span>
+        <button class="ui-btn primary" type="button" disabled={busy || !ready(e)} onclick={() => onapprove()}><Icon name="check" size={15} />Approve</button>
+      </footer>
+    {/if}
+  {/if}
+</dialog>
+
+<style>
+  .detail { width: min(880px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); }
+  .detail[open] { display: flex; flex-direction: column; }
+  .detail:focus-visible { outline: none; }
+  .top { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .place { min-width: 84px; text-align: center; font-weight: 600; font-size: var(--text-sub); }
+  .grow { flex: 1; }
+  .main { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; padding: 16px; overflow: auto; }
+  @media (max-width: 720px) { .main { grid-template-columns: minmax(0, 1fr); } }
+  .pics { display: grid; place-items: center; min-height: 160px; padding: 16px 12px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--bg); overflow-x: auto; }
+  .sizes { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end; gap: 16px 20px; max-width: 100%; }
+  .sizes figure { display: grid; justify-items: center; gap: 6px; margin: 0; }
+  .frame { display: block; max-width: 100%; }
+  .frame img { display: block; width: 100%; height: 100%; object-fit: contain; }
+  .sizes figcaption { display: grid; justify-items: center; font-size: 11px; line-height: 1.4; color: var(--dim); white-space: nowrap; }
+  .sizes figcaption b { font-weight: 600; color: var(--muted); }
+  .facts { display: grid; align-content: start; gap: 4px; min-width: 0; }
+  .facts h2 { margin: 0; font-size: 1.3rem; line-height: 1.25; overflow-wrap: anywhere; }
+  .who { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; color: var(--muted); }
+  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; margin: 0; font-size: var(--text-sub); }
+  dt { color: var(--dim); }
+  dd { margin: 0; min-width: 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .chips .ui-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-transform: none; letter-spacing: 0; }
+  .id { display: flex; align-items: center; gap: 6px; }
+  .id .ui-mono { overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+  .tabs { display: flex; justify-content: center; padding: 4px 16px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .pane { min-height: 140px; max-height: 280px; overflow: auto; }
+  .log > li { align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .line { display: grid; gap: 2px; min-width: 0; font-size: var(--text-sub); }
+  .more { color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .log time { flex: none; font-size: 12px; font-weight: 600; color: var(--dim); user-select: none; }
+  .detail footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+  .small { display: flex; gap: 6px; }
+  @media (max-width: 480px) {
+    .detail footer { flex-wrap: wrap; }
+    .detail footer > .ui-btn { flex: 1; }
+    .small { order: 3; width: 100%; justify-content: center; }
+    .main { padding: 12px; }
+  }
+</style>

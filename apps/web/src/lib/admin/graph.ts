@@ -97,3 +97,86 @@ export function tally(grants: Grant[]) {
     gone: grants.length - held.length,
   };
 }
+
+/** How an account came to hold something, in a few words. */
+export const SOURCE_LABEL: Record<Grant['source'], string> = {
+  STAFF: 'Given by staff',
+  PURCHASE: 'Bought',
+  CODE: 'Redeemed a code',
+  EVENT: 'Event',
+  DEFAULT: 'Every account',
+  OWNER: 'Owner list',
+};
+
+/** The source with its order or code batch: `Bought · Supporter pack`. */
+export function how(g: Grant): string {
+  const extra = g.orderName ?? g.codeBatchName ?? null;
+  return extra ? `${SOURCE_LABEL[g.source]} · ${extra}` : SOURCE_LABEL[g.source];
+}
+
+export type HolderSort = 'account' | 'how' | 'given' | 'ended';
+
+/**
+ * The holders table of one item: held now only, or everyone who ever held it; narrowed by a
+ * search over the account's name (from `nameOf`) and ID; sorted by a column. Ties go newest given
+ * first. Pure, so the owners lookup and its CSV agree.
+ */
+export function holderRows(
+  grants: Grant[],
+  opts: { show: 'held' | 'ever'; sort: HolderSort; desc: boolean; search?: string; nameOf?: (id: string) => string | undefined },
+): Grant[] {
+  const name = (g: Grant) => (opts.nameOf?.(g.accountId) ?? '').toLowerCase();
+  const q = (opts.search ?? '').trim().toLowerCase();
+  const rows = grants.filter(
+    (g) => (opts.show === 'ever' || g.active) && (!q || name(g).includes(q) || g.accountId.toLowerCase().includes(q)),
+  );
+  const key = (g: Grant): string => {
+    switch (opts.sort) {
+      case 'account':
+        return name(g) || g.accountId.toLowerCase();
+      case 'how':
+        return how(g).toLowerCase();
+      case 'ended':
+        // Still held counts as ending last: after the ended ones going up, first going down.
+        return g.revokedAt ?? '\uffff';
+      default:
+        return g.grantedAt ?? '';
+    }
+  };
+  const dir = opts.desc ? -1 : 1;
+  return rows.sort((a, b) => {
+    const x = key(a);
+    const y = key(b);
+    if (x !== y) return x < y ? -dir : dir;
+    return (b.grantedAt ?? '').localeCompare(a.grantedAt ?? '');
+  });
+}
+
+/** A CSV field: quoted when it needs to be; a leading = + - @ is defused for spreadsheets. */
+function field(v: string | null | undefined): string {
+  let s = v ?? '';
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** The holders as CSV (with a header row), for a spreadsheet. */
+export function holdersCsv(rows: Grant[], nameOf: (id: string) => string | undefined = () => undefined): string {
+  const head = ['account_id', 'account', 'held_now', 'how', 'given_by', 'given_at', 'reason', 'ended_at', 'ended_by', 'end_reason'];
+  const lines = rows.map((g) =>
+    [
+      g.accountId,
+      nameOf(g.accountId) ?? '',
+      g.active ? 'yes' : 'no',
+      how(g),
+      g.grantedBy ?? '',
+      g.grantedAt ?? '',
+      g.reason ?? '',
+      g.revokedAt ?? '',
+      g.revokedBy ?? '',
+      g.revokeReason ?? '',
+    ]
+      .map(field)
+      .join(','),
+  );
+  return [head.join(','), ...lines].join('\r\n') + '\r\n';
+}

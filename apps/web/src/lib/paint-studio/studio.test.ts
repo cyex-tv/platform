@@ -5,6 +5,7 @@ import { searchItems, SIZES } from './anim';
 import { alphaOf, blankPaint, checkPicture, fmtBytes, LIMITS, normHex, rgbaToHex, sortStops, validatePaint, withAlpha, type StudioPaint } from './format';
 import { anyColour, engineShadows, exportPaint, hexToInt, importPaint, intToHex, projectDoc, toEngineShadows } from './interop';
 import { STATIC_PRESETS } from './presets';
+import { STILL_FRAME, THUMB_H, THUMB_W, thumbDoc } from './thumbs';
 
 const paint = (o: Partial<StudioPaint> = {}): StudioPaint => ({ ...blankPaint(), name: 'Test', ...o });
 
@@ -244,6 +245,29 @@ describe('engine', async () => {
     expect(dropped).toBe(1);
     expect(doc.layers).toHaveLength(1);
     expect('custom' in doc).toBe(false);
+  });
+  it('draws a preview for every option in the add dialog', () => {
+    const fx = thumbDoc(PL, 'effect', Object.keys(PL.EFFECTS)[0]);
+    expect(fx.layers).toHaveLength(2);
+    expect(fx.effects).toHaveLength(1);
+    expect([fx.width, fx.height]).toEqual([THUMB_W, THUMB_H]);
+    const blank: string[] = [];
+    for (const [kind, store, cats] of [['layer', PL.LAYERS, PL.LAYER_CATS], ['effect', PL.EFFECTS, PL.EFFECT_CATS]] as const) {
+      for (const d of Object.values(store).filter((x) => cats.includes(x.cat))) {
+        let img: ImageData;
+        try {
+          const cp = PL.Engine.compile(thumbDoc(PL, kind, d.id));
+          img = PL.Engine.renderFrame(cp, Math.min(STILL_FRAME, cp.frames - 1), THUMB_W, THUMB_H);
+        } catch (e) {
+          // Text and picture elements draw through OffscreenCanvas, which Node lacks.
+          if (String(e).includes('OffscreenCanvas')) continue;
+          throw e;
+        }
+        if (!img.data.some((v, i) => i % 4 === 3 && v > 0)) blank.push(`${kind}:${d.id}`);
+      }
+    }
+    // A few layers draw only now and then (a flash, a single particle); nearly all show something.
+    expect(blank.length).toBeLessThan(12);
   });
   it('searches the library by name, tags and synonyms', () => {
     expect(searchItems(PL, PL.LAYERS, 'fire')[0].name.toLowerCase()).toContain('fire');

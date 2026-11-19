@@ -404,19 +404,21 @@ pub async fn audit_log(
     )
     .await
     .map_err(db_error)?;
-    Ok(entries
-        .into_iter()
-        .map(|e| AuditEntry {
-            id: ids::to_text(e.id),
-            actor_id: e.actor_account_id.map(ids::to_text),
-            action: e.action,
-            target_kind: e.target_kind,
-            target_id: e.target_id,
-            before: e.before_json.map(|v| v.to_string()),
-            after: e.after_json.map(|v| v.to_string()),
-            created_at: views::time(e.created_at),
-        })
-        .collect())
+    Ok(entries.into_iter().map(audit_view).collect())
+}
+
+/// One audit log entry as the API shows it.
+pub fn audit_view(e: audit::Entry) -> AuditEntry {
+    AuditEntry {
+        id: ids::to_text(e.id),
+        actor_id: e.actor_account_id.map(ids::to_text),
+        action: e.action,
+        target_kind: e.target_kind,
+        target_id: e.target_id,
+        before: e.before_json.map(|v| v.to_string()),
+        after: e.after_json.map(|v| v.to_string()),
+        created_at: views::time(e.created_at),
+    }
 }
 
 // Writes
