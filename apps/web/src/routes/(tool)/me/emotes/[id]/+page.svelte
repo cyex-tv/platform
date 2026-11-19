@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { ApiError, gql } from '$lib/api';
+  import { ApiError, gql, type EmoteVisibility } from '$lib/api';
   import { problemTitle } from '$lib/components/problem';
   import { ready } from '$lib/emote';
   import { clean, date, iso } from '$lib/format';
@@ -20,6 +20,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
   import EmoteFlags from '$lib/tool/EmoteFlags.svelte';
+  import { visibilityOf } from '$lib/tool/visibility';
 
   const scales = [1, 2, 4] as const;
   let emote = $state<EmoteFieldsFragment | null>(null);
@@ -30,7 +31,7 @@
   let name = $state('');
   let tagText = $state('');
   let zeroWidth = $state(false);
-  let hidden = $state(false);
+  let visibility = $state<EmoteVisibility>('PUBLIC');
   let nsfw = $state(false);
   let saving = $state(false);
   let deleting = $state(false);
@@ -45,7 +46,7 @@
       (name.trim() !== emote.name ||
         tags.join(',') !== emote.tags.join(',') ||
         zeroWidth !== emote.flags.zeroWidth ||
-        hidden !== emote.flags.private ||
+        visibility !== visibilityOf(emote) ||
         nsfw !== emote.flags.nsfw),
   );
 
@@ -54,7 +55,7 @@
     name = e.name;
     tagText = e.tags.join(', ');
     zeroWidth = e.flags.zeroWidth;
-    hidden = e.flags.private;
+    visibility = visibilityOf(e);
     nsfw = e.flags.nsfw;
   }
 
@@ -106,7 +107,7 @@
     try {
       const r = await gql(UPDATE_EMOTE, {
         id: emote.id,
-        input: { name: name.trim(), tags, zeroWidth, private: hidden, nsfw },
+        input: { name: name.trim(), tags, zeroWidth, visibility, nsfw },
       });
       fill(r.updateEmote);
       notify('Saved.');
@@ -200,7 +201,7 @@
             <input class="ui-input" bind:value={tagText} placeholder="cat, dance" aria-invalid={tagError ? 'true' : undefined} />
             {#if tagError}<span class="ui-error">{tagError}</span>{/if}
           </label>
-          <EmoteFlags id="edit" bind:zeroWidth bind:hidden bind:nsfw disabled={saving} />
+          <EmoteFlags id="edit" bind:zeroWidth bind:visibility bind:nsfw disabled={saving} />
           <div class="ui-actions">
             <button class="ui-btn primary" type="submit" disabled={saving || !changed || !!nameError || !!tagError}>
               {saving ? 'Saving…' : 'Save'}

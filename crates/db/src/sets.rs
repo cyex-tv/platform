@@ -226,6 +226,7 @@ pub async fn personal_for_users(
                 s.id, s.owner_account_id, s.name, s.kind, s.capacity, s.created_at, s.updated_at,
                 s.visibility
          FROM identities i
+         JOIN accounts a ON a.id = i.account_id AND a.deleted_at IS NULL
          JOIN emote_sets s ON s.owner_account_id = i.account_id AND s.kind = 'personal'
          WHERE i.platform = $1
            AND i.platform_user_id = ANY($2)

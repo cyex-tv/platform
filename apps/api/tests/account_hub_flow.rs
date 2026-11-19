@@ -801,6 +801,65 @@ async fn deleting_an_account_removes_it_and_keeps_what_others_use() {
     assert_eq!(r["data"]["accountEditors"], json!([]), "{r}");
     assert_eq!(r["data"]["editorOf"], json!([]), "{r}");
 
+    // Hidden, not erased yet (ADR 0019): her identities and emotes are still there, her sessions
+    // aren't, the deletion is audited with its date, and search finds none of her emotes.
+    {
+        let mut conn = w.db.conn().await;
+        assert!(
+            !accounts::identities(&mut conn, alice.id)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            sessions::list_for_account(&mut conn, alice.id)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        let row = accounts::get(&mut conn, alice.id).await.unwrap().unwrap();
+        let erase_after = row.erase_after.expect("scheduled");
+        let days = (erase_after - chrono::Utc::now()).num_hours();
+        assert!((29 * 24..=30 * 24).contains(&days), "{days} hours");
+        assert!(
+            emotes::get(&mut conn, ids::from_text(&lonely).unwrap())
+                .await
+                .unwrap()
+                .is_some()
+        );
+    }
+    let (r, _) = w
+        .post(
+            None,
+            r#"{ searchEmotes(query: "alice") { total } }"#,
+            json!({}),
+        )
+        .await;
+    assert_eq!(r["data"]["searchEmotes"]["total"], 0, "{r}");
+    let scheduled = w
+        .audit_actions()
+        .await
+        .into_iter()
+        .find(|e| e.action == "account.deletion_scheduled")
+        .expect("audited");
+    assert_eq!(scheduled.actor_account_id, Some(alice.id));
+    assert!(
+        !w.audit_actions()
+            .await
+            .iter()
+            .any(|e| e.action == "account.deleted")
+    );
+
+    // 30 days on, the worker erases her (it runs `privacy::erase_account` the same way).
+    {
+        let mut conn = w.db.conn().await;
+        let mut tx = sqlx::Connection::begin(&mut *conn).await.unwrap();
+        cyex_tv_db::privacy::erase_account(&mut tx, alice.id)
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+    }
+
     // Rows that named her: identities and sessions gone, the account row kept as deleted.
     {
         let mut conn = w.db.conn().await;

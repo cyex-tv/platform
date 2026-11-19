@@ -19,6 +19,7 @@
   import UsedIn from './UsedIn.svelte';
   import { labels, trust, type ChatPool, type EmoteChannel, type PageEmote } from './emote-page';
   import { Viewer } from './viewer.svelte';
+  import { visibilityOf } from '$lib/tool/visibility';
 
   type Props = {
     emote: PageEmote;
@@ -43,6 +44,9 @@
   // Activity is only for listed emotes: pending, rejected, taken-down and private ones have none,
   // so the tab isn't there and nothing is asked.
   const listed = $derived(public_ && !e.flags.private);
+  // Unlisted and private emotes say so beside their labels (ADR 0020): people who got the link
+  // know it isn't in search.
+  const vis = $derived(visibilityOf(e));
 
   type TabId = 'channels' | 'more' | 'activity';
   const tabs = $derived<{ id: TabId; label: string; short?: string; icon: IconName; n?: string }[]>([
@@ -91,8 +95,13 @@
               <span><span class="sr-only">By </span><bdi>{ownerName}</bdi></span>
             </a>
           {/if}
-          {#if tags.length}
+          {#if tags.length || vis !== 'PUBLIC'}
             <ul class="labels" aria-label="Labels">
+              {#if vis === 'UNLISTED'}
+                <li class="label vis" title="Only people with the link can find it"><Icon name="link" size={12} />Unlisted</li>
+              {:else if vis === 'PRIVATE'}
+                <li class="label vis" title="Only its creator can add it to sets"><Icon name="shield" size={12} />Private</li>
+              {/if}
               {#each tags as l}<li class="label">{l}</li>{/each}
             </ul>
           {/if}
@@ -203,6 +212,7 @@
   .labels { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
   .label { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border: 1px solid var(--border);
     border-radius: var(--radius-btn); font-size: var(--t-label); color: var(--muted); }
+  .label.vis { gap: 4px; padding-left: 6px; color: var(--text); border-color: var(--border-strong); }
 
   .notice { padding: 12px 16px; border: 1px solid var(--border-strong); border-radius: var(--radius-card); background: var(--surface);
     font-size: var(--t-small); max-width: 72ch; }

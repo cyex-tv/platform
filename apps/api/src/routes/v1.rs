@@ -17,8 +17,8 @@ use cyex_tv_auth::flow::Callback;
 use cyex_tv_shared::error::{ApiError, ApiResult, ErrorBody};
 use cyex_tv_shared::model::{
     CallbackQuery, Channel, CosmeticCatalog, CosmeticImage, CosmeticKind, Emote, EmoteSet,
-    LoginQuery, PersonalLookup, PersonalLookupResult, Platform, UploadCosmeticImage, UploadEmote,
-    UserCosmeticsQuery, UserCosmeticsResult,
+    EmoteVisibility, LoginQuery, PersonalLookup, PersonalLookupResult, Platform,
+    UploadCosmeticImage, UploadEmote, UserCosmeticsQuery, UserCosmeticsResult,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -186,8 +186,20 @@ async fn callback(
 )]
 async fn logout(
     State(state): State<AppState>,
+    method: axum::http::Method,
+    headers: axum::http::HeaderMap,
     MaybeCaller(caller): MaybeCaller,
 ) -> ApiResult<Response> {
+    // A session signed in only to restore a deleted account (ADR 0019) ends too.
+    let caller = match caller {
+        Some(c) => Some(c),
+        None => {
+            state
+                .auth
+                .restorable_caller(&state.db, &method, &headers)
+                .await?
+        }
+    };
     let clear = state.auth.sign_out(&state.db, caller.as_ref()).await?;
     let mut response = StatusCode::NO_CONTENT.into_response();
     response.headers_mut().insert(
@@ -204,7 +216,8 @@ async fn logout(
 ///
 /// PNG, APNG, GIF or WebP; at most 5 MB, 1000×1000 px and 1000 frames. Sign in first (with the
 /// cookie, from `https://cyex.tv`). At most 20 uploads an hour. The flags `zero_width`, `private`
-/// and `nsfw` may be set at once (each `true` or `false`, default `false`); `updateEmote` changes
+/// and `nsfw` may be set at once (each `true` or `false`, default `false`), and `visibility`
+/// (`public`, `unlisted` or `private`; with `private` too, they must agree); `updateEmote` changes
 /// them later.
 #[utoipa::path(
     post,
@@ -233,6 +246,8 @@ async fn upload_emote(
     let mut name = None;
     let mut tags = None;
     let mut flags = upload::Flags::default();
+    let mut private: Option<bool> = None;
+    let mut visibility: Option<EmoteVisibility> = None;
     let mut file: Option<Vec<u8>> = None;
     while let Some(mut field) = form
         .next_field()
@@ -281,17 +296,30 @@ async fn upload_emote(
                     .ok_or_else(|| bad_form("A flag is true or false."))?;
                 match key.as_str() {
                     "zero_width" => flags.zero_width = on,
-                    "private" => flags.private = on,
+                    "private" => private = Some(on),
                     _ => flags.nsfw = on,
                 }
             }
+            Some("visibility") => {
+                let text = field
+                    .text()
+                    .await
+                    .map_err(|_| bad_form("A form field couldn't be read."))?;
+                visibility = Some(
+                    text.parse()
+                        .map_err(|_| bad_form("Visibility is public, unlisted or private."))?,
+                );
+            }
             _ => {
                 return Err(bad_form(
-                    "Unknown form field. Send name, tags, zero_width, private, nsfw and file.",
+                    "Unknown form field. Send name, tags, zero_width, private, visibility, nsfw and file.",
                 ));
             }
         }
     }
+    let chosen = EmoteVisibility::after(EmoteVisibility::Public, visibility, private)
+        .ok_or_else(|| bad_form("`visibility` and `private` say different things."))?;
+    (flags.private, flags.unlisted) = chosen.flags();
     let name = name.ok_or_else(|| bad_form("Give the emote a name."))?;
     let file = file.ok_or_else(|| bad_form("Attach the image as `file`."))?;
     let emote = upload::upload(

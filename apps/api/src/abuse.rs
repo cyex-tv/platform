@@ -95,7 +95,7 @@ async fn emote_view(
     // Taken-down and deleted emotes included: moderators need to see what was reported.
     let row: Option<reads::EmoteRow> = sqlx::query_as(
         "SELECT e.id, e.owner_account_id AS owner, e.name, e.zero_width, e.private,
-                e.nsfw, e.animated, e.state, e.created_at, f.sha256, f.variants
+                e.unlisted, e.nsfw, e.animated, e.state, e.created_at, f.sha256, f.variants
          FROM emotes e LEFT JOIN files f ON f.id = e.file_id WHERE e.id = $1",
     )
     .bind(id)

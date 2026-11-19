@@ -4,27 +4,31 @@
 //! Every answer is about the caller only: there is no account argument, so nobody can ask about
 //! someone else (IDOR). Sessions are shown by a public ID, never by token or token hash.
 //!
-//! Deleting an account (the privacy page: "its data is removed"): sessions, identities, channels,
-//! sets, editor grants both ways, cosmetics, roles and notifications go; reports it filed stay
-//! without the reporter; its approved emotes that are in other people's sets stay, owned by
-//! nobody ("deleted user"); every other emote of it is deleted. The account row stays, marked
-//! deleted, so audit rows keep their actor. The owner's account and restricted or blocked accounts
+//! Deleting an account (ADR 0019, the privacy page: "its data is removed") hides it at once: its
+//! profile, sets, emotes and channels read as gone, its sessions end, and it is erased for good by
+//! the worker 30 days later (`privacy::erase_account`): sessions, identities, channels, sets,
+//! editor grants both ways, cosmetics, roles and notifications go; reports it filed stay without
+//! the reporter; its approved emotes that are in other people's sets stay, owned by nobody
+//! ("deleted user"); every other emote of it is deleted. The account row stays, marked deleted,
+//! so audit rows keep their actor. Signing in again before then offers to restore it
+//! (`pendingDeletion`, `restoreAccount`). The owner's account and restricted or blocked accounts
 //! can't be deleted this way. Audited.
 
 use axum::http::StatusCode;
+use chrono::{DateTime, Utc};
 use cyex_tv_auth::{Caller, Via};
 use cyex_tv_db::sessions::{self, SessionKind};
 use cyex_tv_db::{
-    accounts, audit, channels, cosmetics as cosmetics_db, editors as editors_db, emotes, files,
-    ids, jobs, notifications, outbox, privacy, reads, reports, roles, sets,
+    accounts, audit, channels, editors as editors_db, ids, notifications, privacy, reads, reports,
+    roles, sets,
 };
 use cyex_tv_shared::error::{ApiError, ApiResult};
-use cyex_tv_shared::model::{AccountSession, EventType, SessionKindView, SetKind};
+use cyex_tv_shared::model::{AccountSession, PendingDeletion, SessionKindView};
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
-use crate::catalog::{db_error, my_sets, not_found, publish_member_event};
+use crate::catalog::{db_error, my_sets, not_found};
 use crate::errors::{bad, rate_limited, sqlx_error};
 use crate::state::AppState;
 use crate::views;
@@ -466,31 +470,21 @@ async fn export_orders(conn: &mut PgConnection, account_id: Uuid) -> ApiResult<V
 
 // Deleting
 
-/// What deleting an account did, as counts (the audit row holds the same, and no names).
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
-pub struct Deleted {
-    pub emotes_kept: u64,
-    pub emotes_deleted: u64,
-    /// Files queued for deletion from storage and the CDN.
-    pub files_deleted: u64,
-    pub sets_deleted: u64,
-    pub channels_deleted: u64,
-}
-
 /// Whether `confirm` names one of the account's logins (any case, a leading `@` allowed).
 pub fn confirms(confirm: &str, logins: &[String]) -> bool {
     let typed = confirm.trim().trim_start_matches('@');
     !typed.is_empty() && logins.iter().any(|l| l.eq_ignore_ascii_case(typed))
 }
 
-/// Deletes the caller's account at once, as the module says. `confirm` must be one of its Twitch
-/// or Kick logins, and the request must come from the website (the cookie session), not an app
-/// token. The owner's account can't be deleted. 3 tries an hour per account (`rate_limited`).
+/// Deletes the caller's account, as the module says: hidden at once, erased after 30 days unless
+/// restored. `confirm` must be one of its Twitch or Kick logins, and the request must come from
+/// the website (the cookie session), not an app token. The owner's account can't be deleted. 3
+/// tries an hour per account (`rate_limited`). Returns when it will be erased.
 pub async fn delete_account(
     state: &AppState,
     caller: &Caller,
     confirm: &str,
-) -> ApiResult<Deleted> {
+) -> ApiResult<DateTime<Utc>> {
     if caller.via != Via::Cookie {
         return Err(ApiError::new(
             StatusCode::FORBIDDEN,
@@ -520,8 +514,8 @@ pub async fn delete_account(
         .await
         .map_err(db_error)?
         .ok_or_else(not_found)?;
-    // A restricted or blocked account can't delete itself: signing in again would make a fresh,
-    // unrestricted account.
+    // A restricted or blocked account can't delete itself: signing in again after it is erased
+    // would make a fresh, unrestricted account.
     let account = accounts::get(&mut tx, account_id)
         .await
         .map_err(db_error)?
@@ -533,153 +527,115 @@ pub async fn delete_account(
             "A restricted account can't be deleted. Write to us if you want it removed.",
         ));
     }
-    let identities = accounts::identities(&mut tx, account_id)
+    let logins: Vec<String> = accounts::identities(&mut tx, account_id)
         .await
-        .map_err(db_error)?;
-    let logins: Vec<String> = identities.iter().map(|i| i.login.clone()).collect();
+        .map_err(db_error)?
+        .into_iter()
+        .map(|i| i.login)
+        .collect();
     if !confirms(confirm, &logins) {
         return Err(bad(
             "confirm_mismatch",
             "Type one of your Twitch or Kick logins to confirm.",
         ));
     }
-    let mut done = Deleted::default();
-
-    // Emotes: kept ones lose their owner; the rest leave every set and are deleted.
-    let keep = privacy::emotes_to_keep(&mut tx, account_id)
-        .await
-        .map_err(db_error)?;
-    let remove = privacy::emotes_to_remove(&mut tx, account_id, &keep)
-        .await
-        .map_err(db_error)?;
-    for id in &remove {
-        for (set_id, name) in emotes::remove_from_all_sets(&mut tx, *id)
-            .await
-            .map_err(db_error)?
-        {
-            if let Some(set) = sets::get(&mut tx, set_id).await.map_err(db_error)?
-                && set.owner_account_id != Some(account_id)
-            {
-                publish_member_event(&mut tx, &set, EventType::SetEmoteRemoved, *id, Some(&name))
-                    .await?;
-            }
-        }
-        if emotes::delete(&mut tx, *id).await.map_err(db_error)? {
-            done.emotes_deleted += 1;
-        }
-    }
-    done.emotes_kept = privacy::disown_emotes(&mut tx, &keep)
-        .await
-        .map_err(db_error)?;
-    // Their files leave storage and the CDN, unless another live emote uses the same bytes.
-    for file_id in files::mark_orphans_purged(&mut tx, account_id)
+    let erase_after = Utc::now() + chrono::Duration::days(privacy::UNDO_DAYS);
+    if !privacy::schedule_erase(&mut tx, account_id, erase_after)
         .await
         .map_err(db_error)?
     {
-        jobs::enqueue(
-            &mut tx,
-            crate::abuse::DELETE_JOB,
-            &json!({ "file_id": ids::to_text(file_id), "reason": "account_deleted" }),
-            10,
-        )
-        .await
-        .map_err(db_error)?;
-        done.files_deleted += 1;
+        return Err(not_found());
     }
-    privacy::disown_deleted(&mut tx, account_id)
-        .await
-        .map_err(db_error)?;
-
-    // Channels stop showing a set; chat clients hear it before the channel goes.
-    for ch in channels::list_for_account(&mut tx, account_id)
-        .await
-        .map_err(db_error)?
-    {
-        if ch.active_set_id.is_some() {
-            outbox::publish(
-                &mut tx,
-                &outbox::NewEvent {
-                    event_type: EventType::ChannelActiveSetChanged,
-                    topics: vec![outbox::channel_topic(ch.platform, &ch.platform_channel_id)],
-                    set_id: None,
-                    payload: json!({ "set_id": null }),
-                },
-            )
-            .await
-            .map_err(db_error)?;
-        }
-        done.channels_deleted += 1;
-    }
-    for identity in &identities {
-        channels::delete_for(&mut tx, account_id, identity.platform)
-            .await
-            .map_err(db_error)?;
-    }
-
-    // Sets; for the personal set, chat clients drop its emotes, and cosmetics stop showing.
-    let user_topics: Vec<String> = identities
-        .iter()
-        .map(|i| outbox::user_topic(i.platform, &i.platform_user_id))
-        .collect();
-    for set in sets::list_for_owner(&mut tx, account_id)
-        .await
-        .map_err(db_error)?
-    {
-        if set.kind == SetKind::Personal && !user_topics.is_empty() {
-            let mut topics = user_topics.clone();
-            topics.push(outbox::set_topic(set.id));
-            outbox::publish(
-                &mut tx,
-                &outbox::NewEvent {
-                    event_type: EventType::PersonalUpdated,
-                    topics,
-                    set_id: Some(set.id),
-                    payload: json!({ "set_id": ids::to_text(set.id) }),
-                },
-            )
-            .await
-            .map_err(db_error)?;
-        }
-        if sets::delete(&mut tx, set.id).await.map_err(db_error)? {
-            done.sets_deleted += 1;
-        }
-    }
-    let shown = cosmetics_db::selection(&mut tx, account_id)
-        .await
-        .map_err(db_error)?;
-    if (shown.0.is_some() || shown.1.is_some()) && !user_topics.is_empty() {
-        outbox::publish(
-            &mut tx,
-            &outbox::NewEvent {
-                event_type: EventType::UserCosmeticsUpdated,
-                topics: user_topics.clone(),
-                set_id: None,
-                payload: json!({ "badge_id": null, "paint_id": null }),
-            },
-        )
-        .await
-        .map_err(db_error)?;
-    }
-
-    privacy::erase(&mut tx, account_id)
-        .await
-        .map_err(db_error)?;
     audit::write(
         &mut tx,
         &audit::NewEntry {
             actor: Some(account_id),
-            action: "account.deleted",
+            action: "account.deletion_scheduled",
             target_kind: "account",
             target_id: &ids::to_text(account_id),
             before: None,
-            after: Some(json!(done)),
+            after: Some(json!({ "erase_after": views::time(erase_after) })),
         },
     )
     .await
     .map_err(db_error)?;
     tx.commit().await.map_err(sqlx_error)?;
-    tracing::info!(account = %ids::to_text(account_id), "account deleted");
-    Ok(done)
+    tracing::info!(account = %ids::to_text(account_id), "account deletion scheduled");
+    Ok(erase_after)
+}
+
+/// The deletion a signed-in-to-restore session may undo (`pendingDeletion`): when it was asked
+/// for, when the account will be erased, and the name it showed. `None` when there is none.
+pub async fn pending_deletion(
+    state: &AppState,
+    pending: &Caller,
+) -> ApiResult<Option<PendingDeletion>> {
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let Some(account) = accounts::get(&mut conn, pending.account_id)
+        .await
+        .map_err(db_error)?
+    else {
+        return Ok(None);
+    };
+    if !account.restorable(Utc::now()) {
+        return Ok(None);
+    }
+    let (Some(deleted_at), Some(erase_after)) = (account.deleted_at, account.erase_after) else {
+        return Ok(None);
+    };
+    let identity = accounts::identities(&mut conn, account.id)
+        .await
+        .map_err(db_error)?
+        .into_iter()
+        .next();
+    Ok(Some(PendingDeletion {
+        requested_at: views::time(deleted_at),
+        erase_after: views::time(erase_after),
+        display_name: identity.as_ref().map(|i| i.display_name.clone()),
+        avatar: identity.and_then(|i| i.avatar),
+    }))
+}
+
+/// Restores the account a signed-in-to-restore session belongs to, within the window: it and
+/// everything it had show again, and the session becomes a normal one. Audited
+/// (`account.restored`). `nothing_to_restore` when the window has passed or there was nothing.
+pub async fn restore_account(state: &AppState, pending: &Caller) -> ApiResult<()> {
+    if pending.via != Via::Cookie {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "website_only",
+            "Restore your account on cyex.tv, signed in there.",
+        ));
+    }
+    let account_id = pending.account_id;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    if !privacy::restore(&mut tx, account_id)
+        .await
+        .map_err(db_error)?
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "nothing_to_restore",
+            "There's no deleted account to restore here.",
+        ));
+    }
+    audit::write(
+        &mut tx,
+        &audit::NewEntry {
+            actor: Some(account_id),
+            action: "account.restored",
+            target_kind: "account",
+            target_id: &ids::to_text(account_id),
+            before: None,
+            after: None,
+        },
+    )
+    .await
+    .map_err(db_error)?;
+    tx.commit().await.map_err(sqlx_error)?;
+    tracing::info!(account = %ids::to_text(account_id), "account restored");
+    Ok(())
 }
 
 #[cfg(test)]

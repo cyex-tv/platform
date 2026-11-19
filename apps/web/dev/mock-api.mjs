@@ -346,6 +346,7 @@ const emote = (i, owner = OTHERS[i % OTHERS.length], state = 'APPROVED') => {
     host: `${BASE}/emotes/${i}`,
     createdAt: new Date(NOW - idx * 0.2 * DAY - Math.floor(rngFor(i, 3)() * 0.18 * DAY)).toISOString(),
     flags: { zeroWidth: s.zero, nsfw: false, private: false },
+    visibility: 'PUBLIC',
     // Made-up but stable: a few popular ones, a long tail, some in no channel.
     channelCount: i % 11 === 0 ? 0 : (i * 37) % 91 + (i % 5 === 0 ? 400 : 0),
     owner,
@@ -472,6 +473,7 @@ const twitchEmote = (n, owner = OTHERS[n % OTHERS.length]) => {
     host: `${BASE}/twitch/${n}`,
     createdAt: new Date(NOW - idx * 0.2 * DAY - Math.floor(rngFor(n, 3)() * 0.18 * DAY)).toISOString(),
     flags: { zeroWidth: false, nsfw: false, private: false },
+    visibility: 'PUBLIC',
     channelCount: n % 11 === 0 ? 0 : (n * 37) % 91 + (n % 5 === 0 ? 400 : 0),
     owner,
     files: [1, 2, 3, 4].flatMap((k) => [
@@ -489,10 +491,20 @@ const twitchEmote = (n, owner = OTHERS[n % OTHERS.length]) => {
 NAME_OF.set(10, 'AbsolutelyUnreasonablyLongEmoteNameThatKeepsGoing');
 const ALL = FACES ? Array.from({ length: 300 }, (_, i) => emote(i)) : TWITCH.map((_, n) => twitchEmote(n));
 // The mock account's own uploads: a few of each state.
-// Emote 11 is private (no activity, no tab).
+// Emote 11 is private (no activity, no tab); emote 12 is unlisted (ADR 0020: open by link, never
+// in search or browse).
 ALL[11].flags.private = true;
+ALL[11].visibility = 'PRIVATE';
+ALL[12].visibility = 'UNLISTED';
 const MINE = Array.from({ length: 9 }, (_, i) =>
   emote(600 + i, ME_SUMMARY, i < 2 ? 'PENDING' : i === 2 ? 'REJECTED' : 'APPROVED'));
+MINE[4].visibility = 'UNLISTED';
+// A deletion within its 30-day undo window (ADR 0019): set by deleteAccount, cleared by
+// restoreAccount. Signing in while it is set gives the mock_restore cookie, not a session.
+let PENDING_DELETION = null;
+let RESTORE_COOKIE = false;
+const MY_ROLES = () => (ACCOUNT_ROLES[ME_ID] ?? []).map((id) => ROLES.find((r) => r.id === id)).filter(Boolean)
+  .sort((a, b) => b.position - a.position).map((r) => ({ id: r.id, name: r.name, public: r.public }));
 let uploads = 0;
 
 const member = (e, name = e.name) => ({ name, zeroWidth: e.flags.zeroWidth, addedAt: e.createdAt, emote: e });
@@ -1322,7 +1334,9 @@ function signedIn(body, v, ADMIN) {
   const op = (body.query.match(/(?:query|mutation)\s+(\w+)/) ?? [])[1];
   switch (op) {
     case 'Me':
-      return { data: { me: { id: ME_ID, createdAt: '2026-11-10T12:00:00.000Z', permissions: ADMIN ? PERMISSIONS : [], identities: IDENTITIES } } };
+      return { data: { me: { id: ME_ID, createdAt: '2026-11-10T12:00:00.000Z', permissions: ADMIN ? PERMISSIONS : [], identities: IDENTITIES, roles: MY_ROLES() } } };
+    case 'MyRoles':
+      return { data: { me: { id: ME_ID, roles: MY_ROLES() } } };
     case 'MyEmotes': {
       const per = v.perPage ?? 50;
       const page = v.page ?? 1;
@@ -1333,7 +1347,16 @@ function signedIn(body, v, ADMIN) {
       if (!e) return err('Only the emote’s owner can change it.', 'forbidden');
       if (v.input.name !== undefined) e.name = v.input.name;
       if (v.input.tags) e.tags = v.input.tags;
-      for (const k of ['zeroWidth', 'private', 'nsfw']) if (v.input[k] !== undefined) e.flags[k] = v.input[k];
+      for (const k of ['zeroWidth', 'nsfw']) if (v.input[k] !== undefined) e.flags[k] = v.input[k];
+      // As the API (ADR 0020): visibility wins; private alone keeps an unlisted emote unlisted.
+      const vis = v.input.visibility;
+      const priv = v.input.private;
+      if (vis && priv !== undefined && priv !== null && priv !== (vis === 'PRIVATE'))
+        return err('visibility and private say different things.', 'bad_visibility');
+      if (vis) e.visibility = vis;
+      else if (priv === true) e.visibility = 'PRIVATE';
+      else if (priv === false && e.visibility === 'PRIVATE') e.visibility = 'PUBLIC';
+      e.flags.private = e.visibility === 'PRIVATE';
       return { data: { updateEmote: e } };
     }
     case 'DeleteEmote': {
@@ -1665,7 +1688,10 @@ function accountHub(q, v) {
     const typed = String(v.confirm ?? '').trim().replace(/^@/, '').toLowerCase();
     if (!IDENTITIES.some((i) => i.login.toLowerCase() === typed))
       return err('Type one of your Twitch or Kick logins to confirm.', 'confirm_mismatch');
-    // The mock keeps its data (it would have nothing left to show); it signs you out like the API.
+    // The mock keeps its data (it would have nothing left to show); it signs you out like the API
+    // and remembers the 30-day window, so signing in again lands on /restore.
+    const now = Date.now();
+    PENDING_DELETION = { requestedAt: new Date(now).toISOString(), eraseAfter: new Date(now + 30 * DAY).toISOString(), displayName: IDENTITIES[0]?.displayName ?? null, avatar: IDENTITIES[0]?.avatar ?? null };
     return { data: { deleteAccount: true }, _cookie: 'mock_session=; Path=/; Max-Age=0' };
   }
   if (/\bmarkNotificationsRead\b/.test(q)) {
@@ -1689,6 +1715,13 @@ function newFields(q, v, session) {
   if (hub?._cookie || hub?.errors) return hub;
   if (hub) parts.push(hub);
   const has = (name) => new RegExp(`\\b${name}\\s*\\(`).test(q);
+  // The undo window (ADR 0019): only the restore cookie sees and undoes the deletion.
+  if (/\bpendingDeletion\b/.test(q)) return { data: { pendingDeletion: !session && RESTORE_COOKIE ? PENDING_DELETION : null } };
+  if (/\brestoreAccount\b/.test(q)) {
+    if (session || !RESTORE_COOKIE || !PENDING_DELETION) return err('Sign in to the deleted account to restore it.', 'signed_out');
+    PENDING_DELETION = null;
+    return { data: { restoreAccount: true }, _cookie: 'mock_session=1; Path=/; HttpOnly; SameSite=Lax' };
+  }
   if (has('accountProfile')) parts.push({ data: { accountProfile: accountProfile(id) } });
   if (has('accountCosmetics')) {
     const list = accountCosmetics(v.accountIds ?? v.ids);
@@ -1742,7 +1775,8 @@ function baseAnswer(body, session, admin) {
   if (q.includes('query GlobalSet')) return { data: { globalSet: { id: GLOBAL.id, name: 'Global', emotes: GLOBAL.emotes } } };
   if (q.includes('query Search')) {
     const terms = (v.query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
-    let hits = ALL.filter((e) => terms.every((t) => e.name.toLowerCase().includes(t) || e.tags.some((g) => g.includes(t))));
+    // Unlisted and private emotes are never in search or browse (ADR 0020).
+    let hits = ALL.filter((e) => e.visibility === 'PUBLIC' && terms.every((t) => e.name.toLowerCase().includes(t) || e.tags.some((g) => g.includes(t))));
     if (v.animated === true) hits = hits.filter((e) => e.animated);
     if (v.animated === false) hits = hits.filter((e) => !e.animated);
     if (v.owner) hits = hits.filter((e) => e.owner?.id === v.owner);
@@ -1792,6 +1826,7 @@ createServer(async (req, res) => {
   res.setHeader('access-control-allow-headers', 'content-type');
   if (req.method === 'OPTIONS') return res.writeHead(204).end();
   const session = OPEN_ENV || /(?:^|;\s*)mock_session=1/.test(req.headers.cookie ?? '');
+  RESTORE_COOKIE = /(?:^|;\s*)mock_restore=1/.test(req.headers.cookie ?? '');
   const url = new URL(req.url ?? '/', BASE);
   const admin = ADMIN_ENV || /(?:^|;\s*)mock_admin=1/.test(req.headers.cookie ?? '');
   if (url.pathname === '/mock/admin') {
@@ -1852,11 +1887,16 @@ createServer(async (req, res) => {
     if (url.searchParams.get('link') === 'true' && !IDENTITIES.some((i) => i.platform === 'KICK') && url.pathname.includes('kick'))
       IDENTITIES.push({ platform: 'KICK', platformUserId: '4815162', login: 'lumen_fox', displayName: 'lumen_fox', avatar: null });
     const back = url.searchParams.get('return_to') ?? '/';
+    // A deleted account within its 30 days lands on /restore with a restore-only cookie.
+    if (PENDING_DELETION) {
+      res.writeHead(302, { location: SITE + '/restore', 'set-cookie': 'mock_restore=1; Path=/; HttpOnly; SameSite=Lax' });
+      return res.end();
+    }
     res.writeHead(302, { location: SITE + (back.startsWith('/') ? back : '/'), 'set-cookie': 'mock_session=1; Path=/; HttpOnly; SameSite=Lax' });
     return res.end();
   }
   if (req.method === 'POST' && url.pathname === '/v1/auth/logout') {
-    res.writeHead(204, { 'set-cookie': 'mock_session=; Path=/; Max-Age=0' });
+    res.writeHead(204, { 'set-cookie': ['mock_session=; Path=/; Max-Age=0', 'mock_restore=; Path=/; Max-Age=0'] });
     return res.end();
   }
   if (req.method === 'POST' && url.pathname === '/v1/emotes') {
@@ -1877,10 +1917,17 @@ createServer(async (req, res) => {
     };
     const flags = { zeroWidth: flag('zero_width'), private: flag('private'), nsfw: flag('nsfw') };
     if (Object.values(flags).includes(null)) return json(res, 400, { error: 'bad_form', message: 'A flag is true or false.' });
+    const visField = (field('visibility') ?? '').trim().toLowerCase();
+    if (visField && !['public', 'unlisted', 'private'].includes(visField)) return json(res, 400, { error: 'bad_form', message: 'Visibility is public, unlisted or private.' });
+    const visibility = visField ? visField.toUpperCase() : flags.private ? 'PRIVATE' : 'PUBLIC';
+    if (field('private') !== undefined && visField && flags.private !== (visibility === 'PRIVATE'))
+      return json(res, 400, { error: 'bad_form', message: 'visibility and private say different things.' });
+    flags.private = visibility === 'PRIVATE';
     await new Promise((r) => setTimeout(r, 700)); // long enough to see the progress
     const e = emote(700 + uploads++, ME_SUMMARY, 'PENDING');
     e.name = name;
     e.flags = flags;
+    e.visibility = visibility;
     e.tags = (field('tags') ?? '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
     e.host = '';
     e.files = [];

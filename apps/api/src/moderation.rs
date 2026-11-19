@@ -11,7 +11,9 @@ use cyex_tv_auth::Caller;
 use cyex_tv_db::emotes::{self, EmotePatch};
 use cyex_tv_db::{DbError, accounts, audit, ids, reads, sets};
 use cyex_tv_shared::error::{ApiError, ApiResult};
-use cyex_tv_shared::model::{Emote, EmoteState, EventType, ReviewQueue, UpdateEmote};
+use cyex_tv_shared::model::{
+    Emote, EmoteState, EmoteVisibility, EventType, ReviewQueue, UpdateEmote,
+};
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
 use serde_json::{Value, json};
@@ -131,7 +133,20 @@ async fn write_audit(
 
 // Reads
 
-/// An emote as `caller` may see it.
+/// Whether the emote's owner is an account whose deletion is pending (ADR 0019): its emotes are
+/// hidden with it. Emotes of erased accounts have no owner, so this is only ever the pending ones.
+pub(crate) async fn owner_hidden(conn: &mut PgConnection, owner: Option<Uuid>) -> ApiResult<bool> {
+    let Some(owner) = owner else {
+        return Ok(false);
+    };
+    Ok(accounts::get(conn, owner)
+        .await
+        .map_err(db_error)?
+        .is_some_and(|a| a.deleted_at.is_some()))
+}
+
+/// An emote as `caller` may see it. An emote of an account whose deletion is pending is hidden
+/// from everyone but moderators.
 pub async fn emote(
     state: &AppState,
     caller: Option<&Caller>,
@@ -151,6 +166,15 @@ pub async fn emote(
             Some(c) => holds(&mut conn, c, permissions::EMOTES_REVIEW).await?,
         };
         if !allowed {
+            return Ok(None);
+        }
+    }
+    if owner_hidden(&mut conn, found.owner).await? {
+        let staff = match caller {
+            Some(c) => holds(&mut conn, c, permissions::EMOTES_REVIEW).await?,
+            None => false,
+        };
+        if !staff {
             return Ok(None);
         }
     }
@@ -295,6 +319,15 @@ pub async fn update(
             ));
         }
     }
+    let current = EmoteVisibility::of(before.private, before.unlisted);
+    let visibility =
+        EmoteVisibility::after(current, input.visibility, input.private).ok_or_else(|| {
+            bad(
+                "bad_visibility",
+                "`visibility` and `private` say different things.",
+            )
+        })?;
+    let (private, unlisted) = visibility.flags();
     let old_tags = emotes::tags(&mut tx, id).await.map_err(db_error)?;
     let renamed = name.is_some_and(|n| n != before.name);
     let retagged = tags.as_ref().is_some_and(|t| {
@@ -310,7 +343,8 @@ pub async fn update(
         &EmotePatch {
             name,
             zero_width: input.zero_width,
-            private: input.private,
+            private: Some(private),
+            unlisted: Some(unlisted),
             nsfw: input.nsfw,
         },
     )
@@ -338,7 +372,7 @@ pub async fn update(
         .await?;
     }
     if !owner {
-        let snap = |r: &reads::EmoteRow, tags: &[String]| json!({ "name": r.name, "zero_width": r.zero_width, "private": r.private, "nsfw": r.nsfw, "tags": tags });
+        let snap = |r: &reads::EmoteRow, tags: &[String]| json!({ "name": r.name, "zero_width": r.zero_width, "private": r.private, "unlisted": r.unlisted, "nsfw": r.nsfw, "tags": tags });
         write_audit(
             &mut tx,
             caller,

@@ -133,7 +133,7 @@ function documentFor(kind: OpKind, field: GraphQLField<unknown, unknown>) {
 }
 
 /** Operations for the signed-in account: `me`, `my…`, and the ones a set or account owner calls. */
-const SIGNED_IN_QUERIES = new Set(['me', 'mySets', 'myEmotes', 'myChannels', 'myNotifications', 'setEditors', 'accountRoles']);
+const SIGNED_IN_QUERIES = new Set(['me', 'mySets', 'myEmotes', 'myChannels', 'myNotifications', 'setEditors', 'accountRoles', 'pendingDeletion']);
 
 function accessOf(kind: OpKind, field: GraphQLField<unknown, unknown>): GqlOp['access'] {
   if (/Needs `/.test(field.description ?? '')) return 'restricted';

@@ -12,7 +12,7 @@ import type {
   ProfileEditedQuery,
   ProfileMineQuery,
 } from '$lib/gql/graphql';
-import { ACCOUNT_EDITORS, ACCOUNT_PROFILE, ACCOUNT_ROLES, ACCOUNT_SETS, EDITOR_OF, PROFILE_EDITED, PROFILE_MINE } from '$lib/queries';
+import { ACCOUNT_EDITORS, ACCOUNT_PROFILE, ACCOUNT_ROLES, ACCOUNT_SETS, EDITOR_OF, MY_ROLES, PROFILE_EDITED, PROFILE_MINE } from '$lib/queries';
 import { session, type Me } from '$lib/tool/session.svelte';
 import { NOBODY, type Relation } from './rows';
 
@@ -58,6 +58,10 @@ export const rolesOf = (accountId: string) =>
       .then((r) => [...r.accountRoles].sort((a, b) => b.position - a.position))
       .catch(() => [] as Role[]),
   );
+
+/** Your own roles, hidden ones too (`me.roles`): only your own profile shows the hidden ones, marked. */
+export const myRoles = () =>
+  once('roles:mine', () => gql(MY_ROLES, {}).then((r) => r.me.roles));
 
 export type PublicProfile = NonNullable<AccountProfileQuery['accountProfile']>;
 

@@ -99,6 +99,41 @@ impl Auth {
         }))
     }
 
+    /// The cookie's session when its account's deletion is pending and can still be restored
+    /// (ADR 0019). `caller` never answers with these; this one may only see and undo the
+    /// deletion, or sign out. Cookie only, with the same `Origin` rule.
+    pub async fn restorable_caller(
+        &self,
+        db: &PgPool,
+        method: &Method,
+        headers: &HeaderMap,
+    ) -> Result<Option<Caller>, AuthError> {
+        if bearer(headers).is_some() {
+            return Ok(None);
+        }
+        let Some(token) = cookies::read(headers, cookies::SESSION) else {
+            return Ok(None);
+        };
+        if !origin::is_safe(method) && !origin::is_allowed(self.config(), headers) {
+            return Err(AuthError::BadOrigin);
+        }
+        if !tokens::is_well_formed(&token) {
+            return Ok(None);
+        }
+        let hash = tokens::hash(&token);
+        let mut conn = db.acquire().await?;
+        let Some(session) = sessions::find_restorable(&mut conn, &hash).await? else {
+            return Ok(None);
+        };
+        Ok(Some(Caller {
+            account_id: session.account_id,
+            owner: false,
+            token_hash: hash,
+            kind: SessionKind::Site,
+            via: Via::Cookie,
+        }))
+    }
+
     /// Whether the account is one of the owners in `CYEX_TV_OWNER_IDS`.
     pub async fn is_owner(
         &self,

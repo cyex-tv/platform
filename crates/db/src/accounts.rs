@@ -16,6 +16,16 @@ pub struct Account {
     pub deleted_at: Option<DateTime<Utc>>,
     /// Blocked by `users.restrict`: can't sign in.
     pub blocked_at: Option<DateTime<Utc>>,
+    /// Set while a deletion is pending (with `deleted_at`): the account is hidden, and signing in
+    /// before this time can restore it; after it, the worker erases it (ADR 0019).
+    pub erase_after: Option<DateTime<Utc>>,
+}
+
+impl Account {
+    /// Deleted, but still within the undo window.
+    pub fn restorable(&self, now: DateTime<Utc>) -> bool {
+        self.deleted_at.is_some() && self.erase_after.is_some_and(|t| t > now)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, FromRow)]
@@ -48,7 +58,7 @@ pub struct SignIn {
     pub created: bool,
 }
 
-const ACCOUNT: &str = "id, created_at, restricted_at, deleted_at, blocked_at";
+const ACCOUNT: &str = "id, created_at, restricted_at, deleted_at, blocked_at, erase_after";
 const IDENTITY: &str =
     "platform, platform_user_id, account_id, login, display_name, avatar, linked_at, refreshed_at";
 

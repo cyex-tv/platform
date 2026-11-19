@@ -7,7 +7,7 @@
   // page, as before; a batch stays here with a link per emote.
   import { goto } from '$app/navigation';
   import { onDestroy } from 'svelte';
-  import { ApiError, uploadEmote, type Uploaded } from '$lib/api';
+  import { ApiError, uploadEmote, type EmoteVisibility, type Uploaded } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import { bytes, count, iso } from '$lib/format';
@@ -29,7 +29,7 @@
     prefilled: string;
     tagText: string;
     zeroWidth: boolean;
-    hidden: boolean;
+    visibility: EmoteVisibility;
     nsfw: boolean;
     status: Status;
     progress: number;
@@ -94,7 +94,7 @@
       const name = nameFromFile(file.name);
       const item: Item = {
         key: nextKey++, file, url: URL.createObjectURL(file), width: 0, height: 0, sizeError: null,
-        name, prefilled: name, tagText: '', zeroWidth: false, hidden: false, nsfw: false,
+        name, prefilled: name, tagText: '', zeroWidth: false, visibility: 'PUBLIC', nsfw: false,
         status: 'ready', progress: 0, error: null, made: null, open: false,
       };
       items.push(item);
@@ -122,7 +122,7 @@
   /** The first file's tags and flags, on every other file still waiting. */
   function copyToAll() {
     const [first, ...rest] = waiting;
-    for (const i of rest) Object.assign(i, { tagText: first.tagText, zeroWidth: first.zeroWidth, hidden: first.hidden, nsfw: first.nsfw });
+    for (const i of rest) Object.assign(i, { tagText: first.tagText, zeroWidth: first.zeroWidth, visibility: first.visibility, nsfw: first.nsfw });
     notify(`Tags and flags copied to ${count(rest.length)} ${rest.length === 1 ? 'file' : 'files'}.`);
   }
 
@@ -135,7 +135,7 @@
         item.file,
         item.name.trim(),
         parseTags(item.tagText),
-        { zeroWidth: item.zeroWidth, private: item.hidden, nsfw: item.nsfw },
+        { zeroWidth: item.zeroWidth, visibility: item.visibility, nsfw: item.nsfw },
         (p) => (item.progress = p),
       );
       item.status = 'done';
@@ -267,7 +267,7 @@
                       aria-invalid={te ? 'true' : undefined} aria-describedby="tags-{item.key}" placeholder="cat, dance" />
                     {#if te}<span class="ui-error" id="tags-{item.key}">{te}</span>{:else}<span class="ui-hint" id="tags-{item.key}">Up to 10, separated by commas. They help people find it.</span>{/if}
                   </label>
-                  <EmoteFlags id="f{item.key}" bind:zeroWidth={item.zeroWidth} bind:hidden={item.hidden} bind:nsfw={item.nsfw} disabled={item.status === 'uploading'} />
+                  <EmoteFlags id="f{item.key}" bind:zeroWidth={item.zeroWidth} bind:visibility={item.visibility} bind:nsfw={item.nsfw} disabled={item.status === 'uploading'} />
                 </div>
                 <div class="pv">
                   <span class="ui-label">Preview</span>
