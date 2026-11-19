@@ -4,12 +4,16 @@
   import { tick, untrack } from 'svelte';
   import { ApiError, gql } from '$lib/api';
   import Chip from '$lib/components/Chip.svelte';
-  import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
   import Icon, { type IconName } from '$lib/components/Icon.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
+  import Popover from '$lib/components/Popover.svelte';
   import BrowseFilters from '$lib/components/browse/BrowseFilters.svelte';
-  import BulkAdd from '$lib/components/browse/BulkAdd.svelte';
+  import BrowseGrid from '$lib/components/browse/BrowseGrid.svelte';
+  import SelectBar from '$lib/components/browse/SelectBar.svelte';
+  import TargetSet from '$lib/components/browse/TargetSet.svelte';
+  import { all, CAP, EMPTY, toggle, type Selection, type Step } from '$lib/components/browse/selection';
+  import { session } from '$lib/tool/session.svelte';
   import Problem from '$lib/components/Problem.svelte';
   import State from '$lib/components/State.svelte';
   import {
@@ -29,8 +33,7 @@
     type Sort,
     type Window,
   } from '$lib/components/browse/params';
-  import RailLayout from '$lib/shell/RailLayout.svelte';
-  import SideRail from '$lib/shell/SideRail.svelte';
+  import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
   import { clean, count, iso } from '$lib/format';
   import { SEARCH } from '$lib/queries';
   import SearchField from '$lib/components/browse/SearchField.svelte';
@@ -68,8 +71,8 @@
 
   const sorts = $derived<{ value: Sort; label: string; icon: IconName }[]>([
     ...(view.q ? [{ value: 'relevance' as const, label: 'Relevance', icon: 'search' as const }] : []),
-    { value: 'trending', label: 'Trending', icon: 'trending' },
     { value: 'top', label: 'Top', icon: 'arrow-up' },
+    { value: 'trending', label: 'Trending', icon: 'trending' },
     { value: 'new', label: 'New', icon: 'sparkles' },
   ]);
   const windows = WINDOWS.map((w) => ({ value: w.value, label: w.short }));
@@ -127,32 +130,51 @@
     input?.focus();
   }
 
-  // ---- Phones and narrow windows (SideRail's breakpoint): the rail becomes a Filters sheet and
-  // the search field moves into its sticky bar, so it is never hidden behind a button.
-  let narrow = $state(false);
-  $effect(() => {
-    const mq = matchMedia('(max-width: 899.98px)');
-    const on = () => (narrow = mq.matches);
-    on();
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  });
-
   /** Puts the local view state into the address without loading anything again. */
   function sync() {
     replaceState(`/search${toSearch({ ...here, pages: Math.min(pageNo, MAX_PAGES) })}`, page.state);
   }
 
-  // ---- Multi-select: picked ids (in the order picked), kept while filters change.
-  let picked = $state.raw<string[]>([]);
-  const pickedSet = $derived(new Set(picked));
-  function toggle(e: { id: string }) {
-    picked = pickedSet.has(e.id) ? picked.filter((id) => id !== e.id) : [...picked, e.id];
+  // ---- Multi-select (up to CAP): picked ids in the order picked, kept while filters change.
+  let sel = $state.raw<Selection>(EMPTY);
+  const order = $derived(shown.map((e) => e.id));
+  let note = $state('');
+  let noteTimer: ReturnType<typeof setTimeout> | undefined;
+  function step(s: Step) {
+    if (s.sel !== sel && !s.refused) note = ''; // the cap note goes once the picks change again
+    sel = s.sel;
+    if (s.refused) {
+      note = `That’s ${CAP}, the most at once. Add these first, then pick more.`;
+      clearTimeout(noteTimer);
+      noteTimer = setTimeout(() => (note = ''), 4000);
+    }
   }
-  function setSelecting(on: boolean) {
+  function setSelecting(on: boolean, id?: string) {
     selecting = on;
-    if (!on) picked = [];
+    if (!on) sel = EMPTY;
+    else if (id && !sel.ids.includes(id)) step(toggle(sel, id));
     sync();
+  }
+  function unpick(done: string[]) {
+    note = '';
+    sel = { ...sel, ids: sel.ids.filter((id) => !done.includes(id)) };
+    return sel.ids;
+  }
+  // Escape clears the picks (and leaves Select mode when nothing is picked); Ctrl/⌘+A picks what
+  // is shown, up to the cap. Not while typing, or inside a menu, popover or sheet.
+  function onkeydown(e: KeyboardEvent) {
+    if (!selecting || e.defaultPrevented) return;
+    const t = e.target as HTMLElement;
+    if (t.closest('input, textarea, select, [contenteditable="true"], [role="menu"], [role="dialog"]')) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      note = '';
+      if (sel.ids.length) sel = EMPTY;
+      else setSelecting(false);
+    } else if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'a') {
+      e.preventDefault();
+      step(all(sel, order));
+    }
   }
   const signin = $derived(`/signin?back=${encodeURIComponent(page.url.pathname + page.url.search)}`);
 
@@ -219,53 +241,52 @@
   <SearchField bind:value={text} bind:input label="Emote name or tag" placeholder="Name or tag" oninput={typed} onsubmit={submit} onclear={clearText} />
 {/snippet}
 
-{#snippet railHead()}
-  <div class="rail-head">
-    {#if narrow}
-      <p class="rail-on">{filters.length} on</p>
-    {:else}
-      <p class="rail-title">Filters{#if filters.length}<span class="n">{filters.length}</span>{/if}</p>
-    {/if}
-    {#if filters.length}<button class="reset" type="button" onclick={() => go({ ...CLEARED })}>Reset</button>{/if}
-  </div>
-{/snippet}
+<svelte:window {onkeydown} />
 
 {#if view.tab === 'users'}
   <UsersSearch {data} />
 {:else}
-<RailLayout>
-  {#snippet rail()}
-    <!-- In the sheet its title already says Filters: the head is only there to Reset. -->
-    <SideRail
-      label="Emote filters"
-      collapse="sheet"
-      sheetLabel="Filters"
-      bar={narrow ? field : undefined}
-      sheetCount={filters.length}
-      head={narrow && !filters.length ? undefined : railHead}
-    >
-      <BrowseFilters {view} {tags} failed={!!data.error} onchange={(o) => go(o)} search={narrow ? undefined : field} />
-    </SideRail>
-  {/snippet}
-
+<ColumnLayout top>
   <div class="browse">
-    <div class="toolbar" bind:this={gridTop}>
+    <div class="head">
       <div class="title">
         <h1>Emotes</h1>
         {#if !data.error}<p class="total" aria-live="polite">{countText}</p>{/if}
       </div>
-      <div class="tools">
-        <SearchTabs {view} />
+      <SearchTabs {view} />
+    </div>
+
+    <div class="toolbar" bind:this={gridTop}>
+      <div class="sorts">
         <Segmented label="Sort" size="s" options={sorts} value={view.sort} onchange={(v) => go({ sort: v }, true)} />
-        <button class="btn btn-s selbtn" type="button" aria-pressed={selecting} onclick={() => setSelecting(!selecting)}><Icon name="check" size={15} />Select</button>
+        {#if trending}
+          <Segmented label="Trending window" size="s" options={windows} value={view.window} onchange={(v: Window) => go({ window: v }, true)} />
+        {/if}
+      </div>
+      <div class="find">{@render field()}</div>
+      <div class="acts">
+        <Popover label="Filters" sheet align="end" width="340px">
+          {#snippet trigger(props)}
+            <button class="btn btn-s filt" type="button" {...props}>
+              <Icon name="sliders" size={15} />Filters{#if filters.length}<span class="n">{filters.length}</span>{/if}
+            </button>
+          {/snippet}
+          <BrowseFilters {view} {tags} failed={!!data.error} onchange={(o) => go(o)} />
+          {#snippet footer()}
+            <button class="btn btn-s" type="button" disabled={!filters.length} onclick={() => go({ ...CLEARED })}>Reset</button>
+          {/snippet}
+        </Popover>
+        <label class="switch" class:on={selecting}>
+          <span>Select</span>
+          <input type="checkbox" role="switch" checked={selecting} onchange={(e) => setSelecting(e.currentTarget.checked)} />
+          <span class="track" aria-hidden="true"></span>
+        </label>
+        {#if session.me}<TargetSet />{/if}
       </div>
     </div>
 
     {#if trending}
-      <div class="window">
-        <span class="wlabel">Ranked by channels adding them in the last</span>
-        <Segmented label="Trending window" size="s" options={windows} value={view.window} onchange={(v: Window) => go({ window: v }, true)} />
-      </div>
+      <p class="wlabel">Ranked by how many channels added them in the {windowLabel}.</p>
     {/if}
 
     {#if filters.length}
@@ -306,71 +327,85 @@
       </div>
     {:else}
       <div class="results" class:dim={switching}>
-        <EmoteGrid
+        <BrowseGrid
           items={shown}
           eager={12}
           loading={busy || (switching && shown.length === 0)}
           skeletons={10}
           label={trending ? `Trending emotes, ${windowLabel}` : 'Emotes'}
           ranked={trending}
-          picked={selecting ? pickedSet : undefined}
-          onpick={selecting ? toggle : undefined}
+          {selecting}
+          {sel}
+          onstep={step}
+          onstart={(id) => setSelecting(true, id)}
         />
       </div>
       <div class="more" bind:this={end}>
         <LoadMore {hasMore} {busy} error={moreError} total={shown.length > 0 ? data.total : 0} onmore={loadMore} href={moreHref} />
       </div>
-      {#if selecting}
-        <BulkAdd
-          ids={picked}
-          shown={shown.length}
-          {signin}
-          onall={() => (picked = [...new Set([...picked, ...shown.map((e) => e.id)])])}
-          onclear={() => (picked = [])}
-          onexit={() => setSelecting(false)}
-          onadded={(ids) => (picked = picked.filter((id) => !ids.includes(id)))}
-        />
-      {/if}
+    {/if}
+    {#if selecting && !data.error}
+      <SelectBar
+        ids={sel.ids}
+        shown={shown.length}
+        {signin}
+        {note}
+        onall={() => step(all(sel, order))}
+        onclear={() => ((sel = EMPTY), (note = ''))}
+        onexit={() => setSelecting(false)}
+        onadded={unpick}
+      />
     {/if}
   </div>
-</RailLayout>
+</ColumnLayout>
 {/if}
 
 <style>
-  /* Rail head: the rail's title, the number of filters on, and Reset. */
-  .rail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding-left: 8px; }
-  .rail-title { display: flex; align-items: center; gap: 8px; margin: 0; font-size: var(--t-ui); font-weight: 600; letter-spacing: -.01em; }
-  .rail-on { margin: 0; font-size: var(--t-nav); color: var(--muted); }
-  .n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius);
-    background: var(--accent-dim); color: var(--accent-text); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .reset { height: 40px; padding: 0 10px; border: 0; border-radius: var(--radius); background: none; color: var(--accent-text);
-    font: inherit; font-size: var(--t-fine); font-weight: 500; cursor: pointer; }
-  .reset:active { opacity: .6; }
-
-  /* Toolbar: title and count left; tabs, sort and select right; one 40px row like the header's. */
-  .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; min-height: 40px; }
-  @media (max-width: 899.98px) { .toolbar { padding-top: 4px; } }
+  /* Title row: the one page title and the count, Emotes | Users on the right. */
+  .head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; min-height: 40px; }
   .title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
   h1 { margin: 0; font-size: var(--t-page); line-height: 1.25; letter-spacing: -.02em; }
   .total { margin: 0; font-size: var(--t-nav); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
-  .selbtn { height: 34px; }
-  .selbtn[aria-pressed='true'] { font-weight: 700; }
-  .selbtn :global(svg) { color: var(--dim); }
-  .selbtn[aria-pressed='true'] :global(svg) { color: var(--accent-text); }
 
-  /* Trending's window: a quiet line under the toolbar, the choice in the same segmented control. */
-  .window { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 10px; margin-top: 8px; }
-  .wlabel { font-size: var(--t-small); color: var(--muted); }
+  /* Toolbar: sort (and Trending's window), the search field, then Filters, Select and the target set. */
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin-top: 16px; }
+  .sorts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+  .find { flex: 1 1 220px; min-width: 0; max-width: 420px; }
+  .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-left: auto; min-width: 0; }
+  .filt { height: 34px; }
+  .filt :global(svg) { color: var(--dim); }
+  .n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+    background: var(--accent-dim); color: var(--accent-text); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* Select: the cyex-app switch. Accent track when on, with a tick on it so on reads as on. */
+  .switch { position: relative; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 2px;
+    font-size: var(--t-nav); font-weight: 500; color: var(--muted); cursor: pointer; user-select: none; }
+  .switch.on { color: var(--text); font-weight: 700; }
+  .switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+  .track { position: relative; width: 36px; height: 20px; border-radius: 999px; background: var(--border-strong);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 40%, transparent); transition: background-color var(--fast) var(--ease); }
+  .track::before { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--text);
+    transition: translate var(--fast) var(--ease), background-color var(--fast); }
+  .track::after { content: ''; position: absolute; top: 6px; left: 9px; width: 2px; height: 8px; border-radius: 1px; background: var(--accent-ink); opacity: 0; }
+  .on .track { background: var(--accent); box-shadow: none; }
+  .on .track::before { translate: 16px 0; background: var(--accent-ink); }
+  .on .track::after { opacity: 1; }
+  .switch:has(input:focus-visible) .track { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+  .wlabel { margin: 8px 0 0; font-size: var(--t-small); color: var(--muted); }
   .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
   .clearall { background: none; border: 0; padding: 0 8px; font: inherit; font-size: var(--t-small); cursor: pointer; min-height: 40px; margin-block: 0; }
 
   .results { margin-top: 16px; transition: opacity var(--dur-color) ease-out; }
   .results.dim { opacity: .55; transition-delay: .15s; }
   .more { padding: 32px 0 8px; min-height: 96px; }
-
   .state { margin-top: 16px; }
 
+  /* Narrow: the field takes its own row first, the rest wraps under it. */
+  @media (max-width: 760px) {
+    .find { order: -1; flex-basis: 100%; max-width: none; }
+    .acts { margin-left: 0; }
+  }
   @media (max-width: 480px) { .title { flex-direction: column; align-items: flex-start; gap: 0; } }
-  @media (prefers-reduced-motion: reduce) { .results { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .results, .track, .track::before { transition: none; } }
 </style>
