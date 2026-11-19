@@ -86,19 +86,33 @@
     };
   });
 
-  // Keep the current tab in view when the strip is narrower than its tabs.
-  $effect(() => {
-    if (!narrow || !strip) return;
-    void groups; void tabs;
-    const tab = strip.querySelector<HTMLElement>('[aria-current="page"]');
-    if (!tab) return;
+  // Keep the current tab in view when the strip is narrower than its tabs. Counts arriving and
+  // the web font loading make earlier tabs wider, which pushes the current one out again, so it is
+  // revealed again whenever the strip's content changes (never on the reader's own scrolling).
+  function reveal() {
+    const tab = strip?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!strip || !tab) return;
     // Scroll only as far as needed, so the first tabs stay readable when the current one already shows.
     const pad = 20;
     const left = tab.offsetLeft - pad;
     const right = tab.offsetLeft + tab.offsetWidth + pad - strip.clientWidth;
+    // Snapping is off for the jump: it would otherwise settle on the neighbouring tab's edge and push this one out again.
+    const was = strip.style.scrollSnapType;
+    strip.style.scrollSnapType = 'none';
     if (left < strip.scrollLeft) strip.scrollLeft = Math.max(0, left);
     else if (right > strip.scrollLeft) strip.scrollLeft = right;
+    const el = strip;
+    requestAnimationFrame(() => (el.style.scrollSnapType = was));
     edges();
+  }
+  $effect(() => {
+    if (!narrow || !strip) return;
+    void groups; void tabs;
+    reveal();
+    const mo = new MutationObserver(reveal);
+    mo.observe(strip, { subtree: true, childList: true, characterData: true });
+    void document.fonts?.ready.then(reveal);
+    return () => mo.disconnect();
   });
 
   // The desktop rail sticks under the header only while it fits the window. Taller (a short

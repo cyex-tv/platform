@@ -53,14 +53,22 @@ export function tagsProblem(tags: string[]): string | null {
 /** A file's problem for upload, or null: PNG, APNG, GIF, WebP or JPEG, at most 8 MB. */
 export function fileProblem(file: Pick<File, 'type' | 'size'> & { name?: string }): string | null {
   const known = UPLOAD_TYPES.includes(file.type) || (!file.type && !!file.name && UPLOAD_EXTENSIONS.test(file.name));
-  if (!known) return `${UPLOAD_FORMATS} only.`;
-  if (file.size > MAX_UPLOAD_BYTES) return `It’s ${mb(file.size)}; at most 8 MB.`;
+  if (!known) {
+    // AVIF is a format people have, so say it by name and what to do instead.
+    if (file.type === 'image/avif' || (!file.type && !!file.name && /\.avif$/i.test(file.name))) return 'AVIF isn’t accepted yet. Save it as PNG, WebP or JPEG.';
+    return `${UPLOAD_FORMATS} only.`;
+  }
+  if (file.size > MAX_UPLOAD_BYTES) return `${sizeOver(file.size)}; at most 8 MB.`;
   return null;
 }
 
-/** Megabytes the cyex way, one decimal, rounded up so 8,01 MB never reads as 8 MB: 9,3 MB. */
-function mb(size: number): string {
-  return `${(Math.ceil((size / (1024 * 1024)) * 10) / 10).toFixed(1).replace('.', ',')} MB`;
+/**
+ * How far over the cap a file is, in the same one-decimal megabytes the queue row shows (`bytes`),
+ * so the row and the message never disagree. A file that rounds to 8 MB itself is "just over".
+ */
+function sizeOver(size: number): string {
+  const rounded = Math.round((size / (1024 * 1024)) * 10) / 10;
+  return rounded <= 8 ? 'It’s just over 8 MB' : `It’s ${rounded.toFixed(1).replace('.', ',')} MB`;
 }
 
 /**

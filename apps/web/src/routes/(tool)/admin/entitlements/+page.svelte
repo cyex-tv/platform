@@ -130,7 +130,7 @@
   @media (min-width: 1100px) { .pickers { grid-template-columns: 1fr 1fr; } }
   .pick { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 12px; }
   .grow { flex: 1; min-width: 180px; }
-  .find { flex-basis: 100%; }
+  .find { flex-basis: 100%; display: flex; align-items: center; min-height: 24px; }
   .graph header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .pad { padding: 12px 14px 14px; }
 </style>

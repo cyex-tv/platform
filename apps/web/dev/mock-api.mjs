@@ -643,7 +643,7 @@ const graphOf = (id) => {
   const base = [grant({ kind: 'ROLE', itemId: 'ROLEUSER', itemName: 'User', accountId: id, source: 'DEFAULT' })];
   if (id === ME_ID) return [grant({ kind: 'ROLE', itemId: 'ROLEROOT', itemName: 'Owner', accountId: id, source: 'OWNER' }), ...base];
   const roles = (ACCOUNT_ROLES[id] ?? []).map((r) => ROLES.find((x) => x.id === r)).filter(Boolean)
-    .map((r, i) => grant({ kind: 'ROLE', itemId: r.id, itemName: r.name, accountId: id, source: 'STAFF', grantedBy: ME_ID, grantedAt: `2026-11-0${i + 2}T10:00:00.000Z` }));
+    .map((r, i) => grant({ kind: 'ROLE', itemId: r.id, itemName: r.name, accountId: id, source: 'STAFF', grantedBy: ME_ID, grantedAt: `2026-11-${String((i % 8) + 2).padStart(2, '0')}T10:00:00.000Z` }));
   return [
     ...roles,
     grant({ kind: 'BADGE', itemId: 'BADGE1', itemName: 'Early supporter', accountId: id, source: 'STAFF', reason: 'Beta tester', grantedBy: ME_ID, grantedAt: '2026-11-05T12:00:00.000Z' }),
@@ -2038,7 +2038,7 @@ function signedIn(body, v, ADMIN) {
       // Catalog items stand in for the made-up ones: odd ones held now by most, even ones taken back from some.
       const stand = { BADGE: ['BADGE1', 'BADGE2'], PAINT: ['PAINT1', 'PAINT2', 'PAINT3'] }[v.kind];
       const like = stand && !stand.includes(v.id) ? stand[[...v.id].reduce((n, c) => n + c.charCodeAt(0), 0) % stand.length] : v.id;
-      const all = [ME_ID, ...OTHERS.map((o) => o.id)].flatMap((id, i) => graphOf(id).map((g) => ({ ...g, grantedAt: g.grantedAt && new Date(Date.parse(g.grantedAt) - i * 5 * 3600_000).toISOString() })))
+      const all = [ME_ID, ...OTHERS.map((o) => o.id)].flatMap((id, i) => graphOf(id).map((g) => ({ ...g, grantedAt: g.grantedAt ? new Date(Date.parse(g.grantedAt) - i * 5 * 3600_000).toISOString() : null })))
         .filter((g) => g.kind === v.kind && g.itemId === like).map((g) => ({ ...g, itemId: v.id }));
       return { data: { entitlementHolders: all } };
     }
@@ -2538,12 +2538,17 @@ createServer(async (req, res) => {
     res.writeHead(204, { 'set-cookie': ['mock_session=; Path=/; Max-Age=0', 'mock_restore=; Path=/; Max-Age=0'] });
     return res.end();
   }
+  // A route that never answers, for timeout checks.
+  if (url.pathname === '/mock/hang') return;
   if (req.method === 'POST' && url.pathname === '/v1/emotes') {
-    const raw = (await read(req)).toString('latin1');
+    // UTF-8, as the API reads it: names in any script and emoji arrive whole.
+    const raw = (await read(req)).toString('utf8');
     if (!session) return json(res, 401, { error: 'signed_out', message: 'Sign in to upload.' });
     const field = (k) => raw.match(new RegExp(`name="${k}"\\r\\n\\r\\n([^\\r]*)`))?.[1];
     const name = field('name') ?? 'upload';
     // Names that stand in for the API's refusals, to see how the upload form explains them.
+    // Never answers (the request is read, then left open), to see the stall timeout and Cancel.
+    if (name === 'hang') return;
     if (name === 'blocked') return json(res, 422, { error: 'blocked', message: 'This image can’t be uploaded to cyex.tv.' });
     if (name === 'ratelimited') return json(res, 429, { error: 'rate_limited', message: 'That’s a lot of uploads. Try again in an hour.' });
     if (name === 'toobig') return json(res, 413, { error: 'too_large', message: 'The file is over 8 MB, the most an upload can be.' });

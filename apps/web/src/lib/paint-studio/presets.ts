@@ -22,3 +22,20 @@ export const STATIC_PRESETS: StudioPaint[] = [
   paint('Mint Glass', { angle: 160, stops: st([0, '#e6fff4'], [0.5, '#3ddc97'], [1, '#0f3d3e']), shadows: [sh(1, 1, 0, '#0f3d3e')] }),
   paint('Fade Out', { stops: st([0, '#ffd54f'], [0.55, '#ff7043'], [1, '#ff7043', 0]) }),
 ];
+
+/** Relative luminance (0 to 1) of a `#rrggbb` or `#rrggbbaa` stop colour. */
+function luma(hex: string): number {
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+}
+
+/**
+ * Which stage a preset's name reads on: a dark paint (Blood Moon, Neon Core) vanishes on the dark
+ * stage, so it gets the light one, and the other way round. Stops that are nearly transparent
+ * don't count.
+ */
+export function presetGround(p: StudioPaint): 'dark' | 'light' {
+  const lit = p.stops.filter((s) => s.color.length < 9 || parseInt(s.color.slice(7, 9), 16) > 50).map((s) => luma(s.color));
+  if (!lit.length) return 'dark';
+  return lit.reduce((a, b) => a + b, 0) / lit.length < 0.22 ? 'light' : 'dark';
+}

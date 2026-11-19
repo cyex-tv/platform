@@ -19,3 +19,8 @@
     {#if label}<bdi>{label}</bdi>{:else}<span class="ui-mono">{id.slice(-8)}</span>{/if}
   </a>
 {/if}
+
+<style>
+  /* a touch target of at least 24px (WCAG 2.5.8) */
+  a { display: inline-block; vertical-align: middle; min-height: 24px; line-height: 24px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+</style>

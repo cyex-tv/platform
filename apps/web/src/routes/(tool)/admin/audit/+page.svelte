@@ -6,8 +6,10 @@
   import { page } from '$app/state';
   import { gql } from '$lib/api';
   import AccountLink from '$lib/admin/AccountLink.svelte';
+  import ActorField from '$lib/admin/ActorField.svelte';
+  import DateField from '$lib/components/DateField.svelte';
   import { lookUp } from '$lib/admin/names.svelte';
-  import { actionText, changes, dayAfter, dayStart, looksLikeId, targetHref } from '$lib/admin/audit';
+  import { actionText, changes, dayAfter, dayStart, targetHref } from '$lib/admin/audit';
   import Icon from '$lib/components/Icon.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
@@ -69,7 +71,6 @@
   const first = $derived(L.data);
   const entries = $derived(first ? [...first, ...older] : null);
   const more = $derived(olderMore ?? first?.length === LIMIT);
-  const bad = $derived(!!q('actor') && !looksLikeId(q('actor')));
 
   async function fetchOlder() {
     const before = entries?.at(-1)?.id ?? null;
@@ -118,7 +119,7 @@
 <PageHead title="Audit log" line="Every audited change, newest first." />
 
 <form class="filters" onsubmit={filter}>
-  <input class="ui-input" bind:value={actor} placeholder="Actor account ID" aria-label="Actor account ID" spellcheck="false" autocomplete="off" aria-invalid={bad} />
+  <ActorField value={actor} onchange={(id) => (actor = id)} />
   <select class="ui-input kind" bind:value={kind} aria-label="Target kind">
     <option value="">Any kind</option>
     <option value="account">Account</option>
@@ -129,8 +130,8 @@
   <input class="ui-input" bind:value={target} placeholder="Target ID" aria-label="Target ID" spellcheck="false" autocomplete="off" />
   <input class="ui-input" bind:value={action} placeholder="Action, such as role.updated" aria-label="Action" list="audit-actions" spellcheck="false" autocomplete="off" />
   <datalist id="audit-actions">{#each ACTIONS as a}<option value={a}></option>{/each}</datalist>
-  <label class="day"><span class="ui-label">From</span><input class="ui-input" type="date" bind:value={from} /></label>
-  <label class="day"><span class="ui-label">To</span><input class="ui-input" type="date" bind:value={to} /></label>
+  <DateField label="From" value={from} onchange={(d) => (from = d)} />
+  <DateField label="To" value={to} onchange={(d) => (to = d)} />
   <div class="ui-actions">
     <button class="ui-btn secondary" type="submit">Filter</button>
     {#if page.url.search}<a class="ui-btn ghost" href="/admin/audit">Clear</a>{/if}
@@ -209,7 +210,6 @@
 
 <style>
   .filters { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); gap: 8px; align-items: end; margin-bottom: 16px; max-width: 1000px; }
-  .day { display: grid; gap: 4px; }
   .rows { list-style: none; margin: 0; padding: 0; }
   .rows li.alt { background: var(--row-alt); }
   .row { display: grid; grid-template-columns: 150px minmax(140px, 1fr) minmax(0, 2fr) minmax(0, 1.2fr) 40px; gap: 12px; align-items: center; min-height: 40px;
@@ -247,4 +247,6 @@
     .json { grid-template-columns: minmax(0, 1fr); }
     .changes li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   }
+  /* a touch target of at least 24px (WCAG 2.5.8) */
+  .rows a { display: inline-block; vertical-align: middle; min-height: 24px; line-height: 24px; max-width: 100%; }
 </style>
