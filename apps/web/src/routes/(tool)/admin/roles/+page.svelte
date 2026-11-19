@@ -3,7 +3,7 @@
   // owners' top role (only its holders see it). The API says per role whether you may edit it
   // (below your highest, not one you hold) or give it; the page follows that and says why not.
   import Name from '$lib/components/Name.svelte';
-  import { iso } from '$lib/format';
+  import { count, iso } from '$lib/format';
   import { gql } from '$lib/api';
   import type { RoleFieldsFragment } from '$lib/gql/graphql';
   import { ACCOUNT_ROLES, CREATE_ROLE, DELETE_ROLE, ROLES, UPDATE_ROLE } from '$lib/queries';
@@ -40,7 +40,7 @@
   const userRole = $derived(editing?.builtIn === 'USER');
   const nameError = $derived(tried && !name.trim() ? 'Give it a name.' : null);
   const posOk = $derived(userRole || (Number.isInteger(position) && position >= 1 && position <= MAX_POS));
-  const posError = $derived(tried && !posOk ? `Position 1 to ${MAX_POS.toLocaleString('en-US')}.` : null);
+  const posError = $derived(tried && !posOk ? `Position 1 to ${count(MAX_POS)}.` : null);
 
   const mine = $derived(new Set(session.me?.permissions ?? []));
   const sorted = $derived([...(roles ?? [])].sort((a, b) => b.position - a.position));
@@ -139,7 +139,7 @@
       {#each sorted as r (r.id)}
         {@const groups = summary(r)}
         <li class="row">
-          <span class="pos ui-num" title="Position">{r.position.toLocaleString('en-US')}</span>
+          <span class="pos ui-num" title="Position">{count(r.position)}</span>
           <span class="what">
             <strong class="title"><Name value={r.name} />
               {#if r.builtIn}<span class="ui-chip">{BUILT_IN[r.builtIn]}</span>{/if}

@@ -4,7 +4,7 @@
   // (one note, closes this emote's reports). Names link to the account's admin page.
   import { gql } from '$lib/api';
   import AccountLink from '$lib/admin/AccountLink.svelte';
-  import { clean, count, date, iso } from '$lib/format';
+  import { clean, count, dateTime, iso } from '$lib/format';
   import type { ReportQueueQuery } from '$lib/gql/graphql';
   import { REPORT_QUEUE, RESOLVE_REPORT } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
@@ -99,7 +99,7 @@
               {#each open === g.key ? g.reports : g.reports.slice(0, 2) as r (r.id)}
                 <li>
                   <span class="reason">“<bdi>{clean(r.reason)}</bdi>”</span>
-                  <span class="ui-hint ui-num">{date(r.createdAt)}{#if r.reporterId}{' · '}<AccountLink id={r.reporterId} />{/if}</span>
+                  <span class="ui-hint ui-num">{dateTime(r.createdAt)}{#if r.reporterId}{' · '}<AccountLink id={r.reporterId} />{/if}</span>
                 </li>
               {/each}
             </ul>

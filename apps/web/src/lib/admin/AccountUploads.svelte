@@ -1,7 +1,7 @@
 <script lang="ts">
   // An account's emotes in every state, newest first (accountEmotes), 20 at a time.
   import { gql } from '$lib/api';
-  import { clean, count, date } from '$lib/format';
+  import { clean, count, dateTime } from '$lib/format';
   import type { AccountEmotesQuery } from '$lib/gql/graphql';
   import { ACCOUNT_EMOTES } from '$lib/queries';
   import State from '$lib/components/State.svelte';
@@ -59,7 +59,7 @@
           <Thumb emote={e} name={clean(e.name)} box={40} />
           <span class="what">
             <a href="/me/emotes/{encodeURIComponent(e.id)}"><bdi>{clean(e.name)}</bdi></a>
-            <span class="ui-hint ui-num">{date(e.createdAt)}{#if e.channelCount}{' · '}{count(e.channelCount)} channels{/if}</span>
+            <span class="ui-hint ui-num">{dateTime(e.createdAt)}{#if e.channelCount}{' · '}{count(e.channelCount)} channels{/if}</span>
           </span>
           <span class="ui-chip {e.state.toLowerCase()}">{STATE_LABEL[e.state]}</span>
         </li>

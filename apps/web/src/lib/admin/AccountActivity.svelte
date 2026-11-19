@@ -2,7 +2,7 @@
   // The latest audited changes that target an account (auditLog by target), with a way on to the
   // whole log, and to what the account did itself.
   import { gql } from '$lib/api';
-  import { date } from '$lib/format';
+  import { dateTime } from '$lib/format';
   import type { AuditQuery } from '$lib/gql/graphql';
   import { AUDIT } from '$lib/queries';
   import State from '$lib/components/State.svelte';
@@ -48,7 +48,7 @@
           <li>
             <span class="what">
               <strong>{actionText(e.action)}</strong>
-              <span class="ui-hint ui-num">{date(e.createdAt)}{' · by '}<AccountLink id={e.actorId} /></span>
+              <span class="ui-hint ui-num">{dateTime(e.createdAt)}{' · by '}<AccountLink id={e.actorId} /></span>
             </span>
           </li>
         {/each}

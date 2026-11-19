@@ -53,7 +53,7 @@
 </script>
 
 {#snippet actions()}
-  {#if relation.mine}<a class="ui-btn secondary small" href="/me/settings"><Icon name="settings" size={15} />Settings</a>{/if}
+  {#if relation.mine}<a class="btn btn-s" href="/me/settings"><Icon name="settings" size={15} />Settings</a>{/if}
 {/snippet}
 
 <svelte:head>

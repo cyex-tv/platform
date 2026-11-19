@@ -7,7 +7,7 @@
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { loadCatalog, type Catalog } from '$lib/cosmetics/store.svelte';
   import type { CosmeticKind, EntitlementsQuery } from '$lib/gql/graphql';
-  import { clean, date, iso } from '$lib/format';
+  import { clean, dateTime, iso } from '$lib/format';
   import { ENTITLEMENTS, REVOKE_COSMETIC } from '$lib/queries';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
@@ -96,7 +96,7 @@
                 {#if badge}<BadgeIcon {badge} size={24} />{/if}
                 <span class="what">
                   <strong>{#if paint}<PaintedName name={paint.name} {paint} />{:else}<bdi>{clean(nameOf(kind, r.cosmeticId))}</bdi>{/if}</strong>
-                  <span class="ui-hint">{date(r.grantedAt)}{#if r.grantedBy}{' · by '}<bdi>{clean(r.grantedBy.displayName)}</bdi>{/if}{#if r.reason}{' · '}<bdi>{clean(r.reason)}</bdi>{/if}</span>
+                  <span class="ui-hint">{dateTime(r.grantedAt)}{#if r.grantedBy}{' · by '}<bdi>{clean(r.grantedBy.displayName)}</bdi>{/if}{#if r.reason}{' · '}<bdi>{clean(r.reason)}</bdi>{/if}</span>
                 </span>
                 <button class="ui-btn ghost small" type="button" onclick={() => { target = r; revokeDlg?.open(); }}>Revoke</button>
               </li>

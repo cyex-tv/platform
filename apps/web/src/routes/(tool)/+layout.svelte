@@ -131,7 +131,7 @@
 {#snippet band()}
   {#if meAccount}
     <ProfileHeader account={meAccount} relation={meRelation} profile={meProfile}>
-      {#snippet actions()}<a class="ui-btn secondary small" href="/me/settings"><Icon name="settings" size={15} />Settings</a>{/snippet}
+      {#snippet actions()}<a class="btn btn-s" href="/me/settings"><Icon name="settings" size={15} />Settings</a>{/snippet}
     </ProfileHeader>
   {/if}
 {/snippet}

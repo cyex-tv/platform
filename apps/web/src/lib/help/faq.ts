@@ -41,7 +41,7 @@ export const HELP: HelpGroup[] = [
     ['how-do-i-sign-in', 'How do I sign in?',
       '[Sign in](/signin) with Twitch or Kick. cyex.tv never sees your password; the platform tells us who you are and nothing else. You can link both platforms to one account.'],
     ['what-does-it-cost', 'Does it cost anything?',
-      'No. Emotes, sets and channels are free. Badges and paints are handed out by the cyex.tv team for now.'],
+      'Emotes, sets and channels are free. Badges and name paints come from the [shop](/shop), a [code](/redeem) or the cyex.tv team; they only change how your name looks in chat.'],
   ]),
   group('extension', 'The extension', [
     ['get-the-extension', 'Where do I get the extension?',

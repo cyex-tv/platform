@@ -44,7 +44,7 @@
     <ul class="ui-list">
       {#each rows as s (s.id)}
         <li>
-          <span class="what"><strong>{s.device}</strong><span class="ui-hint">{s.kind === 'SITE' ? 'Website' : 'App'} · signed in <span class="ui-num">{date(s.createdAt)}</span></span></span>
+          <span class="what"><strong>{s.device}</strong><span class="ui-hint">{s.kind === 'SITE' ? 'Website' : 'App'} · signed in <span class="ui-num">{dateTime(s.createdAt)}</span></span></span>
           <span class="when ui-hint">Last used <span class="ui-num">{dateTime(s.lastSeenAt)}</span><br />Ends <span class="ui-num">{date(s.expiresAt)}</span></span>
         </li>
       {/each}

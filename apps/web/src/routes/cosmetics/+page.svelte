@@ -134,6 +134,8 @@
     background: var(--bg); font-size: 13px; }
   .who { font-weight: 700; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .msg { color: var(--muted); white-space: nowrap; }
+  /* The gap spaces the badge from the name; the colon sits right after the name ("name: hi chat"). */
+  .who + .msg { margin-inline-start: -5px; }
 
   .paint { padding: 18px 16px 14px; }
   .sample { display: flex; align-items: center; min-height: 52px; padding: 0 12px; border-radius: var(--radius); background: var(--bg);
