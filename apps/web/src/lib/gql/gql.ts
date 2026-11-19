@@ -135,6 +135,8 @@ type Documents = {
     "\n  mutation CreateCodeBatch($input: CodeBatchInput!) {\n    createCodeBatch(input: $input) {\n      batch {\n        ...CodeBatchFields\n      }\n      codes\n    }\n  }\n": typeof types.CreateCodeBatchDocument,
     "\n  mutation DisableCodeBatch($id: String!) {\n    disableCodeBatch(id: $id) {\n      ...CodeBatchFields\n    }\n  }\n": typeof types.DisableCodeBatchDocument,
     "\n  query ShopCounts($items: Boolean!, $orders: Boolean!, $codes: Boolean!) {\n    shopItems(all: true) @include(if: $items) {\n      id\n    }\n    orders(page: 1, perPage: 1) @include(if: $orders) {\n      total\n    }\n    codeBatches(page: 1, perPage: 1) @include(if: $codes) {\n      total\n    }\n  }\n": typeof types.ShopCountsDocument,
+    "\n  query QuickSearch($query: String!) {\n    quickSearch(query: $query) {\n      emotes {\n        ...EmoteFields\n      }\n      users {\n        account {\n          id\n          displayName\n          avatar\n        }\n        identities {\n          platform\n          login\n          displayName\n        }\n      }\n    }\n  }\n": typeof types.QuickSearchDocument,
+    "\n  query EditableChannels {\n    myEditableChannels {\n      role\n      channel {\n        platform\n        login\n        account {\n          id\n          displayName\n          avatar\n        }\n      }\n    }\n  }\n": typeof types.EditableChannelsDocument,
     "\n  query StaffNotes($accountId: String!) {\n    staffNotes(accountId: $accountId) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n": typeof types.StaffNotesDocument,
     "\n  mutation AddStaffNote($accountId: String!, $body: String!) {\n    addStaffNote(accountId: $accountId, body: $body) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n": typeof types.AddStaffNoteDocument,
     "\n  mutation DeleteStaffNote($id: String!) {\n    deleteStaffNote(id: $id)\n  }\n": typeof types.DeleteStaffNoteDocument,
@@ -265,6 +267,8 @@ const documents: Documents = {
     "\n  mutation CreateCodeBatch($input: CodeBatchInput!) {\n    createCodeBatch(input: $input) {\n      batch {\n        ...CodeBatchFields\n      }\n      codes\n    }\n  }\n": types.CreateCodeBatchDocument,
     "\n  mutation DisableCodeBatch($id: String!) {\n    disableCodeBatch(id: $id) {\n      ...CodeBatchFields\n    }\n  }\n": types.DisableCodeBatchDocument,
     "\n  query ShopCounts($items: Boolean!, $orders: Boolean!, $codes: Boolean!) {\n    shopItems(all: true) @include(if: $items) {\n      id\n    }\n    orders(page: 1, perPage: 1) @include(if: $orders) {\n      total\n    }\n    codeBatches(page: 1, perPage: 1) @include(if: $codes) {\n      total\n    }\n  }\n": types.ShopCountsDocument,
+    "\n  query QuickSearch($query: String!) {\n    quickSearch(query: $query) {\n      emotes {\n        ...EmoteFields\n      }\n      users {\n        account {\n          id\n          displayName\n          avatar\n        }\n        identities {\n          platform\n          login\n          displayName\n        }\n      }\n    }\n  }\n": types.QuickSearchDocument,
+    "\n  query EditableChannels {\n    myEditableChannels {\n      role\n      channel {\n        platform\n        login\n        account {\n          id\n          displayName\n          avatar\n        }\n      }\n    }\n  }\n": types.EditableChannelsDocument,
     "\n  query StaffNotes($accountId: String!) {\n    staffNotes(accountId: $accountId) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n": types.StaffNotesDocument,
     "\n  mutation AddStaffNote($accountId: String!, $body: String!) {\n    addStaffNote(accountId: $accountId, body: $body) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n": types.AddStaffNoteDocument,
     "\n  mutation DeleteStaffNote($id: String!) {\n    deleteStaffNote(id: $id)\n  }\n": types.DeleteStaffNoteDocument,
@@ -755,6 +759,14 @@ export function graphql(source: "\n  mutation DisableCodeBatch($id: String!) {\n
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query ShopCounts($items: Boolean!, $orders: Boolean!, $codes: Boolean!) {\n    shopItems(all: true) @include(if: $items) {\n      id\n    }\n    orders(page: 1, perPage: 1) @include(if: $orders) {\n      total\n    }\n    codeBatches(page: 1, perPage: 1) @include(if: $codes) {\n      total\n    }\n  }\n"): typeof import('./graphql').ShopCountsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query QuickSearch($query: String!) {\n    quickSearch(query: $query) {\n      emotes {\n        ...EmoteFields\n      }\n      users {\n        account {\n          id\n          displayName\n          avatar\n        }\n        identities {\n          platform\n          login\n          displayName\n        }\n      }\n    }\n  }\n"): typeof import('./graphql').QuickSearchDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query EditableChannels {\n    myEditableChannels {\n      role\n      channel {\n        platform\n        login\n        account {\n          id\n          displayName\n          avatar\n        }\n      }\n    }\n  }\n"): typeof import('./graphql').EditableChannelsDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

@@ -8,9 +8,9 @@ See them all with live data at `/dev/components` (dev server only; a 404 in prod
 
 | Component | Props | Notes |
 |---|---|---|
-| `Nav` | `me?: { displayName, avatar?, platform?, admin? } \| null`, `onsignout?()` | Sticky, 64px plus the top safe area, **in the flow**: pages start right under it, so don't pad by `--nav-h`. Glass after 8px of scroll. Links: Emotes. Search field opens the palette (no shortcut hint; hidden on /search). Signed in: Upload and the account menu (your emotes, upload, sets, channels; account, admin for staff; sign out last). 720px and narrower: search and menu buttons (the avatar when signed in), menu in a `BottomSheet`. |
+| `Nav` | `me?: { displayName, avatar?, platform?, admin? } \| null`, `onsignout?()` | Sticky, 64px plus the top safe area, **in the flow**: pages start right under it, so don't pad by `--nav-h`. Glass after 8px of scroll. Links: Emotes. Search field: HeaderSearch (no shortcut hint). Signed in: Upload and the account menu (your emotes, upload, sets, channels; account, admin for staff; sign out last). 720px and narrower: search and menu buttons (the avatar when signed in), menu in a `BottomSheet`. |
 | `Footer` | none | Browse, Download, Cosmetics, Help, Developers, Source, Takedowns (Terms, Privacy and Contact once their pages exist), non-affiliation line. |
-| `CommandPalette` | none | Ctrl K / Cmd K, or `/` outside a field (no on-screen hint). A page input marked `data-page-search` takes `/` instead. Open it from code with `openPalette(query?)` from `palette.svelte.ts`. |
+| `HeaderSearch` (`lib/shell`) | `phone?`, `onclose?()` | The header's search field is the search: typing drops a list under it with the top 5 emotes (`quickSearch`'s name matcher) and top 3 people; focusing it empty lists the channels you can manage by role. ARIA combobox (↑ ↓ Enter Escape). `/` outside a field focuses it (a page input marked `data-page-search` takes `/` instead); `focusSearch(query?)` from `lib/shell/search.svelte.ts` does it from code. No command palette. |
 
 ## Emotes
 
@@ -56,5 +56,5 @@ See them all with live data at `/dev/components` (dev server only; a 404 in prod
 
 - Tokens added: `--ease-drawer`, `--dur-pop`, `--dur-sheet`, `--delay-tip`, `--z-nav`, `--z-pop`, `--z-tip`, `--scrim`, `--shadow-pop`, `--t-label`, `--emote-art`, `--emote-art-compact`, `--emote-chat`.
 - Inputs are 16px (no iOS zoom). Controls have `touch-action: manipulation` and no text selection.
-- `src/lib/palette.ts` holds the palette's pure logic (`asLogin`, `channelJumps`, `pageJumps`, `PAGES`).
+- `src/lib/shell/search.ts` holds the header search's pure logic (`move`, `typing`, `announce`, `searchHref`); `src/lib/shell/nav.ts` the header links and the channel role order.
 - `src/lib/emote.ts` adds `hasStill`, `isWide`, `srcsetW` (width descriptors; pair with `sizes`).

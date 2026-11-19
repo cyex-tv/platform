@@ -1,8 +1,10 @@
 <script lang="ts">
-  // The bell in the header (desktop; on phones the same list is a row in the menu sheet): a
-  // 40px button with the unread count, opening a popover with the newest notifications, Mark all
-  // read and a link to the full page. Enter or Space opens it, Escape closes it with focus back
-  // on the bell. The count is kept fresh by watchInbox (the AppHeader starts it).
+  // The bell in the header, on every width (like the deck's Twitch bell): a 40px button with the
+  // unread count, opening a panel anchored under it with the newest notifications, Mark all read
+  // and a link to the full page (/me/notifications); on phones the panel is a bottom sheet and
+  // the button is borderless like the other phone header buttons. Enter or Space opens it,
+  // Escape closes it with focus back on the bell. The count is kept fresh by watchInbox (the
+  // AppHeader starts it); new ones also pop up as NotificationToasts.
   import Icon from '$lib/components/Icon.svelte';
   import Popover from '$lib/components/Popover.svelte';
   import Problem from '$lib/components/Problem.svelte';
@@ -11,6 +13,7 @@
   import { inbox, loadInbox, markRead, type Note } from './inbox.svelte';
   import NotificationRow from './NotificationRow.svelte';
 
+  let { phone = false }: { phone?: boolean } = $props();
   let open = $state(false);
   const shown = $derived(badge(inbox.count));
   const recent = $derived((inbox.items ?? []).slice(0, 8));
@@ -25,10 +28,11 @@
   }
 </script>
 
-<Popover label="Notifications" align="end" width="380px" bind:open>
+<Popover label="Notifications" align="end" width="380px" sheet bind:open>
   {#snippet trigger(props)}
     <button
       class="bell"
+      class:phone
       type="button"
       {...props}
       aria-label={inbox.count ? `Notifications, ${shown === '99+' ? 'more than 99' : shown} unread` : 'Notifications'}
@@ -38,7 +42,8 @@
     </button>
   {/snippet}
   <div class="head">
-    <h2>Notifications</h2>
+    <!-- On phones the sheet already says Notifications above. -->
+    {#if phone}<span></span>{:else}<h2>Notifications</h2>{/if}
     {#if inbox.count}<button class="btn btn-s btn-ghost" type="button" disabled={inbox.marking} onclick={() => markRead()}>Mark all read</button>{/if}
   </div>
   {#if inbox.items === null && inbox.error}
@@ -68,11 +73,13 @@
     font-variant-numeric: tabular-nums; box-shadow: 0 0 0 2px var(--bg); }
   .head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding: 0 4px 0 12px; }
   .head h2 { margin: 0; font-size: var(--t-ui); font-weight: 600; }
-  .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: min(460px, 60dvh); overflow-y: auto; overscroll-behavior: contain; }
+  .phone { border-color: transparent; }
+  .phone .badge { top: 0; right: 0; }
   .all { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 28px; margin: -2px 0; padding: 0 8px;
     color: var(--accent-text); font-size: var(--t-nav); font-weight: 500; text-decoration: none; }
   .all:focus-visible { outline-offset: -2px; }
   @media (hover: hover) and (pointer: fine) { .bell:hover { color: var(--text); border-color: var(--border-strong); background: var(--surface-hover); } }
   @media (forced-colors: active) { .badge { border: 1px solid CanvasText; } .bell[aria-expanded='true'] { outline: 2px solid Highlight; } }
-  @media (pointer: coarse) { .bell::after { content: ''; position: absolute; inset: -2px; } }
+  @media (pointer: coarse) { .bell::after { content: ''; position: absolute; inset: -2px; } .phone { width: 44px; height: 44px; } }
 </style>
