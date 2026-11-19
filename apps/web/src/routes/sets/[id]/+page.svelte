@@ -7,6 +7,7 @@
   import Avatar from '$lib/components/Avatar.svelte';
   import EmoteTable from '$lib/components/browse/EmoteTable.svelte';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
+  import LoadMore from '$lib/components/LoadMore.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
@@ -62,8 +63,17 @@
   const shown = $derived(filterMembers(members, query));
   // Tiles show the name in the set (and the emote's own name stays in its page); rows say when it
   // was added to the set.
-  const cards = $derived(shown.map((m) => ({ ...m.emote, shownName: m.name !== m.emote.name ? m.name : undefined })));
-  const rows = $derived(shown.map((m) => ({ ...m.emote, name: m.name, createdAt: m.addedAt })));
+  // A set can hold a thousand emotes: the page draws them a step at a time (the search above
+  // still looks through all of them), so a big set doesn't put a thousand tiles in at once.
+  const STEP = 120;
+  let limit = $state(STEP);
+  $effect(() => {
+    void needle;
+    limit = STEP;
+  });
+  const drawn = $derived(shown.slice(0, limit));
+  const cards = $derived(drawn.map((m) => ({ ...m.emote, shownName: m.name !== m.emote.name ? m.name : undefined })));
+  const rows = $derived(drawn.map((m) => ({ ...m.emote, name: m.name, createdAt: m.addedAt })));
 
   type View = 'grid' | 'list';
   let view = $state<View>('grid');
@@ -176,6 +186,9 @@
         {:else}
           <EmoteGrid items={cards} eager={12} label="Emotes in {name}" />
         {/if}
+        {#if shown.length > STEP}
+          <div class="more"><LoadMore hasMore={shown.length > limit} total={shown.length} onmore={() => (limit += STEP)} /></div>
+        {/if}
       </section>
     </ColumnLayout>
     <CloneDialog bind:this={dlg} id={s.id} name={s.name} />
@@ -201,6 +214,7 @@
 
 <style>
   .set { padding-bottom: 40px; }
+  .more { margin-top: 24px; }
   .head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 24px; margin-bottom: 20px; }
   .text { flex: 1 1 320px; min-width: 0; }
   .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-top: 10px; font-size: var(--t-small); color: var(--muted); }
