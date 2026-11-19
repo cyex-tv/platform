@@ -11,7 +11,7 @@
   // icon, never a filled box (owner rule). `phone`: the field sits in the header row and the list
   // spans the screen under it; `onclose` hands control back to the header.
   import { goto } from '$app/navigation';
-  import { gql } from '$lib/api';
+  import { fetchWith, gql } from '$lib/api';
   import type { Snippet } from 'svelte';
   import { ready, size, src, srcsetW } from '$lib/emote';
   import { clean } from '$lib/format';
@@ -120,7 +120,7 @@
       const ctl = new AbortController();
       inflight = ctl;
       try {
-        const r = await gql(QUICK_SEARCH, { query: q }, (u, init) => fetch(u, { ...init, signal: ctl.signal }));
+        const r = await gql(QUICK_SEARCH, { query: q }, fetchWith(ctl.signal));
         if (ctl.signal.aborted) return;
         emotes = r.quickSearch.emotes.slice(0, 5);
         people = r.quickSearch.users.slice(0, 3);
