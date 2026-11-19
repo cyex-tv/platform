@@ -97,7 +97,8 @@ fn clean_tags(tags: &[String]) -> Option<Vec<String>> {
     // every stored tag can be searched for.
     let valid = |t: &String| {
         t.chars().count() <= TAG_LEN_MAX
-            && t.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+            && t.chars()
+                .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
     };
     out.iter().all(valid).then_some(out)
 }
