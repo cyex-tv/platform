@@ -11,6 +11,14 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 - Tests: Postgres `apps/api/tests/review_queue_flow.rs` (tabs, counts, search, sorts, paging, resolved, approve as unlisted/private, audit visibility, notes with author-only delete, history, permission and input errors); unit test for the filter defaults; vitest `queue.test.ts` (history lines, sizes, grid keys), `graph.test.ts` (holders filter, sort, CSV), `studio.test.ts` (every library option renders a preview).
 - Manual check (2026/11/19): headless Edge over CDP against the dev mock with 3000 pending, at 1440, 2560 and 375, dark and light: queue, limited tab, detail, reject reasons, owners lookup, studio library (layers, materials, effects); keyboard flow in the queue (arrows, A on a card, Enter, arrows in the dialog, A in the dialog opens the next, R opens the reason, Esc twice). Screens in `.claude/runs/2026-11-19-feedback/screens/j-admin/`.
 
+### GitHub write log for this PR
+
+```
+git push -u origin feat/admin-queue
+gh pr create --base main --head feat/admin-queue --title "Admin: review queue, owners lookup, studio library previews" --body-file <file>
+gh pr merge 98 --merge
+```
+
 ## Emotes tab: no rail, one toolbar, tile menu, multi-select up to 100 (branch `feat/browse-select`)
 
 Owner feedback 2026/11/19, section J (browse). Web only: no API change (bulk add already sends one `addSetEmote` per emote; 100 of them stay well inside the per-account GraphQL limit of 600 a minute, and there is no other cap to raise).
