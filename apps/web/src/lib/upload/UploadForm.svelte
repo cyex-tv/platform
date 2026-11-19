@@ -2,7 +2,7 @@
   // The upload form, one file or a batch (up to 20, the API's hourly limit): in the site-wide
   // upload dialog (UploadDialog) and on /me/upload as a page. Each file in the queue has its own
   // name (from the file name until typed), tags (TagInput: Enter or a comma adds one), visibility
-  // and flags, and a preview at real sizes on dark, light and in chat. Wide is worked out from the
+  // and flags, and a preview at real sizes (1x to 4x). Wide is worked out from the
   // picture, as the API does. Files are checked in the browser first (type, 8 MB, 1000 × 1000 px),
   // then sent one after another with a progress bar; a refusal is explained in words and the file
   // stays in the queue to fix or retry. Uploading needs the guidelines box ticked once per batch.
@@ -346,7 +346,7 @@
               <div class="pv">
                 <span class="ui-label">Preview</span>
                 {#if item.width && !fe}
-                  <LocalPreview src={item.url} width={item.width} height={item.height} name={item.name.trim() || item.file.name} zeroWidth={item.zeroWidth} />
+                  <LocalPreview src={item.url} width={item.width} height={item.height} name={item.name.trim() || item.file.name} />
                 {:else}
                   <p class="ui-hint">{fe ? 'No preview: the file can’t be uploaded as it is.' : 'Reading the image…'}</p>
                 {/if}
