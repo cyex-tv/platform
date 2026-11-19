@@ -22,3 +22,14 @@ export function exportMessage(err: unknown): string {
   }
   return 'The export didn’t work. Try again in a moment.';
 }
+
+const UNLINK: Record<string, string> = {
+  restricted: 'Your account is restricted, so you can’t unlink a sign-in right now.',
+  rate_limited: 'Too many tries. Wait a moment, then try again.',
+};
+
+/** The sentence for a failed unlink of a linked Twitch or Kick sign-in. */
+export function unlinkMessage(err: unknown): string {
+  if (err instanceof ApiError) return UNLINK[err.code] ?? err.message;
+  return 'Something went wrong. Nothing was unlinked.';
+}

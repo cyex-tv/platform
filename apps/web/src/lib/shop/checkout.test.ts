@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const gql = vi.fn();
+let paddleConfig: unknown = null;
 let paddleEvent: ((e: { name?: string }) => void) | null = null;
 vi.mock('$lib/api', () => ({ gql: (...a: unknown[]) => gql(...a), ApiError: class extends Error {} }));
 vi.mock('$lib/queries', () => ({ ORDER: 'ORDER', START_CHECKOUT: 'START' }));
 vi.mock('$lib/tool/notices.svelte', () => ({ notify: vi.fn(), fail: vi.fn() }));
 vi.mock('./paddle', () => ({
-  openPaddle: (_c: unknown, onevent: (e: { name?: string }) => void) => {
+  openPaddle: (c: unknown, onevent: (e: { name?: string }) => void) => {
+    paddleConfig = c;
     paddleEvent = onevent;
     return Promise.resolve();
   },
@@ -55,6 +57,27 @@ describe('checkout after the poll gave up', () => {
     expect(flow.phase).toBe('confirming');
     await vi.advanceTimersByTimeAsync(3000);
     expect(flow.phase).toBe('paid');
+  });
+
+  it('opens Paddle.js by transaction id when there is no checkout URL, with no redirect', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('window', { location: { assign } });
+    gql.mockImplementation(async () => started({ checkoutUrl: null }));
+    await buy({ itemId: 'i', itemName: 'Item', gift: null, to: null });
+    expect(paddleConfig).toMatchObject({ transactionId: 't', clientToken: 'tok' });
+    expect(flow.phase).toBe('paying');
+    expect(assign).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it('with neither a token nor a URL it waits on the order and never redirects', async () => {
+    const assign = vi.fn();
+    vi.stubGlobal('window', { location: { assign } });
+    gql.mockImplementation(async () => started({ clientToken: null, checkoutUrl: null }));
+    await buy({ itemId: 'i', itemName: 'Item', gift: null, to: null });
+    expect(flow.phase).toBe('confirming');
+    expect(assign).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 
   it('refuses an unsafe hosted page', async () => {

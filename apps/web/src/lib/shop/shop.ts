@@ -103,7 +103,8 @@ export function redeemMessage(err: unknown): string {
 const STAFF: Record<string, string> = {
   not_refundable: 'Only paid orders can be refunded, and only once.',
   already_refunded: 'That order was refunded already.',
-  refund_in_progress: 'A refund for that order is already in progress. Check again in a minute.',
+  refund_in_progress: 'A refund for that order is already in progress. If it is still stuck, it can be tried again after 10 minutes.',
+  refund_unavailable: 'Refunds are off: Paddle isn’t set up on this server.',
   refund_failed: 'The payment provider refused the refund. Nothing changed here. Try again, or refund it in Paddle.',
   bad_reason: 'Give a reason of 1 to 500 characters.',
   bad_name: 'Names are 1 to 64 characters.',
@@ -122,6 +123,37 @@ const STAFF: Record<string, string> = {
 export function staffMessage(err: unknown): string {
   if (!(err instanceof ApiError)) return 'That didn’t work. Nothing was changed.';
   return STAFF[err.code] ?? err.message;
+}
+
+type OrderLike = {
+  status: string;
+  gift: boolean;
+  buyer?: { id: string; displayName: string } | null;
+  recipient?: { id: string; displayName: string } | null;
+  amountCents: number;
+  currency: string;
+  paidTotalCents?: number | null;
+  paidCurrency?: string | null;
+};
+
+/**
+ * One row of "Your orders". A gift the viewer received has no price for them (the API sends 0 and
+ * no paid fields), so the right-hand side says who it is from instead of an amount.
+ */
+export function orderRow(o: OrderLike, viewerId: string | undefined, name: (s: string | undefined) => string = (s) => s ?? '') {
+  const received = o.gift && !!viewerId && o.buyer?.id !== viewerId;
+  const who = (u: OrderLike['buyer']) => name(u?.displayName) || 'someone';
+  const sent = o.gift && !received;
+  const paid = o.status === 'PAID' || o.status === 'REFUNDED';
+  return {
+    received,
+    note: sent ? `Gift to ${who(o.recipient)}` : '',
+    amount: received
+      ? `Gift from ${who(o.buyer)}`
+      : paid
+        ? price(o.paidTotalCents ?? o.amountCents, o.paidCurrency ?? o.currency)
+        : price(o.amountCents, o.currency),
+  };
 }
 
 export type OrderStatus = 'PENDING' | 'PAID' | 'REFUNDED' | 'FAILED';

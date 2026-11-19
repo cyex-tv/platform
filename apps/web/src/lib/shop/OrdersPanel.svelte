@@ -13,7 +13,7 @@
   import { loader } from '$lib/tool/loader.svelte';
   import { appendUnique, pageToken } from '$lib/tool/paging';
   import LoadGate from '$lib/tool/LoadGate.svelte';
-  import { orderStatusText, price, type OrderStatus } from './shop';
+  import { orderRow, orderStatusText, type OrderStatus } from './shop';
 
   const PER = 20;
   let more = $state<OrderFieldsFragment[]>([]);
@@ -46,12 +46,8 @@
   }
 
   const mine = $derived(session.me?.id);
-  const sub = (o: OrderFieldsFragment) =>
-    [date(o.createdAt), !o.gift ? '' : o.buyer?.id === mine ? `Gift to ${iso(o.recipient?.displayName) || 'someone'}` : `Gift from ${iso(o.buyer?.displayName) || 'someone'}`]
-      .filter(Boolean)
-      .join(' · ');
-  const amount = (o: OrderFieldsFragment) =>
-    o.status === 'PAID' || o.status === 'REFUNDED' ? price(o.paidTotalCents ?? o.amountCents, o.paidCurrency ?? o.currency) : price(o.amountCents, o.currency);
+  const row = (o: OrderFieldsFragment) => orderRow(o, mine, iso);
+  const sub = (o: OrderFieldsFragment) => [date(o.createdAt), row(o).note].filter(Boolean).join(' · ');
 </script>
 
 <section class="ui-panel" aria-labelledby="orders-h">
@@ -73,7 +69,7 @@
                 <span class="ui-hint">{sub(o)}</span>
               </span>
               <span class="right">
-                <span class="amt ui-num">{amount(o)}</span>
+                <span class="amt" class:ui-num={!row(o).received}>{row(o).amount}</span>
                 <span class="st" class:dim={o.status !== 'PAID'}>{orderStatusText(o.status as OrderStatus)}</span>
               </span>
             </li>

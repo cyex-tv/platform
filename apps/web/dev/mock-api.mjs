@@ -870,6 +870,7 @@ const ORDERS = [
   mkOrder(ME_ID, ME_ID, SHOP_ITEMS[0], 'PAID', '2026-11-14T10:00:00.000Z'),
   mkOrder(ME_ID, ME_ID, SHOP_ITEMS[1], 'REFUNDED', '2026-11-12T09:00:00.000Z', { refundReason: 'Sample refund (mock data)', refundedAt: '2026-11-13T09:00:00.000Z' }),
   mkOrder(OTHERS[0].id, ME_ID, SHOP_ITEMS[2], 'PAID', '2026-11-15T18:00:00.000Z'),
+  mkOrder(ME_ID, OTHERS[1].id, SHOP_ITEMS[1], 'PAID', '2026-11-13T12:00:00.000Z'), // a gift I sent
   // Paddle rejected this refund after the cosmetics were taken back (the staff flag).
   mkOrder(OTHERS[1].id, OTHERS[1].id, SHOP_ITEMS[0], 'REFUNDED', '2026-11-10T09:00:00.000Z', { refundReason: 'Sample refund (mock data)', refundedAt: '2026-11-11T09:00:00.000Z', refundRejectedAt: '2026-11-11T09:05:00.000Z' }),
   // A refund already running: the first try answers refund_in_progress, the second goes through.

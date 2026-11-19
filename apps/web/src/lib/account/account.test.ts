@@ -1,6 +1,6 @@
 import { describe as suite, expect, it } from 'vitest';
 import { ApiError } from '$lib/api';
-import { deleteMessage, exportMessage } from './errors';
+import { deleteMessage, exportMessage, unlinkMessage } from './errors';
 import { exportFilename } from './export';
 import { badge, describe, parsePayload } from './notifications';
 
@@ -107,5 +107,13 @@ suite('error messages', () => {
   });
   it('says rate_limited humanely', () => {
     expect(exportMessage(new ApiError('raw', 'rate_limited'))).toContain('hour');
+  });
+});
+
+suite('unlinkMessage', () => {
+  it('says why a restricted account can’t unlink', () => {
+    expect(unlinkMessage(new ApiError('raw', 'restricted'))).toBe('Your account is restricted, so you can’t unlink a sign-in right now.');
+    expect(unlinkMessage(new ApiError('As the API says.', 'other'))).toBe('As the API says.');
+    expect(unlinkMessage(new Error('x'))).toContain('Nothing was unlinked');
   });
 });

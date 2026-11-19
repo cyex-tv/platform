@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '$lib/api';
 import {
-  centsFrom, centsText, codesFilename, codesText, fromLocalInput, itemState, lockoutMinutes, normaliseCode, orderStatusText, plausibleCode, price,
+  centsFrom, centsText, codesFilename, codesText, fromLocalInput, itemState, lockoutMinutes, normaliseCode, orderRow, orderStatusText, plausibleCode, price,
   redeemMessage, saleEndText, settled, shopMessage, staffMessage, stockText, tidyCode, toLocalInput,
 } from './shop';
 
@@ -88,6 +88,8 @@ describe('error messages', () => {
     expect(staffMessage(e('bad_price_id'))).toContain('pri_');
     expect(staffMessage(e('not_refundable'))).toContain('paid');
     for (const code of ['already_refunded', 'refund_in_progress']) expect(staffMessage(e(code))).not.toBe('raw');
+    expect(staffMessage(e('refund_unavailable'))).toBe('Refunds are off: Paddle isn’t set up on this server.');
+    expect(staffMessage(e('refund_in_progress'))).toContain('after 10 minutes');
     expect(staffMessage(e('unknown_thing', 'As the API says.'))).toBe('As the API says.');
     expect(staffMessage(new Error('x'))).toBe('That didn’t work. Nothing was changed.');
   });
@@ -156,5 +158,28 @@ describe('the site’s one error wording', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+});
+
+describe('orderRow', () => {
+  const me = { id: 'me', displayName: 'Me' };
+  const them = { id: 'them', displayName: 'Ana' };
+  const base = { status: 'PAID', gift: false, buyer: me, recipient: me, amountCents: 499, currency: 'EUR', paidTotalCents: 499, paidCurrency: 'EUR' };
+  it('shows the price of what I bought', () => {
+    expect(orderRow(base, 'me')).toEqual({ received: false, note: '', amount: '4,99 €' });
+  });
+  it('hides the price of a gift I received and says who it is from', () => {
+    const r = orderRow({ ...base, gift: true, buyer: them, amountCents: 0, paidTotalCents: null, paidCurrency: null }, 'me');
+    expect(r).toEqual({ received: true, note: '', amount: 'Gift from Ana' });
+    expect(r.amount).not.toMatch(/Free|€/);
+  });
+  it('keeps the price and names the person for a gift I sent', () => {
+    expect(orderRow({ ...base, gift: true, recipient: them }, 'me')).toEqual({ received: false, note: 'Gift to Ana', amount: '4,99 €' });
+  });
+  it('falls back to someone when the name is missing', () => {
+    expect(orderRow({ ...base, gift: true, buyer: null, amountCents: 0 }, 'me').amount).toBe('Gift from someone');
+  });
+  it('shows the started price while an order waits', () => {
+    expect(orderRow({ ...base, status: 'PENDING', paidTotalCents: null }, 'me').amount).toBe('4,99 €');
   });
 });

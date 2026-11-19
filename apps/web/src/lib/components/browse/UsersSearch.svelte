@@ -33,12 +33,14 @@
   let pageNo = $state(untrack(() => data.pages));
   let busy = $state(false);
   let moreError = $state('');
+  let exhausted = $state(false); // an empty page came back: there is no more, whatever the total says
   $effect.pre(() => {
     loaded = data.people;
     pageNo = data.pages;
     moreError = '';
+    exhausted = false;
   });
-  const hasMore = $derived(pageNo < Math.ceil(data.total / USERS_PER_PAGE) && pageNo < MAX_PAGES);
+  const hasMore = $derived(!exhausted && pageNo < Math.ceil(data.total / USERS_PER_PAGE) && pageNo < MAX_PAGES);
   const switching = $derived(!!navigating.to);
 
   // ---- Search field: the address follows the typing (replaced, not pushed, after a pause).
@@ -90,6 +92,10 @@
     try {
       const r = await gql(SEARCH_ACCOUNTS, { query: view.q, page: pageNo + 1, perPage: USERS_PER_PAGE }, fetch);
       if (from !== data) return; // the view changed while this loaded
+      if (!r.searchAccounts.items.length) {
+        exhausted = true;
+        return;
+      }
       const seen = new Set(loaded.map((h) => h.account.id));
       loaded = [...loaded, ...r.searchAccounts.items.filter((h) => !seen.has(h.account.id))];
       pageNo += 1;
