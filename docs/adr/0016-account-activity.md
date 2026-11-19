@@ -16,3 +16,6 @@
 ## Consequences
 - More audit rows (one per owner edit); the feed query is one indexed read plus a few batch lookups.
 - Entries show the current names of sets and cosmetics, and the emote's name at the time of the change.
+
+## Amendment 2026/11/19: the staff account dashboard
+The staff account page (`/admin/users/<id>`) shows "recent activity" from the audit log by target (`auditLog(targetKind: "account", targetId)`, `audit.view`), not from this feed: staff need the moderation lines this feed leaves out (restrictions, role changes, grants, notes). The public feed stays as decided above; nothing staff do on the dashboard is written to it, and no feed entry carries a reason, a note or a restriction. The new audit actions from the same amendment of ADR 0010 (`account.restriction_placed`, `account.restriction_lifted`, `account.note_added`, `account.note_deleted`) never set `subject_account_id`.

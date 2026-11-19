@@ -1171,7 +1171,11 @@ pub async fn orders(
     let item = filter_id(item_id)?;
     let (limit, offset) = paging(page, per_page);
     let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::SHOP_ORDERS).await?;
+    // `billing.view` reads one account's orders (the staff account page); every order, and
+    // refunds, need `shop.orders`.
+    if account.is_none() || !holds(&mut conn, caller, permissions::BILLING_VIEW).await? {
+        require(&mut conn, caller, permissions::SHOP_ORDERS).await?;
+    }
     let filter = OrderFilter {
         account,
         status: status.map(OrderStatus::as_str),

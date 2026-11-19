@@ -28,6 +28,7 @@ pub mod search;
 pub mod sessions;
 pub mod sets;
 pub mod shop;
+pub mod staff;
 #[cfg(feature = "testing")]
 pub mod testing;
 

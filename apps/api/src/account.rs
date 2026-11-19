@@ -78,7 +78,7 @@ pub fn device_name(kind: SessionKind, user_agent: Option<&str>) -> String {
     }
 }
 
-fn session_view(s: &sessions::Session, caller: &Caller) -> AccountSession {
+pub(crate) fn session_view(s: &sessions::Session, caller: &Caller) -> AccountSession {
     AccountSession {
         id: ids::to_text(s.id),
         kind: match s.kind {

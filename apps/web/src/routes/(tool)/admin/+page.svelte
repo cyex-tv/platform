@@ -9,10 +9,11 @@
   import { loadCatalog, loadOwned, looks, NO_LOOK } from '$lib/cosmetics/store.svelte';
   import { fail } from '$lib/tool/notices.svelte';
   import { loadShopCounts, shopCounts } from '$lib/shop/counts.svelte';
+  import { USER_PAGE_PERMISSIONS } from '$lib/admin/permissions';
 
   let counts = $state<AdminCountsQuery | null>(null);
   const review = can('emotes.review');
-  const reports = review || can('emotes.takedown');
+  const reports = review || can('emotes.takedown') || can('reports.manage');
 
   $effect(() => {
     gql(ADMIN_COUNTS, { review, reports })
@@ -43,8 +44,9 @@
       { href: '/admin/shop/items', title: 'Shop items', icon: 'tag' as const, text: 'What is on sale: bundles of badges and paints, prices, sale windows, stock.', figure: shopCounts.items, show: can('shop.manage') },
       { href: '/admin/shop/orders', title: 'Orders', icon: 'list' as const, text: 'Every purchase and gift. Refund a paid order.', figure: shopCounts.orders, show: can('shop.orders') },
       { href: '/admin/shop/codes', title: 'Codes', icon: 'key' as const, text: 'Batches of redeem codes: make, hand out, turn off.', figure: shopCounts.codes, show: can('codes.manage') },
-      { href: '/admin/users', title: 'Users', icon: 'users' as const, text: 'Find someone by login; block uploads or sign-in; give roles.', show: can('users.view') || can('users.restrict') || can('roles.manage') },
-      { href: '/admin/roles', title: 'Roles', icon: 'key' as const, text: 'Who may do what. You manage roles below your own.', show: can('roles.manage') },
+      { href: '/admin/users', title: 'Users', icon: 'users' as const, text: 'Find someone; their whole account on one page: restrictions, roles, billing, notes.', show: USER_PAGE_PERMISSIONS.some(can) },
+      { href: '/admin/roles', title: 'Roles', icon: 'key' as const, text: 'Who may do what. You manage roles below your own.', show: can('roles.manage') || can('roles.assign') },
+      { href: '/admin/entitlements', title: 'Entitlement graph', icon: 'network' as const, text: 'How each badge, paint and role was given, and by whom.', show: can('entitlements.view') || can('cosmetics.grant') },
       { href: '/admin/audit', title: 'Audit log', icon: 'scroll' as const, text: 'Every audited change, newest first.', show: can('audit.view') },
       { href: counts ? `/me/sets/${counts.globalSet.id}` : '/admin', title: 'Global set', icon: 'layers' as const, text: 'Shown in every channel that uses cyex.tv.', show: can('global_set.edit') },
     ].filter((c) => c.show),
