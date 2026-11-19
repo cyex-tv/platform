@@ -51,7 +51,7 @@
 
 <section class="ui-panel" aria-labelledby="bl-h">
   <header>
-    <h2 id="bl-h">Billing</h2>
+    <h2 id="bl-h">Subscriptions and orders</h2>
     <a class="ui-btn ghost small" href="/admin/shop/orders?account={encodeURIComponent(accountId)}">All orders<Icon name="arrow-right" size={14} /></a>
   </header>
   {#if problem}
