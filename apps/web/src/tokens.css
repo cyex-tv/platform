@@ -208,7 +208,7 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 html { background: var(--bg); scroll-padding-top: calc(var(--nav-h) + 16px); -webkit-text-size-adjust: 100%; scrollbar-gutter: stable; }
-@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+@media (prefers-reduced-motion: no-preference) { html:not([data-motion='reduce']) { scroll-behavior: smooth; } }
 body {
   margin: 0;
   font: 400 var(--t-body)/1.6 var(--font);
@@ -228,11 +228,20 @@ a { color: inherit; text-decoration: none; }
 .wrap { width: 100%; max-width: var(--page-max); margin-inline: auto; padding-inline: var(--page-pad); }
 .section { padding-top: var(--section-pad); }
 
+/* Reduced motion "Off" (data-motion="full") keeps the site's motion even when the OS asks for less. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  :root:not([data-motion='full']) *, :root:not([data-motion='full']) *::before, :root:not([data-motion='full']) *::after {
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
+}
+/* Settings → Appearance → Reduced motion "On": the same, whatever the OS says. */
+:root[data-motion='reduce'] *, :root[data-motion='reduce'] *::before, :root[data-motion='reduce'] *::after,
+:root[data-motion='reduce']::view-transition-old(root), :root[data-motion='reduce']::view-transition-new(root) {
+  animation-duration: .01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .01ms !important;
+  scroll-behavior: auto !important;
 }
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--dur-theme); animation-timing-function: ease; }

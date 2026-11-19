@@ -1,5 +1,6 @@
 // The profile's rail (your profile is your dashboard, the 7TV model): which rows a viewer gets on
 // an account's page, where each goes, and which one is current. Pure, so it is tested.
+//   - The owner: Overview first (?s=overview, the dashboard the account menu opens).
 //   - Everyone: Uploaded emotes and Emote sets (the account's listed sets, ADR 0017).
 //   - The owner, and editors of the account: Active emotes, and all their sets; the owner also Channels.
 //   - The owner, and editors with PROFILE: Cosmetics.
@@ -10,7 +11,7 @@
 import type { EditorPermission } from '$lib/gql/graphql';
 import type { RailGroup, RailItem } from '$lib/shell/rail';
 
-export const SECTIONS = ['uploads', 'active', 'sets', 'cosmetics', 'activity'] as const;
+export const SECTIONS = ['overview', 'uploads', 'active', 'sets', 'cosmetics', 'activity'] as const;
 export type SectionKey = (typeof SECTIONS)[number];
 /** A profile section, or a /me page that sits in the profile's rail. */
 export type RailKey = SectionKey | 'channels' | 'connections' | 'editors' | null;
@@ -35,6 +36,7 @@ export function sectionHref(accountId: string, key: SectionKey): string {
 /** The sections this viewer has on this account, in rail order. */
 export function sectionsFor(r: Relation, activity: boolean): SectionKey[] {
   const out: SectionKey[] = [];
+  if (r.mine) out.push('overview');
   if (manages(r)) out.push('active');
   out.push('uploads');
   out.push('sets');
@@ -61,6 +63,7 @@ export function railKeyForPath(path: string): RailKey {
 }
 
 const LABEL: Record<SectionKey, string> = {
+  overview: 'Overview',
   active: 'Active emotes',
   uploads: 'Uploaded emotes',
   sets: 'Emote sets',
@@ -68,6 +71,7 @@ const LABEL: Record<SectionKey, string> = {
   activity: 'Activity',
 };
 const ICON: Record<SectionKey, RailItem['icon']> = {
+  overview: 'gauge',
   active: 'zap',
   uploads: 'upload',
   sets: 'folder',
@@ -82,7 +86,8 @@ export function profileRail(accountId: string, r: Relation, current: RailKey, ac
   const emotes: RailItem[] = keys.filter((k) => k === 'active' || k === 'uploads' || k === 'sets').map(item);
   if (r.mine) emotes.push({ href: '/me/channels', label: 'Channels', icon: 'tv', current: current === 'channels' });
   const more = keys.filter((k) => k === 'cosmetics' || k === 'activity').map(item);
-  return [{ items: emotes }, ...(more.length ? [{ items: more }] : [])];
+  const head = keys.includes('overview') ? [{ items: [item('overview')] }] : [];
+  return [...head, { items: emotes }, ...(more.length ? [{ items: more }] : [])];
 }
 
 /**

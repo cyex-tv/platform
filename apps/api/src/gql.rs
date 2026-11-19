@@ -223,6 +223,9 @@ async fn me_of(ctx: &Context<'_>, caller: &Caller) -> Result<Me> {
     let permissions = catalog::permissions_of(&mut conn, caller)
         .await
         .map_err(api_error)?;
+    let display_platform = accounts::display_platform(&mut conn, account.id)
+        .await
+        .map_err(internal)?;
     let roles = cyex_tv_db::roles::roles_of(&mut conn, account.id)
         .await
         .map_err(internal)?
@@ -241,6 +244,7 @@ async fn me_of(ctx: &Context<'_>, caller: &Caller) -> Result<Me> {
         created_at: account
             .created_at
             .to_rfc3339_opts(SecondsFormat::Millis, true),
+        display_platform,
     })
 }
 
@@ -486,6 +490,10 @@ impl Query {
     /// `accountActivity` with a cursor: `next` is the `before` for the following page, null when
     /// there is none. A page can hold fewer than `limit` entries and still have a `next`, because
     /// the feed skips what isn't public.
+    ///
+    /// `filter` narrows it: `groups` (emotes, sets, cosmetics, editors; editor lines only show
+    /// when asked for), `actorId` (only lines by the owner or that editor), and `since` /
+    /// `until` (RFC 3339; `bad_time` otherwise).
     #[graphql(complexity = "100 + child_complexity")]
     async fn account_activity_page(
         &self,
@@ -493,11 +501,18 @@ impl Query {
         account_id: String,
         before: Option<String>,
         limit: Option<u32>,
+        filter: Option<cyex_tv_shared::model::ActivityFilter>,
     ) -> Result<ActivityPage> {
         heavy_read(ctx)?;
-        activity::account_activity_page(state(ctx), &account_id, before.as_deref(), limit)
-            .await
-            .map_err(api_error)
+        activity::account_activity_where(
+            state(ctx),
+            &account_id,
+            before.as_deref(),
+            limit,
+            filter.as_ref(),
+        )
+        .await
+        .map_err(api_error)
     }
 
     /// An emote's public activity, newest first: `EMOTE_UPLOADED` (when it was approved, shown
@@ -1098,6 +1113,26 @@ impl Mutation {
         me_of(ctx, caller).await
     }
 
+    /// Go by the name and picture of your identity on `platform` (when more than one is linked,
+    /// pick which login you show as). Every linked login still finds you in search.
+    /// `not_found` when that platform isn't linked. Unlinking it goes back to the default.
+    async fn set_display_platform(&self, ctx: &Context<'_>, platform: Platform) -> Result<Me> {
+        let caller = caller(ctx)?;
+        let mut conn = state(ctx).db.acquire().await.map_err(internal)?;
+        match accounts::set_display_platform(&mut conn, caller.account_id, platform).await {
+            Ok(()) => {}
+            Err(DbError::NotFound) => {
+                return Err(coded(
+                    "not_found",
+                    "That platform isn't linked to your account.",
+                ));
+            }
+            Err(err) => return Err(internal(err)),
+        }
+        drop(conn);
+        me_of(ctx, caller).await
+    }
+
     /// Change a channel's active set and settings. The channel's owner, or their account editors
     /// with `SETS`.
     async fn update_channel_settings(
@@ -1679,6 +1714,22 @@ impl Mutation {
             );
         }
         Ok(done)
+    }
+
+    /// Sign out everywhere, here too: every site and app session ends and the cookie is cleared.
+    /// Returns how many sessions ended.
+    async fn sign_out_everywhere(&self, ctx: &Context<'_>) -> Result<u64> {
+        let caller = caller(ctx)?;
+        let n = account::revoke_all_sessions(state(ctx), caller)
+            .await
+            .map_err(api_error)?;
+        if caller.via == cyex_tv_auth::Via::Cookie {
+            ctx.insert_http_header(
+                axum::http::header::SET_COOKIE,
+                cyex_tv_auth::cookies::clear_session(state(ctx).auth.config()),
+            );
+        }
+        Ok(n)
     }
 
     /// Sign out everywhere but here. Returns how many sessions ended.

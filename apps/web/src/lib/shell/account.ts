@@ -11,9 +11,9 @@ const profile = (id: string, s = '') => `/users/${encodeURIComponent(id)}${s ? `
 const on = (id: string, s: string | null) => (p: string, q?: URLSearchParams) =>
   p === profile(id) && (q?.get('s') ?? null) === s;
 
-/** Your profile: what everyone else sees, with your edit controls. */
+/** Your profile's dashboard (Overview): the account menu's name row opens it. */
 export function profileLink(id: string): ShellLink {
-  return { href: profile(id), label: 'Profile', icon: 'circle-user', match: on(id, null) };
+  return { href: profile(id, 'overview'), label: 'Profile', icon: 'circle-user', match: (p, q) => on(id, 'overview')(p, q) || on(id, null)(p, q) };
 }
 
 /** The account menu's list after Profile: your emotes and your cosmetics, both on the profile. */
@@ -31,7 +31,13 @@ export function menuLinks(id: string): ShellLink[] {
 
 export const UPLOAD: ShellLink = { href: '/me/upload', label: 'Upload', icon: 'upload', match: under('/me/upload') };
 
-export const ACCOUNT: ShellLink = { href: '/me/account', label: 'Account', icon: 'user', match: under('/me/account') };
+/** Settings (Account, Appearance, Editors, Billing); /me/account is its old address. */
+export const ACCOUNT: ShellLink = {
+  href: '/me/settings',
+  label: 'Settings',
+  icon: 'settings',
+  match: (p) => under('/me/settings')(p) || under('/me/account')(p) || under('/me/editors')(p),
+};
 export const ADMIN: ShellLink = { href: '/admin', label: 'Admin', icon: 'shield', match: under('/admin') };
 export const EMOTES: ShellLink = {
   href: '/search',
