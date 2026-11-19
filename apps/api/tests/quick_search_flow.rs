@@ -425,10 +425,18 @@ async fn editable_channels_are_ranked_by_role_then_login() {
         cyex_tv_db::ids::to_text(alpha)
     );
 
-    // Someone with no grants sees only their own.
+    // The editor I added sees their own channel, then mine as an account editor.
     let token = w.token(nobody).await;
     let r = w.gql(Some(&token), EDITABLE, json!({})).await;
-    assert_eq!(roles(&r), [row("OWNER", "nobody", "TWITCH")], "{r}");
+    assert_eq!(
+        roles(&r),
+        [
+            row("OWNER", "nobody", "TWITCH"),
+            row("ACCOUNT_EDITOR", "zed", "KICK"),
+            row("ACCOUNT_EDITOR", "zed", "TWITCH"),
+        ],
+        "{r}"
+    );
     w.db.close().await;
 }
 
