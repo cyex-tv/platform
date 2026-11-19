@@ -21,6 +21,21 @@ gh pr create --base main --head feat/upload-v3 --title "Upload v3: upload dialog
 gh pr merge <n> --merge
 ```
 
+## Admin user dashboard and entitlement graph (branch `feat/admin-dashboard`, ADR 0010 amendment part 2)
+- Owner feedback F (2026/11/19, later additions): "an entitlement graph like 7tv has" and "a large admin dashboard" per user.
+- API (additive): migration `20261207000022_staff_notes.sql` (staff notes, an index for the graph's audit reads); `staffNotes`, `addStaffNote`, `deleteStaffNote` (users.notes, audited), `accountSessions` (users.sessions), `accountSubscriptions` (empty until subscriptions exist), `entitlementGraph`, `entitlementHolders` (entitlements.view or cosmetics.grant); `orders(accountId)` also for billing.view. ADR 0010 and ADR 0016 amended.
+- Tests (Postgres, run in CI): `apps/api/tests/staff_dashboard_flow.rs` (notes, sessions, subscriptions, billing.view's reach, the graph's sources, revokes and the reverse, the top role hidden). Vitest `src/lib/admin/graph.test.ts` (branches, held-only, by holder, counts).
+- Web: `/admin/entitlements` (pick an account or a badge, paint or role; a tree from the root through each source to what came from it, with a list view and a held-only switch); the account page is a dashboard in groups (Moderation: restrictions, staff notes, sessions; Roles and cosmetics with the graph; Billing: subscriptions and orders; Content: uploads, sets, reports; Activity) with jump links; the admin rail and overview list the graph; the orders page takes `?account=`.
+- Manual check (2026/11/19): headless Edge against the dev mock at 1440 and 375, dark and light, keyboard; screens in .claude/runs/2026-11-19-feedback/screens/f.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/admin-dashboard
+gh pr create --base main --head feat/admin-dashboard --title "Admin: user dashboard and entitlement graph" --body-file <file>
+gh pr merge <n> --merge
+```
+
 ## Owner's answers of 2026/11/19 (branch `feat/owner-answers`)
 
 Additive API; two new migrations; nothing was deployed.

@@ -569,6 +569,31 @@ const statusOf = (id) => {
   return out;
 };
 const HOLD_FIELD = { UPLOADS: 'uploadsBlocked', TICKETS: 'ticketsBlocked', ACCOUNT: 'blocked' };
+// Staff notes, newest first, per account.
+const STAFF_NOTES = {
+  '01JD8X0000000000000000NORA': [
+    { id: 'NOTE2', authorId: '01JD8X0000000000000000OAK1', body: 'Asked about the paint refund; told them refunds go through the order page.', createdAt: '2026-11-16T15:20:00.000Z' },
+    { id: 'NOTE1', authorId: ME_ID, body: 'Warned once for report spam (three reports on the same emote in an hour).', createdAt: '2026-11-12T09:05:00.000Z' },
+  ],
+};
+// The entitlement graph: where each cosmetic and role came from, per account.
+const grant = (o) => ({ reason: null, grantedBy: null, grantedAt: null, orderId: null, orderName: null, orderStatus: null, codeBatchId: null, codeBatchName: null,
+  revokedAt: null, revokedBy: null, revokeReason: null, active: true, ...o });
+const graphOf = (id) => {
+  const base = [grant({ kind: 'ROLE', itemId: 'ROLEUSER', itemName: 'User', accountId: id, source: 'DEFAULT' })];
+  if (id === ME_ID) return [grant({ kind: 'ROLE', itemId: 'ROLEROOT', itemName: 'Owner', accountId: id, source: 'OWNER' }), ...base];
+  const roles = (ACCOUNT_ROLES[id] ?? []).map((r) => ROLES.find((x) => x.id === r)).filter(Boolean)
+    .map((r, i) => grant({ kind: 'ROLE', itemId: r.id, itemName: r.name, accountId: id, source: 'STAFF', grantedBy: ME_ID, grantedAt: `2026-11-0${i + 2}T10:00:00.000Z` }));
+  return [
+    ...roles,
+    grant({ kind: 'BADGE', itemId: 'BADGE1', itemName: 'Early supporter', accountId: id, source: 'STAFF', reason: 'Beta tester', grantedBy: ME_ID, grantedAt: '2026-11-05T12:00:00.000Z' }),
+    grant({ kind: 'PAINT', itemId: 'PAINT1', itemName: 'Sunset', accountId: id, source: 'PURCHASE', orderId: 'ORDER1', orderName: 'Sunset pack', orderStatus: 'paid', grantedAt: '2026-11-14T18:00:00.000Z' }),
+    grant({ kind: 'PAINT', itemId: 'PAINT2', itemName: 'Aurora', accountId: id, source: 'CODE', codeBatchId: 'BATCH1', codeBatchName: 'Launch week', grantedAt: '2026-11-10T08:00:00.000Z' }),
+    grant({ kind: 'BADGE', itemId: 'BADGE2', itemName: 'Event host', accountId: id, source: 'STAFF', grantedBy: '01JD8X0000000000000000OAK1', grantedAt: '2026-11-03T12:00:00.000Z', revokedAt: '2026-11-09T12:00:00.000Z', revokedBy: ME_ID, revokeReason: 'Event over', active: false }),
+    grant({ kind: 'PAINT', itemId: 'PAINT3', itemName: 'Ember', accountId: id, source: 'PURCHASE', orderId: 'ORDER2', orderName: 'Ember collector', orderStatus: 'refunded', grantedAt: '2026-11-11T10:00:00.000Z', revokedAt: '2026-11-12T10:00:00.000Z', revokeReason: 'Order refunded', active: false }),
+    ...base,
+  ];
+};
 const AUDIT = Array.from({ length: 64 }, (_, i) => ({
   id: '01JD8XAUD' + String(1000 - i).padStart(17, '0'), actorId: i % 5 === 0 ? null : i % 3 === 0 ? OWNERS[1].id : ME_ID,
   action: ['emote.approved', 'set.editor_added', 'role.updated', 'account.restricted'][i % 4],
@@ -1698,6 +1723,37 @@ function signedIn(body, v, ADMIN) {
       for (const r of RESTRICTIONS[v.accountId] ?? []) if (r.kind === v.kind && r.active) Object.assign(r, { active: false, liftedAt: now, liftedBy: ME_ID });
       Object.assign((STATUS[v.accountId] ??= {}), { [f]: false, [f + 'Until']: null });
       return { data: { liftRestriction: statusOf(v.accountId) } };
+    }
+    case 'StaffNotes':
+      return { data: { staffNotes: STAFF_NOTES[v.accountId] ?? [] } };
+    case 'AddStaffNote': {
+      const body = (v.body ?? '').trim();
+      if (!body || body.length > 2000) return err('Notes are 1 to 2000 characters.', 'bad_note');
+      const n = { id: 'NOTE' + Date.now(), authorId: ME_ID, body, createdAt: new Date().toISOString() };
+      (STAFF_NOTES[v.accountId] ??= []).unshift(n);
+      return { data: { addStaffNote: n } };
+    }
+    case 'DeleteStaffNote': {
+      for (const list of Object.values(STAFF_NOTES)) {
+        const i = list.findIndex((n) => n.id === v.id);
+        if (i >= 0) { list.splice(i, 1); return { data: { deleteStaffNote: true } }; }
+      }
+      return { data: { deleteStaffNote: false } };
+    }
+    case 'AccountSessions': {
+      if (statusOf(v.accountId).blocked) return { data: { accountSessions: [] } };
+      return { data: { accountSessions: [
+        { id: 'SESS1', kind: 'SITE', device: 'Firefox on Windows', createdAt: '2026-11-15T10:00:00.000Z', lastSeenAt: '2026-11-19T08:30:00.000Z', expiresAt: '2026-12-15T10:00:00.000Z' },
+        { id: 'SESS2', kind: 'APP', device: 'cyex deck', createdAt: '2026-11-01T18:00:00.000Z', lastSeenAt: '2026-11-18T22:10:00.000Z', expiresAt: '2027-01-30T18:00:00.000Z' },
+      ] } };
+    }
+    case 'AccountSubscriptions':
+      return { data: { accountSubscriptions: [] } };
+    case 'EntitlementGraph':
+      return { data: { entitlementGraph: graphOf(v.accountId) } };
+    case 'EntitlementHolders': {
+      const all = [ME_ID, ...OTHERS.map((o) => o.id)].flatMap(graphOf).filter((g) => g.kind === v.kind && g.itemId === v.id);
+      return { data: { entitlementHolders: all } };
     }
     case 'AccountRestrictions': {
       const now = Date.now();
