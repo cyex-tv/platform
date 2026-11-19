@@ -5,12 +5,35 @@
   import Icon from '$lib/components/Icon.svelte';
   import { dateTime, isoParts } from '$lib/format';
   import { relative } from '$lib/profile/activity';
+  import { gql } from '$lib/api';
+  import { ACCEPT_EMOTE_TRANSFER, DECLINE_EMOTE_TRANSFER } from '$lib/queries';
+  import { fail, notify } from '$lib/tool/notices.svelte';
   import { describe } from './notifications';
   import type { Note } from './inbox.svelte';
 
   type Props = { note: Note; onpick?: (n: Note) => void };
   let { note, onpick }: Props = $props();
   const line = $derived(describe(note.kind, note.payload));
+
+  // A transfer request is answered here too (ADR 0014); the emote's edit page lists it as well.
+  let busy = $state(false);
+  let answered = $state<string | null>(null);
+  async function answer(accept: boolean) {
+    if (!line.request || busy) return;
+    busy = true;
+    try {
+      if (accept) await gql(ACCEPT_EMOTE_TRANSFER, { id: line.request });
+      else await gql(DECLINE_EMOTE_TRANSFER, { id: line.request });
+      answered = accept ? 'Accepted: it moved.' : 'Declined: it stays yours.';
+      notify(answered);
+    } catch (err) {
+      // Closed already (expired, withdrawn or answered): say so once, then leave it.
+      fail(err);
+      answered = 'This request is closed.';
+    } finally {
+      busy = false;
+    }
+  }
 </script>
 
 {#snippet inner()}
@@ -26,6 +49,15 @@
 {:else}
   <button class="note" class:unread={!note.read} type="button" onclick={() => onpick?.(note)}>{@render inner()}</button>
 {/if}
+{#if line.request}
+  <div class="answer">
+    {#if answered}<span class="ui-hint" role="status">{answered}</span>
+    {:else}
+      <button class="ui-btn primary small" type="button" disabled={busy} onclick={() => answer(true)}>Accept</button>
+      <button class="ui-btn secondary small" type="button" disabled={busy} onclick={() => answer(false)}>Decline</button>
+    {/if}
+  </div>
+{/if}
 
 <style>
   .note { display: flex; align-items: flex-start; gap: 12px; width: 100%; min-height: 48px; padding: 10px 12px; border: 0;
@@ -40,4 +72,5 @@
   .note:focus-visible { outline-offset: -2px; }
   .note:active { opacity: .6; transition: none; }
   @media (hover: hover) and (pointer: fine) { .note:hover { background: var(--row-hover); } }
+  .answer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 12px 10px 44px; }
 </style>

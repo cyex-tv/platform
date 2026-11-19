@@ -268,6 +268,52 @@ pub struct EditableChannel {
     pub channel: Channel,
 }
 
+/// Where an emote transfer request stands (ADR 0014).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "lowercase")]
+pub enum TransferRequestState {
+    /// Waiting for the emote's owner.
+    Pending,
+    Accepted,
+    Declined,
+    /// Withdrawn by the editor, or closed because the emote moved or went away.
+    Cancelled,
+    /// Nobody answered within 7 days.
+    Expired,
+}
+
+impl TransferRequestState {
+    pub fn parse(raw: &str) -> Option<Self> {
+        Some(match raw {
+            "pending" => Self::Pending,
+            "accepted" => Self::Accepted,
+            "declined" => Self::Declined,
+            "cancelled" => Self::Cancelled,
+            "expired" => Self::Expired,
+            _ => return None,
+        })
+    }
+}
+
+/// An account editor's request to give one of the owner's emotes to another account; the emote
+/// moves only when the owner accepts (ADR 0014).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct EmoteTransferRequest {
+    pub id: String,
+    pub emote_id: String,
+    pub emote_name: String,
+    /// The emote's owner, who accepts or declines.
+    pub from: AccountSummary,
+    pub to: AccountSummary,
+    pub requested_by: AccountSummary,
+    pub state: TransferRequestState,
+    pub created_at: String,
+    pub expires_at: String,
+    pub resolved_at: Option<String>,
+}
+
 /// An account you edit, with what you may do there.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]

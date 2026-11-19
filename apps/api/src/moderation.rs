@@ -89,7 +89,7 @@ fn reason(raw: &str) -> ApiResult<String> {
     Ok(text.to_owned())
 }
 
-async fn row(conn: &mut PgConnection, id: Uuid) -> ApiResult<Option<reads::EmoteRow>> {
+pub(crate) async fn row(conn: &mut PgConnection, id: Uuid) -> ApiResult<Option<reads::EmoteRow>> {
     Ok(reads::emotes(conn, &[id])
         .await
         .map_err(db_error)?
@@ -97,7 +97,7 @@ async fn row(conn: &mut PgConnection, id: Uuid) -> ApiResult<Option<reads::Emote
         .next())
 }
 
-async fn build(
+pub(crate) async fn build(
     state: &AppState,
     conn: &mut PgConnection,
     row: &reads::EmoteRow,
@@ -109,7 +109,11 @@ async fn build(
 }
 
 /// Tells every set holding the emote (and the channels and users showing those sets).
-async fn announce(conn: &mut PgConnection, emote_id: Uuid, event_type: EventType) -> ApiResult<()> {
+pub(crate) async fn announce(
+    conn: &mut PgConnection,
+    emote_id: Uuid,
+    event_type: EventType,
+) -> ApiResult<()> {
     for set_id in emotes::sets_containing(conn, emote_id)
         .await
         .map_err(db_error)?
@@ -175,7 +179,7 @@ async fn write_editor_audit(
 }
 
 /// True if the caller is an account editor of the emote's owner with `flag` on every set.
-async fn editor_of_owner(
+pub(crate) async fn editor_of_owner(
     conn: &mut PgConnection,
     caller: &Caller,
     owner: Option<Uuid>,
@@ -189,13 +193,17 @@ async fn editor_of_owner(
     }
 }
 
-fn restricted(message: &str) -> ApiError {
+pub(crate) fn restricted(message: &str) -> ApiError {
     ApiError::new(StatusCode::FORBIDDEN, "restricted", message)
 }
 
 /// Refuses while uploads of `account` are held (#87): the account can't change emotes, and
 /// nobody can change them for it.
-async fn not_restricted(conn: &mut PgConnection, account: Uuid, message: &str) -> ApiResult<()> {
+pub(crate) async fn not_restricted(
+    conn: &mut PgConnection,
+    account: Uuid,
+    message: &str,
+) -> ApiResult<()> {
     let held = accounts::get(conn, account)
         .await
         .map_err(db_error)?
@@ -207,8 +215,8 @@ async fn not_restricted(conn: &mut PgConnection, account: Uuid, message: &str) -
     }
 }
 
-const YOU_RESTRICTED: &str = "Your account can't change emotes right now.";
-const OWNER_RESTRICTED: &str =
+pub(crate) const YOU_RESTRICTED: &str = "Your account can't change emotes right now.";
+pub(crate) const OWNER_RESTRICTED: &str =
     "That account can't change emotes right now, so nobody can change them for it.";
 
 // Reads
@@ -818,130 +826,6 @@ pub async fn delete(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bo
     let deleted = emotes::delete(&mut tx, id).await.map_err(db_error)?;
     tx.commit().await.map_err(sqlx_error)?;
     Ok(deleted)
-}
-
-/// Gives an emote to another account (ADR 0014, amended 2026/11/19). Allowed for its owner and
-/// for an account editor of the owner with `emote_transfer` on every set. The receiving account
-/// must be the caller, or one the caller edits with `emote_upload` on every set: the receiver
-/// agreed by making them an uploader there, so nobody can push emotes onto an account that never
-/// trusted them, and nobody gains an emote they couldn't have uploaded. Blocked, deleted and
-/// restricted accounts (either side, and the caller) are refused. The emote keeps its state,
-/// visibility, tags and sets; it is audited as `emote.transferred` (subject: the old owner) and
-/// both owners hear about it unless they did it.
-pub async fn transfer(
-    state: &AppState,
-    caller: &Caller,
-    id: &str,
-    to_account_id: &str,
-) -> ApiResult<Emote> {
-    let id = parse_id(id)?;
-    let to = parse_id(to_account_id)?;
-    state
-        .limits
-        .emote_transfers
-        .check(&ids::to_text(caller.account_id))
-        .map_err(|_| {
-            ApiError::new(
-                StatusCode::TOO_MANY_REQUESTS,
-                "rate_limited",
-                "That's a lot of transfers. Try again in a while.",
-            )
-        })?;
-    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    let lock = emotes::lock(&mut tx, id).await.map_err(db_error)?;
-    let before = row(&mut tx, id).await?.ok_or_else(not_found)?;
-    let (Some(_), Some(from)) = (lock, before.owner) else {
-        return Err(not_found());
-    };
-    let owner = from == caller.account_id;
-    let editor = !owner
-        && editor_of_owner(&mut tx, caller, Some(from), EditorPermission::EmoteTransfer).await?;
-    if !owner && !editor {
-        // An emote others can't see yet answers as if it weren't there.
-        if before.state != EmoteState::Approved {
-            return Err(not_found());
-        }
-        return Err(forbidden(
-            "Only the emote's owner and its editors with the transfer permission can give it away.",
-        ));
-    }
-    if to == from {
-        return Err(bad("same_owner", "That account owns it already."));
-    }
-    let receiver_ok = to == caller.account_id
-        || crate::editors::has_emote_flag(
-            &mut tx,
-            to,
-            caller.account_id,
-            EditorPermission::EmoteUpload,
-        )
-        .await?;
-    if !receiver_ok {
-        return Err(forbidden(
-            "You can give it to yourself, or to an account you edit with the upload permission on every set.",
-        ));
-    }
-    let receiver = accounts::get(&mut tx, to)
-        .await
-        .map_err(db_error)?
-        .filter(|a| a.deleted_at.is_none() && a.blocked_at.is_none())
-        .ok_or_else(not_found)?;
-    not_restricted(&mut tx, caller.account_id, YOU_RESTRICTED).await?;
-    not_restricted(&mut tx, from, OWNER_RESTRICTED).await?;
-    if receiver.restricted_at.is_some() {
-        return Err(restricted("That account can't take emotes right now."));
-    }
-    if !emotes::transfer(&mut tx, id, to).await.map_err(db_error)? {
-        return Err(not_found());
-    }
-    let mut after = json!({ "owner_id": ids::to_text(to) });
-    if editor {
-        after["via"] = json!("account_editor");
-    }
-    audit::write_for(
-        &mut tx,
-        &audit::NewEntry {
-            actor: Some(caller.account_id),
-            action: "emote.transferred",
-            target_kind: "emote",
-            target_id: &ids::to_text(id),
-            before: Some(json!({ "owner_id": ids::to_text(from), "name": before.name })),
-            after: Some(after),
-        },
-        Some(from),
-    )
-    .await
-    .map_err(db_error)?;
-    let names = reads::summaries(&mut tx, &[from, to, caller.account_id])
-        .await
-        .map_err(db_error)?;
-    let name = |a: Uuid| names.get(&a).map(|s| s.display_name.clone());
-    let payload = |role: &str| {
-        json!({
-            "role": role,
-            "emote_id": ids::to_text(id),
-            "name": before.name,
-            "from_id": ids::to_text(from),
-            "from_name": name(from),
-            "to_id": ids::to_text(to),
-            "to_name": name(to),
-            "actor_id": ids::to_text(caller.account_id),
-            "actor_name": name(caller.account_id),
-        })
-    };
-    if caller.account_id != from {
-        crate::account::notify(&mut tx, from, "emote.transferred", &payload("from")).await?;
-    }
-    if caller.account_id != to {
-        crate::account::notify(&mut tx, to, "emote.transferred", &payload("to")).await?;
-    }
-    if before.state == EmoteState::Approved {
-        announce(&mut tx, id, EventType::EmoteUpdated).await?;
-    }
-    tx.commit().await.map_err(sqlx_error)?;
-    let after = row(&mut conn, id).await?.ok_or_else(not_found)?;
-    build(state, &mut conn, &after).await
 }
 
 #[cfg(test)]

@@ -669,6 +669,25 @@ export type EmoteState =
   | 'REJECTED'
   | 'TAKEN_DOWN';
 
+/**
+ * An account editor's request to give one of the owner's emotes to another account; the emote
+ * moves only when the owner accepts (ADR 0014).
+ */
+export type EmoteTransferRequest = {
+  __typename?: 'EmoteTransferRequest';
+  createdAt: Scalars['String']['output'];
+  emoteId: Scalars['String']['output'];
+  emoteName: Scalars['String']['output'];
+  expiresAt: Scalars['String']['output'];
+  /** The emote's owner, who accepts or declines. */
+  from: AccountSummary;
+  id: Scalars['String']['output'];
+  requestedBy: AccountSummary;
+  resolvedAt?: Maybe<Scalars['String']['output']>;
+  state: TransferRequestState;
+  to: AccountSummary;
+};
+
 /** Where an emote stands among the trending ones. */
 export type EmoteTrending = {
   __typename?: 'EmoteTrending';
@@ -865,6 +884,8 @@ export type Me = {
 
 export type Mutation = {
   __typename?: 'Mutation';
+  /** Accept an editor's transfer request of your emote: it moves if the rules still allow it. */
+  acceptEmoteTransfer: Emote;
   /**
    * Make someone an editor of your account, of an account you edit with `EDITORS` (ADR
    * 0014), or of anyone's with `editors.manage_any` (audited with `via`). Give their account ID, or a platform and login. You can only grant permissions you
@@ -894,6 +915,8 @@ export type Mutation = {
    * `roles.manage` or `roles.assign`; the User and top roles can't be given. Audited.
    */
   assignRole: Scalars['Boolean']['output'];
+  /** Withdraw a transfer request you made. */
+  cancelEmoteTransfer: EmoteTransferRequest;
   /**
    * Copy a set you can open into a new channel set: yours, or with `ownerId` one for an account
    * you edit with `SETS`. Name defaults to the source's; visibility to `LISTED`. Emotes go in
@@ -923,6 +946,8 @@ export type Mutation = {
   createSet: EmoteSet;
   /** Make a shop item: a bundle of 1 to 10 badges and paints. Needs `shop.manage`. Audited. */
   createShopItem: ShopItem;
+  /** Decline an editor's transfer request of your emote. */
+  declineEmoteTransfer: EmoteTransferRequest;
   /**
    * Delete your account. `confirm` is one of your Twitch or Kick logins. Website only
    * (`website_only` with an app token); the owner's account can't be (`owner_protected`).
@@ -1090,7 +1115,10 @@ export type Mutation = {
   /**
    * Give an emote to another account (ADR 0014). Its owner, or an account editor of the owner
    * with `EMOTE_TRANSFER` on every set. The receiver is you, or an account you edit with
-   * `EMOTE_UPLOAD` on every set. Audited (`emote.transferred`); both owners are told. 60 an hour.
+   * `EMOTE_UPLOAD` on every set. The owner's transfer is immediate (`emote.transferred`); an
+   * editor's makes a request the owner accepts or declines within 7 days, and the emote comes
+   * back unchanged (`emoteTransferRequests`; one open request per emote, `transfer_pending`).
+   * 60 an hour, with accepting, declining and cancelling.
    */
   transferEmote: Emote;
   /**
@@ -1144,6 +1172,11 @@ export type Mutation = {
 };
 
 
+export type MutationAcceptEmoteTransferArgs = {
+  id: Scalars['String']['input'];
+};
+
+
 export type MutationAddAccountEditorArgs = {
   input: AddAccountEditorInput;
 };
@@ -1186,6 +1219,11 @@ export type MutationAssignRoleArgs = {
 };
 
 
+export type MutationCancelEmoteTransferArgs = {
+  id: Scalars['String']['input'];
+};
+
+
 export type MutationCloneSetArgs = {
   id: Scalars['String']['input'];
   name?: InputMaybe<Scalars['String']['input']>;
@@ -1221,6 +1259,11 @@ export type MutationCreateSetArgs = {
 
 export type MutationCreateShopItemArgs = {
   input: ShopItemInput;
+};
+
+
+export type MutationDeclineEmoteTransferArgs = {
+  id: Scalars['String']['input'];
 };
 
 
@@ -1849,6 +1892,11 @@ export type Query = {
   /** Reviewers' notes on an emote, newest first (the latest 200). Needs `emotes.review`. */
   emoteNotes: Array<EmoteNote>;
   /**
+   * Open emote transfer requests you take part in (ADR 0014): those waiting for you to accept
+   * or decline (your emotes), and those you made as an editor; of one emote when given.
+   */
+  emoteTransferRequests: Array<EmoteTransferRequest>;
+  /**
    * Where an emote stands among the 100 most added in `window` (`DAY`, `WEEK` by default or
    * `MONTH`): its rank and the channels that added it, net of removals. Null when `id` isn't
    * an emote ID, the emote isn't approved and listed, or it is not in the top 100.
@@ -2161,6 +2209,11 @@ export type QueryEmoteHistoryArgs = {
 
 export type QueryEmoteNotesArgs = {
   emoteId: Scalars['String']['input'];
+};
+
+
+export type QueryEmoteTransferRequestsArgs = {
+  emoteId?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -2619,6 +2672,17 @@ export type SubscriptionState =
   | 'CURRENT'
   | 'FUTURE'
   | 'PAST';
+
+/** Where an emote transfer request stands (ADR 0014). */
+export type TransferRequestState =
+  | 'ACCEPTED'
+  /** Withdrawn by the editor, or closed because the emote moved or went away. */
+  | 'CANCELLED'
+  | 'DECLINED'
+  /** Nobody answered within 7 days. */
+  | 'EXPIRED'
+  /** Waiting for the emote's owner. */
+  | 'PENDING';
 
 /** How far back `TRENDING` counts channel adds. */
 export type TrendingWindow =
@@ -3278,6 +3342,36 @@ export type TransferEmoteMutationVariables = Exact<{
 
 export type TransferEmoteMutation = { __typename?: 'Mutation', transferEmote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } };
 
+export type TransferRequestFieldsFragment = { __typename?: 'EmoteTransferRequest', id: string, emoteId: string, emoteName: string, state: TransferRequestState, createdAt: string, expiresAt: string, from: { __typename?: 'AccountSummary', id: string, displayName: string }, to: { __typename?: 'AccountSummary', id: string, displayName: string }, requestedBy: { __typename?: 'AccountSummary', id: string, displayName: string } };
+
+export type EmoteTransferRequestsQueryVariables = Exact<{
+  emoteId?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type EmoteTransferRequestsQuery = { __typename?: 'Query', emoteTransferRequests: Array<{ __typename?: 'EmoteTransferRequest', id: string, emoteId: string, emoteName: string, state: TransferRequestState, createdAt: string, expiresAt: string, from: { __typename?: 'AccountSummary', id: string, displayName: string }, to: { __typename?: 'AccountSummary', id: string, displayName: string }, requestedBy: { __typename?: 'AccountSummary', id: string, displayName: string } }> };
+
+export type AcceptEmoteTransferMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type AcceptEmoteTransferMutation = { __typename?: 'Mutation', acceptEmoteTransfer: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } };
+
+export type DeclineEmoteTransferMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DeclineEmoteTransferMutation = { __typename?: 'Mutation', declineEmoteTransfer: { __typename?: 'EmoteTransferRequest', id: string, emoteId: string, emoteName: string, state: TransferRequestState, createdAt: string, expiresAt: string, from: { __typename?: 'AccountSummary', id: string, displayName: string }, to: { __typename?: 'AccountSummary', id: string, displayName: string }, requestedBy: { __typename?: 'AccountSummary', id: string, displayName: string } } };
+
+export type CancelEmoteTransferMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type CancelEmoteTransferMutation = { __typename?: 'Mutation', cancelEmoteTransfer: { __typename?: 'EmoteTransferRequest', id: string, emoteId: string, emoteName: string, state: TransferRequestState, createdAt: string, expiresAt: string, from: { __typename?: 'AccountSummary', id: string, displayName: string }, to: { __typename?: 'AccountSummary', id: string, displayName: string }, requestedBy: { __typename?: 'AccountSummary', id: string, displayName: string } } };
+
 export type AccountEmotesQueryVariables = Exact<{
   accountId: Scalars['String']['input'];
   page?: InputMaybe<Scalars['Int']['input']>;
@@ -3879,6 +3973,28 @@ export const RoleFieldsFragmentDoc = new TypedDocumentString(`
   assignable
 }
     `, {"fragmentName":"RoleFields"}) as unknown as TypedDocumentString<RoleFieldsFragment, unknown>;
+export const TransferRequestFieldsFragmentDoc = new TypedDocumentString(`
+    fragment TransferRequestFields on EmoteTransferRequest {
+  id
+  emoteId
+  emoteName
+  state
+  createdAt
+  expiresAt
+  from {
+    id
+    displayName
+  }
+  to {
+    id
+    displayName
+  }
+  requestedBy {
+    id
+    displayName
+  }
+}
+    `, {"fragmentName":"TransferRequestFields"}) as unknown as TypedDocumentString<TransferRequestFieldsFragment, unknown>;
 export const CosmeticImageFieldsFragmentDoc = new TypedDocumentString(`
     fragment CosmeticImageFields on CosmeticImage {
   id
@@ -5613,6 +5729,121 @@ export const TransferEmoteDocument = new TypedDocumentString(`
     isStatic
   }
 }`) as unknown as TypedDocumentString<TransferEmoteMutation, TransferEmoteMutationVariables>;
+export const EmoteTransferRequestsDocument = new TypedDocumentString(`
+    query EmoteTransferRequests($emoteId: String) {
+  emoteTransferRequests(emoteId: $emoteId) {
+    ...TransferRequestFields
+  }
+}
+    fragment TransferRequestFields on EmoteTransferRequest {
+  id
+  emoteId
+  emoteName
+  state
+  createdAt
+  expiresAt
+  from {
+    id
+    displayName
+  }
+  to {
+    id
+    displayName
+  }
+  requestedBy {
+    id
+    displayName
+  }
+}`) as unknown as TypedDocumentString<EmoteTransferRequestsQuery, EmoteTransferRequestsQueryVariables>;
+export const AcceptEmoteTransferDocument = new TypedDocumentString(`
+    mutation AcceptEmoteTransfer($id: String!) {
+  acceptEmoteTransfer(id: $id) {
+    ...EmoteFields
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    nsfw
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<AcceptEmoteTransferMutation, AcceptEmoteTransferMutationVariables>;
+export const DeclineEmoteTransferDocument = new TypedDocumentString(`
+    mutation DeclineEmoteTransfer($id: String!) {
+  declineEmoteTransfer(id: $id) {
+    ...TransferRequestFields
+  }
+}
+    fragment TransferRequestFields on EmoteTransferRequest {
+  id
+  emoteId
+  emoteName
+  state
+  createdAt
+  expiresAt
+  from {
+    id
+    displayName
+  }
+  to {
+    id
+    displayName
+  }
+  requestedBy {
+    id
+    displayName
+  }
+}`) as unknown as TypedDocumentString<DeclineEmoteTransferMutation, DeclineEmoteTransferMutationVariables>;
+export const CancelEmoteTransferDocument = new TypedDocumentString(`
+    mutation CancelEmoteTransfer($id: String!) {
+  cancelEmoteTransfer(id: $id) {
+    ...TransferRequestFields
+  }
+}
+    fragment TransferRequestFields on EmoteTransferRequest {
+  id
+  emoteId
+  emoteName
+  state
+  createdAt
+  expiresAt
+  from {
+    id
+    displayName
+  }
+  to {
+    id
+    displayName
+  }
+  requestedBy {
+    id
+    displayName
+  }
+}`) as unknown as TypedDocumentString<CancelEmoteTransferMutation, CancelEmoteTransferMutationVariables>;
 export const AccountEmotesDocument = new TypedDocumentString(`
     query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {
   accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {

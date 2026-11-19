@@ -67,3 +67,12 @@ The owner asked for the emote flags to work now (billing stays stored only). The
 - **Audit:** `emote.uploaded`, `emote.updated`, `emote.deleted` and `emote.transferred`, actor the editor, `"via": "account_editor"` in `after`, subject the owner. An owner's own transfer is audited without `via`; staff edits keep `"via": "emotes.delete_any"` and no subject.
 - **API (additive):** `owner_id` on the upload form, `transferEmote(id, toAccountId)`, `accountEmotes` also for the account itself and its managers; no field changed meaning.
 - Tests: `apps/api/tests/editor_emotes_flow.rs`.
+
+## Amendment (owner decision, 2026/11/19): the owner must accept an editor's transfer
+This replaces "There is no accept step" in the amendment above.
+- The owner's own `transferEmote` stays immediate, under the same receiver rule.
+- An editor's `transferEmote` makes a pending request (`emote_transfer_requests`, migration `20261207000081`) and returns the emote unchanged. The owner is notified (`emote.transfer_requested`, answerable from the notification) and sees it on the emote's edit page; the emote moves only on `acceptEmoteTransfer`. The owner can `declineEmoteTransfer`, the editor can `cancelEmoteTransfer`, and a request expires after 7 days (marked `expired` the next time anything reads or answers requests). One open request per emote (`409 transfer_pending`).
+- Accepting checks the rules as they stand then: the request is still open, the emote still belongs to the owner (else the request is closed as cancelled), the receiver is still the editor or an account where the editor holds `emote_upload` on every set, and nobody involved (owner, editor, receiver) is held or gone.
+- When the emote moves any other way (the owner's own transfer, or another request accepted), open requests for it are cancelled.
+- Every step is audited with the owner as subject: `emote.transfer_requested` (actor the editor, `"via": "account_editor"`), `emote.transfer_accepted` and `emote.transferred` (actor the owner; `requested_by` in `after`), `emote.transfer_declined`, `emote.transfer_cancelled`, `emote.transfer_expired` (no actor). The other side is notified at each step.
+- API (additive): `emoteTransferRequests(emoteId)` (open requests on your emotes and the ones you made), `acceptEmoteTransfer`, `declineEmoteTransfer`, `cancelEmoteTransfer`; `EmoteTransferRequest`, `TransferRequestState`. Accepting, declining and cancelling share the 60-an-hour transfer limit.
