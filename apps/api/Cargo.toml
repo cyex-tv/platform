@@ -52,6 +52,7 @@ utoipa-axum.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
+cyex-tv-events = { path = "../events" }
 futures-util = { workspace = true, features = ["sink"] }
 http-body-util.workspace = true
 image = { workspace = true, features = ["gif", "jpeg", "png", "webp"] }
