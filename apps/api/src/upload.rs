@@ -83,6 +83,8 @@ pub struct Upload {
 pub struct Flags {
     pub zero_width: bool,
     pub private: bool,
+    /// Never with `private` (ADR 0020).
+    pub unlisted: bool,
     pub nsfw: bool,
 }
 
@@ -231,6 +233,7 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
             animated: probe.animated,
             zero_width: input.flags.zero_width,
             private: input.flags.private,
+            unlisted: input.flags.unlisted && !input.flags.private,
             nsfw: input.flags.nsfw,
         },
     )
@@ -298,6 +301,7 @@ mod tests {
             Flags {
                 zero_width: false,
                 private: false,
+                unlisted: false,
                 nsfw: false
             }
         );

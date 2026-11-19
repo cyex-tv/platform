@@ -16,6 +16,8 @@ pub struct Emote {
     pub name: String,
     pub zero_width: bool,
     pub private: bool,
+    /// Reachable by link, left out of listings (ADR 0020). Never with `private`.
+    pub unlisted: bool,
     pub nsfw: bool,
     pub animated: bool,
     pub state: EmoteState,
@@ -32,25 +34,30 @@ pub struct NewEmote<'a> {
     pub animated: bool,
     pub zero_width: bool,
     pub private: bool,
+    /// Never with `private` (a CHECK refuses both).
+    pub unlisted: bool,
     pub nsfw: bool,
 }
 
-/// Fields to change. `None` leaves a field as it is.
+/// Fields to change. `None` leaves a field as it is. Setting `private` or `unlisted` to true
+/// needs the other set to false in the same patch.
 #[derive(Clone, Debug, Default)]
 pub struct EmotePatch<'a> {
     pub name: Option<&'a str>,
     pub zero_width: Option<bool>,
     pub private: Option<bool>,
+    pub unlisted: Option<bool>,
     pub nsfw: Option<bool>,
 }
 
-const EMOTE: &str = "id, owner_account_id, file_id, name, zero_width, private, nsfw, animated, \
-                     state, created_at, updated_at, deleted_at";
+const EMOTE: &str = "id, owner_account_id, file_id, name, zero_width, private, unlisted, nsfw, \
+                     animated, state, created_at, updated_at, deleted_at";
 
 pub async fn create(conn: &mut PgConnection, new: &NewEmote<'_>) -> DbResult<Emote> {
     Ok(sqlx::query_as(&format!(
-        "INSERT INTO emotes (id, owner_account_id, file_id, name, animated, zero_width, private, nsfw)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        "INSERT INTO emotes (id, owner_account_id, file_id, name, animated, zero_width, private,
+                             nsfw, unlisted)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING {EMOTE}"
     ))
     .bind(new_id())
@@ -61,6 +68,7 @@ pub async fn create(conn: &mut PgConnection, new: &NewEmote<'_>) -> DbResult<Emo
     .bind(new.zero_width)
     .bind(new.private)
     .bind(new.nsfw)
+    .bind(new.unlisted)
     .fetch_one(conn)
     .await?)
 }
@@ -93,6 +101,7 @@ pub async fn update(conn: &mut PgConnection, id: Uuid, patch: &EmotePatch<'_>) -
              zero_width = coalesce($3, zero_width),
              private = coalesce($4, private),
              nsfw = coalesce($5, nsfw),
+             unlisted = coalesce($6, unlisted),
              updated_at = now()
          WHERE id = $1 AND deleted_at IS NULL
          RETURNING {EMOTE}"
@@ -102,6 +111,7 @@ pub async fn update(conn: &mut PgConnection, id: Uuid, patch: &EmotePatch<'_>) -
     .bind(patch.zero_width)
     .bind(patch.private)
     .bind(patch.nsfw)
+    .bind(patch.unlisted)
     .fetch_optional(conn)
     .await?
     .ok_or(DbError::NotFound)

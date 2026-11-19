@@ -2,8 +2,8 @@
 //! `audit_log` rows that the owner's own changes and their account editors' changes write with
 //! the account as their subject; the SQL side is `audit::activity_rows`.
 //!
-//! What never shows: moderation actions, reasons, staff-only changes, pending, private, rejected
-//! and taken-down emotes, deleted sets, and anything about a blocked, deleted or unknown account
+//! What never shows: moderation actions, reasons, staff-only changes, pending, private, unlisted
+//! (ADR 0020), rejected and taken-down emotes, deleted sets, and anything about a blocked, deleted or unknown account
 //! (an empty list). A line about an emote that isn't public (yet) is left out; it appears once
 //! the emote is approved. Only listed sets show (ADR 0017): an unlisted set's ID is its secret and
 //! a private set is nobody else's business, so lines about them are left out, whatever their
@@ -123,12 +123,12 @@ async fn lookup(
         .into_iter()
         .map(|c| (c.id, c))
         .collect();
-    // Only emotes anyone may see: approved, not private, not deleted.
+    // Only emotes anyone may see: approved, not private or unlisted, not deleted.
     let emote_rows: Vec<EmoteRow> = reads::emotes(conn, &list(&r.emotes))
         .await
         .map_err(db_error)?
         .into_iter()
-        .filter(|e| e.state == EmoteState::Approved && !e.private)
+        .filter(|e| e.state == EmoteState::Approved && !e.private && !e.unlisted)
         .collect();
     let built = views::emotes(conn, &emote_rows, cdn_url)
         .await
@@ -393,11 +393,18 @@ pub async fn emote_activity_page(
         return Ok(ActivityPage::default());
     };
     let mut conn = conn(state).await?;
-    let public = reads::emotes(&mut conn, &[emote])
+    // An unlisted emote's page is open to anyone with the link, its activity too; an emote of an
+    // account whose deletion is pending is hidden with it.
+    let row = reads::emotes(&mut conn, &[emote])
         .await
         .map_err(db_error)?
-        .first()
-        .is_some_and(|e| e.state == EmoteState::Approved && !e.private);
+        .into_iter()
+        .next()
+        .filter(|e| e.state == EmoteState::Approved && !e.private);
+    let public = match row {
+        Some(e) => !crate::moderation::owner_hidden(&mut conn, e.owner).await?,
+        None => false,
+    };
     if !public {
         return Ok(ActivityPage::default());
     }

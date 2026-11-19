@@ -10,7 +10,7 @@ export const STATE_LABEL: Record<EmoteState, string> = {
 
 export const STATE_HINT: Record<EmoteState, string> = {
   PENDING: 'Waiting for a moderator. You can already use it in your own sets.',
-  APPROVED: 'Public: anyone can find it and add it.',
+  APPROVED: 'Approved: it works wherever it’s in a set. Its visibility says who can find it.',
   REJECTED: 'A moderator turned it down. Only you can see it.',
   TAKEN_DOWN: 'Removed everywhere after a report.',
 };

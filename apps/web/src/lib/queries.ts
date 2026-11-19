@@ -11,6 +11,7 @@ export const EMOTE_FIELDS = graphql(`
     host
     createdAt
     channelCount
+    visibility
     flags {
       zeroWidth
       nsfw
@@ -563,6 +564,38 @@ export const EXPORT_MY_DATA = graphql(`
 export const DELETE_ACCOUNT = graphql(`
   mutation DeleteAccount($confirm: String!) {
     deleteAccount(confirm: $confirm)
+  }
+`);
+
+// The 30-day undo window (ADR 0019): only the session that signing in to a deleted account gave.
+export const PENDING_DELETION = graphql(`
+  query PendingDeletion {
+    pendingDeletion {
+      requestedAt
+      eraseAfter
+      displayName
+      avatar
+    }
+  }
+`);
+
+export const RESTORE_ACCOUNT = graphql(`
+  mutation RestoreAccount {
+    restoreAccount
+  }
+`);
+
+// Your own roles, hidden ones too (only for your own profile).
+export const MY_ROLES = graphql(`
+  query MyRoles {
+    me {
+      id
+      roles {
+        id
+        name
+        public
+      }
+    }
   }
 `);
 

@@ -2,7 +2,8 @@
 //! popularity column. Handlers use [`EmoteSearch`], so moving to Typesense or Meilisearch later
 //! is a new implementation of it, not a change to them.
 //!
-//! Only approved, listed (not private), not deleted emotes are found. NSFW ones only when asked.
+//! Only approved, public (not private or unlisted), not deleted emotes are found, and none of an
+//! account whose deletion is pending (ADR 0019). NSFW ones only when asked.
 //! Ranking: exact name, then name prefix, then name similarity, then popularity.
 
 use cyex_tv_shared::model::EmoteSort;
@@ -78,6 +79,9 @@ pub async fn search(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<Hits> {
         "SELECT e.id, count(*) OVER () AS total
          FROM emotes e
          WHERE e.state = 'approved' AND e.deleted_at IS NULL AND NOT e.private
+           AND NOT e.unlisted
+           AND NOT EXISTS (SELECT 1 FROM accounts oa
+                           WHERE oa.id = e.owner_account_id AND oa.deleted_at IS NOT NULL)
            AND ($2::boolean IS NULL OR e.animated = $2)
            AND ($3::uuid IS NULL OR e.owner_account_id = $3)
            AND ($4 OR NOT e.nsfw)

@@ -39,9 +39,12 @@ describe('help questions', () => {
     }
   });
 
-  it('describes account deletion as it ships: self-serve, at once, "Deleted user"', () => {
+  it('describes account deletion as it ships: self-serve, hidden at once, 30 days to undo, "Deleted user"', () => {
     const del = ALL_QUESTIONS.find((q) => q.id === 'delete-account')!;
     expect(del.hay).toMatch(/delete account/);
+    expect(del.hay).toMatch(/hidden at once/);
+    expect(del.hay).toMatch(/30 days/);
+    expect(del.hay).toMatch(/sign in before then to undo it/);
     expect(del.hay).toMatch(/deleted user/);
     expect(del.hay).not.toMatch(/abuse@|on its way/);
   });

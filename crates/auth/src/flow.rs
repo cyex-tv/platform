@@ -24,6 +24,9 @@ use crate::providers::{self, Provider};
 use crate::session::{Caller, Via, ttl};
 use crate::{cookies, return_to, tokens};
 
+/// Where signing in to an account whose deletion can still be undone lands (ADR 0019).
+pub const RESTORE_PATH: &str = "/restore";
+
 /// How long a sign-in may take between leaving for the platform and coming back.
 pub fn state_ttl() -> Duration {
     Duration::minutes(10)
@@ -216,6 +219,7 @@ impl Auth {
         };
 
         let mut conn = db.acquire().await?;
+        let mut restoring = false;
         let (account_id, created, linked) = match stored.link_account_id {
             Some(account_id) => {
                 // The account was deleted while the link was under way.
@@ -235,11 +239,15 @@ impl Auth {
             }
             None => {
                 let signed_in = accounts::sign_in(&mut conn, profile).await?;
-                if signed_in.account.deleted_at.is_some() {
-                    return Err(AuthError::AccountDeleted);
-                }
                 if signed_in.account.blocked_at.is_some() {
                     return Err(AuthError::AccountBlocked);
+                }
+                // A deletion still within its undo window (ADR 0019): sign in to the page that
+                // offers to restore it. The session can do nothing else until then.
+                if signed_in.account.restorable(chrono::Utc::now()) {
+                    restoring = true;
+                } else if signed_in.account.deleted_at.is_some() {
+                    return Err(AuthError::AccountDeleted);
                 }
                 // A new account starts with a channel set named after it (ADR 0017).
                 if signed_in.created {
@@ -275,8 +283,16 @@ impl Auth {
         }
         tx.commit().await?;
 
+        let location = if restoring {
+            self.cfg
+                .site_url
+                .join(RESTORE_PATH)
+                .map_or(stored.return_to, String::from)
+        } else {
+            stored.return_to
+        };
         Ok(Finished {
-            location: stored.return_to,
+            location,
             set_cookies: vec![
                 cookies::session(&self.cfg, &token, ttl(SessionKind::Site)),
                 cookies::clear_state(&self.cfg),

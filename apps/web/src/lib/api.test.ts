@@ -23,15 +23,26 @@ describe('safeBack', () => {
 describe('uploadForm', () => {
   it('sends only the flags that are on, and tags comma-separated', async () => {
     const { uploadForm } = await import('./api');
-    const f = uploadForm(new Blob(['x']), 'catJAM', ['cat', 'dance'], { zeroWidth: true, private: false, nsfw: true });
+    const f = uploadForm(new Blob(['x']), 'catJAM', ['cat', 'dance'], { zeroWidth: true, visibility: 'PUBLIC', nsfw: true });
     expect(f.get('name')).toBe('catJAM');
     expect(f.get('tags')).toBe('cat,dance');
     expect(f.get('zero_width')).toBe('true');
     expect(f.get('private')).toBeNull();
+    expect(f.get('visibility')).toBeNull();
     expect(f.get('nsfw')).toBe('true');
     expect(f.get('file')).toBeInstanceOf(Blob);
     const plain = uploadForm(new Blob(['x']), 'a', []);
     expect([...plain.keys()]).toEqual(['name', 'file']);
+  });
+
+  it('sends unlisted as visibility only, and private with the older flag too', async () => {
+    const { uploadForm } = await import('./api');
+    const unlisted = uploadForm(new Blob(['x']), 'a', [], { visibility: 'UNLISTED' });
+    expect(unlisted.get('visibility')).toBe('unlisted');
+    expect(unlisted.get('private')).toBeNull();
+    const priv = uploadForm(new Blob(['x']), 'a', [], { visibility: 'PRIVATE' });
+    expect(priv.get('visibility')).toBe('private');
+    expect(priv.get('private')).toBe('true');
   });
 });
 
