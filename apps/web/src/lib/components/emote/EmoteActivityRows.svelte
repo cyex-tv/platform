@@ -14,7 +14,7 @@
   $effect(() => wantLooks(items.map((i) => i.actor?.id)));
 
   const ICON: Record<ActivityKind, IconName> = {
-    added: 'plus', removed: 'minus', renamed: 'pencil', active: 'zap', cosmetics: 'brush', uploaded: 'upload', created: 'folder', setRenamed: 'pencil',
+    added: 'plus', removed: 'minus', renamed: 'pencil', active: 'zap', cosmetics: 'brush', uploaded: 'upload', created: 'folder', setRenamed: 'pencil', editorAdded: 'user-plus', editorRemoved: 'user-minus',
   };
   const alias = (i: ActivityItem) => (i.emote && clean(i.emote.name) !== clean(name) ? clean(i.emote.name) : null);
 </script>

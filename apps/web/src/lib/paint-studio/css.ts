@@ -38,9 +38,11 @@ export function paintStyleText(p: StudioPaint, imageUrl?: string | null): string
   if (p.color) out.push(`color: ${p.color.toLowerCase()}`);
   if (url)
     out.push(
-      `background-image: ${quote(url)}`,
-      `background-size: ${p.repeat ? 'auto 100%' : 'cover'}`,
-      `background-repeat: ${p.repeat ? 'repeat' : 'no-repeat'}`,
+      // Under the picture, a flat layer in the text colour: a picture that can't load still
+      // leaves a readable name (as the site draws it, lib/cosmetics/paint.ts).
+      `background-image: ${quote(url)}, linear-gradient(currentColor, currentColor)`,
+      `background-size: ${p.repeat ? 'auto 100%' : 'cover'}, 100% 100%`,
+      `background-repeat: ${p.repeat ? 'repeat' : 'no-repeat'}, no-repeat`,
       'background-position: center',
       '-webkit-background-clip: text',
       'background-clip: text',

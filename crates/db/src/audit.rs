@@ -114,7 +114,7 @@ pub async fn list(
 }
 
 /// The actions the public activity feed is built from (see `apps/api/src/activity.rs`).
-pub const ACTIVITY_ACTIONS: [&str; 8] = [
+pub const ACTIVITY_ACTIONS: [&str; 10] = [
     "set.created",
     "set.renamed",
     "set.emote_added",
@@ -123,7 +123,23 @@ pub const ACTIVITY_ACTIONS: [&str; 8] = [
     "channel.settings_changed",
     "cosmetics.selected",
     "emote.approved",
+    "account.editor_added",
+    "account.editor_removed",
 ];
+
+/// Narrows an account's activity rows. Empty fields match everything.
+#[derive(Clone, Debug, Default)]
+pub struct ActivityFilter {
+    /// Only these actions (each one of `ACTIVITY_ACTIONS`); `None` for all of them.
+    pub actions: Option<Vec<&'static str>>,
+    /// Only lines shown as by this account: changes it made, and (for the account itself) its
+    /// approved uploads.
+    pub actor: Option<Uuid>,
+    /// Only rows at or after this time.
+    pub since: Option<DateTime<Utc>>,
+    /// Only rows before this time.
+    pub until: Option<DateTime<Utc>>,
+}
 
 /// An activity row with the account whose feed it belongs to.
 #[derive(Clone, Debug, PartialEq, FromRow)]
@@ -195,7 +211,25 @@ pub async fn activity_rows(
     before_id: Option<Uuid>,
     limit: i64,
 ) -> DbResult<Vec<Entry>> {
-    let actions: Vec<&str> = ACTIVITY_ACTIONS.to_vec();
+    activity_rows_where(conn, subject, before_id, limit, &ActivityFilter::default()).await
+}
+
+/// `activity_rows`, narrowed by `filter` (kind, who, when).
+pub async fn activity_rows_where(
+    conn: &mut PgConnection,
+    subject: Uuid,
+    before_id: Option<Uuid>,
+    limit: i64,
+    filter: &ActivityFilter,
+) -> DbResult<Vec<Entry>> {
+    let actions: Vec<&str> = match &filter.actions {
+        Some(only) => ACTIVITY_ACTIONS
+            .iter()
+            .copied()
+            .filter(|a| only.contains(a))
+            .collect(),
+        None => ACTIVITY_ACTIONS.to_vec(),
+    };
     Ok(sqlx::query_as(&format!(
         "SELECT a.id, a.actor_account_id, a.action, a.target_kind, a.target_id, a.before_json,
                 a.after_json, a.created_at
@@ -215,6 +249,11 @@ pub async fn activity_rows(
                         OR a.after_json ->> 'via' = 'account_editor'))
            )
            AND {LISTED_SET_ONLY}
+           AND ($5::uuid IS NULL
+                OR (a.action = 'emote.approved' AND a.subject_account_id = $5)
+                OR (a.action <> 'emote.approved' AND a.actor_account_id = $5))
+           AND ($6::timestamptz IS NULL OR a.created_at >= $6)
+           AND ($7::timestamptz IS NULL OR a.created_at < $7)
          ORDER BY a.id DESC
          LIMIT $4"
     ))
@@ -222,6 +261,9 @@ pub async fn activity_rows(
     .bind(before_id)
     .bind(&actions)
     .bind(limit)
+    .bind(filter.actor)
+    .bind(filter.since)
+    .bind(filter.until)
     .fetch_all(conn)
     .await?)
 }

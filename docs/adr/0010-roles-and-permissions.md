@@ -83,3 +83,13 @@ An account has three holds: uploads (`restricted_at`), tickets (`tickets_blocked
 - **Sessions:** `accountSessions(accountId)` with `users.sessions`, the same shape as `mySessions`; never tokens.
 - **Billing:** `orders(accountId)` also takes `billing.view` when narrowed to one account; every order and refunds still need `shop.orders`. `accountSubscriptions(accountId)` (`billing.view`, `subscriptions.manage` or `shop.orders`) returns past, current and future subscriptions; none exist yet, so it is empty until they do. The shape (`plan`, `state`, `startsAt`, `endsAt`, `source`) is fixed now so pages can be built against it.
 - **Entitlement graph:** `entitlementGraph(accountId)` and `entitlementHolders(kind, id)` (`entitlements.view` or `cosmetics.grant`) return grants: what (badge, paint, role), where it came from (`STAFF`, `PURCHASE` with the order, `CODE` with the batch, `EVENT`, `DEFAULT` for the User role, `OWNER` for the top role), who gave it, when, and when and by whom it was taken away. Built from the entitlement tables, `shop_order_entitlements` of refunded orders, code redemptions, `account_roles` and the audit log (`cosmetic.granted`, `cosmetic.revoked`, `role.assigned`, `role.unassigned`, `role.deleted`). The top role shows only to the owners. A grant made before the audit log knew of it has no time.
+
+### Amendment 2026/11/19, part 3: acting on anyone's emotes and editors
+The owner asked for role permissions to edit anyone's emotes and editors. `emotes.edit_any` already renamed, retagged and changed the flags and visibility of anyone's emote, so it stays as it is; two permissions are new, so no role gains anything it didn't have (the built-in Admin role, which starts with every permission, gets both; migration `global_emote_editor_perms`):
+
+| Permission | What it allows | Audited as |
+|---|---|---|
+| `emotes.delete_any` | delete anyone's emote, as its owner can (it leaves every set) | `emote.deleted`, with the emote as it was and `"via": "emotes.delete_any"` |
+| `editors.manage_any` | list, add, change and remove any account's editors on its behalf, with every flag, as the owner can | `account.editor_added`, `_updated`, `_removed` on the owner's account, with `"via": "editors.manage_any"` |
+
+`accountEmotes(accountId)` also takes `emotes.edit_any` and `emotes.delete_any`, so holders can find what to act on. The admin account page shows an Editors panel with `editors.manage_any`, and the emote page shows its edit form and delete button to holders of the matching permission.

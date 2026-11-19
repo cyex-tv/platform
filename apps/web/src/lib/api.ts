@@ -68,7 +68,7 @@ export function signInUrl(platform: 'twitch' | 'kick', back = '/'): string {
 }
 
 /** The address that links another platform to the signed-in account, and comes back to `back`. */
-export function linkUrl(platform: 'twitch' | 'kick', back = '/me/account'): string {
+export function linkUrl(platform: 'twitch' | 'kick', back = '/me/settings/account'): string {
   return `${signInUrl(platform, back)}&link=true`;
 }
 

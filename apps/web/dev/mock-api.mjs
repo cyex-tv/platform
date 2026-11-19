@@ -634,6 +634,16 @@ const CHANNELS = [
 const IDENTITIES = [
   { platform: 'TWITCH', platformUserId: '141981764', login: 'lumen_fox', displayName: 'lumen_fox', avatar: ME_SUMMARY.avatar },
 ];
+// MOCK_KICK=1: the mock account has Kick linked too (to try the display name choice and Disconnect).
+if (process.env.MOCK_KICK === '1') IDENTITIES.push({ platform: 'KICK', platformUserId: '4815162', login: 'lumenfox_kick', displayName: 'LumenFoxKick', avatar: null });
+// setDisplayPlatform: which identity the account goes by (null: Twitch first). Listed first, and
+// the account's name everywhere follows it.
+let DISPLAY_PLATFORM = null;
+const myIdentities = () => [...IDENTITIES].sort((a, b) => (b.platform === DISPLAY_PLATFORM) - (a.platform === DISPLAY_PLATFORM) || b.platform.localeCompare(a.platform));
+function goBy() {
+  const first = myIdentities()[0];
+  if (first) Object.assign(ME_SUMMARY, { displayName: first.displayName, avatar: first.avatar });
+}
 const NOTES = [
   { id: '01JD8XNOTE0000000000000006', kind: 'cosmetic.granted', payload: JSON.stringify({ kind: 'paint', cosmetic_id: 'P1', name: 'Sample sunrise', reason: 'Thanks for testing' }), createdAt: '2026-11-17T09:30:00.000Z', read: false },
   { id: '01JD8XNOTE0000000000000005', kind: 'editor.added', payload: JSON.stringify({ role: 'editor', owner_id: OTHERS[4].id, owner_name: OTHERS[4].displayName, editor_id: ME_ID, editor_name: ME_SUMMARY.displayName, actor_id: OTHERS[4].id, actor_name: OTHERS[4].displayName, permissions: ['emotes', 'profile'] }), createdAt: '2026-11-15T20:00:00.000Z', read: false },
@@ -722,7 +732,8 @@ const flagsOn = (ownerId) => (ownerId === ME_ID ? EDITOR_FLAGS : withImplied(EDI
 const editorOfOut = () => EDITOR_OF.map((g) => ({ ...g }));
 
 const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view', 'cosmetics.manage', 'cosmetics.grant', 'shop.manage', 'shop.orders', 'codes.manage',
-  'roles.assign', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets', 'users.block', 'users.sessions', 'users.notes', 'entitlements.view', 'billing.view', 'subscriptions.manage'];
+  'roles.assign', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets', 'users.block', 'users.sessions', 'users.notes', 'entitlements.view', 'billing.view', 'subscriptions.manage',
+  'emotes.delete_any', 'editors.manage_any'];
 
 // ---- Chat cosmetics (ADR 0015) ----------------------------------------------------------
 // SAMPLE DATA ONLY: two made-up badges (simple SVG drawn here) and three sample paints, so the
@@ -1263,7 +1274,7 @@ function shopAnswer(q, v, session, admin) {
 // never appear, so none are here. Everyone else has none; blocked accounts answer an empty list.
 const act = (n, minsAgo, kind, actor, rest) => ({
   id: `01JD8XACT${String(9000 - n).padStart(17, '0')}`, kind, actor, set: null, emote: null, fromName: null, toName: null,
-  badge: null, paint: null, createdAt: new Date(NOW - minsAgo * 60_000).toISOString(), ...rest,
+  badge: null, paint: null, editor: null, createdAt: new Date(NOW - minsAgo * 60_000).toISOString(), ...rest,
 });
 const aSet = (s) => ({ id: s.id, name: s.name });
 const aEmote = (e, name = e.name) => ({ id: e.id, name, host: e.host, files: e.files });
@@ -1284,6 +1295,9 @@ const ACTIVITY = {
     act(9, 2 * 1440 + 30, 'SET_CREATED', ME_SUMMARY, { set: aSet(FOX_SUB) }),
     act(10, 4 * 1440, 'SET_EMOTE_ADDED', ME_SUMMARY, { set: aSet(FOX_MAIN), emote: aEmote(MINE[4]) }),
     act(11, 6 * 1440, 'SET_CREATED', ME_SUMMARY, { set: aSet(FOX_MAIN) }),
+    act(12, 6 * 1440 - 20, 'EDITOR_ADDED', ME_SUMMARY, { editor: NORA }),
+    act(13, 6 * 1440 - 40, 'EDITOR_ADDED', ME_SUMMARY, { editor: PIXEL }),
+    act(14, 40 * 1440, 'EDITOR_REMOVED', OTHERS[5], { editor: OTHERS[5] }),
   ],
   [OTHERS[0].id]: [
     act(21, 12, 'SET_EMOTE_ADDED', OTHERS[0], { set: aSet(OAK_MAIN), emote: aEmote(ALL[62]) }),
@@ -1318,9 +1332,23 @@ function activityPageOf(rows, v, shortFirst = 0) {
   const more = from.length > entries.length;
   return { entries, next: more ? entries.at(-1)?.id ?? v.before ?? null : null };
 }
+// The `filter` as the API reads it: groups (editor lines only when EDITORS is asked for), the
+// actor (an upload counts as the owner's), and since (inclusive) / until (exclusive), RFC 3339.
+const GROUP_OF = { SET_EMOTE_ADDED: 'EMOTES', SET_EMOTE_REMOVED: 'EMOTES', SET_EMOTE_RENAMED: 'EMOTES', EMOTE_UPLOADED: 'EMOTES',
+  SET_CREATED: 'SETS', SET_RENAMED: 'SETS', ACTIVE_SET_CHANGED: 'SETS', COSMETICS_SELECTED: 'COSMETICS', EDITOR_ADDED: 'EDITORS', EDITOR_REMOVED: 'EDITORS' };
+function filtered(rows, f) {
+  const groups = f?.groups?.length ? f.groups : ['EMOTES', 'SETS', 'COSMETICS'];
+  return rows.filter((a) => groups.includes(GROUP_OF[a.kind])
+    && (!f?.actorId || a.actor?.id === f.actorId)
+    && (!f?.since || Date.parse(a.createdAt) >= Date.parse(f.since))
+    && (!f?.until || Date.parse(a.createdAt) < Date.parse(f.until)));
+}
 function activityPageAnswer(v) {
   if (statusOf(v.accountId).blocked) return { data: { accountActivityPage: { entries: [], next: null } } };
-  return { data: { accountActivityPage: activityPageOf(ACTIVITY[v.accountId] ?? [], v, v.accountId === ME_ID ? 4 : 0) } };
+  const f = v.filter ?? null;
+  for (const k of ['since', 'until']) if (f?.[k] && Number.isNaN(Date.parse(f[k]))) return err(`${k} must be an RFC 3339 time.`, 'bad_time');
+  const short = v.accountId === ME_ID && !f?.actorId && !f?.since ? 4 : 0;
+  return { data: { accountActivityPage: activityPageOf(filtered(ACTIVITY[v.accountId] ?? [], f), v, short) } };
 }
 
 // `emoteActivity(emoteId, before, limit)`: the sample lines about this emote from every account's
@@ -1401,6 +1429,8 @@ const sorted = (hits, sort, window = 'WEEK') => {
   return hits;
 };
 
+// Editors of other accounts, as staff with editors.manage_any manage them (the mock admin).
+const STAFF_EDITORS = {};
 const findEmote = (id) => MINE.find((e) => e.id === id) ?? ALL.find((e) => e.id === id);
 const findSet = (id) => SETS.find((s) => s.id === id) ?? SHARED_SETS.find((s) => s.id === id) ?? PUBLIC_SETS.find((s) => s.id === id);
 const ALL_SETS = () => [...SETS, ...SHARED_SETS, ...PUBLIC_SETS];
@@ -1450,7 +1480,13 @@ function signedIn(body, v, ADMIN) {
   const op = (body.query.match(/(?:query|mutation)\s+(\w+)/) ?? [])[1];
   switch (op) {
     case 'Me':
-      return { data: { me: { id: ME_ID, createdAt: '2026-11-10T12:00:00.000Z', permissions: ADMIN ? PERMISSIONS : ROLES.find((r) => r.builtIn === 'USER').permissions, identities: IDENTITIES, roles: MY_ROLES() } } };
+      return { data: { me: { id: ME_ID, createdAt: '2026-11-10T12:00:00.000Z', permissions: ADMIN ? PERMISSIONS : ROLES.find((r) => r.builtIn === 'USER').permissions, identities: myIdentities(), displayPlatform: DISPLAY_PLATFORM, roles: MY_ROLES() } } };
+    case 'SetDisplayPlatform': {
+      if (!IDENTITIES.some((i) => i.platform === v.platform)) return err('That platform isn’t linked to your account.', 'not_found');
+      DISPLAY_PLATFORM = v.platform;
+      goBy();
+      return { data: { setDisplayPlatform: { id: ME_ID, displayPlatform: DISPLAY_PLATFORM } } };
+    }
     case 'MyRoles':
       return { data: { me: { id: ME_ID, roles: MY_ROLES() } } };
     case 'MyEmotes': {
@@ -1459,7 +1495,8 @@ function signedIn(body, v, ADMIN) {
       return { data: { myEmotes: { total: MINE.length, items: MINE.slice((page - 1) * per, page * per) } } };
     }
     case 'UpdateEmote': {
-      const e = MINE.find((x) => x.id === v.id);
+      // Staff with emotes.edit_any (the mock admin) change anyone's.
+      const e = MINE.find((x) => x.id === v.id) ?? (ADMIN ? findEmote(v.id) : null);
       if (!e) return err('Only the emote’s owner can change it.', 'forbidden');
       if (v.input.name !== undefined) e.name = v.input.name;
       if (v.input.tags) e.tags = v.input.tags;
@@ -1477,8 +1514,11 @@ function signedIn(body, v, ADMIN) {
     }
     case 'DeleteEmote': {
       const i = MINE.findIndex((x) => x.id === v.id);
-      if (i < 0) return err('Not found.', 'not_found');
-      MINE.splice(i, 1);
+      // Staff with emotes.delete_any (the mock admin) delete anyone's.
+      const j = i < 0 && ADMIN ? ALL.findIndex((x) => x.id === v.id) : -1;
+      if (i < 0 && j < 0) return err(findEmote(v.id) ? 'Only the emote’s owner can delete it.' : 'Not found.', findEmote(v.id) ? 'forbidden' : 'not_found');
+      if (i >= 0) MINE.splice(i, 1);
+      else ALL.splice(j, 1);
       for (const s of SETS) s.emotes = s.emotes.filter((m) => m.emote.id !== v.id);
       return { data: { deleteEmote: true } };
     }
@@ -1592,6 +1632,7 @@ function signedIn(body, v, ADMIN) {
       return { data: { editorOf: editorOfOut() } };
     case 'AccountEditors': {
       if (!v.accountId || v.accountId === ME_ID) return { data: { accountEditors: ACCOUNT_EDITORS } };
+      if (ADMIN) return { data: { accountEditors: (STAFF_EDITORS[v.accountId] ??= []) } }; // editors.manage_any
       if (!flagsOn(v.accountId).includes('EDITORS')) return err('This needs the editors permission on that account.', 'forbidden');
       return { data: { accountEditors: [] } };
     }
@@ -1605,6 +1646,21 @@ function signedIn(body, v, ADMIN) {
       return { data: { accountEditors: ACCOUNT_EDITORS, editorOf: editorOfOut(), mySets: SETS.map((x) => ({ id: x.id, name: x.name, kind: x.kind, owner: x.owner ? { id: x.owner.id } : null })) } };
     case 'AddAccountEditor': {
       const { login, accountId, permissions } = v.input;
+      if (v.input.ownerId && v.input.ownerId !== ME_ID) {
+        // Someone else's account: staff with editors.manage_any (the mock admin) only.
+        if (!ADMIN) return err('Only the account’s owner and its editors with the editors permission can manage its editors.', 'forbidden');
+        if (!permissions?.length) return err('Pick at least one permission.', 'no_permissions');
+        const list = (STAFF_EDITORS[v.input.ownerId] ??= []);
+        const who = String(login ?? '').trim().replace(/^@/, '').toLowerCase();
+        const a = [ME_SUMMARY, ...OTHERS].find((o) => (accountId ? o.id === accountId : o.displayName.toLowerCase() === who));
+        if (!a) return err('Not found.', 'not_found');
+        if (a.id === v.input.ownerId) return err('The account’s owner can do all of this already.', 'already_owner');
+        if (list.some((e) => e.account.id === a.id)) return err('They are an editor already.', 'already_editor');
+        const now = new Date().toISOString();
+        const ed = { account: a, permissions: withImplied(permissions), allSets: true, setIds: [], grantedBy: ME_SUMMARY, grantedAt: now, updatedAt: now };
+        list.push(ed);
+        return { data: { addAccountEditor: ed } };
+      }
       if (!permissions?.length) return err('Pick at least one permission.', 'no_permissions');
       if (ACCOUNT_EDITORS.length >= MAX_EDITORS) return err('An account can have at most 50 editors. Remove one to add someone else.', 'too_many_editors');
       const scope = scopeFrom(v.input.setIds);
@@ -1620,7 +1676,8 @@ function signedIn(body, v, ADMIN) {
       return { data: { addAccountEditor: ed } };
     }
     case 'UpdateAccountEditor': {
-      const ed = ACCOUNT_EDITORS.find((e) => e.account.id === v.accountId);
+      if (v.ownerId && v.ownerId !== ME_ID && !ADMIN) return err('Only the account’s owner and its editors with the editors permission can manage its editors.', 'forbidden');
+      const ed = (v.ownerId && v.ownerId !== ME_ID ? (STAFF_EDITORS[v.ownerId] ?? []) : ACCOUNT_EDITORS).find((e) => e.account.id === v.accountId);
       if (!ed) return err('Not found.', 'not_found');
       if (!v.permissions?.length) return err('Pick at least one permission.', 'no_permissions');
       if (v.setIds) {
@@ -1633,6 +1690,12 @@ function signedIn(body, v, ADMIN) {
       return { data: { updateAccountEditor: ed } };
     }
     case 'RemoveAccountEditor': {
+      if (v.ownerId && v.ownerId !== ME_ID && v.accountId !== ME_ID && ADMIN) {
+        const list = STAFF_EDITORS[v.ownerId] ?? [];
+        const i = list.findIndex((e) => e.account.id === v.accountId);
+        if (i >= 0) list.splice(i, 1);
+        return { data: { removeAccountEditor: i >= 0 } };
+      }
       if (v.ownerId && v.ownerId !== ME_ID) {
         const i = EDITOR_OF.findIndex((g) => g.account.id === v.ownerId);
         if (i >= 0 && v.accountId === ME_ID) EDITOR_OF.splice(i, 1);
@@ -1644,7 +1707,11 @@ function signedIn(body, v, ADMIN) {
     }
     case 'Unlink': {
       if (IDENTITIES.length < 2) return err('The last identity can’t be removed.', 'last_identity');
-      IDENTITIES.splice(IDENTITIES.findIndex((i) => i.platform === v.platform), 1);
+      const at = IDENTITIES.findIndex((i) => i.platform === v.platform);
+      if (at < 0) return err('That platform isn’t linked to your account.', 'not_found');
+      IDENTITIES.splice(at, 1);
+      if (DISPLAY_PLATFORM === v.platform) DISPLAY_PLATFORM = null;
+      goBy();
       return { data: { unlinkIdentity: { id: ME_ID } } };
     }
     case 'MyNotifications':
@@ -1841,7 +1908,7 @@ function accountProfile(id) {
   const account = [ME_SUMMARY, ...OTHERS].find((a) => a.id === id);
   if (!account || statusOf(id).blocked) return null;
   const identities = id === ME_ID
-    ? IDENTITIES.map((i) => ({ platform: i.platform, login: i.login, displayName: i.displayName }))
+    ? myIdentities().map((i) => ({ platform: i.platform, login: i.login, displayName: i.displayName }))
     : searchPeople().find((h) => h.account.id === id)?.identities ?? [];
   const roles = (ACCOUNT_ROLES[id] ?? []).map((r) => ROLES.find((x) => x.id === r)).filter((r) => r?.public)
     .sort((a, b) => b.position - a.position).map((r) => ({ id: r.id, name: r.name }));
@@ -1850,7 +1917,7 @@ function accountProfile(id) {
     return set ? { platform: c.platform, login: c.login, setId: set.id, setName: set.name } : null;
   }).filter(Boolean);
   // Editors, names only (never their permissions).
-  const editors = id === ME_ID ? ACCOUNT_EDITORS.map((e) => e.account) : [];
+  const editors = id === ME_ID ? ACCOUNT_EDITORS.map((e) => e.account) : id === OTHERS[0].id ? [ME_SUMMARY, OTHERS[3]] : [];
   return { account, identities, roles, activeSets, editors, createdAt: id === ME_ID ? '2026-11-10T12:00:00.000Z' : '2026-11-08T09:00:00.000Z' };
 }
 // accountCosmetics(accountIds): what each account shows, with the badge and paint themselves.
@@ -1903,6 +1970,11 @@ function accountHub(q, v) {
     if (i >= 0) SESSIONS.splice(i, 1);
     data.revokeSession = i >= 0;
   }
+  if (/\bsignOutEverywhere\b/.test(q)) {
+    const n = SESSIONS.length;
+    SESSIONS.splice(0, SESSIONS.length);
+    return { data: { signOutEverywhere: n }, _cookie: 'mock_session=; Path=/; Max-Age=0' };
+  }
   if (/\brevokeOtherSessions\b/.test(q)) {
     data.revokeOtherSessions = SESSIONS.filter((x) => !x.current).length;
     SESSIONS.splice(0, SESSIONS.length, ...SESSIONS.filter((x) => x.current));
@@ -1933,7 +2005,7 @@ function accountHub(q, v) {
 
 // Fields added after the site's first queries, answered by field name so any operation name works.
 function newFields(q, v, session) {
-  if (/\b(mySessions|unreadNotificationCount|revokeSession|revokeOtherSessions|exportMyData|deleteAccount|markNotificationsRead)\b/.test(q))
+  if (/\b(mySessions|unreadNotificationCount|revokeSession|revokeOtherSessions|signOutEverywhere|exportMyData|deleteAccount|markNotificationsRead)\b/.test(q))
     if (!session) return err('Sign in to use this.', 'signed_out');
   // Each handler answers one new field; an operation may ask for several, and for older ones too.
   const id = v.accountId ?? v.id ?? '';

@@ -21,7 +21,8 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::catalog::{
-    db_error, forbidden, holds, load_set, member_name, not_found, parse_id, publish_member_event,
+    db_error, forbidden, holds, load_set, member_name, not_found, parse_id, permissions_of,
+    publish_member_event,
 };
 use crate::state::AppState;
 use crate::views;
@@ -217,10 +218,15 @@ pub async fn account_emotes(
 ) -> ApiResult<EmotePage> {
     let owner = parse_id(account_id)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    if !holds(&mut conn, caller, permissions::USERS_VIEW).await?
-        && !holds(&mut conn, caller, permissions::EMOTES_REVIEW).await?
-        && !holds(&mut conn, caller, permissions::EMOTES_TAKEDOWN).await?
-    {
+    let held = permissions_of(&mut conn, caller).await?;
+    let may = [
+        permissions::USERS_VIEW,
+        permissions::EMOTES_REVIEW,
+        permissions::EMOTES_TAKEDOWN,
+        permissions::EMOTES_EDIT_ANY,
+        permissions::EMOTES_DELETE_ANY,
+    ];
+    if !held.iter().any(|p| may.contains(&p.as_str())) {
         return Err(forbidden("This needs users.view or emotes.review."));
     }
     let per_page = per_page.unwrap_or(QUEUE_PAGE).clamp(1, QUEUE_PAGE_MAX);
@@ -422,7 +428,8 @@ pub async fn update(
     build(state, &mut conn, &after).await
 }
 
-/// The owner deletes their emote: it leaves every set at once. False if there was none.
+/// The owner, or `emotes.delete_any` (audited as `emote.deleted`), deletes an emote: it leaves
+/// every set at once. False if there was none.
 pub async fn delete(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bool> {
     let id = parse_id(id)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
@@ -430,8 +437,28 @@ pub async fn delete(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bo
     let Some(found) = row(&mut tx, id).await? else {
         return Ok(false);
     };
-    if found.owner != Some(caller.account_id) {
+    let owner = found.owner == Some(caller.account_id);
+    if !owner && !holds(&mut tx, caller, permissions::EMOTES_DELETE_ANY).await? {
         return Err(forbidden("Only the emote's owner can delete it."));
+    }
+    if !owner {
+        let tags = emotes::tags(&mut tx, id).await.map_err(db_error)?;
+        write_audit(
+            &mut tx,
+            caller,
+            "emote.deleted",
+            id,
+            Some(json!({
+                "name": found.name,
+                "owner_id": found.owner.map(ids::to_text),
+                "state": found.state,
+                "private": found.private,
+                "unlisted": found.unlisted,
+                "tags": tags,
+            })),
+            Some(json!({ "via": permissions::EMOTES_DELETE_ANY })),
+        )
+        .await?;
     }
     for (set_id, name) in emotes::remove_from_all_sets(&mut tx, id)
         .await

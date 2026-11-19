@@ -77,6 +77,19 @@ describe('paintStyle', () => {
     expect(css).toContain('background-clip: text');
     expect(css).toContain('-webkit-text-fill-color: transparent');
   });
+  it('keeps an image-painted name readable when its picture fails to load', () => {
+    // Regression: the text is transparent and clipped to the background, so with only the picture
+    // as background a blocked or missing picture drew nothing at all (an invisible name).
+    for (const color of ['#FF7A45', null]) {
+      const css = paintStyle({ ...base, kind: 'IMAGE', color, image: img });
+      expect(css).toContain('-webkit-text-fill-color: transparent');
+      const layers = css.match(/background-image: ([^;]+)/)![1];
+      expect(layers).toBe('url("https://cdn.cyex.tv/cosmetics/paints/abc/1x.webp"), linear-gradient(currentColor, currentColor)');
+      expect(css).toContain('background-size: cover, 100% 100%');
+      if (color) expect(css.startsWith('color: #ff7a45')).toBe(true);
+    }
+    expect(paintStyle({ ...base, kind: 'IMAGE', repeat: true, image: img })).toContain('background-repeat: repeat, no-repeat');
+  });
   it('falls back to the plain colour when the paint can’t be drawn', () => {
     expect(paintStyle({ ...base, stops: [] })).toBe('color: #ff7a45');
     expect(paintStyle({ ...base, color: null, stops: [] })).toBe('');

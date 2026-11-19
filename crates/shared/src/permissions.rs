@@ -43,6 +43,11 @@ pub const ENTITLEMENTS_VIEW: &str = "entitlements.view";
 pub const BILLING_VIEW: &str = "billing.view";
 /// See and change subscriptions.
 pub const SUBSCRIPTIONS_MANAGE: &str = "subscriptions.manage";
+/// Delete any account's emote, as its owner can (`emotes.edit_any` already renames, retags and
+/// changes the flags and visibility of anyone's emotes). Audited.
+pub const EMOTES_DELETE_ANY: &str = "emotes.delete_any";
+/// Add, change and remove any account's editors on its behalf, as its owner can. Audited.
+pub const EDITORS_MANAGE_ANY: &str = "editors.manage_any";
 
 /// Every permission that exists. A role can only hold names from this list.
 pub const ALL: &[&str] = &[
@@ -70,6 +75,8 @@ pub const ALL: &[&str] = &[
     ENTITLEMENTS_VIEW,
     BILLING_VIEW,
     SUBSCRIPTIONS_MANAGE,
+    EMOTES_DELETE_ANY,
+    EDITORS_MANAGE_ANY,
 ];
 
 pub fn is_known(name: &str) -> bool {

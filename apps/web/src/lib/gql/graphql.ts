@@ -184,6 +184,8 @@ export type ActivityEntry = {
   actor: AccountSummary;
   badge?: Maybe<ActivityCosmeticChange>;
   createdAt: Scalars['String']['output'];
+  /** The editor added or removed (`EDITOR_ADDED`, `EDITOR_REMOVED`). */
+  editor?: Maybe<AccountSummary>;
   emote?: Maybe<ActivityEmote>;
   fromName?: Maybe<Scalars['String']['output']>;
   /** An audit row ID; page back with it. */
@@ -194,12 +196,51 @@ export type ActivityEntry = {
   toName?: Maybe<Scalars['String']['output']>;
 };
 
+/**
+ * Narrows `accountActivityPage`. Every field is optional; an empty filter is the whole feed
+ * (without editor lines, as before filters existed).
+ */
+export type ActivityFilter = {
+  /** Only lines by this account (the owner or one of its editors). */
+  actorId?: InputMaybe<Scalars['String']['input']>;
+  /**
+   * Only these groups. Editor lines (`EDITOR_ADDED`, `EDITOR_REMOVED`) show only when this
+   * lists `EDITORS`.
+   */
+  groups?: InputMaybe<Array<ActivityGroup>>;
+  /** Only lines at or after this time (RFC 3339). */
+  since?: InputMaybe<Scalars['String']['input']>;
+  /** Only lines before this time (RFC 3339). */
+  until?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** A group of activity lines, for filtering a feed. */
+export type ActivityGroup =
+  /** Badge and paint changes. */
+  | 'COSMETICS'
+  /** Account editors added and removed. */
+  | 'EDITORS'
+  /** Emotes added to, removed from or renamed in sets, and uploads that went public. */
+  | 'EMOTES'
+  /** Sets made or renamed, and active set changes. */
+  | 'SETS';
+
 /** What one line of an account's public activity feed says happened. */
 export type ActivityKind =
   /** A channel's active set changed (`set` is the new one; `from_name`, `to_name`). */
   | 'ACTIVE_SET_CHANGED'
   /** The badge and/or paint shown changed (`badge`, `paint`). */
   | 'COSMETICS_SELECTED'
+  /**
+   * Someone became an account editor (`editor`). Never their permissions. Only listed when
+   * the filter asks for `EDITORS`.
+   */
+  | 'EDITOR_ADDED'
+  /**
+   * An account editor was removed or left (`editor`). Only listed when the filter asks for
+   * `EDITORS`.
+   */
+  | 'EDITOR_REMOVED'
   /** An emote of the account was approved and listed. */
   | 'EMOTE_UPLOADED'
   | 'SET_CREATED'
@@ -795,6 +836,11 @@ export type ImageFormat =
 export type Me = {
   __typename?: 'Me';
   createdAt: Scalars['String']['output'];
+  /**
+   * The platform whose name and picture the account goes by (`setDisplayPlatform`); null for
+   * the default, Twitch first. `identities` lists that one first.
+   */
+  displayPlatform?: Maybe<Platform>;
   id: Scalars['String']['output'];
   identities: Array<Identity>;
   /** Permission names from the account's roles (ADR 0010). */
@@ -809,8 +855,8 @@ export type Me = {
 export type Mutation = {
   __typename?: 'Mutation';
   /**
-   * Make someone an editor of your account, or of an account you edit with `EDITORS` (ADR
-   * 0014). Give their account ID, or a platform and login. You can only grant permissions you
+   * Make someone an editor of your account, of an account you edit with `EDITORS` (ADR
+   * 0014), or of anyone's with `editors.manage_any` (audited with `via`). Give their account ID, or a platform and login. You can only grant permissions you
    * hold. `setIds` limits them to some of the account's sets; leave it out for every set, new
    * ones included. At most 50 editors per account (`too_many_editors`). Audited.
    */
@@ -878,7 +924,10 @@ export type Mutation = {
    * `cosmetics.manage`. Audited.
    */
   deleteBadge: Scalars['Boolean']['output'];
-  /** Delete your emote. It is removed from every set. */
+  /**
+   * Delete your emote, or anyone's with `emotes.delete_any` (audited). It is removed from
+   * every set.
+   */
   deleteEmote: Scalars['Boolean']['output'];
   /**
    * Delete a paint: everyone loses it and stops showing it. False when there was none. Needs
@@ -949,7 +998,7 @@ export type Mutation = {
   /** Reject a pending emote with a reason. Needs `emotes.review`. Audited. */
   rejectEmote: Emote;
   /**
-   * Remove an account editor: the owner, an editor with `EDITORS`, or the editor themselves
+   * Remove an account editor: the owner, an editor with `EDITORS`, `editors.manage_any`, or the editor themselves
    * (with `ownerId` set to the account they leave). False when they weren't one. Audited.
    */
   removeAccountEditor: Scalars['Boolean']['output'];
@@ -996,6 +1045,17 @@ export type Mutation = {
    */
   selectCosmetics: OwnedCosmetics;
   /**
+   * Go by the name and picture of your identity on `platform` (when more than one is linked,
+   * pick which login you show as). Every linked login still finds you in search.
+   * `not_found` when that platform isn't linked. Unlinking it goes back to the default.
+   */
+  setDisplayPlatform: Me;
+  /**
+   * Sign out everywhere, here too: every site and app session ends and the cookie is cleared.
+   * Returns how many sessions ended.
+   */
+  signOutEverywhere: Scalars['Int']['output'];
+  /**
    * Start buying an item for yourself, or as a gift with `recipient`. Answers the Paddle
    * transaction to open in Paddle's checkout; the order turns `PAID` once Paddle confirms.
    * `checkout_unavailable` while Paddle isn't set up or the item has no Paddle price. Asking
@@ -1020,6 +1080,7 @@ export type Mutation = {
   unlinkIdentity: Me;
   /**
    * Change an account editor's permissions. `ownerId` is the account edited; empty for yours.
+   * The owner, an editor with `EDITORS`, or `editors.manage_any`.
    * `setIds` changes which sets they work on: empty for every set, left out to keep them.
    * Audited.
    */
@@ -1268,6 +1329,11 @@ export type MutationSelectCosmeticsArgs = {
   badgeId?: InputMaybe<Scalars['String']['input']>;
   ownerId?: InputMaybe<Scalars['String']['input']>;
   paintId?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type MutationSetDisplayPlatformArgs = {
+  platform: Platform;
 };
 
 
@@ -1600,6 +1666,10 @@ export type Query = {
    * `accountActivity` with a cursor: `next` is the `before` for the following page, null when
    * there is none. A page can hold fewer than `limit` entries and still have a `next`, because
    * the feed skips what isn't public.
+   *
+   * `filter` narrows it: `groups` (emotes, sets, cosmetics, editors; editor lines only show
+   * when asked for), `actorId` (only lines by the owner or that editor), and `since` /
+   * `until` (RFC 3339; `bad_time` otherwise).
    */
   accountActivityPage: ActivityPage;
   /**
@@ -1610,12 +1680,12 @@ export type Query = {
   accountCosmetics: Array<AccountCosmetics>;
   /**
    * An account's editors (ADR 0014): yours, or, with `accountId`, those of an account you edit
-   * with the `EDITORS` permission.
+   * with the `EDITORS` permission, or anyone's with `editors.manage_any`.
    */
   accountEditors: Array<AccountEditor>;
   /**
-   * An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`
-   * or `emotes.takedown`. `perPage` is 1 to 100, default 50.
+   * An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`,
+   * `emotes.takedown`, `emotes.edit_any` or `emotes.delete_any`. `perPage` is 1 to 100, default 50.
    */
   accountEmotes: EmotePage;
   /**
@@ -1888,6 +1958,7 @@ export type QueryAccountActivityArgs = {
 export type QueryAccountActivityPageArgs = {
   accountId: Scalars['String']['input'];
   before?: InputMaybe<Scalars['String']['input']>;
+  filter?: InputMaybe<ActivityFilter>;
   limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
@@ -2616,7 +2687,7 @@ export type GlobalSetQuery = { __typename?: 'Query', globalSet: { __typename?: '
 export type MeQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type MeQuery = { __typename?: 'Query', me: { __typename?: 'Me', id: string, createdAt: string, permissions: Array<string>, identities: Array<{ __typename?: 'Identity', platform: Platform, platformUserId: string, login: string, displayName: string, avatar?: string | null }> } };
+export type MeQuery = { __typename?: 'Query', me: { __typename?: 'Me', id: string, createdAt: string, permissions: Array<string>, displayPlatform?: Platform | null, identities: Array<{ __typename?: 'Identity', platform: Platform, platformUserId: string, login: string, displayName: string, avatar?: string | null }> } };
 
 export type MyEmotesQueryVariables = Exact<{
   page?: InputMaybe<Scalars['Int']['input']>;
@@ -2772,6 +2843,18 @@ export type RemoveAccountEditorMutationVariables = Exact<{
 
 
 export type RemoveAccountEditorMutation = { __typename?: 'Mutation', removeAccountEditor: boolean };
+
+export type SetDisplayPlatformMutationVariables = Exact<{
+  platform: Platform;
+}>;
+
+
+export type SetDisplayPlatformMutation = { __typename?: 'Mutation', setDisplayPlatform: { __typename?: 'Me', id: string, displayPlatform?: Platform | null } };
+
+export type SignOutEverywhereMutationVariables = Exact<{ [key: string]: never; }>;
+
+
+export type SignOutEverywhereMutation = { __typename?: 'Mutation', signOutEverywhere: number };
 
 export type UnlinkMutationVariables = Exact<{
   platform: Platform;
@@ -3106,7 +3189,7 @@ export type AccountProfileQueryVariables = Exact<{
 }>;
 
 
-export type AccountProfileQuery = { __typename?: 'Query', accountProfile?: { __typename?: 'AccountProfile', createdAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }>, roles: Array<{ __typename?: 'PublicRole', id: string, name: string }>, activeSets: Array<{ __typename?: 'ActiveChannelSet', platform: Platform, login: string, setId: string, setName: string }> } | null };
+export type AccountProfileQuery = { __typename?: 'Query', accountProfile?: { __typename?: 'AccountProfile', createdAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }>, roles: Array<{ __typename?: 'PublicRole', id: string, name: string }>, activeSets: Array<{ __typename?: 'ActiveChannelSet', platform: Platform, login: string, setId: string, setName: string }>, editors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }> } | null };
 
 export type MyCosmeticsQueryVariables = Exact<{
   accountId?: InputMaybe<Scalars['String']['input']>;
@@ -3228,10 +3311,11 @@ export type AccountActivityQueryVariables = Exact<{
   accountId: Scalars['String']['input'];
   before?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
+  filter?: InputMaybe<ActivityFilter>;
 }>;
 
 
-export type AccountActivityQuery = { __typename?: 'Query', accountActivityPage: { __typename?: 'ActivityPage', next?: string | null, entries: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> } };
+export type AccountActivityQuery = { __typename?: 'Query', accountActivityPage: { __typename?: 'ActivityPage', next?: string | null, entries: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, editor?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> } };
 
 export type EmoteActivityQueryVariables = Exact<{
   emoteId: Scalars['String']['input'];
@@ -4316,6 +4400,7 @@ export const MeDocument = new TypedDocumentString(`
     id
     createdAt
     permissions
+    displayPlatform
     identities {
       platform
       platformUserId
@@ -4771,6 +4856,19 @@ export const RemoveAccountEditorDocument = new TypedDocumentString(`
   removeAccountEditor(ownerId: $ownerId, accountId: $accountId)
 }
     `) as unknown as TypedDocumentString<RemoveAccountEditorMutation, RemoveAccountEditorMutationVariables>;
+export const SetDisplayPlatformDocument = new TypedDocumentString(`
+    mutation SetDisplayPlatform($platform: Platform!) {
+  setDisplayPlatform(platform: $platform) {
+    id
+    displayPlatform
+  }
+}
+    `) as unknown as TypedDocumentString<SetDisplayPlatformMutation, SetDisplayPlatformMutationVariables>;
+export const SignOutEverywhereDocument = new TypedDocumentString(`
+    mutation SignOutEverywhere {
+  signOutEverywhere
+}
+    `) as unknown as TypedDocumentString<SignOutEverywhereMutation, SignOutEverywhereMutationVariables>;
 export const UnlinkDocument = new TypedDocumentString(`
     mutation Unlink($platform: Platform!) {
   unlinkIdentity(platform: $platform) {
@@ -5544,6 +5642,11 @@ export const AccountProfileDocument = new TypedDocumentString(`
       setId
       setName
     }
+    editors {
+      id
+      displayName
+      avatar
+    }
     createdAt
   }
 }
@@ -5962,12 +6065,22 @@ fragment SetFields on EmoteSet {
   }
 }`) as unknown as TypedDocumentString<ProfileEditedQuery, ProfileEditedQueryVariables>;
 export const AccountActivityDocument = new TypedDocumentString(`
-    query AccountActivity($accountId: String!, $before: String, $limit: Int) {
-  accountActivityPage(accountId: $accountId, before: $before, limit: $limit) {
+    query AccountActivity($accountId: String!, $before: String, $limit: Int, $filter: ActivityFilter) {
+  accountActivityPage(
+    accountId: $accountId
+    before: $before
+    limit: $limit
+    filter: $filter
+  ) {
     entries {
       id
       kind
       actor {
+        id
+        displayName
+        avatar
+      }
+      editor {
         id
         displayName
         avatar

@@ -223,6 +223,9 @@ async fn me_of(ctx: &Context<'_>, caller: &Caller) -> Result<Me> {
     let permissions = catalog::permissions_of(&mut conn, caller)
         .await
         .map_err(api_error)?;
+    let display_platform = accounts::display_platform(&mut conn, account.id)
+        .await
+        .map_err(internal)?;
     let roles = cyex_tv_db::roles::roles_of(&mut conn, account.id)
         .await
         .map_err(internal)?
@@ -241,6 +244,7 @@ async fn me_of(ctx: &Context<'_>, caller: &Caller) -> Result<Me> {
         created_at: account
             .created_at
             .to_rfc3339_opts(SecondsFormat::Millis, true),
+        display_platform,
     })
 }
 
@@ -486,6 +490,10 @@ impl Query {
     /// `accountActivity` with a cursor: `next` is the `before` for the following page, null when
     /// there is none. A page can hold fewer than `limit` entries and still have a `next`, because
     /// the feed skips what isn't public.
+    ///
+    /// `filter` narrows it: `groups` (emotes, sets, cosmetics, editors; editor lines only show
+    /// when asked for), `actorId` (only lines by the owner or that editor), and `since` /
+    /// `until` (RFC 3339; `bad_time` otherwise).
     #[graphql(complexity = "100 + child_complexity")]
     async fn account_activity_page(
         &self,
@@ -493,11 +501,18 @@ impl Query {
         account_id: String,
         before: Option<String>,
         limit: Option<u32>,
+        filter: Option<cyex_tv_shared::model::ActivityFilter>,
     ) -> Result<ActivityPage> {
         heavy_read(ctx)?;
-        activity::account_activity_page(state(ctx), &account_id, before.as_deref(), limit)
-            .await
-            .map_err(api_error)
+        activity::account_activity_where(
+            state(ctx),
+            &account_id,
+            before.as_deref(),
+            limit,
+            filter.as_ref(),
+        )
+        .await
+        .map_err(api_error)
     }
 
     /// An emote's public activity, newest first: `EMOTE_UPLOADED` (when it was approved, shown
@@ -625,7 +640,7 @@ impl Query {
     }
 
     /// An account's editors (ADR 0014): yours, or, with `accountId`, those of an account you edit
-    /// with the `EDITORS` permission.
+    /// with the `EDITORS` permission, or anyone's with `editors.manage_any`.
     async fn account_editors(
         &self,
         ctx: &Context<'_>,
@@ -920,8 +935,8 @@ impl Query {
             .map_err(api_error)
     }
 
-    /// An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`
-    /// or `emotes.takedown`. `perPage` is 1 to 100, default 50.
+    /// An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`,
+    /// `emotes.takedown`, `emotes.edit_any` or `emotes.delete_any`. `perPage` is 1 to 100, default 50.
     async fn account_emotes(
         &self,
         ctx: &Context<'_>,
@@ -1100,6 +1115,26 @@ impl Mutation {
         me_of(ctx, caller).await
     }
 
+    /// Go by the name and picture of your identity on `platform` (when more than one is linked,
+    /// pick which login you show as). Every linked login still finds you in search.
+    /// `not_found` when that platform isn't linked. Unlinking it goes back to the default.
+    async fn set_display_platform(&self, ctx: &Context<'_>, platform: Platform) -> Result<Me> {
+        let caller = caller(ctx)?;
+        let mut conn = state(ctx).db.acquire().await.map_err(internal)?;
+        match accounts::set_display_platform(&mut conn, caller.account_id, platform).await {
+            Ok(()) => {}
+            Err(DbError::NotFound) => {
+                return Err(coded(
+                    "not_found",
+                    "That platform isn't linked to your account.",
+                ));
+            }
+            Err(err) => return Err(internal(err)),
+        }
+        drop(conn);
+        me_of(ctx, caller).await
+    }
+
     /// Change a channel's active set and settings. The channel's owner, or their account editors
     /// with `SETS`.
     async fn update_channel_settings(
@@ -1247,8 +1282,8 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Make someone an editor of your account, or of an account you edit with `EDITORS` (ADR
-    /// 0014). Give their account ID, or a platform and login. You can only grant permissions you
+    /// Make someone an editor of your account, of an account you edit with `EDITORS` (ADR
+    /// 0014), or of anyone's with `editors.manage_any` (audited with `via`). Give their account ID, or a platform and login. You can only grant permissions you
     /// hold. `setIds` limits them to some of the account's sets; leave it out for every set, new
     /// ones included. At most 50 editors per account (`too_many_editors`). Audited.
     async fn add_account_editor(
@@ -1263,6 +1298,7 @@ impl Mutation {
     }
 
     /// Change an account editor's permissions. `ownerId` is the account edited; empty for yours.
+    /// The owner, an editor with `EDITORS`, or `editors.manage_any`.
     /// `setIds` changes which sets they work on: empty for every set, left out to keep them.
     /// Audited.
     async fn update_account_editor(
@@ -1286,7 +1322,7 @@ impl Mutation {
         .map_err(api_error)
     }
 
-    /// Remove an account editor: the owner, an editor with `EDITORS`, or the editor themselves
+    /// Remove an account editor: the owner, an editor with `EDITORS`, `editors.manage_any`, or the editor themselves
     /// (with `ownerId` set to the account they leave). False when they weren't one. Audited.
     async fn remove_account_editor(
         &self,
@@ -1527,7 +1563,8 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Delete your emote. It is removed from every set.
+    /// Delete your emote, or anyone's with `emotes.delete_any` (audited). It is removed from
+    /// every set.
     async fn delete_emote(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
         let caller = caller(ctx)?;
         moderation::delete(state(ctx), caller, &id)
@@ -1679,6 +1716,22 @@ impl Mutation {
             );
         }
         Ok(done)
+    }
+
+    /// Sign out everywhere, here too: every site and app session ends and the cookie is cleared.
+    /// Returns how many sessions ended.
+    async fn sign_out_everywhere(&self, ctx: &Context<'_>) -> Result<u64> {
+        let caller = caller(ctx)?;
+        let n = account::revoke_all_sessions(state(ctx), caller)
+            .await
+            .map_err(api_error)?;
+        if caller.via == cyex_tv_auth::Via::Cookie {
+            ctx.insert_http_header(
+                axum::http::header::SET_COOKIE,
+                cyex_tv_auth::cookies::clear_session(state(ctx).auth.config()),
+            );
+        }
+        Ok(n)
     }
 
     /// Sign out everywhere but here. Returns how many sessions ended.

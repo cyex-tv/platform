@@ -1,22 +1,26 @@
 <script lang="ts">
-  // The one profile page, for everyone (7TV's model: your profile is your dashboard). The server
-  // renders the public page (Uploaded emotes); in the browser, the owner and the account's editors
-  // also get Active emotes, Emote sets, Cosmetics (owner, or editors with PROFILE) and Activity
-  // (when the API has it), plus edit controls. Sections are ?s= tabs in the ProfileRail.
+  // The one profile page, for everyone. The identity band (ProfileHeader: name, roles as flags,
+  // connections, channels, editors) heads it; the ProfileRail beside the content is navigation.
+  // The server renders the public page (Uploaded emotes; Emote sets and Activity are a tab away);
+  // in the browser, the owner also gets Overview (?s=overview, the dashboard the account menu
+  // opens), and the owner and the account's editors Active emotes, Cosmetics (owner, or editors
+  // with PROFILE) and edit controls. Sections are ?s= tabs.
   import { setContext } from 'svelte';
   import { invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
   import Problem from '$lib/components/Problem.svelte';
   import { problemTitle } from '$lib/components/problem';
   import State from '$lib/components/State.svelte';
-  import CopyLink from '$lib/components/CopyLink.svelte';
   import { clean } from '$lib/format';
   import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
   import RailLayout from '$lib/shell/RailLayout.svelte';
   import { session } from '$lib/tool/session.svelte';
   import { ACTIVITY_READY } from '$lib/profile/activity';
   import { relationState } from '$lib/profile/data.svelte';
+  import ProfileHeader from '$lib/profile/ProfileHeader.svelte';
   import ProfileRail from '$lib/profile/ProfileRail.svelte';
+  import Icon from '$lib/components/Icon.svelte';
+  import Overview from '$lib/profile/sections/Overview.svelte';
   import { canSets, sectionFrom, sectionsFor, type SectionKey } from '$lib/profile/rows';
   import ActiveEmotes from '$lib/profile/sections/ActiveEmotes.svelte';
   import ActivityFeed from '$lib/profile/sections/ActivityFeed.svelte';
@@ -45,11 +49,11 @@
   // A section only the owner or an editor has, asked for before the session is known: wait for it.
   const waiting = $derived(!!asked && asked !== section && (!session.known || (!!session.me && !granted)));
 
-  const TITLE: Record<SectionKey, string> = { uploads: 'Uploaded emotes', active: 'Active emotes', sets: 'Emote sets', cosmetics: 'Cosmetics', activity: 'Activity' };
+  const TITLE: Record<SectionKey, string> = { overview: 'Overview', uploads: 'Uploaded emotes', active: 'Active emotes', sets: 'Emote sets', cosmetics: 'Cosmetics', activity: 'Activity' };
 </script>
 
 {#snippet actions()}
-  <CopyLink url={() => location.origin + page.url.pathname} />
+  {#if relation.mine}<a class="ui-btn secondary small" href="/me/settings"><Icon name="settings" size={15} />Settings</a>{/if}
 {/snippet}
 
 <svelte:head>
@@ -78,12 +82,17 @@
 {:else}
   {@const account = { id: data.id, displayName: data.creator.displayName, avatar: data.creator.avatar }}
   <RailLayout>
+    {#snippet top()}
+      <ProfileHeader {account} {relation} profile={data.profile} seed={data.look} {actions} />
+    {/snippet}
     {#snippet rail()}
-      <ProfileRail {account} {relation} current={section} activity={ACTIVITY_READY} heading {actions} profile={data.profile} seed={data.look} />
+      <ProfileRail {account} {relation} current={section} activity={ACTIVITY_READY} />
     {/snippet}
 
     {#if waiting}
       <State kind="loading" title="Loading…" />
+    {:else if section === 'overview'}
+      {#key data.id}<Overview accountId={data.id} />{/key}
     {:else if section === 'active'}
       {#key data.id}<ActiveEmotes accountId={data.id} mine={relation.mine} />{/key}
     {:else if section === 'sets'}
@@ -91,7 +100,7 @@
     {:else if section === 'cosmetics'}
       {#key data.id}<CosmeticsPicker accountId={data.id} mine={relation.mine} {name} />{/key}
     {:else if section === 'activity'}
-      {#key data.id}<ActivityFeed accountId={data.id} />{/key}
+      {#key data.id}<ActivityFeed accountId={data.id} name={data.creator.displayName} />{/key}
     {:else if relation.mine}
       <MyUploads />
     {:else}
