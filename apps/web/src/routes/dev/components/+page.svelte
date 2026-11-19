@@ -7,12 +7,13 @@
   import IconButton from '$lib/components/IconButton.svelte';
   import Popover from '$lib/components/Popover.svelte';
   import SectionHead from '$lib/components/SectionHead.svelte';
+  import TagInput from '$lib/components/TagInput.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import { focusSearch } from '$lib/shell/search.svelte';
 
   let { data } = $props();
   let sort = $state<'top' | 'new'>('top');
-  let density = $state<'comfortable' | 'compact'>('comfortable');
+  let tagList = $state(['cat', 'happy']);
   let kind = $state<'all' | 'animated' | 'static'>('all');
   let zeroWidth = $state(false);
   let sheet = $state(false);
@@ -64,8 +65,6 @@
             <label class="check"><input type="checkbox" bind:checked={zeroWidth} /> Zero-width only <span class="fine">Emotes that sit on top of the one before them.</span></label>
           </div>
         </Popover>
-        <IconButton icon="grid" label="Comfortable" variant="outline" pressed={density === 'comfortable'} onclick={() => (density = 'comfortable')} />
-        <IconButton icon="grid-dense" label="Compact" variant="outline" pressed={density === 'compact'} onclick={() => (density = 'compact')} />
         <IconButton icon="copy" label="Copy link" />
         <button class="btn btn-s" type="button" onclick={() => (sheet = true)}>Open a sheet</button>
         <button class="btn btn-s" type="button" onclick={() => focusSearch('fox')}>Header search with “fox”</button>
@@ -78,13 +77,23 @@
     </section>
 
     <section>
-      <Eyebrow lit="middle">Emote grid, {density}</Eyebrow>
-      <EmoteGrid items={e} {density} eager={12} label="Emotes" />
+      <Eyebrow lit="middle">Tag field</Eyebrow>
+      <div class="tagdemo"><TagInput tags={tagList} onchange={(t) => (tagList = t)} label="Tags" showLabel max={5} hint="Enter adds a tag, Backspace takes the last one off. Up to 5." /></div>
+    </section>
+
+    <section>
+      <Eyebrow lit="middle">Emote grid</Eyebrow>
+      <EmoteGrid items={e} eager={12} label="Emotes" />
+    </section>
+
+    <section>
+      <Eyebrow lit="middle">Trending grid</Eyebrow>
+      <EmoteGrid items={e.slice(0, 8)} ranked label="Trending emotes" />
     </section>
 
     <section>
       <Eyebrow lit="middle">Loading more</Eyebrow>
-      <EmoteGrid items={e.slice(0, 4)} {density} loading skeletons={8} />
+      <EmoteGrid items={e.slice(0, 4)} loading skeletons={8} />
     </section>
 
     <section>
@@ -108,6 +117,7 @@
 </BottomSheet>
 
 <style>
+  .tagdemo { max-width: 360px; }
   .stack { display: grid; gap: 56px; }
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 14px; }
   .filters { display: grid; gap: 12px; padding: 8px; }

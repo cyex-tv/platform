@@ -9,10 +9,11 @@
 
 <script lang="ts">
   // One emote in a grid: name first, borderless, the art in a fixed box (no layout shift).
-  // Animated emotes show their still first frame and play while hovered or focused; under
-  // reduced motion they stay still. The tile's ground lifts one tone on hover.
-  import { hasStill, isWide, ready, size, src, srcsetW } from '$lib/emote';
+  // Animated emotes always play (EmotePicture: the still first frame under reduced motion). The
+  // tile's ground lifts one tone on hover.
+  import { isWide, ready, size } from '$lib/emote';
   import { clean } from '$lib/format';
+  import EmotePicture from './EmotePicture.svelte';
 
   type Props = {
     emote: CardEmote;
@@ -26,11 +27,9 @@
   };
   let { emote: e, density = 'comfortable', creator = true, labels = true, href, eager = false, note }: Props = $props();
 
-  let hot = $state(false);
-  let loaded = $state(false);
   const name = $derived(clean(e.shownName ?? e.name));
   const owner = $derived(e.owner ? clean(e.owner.displayName) : '');
-  // A lazy still that is already cached shows at once; one that loads late fades in.
+  // A lazy picture that is already cached shows at once; one that loads late fades in.
   function settle(node: HTMLImageElement) {
     if (node.complete || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     node.classList.add('fade');
@@ -38,7 +37,6 @@
     node.addEventListener('error', () => node.classList.remove('fade'), { once: true });
   }
   const wide = $derived(isWide(e));
-  const still = $derived(hasStill(e));
   const dims = $derived(size(e));
   // The picture fills 3/4 of the box height; `sizes` lets the browser pick the right file.
   const shownW = $derived(Math.round((ART[density] * 0.75 * dims.width) / dims.height));
@@ -48,51 +46,16 @@
   const kinds = $derived(
     (labels ? [e.animated && 'animated', e.flags?.zeroWidth && 'zero-width', wide && 'wide'] : []).filter(Boolean) as string[],
   );
-
-  function heat(on: boolean) {
-    // Read at the moment it runs (cyex-design): reduced motion never plays.
-    hot = on && e.animated && still && !matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!hot) loaded = false;
-  }
 </script>
 
 <a
   class="card {density}"
   class:wide
   href={href ?? `/emotes/${e.id}`}
-  onpointerenter={(ev) => ev.pointerType === 'mouse' && heat(true)}
-  onpointerleave={() => heat(false)}
-  onfocus={() => heat(true)}
-  onblur={() => heat(false)}
 >
   <span class="art">
     {#if ready(e)}
-      <img
-        class="pic"
-        src={src(e, 1, still)}
-        srcset={srcsetW(e, still)}
-        sizes="{shownW}px"
-        width={dims.width}
-        height={dims.height}
-        alt=""
-        loading={eager ? 'eager' : 'lazy'}
-        decoding="async"
-        use:settle
-      />
-      {#if hot}
-        <img
-          class="pic moving"
-          class:loaded
-          src={src(e, 1)}
-          srcset={srcsetW(e)}
-          sizes="{shownW}px"
-          width={dims.width}
-          height={dims.height}
-          alt=""
-          decoding="async"
-          onload={() => (loaded = true)}
-        />
-      {/if}
+      <EmotePicture emote={e} class="pic" sizes="{shownW}px" {eager} use={settle} />
     {:else}
       <span class="processing">Processing</span>
     {/if}
@@ -113,11 +76,9 @@
   .card:focus-visible { outline-offset: 0; border-radius: var(--radius-m); background: var(--surface); }
   .art { position: relative; display: grid; place-items: center; width: var(--art); height: var(--art); margin-bottom: 6px; }
   .wide .art { width: calc(var(--art) * 2); }
-  .pic { grid-area: 1 / 1; display: block; height: calc(var(--art) * .75); width: auto; max-width: 100%; object-fit: contain; }
-  .moving { opacity: 0; transition: opacity var(--dur-color); }
-  .fade { opacity: 0; }
-  .pic:not(.fade):not(.moving) { transition: opacity var(--dur-color); }
-  .moving.loaded { opacity: 1; }
+  .art :global(.pic) { grid-area: 1 / 1; display: block; height: calc(var(--art) * .75); width: auto; max-width: 100%; object-fit: contain; }
+  .art :global(.pic.fade) { opacity: 0; }
+  .art :global(.pic:not(.fade)) { transition: opacity var(--dur-color); }
   .processing { font-size: var(--t-fine); color: var(--muted); }
   .name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font-size: var(--t-ui); font-weight: 500; line-height: 1.35; color: var(--text); }

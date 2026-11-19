@@ -8,7 +8,7 @@ use cyex_tv_db::accounts::{self, Profile};
 use cyex_tv_db::emotes::{self, EmotePatch, NewEmote};
 use cyex_tv_db::sessions::{self, SessionKind};
 use cyex_tv_db::sets::{self, NewMember};
-use cyex_tv_db::{DbError, audit, channels, files, outbox, roles};
+use cyex_tv_db::{DbError, audit, channels, files, ids, outbox, roles, search};
 use cyex_tv_shared::model::{EmoteState, EventType, Platform, SetKind};
 use cyex_tv_shared::permissions;
 use serde_json::json;
@@ -1360,6 +1360,96 @@ async fn outbox_ids_topics_and_notify() {
 
     drop(c);
     drop(listener);
+    db.close().await;
+}
+
+// Trending rollup
+
+async fn event(c: &mut PgConnection, kind: &str, topics: &[&str], emote: &str, hours_ago: i32) {
+    let topics: Vec<String> = topics.iter().map(|t| (*t).to_owned()).collect();
+    sqlx::query(
+        "INSERT INTO events_outbox (type, topics, payload, created_at)
+         VALUES ($1, $2, $3, date_trunc('hour', now()) - make_interval(hours => $4)
+                             + interval '10 minutes')",
+    )
+    .bind(kind)
+    .bind(&topics)
+    .bind(json!({ "emote_id": emote }))
+    .bind(hours_ago)
+    .execute(c)
+    .await
+    .unwrap();
+}
+
+async fn buckets(c: &mut PgConnection, emote: Uuid) -> Vec<(i32, i32)> {
+    sqlx::query_as("SELECT adds, removes FROM emote_channel_adds WHERE emote_id = $1 ORDER BY hour")
+        .bind(emote)
+        .fetch_all(c)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn rollup_counts_distinct_channels_per_hour_and_is_idempotent() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let owner = account(&mut c, "1").await;
+    let x = emote(&mut c, owner, "xx", EmoteState::Approved).await;
+    let x_text = ids::to_text(x);
+    let gone = ids::to_text(ids::new_id());
+
+    // Three hours ago: two channels add it, one of them twice (counted once), one removes it.
+    // The set topic is no channel.
+    event(
+        &mut c,
+        "set.emote_added",
+        &["channel:twitch:1", "channel:kick:2", "set:abc"],
+        &x_text,
+        3,
+    )
+    .await;
+    event(&mut c, "set.emote_added", &["channel:twitch:1"], &x_text, 3).await;
+    event(
+        &mut c,
+        "set.emote_removed",
+        &["channel:twitch:1", "set:abc"],
+        &x_text,
+        3,
+    )
+    .await;
+    // Two hours ago: one channel.
+    event(&mut c, "set.emote_added", &["channel:twitch:3"], &x_text, 2).await;
+    // Ignored: personal sets, events without a channel, unparsable or unknown emotes.
+    event(
+        &mut c,
+        "personal.updated",
+        &["channel:twitch:9"],
+        &x_text,
+        2,
+    )
+    .await;
+    event(&mut c, "set.emote_added", &["set:abc"], &x_text, 2).await;
+    event(&mut c, "set.emote_added", &["channel:twitch:1"], "nope", 2).await;
+    event(&mut c, "set.emote_added", &["channel:twitch:1"], &gone, 2).await;
+
+    assert_eq!(search::rollup_channel_adds(&mut c).await.unwrap(), 2);
+    assert_eq!(buckets(&mut c, x).await, [(2, 1), (1, 0)]);
+
+    // Again: the same table. Only the newest hour is redone, so one bucket is written.
+    assert_eq!(search::rollup_channel_adds(&mut c).await.unwrap(), 1);
+    assert_eq!(buckets(&mut c, x).await, [(2, 1), (1, 0)]);
+    let total: i64 = sqlx::query_scalar("SELECT count(*) FROM emote_channel_adds")
+        .fetch_one(&mut *c)
+        .await
+        .unwrap();
+    assert_eq!(total, 2);
+
+    // A later event in the newest hour updates that bucket and leaves the older one.
+    event(&mut c, "set.emote_added", &["channel:twitch:4"], &x_text, 2).await;
+    assert_eq!(search::rollup_channel_adds(&mut c).await.unwrap(), 1);
+    assert_eq!(buckets(&mut c, x).await, [(2, 1), (2, 0)]);
+
+    drop(c);
     db.close().await;
 }
 

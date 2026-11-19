@@ -496,6 +496,8 @@ const ALL = FACES ? Array.from({ length: 300 }, (_, i) => emote(i)) : TWITCH.map
 ALL[11].flags.private = true;
 ALL[11].visibility = 'PRIVATE';
 ALL[12].visibility = 'UNLISTED';
+// A few NSFW emotes (left out of search unless asked for), and `wide` as the API derives it.
+for (const [n, e] of ALL.entries()) if (n % 23 === 7) e.flags.nsfw = true;
 const MINE = Array.from({ length: 9 }, (_, i) =>
   emote(600 + i, ME_SUMMARY, i < 2 ? 'PENDING' : i === 2 ? 'REJECTED' : 'APPROVED'));
 MINE[4].visibility = 'UNLISTED';
@@ -506,6 +508,27 @@ let RESTORE_COOKIE = false;
 const MY_ROLES = () => (ACCOUNT_ROLES[ME_ID] ?? []).map((id) => ROLES.find((r) => r.id === id)).filter(Boolean)
   .sort((a, b) => b.position - a.position).map((r) => ({ id: r.id, name: r.name, public: r.public }));
 let uploads = 0;
+const wideOf = (e) => {
+  const one = e.files.find((f) => f.name === '1x.webp');
+  return !!one && one.width * 4 >= one.height * 7;
+};
+for (const e of [...ALL, ...MINE]) e.flags.wide = wideOf(e);
+
+// Trending (the API's emote_channel_adds rollup): made-up but stable net channel adds per window,
+// growing with the window. About two thirds of the emotes trend at all.
+const TREND_DAYS = { DAY: 1, WEEK: 7, MONTH: 30 };
+function trendAdds(e, window) {
+  const n = ALL.indexOf(e);
+  if (n < 0 || n % 3 === 0) return 0;
+  const day = n % 4 === 1 ? ((n * 13) % 9) + 1 : 0;
+  const week = day + ((n * 7) % 23);
+  const month = week + ((n * 5) % 47);
+  return { DAY: day, WEEK: week, MONTH: month }[window in TREND_DAYS ? window : 'WEEK'];
+}
+const trendPool = (window, nsfw) =>
+  ALL.filter((e) => e.state === 'APPROVED' && e.visibility === 'PUBLIC' && (nsfw || !e.flags.nsfw) && trendAdds(e, window) > 0).sort(
+    (a, b) => trendAdds(b, window) - trendAdds(a, window) || b.channelCount - a.channelCount || a.id.localeCompare(b.id),
+  );
 
 const member = (e, name = e.name) => ({ name, zeroWidth: e.flags.zeroWidth, addedAt: e.createdAt, emote: e });
 const SETS = [
@@ -1394,7 +1417,11 @@ const channelByLogin = (platform, login) => {
   if (login.toLowerCase() === 'lumen_fox') return { ...CHANNELS[0], platform };
   return channelIndex.get(`${platform}/${login.toLowerCase()}`) ?? null;
 };
-const sorted = (hits, sort) => {
+const sorted = (hits, sort, window = 'WEEK') => {
+  if (sort === 'TRENDING')
+    return hits
+      .filter((e) => trendAdds(e, window) > 0)
+      .sort((a, b) => trendAdds(b, window) - trendAdds(a, window) || b.channelCount - a.channelCount || a.id.localeCompare(b.id));
   if (sort === 'TOP') return [...hits].sort((a, b) => b.channelCount - a.channelCount || a.name.localeCompare(b.name));
   if (sort === 'NEW') return [...hits].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   return hits;
@@ -2062,14 +2089,33 @@ function baseAnswer(body, session, admin) {
   if (q.includes('query Me') || /^\s*mutation/.test(q) || q.includes('query My') || q.includes('query EditSet'))
     return err('Sign in to use this.', 'signed_out');
   if (q.includes('query GlobalSet')) return { data: { globalSet: { id: GLOBAL.id, name: 'Global', emotes: GLOBAL.emotes } } };
+  if (q.includes('query EmoteTrending')) {
+    const e = ALL.find((x) => x.id === v.id);
+    const window = v.window ?? 'WEEK';
+    const rank = e ? trendPool(window, e.flags.nsfw).indexOf(e) + 1 : 0;
+    return { data: { emoteTrending: rank > 0 && rank <= 100 ? { rank, channels: trendAdds(e, window), window } : null } };
+  }
   if (q.includes('query Search')) {
-    const terms = (v.query ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+    // As the API: the text (exact name or rough match), then type, owner, flags (all must be set; NSFW
+    // ones only when asked) and tags (all must be there).
+    const text = (v.query ?? '').trim().toLowerCase();
+    const terms = text.split(/\s+/).filter(Boolean);
+    const flags = new Set(v.flags ?? []);
+    const tags = [...new Set((v.tags ?? []).map((t) => t.trim().replace(/^#+/, '').toLowerCase()).filter(Boolean))].slice(0, 10);
     // Unlisted and private emotes are never in search or browse (ADR 0020).
-    let hits = ALL.filter((e) => e.visibility === 'PUBLIC' && terms.every((t) => e.name.toLowerCase().includes(t) || e.tags.some((g) => g.includes(t))));
+    let hits = ALL.filter((e) => e.state === 'APPROVED' && e.visibility === 'PUBLIC');
+    hits = v.exact && text
+      ? hits.filter((e) => e.name.toLowerCase() === text)
+      : hits.filter((e) => terms.every((t) => e.name.toLowerCase().includes(t) || e.tags.some((g) => g.includes(t))));
     if (v.animated === true) hits = hits.filter((e) => e.animated);
     if (v.animated === false) hits = hits.filter((e) => !e.animated);
     if (v.owner) hits = hits.filter((e) => e.owner?.id === v.owner);
-    hits = sorted(hits, v.sort ?? 'RELEVANCE');
+    if (!v.nsfw && !flags.has('NSFW')) hits = hits.filter((e) => !e.flags.nsfw);
+    if (flags.has('NSFW')) hits = hits.filter((e) => e.flags.nsfw);
+    if (flags.has('ZERO_WIDTH')) hits = hits.filter((e) => e.flags.zeroWidth);
+    if (flags.has('WIDE')) hits = hits.filter((e) => e.flags.wide);
+    if (tags.length) hits = hits.filter((e) => tags.every((t) => e.tags.some((g) => g.toLowerCase() === t)));
+    hits = sorted(hits, v.sort ?? 'RELEVANCE', v.window ?? 'WEEK');
     const per = v.perPage ?? 50;
     const page = v.page ?? 1;
     return { data: { searchEmotes: { total: hits.length, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
@@ -2222,7 +2268,7 @@ createServer(async (req, res) => {
     await new Promise((r) => setTimeout(r, 700)); // long enough to see the progress
     const e = emote(700 + uploads++, ME_SUMMARY, 'PENDING');
     e.name = name;
-    e.flags = flags;
+    e.flags = { ...flags, wide: false };
     e.visibility = visibility;
     e.tags = (field('tags') ?? '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
     e.host = '';
@@ -2230,7 +2276,10 @@ createServer(async (req, res) => {
     e.createdAt = new Date().toISOString();
     MINE.unshift(e);
     // The worker "finishes" the files a few seconds later.
-    setTimeout(() => Object.assign(e, { host: emote(700).host, files: emote(700).files }), 4000);
+    setTimeout(() => {
+      Object.assign(e, { host: emote(700).host, files: emote(700).files });
+      e.flags.wide = wideOf(e);
+    }, 4000);
     return json(res, 202, e);
   }
   if (req.method === 'POST' && url.pathname === '/v1/gql') {

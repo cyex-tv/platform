@@ -23,7 +23,7 @@ function emote(over: Partial<PageEmote> = {}): PageEmote {
     createdAt: '2026-11-17T10:00:00.000Z',
     channelCount: 0,
     visibility: 'PUBLIC',
-    flags: { zeroWidth: false, nsfw: false, private: false },
+    flags: { zeroWidth: false, nsfw: false, private: false, wide: false },
     owner: { id: 'A1', displayName: 'nora_byte', avatar: null },
     files: [1, 2, 3, 4].flatMap((s) => [file(s), file(s, { isStatic: true, size: 400 * s })]),
     ...over,
@@ -55,7 +55,7 @@ describe('facts', () => {
     expect(formats([file(1), file(1, { format: 'AVIF' }), file(2)])).toEqual(['WebP', 'AVIF']);
   });
   it('describes type and labels', () => {
-    const e = emote({ flags: { zeroWidth: true, nsfw: true, private: false } });
+    const e = emote({ flags: { zeroWidth: true, nsfw: true, private: false, wide: false } });
     expect(kind(e)).toBe('Animated, zero-width');
     expect(labels(e)).toEqual(['animated', 'zero-width', 'NSFW']);
     const wide = emote({ animated: false, files: [file(1, { width: 64 })] });
@@ -66,13 +66,13 @@ describe('facts', () => {
 describe('chat', () => {
   const pool = [
     emote({ id: 'G1', name: 'wideOne', files: [file(1, { width: 96 })] }),
-    emote({ id: 'G2', name: 'zw', flags: { zeroWidth: true, nsfw: false, private: false } }),
+    emote({ id: 'G2', name: 'zw', flags: { zeroWidth: true, nsfw: false, private: false, wide: false } }),
     emote({ id: 'G3', name: 'plain' }),
     emote({ id: 'G4', name: 'other' }),
   ];
   it('stands a zero-width emote on an ordinary, narrow global emote', () => {
     expect(baseEmote(pool, 'x')?.name).toBe('plain');
-    const e = emote({ name: 'hat', flags: { zeroWidth: true, nsfw: false, private: false } });
+    const e = emote({ name: 'hat', flags: { zeroWidth: true, nsfw: false, private: false, wide: false } });
     const lines = chatLines(e, pool);
     const layered = lines[1].parts.filter((p) => 'emote' in p).map((p) => ('emote' in p ? p.emote.name : ''));
     expect(layered).toEqual(['plain', 'hat']);

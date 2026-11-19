@@ -19,16 +19,17 @@ use cyex_tv_db::{DbError, accounts, channels, ids};
 use cyex_tv_hub::Message as HubMessage;
 use cyex_tv_hub::topics as hub_topics;
 use cyex_tv_shared::error::ApiError;
+use cyex_tv_shared::model::TrendingWindow;
 use cyex_tv_shared::model::{
     AccountEditor, AccountReports, AccountResults, AccountSession, AccountStatus, AccountSummary,
     ActivityEntry, ActivityPage, AddAccountEditor, AddSetEmote, AdminAccount, AuditEntry, Badge,
     Channel, ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge, CreateRole,
-    CreateSet, EditableChannel, EditedAccount, EditorPermission, Emote, EmotePage, EmoteSet,
-    EmoteSort, Entitlement, EntitlementPage, Event, GrantCosmetic, Identity, Me, Notification,
-    OwnedCosmetics, Paint, PaintInput, PendingDeletion, PersonalSetEntry, Platform, QuickSearch,
-    Report, ReportAction, ReportQueue, ReviewQueue, Role, SearchResults, SetEmote, SetSummary,
-    SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole, UpdateSet,
-    UpdateSetEmote, UserCosmetics,
+    CreateSet, EditableChannel, EditedAccount, EditorPermission, Emote, EmoteFlag, EmotePage,
+    EmoteSet, EmoteSort, EmoteTrending, Entitlement, EntitlementPage, Event, GrantCosmetic,
+    Identity, Me, Notification, OwnedCosmetics, Paint, PaintInput, PendingDeletion,
+    PersonalSetEntry, Platform, QuickSearch, Report, ReportAction, ReportQueue, ReviewQueue, Role,
+    SearchResults, SetEmote, SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings,
+    UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote, UserCosmetics,
 };
 use cyex_tv_shared::model::{
     Checkout, CodeBatch, CodeBatchInput, CodeBatchPage, CreatedCodeBatch, Order, OrderPage,
@@ -334,8 +335,15 @@ impl Query {
 
     /// Approved, listed emotes by name and tag, best match first, then the most used.
     /// `perPage` is 1 to 100, default 50. NSFW emotes only with `nsfw: true`. `sort` is
-    /// `RELEVANCE` (default: best match, then most used), `TOP` (most used, then name) or `NEW`
-    /// (newest first). An empty `query` lists every approved, listed emote.
+    /// `RELEVANCE` (default: best match, then most used), `TOP` (most used, then name), `NEW`
+    /// (newest first) or `TRENDING` (most channels added it in `window`, net of removals, then
+    /// most used; only emotes with a net gain are listed). An empty `query` lists every approved,
+    /// listed emote.
+    /// `flags` keeps the emotes that have every flag listed (`ZERO_WIDTH`, `WIDE`, `NSFW`; at most
+    /// 3 different ones). `NSFW` lists only NSFW emotes, with or without `nsfw: true`. `tags` keeps
+    /// the emotes that have every tag listed (exact; a leading `#` and case are ignored, at most
+    /// 10). `exact: true` makes a non-empty `query` match the whole name (any case) instead of
+    /// roughly. `window` is `DAY`, `WEEK` (default) or `MONTH`, and only matters for `TRENDING`.
     #[allow(clippy::too_many_arguments)]
     async fn search_emotes(
         &self,
@@ -347,7 +355,21 @@ impl Query {
         page: Option<u32>,
         per_page: Option<u32>,
         sort: Option<EmoteSort>,
+        flags: Option<Vec<EmoteFlag>>,
+        tags: Option<Vec<String>>,
+        exact: Option<bool>,
+        window: Option<TrendingWindow>,
     ) -> Result<SearchResults> {
+        let flags: Vec<EmoteFlag> =
+            flags
+                .unwrap_or_default()
+                .into_iter()
+                .fold(Vec::new(), |mut all, f| {
+                    if !all.contains(&f) {
+                        all.push(f);
+                    }
+                    all
+                });
         search::search(
             state(ctx),
             &search::Params {
@@ -355,6 +377,10 @@ impl Query {
                 animated,
                 owner: owner.as_deref(),
                 nsfw: nsfw.unwrap_or(false),
+                flags: &flags,
+                tags: tags.as_deref().unwrap_or_default(),
+                exact: exact.unwrap_or(false),
+                window: window.unwrap_or_default(),
                 sort: sort.unwrap_or_default(),
                 page,
                 per_page,
@@ -362,6 +388,20 @@ impl Query {
         )
         .await
         .map_err(api_error)
+    }
+
+    /// Where an emote stands among the 100 most added in `window` (`DAY`, `WEEK` by default or
+    /// `MONTH`): its rank and the channels that added it, net of removals. Null when `id` isn't
+    /// an emote ID, the emote isn't approved and listed, or it is not in the top 100.
+    async fn emote_trending(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        window: Option<TrendingWindow>,
+    ) -> Result<Option<EmoteTrending>> {
+        search::trending(state(ctx), &id, window)
+            .await
+            .map_err(api_error)
     }
 
     /// Accounts by Twitch or Kick login or display name (a leading `@` is ignored): exact login
