@@ -110,6 +110,10 @@ jobs:
         run: |
           ulimit -n 65536 || ulimit -n
           cargo test --release -p cyex-tv-api --test gql_load -- --ignored --nocapture
+      # The hot reads at a larger deployment's size (100k emotes, 50k accounts, 20k channels):
+      # each one's time with the old query and without the scale indexes, then as it is now.
+      - name: Time the hot reads at full scale
+        run: cargo test --release -p cyex-tv-db --test scale -- --ignored --nocapture
 
   # Phase 9: the service images build, and each binary in them runs.
   images:
