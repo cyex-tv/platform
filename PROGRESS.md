@@ -9,6 +9,7 @@ The owner asked for `EMOTE_UPLOAD`, `EMOTE_MANAGE` and `EMOTE_TRANSFER` to work 
 - [x] Transfer decision: no accept step. The receiver must be the caller or an account where the caller holds `EMOTE_UPLOAD` on every set (it already trusts them with uploads); the owner follows the same rule; both owners are notified; 60 an hour.
 - [x] Website: Upload as picker in the upload form and dialog (you by default, `?for=` preselects); Edit on `/emotes/[id]` and a working edit page (details, delete, Give to another account) for managers; the managed account's Uploaded emotes in every state on its profile; "You edit" rows link Emotes and Upload and say when a set limit switches the emote permissions off; the permissions dialog drops "Saved now; used once…" for Emotes and notes that they need All sets.
 - [x] Tests: `apps/api/tests/editor_emotes_flow.rs` (Postgres in CI: allow, no flag, wrong account, set-limited, restricted editor and owner, audit rows, the feed line, both upload limits, transfer receivers and notifications); vitest `editors.test.ts`, `api.test.ts`. Dev mock: OTHERS[0] grants upload, manage and transfer.
+- [x] PR 100; CI's test job ran `editor_emotes_flow` against Postgres (4 passed).
 - [x] Manual (CDP, `screens/editor-emotes/check.mjs`, 1440 and 375): Edit shows on a managed account's emote and not on another's; the edit page has Details, Give and Delete; Upload as lists you and the managed account, `?for=` picks it; You edit shows Emotes and Upload; the dialog has no "Saved now" note.
 
 ### GitHub write log for this PR
@@ -16,6 +17,7 @@ The owner asked for `EMOTE_UPLOAD`, `EMOTE_MANAGE` and `EMOTE_TRANSFER` to work 
 ```
 git push -u origin feat/editor-emote-perms
 gh pr create --base main --head feat/editor-emote-perms --title "Account editors: emote upload, manage and transfer" --body-file <file>
+gh pr merge 100 --merge
 ```
 
 ## Final pass of the 2026/11/19 feedback round (branch `fix/final-pass`)
