@@ -11,7 +11,7 @@
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { Kind, parse } from 'graphql';
-
+import { quickTier, similar, personMatch } from './search.mjs';
 const PORT = Number(process.env.PORT ?? 8787);
 const ORIGIN = process.env.SITE_ORIGIN ?? 'http://localhost:5173';
 const BASE = `http://localhost:${PORT}`;
@@ -507,8 +507,12 @@ MINE[4].visibility = 'UNLISTED';
 // restoreAccount. Signing in while it is set gives the mock_restore cookie, not a session.
 let PENDING_DELETION = null;
 let RESTORE_COOKIE = false;
-const MY_ROLES = () => (ACCOUNT_ROLES[ME_ID] ?? []).map((id) => ROLES.find((r) => r.id === id)).filter(Boolean)
-  .sort((a, b) => b.position - a.position).map((r) => ({ id: r.id, name: r.name, public: r.public }));
+// As the API's me.roles: with every permission (the mock's owner) the top role comes first, hidden.
+const MY_ROLES = (admin) => [
+  ...(admin ? [{ id: ROLES.find((r) => r.builtIn === 'ROOT')?.id ?? 'owner', name: 'Owner', public: false }] : []),
+  ...(ACCOUNT_ROLES[ME_ID] ?? []).map((id) => ROLES.find((r) => r.id === id)).filter(Boolean)
+    .sort((a, b) => b.position - a.position).filter((r) => r.builtIn !== 'ROOT').map((r) => ({ id: r.id, name: r.name, public: r.public })),
+];
 let uploads = 0;
 const wideOf = (e) => {
   const one = e.files.find((f) => f.name === '1x.webp');
@@ -1534,7 +1538,7 @@ function signedIn(body, v, ADMIN) {
   const op = (body.query.match(/(?:query|mutation)\s+(\w+)/) ?? [])[1];
   switch (op) {
     case 'Me':
-      return { data: { me: { id: ME_ID, createdAt: '2026-11-10T12:00:00.000Z', permissions: ADMIN ? PERMISSIONS : ROLES.find((r) => r.builtIn === 'USER').permissions, identities: myIdentities(), displayPlatform: DISPLAY_PLATFORM, roles: MY_ROLES() } } };
+      return { data: { me: { id: ME_ID, createdAt: '2026-11-10T12:00:00.000Z', permissions: ADMIN ? PERMISSIONS : ROLES.find((r) => r.builtIn === 'USER').permissions, identities: myIdentities(), displayPlatform: DISPLAY_PLATFORM, roles: MY_ROLES(ADMIN) } } };
     case 'SetDisplayPlatform': {
       if (!IDENTITIES.some((i) => i.platform === v.platform)) return err('That platform isn’t linked to your account.', 'not_found');
       DISPLAY_PLATFORM = v.platform;
@@ -1542,7 +1546,7 @@ function signedIn(body, v, ADMIN) {
       return { data: { setDisplayPlatform: { id: ME_ID, displayPlatform: DISPLAY_PLATFORM } } };
     }
     case 'MyRoles':
-      return { data: { me: { id: ME_ID, roles: MY_ROLES() } } };
+      return { data: { me: { id: ME_ID, roles: MY_ROLES(ADMIN) } } };
     case 'MyEmotes': {
       const per = v.perPage ?? 50;
       const page = v.page ?? 1;
@@ -2039,24 +2043,29 @@ function signedIn(body, v, ADMIN) {
 // searchAccounts(query, page, perPage): the mock's people by login or display name, exact login
 // first, then prefixes, then anything containing the text. Blocked accounts are never listed.
 let accountSearches = 0;
-const searchPeople = () => [ME_SUMMARY, ...OTHERS].map((a) => ({
-  account: a,
-  identities: [
-    { platform: 'TWITCH', login: a.displayName.toLowerCase(), displayName: a.displayName },
-    ...(a.id === OTHERS[0].id ? [{ platform: 'KICK', login: 'quietoak_live', displayName: 'QuietOak' }] : []),
-  ],
-}));
+// Every login the account has linked: the signed-in account's own identities, the channels the mock
+// knows for others (EDITOR_CHANNELS), and a Twitch login made from the display name when none is
+// known. The people search matches any of them, not only the display name.
+const searchPeople = () => [ME_SUMMARY, ...OTHERS].map((a) => {
+  const list = a.id === ME_ID
+    ? IDENTITIES.map((i) => ({ platform: i.platform, login: i.login, displayName: i.displayName }))
+    : EDITOR_CHANNELS.filter((c) => c.account.id === a.id).map((c) => ({ platform: c.platform, login: c.login, displayName: a.displayName }));
+  if (!list.some((i) => i.platform === 'TWITCH')) list.unshift({ platform: 'TWITCH', login: a.displayName.toLowerCase(), displayName: a.displayName });
+  if (a.id === OTHERS[0].id) list.push({ platform: 'KICK', login: 'quietoak_live', displayName: 'QuietOak' });
+  const seen = new Set();
+  return { account: a, identities: list.filter((i) => !seen.has(`${i.platform}/${i.login}`) && seen.add(`${i.platform}/${i.login}`)) };
+});
 function searchAccounts(v) {
   if (++accountSearches > 600) return err('That’s a lot of searches. Try again in a minute.', 'rate_limited');
   const text = String(v.query ?? '').trim().replace(/^@/, '').trim().toLowerCase();
   const per = Math.min(50, Math.max(1, v.perPage ?? 20));
   const page = Math.min(Math.ceil(1000 / per), Math.max(1, v.page ?? 1));
-  const tier = (h) => Math.max(...h.identities.map((i) =>
-    i.login === text ? 3 : i.login.startsWith(text) ? 2 : i.displayName.toLowerCase().startsWith(text) ? 1 : 0));
   const hits = [...text].length < 2 ? [] : searchPeople()
     .filter((h) => !statusOf(h.account.id).blocked)
-    .filter((h) => h.identities.some((i) => i.login.includes(text) || i.displayName.toLowerCase().includes(text)))
-    .sort((a, b) => tier(b) - tier(a) || a.account.id.localeCompare(b.account.id));
+    .map((h) => ({ h, m: personMatch(h.identities, text) }))
+    .filter((x) => x.m.tier >= 0)
+    .sort((a, b) => b.m.tier - a.m.tier || b.m.score - a.m.score || a.h.account.id.localeCompare(b.h.account.id))
+    .map((x) => x.h);
   return { data: { searchAccounts: { total: hits.length, totalCapped: false, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
 }
 
@@ -2197,22 +2206,6 @@ function newFields(q, v, session) {
 // quickSearch(query): the header search. The same tiers as the API's matcher (crates/db
 // search::quick): exact, exact ignoring case, prefix, word or initials prefix, substring, then a
 // near miss (shared trigrams, 3+ letters); most used first within a tier. 5 emotes, 3 people.
-const nameWords = (n) => n.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
-  .replace(/([A-Za-z])([0-9])/g, '$1 $2').replace(/([0-9])([A-Za-z])/g, '$1 $2').toLowerCase().split(/[\s_.\-]+/).filter(Boolean);
-const grams = (t) => { const p = `  ${t.toLowerCase()} `; const g = new Set(); for (let i = 0; i + 3 <= p.length; i++) g.add(p.slice(i, i + 3)); return g; };
-const similar = (a, b) => { const x = grams(a); const y = grams(b); let n = 0; for (const g of x) if (y.has(g)) n++; return n / (x.size + y.size - n); };
-function quickTier(name, q) {
-  const l = name.toLowerCase();
-  const ql = q.toLowerCase();
-  if (name === q) return 1;
-  if (l === ql) return 2;
-  if (l.startsWith(ql)) return 3;
-  const words = nameWords(name);
-  if (words.some((w) => w.startsWith(ql)) || words.map((w) => w[0]).join('').startsWith(ql)) return 4;
-  if (l.includes(ql)) return 5;
-  if ([...ql].length >= 3 && similar(name, q) >= 0.3) return 6;
-  return 0;
-}
 function quickSearch(v) {
   const q = String(v.query ?? '').trim().slice(0, 100);
   if (!q) return { data: { quickSearch: { emotes: [], users: [] } } };
@@ -2224,8 +2217,11 @@ function quickSearch(v) {
     .map((h) => h.e);
   const text = q.replace(/^@/, '').toLowerCase();
   const users = [...text].length < 2 ? [] : searchPeople()
-    .filter((h) => h.identities.some((i) => i.login.toLowerCase().includes(text) || i.displayName.toLowerCase().includes(text)) || h.account.displayName.toLowerCase().includes(text))
-    .slice(0, 3);
+    .map((h) => ({ h, m: personMatch(h.identities, text) }))
+    .filter((x) => x.m.tier >= 0)
+    .sort((a, b) => b.m.tier - a.m.tier || b.m.score - a.m.score || a.h.account.id.localeCompare(b.h.account.id))
+    .slice(0, 3)
+    .map((x) => x.h);
   return { data: { quickSearch: { emotes, users } } };
 }
 // myEditableChannels: yours, the accounts you edit, then accounts whose sets you edit (here: none
