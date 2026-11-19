@@ -19,7 +19,7 @@ Owner feedback 2026/11/19, section J (browse). Web only: no API change (bulk add
 ```
 git push -u origin feat/browse-select
 gh pr create --base main --head feat/browse-select --title "Emotes tab: one toolbar, tile menu, multi-select up to 100" --body-file <file>
-gh pr merge <n> --merge
+gh pr merge 97 --merge
 ```
 
 ## Paint render fix and global emote/editor permissions (branch `fix/paints-and-global-perms`, ADR 0010 amendment part 3)
@@ -87,7 +87,7 @@ Additive API; no migration; nothing was deployed.
 ```
 git push -u origin feat/upload-v3
 gh pr create --base main --head feat/upload-v3 --title "Upload v3: upload dialog, tag chips, JPEG and 8 MB, guidelines" --body-file <file>
-gh pr merge <n> --merge
+gh pr merge 97 --merge
 ```
 
 ## Admin user dashboard and entitlement graph (branch `feat/admin-dashboard`, ADR 0010 amendment part 2)
@@ -102,7 +102,7 @@ gh pr merge <n> --merge
 ```
 git push -u origin feat/admin-dashboard
 gh pr create --base main --head feat/admin-dashboard --title "Admin: user dashboard and entitlement graph" --body-file <file>
-gh pr merge <n> --merge
+gh pr merge 97 --merge
 ```
 
 ## Owner's answers of 2026/11/19 (branch `feat/owner-answers`)
@@ -132,7 +132,7 @@ Additive API, new migrations only; nothing was deployed. ADR 0014 and 0017 amend
 ```
 git push -u origin feat/sets-editors
 gh pr create --base main --head feat/sets-editors --title "Sets and editors: default sets, use on channel, editor permissions dialog" --body-file <file>
-gh pr merge <n> --merge
+gh pr merge 97 --merge
 ```
 
 ## Header search, nav, notifications and mark (branch `feat/header-search`)
@@ -170,7 +170,7 @@ gh pr merge 86 --merge
 ```
 git push -u origin feat/admin-roles
 gh pr create --base main --head feat/admin-roles --title "Admin: built-in roles, finer permissions, timed restrictions" --body-file <file>
-gh pr merge <n> --merge
+gh pr merge 97 --merge
 ```
 
 ## Front page: 3D logo hero and four boxes (branch `feat/front-page`)
@@ -189,7 +189,7 @@ Owner feedback 2026/11/19, part B. Web only; nothing was deployed.
 ```
 git push -u origin feat/front-page
 gh pr create --base main --head feat/front-page --title "web: front page with a 3D logo hero and four boxes" --body-file <file>
-gh pr merge <n> --merge
+gh pr merge 97 --merge
 ```
 
 ## Admin v2 (branch `feat/admin-v2`)
@@ -215,7 +215,7 @@ The second security review and the sign-off code review (overnight run 2026-11-1
 ```
 git push -u origin fix/signoff-api
 gh pr create --base main --head fix/signoff-api --title "api: sign-off security and correctness fixes" --body-file <file>
-gh pr merge <n> --merge
+gh pr merge 97 --merge
 ```
 
 ## Design harmony pass (branch `polish/harmony`)
@@ -236,7 +236,7 @@ Contact sheets of every route at 1440 and 375, dark and light, read as one produ
 ```
 git push -u origin polish/harmony
 gh pr create --base main --head polish/harmony --title "web: design harmony pass" --body-file <file>
-gh pr merge <n> --merge
+gh pr merge 97 --merge
 ```
 
 ## Shop hardening (branch `fix/shop-hardening`)
@@ -437,7 +437,7 @@ gh pr merge 51 --merge
 ```
 git push -u origin feat/activity
 gh pr create --base main --head feat/activity
-gh pr merge <n> --merge   (only after all checks were green and the new database suite ran in the CI log)
+gh pr merge 97 --merge   (only after all checks were green and the new database suite ran in the CI log)
 ```
 
 ## Chat cosmetics (branch `feat/cosmetics`)
@@ -475,7 +475,7 @@ Report: `docs/security/assessment-2026-11.md`. 0 critical, 2 high, 14 medium, 19
 
 #### GitHub write log
 - `gh pr create --base main` for each fix branch (`sec/web-headers`, `sec/media`, `sec/role-seniority`, `sec/text-sanitize`, `sec/emote-edit-review`, `sec/gql-ws`), `-R cyex-tv/extension` for `sec/extension`, `-R cyex-tv/infra` for `sec/infra`.
-- `gh pr merge <n> --merge` for 40, 41, 42, 39, 43, 38; `gh pr merge 10 -R cyex-tv/extension --merge`.
+- `gh pr merge 97 --merge` for 40, 41, 42, 39, 43, 38; `gh pr merge 10 -R cyex-tv/extension --merge`.
 
 ## Phase 8: Browser extension (merged, in `cyex-tv/extension`)
 
