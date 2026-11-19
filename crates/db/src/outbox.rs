@@ -115,13 +115,28 @@ pub async fn oldest_id(conn: &mut PgConnection) -> DbResult<Option<i64>> {
         .await?)
 }
 
-/// Removes events older than `cutoff` (48 h, run on a schedule).
+/// Rows `delete_older_than` removes per statement.
+pub const DELETE_BATCH: i64 = 10_000;
+
+/// Removes events older than `cutoff` (48 h, run on a schedule). In batches of
+/// [`DELETE_BATCH`], each its own statement, so a busy day's events never make one long delete
+/// that holds its locks and its WAL until the end.
 pub async fn delete_older_than(conn: &mut PgConnection, cutoff: DateTime<Utc>) -> DbResult<u64> {
-    let done = sqlx::query("DELETE FROM events_outbox WHERE created_at < $1")
+    let mut removed = 0;
+    loop {
+        let done = sqlx::query(
+            "DELETE FROM events_outbox WHERE id IN (
+                 SELECT id FROM events_outbox WHERE created_at < $1 ORDER BY created_at LIMIT $2)",
+        )
         .bind(cutoff)
-        .execute(conn)
+        .bind(DELETE_BATCH)
+        .execute(&mut *conn)
         .await?;
-    Ok(done.rows_affected())
+        removed += done.rows_affected();
+        if done.rows_affected() < DELETE_BATCH as u64 {
+            return Ok(removed);
+        }
+    }
 }
 
 /// Every event after `after_id`, oldest first, whatever its topics. The live feeder reads this.

@@ -168,28 +168,39 @@ pub async fn emote_activity_rows(
     before_id: Option<Uuid>,
     limit: i64,
 ) -> DbResult<Vec<SubjectEntry>> {
-    Ok(sqlx::query_as(&format!(
-        "SELECT a.id, a.actor_account_id, a.action, a.target_kind, a.target_id, a.before_json,
-                a.after_json, a.created_at, a.subject_account_id
+    // Two branches, each read newest first from its own index (the approval by target, the set
+    // changes by `audit_log_emote_activity`) and cut at `limit`, so an emote in thousands of
+    // channels reads a page, not every row naming it. No row is in both (the actions differ).
+    const ROW: &str = "SELECT a.id, a.actor_account_id, a.action, a.target_kind, a.target_id,
+                a.before_json, a.after_json, a.created_at, a.subject_account_id
          FROM audit_log a
          JOIN accounts s ON s.id = a.subject_account_id
                         AND s.deleted_at IS NULL AND (s.blocked_at IS NULL OR s.blocked_until <= now())
          LEFT JOIN accounts act ON act.id = a.actor_account_id
          WHERE a.subject_account_id IS NOT NULL
-           AND ($2::uuid IS NULL OR a.id < $2)
-           AND (
-               (a.action = 'emote.approved' AND a.target_kind = 'emote' AND a.target_id = $1
-                AND NOT EXISTS (SELECT 1 FROM audit_log p
-                                WHERE p.action = 'emote.approved' AND p.target_kind = 'emote'
-                                  AND p.target_id = a.target_id AND p.id < a.id))
-               OR (a.action IN ('set.emote_added', 'set.emote_removed', 'set.emote_updated')
-                   AND coalesce(a.after_json ->> 'emote_id', a.before_json ->> 'emote_id') = $1
-                   AND act.id IS NOT NULL AND (act.blocked_at IS NULL OR act.blocked_until <= now()) AND act.deleted_at IS NULL
-                   AND (a.actor_account_id = a.subject_account_id
-                        OR a.after_json ->> 'via' = 'account_editor'))
-           )
-           AND {LISTED_SET_ONLY}
-         ORDER BY a.id DESC
+           AND ($2::uuid IS NULL OR a.id < $2)";
+    Ok(sqlx::query_as(&format!(
+        "SELECT * FROM (
+             ({ROW}
+               AND a.action = 'emote.approved' AND a.target_kind = 'emote' AND a.target_id = $1
+               AND NOT EXISTS (SELECT 1 FROM audit_log p
+                               WHERE p.action = 'emote.approved' AND p.target_kind = 'emote'
+                                 AND p.target_id = a.target_id AND p.id < a.id)
+               AND {LISTED_SET_ONLY}
+             ORDER BY a.id DESC
+             LIMIT $3)
+             UNION ALL
+             ({ROW}
+               AND a.action IN ('set.emote_added', 'set.emote_removed', 'set.emote_updated')
+               AND coalesce(a.after_json ->> 'emote_id', a.before_json ->> 'emote_id') = $1
+               AND act.id IS NOT NULL AND (act.blocked_at IS NULL OR act.blocked_until <= now()) AND act.deleted_at IS NULL
+               AND (a.actor_account_id = a.subject_account_id
+                    OR a.after_json ->> 'via' = 'account_editor')
+               AND {LISTED_SET_ONLY}
+             ORDER BY a.id DESC
+             LIMIT $3)
+         ) r
+         ORDER BY id DESC
          LIMIT $3"
     ))
     .bind(emote_id)

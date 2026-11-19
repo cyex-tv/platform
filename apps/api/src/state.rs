@@ -7,6 +7,7 @@ use cyex_tv_hub::Hub;
 
 use crate::limits::Limits;
 use crate::paddle::Paddle;
+use crate::read_cache::ReadCache;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::metrics::Registry;
 use cyex_tv_storage::Store;
@@ -32,6 +33,9 @@ pub struct AppState {
     /// cyex.tv's Paddle account for the shop (ADR 0016). `None`, or a key unset: checkout answers
     /// `checkout_unavailable`, the webhook 503.
     pub paddle: Option<Arc<Paddle>>,
+    /// The public chat-client reads, shared for a few seconds (`read_cache`). Off unless
+    /// `with_read_cache` turns it on; the api binary does, and keeps it current from `hub`.
+    pub reads: Arc<ReadCache>,
 }
 
 impl AppState {
@@ -45,7 +49,21 @@ impl AppState {
             limits: Arc::new(Limits::default()),
             metrics: Registry::new(),
             paddle: None,
+            reads: Arc::new(ReadCache::disabled()),
         }
+    }
+
+    /// Caches the public chat-client reads for `ttl` (zero: off), dropping entries as `hub`
+    /// publishes events about them. `hub` must be fed (`main` runs its feeder).
+    pub fn with_read_cache(mut self, ttl: std::time::Duration) -> Self {
+        let cache = Arc::new(ReadCache::new(ttl));
+        let tapped = cache.clone();
+        self.hub
+            .tap(Arc::new(move |event: &cyex_tv_db::outbox::Event| {
+                tapped.on_event(event)
+            }));
+        self.reads = cache;
+        self
     }
 
     pub fn with_limits(mut self, limits: Limits) -> Self {

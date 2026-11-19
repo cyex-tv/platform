@@ -2,6 +2,23 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Scale: hot reads at 100k emotes, 50k accounts, 20k channels (branch `perf/scale-1`)
+
+Owner: "make sure everything is already laid out for a higher scale deployment like thousands of emotes and users". Audit with file:line and the proposals: `.claude/runs/2026-11-19-feedback/scale-audit.md`.
+- [x] Migrations `20261208000901`..`904` (additive, `CREATE INDEX CONCURRENTLY`, one per file, `-- no-transaction`): set members by emote and newest add (channel counts index-only, `emoteChannels` in order), set members by set and newest add (card previews), searchable emotes by TOP and by NEW order.
+- [x] `search`: no `count(*) OVER ()` outside TRENDING (counted apart, skipped on a short page), name candidates through the trigram and tag indexes, the tag check skipped when no tag is asked, empty-text RELEVANCE in index order. Same answers (tested against the old query); `quickSearch` now leaves unlisted emotes out, as documented.
+- [x] `newest_members` reads each set's newest members from the index (LATERAL ... LIMIT) instead of numbering all of them; `emote_activity_rows` reads its two kinds of row from their own indexes, a page each; outbox pruning deletes in batches of 10 000.
+- [x] API: `read_cache` shares the chat-client reads (`/v1/sets/{id}`, `/v1/sets/global`, `/v1/channels/{platform}/{id}`, `/v1/emotes/{id}`, `/v1/cosmetics`) per instance: one build for everyone asking at once, kept up to `CYEX_TV_READ_CACHE_MS` (default 5000, 0 off), dropped when the instance's feeder sees an event about it (`Hub::tap`, additive). Answers, headers and status codes unchanged.
+- [x] Website: a public set draws 120 emotes at a time with Load more.
+- [x] Extension (cyex-tv/extension PR 33, merged): personal emote lookups ask for every queued chatter, 100 a request (a busy chat lost everyone past 100 for 10 minutes).
+- [x] Tests: `crates/db/tests/scale.rs` (seeded volumes; Postgres' own counters show the browse, search, preview, emote channels and emote activity reads use their indexes; the rewritten reads answer exactly what the old ones did; batched pruning); `read_cache` unit tests; `catalog_flow::cached_reads_follow_events` with a live feeder. CI's `load` job times each read at full scale, old against new (`scale -- --ignored --nocapture`).
+### GitHub write log for this PR
+
+```
+git push -u origin perf/scale-1
+gh pr create --base main --head perf/scale-1 --title "Scale: hot reads, indexes and a shared chat-read cache" --body-file <file>
+gh pr create --repo cyex-tv/extension --base main --head fix/personal-lookup-batches --title "Personal emote lookups: every queued chatter, 100 a request" --body-file <file>
+gh pr merge 33 --repo cyex-tv/extension --merge
 ## API coverage suite (branch `test/api-coverage`)
 
 Goal: every endpoint exists and works as the website calls it. Tests only, in one new test binary `apps/api/tests/api_coverage/` (Postgres in CI).
