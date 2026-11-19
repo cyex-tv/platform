@@ -1,6 +1,8 @@
 <script lang="ts">
   // The one vertical rail (7TV's side bar, cyex styling): context for the page's subject, never a
-  // second top bar. 240px on a surface card, sticky under the header with its own scroll. Groups
+  // second top bar. 240px on a surface card, sticky under the header while it fits the window;
+  // a taller rail scrolls with the page instead, never inside itself (owner: no scroll bar in the
+  // category selector). `fill` makes it run the full height of the left side. Groups
   // have a hairline between them (a group is a collapsible row with a count, or a plain caption); rows are icon + label + optional count;
   // the current row is full-contrast and bold with an accent icon (aria-current="page"), no fill or bar. The rows
   // are one Tab stop (the current row); arrow keys move between them. Fewer than two rows: no
@@ -38,8 +40,10 @@
     sheetCount?: number;
     /** collapse="tabs" only: the phone strip's tabs when they are not just the rows (a page without a row of its own adds its tab). */
     tabs?: RailItem[];
+    /** Wide windows: the rail runs the full height of the left side (the window below the header), its foot at the bottom. */
+    fill?: boolean;
   };
-  let { label, groups = [], head, children, foot, collapse = 'tabs', sheetLabel = 'Menu', bar, sheetCount = 0, tabs }: Props = $props();
+  let { label, groups = [], head, children, foot, collapse = 'tabs', sheetLabel = 'Menu', bar, sheetCount = 0, tabs, fill = false }: Props = $props();
 
   // Collapsible groups the reader closed, by their label. A group holding the current row stays open.
   let closed = $state<Record<string, boolean>>({});
@@ -97,26 +101,36 @@
     edges();
   });
 
-  // The desktop rail scrolls inside itself when the window is short: a soft fade at its bottom
-  // edge says there is more, and only while there is.
+  // The desktop rail sticks under the header only while it fits the window. Taller (a short
+  // window, every group open), it scrolls with the page, so its last rows are always reachable
+  // and it never needs a scroll bar of its own.
   let aside = $state<HTMLElement>();
-  let more = $state(false);
-  function below() {
-    if (aside) more = aside.scrollTop + aside.clientHeight < aside.scrollHeight - 2;
+  let tall = $state(false);
+  function fit() {
+    if (!aside) return;
+    // Where the sticky rail sits (below the header, one gap down) and the gap it keeps at the
+    // bottom: from the same custom properties the CSS uses, so the answer doesn't change when
+    // the class flips.
+    const cs = getComputedStyle(aside);
+    const px = (name: string, fallback: number) => parseFloat(cs.getPropertyValue(name)) || fallback;
+    const gap = px('--rail-gap', 20);
+    const room = innerHeight - px('--nav-h', 56) - 2 * gap;
+    tall = aside.offsetHeight > room + 1;
   }
   $effect(() => {
     if (!aside) return;
     const el = aside;
-    below();
-    const ro = new ResizeObserver(below);
-    ro.observe(el);
-    const mo = new MutationObserver(below);
-    mo.observe(el, { subtree: true, childList: true, attributes: true, attributeFilter: ['open', 'hidden'] });
-    el.addEventListener('scroll', below, { passive: true });
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el, { box: 'border-box' });
+    // Rows arriving later (counts, a group opening) change the height too.
+    const mo = new MutationObserver(() => requestAnimationFrame(fit));
+    mo.observe(el, { subtree: true, childList: true, characterData: true });
+    addEventListener('resize', fit, { passive: true });
     return () => {
       ro.disconnect();
       mo.disconnect();
-      el.removeEventListener('scroll', below);
+      removeEventListener('resize', fit);
     };
   });
 
@@ -191,21 +205,16 @@
     <div class="in-sheet">{@render body(() => (sheet = false))}</div>
   </BottomSheet>
 {:else}
-  <aside class="rail" class:footed={!!foot} aria-label={label} bind:this={aside}>
+  <aside class="rail" class:footed={!!foot} class:fill class:tall aria-label={label} bind:this={aside}>
     {@render body()}
-    {#if more}<div class="cue" aria-hidden="true"></div>{/if}
   </aside>
 {/if}
 
 <style>
   .rail { position: sticky; top: calc(var(--nav-h) + env(safe-area-inset-top, 0px) + var(--rail-gap)); align-self: start;
-    width: var(--rail-w); max-height: calc(100dvh - var(--nav-h) - env(safe-area-inset-top, 0px) - 2 * var(--rail-gap));
-    overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent;
-    padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
-  /* A zero-height element pinned to the rail's bottom edge, its fade drawn upward over the last rows. */
-  .cue { position: sticky; bottom: 0; flex: none; height: 0; pointer-events: none; }
-  .cue::before { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 36px;
-    background: linear-gradient(to top, var(--surface), transparent); }
+    width: var(--rail-w); padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
+  /* Taller than the window: it scrolls with the page (sticky would hide its bottom rows). */
+  .rail.tall { position: relative; top: auto; }
   /* Before hydration on a narrow screen: no full rail above the content, the strip follows. */
   @media (max-width: 899.98px) { .rail { display: none; } }
   .head { padding: 2px 2px 12px; margin-bottom: 10px; border-bottom: 1px solid var(--border); }
@@ -219,7 +228,7 @@
   .chev.up { rotate: 180deg; }
   .nested { margin-top: 1px; }
   .nested .row { padding-left: 36px; }
-  .footed { display: flex; flex-direction: column; min-height: calc(100dvh - var(--nav-h) - env(safe-area-inset-top, 0px) - 2 * var(--rail-gap)); }
+  .footed, .fill { display: flex; flex-direction: column; min-height: calc(100dvh - var(--nav-h) - env(safe-area-inset-top, 0px) - 2 * var(--rail-gap)); }
   .foot { margin-top: auto; padding-top: 12px; }
   .foot :global(.rail-foot) { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; margin-top: 10px;
     border-top: 1px solid var(--border); padding-top: 10px; border-radius: 0; font-size: var(--t-nav); font-weight: 500; color: var(--muted); }

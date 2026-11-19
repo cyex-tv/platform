@@ -104,9 +104,15 @@ export type AccountStatus = {
   __typename?: 'AccountStatus';
   /** No sign-in, no sessions. */
   blocked: Scalars['Boolean']['output'];
+  blockedUntil?: Maybe<Scalars['String']['output']>;
   id: Scalars['String']['output'];
+  /** No reports or tickets. */
+  ticketsBlocked: Scalars['Boolean']['output'];
+  ticketsBlockedUntil?: Maybe<Scalars['String']['output']>;
   /** No uploads. */
   uploadsBlocked: Scalars['Boolean']['output'];
+  /** When each hold ends; empty while it is off or for good. */
+  uploadsBlockedUntil?: Maybe<Scalars['String']['output']>;
 };
 
 /** A short reference to an account, for owners and editors. */
@@ -223,11 +229,17 @@ export type AdminAccount = {
   __typename?: 'AdminAccount';
   avatar?: Maybe<Scalars['String']['output']>;
   blocked: Scalars['Boolean']['output'];
+  blockedUntil?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['String']['output'];
   displayName: Scalars['String']['output'];
   id: Scalars['String']['output'];
   identities: Array<Identity>;
+  /** No reports or tickets. */
+  ticketsBlocked: Scalars['Boolean']['output'];
+  ticketsBlockedUntil?: Maybe<Scalars['String']['output']>;
   uploadsBlocked: Scalars['Boolean']['output'];
+  /** When each hold ends; empty while it is off or for good. */
+  uploadsBlockedUntil?: Maybe<Scalars['String']['output']>;
 };
 
 /** One audited change (ADR 0010). `before` and `after` are JSON, as text. */
@@ -257,6 +269,15 @@ export type Badge = {
   tooltip: Scalars['String']['output'];
   updatedAt: Scalars['String']['output'];
 };
+
+/** The roles cyex.tv comes with (ADR 0010). */
+export type BuiltInRole =
+  /** "Admin": can't be deleted. */
+  | 'ADMIN'
+  /** The top role: every permission, held by the owners only, never granted or edited. */
+  | 'ROOT'
+  /** "User": every account holds it without an assignment. Starts with no permissions. */
+  | 'USER';
 
 export type Channel = {
   __typename?: 'Channel';
@@ -647,7 +668,10 @@ export type Mutation = {
   addSetEmote: SetEmote;
   /** Approve a pending emote. Needs `emotes.review`. Audited. */
   approveEmote: Emote;
-  /** Give an account a role. Needs `roles.manage`. Audited. */
+  /**
+   * Give an account a role below your highest one that grants only what you hold. Needs
+   * `roles.manage` or `roles.assign`; the User and top roles can't be given. Audited.
+   */
   assignRole: Scalars['Boolean']['output'];
   /**
    * Copy a set you can open into a new channel set: yours, or with `ownerId` one for an account
@@ -700,7 +724,10 @@ export type Mutation = {
    * `cosmetics.manage`. Audited.
    */
   deletePaint: Scalars['Boolean']['output'];
-  /** Delete a role below your own highest one. Needs `roles.manage`. Audited. */
+  /**
+   * Delete a role below your own highest one that you don't hold; built-in roles stay.
+   * Needs `roles.manage`. Audited.
+   */
   deleteRole: Scalars['Boolean']['output'];
   /**
    * Delete a set. Its owner, or their account editors with `SETS`. A channel's active set
@@ -724,10 +751,23 @@ export type Mutation = {
   /** Give an account a badge or paint, with a reason. Needs `cosmetics.grant`. Audited. */
   grantCosmetic: Entitlement;
   /**
+   * Lift a restriction early, with an optional reason. Needs the same permission as placing
+   * it. Audited.
+   */
+  liftRestriction: AccountStatus;
+  /**
    * Mark your notifications read: those in `ids` (up to 100; others' IDs are ignored), or all
    * of them without `ids`. Returns how many were unread.
    */
   markNotificationsRead: Scalars['Int']['output'];
+  /**
+   * Restrict an account with a reason, for good or `until` a time: no uploads
+   * (`users.restrict_uploads`), no reports or tickets (`users.restrict_tickets`), or a full
+   * block that ends its sessions (`users.block`); `users.restrict` does all three. A running
+   * restriction of the same kind is replaced. The owner, and accounts whose highest role is at
+   * or above yours, are protected. Audited.
+   */
+  placeRestriction: AccountStatus;
   /**
    * Redeem a code (case, spaces and dashes don't matter). Wrong codes lock you out for a
    * while after a few tries (`locked_out`). Each cosmetic it gives sends a `cosmetic.granted`
@@ -762,8 +802,9 @@ export type Mutation = {
    */
   resolveReport: Report;
   /**
-   * Block an account's uploads, or the whole account. Needs `users.restrict`; the owner is
-   * protected. Audited.
+   * Block an account's uploads, or the whole account, for good and without a reason (see
+   * `placeRestriction` for timed ones). Needs `users.restrict`, or `users.restrict_uploads` /
+   * `users.block` for the one you change; the owner is protected. Audited.
    */
   restrictAccount: AccountStatus;
   /**
@@ -799,7 +840,7 @@ export type Mutation = {
   takedownEmote: Emote;
   /**
    * Take a role from an account. The owner and the last `roles.manage` holder are protected.
-   * Needs `roles.manage`. Audited.
+   * Needs `roles.manage` or `roles.assign`. Audited.
    */
   unassignRole: Scalars['Boolean']['output'];
   /**
@@ -823,7 +864,10 @@ export type Mutation = {
   updateEmote: Emote;
   /** Replace every field of a paint. Needs `cosmetics.manage`. Audited. */
   updatePaint: Paint;
-  /** Change a role below your own highest one. Needs `roles.manage`. Audited. */
+  /**
+   * Change a role below your own highest one that you don't hold. The top role can't be
+   * changed; the User role keeps position 0. Needs `roles.manage`. Audited.
+   */
   updateRole: Role;
   /**
    * Rename a set, change who sees it (`visibility`: owner or account editors with `SETS`), or
@@ -952,8 +996,21 @@ export type MutationGrantCosmeticArgs = {
 };
 
 
+export type MutationLiftRestrictionArgs = {
+  accountId: Scalars['String']['input'];
+  kind: RestrictionKind;
+  reason?: InputMaybe<Scalars['String']['input']>;
+};
+
+
 export type MutationMarkNotificationsReadArgs = {
   ids?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+
+export type MutationPlaceRestrictionArgs = {
+  accountId: Scalars['String']['input'];
+  input: RestrictionInput;
 };
 
 
@@ -1368,6 +1425,12 @@ export type Query = {
    * Needs `emotes.review` or `emotes.takedown`.
    */
   accountReports: AccountReports;
+  /**
+   * Every restriction placed on an account, newest first (the latest 100), running or over,
+   * with its reason and end. Needs `users.view`, `users.restrict` or a narrower restrict
+   * permission.
+   */
+  accountRestrictions: Array<Restriction>;
   /** An account's roles. Yours, or anyone's with `roles.manage` or `users.view`. */
   accountRoles: Array<Role>;
   /**
@@ -1378,8 +1441,8 @@ export type Query = {
    */
   accountSets: Array<SetSummary>;
   /**
-   * Whether an account's uploads or sign-in are blocked. Needs `users.view` or
-   * `users.restrict`.
+   * What an account may do now: uploads, reports and sign-in, each with its end when timed.
+   * Needs `users.view`, `users.restrict` or a narrower restrict permission.
    */
   accountStatus: AccountStatus;
   /**
@@ -1498,7 +1561,10 @@ export type Query = {
   reportQueue: ReportQueue;
   /** Pending emotes, oldest first. Needs `emotes.review`. `perPage` is 1 to 100, default 50. */
   reviewQueue: ReviewQueue;
-  /** All roles. Needs `roles.manage`. */
+  /**
+   * All roles, most senior first, each with whether you may edit or assign it. Needs
+   * `roles.manage` or `roles.assign`. The top role is listed to the owners only.
+   */
   roles: Array<Role>;
   /**
    * Accounts by Twitch or Kick login or display name (a leading `@` is ignored): exact login
@@ -1583,6 +1649,11 @@ export type QueryAccountProfileArgs = {
 
 
 export type QueryAccountReportsArgs = {
+  accountId: Scalars['String']['input'];
+};
+
+
+export type QueryAccountRestrictionsArgs = {
   accountId: Scalars['String']['input'];
 };
 
@@ -1827,6 +1898,43 @@ export type ReportState =
   | 'DISMISSED'
   | 'OPEN';
 
+/** One restriction placed on an account, running or over. */
+export type Restriction = {
+  __typename?: 'Restriction';
+  /** Still holding now. */
+  active: Scalars['Boolean']['output'];
+  createdAt: Scalars['String']['output'];
+  /** The staff account that placed it. */
+  createdBy?: Maybe<Scalars['String']['output']>;
+  /** When it ends; empty for good. */
+  endsAt?: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  kind: RestrictionKind;
+  /** When staff lifted it early, or a newer restriction of the same kind replaced it. */
+  liftedAt?: Maybe<Scalars['String']['output']>;
+  liftedBy?: Maybe<Scalars['String']['output']>;
+  /** Why, as staff wrote it. Empty on restrictions made without one (`restrictAccount`). */
+  reason?: Maybe<Scalars['String']['output']>;
+};
+
+/** A restriction to place. */
+export type RestrictionInput = {
+  kind: RestrictionKind;
+  /** Why: 1 to 500 characters. Staff see it; the account doesn't. */
+  reason: Scalars['String']['input'];
+  /** When it ends (RFC 3339, in the future, at most ten years out); empty for good. */
+  until?: InputMaybe<Scalars['String']['input']>;
+};
+
+/** What a restriction stops. */
+export type RestrictionKind =
+  /** The whole account: no sign-in, sessions ended (`users.block`). */
+  | 'ACCOUNT'
+  /** Filing reports and tickets (`users.restrict_tickets`). */
+  | 'TICKETS'
+  /** Uploading emotes (`users.restrict_uploads`). */
+  | 'UPLOADS';
+
 export type ReviewQueue = {
   __typename?: 'ReviewQueue';
   items: Array<Emote>;
@@ -1835,7 +1943,19 @@ export type ReviewQueue = {
 
 export type Role = {
   __typename?: 'Role';
+  /**
+   * Whether you may give it to someone (and take it away): below your highest role, you hold
+   * what it grants, and not the User or top role.
+   */
+  assignable: Scalars['Boolean']['output'];
+  /**
+   * Set on the built-in roles: `USER` (every account holds it), `ADMIN` and `ROOT` (the
+   * owners' top role, shown only to its holders).
+   */
+  builtIn?: Maybe<BuiltInRole>;
   description?: Maybe<Scalars['String']['output']>;
+  /** Whether you may change it: below your highest role, not one you hold, not the top role. */
+  editable: Scalars['Boolean']['output'];
   id: Scalars['String']['output'];
   name: Scalars['String']['output'];
   permissions: Array<Scalars['String']['output']>;
@@ -2401,19 +2521,19 @@ export type TakedownMutationVariables = Exact<{
 
 export type TakedownMutation = { __typename?: 'Mutation', takedownEmote: { __typename?: 'Emote', id: string, state: EmoteState } };
 
-export type RoleFieldsFragment = { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean };
+export type RoleFieldsFragment = { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean };
 
 export type RolesQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type RolesQuery = { __typename?: 'Query', permissions: Array<string>, roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean }> };
+export type RolesQuery = { __typename?: 'Query', permissions: Array<string>, roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean }> };
 
 export type CreateRoleMutationVariables = Exact<{
   input: CreateRoleInput;
 }>;
 
 
-export type CreateRoleMutation = { __typename?: 'Mutation', createRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean } };
+export type CreateRoleMutation = { __typename?: 'Mutation', createRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean } };
 
 export type UpdateRoleMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -2421,7 +2541,7 @@ export type UpdateRoleMutationVariables = Exact<{
 }>;
 
 
-export type UpdateRoleMutation = { __typename?: 'Mutation', updateRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean } };
+export type UpdateRoleMutation = { __typename?: 'Mutation', updateRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean } };
 
 export type DeleteRoleMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -2445,12 +2565,12 @@ export type UserDetailsQueryVariables = Exact<{
 }>;
 
 
-export type UserDetailsQuery = { __typename?: 'Query', accountStatus?: { __typename?: 'AccountStatus', uploadsBlocked: boolean, blocked: boolean }, accountRoles?: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean }> };
+export type UserDetailsQuery = { __typename?: 'Query', accountStatus?: { __typename?: 'AccountStatus', uploadsBlocked: boolean, ticketsBlocked: boolean, blocked: boolean, uploadsBlockedUntil?: string | null, ticketsBlockedUntil?: string | null, blockedUntil?: string | null }, accountRoles?: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean }> };
 
 export type AllRolesQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type AllRolesQuery = { __typename?: 'Query', roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean }> };
+export type AllRolesQuery = { __typename?: 'Query', roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean }> };
 
 export type RestrictMutationVariables = Exact<{
   accountId: Scalars['String']['input'];
@@ -2459,7 +2579,31 @@ export type RestrictMutationVariables = Exact<{
 }>;
 
 
-export type RestrictMutation = { __typename?: 'Mutation', restrictAccount: { __typename?: 'AccountStatus', uploadsBlocked: boolean, blocked: boolean } };
+export type RestrictMutation = { __typename?: 'Mutation', restrictAccount: { __typename?: 'AccountStatus', uploadsBlocked: boolean, ticketsBlocked: boolean, blocked: boolean, uploadsBlockedUntil?: string | null, ticketsBlockedUntil?: string | null, blockedUntil?: string | null } };
+
+export type PlaceRestrictionMutationVariables = Exact<{
+  accountId: Scalars['String']['input'];
+  input: RestrictionInput;
+}>;
+
+
+export type PlaceRestrictionMutation = { __typename?: 'Mutation', placeRestriction: { __typename?: 'AccountStatus', uploadsBlocked: boolean, ticketsBlocked: boolean, blocked: boolean, uploadsBlockedUntil?: string | null, ticketsBlockedUntil?: string | null, blockedUntil?: string | null } };
+
+export type LiftRestrictionMutationVariables = Exact<{
+  accountId: Scalars['String']['input'];
+  kind: RestrictionKind;
+  reason?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type LiftRestrictionMutation = { __typename?: 'Mutation', liftRestriction: { __typename?: 'AccountStatus', uploadsBlocked: boolean, ticketsBlocked: boolean, blocked: boolean, uploadsBlockedUntil?: string | null, ticketsBlockedUntil?: string | null, blockedUntil?: string | null } };
+
+export type AccountRestrictionsQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type AccountRestrictionsQuery = { __typename?: 'Query', accountRestrictions: Array<{ __typename?: 'Restriction', id: string, kind: RestrictionKind, reason?: string | null, endsAt?: string | null, createdBy?: string | null, createdAt: string, liftedAt?: string | null, liftedBy?: string | null, active: boolean }> };
 
 export type AssignRoleMutationVariables = Exact<{
   accountId: Scalars['String']['input'];
@@ -2519,7 +2663,7 @@ export type AdminAccountQueryVariables = Exact<{
 }>;
 
 
-export type AdminAccountQuery = { __typename?: 'Query', adminAccount: { __typename?: 'AdminAccount', id: string, displayName: string, avatar?: string | null, createdAt: string, uploadsBlocked: boolean, blocked: boolean, identities: Array<{ __typename?: 'Identity', platform: Platform, platformUserId: string, login: string, displayName: string, avatar?: string | null }> } };
+export type AdminAccountQuery = { __typename?: 'Query', adminAccount: { __typename?: 'AdminAccount', id: string, displayName: string, avatar?: string | null, createdAt: string, uploadsBlocked: boolean, ticketsBlocked: boolean, blocked: boolean, uploadsBlockedUntil?: string | null, ticketsBlockedUntil?: string | null, blockedUntil?: string | null, identities: Array<{ __typename?: 'Identity', platform: Platform, platformUserId: string, login: string, displayName: string, avatar?: string | null }> } };
 
 export type AccountEmotesQueryVariables = Exact<{
   accountId: Scalars['String']['input'];
@@ -3042,6 +3186,9 @@ export const RoleFieldsFragmentDoc = new TypedDocumentString(`
   position
   permissions
   public
+  builtIn
+  editable
+  assignable
 }
     `, {"fragmentName":"RoleFields"}) as unknown as TypedDocumentString<RoleFieldsFragment, unknown>;
 export const CosmeticImageFieldsFragmentDoc = new TypedDocumentString(`
@@ -4286,6 +4433,9 @@ export const RolesDocument = new TypedDocumentString(`
   position
   permissions
   public
+  builtIn
+  editable
+  assignable
 }`) as unknown as TypedDocumentString<RolesQuery, RolesQueryVariables>;
 export const CreateRoleDocument = new TypedDocumentString(`
     mutation CreateRole($input: CreateRoleInput!) {
@@ -4300,6 +4450,9 @@ export const CreateRoleDocument = new TypedDocumentString(`
   position
   permissions
   public
+  builtIn
+  editable
+  assignable
 }`) as unknown as TypedDocumentString<CreateRoleMutation, CreateRoleMutationVariables>;
 export const UpdateRoleDocument = new TypedDocumentString(`
     mutation UpdateRole($id: String!, $input: UpdateRoleInput!) {
@@ -4314,6 +4467,9 @@ export const UpdateRoleDocument = new TypedDocumentString(`
   position
   permissions
   public
+  builtIn
+  editable
+  assignable
 }`) as unknown as TypedDocumentString<UpdateRoleMutation, UpdateRoleMutationVariables>;
 export const DeleteRoleDocument = new TypedDocumentString(`
     mutation DeleteRole($id: String!) {
@@ -4338,7 +4494,11 @@ export const UserDetailsDocument = new TypedDocumentString(`
     query UserDetails($accountId: String!, $status: Boolean!, $roles: Boolean!) {
   accountStatus(accountId: $accountId) @include(if: $status) {
     uploadsBlocked
+    ticketsBlocked
     blocked
+    uploadsBlockedUntil
+    ticketsBlockedUntil
+    blockedUntil
   }
   accountRoles(accountId: $accountId) @include(if: $roles) {
     ...RoleFields
@@ -4351,6 +4511,9 @@ export const UserDetailsDocument = new TypedDocumentString(`
   position
   permissions
   public
+  builtIn
+  editable
+  assignable
 }`) as unknown as TypedDocumentString<UserDetailsQuery, UserDetailsQueryVariables>;
 export const AllRolesDocument = new TypedDocumentString(`
     query AllRoles {
@@ -4365,6 +4528,9 @@ export const AllRolesDocument = new TypedDocumentString(`
   position
   permissions
   public
+  builtIn
+  editable
+  assignable
 }`) as unknown as TypedDocumentString<AllRolesQuery, AllRolesQueryVariables>;
 export const RestrictDocument = new TypedDocumentString(`
     mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {
@@ -4374,10 +4540,53 @@ export const RestrictDocument = new TypedDocumentString(`
     blocked: $blocked
   ) {
     uploadsBlocked
+    ticketsBlocked
     blocked
+    uploadsBlockedUntil
+    ticketsBlockedUntil
+    blockedUntil
   }
 }
     `) as unknown as TypedDocumentString<RestrictMutation, RestrictMutationVariables>;
+export const PlaceRestrictionDocument = new TypedDocumentString(`
+    mutation PlaceRestriction($accountId: String!, $input: RestrictionInput!) {
+  placeRestriction(accountId: $accountId, input: $input) {
+    uploadsBlocked
+    ticketsBlocked
+    blocked
+    uploadsBlockedUntil
+    ticketsBlockedUntil
+    blockedUntil
+  }
+}
+    `) as unknown as TypedDocumentString<PlaceRestrictionMutation, PlaceRestrictionMutationVariables>;
+export const LiftRestrictionDocument = new TypedDocumentString(`
+    mutation LiftRestriction($accountId: String!, $kind: RestrictionKind!, $reason: String) {
+  liftRestriction(accountId: $accountId, kind: $kind, reason: $reason) {
+    uploadsBlocked
+    ticketsBlocked
+    blocked
+    uploadsBlockedUntil
+    ticketsBlockedUntil
+    blockedUntil
+  }
+}
+    `) as unknown as TypedDocumentString<LiftRestrictionMutation, LiftRestrictionMutationVariables>;
+export const AccountRestrictionsDocument = new TypedDocumentString(`
+    query AccountRestrictions($accountId: String!) {
+  accountRestrictions(accountId: $accountId) {
+    id
+    kind
+    reason
+    endsAt
+    createdBy
+    createdAt
+    liftedAt
+    liftedBy
+    active
+  }
+}
+    `) as unknown as TypedDocumentString<AccountRestrictionsQuery, AccountRestrictionsQueryVariables>;
 export const AssignRoleDocument = new TypedDocumentString(`
     mutation AssignRole($accountId: String!, $roleId: String!) {
   assignRole(accountId: $accountId, roleId: $roleId)
@@ -4486,7 +4695,11 @@ export const AdminAccountDocument = new TypedDocumentString(`
     avatar
     createdAt
     uploadsBlocked
+    ticketsBlocked
     blocked
+    uploadsBlockedUntil
+    ticketsBlockedUntil
+    blockedUntil
     identities {
       platform
       platformUserId

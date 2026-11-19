@@ -22,7 +22,24 @@ pub struct Role {
     pub created_at: DateTime<Utc>,
     /// Shown on its holders' public profiles.
     pub public: bool,
+    /// A built-in role: `user`, `admin` or `root` (see the migration `default_roles`).
+    pub system: Option<String>,
 }
+
+impl Role {
+    pub fn is(&self, system: &str) -> bool {
+        self.system.as_deref() == Some(system)
+    }
+}
+
+/// The built-in role every account holds without an assignment.
+pub const SYSTEM_USER: &str = "user";
+/// The built-in "Admin" role.
+pub const SYSTEM_ADMIN: &str = "admin";
+/// The top role: the owners hold it, nobody else sees it.
+pub const SYSTEM_ROOT: &str = "root";
+/// The top role's position: the highest the column allows. No other role reaches it.
+pub const ROOT_POSITION: i32 = 1_000_000;
 
 #[derive(Clone, Copy, Debug)]
 pub struct NewRole<'a> {
@@ -41,7 +58,7 @@ pub struct RolePatch<'a> {
     pub position: Option<i32>,
 }
 
-const ROLE: &str = "id, name, description, position, created_by, created_at, public";
+const ROLE: &str = "id, name, description, position, created_by, created_at, public, system";
 
 fn check_known(perms: &[&str]) -> DbResult<()> {
     match perms.iter().find(|p| !permissions::is_known(p)) {
@@ -204,7 +221,8 @@ pub async fn unassign(conn: &mut PgConnection, account_id: Uuid, role_id: Uuid) 
 /// An account's roles, most senior first.
 pub async fn roles_of(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<Role>> {
     Ok(sqlx::query_as(
-        "SELECT r.id, r.name, r.description, r.position, r.created_by, r.created_at, r.public
+        "SELECT r.id, r.name, r.description, r.position, r.created_by, r.created_at, r.public,
+                r.system
          FROM roles r
          JOIN account_roles ar ON ar.role_id = r.id
          WHERE ar.account_id = $1
@@ -236,14 +254,29 @@ pub async fn public_roles_of(conn: &mut PgConnection, account_id: Uuid) -> DbRes
         .collect())
 }
 
-/// The union of an account's roles' permissions, sorted.
+/// The built-in role `system` (`user`, `admin` or `root`).
+pub async fn system(conn: &mut PgConnection, system: &str) -> DbResult<Option<Role>> {
+    Ok(
+        sqlx::query_as(&format!("SELECT {ROLE} FROM roles WHERE system = $1"))
+            .bind(system)
+            .fetch_optional(conn)
+            .await?,
+    )
+}
+
+/// The union of an account's roles' permissions, sorted, the built-in User role's included
+/// (every account holds it).
 pub async fn permissions_of(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<String>> {
     Ok(sqlx::query_scalar(
-        "SELECT DISTINCT rp.permission
+        "SELECT rp.permission
          FROM role_permissions rp
          JOIN account_roles ar ON ar.role_id = rp.role_id
          WHERE ar.account_id = $1
-         ORDER BY rp.permission",
+         UNION
+         SELECT rp.permission
+         FROM role_permissions rp
+         JOIN roles r ON r.id = rp.role_id AND r.system = 'user'
+         ORDER BY 1",
     )
     .bind(account_id)
     .fetch_all(conn)
@@ -285,4 +318,23 @@ pub async fn members(conn: &mut PgConnection, role_id: Uuid) -> DbResult<Vec<Uui
     .bind(role_id)
     .fetch_all(conn)
     .await?)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_admin_seed_names_only_known_permissions() {
+        let sql = include_str!("../migrations/20261207000020_default_roles.sql");
+        let list = sql.split("unnest(ARRAY[").nth(1).unwrap();
+        let list = list.split("])").next().unwrap();
+        let names: Vec<&str> = list
+            .split(',')
+            .map(|p| p.trim().trim_matches('\''))
+            .collect();
+        for name in &names {
+            assert!(cyex_tv_shared::permissions::is_known(name), "{name}");
+        }
+        // Every permission that existed when the seed was written.
+        assert_eq!(names.len(), 24);
+    }
 }
