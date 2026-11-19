@@ -13,8 +13,7 @@
   import { looks } from '$lib/cosmetics/store.svelte';
   import { clean, count, iso } from '$lib/format';
   import { SEARCH_ACCOUNTS } from '$lib/queries';
-  import RailLayout from '$lib/shell/RailLayout.svelte';
-  import SideRail from '$lib/shell/SideRail.svelte';
+  import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
   import { change, MAX_PAGES, toSearch, USERS_PER_PAGE, type Browse } from './params';
   import SearchField from './SearchField.svelte';
   import SearchTabs from './SearchTabs.svelte';
@@ -73,16 +72,6 @@
     input?.focus();
   }
 
-  // ---- Phones: the field sits above the results, not in a rail.
-  let narrow = $state(false);
-  $effect(() => {
-    const mq = matchMedia('(max-width: 899.98px)');
-    const on = () => (narrow = mq.matches);
-    on();
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  });
-
   // ---- Load more: the button, and automatically when the end comes near.
   async function loadMore(asked = true) {
     if (busy || !hasMore) return;
@@ -132,15 +121,8 @@
   <SearchField bind:value={text} bind:input label="Name or login" placeholder="Name or login" oninput={typed} onsubmit={submit} onclear={clearText} />
 {/snippet}
 
-<RailLayout>
-  {#snippet rail()}
-    {#if !narrow}
-      <SideRail label="Search people">
-        <p class="rail-title">Search</p>
-        {@render field()}
-      </SideRail>
-    {/if}
-  {/snippet}
+<!-- The same column and toolbar as the Emotes tab: title row, then the field. -->
+<ColumnLayout top>
 
   <div class="browse">
     <div class="toolbar">
@@ -151,7 +133,7 @@
       <div class="tools"><SearchTabs {view} /></div>
     </div>
 
-    {#if narrow}<div class="field-top">{@render field()}</div>{/if}
+    <div class="field-top">{@render field()}</div>
 
     {#if data.error}
       <div class="state">
@@ -181,17 +163,16 @@
       </div>
     {/if}
   </div>
-</RailLayout>
+</ColumnLayout>
 
 <style>
-  .rail-title { margin: 0 0 10px; padding-left: 8px; font-size: var(--t-ui); font-weight: 600; letter-spacing: -.01em; }
   .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; min-height: 40px; }
-  @media (max-width: 899.98px) { .toolbar { padding-top: 4px; } }
   .title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
   h1 { margin: 0; font-size: var(--t-page); line-height: 1.25; letter-spacing: -.02em; }
   .total { margin: 0; font-size: var(--t-nav); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
-  .field-top { margin-top: 12px; }
+  .field-top { margin-top: 16px; max-width: 420px; }
+  @media (max-width: 760px) { .field-top { max-width: none; } }
   .results { margin-top: 16px; transition: opacity var(--dur-color) ease-out; }
   .results.dim { opacity: .55; transition-delay: .15s; }
   .more { padding: 32px 0 8px; min-height: 96px; }

@@ -137,15 +137,17 @@
     padding: 0 6px; border-radius: var(--radius);
     background: var(--elevated-2); color: var(--muted); font-size: 12px; font-weight: 500; line-height: 16px; white-space: nowrap;
     opacity: 0; transition: opacity var(--fast) ease-out; pointer-events: none; }
-  /* Picked: bold name and an accent tick; never a filled box or a border change. */
+  /* Picked: an accent hairline, an accent tick and a bold name; never a filled box. */
   .tick { position: absolute; top: 6px; right: 6px; display: inline-grid; place-items: center; width: 20px; height: 20px;
     border: 1px solid var(--border-strong); border-radius: var(--radius); color: transparent; background: var(--bg); }
+  .picked, .picked .tick { border-color: var(--accent-border); }
   .picked .tick { color: var(--accent-text); }
   .picked .name { font-weight: 700; }
   .tile:focus-visible .kinds { opacity: 1; }
   @media (hover: hover) and (pointer: fine) {
     .tile:hover { background: var(--surface-hover); border-color: var(--border-strong); }
     .tile:hover .kinds { opacity: 1; }
+    .tile.picked:hover { border-color: var(--accent-text); }
   }
   @media (prefers-contrast: more) { .tile { border-color: var(--border-strong); } }
 </style>

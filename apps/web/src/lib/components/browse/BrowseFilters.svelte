@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The browse page's filter rail content (inside SideRail, or its Filters sheet on phones):
+  // The browse page's filters (in the toolbar's Filters popover, a sheet on phones):
   // collapsible sections Search, Match, Type, Flags and Tags. One model: Type is one choice (All,
   // Animated, Still); Flags are toggle chips that each narrow to emotes with that flag; Tags is a
   // tag field (Enter adds a chip) with the most used tags of the results to add in one tap. Every

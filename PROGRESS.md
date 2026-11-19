@@ -2,6 +2,26 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Emotes tab: no rail, one toolbar, tile menu, multi-select up to 100 (branch `feat/browse-select`)
+
+Owner feedback 2026/11/19, section J (browse). Web only: no API change (bulk add already sends one `addSetEmote` per emote; 100 of them stay well inside the per-account GraphQL limit of 600 a minute, and there is no other cap to raise).
+
+- [x] Layout: the filter rail is gone (Emotes and Users tabs both use `ColumnLayout`). One toolbar: sort Top / Trending (its Day / 7 days / 30 days next to it) / New (Relevance with a query), the search field, Filters in a popover (a sheet on phones; Type, Flags, Tags as before, with Reset), a Select switch, and the target set button (signed in only). One large grid, no size options.
+- [x] Target set (`browse/target.svelte.ts`, `TargetSet.svelte`): your sets and sets you edit with EMOTES; starts as your channel's active set, a pick is remembered on the device.
+- [x] Tile menu (`TileMenu.svelte`): right-click, the context-menu key or Shift+F10, or the ⋯ button (shows on keyboard focus and hover, always on touch). Add to / Remove from the target set, Open in new tab, Copy emote link, Select. The browser's own menu never shows on tiles. Arrow keys, Home, End; Escape returns focus to the tile.
+- [x] Multi-select (`browse/selection.ts`, pure; `BrowseGrid.svelte`): click or Ctrl/⌘+click toggles, Shift+click a range from the last toggled tile, Space / Shift+Space on the focused tile, a drag rectangle (mouse or pen; from an empty spot it turns Select on) with auto-scroll near the window's edges, Ctrl/⌘+A picks what is shown, Escape clears (again: leaves Select). Touch: long-press turns Select on with that tile (in Select: a range). Cap 100: anything over it is refused with a note in the bar. Bar: "n / 100 selected", Add n to the target set (progress and a summary), Select all shown, Clear, Done. Picked tiles get an accent hairline and tick and a bold name (one CSS rule added to the shared `EmoteTile`).
+- [x] Kept: URL state (`select=1` and every filter), the trending `#n` ranks, the empty, error and loading states.
+- Tests: vitest `selection.test.ts` (toggle, range both ways, cap and refused counts, Select all, drag rectangle base plus hits, hit-test incl. gaps and touching edges, drag threshold, edge auto-scroll speed).
+- Manual check (2026/11/19): headless Edge against the dev mock, `.claude/runs/2026-11-19-feedback/screens/j-browse/check.mjs` and `touch.mjs`: no rail; context menu opens with our items and stays inside the window at 375, 768, 1440 and 2560, dark and light; Add and Remove from the menu; Escape closes it and refocuses the tile; Select in the URL; click plus Ctrl+click (2), Shift range (7); Escape clears; drag rectangle picks the tiles it touches and the click after it doesn't navigate; Ctrl+A over 285 shown picks 100; one more click is refused with the note; Space toggles; bulk add summary; long-press on touch turns Select on without navigating, a tap then toggles; the context-menu key opens the menu with focus in it; Tab reaches the ⋯; no sideways scroll at any width; rank labels; empty state; Filters popover. Screens in `.claude/runs/2026-11-19-feedback/screens/j-browse/`.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/browse-select
+gh pr create --base main --head feat/browse-select --title "Emotes tab: one toolbar, tile menu, multi-select up to 100" --body-file <file>
+gh pr merge <n> --merge
+```
+
 ## Paint render fix and global emote/editor permissions (branch `fix/paints-and-global-perms`, ADR 0010 amendment part 3)
 - Owner feedback I (2026/11/19): "paints seem to not render properly on the website" (an image paint, "Icy Wave", showed as an empty radio in the cosmetics picker) and "perms to edit someones emotes and editors globally for a role".
 - Paint cause: a painted name is transparent text (`-webkit-text-fill-color: transparent`) showing its background through `background-clip: text`. For an image paint the only background was the picture, so whenever the picture didn't load (blocked by the CSP's `img-src`, missing on the CDN, still on its way) the name drew nothing. A local stack serves pictures from `CYEX_TV_CDN_URL` (the S3 server), which the CSP never allowed; the studio previews render locally, so they looked fine. Fix: `paintStyle` (and the studio's `paintStyleText`) put a flat layer in the text colour under the picture; `PUBLIC_CDN_URL` adds the pictures' origin to `img-src` (svelte.config.js, Dockerfile build arg, .env.example).
