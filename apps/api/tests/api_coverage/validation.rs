@@ -63,8 +63,8 @@ async fn bad_inputs_answer_their_rule() {
     let item = id_at(
         &w.gql(
             os,
-            "mutation { createShopItem(input: { name: \"Val item\", priceCents: 100 }) { id } }",
-            json!({}),
+            "mutation($b: String!) { createShopItem(input: { name: \"Val item\", priceCents: 100, badgeIds: [$b] }) { id } }",
+            json!({ "b": badge }),
         )
         .await,
         "/data/createShopItem/id",
@@ -136,20 +136,20 @@ async fn bad_inputs_answer_their_rule() {
         ),
         (
             "updateShopItem: negative price",
-            "mutation($id: String!) { updateShopItem(id: $id, input: { name: \"Val item\", priceCents: -1 }) { id } }",
-            json!({ "id": item }),
+            "mutation($id: String!, $b: String!) { updateShopItem(id: $id, input: { name: \"Val item\", priceCents: -1, badgeIds: [$b] }) { id } }",
+            json!({ "id": item, "b": badge }),
             "bad_price",
         ),
         (
             "updateShopItem: ends before it starts",
-            "mutation($id: String!) { updateShopItem(id: $id, input: { name: \"Val item\", priceCents: 100, activeFrom: \"2030-02-01T00:00:00Z\", activeTo: \"2030-01-01T00:00:00Z\" }) { id } }",
-            json!({ "id": item }),
+            "mutation($id: String!, $b: String!) { updateShopItem(id: $id, input: { name: \"Val item\", priceCents: 100, activeFrom: \"2030-02-01T00:00:00Z\", activeTo: \"2030-01-01T00:00:00Z\", badgeIds: [$b] }) { id } }",
+            json!({ "id": item, "b": badge }),
             "bad_time",
         ),
         (
             "updateShopItem: empty name",
-            "mutation($id: String!) { updateShopItem(id: $id, input: { name: \"\", priceCents: 100 }) { id } }",
-            json!({ "id": item }),
+            "mutation($id: String!, $b: String!) { updateShopItem(id: $id, input: { name: \"\", priceCents: 100, badgeIds: [$b] }) { id } }",
+            json!({ "id": item, "b": badge }),
             "bad_name",
         ),
         (

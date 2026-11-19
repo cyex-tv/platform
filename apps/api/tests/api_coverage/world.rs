@@ -71,7 +71,7 @@ pub struct World {
     pub state: AppState,
 }
 
-/// Every limit at a million a minute: these tests count calls, they don't test limits.
+/// Every limit at a million a minute (and `CF-Connecting-IP` trusted, see `authorize`): these tests count calls, they don't test limits.
 pub fn open_rates() -> Rates {
     let r = Rate::per_minute(1_000_000);
     Rates {
@@ -158,7 +158,7 @@ impl World {
         })
         .unwrap();
         let state = AppState::new(db.pool.clone(), Arc::new(Auth::new(cfg).unwrap()))
-            .with_limits(Limits::new(open_rates(), false))
+            .with_limits(Limits::new(open_rates(), true))
             .with_store(Store::memory())
             .with_cdn_url("https://cdn.example.test");
         Some(Self {
@@ -227,6 +227,8 @@ impl World {
         mut request: axum::http::request::Builder,
         who: As<'_>,
     ) -> axum::http::request::Builder {
+        // A known client address, as Cloudflare sends it (`redeemCode` refuses unknown ones).
+        request = request.header("cf-connecting-ip", "203.0.113.7");
         match who {
             As::Nobody => {}
             As::App(user) => {

@@ -97,6 +97,38 @@ const STAFF: &[&str] = &[
     "unassignRole",
 ];
 
+/// Staff mutations that check their input before the caller's permission (cheap checks first):
+/// placeholders that pass those checks, so the sweep reaches the permission check.
+fn valid_input(field: &str) -> Option<String> {
+    let id = || ids::to_text(ids::new_id());
+    let paint = r##"{ name: "Sweep", kind: LINEAR_GRADIENT, stops: [{ at: 0.0, color: "#ff0000" }, { at: 1.0, color: "#0000ff" }] }"##;
+    Some(match field {
+        "createPaint" => format!("mutation {{ createPaint(input: {paint}) {{ id }} }}"),
+        "updatePaint" => format!(
+            "mutation {{ updatePaint(id: \"{}\", input: {paint}) {{ id }} }}",
+            id()
+        ),
+        "createShopItem" => format!(
+            "mutation {{ createShopItem(input: {{ name: \"Sweep\", priceCents: 100, badgeIds: [\"{}\"] }}) {{ id }} }}",
+            id()
+        ),
+        "updateShopItem" => format!(
+            "mutation {{ updateShopItem(id: \"{}\", input: {{ name: \"Sweep\", priceCents: 100, badgeIds: [\"{}\"] }}) {{ id }} }}",
+            id(),
+            id()
+        ),
+        "createCodeBatch" => format!(
+            "mutation {{ createCodeBatch(input: {{ name: \"Sweep\", prefix: \"SWEEP\", count: 1, badgeIds: [\"{}\"] }}) {{ codes }} }}",
+            id()
+        ),
+        "createRole" => {
+            "mutation { createRole(input: { name: \"Sweep\", position: 1, permissions: [] }) { id } }"
+                .to_owned()
+        }
+        _ => return None,
+    })
+}
+
 const TYPE_REF: &str =
     "kind name ofType { kind name ofType { kind name ofType { kind name ofType { kind name } } } }";
 
@@ -236,7 +268,7 @@ async fn every_field_refuses_the_signed_out_and_staff_fields_refuse_everyone_els
     let mut failures = Vec::new();
     for (op, field) in &schema.roots {
         let name = field["name"].as_str().unwrap();
-        let doc = schema.call(op, field);
+        let doc = valid_input(name).unwrap_or_else(|| schema.call(op, field));
         let r = w.gql(As::Nobody, &doc, json!({})).await;
         if r["errors"]
             .as_array()
