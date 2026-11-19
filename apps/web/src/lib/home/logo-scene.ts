@@ -3,6 +3,11 @@
 // from inside (emissive accent: the front brightest, the sides less), with a glow through its
 // opening and around it; its light spills onto the inner faces of the other two.
 //
+// Shadows: the key light (a spot, so it also falls off across the mark) casts real, soft shadows
+// between the bars; a floor under the mark catches the mark's own shadow, with a soft contact
+// shadow that grows and fades as the mark floats, and a faint pool of the lit bar's light. All of it is
+// drawn into the same canvas (transparent), so the page shows through.
+//
 // Motion: it first shows the still pose (the same one as the static image under it), makes one
 // slow full turn, then sways and floats on its own, and turns further and lets the lit bar come
 // forward as the hero scrolls away. It never follows the pointer (cyex-web).
@@ -24,11 +29,14 @@ import {
   NormalBlending,
   Path,
   PerspectiveCamera,
+  PCFShadowMap,
   PlaneGeometry,
   PMREMGenerator,
   PointLight,
   Scene,
+  ShadowMaterial,
   Shape,
+  SpotLight,
   SRGBColorSpace,
   WebGLRenderer,
   type BufferGeometry,
@@ -56,6 +64,9 @@ const FOV = 26;
 const FIT = GRID * 1.1; // the view holds this many units, so the turned logo and its glow fit
 const PX = 16; // texture pixels per grid unit for the glows
 const PAD = 4; // glow room around a bar, grid units
+const FLOOR = -13; // the catcher floor's height under the mark's middle, grid units
+const FLOOR_SIZE = 70; // floor edge, grid units: wider than the mark ever turns
+const SHADOW_MAP = 1536;
 
 /** A soft white light texture: a blurred frame line (`line`) or a blurred fill (`fill`), tinted by the material. */
 function glow(b: Bar, kind: 'line' | 'fill', blur: number, width = 0): CanvasTexture {
@@ -86,6 +97,20 @@ function glow(b: Bar, kind: 'line' | 'fill', blur: number, width = 0): CanvasTex
   return t;
 }
 
+/** A soft round blob, white in the middle and clear at the edge: a contact shadow or a pool of light, tinted by its material. */
+function blob(): CanvasTexture {
+  const n = 128;
+  const c = document.createElement('canvas');
+  c.width = c.height = n;
+  const g = c.getContext('2d')!;
+  const r = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+  // A smooth falloff (no visible rim): close to a gaussian.
+  for (const [k, a] of [[0, 1], [0.2, 0.82], [0.4, 0.5], [0.6, 0.22], [0.8, 0.05], [1, 0]]) r.addColorStop(k, `rgba(255,255,255,${a})`);
+  g.fillStyle = r;
+  g.fillRect(0, 0, n, n);
+  return new CanvasTexture(c);
+}
+
 /** One open bar: a rectangle with a rectangular hole, extruded with a rounded bevel, centred on its own middle. */
 function frame(b: Bar): ExtrudeGeometry {
   // The bevel grows the outline, so the shape is drawn that much smaller to keep the footprint.
@@ -109,11 +134,18 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
   renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 2));
   renderer.outputColorSpace = SRGBColorSpace;
   renderer.setClearColor(0x000000, 0);
+  // Soft shadows: PCF with a wide, noisy kernel (three's old "soft" mode was folded into this one).
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = PCFShadowMap;
 
   const scene = new Scene();
   const camera = new PerspectiveCamera(FOV, 1, 1, 400);
+  // The stage is tilted like the logo (its pitch), so the floor is the mark's own ground; the
+  // mark turns inside it.
+  const stage = new Group();
   const logo = new Group();
-  scene.add(logo);
+  stage.add(logo);
+  scene.add(stage);
 
   const geos: BufferGeometry[] = [];
   const mats: Material[] = [];
@@ -145,7 +177,9 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
     bar.position.set(b.x + b.w / 2 - CENTER.x, CENTER.y - (b.y + b.h / 2), b.lit ? REST.lift : 0);
     const geo = frame(b);
     geos.push(geo);
-    bar.add(new Mesh(geo, b.lit ? [litCap, litSide] : [inkCap, inkSide]));
+    const body = new Mesh(geo, b.lit ? [litCap, litSide] : [inkCap, inkSide]);
+    body.castShadow = body.receiveShadow = true;
+    bar.add(body);
 
     const plane = new PlaneGeometry(b.w + PAD * 2, b.h + PAD * 2);
     geos.push(plane);
@@ -187,15 +221,62 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
 
   const ambient = new AmbientLight(0xffffff, 0.25);
   // Key from the upper left and in front: the tops and left sides catch it, the fronts less so.
-  const key = new DirectionalLight(0xffffff, 2.6);
-  key.position.set(-10, 14, 9);
+  // A spot far off: it falls off gently across the mark (the near side brighter, the far side
+  // dimmer, so the faces read with depth) and casts the soft shadows.
+  const key = new SpotLight(0xffffff, 380, 0, 0.62, 0.75, 1.4);
+  key.position.set(-12, 31, 14);
+  key.castShadow = true;
+  key.shadow.mapSize.set(SHADOW_MAP, SHADOW_MAP);
+  key.shadow.camera.near = 12;
+  key.shadow.camera.far = 90;
+  key.shadow.bias = -0.0004;
+  key.shadow.normalBias = 0.06;
+  key.shadow.radius = 5;
   // Rim from behind on the right, so the far edges separate from the ground.
   const rim = new DirectionalLight(0xffffff, 1.4);
   rim.position.set(12, 4, -10);
   // The lit bar's light falls on the inner edges of the other two.
   const spill = new PointLight(0xffffff, 80, 18, 1.6);
   spill.position.set(3, 0, REST.lift * 0.4);
-  scene.add(ambient, key, rim, spill);
+  scene.add(ambient, key, key.target, rim, spill);
+
+  // The floor under the mark: it shows only the shadows on it (a transparent catcher), then a
+  // soft contact shadow right under the mark, and a faint pool of the lit bar's light.
+  const catcher = own(new ShadowMaterial({ transparent: true }));
+  // Fade the catcher out toward its edges, so no cut-off edge of the floor ever shows.
+  catcher.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('void main() {', 'varying vec2 vFloor; void main() { vFloor = position.xy;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('void main() {', 'varying vec2 vFloor; void main() {')
+      .replace('gl_FragColor = vec4( color, opacity * ( 1.0 - getShadowMask() ) );', 'gl_FragColor = vec4( color, opacity * ( 1.0 - getShadowMask() ) * (1.0 - smoothstep( 0.05, 0.2, length( ( vFloor - vec2( 0.03, 0.0 ) ) * vec2( 1.2, 2.2 ) ) ) ) );');
+  };
+  const contact = own(new MeshBasicMaterial({ transparent: true, depthWrite: false, color: 0x000000 }));
+  const pool = own(new MeshBasicMaterial({ transparent: true, depthWrite: false }));
+  const soft = blob();
+  texs.push(soft);
+  contact.map = pool.map = soft;
+  const flat = new PlaneGeometry(1, 1);
+  geos.push(flat);
+  const floor = new Mesh(flat, catcher);
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = FLOOR;
+  floor.scale.set(FLOOR_SIZE, FLOOR_SIZE, 1);
+  floor.receiveShadow = true;
+  floor.renderOrder = 1;
+  const floorBlob = (m: MeshBasicMaterial, order: number) => {
+    const f = new Mesh(flat, m);
+    f.rotation.x = -Math.PI / 2;
+    f.position.y = FLOOR + 0.02;
+    f.renderOrder = order;
+    return f;
+  };
+  const contactMesh = floorBlob(contact, 0);
+  const poolMesh = floorBlob(pool, 0);
+  stage.add(poolMesh, contactMesh, floor);
+
+
+  let contactBase = 0.7;
+  let poolBase = 0.3;
 
   function paint() {
     const light = isLight();
@@ -217,17 +298,28 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
     litCap.envMapIntensity = litSide.envMapIntensity = 0.5;
     spill.color.copy(accent);
     spill.intensity = light ? 30 : 90;
-    key.intensity = light ? 2.2 : 2.1;
+    key.intensity = light ? 322 : 307;
     ambient.intensity = light ? 0.45 : 0.25;
     for (const m of [halo, core, inkHalo]) m.color.copy(m === inkHalo ? markInk : accent);
     // On dark the glow adds light; on white it has to lay colour down instead.
     halo.blending = core.blending = light ? NormalBlending : AdditiveBlending;
     halo.opacity = light ? 0.5 : 0.7;
     core.opacity = light ? 0.3 : 0.45;
+    // Shadows: deep and cool on dark; lighter and softer on white.
+    key.shadow.intensity = light ? 0.5 : 0.85;
+    key.shadow.radius = light ? 7 : 5;
+    catcher.color.set(light ? 0x1d2a55 : 0x000000);
+    catcher.opacity = light ? 0.26 : 0.6;
+    contact.color.set(light ? 0x1d2a55 : 0x000000);
+    contactBase = light ? 0.3 : 0.7;
+    pool.color.copy(accent);
+    pool.blending = light ? NormalBlending : AdditiveBlending;
+    poolBase = light ? 0.1 : 0.32;
     inkHalo.blending = AdditiveBlending;
     inkHalo.opacity = light ? 0 : 0.1;
     inkHalo.visible = !light;
     for (const m of mats) m.needsUpdate = true;
+    apply(current);
     draw();
   }
 
@@ -250,14 +342,34 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
     scroll = Math.min(1, Math.max(0, -r.top / Math.max(1, r.height)));
   };
 
+  let current: Pose = REST;
   function apply(p: Pose) {
-    logo.rotation.set(p.pitch, p.yaw, 0);
+    current = p;
+    stage.rotation.x = p.pitch;
+    logo.rotation.y = p.yaw;
     logo.position.y = p.float;
     if (litBar) litBar.position.z = p.lift;
+    // The contact shadow tightens and darkens as the mark settles, loosens as it floats up; the
+    // lit bar coming forward pulls it that way.
+    const up = Math.max(-1, Math.min(1, p.float / 0.45));
+    const k = 1 - up * 0.18;
+    const fwd = (p.lift - REST.lift) * 0.5;
+    contactMesh.scale.set(30 * k, 17 * k, 1);
+    contactMesh.position.set(0, FLOOR + 0.02 - p.float * 0.4, fwd);
+    contact.opacity = contactBase * (1 - up * 0.22);
+    poolMesh.scale.set(34, 18, 1);
+    poolMesh.position.set(4, FLOOR + 0.03 - p.float * 0.4, fwd + p.lift * 0.4);
+    pool.opacity = poolBase * (1 - up * 0.15);
   }
 
+  const perf = import.meta.env.DEV && location.search.includes('logoperf');
   function draw() {
+    if (!perf) return renderer.render(scene, camera);
+    // Development only: how long one draw takes on the GPU too (waits for it), kept on window.
+    const t = performance.now();
     renderer.render(scene, camera);
+    renderer.getContext().finish();
+    ((window as unknown as { __logoDraw?: number[] }).__logoDraw ??= []).push(performance.now() - t);
   }
 
   // Time only runs while it's drawn, so a hidden tab or a scrolled-off hero picks up where it was.
@@ -322,6 +434,22 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
     ready = true;
     onReady();
   } else schedule();
+
+  // Development only: the mean time of `n` full draws, waiting for the GPU (frame cost, not the display's rate).
+  if (import.meta.env.DEV) {
+    (window as unknown as { __logoBench?: (n: number) => number }).__logoBench = (n) => {
+      const gl = renderer.getContext();
+      const px = new Uint8Array(4);
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      const t = performance.now();
+      for (let i = 0; i < n; i++) {
+        apply(pose(i * 0.016 + 6, 0));
+        renderer.render(scene, camera);
+      }
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      return (performance.now() - t) / n;
+    };
+  }
 
   // Development only: the still pose as a PNG, to remake the static images (static/home/).
   if (import.meta.env.DEV) {
