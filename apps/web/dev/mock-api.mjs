@@ -1838,12 +1838,60 @@ function newFields(q, v, session) {
     parts.push(list === null ? err('Look up at most 100 accounts at once.', 'too_many') : { data: { accountCosmetics: list } });
   }
   if (has('searchAccounts')) parts.push(searchAccounts(v));
+  if (has('quickSearch')) parts.push(quickSearch(v));
+  if (/\bmyEditableChannels\b/.test(q)) parts.push(session ? { data: { myEditableChannels: myEditableChannels() } } : err('Sign in to use this.', 'signed_out'));
   if (has('cloneSet')) parts.push(session ? cloneSet(v, session) : err('Sign in to use this.', 'signed_out'));
   if (has('accountSets')) parts.push({ data: { accountSets: accountSets(id, v.preview) } });
   if (!parts.length) return null;
   const failed = parts.find((p) => p.errors);
   if (failed) return failed;
   return { data: Object.assign({}, ...parts.map((p) => p.data)) };
+}
+
+// quickSearch(query): the header search. The same tiers as the API's matcher (crates/db
+// search::quick): exact, exact ignoring case, prefix, word or initials prefix, substring, then a
+// near miss (shared trigrams, 3+ letters); most used first within a tier. 5 emotes, 3 people.
+const nameWords = (n) => n.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+  .replace(/([A-Za-z])([0-9])/g, '$1 $2').replace(/([0-9])([A-Za-z])/g, '$1 $2').toLowerCase().split(/[\s_.\-]+/).filter(Boolean);
+const grams = (t) => { const p = `  ${t.toLowerCase()} `; const g = new Set(); for (let i = 0; i + 3 <= p.length; i++) g.add(p.slice(i, i + 3)); return g; };
+const similar = (a, b) => { const x = grams(a); const y = grams(b); let n = 0; for (const g of x) if (y.has(g)) n++; return n / (x.size + y.size - n); };
+function quickTier(name, q) {
+  const l = name.toLowerCase();
+  const ql = q.toLowerCase();
+  if (name === q) return 1;
+  if (l === ql) return 2;
+  if (l.startsWith(ql)) return 3;
+  const words = nameWords(name);
+  if (words.some((w) => w.startsWith(ql)) || words.map((w) => w[0]).join('').startsWith(ql)) return 4;
+  if (l.includes(ql)) return 5;
+  if ([...ql].length >= 3 && similar(name, q) >= 0.3) return 6;
+  return 0;
+}
+function quickSearch(v) {
+  const q = String(v.query ?? '').trim().slice(0, 100);
+  if (!q) return { data: { quickSearch: { emotes: [], users: [] } } };
+  const emotes = ALL.filter((e) => e.state === 'APPROVED' && !e.flags.private && !e.flags.nsfw)
+    .map((e) => ({ e, t: quickTier(e.name, q), s: similar(e.name, q) }))
+    .filter((h) => h.t > 0)
+    .sort((a, b) => a.t - b.t || (a.t === 6 ? b.s - a.s : 0) || b.e.channelCount - a.e.channelCount || a.e.name.length - b.e.name.length || a.e.name.localeCompare(b.e.name))
+    .slice(0, 5)
+    .map((h) => h.e);
+  const text = q.replace(/^@/, '').toLowerCase();
+  const users = [...text].length < 2 ? [] : searchPeople()
+    .filter((h) => h.identities.some((i) => i.login.toLowerCase().includes(text) || i.displayName.toLowerCase().includes(text)) || h.account.displayName.toLowerCase().includes(text))
+    .slice(0, 3);
+  return { data: { quickSearch: { emotes, users } } };
+}
+// myEditableChannels: yours, the accounts you edit, then accounts whose sets you edit (here: none
+// beyond those), by role then login.
+function myEditableChannels() {
+  const rank = { OWNER: 0, ACCOUNT_EDITOR: 1, SET_EDITOR: 2 };
+  const list = [
+    ...CHANNELS.map((channel) => ({ role: 'OWNER', channel })),
+    ...editorChannels().map((channel) => ({ role: 'ACCOUNT_EDITOR', channel })),
+    { role: 'SET_EDITOR', channel: { platform: 'TWITCH', platformChannelId: '55500009', login: 'Nora_byte', activeSetId: null, allowPersonalEmotes: true, account: OTHERS[1] } },
+  ];
+  return list.sort((a, b) => rank[a.role] - rank[b.role] || a.channel.login.localeCompare(b.channel.login, 'en', { sensitivity: 'base' }) || a.channel.platform.localeCompare(b.channel.platform));
 }
 
 // New fields merge with whatever else the same operation asks for (the older handlers below).
@@ -1937,6 +1985,12 @@ createServer(async (req, res) => {
   const session = OPEN_ENV || /(?:^|;\s*)mock_session=1/.test(req.headers.cookie ?? '');
   const url = new URL(req.url ?? '/', BASE);
   const admin = ADMIN_ENV || /(?:^|;\s*)mock_admin=1/.test(req.headers.cookie ?? '');
+  // /mock/notify: one new unread notification now (for the header's toasts); the bell's poll picks it up.
+  if (url.pathname === '/mock/notify') {
+    NOTES.unshift({ id: `01JD8XLIVE${String(Date.now()).padStart(16, '0')}`, kind: 'emote.approved', payload: JSON.stringify({ emote_id: MINE[0].id, name: MINE[0].name }), createdAt: new Date().toISOString(), read: false });
+    res.writeHead(200, { 'content-type': 'text/plain' });
+    return res.end('ok');
+  }
   if (url.pathname === '/mock/admin') {
     const off = url.searchParams.has('off');
     const cookie = off ? 'mock_admin=; Path=/; Max-Age=0' : 'mock_admin=1; Path=/; SameSite=Lax';

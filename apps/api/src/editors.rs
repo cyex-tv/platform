@@ -21,8 +21,8 @@ use cyex_tv_db::editors::{self, Grant};
 use cyex_tv_db::{accounts, channels, ids, reads, sets};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
-    AccountEditor, AccountSummary, AddAccountEditor, Channel, EditedAccount, EditorPermission,
-    EmoteSet,
+    AccountEditor, AccountSummary, AddAccountEditor, Channel, ChannelRole, EditableChannel,
+    EditedAccount, EditorPermission, EmoteSet,
 };
 use serde_json::json;
 use sqlx::{Connection, PgConnection};
@@ -524,6 +524,63 @@ pub async fn editor_channels(state: &AppState, caller: &Caller) -> ApiResult<Vec
             }
         }
     }
+    Ok(out)
+}
+
+/// The channels the caller can manage, each once under their highest role, ordered by role, then
+/// login (ignoring case), then platform.
+pub async fn my_editable_channels(
+    state: &AppState,
+    caller: &Caller,
+) -> ApiResult<Vec<EditableChannel>> {
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    // Accounts in the order of the role they give: the caller, account editors, set editors.
+    let mut roles: Vec<(Uuid, ChannelRole)> = vec![(caller.account_id, ChannelRole::Owner)];
+    for g in editors::list_for_editor(&mut conn, caller.account_id)
+        .await
+        .map_err(db_error)?
+    {
+        roles.push((g.account_id, ChannelRole::AccountEditor));
+    }
+    for set in sets::list_editable(&mut conn, caller.account_id)
+        .await
+        .map_err(db_error)?
+    {
+        if let Some(owner) = set.owner_account_id {
+            roles.push((owner, ChannelRole::SetEditor));
+        }
+    }
+    let mut seen = BTreeSet::new();
+    let mut out = Vec::new();
+    for (account, role) in roles {
+        if !seen.insert(account) {
+            continue;
+        }
+        // Set editors of an account that is blocked or deleted manage nothing.
+        if role == ChannelRole::SetEditor
+            && !accounts::get(&mut conn, account)
+                .await
+                .map_err(db_error)?
+                .is_some_and(|a| a.deleted_at.is_none() && a.blocked_at.is_none())
+        {
+            continue;
+        }
+        for ch in channels::list_for_account(&mut conn, account)
+            .await
+            .map_err(db_error)?
+        {
+            if let Some(channel) = views::channel(&mut conn, &ch).await.map_err(db_error)? {
+                out.push(EditableChannel { role, channel });
+            }
+        }
+    }
+    out.sort_by_cached_key(|e| {
+        (
+            e.role,
+            e.channel.login.to_lowercase(),
+            e.channel.platform.to_string(),
+        )
+    });
     Ok(out)
 }
 

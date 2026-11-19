@@ -2,7 +2,6 @@
   import '../app.css';
   import { untrack } from 'svelte';
   import { navigating, page } from '$app/state';
-  import CommandPalette from '$lib/components/CommandPalette.svelte';
   import Footer from '$lib/components/Footer.svelte';
   import AppHeader from '$lib/shell/AppHeader.svelte';
   import Toasts from '$lib/tool/Toasts.svelte';
@@ -51,7 +50,6 @@
 </main>
 <Footer slim={page.data.footer === 'slim'} />
 <Toasts />
-<CommandPalette />
 
 <style>
   main:focus { outline: none; }
