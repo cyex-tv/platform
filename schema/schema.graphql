@@ -140,6 +140,25 @@ type AccountStatus {
 }
 
 """
+A subscription to a plan. None exist yet; `accountSubscriptions` returns an empty list until
+they do.
+"""
+type AccountSubscription {
+	id: String!
+	plan: String!
+	state: SubscriptionState!
+	startsAt: String!
+	"""
+	Empty while it renews.
+	"""
+	endsAt: String
+	"""
+	`purchase`, `gift` or `staff`.
+	"""
+	source: String!
+}
+
+"""
 A short reference to an account, for owners and editors.
 """
 type AccountSummary {
@@ -860,6 +879,54 @@ type Entitlement {
 	grantedAt: String!
 }
 
+"""
+One badge, paint or role an account holds or held, and where it came from: one edge of the
+entitlement graph.
+"""
+type EntitlementGrant {
+	kind: GrantKind!
+	itemId: String!
+	"""
+	Empty when the item was deleted since.
+	"""
+	itemName: String!
+	accountId: String!
+	source: GrantSource!
+	"""
+	What staff wrote when they gave it.
+	"""
+	reason: String
+	"""
+	The staff account that gave it; empty for purchases, codes and the built-in roles.
+	"""
+	grantedBy: String
+	"""
+	Empty when it isn't known (built-in roles; grants older than the audit log).
+	"""
+	grantedAt: String
+	orderId: String
+	orderName: String
+	"""
+	`paid`, `refunded` and so on.
+	"""
+	orderStatus: String
+	codeBatchId: String
+	codeBatchName: String
+	"""
+	When it was taken away; empty while held.
+	"""
+	revokedAt: String
+	"""
+	Who took it away; empty for refunds.
+	"""
+	revokedBy: String
+	revokeReason: String
+	"""
+	Held now.
+	"""
+	active: Boolean!
+}
+
 type EntitlementPage {
 	items: [Entitlement!]!
 	total: Int!
@@ -956,6 +1023,45 @@ input GrantCosmeticInput {
 	Why, for the audit log. 1 to 500 characters.
 	"""
 	reason: String!
+}
+
+"""
+What an entitlement is of.
+"""
+enum GrantKind {
+	BADGE
+	PAINT
+	ROLE
+}
+
+"""
+How an account came to hold something.
+"""
+enum GrantSource {
+	"""
+	Given by staff (a cosmetic grant or a role assignment).
+	"""
+	STAFF
+	"""
+	Bought in the shop (`orderId`).
+	"""
+	PURCHASE
+	"""
+	A redeemed code (`codeBatchId`).
+	"""
+	CODE
+	"""
+	An event.
+	"""
+	EVENT
+	"""
+	The User role every account holds.
+	"""
+	DEFAULT
+	"""
+	The owners' top role, from the owner list.
+	"""
+	OWNER
 }
 
 """
@@ -1186,6 +1292,14 @@ type Mutation {
 	its owners told. Needs `emotes.takedown`. Audited.
 	"""
 	takedownEmote(id: String!, reason: String!): Emote!
+	"""
+	Add a staff note to an account (1 to 2000 characters). Needs `users.notes`. Audited.
+	"""
+	addStaffNote(accountId: String!, body: String!): StaffNote!
+	"""
+	Delete a staff note: its author may, and the owner. False if it was gone. Audited.
+	"""
+	deleteStaffNote(id: String!): Boolean!
 	"""
 	Restrict an account with a reason, for good or `until` a time: no uploads
 	(`users.restrict_uploads`), no reports or tickets (`users.restrict_tickets`), or a full
@@ -1843,7 +1957,7 @@ type Query {
 	order(id: String!): Order
 	"""
 	Every order, newest first; narrow by status, account (bought or received) and item.
-	Needs `shop.orders`.
+	Needs `shop.orders`, or `billing.view` narrowed to one account.
 	"""
 	orders(status: OrderStatus, accountId: String, itemId: String, page: Int, perPage: Int): OrderPage!
 	"""
@@ -1916,6 +2030,34 @@ type Query {
 	Needs `users.view`, `users.restrict` or a narrower restrict permission.
 	"""
 	accountStatus(accountId: String!): AccountStatus!
+	"""
+	Staff notes on an account, newest first (the latest 200). Needs `users.notes`.
+	"""
+	staffNotes(accountId: String!): [StaffNote!]!
+	"""
+	Where an account is signed in, the most recently used first. Never tokens. Needs
+	`users.sessions`.
+	"""
+	accountSessions(accountId: String!): [AccountSession!]!
+	"""
+	An account's subscriptions: past, current and to come. There are no subscriptions yet,
+	so this is empty until there are. Needs `billing.view`, `subscriptions.manage` or
+	`shop.orders`.
+	"""
+	accountSubscriptions(accountId: String!): [AccountSubscription!]!
+	"""
+	The entitlement graph of an account: every badge, paint and role it holds or held, where
+	each came from (staff, an order, a redeem code, an event, the User role, the owner list),
+	who gave it and when, and when and by whom it was taken away. Held ones first. Needs
+	`entitlements.view` or `cosmetics.grant`.
+	"""
+	entitlementGraph(accountId: String!): [EntitlementGrant!]!
+	"""
+	The reverse: who holds or held one badge, paint or role, and how each got it (the latest
+	200 of each kind of record). Not for the User and top roles (`implicit_role`). Needs
+	`entitlements.view` or `cosmetics.grant`.
+	"""
+	entitlementHolders(kind: GrantKind!, id: String!): [EntitlementGrant!]!
 	"""
 	All roles, most senior first, each with whether you may edit or assign it. Needs
 	`roles.manage` or `roles.assign`. The top role is listed to the owners only.
@@ -2288,12 +2430,35 @@ input ShopItemInput {
 	sortOrder: Int
 }
 
+"""
+A note staff keep on an account (`users.notes`).
+"""
+type StaffNote {
+	id: String!
+	accountId: String!
+	"""
+	Empty when the author's account is gone.
+	"""
+	authorId: String
+	body: String!
+	createdAt: String!
+}
+
 type Subscription {
 	"""
 	Live updates for up to 500 topics: `channel:<platform>:<id>`, `set:<id>`,
 	`user:<platform>:<id>` (ADR 0005), and `cosmetics` (ADR 0015). The same events as the event WebSocket.
 	"""
 	events(topics: [String!]!): Event!
+}
+
+"""
+Where a subscription is in time.
+"""
+enum SubscriptionState {
+	PAST
+	CURRENT
+	FUTURE
 }
 
 """

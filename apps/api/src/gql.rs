@@ -44,6 +44,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::state::AppState;
 use crate::{
     abuse, account, activity, admin, catalog, codes, cosmetics, editors, moderation, search, shop,
+    staff,
 };
 
 pub type ApiSchema = Schema<Query, Mutation, Subscription>;
@@ -765,7 +766,7 @@ impl Query {
     }
 
     /// Every order, newest first; narrow by status, account (bought or received) and item.
-    /// Needs `shop.orders`.
+    /// Needs `shop.orders`, or `billing.view` narrowed to one account.
     #[allow(clippy::too_many_arguments)]
     async fn orders(
         &self,
@@ -967,6 +968,75 @@ impl Query {
     async fn account_status(&self, ctx: &Context<'_>, account_id: String) -> Result<AccountStatus> {
         let caller = caller(ctx)?;
         abuse::status(state(ctx), caller, &account_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Staff notes on an account, newest first (the latest 200). Needs `users.notes`.
+    async fn staff_notes(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+    ) -> Result<Vec<cyex_tv_shared::model::StaffNote>> {
+        let caller = caller(ctx)?;
+        staff::notes(state(ctx), caller, &account_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Where an account is signed in, the most recently used first. Never tokens. Needs
+    /// `users.sessions`.
+    async fn account_sessions(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+    ) -> Result<Vec<AccountSession>> {
+        let caller = caller(ctx)?;
+        staff::account_sessions(state(ctx), caller, &account_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// An account's subscriptions: past, current and to come. There are no subscriptions yet,
+    /// so this is empty until there are. Needs `billing.view`, `subscriptions.manage` or
+    /// `shop.orders`.
+    async fn account_subscriptions(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+    ) -> Result<Vec<cyex_tv_shared::model::AccountSubscription>> {
+        let caller = caller(ctx)?;
+        staff::account_subscriptions(state(ctx), caller, &account_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// The entitlement graph of an account: every badge, paint and role it holds or held, where
+    /// each came from (staff, an order, a redeem code, an event, the User role, the owner list),
+    /// who gave it and when, and when and by whom it was taken away. Held ones first. Needs
+    /// `entitlements.view` or `cosmetics.grant`.
+    async fn entitlement_graph(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+    ) -> Result<Vec<cyex_tv_shared::model::EntitlementGrant>> {
+        let caller = caller(ctx)?;
+        staff::graph(state(ctx), caller, &account_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// The reverse: who holds or held one badge, paint or role, and how each got it (the latest
+    /// 200 of each kind of record). Not for the User and top roles (`implicit_role`). Needs
+    /// `entitlements.view` or `cosmetics.grant`.
+    async fn entitlement_holders(
+        &self,
+        ctx: &Context<'_>,
+        kind: cyex_tv_shared::model::GrantKind,
+        id: String,
+    ) -> Result<Vec<cyex_tv_shared::model::EntitlementGrant>> {
+        let caller = caller(ctx)?;
+        staff::holders(state(ctx), caller, kind, &id)
             .await
             .map_err(api_error)
     }
@@ -1507,6 +1577,27 @@ impl Mutation {
     async fn takedown_emote(&self, ctx: &Context<'_>, id: String, reason: String) -> Result<Emote> {
         let caller = caller(ctx)?;
         abuse::takedown(state(ctx), caller, &id, &reason)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Add a staff note to an account (1 to 2000 characters). Needs `users.notes`. Audited.
+    async fn add_staff_note(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+        body: String,
+    ) -> Result<cyex_tv_shared::model::StaffNote> {
+        let caller = caller(ctx)?;
+        staff::add_note(state(ctx), caller, &account_id, &body)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Delete a staff note: its author may, and the owner. False if it was gone. Audited.
+    async fn delete_staff_note(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
+        let caller = caller(ctx)?;
+        staff::delete_note(state(ctx), caller, &id)
             .await
             .map_err(api_error)
     }

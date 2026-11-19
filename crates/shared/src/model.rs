@@ -1399,6 +1399,106 @@ mod tests {
     }
 }
 
+// The staff account dashboard (ADR 0010 amendment 2026/11/19)
+
+/// A note staff keep on an account (`users.notes`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct StaffNote {
+    pub id: String,
+    pub account_id: String,
+    /// Empty when the author's account is gone.
+    pub author_id: Option<String>,
+    pub body: String,
+    pub created_at: String,
+}
+
+/// Where a subscription is in time.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "lowercase")]
+pub enum SubscriptionState {
+    Past,
+    Current,
+    Future,
+}
+
+/// A subscription to a plan. None exist yet; `accountSubscriptions` returns an empty list until
+/// they do.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct AccountSubscription {
+    pub id: String,
+    pub plan: String,
+    pub state: SubscriptionState,
+    pub starts_at: String,
+    /// Empty while it renews.
+    pub ends_at: Option<String>,
+    /// `purchase`, `gift` or `staff`.
+    pub source: String,
+}
+
+/// What an entitlement is of.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "lowercase")]
+pub enum GrantKind {
+    Badge,
+    Paint,
+    Role,
+}
+
+/// How an account came to hold something.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "lowercase")]
+pub enum GrantSource {
+    /// Given by staff (a cosmetic grant or a role assignment).
+    Staff,
+    /// Bought in the shop (`orderId`).
+    Purchase,
+    /// A redeemed code (`codeBatchId`).
+    Code,
+    /// An event.
+    Event,
+    /// The User role every account holds.
+    Default,
+    /// The owners' top role, from the owner list.
+    Owner,
+}
+
+/// One badge, paint or role an account holds or held, and where it came from: one edge of the
+/// entitlement graph.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct EntitlementGrant {
+    pub kind: GrantKind,
+    pub item_id: String,
+    /// Empty when the item was deleted since.
+    pub item_name: String,
+    pub account_id: String,
+    pub source: GrantSource,
+    /// What staff wrote when they gave it.
+    pub reason: Option<String>,
+    /// The staff account that gave it; empty for purchases, codes and the built-in roles.
+    pub granted_by: Option<String>,
+    /// Empty when it isn't known (built-in roles; grants older than the audit log).
+    pub granted_at: Option<String>,
+    pub order_id: Option<String>,
+    pub order_name: Option<String>,
+    /// `paid`, `refunded` and so on.
+    pub order_status: Option<String>,
+    pub code_batch_id: Option<String>,
+    pub code_batch_name: Option<String>,
+    /// When it was taken away; empty while held.
+    pub revoked_at: Option<String>,
+    /// Who took it away; empty for refunds.
+    pub revoked_by: Option<String>,
+    pub revoke_reason: Option<String>,
+    /// Held now.
+    pub active: bool,
+}
+
 #[cfg(test)]
 mod visibility_tests {
     use super::EmoteVisibility as V;

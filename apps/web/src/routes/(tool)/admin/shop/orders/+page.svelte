@@ -3,7 +3,9 @@
   // to its detail: who paid, who got it, the amounts, Paddle's transaction, the dates and the refund
   // reason staff gave. A paid order can be refunded with a reason: Paddle is asked for a full
   // refund and the cosmetics are taken back at once. Buyers never see that reason.
+  import { page as route } from '$app/state';
   import { ApiError, gql } from '$lib/api';
+  import { lookUp, who } from '$lib/admin/names.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import State from '$lib/components/State.svelte';
   import { clean, count, dateTime, iso } from '$lib/format';
@@ -26,7 +28,16 @@
 
   let status = $state<Status | ''>('');
   let itemId = $state('');
-  let account = $state<{ id: string; name: string } | null>(null);
+  // ?account=<id> (from a staff account page) starts narrowed to that account.
+  const fromLink = route.url.searchParams.get('account');
+  let account = $state<{ id: string; name: string } | null>(fromLink ? { id: fromLink, name: '' } : null);
+  $effect(() => {
+    if (!account || account.name) return;
+    const id = account.id;
+    lookUp([id]);
+    const known = who(id);
+    if (known) account = { id, name: known.name };
+  });
   let more = $state<Row[]>([]);
   let page = $state(1);
   let loadingMore = $state(false);
@@ -116,7 +127,7 @@
     {#if account}
       <div class="ui-field">
         <span class="ui-label">Account</span>
-        <button class="ui-btn secondary clear" type="button" onclick={() => (account = null)} aria-label="Stop filtering by {iso(account.name)}"><bdi>{clean(account.name)}</bdi><Icon name="x" size={14} /></button>
+        <button class="ui-btn secondary clear" type="button" onclick={() => (account = null)} aria-label="Stop filtering by {iso(account.name)}"><bdi>{clean(account.name) || account.id.slice(-8)}</bdi><Icon name="x" size={14} /></button>
       </div>
     {/if}
   </div>
