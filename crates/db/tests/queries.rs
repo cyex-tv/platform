@@ -1435,8 +1435,8 @@ async fn rollup_counts_distinct_channels_per_hour_and_is_idempotent() {
     assert_eq!(search::rollup_channel_adds(&mut c).await.unwrap(), 2);
     assert_eq!(buckets(&mut c, x).await, [(2, 1), (1, 0)]);
 
-    // Again: the same table.
-    assert_eq!(search::rollup_channel_adds(&mut c).await.unwrap(), 2);
+    // Again: the same table. Only the newest hour is redone, so one bucket is written.
+    assert_eq!(search::rollup_channel_adds(&mut c).await.unwrap(), 1);
     assert_eq!(buckets(&mut c, x).await, [(2, 1), (1, 0)]);
     let total: i64 = sqlx::query_scalar("SELECT count(*) FROM emote_channel_adds")
         .fetch_one(&mut *c)
