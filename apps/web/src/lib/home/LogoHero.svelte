@@ -1,12 +1,13 @@
 <script lang="ts">
-  // The hero's logo. The flat SVG paints first and is all most of the page's readers need; on a
-  // device that can take it (WebGL, no data saver, enough memory and cores, motion allowed), the
-  // 3D scene loads after the page has settled and fades in over it at the same size and pose.
-  // The box has a fixed shape, so nothing moves when it arrives (CLS 0), and nothing on the first
-  // screen waits for it. Reduced motion, turned on at any time, puts the flat logo back.
+  // The hero's logo. A still image of the 3D logo paints first (one per theme) and is all most of
+  // the page's readers need: it is the fallback where there's no 3D and what reduced motion keeps.
+  // On a device that can take it (WebGL, no data saver, enough memory and cores, motion allowed),
+  // the live scene loads after the page has settled and fades in over it in the same pose, then
+  // starts to move. The box has a fixed shape, so nothing shifts when it arrives (CLS 0), and
+  // nothing on the first screen waits for it. Reduced motion, turned on at any time (the system's
+  // or the site's own), puts the still image back.
   import { onMount } from 'svelte';
-  import LogoMark from './LogoMark.svelte';
-  import { capable, readEnv } from './capable';
+  import { capable, motionReduced, readEnv } from './capable';
   import { settled } from './settle';
   import type { LogoScene } from './logo-scene';
 
@@ -39,7 +40,7 @@
         // Marks for the page's own timeline: when the 3D was asked for, and when it showed.
         performance.mark('logo-3d:load');
         const { mountLogo } = await import('./logo-scene');
-        if (gone || motion.matches) return;
+        if (gone || motionReduced()) return;
         canvas = document.createElement('canvas');
         host.append(canvas);
         scene = mountLogo(canvas, host, {
@@ -53,7 +54,7 @@
           },
         });
       } catch {
-        // The chunk didn't load or WebGL refused: the flat logo is already there.
+        // The chunk didn't load or WebGL refused: the still image is already there.
         failed = true;
         stop();
       } finally {
@@ -61,26 +62,34 @@
       }
     }
 
-    const onMotion = () => (motion.matches ? stop() : start());
+    const onMotion = () => (motionReduced() ? stop() : start());
     motion.addEventListener('change', onMotion);
+    const site = new MutationObserver(onMotion);
+    site.observe(document.documentElement, { attributes: true, attributeFilter: ['data-motion'] });
     start();
     return () => {
       gone = true;
       motion.removeEventListener('change', onMotion);
+      site.disconnect();
       stop();
     };
   });
 </script>
 
 <div class="logo-hero" class:live bind:this={host} aria-hidden="true">
-  <div class="flat"><LogoMark /></div>
+  <!-- Lazy, so only the one for the theme in use loads (the other is display: none). -->
+  <img class="still dark" src="/home/logo-3d-dark.webp" width="840" height="840" alt="" loading="lazy" decoding="async" />
+  <img class="still light" src="/home/logo-3d-light.webp" width="840" height="840" alt="" loading="lazy" decoding="async" />
 </div>
 
 <style>
   .logo-hero { position: relative; width: 100%; aspect-ratio: 1; contain: layout paint; }
-  .flat, .logo-hero :global(canvas) { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .flat { transition: opacity .9s var(--ease); }
-  .logo-hero :global(canvas) { display: block; opacity: 0; transition: opacity .9s var(--ease); }
+  .still, .logo-hero :global(canvas) { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .still { display: block; transition: opacity .5s var(--ease); user-select: none; -webkit-user-drag: none; }
+  .light { display: none; }
+  :global([data-theme='light']) .light { display: block; }
+  :global([data-theme='light']) .dark { display: none; }
+  .logo-hero :global(canvas) { display: block; opacity: 0; transition: opacity .5s var(--ease); }
   .live :global(canvas) { opacity: 1; }
-  .live .flat { opacity: 0; }
+  .live .still { opacity: 0; }
 </style>
