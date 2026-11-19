@@ -957,7 +957,8 @@ impl Query {
     }
 
     /// An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`,
-    /// `emotes.takedown`, `emotes.edit_any` or `emotes.delete_any`. `perPage` is 1 to 100, default 50.
+    /// `emotes.takedown`, `emotes.edit_any` or `emotes.delete_any`, or to be the account or its
+    /// editor with `EMOTE_MANAGE` on every set. `perPage` is 1 to 100, default 50.
     async fn account_emotes(
         &self,
         ctx: &Context<'_>,
@@ -1571,7 +1572,8 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Change an emote's name, tags or flags. Owner, or `emotes.edit_any`.
+    /// Change an emote's name, tags or flags. Owner, an account editor of the owner with
+    /// `EMOTE_MANAGE` on every set (audited), or `emotes.edit_any`.
     async fn update_emote(
         &self,
         ctx: &Context<'_>,
@@ -1584,8 +1586,23 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Delete your emote, or anyone's with `emotes.delete_any` (audited). It is removed from
-    /// every set.
+    /// Give an emote to another account (ADR 0014). Its owner, or an account editor of the owner
+    /// with `EMOTE_TRANSFER` on every set. The receiver is you, or an account you edit with
+    /// `EMOTE_UPLOAD` on every set. Audited (`emote.transferred`); both owners are told. 60 an hour.
+    async fn transfer_emote(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        to_account_id: String,
+    ) -> Result<Emote> {
+        let caller = caller(ctx)?;
+        moderation::transfer(state(ctx), caller, &id, &to_account_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Delete your emote, an emote of an account you edit with `EMOTE_MANAGE`, or anyone's with
+    /// `emotes.delete_any` (audited). It is removed from every set.
     async fn delete_emote(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
         let caller = caller(ctx)?;
         moderation::delete(state(ctx), caller, &id)

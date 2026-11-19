@@ -219,7 +219,8 @@ async fn logout(
 /// frames. Sign in first (with the cookie, from `https://cyex.tv`). At most 20 uploads an hour.
 /// The flags `zero_width`, `private` and `nsfw` may be set at once (each `true` or `false`,
 /// default `false`), and `visibility` (`public`, `unlisted` or `private`; with `private` too,
-/// they must agree); `updateEmote` changes them later.
+/// they must agree); `updateEmote` changes them later. `owner_id` uploads for an account you edit
+/// with `EMOTE_UPLOAD` (ADR 0014): it owns the emote, and the upload counts against both of you.
 #[utoipa::path(
     post,
     path = "/v1/emotes",
@@ -229,7 +230,7 @@ async fn logout(
         (status = 202, description = "Accepted; the files are being made. The emote is `pending`.", body = Emote),
         (status = 400, description = "`bad_name`, `bad_tag`, `too_many_tags` or `bad_form`.", body = ErrorBody),
         (status = 401, description = "`signed_out`.", body = ErrorBody),
-        (status = 403, description = "`restricted`, or `bad_origin` for a cookie from another site.", body = ErrorBody),
+        (status = 403, description = "`restricted` (you or the owner you upload for), `forbidden` (no `EMOTE_UPLOAD` there), or `bad_origin` for a cookie from another site.", body = ErrorBody),
         (status = 413, description = "`too_large`: over 8 MB, 1000×1000 px or 1000 frames.", body = ErrorBody),
         (status = 415, description = "`unsupported_format`: not PNG, APNG, GIF, WebP or JPEG (AVIF isn't taken yet).", body = ErrorBody),
         (status = 422, description = "`invalid_image` (doesn't decode) or `blocked`.", body = ErrorBody),
@@ -249,6 +250,7 @@ async fn upload_emote(
     let mut flags = upload::Flags::default();
     let mut private: Option<bool> = None;
     let mut visibility: Option<EmoteVisibility> = None;
+    let mut owner_id: Option<String> = None;
     let mut file: Option<Vec<u8>> = None;
     while let Some(mut field) = form
         .next_field()
@@ -301,6 +303,16 @@ async fn upload_emote(
                     _ => flags.nsfw = on,
                 }
             }
+            Some("owner_id") => {
+                let text = field
+                    .text()
+                    .await
+                    .map_err(|_| bad_form("A form field couldn't be read."))?;
+                if text.len() > 64 {
+                    return Err(bad_form("A form field is too long."));
+                }
+                owner_id = Some(text);
+            }
             Some("visibility") => {
                 let text = field
                     .text()
@@ -313,7 +325,7 @@ async fn upload_emote(
             }
             _ => {
                 return Err(bad_form(
-                    "Unknown form field. Send name, tags, zero_width, private, visibility, nsfw and file.",
+                    "Unknown form field. Send name, tags, zero_width, private, visibility, nsfw, owner_id and file.",
                 ));
             }
         }
@@ -330,6 +342,7 @@ async fn upload_emote(
             name,
             tags: upload::split_tags(tags.as_deref()),
             flags,
+            owner_id,
             file: file.into(),
         },
     )

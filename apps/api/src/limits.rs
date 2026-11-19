@@ -59,6 +59,8 @@ pub struct Rates {
     pub heavy_reads: Rate,
     /// `deleteAccount`, per account, tries with a wrong confirmation included.
     pub delete_account: Rate,
+    /// `transferEmote`, per account, refused tries included (ADR 0014).
+    pub emote_transfers: Rate,
 }
 
 impl Default for Rates {
@@ -80,6 +82,7 @@ impl Default for Rates {
             quick_search: Rate::per_minute(240),
             heavy_reads: Rate::per_minute(120),
             delete_account: Rate::per_hour(3),
+            emote_transfers: Rate::per_hour(60),
         }
     }
 }
@@ -103,6 +106,7 @@ pub struct Limits {
     pub quick_search: Limiter,
     pub heavy_reads: Limiter,
     pub delete_account: Limiter,
+    pub emote_transfers: Limiter,
     /// Take the client IP from `CF-Connecting-IP` (`CYEX_TV_TRUST_CLOUDFLARE=true`).
     pub trust_cloudflare: bool,
 }
@@ -127,6 +131,7 @@ impl Limits {
             quick_search: Limiter::new(rates.quick_search),
             heavy_reads: Limiter::new(rates.heavy_reads),
             delete_account: Limiter::new(rates.delete_account),
+            emote_transfers: Limiter::new(rates.emote_transfers),
             trust_cloudflare,
         }
     }
