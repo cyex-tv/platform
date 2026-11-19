@@ -8,7 +8,9 @@
 // every permission (/mock/admin?off clears it). MOCK_OPEN=1 is for a shared preview: every
 // visitor counts as signed in as the staff account with every permission, no cookie needed.
 // Development only; nothing here ships.
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
+import { Kind, parse } from 'graphql';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const ORIGIN = process.env.SITE_ORIGIN ?? 'http://localhost:5173';
@@ -345,7 +347,7 @@ const emote = (i, owner = OTHERS[i % OTHERS.length], state = 'APPROVED') => {
     tags: [...s.tags],
     host: `${BASE}/emotes/${i}`,
     createdAt: new Date(NOW - idx * 0.2 * DAY - Math.floor(rngFor(i, 3)() * 0.18 * DAY)).toISOString(),
-    flags: { zeroWidth: s.zero, nsfw: false, private: false },
+    flags: { zeroWidth: s.zero, nsfw: false, private: false, wide: s.wide },
     visibility: 'PUBLIC',
     // Made-up but stable: a few popular ones, a long tail, some in no channel.
     channelCount: i % 11 === 0 ? 0 : (i * 37) % 91 + (i % 5 === 0 ? 400 : 0),
@@ -799,6 +801,7 @@ const cImage = (key, kind = 'BADGE') => ({
   width: 72, height: 72, ready: true, createdAt: C_TIME,
   files: [1, 2, 4].map((k) => ({ name: `${k}x.webp`, format: 'WEBP', scale: k, width: 18 * k, height: 18 * k, size: 300 * k, isStatic: false })),
 });
+const UPLOADED = new Map(); // SHA-256 of an uploaded file -> its picture
 const C_IMAGES = [cImage('sample-star'), cImage('sample-shield')];
 const BADGES = [
   { id: '01JD8XBDG000000000000000001', name: 'Sample: Early', tooltip: 'Sample badge (mock data)', image: C_IMAGES[0], createdAt: C_TIME, updatedAt: C_TIME },
@@ -1791,6 +1794,17 @@ function signedIn(body, v, ADMIN) {
       logEmote(e.id, op === 'Approve' ? 'emote.approved' : 'emote.rejected', { state: e.state.toLowerCase(), reason: v.reason ?? null, visibility: e.visibility.toLowerCase() });
       return { data: { [op === 'Approve' ? 'approveEmote' : 'rejectEmote']: { id: e.id, state: e.state, visibility: e.visibility } } };
     }
+    case 'Takedown': {
+      if (!ADMIN) return err('This needs emotes.takedown.', 'forbidden');
+      const e = anyEmote(v.id);
+      if (!e) return err('Not found.', 'not_found');
+      if (e.state === 'TAKEN_DOWN') return err('That emote is taken down already.', 'already_taken_down');
+      if (!String(v.reason ?? '').trim()) return err('Say why.', 'bad_reason');
+      e.state = 'TAKEN_DOWN';
+      for (const set of ALL_SETS()) set.emotes = set.emotes.filter((m) => m.id !== e.id);
+      logEmote(e.id, 'emote.taken_down', { state: 'taken_down', reason: v.reason });
+      return { data: { takedownEmote: e } };
+    }
     case 'EmoteHistory': {
       const e = PENDING.find((x) => x.id === v.emoteId) ?? RESOLVED.find((x) => x.id === v.emoteId);
       const tagged = e?.tags.length ? [{ id: 'ELOGTG' + e.id.slice(-4), actorId: e.owner?.id ?? null, action: 'emote.updated', before: JSON.stringify({ tags: [] }), after: JSON.stringify({ tags: e.tags }), createdAt: new Date(Date.parse(e.createdAt) + 90_000).toISOString() }] : [];
@@ -2371,9 +2385,7 @@ createServer(async (req, res) => {
   }
   if (req.method === 'GET' && url.pathname === '/v1/cosmetics') {
     const c = cosmeticCatalog();
-    const toRest = (x) => JSON.parse(JSON.stringify(x, (k, val) => (typeof val === 'string' && /^[A-Z_]+$/.test(val) && ['kind', 'shape', 'format'].includes(k) ? val.toLowerCase() : val))
-      .replace(/"([a-z]+)([A-Z][a-zA-Z]*)":/g, (_, a, b) => `"${a}${b.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase())}":`));
-    return json(res, 200, toRest(c));
+    return json(res, 200, restOf(c));
   }
   if (req.method === 'GET' && url.pathname === '/v1/cosmetics/users') {
     const ids = (url.searchParams.get('ids') ?? '').split(',').filter(Boolean);
@@ -2385,14 +2397,22 @@ createServer(async (req, res) => {
     const raw = (await read(req)).toString('latin1');
     if (!session) return json(res, 401, { error: 'signed_out', message: 'Sign in to upload.' });
     if (!admin) return json(res, 403, { error: 'forbidden', message: 'This needs cosmetics.manage.' });
-    const kind = raw.match(/name="kind"\r\n\r\n([^\r]*)/)?.[1];
+    const kind = raw.match(/name="kind"\r\n\r\n([^\r]*)/)?.[1]?.trim();
+    const file = raw.match(/name="file"[^\r]*\r\n(?:[^\r]+\r\n)*\r\n([\s\S]*?)\r\n--/)?.[1];
+    if (kind === undefined) return json(res, 400, { error: 'bad_form', message: 'Say what it is for: kind=badge or kind=paint.' });
     if (kind !== 'badge' && kind !== 'paint') return json(res, 400, { error: 'bad_kind', message: 'kind is badge or paint.' });
+    if (file === undefined) return json(res, 400, { error: 'bad_form', message: 'Attach the image as `file`.' });
+    // The same bytes give the same picture again (the API keys pictures by their SHA-256).
+    const sha = createHash('sha256').update(file, 'latin1').digest('hex');
+    const again = UPLOADED.get(sha);
+    if (again) return json(res, 202, restOf(again));
     // Uploads reuse the sample star picture; the files are "made" two seconds later.
     const img = { ...cImage('sample-star', kind.toUpperCase()), id: `01JD8XIMG${String(100 + cosmeticSeq++).padStart(17, '0')}`, ready: false, files: [], createdAt: new Date().toISOString() };
     if (kind === 'paint') img.host = `${BASE}/cosmetics/badges/sample-star`;
     C_IMAGES.push(img);
+    UPLOADED.set(sha, img);
     setTimeout(() => Object.assign(img, { ready: true, files: cImage('sample-star').files }), 2000);
-    return json(res, 202, img);
+    return json(res, 202, restOf(img));
   }
   const av = url.pathname.match(/^\/avatars\/(\d+)\.svg$/);
   if (av) {
@@ -2462,7 +2482,7 @@ createServer(async (req, res) => {
       Object.assign(e, { host: emote(700).host, files: emote(700).files });
       e.flags.wide = wideOf(e);
     }, 4000);
-    return json(res, 202, e);
+    return json(res, 202, restOf(e));
   }
   if (req.method === 'POST' && url.pathname === '/v1/gql') {
     const raw = (await read(req)).toString('utf8');
@@ -2475,13 +2495,57 @@ createServer(async (req, res) => {
         res.setHeader('set-cookie', out._cookie);
         delete out._cookie;
       }
-      return json(res, 200, out);
+      return json(res, 200, pruneAnswer(body.query, out));
     } catch (e) {
       return json(res, 400, { data: null, errors: [{ message: String(e?.message ?? e), extensions: { code: 'bad_request' } }] });
     }
   }
   res.writeHead(404).end();
 }).listen(PORT, process.env.MOCK_HOST ?? 'localhost', () => console.log(`mock api on ${BASE}${OPEN_ENV ? ' (open: everyone is staff)' : ADMIN_ENV ? ' (admin)' : ''}`));
+
+// The REST API's JSON: snake_case keys and lower-case enum values (the GraphQL shapes are camelCase
+// with upper-case enums).
+const REST_ENUM_KEYS = new Set(['kind', 'shape', 'format', 'state', 'visibility']);
+function restOf(x, key = '') {
+  if (Array.isArray(x)) return x.map((v) => restOf(v, key));
+  if (x && typeof x === 'object') {
+    return Object.fromEntries(Object.entries(x).map(([k, v]) => [k.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase()), restOf(v, k)]));
+  }
+  return typeof x === 'string' && REST_ENUM_KEYS.has(key) && /^[A-Z_]+$/.test(x) ? x.toLowerCase() : x;
+}
+
+// Cuts an answer down to what the query selected, as a GraphQL server does: the mock's objects carry
+// more than any one query asks for.
+function prune(value, sets, frags) {
+  if (Array.isArray(value)) return value.map((v) => prune(v, sets, frags));
+  if (value === null || typeof value !== 'object' || !sets.length) return value;
+  const fields = new Map();
+  const collect = (set) => {
+    for (const sel of set.selections) {
+      if (sel.kind === Kind.FIELD) {
+        const key = sel.alias?.value ?? sel.name.value;
+        const f = fields.get(key) ?? { name: sel.name.value, sets: [] };
+        if (sel.selectionSet) f.sets.push(sel.selectionSet);
+        fields.set(key, f);
+      } else if (sel.kind === Kind.INLINE_FRAGMENT) collect(sel.selectionSet);
+      else if (frags.has(sel.name.value)) collect(frags.get(sel.name.value));
+    }
+  };
+  sets.forEach(collect);
+  const out = {};
+  for (const [key, f] of fields) {
+    const src = key in value ? value[key] : value[f.name];
+    if (src !== undefined) out[key] = prune(src, f.sets, frags);
+  }
+  return out;
+}
+function pruneAnswer(query, out) {
+  if (!out?.data || typeof out.data !== 'object') return out;
+  const doc = parse(query);
+  const frags = new Map(doc.definitions.filter((d) => d.kind === Kind.FRAGMENT_DEFINITION).map((d) => [d.name.value, d.selectionSet]));
+  const op = doc.definitions.find((d) => d.kind === Kind.OPERATION_DEFINITION);
+  return op ? { ...out, data: prune(out.data, [op.selectionSet], frags) } : out;
+}
 
 function json(res, status, body) {
   res.writeHead(status, { 'content-type': 'application/json' });
