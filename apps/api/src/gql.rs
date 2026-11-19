@@ -25,12 +25,12 @@ use cyex_tv_shared::model::{
     ActivityEntry, ActivityPage, AddAccountEditor, AddSetEmote, AdminAccount, AuditEntry, Badge,
     Channel, ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge, CreateRole,
     CreateSet, EditableChannel, EditedAccount, EditorPermission, Emote, EmoteFlag, EmoteNote,
-    EmotePage, EmoteSet, EmoteSort, EmoteTrending, EmoteVisibility, Entitlement, EntitlementPage,
-    Event, GrantCosmetic, Identity, Me, Notification, OwnedCosmetics, Paint, PaintInput,
-    PendingDeletion, PersonalSetEntry, Platform, QuickSearch, Report, ReportAction, ReportQueue,
-    ReviewQueue, ReviewQueueFilter, Role, SearchResults, SetEmote, SetSummary, SetVisibility,
-    UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote,
-    UserCosmetics,
+    EmotePage, EmoteSet, EmoteSort, EmoteTransferRequest, EmoteTrending, EmoteVisibility,
+    Entitlement, EntitlementPage, Event, GrantCosmetic, Identity, Me, Notification, OwnedCosmetics,
+    Paint, PaintInput, PendingDeletion, PersonalSetEntry, Platform, QuickSearch, Report,
+    ReportAction, ReportQueue, ReviewQueue, ReviewQueueFilter, Role, SearchResults, SetEmote,
+    SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole,
+    UpdateSet, UpdateSetEmote, UserCosmetics,
 };
 use cyex_tv_shared::model::{
     Checkout, CodeBatch, CodeBatchInput, CodeBatchPage, CreatedCodeBatch, Order, OrderPage,
@@ -45,7 +45,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::state::AppState;
 use crate::{
     abuse, account, activity, admin, catalog, codes, cosmetics, editors, moderation, search, shop,
-    staff,
+    staff, transfers,
 };
 
 pub type ApiSchema = Schema<Query, Mutation, Subscription>;
@@ -649,6 +649,19 @@ impl Query {
     ) -> Result<Vec<AccountEditor>> {
         let caller = caller(ctx)?;
         editors::account_editors(state(ctx), caller, account_id.as_deref())
+            .await
+            .map_err(api_error)
+    }
+
+    /// Open emote transfer requests you take part in (ADR 0014): those waiting for you to accept
+    /// or decline (your emotes), and those you made as an editor; of one emote when given.
+    async fn emote_transfer_requests(
+        &self,
+        ctx: &Context<'_>,
+        emote_id: Option<String>,
+    ) -> Result<Vec<EmoteTransferRequest>> {
+        let caller = caller(ctx)?;
+        transfers::open_requests(state(ctx), caller, emote_id.as_deref())
             .await
             .map_err(api_error)
     }
@@ -1588,7 +1601,10 @@ impl Mutation {
 
     /// Give an emote to another account (ADR 0014). Its owner, or an account editor of the owner
     /// with `EMOTE_TRANSFER` on every set. The receiver is you, or an account you edit with
-    /// `EMOTE_UPLOAD` on every set. Audited (`emote.transferred`); both owners are told. 60 an hour.
+    /// `EMOTE_UPLOAD` on every set. The owner's transfer is immediate (`emote.transferred`); an
+    /// editor's makes a request the owner accepts or declines within 7 days, and the emote comes
+    /// back unchanged (`emoteTransferRequests`; one open request per emote, `transfer_pending`).
+    /// 60 an hour, with accepting, declining and cancelling.
     async fn transfer_emote(
         &self,
         ctx: &Context<'_>,
@@ -1596,7 +1612,39 @@ impl Mutation {
         to_account_id: String,
     ) -> Result<Emote> {
         let caller = caller(ctx)?;
-        moderation::transfer(state(ctx), caller, &id, &to_account_id)
+        transfers::transfer(state(ctx), caller, &id, &to_account_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Accept an editor's transfer request of your emote: it moves if the rules still allow it.
+    async fn accept_emote_transfer(&self, ctx: &Context<'_>, id: String) -> Result<Emote> {
+        let caller = caller(ctx)?;
+        transfers::accept(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Decline an editor's transfer request of your emote.
+    async fn decline_emote_transfer(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+    ) -> Result<EmoteTransferRequest> {
+        let caller = caller(ctx)?;
+        transfers::decline(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Withdraw a transfer request you made.
+    async fn cancel_emote_transfer(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+    ) -> Result<EmoteTransferRequest> {
+        let caller = caller(ctx)?;
+        transfers::cancel(state(ctx), caller, &id)
             .await
             .map_err(api_error)
     }

@@ -21,6 +21,7 @@ pub mod search;
 pub mod shop;
 pub mod staff;
 pub mod state;
+pub mod transfers;
 pub mod upload;
 pub mod views;
 

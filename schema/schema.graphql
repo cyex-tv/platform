@@ -904,6 +904,26 @@ enum EmoteState {
 }
 
 """
+An account editor's request to give one of the owner's emotes to another account; the emote
+moves only when the owner accepts (ADR 0014).
+"""
+type EmoteTransferRequest {
+	id: String!
+	emoteId: String!
+	emoteName: String!
+	"""
+	The emote's owner, who accepts or declines.
+	"""
+	from: AccountSummary!
+	to: AccountSummary!
+	requestedBy: AccountSummary!
+	state: TransferRequestState!
+	createdAt: String!
+	expiresAt: String!
+	resolvedAt: String
+}
+
+"""
 Where an emote stands among the trending ones.
 """
 type EmoteTrending {
@@ -1356,9 +1376,24 @@ type Mutation {
 	"""
 	Give an emote to another account (ADR 0014). Its owner, or an account editor of the owner
 	with `EMOTE_TRANSFER` on every set. The receiver is you, or an account you edit with
-	`EMOTE_UPLOAD` on every set. Audited (`emote.transferred`); both owners are told. 60 an hour.
+	`EMOTE_UPLOAD` on every set. The owner's transfer is immediate (`emote.transferred`); an
+	editor's makes a request the owner accepts or declines within 7 days, and the emote comes
+	back unchanged (`emoteTransferRequests`; one open request per emote, `transfer_pending`).
+	60 an hour, with accepting, declining and cancelling.
 	"""
 	transferEmote(id: String!, toAccountId: String!): Emote!
+	"""
+	Accept an editor's transfer request of your emote: it moves if the rules still allow it.
+	"""
+	acceptEmoteTransfer(id: String!): Emote!
+	"""
+	Decline an editor's transfer request of your emote.
+	"""
+	declineEmoteTransfer(id: String!): EmoteTransferRequest!
+	"""
+	Withdraw a transfer request you made.
+	"""
+	cancelEmoteTransfer(id: String!): EmoteTransferRequest!
 	"""
 	Delete your emote, an emote of an account you edit with `EMOTE_MANAGE`, or anyone's with
 	`emotes.delete_any` (audited). It is removed from every set.
@@ -2013,6 +2048,11 @@ type Query {
 	"""
 	accountEditors(accountId: String): [AccountEditor!]!
 	"""
+	Open emote transfer requests you take part in (ADR 0014): those waiting for you to accept
+	or decline (your emotes), and those you made as an editor; of one emote when given.
+	"""
+	emoteTransferRequests(emoteId: String): [EmoteTransferRequest!]!
+	"""
 	The accounts you edit, with what you may do on each.
 	"""
 	editorOf: [EditedAccount!]!
@@ -2666,6 +2706,26 @@ enum SubscriptionState {
 	PAST
 	CURRENT
 	FUTURE
+}
+
+"""
+Where an emote transfer request stands (ADR 0014).
+"""
+enum TransferRequestState {
+	"""
+	Waiting for the emote's owner.
+	"""
+	PENDING
+	ACCEPTED
+	DECLINED
+	"""
+	Withdrawn by the editor, or closed because the emote moved or went away.
+	"""
+	CANCELLED
+	"""
+	Nobody answered within 7 days.
+	"""
+	EXPIRED
 }
 
 """
