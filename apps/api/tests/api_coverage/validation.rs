@@ -135,8 +135,8 @@ async fn bad_inputs_answer_their_rule() {
             "bad_stops",
         ),
         (
-            "updateShopItem: negative price",
-            "mutation($id: String!, $b: String!) { updateShopItem(id: $id, input: { name: \"Val item\", priceCents: -1, badgeIds: [$b] }) { id } }",
+            "updateShopItem: price over 100000 cents",
+            "mutation($id: String!, $b: String!) { updateShopItem(id: $id, input: { name: \"Val item\", priceCents: 100001, badgeIds: [$b] }) { id } }",
             json!({ "id": item, "b": badge }),
             "bad_price",
         ),
