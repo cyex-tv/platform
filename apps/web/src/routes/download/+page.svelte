@@ -36,13 +36,15 @@
   <section class="block" aria-labelledby="ext-title">
     <h2 class="block-title" id="ext-title">The extension</h2>
     <div class="cards">
-      <article class="card" style:order={rank('chrome', 0)}>
+      <article class="card" id="chrome" style:order={rank('chrome', 0)}>
+        <!-- The front page's extension menu links each Chromium browser here by name. -->
+        <span class="anchor" id="edge"></span><span class="anchor" id="opera"></span><span class="anchor" id="brave"></span>
         <p class="status"><span class="dot" aria-hidden="true"></span>Early testing{#if browser === 'chrome'}<span class="yours"> · your browser</span>{/if}</p>
         <h3>Chrome</h3>
         <p>Also Edge, Brave, Opera and other Chromium browsers on the desktop.</p>
         <p class="foot">Coming to the Chrome Web Store.</p>
       </article>
-      <article class="card" style:order={rank('firefox', 1)}>
+      <article class="card" id="firefox" style:order={rank('firefox', 1)}>
         <p class="status"><span class="dot" aria-hidden="true"></span>Early testing{#if browser === 'firefox'}<span class="yours"> · your browser</span>{/if}</p>
         <h3>Firefox</h3>
         <p>The same extension, for Firefox on the desktop.</p>
@@ -108,8 +110,10 @@
   .link.inline { display: inline; }
 
   .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-  .card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; padding: 20px;
+  .card { scroll-margin-top: calc(var(--nav-h) + 20px); }
+  .card { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; padding: 20px;
     border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); }
+  .anchor { position: absolute; top: 0; scroll-margin-top: calc(var(--nav-h) + 20px); }
   .card h3, .step h3 { margin: 0; font-size: 17px; line-height: 1.35; letter-spacing: -.01em; }
   .card p { margin: 0; font-size: var(--t-small); line-height: 1.55; color: var(--muted); }
   .card .foot { margin-top: auto; padding-top: 8px; font-size: var(--t-fine); color: var(--dim); }
