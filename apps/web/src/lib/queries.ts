@@ -182,6 +182,7 @@ export const ME = graphql(`
       id
       createdAt
       permissions
+      displayPlatform
       identities {
         platform
         platformUserId
@@ -494,6 +495,23 @@ export const UPDATE_ACCOUNT_EDITOR = graphql(`
 export const REMOVE_ACCOUNT_EDITOR = graphql(`
   mutation RemoveAccountEditor($ownerId: String, $accountId: String!) {
     removeAccountEditor(ownerId: $ownerId, accountId: $accountId)
+  }
+`);
+
+// Which linked platform's name and picture you go by (Settings → Account).
+export const SET_DISPLAY_PLATFORM = graphql(`
+  mutation SetDisplayPlatform($platform: Platform!) {
+    setDisplayPlatform(platform: $platform) {
+      id
+      displayPlatform
+    }
+  }
+`);
+
+// Settings → Account → Security: every session ends, this one too.
+export const SIGN_OUT_EVERYWHERE = graphql(`
+  mutation SignOutEverywhere {
+    signOutEverywhere
   }
 `);
 
@@ -1109,6 +1127,11 @@ export const ACCOUNT_PROFILE = graphql(`
         setId
         setName
       }
+      editors {
+        id
+        displayName
+        avatar
+      }
       createdAt
     }
   }
@@ -1308,12 +1331,17 @@ export const PROFILE_EDITED = graphql(`
 // An account's public activity feed (ADR 0016), newest first; page back with `before` set to the
 // answer's `next` (a page can be short and still have one).
 export const ACCOUNT_ACTIVITY = graphql(`
-  query AccountActivity($accountId: String!, $before: String, $limit: Int) {
-    accountActivityPage(accountId: $accountId, before: $before, limit: $limit) {
+  query AccountActivity($accountId: String!, $before: String, $limit: Int, $filter: ActivityFilter) {
+    accountActivityPage(accountId: $accountId, before: $before, limit: $limit, filter: $filter) {
       entries {
         id
         kind
         actor {
+          id
+          displayName
+          avatar
+        }
+        editor {
           id
           displayName
           avatar

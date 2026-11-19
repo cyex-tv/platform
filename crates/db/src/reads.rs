@@ -268,7 +268,8 @@ pub async fn tags(
     Ok(out)
 }
 
-/// How an account is shown to others: its first identity's name and avatar (Twitch first).
+/// How an account is shown to others: the name and avatar of the identity it goes by
+/// (`accounts.display_platform`, else Twitch first).
 #[derive(Clone, Debug, PartialEq, Eq, FromRow)]
 pub struct Summary {
     pub account_id: Uuid,
@@ -296,7 +297,8 @@ pub async fn summaries(
          FROM identities i
          JOIN accounts a ON a.id = i.account_id AND a.deleted_at IS NULL
          WHERE i.account_id = ANY($1)
-         ORDER BY i.account_id, i.platform DESC",
+         ORDER BY i.account_id, i.platform IS NOT DISTINCT FROM a.display_platform DESC,
+                  i.platform DESC",
     )
     .bind(account_ids)
     .fetch_all(conn)

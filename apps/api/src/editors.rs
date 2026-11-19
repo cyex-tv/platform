@@ -400,7 +400,15 @@ async fn audit(
             "set_ids": scope.ids(),
         })
     };
-    cyex_tv_db::audit::write(
+    // Adding and removing editors shows on the owner's public activity feed (names only, never
+    // the permissions; ADR 0016), so the row names its subject. A change someone else made (an
+    // editor with `EDITORS`, or an editor leaving) is marked the way other editor changes are.
+    let mut after = after.map(shape);
+    if caller.account_id != owner {
+        let mark = after.get_or_insert_with(|| json!({}));
+        mark["via"] = json!("account_editor");
+    }
+    cyex_tv_db::audit::write_for(
         conn,
         &cyex_tv_db::audit::NewEntry {
             actor: Some(caller.account_id),
@@ -408,8 +416,9 @@ async fn audit(
             target_kind: "account",
             target_id: &ids::to_text(owner),
             before: before.map(shape),
-            after: after.map(shape),
+            after,
         },
+        Some(owner),
     )
     .await
     .map_err(db_error)?;

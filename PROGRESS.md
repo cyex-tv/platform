@@ -2,6 +2,30 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Profile dashboard, activity filters, settings (branch `feat/profile-dashboard`)
+
+Owner feedback 2026/11/19, sections D and I (profile parts). Additive API; one new migration; nothing was deployed.
+
+- [x] Your profile's dashboard: Overview (`/users/<id>?s=overview`, first rail row for the owner; the account menu's name row opens it): tiles for Channels (and the set each shows), Notifications, Recent uploads with their state, Recent activity, Editors, Cosmetics (what you show, how many you own) and Emote sets, each linking to its tab. Each tile loads and fails on its own.
+- [x] Activity tab: filter bar (Everything / Emotes / Sets / Cosmetics / Editors; By: anyone, the owner or one of its editors; the cyex logs timeframe All time / Day / Month with a "Jump to date" / "Jump to month" popover that refuses future dates). Filters live in the address (`?k=`, `?by=`, `?d=` / `?m=`). Rows show date and time (2026/11/19 14:05) and how long ago, everywhere (the emote page's Activity too). On an account's own feed its own lines drop "by <name>"; editor lines read "Added X as an editor", "Removed X as an editor", "X stopped being an editor".
+- [x] API: `accountActivityPage(filter: ActivityFilter)` with `groups` (`EMOTES`, `SETS`, `COSMETICS`, `EDITORS`), `actorId`, `since`, `until` (RFC 3339, `bad_time`). New kinds `EDITOR_ADDED`, `EDITOR_REMOVED` and `ActivityEntry.editor` (names only, never permissions); editor lines show only when a filter asks for `EDITORS`, so the unfiltered feed is unchanged. Editor add/remove audit rows now name the owner as their subject (an editor's own change is marked `via: account_editor`); older editor rows don't show.
+- [x] Display name: migration `20261207000050_display_platform.sql` (`accounts.display_platform`); `setDisplayPlatform(platform)` (`not_found` when not linked), `Me.displayPlatform`; the chosen identity is listed first and gives the account's name and picture everywhere (summaries, profiles, search results); search still matches every login; unlinking that platform goes back to Twitch first.
+- [x] Sign out everywhere: `signOutEverywhere` ends every session, this one too, and clears the cookie (Settings → Account → Security). The header menu's Sign out stays this session only.
+- [x] Connections: Disconnect with more than one linked; the last never goes (`last_identity`, the website says why). Restricted, ticket-blocked or blocked accounts still can't unlink (identity holds, #83); an account in its deletion window has only the restore session, so it can't either (#89).
+- [x] Settings (account menu → Settings): rail Account / Appearance / Editors (the existing /me/editors page) / Billing (orders). Account: display name choice, connections, security, sessions, data, delete. Appearance: theme and reduced motion (System / On / Off, per device in `cyexMotion`): app.html sets `data-motion` before first paint and makes `matchMedia('(prefers-reduced-motion: …)')` answer by the setting, so every script follows it; `data-motion="reduce"` turns transitions and animations off in CSS. `/me/account` and `/me/settings` redirect to Settings → Account.
+- [x] Profile look: the identity moved out of a 7TV-style centred side card into a left-aligned band across the page (paint-ringed avatar, painted name as h1, roles as flags right after it, a facts line: connections, channel sets, editors by name, member since). The rail is navigation only and runs the full height of the left column. Copy link is gone from profiles; the permissions panel is gone from the account page. Others' profiles show their listed sets, public uploads and editors by name.
+- [x] /help: the index has no scroll bar of its own on wide windows; it runs the full column height with the search pinned.
+- Tests: `apps/api/tests/profile_dashboard_flow.rs` (Postgres, CI: last connection, restricted unlink, display name and search by both logins, sign out everywhere with cookie and app token, activity groups / actor / time / bad input / editor lines), unit tests in `activity.rs`; vitest `lib/profile/timeframe.test.ts`, `lib/account/settings.test.ts`, `activity.test.ts` (editor lines, filter, Overview row).
+- Manual check (2026/11/19): headless Edge against the dev mock (MOCK_KICK=1) at 375, 1440 and 2560, dark and light: overview, activity with filters and the date popover (future date refused), another person's profile, settings account (display name switch updated the header and band), appearance, /me/account redirect, help index; screens in the 2026-11-19-feedback run folder, screens/d.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/profile-dashboard
+gh pr create --base main --head feat/profile-dashboard --title "Profile dashboard, activity filters and settings" --body-file <file>
+gh pr merge <n> --merge
+```
+
 ## Owner's answers of 2026/11/19 (branch `feat/owner-answers`)
 
 Additive API; two new migrations; nothing was deployed.

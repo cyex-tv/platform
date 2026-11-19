@@ -205,6 +205,56 @@ type ActivityEntry {
 	badge: ActivityCosmeticChange
 	paint: ActivityCosmeticChange
 	createdAt: String!
+	"""
+	The editor added or removed (`EDITOR_ADDED`, `EDITOR_REMOVED`).
+	"""
+	editor: AccountSummary
+}
+
+"""
+Narrows `accountActivityPage`. Every field is optional; an empty filter is the whole feed
+(without editor lines, as before filters existed).
+"""
+input ActivityFilter {
+	"""
+	Only these groups. Editor lines (`EDITOR_ADDED`, `EDITOR_REMOVED`) show only when this
+	lists `EDITORS`.
+	"""
+	groups: [ActivityGroup!]
+	"""
+	Only lines by this account (the owner or one of its editors).
+	"""
+	actorId: String
+	"""
+	Only lines at or after this time (RFC 3339).
+	"""
+	since: String
+	"""
+	Only lines before this time (RFC 3339).
+	"""
+	until: String
+}
+
+"""
+A group of activity lines, for filtering a feed.
+"""
+enum ActivityGroup {
+	"""
+	Emotes added to, removed from or renamed in sets, and uploads that went public.
+	"""
+	EMOTES
+	"""
+	Sets made or renamed, and active set changes.
+	"""
+	SETS
+	"""
+	Badge and paint changes.
+	"""
+	COSMETICS
+	"""
+	Account editors added and removed.
+	"""
+	EDITORS
 }
 
 """
@@ -234,6 +284,16 @@ enum ActivityKind {
 	A set was renamed (`from_name`, `to_name`).
 	"""
 	SET_RENAMED
+	"""
+	Someone became an account editor (`editor`). Never their permissions. Only listed when
+	the filter asks for `EDITORS`.
+	"""
+	EDITOR_ADDED
+	"""
+	An account editor was removed or left (`editor`). Only listed when the filter asks for
+	`EDITORS`.
+	"""
+	EDITOR_REMOVED
 }
 
 """
@@ -944,6 +1004,11 @@ type Me {
 	permissions: [String!]!
 	createdAt: String!
 	"""
+	The platform whose name and picture the account goes by (`setDisplayPlatform`); null for
+	the default, Twitch first. `identities` lists that one first.
+	"""
+	displayPlatform: Platform
+	"""
 	Every role the account holds, public or not, most senior first. Only you see the ones
 	that aren't public: your profile marks them hidden; others see `AccountProfile.roles`.
 	"""
@@ -956,6 +1021,12 @@ type Mutation {
 	restricted or blocked account can't unlink (`restricted`).
 	"""
 	unlinkIdentity(platform: Platform!): Me!
+	"""
+	Go by the name and picture of your identity on `platform` (when more than one is linked,
+	pick which login you show as). Every linked login still finds you in search.
+	`not_found` when that platform isn't linked. Unlinking it goes back to the default.
+	"""
+	setDisplayPlatform(platform: Platform!): Me!
 	"""
 	Change a channel's active set and settings. The channel's owner, or their account editors
 	with `SETS`.
@@ -1170,6 +1241,11 @@ type Mutation {
 	when you have none with that ID.
 	"""
 	revokeSession(id: String!): Boolean!
+	"""
+	Sign out everywhere, here too: every site and app session ends and the cookie is cleared.
+	Returns how many sessions ended.
+	"""
+	signOutEverywhere: Int!
 	"""
 	Sign out everywhere but here. Returns how many sessions ended.
 	"""
@@ -1668,8 +1744,12 @@ type Query {
 	`accountActivity` with a cursor: `next` is the `before` for the following page, null when
 	there is none. A page can hold fewer than `limit` entries and still have a `next`, because
 	the feed skips what isn't public.
+	
+	`filter` narrows it: `groups` (emotes, sets, cosmetics, editors; editor lines only show
+	when asked for), `actorId` (only lines by the owner or that editor), and `since` /
+	`until` (RFC 3339; `bad_time` otherwise).
 	"""
-	accountActivityPage(accountId: String!, before: String, limit: Int): ActivityPage!
+	accountActivityPage(accountId: String!, before: String, limit: Int, filter: ActivityFilter): ActivityPage!
 	"""
 	An emote's public activity, newest first: `EMOTE_UPLOADED` (when it was approved, shown
 	as by its owner) and `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED` in listed

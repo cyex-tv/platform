@@ -9,11 +9,12 @@
   import { ApiError, gql } from '$lib/api';
   import type { AdminCountsQuery } from '$lib/gql/graphql';
   import { ADMIN_COUNTS } from '$lib/queries';
-  import { relationTo } from '$lib/profile/data.svelte';
+  import { profileOf, relationTo, type PublicProfile } from '$lib/profile/data.svelte';
+  import ProfileHeader from '$lib/profile/ProfileHeader.svelte';
   import ProfileRail from '$lib/profile/ProfileRail.svelte';
   import { ACTIVITY_READY } from '$lib/profile/activity';
-  import CopyLink from '$lib/components/CopyLink.svelte';
   import { railKeyForPath } from '$lib/profile/rows';
+  import { settingsRail, isSettingsPath } from '$lib/account/settings';
   import Icon from '$lib/components/Icon.svelte';
   import type { IconName } from '$lib/components/Icon.svelte';
   import RailLayout from '$lib/shell/RailLayout.svelte';
@@ -41,6 +42,17 @@
   // The /me pages sit in your profile's rail (your profile is your dashboard), the row they belong to marked.
   const meAccount = $derived(session.me ? { id: session.me.id, displayName: who?.displayName ?? '', avatar: who?.avatar } : null);
   const meRelation = $derived(relationTo(session.me?.id ?? '', session.me, null));
+  // Settings (and the Editors page it lists) have their own rail; the other /me pages sit under
+  // your profile's band and rail.
+  const settings = $derived(isSettingsPath(path));
+  let meProfile = $state<PublicProfile | null>(null);
+  $effect(() => {
+    const id = session.me?.id;
+    if (!id) return;
+    profileOf(id)
+      .then((p) => (meProfile = p))
+      .catch(() => {});
+  });
 
   // Open tickets for the admin rail's counts.
   let counts = $state<AdminCountsQuery | null>(null);
@@ -115,7 +127,15 @@
   onMount(() => signIn());
 </script>
 
-<RailLayout>
+{#snippet band()}
+  {#if meAccount}
+    <ProfileHeader account={meAccount} relation={meRelation} profile={meProfile}>
+      {#snippet actions()}<a class="ui-btn secondary small" href="/me/settings"><Icon name="settings" size={15} />Settings</a>{/snippet}
+    </ProfileHeader>
+  {/if}
+{/snippet}
+
+<RailLayout top={!admin && !settings && meAccount ? band : undefined}>
   {#snippet rail()}
     {#if admin}
       <SideRail label="Admin" groups={adminRail} fill>
@@ -126,11 +146,14 @@
           {#if session.me}<a class="rail-foot" href="/users/{session.me.id}"><Icon name="circle-user" /><span class="lbl">Your profile</span><Icon name="chevron-right" size={14} /></a>{/if}
         {/snippet}
       </SideRail>
+    {:else if meAccount && settings}
+      <SideRail label="Settings" groups={settingsRail(path)} fill>
+        {#snippet head()}<div class="title"><strong>Settings</strong></div>{/snippet}
+        {#snippet foot()}<a class="rail-foot" href="/users/{meAccount.id}?s=overview"><Icon name="circle-user" /><span class="lbl">Your profile</span><Icon name="chevron-right" size={14} /></a>{/snippet}
+      </SideRail>
     {:else if meAccount}
-      <!-- The same rail as your public profile (/users/<id>): same rows, same Copy link, so moving between them never shifts it. -->
-      <ProfileRail account={meAccount} relation={meRelation} current={railKeyForPath(path)} activity={ACTIVITY_READY}>
-        {#snippet actions()}<CopyLink url={() => `${location.origin}/users/${meAccount.id}`} />{/snippet}
-      </ProfileRail>
+      <!-- The same band and rail as your public profile (/users/<id>), so moving between them never shifts them. -->
+      <ProfileRail account={meAccount} relation={meRelation} current={railKeyForPath(path)} activity={ACTIVITY_READY} />
     {:else}
       <SideRail label="Your account">
         {#snippet head()}
