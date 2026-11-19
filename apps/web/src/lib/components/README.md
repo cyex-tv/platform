@@ -16,13 +16,14 @@ See them all with live data at `/dev/components` (dev server only; a 404 in prod
 
 | Component | Props | Usage |
 |---|---|---|
-| `EmoteGrid` | `items: CardEmote[]`, `density?: 'comfortable' \| 'compact'`, `creator? = true`, `labels? = true`, `loading?`, `skeletons? = 12`, `empty?`, `eager? = 0`, `label?`, `href?(e)` | `<EmoteGrid items={data.results.items} {density} loading={more} eager={12} />` |
+| `EmoteGrid` | `items: CardEmote[]`, `density?: 'comfortable' \| 'compact'`, `creator? = true`, `labels? = true`, `loading?`, `skeletons? = 12`, `empty?`, `eager? = 0`, `label?`, `href?(e)`, `ranked?` | `<EmoteGrid items={data.results.items} loading={more} eager={12} />`. One size: `compact` is only for small pickers, never a switch. `ranked` numbers the tiles (#1, #2 …) for Trending. |
+| `EmotePicture` | `emote: Picture`, `sizes?`, `eager?`, `alt?`, `class?`, `use?` | Every emote picture in a list: animated ones play without hover; under reduced motion a `<picture>` source picks the still frame. Lazy and async by default. |
 | `EmoteCard` | `emote: CardEmote`, `density?`, `creator?`, `labels?`, `href?`, `eager?` | `<EmoteCard emote={e} />` (for strips and rows outside a grid) |
 | `EmoteSkeleton` | `density?`, `creator?` | `<EmoteSkeleton />` (same box as a card) |
 
 - `CardEmote` is the API's `EmoteFields` (or a set member spread with `shownName`): `host`, `animated`, `files`, `id`, `name`, `owner?`, `flags?`, `shownName?`.
 - Art box 112px (comfortable) / 80px (compact), picture at 3/4 of it. Wide emotes (≥ 1,75:1) take two cells; the grid packs densely.
-- Animated emotes show `1x_static.webp` and play on mouse hover or keyboard focus; never under reduced motion. Labels: animated, zero-width, wide.
+- Animated emotes always play (`EmotePicture`); under reduced motion they show `*_static.webp`. Labels: animated, zero-width, wide. Every tile in a grid row is the row's height.
 - `eager` = cards above the fold (they load without `loading="lazy"`).
 
 ## Chat
@@ -58,3 +59,9 @@ See them all with live data at `/dev/components` (dev server only; a 404 in prod
 - Inputs are 16px (no iOS zoom). Controls have `touch-action: manipulation` and no text selection.
 - `src/lib/shell/search.ts` holds the header search's pure logic (`move`, `typing`, `announce`, `searchHref`); `src/lib/shell/nav.ts` the header links and the channel role order.
 - `src/lib/emote.ts` adds `hasStill`, `isWide`, `srcsetW` (width descriptors; pair with `sizes`).
+
+## Fields
+
+| Component | Props | Usage |
+|---|---|---|
+| `TagInput` | `tags: string[]`, `onchange(tags)`, `label`, `showLabel?`, `placeholder?`, `max?`, `clean?(raw)`, `hint?`, `id?`, `disabled?` | Enter (or a comma) turns the typed text into a chip; pasting `a, b` adds two; Backspace in the empty field takes the last chip off; each chip has a remove button. Rules in `tag-input.ts` (tested). The browse filters use it; the upload form can too. |

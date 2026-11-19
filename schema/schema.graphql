@@ -736,6 +736,24 @@ type EmoteFile {
 	isStatic: Boolean!
 }
 
+"""
+A flag `searchEmotes` can require.
+"""
+enum EmoteFlag {
+	"""
+	Overlays the emote before it.
+	"""
+	ZERO_WIDTH
+	"""
+	About twice as wide as tall or more.
+	"""
+	WIDE
+	"""
+	Only NSFW emotes (they are listed even without `nsfw: true`).
+	"""
+	NSFW
+}
+
 type EmoteFlags {
 	zeroWidth: Boolean!
 	"""
@@ -743,6 +761,11 @@ type EmoteFlags {
 	"""
 	private: Boolean!
 	nsfw: Boolean!
+	"""
+	About twice as wide as tall or more: the 1x file is at least 1.75 times as wide as it is
+	tall. Derived from the files, not set by the uploader.
+	"""
+	wide: Boolean!
 }
 
 """
@@ -793,6 +816,10 @@ enum EmoteSort {
 	The newest first.
 	"""
 	NEW
+	"""
+	Most channels added it in the `window` (net of removals), then the most used.
+	"""
+	TRENDING
 }
 
 enum EmoteState {
@@ -800,6 +827,24 @@ enum EmoteState {
 	APPROVED
 	REJECTED
 	TAKEN_DOWN
+}
+
+"""
+Where an emote stands among the trending ones.
+"""
+type EmoteTrending {
+	"""
+	1 is the most added emote in the window.
+	"""
+	rank: Int!
+	"""
+	Channels that added it in the window, net of removals.
+	"""
+	channels: Int!
+	"""
+	The window the rank is in.
+	"""
+	window: TrendingWindow!
 }
 
 """
@@ -1731,10 +1776,23 @@ type Query {
 	"""
 	Approved, listed emotes by name and tag, best match first, then the most used.
 	`perPage` is 1 to 100, default 50. NSFW emotes only with `nsfw: true`. `sort` is
-	`RELEVANCE` (default: best match, then most used), `TOP` (most used, then name) or `NEW`
-	(newest first). An empty `query` lists every approved, listed emote.
+	`RELEVANCE` (default: best match, then most used), `TOP` (most used, then name), `NEW`
+	(newest first) or `TRENDING` (most channels added it in `window`, net of removals, then
+	most used; only emotes with a net gain are listed). An empty `query` lists every approved,
+	listed emote.
+	`flags` keeps the emotes that have every flag listed (`ZERO_WIDTH`, `WIDE`, `NSFW`; at most
+	3 different ones). `NSFW` lists only NSFW emotes, with or without `nsfw: true`. `tags` keeps
+	the emotes that have every tag listed (exact; a leading `#` and case are ignored, at most
+	10). `exact: true` makes a non-empty `query` match the whole name (any case) instead of
+	roughly. `window` is `DAY`, `WEEK` (default) or `MONTH`, and only matters for `TRENDING`.
 	"""
-	searchEmotes(query: String!, animated: Boolean, owner: String, nsfw: Boolean, page: Int, perPage: Int, sort: EmoteSort): SearchResults!
+	searchEmotes(query: String!, animated: Boolean, owner: String, nsfw: Boolean, page: Int, perPage: Int, sort: EmoteSort, flags: [EmoteFlag!], tags: [String!], exact: Boolean, window: TrendingWindow): SearchResults!
+	"""
+	Where an emote stands among the 100 most added in `window` (`DAY`, `WEEK` by default or
+	`MONTH`): its rank and the channels that added it, net of removals. Null when `id` isn't
+	an emote ID, the emote isn't approved and listed, or it is not in the top 100.
+	"""
+	emoteTrending(id: String!, window: TrendingWindow): EmoteTrending
 	"""
 	Accounts by Twitch or Kick login or display name (a leading `@` is ignored): exact login
 	first, then login and name prefixes, then similar names. Public fields only; deleted and
@@ -2401,6 +2459,24 @@ enum SubscriptionState {
 	PAST
 	CURRENT
 	FUTURE
+}
+
+"""
+How far back `TRENDING` counts channel adds.
+"""
+enum TrendingWindow {
+	"""
+	The last day.
+	"""
+	DAY
+	"""
+	The last 7 days. The default.
+	"""
+	WEEK
+	"""
+	The last 30 days.
+	"""
+	MONTH
 }
 
 input UpdateBadgeInput {

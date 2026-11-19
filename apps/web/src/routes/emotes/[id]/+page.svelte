@@ -73,7 +73,7 @@
 
 {#if e}
   {#key e.id}
-    <EmoteView emote={e} {pool} more={data.more} channels={data.emote ? data.channels : (asked?.channels ?? null)} channelCount={channelCount(e)} {back} />
+    <EmoteView emote={e} {pool} more={data.more} channels={data.emote ? data.channels : (asked?.channels ?? null)} channelCount={channelCount(e)} trending={data.emote ? data.trending : null} {back} />
   {/key}
 {:else if asked === undefined}
   <!-- Asking from the browser: hold the space quietly, then show the page or say it's gone. -->

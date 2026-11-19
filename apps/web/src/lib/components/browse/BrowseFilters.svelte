@@ -1,18 +1,22 @@
 <script lang="ts">
   // The browse page's filter rail content (inside SideRail, or its Filters sheet on phones):
-  // collapsible sections Search, Type, Flags and Tags. Every choice applies at once (no Apply
-  // button) and lands in the URL. Sections start open; a closed one stays closed on this device.
+  // collapsible sections Search, Match, Type, Flags and Tags. One model: Type is one choice (All,
+  // Animated, Still); Flags are toggle chips that each narrow to emotes with that flag; Tags is a
+  // tag field (Enter adds a chip) with the most used tags of the results to add in one tap. Every
+  // choice applies at once (no Apply button), is the API's filter, and lands in the URL. Sections
+  // start open; a closed one stays closed on this device.
   import type { Snippet } from 'svelte';
-  import Icon from '$lib/components/Icon.svelte';
+  import Icon, { type IconName } from '$lib/components/Icon.svelte';
+  import TagInput from '$lib/components/TagInput.svelte';
   import { count as fmt } from '$lib/format';
-  import type { Browse, Kind } from './params';
+  import { cleanTag, MAX_TAGS, type Browse, type Flag, type Kind } from './params';
 
   type Props = {
     view: Browse;
     onchange: (over: Partial<Browse>) => void;
     /** The search field (the page owns it); left out on phones, where it sits in the sticky Filters bar. */
     search?: Snippet;
-    /** The most used tags in what is loaded. */
+    /** The most used tags in what is loaded (the chosen ones left out). */
     tags: { tag: string; count: number }[];
     /** The emotes didn't load: there is nothing to say about their tags. */
     failed?: boolean;
@@ -24,13 +28,13 @@
     { value: 'animated', label: 'Animated' },
     { value: 'still', label: 'Still' },
   ];
-  const flags: { key: 'zeroWidth' | 'wide' | 'nsfw'; label: string; hint: string }[] = [
-    { key: 'zeroWidth', label: 'Zero-width', hint: 'Stack on the emote before them' },
-    { key: 'wide', label: 'Wide', hint: 'About twice as wide as tall' },
-    { key: 'nsfw', label: 'Show NSFW', hint: 'Hidden unless this is on' },
+  const flags: { key: Flag; label: string; icon: IconName; hint: string }[] = [
+    { key: 'zeroWidth', label: 'Zero-width', icon: 'layers', hint: 'Drawn over the emote before it' },
+    { key: 'wide', label: 'Wide', icon: 'wide', hint: 'About twice as wide as tall or more' },
+    { key: 'nsfw', label: 'NSFW', icon: 'eye-off', hint: 'Only NSFW emotes; they are hidden otherwise' },
   ];
-  // The selected tag stays listed even when the loaded emotes no longer count it.
-  const shownTags = $derived(view.tag && !tags.some((t) => t.tag === view.tag) ? [{ tag: view.tag, count: 0 }, ...tags] : tags);
+  // Tags as the API stores them: a-z, 0-9 and _, spaces become _.
+  const tagClean = (raw: string) => cleanTag(raw).replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
 
   type Section = 'search' | 'match' | 'type' | 'flags' | 'tags';
   const KEY = 'cyex.browse.closed';
@@ -88,29 +92,38 @@
 {/snippet}
 
 {#snippet flagsBody()}
-  <div class="opts">
+  <div class="tags flags" role="group" aria-label="Flags">
     {#each flags as f (f.key)}
-      <label class="opt check" class:on={view[f.key]}>
-        <input type="checkbox" checked={view[f.key]} onchange={(e) => onchange({ [f.key]: e.currentTarget.checked })} />
-        <span class="box" aria-hidden="true"><Icon name="check" size={12} /></span>
-        <span class="lbl"><span>{f.label}</span><small>{f.hint}</small></span>
-      </label>
+      <button class="tag flag" type="button" title={f.hint} aria-pressed={view[f.key]} aria-describedby="flag-{f.key}" onclick={() => onchange({ [f.key]: !view[f.key] })}>
+        <span class="fi" aria-hidden="true"><Icon name={view[f.key] ? 'check' : f.icon} size={14} /></span>{f.label}
+      </button>
+      <span class="sr-only" id="flag-{f.key}">{f.hint}</span>
     {/each}
   </div>
 {/snippet}
 
 {#snippet tagsBody()}
-  {#if shownTags.length}
-    <div class="tags" role="group" aria-label="Tags">
-      {#each shownTags as t (t.tag)}
-        <button class="tag" type="button" title="#{t.tag}" aria-pressed={view.tag === t.tag} onclick={() => onchange({ tag: view.tag === t.tag ? '' : t.tag })}>
-          <bdi>#{t.tag}</bdi>{#if t.count}<span class="n">{fmt(t.count)}</span>{/if}
-        </button>
-      {/each}
-    </div>
-  {:else}
-    <p class="none">No tags on these emotes.</p>
-  {/if}
+  <div class="tagbody">
+    <TagInput
+      tags={view.tags}
+      onchange={(t) => onchange({ tags: t })}
+      label="Tags the emotes must have"
+      placeholder="Type a tag, press Enter"
+      max={MAX_TAGS}
+      clean={tagClean}
+    />
+    {#if tags.length && view.tags.length < MAX_TAGS}
+      <div class="tags" role="group" aria-label="Common tags in these results">
+        {#each tags as t (t.tag)}
+          <button class="tag" type="button" title="Add #{t.tag}" onclick={() => onchange({ tags: [...view.tags, t.tag] })}>
+            <bdi>#{t.tag}</bdi><span class="n">{fmt(t.count)}</span>
+          </button>
+        {/each}
+      </div>
+    {:else if !tags.length && !view.tags.length}
+      <p class="none">No tags on these emotes.</p>
+    {/if}
+  </div>
 {/snippet}
 
 <div class="filters">
@@ -118,7 +131,7 @@
   {#if view.q}{@render section('match', 'Match', matchBody)}{/if}
   {@render section('type', 'Type', typeBody)}
   {@render section('flags', 'Flags', flagsBody)}
-  {#if !failed || shownTags.length}{@render section('tags', 'Tags', tagsBody)}{/if}
+  {#if !failed || view.tags.length}{@render section('tags', 'Tags', tagsBody)}{/if}
 </div>
 
 <style>
@@ -156,7 +169,12 @@
   .on .box { border-color: var(--accent-text); color: var(--accent-text); } /* the tick is the accent icon; no fill */
   .opt:active { opacity: .6; transition: none; }
 
+  .tagbody { display: grid; gap: 8px; padding: 2px; min-width: 0; }
   .tags { display: flex; flex-wrap: wrap; gap: 8px 6px; padding: 4px 2px; min-width: 0; }
+  .tagbody .tags { padding: 0; }
+  .flag { gap: 6px; padding: 0 10px 0 8px; }
+  .fi { display: inline-flex; color: var(--dim); }
+  .flag[aria-pressed='true'] .fi { color: var(--accent-text); }
   /* 32px to see, 40px to hit (the row gap takes the rest). Long tags end in an ellipsis. */
   .tag { position: relative; display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; height: 32px; padding: 0 8px;
     border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--muted);
