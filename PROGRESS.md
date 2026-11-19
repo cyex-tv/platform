@@ -21,6 +21,7 @@ Owner feedback 2026/11/19, part I ("not 3d enough", "animation too subtle", "sta
 git push -u origin feat/front-page-2
 gh pr create --base main --head feat/front-page-2 --title "Front page: a deeper 3D hero and the ways in as a zig-zag" --body-file <file>
 gh pr merge 93 --merge
+```
 
 ## Upload v3 (branch `feat/upload-v3`, owner feedback 2026/11/19 section C)
 
