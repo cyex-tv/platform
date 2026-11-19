@@ -779,6 +779,28 @@ pub struct ReportQueue {
     pub total: u64,
 }
 
+/// Reports about an account's emotes and reports it filed (`emotes.review` or
+/// `emotes.takedown`), newest first, at most 50 each.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct AccountReports {
+    pub about: Vec<Report>,
+    pub by: Vec<Report>,
+}
+
+/// An account as staff see it (`users.view` or `users.restrict`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct AdminAccount {
+    pub id: String,
+    pub display_name: String,
+    pub avatar: Option<String>,
+    pub identities: Vec<Identity>,
+    pub created_at: String,
+    pub uploads_blocked: bool,
+    pub blocked: bool,
+}
+
 /// Something the platform tells you, such as a takedown of your emote.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]

@@ -511,6 +511,12 @@ const PENDING = Array.from({ length: 7 }, (_, i) => emote(800 + i, OTHERS[i % 2]
 const REPORTS = [
   { id: 'R1', reason: 'This is a copy of my emote.', reporterId: OTHERS[1].id, state: 'OPEN', createdAt: '2026-11-16T18:00:00.000Z', emote: ALL[5] },
   { id: 'R2', reason: 'Spam', reporterId: OTHERS[0].id, state: 'OPEN', createdAt: '2026-11-16T19:30:00.000Z', emote: ALL[8] },
+  { id: 'R3', reason: 'Looks like the one from a well-known streamer.', reporterId: OTHERS[2].id, state: 'OPEN', createdAt: '2026-11-16T20:10:00.000Z', emote: ALL[5] },
+  { id: 'R4', reason: 'Not safe for chat.', reporterId: OTHERS[3].id, state: 'OPEN', createdAt: '2026-11-16T20:40:00.000Z', emote: ALL[5] },
+];
+// Closed reports, for the account page's lists.
+const CLOSED_REPORTS = [
+  { id: 'R0', reason: 'Wrong tag.', reporterId: OTHERS[1].id, state: 'DISMISSED', resolution: 'Fine as is.', createdAt: '2026-11-14T10:00:00.000Z', resolvedAt: '2026-11-14T12:00:00.000Z', emote: ALL[5] },
 ];
 const ROLES = [
   { id: 'ROLE1', name: 'Admin', description: 'Runs the platform.', position: 100, permissions: ['roles.manage', 'users.view', 'users.restrict', 'audit.view'], public: false },
@@ -524,9 +530,10 @@ if (process.env.MOCK_LONG === '1') {
 }
 const STATUS = {};
 const AUDIT = Array.from({ length: 64 }, (_, i) => ({
-  id: '01JD8XAUD' + String(1000 - i).padStart(17, '0'), actorId: i % 5 === 0 ? null : ME_ID,
+  id: '01JD8XAUD' + String(1000 - i).padStart(17, '0'), actorId: i % 5 === 0 ? null : i % 3 === 0 ? OWNERS[1].id : ME_ID,
   action: ['emote.approved', 'set.editor_added', 'role.updated', 'account.restricted'][i % 4],
-  targetKind: ['emote', 'set', 'role', 'account'][i % 4], targetId: '01JD8X' + String(i).padStart(20, '0'),
+  targetKind: ['emote', 'set', 'role', 'account'][i % 4],
+  targetId: i % 4 === 3 ? OWNERS[1 + (i % 3)].id : '01JD8X' + String(i).padStart(20, '0'),
   before: i % 4 === 3 ? JSON.stringify({ uploads_blocked: false, blocked: false }) : null,
   after: JSON.stringify({ state: 'APPROVED', n: i }), createdAt: new Date(Date.UTC(2026, 10, 16, 22, 0, 0) - i * 600_000).toISOString(),
 }));
@@ -1551,8 +1558,29 @@ function signedIn(body, v, ADMIN) {
     }
     case 'ReportQueue':
       return { data: { reportQueue: { total: REPORTS.length, items: REPORTS } } };
+    case 'AdminAccount': {
+      const a = publicAccount(v.accountId);
+      if (!ADMIN) return err('This needs users.view or users.restrict.', 'forbidden');
+      if (!a) return err('Not found.', 'not_found');
+      const st = STATUS[a.id] ?? { uploadsBlocked: false, blocked: false };
+      const idn = (platform, n) => ({ platform, platformUserId: '5550' + a.id.slice(-3) + n, login: a.displayName.toLowerCase(), displayName: a.displayName, avatar: a.avatar });
+      return { data: { adminAccount: { ...a, createdAt: '2026-10-02T09:30:00.000Z', ...st, identities: a.id === ME_ID ? IDENTITIES : [idn('TWITCH', 1), ...(a.id.endsWith('NORA') ? [idn('KICK', 2)] : [])] } } };
+    }
+    case 'AccountEmotes': {
+      if (!ADMIN) return err('This needs users.view or emotes.review.', 'forbidden');
+      const all = [...MINE, ...PENDING, ...ALL].filter((e) => e.owner?.id === v.accountId);
+      const per = v.perPage ?? 50;
+      const from = ((v.page ?? 1) - 1) * per;
+      return { data: { accountEmotes: { total: all.length, items: all.slice(from, from + per) } } };
+    }
+    case 'AccountReports': {
+      if (!ADMIN) return err('This needs emotes.review or emotes.takedown.', 'forbidden');
+      const all = [...REPORTS, ...CLOSED_REPORTS];
+      return { data: { accountReports: { about: all.filter((r) => r.emote?.owner?.id === v.accountId), by: all.filter((r) => r.reporterId === v.accountId) } } };
+    }
     case 'ResolveReport': {
       const r = REPORTS.splice(REPORTS.findIndex((x) => x.id === v.id), 1)[0];
+      if (v.action === 'TAKE_DOWN') for (let k = REPORTS.length - 1; k >= 0; k--) if (REPORTS[k].emote?.id === r.emote?.id) REPORTS.splice(k, 1);
       return { data: { resolveReport: { id: r.id, state: v.action === 'DISMISS' ? 'DISMISSED' : 'ACTIONED' } } };
     }
     case 'Roles':
@@ -1596,7 +1624,12 @@ function signedIn(body, v, ADMIN) {
       ACCOUNT_ROLES[v.accountId] = (ACCOUNT_ROLES[v.accountId] ?? []).filter((id) => id !== v.roleId);
       return { data: { unassignRole: true } };
     case 'Audit': {
-      let rows = AUDIT.filter((a) => (!v.targetKind || a.targetKind === v.targetKind) && (!v.targetId || a.targetId === v.targetId));
+      const since = v.since ? Date.parse(v.since) : null;
+      const until = v.until ? Date.parse(v.until) : null;
+      if ((v.since && Number.isNaN(since)) || (v.until && Number.isNaN(until))) return err('since must be a time like 2026-11-17T00:00:00Z.', 'bad_time');
+      let rows = AUDIT.filter((a) => (!v.targetKind || a.targetKind === v.targetKind) && (!v.targetId || a.targetId === v.targetId)
+        && (!v.actorId || a.actorId === v.actorId) && (!v.action || a.action === v.action)
+        && (since === null || Date.parse(a.createdAt) >= since) && (until === null || Date.parse(a.createdAt) < until));
       if (v.before) rows = rows.filter((a) => a.id < v.before);
       return { data: { auditLog: rows.slice(0, v.limit ?? 50) } };
     }

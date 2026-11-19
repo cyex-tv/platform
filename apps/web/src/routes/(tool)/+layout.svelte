@@ -75,6 +75,7 @@
         items: [
           ...row('/admin/cosmetics/paints', 'Paints', 'brush', cosmetics),
           ...row('/admin/cosmetics/badges', 'Badges', 'badge', cosmetics),
+          ...row('/admin/cosmetics/owners', 'Owners', 'users', can('cosmetics.grant')),
         ],
       },
       {

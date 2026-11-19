@@ -65,6 +65,15 @@ type AccountProfile {
 	editors: [AccountSummary!]!
 }
 
+"""
+Reports about an account's emotes and reports it filed (`emotes.review` or
+`emotes.takedown`), newest first, at most 50 each.
+"""
+type AccountReports {
+	about: [Report!]!
+	by: [Report!]!
+}
+
 type AccountResults {
 	items: [AccountHit!]!
 	"""
@@ -267,6 +276,19 @@ input AddSetEmoteInput {
 	"""
 	name: String
 	zeroWidth: Boolean
+}
+
+"""
+An account as staff see it (`users.view` or `users.restrict`).
+"""
+type AdminAccount {
+	id: String!
+	displayName: String!
+	avatar: String
+	identities: [Identity!]!
+	createdAt: String!
+	uploadsBlocked: Boolean!
+	blocked: Boolean!
 }
 
 """
@@ -1611,23 +1633,39 @@ type Query {
 	"""
 	accountRoles(accountId: String!): [Role!]!
 	"""
-	Audited changes, newest first. Needs `audit.view`. Page back with `before` (an entry ID);
-	`limit` is 1 to 100, default 50.
+	Audited changes, newest first. Needs `audit.view`. Narrow by target, `actorId`, an exact
+	`action`, and `since` (inclusive) / `until` (exclusive) as RFC 3339 times. Page back with
+	`before` (an entry ID); `limit` is 1 to 100, default 50.
 	"""
-	auditLog(targetKind: String, targetId: String, before: String, limit: Int): [AuditEntry!]!
+	auditLog(targetKind: String, targetId: String, actorId: String, action: String, since: String, until: String, before: String, limit: Int): [AuditEntry!]!
 	"""
 	Open reports, oldest first. Needs `emotes.review` or `emotes.takedown`.
 	"""
 	reportQueue(page: Int, perPage: Int): ReportQueue!
+	"""
+	Reports about an account's emotes and the ones it filed, newest first, at most 50 each.
+	Needs `emotes.review` or `emotes.takedown`.
+	"""
+	accountReports(accountId: String!): AccountReports!
 	"""
 	Where you are signed in: your live sessions, the most recently used first, with the one
 	this request came with marked `current`. Never shows tokens.
 	"""
 	mySessions: [AccountSession!]!
 	"""
+	An account as staff see it: identities, created time and restrictions. Needs
+	`users.view` or `users.restrict`.
+	"""
+	adminAccount(accountId: String!): AdminAccount!
+	"""
 	How many of your notifications are unread.
 	"""
 	unreadNotificationCount: Int!
+	"""
+	An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`
+	or `emotes.takedown`. `perPage` is 1 to 100, default 50.
+	"""
+	accountEmotes(accountId: String!, page: Int, perPage: Int): EmotePage!
 	"""
 	Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
 	`emote.rejected`, `emote.taken_down`, `editor.added`, `editor.changed`, `editor.removed`,

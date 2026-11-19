@@ -611,6 +611,21 @@ export const REJECT = graphql(`
   }
 `);
 
+export const REPORT_FIELDS = graphql(`
+  fragment ReportFields on Report {
+    id
+    reason
+    reporterId
+    state
+    resolution
+    createdAt
+    resolvedAt
+    emote {
+      ...EmoteFields
+    }
+  }
+`);
+
 export const REPORT_QUEUE = graphql(`
   query ReportQueue($page: Int, $perPage: Int) {
     reportQueue(page: $page, perPage: $perPage) {
@@ -746,8 +761,26 @@ export const UNASSIGN_ROLE = graphql(`
 `);
 
 export const AUDIT = graphql(`
-  query Audit($targetKind: String, $targetId: String, $before: String, $limit: Int) {
-    auditLog(targetKind: $targetKind, targetId: $targetId, before: $before, limit: $limit) {
+  query Audit(
+    $targetKind: String
+    $targetId: String
+    $actorId: String
+    $action: String
+    $since: String
+    $until: String
+    $before: String
+    $limit: Int
+  ) {
+    auditLog(
+      targetKind: $targetKind
+      targetId: $targetId
+      actorId: $actorId
+      action: $action
+      since: $since
+      until: $until
+      before: $before
+      limit: $limit
+    ) {
       id
       actorId
       action
@@ -792,6 +825,51 @@ export const SEARCH_BY_OWNER = graphql(`
       perPage
       items {
         ...EmoteFields
+      }
+    }
+  }
+`);
+
+// The admin account page: the account as staff see it, its uploads, and its reports.
+export const ADMIN_ACCOUNT = graphql(`
+  query AdminAccount($accountId: String!) {
+    adminAccount(accountId: $accountId) {
+      id
+      displayName
+      avatar
+      createdAt
+      uploadsBlocked
+      blocked
+      identities {
+        platform
+        platformUserId
+        login
+        displayName
+        avatar
+      }
+    }
+  }
+`);
+
+export const ACCOUNT_EMOTES = graphql(`
+  query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {
+    accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {
+      total
+      items {
+        ...EmoteFields
+      }
+    }
+  }
+`);
+
+export const ACCOUNT_REPORTS = graphql(`
+  query AccountReports($accountId: String!) {
+    accountReports(accountId: $accountId) {
+      about {
+        ...ReportFields
+      }
+      by {
+        ...ReportFields
       }
     }
   }

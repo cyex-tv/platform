@@ -40,6 +40,12 @@ pub struct Filter<'a> {
     pub actor: Option<Uuid>,
     pub target_kind: Option<&'a str>,
     pub target_id: Option<&'a str>,
+    /// An exact action name, for example `emotes.approve`.
+    pub action: Option<&'a str>,
+    /// Only entries at or after this time.
+    pub since: Option<DateTime<Utc>>,
+    /// Only entries before this time.
+    pub until: Option<DateTime<Utc>>,
     /// Paging: only entries older than this one.
     pub before_id: Option<Uuid>,
 }
@@ -89,6 +95,9 @@ pub async fn list(
            AND ($2::text IS NULL OR target_kind = $2)
            AND ($3::text IS NULL OR target_id = $3)
            AND ($4::uuid IS NULL OR id < $4)
+           AND ($6::text IS NULL OR action = $6)
+           AND ($7::timestamptz IS NULL OR created_at >= $7)
+           AND ($8::timestamptz IS NULL OR created_at < $8)
          ORDER BY id DESC
          LIMIT $5"
     ))
@@ -97,6 +106,9 @@ pub async fn list(
     .bind(filter.target_id)
     .bind(filter.before_id)
     .bind(limit)
+    .bind(filter.action)
+    .bind(filter.since)
+    .bind(filter.until)
     .fetch_all(conn)
     .await?)
 }

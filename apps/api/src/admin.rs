@@ -220,15 +220,54 @@ pub async fn account_roles(
     Ok(out)
 }
 
+/// What `audit_log` narrows by, besides paging.
+#[derive(Default)]
+pub struct AuditQuery<'a> {
+    pub target_kind: Option<&'a str>,
+    pub target_id: Option<&'a str>,
+    pub actor_id: Option<&'a str>,
+    pub action: Option<&'a str>,
+    /// RFC 3339.
+    pub since: Option<&'a str>,
+    pub until: Option<&'a str>,
+}
+
+type Instant = Option<chrono::DateTime<chrono::Utc>>;
+
+fn instant(raw: Option<&str>, what: &str) -> ApiResult<Instant> {
+    raw.map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            chrono::DateTime::parse_from_rfc3339(s)
+                .map(|t| t.with_timezone(&chrono::Utc))
+                .map_err(|_| {
+                    bad(
+                        "bad_time",
+                        &format!("{what} must be a time like 2026-11-17T00:00:00Z."),
+                    )
+                })
+        })
+        .transpose()
+}
+
 /// The audit log, newest first. Needs `audit.view`. `before` is an entry ID to page back from.
 pub async fn audit_log(
     state: &AppState,
     caller: &Caller,
-    target_kind: Option<&str>,
-    target_id: Option<&str>,
+    q: &AuditQuery<'_>,
     before: Option<&str>,
     limit: Option<u32>,
 ) -> ApiResult<Vec<AuditEntry>> {
+    let actor_id = q
+        .actor_id
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(parse_id)
+        .transpose()?;
+    let since = instant(q.since, "since")?;
+    let until = instant(q.until, "until")?;
+    let (target_kind, target_id) = (q.target_kind, q.target_id);
+    let action = q.action.map(str::trim).filter(|s| !s.is_empty());
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     require(&mut conn, caller, permissions::AUDIT_VIEW).await?;
     let before_id = before.map(parse_id).transpose()?;
@@ -236,9 +275,12 @@ pub async fn audit_log(
     let entries = audit::list(
         &mut conn,
         &audit::Filter {
-            actor: None,
+            actor: actor_id,
             target_kind,
             target_id,
+            action,
+            since,
+            until,
             before_id,
         },
         limit,
