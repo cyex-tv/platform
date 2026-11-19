@@ -143,3 +143,47 @@ describe('readability floor', () => {
     expect(paintFloor({ ...base, kind: 'IMAGE', color: null, stops: [] })).toBeNull();
   });
 });
+
+describe('one renderer for every paint kind (site and paint studio)', () => {
+  // Every kind the studio can save, drawn by the site, and by the studio's preview and CSS export.
+  const kinds: [string, PaintLike][] = [
+    ['linear', { ...base, stops }],
+    ['repeating linear', { ...base, angle: 45, repeat: true, stops }],
+    ['radial circle', { ...base, kind: 'RADIAL_GRADIENT', stops }],
+    ['radial ellipse', { ...base, kind: 'RADIAL_GRADIENT', shape: 'ELLIPSE', stops }],
+    ['repeating radial', { ...base, kind: 'RADIAL_GRADIENT', repeat: true, stops }],
+    ['translucent stops', { ...base, stops: [{ at: 0, color: '#FFD54F' }, { at: 1, color: '#FF704300' }] }],
+    ['shadows', { ...base, stops, shadows: [{ x: 0, y: 1, radius: 0, color: '#3B2500' }, { x: 0, y: 0, radius: 4, color: '#FFD70099' }] }],
+    ['image (still)', { ...base, kind: 'IMAGE', image: { ...img, animated: false, files: [{ name: '1x.webp' }] } }],
+    ['image (animated, rendered by the studio)', { ...base, kind: 'IMAGE', image: img }],
+    ['repeating image', { ...base, kind: 'IMAGE', repeat: true, image: img }],
+  ];
+  it.each(kinds)('%s: the name is drawn with a background clipped to the text', (_, p) => {
+    const css = paintStyle(p);
+    expect(css).toContain('background-clip: text');
+    expect(css).toContain('-webkit-text-fill-color: transparent');
+    expect(css).toMatch(/background-image: (repeating-)?(linear|radial)-gradient\(|background-image: url\("https:\/\/cdn\.cyex\.tv\//);
+  });
+  it.each(kinds)('%s: the studio draws exactly what the site draws', async (_, p) => {
+    const { paintStyleText } = await import('$lib/paint-studio/css');
+    const studio = { name: 'x', ...p, color: p.color ?? null, stops: [...p.stops], shadows: [...p.shadows], image: p.kind === 'IMAGE' ? { id: 'i', url: `${img.host}/1x.webp` } : null };
+    expect(paintStyleText(studio)).toBe(paintStyle(p));
+  });
+  it('previews a picture that is not on the CDN yet (the studio render) with the same declarations', () => {
+    const p: PaintLike = { ...base, kind: 'IMAGE', image: null };
+    const css = paintStyle(p, false, 'blob:http://localhost:5173/6f1c-42');
+    expect(css).toContain('background-image: url("blob:http://localhost:5173/6f1c-42"), linear-gradient(currentColor, currentColor)');
+    expect(paintStyle(p, false, 'javascript:alert(1)')).not.toContain('url(');
+    expect(paintStyle(p, false, 'https://x.test/a")b')).toContain('url("https://x.test/a%22%29b")');
+  });
+});
+
+describe('readability floor on a fixed ground (studio preview)', () => {
+  it('gives a pale paint its halo on the light ground only', async () => {
+    const { floorFilter, FLOOR_FILTER } = await import('./paint');
+    const icy: PaintLike = { ...base, stops: [{ at: 0, color: '#D4F6FF' }, { at: 1, color: '#EFFCFF' }] };
+    expect(floorFilter(icy, 'light')).toBe(FLOOR_FILTER.light);
+    expect(floorFilter(icy, 'dark')).toBe('');
+    expect(floorFilter({ ...base, stops: [{ at: 0, color: '#E8173A' }, { at: 1, color: '#D81B60' }] }, 'light')).toBe('');
+  });
+});

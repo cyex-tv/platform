@@ -1,12 +1,13 @@
 <script lang="ts">
   // The emote page's activity rows: an icon, one plain sentence about this emote (it is the page's
-  // subject, so it isn't named again unless a set calls it something else), who did it, and the
+  // subject, so it isn't named again unless a set calls it something else), who did it (unless that is you), and the
   // date and time it happened (2026/11/19 14:05, how long ago on hover).
   import Icon, { type IconName } from '$lib/components/Icon.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { looks, NO_LOOK, wantLooks } from '$lib/cosmetics/store.svelte';
   import { clean, dateTime } from '$lib/format';
-  import { relative, type ActivityItem, type ActivityKind } from '$lib/profile/activity';
+  import { namesActor, relative, type ActivityItem, type ActivityKind } from '$lib/profile/activity';
+  import { session } from '$lib/tool/session.svelte';
 
   /** `name`: the emote's own name, so a row only spells out a different one (an alias in a set). */
   let { items, name }: { items: ActivityItem[]; name: string } = $props();
@@ -35,7 +36,7 @@
         {:else if i.kind === 'removed'}Removed from {@render setName(i)}
         {:else if i.kind === 'renamed'}Renamed{#if i.from}{' from '}<strong><bdi>{clean(i.from)}</bdi></strong>{/if}{' to '}<strong><bdi>{as ?? clean(name)}</bdi></strong> in {@render setName(i)}
         {:else}Changed in {@render setName(i)}{/if}
-        {#if i.actor}{' by '}<a href="/users/{encodeURIComponent(i.actor.id)}"><PaintedName name={i.actor.displayName} paint={(looks[i.actor.id] ?? NO_LOOK).paint} badge={(looks[i.actor.id] ?? NO_LOOK).badge} badgeSize={16} /></a>{/if}
+        {#if i.actor && namesActor(i, session.me?.id)}{' by '}<a href="/users/{encodeURIComponent(i.actor.id)}"><PaintedName name={i.actor.displayName} paint={(looks[i.actor.id] ?? NO_LOOK).paint} badge={(looks[i.actor.id] ?? NO_LOOK).badge} badgeSize={16} /></a>{/if}
       </span>
       <time datetime={i.at} title={relative(i.at)}>{dateTime(i.at)}</time>
     </li>
