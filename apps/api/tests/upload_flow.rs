@@ -357,7 +357,7 @@ async fn flags_can_be_set_at_upload() {
     assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
     assert_eq!(
         r.body["flags"],
-        json!({ "zero_width": true, "private": true, "nsfw": true })
+        json!({ "zero_width": true, "private": true, "nsfw": true, "wide": false })
     );
     let r = w
         .post(
@@ -376,14 +376,14 @@ async fn flags_can_be_set_at_upload() {
     assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
     assert_eq!(
         r.body["flags"],
-        json!({ "zero_width": false, "private": false, "nsfw": false })
+        json!({ "zero_width": false, "private": false, "nsfw": false, "wide": false })
     );
 
     // Without the fields, nothing changes from before: all off.
     let r = w.upload(&alice, "plain", &png(40, 40, 52)).await;
     assert_eq!(
         r.body["flags"],
-        json!({ "zero_width": false, "private": false, "nsfw": false })
+        json!({ "zero_width": false, "private": false, "nsfw": false, "wide": false })
     );
     w.db.close().await;
 }
