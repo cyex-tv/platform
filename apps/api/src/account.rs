@@ -520,7 +520,7 @@ pub async fn delete_account(
         .await
         .map_err(db_error)?
         .ok_or_else(not_found)?;
-    if account.restricted_at.is_some() || account.blocked_at.is_some() {
+    if account.held() {
         return Err(ApiError::new(
             StatusCode::FORBIDDEN,
             "restricted",

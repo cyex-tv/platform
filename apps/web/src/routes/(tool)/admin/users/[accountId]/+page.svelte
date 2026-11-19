@@ -5,7 +5,9 @@
   import { page } from '$app/state';
   import { ApiError, gql } from '$lib/api';
   import type { AdminAccountQuery, RoleFieldsFragment } from '$lib/gql/graphql';
-  import { ACCOUNT, ADMIN_ACCOUNT, ALL_ROLES, ASSIGN_ROLE, RESTRICT, UNASSIGN_ROLE, USER_DETAILS } from '$lib/queries';
+  import { ACCOUNT, ADMIN_ACCOUNT, ALL_ROLES, ASSIGN_ROLE, UNASSIGN_ROLE, USER_DETAILS } from '$lib/queries';
+  import Restrictions, { type Status } from '$lib/admin/Restrictions.svelte';
+  import { permissionLabel } from '$lib/admin/permissions';
   import Avatar from '$lib/components/Avatar.svelte';
   import Name from '$lib/components/Name.svelte';
   import State from '$lib/components/State.svelte';
@@ -16,7 +18,6 @@
   import UserCosmetics from '$lib/admin/UserCosmetics.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { lookFor, NO_LOOK, type Look } from '$lib/cosmetics/store.svelte';
-  import Confirm from '$lib/tool/Confirm.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
   import { loader } from '$lib/tool/loader.svelte';
@@ -24,11 +25,10 @@
   import { can, session } from '$lib/tool/session.svelte';
 
   type Account = NonNullable<AdminAccountQuery['adminAccount']>;
-  type Loaded = { account: Account | null; status: { uploadsBlocked: boolean; blocked: boolean } | null; roles: RoleFieldsFragment[] };
+  type Loaded = { account: Account | null; status: Status | null; roles: RoleFieldsFragment[] };
 
-  const canStatus = can('users.view') || can('users.restrict');
-  const canRestrict = can('users.restrict');
-  const manageRoles = can('roles.manage');
+  const canStatus = ['users.view', 'users.restrict', 'users.restrict_uploads', 'users.restrict_tickets', 'users.block'].some(can);
+  const manageRoles = can('roles.manage') || can('roles.assign');
   const canRoles = manageRoles || can('users.view');
   const canUploads = can('users.view') || can('emotes.review') || can('emotes.takedown');
   const canReports = can('emotes.review') || can('emotes.takedown');
@@ -37,10 +37,10 @@
   let roles = $state<RoleFieldsFragment[]>([]);
   let allRoles = $state<RoleFieldsFragment[]>([]);
   let pick = $state('');
-  let busy = $state(false);
   let look = $state<Look>(NO_LOOK);
 
-  const assignable = $derived(allRoles.filter((r) => !roles.some((x) => x.id === r.id)));
+  // Roles you may give that they don't have yet (the API says which you may give).
+  const assignable = $derived(allRoles.filter((r) => r.assignable && !roles.some((x) => x.id === r.id)));
 
   const L = loader<Loaded>(async ({ fetch }) => {
     const id = page.params.accountId ?? '';
@@ -54,7 +54,7 @@
       } else {
         // Without users.view only the public summary is known.
         const a = (await gql(ACCOUNT, { id }, fetch)).account;
-        account = a ? { id: a.id, displayName: a.displayName, avatar: a.avatar, createdAt: '', uploadsBlocked: false, blocked: false, identities: [] } : null;
+        account = a ? { id: a.id, displayName: a.displayName, avatar: a.avatar, createdAt: '', uploadsBlocked: false, ticketsBlocked: false, blocked: false, identities: [] } : null;
       }
     } catch (e) {
       if (e instanceof ApiError && e.code === 'not_found') return { account: null, status: null, roles: [] };
@@ -63,27 +63,16 @@
     if (!account) return { account: null, status: null, roles: [] };
     const d = await gql(USER_DETAILS, { accountId: id, status: false, roles: canRoles }, fetch);
     if (manageRoles && allRoles.length === 0) allRoles = (await gql(ALL_ROLES, {}, fetch)).roles;
-    status = canStatus ? { uploadsBlocked: account.uploadsBlocked, blocked: account.blocked } : null;
+    status = canStatus
+      ? { uploadsBlocked: account.uploadsBlocked, ticketsBlocked: account.ticketsBlocked, blocked: account.blocked,
+          uploadsBlockedUntil: account.uploadsBlockedUntil, ticketsBlockedUntil: account.ticketsBlockedUntil, blockedUntil: account.blockedUntil }
+      : null;
     roles = d.accountRoles ?? [];
     pick = assignable[0]?.id ?? '';
     const first = account.identities[0];
     if (first) lookFor(first.platform, first.platformUserId).then((l) => page.params.accountId === id && (look = l));
     return { account, status, roles };
   });
-
-  async function restrict(input: { uploadsBlocked?: boolean; blocked?: boolean }) {
-    const id = L.data?.account?.id;
-    if (!id || busy) return;
-    busy = true;
-    try {
-      status = (await gql(RESTRICT, { accountId: id, ...input })).restrictAccount;
-      notify('Saved.');
-    } catch (e) {
-      fail(e);
-    } finally {
-      busy = false;
-    }
-  }
 
   async function assign() {
     const id = L.data?.account?.id;
@@ -133,7 +122,11 @@
       <Avatar src={account.avatar} name={account.displayName} size={72} tone="tool" />
       <h2><PaintedName name={account.displayName} paint={look.paint} badge={look.badge} badgeSize={20} /></h2>
       <p class="chips">
-        {#if status?.blocked}<span class="ui-chip rejected">Blocked</span>{:else if status?.uploadsBlocked}<span class="ui-chip pending">Uploads blocked</span>{:else if status}<span class="ui-chip approved">Active</span>{/if}
+        {#if status?.blocked}<span class="ui-chip rejected">Blocked</span>{:else}
+          {#if status?.uploadsBlocked}<span class="ui-chip pending">Uploads stopped</span>{/if}
+          {#if status?.ticketsBlocked}<span class="ui-chip pending">Reports stopped</span>{/if}
+          {#if status && !status.uploadsBlocked && !status.ticketsBlocked}<span class="ui-chip approved">Active</span>{/if}
+        {/if}
         {#each roles as r (r.id)}<span class="ui-chip"><Name value={r.name} /></span>{/each}
       </p>
       <dl class="ids">
@@ -153,29 +146,7 @@
     </section>
 
     <div class="stack">
-      {#if status}
-        <section class="ui-panel" aria-labelledby="rs-h">
-          <header><h2 id="rs-h">Restrictions</h2></header>
-          <div class="pad">
-            <label class="ui-row">
-              <div><strong>Block uploads</strong><span class="ui-hint">They can still sign in and use sets.</span></div>
-              <input class="ui-switch" type="checkbox" checked={status.uploadsBlocked} disabled={!canRestrict || busy || self}
-                onchange={(e) => restrict({ uploadsBlocked: e.currentTarget.checked })} />
-            </label>
-            <label class="ui-row">
-              <div><strong>Block the account</strong><span class="ui-hint">Signs them out everywhere and refuses sign-in.</span></div>
-              {#if status.blocked}
-                <input class="ui-switch" type="checkbox" checked disabled={!canRestrict || busy || self}
-                  aria-label="Block the account" onchange={() => restrict({ blocked: false })} />
-              {:else}
-                <Confirm small label="Block" confirm="Click again to block and sign out" busy={!canRestrict || busy || self}
-                  onconfirm={() => restrict({ blocked: true })} />
-              {/if}
-            </label>
-            {#if !canRestrict}<p class="ui-hint">Changing these needs users.restrict.</p>{/if}
-          </div>
-        </section>
-      {/if}
+      {#if status}<Restrictions accountId={account.id} bind:status {self} />{/if}
 
       {#if canRoles}
         <section class="ui-panel" aria-labelledby="ro-h">
@@ -184,8 +155,8 @@
             <ul class="ui-list">
               {#each roles as r (r.id)}
                 <li>
-                  <span class="what"><strong><Name value={r.name} /></strong><span class="ui-hint">{r.permissions.join(', ') || 'No permissions'}</span></span>
-                  {#if manageRoles}<button class="ui-btn ghost small" type="button" onclick={() => unassign(r)}>Take away</button>{/if}
+                  <span class="what"><strong><Name value={r.name} /></strong><span class="ui-hint">{r.builtIn === 'ROOT' ? 'Every permission' : r.permissions.map(permissionLabel).join(', ') || 'No permissions'}</span></span>
+                  {#if manageRoles && r.assignable}<button class="ui-btn ghost small" type="button" onclick={() => unassign(r)}>Take away</button>{/if}
                 </li>
               {/each}
             </ul>
@@ -224,7 +195,6 @@
   .ids dd { display: grid; margin: 2px 0 0; font-size: var(--text-sub); overflow-wrap: anywhere; }
   .links { display: flex; gap: 16px; font-size: var(--text-sub); }
   .pad { padding: 2px 14px 10px; margin: 0; }
-  .ui-row .ui-hint { display: block; }
   .what { display: grid; flex: 1; min-width: 0; }
   .give { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--border); }
   .give select { flex: 1; background: var(--bg); }

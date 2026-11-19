@@ -36,8 +36,8 @@ pub async fn permissions_of(
     Ok(sqlx::query_scalar(
         "SELECT e.permissions
          FROM account_editors e
-         JOIN accounts o ON o.id = e.account_id AND o.deleted_at IS NULL AND o.blocked_at IS NULL
-         JOIN accounts x ON x.id = e.editor_id AND x.deleted_at IS NULL AND x.blocked_at IS NULL
+         JOIN accounts o ON o.id = e.account_id AND o.deleted_at IS NULL AND (o.blocked_at IS NULL OR o.blocked_until <= now())
+         JOIN accounts x ON x.id = e.editor_id AND x.deleted_at IS NULL AND (x.blocked_at IS NULL OR x.blocked_until <= now())
          WHERE e.account_id = $1 AND e.editor_id = $2",
     )
     .bind(account)
@@ -72,7 +72,7 @@ pub async fn list_for_editor(conn: &mut PgConnection, editor: Uuid) -> DbResult<
     Ok(sqlx::query_as(
         "SELECT e.account_id, e.editor_id, e.permissions, e.granted_by, e.granted_at, e.updated_at
          FROM account_editors e
-         JOIN accounts o ON o.id = e.account_id AND o.deleted_at IS NULL AND o.blocked_at IS NULL
+         JOIN accounts o ON o.id = e.account_id AND o.deleted_at IS NULL AND (o.blocked_at IS NULL OR o.blocked_until <= now())
          WHERE e.editor_id = $1
          ORDER BY e.granted_at, e.account_id",
     )

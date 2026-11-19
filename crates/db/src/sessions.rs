@@ -144,7 +144,7 @@ pub async fn find_active(conn: &mut PgConnection, hash: &TokenHash) -> DbResult<
          FROM sessions s
          JOIN accounts a ON a.id = s.account_id
          WHERE s.id_hash = $1 AND s.expires_at > now()
-           AND a.deleted_at IS NULL AND a.blocked_at IS NULL",
+           AND a.deleted_at IS NULL AND (a.blocked_at IS NULL OR a.blocked_until <= now())",
     )
     .bind(&hash[..])
     .fetch_optional(conn)
@@ -163,7 +163,7 @@ pub async fn find_restorable(
          FROM sessions s
          JOIN accounts a ON a.id = s.account_id
          WHERE s.id_hash = $1 AND s.expires_at > now() AND s.kind = 'site'
-           AND a.erase_after > now() AND a.blocked_at IS NULL",
+           AND a.erase_after > now() AND (a.blocked_at IS NULL OR a.blocked_until <= now())",
     )
     .bind(&hash[..])
     .fetch_optional(conn)

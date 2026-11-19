@@ -34,3 +34,46 @@ A moderation team exists from day one. Admins must create roles, choose a role's
 ## Consequences
 - Flexible enough for a growing team.
 - Needs good admin pages (Phase 6) and full tests of the escalation rules (Phase 2).
+
+## Amendment 2026/11/19: built-in roles, finer permissions, timed restrictions
+
+Owner feedback (section F): a default "User" role that starts empty and can be edited, an "Admin" role, and an invisible role above every admin; nobody edits the role they hold; more and finer permissions with readable names, grouped; bans from uploading and from filing tickets, for a time or for good.
+
+### Built-in roles
+`roles.system` marks three roles (migration `default_roles`):
+
+| Role | Position | Rules |
+|---|---|---|
+| Owner (`root`) | 1 000 000, the column's maximum | Held by the accounts in `CYEX_TV_OWNER_IDS` only, without an assignment row. Holds every permission in code (no permission rows), so permissions added later are included. Listed only to its holders; to anyone else it is `not_found`, even by ID. Never granted, edited or deleted through the API (`built_in_role`). |
+| Admin (`admin`) | 1000 | Seeded with every permission that existed on 2026/11/19. Assigned like any role; can't be deleted. |
+| User (`user`) | 0 | Every account holds it without an assignment, so its permissions are everyone's (`roles::permissions_of` adds them). Starts empty. Its name, description and permissions can change; it is never assigned or taken away, and stays at position 0. |
+
+Custom roles sit between them: positions 1 to 999 999 (`bad_position` otherwise).
+
+### New rules
+- **Not your own role:** nobody edits or deletes a role they hold through an assignment, the owner included (`own_role`). Assigning already required a role strictly below your highest, so you can't give away a role at or above your own. The User role is exempt (everyone holds it); only those whose highest role is above 0 can edit it, with the usual no-escalation rule for what it grants.
+- The lock-out rule stays; deleting or emptying your own manager role is now refused earlier by "not your own role".
+- `roles` and `accountRoles` return `builtIn`, and for the caller `editable` and `assignable`, so pages follow the rules without repeating them.
+
+### Finer permissions
+Each narrows part of an older, broader permission; the broad one keeps working, so nothing that worked stops working.
+
+| Permission | What it allows | Broader one that also allows it |
+|---|---|---|
+| `roles.assign` | give and take roles below yours (without editing roles) | `roles.manage` |
+| `reports.manage` | the report queue, dismissing and acting on reports | `emotes.review`, `emotes.takedown` |
+| `users.restrict_uploads` | stop uploads | `users.restrict` |
+| `users.restrict_tickets` | stop reports and tickets | `users.restrict` |
+| `users.block` | block the account (no sign-in, sessions end) | `users.restrict` |
+| `users.sessions` | see an account's sessions | |
+| `users.notes` | read and write staff notes | |
+| `entitlements.view` | the entitlement graph | `cosmetics.grant` |
+| `billing.view` | an account's orders and payments | `shop.orders` |
+| `subscriptions.manage` | subscriptions (none exist yet) | |
+
+The website names and groups them for people (Emotes, Sets, Users, Moderation, Tickets and reports, Cosmetics, Shop and billing, Roles, System) in `apps/web/src/lib/admin/permissions.ts`; a test there fails when a permission here has no label.
+
+### Timed restrictions
+An account has three holds: uploads (`restricted_at`), tickets (`tickets_blocked_at`, new: no reports) and the whole account (`blocked_at`). Each has an end (`*_until`, NULL for good; migration `timed_restrictions`). Every read treats a hold whose end has passed as absent, in Rust (`accounts::get` and every query using its column list) and in SQL (`blocked_until <= now()` beside each `blocked_at IS NULL`), so nothing has to sweep. Holds left behind by an identity (`identity_holds`) carry their end and the tickets hold; merging two keeps the longer one.
+
+`placeRestriction(accountId, { kind, until, reason })` and `liftRestriction(accountId, kind, reason)` need `users.restrict` or the kind's own permission; the target must be below the caller's highest role, and the owner can't be restricted. A reason (1 to 500 characters) is required; ends are in the future and at most ten years out. Every one placed or lifted is a row in `account_restrictions` (who, why, until, lifted by) and an audit row (`account.restriction_placed`, `account.restriction_lifted`). The older `restrictAccount` switch still works, for good and without a reason, and is recorded there too.

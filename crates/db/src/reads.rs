@@ -315,7 +315,7 @@ pub async fn channel_counts(
         "SELECT m.emote_id, count(DISTINCT c.id)
          FROM emote_set_members m
          JOIN channels c ON c.active_set_id = m.set_id
-         JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL AND a.blocked_at IS NULL
+         JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL AND (a.blocked_at IS NULL OR a.blocked_until <= now())
          WHERE m.emote_id = ANY($1)
          GROUP BY m.emote_id",
     )
@@ -340,7 +340,7 @@ pub async fn emote_channels(
                 c.allow_personal_emotes, c.created_at, c.updated_at
          FROM emote_set_members m
          JOIN channels c ON c.active_set_id = m.set_id
-         JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL AND a.blocked_at IS NULL
+         JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL AND (a.blocked_at IS NULL OR a.blocked_until <= now())
          WHERE m.emote_id = $1
          ORDER BY m.added_at DESC, c.id
          LIMIT $2",

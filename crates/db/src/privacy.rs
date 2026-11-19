@@ -147,7 +147,8 @@ pub async fn schedule_erase(
 pub async fn restore(conn: &mut PgConnection, account_id: Uuid) -> DbResult<bool> {
     let done = sqlx::query(
         "UPDATE accounts SET deleted_at = NULL, erase_after = NULL
-          WHERE id = $1 AND erase_after > now() AND blocked_at IS NULL",
+          WHERE id = $1 AND erase_after > now()
+            AND (blocked_at IS NULL OR blocked_until <= now())",
     )
     .bind(account_id)
     .execute(&mut *conn)

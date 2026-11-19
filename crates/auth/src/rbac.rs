@@ -6,6 +6,10 @@
 //!   assign roles below your own highest `position`.
 //! - **No lock-out:** a change that would leave nobody but the owner holding `roles.manage` is
 //!   refused, unless the owner makes it.
+//! - **Not your own role:** nobody edits or deletes a role they hold, the owner included.
+//! - **Built-in roles** (amendment 2026/11/19): the top role (every permission, held by the owners
+//!   only, never granted or edited through the API), "Admin" (can't be deleted) and "User" (every
+//!   account holds it without an assignment; only its name, description and permissions change).
 
 use std::collections::BTreeSet;
 
@@ -63,6 +67,10 @@ pub enum RuleError {
     OwnerProtected,
     #[error("this would leave nobody but the owner able to manage roles")]
     LastManager,
+    #[error("you can't edit a role you hold")]
+    OwnRole,
+    #[error("built-in roles can't be changed this way")]
+    BuiltIn,
 }
 
 impl RuleError {
@@ -72,6 +80,8 @@ impl RuleError {
             Self::NotBelowYou => "not_below_you",
             Self::OwnerProtected => "owner_protected",
             Self::LastManager => "last_manager",
+            Self::OwnRole => "own_role",
+            Self::BuiltIn => "built_in_role",
         }
     }
 
@@ -83,6 +93,8 @@ impl RuleError {
             Self::LastManager => {
                 "This would leave nobody but the owner able to manage roles. Give roles.manage to someone else first."
             }
+            Self::OwnRole => "You can't edit a role you hold. Someone above you has to.",
+            Self::BuiltIn => "This is a built-in role; it can't be changed this way.",
         }
     }
 }
@@ -94,6 +106,8 @@ pub struct Actor {
     pub permissions: BTreeSet<String>,
     /// The position of their most senior role, if they have any.
     pub highest: Option<i32>,
+    /// The roles they hold through an assignment (not the implicit "User" role).
+    pub held: BTreeSet<Uuid>,
 }
 
 impl Actor {
@@ -121,6 +135,16 @@ impl Actor {
             Some(highest) if position < highest => Ok(()),
             _ => Err(RuleError::NotBelowYou),
         }
+    }
+
+    /// Editing or deleting a role: below your highest, and not one you hold. This binds the
+    /// owner too: nobody edits their own role.
+    pub fn may_edit(&self, role_id: Uuid, position: i32) -> Result<(), RuleError> {
+        self.may_manage(position)?;
+        if self.held.contains(&role_id) {
+            return Err(RuleError::OwnRole);
+        }
+        Ok(())
     }
 
     /// Acting on another account (restricting it, taking a role from it): its most senior role
@@ -168,6 +192,7 @@ mod tests {
             owner: false,
             permissions: perms.iter().map(|p| (*p).to_owned()).collect(),
             highest,
+            held: BTreeSet::new(),
         }
     }
 
@@ -252,6 +277,25 @@ mod tests {
         assert_eq!(roleless.may_act_on(None), Ok(()));
         assert_eq!(roleless.may_act_on(Some(0)), Err(RuleError::NotBelowYou));
         assert_eq!(owner().may_act_on(Some(i32::MAX)), Ok(()));
+    }
+
+    #[test]
+    fn nobody_edits_a_role_they_hold() {
+        let mine = Uuid::from_u128(1);
+        let other = Uuid::from_u128(2);
+        let mut a = actor(&["roles.manage"], Some(50));
+        a.held.insert(mine);
+        assert_eq!(a.may_edit(other, 10), Ok(()));
+        assert_eq!(a.may_edit(mine, 10), Err(RuleError::OwnRole));
+        // At or above your highest is refused first, as before.
+        assert_eq!(a.may_edit(mine, 50), Err(RuleError::NotBelowYou));
+        // The owner passes the position rule, but not this one.
+        let mut o = owner();
+        o.held.insert(mine);
+        assert_eq!(o.may_edit(other, i32::MAX), Ok(()));
+        assert_eq!(o.may_edit(mine, 10), Err(RuleError::OwnRole));
+        assert_eq!(RuleError::OwnRole.code(), "own_role");
+        assert_eq!(RuleError::BuiltIn.code(), "built_in_role");
     }
 
     #[test]
