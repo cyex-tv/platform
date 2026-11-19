@@ -142,6 +142,14 @@ type Documents = {
     "\n  query ShopCounts($items: Boolean!, $orders: Boolean!, $codes: Boolean!) {\n    shopItems(all: true) @include(if: $items) {\n      id\n    }\n    orders(page: 1, perPage: 1) @include(if: $orders) {\n      total\n    }\n    codeBatches(page: 1, perPage: 1) @include(if: $codes) {\n      total\n    }\n  }\n": typeof types.ShopCountsDocument,
     "\n  query QuickSearch($query: String!) {\n    quickSearch(query: $query) {\n      emotes {\n        ...EmoteFields\n      }\n      users {\n        account {\n          id\n          displayName\n          avatar\n        }\n        identities {\n          platform\n          login\n          displayName\n        }\n      }\n    }\n  }\n": typeof types.QuickSearchDocument,
     "\n  query EditableChannels {\n    myEditableChannels {\n      role\n      channel {\n        platform\n        login\n        account {\n          id\n          displayName\n          avatar\n        }\n      }\n    }\n  }\n": typeof types.EditableChannelsDocument,
+    "\n  query StaffNotes($accountId: String!) {\n    staffNotes(accountId: $accountId) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n": typeof types.StaffNotesDocument,
+    "\n  mutation AddStaffNote($accountId: String!, $body: String!) {\n    addStaffNote(accountId: $accountId, body: $body) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n": typeof types.AddStaffNoteDocument,
+    "\n  mutation DeleteStaffNote($id: String!) {\n    deleteStaffNote(id: $id)\n  }\n": typeof types.DeleteStaffNoteDocument,
+    "\n  query AccountSessions($accountId: String!) {\n    accountSessions(accountId: $accountId) {\n      id\n      kind\n      device\n      createdAt\n      lastSeenAt\n      expiresAt\n    }\n  }\n": typeof types.AccountSessionsDocument,
+    "\n  query AccountSubscriptions($accountId: String!) {\n    accountSubscriptions(accountId: $accountId) {\n      id\n      plan\n      state\n      startsAt\n      endsAt\n      source\n    }\n  }\n": typeof types.AccountSubscriptionsDocument,
+    "\n  fragment GrantFields on EntitlementGrant {\n    kind\n    itemId\n    itemName\n    accountId\n    source\n    reason\n    grantedBy\n    grantedAt\n    orderId\n    orderName\n    orderStatus\n    codeBatchId\n    codeBatchName\n    revokedAt\n    revokedBy\n    revokeReason\n    active\n  }\n": typeof types.GrantFieldsFragmentDoc,
+    "\n  query EntitlementGraph($accountId: String!) {\n    entitlementGraph(accountId: $accountId) {\n      ...GrantFields\n    }\n  }\n": typeof types.EntitlementGraphDocument,
+    "\n  query EntitlementHolders($kind: GrantKind!, $id: String!) {\n    entitlementHolders(kind: $kind, id: $id) {\n      ...GrantFields\n    }\n  }\n": typeof types.EntitlementHoldersDocument,
 };
 const documents: Documents = {
     "\n  fragment StudioPaintFields on Paint {\n    id\n    name\n    kind\n    angle\n    repeat\n    shape\n    color\n    stops {\n      at\n      color\n    }\n    shadows {\n      x\n      y\n      radius\n      color\n    }\n    image {\n      id\n      host\n      ready\n      width\n      height\n      animated\n      files {\n        name\n        format\n        scale\n        width\n        height\n        isStatic\n      }\n    }\n    updatedAt\n  }\n": types.StudioPaintFieldsFragmentDoc,
@@ -271,6 +279,14 @@ const documents: Documents = {
     "\n  query ShopCounts($items: Boolean!, $orders: Boolean!, $codes: Boolean!) {\n    shopItems(all: true) @include(if: $items) {\n      id\n    }\n    orders(page: 1, perPage: 1) @include(if: $orders) {\n      total\n    }\n    codeBatches(page: 1, perPage: 1) @include(if: $codes) {\n      total\n    }\n  }\n": types.ShopCountsDocument,
     "\n  query QuickSearch($query: String!) {\n    quickSearch(query: $query) {\n      emotes {\n        ...EmoteFields\n      }\n      users {\n        account {\n          id\n          displayName\n          avatar\n        }\n        identities {\n          platform\n          login\n          displayName\n        }\n      }\n    }\n  }\n": types.QuickSearchDocument,
     "\n  query EditableChannels {\n    myEditableChannels {\n      role\n      channel {\n        platform\n        login\n        account {\n          id\n          displayName\n          avatar\n        }\n      }\n    }\n  }\n": types.EditableChannelsDocument,
+    "\n  query StaffNotes($accountId: String!) {\n    staffNotes(accountId: $accountId) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n": types.StaffNotesDocument,
+    "\n  mutation AddStaffNote($accountId: String!, $body: String!) {\n    addStaffNote(accountId: $accountId, body: $body) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n": types.AddStaffNoteDocument,
+    "\n  mutation DeleteStaffNote($id: String!) {\n    deleteStaffNote(id: $id)\n  }\n": types.DeleteStaffNoteDocument,
+    "\n  query AccountSessions($accountId: String!) {\n    accountSessions(accountId: $accountId) {\n      id\n      kind\n      device\n      createdAt\n      lastSeenAt\n      expiresAt\n    }\n  }\n": types.AccountSessionsDocument,
+    "\n  query AccountSubscriptions($accountId: String!) {\n    accountSubscriptions(accountId: $accountId) {\n      id\n      plan\n      state\n      startsAt\n      endsAt\n      source\n    }\n  }\n": types.AccountSubscriptionsDocument,
+    "\n  fragment GrantFields on EntitlementGrant {\n    kind\n    itemId\n    itemName\n    accountId\n    source\n    reason\n    grantedBy\n    grantedAt\n    orderId\n    orderName\n    orderStatus\n    codeBatchId\n    codeBatchName\n    revokedAt\n    revokedBy\n    revokeReason\n    active\n  }\n": types.GrantFieldsFragmentDoc,
+    "\n  query EntitlementGraph($accountId: String!) {\n    entitlementGraph(accountId: $accountId) {\n      ...GrantFields\n    }\n  }\n": types.EntitlementGraphDocument,
+    "\n  query EntitlementHolders($kind: GrantKind!, $id: String!) {\n    entitlementHolders(kind: $kind, id: $id) {\n      ...GrantFields\n    }\n  }\n": types.EntitlementHoldersDocument,
 };
 
 /**
@@ -781,6 +797,38 @@ export function graphql(source: "\n  query QuickSearch($query: String!) {\n    q
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query EditableChannels {\n    myEditableChannels {\n      role\n      channel {\n        platform\n        login\n        account {\n          id\n          displayName\n          avatar\n        }\n      }\n    }\n  }\n"): typeof import('./graphql').EditableChannelsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query StaffNotes($accountId: String!) {\n    staffNotes(accountId: $accountId) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n"): typeof import('./graphql').StaffNotesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation AddStaffNote($accountId: String!, $body: String!) {\n    addStaffNote(accountId: $accountId, body: $body) {\n      id\n      authorId\n      body\n      createdAt\n    }\n  }\n"): typeof import('./graphql').AddStaffNoteDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteStaffNote($id: String!) {\n    deleteStaffNote(id: $id)\n  }\n"): typeof import('./graphql').DeleteStaffNoteDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AccountSessions($accountId: String!) {\n    accountSessions(accountId: $accountId) {\n      id\n      kind\n      device\n      createdAt\n      lastSeenAt\n      expiresAt\n    }\n  }\n"): typeof import('./graphql').AccountSessionsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AccountSubscriptions($accountId: String!) {\n    accountSubscriptions(accountId: $accountId) {\n      id\n      plan\n      state\n      startsAt\n      endsAt\n      source\n    }\n  }\n"): typeof import('./graphql').AccountSubscriptionsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment GrantFields on EntitlementGrant {\n    kind\n    itemId\n    itemName\n    accountId\n    source\n    reason\n    grantedBy\n    grantedAt\n    orderId\n    orderName\n    orderStatus\n    codeBatchId\n    codeBatchName\n    revokedAt\n    revokedBy\n    revokeReason\n    active\n  }\n"): typeof import('./graphql').GrantFieldsFragmentDoc;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query EntitlementGraph($accountId: String!) {\n    entitlementGraph(accountId: $accountId) {\n      ...GrantFields\n    }\n  }\n"): typeof import('./graphql').EntitlementGraphDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query EntitlementHolders($kind: GrantKind!, $id: String!) {\n    entitlementHolders(kind: $kind, id: $id) {\n      ...GrantFields\n    }\n  }\n"): typeof import('./graphql').EntitlementHoldersDocument;
 
 
 export function graphql(source: string) {

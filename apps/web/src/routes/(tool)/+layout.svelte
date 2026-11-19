@@ -104,6 +104,7 @@
         items: [
           ...row('/admin/users', 'Users', 'users', USER_PAGE_PERMISSIONS.some(can)),
           ...row('/admin/roles', 'Roles', 'key', can('roles.manage') || can('roles.assign')),
+          ...row('/admin/entitlements', 'Entitlement graph', 'network', can('entitlements.view') || can('cosmetics.grant')),
         ],
       },
       { toggle: { label: 'System', icon: 'settings' }, items: row('/admin/audit', 'Audit log', 'scroll', can('audit.view')) },

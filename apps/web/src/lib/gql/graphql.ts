@@ -121,6 +121,22 @@ export type AccountStatus = {
   uploadsBlockedUntil?: Maybe<Scalars['String']['output']>;
 };
 
+/**
+ * A subscription to a plan. None exist yet; `accountSubscriptions` returns an empty list until
+ * they do.
+ */
+export type AccountSubscription = {
+  __typename?: 'AccountSubscription';
+  /** Empty while it renews. */
+  endsAt?: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  plan: Scalars['String']['output'];
+  /** `purchase`, `gift` or `staff`. */
+  source: Scalars['String']['output'];
+  startsAt: Scalars['String']['output'];
+  state: SubscriptionState;
+};
+
 /** A short reference to an account, for owners and editors. */
 export type AccountSummary = {
   __typename?: 'AccountSummary';
@@ -650,6 +666,39 @@ export type Entitlement = {
   source: EntitlementSource;
 };
 
+/**
+ * One badge, paint or role an account holds or held, and where it came from: one edge of the
+ * entitlement graph.
+ */
+export type EntitlementGrant = {
+  __typename?: 'EntitlementGrant';
+  accountId: Scalars['String']['output'];
+  /** Held now. */
+  active: Scalars['Boolean']['output'];
+  codeBatchId?: Maybe<Scalars['String']['output']>;
+  codeBatchName?: Maybe<Scalars['String']['output']>;
+  /** Empty when it isn't known (built-in roles; grants older than the audit log). */
+  grantedAt?: Maybe<Scalars['String']['output']>;
+  /** The staff account that gave it; empty for purchases, codes and the built-in roles. */
+  grantedBy?: Maybe<Scalars['String']['output']>;
+  itemId: Scalars['String']['output'];
+  /** Empty when the item was deleted since. */
+  itemName: Scalars['String']['output'];
+  kind: GrantKind;
+  orderId?: Maybe<Scalars['String']['output']>;
+  orderName?: Maybe<Scalars['String']['output']>;
+  /** `paid`, `refunded` and so on. */
+  orderStatus?: Maybe<Scalars['String']['output']>;
+  /** What staff wrote when they gave it. */
+  reason?: Maybe<Scalars['String']['output']>;
+  revokeReason?: Maybe<Scalars['String']['output']>;
+  /** When it was taken away; empty while held. */
+  revokedAt?: Maybe<Scalars['String']['output']>;
+  /** Who took it away; empty for refunds. */
+  revokedBy?: Maybe<Scalars['String']['output']>;
+  source: GrantSource;
+};
+
 export type EntitlementPage = {
   __typename?: 'EntitlementPage';
   items: Array<Entitlement>;
@@ -720,6 +769,27 @@ export type GrantCosmeticInput = {
   reason: Scalars['String']['input'];
 };
 
+/** What an entitlement is of. */
+export type GrantKind =
+  | 'BADGE'
+  | 'PAINT'
+  | 'ROLE';
+
+/** How an account came to hold something. */
+export type GrantSource =
+  /** A redeemed code (`codeBatchId`). */
+  | 'CODE'
+  /** The User role every account holds. */
+  | 'DEFAULT'
+  /** An event. */
+  | 'EVENT'
+  /** The owners' top role, from the owner list. */
+  | 'OWNER'
+  /** Bought in the shop (`orderId`). */
+  | 'PURCHASE'
+  /** Given by staff (a cosmetic grant or a role assignment). */
+  | 'STAFF';
+
 /** A Twitch or Kick account linked to a cyex.tv account. */
 export type Identity = {
   __typename?: 'Identity';
@@ -771,6 +841,8 @@ export type Mutation = {
   addSetEditor: Scalars['Boolean']['output'];
   /** Add an emote to a set. Personal sets take approved emotes only. */
   addSetEmote: SetEmote;
+  /** Add a staff note to an account (1 to 2000 characters). Needs `users.notes`. Audited. */
+  addStaffNote: StaffNote;
   /** Approve a pending emote. Needs `emotes.review`. Audited. */
   approveEmote: Emote;
   /**
@@ -847,6 +919,8 @@ export type Mutation = {
    * none. Needs `shop.manage`. Audited.
    */
   deleteShopItem: Scalars['Boolean']['output'];
+  /** Delete a staff note: its author may, and the owner. False if it was gone. Audited. */
+  deleteStaffNote: Scalars['Boolean']['output'];
   /** Turn off every code of a batch. Needs `codes.manage`. Audited. */
   disableCodeBatch: CodeBatch;
   /**
@@ -1029,6 +1103,12 @@ export type MutationAddSetEmoteArgs = {
 };
 
 
+export type MutationAddStaffNoteArgs = {
+  accountId: Scalars['String']['input'];
+  body: Scalars['String']['input'];
+};
+
+
 export type MutationApproveEmoteArgs = {
   id: Scalars['String']['input'];
 };
@@ -1109,6 +1189,11 @@ export type MutationDeleteSetArgs = {
 
 
 export type MutationDeleteShopItemArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type MutationDeleteStaffNoteArgs = {
   id: Scalars['String']['input'];
 };
 
@@ -1592,6 +1677,11 @@ export type Query = {
   /** An account's roles. Yours, or anyone's with `roles.manage` or `users.view`. */
   accountRoles: Array<Role>;
   /**
+   * Where an account is signed in, the most recently used first. Never tokens. Needs
+   * `users.sessions`.
+   */
+  accountSessions: Array<AccountSession>;
+  /**
    * An account's `LISTED` sets as profile cards, oldest first, at most 50. `preview` is how
    * many of each set's newest emotes to include, 0 to 50, default 12. Empty when the account
    * is unknown, deleted or blocked. Counts as a heavy read: 120 a minute per account, or per IP
@@ -1603,6 +1693,12 @@ export type Query = {
    * Needs `users.view`, `users.restrict` or a narrower restrict permission.
    */
   accountStatus: AccountStatus;
+  /**
+   * An account's subscriptions: past, current and to come. There are no subscriptions yet,
+   * so this is empty until there are. Needs `billing.view`, `subscriptions.manage` or
+   * `shop.orders`.
+   */
+  accountSubscriptions: Array<AccountSubscription>;
   /**
    * An account as staff see it: identities, created time and restrictions. Needs
    * `users.view` or `users.restrict`.
@@ -1666,6 +1762,19 @@ export type Query = {
    * default 8. Empty when the emote is unknown or not public.
    */
   emoteChannels: Array<Channel>;
+  /**
+   * The entitlement graph of an account: every badge, paint and role it holds or held, where
+   * each came from (staff, an order, a redeem code, an event, the User role, the owner list),
+   * who gave it and when, and when and by whom it was taken away. Held ones first. Needs
+   * `entitlements.view` or `cosmetics.grant`.
+   */
+  entitlementGraph: Array<EntitlementGrant>;
+  /**
+   * The reverse: who holds or held one badge, paint or role, and how each got it (the latest
+   * 200 of each kind of record). Not for the User and top roles (`implicit_role`). Needs
+   * `entitlements.view` or `cosmetics.grant`.
+   */
+  entitlementHolders: Array<EntitlementGrant>;
   /** The cyex.tv global set, shown in every channel. */
   globalSet: EmoteSet;
   /** The signed-in account. */
@@ -1713,7 +1822,7 @@ export type Query = {
   order?: Maybe<Order>;
   /**
    * Every order, newest first; narrow by status, account (bought or received) and item.
-   * Needs `shop.orders`.
+   * Needs `shop.orders`, or `billing.view` narrowed to one account.
    */
   orders: OrderPage;
   /**
@@ -1777,6 +1886,8 @@ export type Query = {
    * scheduled ones too (needs `shop.manage`).
    */
   shopItems: Array<ShopItem>;
+  /** Staff notes on an account, newest first (the latest 200). Needs `users.notes`. */
+  staffNotes: Array<StaffNote>;
   /** How many of your notifications are unread. */
   unreadNotificationCount: Scalars['Int']['output'];
   /**
@@ -1844,6 +1955,11 @@ export type QueryAccountRolesArgs = {
 };
 
 
+export type QueryAccountSessionsArgs = {
+  accountId: Scalars['String']['input'];
+};
+
+
 export type QueryAccountSetsArgs = {
   accountId: Scalars['String']['input'];
   preview?: InputMaybe<Scalars['Int']['input']>;
@@ -1851,6 +1967,11 @@ export type QueryAccountSetsArgs = {
 
 
 export type QueryAccountStatusArgs = {
+  accountId: Scalars['String']['input'];
+};
+
+
+export type QueryAccountSubscriptionsArgs = {
   accountId: Scalars['String']['input'];
 };
 
@@ -1926,6 +2047,17 @@ export type QueryEmoteActivityPageArgs = {
 export type QueryEmoteChannelsArgs = {
   id: Scalars['String']['input'];
   limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryEntitlementGraphArgs = {
+  accountId: Scalars['String']['input'];
+};
+
+
+export type QueryEntitlementHoldersArgs = {
+  id: Scalars['String']['input'];
+  kind: GrantKind;
 };
 
 
@@ -2029,6 +2161,11 @@ export type QueryShopItemArgs = {
 
 export type QueryShopItemsArgs = {
   all?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
+
+export type QueryStaffNotesArgs = {
+  accountId: Scalars['String']['input'];
 };
 
 
@@ -2283,6 +2420,17 @@ export type ShopItemInput = {
   visible?: InputMaybe<Scalars['Boolean']['input']>;
 };
 
+/** A note staff keep on an account (`users.notes`). */
+export type StaffNote = {
+  __typename?: 'StaffNote';
+  accountId: Scalars['String']['output'];
+  /** Empty when the author's account is gone. */
+  authorId?: Maybe<Scalars['String']['output']>;
+  body: Scalars['String']['output'];
+  createdAt: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+};
+
 export type Subscription = {
   __typename?: 'Subscription';
   /**
@@ -2296,6 +2444,12 @@ export type Subscription = {
 export type SubscriptionEventsArgs = {
   topics: Array<Scalars['String']['input']>;
 };
+
+/** Where a subscription is in time. */
+export type SubscriptionState =
+  | 'CURRENT'
+  | 'FUTURE'
+  | 'PAST';
 
 export type UpdateBadgeInput = {
   /** Another ready badge image. */
@@ -3228,6 +3382,59 @@ export type EditableChannelsQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type EditableChannelsQuery = { __typename?: 'Query', myEditableChannels: Array<{ __typename?: 'EditableChannel', role: ChannelRole, channel: { __typename?: 'Channel', platform: Platform, login: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } } }> };
 
+export type StaffNotesQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type StaffNotesQuery = { __typename?: 'Query', staffNotes: Array<{ __typename?: 'StaffNote', id: string, authorId?: string | null, body: string, createdAt: string }> };
+
+export type AddStaffNoteMutationVariables = Exact<{
+  accountId: Scalars['String']['input'];
+  body: Scalars['String']['input'];
+}>;
+
+
+export type AddStaffNoteMutation = { __typename?: 'Mutation', addStaffNote: { __typename?: 'StaffNote', id: string, authorId?: string | null, body: string, createdAt: string } };
+
+export type DeleteStaffNoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DeleteStaffNoteMutation = { __typename?: 'Mutation', deleteStaffNote: boolean };
+
+export type AccountSessionsQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type AccountSessionsQuery = { __typename?: 'Query', accountSessions: Array<{ __typename?: 'AccountSession', id: string, kind: SessionKind, device: string, createdAt: string, lastSeenAt: string, expiresAt: string }> };
+
+export type AccountSubscriptionsQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type AccountSubscriptionsQuery = { __typename?: 'Query', accountSubscriptions: Array<{ __typename?: 'AccountSubscription', id: string, plan: string, state: SubscriptionState, startsAt: string, endsAt?: string | null, source: string }> };
+
+export type GrantFieldsFragment = { __typename?: 'EntitlementGrant', kind: GrantKind, itemId: string, itemName: string, accountId: string, source: GrantSource, reason?: string | null, grantedBy?: string | null, grantedAt?: string | null, orderId?: string | null, orderName?: string | null, orderStatus?: string | null, codeBatchId?: string | null, codeBatchName?: string | null, revokedAt?: string | null, revokedBy?: string | null, revokeReason?: string | null, active: boolean };
+
+export type EntitlementGraphQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type EntitlementGraphQuery = { __typename?: 'Query', entitlementGraph: Array<{ __typename?: 'EntitlementGrant', kind: GrantKind, itemId: string, itemName: string, accountId: string, source: GrantSource, reason?: string | null, grantedBy?: string | null, grantedAt?: string | null, orderId?: string | null, orderName?: string | null, orderStatus?: string | null, codeBatchId?: string | null, codeBatchName?: string | null, revokedAt?: string | null, revokedBy?: string | null, revokeReason?: string | null, active: boolean }> };
+
+export type EntitlementHoldersQueryVariables = Exact<{
+  kind: GrantKind;
+  id: Scalars['String']['input'];
+}>;
+
+
+export type EntitlementHoldersQuery = { __typename?: 'Query', entitlementHolders: Array<{ __typename?: 'EntitlementGrant', kind: GrantKind, itemId: string, itemName: string, accountId: string, source: GrantSource, reason?: string | null, grantedBy?: string | null, grantedAt?: string | null, orderId?: string | null, orderName?: string | null, orderStatus?: string | null, codeBatchId?: string | null, codeBatchName?: string | null, revokedAt?: string | null, revokedBy?: string | null, revokeReason?: string | null, active: boolean }> };
+
 export class TypedDocumentString<TResult, TVariables>
   extends String
   implements DocumentTypeDecoration<TResult, TVariables>
@@ -3636,6 +3843,27 @@ export const CodeBatchFieldsFragmentDoc = new TypedDocumentString(`
   createdAt
 }
     `, {"fragmentName":"CodeBatchFields"}) as unknown as TypedDocumentString<CodeBatchFieldsFragment, unknown>;
+export const GrantFieldsFragmentDoc = new TypedDocumentString(`
+    fragment GrantFields on EntitlementGrant {
+  kind
+  itemId
+  itemName
+  accountId
+  source
+  reason
+  grantedBy
+  grantedAt
+  orderId
+  orderName
+  orderStatus
+  codeBatchId
+  codeBatchName
+  revokedAt
+  revokedBy
+  revokeReason
+  active
+}
+    `, {"fragmentName":"GrantFields"}) as unknown as TypedDocumentString<GrantFieldsFragment, unknown>;
 export const StudioPaintsDocument = new TypedDocumentString(`
     query StudioPaints {
   cosmetics {
@@ -6527,3 +6755,102 @@ export const EditableChannelsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<EditableChannelsQuery, EditableChannelsQueryVariables>;
+export const StaffNotesDocument = new TypedDocumentString(`
+    query StaffNotes($accountId: String!) {
+  staffNotes(accountId: $accountId) {
+    id
+    authorId
+    body
+    createdAt
+  }
+}
+    `) as unknown as TypedDocumentString<StaffNotesQuery, StaffNotesQueryVariables>;
+export const AddStaffNoteDocument = new TypedDocumentString(`
+    mutation AddStaffNote($accountId: String!, $body: String!) {
+  addStaffNote(accountId: $accountId, body: $body) {
+    id
+    authorId
+    body
+    createdAt
+  }
+}
+    `) as unknown as TypedDocumentString<AddStaffNoteMutation, AddStaffNoteMutationVariables>;
+export const DeleteStaffNoteDocument = new TypedDocumentString(`
+    mutation DeleteStaffNote($id: String!) {
+  deleteStaffNote(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeleteStaffNoteMutation, DeleteStaffNoteMutationVariables>;
+export const AccountSessionsDocument = new TypedDocumentString(`
+    query AccountSessions($accountId: String!) {
+  accountSessions(accountId: $accountId) {
+    id
+    kind
+    device
+    createdAt
+    lastSeenAt
+    expiresAt
+  }
+}
+    `) as unknown as TypedDocumentString<AccountSessionsQuery, AccountSessionsQueryVariables>;
+export const AccountSubscriptionsDocument = new TypedDocumentString(`
+    query AccountSubscriptions($accountId: String!) {
+  accountSubscriptions(accountId: $accountId) {
+    id
+    plan
+    state
+    startsAt
+    endsAt
+    source
+  }
+}
+    `) as unknown as TypedDocumentString<AccountSubscriptionsQuery, AccountSubscriptionsQueryVariables>;
+export const EntitlementGraphDocument = new TypedDocumentString(`
+    query EntitlementGraph($accountId: String!) {
+  entitlementGraph(accountId: $accountId) {
+    ...GrantFields
+  }
+}
+    fragment GrantFields on EntitlementGrant {
+  kind
+  itemId
+  itemName
+  accountId
+  source
+  reason
+  grantedBy
+  grantedAt
+  orderId
+  orderName
+  orderStatus
+  codeBatchId
+  codeBatchName
+  revokedAt
+  revokedBy
+  revokeReason
+  active
+}`) as unknown as TypedDocumentString<EntitlementGraphQuery, EntitlementGraphQueryVariables>;
+export const EntitlementHoldersDocument = new TypedDocumentString(`
+    query EntitlementHolders($kind: GrantKind!, $id: String!) {
+  entitlementHolders(kind: $kind, id: $id) {
+    ...GrantFields
+  }
+}
+    fragment GrantFields on EntitlementGrant {
+  kind
+  itemId
+  itemName
+  accountId
+  source
+  reason
+  grantedBy
+  grantedAt
+  orderId
+  orderName
+  orderStatus
+  codeBatchId
+  codeBatchName
+  revokedAt
+  revokedBy
+  revokeReason
+  active
+}`) as unknown as TypedDocumentString<EntitlementHoldersQuery, EntitlementHoldersQueryVariables>;

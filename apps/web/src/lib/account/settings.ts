@@ -39,9 +39,10 @@ export function canDisconnect(identities: readonly { platform: string }[]): bool
 }
 
 // Appearance → Reduced motion, per device: "system" follows the OS, "reduce" turns motion down
-// everywhere, "full" keeps it on even when the OS asks for less (for scripted motion; CSS that
-// follows the OS media query keeps doing so). app.html applies it before the first paint (the
-// data-motion attribute and a prefers-reduced-motion answer that follows it).
+// everywhere, "full" keeps it on even when the OS asks for less. app.html applies it before the
+// first paint: <html data-motion="reduce" | "full"> (none for System; the front page's hero reads
+// the same attribute), and a prefers-reduced-motion answer from matchMedia that follows it. The
+// global CSS rules honour both values; a few component rules still follow the OS query.
 export type MotionPref = 'system' | 'reduce' | 'full';
 export const MOTION_KEY = 'cyexMotion';
 
