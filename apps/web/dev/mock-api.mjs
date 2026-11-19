@@ -518,17 +518,45 @@ const REPORTS = [
 const CLOSED_REPORTS = [
   { id: 'R0', reason: 'Wrong tag.', reporterId: OTHERS[1].id, state: 'DISMISSED', resolution: 'Fine as is.', createdAt: '2026-11-14T10:00:00.000Z', resolvedAt: '2026-11-14T12:00:00.000Z', emote: ALL[5] },
 ];
+// The built-in roles (ADR 0010): the owners' hidden top role, Admin and the User role everyone
+// holds. The mock's signed-in admin is the owner: it holds the top role and sees it.
 const ROLES = [
-  { id: 'ROLE1', name: 'Admin', description: 'Runs the platform.', position: 100, permissions: ['roles.manage', 'users.view', 'users.restrict', 'audit.view'], public: false },
-  { id: 'ROLE2', name: 'Moderator', description: 'Reviews uploads and reports.', position: 50, permissions: ['emotes.review', 'emotes.takedown'], public: true },
-  { id: 'ROLE3', name: 'Artist', description: 'Makes emotes people love.', position: 10, permissions: [], public: true },
+  { id: 'ROLEROOT', name: 'Owner', description: 'Every permission. Held by the owners only and shown to nobody else.', position: 1000000, permissions: [], public: false, builtIn: 'ROOT' },
+  { id: 'ROLE1', name: 'Admin', description: 'Runs cyex.tv day to day.', position: 1000, permissions: ['roles.manage', 'users.view', 'users.restrict', 'audit.view', 'users.notes'], public: false, builtIn: 'ADMIN' },
+  { id: 'ROLE2', name: 'Moderator', description: 'Reviews uploads and reports.', position: 50, permissions: ['emotes.review', 'emotes.takedown', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets'], public: true, builtIn: null },
+  { id: 'ROLE3', name: 'Artist', description: 'Makes emotes people love.', position: 10, permissions: [], public: true, builtIn: null },
+  { id: 'ROLEUSER', name: 'User', description: 'Every account has this role. Its permissions are everyone’s.', position: 0, permissions: [], public: false, builtIn: 'USER' },
 ];
-const ACCOUNT_ROLES = { [OTHERS[0].id]: ['ROLE2', 'ROLE3'], [OTHERS[1].id]: ['ROLE3'], [ME_ID]: ['ROLE1'] };
+const ACCOUNT_ROLES = { [OTHERS[0].id]: ['ROLE2', 'ROLE3'], [OTHERS[1].id]: ['ROLE3'], [ME_ID]: [] };
+// A role as the signed-in owner sees it: the top role holds everything and can't be touched.
+const roleOut = (r) => {
+  const root = r.builtIn === 'ROOT';
+  const held = (ACCOUNT_ROLES[ME_ID] ?? []).includes(r.id);
+  return { ...r, builtIn: r.builtIn ?? null, permissions: root ? PERMISSIONS : r.permissions,
+    editable: !root && !held, assignable: !root && r.builtIn !== 'USER' };
+};
+const rolesOf = (accountId) => [
+  ...(accountId === ME_ID ? [ROLES[0]] : []),
+  ...(ACCOUNT_ROLES[accountId] ?? []).map((id) => ROLES.find((r) => r.id === id)).filter(Boolean),
+].map(roleOut);
 if (process.env.MOCK_LONG === '1') {
   for (const n of ['Founder', 'Translator of the Many Tongues', 'Beta tester', 'Community helper', 'Event host', 'Supporter', 'Emote reviewer', 'Contest winner'])
     { const id = 'ROLEX' + ROLES.length; ROLES.push({ id, name: n, description: null, position: 5 + ROLES.length, permissions: [], public: true }); ACCOUNT_ROLES[OTHERS[0].id].push(id); }
 }
+// Restrictions: what holds now (with ends) and every one placed, newest first.
 const STATUS = {};
+const RESTRICTIONS = {};
+const statusOf = (id) => {
+  const st = STATUS[id] ?? {};
+  const now = Date.now();
+  const live = (on, until) => !!on && (!until || Date.parse(until) > now);
+  const out = { id, uploadsBlocked: live(st.uploadsBlocked, st.uploadsBlockedUntil), ticketsBlocked: live(st.ticketsBlocked, st.ticketsBlockedUntil), blocked: live(st.blocked, st.blockedUntil) };
+  out.uploadsBlockedUntil = out.uploadsBlocked ? st.uploadsBlockedUntil ?? null : null;
+  out.ticketsBlockedUntil = out.ticketsBlocked ? st.ticketsBlockedUntil ?? null : null;
+  out.blockedUntil = out.blocked ? st.blockedUntil ?? null : null;
+  return out;
+};
+const HOLD_FIELD = { UPLOADS: 'uploadsBlocked', TICKETS: 'ticketsBlocked', ACCOUNT: 'blocked' };
 const AUDIT = Array.from({ length: 64 }, (_, i) => ({
   id: '01JD8XAUD' + String(1000 - i).padStart(17, '0'), actorId: i % 5 === 0 ? null : i % 3 === 0 ? OWNERS[1].id : ME_ID,
   action: ['emote.approved', 'set.editor_added', 'role.updated', 'account.restricted'][i % 4],
@@ -633,7 +661,8 @@ const editorChannels = () => EDITOR_CHANNELS.filter((c) => EDITOR_OF.some((g) =>
 const flagsOn = (ownerId) => (ownerId === ME_ID ? EDITOR_FLAGS : withImplied(EDITOR_OF.find((g) => g.account.id === ownerId)?.permissions ?? []));
 const editorOfOut = () => EDITOR_OF.map((g) => ({ ...g }));
 
-const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view', 'cosmetics.manage', 'cosmetics.grant', 'shop.manage', 'shop.orders', 'codes.manage'];
+const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view', 'cosmetics.manage', 'cosmetics.grant', 'shop.manage', 'shop.orders', 'codes.manage',
+  'roles.assign', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets', 'users.block', 'users.sessions', 'users.notes', 'entitlements.view', 'billing.view', 'subscriptions.manage'];
 
 // ---- Chat cosmetics (ADR 0015) ----------------------------------------------------------
 // SAMPLE DATA ONLY: two made-up badges (simple SVG drawn here) and three sample paints, so the
@@ -1210,7 +1239,7 @@ const ACTIVITY = {
 };
 // `accountActivity(accountId, before, limit)`: newest first, `limit` 1 to 100 (default 30).
 function activityAnswer(v) {
-  if (STATUS[v.accountId]?.blocked) return { data: { accountActivity: [] } };
+  if (statusOf(v.accountId).blocked) return { data: { accountActivity: [] } };
   const limit = Math.min(100, Math.max(1, v.limit ?? 30));
   let rows = ACTIVITY[v.accountId] ?? [];
   if (v.before) rows = rows.filter((a) => a.id < v.before);
@@ -1230,7 +1259,7 @@ function activityPageOf(rows, v, shortFirst = 0) {
   return { entries, next: more ? entries.at(-1)?.id ?? v.before ?? null : null };
 }
 function activityPageAnswer(v) {
-  if (STATUS[v.accountId]?.blocked) return { data: { accountActivityPage: { entries: [], next: null } } };
+  if (statusOf(v.accountId).blocked) return { data: { accountActivityPage: { entries: [], next: null } } };
   return { data: { accountActivityPage: activityPageOf(ACTIVITY[v.accountId] ?? [], v, v.accountId === ME_ID ? 4 : 0) } };
 }
 
@@ -1327,7 +1356,7 @@ const setCard = (s, preview = 12) => {
 // accountSets(accountId, preview): an account's listed sets as cards, signed in or not.
 const accountSets = (accountId, preview) =>
   ALL_SETS().filter((s) => s.owner?.id === accountId && s.kind !== 'GLOBAL' && (s.visibility ?? 'LISTED') === 'LISTED'
-    && !(STATUS[accountId]?.blocked)).slice(0, 50).map((s) => setCard(s, preview ?? 12));
+    && !(statusOf(accountId).blocked)).slice(0, 50).map((s) => setCard(s, preview ?? 12));
 const VISIBILITIES = ['LISTED', 'UNLISTED', 'PRIVATE'];
 let clones = 0;
 // cloneSet(id, name, ownerId, visibility): the API's rules in small: approved emotes only,
@@ -1356,7 +1385,7 @@ function signedIn(body, v, ADMIN) {
   const op = (body.query.match(/(?:query|mutation)\s+(\w+)/) ?? [])[1];
   switch (op) {
     case 'Me':
-      return { data: { me: { id: ME_ID, createdAt: '2026-11-10T12:00:00.000Z', permissions: ADMIN ? PERMISSIONS : [], identities: IDENTITIES } } };
+      return { data: { me: { id: ME_ID, createdAt: '2026-11-10T12:00:00.000Z', permissions: ADMIN ? PERMISSIONS : ROLES.find((r) => r.builtIn === 'USER').permissions, identities: IDENTITIES } } };
     case 'MyEmotes': {
       const per = v.perPage ?? 50;
       const page = v.page ?? 1;
@@ -1492,8 +1521,9 @@ function signedIn(body, v, ADMIN) {
     }
     case 'AccountRoles': {
       if (v.accountId !== ME_ID && !ADMIN) return err('This needs users.view.', 'forbidden');
-      const ids = v.accountId === ME_ID ? (ADMIN ? ['ROLE1'] : []) : ACCOUNT_ROLES[v.accountId] ?? [];
-      return { data: { accountRoles: ids.map((id) => ROLES.find((r) => r.id === id)).filter(Boolean) } };
+      // The signed-in admin is the owner: the top role (only they see it) and what they were given.
+      if (v.accountId === ME_ID && !ADMIN) return { data: { accountRoles: [] } };
+      return { data: { accountRoles: rolesOf(v.accountId) } };
     }
     case 'Editors':
       return { data: { accountEditors: ACCOUNT_EDITORS, editorOf: editorOfOut(), mySets: SETS.map((x) => ({ id: x.id, name: x.name, kind: x.kind, owner: x.owner ? { id: x.owner.id } : null })) } };
@@ -1562,7 +1592,7 @@ function signedIn(body, v, ADMIN) {
       const a = publicAccount(v.accountId);
       if (!ADMIN) return err('This needs users.view or users.restrict.', 'forbidden');
       if (!a) return err('Not found.', 'not_found');
-      const st = STATUS[a.id] ?? { uploadsBlocked: false, blocked: false };
+      const st = statusOf(a.id);
       const idn = (platform, n) => ({ platform, platformUserId: '5550' + a.id.slice(-3) + n, login: a.displayName.toLowerCase(), displayName: a.displayName, avatar: a.avatar });
       return { data: { adminAccount: { ...a, createdAt: '2026-10-02T09:30:00.000Z', ...st, identities: a.id === ME_ID ? IDENTITIES : [idn('TWITCH', 1), ...(a.id.endsWith('NORA') ? [idn('KICK', 2)] : [])] } } };
     }
@@ -1584,42 +1614,79 @@ function signedIn(body, v, ADMIN) {
       return { data: { resolveReport: { id: r.id, state: v.action === 'DISMISS' ? 'DISMISSED' : 'ACTIONED' } } };
     }
     case 'Roles':
-      return { data: { roles: ROLES, permissions: PERMISSIONS } };
+      return { data: { roles: ROLES.map(roleOut), permissions: PERMISSIONS } };
     case 'AllRoles':
-      return { data: { roles: ROLES } };
+      return { data: { roles: ROLES.map(roleOut) } };
     case 'CreateRole': {
-      const r = { id: 'ROLE' + (ROLES.length + 1), ...v.input, description: v.input.description ?? null, public: v.input.public ?? false };
+      if (!(v.input.position >= 1 && v.input.position < 1000000)) return err('Positions are 1 to 999999: above the User role, below the top role.', 'bad_position');
+      if (ROLES.some((x) => x.name.toLowerCase() === v.input.name.toLowerCase())) return err('A role with that name exists.', 'role_name_taken');
+      const r = { id: 'ROLE' + (ROLES.length + 1), ...v.input, description: v.input.description ?? null, public: v.input.public ?? false, builtIn: null };
       ROLES.push(r);
-      return { data: { createRole: r } };
+      ROLES.sort((a, b) => b.position - a.position);
+      return { data: { createRole: roleOut(r) } };
     }
     case 'UpdateRole': {
       const r = ROLES.find((x) => x.id === v.id);
-      Object.assign(r, v.input);
+      if (!r) return err('Not found.', 'not_found');
+      if (r.builtIn === 'ROOT') return err('This is a built-in role; it can’t be changed this way.', 'built_in_role');
+      if (!roleOut(r).editable) return err('You can’t edit a role you hold. Someone above you has to.', 'own_role');
+      if (r.builtIn === 'USER' && v.input.position != null && v.input.position !== 0) return err('This is a built-in role; it can’t be changed this way.', 'built_in_role');
+      Object.assign(r, Object.fromEntries(Object.entries(v.input).filter(([, x]) => x != null)));
       if (r.description === '') r.description = null;
-      return { data: { updateRole: r } };
+      ROLES.sort((a, b) => b.position - a.position);
+      return { data: { updateRole: roleOut(r) } };
     }
-    case 'DeleteRole':
+    case 'DeleteRole': {
+      const r = ROLES.find((x) => x.id === v.id);
+      if (r?.builtIn) return err('This is a built-in role; it can’t be changed this way.', 'built_in_role');
       ROLES.splice(ROLES.findIndex((x) => x.id === v.id), 1);
       return { data: { deleteRole: true } };
+    }
     case 'User': {
       const a = [...OTHERS, ME_SUMMARY].find((o) => o.displayName === v.login);
       return { data: { channelByLogin: a ? { platform: v.platform, platformChannelId: '5550' + a.id.slice(-3), login: v.login, account: a } : null } };
     }
     case 'UserDetails': {
-      const st = STATUS[v.accountId] ?? { uploadsBlocked: false, blocked: false };
-      const roles = (ACCOUNT_ROLES[v.accountId] ?? []).map((id) => ROLES.find((r) => r.id === id)).filter(Boolean);
-      return { data: { ...(v.status ? { accountStatus: st } : {}), ...(v.roles ? { accountRoles: roles } : {}) } };
+      return { data: { ...(v.status ? { accountStatus: statusOf(v.accountId) } : {}), ...(v.roles ? { accountRoles: rolesOf(v.accountId) } : {}) } };
     }
     case 'Restrict': {
       if (v.accountId === ME_ID) return err('The owner’s account can’t be restricted.', 'owner_protected');
-      const st = (STATUS[v.accountId] ??= { uploadsBlocked: false, blocked: false });
-      if (v.uploadsBlocked !== undefined && v.uploadsBlocked !== null) st.uploadsBlocked = v.uploadsBlocked;
-      if (v.blocked !== undefined && v.blocked !== null) st.blocked = v.blocked;
-      return { data: { restrictAccount: st } };
+      const st = (STATUS[v.accountId] ??= {});
+      if (v.uploadsBlocked !== undefined && v.uploadsBlocked !== null) Object.assign(st, { uploadsBlocked: v.uploadsBlocked, uploadsBlockedUntil: null });
+      if (v.blocked !== undefined && v.blocked !== null) Object.assign(st, { blocked: v.blocked, blockedUntil: null });
+      return { data: { restrictAccount: statusOf(v.accountId) } };
     }
-    case 'AssignRole':
+    case 'PlaceRestriction': {
+      if (v.accountId === ME_ID) return err('The owner’s account can’t be restricted.', 'owner_protected');
+      const reason = (v.input.reason ?? '').trim();
+      if (!reason) return err('Give a reason of 1 to 500 characters.', 'bad_reason');
+      if (v.input.until && Date.parse(v.input.until) <= Date.now()) return err('The end has to be in the future.', 'bad_time');
+      const f = HOLD_FIELD[v.input.kind];
+      const now = new Date().toISOString();
+      const list = (RESTRICTIONS[v.accountId] ??= []);
+      for (const r of list) if (r.kind === v.input.kind && r.active) Object.assign(r, { active: false, liftedAt: now, liftedBy: ME_ID });
+      list.unshift({ id: 'RS' + Date.now(), kind: v.input.kind, reason, endsAt: v.input.until ?? null, createdBy: ME_ID, createdAt: now, liftedAt: null, liftedBy: null, active: true });
+      Object.assign((STATUS[v.accountId] ??= {}), { [f]: true, [f + 'Until']: v.input.until ?? null });
+      return { data: { placeRestriction: statusOf(v.accountId) } };
+    }
+    case 'LiftRestriction': {
+      const f = HOLD_FIELD[v.kind];
+      const now = new Date().toISOString();
+      for (const r of RESTRICTIONS[v.accountId] ?? []) if (r.kind === v.kind && r.active) Object.assign(r, { active: false, liftedAt: now, liftedBy: ME_ID });
+      Object.assign((STATUS[v.accountId] ??= {}), { [f]: false, [f + 'Until']: null });
+      return { data: { liftRestriction: statusOf(v.accountId) } };
+    }
+    case 'AccountRestrictions': {
+      const now = Date.now();
+      const rows = (RESTRICTIONS[v.accountId] ?? []).map((r) => ({ ...r, active: r.active && (!r.endsAt || Date.parse(r.endsAt) > now) }));
+      return { data: { accountRestrictions: rows } };
+    }
+    case 'AssignRole': {
+      const r = ROLES.find((x) => x.id === v.roleId);
+      if (!r || r.builtIn === 'ROOT' || r.builtIn === 'USER') return err('This is a built-in role; it can’t be changed this way.', 'built_in_role');
       (ACCOUNT_ROLES[v.accountId] ??= []).push(v.roleId);
       return { data: { assignRole: true } };
+    }
     case 'UnassignRole':
       ACCOUNT_ROLES[v.accountId] = (ACCOUNT_ROLES[v.accountId] ?? []).filter((id) => id !== v.roleId);
       return { data: { unassignRole: true } };
@@ -1656,7 +1723,7 @@ function searchAccounts(v) {
   const tier = (h) => Math.max(...h.identities.map((i) =>
     i.login === text ? 3 : i.login.startsWith(text) ? 2 : i.displayName.toLowerCase().startsWith(text) ? 1 : 0));
   const hits = [...text].length < 2 ? [] : searchPeople()
-    .filter((h) => !STATUS[h.account.id]?.blocked)
+    .filter((h) => !statusOf(h.account.id).blocked)
     .filter((h) => h.identities.some((i) => i.login.includes(text) || i.displayName.toLowerCase().includes(text)))
     .sort((a, b) => tier(b) - tier(a) || a.account.id.localeCompare(b.account.id));
   return { data: { searchAccounts: { total: hits.length, totalCapped: false, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
@@ -1665,7 +1732,7 @@ function searchAccounts(v) {
 // accountProfile(accountId): public logins (no IDs), roles marked public, each channel's active set.
 function accountProfile(id) {
   const account = [ME_SUMMARY, ...OTHERS].find((a) => a.id === id);
-  if (!account || STATUS[id]?.blocked) return null;
+  if (!account || statusOf(id).blocked) return null;
   const identities = id === ME_ID
     ? IDENTITIES.map((i) => ({ platform: i.platform, login: i.login, displayName: i.displayName }))
     : searchPeople().find((h) => h.account.id === id)?.identities ?? [];
@@ -1686,7 +1753,7 @@ function accountCosmetics(ids) {
   const catalog = cosmeticCatalog();
   const out = [];
   for (const id of [...new Set(ids)]) {
-    if (STATUS[id]?.blocked) continue;
+    if (statusOf(id).blocked) continue;
     const pick = C_SELECTED[id];
     if (!pick) continue;
     const badge = catalog.badges.find((b) => b.id === pick.badgeId) ?? null;

@@ -20,6 +20,30 @@ pub const SHOP_ORDERS: &str = "shop.orders";
 /// Make and disable redeem code batches (ADR 0016).
 pub const CODES_MANAGE: &str = "codes.manage";
 
+// Finer permissions (ADR 0010, amendment 2026/11/19). Each one is a narrower way to do part of
+// what an older, broader permission does; the broad one keeps working.
+
+/// Give and take away roles below your own, without editing roles (`roles.manage` does both).
+pub const ROLES_ASSIGN: &str = "roles.assign";
+/// See and resolve reports (`emotes.review` and `emotes.takedown` still see them too).
+pub const REPORTS_MANAGE: &str = "reports.manage";
+/// Stop an account from uploading, for a time or for good (part of `users.restrict`).
+pub const USERS_RESTRICT_UPLOADS: &str = "users.restrict_uploads";
+/// Stop an account from filing reports and tickets (part of `users.restrict`).
+pub const USERS_RESTRICT_TICKETS: &str = "users.restrict_tickets";
+/// Block an account outright: no sign-in, sessions ended (part of `users.restrict`).
+pub const USERS_BLOCK: &str = "users.block";
+/// See where an account is signed in.
+pub const USERS_SESSIONS: &str = "users.sessions";
+/// Read and write staff notes on accounts.
+pub const USERS_NOTES: &str = "users.notes";
+/// See how an account's cosmetics and roles were given (the entitlement graph).
+pub const ENTITLEMENTS_VIEW: &str = "entitlements.view";
+/// See an account's orders and payments (`shop.orders` also refunds).
+pub const BILLING_VIEW: &str = "billing.view";
+/// See and change subscriptions.
+pub const SUBSCRIPTIONS_MANAGE: &str = "subscriptions.manage";
+
 /// Every permission that exists. A role can only hold names from this list.
 pub const ALL: &[&str] = &[
     EMOTES_REVIEW,
@@ -36,6 +60,16 @@ pub const ALL: &[&str] = &[
     SHOP_MANAGE,
     SHOP_ORDERS,
     CODES_MANAGE,
+    ROLES_ASSIGN,
+    REPORTS_MANAGE,
+    USERS_RESTRICT_UPLOADS,
+    USERS_RESTRICT_TICKETS,
+    USERS_BLOCK,
+    USERS_SESSIONS,
+    USERS_NOTES,
+    ENTITLEMENTS_VIEW,
+    BILLING_VIEW,
+    SUBSCRIPTIONS_MANAGE,
 ];
 
 pub fn is_known(name: &str) -> bool {

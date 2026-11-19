@@ -22,6 +22,21 @@ gh pr create --base main --head feat/sets-editors --title "Sets and editors: def
 gh pr merge <n> --merge
 ```
 
+## Admin roles and moderation (branch `feat/admin-roles`, ADR 0010 amendment 2026/11/19)
+- Owner feedback F (2026/11/19): built-in roles, finer permissions, timed restrictions, the admin rail's height.
+- API (additive): migrations `20261207000020_default_roles.sql` (roles.system; User, Admin and the owners' top role) and `20261207000021_timed_restrictions.sql` (`*_until` ends, the tickets hold, `account_restrictions` history, identity holds carry both). `Role` gains `builtIn`, `editable`, `assignable`; `AccountStatus`/`AdminAccount` gain `ticketsBlocked` and the three ends; new `placeRestriction`, `liftRestriction`, `accountRestrictions`. Ten new permissions (`roles.assign`, `reports.manage`, `users.restrict_uploads`, `users.restrict_tickets`, `users.block`, `users.sessions`, `users.notes`, `entitlements.view`, `billing.view`, `subscriptions.manage`); each broad permission keeps working. Rules: nobody edits a role they hold (`own_role`), built-in roles (`built_in_role`), the top role is `not_found` to everyone but the owners, custom positions 1 to 999 999 (`bad_position`). Reports refuse `tickets_blocked`. Audit rows: `account.restriction_placed`, `account.restriction_lifted`.
+- Tests (Postgres, run in CI): `apps/api/tests/builtin_roles_flow.rs` (top role hidden and untouchable, User role is everyone's, own role, granting at or above, roles.assign), `abuse_flow.rs` (`timed_restrictions_end_on_their_own`, `a_ticket_ban_stops_reports_until_lifted`), `crates/db/tests/queries.rs` (`timed_holds_end_and_follow_the_person`); existing role tests updated for the seeded roles. Unit: rbac `nobody_edits_a_role_they_hold`, positions, restriction ends; vitest `src/lib/admin/permissions.test.ts` (every API permission labelled, group checkbox states).
+- Web: the role editor groups permissions (Emotes, Sets, Users, Moderation, Tickets and reports, Cosmetics, Shop and billing, Roles, System) with plain names, a tooltip on hover and focus, and a group checkbox (indeterminate when partial); roles list marks built-in and your own roles and says why one can't be edited. The account page's restrictions panel places uploads, reports or full blocks for 1 hour, 1 day, 7 days, 30 days, until a date, or for good, with a reason, shows ends, lifts them and lists the history. SideRail (shared): no scroll inside the rail any more; a rail taller than the window scrolls with the page; new `fill` prop (the admin rail uses it) runs the full height of the left side.
+- Manual check (2026/11/19): headless Edge against the dev mock at 1440 and 375, dark and light, keyboard focus on the permission tooltips; screens in .claude/runs/2026-11-19-feedback/screens/f.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/admin-roles
+gh pr create --base main --head feat/admin-roles --title "Admin: built-in roles, finer permissions, timed restrictions" --body-file <file>
+gh pr merge <n> --merge
+```
+
 ## Front page: 3D logo hero and four boxes (branch `feat/front-page`)
 
 Owner feedback 2026/11/19, part B. Web only; nothing was deployed.
