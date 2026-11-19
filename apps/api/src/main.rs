@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let auth = Arc::new(Auth::new(auth_cfg)?);
 
     let db = cyex_tv_db::connect(&cfg).await?;
-    cyex_tv_db::MIGRATOR.run(&db).await?;
+    cyex_tv_db::migrate(&db).await?;
 
     let trust_cloudflare = matches!(
         std::env::var("CYEX_TV_TRUST_CLOUDFLARE").as_deref(),
@@ -35,6 +35,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         cyex_tv_api::limits::Rates::default(),
         trust_cloudflare,
     ));
+    // Chat-client reads shared for a few seconds per instance (`read_cache`); 0 turns it off.
+    let read_cache_ms = match std::env::var("CYEX_TV_READ_CACHE_MS") {
+        Ok(raw) => raw
+            .trim()
+            .parse::<u64>()
+            .map_err(|_| "CYEX_TV_READ_CACHE_MS must be a whole number of milliseconds")?,
+        Err(_) => cyex_tv_api::read_cache::DEFAULT_TTL.as_millis() as u64,
+    };
+    state = state.with_read_cache(std::time::Duration::from_millis(read_cache_ms));
     if let Ok(cdn) = std::env::var("CYEX_TV_CDN_URL") {
         state = state.with_cdn_url(&cdn);
     }

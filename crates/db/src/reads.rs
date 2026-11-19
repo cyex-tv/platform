@@ -281,21 +281,23 @@ pub async fn newest_members(
     access: &MemberAccess<'_>,
     per_set: i64,
 ) -> DbResult<Vec<MemberRow>> {
+    // Per set, the members in index order (`emote_set_members_set_newest`) until `per_set` pass
+    // the access rule, instead of numbering every member of every set.
     Ok(sqlx::query_as(&format!(
-        "SELECT * FROM (
-             SELECT {},
-                    row_number() OVER (PARTITION BY m.set_id
-                                       ORDER BY m.added_at DESC, m.emote_id DESC) AS rn
+        "SELECT t.* FROM (SELECT DISTINCT u.id FROM unnest($1::uuid[]) AS u(id)) s
+         CROSS JOIN LATERAL (
+             SELECT {}
              FROM emote_set_members m
              JOIN emotes e ON e.id = m.emote_id AND e.deleted_at IS NULL
              LEFT JOIN files f ON f.id = e.file_id
-             WHERE m.set_id = ANY($1)
+             WHERE m.set_id = s.id
                AND (e.state = 'approved'
                     OR (e.state = 'pending'
                         AND ($2 OR m.set_id = ANY($3) OR e.owner_account_id = $4)))
+             ORDER BY m.added_at DESC, m.emote_id DESC
+             LIMIT $5
          ) t
-         WHERE rn <= $5
-         ORDER BY set_id, rn",
+         ORDER BY t.set_id, t.added_at DESC, t.emote_id DESC",
         member_columns!()
     ))
     .bind(set_ids)

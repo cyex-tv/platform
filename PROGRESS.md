@@ -7,11 +7,43 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 Handoff `2026-11-19-03-deck-to-cyextv-app-sign-in` from the deck chat.
 - [x] Flow: authorization code + PKCE S256 with a loopback redirect (RFC 8252, any port on `127.0.0.1` or `[::1]`, path `/callback`). `GET /v1/auth/app/authorize` checks the client and redirect (400, never redirected to, when they fail) and sends the browser to the site's `/authorize` consent page; `POST /v1/auth/app/consent` (site cookie and Origin only) answers where to go (code and state, or `access_denied`); `POST /v1/auth/app/token` (form; `authorization_code` or `refresh_token`); `POST /v1/auth/app/revoke` (RFC 7009); `GET /v1/auth/app/clients/{id}`.
 - [x] Public client `cyex-deck` in `crates/auth/src/app.rs` (no secret). Scopes `sets.emotes` (`addSetEmote`, `updateSetEmote`, `removeSetEmote`) and `cosmetics.select` (`selectCosmetics`); queries open, every other mutation `insufficient_scope` (checked per resolved field), uploads refused.
-- [x] Lifetimes: code 2 minutes, single use (a replay signs out what it gave); access 1 hour, not slid; refresh 60 days, rotated, reuse signs the session out. One `sessions` row per sign-in (migration `20261207000090`: `app_client_id`, `access_expires_at`, `app_auth_codes`, `app_refresh_tokens`), listed once in `mySessions` as the app (`appClientId`), revocable there; refresh tokens go with the session.
+- [x] Lifetimes: code 2 minutes, single use (a replay signs out what it gave); access 1 hour, not slid; refresh 60 days, rotated, reuse signs the session out. One `sessions` row per sign-in (migration `20261208000910`: `app_client_id`, `access_expires_at`, `app_auth_codes`, `app_refresh_tokens`), listed once in `mySessions` as the app (`appClientId`), revocable there; refresh tokens go with the session.
 - [x] GraphQL (additive): `channelEditableSets(platform, id | login)` with `role`, `canEditActiveSet` and each set's `access` (`OWNER`, `ACCOUNT_EDITOR`, `SET_EDITOR`, `STAFF`), built on the same rights check as `addSetEmote`. `AccountSession.appClientId`.
 - [x] Website: `/authorize` consent page (cyex app layer: one card, the app, what it may do, the account with Not you?, Deny and Allow; sign-in buttons when signed out; one error state for bad links). Dev mock: the whole flow. Docs: App sign-in guide on /developers, the five endpoints in the reference.
 - [x] Tests: `apps/api/tests/app_sign_in_flow.rs` (Postgres in CI), unit tests in `crates/auth/src/app.rs`, vitest `app-auth.test.ts`.
 - [x] Manual (CDP, `.claude/runs/2026-11-20-overnight/screens/app-sign-in/shots.mjs`, 375 and 1440, dark and light): consent, sign-in and invalid states; Allow and Deny go back to the loopback address.
+## Scale: hot reads at 100k emotes, 50k accounts, 20k channels (branch `perf/scale-1`)
+
+Owner: "make sure everything is already laid out for a higher scale deployment like thousands of emotes and users". Audit with file:line and the proposals: `.claude/runs/2026-11-19-feedback/scale-audit.md`.
+- [x] Migrations `20261208000901`..`904` (additive, `CREATE INDEX CONCURRENTLY`, one per file, `-- no-transaction`): set members by emote and newest add (channel counts index-only, `emoteChannels` in order), set members by set and newest add (card previews), searchable emotes by TOP and by NEW order.
+- [x] `search`: no `count(*) OVER ()` outside TRENDING (counted apart, skipped on a short page), name candidates through the trigram and tag indexes, the tag check skipped when no tag is asked, empty-text RELEVANCE in index order. Same answers (tested against the old query); `quickSearch` now leaves unlisted emotes out, as documented.
+- [x] `newest_members` reads each set's newest members from the index (LATERAL ... LIMIT) instead of numbering all of them; `emote_activity_rows` reads its two kinds of row from their own indexes, a page each; outbox pruning deletes in batches of 10 000.
+- [x] API: `read_cache` shares the chat-client reads (`/v1/sets/{id}`, `/v1/sets/global`, `/v1/channels/{platform}/{id}`, `/v1/emotes/{id}`, `/v1/cosmetics`) per instance: one build for everyone asking at once, kept up to `CYEX_TV_READ_CACHE_MS` (default 5000, 0 off), dropped when the instance's feeder sees an event about it (`Hub::tap`, additive). Answers, headers and status codes unchanged.
+- [x] Website: a public set draws 120 emotes at a time with Load more.
+- [x] Extension (cyex-tv/extension PR 33, merged): personal emote lookups ask for every queued chatter, 100 a request (a busy chat lost everyone past 100 for 10 minutes).
+- [x] Tests: `crates/db/tests/scale.rs` (seeded volumes; Postgres' own counters show the browse, search, preview, emote channels and emote activity reads use their indexes; the rewritten reads answer exactly what the old ones did; batched pruning); `read_cache` unit tests; `catalog_flow::cached_reads_follow_events` with a live feeder. CI's `load` job times each read at full scale, old against new (`scale -- --ignored --nocapture`).
+### GitHub write log for this PR
+
+```
+git push -u origin perf/scale-1
+gh pr create --base main --head perf/scale-1 --title "Scale: hot reads, indexes and a shared chat-read cache" --body-file <file>
+gh pr create --repo cyex-tv/extension --base main --head fix/personal-lookup-batches --title "Personal emote lookups: every queued chatter, 100 a request" --body-file <file>
+gh pr merge 33 --repo cyex-tv/extension --merge
+## API coverage suite (branch `test/api-coverage`)
+
+Goal: every endpoint exists and works as the website calls it. Tests only, in one new test binary `apps/api/tests/api_coverage/` (Postgres in CI).
+- [x] `contract`: reads every GraphQL operation from `apps/web/src/lib/queries.ts` and `paint-studio/queries.ts` (with the fragments each uses), and runs all of them through the real router as the site sends them (cookie and `Origin`) with seeded data: an operation or field the API doesn't have fails, and so does any error except the two listed (checkout and refund need Paddle). An operation added to the site and not run by the test fails it. Also the site's REST calls: emote upload, cosmetic picture upload (and the same bytes again), the Twitch and Kick sign-in redirects, sign-out.
+- [x] `authz`: every root field from introspection, called signed out (all but the public reads answer `signed_out`) and, for staff fields, by an account without roles (`forbidden`).
+- [x] `live`: one `addSetEmote` reaches both a `/v1/gql/ws` subscriber and a `/v1/events` client (events service as a dev-dependency), each fed from the same outbox.
+- [x] `validation`: input rules no other test sent a bad value to (badge, paint, shop item, code batch, grant reason, lookups over 100, review search, reject reason, note body, tags, restriction end, editor sets, role name), and nothing changed.
+- [x] Inventory with before and after counts: `.claude/runs/2026-11-20-overnight/api-coverage.md`.
+
+### GitHub write log for this PR
+
+```
+git push -u origin test/api-coverage
+gh pr create --base main --head test/api-coverage --title "Tests: API coverage suite (website contract, auth sweep, both sockets, input rules)" --body-file <file>
+```
 
 ## Cosmetics for real: badge upload and studio paints (branch `fix/cosmetics-real`)
 

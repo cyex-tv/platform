@@ -44,6 +44,17 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 /// Migrations in `crates/db/migrations`, embedded at build time. The api service runs them on start.
 pub static MIGRATOR: Migrator = sqlx::migrate!("./migrations");
 
+/// Runs `MIGRATOR` on a connection of its own without the pool's statement timeout: an index
+/// built `CONCURRENTLY` on a large table takes longer than a request may. The connection is
+/// closed afterwards, so the pool never gets it back without its timeout.
+pub async fn migrate(pool: &PgPool) -> Result<(), sqlx::migrate::MigrateError> {
+    let mut conn = pool.acquire().await?.detach();
+    conn.execute("SET statement_timeout = 0").await?;
+    let done = MIGRATOR.run(&mut conn).await;
+    let _ = sqlx::Connection::close(conn).await;
+    done
+}
+
 /// Opens the pool and checks that one connection works.
 pub async fn connect(cfg: &Config) -> Result<PgPool, sqlx::Error> {
     options(cfg).connect(&cfg.database_url).await

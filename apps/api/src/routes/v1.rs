@@ -25,6 +25,9 @@ use sha2::{Digest, Sha256};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 
+use std::sync::Arc;
+
+use crate::read_cache::{self, Body};
 use crate::state::{AppState, MaybeCaller};
 use crate::{catalog, cosmetics, moderation, shop, upload};
 
@@ -461,10 +464,22 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// The body and strong `ETag` (a hash of the body) of a read's answer.
+fn built<T: Serialize>(value: &T) -> ApiResult<Arc<Body>> {
+    let json = serde_json::to_vec(value).map_err(|_| ApiError::internal())?;
+    let etag = format!("\"{}\"", hex(&Sha256::digest(&json)[..16]));
+    Ok(Arc::new(Body { json, etag }))
+}
+
 /// Answers JSON with a strong `ETag` (a hash of the body), or `304` when `If-None-Match` has it.
 fn cached<T: Serialize>(headers: &HeaderMap, value: &T, max_age: u32) -> ApiResult<Response> {
-    let body = serde_json::to_vec(value).map_err(|_| ApiError::internal())?;
-    let etag = format!("\"{}\"", hex(&Sha256::digest(&body)[..16]));
+    let body = built(value)?;
+    respond(headers, &body, max_age)
+}
+
+/// `cached` for an answer already built.
+fn respond(headers: &HeaderMap, body: &Body, max_age: u32) -> ApiResult<Response> {
+    let etag = body.etag.as_str();
     let cache = format!("public, max-age={max_age}, stale-while-revalidate=60");
     let fresh = headers
         .get(IF_NONE_MATCH)
@@ -472,23 +487,50 @@ fn cached<T: Serialize>(headers: &HeaderMap, value: &T, max_age: u32) -> ApiResu
         .is_some_and(|v| {
             v.split(',')
                 .map(str::trim)
-                .any(|t| t == "*" || t == etag || t.strip_prefix("W/") == Some(etag.as_str()))
+                .any(|t| t == "*" || t == etag || t.strip_prefix("W/") == Some(etag))
         });
     let mut response = if fresh {
         StatusCode::NOT_MODIFIED.into_response()
     } else {
-        ([(CONTENT_TYPE, "application/json")], body).into_response()
+        ([(CONTENT_TYPE, "application/json")], body.json.clone()).into_response()
     };
     let out = response.headers_mut();
     out.insert(
         ETAG,
-        HeaderValue::from_str(&etag).map_err(|_| ApiError::internal())?,
+        HeaderValue::from_str(etag).map_err(|_| ApiError::internal())?,
     );
     out.insert(
         CACHE_CONTROL,
         HeaderValue::from_str(&cache).map_err(|_| ApiError::internal())?,
     );
     Ok(response)
+}
+
+/// A public read through the instance's read cache (`read_cache`): built once for everyone
+/// asking at the same time, answered with its `ETag`, `404` when there is nothing.
+async fn shared_read<T, F, Fut>(
+    state: &AppState,
+    headers: &HeaderMap,
+    key: Option<String>,
+    load: F,
+) -> ApiResult<Response>
+where
+    T: Serialize,
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = ApiResult<Option<T>>>,
+{
+    let build = || async move {
+        match load().await? {
+            Some(value) => built(&value).map(Some),
+            None => Ok(None),
+        }
+    };
+    let answer = match key {
+        Some(key) => state.reads.get_or_load(&key, build).await?,
+        None => build().await?,
+    };
+    let body = answer.ok_or_else(catalog::not_found)?;
+    respond(headers, &body, READ_MAX_AGE)
 }
 
 /// A channel and its active set ID. Poll this, then fetch the set.
@@ -512,10 +554,11 @@ async fn get_channel(
     headers: HeaderMap,
 ) -> ApiResult<Response> {
     let platform = platform(&raw)?;
-    let channel = catalog::channel(&state, platform, &id)
-        .await?
-        .ok_or_else(catalog::not_found)?;
-    cached(&headers, &channel, READ_MAX_AGE)
+    let key = cyex_tv_db::outbox::channel_topic(platform, id.trim());
+    shared_read(&state, &headers, Some(key), || {
+        catalog::channel(&state, platform, &id)
+    })
+    .await
 }
 
 /// A set with its emotes.
@@ -535,10 +578,8 @@ async fn get_set(
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> ApiResult<Response> {
-    let set = catalog::set(&state, None, &id)
-        .await?
-        .ok_or_else(catalog::not_found)?;
-    cached(&headers, &set, READ_MAX_AGE)
+    let key = cyex_tv_db::ids::from_text(id.trim()).map(read_cache::set_key);
+    shared_read(&state, &headers, key, || catalog::set(&state, None, &id)).await
 }
 
 /// The cyex.tv global set, shown in every channel.
@@ -549,8 +590,13 @@ async fn get_set(
     responses((status = 200, body = EmoteSet), (status = 304, description = "Not modified."))
 )]
 async fn get_global_set(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Response> {
-    let set = catalog::global_set(&state, None).await?;
-    cached(&headers, &set, READ_MAX_AGE)
+    shared_read(
+        &state,
+        &headers,
+        Some(read_cache::GLOBAL_SET_KEY.to_owned()),
+        || async { catalog::global_set(&state, None).await.map(Some) },
+    )
+    .await
 }
 
 /// An approved emote.
@@ -570,10 +616,11 @@ async fn get_emote(
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> ApiResult<Response> {
-    let emote = moderation::emote(&state, None, &id)
-        .await?
-        .ok_or_else(catalog::not_found)?;
-    cached(&headers, &emote, READ_MAX_AGE)
+    let key = cyex_tv_db::ids::from_text(id.trim()).map(read_cache::emote_key);
+    shared_read(&state, &headers, key, || {
+        moderation::emote(&state, None, &id)
+    })
+    .await
 }
 
 /// Personal sets for up to 100 chatters at once, for clients rendering a chat.
@@ -604,8 +651,13 @@ async fn lookup_personal_sets(
     responses((status = 200, body = CosmeticCatalog), (status = 304, description = "Not modified."))
 )]
 async fn get_cosmetics(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Response> {
-    let catalog = cosmetics::catalog(&state).await?;
-    cached(&headers, &catalog, READ_MAX_AGE)
+    shared_read(
+        &state,
+        &headers,
+        Some(read_cache::COSMETICS_KEY.to_owned()),
+        || async { cosmetics::catalog(&state).await.map(Some) },
+    )
+    .await
 }
 
 /// The badge and paint up to 100 chatters show, as catalog IDs. Only chatters showing something
