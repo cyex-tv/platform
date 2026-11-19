@@ -514,7 +514,7 @@ pub async fn selections_for_accounts(
     Ok(sqlx::query_as(
         "SELECT s.account_id, s.badge_id, s.paint_id
          FROM cosmetic_selections s
-         JOIN accounts a ON a.id = s.account_id AND a.deleted_at IS NULL AND a.blocked_at IS NULL
+         JOIN accounts a ON a.id = s.account_id AND a.deleted_at IS NULL AND (a.blocked_at IS NULL OR a.blocked_until <= now())
          WHERE s.account_id = ANY($1) AND (s.badge_id IS NOT NULL OR s.paint_id IS NOT NULL)
          ORDER BY s.account_id",
     )
@@ -531,7 +531,7 @@ pub async fn selections_for_users(
     Ok(sqlx::query_as(
         "SELECT i.platform_user_id, s.badge_id, s.paint_id
          FROM identities i
-         JOIN accounts a ON a.id = i.account_id AND a.deleted_at IS NULL AND a.blocked_at IS NULL
+         JOIN accounts a ON a.id = i.account_id AND a.deleted_at IS NULL AND (a.blocked_at IS NULL OR a.blocked_until <= now())
          JOIN cosmetic_selections s ON s.account_id = i.account_id
          WHERE i.platform = $1
            AND i.platform_user_id = ANY($2)

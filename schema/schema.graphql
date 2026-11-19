@@ -115,6 +115,16 @@ type AccountStatus {
 	No sign-in, no sessions.
 	"""
 	blocked: Boolean!
+	"""
+	No reports or tickets.
+	"""
+	ticketsBlocked: Boolean!
+	"""
+	When each hold ends; empty while it is off or for good.
+	"""
+	uploadsBlockedUntil: String
+	blockedUntil: String
+	ticketsBlockedUntil: String
 }
 
 """
@@ -273,6 +283,16 @@ type AdminAccount {
 	createdAt: String!
 	uploadsBlocked: Boolean!
 	blocked: Boolean!
+	"""
+	No reports or tickets.
+	"""
+	ticketsBlocked: Boolean!
+	"""
+	When each hold ends; empty while it is off or for good.
+	"""
+	uploadsBlockedUntil: String
+	blockedUntil: String
+	ticketsBlockedUntil: String
 }
 
 """
@@ -311,6 +331,24 @@ type Badge {
 	image: CosmeticImage!
 	createdAt: String!
 	updatedAt: String!
+}
+
+"""
+The roles cyex.tv comes with (ADR 0010).
+"""
+enum BuiltInRole {
+	"""
+	"User": every account holds it without an assignment. Starts with no permissions.
+	"""
+	USER
+	"""
+	"Admin": can't be deleted.
+	"""
+	ADMIN
+	"""
+	The top role: every permission, held by the owners only, never granted or edited.
+	"""
+	ROOT
 }
 
 type Channel {
@@ -1003,8 +1041,22 @@ type Mutation {
 	"""
 	takedownEmote(id: String!, reason: String!): Emote!
 	"""
-	Block an account's uploads, or the whole account. Needs `users.restrict`; the owner is
-	protected. Audited.
+	Restrict an account with a reason, for good or `until` a time: no uploads
+	(`users.restrict_uploads`), no reports or tickets (`users.restrict_tickets`), or a full
+	block that ends its sessions (`users.block`); `users.restrict` does all three. A running
+	restriction of the same kind is replaced. The owner, and accounts whose highest role is at
+	or above yours, are protected. Audited.
+	"""
+	placeRestriction(accountId: String!, input: RestrictionInput!): AccountStatus!
+	"""
+	Lift a restriction early, with an optional reason. Needs the same permission as placing
+	it. Audited.
+	"""
+	liftRestriction(accountId: String!, kind: RestrictionKind!, reason: String): AccountStatus!
+	"""
+	Block an account's uploads, or the whole account, for good and without a reason (see
+	`placeRestriction` for timed ones). Needs `users.restrict`, or `users.restrict_uploads` /
+	`users.block` for the one you change; the owner is protected. Audited.
 	"""
 	restrictAccount(accountId: String!, uploadsBlocked: Boolean, blocked: Boolean): AccountStatus!
 	"""
@@ -1043,20 +1095,23 @@ type Mutation {
 	"""
 	createRole(input: CreateRoleInput!): Role!
 	"""
-	Change a role below your own highest one. Needs `roles.manage`. Audited.
+	Change a role below your own highest one that you don't hold. The top role can't be
+	changed; the User role keeps position 0. Needs `roles.manage`. Audited.
 	"""
 	updateRole(id: String!, input: UpdateRoleInput!): Role!
 	"""
-	Delete a role below your own highest one. Needs `roles.manage`. Audited.
+	Delete a role below your own highest one that you don't hold; built-in roles stay.
+	Needs `roles.manage`. Audited.
 	"""
 	deleteRole(id: String!): Boolean!
 	"""
-	Give an account a role. Needs `roles.manage`. Audited.
+	Give an account a role below your highest one that grants only what you hold. Needs
+	`roles.manage` or `roles.assign`; the User and top roles can't be given. Audited.
 	"""
 	assignRole(accountId: String!, roleId: String!): Boolean!
 	"""
 	Take a role from an account. The owner and the last `roles.manage` holder are protected.
-	Needs `roles.manage`. Audited.
+	Needs `roles.manage` or `roles.assign`. Audited.
 	"""
 	unassignRole(accountId: String!, roleId: String!): Boolean!
 }
@@ -1629,12 +1684,19 @@ type Query {
 	"""
 	myNotifications(unreadOnly: Boolean): [Notification!]!
 	"""
-	Whether an account's uploads or sign-in are blocked. Needs `users.view` or
-	`users.restrict`.
+	Every restriction placed on an account, newest first (the latest 100), running or over,
+	with its reason and end. Needs `users.view`, `users.restrict` or a narrower restrict
+	permission.
+	"""
+	accountRestrictions(accountId: String!): [Restriction!]!
+	"""
+	What an account may do now: uploads, reports and sign-in, each with its end when timed.
+	Needs `users.view`, `users.restrict` or a narrower restrict permission.
 	"""
 	accountStatus(accountId: String!): AccountStatus!
 	"""
-	All roles. Needs `roles.manage`.
+	All roles, most senior first, each with whether you may edit or assign it. Needs
+	`roles.manage` or `roles.assign`. The top role is listed to the owners only.
 	"""
 	roles: [Role!]!
 }
@@ -1701,6 +1763,69 @@ enum ReportState {
 	ACTIONED
 }
 
+"""
+One restriction placed on an account, running or over.
+"""
+type Restriction {
+	id: String!
+	kind: RestrictionKind!
+	"""
+	Why, as staff wrote it. Empty on restrictions made without one (`restrictAccount`).
+	"""
+	reason: String
+	"""
+	When it ends; empty for good.
+	"""
+	endsAt: String
+	"""
+	The staff account that placed it.
+	"""
+	createdBy: String
+	createdAt: String!
+	"""
+	When staff lifted it early, or a newer restriction of the same kind replaced it.
+	"""
+	liftedAt: String
+	liftedBy: String
+	"""
+	Still holding now.
+	"""
+	active: Boolean!
+}
+
+"""
+A restriction to place.
+"""
+input RestrictionInput {
+	kind: RestrictionKind!
+	"""
+	When it ends (RFC 3339, in the future, at most ten years out); empty for good.
+	"""
+	until: String
+	"""
+	Why: 1 to 500 characters. Staff see it; the account doesn't.
+	"""
+	reason: String!
+}
+
+"""
+What a restriction stops.
+"""
+enum RestrictionKind {
+	"""
+	Uploading emotes (`users.restrict_uploads`).
+	"""
+	UPLOADS
+	"""
+	Filing reports and tickets (`users.restrict_tickets`).
+	"""
+	TICKETS
+	"""
+	The whole account: no sign-in, sessions ended (`users.block`).
+	"""
+	ACCOUNT
+}
+
 type ReviewQueue {
 	items: [Emote!]!
 	total: Int!
@@ -1719,6 +1844,20 @@ type Role {
 	Shown on its holders' public profiles (`accountProfile`). Off by default.
 	"""
 	public: Boolean!
+	"""
+	Set on the built-in roles: `USER` (every account holds it), `ADMIN` and `ROOT` (the
+	owners' top role, shown only to its holders).
+	"""
+	builtIn: BuiltInRole
+	"""
+	Whether you may change it: below your highest role, not one you hold, not the top role.
+	"""
+	editable: Boolean!
+	"""
+	Whether you may give it to someone (and take it away): below your highest role, you hold
+	what it grants, and not the User or top role.
+	"""
+	assignable: Boolean!
 }
 
 type SearchResults {

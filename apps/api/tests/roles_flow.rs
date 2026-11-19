@@ -167,9 +167,10 @@ async fn the_owner_holds_everything() {
     let r = w
         .gql(&owner, "{ roles { name position permissions } }", json!({}))
         .await;
-    assert_eq!(r["data"]["roles"][0]["name"], "Admins");
+    // After the owners' top role.
+    assert_eq!(r["data"]["roles"][1]["name"], "Admins", "{r}");
     assert_eq!(
-        r["data"]["roles"][0]["permissions"]
+        r["data"]["roles"][1]["permissions"]
             .as_array()
             .unwrap()
             .len(),
@@ -351,7 +352,8 @@ async fn the_last_manager_stays() {
     w.assign(&owner, &admin, &top).await;
     w.assign(&owner, &admin, &managers).await;
 
-    // The admin is the only non-owner with roles.manage: none of these may go through.
+    // The admin is the only non-owner with roles.manage: none of these may go through. Deleting
+    // or emptying the role they hold is refused before that: nobody edits their own role.
     assert_eq!(
         code(&w.unassign(&admin, &admin, &managers).await),
         "last_manager"
@@ -365,7 +367,7 @@ async fn the_last_manager_stays() {
             )
             .await
         ),
-        "last_manager"
+        "own_role"
     );
     assert_eq!(
         code(
@@ -376,7 +378,7 @@ async fn the_last_manager_stays() {
             )
             .await
         ),
-        "last_manager"
+        "own_role"
     );
     // Nothing changed.
     let r = w.gql(&admin, "{ me { permissions } }", json!({})).await;

@@ -152,7 +152,7 @@ async fn profiles_show_only_public_things() {
     let admin = w.user("6001").await;
     let alice = w.user("6002").await;
     let stranger = w.user("6003").await;
-    w.role("Admin", 100, &["roles.manage"], &admin).await;
+    w.role("Admins", 100, &["roles.manage"], &admin).await;
     let artist = w.role("Artist", 10, &[], &alice).await;
     let _staff = w
         .role("Trust and safety", 50, &["emotes.review"], &alice)

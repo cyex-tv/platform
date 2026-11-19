@@ -4,6 +4,12 @@
 //!
 //! Every role change takes one advisory lock, so two admins demoting each other at the same time
 //! can't both pass the lock-out check.
+//!
+//! Built-in roles (migration `default_roles`): "User" is everyone's without an assignment, so it
+//! is never assigned or taken away and its position stays 0; "Admin" can't be deleted; the top
+//! role is the owners' (`CYEX_TV_OWNER_IDS`), listed to them only, never granted, edited or
+//! deleted. Nobody edits a role they hold. Giving and taking roles needs `roles.manage` or the
+//! narrower `roles.assign`; making and editing them needs `roles.manage`.
 
 use std::collections::BTreeSet;
 
@@ -13,7 +19,7 @@ use cyex_tv_auth::{AuthError, Caller};
 use cyex_tv_db::roles::{self, NewRole, RolePatch};
 use cyex_tv_db::{DbError, accounts, audit, ids};
 use cyex_tv_shared::error::{ApiError, ApiResult};
-use cyex_tv_shared::model::{AuditEntry, CreateRole, Role, UpdateRole};
+use cyex_tv_shared::model::{AuditEntry, BuiltInRole, CreateRole, Role, UpdateRole};
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
 use serde_json::{Value, json};
@@ -51,14 +57,21 @@ fn sqlx_error(err: sqlx::Error) -> ApiError {
 }
 
 pub(crate) async fn actor(conn: &mut PgConnection, caller: &Caller) -> ApiResult<Actor> {
-    let held = permissions_of(conn, caller).await?;
-    let highest = roles::highest_position(conn, caller.account_id)
+    let perms = permissions_of(conn, caller).await?;
+    let held = roles::roles_of(conn, caller.account_id)
         .await
         .map_err(db_error)?;
+    // The owners hold the top role.
+    let highest = if caller.owner {
+        Some(roles::ROOT_POSITION)
+    } else {
+        held.iter().map(|r| r.position).max()
+    };
     Ok(Actor {
         owner: caller.owner,
-        permissions: held.into_iter().collect(),
+        permissions: perms.into_iter().collect(),
         highest,
+        held: held.into_iter().map(|r| r.id).collect(),
     })
 }
 
@@ -69,6 +82,68 @@ async fn require(conn: &mut PgConnection, caller: &Caller, permission: &str) -> 
         return Err(forbidden(&format!("This needs {permission}.")));
     }
     Ok(actor)
+}
+
+/// The actor, if they may give and take roles: `roles.manage` or `roles.assign`.
+async fn assigner(conn: &mut PgConnection, caller: &Caller) -> ApiResult<Actor> {
+    let actor = actor(conn, caller).await?;
+    if !actor.holds(permissions::ROLES_MANAGE) && !actor.holds(permissions::ROLES_ASSIGN) {
+        return Err(forbidden("This needs roles.manage or roles.assign."));
+    }
+    Ok(actor)
+}
+
+fn built_in(role: &roles::Role) -> Option<BuiltInRole> {
+    match role.system.as_deref() {
+        Some(roles::SYSTEM_USER) => Some(BuiltInRole::User),
+        Some(roles::SYSTEM_ADMIN) => Some(BuiltInRole::Admin),
+        Some(roles::SYSTEM_ROOT) => Some(BuiltInRole::Root),
+        _ => None,
+    }
+}
+
+/// Custom roles sit between the User role (0) and the top role.
+fn position(p: i32) -> ApiResult<i32> {
+    if p <= 0 || p >= roles::ROOT_POSITION {
+        return Err(bad(
+            "bad_position",
+            &format!(
+                "Positions are 1 to {}: above the User role, below the top role.",
+                roles::ROOT_POSITION - 1
+            ),
+        ));
+    }
+    Ok(p)
+}
+
+/// Loads a role the caller may know about: the top role is `not_found` to everyone but its
+/// holders (the owners).
+async fn load_visible(
+    conn: &mut PgConnection,
+    caller: &Caller,
+    id: Uuid,
+) -> ApiResult<roles::Role> {
+    let role = load(conn, id).await?;
+    if role.is(roles::SYSTEM_ROOT) && !caller.owner {
+        return Err(not_found());
+    }
+    Ok(role)
+}
+
+/// The top role is never granted, edited or deleted.
+fn not_root(role: &roles::Role) -> ApiResult<()> {
+    match role.is(roles::SYSTEM_ROOT) {
+        true => Err(rule(RuleError::BuiltIn)),
+        false => Ok(()),
+    }
+}
+
+/// Neither is the User role assigned: everyone holds it.
+fn assignable_kind(role: &roles::Role) -> ApiResult<()> {
+    match role.is(roles::SYSTEM_ROOT) || role.is(roles::SYSTEM_USER) {
+        true => Err(rule(RuleError::BuiltIn)),
+        false => Ok(()),
+    }
 }
 
 /// Accounts other than the owners that hold `roles.manage`.
@@ -122,14 +197,31 @@ fn permission_list(raw: &[String]) -> ApiResult<Vec<String>> {
     Ok(set.into_iter().collect())
 }
 
-async fn view(conn: &mut PgConnection, role: &roles::Role) -> ApiResult<Role> {
+/// A role as `actor` sees it: with what they may do with it.
+async fn view(conn: &mut PgConnection, role: &roles::Role, actor: &Actor) -> ApiResult<Role> {
+    // The top role holds every permission in code (see the migration).
+    let perms = if role.is(roles::SYSTEM_ROOT) {
+        cyex_tv_auth::rbac::all_permissions()
+    } else {
+        roles::permissions(conn, role.id).await.map_err(db_error)?
+    };
+    let editable = !role.is(roles::SYSTEM_ROOT)
+        && actor.holds(permissions::ROLES_MANAGE)
+        && actor.may_edit(role.id, role.position).is_ok();
+    let assignable = assignable_kind(role).is_ok()
+        && (actor.holds(permissions::ROLES_MANAGE) || actor.holds(permissions::ROLES_ASSIGN))
+        && actor.may_manage(role.position).is_ok()
+        && actor.may_grant(perms.iter().map(String::as_str)).is_ok();
     Ok(Role {
         id: ids::to_text(role.id),
         name: role.name.clone(),
         description: role.description.clone(),
         position: role.position,
-        permissions: roles::permissions(conn, role.id).await.map_err(db_error)?,
+        permissions: perms,
         public: role.public,
+        built_in: built_in(role),
+        editable,
+        assignable,
     })
 }
 
@@ -186,12 +278,17 @@ async fn load(conn: &mut PgConnection, id: Uuid) -> ApiResult<roles::Role> {
 
 // Reads
 
+/// Every role, most senior first. Needs `roles.manage` or `roles.assign`. The top role is listed
+/// to its holders (the owners) only.
 pub async fn list(state: &AppState, caller: &Caller) -> ApiResult<Vec<Role>> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    require(&mut conn, caller, permissions::ROLES_MANAGE).await?;
+    let actor = assigner(&mut conn, caller).await?;
     let mut out = Vec::new();
     for role in roles::list(&mut conn).await.map_err(db_error)? {
-        out.push(view(&mut conn, &role).await?);
+        if role.is(roles::SYSTEM_ROOT) && !caller.owner {
+            continue;
+        }
+        out.push(view(&mut conn, &role, &actor).await?);
     }
     Ok(out)
 }
@@ -204,18 +301,38 @@ pub async fn account_roles(
 ) -> ApiResult<Vec<Role>> {
     let account_id = parse_id(account_id)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    if account_id != caller.account_id {
-        let actor = actor(&mut conn, caller).await?;
-        if !actor.holds(permissions::ROLES_MANAGE) && !actor.holds(permissions::USERS_VIEW) {
-            return Err(forbidden("This needs roles.manage or users.view."));
-        }
+    let actor = actor(&mut conn, caller).await?;
+    if account_id != caller.account_id
+        && !actor.holds(permissions::ROLES_MANAGE)
+        && !actor.holds(permissions::ROLES_ASSIGN)
+        && !actor.holds(permissions::USERS_VIEW)
+    {
+        return Err(forbidden(
+            "This needs roles.manage, roles.assign or users.view.",
+        ));
     }
     let mut out = Vec::new();
+    // The owners hold the top role; only they see it.
+    if caller.owner
+        && state
+            .auth
+            .is_owner(&mut conn, account_id)
+            .await
+            .map_err(auth_error)?
+        && let Some(root) = roles::system(&mut conn, roles::SYSTEM_ROOT)
+            .await
+            .map_err(db_error)?
+    {
+        out.push(view(&mut conn, &root, &actor).await?);
+    }
     for role in roles::roles_of(&mut conn, account_id)
         .await
         .map_err(db_error)?
     {
-        out.push(view(&mut conn, &role).await?);
+        if role.is(roles::SYSTEM_ROOT) && !caller.owner {
+            continue;
+        }
+        out.push(view(&mut conn, &role, &actor).await?);
     }
     Ok(out)
 }
@@ -318,6 +435,7 @@ pub async fn create(state: &AppState, caller: &Caller, input: &CreateRole) -> Ap
     lock(&mut tx).await?;
     let actor = require(&mut tx, caller, permissions::ROLES_MANAGE).await?;
     actor.may_manage(input.position).map_err(rule)?;
+    position(input.position)?;
     actor
         .may_grant(perms.iter().map(String::as_str))
         .map_err(rule)?;
@@ -342,7 +460,7 @@ pub async fn create(state: &AppState, caller: &Caller, input: &CreateRole) -> Ap
     } else {
         role
     };
-    let out = view(&mut tx, &role).await?;
+    let out = view(&mut tx, &role, &actor).await?;
     write_audit(
         &mut tx,
         caller,
@@ -375,12 +493,19 @@ pub async fn update(
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     lock(&mut tx).await?;
     let actor = require(&mut tx, caller, permissions::ROLES_MANAGE).await?;
-    let role = load(&mut tx, id).await?;
-    actor.may_manage(role.position).map_err(rule)?;
-    if let Some(position) = input.position {
-        actor.may_manage(position).map_err(rule)?;
+    let role = load_visible(&mut tx, caller, id).await?;
+    not_root(&role)?;
+    actor.may_edit(role.id, role.position).map_err(rule)?;
+    if let Some(p) = input.position {
+        actor.may_manage(p).map_err(rule)?;
+        if role.is(roles::SYSTEM_USER) && p != role.position {
+            return Err(rule(RuleError::BuiltIn));
+        }
+        if !role.is(roles::SYSTEM_USER) {
+            position(p)?;
+        }
     }
-    let before = view(&mut tx, &role).await?;
+    let before = view(&mut tx, &role, &actor).await?;
     if let Some(perms) = &perms {
         let added = perms.iter().filter(|p| !before.permissions.contains(p));
         actor.may_grant(added.map(String::as_str)).map_err(rule)?;
@@ -415,7 +540,7 @@ pub async fn update(
         .keeps_a_manager(&managers_before, &managers_after)
         .map_err(rule)?;
 
-    let after = view(&mut tx, &updated).await?;
+    let after = view(&mut tx, &updated, &actor).await?;
     write_audit(
         &mut tx,
         caller,
@@ -439,8 +564,14 @@ pub async fn delete(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bo
     let Some(role) = roles::get(&mut tx, id).await.map_err(db_error)? else {
         return Ok(false);
     };
-    actor.may_manage(role.position).map_err(rule)?;
-    let before = view(&mut tx, &role).await?;
+    if role.is(roles::SYSTEM_ROOT) && !caller.owner {
+        return Err(not_found());
+    }
+    if role.system.is_some() {
+        return Err(rule(RuleError::BuiltIn));
+    }
+    actor.may_edit(role.id, role.position).map_err(rule)?;
+    let before = view(&mut tx, &role, &actor).await?;
     let members = roles::members(&mut tx, id).await.map_err(db_error)?;
     let managers_before = managers(state, &mut tx).await?;
     roles::delete(&mut tx, id).await.map_err(db_error)?;
@@ -465,7 +596,8 @@ pub async fn delete(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bo
 }
 
 /// Gives an account a role. False if it had it already. You must hold every permission the role
-/// grants, and the role must be below your highest.
+/// grants, and the role must be below your highest. Needs `roles.manage` or `roles.assign`; the
+/// User and top roles are never assigned.
 pub async fn assign(
     state: &AppState,
     caller: &Caller,
@@ -477,8 +609,9 @@ pub async fn assign(
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     lock(&mut tx).await?;
-    let actor = require(&mut tx, caller, permissions::ROLES_MANAGE).await?;
-    let role = load(&mut tx, role_id).await?;
+    let actor = assigner(&mut tx, caller).await?;
+    let role = load_visible(&mut tx, caller, role_id).await?;
+    assignable_kind(&role)?;
     actor.may_manage(role.position).map_err(rule)?;
     let granted = roles::permissions(&mut tx, role_id)
         .await
@@ -524,8 +657,9 @@ pub async fn unassign(
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     lock(&mut tx).await?;
-    let actor = require(&mut tx, caller, permissions::ROLES_MANAGE).await?;
-    let role = load(&mut tx, role_id).await?;
+    let actor = assigner(&mut tx, caller).await?;
+    let role = load_visible(&mut tx, caller, role_id).await?;
+    assignable_kind(&role)?;
     actor.may_manage(role.position).map_err(rule)?;
     let target_is_owner = state
         .auth
@@ -598,5 +732,22 @@ mod tests {
         assert_eq!(rule(RuleError::Escalation).status, StatusCode::FORBIDDEN);
         assert_eq!(rule(RuleError::NotBelowYou).code, "not_below_you");
         assert_eq!(rule(RuleError::OwnerProtected).code, "owner_protected");
+        assert_eq!(rule(RuleError::OwnRole).status, StatusCode::FORBIDDEN);
+        assert_eq!(rule(RuleError::BuiltIn).code, "built_in_role");
+    }
+
+    #[test]
+    fn custom_positions_sit_between_user_and_top() {
+        assert!(position(0).is_err());
+        assert!(position(-1).is_err());
+        assert_eq!(position(1).unwrap(), 1);
+        assert_eq!(
+            position(roles::ROOT_POSITION - 1).unwrap(),
+            roles::ROOT_POSITION - 1
+        );
+        assert_eq!(
+            position(roles::ROOT_POSITION).unwrap_err().code,
+            "bad_position"
+        );
     }
 }

@@ -12,10 +12,72 @@ use crate::ids::new_id;
 pub struct Account {
     pub id: Uuid,
     pub created_at: DateTime<Utc>,
+    /// Uploads blocked. Like every hold here, read as it is now: a hold whose end has passed
+    /// reads as `None`.
     pub restricted_at: Option<DateTime<Utc>>,
     pub deleted_at: Option<DateTime<Utc>>,
-    /// Blocked by `users.restrict`: can't sign in.
+    /// Blocked by `users.restrict` or `users.block`: can't sign in.
     pub blocked_at: Option<DateTime<Utc>>,
+    /// When the uploads hold ends; `None` with `restricted_at` set means for good.
+    pub restricted_until: Option<DateTime<Utc>>,
+    pub blocked_until: Option<DateTime<Utc>>,
+    /// Can't file reports or tickets.
+    pub tickets_blocked_at: Option<DateTime<Utc>>,
+    pub tickets_blocked_until: Option<DateTime<Utc>>,
+}
+
+impl Account {
+    /// Any hold at all (uploads, tickets or the whole account).
+    pub fn held(&self) -> bool {
+        self.restricted_at.is_some()
+            || self.blocked_at.is_some()
+            || self.tickets_blocked_at.is_some()
+    }
+}
+
+/// One of an account's three holds (migration `timed_restrictions`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Hold {
+    /// No uploads (`restricted_at`).
+    Uploads,
+    /// No reports or tickets (`tickets_blocked_at`).
+    Tickets,
+    /// No sign-in, no sessions (`blocked_at`).
+    Account,
+}
+
+impl Hold {
+    pub const ALL: [Hold; 3] = [Hold::Uploads, Hold::Tickets, Hold::Account];
+
+    /// The `account_restrictions.kind` value.
+    pub fn kind(self) -> &'static str {
+        match self {
+            Self::Uploads => "uploads",
+            Self::Tickets => "tickets",
+            Self::Account => "account",
+        }
+    }
+
+    pub fn from_kind(kind: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|h| h.kind() == kind)
+    }
+
+    fn columns(self) -> (&'static str, &'static str) {
+        match self {
+            Self::Uploads => ("restricted_at", "restricted_until"),
+            Self::Tickets => ("tickets_blocked_at", "tickets_blocked_until"),
+            Self::Account => ("blocked_at", "blocked_until"),
+        }
+    }
+
+    /// When it started and when it ends, as the account is now.
+    pub fn of(self, account: &Account) -> (Option<DateTime<Utc>>, Option<DateTime<Utc>>) {
+        match self {
+            Self::Uploads => (account.restricted_at, account.restricted_until),
+            Self::Tickets => (account.tickets_blocked_at, account.tickets_blocked_until),
+            Self::Account => (account.blocked_at, account.blocked_until),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, FromRow)]
@@ -48,7 +110,14 @@ pub struct SignIn {
     pub created: bool,
 }
 
-const ACCOUNT: &str = "id, created_at, restricted_at, deleted_at, blocked_at";
+// Holds are read as they are now: one that has ended reads as none.
+const ACCOUNT: &str = "id, created_at, deleted_at,
+    CASE WHEN restricted_until IS NULL OR restricted_until > now() THEN restricted_at END AS restricted_at,
+    CASE WHEN restricted_until > now() THEN restricted_until END AS restricted_until,
+    CASE WHEN blocked_until IS NULL OR blocked_until > now() THEN blocked_at END AS blocked_at,
+    CASE WHEN blocked_until > now() THEN blocked_until END AS blocked_until,
+    CASE WHEN tickets_blocked_until IS NULL OR tickets_blocked_until > now() THEN tickets_blocked_at END AS tickets_blocked_at,
+    CASE WHEN tickets_blocked_until > now() THEN tickets_blocked_until END AS tickets_blocked_until";
 const IDENTITY: &str =
     "platform, platform_user_id, account_id, login, display_name, avatar, linked_at, refreshed_at";
 
@@ -200,34 +269,66 @@ pub async fn find_by_login(
     .await?)
 }
 
-/// Copies the hold an identity left behind (see the migration `identity_holds`) onto `account`,
-/// and uses it up. The account as it is afterwards.
+/// Copies the hold an identity left behind (see the migrations `identity_holds` and
+/// `timed_restrictions`) onto `account`, and uses it up. Where both hold the same kind, the longer
+/// one stays. The account as it is afterwards.
 async fn apply_hold(
     conn: &mut PgConnection,
     account: Account,
     profile: Profile<'_>,
 ) -> DbResult<Account> {
-    type Times = (Option<DateTime<Utc>>, Option<DateTime<Utc>>);
-    let hold: Option<Times> = sqlx::query_as(
+    type Time = Option<DateTime<Utc>>;
+    let hold: Option<(Time, Time, Time, Time, Time, Time)> = sqlx::query_as(
         "DELETE FROM identity_holds WHERE platform = $1 AND platform_user_id = $2
-         RETURNING restricted_at, blocked_at",
+         RETURNING restricted_at, restricted_until, blocked_at, blocked_until,
+                   tickets_blocked_at, tickets_blocked_until",
     )
     .bind(profile.platform)
     .bind(profile.platform_user_id)
     .fetch_optional(&mut *conn)
     .await?;
-    let Some((restricted_at, blocked_at)) = hold else {
+    let Some((r_at, r_until, b_at, b_until, t_at, t_until)) = hold else {
         return Ok(account);
     };
+    let mut out = account;
+    for (hold, at, until) in [
+        (Hold::Uploads, r_at, r_until),
+        (Hold::Account, b_at, b_until),
+        (Hold::Tickets, t_at, t_until),
+    ] {
+        let Some(at) = at else { continue };
+        if until.is_some_and(|u| u <= Utc::now()) {
+            continue;
+        }
+        out = merge_hold(conn, out.id, hold, at, until).await?;
+    }
+    Ok(out)
+}
+
+/// Puts `hold` on an account from `at` until `until` (`None`: for good), keeping a longer one it
+/// already has.
+async fn merge_hold(
+    conn: &mut PgConnection,
+    account_id: Uuid,
+    hold: Hold,
+    at: DateTime<Utc>,
+    until: Option<DateTime<Utc>>,
+) -> DbResult<Account> {
+    let (at_col, until_col) = hold.columns();
+    let live = format!("({at_col} IS NOT NULL AND ({until_col} IS NULL OR {until_col} > now()))");
     Ok(sqlx::query_as(&format!(
         "UPDATE accounts
-         SET restricted_at = coalesce(restricted_at, $2), blocked_at = coalesce(blocked_at, $3)
+         SET {until_col} = CASE
+                 WHEN NOT {live} THEN $3::timestamptz
+                 WHEN {until_col} IS NULL OR $3::timestamptz IS NULL THEN NULL
+                 ELSE greatest({until_col}, $3::timestamptz) END,
+             {at_col} = CASE WHEN {live} THEN {at_col} ELSE $2 END
          WHERE id = $1
          RETURNING {ACCOUNT}"
     ))
-    .bind(account.id)
-    .bind(restricted_at)
-    .bind(blocked_at)
+    .bind(account_id)
+    .bind(at)
+    .bind(until)
     .fetch_one(conn)
     .await?)
 }
@@ -319,7 +420,11 @@ pub async fn set_restricted(
 ) -> DbResult<Account> {
     sqlx::query_as(&format!(
         "UPDATE accounts
-         SET restricted_at = CASE WHEN $2 THEN coalesce(restricted_at, now()) END
+         SET restricted_at = CASE WHEN $2 THEN
+                 CASE WHEN restricted_until IS NULL OR restricted_until > now()
+                      THEN coalesce(restricted_at, now()) ELSE now() END
+             END,
+             restricted_until = NULL
          WHERE id = $1
          RETURNING {ACCOUNT}"
     ))
@@ -359,7 +464,11 @@ pub async fn set_blocked(
 ) -> DbResult<Account> {
     sqlx::query_as(&format!(
         "UPDATE accounts
-         SET blocked_at = CASE WHEN $2 THEN coalesce(blocked_at, now()) END
+         SET blocked_at = CASE WHEN $2 THEN
+                 CASE WHEN blocked_until IS NULL OR blocked_until > now()
+                      THEN coalesce(blocked_at, now()) ELSE now() END
+             END,
+             blocked_until = NULL
          WHERE id = $1
          RETURNING {ACCOUNT}"
     ))
@@ -368,4 +477,111 @@ pub async fn set_blocked(
     .fetch_optional(conn)
     .await?
     .ok_or(DbError::NotFound)
+}
+
+/// Puts `hold` on an account until `until` (`None`: for good), replacing the end of one it had of
+/// that kind; or lifts it (`on` false). A new hold starts now; a running one keeps its start.
+pub async fn set_hold(
+    conn: &mut PgConnection,
+    account_id: Uuid,
+    hold: Hold,
+    on: bool,
+    until: Option<DateTime<Utc>>,
+) -> DbResult<Account> {
+    let (at_col, until_col) = hold.columns();
+    sqlx::query_as(&format!(
+        "UPDATE accounts
+         SET {at_col} = CASE WHEN $2 THEN
+                 CASE WHEN {at_col} IS NOT NULL AND ({until_col} IS NULL OR {until_col} > now())
+                      THEN {at_col} ELSE now() END
+             END,
+             {until_col} = CASE WHEN $2 THEN $3::timestamptz END
+         WHERE id = $1
+         RETURNING {ACCOUNT}"
+    ))
+    .bind(account_id)
+    .bind(on)
+    .bind(until)
+    .fetch_optional(conn)
+    .await?
+    .ok_or(DbError::NotFound)
+}
+
+/// One hold placed on an account, from `account_restrictions`.
+#[derive(Clone, Debug, PartialEq, Eq, FromRow)]
+pub struct Restriction {
+    pub id: Uuid,
+    pub account_id: Uuid,
+    pub kind: String,
+    pub reason: Option<String>,
+    pub ends_at: Option<DateTime<Utc>>,
+    pub created_by: Option<Uuid>,
+    pub created_at: DateTime<Utc>,
+    pub lifted_at: Option<DateTime<Utc>>,
+    pub lifted_by: Option<Uuid>,
+}
+
+const RESTRICTION: &str =
+    "id, account_id, kind, reason, ends_at, created_by, created_at, lifted_at, lifted_by";
+
+/// Records a hold being placed. A running record of the same kind is marked lifted by `by`: the
+/// new one replaces it.
+pub async fn record_hold(
+    conn: &mut PgConnection,
+    account_id: Uuid,
+    hold: Hold,
+    reason: Option<&str>,
+    ends_at: Option<DateTime<Utc>>,
+    by: Option<Uuid>,
+) -> DbResult<Restriction> {
+    end_records(conn, account_id, hold, by).await?;
+    Ok(sqlx::query_as(&format!(
+        "INSERT INTO account_restrictions (id, account_id, kind, reason, ends_at, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING {RESTRICTION}"
+    ))
+    .bind(new_id())
+    .bind(account_id)
+    .bind(hold.kind())
+    .bind(reason)
+    .bind(ends_at)
+    .bind(by)
+    .fetch_one(conn)
+    .await?)
+}
+
+/// Marks the running records of `hold` lifted by `by`. How many there were.
+pub async fn end_records(
+    conn: &mut PgConnection,
+    account_id: Uuid,
+    hold: Hold,
+    by: Option<Uuid>,
+) -> DbResult<u64> {
+    let done = sqlx::query(
+        "UPDATE account_restrictions SET lifted_at = now(), lifted_by = $3
+         WHERE account_id = $1 AND kind = $2 AND lifted_at IS NULL
+           AND (ends_at IS NULL OR ends_at > now())",
+    )
+    .bind(account_id)
+    .bind(hold.kind())
+    .bind(by)
+    .execute(conn)
+    .await?;
+    Ok(done.rows_affected())
+}
+
+/// Every hold placed on an account, newest first (at most `limit`).
+pub async fn restrictions(
+    conn: &mut PgConnection,
+    account_id: Uuid,
+    limit: i64,
+) -> DbResult<Vec<Restriction>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {RESTRICTION} FROM account_restrictions WHERE account_id = $1
+         ORDER BY created_at DESC, id DESC LIMIT $2"
+    ))
+    .bind(account_id)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
 }
