@@ -65,7 +65,7 @@ async fn seed(c: &mut PgConnection, s: &Scale) -> Uuid {
                 || (ARRAY['Laugh','Clap','Spin','Jam','Cry','Wave','Sit','Run'])[1 + (f.n / 8) % 8]
                 || f.n,
                 CASE WHEN f.n % 20 = 0 THEN 'pending' ELSE 'approved' END,
-                f.n % 50 = 1, f.n % 33 = 2, f.n % 50 = 3, f.n % 4 = 0, f.n % 40 = 5,
+                f.n % 50 = 1, f.n % 33 = 2 AND f.n % 50 <> 1, f.n % 50 = 3, f.n % 4 = 0, f.n % 40 = 5,
                 now() - f.n * interval '1 minute'
          FROM seed_files f JOIN seed_accounts a ON a.n = 1 + f.n % $1",
         "CREATE TABLE seed_emotes AS
