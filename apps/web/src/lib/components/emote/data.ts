@@ -1,7 +1,7 @@
 // What the emote page asks for besides the emote itself. Both are best-effort: a failure hides
 // the part that needed them instead of failing the page.
 import { gql } from '$lib/api';
-import { EMOTE_CHANNELS, GLOBAL_SET, SEARCH_BY_OWNER } from '$lib/queries';
+import { EMOTE_CHANNELS, EMOTE_TRENDING, GLOBAL_SET, SEARCH_BY_OWNER } from '$lib/queries';
 import type { EmoteChannel, PageEmote } from './emote-page';
 
 /** The global set's emotes, for the chat preview (a zero-width emote needs one to sit on). */
@@ -21,6 +21,17 @@ export async function moreBy(e: PageEmote, fetcher: typeof fetch = fetch): Promi
     return found.items.filter((x) => x.id !== e.id && x.owner?.id === e.owner?.id).slice(0, 12);
   } catch {
     return [];
+  }
+}
+
+/** Where the emote stands among the trending ones of the last 7 days (top 100), or null. */
+export async function trendingOf(e: PageEmote, fetcher: typeof fetch = fetch): Promise<{ rank: number; channels: number } | null> {
+  if (e.state !== 'APPROVED' || e.flags.private) return null;
+  try {
+    const t = (await gql(EMOTE_TRENDING, { id: e.id, window: 'WEEK' }, fetcher)).emoteTrending;
+    return t ? { rank: t.rank, channels: t.channels } : null;
+  } catch {
+    return null;
   }
 }
 

@@ -6,31 +6,28 @@
   import Chip from '$lib/components/Chip.svelte';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
-  import IconButton from '$lib/components/IconButton.svelte';
   import Icon, { type IconName } from '$lib/components/Icon.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import BrowseFilters from '$lib/components/browse/BrowseFilters.svelte';
   import BulkAdd from '$lib/components/browse/BulkAdd.svelte';
-  import EmoteTable from '$lib/components/browse/EmoteTable.svelte';
-  import { looks } from '$lib/cosmetics/store.svelte';
   import Problem from '$lib/components/Problem.svelte';
   import State from '$lib/components/State.svelte';
   import {
-    apiQuery,
-    apiSort,
+    apiVars,
     CLEARED,
-    clientSide,
     MAX_PAGES,
     PER_PAGE,
+    WINDOWS,
     active as activeOf,
     change,
-    matches,
     parse,
     toSearch,
     topTags,
+    without,
+    type Active,
     type Browse,
-    type Layout,
     type Sort,
+    type Window,
   } from '$lib/components/browse/params';
   import RailLayout from '$lib/shell/RailLayout.svelte';
   import SideRail from '$lib/shell/SideRail.svelte';
@@ -64,16 +61,19 @@
 
   const totalPages = $derived(Math.ceil(data.total / PER_PAGE));
   const hasMore = $derived(pageNo < totalPages);
-  const shown = $derived(loaded.filter((e) => matches(view, e)));
-  const clientFiltered = $derived(clientSide(view));
-  const tags = $derived(topTags(loaded));
+  const shown = $derived(loaded);
+  const tags = $derived(topTags(loaded, 12, view.tags));
   const switching = $derived(!!navigating.to);
+  const trending = $derived(view.sort === 'trending');
 
   const sorts = $derived<{ value: Sort; label: string; icon: IconName }[]>([
     ...(view.q ? [{ value: 'relevance' as const, label: 'Relevance', icon: 'search' as const }] : []),
+    { value: 'trending', label: 'Trending', icon: 'trending' },
     { value: 'top', label: 'Top', icon: 'arrow-up' },
     { value: 'new', label: 'New', icon: 'sparkles' },
   ]);
+  const windows = WINDOWS.map((w) => ({ value: w.value, label: w.short }));
+  const windowLabel = $derived(WINDOWS.find((w) => w.value === view.window)?.label.toLowerCase() ?? '');
 
   // ---- Search field: the URL follows the typing (replaced, not pushed, after a short pause).
   let text = $state(untrack(() => data.view.q));
@@ -85,16 +85,13 @@
     if (document.activeElement !== input) text = q;
   });
 
-  // The view's local parts (layout, select mode) are in the URL too, set without a reload.
-  let layoutPick = $state<Layout>(untrack(() => data.view.layout));
+  // Select mode is in the URL too, set without a reload.
   let selecting = $state(untrack(() => data.view.select));
-  // Follows the address (which `sync` and every navigation keep in step with these two).
+  // Follows the address (which `sync` and every navigation keep in step with it).
   $effect.pre(() => {
-    const now = parse(page.url.searchParams);
-    layoutPick = now.layout;
-    selecting = now.select;
+    selecting = parse(page.url.searchParams).select;
   });
-  const here = $derived<Browse>({ ...view, layout: layoutPick, select: selecting });
+  const here = $derived<Browse>({ ...view, select: selecting });
 
   function go(over: Partial<Browse>, replace = false) {
     const next = change(here, over);
@@ -105,8 +102,8 @@
   let gridTop = $state<HTMLElement>();
   // Removing a chip would drop focus to the page: hand it to the next chip's remove button,
   // else Clear all, else the toolbar.
-  async function removeChip(key: keyof typeof CLEARED, i: number) {
-    await go({ [key]: CLEARED[key] } as Partial<Browse>);
+  async function removeChip(key: Active['key'], i: number) {
+    await go(without(here, key));
     await tick();
     const rm = chipsEl?.querySelectorAll<HTMLElement>('.chips [role=listitem] button');
     const target = rm?.[Math.min(i, rm.length - 1)] ?? clearAll ?? gridTop?.querySelector<HTMLElement>('[aria-checked="true"]');
@@ -141,39 +138,6 @@
     return () => mq.removeEventListener('change', on);
   });
 
-  // ---- Density and grid or table, remembered on this device (the URL wins when it says view=).
-  type Density = 'comfortable' | 'compact';
-  let density = $state<Density>('comfortable');
-  let savedLayout = $state<'grid' | 'table'>('grid');
-  const layout = $derived<'grid' | 'table'>(layoutPick || savedLayout);
-  $effect(() => {
-    try {
-      const d = localStorage.getItem('cyex.browse.density');
-      if (d === 'compact' || d === 'comfortable') density = d;
-      const l = localStorage.getItem('cyex.browse.layout');
-      if (l === 'grid' || l === 'table') savedLayout = l;
-    } catch {
-      /* private mode: keep the default */
-    }
-  });
-  function remember(key: string, v: string) {
-    try {
-      localStorage.setItem(key, v);
-    } catch {
-      /* not remembered */
-    }
-  }
-  function setDensity(d: Density) {
-    density = d;
-    remember('cyex.browse.density', d);
-    setLayout('grid');
-  }
-  function setLayout(l: 'grid' | 'table') {
-    layoutPick = l;
-    savedLayout = l;
-    remember('cyex.browse.layout', l);
-    sync();
-  }
   /** Puts the local view state into the address without loading anything again. */
   function sync() {
     replaceState(`/search${toSearch({ ...here, pages: Math.min(pageNo, MAX_PAGES) })}`, page.state);
@@ -203,14 +167,7 @@
     try {
       const r = await gql(
         SEARCH,
-        {
-          query: apiQuery(view),
-          animated: view.kind === 'animated' ? true : view.kind === 'still' ? false : null,
-          nsfw: view.nsfw ? true : null,
-          sort: apiSort(view.sort),
-          page: pageNo + 1,
-          perPage: PER_PAGE,
-        },
+        apiVars(view, pageNo + 1),
         fetch,
       );
       if (from !== data) return; // the view changed while this loaded
@@ -232,8 +189,7 @@
     void pageNo;
     const io = new IntersectionObserver(
       (hits) => {
-        // With a client-side filter that hides everything so far, keep going a little, not forever.
-        if (hits.some((h) => h.isIntersecting) && (shown.length > 0 || pageNo < 8)) void loadMore(false);
+        if (hits.some((h) => h.isIntersecting)) void loadMore(false);
       },
       { rootMargin: '0px 0px 800px 0px' },
     );
@@ -247,10 +203,9 @@
     restore: (s: { y: number }) => requestAnimationFrame(() => scrollTo({ top: s.y, behavior: 'instant' })),
   };
 
-  const countText = $derived(
-    `${count(clientFiltered ? shown.length : data.total)}${clientFiltered && hasMore ? '+' : ''} ${
-      (clientFiltered ? shown.length : data.total) === 1 ? 'emote' : 'emotes'
-    }`,
+  const countText = $derived(`${count(data.total)} ${data.total === 1 ? 'emote' : 'emotes'}`);
+  const emptyTitle = $derived(
+    q ? `No emotes match “${iso(q)}”.` : trending ? `Nothing is trending, ${windowLabel}.` : 'No emotes here.',
   );
   const moreHref = $derived(`/search${toSearch({ ...here, pages: Math.min(pageNo + 1, MAX_PAGES) })}`);
 </script>
@@ -302,14 +257,16 @@
       <div class="tools">
         <SearchTabs {view} />
         <Segmented label="Sort" size="s" options={sorts} value={view.sort} onchange={(v) => go({ sort: v }, true)} />
-        <div class="dens" role="group" aria-label="View">
-          <IconButton icon="grid" label="Comfortable grid" size="s" variant="outline" pressed={layout === 'grid' && density === 'comfortable'} onclick={() => setDensity('comfortable')} />
-          <IconButton icon="grid-dense" label="Compact grid" size="s" variant="outline" pressed={layout === 'grid' && density === 'compact'} onclick={() => setDensity('compact')} />
-          <IconButton icon="list" label="Table" size="s" variant="outline" pressed={layout === 'table'} onclick={() => setLayout('table')} />
-        </div>
         <button class="btn btn-s selbtn" type="button" aria-pressed={selecting} onclick={() => setSelecting(!selecting)}><Icon name="check" size={15} />Select</button>
       </div>
     </div>
+
+    {#if trending}
+      <div class="window">
+        <span class="wlabel">Ranked by channels adding them in the last</span>
+        <Segmented label="Trending window" size="s" options={windows} value={view.window} onchange={(v: Window) => go({ window: v }, true)} />
+      </div>
+    {/if}
 
     {#if filters.length}
       <div class="chips" bind:this={chipsEl} role="list" aria-label="Active filters">
@@ -326,16 +283,20 @@
       </div>
     {:else if shown.length === 0 && !hasMore && !switching}
       <div class="state">
-        <State title={q ? `No emotes match “${iso(q)}”.` : 'No emotes here.'}>
+        <State title={emptyTitle}>
           {#if filters.length}
             {filters.map((f) => f.label).join(', ')} {filters.length === 1 ? 'is' : 'are'} on. Removing {filters.length === 1 ? 'it' : 'one'} may bring emotes back.
           {:else if view.q}
             Check the spelling, or try a shorter name or a tag.
+          {:else if trending}
+            Emotes show up here once channels add them. A longer window may have some.
           {:else}
             Approved emotes show up here.
           {/if}
           {#snippet actions()}
-            {#if filters.length}
+            {#if trending && !filters.length && !view.q && view.window !== 'month'}
+              <button class="btn btn-s" type="button" onclick={() => go({ window: 'month' }, true)}>Show 30 days</button>
+            {:else if filters.length}
               <button class="btn btn-s" type="button" onclick={() => go({ ...CLEARED })}>Clear filters</button>
             {:else if view.q}
               <button class="btn btn-s" type="button" onclick={clearText}>Clear search</button>
@@ -345,31 +306,19 @@
       </div>
     {:else}
       <div class="results" class:dim={switching}>
-        {#if layout === 'table'}
-          <EmoteTable
-            items={shown}
-            sort={view.sort}
-            onsort={(s) => go({ sort: s }, true)}
-            {looks}
-            picked={selecting ? pickedSet : undefined}
-            onpick={selecting ? toggle : undefined}
-            eager={12}
-          />
-        {:else}
-          <EmoteGrid
-            items={shown}
-            {density}
-            eager={12}
-            loading={busy || (switching && shown.length === 0)}
-            skeletons={density === 'compact' ? 16 : 10}
-            label="Emotes"
-            picked={selecting ? pickedSet : undefined}
-            onpick={selecting ? toggle : undefined}
-          />
-        {/if}
+        <EmoteGrid
+          items={shown}
+          eager={12}
+          loading={busy || (switching && shown.length === 0)}
+          skeletons={10}
+          label={trending ? `Trending emotes, ${windowLabel}` : 'Emotes'}
+          ranked={trending}
+          picked={selecting ? pickedSet : undefined}
+          onpick={selecting ? toggle : undefined}
+        />
       </div>
       <div class="more" bind:this={end}>
-        <LoadMore {hasMore} {busy} error={moreError} total={shown.length > 0 ? (clientFiltered ? shown.length : data.total) : 0} onmore={loadMore} href={moreHref} />
+        <LoadMore {hasMore} {busy} error={moreError} total={shown.length > 0 ? data.total : 0} onmore={loadMore} href={moreHref} />
       </div>
       {#if selecting}
         <BulkAdd
@@ -398,20 +347,21 @@
     font: inherit; font-size: var(--t-fine); font-weight: 500; cursor: pointer; }
   .reset:active { opacity: .6; }
 
-  /* Toolbar: title and count left; sort and density right; one 40px row like the header's. */
+  /* Toolbar: title and count left; tabs, sort and select right; one 40px row like the header's. */
   .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; min-height: 40px; }
   @media (max-width: 899.98px) { .toolbar { padding-top: 4px; } }
   .title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
   h1 { margin: 0; font-size: var(--t-page); line-height: 1.25; letter-spacing: -.02em; }
   .total { margin: 0; font-size: var(--t-nav); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
-  .dens { display: inline-flex; gap: 4px; }
-  .dens :global(.ib) { width: 40px; height: 40px; }
   .selbtn { height: 34px; }
   .selbtn[aria-pressed='true'] { font-weight: 700; }
   .selbtn :global(svg) { color: var(--dim); }
   .selbtn[aria-pressed='true'] :global(svg) { color: var(--accent-text); }
 
+  /* Trending's window: a quiet line under the toolbar, the choice in the same segmented control. */
+  .window { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 10px; margin-top: 8px; }
+  .wlabel { font-size: var(--t-small); color: var(--muted); }
   .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; }
   .clearall { background: none; border: 0; padding: 0 8px; font: inherit; font-size: var(--t-small); cursor: pointer; min-height: 40px; margin-block: 0; }
 
@@ -422,6 +372,5 @@
   .state { margin-top: 16px; }
 
   @media (max-width: 480px) { .title { flex-direction: column; align-items: flex-start; gap: 0; } }
-  @media (pointer: coarse) { .dens :global(.ib) { width: 44px; height: 44px; } }
   @media (prefers-reduced-motion: reduce) { .results { transition: none; } }
 </style>

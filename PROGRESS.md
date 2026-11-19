@@ -18,6 +18,18 @@ gh pr create --base main --head fix/paints-and-global-perms --title "Paint rende
 gh pr merge 94 --merge
 ```
 
+## Emote browse: animated everywhere, one grid, flags and tags filters, trending (branch `feat/emote-browse`)
+
+Owner feedback 2026/11/19, section G. Additive API; nothing was deployed.
+
+- [x] Animated emotes play everywhere without hover (tiles, cards, the set page's table, profile set thumbs, activity rows, small thumbs) through one `EmotePicture`: a `<picture>` whose reduced-motion source is the still frame, lazy and `decoding=async`.
+- [x] One grid: the grid, compact and table switch on /search is gone (`view=` is ignored now). The table stays only on the public set page, which is a real list (columns for creator, type, channels, date). Tiles in a row share its height (checked in the running app on /search, profiles and set pages).
+- [x] One filter model, all in the API (totals are real now): Type (All, Animated, Still), Flags as toggle chips (Zero-width, Wide, NSFW: each narrows to emotes with that flag), Tags as a `TagInput` (Enter adds a chip, Backspace or × removes) plus the results' common tags to add in one tap. `searchEmotes` gains `flags: [EmoteFlag!]`, `tags: [String!]` (all must match, 10 at most) and `exact`; `EmoteFlags.wide` (1x file at least 1.75 times as wide as tall, derived).
+- [x] Trending: sort `TRENDING` with `window: DAY | WEEK | MONTH`, ranked by net distinct channels that added the emote in the window. Migration `20261207000050_trending.sql` (`emote_channel_adds`, hourly buckets), filled by the worker's hourly run from the outbox's `set.emote_added`/`set.emote_removed` events (their `channel:*` topics) before the outbox is pruned. Tiles show `#1`, `#2` … in the Trending view; the emote page shows "Trending #n" and "Added in the last 7 days" for the top 100 of the last 7 days (`emoteTrending(id, window)`).
+- [x] Dev mock: flags, tags, exact, NSFW emotes, `wide`, trending windows and `emoteTrending`.
+- Tests: `apps/api/tests/browse_flow.rs` (flags, tags, exact, trending windows, `emoteTrending`), `crates/db/tests/queries.rs` (rollup: distinct channels per hour, idempotent), unit tests for tag cleaning; vitest `tag-input.test.ts` (rules and markup) and `params.test.ts` (filter and trending URL state, API variables).
+- Manual check: /search, Trending (3 windows), filters, the filter sheet, emote page at 375, 768, 1440 and 2560 in both themes; keyboard (tag field Enter/Backspace/paste/×, flag chips with Space, window with arrow keys); reduced motion shows the still frames (screens in the run folder, `2026-11-19-feedback/screens/g`).
+
 ## Front page, round 2: a real 3D hero and the zig-zag (branch `feat/front-page-2`)
 
 Owner feedback 2026/11/19, part I ("not 3d enough", "animation too subtle", "stacked more vertically ... zig zag"). Web only; nothing was deployed.

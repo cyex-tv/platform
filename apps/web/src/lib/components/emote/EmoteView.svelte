@@ -28,8 +28,10 @@
     channels: EmoteChannel[] | null;
     channelCount: number | null;
     back: { href: string; label: string; back: boolean };
+    /** Its place among the trending emotes of the last 7 days (top 100), or null. */
+    trending?: { rank: number; channels: number } | null;
   };
-  let { emote: e, pool, more, channels, channelCount, back }: Props = $props();
+  let { emote: e, pool, more, channels, channelCount, back, trending = null }: Props = $props();
 
   // svelte-ignore state_referenced_locally
   const viewer = new Viewer(e.id);
@@ -95,6 +97,11 @@
               <span><span class="sr-only">By </span><bdi>{ownerName}</bdi></span>
             </a>
           {/if}
+          {#if trending}
+            <a class="trend" href="/search?sort=trending" title="{count(trending.channels)} {trending.channels === 1 ? 'channel' : 'channels'} added it in the last 7 days">
+              <Icon name="trending" size={14} />Trending <span class="rank">#{trending.rank}</span><span class="sr-only">this week, added by {count(trending.channels)} {trending.channels === 1 ? 'channel' : 'channels'}</span>
+            </a>
+          {/if}
           {#if tags.length || vis !== 'PUBLIC'}
             <ul class="labels" aria-label="Labels">
               {#if vis === 'UNLISTED'}
@@ -123,7 +130,7 @@
     <div class="panels">
       <div class="panel"><PreviewStage emote={e} {pool} /></div>
       <aside class="panel side" aria-label="Details">
-        <EmoteFacts emote={e} channels={channelCount} />
+        <EmoteFacts emote={e} channels={channelCount} addedThisWeek={trending?.channels ?? null} />
         <TrustBlock emote={e} {viewer} />
       </aside>
     </div>
@@ -214,6 +221,12 @@
     border-radius: var(--radius-btn); font-size: var(--t-label); color: var(--muted); }
   .label.vis { gap: 4px; padding-left: 6px; color: var(--text); border-color: var(--border-strong); }
 
+  /* Trending: a label like the others, with the accent icon and its rank; it opens the Trending view. */
+  .trend { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 1px solid var(--border-strong);
+    border-radius: var(--radius-btn); font-size: var(--t-label); font-weight: 600; color: var(--text); transition: border-color var(--fast); }
+  .trend::after { content: ''; position: absolute; inset: -10px 0; } /* 44px to hit */
+  .trend :global(.icon) { color: var(--accent-text); }
+  .trend .rank { font-variant-numeric: tabular-nums; color: var(--accent-text); }
   .notice { padding: 12px 16px; border: 1px solid var(--border-strong); border-radius: var(--radius-card); background: var(--surface);
     font-size: var(--t-small); max-width: 72ch; }
   .notice strong { font-weight: 600; }
@@ -246,6 +259,7 @@
     .back:hover { color: var(--text); }
     .back:hover :global(.icon) { transform: translateX(-3px); }
     .creator:hover { border-color: var(--accent-border); background: var(--surface-hover); }
+    .trend:hover { border-color: var(--accent-border); }
     .tabbtn:hover:not([aria-selected='true']) { color: var(--text); }
   }
 

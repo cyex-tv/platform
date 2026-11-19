@@ -25,12 +25,13 @@
   // One emote in a grid, the same tile everywhere emotes are listed (browse, creator, channel,
   // set, your emotes, admin review): a surface card with a hairline, the art in a fixed box (no
   // layout shift), the name, the creator. The whole tile is one link; hover steps the surface and
-  // the border, it never lifts. Animated emotes show their still first frame and play while
-  // hovered or focused (never under reduced motion). The `status` slot (or a `note`, e.g.
-  // "pending") sits in the top-left corner, for /me and the admin pages.
+  // the border, it never lifts. Animated emotes always play (EmotePicture: the still first frame
+  // under reduced motion). The `status` slot (or a `note`, e.g. "pending") sits in the top-left
+  // corner, for /me and the admin pages; `rank` (the Trending view) sits there too, as "#1".
   import type { Snippet } from 'svelte';
-  import { hasStill, isWide, ready, size, src, srcsetW } from '$lib/emote';
+  import { isWide, ready, size } from '$lib/emote';
   import { clean } from '$lib/format';
+  import EmotePicture from './EmotePicture.svelte';
   import Icon from './Icon.svelte';
 
   type Props = {
@@ -47,14 +48,13 @@
     /** Select mode: the tile toggles instead of opening. `selected` says whether it is picked. */
     onpick?: () => void;
     selected?: boolean;
+    /** Its place in a ranking (the Trending view), shown as "#1" in the corner. */
+    rank?: number;
   };
-  let { emote: e, density = 'comfortable', creator = true, labels = true, href, eager = false, note, status, onpick, selected = false }: Props = $props();
-
-  let hot = $state(false);
-  let loaded = $state(false);
+  let { emote: e, density = 'comfortable', creator = true, labels = true, href, eager = false, note, status, onpick, selected = false, rank }: Props = $props();
   const name = $derived(clean(e.shownName ?? e.name));
   const owner = $derived(e.owner ? clean(e.owner.displayName) : '');
-  // A lazy still that is already cached shows at once; one that loads late fades in.
+  // A lazy picture that is already cached shows at once; one that loads late fades in.
   function settle(node: HTMLImageElement) {
     if (node.complete || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     node.classList.add('fade');
@@ -62,7 +62,6 @@
     node.addEventListener('error', () => node.classList.remove('fade'), { once: true });
   }
   const wide = $derived(isWide(e));
-  const still = $derived(hasStill(e));
   const dims = $derived(size(e));
   // The picture fills 80% of the box height; `sizes` lets the browser pick the right file.
   const shownW = $derived(Math.round((TILE_ART[density] * 0.8 * dims.width) / dims.height));
@@ -72,11 +71,6 @@
     (labels ? [e.animated && 'animated', e.flags?.zeroWidth && 'zero-width', wide && 'wide'] : []).filter(Boolean) as string[],
   );
   const title = $derived(owner && creator ? `${name} by ${owner}` : name);
-
-  function heat(on: boolean) {
-    hot = on && e.animated && still && !matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (!hot) loaded = false;
-  }
 </script>
 
 <a
@@ -89,47 +83,19 @@
   onkeydown={onpick ? (ev) => { if (ev.key === ' ') { ev.preventDefault(); onpick(); } } : undefined}
   href={href ?? `/emotes/${e.id}`}
   {title}
-  onpointerenter={(ev) => ev.pointerType === 'mouse' && heat(true)}
-  onpointerleave={() => heat(false)}
-  onfocus={() => heat(true)}
-  onblur={() => heat(false)}
 >
   {#if onpick}
     <span class="tick" aria-hidden="true"><Icon name="check" size={14} /></span>
   {/if}
-  {#if status || note}
+  {#if status || note || rank}
     <span class="status">
       {#if status}{@render status()}{:else if note}<span class="ui-chip {noteTone(note)}">{note}</span>{/if}
+      {#if rank}<span class="rank" class:top={rank <= 3}><span class="sr-only">Trending </span>#{rank}</span>{/if}
     </span>
   {/if}
   <span class="art">
     {#if ready(e)}
-      <img
-        class="pic"
-        src={src(e, 1, still)}
-        srcset={srcsetW(e, still)}
-        sizes="{shownW}px"
-        width={dims.width}
-        height={dims.height}
-        alt=""
-        loading={eager ? 'eager' : 'lazy'}
-        decoding="async"
-        use:settle
-      />
-      {#if hot}
-        <img
-          class="pic moving"
-          class:loaded
-          src={src(e, 1)}
-          srcset={srcsetW(e)}
-          sizes="{shownW}px"
-          width={dims.width}
-          height={dims.height}
-          alt=""
-          decoding="async"
-          onload={() => (loaded = true)}
-        />
-      {/if}
+      <EmotePicture emote={e} class="pic" sizes="{shownW}px" {eager} use={settle} />
     {:else}
       <span class="processing">Processing</span>
     {/if}
@@ -152,11 +118,13 @@
   /* A fixed art box: however wide the picture, it fits inside (contain) and never widens the tile. */
   .art { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; width: 100%; min-width: 0;
     height: var(--art); margin-bottom: 8px; overflow: hidden; }
-  .pic { grid-area: 1 / 1; display: block; height: calc(var(--art) * .8); width: auto; min-width: 0; max-width: 100%; object-fit: contain; }
-  .moving { opacity: 0; transition: opacity var(--dur-color); }
-  .fade { opacity: 0; }
-  .pic:not(.fade):not(.moving) { transition: opacity var(--dur-color); }
-  .moving.loaded { opacity: 1; }
+  .art :global(.pic) { grid-area: 1 / 1; display: block; height: calc(var(--art) * .8); width: auto; min-width: 0; max-width: 100%; object-fit: contain; }
+  .art :global(.pic.fade) { opacity: 0; }
+  .art :global(.pic:not(.fade)) { transition: opacity var(--dur-color); }
+  /* The rank: plain tabular text on the tile's ground; the top three in the accent. */
+  .rank { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); color: var(--muted); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
+  .rank.top { color: var(--accent-text); border-color: var(--accent-border); }
   .processing { font-size: var(--t-fine); color: var(--muted); }
   /* Truncated names stay centred: the bdi is a block that ends in an ellipsis. */
   .name bdi, .by bdi { display: block; overflow: hidden; text-overflow: ellipsis; }

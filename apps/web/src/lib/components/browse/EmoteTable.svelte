@@ -17,7 +17,8 @@
   // cache knows it), type, channels using it, and the day it was added. Channels and Added sort
   // by the same orders as the sort control (Top, New) and carry aria-sort. In select mode a
   // checkbox leads each row (Space toggles it); the name stays the link to the emote.
-  import { hasStill, isWide, ready, src, srcset } from '$lib/emote';
+  import EmotePicture from '$lib/components/EmotePicture.svelte';
+  import { isWide, ready } from '$lib/emote';
   import { clean, count, date } from '$lib/format';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import Icon from '../Icon.svelte';
@@ -74,7 +75,7 @@
           <td class="prev" aria-hidden="true">
             <span class="box">
               {#if ready(e)}
-                <img src={src(e, 1, hasStill(e))} srcset={srcset(e, hasStill(e))} alt="" loading={i < eager ? 'eager' : 'lazy'} decoding="async" />
+                <EmotePicture emote={e} class="pic" eager={i < eager} />
               {/if}
             </span>
           </td>
@@ -105,7 +106,7 @@
   .chk input { width: 18px; height: 18px; margin: 0; accent-color: var(--accent); cursor: pointer; vertical-align: middle; }
   .prev { width: 64px; padding-right: 0; }
   .box { display: grid; place-items: center; width: 48px; height: 40px; }
-  img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+  .box :global(.pic) { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
   .nm { max-width: 260px; }
   .nm a { display: block; overflow: hidden; text-overflow: ellipsis; color: var(--text); font-weight: 500; }
   .by { max-width: 220px; color: var(--muted); }

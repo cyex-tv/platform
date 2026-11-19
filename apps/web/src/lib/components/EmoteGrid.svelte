@@ -1,7 +1,9 @@
 <script lang="ts">
-  // A grid of EmoteTiles (the 7TV-style grid: ~150px tiles, 16px gap; 112px and 8px compact).
-  // Wide emotes take two cells (the grid packs densely so no holes open). While `loading`,
-  // skeleton tiles follow the items (or stand alone on a first load).
+  // A grid of EmoteTiles (the 7TV-style grid: ~150px tiles, 16px gap). One size everywhere; the
+  // compact density is only for small pickers (adding emotes to a set), never a switch. Every tile
+  // in a row is as tall as the row (the cells stretch, the tile fills its cell). Wide emotes take
+  // two cells (the grid packs densely so no holes open). While `loading`, skeleton tiles follow
+  // the items (or stand alone on a first load). `ranked` numbers the tiles (#1, #2 …) for Trending.
   import type { Snippet } from 'svelte';
   import { isWide } from '$lib/emote';
   import EmoteSkeleton from './EmoteSkeleton.svelte';
@@ -28,6 +30,8 @@
     /** Select mode: picking toggles `id` in `picked` through `onpick`; tiles stop being links. */
     picked?: ReadonlySet<string>;
     onpick?: (e: CardEmote) => void;
+    /** Number the tiles from 1 in this order (a ranking, e.g. Trending). */
+    ranked?: boolean;
   };
   let {
     items,
@@ -45,6 +49,7 @@
     below,
     picked,
     onpick,
+    ranked = false,
   }: Props = $props();
 </script>
 
@@ -60,7 +65,7 @@
           </EmoteTile>
         {:else}
           <EmoteTile emote={e} {density} {creator} {labels} eager={i < eager} href={href?.(e)} note={note?.(e)}
-            onpick={onpick ? () => onpick(e) : undefined} selected={picked?.has(e.id) ?? false} />
+            onpick={onpick ? () => onpick(e) : undefined} selected={picked?.has(e.id) ?? false} rank={ranked ? i + 1 : undefined} />
         {/if}
         {#if below}<div class="below">{@render below(e)}</div>{/if}
       </li>
