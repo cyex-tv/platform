@@ -7,8 +7,10 @@ import { session } from '$lib/tool/session.svelte';
 
 export type Note = { id: string; kind: string; payload: string; createdAt: string; read: boolean };
 
-export const inbox = $state<{ count: number; items: Note[] | null; loading: boolean; error: string | null; marking: boolean }>({
+export const inbox = $state<{ count: number; known: boolean; items: Note[] | null; loading: boolean; error: string | null; marking: boolean }>({
   count: 0,
+  /** The count came from the API at least once (until then 0 means "not asked yet"). */
+  known: false,
   items: null,
   loading: false,
   error: null,
@@ -20,6 +22,7 @@ export const inbox = $state<{ count: number; items: Note[] | null; loading: bool
 export async function refreshCount(): Promise<void> {
   try {
     inbox.count = (await gql(UNREAD_COUNT, {})).unreadNotificationCount;
+    inbox.known = true;
   } catch {
     /* keep the last number */
   }
@@ -33,6 +36,7 @@ export async function loadInbox(): Promise<void> {
     const list = (await gql(MY_NOTIFICATIONS, {})).myNotifications;
     inbox.items = list;
     inbox.count = list.filter((n) => !n.read).length;
+    inbox.known = true;
   } catch (e) {
     inbox.error = e instanceof Error ? e.message : 'That didn’t load.';
   } finally {
@@ -80,6 +84,7 @@ export function watchInbox(): () => void {
 /** Forgets everything (signing out or deleting the account). */
 export function forgetInbox(): void {
   inbox.count = 0;
+  inbox.known = false;
   inbox.items = null;
   inbox.error = null;
 }

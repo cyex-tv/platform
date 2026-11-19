@@ -21,6 +21,8 @@
   --muted: #9ba1ad;
   --dim: #868c98;            /* hints, captions, counts (≥ 4.5:1 on every surface) */
   --mark-ink: #e8e8ea;
+  --mark-lit: #cfdcff;  /* the lit bar's inner glow */
+  --mark-core: transparent;
   --neutral-chip: #1f222a;
   --row-hover: rgb(255 255 255 / .05);
   --row-alt: rgb(255 255 255 / .02);
@@ -164,6 +166,8 @@
   --muted: #555b66;
   --dim: #636975;
   --mark-ink: #1b1c20;
+  --mark-lit: #c8f8ff;
+  --mark-core: #0e9fb3; /* the lit bar's deeper inner line */
   --neutral-chip: #e8eaee;
   --row-hover: rgb(13 15 20 / .045);
   --row-alt: rgb(13 15 20 / .02);

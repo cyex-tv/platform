@@ -210,6 +210,84 @@ async fn restricting_an_account() {
 }
 
 #[tokio::test]
+async fn timed_holds_end_and_follow_the_person() {
+    use accounts::Hold;
+    use chrono::{Duration, Utc};
+    let db = db!();
+    let mut c = db.conn().await;
+    let id = account(&mut c, "71").await;
+    accounts::link(&mut c, id, kick("72", "kick72"))
+        .await
+        .unwrap();
+
+    // Tickets for a week, uploads for good.
+    let week = Utc::now() + Duration::days(7);
+    let a = accounts::set_hold(&mut c, id, Hold::Tickets, true, Some(week))
+        .await
+        .unwrap();
+    assert!(a.tickets_blocked_at.is_some());
+    assert!(a.tickets_blocked_until.is_some());
+    let a = accounts::set_hold(&mut c, id, Hold::Uploads, true, None)
+        .await
+        .unwrap();
+    assert!(a.restricted_at.is_some() && a.restricted_until.is_none());
+    assert!(a.held());
+
+    // Unlinking leaves a hold with the end; the next account with that identity gets both.
+    accounts::unlink(&mut c, id, Platform::Kick).await.unwrap();
+    let fresh = accounts::sign_in(&mut c, kick("72", "kick72"))
+        .await
+        .unwrap();
+    assert!(fresh.created);
+    assert!(fresh.account.restricted_at.is_some());
+    assert_eq!(fresh.account.restricted_until, None);
+    let until = fresh.account.tickets_blocked_until.unwrap();
+    assert!((until - week).num_seconds().abs() <= 1, "{until} vs {week}");
+    assert_eq!(fresh.account.blocked_at, None);
+
+    // An end in the past reads as no hold at all, without anything sweeping it away.
+    sqlx::query(
+        "UPDATE accounts SET tickets_blocked_until = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(id)
+    .execute(&mut *c)
+    .await
+    .unwrap();
+    let a = accounts::get(&mut c, id).await.unwrap().unwrap();
+    assert_eq!(a.tickets_blocked_at, None);
+    assert_eq!(a.tickets_blocked_until, None);
+    assert!(a.restricted_at.is_some());
+    // Lifted: gone, end and all.
+    let a = accounts::set_hold(&mut c, id, Hold::Uploads, false, None)
+        .await
+        .unwrap();
+    assert!(!a.held());
+
+    // The history keeps every hold; a newer one of the same kind ends the running one.
+    let first = accounts::record_hold(&mut c, id, Hold::Account, Some("spam"), None, None)
+        .await
+        .unwrap();
+    let second = accounts::record_hold(&mut c, id, Hold::Account, Some("worse"), Some(week), None)
+        .await
+        .unwrap();
+    let rows = accounts::restrictions(&mut c, id, 10).await.unwrap();
+    assert_eq!(rows.len(), 2);
+    let old = rows.iter().find(|r| r.id == first.id).unwrap();
+    assert!(old.lifted_at.is_some());
+    let new = rows.iter().find(|r| r.id == second.id).unwrap();
+    assert!(new.lifted_at.is_none());
+    assert_eq!(
+        accounts::end_records(&mut c, id, Hold::Account, None)
+            .await
+            .unwrap(),
+        1
+    );
+
+    drop(c);
+    db.close().await;
+}
+
+#[tokio::test]
 async fn the_schema_rejects_bad_rows() {
     let db = db!();
     let mut c = db.conn().await;
@@ -1008,7 +1086,8 @@ async fn roles_and_their_permissions() {
         .into_iter()
         .map(|r| r.name)
         .collect();
-    assert_eq!(names, ["Staff", "Moderator"]);
+    // With the built-in roles (migration default_roles) around them.
+    assert_eq!(names, ["Owner", "Admin", "Staff", "Moderator", "User"]);
     assert_eq!(
         roles::roles_of(&mut c, admin).await.unwrap()[0].id,
         staff.id
@@ -1136,6 +1215,27 @@ async fn audit_entries_page_newest_first() {
         ..audit::Filter::default()
     };
     assert_eq!(audit::list(&mut c, &by_actor, 100).await.unwrap().len(), 5);
+    let by_action = audit::Filter {
+        action: Some("emotes.approve"),
+        ..audit::Filter::default()
+    };
+    assert_eq!(audit::list(&mut c, &by_action, 100).await.unwrap().len(), 1);
+    let future = audit::Filter {
+        since: Some(chrono::Utc::now() + chrono::Duration::days(1)),
+        ..audit::Filter::default()
+    };
+    assert!(audit::list(&mut c, &future, 100).await.unwrap().is_empty());
+    let past = audit::Filter {
+        until: Some(chrono::Utc::now() - chrono::Duration::days(1)),
+        ..audit::Filter::default()
+    };
+    assert!(audit::list(&mut c, &past, 100).await.unwrap().is_empty());
+    let window = audit::Filter {
+        since: Some(chrono::Utc::now() - chrono::Duration::days(1)),
+        until: Some(chrono::Utc::now() + chrono::Duration::days(1)),
+        ..audit::Filter::default()
+    };
+    assert_eq!(audit::list(&mut c, &window, 100).await.unwrap().len(), 6);
     let one = audit::Filter {
         target_kind: Some("emote"),
         target_id: Some("e1"),
@@ -1351,4 +1451,78 @@ async fn rollup_counts_distinct_channels_per_hour_and_is_idempotent() {
 
     drop(c);
     db.close().await;
+}
+
+#[tokio::test]
+async fn name_words_and_initials_are_generated() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let owner = account(&mut c, "1").await;
+    for (name, words, initials) in [
+        ("PepePoint", "pepe point", "pp"),
+        ("KEKWait", "kek wait", "kw"),
+        ("Emote2Fast", "emote 2 fast", "e2f"),
+        ("snake_case-name.x", "snake case name x", "scnx"),
+        ("pog", "pog", "p"),
+    ] {
+        let id = emote(&mut c, owner, name, EmoteState::Approved).await;
+        let got: (String, String) =
+            sqlx::query_as("SELECT name_words, name_initials FROM emotes WHERE id = $1")
+                .bind(id)
+                .fetch_one(&mut *c)
+                .await
+                .unwrap();
+        assert_eq!(got, (words.to_owned(), initials.to_owned()), "{name}");
+    }
+}
+
+#[tokio::test]
+async fn quick_search_ranks_by_tier_then_use() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let owner = account(&mut c, "1").await;
+    let mut by_name = std::collections::HashMap::new();
+    for name in [
+        "xpogx",
+        "KEKPog",
+        "PogChamp",
+        "POG",
+        "pog",
+        "PepePoint",
+        "Hidden",
+    ] {
+        let state = if name == "Hidden" {
+            EmoteState::Pending
+        } else {
+            EmoteState::Approved
+        };
+        by_name.insert(name, emote(&mut c, owner, name, state).await);
+    }
+    let names = |ids: Vec<Uuid>| -> Vec<&'static str> {
+        ids.iter()
+            .map(|id| *by_name.iter().find(|(_, v)| *v == id).unwrap().0)
+            .collect()
+    };
+    let got = cyex_tv_db::search::quick(&mut c, "pog", 10).await.unwrap();
+    assert_eq!(names(got), ["pog", "POG", "PogChamp", "KEKPog", "xpogx"]);
+    let got = cyex_tv_db::search::quick(&mut c, "pp", 10).await.unwrap();
+    assert_eq!(names(got), ["PepePoint"]);
+    let got = cyex_tv_db::search::quick(&mut c, "PepePiont", 10)
+        .await
+        .unwrap();
+    assert_eq!(names(got), ["PepePoint"]);
+    let got = cyex_tv_db::search::quick(&mut c, "pog", 2).await.unwrap();
+    assert_eq!(got.len(), 2);
+    assert!(
+        cyex_tv_db::search::quick(&mut c, "  ", 5)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        cyex_tv_db::search::quick(&mut c, "hidden", 5)
+            .await
+            .unwrap()
+            .is_empty()
+    );
 }

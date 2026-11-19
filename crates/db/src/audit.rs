@@ -40,6 +40,12 @@ pub struct Filter<'a> {
     pub actor: Option<Uuid>,
     pub target_kind: Option<&'a str>,
     pub target_id: Option<&'a str>,
+    /// An exact action name, for example `emotes.approve`.
+    pub action: Option<&'a str>,
+    /// Only entries at or after this time.
+    pub since: Option<DateTime<Utc>>,
+    /// Only entries before this time.
+    pub until: Option<DateTime<Utc>>,
     /// Paging: only entries older than this one.
     pub before_id: Option<Uuid>,
 }
@@ -89,6 +95,9 @@ pub async fn list(
            AND ($2::text IS NULL OR target_kind = $2)
            AND ($3::text IS NULL OR target_id = $3)
            AND ($4::uuid IS NULL OR id < $4)
+           AND ($6::text IS NULL OR action = $6)
+           AND ($7::timestamptz IS NULL OR created_at >= $7)
+           AND ($8::timestamptz IS NULL OR created_at < $8)
          ORDER BY id DESC
          LIMIT $5"
     ))
@@ -97,6 +106,9 @@ pub async fn list(
     .bind(filter.target_id)
     .bind(filter.before_id)
     .bind(limit)
+    .bind(filter.action)
+    .bind(filter.since)
+    .bind(filter.until)
     .fetch_all(conn)
     .await?)
 }
@@ -145,7 +157,7 @@ pub async fn emote_activity_rows(
                 a.after_json, a.created_at, a.subject_account_id
          FROM audit_log a
          JOIN accounts s ON s.id = a.subject_account_id
-                        AND s.deleted_at IS NULL AND s.blocked_at IS NULL
+                        AND s.deleted_at IS NULL AND (s.blocked_at IS NULL OR s.blocked_until <= now())
          LEFT JOIN accounts act ON act.id = a.actor_account_id
          WHERE a.subject_account_id IS NOT NULL
            AND ($2::uuid IS NULL OR a.id < $2)
@@ -156,7 +168,7 @@ pub async fn emote_activity_rows(
                                   AND p.target_id = a.target_id AND p.id < a.id))
                OR (a.action IN ('set.emote_added', 'set.emote_removed', 'set.emote_updated')
                    AND coalesce(a.after_json ->> 'emote_id', a.before_json ->> 'emote_id') = $1
-                   AND act.id IS NOT NULL AND act.blocked_at IS NULL AND act.deleted_at IS NULL
+                   AND act.id IS NOT NULL AND (act.blocked_at IS NULL OR act.blocked_until <= now()) AND act.deleted_at IS NULL
                    AND (a.actor_account_id = a.subject_account_id
                         OR a.after_json ->> 'via' = 'account_editor'))
            )
@@ -198,7 +210,7 @@ pub async fn activity_rows(
                                 WHERE p.action = 'emote.approved' AND p.target_kind = 'emote'
                                   AND p.target_id = a.target_id AND p.id < a.id))
                OR (a.action <> 'emote.approved'
-                   AND act.id IS NOT NULL AND act.blocked_at IS NULL AND act.deleted_at IS NULL
+                   AND act.id IS NOT NULL AND (act.blocked_at IS NULL OR act.blocked_until <= now()) AND act.deleted_at IS NULL
                    AND (a.actor_account_id = a.subject_account_id
                         OR a.after_json ->> 'via' = 'account_editor'))
            )

@@ -9,7 +9,7 @@
   import SectionHead from '$lib/components/SectionHead.svelte';
   import TagInput from '$lib/components/TagInput.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
-  import { openPalette } from '$lib/components/palette.svelte';
+  import { focusSearch } from '$lib/shell/search.svelte';
 
   let { data } = $props();
   let sort = $state<'top' | 'new'>('top');
@@ -67,7 +67,7 @@
         </Popover>
         <IconButton icon="copy" label="Copy link" />
         <button class="btn btn-s" type="button" onclick={() => (sheet = true)}>Open a sheet</button>
-        <button class="btn btn-s" type="button" onclick={() => openPalette('fox')}>Palette with “fox”</button>
+        <button class="btn btn-s" type="button" onclick={() => focusSearch('fox')}>Header search with “fox”</button>
       </div>
       <div class="row">
         {#each chips as c (c)}<Chip label={c} onremove={() => (chips = chips.filter((x) => x !== c))} />{/each}

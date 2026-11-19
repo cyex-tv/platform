@@ -318,6 +318,106 @@ async fn report_then_dismiss() {
 }
 
 #[tokio::test]
+async fn staff_look_up_an_account() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("21", &[]).await;
+    let bob = w.user("22", &[]).await;
+    let reviewer = w.user("23", &["emotes.review"]).await;
+    let viewer = w.user("24", &["users.view", "audit.view"]).await;
+    let (emote, _) = w.live_emote(&alice, &reviewer, "aliceSeen", &png(21)).await;
+    let r = w
+        .gql(&bob, REPORT, json!({ "id": emote, "r": "spam" }))
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+
+    let about = "query($a: String!) { accountReports(accountId: $a) { about { reason emote { name } } by { reason } } }";
+    let alice_id = ids::to_text(alice.id);
+    let bob_id = ids::to_text(bob.id);
+    assert_eq!(
+        code(&w.gql(&bob, about, json!({ "a": alice_id })).await),
+        "forbidden"
+    );
+    let r = w.gql(&reviewer, about, json!({ "a": alice_id })).await;
+    assert_eq!(
+        r["data"]["accountReports"]["about"][0]["reason"], "spam",
+        "{r}"
+    );
+    assert_eq!(
+        r["data"]["accountReports"]["about"][0]["emote"]["name"],
+        "aliceSeen"
+    );
+    assert_eq!(
+        r["data"]["accountReports"]["by"].as_array().unwrap().len(),
+        0
+    );
+    let r = w.gql(&reviewer, about, json!({ "a": bob_id })).await;
+    assert_eq!(
+        r["data"]["accountReports"]["by"][0]["reason"], "spam",
+        "{r}"
+    );
+    assert_eq!(
+        r["data"]["accountReports"]["about"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+
+    let account = "query($a: String!) { adminAccount(accountId: $a) { id displayName identities { platform login } blocked uploadsBlocked } }";
+    assert_eq!(
+        code(&w.gql(&reviewer, account, json!({ "a": alice_id })).await),
+        "forbidden"
+    );
+    let r = w.gql(&viewer, account, json!({ "a": alice_id })).await;
+    assert_eq!(r["data"]["adminAccount"]["displayName"], "user21", "{r}");
+    assert_eq!(
+        r["data"]["adminAccount"]["identities"][0]["platform"],
+        "TWITCH"
+    );
+    assert_eq!(r["data"]["adminAccount"]["blocked"], false);
+    let unknown = ids::to_text(ids::new_id());
+    assert_eq!(
+        code(&w.gql(&viewer, account, json!({ "a": unknown })).await),
+        "not_found"
+    );
+
+    let emotes =
+        "query($a: String!) { accountEmotes(accountId: $a) { total items { name state } } }";
+    assert_eq!(
+        code(&w.gql(&bob, emotes, json!({ "a": alice_id })).await),
+        "forbidden"
+    );
+    let r = w.gql(&viewer, emotes, json!({ "a": alice_id })).await;
+    assert_eq!(r["data"]["accountEmotes"]["total"], 1, "{r}");
+    assert_eq!(r["data"]["accountEmotes"]["items"][0]["state"], "APPROVED");
+
+    // The audit log narrows by actor, action and time.
+    let log = "query($actor: String, $action: String, $since: String, $until: String) { auditLog(actorId: $actor, action: $action, since: $since, until: $until) { action actorId } }";
+    let r = w
+        .gql(&viewer, log, json!({ "actor": ids::to_text(reviewer.id) }))
+        .await;
+    let rows = r["data"]["auditLog"].as_array().unwrap();
+    assert!(!rows.is_empty(), "{r}");
+    assert!(
+        rows.iter()
+            .all(|e| e["actorId"] == ids::to_text(reviewer.id))
+    );
+    let r = w
+        .gql(&viewer, log, json!({ "action": "no.such.action" }))
+        .await;
+    assert!(r["data"]["auditLog"].as_array().unwrap().is_empty(), "{r}");
+    let r = w
+        .gql(&viewer, log, json!({ "since": "2999-01-01T00:00:00Z" }))
+        .await;
+    assert!(r["data"]["auditLog"].as_array().unwrap().is_empty(), "{r}");
+    let r = w.gql(&viewer, log, json!({ "since": "yesterday" })).await;
+    assert_eq!(code(&r), "bad_time", "{r}");
+    let r = w.gql(&viewer, log, json!({ "actor": "nope" })).await;
+    assert!(!r["errors"].is_null(), "{r}");
+    w.close().await;
+}
+
+#[tokio::test]
 async fn reports_are_limited_per_account() {
     let Some(w) = World::new().await else { return };
     let alice = w.user("11", &[]).await;
@@ -582,6 +682,201 @@ async fn restricting_and_blocking_accounts() {
         w.count("SELECT count(*) FROM audit_log WHERE action = 'account.restricted'")
             .await,
         2
+    );
+    w.close().await;
+}
+
+const PLACE: &str = "mutation($a: String!, $k: RestrictionKind!, $u: String, $r: String!) { placeRestriction(accountId: $a, input: { kind: $k, until: $u, reason: $r }) { uploadsBlocked ticketsBlocked blocked uploadsBlockedUntil ticketsBlockedUntil blockedUntil } }";
+const LIFT: &str = "mutation($a: String!, $k: RestrictionKind!) { liftRestriction(accountId: $a, kind: $k, reason: \"appeal\") { uploadsBlocked ticketsBlocked blocked } }";
+const HISTORY: &str = "query($a: String!) { accountRestrictions(accountId: $a) { kind reason endsAt createdBy liftedAt liftedBy active } }";
+
+#[tokio::test]
+async fn timed_restrictions_end_on_their_own() {
+    let Some(w) = World::new().await else { return };
+    let mods = w.user("41", &["users.restrict"]).await;
+    let erin = w.user("42", &[]).await;
+    let erin_id = ids::to_text(erin.id);
+    let soon = (chrono::Utc::now() + chrono::Duration::hours(1)).to_rfc3339();
+
+    // A reason is required, and the end has to be in the future.
+    let r = w
+        .gql(
+            &mods,
+            PLACE,
+            json!({ "a": erin_id, "k": "UPLOADS", "u": soon, "r": "" }),
+        )
+        .await;
+    assert_eq!(code(&r), "bad_reason", "{r}");
+    let r = w
+        .gql(
+            &mods,
+            PLACE,
+            json!({ "a": erin_id, "k": "UPLOADS", "u": "2001-01-01T00:00:00Z", "r": "spam" }),
+        )
+        .await;
+    assert_eq!(code(&r), "bad_time", "{r}");
+
+    // One hour without uploads.
+    let r = w
+        .gql(
+            &mods,
+            PLACE,
+            json!({ "a": erin_id, "k": "UPLOADS", "u": soon, "r": "spam uploads" }),
+        )
+        .await;
+    let s = &r["data"]["placeRestriction"];
+    assert_eq!(s["uploadsBlocked"], true, "{r}");
+    assert!(s["uploadsBlockedUntil"].is_string(), "{r}");
+    assert_eq!(s["ticketsBlocked"], false);
+    let (status, body) = w.upload(&erin, "nope", &png(60)).await;
+    assert_eq!(
+        (status, body["error"].as_str()),
+        (StatusCode::FORBIDDEN, Some("restricted"))
+    );
+
+    // The hour passes (moved back in the database): the API lets her upload again, untouched.
+    {
+        let mut conn = w.db.conn().await;
+        sqlx::query(
+            "UPDATE accounts SET restricted_at = now() - interval '2 hours',
+                 restricted_until = now() - interval '1 second' WHERE id = $1",
+        )
+        .bind(erin.id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+        sqlx::query(
+            "UPDATE account_restrictions SET created_at = now() - interval '2 hours',
+                 ends_at = now() - interval '1 second' WHERE account_id = $1",
+        )
+        .bind(erin.id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    }
+    let st = w
+        .gql(
+            &mods,
+            "query($a: String!) { accountStatus(accountId: $a) { uploadsBlocked uploadsBlockedUntil } }",
+            json!({ "a": erin_id }),
+        )
+        .await;
+    assert_eq!(
+        st["data"]["accountStatus"],
+        json!({ "uploadsBlocked": false, "uploadsBlockedUntil": null }),
+        "{st}"
+    );
+    let (status, body) = w.upload(&erin, "allowed", &png(61)).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    let h = w.gql(&mods, HISTORY, json!({ "a": erin_id })).await;
+    let rows = h["data"]["accountRestrictions"].as_array().unwrap();
+    assert_eq!(rows.len(), 1, "{h}");
+    assert_eq!(rows[0]["kind"], "UPLOADS");
+    assert_eq!(rows[0]["reason"], "spam uploads");
+    assert_eq!(rows[0]["active"], false);
+    assert_eq!(rows[0]["createdBy"], ids::to_text(mods.id).as_str());
+
+    // A timed block ends the same way: sessions end now, sign-in works again afterwards.
+    let r = w
+        .gql(
+            &mods,
+            PLACE,
+            json!({ "a": erin_id, "k": "ACCOUNT", "u": soon, "r": "cool off" }),
+        )
+        .await;
+    assert_eq!(r["data"]["placeRestriction"]["blocked"], true, "{r}");
+    assert_eq!(
+        code(&w.gql(&erin, "{ me { id } }", json!({})).await),
+        "signed_out"
+    );
+    {
+        let mut conn = w.db.conn().await;
+        sqlx::query(
+            "UPDATE accounts SET blocked_until = now() - interval '1 second' WHERE id = $1",
+        )
+        .bind(erin.id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+        let again = accounts::get(&mut conn, erin.id).await.unwrap().unwrap();
+        assert_eq!(again.blocked_at, None);
+        assert_eq!(again.blocked_until, None);
+    }
+    let back = w.user("42", &[]).await;
+    assert_eq!(back.id, erin.id);
+    let r = w.gql(&back, "{ me { id } }", json!({})).await;
+    assert_eq!(r["data"]["me"]["id"], erin_id.as_str(), "{r}");
+
+    // Each one placed is audited.
+    assert_eq!(
+        w.count("SELECT count(*) FROM audit_log WHERE action = 'account.restriction_placed'")
+            .await,
+        2
+    );
+    w.close().await;
+}
+
+#[tokio::test]
+async fn a_ticket_ban_stops_reports_until_lifted() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("51", &[]).await;
+    let frank = w.user("52", &[]).await;
+    let reviewer = w.user("53", &["emotes.review"]).await;
+    let ticket_mod = w.user("54", &["users.restrict_tickets"]).await;
+    let (emote, _) = w.live_emote(&alice, &reviewer, "aliceTix", &png(70)).await;
+    let frank_id = ids::to_text(frank.id);
+
+    // The narrow permission covers tickets only.
+    let r = w
+        .gql(
+            &ticket_mod,
+            PLACE,
+            json!({ "a": frank_id, "k": "ACCOUNT", "r": "nope" }),
+        )
+        .await;
+    assert_eq!(code(&r), "forbidden", "{r}");
+    let r = w
+        .gql(
+            &ticket_mod,
+            PLACE,
+            json!({ "a": frank_id, "k": "TICKETS", "r": "report spam" }),
+        )
+        .await;
+    assert_eq!(r["data"]["placeRestriction"]["ticketsBlocked"], true, "{r}");
+    assert!(r["data"]["placeRestriction"]["ticketsBlockedUntil"].is_null());
+    let r = w
+        .gql(&frank, REPORT, json!({ "id": emote, "r": "spam" }))
+        .await;
+    assert_eq!(code(&r), "tickets_blocked", "{r}");
+
+    let r = w
+        .gql(&ticket_mod, LIFT, json!({ "a": frank_id, "k": "TICKETS" }))
+        .await;
+    assert_eq!(r["data"]["liftRestriction"]["ticketsBlocked"], false, "{r}");
+    let r = w
+        .gql(&frank, REPORT, json!({ "id": emote, "r": "spam" }))
+        .await;
+    assert_eq!(r["data"]["reportEmote"]["state"], "OPEN", "{r}");
+
+    let h = w.gql(&reviewer, HISTORY, json!({ "a": frank_id })).await;
+    assert_eq!(code(&h), "forbidden");
+    let h = w.gql(&ticket_mod, HISTORY, json!({ "a": frank_id })).await;
+    let rows = &h["data"]["accountRestrictions"];
+    assert_eq!(rows[0]["kind"], "TICKETS", "{h}");
+    assert_eq!(rows[0]["active"], false);
+    assert_eq!(rows[0]["liftedBy"], ids::to_text(ticket_mod.id).as_str());
+    assert_eq!(
+        w.count("SELECT count(*) FROM audit_log WHERE action = 'account.restriction_lifted'")
+            .await,
+        1
+    );
+    // Lifting what isn't on changes nothing and writes nothing.
+    w.gql(&ticket_mod, LIFT, json!({ "a": frank_id, "k": "TICKETS" }))
+        .await;
+    assert_eq!(
+        w.count("SELECT count(*) FROM audit_log WHERE action = 'account.restriction_lifted'")
+            .await,
+        1
     );
     w.close().await;
 }

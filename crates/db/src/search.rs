@@ -186,6 +186,55 @@ pub async fn search(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<Hits> {
     })
 }
 
+/// The header search: up to `limit` emote IDs for `text` (trimmed, at most 100 characters; empty
+/// finds nothing), best first. Same visibility as [`search`] (approved, listed, not deleted, no
+/// NSFW). Tiers: exact name, same ignoring case, name prefix, word or initials prefix
+/// (`PepePoint` is found by `point` and `pp`), substring, then, from 3 characters, similar names.
+/// Within a tier: most used, shorter name, name, ID; similar names by similarity first.
+pub async fn quick(conn: &mut PgConnection, text: &str, limit: i64) -> DbResult<Vec<Uuid>> {
+    let text: String = text.trim().chars().take(100).collect();
+    if text.is_empty() {
+        return Ok(Vec::new());
+    }
+    let lower = text.to_lowercase();
+    let pattern = like_escape(&lower);
+    let rows: Vec<(Uuid,)> = sqlx::query_as(
+        "SELECT id FROM (
+             SELECT e.id, e.name, e.popularity,
+                    CASE WHEN e.name = $1 THEN 1
+                         WHEN lower(e.name) = $2 THEN 2
+                         WHEN e.name ILIKE $3 || '%' THEN 3
+                         WHEN (' ' || e.name_words) LIKE '% ' || $3 || '%'
+                              OR e.name_initials LIKE $3 || '%' THEN 4
+                         WHEN e.name ILIKE '%' || $3 || '%' THEN 5
+                         ELSE 6 END AS tier,
+                    similarity(e.name, $1) AS sim
+             FROM emotes e
+             WHERE e.state = 'approved' AND e.deleted_at IS NULL AND NOT e.private
+               AND NOT e.nsfw
+               AND (e.name ILIKE '%' || $3 || '%'
+                    OR (' ' || e.name_words) LIKE '% ' || $3 || '%'
+                    OR e.name_initials LIKE $3 || '%'
+                    OR ($4 AND e.name % $1))
+         ) r
+         ORDER BY tier,
+                  CASE WHEN tier = 6 THEN sim END DESC NULLS LAST,
+                  popularity DESC,
+                  CASE WHEN tier < 6 THEN char_length(name) END,
+                  CASE WHEN tier < 6 THEN lower(name) END,
+                  id
+         LIMIT $5",
+    )
+    .bind(&text)
+    .bind(&lower)
+    .bind(&pattern)
+    .bind(text.chars().count() >= 3)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?;
+    Ok(rows.into_iter().map(|(id,)| id).collect())
+}
+
 /// Live accounts (not deleted, not blocked) whose Twitch or Kick login or display name matches
 /// `text` (lowercase, trimmed, at most 64 characters, at least `ACCOUNT_QUERY_MIN`), in rank order,
 /// and how many match (counted up to `ACCOUNT_TOTAL_CAP`).
@@ -234,7 +283,7 @@ async fn accounts_window(
                                  similarity(lower(i.display_name), $1))) AS score
              FROM identities i
              JOIN accounts a ON a.id = i.account_id
-                            AND a.deleted_at IS NULL AND a.blocked_at IS NULL
+                            AND a.deleted_at IS NULL AND (a.blocked_at IS NULL OR a.blocked_until <= now())
              WHERE lower(i.login) LIKE '%' || $2 || '%'
                 OR lower(i.display_name) LIKE '%' || $2 || '%'
                 OR lower(i.login) % $1

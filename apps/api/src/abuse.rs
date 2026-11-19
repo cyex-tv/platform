@@ -9,20 +9,25 @@
 //!   `emote.updated` and `set.emote_removed`), its sha256 and dHash are blocked, its owners are
 //!   notified, open reports on it are closed, and the worker deletes the files and purges the CDN
 //!   (`files.delete`). All in one transaction, audited.
-//! - **Restrict:** `users.restrict` blocks an account's uploads, or the whole account (no sign-in,
-//!   sessions ended). The owner can't be restricted.
+//! - **Restrict:** staff stop an account from uploading (`users.restrict_uploads`), from filing
+//!   reports and tickets (`users.restrict_tickets`), or block it outright (`users.block`: no
+//!   sign-in, sessions ended); `users.restrict` does all three. Each restriction has a reason and
+//!   lasts for good or until a time; the API treats one whose time has passed as gone. Every one
+//!   placed or lifted is kept in `account_restrictions` and audited. The owner can't be
+//!   restricted, and nobody restricts an account whose highest role is at or above their own.
 
 use axum::http::StatusCode;
 use chrono::Utc;
 use cyex_tv_auth::Caller;
+use cyex_tv_db::accounts::Hold;
 use cyex_tv_db::{
     DbError, accounts, audit, blocklist, emotes, files, ids, jobs, notifications, reads, reports,
     sessions, sets,
 };
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
-    AccountStatus, Emote, EmoteState, EventType, Notification, Report, ReportAction, ReportQueue,
-    ReportState,
+    AccountReports, AccountStatus, AdminAccount, Emote, EmoteState, EventType, Notification,
+    Report, ReportAction, ReportQueue, ReportState, Restriction, RestrictionInput, RestrictionKind,
 };
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
@@ -76,14 +81,17 @@ fn state_of(raw: &str) -> ReportState {
     }
 }
 
-/// A moderator: `emotes.review` or `emotes.takedown`.
+/// A moderator: `emotes.review`, `emotes.takedown` or `reports.manage`.
 async fn moderator(conn: &mut PgConnection, caller: &Caller) -> ApiResult<()> {
     if holds(conn, caller, permissions::EMOTES_TAKEDOWN).await?
         || holds(conn, caller, permissions::EMOTES_REVIEW).await?
+        || holds(conn, caller, permissions::REPORTS_MANAGE).await?
     {
         Ok(())
     } else {
-        Err(forbidden("This needs emotes.review or emotes.takedown."))
+        Err(forbidden(
+            "This needs emotes.review, emotes.takedown or reports.manage.",
+        ))
     }
 }
 
@@ -171,6 +179,24 @@ pub async fn report(
     }
     let emote_id = parse_id(emote_id)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let me = accounts::get(&mut conn, caller.account_id)
+        .await
+        .map_err(db_error)?
+        .ok_or_else(not_found)?;
+    if me.tickets_blocked_at.is_some() {
+        let message = match me.tickets_blocked_until {
+            Some(until) => format!(
+                "Your account can't file reports until {}.",
+                until.format("%Y/%m/%d %H:%M UTC")
+            ),
+            None => "Your account can't file reports.".to_owned(),
+        };
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "tickets_blocked",
+            &message,
+        ));
+    }
     let recent = reports::count_by_since(
         &mut conn,
         caller.account_id,
@@ -413,26 +439,116 @@ pub async fn takedown(
 
 // Restrictions
 
-pub async fn restrict(
+/// The longest a timed restriction may run.
+pub const MAX_RESTRICTION_DAYS: i64 = 3650;
+
+fn hold_of(kind: RestrictionKind) -> Hold {
+    match kind {
+        RestrictionKind::Uploads => Hold::Uploads,
+        RestrictionKind::Tickets => Hold::Tickets,
+        RestrictionKind::Account => Hold::Account,
+    }
+}
+
+fn kind_of(hold: Hold) -> RestrictionKind {
+    match hold {
+        Hold::Uploads => RestrictionKind::Uploads,
+        Hold::Tickets => RestrictionKind::Tickets,
+        Hold::Account => RestrictionKind::Account,
+    }
+}
+
+/// The permission that places or lifts `hold`, besides `users.restrict` (which does all three).
+fn permission_for(hold: Hold) -> &'static str {
+    match hold {
+        Hold::Uploads => permissions::USERS_RESTRICT_UPLOADS,
+        Hold::Tickets => permissions::USERS_RESTRICT_TICKETS,
+        Hold::Account => permissions::USERS_BLOCK,
+    }
+}
+
+/// Every permission that can see an account's restrictions.
+const SEE_RESTRICTIONS: [&str; 5] = [
+    permissions::USERS_VIEW,
+    permissions::USERS_RESTRICT,
+    permissions::USERS_RESTRICT_UPLOADS,
+    permissions::USERS_RESTRICT_TICKETS,
+    permissions::USERS_BLOCK,
+];
+
+async fn sees_restrictions(conn: &mut PgConnection, caller: &Caller) -> ApiResult<bool> {
+    let held = crate::catalog::permissions_of(conn, caller).await?;
+    Ok(caller.owner || SEE_RESTRICTIONS.iter().any(|p| held.iter().any(|h| h == p)))
+}
+
+pub(crate) fn status_of(account: &accounts::Account) -> AccountStatus {
+    AccountStatus {
+        id: ids::to_text(account.id),
+        uploads_blocked: account.restricted_at.is_some(),
+        blocked: account.blocked_at.is_some(),
+        tickets_blocked: account.tickets_blocked_at.is_some(),
+        uploads_blocked_until: account.restricted_until.map(views::time),
+        blocked_until: account.blocked_until.map(views::time),
+        tickets_blocked_until: account.tickets_blocked_until.map(views::time),
+    }
+}
+
+/// A restriction's end: in the future and at most ten years out, or `None` for good.
+fn until(raw: Option<&str>) -> ApiResult<Option<chrono::DateTime<Utc>>> {
+    let Some(raw) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(None);
+    };
+    let at = chrono::DateTime::parse_from_rfc3339(raw)
+        .map(|t| t.with_timezone(&Utc))
+        .map_err(|_| {
+            bad(
+                "bad_time",
+                "until must be a time like 2026-11-17T00:00:00Z.",
+            )
+        })?;
+    let now = Utc::now();
+    if at <= now {
+        return Err(bad("bad_time", "The end has to be in the future."));
+    }
+    if at > now + chrono::Duration::days(MAX_RESTRICTION_DAYS) {
+        return Err(bad(
+            "bad_time",
+            "At most ten years; leave the end empty for good.",
+        ));
+    }
+    Ok(Some(at))
+}
+
+/// Who may restrict `account_id` for `holds`: the owner can't be, nobody acts on an account at or
+/// above their own highest role, and each hold needs its permission (or `users.restrict`).
+async fn may_restrict(
     state: &AppState,
+    conn: &mut PgConnection,
     caller: &Caller,
-    account_id: &str,
-    uploads_blocked: Option<bool>,
-    blocked: Option<bool>,
-) -> ApiResult<AccountStatus> {
-    let account_id = parse_id(account_id)?;
-    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    if !holds(&mut tx, caller, permissions::USERS_RESTRICT).await? {
+    account_id: Uuid,
+    holds_wanted: &[Hold],
+) -> ApiResult<accounts::Account> {
+    let held = crate::catalog::permissions_of(conn, caller).await?;
+    let has = |p: &str| caller.owner || held.iter().any(|h| h == p);
+    if holds_wanted.is_empty() && !has(permissions::USERS_RESTRICT) {
         return Err(forbidden("This needs users.restrict."));
     }
-    let before = accounts::get(&mut tx, account_id)
+    for hold in holds_wanted {
+        if !has(permissions::USERS_RESTRICT) && !has(permission_for(*hold)) {
+            return Err(forbidden(&format!(
+                "This needs users.restrict or {}.",
+                permission_for(*hold)
+            )));
+        }
+    }
+    let before = accounts::get(conn, account_id)
         .await
         .map_err(db_error)?
+        .filter(|a| a.deleted_at.is_none())
         .ok_or_else(not_found)?;
     if state
         .auth
-        .is_owner(&mut tx, account_id)
+        .is_owner(conn, account_id)
         .await
         .map_err(ApiError::from)?
     {
@@ -443,25 +559,71 @@ pub async fn restrict(
         ));
     }
     if account_id != caller.account_id {
-        let target_highest = cyex_tv_db::roles::highest_position(&mut tx, account_id)
+        let target_highest = cyex_tv_db::roles::highest_position(conn, account_id)
             .await
             .map_err(db_error)?;
-        actor(&mut tx, caller)
+        actor(conn, caller)
             .await?
             .may_act_on(target_highest)
             .map_err(rule)?;
     }
+    Ok(before)
+}
+
+fn snapshot(a: &accounts::Account) -> Value {
+    json!({
+        "uploads_blocked": a.restricted_at.is_some(),
+        "uploads_blocked_until": a.restricted_until.map(views::time),
+        "tickets_blocked": a.tickets_blocked_at.is_some(),
+        "tickets_blocked_until": a.tickets_blocked_until.map(views::time),
+        "blocked": a.blocked_at.is_some(),
+        "blocked_until": a.blocked_until.map(views::time),
+    })
+}
+
+/// The older switch: block or unblock uploads and the whole account, for good and without a
+/// reason. Kept as it was; each change is also recorded in the account's restrictions.
+pub async fn restrict(
+    state: &AppState,
+    caller: &Caller,
+    account_id: &str,
+    uploads_blocked: Option<bool>,
+    blocked: Option<bool>,
+) -> ApiResult<AccountStatus> {
+    let account_id = parse_id(account_id)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    let wanted: Vec<Hold> = [
+        uploads_blocked.map(|_| Hold::Uploads),
+        blocked.map(|_| Hold::Account),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    let before = may_restrict(state, &mut tx, caller, account_id, &wanted).await?;
     let mut after = before.clone();
-    if let Some(u) = uploads_blocked {
-        after = accounts::set_restricted(&mut tx, account_id, u)
+    for (hold, on) in [(Hold::Uploads, uploads_blocked), (Hold::Account, blocked)] {
+        let Some(on) = on else { continue };
+        after = accounts::set_hold(&mut tx, account_id, hold, on, None)
             .await
             .map_err(db_error)?;
-    }
-    if let Some(b) = blocked {
-        after = accounts::set_blocked(&mut tx, account_id, b)
+        if on {
+            accounts::record_hold(
+                &mut tx,
+                account_id,
+                hold,
+                None,
+                None,
+                Some(caller.account_id),
+            )
             .await
             .map_err(db_error)?;
-        if b {
+        } else {
+            accounts::end_records(&mut tx, account_id, hold, Some(caller.account_id))
+                .await
+                .map_err(db_error)?;
+        }
+        if hold == Hold::Account && on {
             sessions::delete_for_account(&mut tx, account_id, None)
                 .await
                 .map_err(db_error)?;
@@ -478,14 +640,154 @@ pub async fn restrict(
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
-    Ok(AccountStatus {
-        id: ids::to_text(account_id),
-        uploads_blocked: after.restricted_at.is_some(),
-        blocked: after.blocked_at.is_some(),
-    })
+    Ok(status_of(&after))
 }
 
-/// Whether an account's uploads or sign-in are blocked. Needs `users.view` or `users.restrict`.
+/// Places a restriction with a reason, for good or until a time. One of the same kind that is
+/// running is replaced (its end changes; its record is marked lifted). Audited
+/// (`account.restriction_placed`).
+pub async fn place(
+    state: &AppState,
+    caller: &Caller,
+    account_id: &str,
+    input: &RestrictionInput,
+) -> ApiResult<AccountStatus> {
+    let account_id = parse_id(account_id)?;
+    let reason = text(&input.reason, "reason")?;
+    let ends = until(input.until.as_deref())?;
+    let hold = hold_of(input.kind);
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    let before = may_restrict(state, &mut tx, caller, account_id, &[hold]).await?;
+    let after = accounts::set_hold(&mut tx, account_id, hold, true, ends)
+        .await
+        .map_err(db_error)?;
+    let record = accounts::record_hold(
+        &mut tx,
+        account_id,
+        hold,
+        Some(&reason),
+        ends,
+        Some(caller.account_id),
+    )
+    .await
+    .map_err(db_error)?;
+    if hold == Hold::Account {
+        sessions::delete_for_account(&mut tx, account_id, None)
+            .await
+            .map_err(db_error)?;
+    }
+    let mut after_snap = snapshot(&after);
+    after_snap["kind"] = json!(hold.kind());
+    after_snap["reason"] = json!(reason);
+    after_snap["until"] = json!(ends.map(views::time));
+    after_snap["restriction_id"] = json!(ids::to_text(record.id));
+    write_audit(
+        &mut tx,
+        caller,
+        "account.restriction_placed",
+        "account",
+        &ids::to_text(account_id),
+        Some(snapshot(&before)),
+        Some(after_snap),
+    )
+    .await?;
+    tx.commit().await.map_err(sqlx_error)?;
+    Ok(status_of(&after))
+}
+
+/// Lifts a restriction early. Lifting one that isn't on changes nothing (and isn't audited).
+pub async fn lift(
+    state: &AppState,
+    caller: &Caller,
+    account_id: &str,
+    kind: RestrictionKind,
+    reason: Option<&str>,
+) -> ApiResult<AccountStatus> {
+    let account_id = parse_id(account_id)?;
+    let reason = reason
+        .map(str::trim)
+        .filter(|r| !r.is_empty())
+        .map(|r| text(r, "reason"))
+        .transpose()?;
+    let hold = hold_of(kind);
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    let before = may_restrict(state, &mut tx, caller, account_id, &[hold]).await?;
+    if hold.of(&before).0.is_none() {
+        return Ok(status_of(&before));
+    }
+    let after = accounts::set_hold(&mut tx, account_id, hold, false, None)
+        .await
+        .map_err(db_error)?;
+    accounts::end_records(&mut tx, account_id, hold, Some(caller.account_id))
+        .await
+        .map_err(db_error)?;
+    let mut after_snap = snapshot(&after);
+    after_snap["kind"] = json!(hold.kind());
+    after_snap["reason"] = json!(reason);
+    write_audit(
+        &mut tx,
+        caller,
+        "account.restriction_lifted",
+        "account",
+        &ids::to_text(account_id),
+        Some(snapshot(&before)),
+        Some(after_snap),
+    )
+    .await?;
+    tx.commit().await.map_err(sqlx_error)?;
+    Ok(status_of(&after))
+}
+
+/// Every restriction placed on an account, newest first (the latest 100), running or over.
+/// Needs `users.view`, `users.restrict` or one of the narrower restrict permissions.
+pub async fn restrictions(
+    state: &AppState,
+    caller: &Caller,
+    account_id: &str,
+) -> ApiResult<Vec<Restriction>> {
+    let account_id = parse_id(account_id)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    if !sees_restrictions(&mut conn, caller).await? {
+        return Err(forbidden(
+            "This needs users.view or a users.restrict permission.",
+        ));
+    }
+    let account = accounts::get(&mut conn, account_id)
+        .await
+        .map_err(db_error)?
+        .ok_or_else(not_found)?;
+    let rows = accounts::restrictions(&mut conn, account_id, 100)
+        .await
+        .map_err(db_error)?;
+    let now = Utc::now();
+    Ok(rows
+        .into_iter()
+        .filter_map(|r| {
+            let hold = Hold::from_kind(&r.kind)?;
+            // Running: not lifted, not past its end, and the account still holds that kind (the
+            // record of an older switch-off may predate this table).
+            let active = r.lifted_at.is_none()
+                && r.ends_at.is_none_or(|e| e > now)
+                && hold.of(&account).0.is_some();
+            Some(Restriction {
+                id: ids::to_text(r.id),
+                kind: kind_of(hold),
+                reason: r.reason,
+                ends_at: r.ends_at.map(views::time),
+                created_by: r.created_by.map(ids::to_text),
+                created_at: views::time(r.created_at),
+                lifted_at: r.lifted_at.map(views::time),
+                lifted_by: r.lifted_by.map(ids::to_text),
+                active,
+            })
+        })
+        .collect())
+}
+
+/// What an account may do now. Needs `users.view`, `users.restrict` or one of the narrower
+/// restrict permissions.
 pub async fn status(
     state: &AppState,
     caller: &Caller,
@@ -493,9 +795,7 @@ pub async fn status(
 ) -> ApiResult<AccountStatus> {
     let account_id = parse_id(account_id)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    if !holds(&mut conn, caller, permissions::USERS_VIEW).await?
-        && !holds(&mut conn, caller, permissions::USERS_RESTRICT).await?
-    {
+    if !sees_restrictions(&mut conn, caller).await? {
         return Err(forbidden("This needs users.view or users.restrict."));
     }
     let account = accounts::get(&mut conn, account_id)
@@ -503,10 +803,80 @@ pub async fn status(
         .map_err(db_error)?
         .filter(|a| a.deleted_at.is_none())
         .ok_or_else(not_found)?;
-    Ok(AccountStatus {
+    Ok(status_of(&account))
+}
+
+/// Reports about an account's emotes and reports it filed. For moderators.
+pub async fn account_reports(
+    state: &AppState,
+    caller: &Caller,
+    account_id: &str,
+) -> ApiResult<AccountReports> {
+    let account_id = parse_id(account_id)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    moderator(&mut conn, caller).await?;
+    let about = reports::about_owner(&mut conn, account_id, 50)
+        .await
+        .map_err(db_error)?;
+    let by = reports::by_reporter(&mut conn, account_id, 50)
+        .await
+        .map_err(db_error)?;
+    let mut out = AccountReports {
+        about: Vec::with_capacity(about.len()),
+        by: Vec::with_capacity(by.len()),
+    };
+    for r in &about {
+        out.about.push(report_view(state, &mut conn, r).await?);
+    }
+    for r in &by {
+        out.by.push(report_view(state, &mut conn, r).await?);
+    }
+    Ok(out)
+}
+
+/// An account with its identities and restrictions. Needs `users.view` or `users.restrict`.
+pub async fn admin_account(
+    state: &AppState,
+    caller: &Caller,
+    account_id: &str,
+) -> ApiResult<AdminAccount> {
+    let account_id = parse_id(account_id)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    if !sees_restrictions(&mut conn, caller).await? {
+        return Err(forbidden("This needs users.view or users.restrict."));
+    }
+    let account = accounts::get(&mut conn, account_id)
+        .await
+        .map_err(db_error)?
+        .filter(|a| a.deleted_at.is_none())
+        .ok_or_else(not_found)?;
+    let identities: Vec<_> = accounts::identities(&mut conn, account_id)
+        .await
+        .map_err(db_error)?
+        .into_iter()
+        .map(|i| cyex_tv_shared::model::Identity {
+            platform: i.platform,
+            platform_user_id: i.platform_user_id,
+            login: i.login,
+            display_name: i.display_name,
+            avatar: i.avatar,
+        })
+        .collect();
+    Ok(AdminAccount {
         id: ids::to_text(account_id),
+        display_name: identities
+            .first()
+            .map(|i| i.display_name.clone())
+            .unwrap_or_default(),
+        avatar: identities.iter().find_map(|i| i.avatar.clone()),
+        identities,
+        created_at: views::time(account.created_at),
         uploads_blocked: account.restricted_at.is_some(),
         blocked: account.blocked_at.is_some(),
+        tickets_blocked: account.tickets_blocked_at.is_some(),
+        uploads_blocked_until: account.restricted_until.map(views::time),
+        blocked_until: account.blocked_until.map(views::time),
+        tickets_blocked_until: account.tickets_blocked_until.map(views::time),
     })
 }
 
@@ -543,6 +913,29 @@ mod tests {
         assert_eq!(text("  spam ", "reason").unwrap(), "spam");
         assert!(text("", "reason").is_err());
         assert!(text(&"x".repeat(501), "note").is_err());
+    }
+
+    #[test]
+    fn restriction_ends_are_bounded() {
+        assert_eq!(until(None).unwrap(), None);
+        assert_eq!(until(Some("  ")).unwrap(), None);
+        assert_eq!(
+            until(Some("2001-01-01T00:00:00Z")).unwrap_err().code,
+            "bad_time"
+        );
+        assert_eq!(until(Some("tomorrow")).unwrap_err().code, "bad_time");
+        let soon = (Utc::now() + chrono::Duration::hours(1)).to_rfc3339();
+        assert!(until(Some(&soon)).unwrap().is_some());
+        let far = (Utc::now() + chrono::Duration::days(MAX_RESTRICTION_DAYS + 1)).to_rfc3339();
+        assert!(until(Some(&far)).is_err());
+    }
+
+    #[test]
+    fn each_hold_has_its_permission_and_kind() {
+        for hold in Hold::ALL {
+            assert_eq!(hold_of(kind_of(hold)), hold);
+            assert!(permissions::is_known(permission_for(hold)));
+        }
     }
 
     #[test]

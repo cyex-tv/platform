@@ -53,6 +53,15 @@ type AccountProfile {
 	createdAt: String!
 }
 
+"""
+Reports about an account's emotes and reports it filed (`emotes.review` or
+`emotes.takedown`), newest first, at most 50 each.
+"""
+type AccountReports {
+	about: [Report!]!
+	by: [Report!]!
+}
+
 type AccountResults {
 	items: [AccountHit!]!
 	"""
@@ -106,6 +115,16 @@ type AccountStatus {
 	No sign-in, no sessions.
 	"""
 	blocked: Boolean!
+	"""
+	No reports or tickets.
+	"""
+	ticketsBlocked: Boolean!
+	"""
+	When each hold ends; empty while it is off or for good.
+	"""
+	uploadsBlockedUntil: String
+	blockedUntil: String
+	ticketsBlockedUntil: String
 }
 
 """
@@ -254,6 +273,29 @@ input AddSetEmoteInput {
 }
 
 """
+An account as staff see it (`users.view` or `users.restrict`).
+"""
+type AdminAccount {
+	id: String!
+	displayName: String!
+	avatar: String
+	identities: [Identity!]!
+	createdAt: String!
+	uploadsBlocked: Boolean!
+	blocked: Boolean!
+	"""
+	No reports or tickets.
+	"""
+	ticketsBlocked: Boolean!
+	"""
+	When each hold ends; empty while it is off or for good.
+	"""
+	uploadsBlockedUntil: String
+	blockedUntil: String
+	ticketsBlockedUntil: String
+}
+
+"""
 One audited change (ADR 0010). `before` and `after` are JSON, as text.
 """
 type AuditEntry {
@@ -291,6 +333,24 @@ type Badge {
 	updatedAt: String!
 }
 
+"""
+The roles cyex.tv comes with (ADR 0010).
+"""
+enum BuiltInRole {
+	"""
+	"User": every account holds it without an assignment. Starts with no permissions.
+	"""
+	USER
+	"""
+	"Admin": can't be deleted.
+	"""
+	ADMIN
+	"""
+	The top role: every permission, held by the owners only, never granted or edited.
+	"""
+	ROOT
+}
+
 type Channel {
 	platform: Platform!
 	"""
@@ -304,6 +364,24 @@ type Channel {
 	Whether other people's personal emotes show in this channel.
 	"""
 	allowPersonalEmotes: Boolean!
+}
+
+"""
+Who you are on a channel you can manage, highest first.
+"""
+enum ChannelRole {
+	"""
+	The channel is yours.
+	"""
+	OWNER
+	"""
+	You are an editor of the channel's account.
+	"""
+	ACCOUNT_EDITOR
+	"""
+	You edit at least one set of the channel's account.
+	"""
+	SET_EDITOR
 }
 
 """
@@ -503,6 +581,14 @@ A new batch and its codes in plain text. This is the only time they are shown.
 type CreatedCodeBatch {
 	batch: CodeBatch!
 	codes: [String!]!
+}
+
+"""
+A channel you can manage, with your highest role on it.
+"""
+type EditableChannel {
+	role: ChannelRole!
+	channel: Channel!
 }
 
 """
@@ -1026,8 +1112,22 @@ type Mutation {
 	"""
 	takedownEmote(id: String!, reason: String!): Emote!
 	"""
-	Block an account's uploads, or the whole account. Needs `users.restrict`; the owner is
-	protected. Audited.
+	Restrict an account with a reason, for good or `until` a time: no uploads
+	(`users.restrict_uploads`), no reports or tickets (`users.restrict_tickets`), or a full
+	block that ends its sessions (`users.block`); `users.restrict` does all three. A running
+	restriction of the same kind is replaced. The owner, and accounts whose highest role is at
+	or above yours, are protected. Audited.
+	"""
+	placeRestriction(accountId: String!, input: RestrictionInput!): AccountStatus!
+	"""
+	Lift a restriction early, with an optional reason. Needs the same permission as placing
+	it. Audited.
+	"""
+	liftRestriction(accountId: String!, kind: RestrictionKind!, reason: String): AccountStatus!
+	"""
+	Block an account's uploads, or the whole account, for good and without a reason (see
+	`placeRestriction` for timed ones). Needs `users.restrict`, or `users.restrict_uploads` /
+	`users.block` for the one you change; the owner is protected. Audited.
 	"""
 	restrictAccount(accountId: String!, uploadsBlocked: Boolean, blocked: Boolean): AccountStatus!
 	"""
@@ -1066,20 +1166,23 @@ type Mutation {
 	"""
 	createRole(input: CreateRoleInput!): Role!
 	"""
-	Change a role below your own highest one. Needs `roles.manage`. Audited.
+	Change a role below your own highest one that you don't hold. The top role can't be
+	changed; the User role keeps position 0. Needs `roles.manage`. Audited.
 	"""
 	updateRole(id: String!, input: UpdateRoleInput!): Role!
 	"""
-	Delete a role below your own highest one. Needs `roles.manage`. Audited.
+	Delete a role below your own highest one that you don't hold; built-in roles stay.
+	Needs `roles.manage`. Audited.
 	"""
 	deleteRole(id: String!): Boolean!
 	"""
-	Give an account a role. Needs `roles.manage`. Audited.
+	Give an account a role below your highest one that grants only what you hold. Needs
+	`roles.manage` or `roles.assign`; the User and top roles can't be given. Audited.
 	"""
 	assignRole(accountId: String!, roleId: String!): Boolean!
 	"""
 	Take a role from an account. The owner and the last `roles.manage` holder are protected.
-	Needs `roles.manage`. Audited.
+	Needs `roles.manage` or `roles.assign`. Audited.
 	"""
 	unassignRole(accountId: String!, roleId: String!): Boolean!
 }
@@ -1464,6 +1567,15 @@ type Query {
 	"""
 	searchAccounts(query: String!, page: Int, perPage: Int): AccountResults!
 	"""
+	The header search: the top 5 emotes for `query` by the name matcher (exact name, same
+	ignoring case, name prefix, word or initials prefix such as `point` or `pp` for
+	`PepePoint`, substring, then similar names for 3+ characters; most used first within a
+	tier), and the top 3 accounts (`searchAccounts` ranking, a leading `@` ignored, under 2
+	characters finds none). Approved, listed, non-NSFW emotes only. 240 searches a minute per
+	account, or per IP signed out (`rate_limited`).
+	"""
+	quickSearch(query: String!): QuickSearch!
+	"""
 	An account's public profile: linked Twitch and Kick logins (no IDs), roles marked public,
 	and each channel's active set ("Active emotes"). Listed sets: `accountSets`. Null when the
 	account is unknown, deleted or blocked.
@@ -1538,6 +1650,13 @@ type Query {
 	Your channels: one per linked platform you have signed in with.
 	"""
 	myChannels: [Channel!]!
+	"""
+	Channels you can manage: yours (`OWNER`), those of accounts you are an account editor of
+	(`ACCOUNT_EDITOR`), and those of accounts where you edit at least one set (`SET_EDITOR`).
+	Each channel once, under your highest role; sorted by role (`OWNER`, `ACCOUNT_EDITOR`,
+	`SET_EDITOR`), then login (ignoring case), then platform. Signed-in only.
+	"""
+	myEditableChannels: [EditableChannel!]!
 	"""
 	An account's editors (ADR 0014): yours, or, with `accountId`, those of an account you edit
 	with the `EDITORS` permission.
@@ -1623,23 +1742,39 @@ type Query {
 	"""
 	accountRoles(accountId: String!): [Role!]!
 	"""
-	Audited changes, newest first. Needs `audit.view`. Page back with `before` (an entry ID);
-	`limit` is 1 to 100, default 50.
+	Audited changes, newest first. Needs `audit.view`. Narrow by target, `actorId`, an exact
+	`action`, and `since` (inclusive) / `until` (exclusive) as RFC 3339 times. Page back with
+	`before` (an entry ID); `limit` is 1 to 100, default 50.
 	"""
-	auditLog(targetKind: String, targetId: String, before: String, limit: Int): [AuditEntry!]!
+	auditLog(targetKind: String, targetId: String, actorId: String, action: String, since: String, until: String, before: String, limit: Int): [AuditEntry!]!
 	"""
 	Open reports, oldest first. Needs `emotes.review` or `emotes.takedown`.
 	"""
 	reportQueue(page: Int, perPage: Int): ReportQueue!
+	"""
+	Reports about an account's emotes and the ones it filed, newest first, at most 50 each.
+	Needs `emotes.review` or `emotes.takedown`.
+	"""
+	accountReports(accountId: String!): AccountReports!
 	"""
 	Where you are signed in: your live sessions, the most recently used first, with the one
 	this request came with marked `current`. Never shows tokens.
 	"""
 	mySessions: [AccountSession!]!
 	"""
+	An account as staff see it: identities, created time and restrictions. Needs
+	`users.view` or `users.restrict`.
+	"""
+	adminAccount(accountId: String!): AdminAccount!
+	"""
 	How many of your notifications are unread.
 	"""
 	unreadNotificationCount: Int!
+	"""
+	An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`
+	or `emotes.takedown`. `perPage` is 1 to 100, default 50.
+	"""
+	accountEmotes(accountId: String!, page: Int, perPage: Int): EmotePage!
 	"""
 	Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
 	`emote.rejected`, `emote.taken_down`, `editor.added`, `editor.changed`, `editor.removed`,
@@ -1649,14 +1784,29 @@ type Query {
 	"""
 	myNotifications(unreadOnly: Boolean): [Notification!]!
 	"""
-	Whether an account's uploads or sign-in are blocked. Needs `users.view` or
-	`users.restrict`.
+	Every restriction placed on an account, newest first (the latest 100), running or over,
+	with its reason and end. Needs `users.view`, `users.restrict` or a narrower restrict
+	permission.
+	"""
+	accountRestrictions(accountId: String!): [Restriction!]!
+	"""
+	What an account may do now: uploads, reports and sign-in, each with its end when timed.
+	Needs `users.view`, `users.restrict` or a narrower restrict permission.
 	"""
 	accountStatus(accountId: String!): AccountStatus!
 	"""
-	All roles. Needs `roles.manage`.
+	All roles, most senior first, each with whether you may edit or assign it. Needs
+	`roles.manage` or `roles.assign`. The top role is listed to the owners only.
 	"""
 	roles: [Role!]!
+}
+
+"""
+The header search: the best emotes and accounts for one query.
+"""
+type QuickSearch {
+	emotes: [Emote!]!
+	users: [AccountHit!]!
 }
 
 """
@@ -1721,6 +1871,69 @@ enum ReportState {
 	ACTIONED
 }
 
+"""
+One restriction placed on an account, running or over.
+"""
+type Restriction {
+	id: String!
+	kind: RestrictionKind!
+	"""
+	Why, as staff wrote it. Empty on restrictions made without one (`restrictAccount`).
+	"""
+	reason: String
+	"""
+	When it ends; empty for good.
+	"""
+	endsAt: String
+	"""
+	The staff account that placed it.
+	"""
+	createdBy: String
+	createdAt: String!
+	"""
+	When staff lifted it early, or a newer restriction of the same kind replaced it.
+	"""
+	liftedAt: String
+	liftedBy: String
+	"""
+	Still holding now.
+	"""
+	active: Boolean!
+}
+
+"""
+A restriction to place.
+"""
+input RestrictionInput {
+	kind: RestrictionKind!
+	"""
+	When it ends (RFC 3339, in the future, at most ten years out); empty for good.
+	"""
+	until: String
+	"""
+	Why: 1 to 500 characters. Staff see it; the account doesn't.
+	"""
+	reason: String!
+}
+
+"""
+What a restriction stops.
+"""
+enum RestrictionKind {
+	"""
+	Uploading emotes (`users.restrict_uploads`).
+	"""
+	UPLOADS
+	"""
+	Filing reports and tickets (`users.restrict_tickets`).
+	"""
+	TICKETS
+	"""
+	The whole account: no sign-in, sessions ended (`users.block`).
+	"""
+	ACCOUNT
+}
+
 type ReviewQueue {
 	items: [Emote!]!
 	total: Int!
@@ -1739,6 +1952,20 @@ type Role {
 	Shown on its holders' public profiles (`accountProfile`). Off by default.
 	"""
 	public: Boolean!
+	"""
+	Set on the built-in roles: `USER` (every account holds it), `ADMIN` and `ROOT` (the
+	owners' top role, shown only to its holders).
+	"""
+	builtIn: BuiltInRole
+	"""
+	Whether you may change it: below your highest role, not one you hold, not the top role.
+	"""
+	editable: Boolean!
+	"""
+	Whether you may give it to someone (and take it away): below your highest role, you hold
+	what it grants, and not the User or top role.
+	"""
+	assignable: Boolean!
 }
 
 type SearchResults {

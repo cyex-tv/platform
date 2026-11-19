@@ -8,6 +8,16 @@ export const theme = $state({ light: false });
 /** Reads the theme the inline script applied (call once mounted). */
 export function syncTheme() {
   theme.light = document.documentElement.dataset.theme === 'light';
+  pinFavicon();
+}
+
+/** The tab icon follows the site's theme: favicon.svg follows the OS, so a different site theme pins its own. */
+function pinFavicon() {
+  const link = document.querySelector<HTMLLinkElement>('link[rel="icon"][type="image/svg+xml"]');
+  if (!link) return;
+  const os = matchMedia('(prefers-color-scheme: light)').matches;
+  const file = os === theme.light ? 'favicon.svg' : theme.light ? 'favicon-light.svg' : 'favicon-dark.svg';
+  link.href = new URL(`/${file}`, location.href).href;
 }
 
 function apply() {
@@ -20,6 +30,7 @@ function apply() {
   } catch {}
   const bg = getComputedStyle(root).getPropertyValue('--bg').trim();
   document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', bg));
+  pinFavicon();
 }
 
 export function toggleTheme() {

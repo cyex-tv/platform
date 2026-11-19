@@ -13,6 +13,67 @@ Owner feedback 2026/11/19, section G. Additive API; nothing was deployed.
 - [x] Dev mock: flags, tags, exact, NSFW emotes, `wide`, trending windows and `emoteTrending`.
 - Tests: `apps/api/tests/browse_flow.rs` (flags, tags, exact, trending windows, `emoteTrending`), `crates/db/tests/queries.rs` (rollup: distinct channels per hour, idempotent), unit tests for tag cleaning; vitest `tag-input.test.ts` (rules and markup) and `params.test.ts` (filter and trending URL state, API variables).
 - Manual check: /search, Trending (3 windows), filters, the filter sheet, emote page at 375, 768, 1440 and 2560 in both themes; keyboard (tag field Enter/Backspace/paste/×, flag chips with Space, window with arrow keys); reduced motion shows the still frames (screens in the run folder, `2026-11-19-feedback/screens/g`).
+## Header search, nav, notifications and mark (branch `feat/header-search`)
+
+Owner feedback 2026/11/19, section A. Additive API; nothing was deployed.
+
+- [x] The Ctrl K command palette is gone. The header field is the search: typing drops a list under it (ARIA combobox: ↑ ↓, Enter, Escape, Tab) with the top 5 emotes and top 3 people from the new `quickSearch(query)`; Enter with no row picked opens `/search?q=`. Requests wait 150ms and a newer one aborts the older. `/` outside a field focuses it (a page field marked `data-page-search` keeps it). Phones: the search button turns the header row into the field, no modal.
+- [x] `quickSearch` ranks names in tiers: exact, exact ignoring case, prefix, word or initials prefix (`point` and `pp` find `PepePoint`), substring, then near misses (pg_trgm similarity, 3+ characters); most used (channel count) first inside a tier. Migration `20261207000030_quick_search.sql` adds the stored `emotes.name_words` / `name_initials` columns and their indexes. 240 a minute per account or IP (`rate_limited`).
+- [x] Focusing the empty field lists `myEditableChannels`: your channels, then those of accounts you edit, then those whose sets you edit, A to Z inside a role, each channel once under its highest role. Signed out: a hint line.
+- [x] Header links signed in: Emotes, Store (/shop), Subscription (only with an active subscription: `hasSubscription()` is false until subscriptions exist; placeholder `/me/subscription`), Admin for staff. Signed out unchanged. Under 1080px the links keep their icons. The account menu no longer repeats Admin.
+- [x] Notifications: the bell is in the header on every width (a sheet on phones), and new ones pop up as toasts under it (NotificationToasts; only ones newer than the page's first count).
+- [x] The mark is the owner's logo: three outlined bars, the middle one offset and lit with a soft glow (an SVG filter, left out under 20px and with more contrast or forced colours). Header, footer, eyebrows; favicon.svg / -dark / -light (the tab icon follows the site theme), favicon.png and apple-touch-icon.png.
+- [x] Account menu: the name row at the top opens your profile dashboard (`/users/<id>`; the separate Profile row is gone). Sign out ends this session only (`POST /v1/auth/logout`).
+- Tests: `apps/api/tests/quick_search_flow.rs` and `crates/db/tests/queries.rs` (Postgres, CI): tier order, popularity tie-break, camelCase and initials, typo, hidden emotes, rate limit, editable channel roles and order. Vitest: `lib/shell/nav.test.ts` (nav visibility, role sort), `lib/shell/search.test.ts`, `lib/account/toasts.test.ts`.
+- Manual check: 375, 768, 1440 and 2560, dark and light, keyboard (screens in the 2026-11-19-feedback run folder, screens/a).
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/header-search
+gh pr create --base main --head feat/header-search --title "Header search, nav, notifications and the new mark" --body-file <file>
+git merge origin/main   (twice; PROGRESS.md and gql.rs imports resolved)
+gh pr merge 86 --merge
+```
+
+## Admin roles and moderation (branch `feat/admin-roles`, ADR 0010 amendment 2026/11/19)
+- Owner feedback F (2026/11/19): built-in roles, finer permissions, timed restrictions, the admin rail's height.
+- API (additive): migrations `20261207000020_default_roles.sql` (roles.system; User, Admin and the owners' top role) and `20261207000021_timed_restrictions.sql` (`*_until` ends, the tickets hold, `account_restrictions` history, identity holds carry both). `Role` gains `builtIn`, `editable`, `assignable`; `AccountStatus`/`AdminAccount` gain `ticketsBlocked` and the three ends; new `placeRestriction`, `liftRestriction`, `accountRestrictions`. Ten new permissions (`roles.assign`, `reports.manage`, `users.restrict_uploads`, `users.restrict_tickets`, `users.block`, `users.sessions`, `users.notes`, `entitlements.view`, `billing.view`, `subscriptions.manage`); each broad permission keeps working. Rules: nobody edits a role they hold (`own_role`), built-in roles (`built_in_role`), the top role is `not_found` to everyone but the owners, custom positions 1 to 999 999 (`bad_position`). Reports refuse `tickets_blocked`. Audit rows: `account.restriction_placed`, `account.restriction_lifted`.
+- Tests (Postgres, run in CI): `apps/api/tests/builtin_roles_flow.rs` (top role hidden and untouchable, User role is everyone's, own role, granting at or above, roles.assign), `abuse_flow.rs` (`timed_restrictions_end_on_their_own`, `a_ticket_ban_stops_reports_until_lifted`), `crates/db/tests/queries.rs` (`timed_holds_end_and_follow_the_person`); existing role tests updated for the seeded roles. Unit: rbac `nobody_edits_a_role_they_hold`, positions, restriction ends; vitest `src/lib/admin/permissions.test.ts` (every API permission labelled, group checkbox states).
+- Web: the role editor groups permissions (Emotes, Sets, Users, Moderation, Tickets and reports, Cosmetics, Shop and billing, Roles, System) with plain names, a tooltip on hover and focus, and a group checkbox (indeterminate when partial); roles list marks built-in and your own roles and says why one can't be edited. The account page's restrictions panel places uploads, reports or full blocks for 1 hour, 1 day, 7 days, 30 days, until a date, or for good, with a reason, shows ends, lifts them and lists the history. SideRail (shared): no scroll inside the rail any more; a rail taller than the window scrolls with the page; new `fill` prop (the admin rail uses it) runs the full height of the left side.
+- Manual check (2026/11/19): headless Edge against the dev mock at 1440 and 375, dark and light, keyboard focus on the permission tooltips; screens in .claude/runs/2026-11-19-feedback/screens/f.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/admin-roles
+gh pr create --base main --head feat/admin-roles --title "Admin: built-in roles, finer permissions, timed restrictions" --body-file <file>
+gh pr merge <n> --merge
+```
+
+## Front page: 3D logo hero and four boxes (branch `feat/front-page`)
+
+Owner feedback 2026/11/19, part B. Web only; nothing was deployed.
+
+- [x] Hero: the cyex.tv logo (three open bars, the middle one offset and lit) as a three.js object (`apps/web/src/lib/home/logo-scene.ts`, three 0.187.0 pinned). It turns slowly on its own and tilts back as the hero scrolls away; never follows the pointer. The flat SVG (`LogoMark.svelte`) paints first and stays for reduced motion, no WebGL, data saver, under 4 GB memory or under 4 cores. three.js is its own chunk, asked for only after the load event and an idle moment (`LogoHero.svelte`); it draws at 30 fps and only while the hero is on screen.
+- [x] Below the hero: no emotes any more (no strip, cluster or chat previews), and one row of four boxes, each with a small picture in the logo's language (`ShowcaseArt.svelte`): the extension (a menu of Chrome, Edge, Firefox, Opera, Brave; URLs in `apps/web/src/lib/home/stores.ts`, `/download#<browser>` until the store listings exist), cyex deck (direct download of the newest installer), the API and cosmetics.
+- [x] cyex deck download works like cyex.app/deck: the newest `cyex-deck_<v>_x64-setup.exe` of `github.com/cyex-app/cyex-deck` releases (pre-releases counted, drafts skipped, only that repo's download URLs accepted), read from GitHub's release list in the browser after load at most once an hour (`cyexDeckRelease` in localStorage), falling back to a pinned installer (`deck-release.ts`, move it with each release). CSP `connect-src` gained `https://api.github.com` for that one request.
+- [x] /download has anchors for each browser (`#chrome`, `#edge`, `#firefox`, `#opera`, `#brave`).
+- Tests: `apps/web/src/lib/home/home.test.ts` (release picking, installer URL checks, version order, kept answer, browser detection, the 3D gate).
+- Checked in the running app (vite preview + mock): 375, 768, 1440, 2560, dark and light, reduced motion, Edge with WebGL off, the menu by mouse and keyboard; LCP is the hero text before three.js is asked for, CLS 0 from the page.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/front-page
+gh pr create --base main --head feat/front-page --title "web: front page with a 3D logo hero and four boxes" --body-file <file>
+gh pr merge <n> --merge
+```
+
+## Admin v2 (branch `feat/admin-v2`)
+- API (additive): `auditLog` takes `actorId`, `action`, `since`, `until` besides target and paging; new `adminAccount` (users.view or users.restrict), `accountEmotes` (users.view, emotes.review or emotes.takedown) and `accountReports` (moderators). Postgres tests: `staff_look_up_an_account` (apps/api/tests/abuse_flow.rs) and the audit filter cases in crates/db/tests/queries.rs. Not built: sessions on the account page (no sessions API on main yet).
+- Web: `/admin/users/[accountId]` (profile, restrictions, roles, cosmetics, uploads, reports about and by, latest audit entries), `/admin/cosmetics/owners` (who owns what), audit log filters with links to targets and a Changes/JSON toggle, review queue keyboard flow (J, K, A, R) with a 1x/2x/4x comparison, reports grouped by emote.
+- Manual check (2026/11/18): headless Edge against the dev mock at 1440 and 375, dark and light, plus the keyboard flow (J, K, R, A) in the review queue; screens in .claude/runs/2026-11-17-overnight/screens/g9.
 
 ## Sign-off fixes: API (branch `fix/signoff-api`)
 

@@ -613,6 +613,21 @@ export const REJECT = graphql(`
   }
 `);
 
+export const REPORT_FIELDS = graphql(`
+  fragment ReportFields on Report {
+    id
+    reason
+    reporterId
+    state
+    resolution
+    createdAt
+    resolvedAt
+    emote {
+      ...EmoteFields
+    }
+  }
+`);
+
 export const REPORT_QUEUE = graphql(`
   query ReportQueue($page: Int, $perPage: Int) {
     reportQueue(page: $page, perPage: $perPage) {
@@ -657,6 +672,9 @@ export const ROLE_FIELDS = graphql(`
     position
     permissions
     public
+    builtIn
+    editable
+    assignable
   }
 `);
 
@@ -710,7 +728,11 @@ export const USER_DETAILS = graphql(`
   query UserDetails($accountId: String!, $status: Boolean!, $roles: Boolean!) {
     accountStatus(accountId: $accountId) @include(if: $status) {
       uploadsBlocked
+      ticketsBlocked
       blocked
+      uploadsBlockedUntil
+      ticketsBlockedUntil
+      blockedUntil
     }
     accountRoles(accountId: $accountId) @include(if: $roles) {
       ...RoleFields
@@ -730,7 +752,53 @@ export const RESTRICT = graphql(`
   mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {
     restrictAccount(accountId: $accountId, uploadsBlocked: $uploadsBlocked, blocked: $blocked) {
       uploadsBlocked
+      ticketsBlocked
       blocked
+      uploadsBlockedUntil
+      ticketsBlockedUntil
+      blockedUntil
+    }
+  }
+`);
+
+export const PLACE_RESTRICTION = graphql(`
+  mutation PlaceRestriction($accountId: String!, $input: RestrictionInput!) {
+    placeRestriction(accountId: $accountId, input: $input) {
+      uploadsBlocked
+      ticketsBlocked
+      blocked
+      uploadsBlockedUntil
+      ticketsBlockedUntil
+      blockedUntil
+    }
+  }
+`);
+
+export const LIFT_RESTRICTION = graphql(`
+  mutation LiftRestriction($accountId: String!, $kind: RestrictionKind!, $reason: String) {
+    liftRestriction(accountId: $accountId, kind: $kind, reason: $reason) {
+      uploadsBlocked
+      ticketsBlocked
+      blocked
+      uploadsBlockedUntil
+      ticketsBlockedUntil
+      blockedUntil
+    }
+  }
+`);
+
+export const ACCOUNT_RESTRICTIONS = graphql(`
+  query AccountRestrictions($accountId: String!) {
+    accountRestrictions(accountId: $accountId) {
+      id
+      kind
+      reason
+      endsAt
+      createdBy
+      createdAt
+      liftedAt
+      liftedBy
+      active
     }
   }
 `);
@@ -748,8 +816,26 @@ export const UNASSIGN_ROLE = graphql(`
 `);
 
 export const AUDIT = graphql(`
-  query Audit($targetKind: String, $targetId: String, $before: String, $limit: Int) {
-    auditLog(targetKind: $targetKind, targetId: $targetId, before: $before, limit: $limit) {
+  query Audit(
+    $targetKind: String
+    $targetId: String
+    $actorId: String
+    $action: String
+    $since: String
+    $until: String
+    $before: String
+    $limit: Int
+  ) {
+    auditLog(
+      targetKind: $targetKind
+      targetId: $targetId
+      actorId: $actorId
+      action: $action
+      since: $since
+      until: $until
+      before: $before
+      limit: $limit
+    ) {
       id
       actorId
       action
@@ -794,6 +880,55 @@ export const SEARCH_BY_OWNER = graphql(`
       perPage
       items {
         ...EmoteFields
+      }
+    }
+  }
+`);
+
+// The admin account page: the account as staff see it, its uploads, and its reports.
+export const ADMIN_ACCOUNT = graphql(`
+  query AdminAccount($accountId: String!) {
+    adminAccount(accountId: $accountId) {
+      id
+      displayName
+      avatar
+      createdAt
+      uploadsBlocked
+      ticketsBlocked
+      blocked
+      uploadsBlockedUntil
+      ticketsBlockedUntil
+      blockedUntil
+      identities {
+        platform
+        platformUserId
+        login
+        displayName
+        avatar
+      }
+    }
+  }
+`);
+
+export const ACCOUNT_EMOTES = graphql(`
+  query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {
+    accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {
+      total
+      items {
+        ...EmoteFields
+      }
+    }
+  }
+`);
+
+export const ACCOUNT_REPORTS = graphql(`
+  query AccountReports($accountId: String!) {
+    accountReports(accountId: $accountId) {
+      about {
+        ...ReportFields
+      }
+      by {
+        ...ReportFields
       }
     }
   }
@@ -1462,6 +1597,47 @@ export const SHOP_COUNTS = graphql(`
     }
     codeBatches(page: 1, perPage: 1) @include(if: $codes) {
       total
+    }
+  }
+`);
+
+// The header search: the top emotes by the name matcher and the top people, in one request.
+export const QUICK_SEARCH = graphql(`
+  query QuickSearch($query: String!) {
+    quickSearch(query: $query) {
+      emotes {
+        ...EmoteFields
+      }
+      users {
+        account {
+          id
+          displayName
+          avatar
+        }
+        identities {
+          platform
+          login
+          displayName
+        }
+      }
+    }
+  }
+`);
+
+// What the empty header search lists: the channels you can manage and your role on each.
+export const EDITABLE_CHANNELS = graphql(`
+  query EditableChannels {
+    myEditableChannels {
+      role
+      channel {
+        platform
+        login
+        account {
+          id
+          displayName
+          avatar
+        }
+      }
     }
   }
 `);

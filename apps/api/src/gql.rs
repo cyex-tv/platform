@@ -21,15 +21,15 @@ use cyex_tv_hub::topics as hub_topics;
 use cyex_tv_shared::error::ApiError;
 use cyex_tv_shared::model::TrendingWindow;
 use cyex_tv_shared::model::{
-    AccountEditor, AccountResults, AccountSession, AccountStatus, AccountSummary, ActivityEntry,
-    ActivityPage, AddAccountEditor, AddSetEmote, AuditEntry, Badge, Channel, ClonedSet,
-    CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge, CreateRole, CreateSet,
-    EditedAccount, EditorPermission, Emote, EmoteFlag, EmotePage, EmoteSet, EmoteSort,
-    EmoteTrending, Entitlement, EntitlementPage, Event, GrantCosmetic, Identity, Me, Notification,
-    OwnedCosmetics, Paint, PaintInput, PersonalSetEntry, Platform, Report, ReportAction,
-    ReportQueue, ReviewQueue, Role, SearchResults, SetEmote, SetSummary, SetVisibility,
-    UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote,
-    UserCosmetics,
+    AccountEditor, AccountReports, AccountResults, AccountSession, AccountStatus, AccountSummary,
+    ActivityEntry, ActivityPage, AddAccountEditor, AddSetEmote, AdminAccount, AuditEntry, Badge,
+    Channel, ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge, CreateRole,
+    CreateSet, EditableChannel, EditedAccount, EditorPermission, Emote, EmoteFlag, EmotePage,
+    EmoteSet, EmoteSort, EmoteTrending, Entitlement, EntitlementPage, Event, GrantCosmetic,
+    Identity, Me, Notification, OwnedCosmetics, Paint, PaintInput, PersonalSetEntry, Platform,
+    QuickSearch, Report, ReportAction, ReportQueue, ReviewQueue, Role, SearchResults, SetEmote,
+    SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole,
+    UpdateSet, UpdateSetEmote, UserCosmetics,
 };
 use cyex_tv_shared::model::{
     Checkout, CodeBatch, CodeBatchInput, CodeBatchPage, CreatedCodeBatch, Order, OrderPage,
@@ -379,6 +379,19 @@ impl Query {
             .map_err(api_error)
     }
 
+    /// The header search: the top 5 emotes for `query` by the name matcher (exact name, same
+    /// ignoring case, name prefix, word or initials prefix such as `point` or `pp` for
+    /// `PepePoint`, substring, then similar names for 3+ characters; most used first within a
+    /// tier), and the top 3 accounts (`searchAccounts` ranking, a leading `@` ignored, under 2
+    /// characters finds none). Approved, listed, non-NSFW emotes only. 240 searches a minute per
+    /// account, or per IP signed out (`rate_limited`).
+    async fn quick_search(&self, ctx: &Context<'_>, query: String) -> Result<QuickSearch> {
+        let ip = client_ip(ctx);
+        search::quick(state(ctx), caller_opt(ctx), ip, &query)
+            .await
+            .map_err(api_error)
+    }
+
     /// An account's public profile: linked Twitch and Kick logins (no IDs), roles marked public,
     /// and each channel's active set ("Active emotes"). Listed sets: `accountSets`. Null when the
     /// account is unknown, deleted or blocked.
@@ -554,6 +567,17 @@ impl Query {
     async fn my_channels(&self, ctx: &Context<'_>) -> Result<Vec<Channel>> {
         let caller = caller(ctx)?;
         catalog::my_channels(state(ctx), caller)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Channels you can manage: yours (`OWNER`), those of accounts you are an account editor of
+    /// (`ACCOUNT_EDITOR`), and those of accounts where you edit at least one set (`SET_EDITOR`).
+    /// Each channel once, under your highest role; sorted by role (`OWNER`, `ACCOUNT_EDITOR`,
+    /// `SET_EDITOR`), then login (ignoring case), then platform. Signed-in only.
+    async fn my_editable_channels(&self, ctx: &Context<'_>) -> Result<Vec<EditableChannel>> {
+        let caller = caller(ctx)?;
+        editors::my_editable_channels(state(ctx), caller)
             .await
             .map_err(api_error)
     }
@@ -767,13 +791,19 @@ impl Query {
             .map_err(api_error)
     }
 
-    /// Audited changes, newest first. Needs `audit.view`. Page back with `before` (an entry ID);
-    /// `limit` is 1 to 100, default 50.
+    /// Audited changes, newest first. Needs `audit.view`. Narrow by target, `actorId`, an exact
+    /// `action`, and `since` (inclusive) / `until` (exclusive) as RFC 3339 times. Page back with
+    /// `before` (an entry ID); `limit` is 1 to 100, default 50.
+    #[allow(clippy::too_many_arguments)]
     async fn audit_log(
         &self,
         ctx: &Context<'_>,
         target_kind: Option<String>,
         target_id: Option<String>,
+        actor_id: Option<String>,
+        action: Option<String>,
+        since: Option<String>,
+        until: Option<String>,
         before: Option<String>,
         limit: Option<u32>,
     ) -> Result<Vec<AuditEntry>> {
@@ -781,8 +811,14 @@ impl Query {
         admin::audit_log(
             state(ctx),
             caller,
-            target_kind.as_deref(),
-            target_id.as_deref(),
+            &admin::AuditQuery {
+                target_kind: target_kind.as_deref(),
+                target_id: target_id.as_deref(),
+                actor_id: actor_id.as_deref(),
+                action: action.as_deref(),
+                since: since.as_deref(),
+                until: until.as_deref(),
+            },
             before.as_deref(),
             limit,
         )
@@ -803,6 +839,19 @@ impl Query {
             .map_err(api_error)
     }
 
+    /// Reports about an account's emotes and the ones it filed, newest first, at most 50 each.
+    /// Needs `emotes.review` or `emotes.takedown`.
+    async fn account_reports(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+    ) -> Result<AccountReports> {
+        let caller = caller(ctx)?;
+        abuse::account_reports(state(ctx), caller, &account_id)
+            .await
+            .map_err(api_error)
+    }
+
     /// Where you are signed in: your live sessions, the most recently used first, with the one
     /// this request came with marked `current`. Never shows tokens.
     async fn my_sessions(&self, ctx: &Context<'_>) -> Result<Vec<AccountSession>> {
@@ -812,10 +861,34 @@ impl Query {
             .map_err(api_error)
     }
 
+    /// An account as staff see it: identities, created time and restrictions. Needs
+    /// `users.view` or `users.restrict`.
+    async fn admin_account(&self, ctx: &Context<'_>, account_id: String) -> Result<AdminAccount> {
+        let caller = caller(ctx)?;
+        abuse::admin_account(state(ctx), caller, &account_id)
+            .await
+            .map_err(api_error)
+    }
+
     /// How many of your notifications are unread.
     async fn unread_notification_count(&self, ctx: &Context<'_>) -> Result<u64> {
         let caller = caller(ctx)?;
         account::unread_count(state(ctx), caller)
+            .await
+            .map_err(api_error)
+    }
+
+    /// An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`
+    /// or `emotes.takedown`. `perPage` is 1 to 100, default 50.
+    async fn account_emotes(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+        page: Option<u32>,
+        per_page: Option<u32>,
+    ) -> Result<EmotePage> {
+        let caller = caller(ctx)?;
+        moderation::account_emotes(state(ctx), caller, &account_id, page, per_page)
             .await
             .map_err(api_error)
     }
@@ -836,8 +909,22 @@ impl Query {
             .map_err(api_error)
     }
 
-    /// Whether an account's uploads or sign-in are blocked. Needs `users.view` or
-    /// `users.restrict`.
+    /// Every restriction placed on an account, newest first (the latest 100), running or over,
+    /// with its reason and end. Needs `users.view`, `users.restrict` or a narrower restrict
+    /// permission.
+    async fn account_restrictions(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+    ) -> Result<Vec<cyex_tv_shared::model::Restriction>> {
+        let caller = caller(ctx)?;
+        abuse::restrictions(state(ctx), caller, &account_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// What an account may do now: uploads, reports and sign-in, each with its end when timed.
+    /// Needs `users.view`, `users.restrict` or a narrower restrict permission.
     async fn account_status(&self, ctx: &Context<'_>, account_id: String) -> Result<AccountStatus> {
         let caller = caller(ctx)?;
         abuse::status(state(ctx), caller, &account_id)
@@ -845,7 +932,8 @@ impl Query {
             .map_err(api_error)
     }
 
-    /// All roles. Needs `roles.manage`.
+    /// All roles, most senior first, each with whether you may edit or assign it. Needs
+    /// `roles.manage` or `roles.assign`. The top role is listed to the owners only.
     async fn roles(&self, ctx: &Context<'_>) -> Result<Vec<Role>> {
         let caller = caller(ctx)?;
         admin::list(state(ctx), caller).await.map_err(api_error)
@@ -865,7 +953,10 @@ impl Mutation {
         // Locked, so a restriction landing at the same time is seen. Signing in again with the
         // dropped identity would otherwise make a fresh, unrestricted account.
         let restricted: Option<bool> = sqlx::query_scalar(
-            "SELECT restricted_at IS NOT NULL OR blocked_at IS NOT NULL
+            "SELECT (restricted_at IS NOT NULL AND (restricted_until IS NULL OR restricted_until > now()))
+                 OR (blocked_at IS NOT NULL AND (blocked_until IS NULL OR blocked_until > now()))
+                 OR (tickets_blocked_at IS NOT NULL
+                     AND (tickets_blocked_until IS NULL OR tickets_blocked_until > now()))
                FROM accounts WHERE id = $1 FOR SHARE",
         )
         .bind(caller.account_id)
@@ -1377,8 +1468,41 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Block an account's uploads, or the whole account. Needs `users.restrict`; the owner is
-    /// protected. Audited.
+    /// Restrict an account with a reason, for good or `until` a time: no uploads
+    /// (`users.restrict_uploads`), no reports or tickets (`users.restrict_tickets`), or a full
+    /// block that ends its sessions (`users.block`); `users.restrict` does all three. A running
+    /// restriction of the same kind is replaced. The owner, and accounts whose highest role is at
+    /// or above yours, are protected. Audited.
+    async fn place_restriction(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+        input: cyex_tv_shared::model::RestrictionInput,
+    ) -> Result<AccountStatus> {
+        let caller = caller(ctx)?;
+        abuse::place(state(ctx), caller, &account_id, &input)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Lift a restriction early, with an optional reason. Needs the same permission as placing
+    /// it. Audited.
+    async fn lift_restriction(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+        kind: cyex_tv_shared::model::RestrictionKind,
+        reason: Option<String>,
+    ) -> Result<AccountStatus> {
+        let caller = caller(ctx)?;
+        abuse::lift(state(ctx), caller, &account_id, kind, reason.as_deref())
+            .await
+            .map_err(api_error)
+    }
+
+    /// Block an account's uploads, or the whole account, for good and without a reason (see
+    /// `placeRestriction` for timed ones). Needs `users.restrict`, or `users.restrict_uploads` /
+    /// `users.block` for the one you change; the owner is protected. Audited.
     async fn restrict_account(
         &self,
         ctx: &Context<'_>,
@@ -1465,7 +1589,8 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Change a role below your own highest one. Needs `roles.manage`. Audited.
+    /// Change a role below your own highest one that you don't hold. The top role can't be
+    /// changed; the User role keeps position 0. Needs `roles.manage`. Audited.
     async fn update_role(&self, ctx: &Context<'_>, id: String, input: UpdateRole) -> Result<Role> {
         let caller = caller(ctx)?;
         admin::update(state(ctx), caller, &id, &input)
@@ -1473,7 +1598,8 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Delete a role below your own highest one. Needs `roles.manage`. Audited.
+    /// Delete a role below your own highest one that you don't hold; built-in roles stay.
+    /// Needs `roles.manage`. Audited.
     async fn delete_role(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
         let caller = caller(ctx)?;
         admin::delete(state(ctx), caller, &id)
@@ -1481,7 +1607,8 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Give an account a role. Needs `roles.manage`. Audited.
+    /// Give an account a role below your highest one that grants only what you hold. Needs
+    /// `roles.manage` or `roles.assign`; the User and top roles can't be given. Audited.
     async fn assign_role(
         &self,
         ctx: &Context<'_>,
@@ -1495,7 +1622,7 @@ impl Mutation {
     }
 
     /// Take a role from an account. The owner and the last `roles.manage` holder are protected.
-    /// Needs `roles.manage`. Audited.
+    /// Needs `roles.manage` or `roles.assign`. Audited.
     async fn unassign_role(
         &self,
         ctx: &Context<'_>,

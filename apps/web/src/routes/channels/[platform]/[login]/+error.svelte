@@ -2,7 +2,7 @@
   // Shown instead of the channel page when the channel isn't on cyex.tv (or the API can't be reached).
   import { invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
-  import { openPalette } from '$lib/components/palette.svelte';
+  import { focusSearch } from '$lib/shell/search.svelte';
   import Problem from '$lib/components/Problem.svelte';
   import { causeOfStatus, problemTitle } from '$lib/components/problem';
   import State from '$lib/components/State.svelte';
@@ -30,7 +30,7 @@
       Nobody has set up a {platform} channel called <bdi>{login}</bdi> here. A channel shows up once its owner signs in
       with {platform} and picks an emote set. Check the spelling, or look for another channel.
       {#snippet actions()}
-        <button class="btn btn-s btn-primary" type="button" onclick={() => openPalette(login)}>Search channels</button>
+        <button class="btn btn-s btn-primary" type="button" onclick={() => focusSearch(login)}>Search people</button>
         <a class="btn btn-s" href="/search">Browse emotes</a>
       {/snippet}
     </State>
