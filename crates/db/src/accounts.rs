@@ -216,25 +216,34 @@ pub async fn get(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Account>>
     )
 }
 
-/// An account's identities, Twitch first.
+/// An account's identities: the one it goes by first (`display_platform`), then Twitch first.
 pub async fn identities(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<Identity>> {
     Ok(sqlx::query_as(&format!(
-        "SELECT {IDENTITY} FROM identities WHERE account_id = $1 ORDER BY platform DESC"
+        "SELECT {IDENTITY} FROM identities
+         WHERE account_id = $1
+         ORDER BY platform IS NOT DISTINCT FROM
+                      (SELECT display_platform FROM accounts WHERE id = $1) DESC,
+                  platform DESC"
     ))
     .bind(account_id)
     .fetch_all(conn)
     .await?)
 }
 
-/// The identities of many accounts at once, Twitch first, by account.
+/// The identities of many accounts at once, by account, each in `identities` order.
 pub async fn identities_many(
     conn: &mut PgConnection,
     account_ids: &[Uuid],
 ) -> DbResult<std::collections::HashMap<Uuid, Vec<Identity>>> {
-    let rows: Vec<Identity> = sqlx::query_as(&format!(
-        "SELECT {IDENTITY} FROM identities WHERE account_id = ANY($1)
-         ORDER BY account_id, platform DESC"
-    ))
+    let rows: Vec<Identity> = sqlx::query_as(
+        "SELECT i.platform, i.platform_user_id, i.account_id, i.login, i.display_name, i.avatar,
+                i.linked_at, i.refreshed_at
+         FROM identities i
+         JOIN accounts a ON a.id = i.account_id
+         WHERE i.account_id = ANY($1)
+         ORDER BY i.account_id, i.platform IS NOT DISTINCT FROM a.display_platform DESC,
+                  i.platform DESC",
+    )
     .bind(account_ids)
     .fetch_all(conn)
     .await?;
@@ -417,8 +426,55 @@ pub async fn unlink(
     .bind(platform)
     .fetch_one(&mut *tx)
     .await?;
+    // Going by the platform that left: back to the default order.
+    sqlx::query(
+        "UPDATE accounts SET display_platform = NULL WHERE id = $1 AND display_platform = $2",
+    )
+    .bind(account_id)
+    .bind(platform)
+    .execute(&mut *tx)
+    .await?;
     tx.commit().await?;
     Ok(removed)
+}
+
+/// The platform whose name and picture the account goes by; `None` for the default (Twitch first).
+pub async fn display_platform(
+    conn: &mut PgConnection,
+    account_id: Uuid,
+) -> DbResult<Option<Platform>> {
+    Ok(
+        sqlx::query_scalar("SELECT display_platform FROM accounts WHERE id = $1")
+            .bind(account_id)
+            .fetch_optional(conn)
+            .await?
+            .flatten(),
+    )
+}
+
+/// Makes the account go by its identity on `platform`. `NotFound` when that platform isn't
+/// linked. Locks the identities like `unlink`, so the platform can't leave at the same time.
+pub async fn set_display_platform(
+    conn: &mut PgConnection,
+    account_id: Uuid,
+    platform: Platform,
+) -> DbResult<()> {
+    let mut tx = conn.begin().await?;
+    let linked: Vec<Platform> =
+        sqlx::query_scalar("SELECT platform FROM identities WHERE account_id = $1 FOR UPDATE")
+            .bind(account_id)
+            .fetch_all(&mut *tx)
+            .await?;
+    if !linked.contains(&platform) {
+        return Err(DbError::NotFound);
+    }
+    sqlx::query("UPDATE accounts SET display_platform = $2 WHERE id = $1")
+        .bind(account_id)
+        .bind(platform)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
 }
 
 /// Restricts an account (`users.restrict`) or lifts the restriction.

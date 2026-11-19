@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { relative, toItem } from './activity';
+import { filterOf, relative, toItem } from './activity';
 import { profileRail, railKeyForPath, stripExtra, stripTabs, sectionFrom, sectionHref, sectionsFor, NOBODY, type Relation } from './rows';
 
 const now = Date.UTC(2026, 10, 17, 12, 0, 0);
@@ -35,18 +35,41 @@ describe('toItem', () => {
   });
 });
 
+describe('editor lines and the filter', () => {
+  const base = { id: 'a1', actor: { id: 'u', displayName: 'U', avatar: null }, set: null, emote: null,
+    fromName: null, toName: null, badge: null, paint: null, createdAt: '2026-11-17T12:00:00Z' };
+  it('maps editor lines with the editor, names only', () => {
+    const ed = { id: 'e', displayName: 'Ed', avatar: null };
+    expect(toItem({ ...base, kind: 'EDITOR_ADDED', editor: ed })).toMatchObject({ kind: 'editorAdded', editor: ed });
+    expect(toItem({ ...base, kind: 'EDITOR_REMOVED', editor: ed })?.kind).toBe('editorRemoved');
+    expect(toItem({ ...base, kind: 'SET_CREATED' })?.editor).toBeNull();
+  });
+  it('asks for every group (editors too) unless one is picked', () => {
+    expect(filterOf({})).toEqual({ groups: ['EMOTES', 'SETS', 'COSMETICS', 'EDITORS'], actorId: null, since: null, until: null });
+    expect(filterOf({ group: 'cosmetics', actor: 'x', since: 'a', until: 'b' })).toEqual({ groups: ['COSMETICS'], actorId: 'x', since: 'a', until: 'b' });
+  });
+});
+
 describe('profile rows', () => {
   it('gives the public the uploads, the listed sets and the activity', () => {
     expect(sectionsFor(NOBODY, false)).toEqual(['uploads', 'sets']);
     expect(sectionsFor(NOBODY, true)).toEqual(['uploads', 'sets', 'activity']);
   });
   it('gives the owner everything, activity only when the API has it', () => {
-    expect(sectionsFor(mine, false)).toEqual(['active', 'uploads', 'sets', 'cosmetics']);
+    expect(sectionsFor(mine, false)).toEqual(['overview', 'active', 'uploads', 'sets', 'cosmetics']);
     expect(sectionsFor(mine, true)).toContain('activity');
   });
   it('gives editors cosmetics only with PROFILE', () => {
     expect(sectionsFor(editor, false)).not.toContain('cosmetics');
     expect(sectionsFor(profiler, false)).toContain('cosmetics');
+  });
+  it('gives the owner alone the Overview, first in the rail', () => {
+    expect(sectionsFor(editor, true)).not.toContain('overview');
+    expect(sectionsFor(NOBODY, true)).not.toContain('overview');
+    expect(sectionHref('a1', 'overview')).toBe('/users/a1?s=overview');
+    const first = profileRail('a1', mine, 'overview', true)[0].items;
+    expect(first.map((r) => [r.label, r.current])).toEqual([['Overview', true]]);
+    expect(profileRail('a1', editor, null, true)[0].items.some((r) => r.label === 'Overview')).toBe(false);
   });
   it('links the default section without a parameter', () => {
     expect(sectionHref('a1', 'uploads')).toBe('/users/a1');

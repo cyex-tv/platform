@@ -112,8 +112,9 @@ suite('error messages', () => {
 
 suite('unlinkMessage', () => {
   it('says why a restricted account can’t unlink', () => {
-    expect(unlinkMessage(new ApiError('raw', 'restricted'))).toBe('Your account is restricted, so you can’t unlink a sign-in right now.');
+    expect(unlinkMessage(new ApiError('raw', 'restricted'))).toBe('Your account is restricted, so you can’t disconnect a sign-in right now.');
+    expect(unlinkMessage(new ApiError('raw', 'last_identity'))).toMatch(/only connection/);
     expect(unlinkMessage(new ApiError('As the API says.', 'other'))).toBe('As the API says.');
-    expect(unlinkMessage(new Error('x'))).toContain('Nothing was unlinked');
+    expect(unlinkMessage(new Error('x'))).toContain('Nothing was disconnected');
   });
 });

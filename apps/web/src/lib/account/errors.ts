@@ -24,12 +24,14 @@ export function exportMessage(err: unknown): string {
 }
 
 const UNLINK: Record<string, string> = {
-  restricted: 'Your account is restricted, so you can’t unlink a sign-in right now.',
+  restricted: 'Your account is restricted, so you can’t disconnect a sign-in right now.',
+  last_identity: 'This is your only connection. Link another platform first, then you can disconnect this one.',
+  not_found: 'That platform isn’t connected any more.',
   rate_limited: 'Too many tries. Wait a moment, then try again.',
 };
 
 /** The sentence for a failed unlink of a linked Twitch or Kick sign-in. */
 export function unlinkMessage(err: unknown): string {
   if (err instanceof ApiError) return UNLINK[err.code] ?? err.message;
-  return 'Something went wrong. Nothing was unlinked.';
+  return 'Something went wrong. Nothing was disconnected.';
 }

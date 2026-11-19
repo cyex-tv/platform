@@ -103,9 +103,9 @@ export const HELP: HelpGroup[] = [
     ['what-we-keep', 'What does cyex.tv keep about me?',
       'Your Twitch or Kick ID, login, display name and picture, what you upload, your sets and channels, and what you change (some changes show in your activity). No passwords, no email unless you send us one.'],
     ['sign-out-everywhere', 'How do I sign out?',
-      'Account menu → Sign out. Your [account page](/me/account) also lets you unlink a platform you no longer use.'],
+      'Account menu → Sign out signs this browser out. [Settings → Account](/me/settings/account) → Security → Sign out everywhere ends every session, the apps too. There you can also disconnect a platform you no longer use (you always keep at least one) and pick which connection’s name you go by.'],
     ['delete-account', 'Can I delete my account?',
-      'Yes, yourself: Account, then Delete account, and type one of your logins to confirm. Your account is hidden at once and deleted for good after 30 days. Sign in before then to undo it. After that, your emotes, sets, channels, cosmetics and notifications are gone. Approved emotes that other people have in their sets stay there, shown as made by “Deleted user”.'],
+      'Yes, yourself: Settings → Account, then Delete account, and type one of your logins to confirm. Your account is hidden at once and deleted for good after 30 days. Sign in before then to undo it. After that, your emotes, sets, channels, cosmetics and notifications are gone. Approved emotes that other people have in their sets stay there, shown as made by “Deleted user”.'],
   ]),
   group('moderation', 'Moderation and takedowns', [
     ['report-emote', 'How do I report an emote?',

@@ -82,6 +82,11 @@ pub struct Me {
     /// Permission names from the account's roles (ADR 0010).
     pub permissions: Vec<String>,
     pub created_at: String,
+    /// The platform whose name and picture the account goes by (`setDisplayPlatform`); null for
+    /// the default, Twitch first. `identities` lists that one first.
+    #[serde(default)]
+    #[schema(required = false)]
+    pub display_platform: Option<Platform>,
     /// Every role the account holds, public or not, most senior first. Only you see the ones
     /// that aren't public: your profile marks them hidden; others see `AccountProfile.roles`.
     #[serde(default)]
@@ -1201,6 +1206,44 @@ pub enum ActivityKind {
     SetCreated,
     /// A set was renamed (`from_name`, `to_name`).
     SetRenamed,
+    /// Someone became an account editor (`editor`). Never their permissions. Only listed when
+    /// the filter asks for `EDITORS`.
+    EditorAdded,
+    /// An account editor was removed or left (`editor`). Only listed when the filter asks for
+    /// `EDITORS`.
+    EditorRemoved,
+}
+
+/// A group of activity lines, for filtering a feed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "snake_case")]
+pub enum ActivityGroup {
+    /// Emotes added to, removed from or renamed in sets, and uploads that went public.
+    Emotes,
+    /// Sets made or renamed, and active set changes.
+    Sets,
+    /// Badge and paint changes.
+    Cosmetics,
+    /// Account editors added and removed.
+    Editors,
+}
+
+/// Narrows `accountActivityPage`. Every field is optional; an empty filter is the whole feed
+/// (without editor lines, as before filters existed).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
+#[cfg_attr(feature = "graphql", graphql(name = "ActivityFilter"))]
+pub struct ActivityFilter {
+    /// Only these groups. Editor lines (`EDITOR_ADDED`, `EDITOR_REMOVED`) show only when this
+    /// lists `EDITORS`.
+    pub groups: Option<Vec<ActivityGroup>>,
+    /// Only lines by this account (the owner or one of its editors).
+    pub actor_id: Option<String>,
+    /// Only lines at or after this time (RFC 3339).
+    pub since: Option<String>,
+    /// Only lines before this time (RFC 3339).
+    pub until: Option<String>,
 }
 
 /// A set, as a feed line names it.
@@ -1259,6 +1302,10 @@ pub struct ActivityEntry {
     pub badge: Option<ActivityCosmeticChange>,
     pub paint: Option<ActivityCosmeticChange>,
     pub created_at: String,
+    /// The editor added or removed (`EDITOR_ADDED`, `EDITOR_REMOVED`).
+    #[serde(default)]
+    #[schema(required = false)]
+    pub editor: Option<AccountSummary>,
 }
 
 /// One audited change (ADR 0010). `before` and `after` are JSON, as text.

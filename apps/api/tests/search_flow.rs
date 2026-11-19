@@ -409,6 +409,16 @@ async fn emote_channels_lists_public_channels_and_clamps_the_limit() {
     let data = gql(&app, &q(&format!(r#"id: "{pogu}", limit: 500"#))).await;
     assert_eq!(logins(&data).len(), 2);
 
+    // `offset` pages through the same order; past the end, or past the cap, is empty.
+    let data = gql(&app, &q(&format!(r#"id: "{pogu}", limit: 1, offset: 1"#))).await;
+    assert_eq!(logins(&data), ["user1"]);
+    let data = gql(&app, &q(&format!(r#"id: "{pogu}", offset: 0"#))).await;
+    assert_eq!(logins(&data), ["user2", "user1"]);
+    let data = gql(&app, &q(&format!(r#"id: "{pogu}", offset: 2"#))).await;
+    assert!(logins(&data).is_empty());
+    let data = gql(&app, &q(&format!(r#"id: "{pogu}", offset: 10001"#))).await;
+    assert!(logins(&data).is_empty());
+
     // Unknown, malformed and unlisted emotes have no channels.
     let data = gql(&app, &q(r#"id: "not-an-id""#)).await;
     assert!(logins(&data).is_empty());

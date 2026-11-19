@@ -11,6 +11,66 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 - Tests: Postgres `apps/api/tests/review_queue_flow.rs` (tabs, counts, search, sorts, paging, resolved, approve as unlisted/private, audit visibility, notes with author-only delete, history, permission and input errors); unit test for the filter defaults; vitest `queue.test.ts` (history lines, sizes, grid keys), `graph.test.ts` (holders filter, sort, CSV), `studio.test.ts` (every library option renders a preview).
 - Manual check (2026/11/19): headless Edge over CDP against the dev mock with 3000 pending, at 1440, 2560 and 375, dark and light: queue, limited tab, detail, reject reasons, owners lookup, studio library (layers, materials, effects); keyboard flow in the queue (arrows, A on a card, Enter, arrows in the dialog, A in the dialog opens the next, R opens the reason, Esc twice). Screens in `.claude/runs/2026-11-19-feedback/screens/j-admin/`.
 
+## Emotes tab: no rail, one toolbar, tile menu, multi-select up to 100 (branch `feat/browse-select`)
+
+Owner feedback 2026/11/19, section J (browse). Web only: no API change (bulk add already sends one `addSetEmote` per emote; 100 of them stay well inside the per-account GraphQL limit of 600 a minute, and there is no other cap to raise).
+
+- [x] Layout: the filter rail is gone (Emotes and Users tabs both use `ColumnLayout`). One toolbar: sort Top / Trending (its Day / 7 days / 30 days next to it) / New (Relevance with a query), the search field, Filters in a popover (a sheet on phones; Type, Flags, Tags as before, with Reset), a Select switch, and the target set button (signed in only). One large grid, no size options.
+- [x] Target set (`browse/target.svelte.ts`, `TargetSet.svelte`): your sets and sets you edit with EMOTES; starts as your channel's active set, a pick is remembered on the device.
+- [x] Tile menu (`TileMenu.svelte`): right-click, the context-menu key or Shift+F10, or the ⋯ button (shows on keyboard focus and hover, always on touch). Add to / Remove from the target set, Open in new tab, Copy emote link, Select. The browser's own menu never shows on tiles. Arrow keys, Home, End; Escape returns focus to the tile.
+- [x] Multi-select (`browse/selection.ts`, pure; `BrowseGrid.svelte`): click or Ctrl/⌘+click toggles, Shift+click a range from the last toggled tile, Space / Shift+Space on the focused tile, a drag rectangle (mouse or pen; from an empty spot it turns Select on) with auto-scroll near the window's edges, Ctrl/⌘+A picks what is shown, Escape clears (again: leaves Select). Touch: long-press turns Select on with that tile (in Select: a range). Cap 100: anything over it is refused with a note in the bar. Bar: "n / 100 selected", Add n to the target set (progress and a summary), Select all shown, Clear, Done. Picked tiles get an accent hairline and tick and a bold name (one CSS rule added to the shared `EmoteTile`).
+- [x] Kept: URL state (`select=1` and every filter), the trending `#n` ranks, the empty, error and loading states.
+- Tests: vitest `selection.test.ts` (toggle, range both ways, cap and refused counts, Select all, drag rectangle base plus hits, hit-test incl. gaps and touching edges, drag threshold, edge auto-scroll speed).
+- Manual check (2026/11/19): headless Edge against the dev mock, `.claude/runs/2026-11-19-feedback/screens/j-browse/check.mjs` and `touch.mjs`: no rail; context menu opens with our items and stays inside the window at 375, 768, 1440 and 2560, dark and light; Add and Remove from the menu; Escape closes it and refocuses the tile; Select in the URL; click plus Ctrl+click (2), Shift range (7); Escape clears; drag rectangle picks the tiles it touches and the click after it doesn't navigate; Ctrl+A over 285 shown picks 100; one more click is refused with the note; Space toggles; bulk add summary; long-press on touch turns Select on without navigating, a tap then toggles; the context-menu key opens the menu with focus in it; Tab reaches the ⋯; no sideways scroll at any width; rank labels; empty state; Filters popover. Screens in `.claude/runs/2026-11-19-feedback/screens/j-browse/`.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/browse-select
+gh pr create --base main --head feat/browse-select --title "Emotes tab: one toolbar, tile menu, multi-select up to 100" --body-file <file>
+git merge origin/main   (PROGRESS.md resolved)
+gh pr merge 97 --merge
+```
+
+## Emote page, round 3: one card, tabs with pagers, dated activity (branch `feat/emote-page-3`)
+
+Owner feedback 2026/11/19, section H. Additive API; no migration; nothing was deployed.
+
+- [x] One main card: the creator and upload date on top, the name, its flags (Animated, Zero-width, Wide, NSFW, Unlisted or Private, each with a tooltip) and tags (links to the tag search), the four sizes on one baseline with scale and pixel size, one line of facts (channels, added in 7 days, formats, file size at the biggest scale, review), and the actions together: Add to set (sets on your own channels first, marked "On your channel"), Edit (owner, or `emotes.edit_any`), More (Copy link, Copy name, Download, Report). Trending #n and Pause sit top right.
+- [x] The preview background switch (Dark, Light, Checker, Chat) and the side panel are gone from the emote page; the review block's Report moved into More. (The edit page `/me/emotes/[id]` still uses `PreviewStage`, untouched.)
+- [x] A second card with tabs Channels (count), Activity, More by the creator, and a pager in the tab bar ("1–24 of 82", previous, next). Channels page 24 at a time through `emoteChannels(offset:)`; Activity pages by cursor (pages kept, Previous needs no request).
+- [x] Activity rows: icon, a plain sentence, who did it, and the date and time (`2026/11/19 14:05`, how long ago on hover). Notifications show the date and time the same way.
+- [x] Phones: the card stacks, sizes wrap, the actions stay in the fixed bottom bar (Add to set, Edit, More); reduced motion starts on still frames.
+- API: `emoteChannels(id, limit, offset)`, `offset` 0 to 10000 (past it: empty). Postgres test in `apps/api/tests/search_flow.rs`; dev mock and codegen updated.
+- Tests: vitest `emote-page.test.ts` (flags, pager range), `pager.test.ts` (cursor trail).
+- Checked in the running app (vite dev + mock, headless Edge): 375, 768, 1440, 2560, dark and light, signed out and signed in (Add to set, Edit, More, Download panel), keyboard (tab arrows), pager next page, reduced motion. No horizontal scroll. Screens in `.claude/runs/2026-11-19-feedback/screens/h/` (`before-after-1440-dark.png`).
+- Left alone (agent D's files): the profile activity rows (dated by #95) and the sessions list (`apps/web/src/lib/account/SessionsPanel.svelte`, "Last seen" still relative, exact time on hover).
+
+## Profile dashboard, activity filters, settings (branch `feat/profile-dashboard`)
+
+Owner feedback 2026/11/19, sections D and I (profile parts). Additive API; one new migration; nothing was deployed.
+
+- [x] Your profile's dashboard: Overview (`/users/<id>?s=overview`, first rail row for the owner; the account menu's name row opens it): tiles for Channels (and the set each shows), Notifications, Recent uploads with their state, Recent activity, Editors, Cosmetics (what you show, how many you own) and Emote sets, each linking to its tab. Each tile loads and fails on its own.
+- [x] Activity tab: filter bar (Everything / Emotes / Sets / Cosmetics / Editors; By: anyone, the owner or one of its editors; the cyex logs timeframe All time / Day / Month with a "Jump to date" / "Jump to month" popover that refuses future dates). Filters live in the address (`?k=`, `?by=`, `?d=` / `?m=`). Rows show date and time (2026/11/19 14:05) and how long ago, everywhere (the emote page's Activity too). On an account's own feed its own lines drop "by <name>"; editor lines read "Added X as an editor", "Removed X as an editor", "X stopped being an editor".
+- [x] API: `accountActivityPage(filter: ActivityFilter)` with `groups` (`EMOTES`, `SETS`, `COSMETICS`, `EDITORS`), `actorId`, `since`, `until` (RFC 3339, `bad_time`). New kinds `EDITOR_ADDED`, `EDITOR_REMOVED` and `ActivityEntry.editor` (names only, never permissions); editor lines show only when a filter asks for `EDITORS`, so the unfiltered feed is unchanged. Editor add/remove audit rows now name the owner as their subject (an editor's own change is marked `via: account_editor`); older editor rows don't show.
+- [x] Display name: migration `20261207000052_display_platform.sql` (`accounts.display_platform`); `setDisplayPlatform(platform)` (`not_found` when not linked), `Me.displayPlatform`; the chosen identity is listed first and gives the account's name and picture everywhere (summaries, profiles, search results); search still matches every login; unlinking that platform goes back to Twitch first.
+- [x] Sign out everywhere: `signOutEverywhere` ends every session, this one too, and clears the cookie (Settings → Account → Security). The header menu's Sign out stays this session only.
+- [x] Connections: Disconnect with more than one linked; the last never goes (`last_identity`, the website says why). Restricted, ticket-blocked or blocked accounts still can't unlink (identity holds, #83); an account in its deletion window has only the restore session, so it can't either (#89).
+- [x] Settings (account menu → Settings): rail Account / Appearance / Editors (the existing /me/editors page) / Billing (orders). Account: display name choice, connections, security, sessions, data, delete. Appearance: theme and reduced motion (System / On / Off, per device in `cyexMotion`): app.html sets `data-motion` before first paint and makes `matchMedia('(prefers-reduced-motion: …)')` answer by the setting, so every script follows it; `data-motion="reduce"` turns transitions and animations off in CSS. `/me/account` and `/me/settings` redirect to Settings → Account.
+- [x] Profile look: the identity moved out of a 7TV-style centred side card into a left-aligned band across the page (paint-ringed avatar, painted name as h1, roles as flags right after it, a facts line: connections, channel sets, editors by name, member since). The rail is navigation only and runs the full height of the left column. Copy link is gone from profiles; the permissions panel is gone from the account page. Others' profiles show their listed sets, public uploads and editors by name.
+- [x] /help: the index has no scroll bar of its own on wide windows; it runs the full column height with the search pinned.
+- Tests: `apps/api/tests/profile_dashboard_flow.rs` (Postgres, CI: last connection, restricted unlink, display name and search by both logins, sign out everywhere with cookie and app token, activity groups / actor / time / bad input / editor lines), unit tests in `activity.rs`; vitest `lib/profile/timeframe.test.ts`, `lib/account/settings.test.ts`, `activity.test.ts` (editor lines, filter, Overview row).
+- Manual check (2026/11/19): headless Edge against the dev mock (MOCK_KICK=1) at 375, 1440 and 2560, dark and light: overview, activity with filters and the date popover (future date refused), another person's profile, settings account (display name switch updated the header and band), appearance, /me/account redirect, help index; screens in the 2026-11-19-feedback run folder, screens/d.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/profile-dashboard
+gh pr create --base main --head feat/profile-dashboard --title "Profile dashboard, activity filters and settings" --body-file <file>
+git merge origin/main   (four times; PROGRESS.md, ActivityRows.svelte and editors.rs resolved; the display platform migration renumbered to 000052)
+gh pr merge 95 --merge
+```
+
 ## Paint render fix and global emote/editor permissions (branch `fix/paints-and-global-perms`, ADR 0010 amendment part 3)
 - Owner feedback I (2026/11/19): "paints seem to not render properly on the website" (an image paint, "Icy Wave", showed as an empty radio in the cosmetics picker) and "perms to edit someones emotes and editors globally for a role".
 - Paint cause: a painted name is transparent text (`-webkit-text-fill-color: transparent`) showing its background through `background-clip: text`. For an image paint the only background was the picture, so whenever the picture didn't load (blocked by the CSP's `img-src`, missing on the CDN, still on its way) the name drew nothing. A local stack serves pictures from `CYEX_TV_CDN_URL` (the S3 server), which the CSP never allowed; the studio previews render locally, so they looked fine. Fix: `paintStyle` (and the studio's `paintStyleText`) put a flat layer in the text colour under the picture; `PUBLIC_CDN_URL` adds the pictures' origin to `img-src` (svelte.config.js, Dockerfile build arg, .env.example).

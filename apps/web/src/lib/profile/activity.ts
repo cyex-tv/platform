@@ -2,13 +2,23 @@
 // `ActivityItem`, and `loadActivity` maps the API's `accountActivity` into it. The feed is public.
 import { gql } from '$lib/api';
 import type { Picture } from '$lib/emote';
-import type { AccountActivityQuery, ActivityKind as ApiKind } from '$lib/gql/graphql';
+import type { AccountActivityQuery, ActivityGroup, ActivityKind as ApiKind } from '$lib/gql/graphql';
 import { ACCOUNT_ACTIVITY, EMOTE_ACTIVITY } from '$lib/queries';
 
 /** Whether the API has `accountActivity` (it does since PR 52). */
 export const ACTIVITY_READY = true;
 
-export type ActivityKind = 'added' | 'removed' | 'renamed' | 'active' | 'cosmetics' | 'uploaded' | 'created' | 'setRenamed';
+export type ActivityKind =
+  | 'added'
+  | 'removed'
+  | 'renamed'
+  | 'active'
+  | 'cosmetics'
+  | 'uploaded'
+  | 'created'
+  | 'setRenamed'
+  | 'editorAdded'
+  | 'editorRemoved';
 
 type Change = { fromId?: string | null; fromName?: string | null; toId?: string | null; toName?: string | null };
 
@@ -26,6 +36,8 @@ export type ActivityItem = {
   to: string | null;
   badge: Change | null;
   paint: Change | null;
+  /** The editor added or removed (editor lines only); never their permissions. */
+  editor: { id: string; displayName: string; avatar?: string | null } | null;
 };
 
 const KIND: Record<ApiKind, ActivityKind> = {
@@ -37,6 +49,8 @@ const KIND: Record<ApiKind, ActivityKind> = {
   EMOTE_UPLOADED: 'uploaded',
   SET_CREATED: 'created',
   SET_RENAMED: 'setRenamed',
+  EDITOR_ADDED: 'editorAdded',
+  EDITOR_REMOVED: 'editorRemoved',
 };
 
 type Entry = AccountActivityQuery['accountActivityPage']['entries'][number];
@@ -56,6 +70,7 @@ export function toItem(e: Entry): ActivityItem | null {
     to: e.toName ?? null,
     badge: e.badge ?? null,
     paint: e.paint ?? null,
+    editor: e.editor ?? null,
   };
 }
 
@@ -86,9 +101,38 @@ async function fill(ask: (before: string | null) => Promise<Answer>, before: str
   return { items, next };
 }
 
+/** What the profile's Activity tab narrows to (the feed's filter bar). */
+export type ActivityQuery = {
+  /** One group, or every group (editor lines included). */
+  group?: Lowercase<ActivityGroup> | 'all';
+  /** Only lines by this account (the owner, or one of its editors). */
+  actor?: string | null;
+  since?: string | null;
+  until?: string | null;
+};
+
+const GROUPS: ActivityGroup[] = ['EMOTES', 'SETS', 'COSMETICS', 'EDITORS'];
+
+/** The API's filter for a query; "all" asks for every group, so editor lines come too. */
+export function filterOf(q: ActivityQuery) {
+  const group = q.group ?? 'all';
+  return {
+    groups: group === 'all' ? GROUPS : [group.toUpperCase() as ActivityGroup],
+    actorId: q.actor || null,
+    since: q.since || null,
+    until: q.until || null,
+  };
+}
+
 /** A page of the account's activity, newest first; `before` is the previous page's `next`. */
-export function loadActivity(accountId: string, before: string | null = null, fetcher: typeof fetch = fetch): Promise<ActivityPage> {
-  return fill((b) => gql(ACCOUNT_ACTIVITY, { accountId, before: b, limit: PAGE }, fetcher).then((r) => r.accountActivityPage), before);
+export function loadActivity(
+  accountId: string,
+  before: string | null = null,
+  fetcher: typeof fetch = fetch,
+  query: ActivityQuery = {},
+): Promise<ActivityPage> {
+  const filter = filterOf(query);
+  return fill((b) => gql(ACCOUNT_ACTIVITY, { accountId, before: b, limit: PAGE, filter }, fetcher).then((r) => r.accountActivityPage), before);
 }
 
 /** A page of the lines about one emote (the emote page's Activity tab); empty unless it is public. */
