@@ -1,17 +1,8 @@
 // What the emote page asks for besides the emote itself. Both are best-effort: a failure hides
 // the part that needed them instead of failing the page.
 import { gql } from '$lib/api';
-import { EMOTE_CHANNELS, EMOTE_TRENDING, GLOBAL_SET, SEARCH_BY_OWNER } from '$lib/queries';
-import type { EmoteChannel, PageEmote } from './emote-page';
-
-/** The global set's emotes, for the chat preview (a zero-width emote needs one to sit on). */
-export async function globalPool(fetcher: typeof fetch = fetch) {
-  try {
-    return (await gql(GLOBAL_SET, {}, fetcher)).globalSet.emotes.map((m) => ({ ...m.emote, name: m.name }));
-  } catch {
-    return [];
-  }
-}
+import { EMOTE_CHANNELS, EMOTE_TRENDING, SEARCH_BY_OWNER } from '$lib/queries';
+import { CHANNEL_PAGE, type EmoteChannel, type PageEmote } from './emote-page';
 
 /** Up to 12 more approved emotes by the same creator, this one left out. */
 export async function moreBy(e: PageEmote, fetcher: typeof fetch = fetch): Promise<PageEmote[]> {
@@ -35,14 +26,18 @@ export async function trendingOf(e: PageEmote, fetcher: typeof fetch = fetch): P
   }
 }
 
-/** Up to 8 channels with the emote in their active set; null (the section is hidden) when none, or on a failure. */
+/** One page of the channels showing the emote, newest first. Throws when the API can't be reached. */
+export async function channelPage(id: string, offset: number, fetcher: typeof fetch = fetch): Promise<EmoteChannel[]> {
+  const list = (await gql(EMOTE_CHANNELS, { id, limit: CHANNEL_PAGE, offset }, fetcher)).emoteChannels;
+  return list.map((c) => ({ platform: c.platform, login: c.login, displayName: c.account.displayName, avatar: c.account.avatar }));
+}
+
+/** The first page of channels with the emote in their active set; null (the tab is hidden) when none, or on a failure. */
 export async function channelsUsing(e: PageEmote, fetcher: typeof fetch = fetch): Promise<EmoteChannel[] | null> {
   if (e.state !== 'APPROVED' || e.channelCount <= 0) return null;
   try {
-    const list = (await gql(EMOTE_CHANNELS, { id: e.id, limit: 8 }, fetcher)).emoteChannels;
-    return list.length
-      ? list.map((c) => ({ platform: c.platform, login: c.login, displayName: c.account.displayName, avatar: c.account.avatar }))
-      : null;
+    const list = await channelPage(e.id, 0, fetcher);
+    return list.length ? list : null;
   } catch {
     return null;
   }

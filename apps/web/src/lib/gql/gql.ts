@@ -97,7 +97,7 @@ type Documents = {
     "\n  query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {\n    accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.AccountEmotesDocument,
     "\n  query AccountReports($accountId: String!) {\n    accountReports(accountId: $accountId) {\n      about {\n        ...ReportFields\n      }\n      by {\n        ...ReportFields\n      }\n    }\n  }\n": typeof types.AccountReportsDocument,
     "\n  query PublicAccount($id: String!) {\n    account(id: $id) {\n      id\n      displayName\n      avatar\n    }\n  }\n": typeof types.PublicAccountDocument,
-    "\n  query EmoteChannels($id: String!, $limit: Int) {\n    emoteChannels(id: $id, limit: $limit) {\n      platform\n      login\n      account {\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.EmoteChannelsDocument,
+    "\n  query EmoteChannels($id: String!, $limit: Int, $offset: Int) {\n    emoteChannels(id: $id, limit: $limit, offset: $offset) {\n      platform\n      login\n      account {\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.EmoteChannelsDocument,
     "\n  fragment CosmeticImageFields on CosmeticImage {\n    id\n    kind\n    host\n    animated\n    ready\n    width\n    height\n    files {\n      name\n      width\n      height\n      isStatic\n    }\n  }\n": typeof types.CosmeticImageFieldsFragmentDoc,
     "\n  fragment BadgeFields on Badge {\n    id\n    name\n    tooltip\n    image {\n      ...CosmeticImageFields\n    }\n  }\n": typeof types.BadgeFieldsFragmentDoc,
     "\n  fragment PaintFields on Paint {\n    id\n    name\n    kind\n    angle\n    repeat\n    shape\n    color\n    stops {\n      at\n      color\n    }\n    shadows {\n      x\n      y\n      radius\n      color\n    }\n    image {\n      ...CosmeticImageFields\n    }\n  }\n": typeof types.PaintFieldsFragmentDoc,
@@ -235,7 +235,7 @@ const documents: Documents = {
     "\n  query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {\n    accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.AccountEmotesDocument,
     "\n  query AccountReports($accountId: String!) {\n    accountReports(accountId: $accountId) {\n      about {\n        ...ReportFields\n      }\n      by {\n        ...ReportFields\n      }\n    }\n  }\n": types.AccountReportsDocument,
     "\n  query PublicAccount($id: String!) {\n    account(id: $id) {\n      id\n      displayName\n      avatar\n    }\n  }\n": types.PublicAccountDocument,
-    "\n  query EmoteChannels($id: String!, $limit: Int) {\n    emoteChannels(id: $id, limit: $limit) {\n      platform\n      login\n      account {\n        displayName\n        avatar\n      }\n    }\n  }\n": types.EmoteChannelsDocument,
+    "\n  query EmoteChannels($id: String!, $limit: Int, $offset: Int) {\n    emoteChannels(id: $id, limit: $limit, offset: $offset) {\n      platform\n      login\n      account {\n        displayName\n        avatar\n      }\n    }\n  }\n": types.EmoteChannelsDocument,
     "\n  fragment CosmeticImageFields on CosmeticImage {\n    id\n    kind\n    host\n    animated\n    ready\n    width\n    height\n    files {\n      name\n      width\n      height\n      isStatic\n    }\n  }\n": types.CosmeticImageFieldsFragmentDoc,
     "\n  fragment BadgeFields on Badge {\n    id\n    name\n    tooltip\n    image {\n      ...CosmeticImageFields\n    }\n  }\n": types.BadgeFieldsFragmentDoc,
     "\n  fragment PaintFields on Paint {\n    id\n    name\n    kind\n    angle\n    repeat\n    shape\n    color\n    stops {\n      at\n      color\n    }\n    shadows {\n      x\n      y\n      radius\n      color\n    }\n    image {\n      ...CosmeticImageFields\n    }\n  }\n": types.PaintFieldsFragmentDoc,
@@ -622,7 +622,7 @@ export function graphql(source: "\n  query PublicAccount($id: String!) {\n    ac
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query EmoteChannels($id: String!, $limit: Int) {\n    emoteChannels(id: $id, limit: $limit) {\n      platform\n      login\n      account {\n        displayName\n        avatar\n      }\n    }\n  }\n"): typeof import('./graphql').EmoteChannelsDocument;
+export function graphql(source: "\n  query EmoteChannels($id: String!, $limit: Int, $offset: Int) {\n    emoteChannels(id: $id, limit: $limit, offset: $offset) {\n      platform\n      login\n      account {\n        displayName\n        avatar\n      }\n    }\n  }\n"): typeof import('./graphql').EmoteChannelsDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

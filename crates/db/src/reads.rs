@@ -330,12 +330,13 @@ pub async fn channel_counts(
         .collect())
 }
 
-/// Channels whose active set holds the emote, the most recently added first. Channels of
-/// deleted or blocked accounts are left out.
+/// Channels whose active set holds the emote, the most recently added first, `offset` rows in.
+/// Channels of deleted or blocked accounts are left out.
 pub async fn emote_channels(
     conn: &mut PgConnection,
     emote_id: Uuid,
     limit: i64,
+    offset: i64,
 ) -> DbResult<Vec<crate::channels::Channel>> {
     Ok(sqlx::query_as(
         "SELECT c.id, c.account_id, c.platform, c.platform_channel_id, c.login, c.active_set_id,
@@ -345,10 +346,11 @@ pub async fn emote_channels(
          JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL AND (a.blocked_at IS NULL OR a.blocked_until <= now())
          WHERE m.emote_id = $1
          ORDER BY m.added_at DESC, c.id
-         LIMIT $2",
+         LIMIT $2 OFFSET $3",
     )
     .bind(emote_id)
     .bind(limit)
+    .bind(offset)
     .fetch_all(conn)
     .await?)
 }

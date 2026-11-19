@@ -1388,9 +1388,10 @@ const publicAccount = (id) => {
   return m ? { id, displayName: FAKE_LOGINS[Number(m[1]) % FAKE_LOGINS.length], avatar: null } : null;
 };
 // Channels showing an emote: as many as its channelCount says, newest first, from the mock owners.
-const emoteChannels = (e, limit) => {
-  const n = Math.min(limit, e.channelCount);
-  return Array.from({ length: n }, (_, k) => {
+const emoteChannels = (e, limit, offset = 0) => {
+  const n = Math.max(0, Math.min(limit, e.channelCount - offset));
+  return Array.from({ length: n }, (_, i) => {
+    const k = i + offset;
     const owner = [...OTHERS, ME_SUMMARY][k % 3];
     const login = k < 3 ? owner.displayName : `${FAKE_LOGINS[k % FAKE_LOGINS.length]}${k}`;
     return {
@@ -2112,7 +2113,8 @@ function baseAnswer(body, session, admin) {
     if (/\bemoteChannels\s*\(/.test(q)) {
       const e = findEmote(v.id ?? v.emoteId);
       const limit = Math.min(50, Math.max(1, v.limit ?? 8));
-      data.emoteChannels = e && e.state === 'APPROVED' && !e.flags.private ? emoteChannels(e, limit) : [];
+      const offset = Math.max(0, v.offset ?? 0);
+      data.emoteChannels = e && e.state === 'APPROVED' && !e.flags.private && offset <= 10000 ? emoteChannels(e, limit, offset) : [];
     }
     return { data };
   }

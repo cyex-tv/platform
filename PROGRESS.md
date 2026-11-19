@@ -2,6 +2,20 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Emote page, round 3: one card, tabs with pagers, dated activity (branch `feat/emote-page-3`)
+
+Owner feedback 2026/11/19, section H. Additive API; no migration; nothing was deployed.
+
+- [x] One main card: the creator and upload date on top, the name, its flags (Animated, Zero-width, Wide, NSFW, Unlisted or Private, each with a tooltip) and tags (links to the tag search), the four sizes on one baseline with scale and pixel size, one line of facts (channels, added in 7 days, formats, file size at the biggest scale, review), and the actions together: Add to set (sets on your own channels first, marked "On your channel"), Edit (owner, or `emotes.edit_any`), More (Copy link, Copy name, Download, Report). Trending #n and Pause sit top right.
+- [x] The preview background switch (Dark, Light, Checker, Chat) and the side panel are gone from the emote page; the review block's Report moved into More. (The edit page `/me/emotes/[id]` still uses `PreviewStage`, untouched.)
+- [x] A second card with tabs Channels (count), Activity, More by the creator, and a pager in the tab bar ("1–24 of 82", previous, next). Channels page 24 at a time through `emoteChannels(offset:)`; Activity pages by cursor (pages kept, Previous needs no request).
+- [x] Activity rows: icon, a plain sentence, who did it, and the date and time (`2026/11/19 14:05`, how long ago on hover). Notifications show the date and time the same way.
+- [x] Phones: the card stacks, sizes wrap, the actions stay in the fixed bottom bar (Add to set, Edit, More); reduced motion starts on still frames.
+- API: `emoteChannels(id, limit, offset)`, `offset` 0 to 10000 (past it: empty). Postgres test in `apps/api/tests/search_flow.rs`; dev mock and codegen updated.
+- Tests: vitest `emote-page.test.ts` (flags, pager range), `pager.test.ts` (cursor trail).
+- Checked in the running app (vite dev + mock, headless Edge): 375, 768, 1440, 2560, dark and light, signed out and signed in (Add to set, Edit, More, Download panel), keyboard (tab arrows), pager next page, reduced motion. No horizontal scroll. Screens in `.claude/runs/2026-11-19-feedback/screens/h/` (`before-after-1440-dark.png`).
+- Left alone (agent D's files): the profile activity rows (dated by #95) and the sessions list (`apps/web/src/lib/account/SessionsPanel.svelte`, "Last seen" still relative, exact time on hover).
+
 ## Profile dashboard, activity filters, settings (branch `feat/profile-dashboard`)
 
 Owner feedback 2026/11/19, sections D and I (profile parts). Additive API; one new migration; nothing was deployed.

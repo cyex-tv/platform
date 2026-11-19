@@ -1,7 +1,10 @@
 // Pure helpers for the emote page (src/routes/emotes/[id]): the back link, facts, chat lines,
 // review copy.
 import type { ChatEmote, ChatLine } from '$lib/components/ChatPreview.svelte';
+import type { IconName } from '$lib/components/Icon.svelte';
 import { isWide, type Picture } from '$lib/emote';
+import { count } from '$lib/format';
+import { visibilityOf } from '$lib/tool/visibility';
 import type { EmoteFieldsFragment, EmoteState } from '$lib/gql/graphql';
 
 export type PageEmote = EmoteFieldsFragment;
@@ -64,6 +67,35 @@ export function labels(e: PageEmote): string[] {
   return [e.animated && 'animated', e.flags.zeroWidth && 'zero-width', isWide(e) && 'wide', e.flags.nsfw && 'NSFW'].filter(
     Boolean,
   ) as string[];
+}
+
+/** One flag on the emote page's card: its icon, word, and what it means (the tooltip). */
+export type Flag = { key: 'animated' | 'zero-width' | 'wide' | 'nsfw' | 'unlisted' | 'private'; label: string; icon: IconName; tip: string };
+
+/**
+ * The emote's flags, in reading order: how it moves, how it sits in chat, NSFW, then who can
+ * find it (ADR 0020: unlisted and private say so). A still, public, ordinary emote has none.
+ */
+export function flagsOf(e: PageEmote): Flag[] {
+  const out: Flag[] = [];
+  if (e.animated) out.push({ key: 'animated', label: 'Animated', icon: 'play', tip: 'Moves in chat' });
+  if (e.flags.zeroWidth) out.push({ key: 'zero-width', label: 'Zero-width', icon: 'layers', tip: 'Sits on top of the emote before it' });
+  if (e.flags.wide || isWide(e)) out.push({ key: 'wide', label: 'Wide', icon: 'wide', tip: 'At least 1,75 times as wide as it is tall' });
+  if (e.flags.nsfw) out.push({ key: 'nsfw', label: 'NSFW', icon: 'eye-off', tip: 'Not safe for work: hidden unless a viewer shows NSFW emotes' });
+  const vis = visibilityOf(e);
+  if (vis === 'UNLISTED') out.push({ key: 'unlisted', label: 'Unlisted', icon: 'link', tip: 'Search leaves it out: only people with the link find it' });
+  else if (vis === 'PRIVATE') out.push({ key: 'private', label: 'Private', icon: 'shield', tip: 'Only its creator and their editors can add it to sets' });
+  return out;
+}
+
+/** Channels on one page of the Channels tab. */
+export const CHANNEL_PAGE = 24;
+
+/** `1–24 of 26`: which rows a page shows, for the pager. Empty when there is nothing. */
+export function rangeLabel(from: number, shown: number, total?: number | null): string {
+  if (shown <= 0) return '';
+  const span = `${count(from + 1)}–${count(from + shown)}`;
+  return total != null ? `${span} of ${count(total)}` : span;
 }
 
 type SetEmote = Picture & { name: string; flags?: { zeroWidth: boolean } | null };

@@ -3,14 +3,15 @@
   // file list has (still or moving for animated emotes, size 1x to 4x, WebP or AVIF) and one button.
   // No sign-in. The chosen option is bold with an accent check, never a filled box. Files come from
   // the CDN, so they are fetched and saved from a Blob (see `save`). `variant="bar"` is the phone's
-  // action bar: just the icon.
+  // action bar: just the icon. `bare` drops the popover and shows only the choices (inside another
+  // menu, e.g. the emote page's More menu); `ondone` runs once the file is saved.
   import Icon from '$lib/components/Icon.svelte';
   import Popover from '$lib/components/Popover.svelte';
   import { bytes, fileName, fileUrl, formatsAt, hasBoth, pick, save, settle, sizes, type Choice } from './download';
   import type { PageEmote } from './emote-page';
 
-  type Props = { emote: Pick<PageEmote, 'host' | 'animated' | 'files'> & { name: string }; variant?: 'head' | 'bar' };
-  let { emote, variant = 'head' }: Props = $props();
+  type Props = { emote: Pick<PageEmote, 'host' | 'animated' | 'files'> & { name: string }; variant?: 'head' | 'bar'; bare?: boolean; ondone?: () => void };
+  let { emote, variant = 'head', bare = false, ondone }: Props = $props();
 
   const id = $props.id();
   const both = $derived(hasBoth(emote.files));
@@ -38,23 +39,34 @@
     saying = 'saving';
     const ok = await save(fileUrl(emote.host, file), fileName(emote.name, file, emote.animated));
     saying = ok ? 'saved' : 'opened';
-    if (ok) setTimeout(() => (open = false), 500);
+    if (ok)
+      setTimeout(() => {
+        open = false;
+        ondone?.();
+      }, 500);
   }
 
   $effect(() => {
-    if (!open) saying = '';
+    if (!open && !bare) saying = '';
   });
 </script>
 
-<Popover label="Download emote" bind:open sheet width="300px" align={variant === 'head' ? 'end' : 'start'}>
-  {#snippet trigger(props)}
-    {#if variant === 'bar'}
-      <button class="btn btn-s icon-only" type="button" aria-label="Download" {...props}><Icon name="download" /></button>
-    {:else}
-      <button class="btn btn-s" type="button" {...props}><Icon name="download" />Download</button>
-    {/if}
-  {/snippet}
+{#if bare}
+  {@render body()}
+{:else}
+  <Popover label="Download emote" bind:open sheet width="300px" align={variant === 'head' ? 'end' : 'start'}>
+    {#snippet trigger(props)}
+      {#if variant === 'bar'}
+        <button class="btn btn-s icon-only" type="button" aria-label="Download" {...props}><Icon name="download" /></button>
+      {:else}
+        <button class="btn btn-s" type="button" {...props}><Icon name="download" />Download</button>
+      {/if}
+    {/snippet}
+    {@render body()}
+  </Popover>
+{/if}
 
+{#snippet body()}
   <div class="dl">
     {#if both}
       <fieldset>
@@ -102,7 +114,7 @@
     {/if}
     <span class="sr-only" role="status">{saying === 'saved' ? 'Saved' : saying === 'opened' ? 'Opened in a new tab' : ''}</span>
   </div>
-</Popover>
+{/snippet}
 
 <style>
   .dl { display: grid; gap: 10px; }

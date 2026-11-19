@@ -6,8 +6,8 @@
   import State from '$lib/components/State.svelte';
   import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
   import EmoteView from '$lib/components/emote/EmoteView.svelte';
-  import { channelsUsing, globalPool } from '$lib/components/emote/data';
-  import { backTarget, channelCount, type ChatPool, type EmoteChannel, type PageEmote } from '$lib/components/emote/emote-page';
+  import { channelsUsing } from '$lib/components/emote/data';
+  import { backTarget, channelCount, type EmoteChannel, type PageEmote } from '$lib/components/emote/emote-page';
   import { src, ready } from '$lib/emote';
   import { clean } from '$lib/format';
   import { EMOTE } from '$lib/queries';
@@ -16,7 +16,7 @@
 
   // The server can't see pending, rejected or taken-down emotes (no session cookie), so when it
   // found nothing the browser asks once more: their owner and moderators get the page.
-  let late = $state<{ id: string; emote: PageEmote | null; pool: ChatPool; channels: EmoteChannel[] | null } | null>(null);
+  let late = $state<{ id: string; emote: PageEmote | null; channels: EmoteChannel[] | null } | null>(null);
   $effect(() => {
     if (data.emote) return;
     const id = data.id;
@@ -28,15 +28,14 @@
       } catch {
         emote = null;
       }
-      const [pool, channels] = emote ? await Promise.all([globalPool(), channelsUsing(emote)]) : [[], null];
-      if (!gone) late = { id, emote, pool, channels };
+      const channels = emote ? await channelsUsing(emote) : null;
+      if (!gone) late = { id, emote, channels };
     })();
     return () => (gone = true);
   });
 
   const asked = $derived(data.emote ? null : late?.id === data.id ? late : undefined);
   const e = $derived(data.emote ?? asked?.emote ?? null);
-  const pool = $derived(data.emote ? data.pool : (asked?.pool ?? []));
 
   let from = $state<URL | null>(null);
   afterNavigate((nav) => {
@@ -73,7 +72,7 @@
 
 {#if e}
   {#key e.id}
-    <EmoteView emote={e} {pool} more={data.more} channels={data.emote ? data.channels : (asked?.channels ?? null)} channelCount={channelCount(e)} trending={data.emote ? data.trending : null} {back} />
+    <EmoteView emote={e} more={data.more} channels={data.emote ? data.channels : (asked?.channels ?? null)} channelCount={channelCount(e)} trending={data.emote ? data.trending : null} {back} />
   {/key}
 {:else if asked === undefined}
   <!-- Asking from the browser: hold the space quietly, then show the page or say it's gone. -->

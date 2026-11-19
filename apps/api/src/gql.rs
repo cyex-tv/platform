@@ -553,14 +553,16 @@ impl Query {
     }
 
     /// Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
-    /// default 8. Empty when the emote is unknown or not public.
+    /// default 8; `offset` skips that many (0 to 10000, default 0) for paging. Empty when the
+    /// emote is unknown or not public.
     async fn emote_channels(
         &self,
         ctx: &Context<'_>,
         id: String,
         limit: Option<u32>,
+        offset: Option<u32>,
     ) -> Result<Vec<Channel>> {
-        catalog::emote_channels(state(ctx), &id, limit)
+        catalog::emote_channels(state(ctx), &id, limit, offset)
             .await
             .map_err(api_error)
     }

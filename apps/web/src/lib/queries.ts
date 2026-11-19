@@ -1030,8 +1030,8 @@ export const ACCOUNT = graphql(`
 
 // Channels that have an emote in their active set (the emote page's "Used in").
 export const EMOTE_CHANNELS = graphql(`
-  query EmoteChannels($id: String!, $limit: Int) {
-    emoteChannels(id: $id, limit: $limit) {
+  query EmoteChannels($id: String!, $limit: Int, $offset: Int) {
+    emoteChannels(id: $id, limit: $limit, offset: $offset) {
       platform
       login
       account {
