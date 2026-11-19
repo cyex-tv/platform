@@ -7,7 +7,7 @@
   import { clean, count } from '$lib/format';
   import { bottomBar } from '$lib/tool/bottom-bars.svelte';
   import { session } from '$lib/tool/session.svelte';
-  import { plan, summary } from './bulk';
+  import { addState, plan, summary } from './bulk';
   import { CAP } from './selection';
   import { target } from './target.svelte';
 
@@ -31,6 +31,7 @@
   const said = $derived(result && result.after === ids.join() ? result.text : '');
   const set = $derived(target.current);
   const preview = $derived(set ? plan(ids, set.held, set.capacity - set.held.size) : null);
+  const addNow = $derived(addState(ids.length, preview));
 
   $effect(() => {
     target.ensure();
@@ -81,7 +82,11 @@
       <a class="btn btn-s" href="/me/sets">Make a set to add to</a>
     {:else}
       <button class="btn btn-s btn-primary add" type="button" disabled={!ids.length || !!run || !preview || preview.add.length === 0} onclick={add}>
-        <span class="lbl">Add {ids.length ? count(preview?.add.length ?? ids.length) : ''} to <bdi>{set ? clean(set.name) : 'set'}</bdi></span>
+        <span class="lbl">
+          {#if addNow === 'already'}Already in <bdi>{clean(set!.name)}</bdi>
+          {:else if addNow === 'full'}<bdi>{clean(set!.name)}</bdi> is full
+          {:else}Add {ids.length ? count(preview?.add.length ?? ids.length) : ''} to <bdi>{set ? clean(set.name) : 'set'}</bdi>{/if}
+        </span>
       </button>
     {/if}
   </div>

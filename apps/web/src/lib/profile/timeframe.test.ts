@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dayOf, dayProblem, frameTo, fromQuery, labelOf, monthProblem, rangeOf, toQuery } from './timeframe';
+import { dayOf, dayProblem, frameTo, fromQuery, labelOf, monthProblem, rangeOf, readDay, toQuery } from './timeframe';
 
 // 2026/11/19 14:05 in the reader's own time zone.
 const now = new Date(2026, 10, 19, 14, 5);
@@ -40,10 +40,17 @@ describe('timeframe', () => {
     expect(labelOf({ frame: 'day', day: '2026-11-03' })).toBe('2026/11/03');
     expect(labelOf({ frame: 'month', year: 2026, month: 4 })).toBe('2026/04');
     expect(labelOf({ frame: 'all' })).toBe('All time');
-    const a = new Date(2026, 10, 2, 9).toISOString();
-    const b = new Date(2026, 10, 19, 23, 59).toISOString();
-    expect(labelOf({ frame: 'all' }, [b, a, 'junk'])).toBe('2026/11/02 – 2026/11/19');
-    expect(labelOf({ frame: 'all' }, [b, b])).toBe('2026/11/19');
+  });
+
+  it('reads the date field in the cyex format (and the dashed one), refuses the rest in words', () => {
+    expect(readDay('2026/11/19', now)).toEqual({ day: '2026-11-19' });
+    expect(readDay(' 2026/1/5 ', now)).toEqual({ day: '2026-01-05' });
+    expect(readDay('2026-11-02', now)).toEqual({ day: '2026-11-02' });
+    expect(readDay('2026/11/21', now)).toEqual({ problem: expect.stringMatching(/future/) });
+    expect(readDay('2999/01/01', now)).toEqual({ problem: expect.stringMatching(/future/) });
+    expect(readDay('2026/02/30', now)).toEqual({ problem: expect.stringMatching(/isn’t a date/) });
+    expect(readDay('25.12.2026', now)).toEqual({ problem: expect.stringMatching(/2026\/11\/19/) });
+    expect(readDay('', now)).toEqual({ problem: expect.stringMatching(/2026\/11\/19/) });
   });
 
   it('round-trips through the address and drops what it cannot use', () => {

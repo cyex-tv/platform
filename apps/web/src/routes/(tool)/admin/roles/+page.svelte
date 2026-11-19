@@ -34,6 +34,8 @@
   let position = $state(10);
   let picked = $state<string[]>([]);
   let shown = $state(false);
+  // Permission groups whose names are listed in the row (the chip's tooltip, for touch and keyboard).
+  let listed = $state<Record<string, boolean>>({});
   let saving = $state(false);
   let tried = $state(false);
   const MAX_POS = 999_999;
@@ -152,7 +154,7 @@
             {#if r.builtIn === 'ROOT'}
               <span class="ui-hint">Every permission, including ones added later.</span>
             {:else}
-              {#each groups as g (g.label)}<span class="grp" title={g.names}><span>{g.label}</span> <span class="ui-num">{g.n}/{g.of}</span></span>{:else}<span class="ui-hint">No permissions</span>{/each}
+              {#each groups as g (g.label)}{@const key = r.id + g.label}<button class="grp" type="button" aria-expanded={!!listed[key]} title={g.names} onclick={() => (listed[key] = !listed[key])}><span>{g.label}</span> <span class="ui-num">{g.n}/{g.of}</span></button>{#if listed[key]}<span class="ui-hint names">{g.names}</span>{/if}{:else}<span class="ui-hint">No permissions</span>{/each}
             {/if}
           </span>
           <div class="ui-actions">
@@ -224,7 +226,10 @@
   .pos { color: var(--dim); padding-top: 1px; font-size: var(--text-sub); }
   .what { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
   .perms { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--text-sub); color: var(--muted); padding-top: 1px; }
+  .grp { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+  .names { flex-basis: 100%; overflow-wrap: anywhere; }
   .grp .ui-num { color: var(--dim); font-size: 12px; }
+  .grp:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius); }
   .row .ui-actions { justify-content: flex-end; flex-wrap: nowrap; align-items: center; }
   .locked { white-space: nowrap; cursor: help; }
   @media (max-width: 860px) {

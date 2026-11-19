@@ -32,6 +32,7 @@
   import { fail, notify } from '$lib/tool/notices.svelte';
   import EmoteFacts from '$lib/components/emote/EmoteFacts.svelte';
   import SizeRow from '$lib/components/emote/SizeRow.svelte';
+  import { transferLine } from '$lib/components/emote/emote-page';
   import Icon from '$lib/components/Icon.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
   import EmoteFlags from '$lib/tool/EmoteFlags.svelte';
@@ -334,10 +335,11 @@
             <ul class="requests">
               {#each requests as r (r.id)}
                 {@const owner = r.from.id === session.me?.id}
+                {@const line = transferLine(r, session.me?.id)}
                 <li>
                   <p>
-                    {#if r.requestedBy.id === session.me?.id}You asked{:else}<bdi>{clean(r.requestedBy.displayName)}</bdi> asks{/if}
-                    to give it to {#if r.to.id === session.me?.id}you{:else}<bdi>{clean(r.to.displayName)}</bdi>{/if}.
+                    {#if line.asker === 'you'}You asked{:else}<bdi>{clean(line.asker.name)}</bdi> asks{/if}
+                    to give it to {#if typeof line.target === 'string'}{line.target}{:else}<bdi>{clean(line.target.name)}</bdi>{/if}.
                     <span class="ui-hint">{owner ? 'It moves only if you accept' : `Waiting for ${clean(r.from.displayName)} to accept`}; open until <span class="ui-num">{date(r.expiresAt)}</span>.</span>
                   </p>
                   <div class="ui-actions">

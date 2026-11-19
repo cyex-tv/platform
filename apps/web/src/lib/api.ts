@@ -26,6 +26,21 @@ export class ApiError extends Error {
 
 type Fetch = typeof fetch;
 
+/** How long a GraphQL call may take before it counts as unanswered. */
+export const GQL_TIMEOUT_MS = 20_000;
+/** An upload that sends nothing for this long has stalled. */
+export const UPLOAD_STALL_MS = 30_000;
+/** After the last byte is sent, the API may take longer (it checks the picture) before it answers. */
+export const UPLOAD_ANSWER_MS = 60_000;
+
+/**
+ * A fetch that also stops when `outer` does, and keeps the call's own deadline (the one `gql`
+ * sets): a plain `{ ...init, signal: outer }` would replace that deadline and let a call hang.
+ */
+export function fetchWith(outer: AbortSignal, base: Fetch = fetch): Fetch {
+  return (input, init) => base(input, { ...init, signal: init?.signal ? AbortSignal.any([outer, init.signal]) : outer });
+}
+
 /** Runs a query or mutation. Throws `ApiError` for the first GraphQL error. */
 export async function gql<TResult, TVariables>(
   doc: TypedDocumentString<TResult, TVariables>,
@@ -33,14 +48,19 @@ export async function gql<TResult, TVariables>(
   fetcher: Fetch = fetch,
 ): Promise<TResult> {
   let response: Response;
+  // One deadline for the whole call, body included: a server that never answers ends in the
+  // shared "cyex.tv didn't answer" problem with Try again, not in a skeleton that never goes.
+  const signal = AbortSignal.timeout(GQL_TIMEOUT_MS);
   try {
     response = await fetcher(`${apiUrl()}/v1/gql`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ query: doc.toString(), variables }),
+      signal,
     });
   } catch {
+    if (signal.aborted) throw new ApiError(unreachableMessage(), 'timeout');
     throw new ApiError(unreachableMessage(), 'offline');
   }
   if (response.status === 429) throw new ApiError('Too many requests. Try again in a moment.', 'rate_limited');
@@ -48,6 +68,7 @@ export async function gql<TResult, TVariables>(
   try {
     body = await response.json();
   } catch {
+    if (signal.aborted) throw new ApiError(unreachableMessage(), 'timeout');
     throw new ApiError(serverMessage(), 'bad_answer');
   }
   const first = body.errors?.[0];
@@ -110,9 +131,20 @@ export function uploadForm(file: Blob, name: string, tags: string[], flags?: Par
   return form;
 }
 
+/** What `uploadEmote` takes besides the file and fields. */
+export type UploadOptions = {
+  /** Aborts the upload: it rejects with code `aborted`. */
+  signal?: AbortSignal;
+  /** No progress for this long (default `UPLOAD_STALL_MS`) rejects with code `stalled`. */
+  stallMs?: number;
+  /** Waiting for the answer after the last byte (default `UPLOAD_ANSWER_MS`); also `stalled`. */
+  answerMs?: number;
+};
+
 /**
  * Uploads an emote (`POST /v1/emotes`, multipart). Throws `ApiError` with the API's code.
- * `progress` gets the share of bytes sent (0 to 1); XHR, since fetch can't report an upload's progress.
+ * `progress` gets the share of bytes sent (0 to 1); XHR, since fetch can't report an upload's
+ * progress. It never hangs: no progress for `stallMs` ends it (`stalled`), and `signal` cancels it (`aborted`).
  */
 export function uploadEmote(
   file: File,
@@ -121,27 +153,59 @@ export function uploadEmote(
   flags?: Partial<UploadFlags>,
   progress?: (share: number) => void,
   ownerId?: string | null,
+  options: UploadOptions = {},
 ): Promise<Uploaded> {
   const form = uploadForm(file, name, tags, flags, ownerId);
+  const { signal, stallMs = UPLOAD_STALL_MS, answerMs = UPLOAD_ANSWER_MS } = options;
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new ApiError(CANCELLED, 'aborted'));
     const xhr = new XMLHttpRequest();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let settled = false;
+    const end = (fail?: ApiError, ok?: Uploaded) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      if (fail) {
+        xhr.abort();
+        reject(fail);
+      } else resolve(ok!);
+    };
+    const watch = (ms: number) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => end(new ApiError(STALLED, 'stalled')), ms);
+    };
+    const onAbort = () => end(new ApiError(CANCELLED, 'aborted'));
+    signal?.addEventListener('abort', onAbort);
     xhr.open('POST', `${apiUrl()}/v1/emotes`);
     xhr.withCredentials = true;
     xhr.responseType = 'text';
-    if (progress) xhr.upload.onprogress = (e) => e.lengthComputable && progress(e.loaded / e.total);
-    xhr.onerror = () => reject(new ApiError(unreachableMessage(), 'offline'));
+    xhr.upload.onprogress = (e) => {
+      watch(stallMs);
+      if (progress && e.lengthComputable) progress(e.loaded / e.total);
+    };
+    xhr.upload.onload = () => watch(answerMs);
+    xhr.onerror = () => end(new ApiError(unreachableMessage(), 'offline'));
     xhr.onload = async () => {
+      if (settled) return;
+      clearTimeout(timer);
       const response = new Response(xhr.responseText || null, { status: xhr.status });
-      if (xhr.status < 200 || xhr.status >= 300) return reject(await restError(response));
+      if (xhr.status < 200 || xhr.status >= 300) return end(await restError(response));
       try {
-        resolve(JSON.parse(xhr.responseText) as Uploaded);
+        end(undefined, JSON.parse(xhr.responseText) as Uploaded);
       } catch {
-        reject(new ApiError(serverMessage(), 'bad_answer'));
+        end(new ApiError(serverMessage(), 'bad_answer'));
       }
     };
+    watch(stallMs);
     xhr.send(form);
   });
 }
+
+/** The words for an upload that went quiet, and for one the sender stopped. */
+export const STALLED = 'The upload stalled. Check your connection, then try again.';
+export const CANCELLED = 'Cancelled.';
 
 /** Ends the session (`POST /v1/auth/logout`). */
 export async function signOut(): Promise<void> {

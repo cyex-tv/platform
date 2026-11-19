@@ -2,7 +2,7 @@
   // The gradient paint: presets, kind, angle or shape, repeat, stops.
   import { clonePaint, type Issue, type StudioPaint } from '../format';
   import { paintStyleText } from '../css';
-  import { STATIC_PRESETS } from '../presets';
+  import { presetGround, STATIC_PRESETS } from '../presets';
   import Glyph from './Glyph.svelte';
   import Seg from './Seg.svelte';
   import Slider from './Slider.svelte';
@@ -26,7 +26,7 @@
   <div class="ps-body">
     <div class="ps-presets">
       {#each STATIC_PRESETS as p (p.name)}
-        <button type="button" class="ps-preset" onclick={() => usePreset(p)} aria-label="Use the {p.name} preset"><span class="ps-painted" style={paintStyleText(p)}>{p.name}</span></button>
+        <button type="button" class="ps-preset {presetGround(p)}" onclick={() => usePreset(p)} aria-label="Use the {p.name} preset"><span class="ps-painted" style={paintStyleText(p)}>{p.name}</span></button>
       {/each}
     </div>
     <p class="ps-hint">A preset replaces the gradient and shadows, and keeps the name.</p>

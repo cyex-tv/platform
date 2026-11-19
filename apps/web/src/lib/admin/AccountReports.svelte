@@ -87,4 +87,6 @@
   .what strong .ui-chip { flex: none; }
   .reason { overflow-wrap: anywhere; }
   .pad { margin: 0; padding: 6px 14px 12px; }
+  /* a touch target of at least 24px (WCAG 2.5.8) */
+  a { display: inline-flex; align-items: center; min-height: 24px; }
 </style>

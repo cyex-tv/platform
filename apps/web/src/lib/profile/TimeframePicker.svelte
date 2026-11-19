@@ -1,16 +1,16 @@
 <script lang="ts">
   // The activity feed's timeframe and date, the cyex logs way: a timeframe switch (All time, Day,
-  // Month) and the date beside it as a button in the cyex format (2026/11/19, 2026/11, or the span
-  // of what has loaded). The button opens a small popover, "Jump to date" (a date field) or "Jump
-  // to month" (a year and a month), with Go; a future date is refused in a line under the field,
-  // as logs does. All time has nothing to jump to: picking a date there switches to that day.
+  // Month) and, under Day and Month, the date beside it as a button in the cyex format (2026/11/19,
+  // 2026/11). The button opens a small popover, "Jump to date" (a text field in the same format:
+  // 2026/11/19) or "Jump to month" (a year and a month), with Go; a future date is refused in a
+  // line under the field, as logs does. All time has no date and no button: pick Day or Month.
   import Icon from '$lib/components/Icon.svelte';
   import Popover from '$lib/components/Popover.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
-  import { dayOf, dayProblem, frameTo, labelOf, monthProblem, type Frame, type Timeframe } from './timeframe';
+  import { dayOf, frameTo, labelOf, monthProblem, readDay, slashDay, type Frame, type Timeframe } from './timeframe';
 
-  type Props = { value: Timeframe; shown?: readonly string[]; onchange: (t: Timeframe) => void };
-  let { value, shown = [], onchange }: Props = $props();
+  type Props = { value: Timeframe; onchange: (t: Timeframe) => void };
+  let { value, onchange }: Props = $props();
 
   const FRAMES: { value: Frame; label: string }[] = [
     { value: 'all', label: 'All time' },
@@ -32,29 +32,40 @@
     if (!open) return;
     const now = new Date();
     problem = '';
-    day = value.frame === 'day' ? value.day : dayOf(now);
+    day = slashDay(value.frame === 'day' ? value.day : dayOf(now));
     year = value.frame === 'month' ? value.year : now.getFullYear();
     month = value.frame === 'month' ? value.month : now.getMonth() + 1;
   });
 
   function go(e: SubmitEvent) {
     e.preventDefault();
-    const why = monthly ? monthProblem(Number(year), Number(month)) : dayProblem(day);
-    if (why) {
-      problem = why;
+    if (monthly) {
+      const why = monthProblem(Number(year), Number(month));
+      if (why) {
+        problem = why;
+        return;
+      }
+      open = false;
+      onchange({ frame: 'month', year: Number(year), month: Number(month) });
+      return;
+    }
+    const got = readDay(day);
+    if ('problem' in got) {
+      problem = got.problem;
       return;
     }
     open = false;
-    onchange(monthly ? { frame: 'month', year: Number(year), month: Number(month) } : { frame: 'day', day });
+    onchange({ frame: 'day', day: got.day });
   }
 </script>
 
 <div class="tf">
   <Segmented label="Timeframe" size="s" options={FRAMES} value={value.frame} onchange={(f) => onchange(frameTo(f))} />
+  {#if value.frame !== 'all'}
   <Popover label={monthly ? 'Jump to month' : 'Jump to date'} width="260px" bind:open>
     {#snippet trigger(props)}
       <button class="ui-btn secondary small date" type="button" {...props} title={monthly ? 'Jump to a different month' : 'Jump to a different date'}>
-        <Icon name="calendar" size={14} /><span class="ui-num">{labelOf(value, shown)}</span>
+        <Icon name="calendar" size={14} /><span class="ui-num">{labelOf(value)}</span>
       </button>
     {/snippet}
     <form class="pop" onsubmit={go} novalidate>
@@ -71,13 +82,14 @@
         </div>
       {:else}
         <label class="sr-only" for="{uid}-d">Date</label>
-        <input id="{uid}-d" class="ui-input" type="date" max={dayOf(new Date())} bind:value={day}
+        <input id="{uid}-d" class="ui-input" type="text" inputmode="numeric" placeholder="2026/11/19" autocomplete="off" spellcheck="false" bind:value={day}
           aria-invalid={!!problem} aria-describedby={problem ? `${uid}-p` : undefined} />
       {/if}
       {#if problem}<p class="problem" id="{uid}-p" role="alert">{problem}</p>{/if}
       <button class="ui-btn primary small go" type="submit">Go</button>
     </form>
   </Popover>
+  {/if}
 </div>
 
 <style>

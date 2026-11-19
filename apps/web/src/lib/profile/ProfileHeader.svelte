@@ -106,10 +106,10 @@
     padding: 18px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
   .ring { display: inline-grid; padding: 2px; border-radius: 50%; background: var(--border); }
   .gap { display: inline-grid; padding: 2px; border-radius: 50%; background: var(--surface); }
-  .id { display: grid; gap: 8px; min-width: 0; }
+  .id { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
   .top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; }
   .name { margin: 0; min-width: 0; max-width: 100%; font-size: 24px; font-weight: 600; letter-spacing: -.015em; line-height: 1.2; overflow-wrap: anywhere; }
-  .flags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
+  .flags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; max-width: 100%; }
   .flag { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border-radius: var(--radius);
     background: var(--neutral-chip); color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
   .flag.hidden { padding-left: 5px; }
