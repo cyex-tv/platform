@@ -54,6 +54,8 @@
   let opened = $state(0);
   let tried = $state(false);
   let saving = $state(false);
+  // A save the API refused, shown in the dialog itself.
+  let problem = $state('');
   const nameError = $derived(tried && !name.trim() ? 'Give it a name (1 to 32 characters).' : null);
   const tipError = $derived(tried && !tooltip.trim() ? 'Give it a tooltip (1 to 64 characters).' : null);
   const imageError = $derived(tried && !editing && !imageId && !picturing ? 'Add a picture.' : null);
@@ -66,6 +68,7 @@
     picturing = false;
     opened += 1;
     tried = false;
+    problem = '';
     dialog.showModal();
   }
 
@@ -75,6 +78,7 @@
     tried = true;
     if (nameError || tipError || imageError) return;
     saving = true;
+    problem = '';
     try {
       // Saved while the picture is still on its way: wait for it, then save with it.
       // A picture that then fails says why in its field; nothing is saved without it.
@@ -91,7 +95,7 @@
       dialog.close();
       await L.reload();
     } catch (err) {
-      fail(err);
+      problem = err instanceof Error ? err.message : 'That didn’t work.';
     } finally {
       saving = false;
     }
@@ -144,7 +148,7 @@
               {/if}
               {#if manage}
                 <button class="ui-btn secondary small" type="button" onclick={() => edit(b)}><Icon name="pencil" size={14} />Edit</button>
-                <Confirm small label="Delete" confirm="Click again to delete it for everyone" {busy} onconfirm={() => remove(b)} />
+                <Confirm small label="Delete" confirm={owners[b.id] ? `Click again: ${count(owners[b.id])} ${owners[b.id] === 1 ? 'owner' : 'owners'}` : 'Click again to delete it for everyone'} {busy} onconfirm={() => remove(b)} />
               {/if}
             </div>
             {#if open === b.id}
@@ -180,6 +184,7 @@
         <ImageUpload kind="badge" label="Picture" bind:imageId bind:busy={picturing} current={editing?.image ?? null} />
       {/key}
       {#if imageError}<span class="ui-error" role="alert">{imageError}</span>{/if}
+      {#if problem}<p class="ui-error" role="alert">{problem}</p>{/if}
     </div>
     <footer>
       <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
