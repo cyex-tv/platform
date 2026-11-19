@@ -160,17 +160,44 @@ pub struct AccountSummary {
 pub enum EditorPermission {
     /// Add, remove, rename and alias emotes in the owner's sets, the active channel sets too.
     Emotes,
-    /// Create, rename and delete sets, change their capacity, and change the owner's channels'
-    /// active set and settings.
+    /// Create, rename and delete sets and change their capacity. Always comes with `Channels`.
     Sets,
     /// Add, change and remove editors, never granting more than you hold.
     Editors,
     /// Pick the badge and paint the owner shows (ADR 0015). Never grants.
     Profile,
+    /// Change the owner's channels' active set and settings. Granting `Sets` grants this too.
+    Channels,
+    /// Upload emotes for the owner. Stored for the feature that will check it; grants nothing yet.
+    #[serde(rename = "emote_upload")]
+    EmoteUpload,
+    /// Rename, retag and delete the owner's emotes. Stored; grants nothing yet.
+    #[serde(rename = "emote_manage")]
+    EmoteManage,
+    /// Hand the owner's emotes to another account. Stored; grants nothing yet.
+    #[serde(rename = "emote_transfer")]
+    EmoteTransfer,
+    /// Manage the owner's payment methods. Stored; grants nothing yet.
+    #[serde(rename = "billing_payment")]
+    BillingPayment,
+    /// Manage the owner's subscription. Stored; grants nothing yet.
+    #[serde(rename = "billing_subscription")]
+    BillingSubscription,
 }
 
 impl EditorPermission {
-    pub const ALL: [Self; 4] = [Self::Emotes, Self::Sets, Self::Editors, Self::Profile];
+    pub const ALL: [Self; 10] = [
+        Self::Emotes,
+        Self::Sets,
+        Self::Editors,
+        Self::Profile,
+        Self::Channels,
+        Self::EmoteUpload,
+        Self::EmoteManage,
+        Self::EmoteTransfer,
+        Self::BillingPayment,
+        Self::BillingSubscription,
+    ];
 
     pub fn as_str(self) -> &'static str {
         match self {
@@ -178,6 +205,12 @@ impl EditorPermission {
             Self::Sets => "sets",
             Self::Editors => "editors",
             Self::Profile => "profile",
+            Self::Channels => "channels",
+            Self::EmoteUpload => "emote_upload",
+            Self::EmoteManage => "emote_manage",
+            Self::EmoteTransfer => "emote_transfer",
+            Self::BillingPayment => "billing_payment",
+            Self::BillingSubscription => "billing_subscription",
         }
     }
 
@@ -197,6 +230,16 @@ pub struct AccountEditor {
     pub granted_by: Option<AccountSummary>,
     pub granted_at: String,
     pub updated_at: String,
+    /// They may work on every set of the account, new ones included. False: only `setIds`.
+    #[serde(default = "yes")]
+    pub all_sets: bool,
+    /// The sets they may work on when `allSets` is false. Empty when it is true.
+    #[serde(default)]
+    pub set_ids: Vec<String>,
+}
+
+fn yes() -> bool {
+    true
 }
 
 /// Who you are on a channel you can manage, highest first.
@@ -227,6 +270,11 @@ pub struct EditedAccount {
     pub account: AccountSummary,
     pub permissions: Vec<EditorPermission>,
     pub granted_at: String,
+    /// You may work on every set of the account. False: only `setIds`.
+    #[serde(default = "yes")]
+    pub all_sets: bool,
+    #[serde(default)]
+    pub set_ids: Vec<String>,
 }
 
 /// Who to add as an editor: an account ID, or a Twitch or Kick login.
@@ -246,6 +294,9 @@ pub struct AddAccountEditor {
     pub login: Option<String>,
     /// At least one.
     pub permissions: Vec<EditorPermission>,
+    /// Limit them to these sets of the account. Empty or missing: every set, new ones included.
+    #[serde(default)]
+    pub set_ids: Option<Vec<String>>,
 }
 
 // Channels
@@ -846,6 +897,9 @@ pub struct AccountProfile {
     /// Each channel's active set, for channels showing one.
     pub active_sets: Vec<ActiveChannelSet>,
     pub created_at: String,
+    /// The account's editors, oldest first: who they are only, never what they may do.
+    #[serde(default)]
+    pub editors: Vec<AccountSummary>,
 }
 
 // Reports and takedowns (Phase 7)

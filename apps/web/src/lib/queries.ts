@@ -275,6 +275,26 @@ export const EDIT_SET = graphql(`
         id
       }
       permissions
+      allSets
+      setIds
+    }
+    myChannels {
+      platform
+      platformChannelId
+      login
+      activeSetId
+      account {
+        id
+      }
+    }
+    editorChannels {
+      platform
+      platformChannelId
+      login
+      activeSetId
+      account {
+        id
+      }
     }
   }
 `);
@@ -418,6 +438,8 @@ export const ACCOUNT_EDITOR_FIELDS = graphql(`
       avatar
     }
     permissions
+    allSets
+    setIds
     grantedBy {
       id
       displayName
@@ -438,7 +460,17 @@ export const EDITORS = graphql(`
         avatar
       }
       permissions
+      allSets
+      setIds
       grantedAt
+    }
+    mySets {
+      id
+      name
+      kind
+      owner {
+        id
+      }
     }
   }
 `);
@@ -452,8 +484,8 @@ export const ADD_ACCOUNT_EDITOR = graphql(`
 `);
 
 export const UPDATE_ACCOUNT_EDITOR = graphql(`
-  mutation UpdateAccountEditor($ownerId: String, $accountId: String!, $permissions: [EditorPermission!]!) {
-    updateAccountEditor(ownerId: $ownerId, accountId: $accountId, permissions: $permissions) {
+  mutation UpdateAccountEditor($ownerId: String, $accountId: String!, $permissions: [EditorPermission!]!, $setIds: [String!]) {
+    updateAccountEditor(ownerId: $ownerId, accountId: $accountId, permissions: $permissions, setIds: $setIds) {
       ...AccountEditorFields
     }
   }

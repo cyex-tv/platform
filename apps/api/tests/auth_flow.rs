@@ -491,11 +491,27 @@ async fn twitch_sign_in_end_to_end() {
         json!([{ "platform": "TWITCH", "platformChannelId": "141981764", "login": "twitch141981764" }])
     );
 
-    // Signing in again reuses the account.
+    // A new account starts with a listed channel set named after it.
+    let sets = h
+        .gql("{ mySets { name kind visibility } }", Some(&session))
+        .await;
+    assert_eq!(
+        sets["data"]["mySets"],
+        json!([{ "name": "Twitch141981764", "kind": "CHANNEL", "visibility": "LISTED" }]),
+        "{sets}"
+    );
+
+    // Signing in again reuses the account, and makes no second default set.
     let again = h.sign_in(Platform::Twitch, "141981764", None, false).await;
     assert_eq!(
         h.me(&again).await["data"]["me"]["id"],
         me["data"]["me"]["id"]
+    );
+    let sets = h.gql("{ mySets { name } }", Some(&again)).await;
+    assert_eq!(
+        sets["data"]["mySets"].as_array().map(Vec::len),
+        Some(1),
+        "{sets}"
     );
     h.db.close().await;
 }
@@ -591,6 +607,14 @@ async fn linking_both_platforms_to_one_account() {
     // Signing in with Kick now lands on the same account.
     let via_kick = h.sign_in(Platform::Kick, "2002", None, false).await;
     assert_eq!(h.me(&via_kick).await["data"]["me"]["id"], account);
+
+    // Linking adds no second default set.
+    let sets = h.gql("{ mySets { name } }", Some(&via_kick)).await;
+    assert_eq!(
+        sets["data"]["mySets"].as_array().map(Vec::len),
+        Some(1),
+        "{sets}"
+    );
 
     // Linking Kick again with a different Kick user: one Kick per account.
     let reply = h

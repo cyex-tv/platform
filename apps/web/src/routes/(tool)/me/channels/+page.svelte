@@ -18,10 +18,11 @@
   let saving = $state<string | null>(null);
 
   const channelSets = $derived(sets.filter((s) => s.kind === 'CHANNEL' && s.owner?.id === session.me?.id));
-  // Account editing (ADR 0014): channels of accounts you edit with the sets permission, by owner.
+  // Account editing (ADR 0014): channels of accounts you edit with the channels permission (which
+  // the sets permission brings), by owner.
   const managed = $derived(
     (L.data?.editorOf ?? [])
-      .filter((g) => g.permissions.includes('SETS'))
+      .filter((g) => g.permissions.includes('CHANNELS') || g.permissions.includes('SETS'))
       .map((g) => ({
         ownerId: g.account.id,
         permissions: g.permissions,

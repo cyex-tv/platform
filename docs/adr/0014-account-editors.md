@@ -33,3 +33,20 @@ Streamers hand their emotes to a team: moderators who add and rename emotes, a m
 - Each authorization check costs one more indexed lookup.
 - The website needs an Editors page and has to label things the caller manages for someone else with their owner.
 - Escalation, IDOR, blocked accounts and immediate loss of access are covered by tests against Postgres in CI (`apps/api/tests/sec_account_editors.rs`).
+
+## Amendment (owner feedback, 2026/11/19)
+- **Set scope:** a grant covers every set of the owner (`account_editors.all_sets`, the default; sets made later are included) or only the sets listed in `account_editor_sets` (at most 200, each one of the owner's; deleting a set takes it off every list). Every set check (`edit_grant`, `may_view`, `editorSets`, the editable count in set views, and the active set in `updateChannelSettings`) asks for the flag *and* the scope. An editor limited to some sets can't create or copy sets for the owner (they couldn't work on the new one).
+- **No widening:** a manager limited to some sets only grants lists inside their own (never "every set"), and only changes or removes editors whose scope is inside theirs, as with flags.
+- **New flags** (additive; stored names in brackets):
+
+  | Flag | Allows |
+  |---|---|
+  | `channels` (`channels`) | change the owner's channels' active set and settings. `sets` keeps allowing this too, so existing grants mean what they meant, and granting `sets` needs `channels` as well |
+  | `emote_upload`, `emote_manage`, `emote_transfer` | stored now; checked once uploading, managing and transferring for another account exist |
+  | `billing_payment`, `billing_subscription` | stored now; checked once subscriptions and billing exist |
+
+  Grants are listed as stored: a grant of `SETS` is listed as `["SETS"]`, not with `CHANNELS` added.
+- **Limit:** 50 editors per account (was 20); over it is `409 too_many_editors` with a sentence saying to remove one.
+- **API (additive):** `AccountEditor.allSets`/`setIds`, `EditedAccount.allSets`/`setIds`, `AddAccountEditorInput.setIds`, `updateAccountEditor(setIds:)` (empty: every set; left out: unchanged), and `AccountProfile.editors`: who edits an account, names only, for anyone (never their flags or sets). The audit rows of grants carry `all_sets` and `set_ids` before and after.
+- **Website:** the Editors page finds people by name (`searchAccounts`, no platform picker), and adding or changing an editor opens one permissions dialog (grouped flags, "Everything", and a "Sets they can edit" list defaulting to all sets). A grant applies when saved. The set page no longer manages per-set editors; it links to the Editors page. Per-set editors keep working in the API.
+- Tests: `apps/api/tests/sets_editors_flow.rs`.
