@@ -67,7 +67,8 @@
 </dialog>
 
 <style>
-  .upload-dialog { width: min(960px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow: hidden; }
+  /* clip, not hidden: focus and scrollIntoView can't shift the panel inside the dialog. */
+  .upload-dialog { width: min(960px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow: clip; }
   .panel { display: grid; grid-template-rows: auto minmax(0, 1fr); max-height: calc(100dvh - 48px); }
   .top { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px 12px; border-bottom: 1px solid var(--border); }
   .text { flex: 1; min-width: 0; }
