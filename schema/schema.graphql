@@ -1859,9 +1859,10 @@ type Query {
 	emoteActivityPage(emoteId: String!, before: String, limit: Int): ActivityPage!
 	"""
 	Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
-	default 8. Empty when the emote is unknown or not public.
+	default 8; `offset` skips that many (0 to 10000, default 0) for paging. Empty when the
+	emote is unknown or not public.
 	"""
-	emoteChannels(id: String!, limit: Int): [Channel!]!
+	emoteChannels(id: String!, limit: Int, offset: Int): [Channel!]!
 	"""
 	One user's personal set.
 	"""

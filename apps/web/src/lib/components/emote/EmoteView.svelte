@@ -1,29 +1,29 @@
 <script lang="ts">
-  // The emote page's body, made once per emote (the route keys it by id), in ColumnLayout:
-  // a header row (name, creator chip, labels, actions), then panels: the preview (real sizes,
-  // background switch, chat) beside the details (facts, review status), then a panel with the
-  // channels using it and more from its creator: tabs when there are both, a plain heading when
-  // there is one. Phones get the actions in a bar fixed to the bottom of the screen; it comes right
-  // after the header in the Tab order.
+  // The emote page's body, made once per emote (the route keys it by id), in ColumnLayout: one
+  // card with everything about the emote (its creator and upload date on top, the name, its flags
+  // and tags, the four sizes on one baseline, a line of facts, and the actions together), then a
+  // card with tabs (Channels using it, Activity, More by the creator) and a pager in the tab bar.
+  // Phones get the actions in a bar fixed to the bottom of the screen.
   import { onMount } from 'svelte';
   import EmoteActions from '$lib/components/EmoteActions.svelte';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
   import Icon, { type IconName } from '$lib/components/Icon.svelte';
-  import { clean, count } from '$lib/format';
+  import IconButton from '$lib/components/IconButton.svelte';
+  import { hasStill } from '$lib/emote';
+  import { bytes, clean, count, date } from '$lib/format';
   import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
+  import { can, session } from '$lib/tool/session.svelte';
   import ActivityTab from './ActivityTab.svelte';
-  import EmoteFacts from './EmoteFacts.svelte';
-  import PreviewStage from './PreviewStage.svelte';
-  import TrustBlock from './TrustBlock.svelte';
-  import UsedIn from './UsedIn.svelte';
-  import { labels, trust, type ChatPool, type EmoteChannel, type PageEmote } from './emote-page';
+  import ChannelsTab from './ChannelsTab.svelte';
+  import Pager from './Pager.svelte';
+  import SizeRow from './SizeRow.svelte';
+  import { flagsOf, formats, scaleFiles, trust, type EmoteChannel, type PageEmote } from './emote-page';
+  import type { PagerState } from './pager';
   import { Viewer } from './viewer.svelte';
-  import { visibilityOf } from '$lib/tool/visibility';
 
   type Props = {
     emote: PageEmote;
-    pool: ChatPool;
     more: PageEmote[];
     channels: EmoteChannel[] | null;
     channelCount: number | null;
@@ -31,7 +31,7 @@
     /** Its place among the trending emotes of the last 7 days (top 100), or null. */
     trending?: { rank: number; channels: number } | null;
   };
-  let { emote: e, pool, more, channels, channelCount, back, trending = null }: Props = $props();
+  let { emote: e, more, channels, channelCount, back, trending = null }: Props = $props();
 
   // svelte-ignore state_referenced_locally
   const viewer = new Viewer(e.id);
@@ -39,30 +39,48 @@
 
   const public_ = $derived(e.state === 'APPROVED');
   const t = $derived(trust(e.state));
-  const tags = $derived(labels(e));
   const name = $derived(clean(e.name));
   const ownerName = $derived(e.owner ? clean(e.owner.displayName) : '');
+  const flags = $derived(flagsOf(e));
+  const uploaded = $derived(date(e.createdAt));
+  const kinds = $derived(formats(e.files));
+  const biggest = $derived(scaleFiles(e.files).at(-1));
+  // Edit: the owner, and staff who may change any emote (the API checks again).
+  const editHref = $derived(
+    session.me && (e.owner?.id === session.me.id || can('emotes.edit_any')) ? `/me/emotes/${encodeURIComponent(e.id)}` : null,
+  );
 
-  // Activity is only for listed emotes: pending, rejected, taken-down and private ones have none,
-  // so the tab isn't there and nothing is asked.
+  // Pause: null follows the reader's motion setting (decided by CSS before the script runs).
+  let paused = $state<boolean | null>(null);
+  let reduced = $state(false);
+  $effect(() => {
+    const mq = matchMedia('(prefers-reduced-motion: reduce)');
+    reduced = mq.matches;
+    const on = () => (reduced = mq.matches);
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  });
+  const still = $derived(paused ?? reduced);
+
+  // Activity is only for listed emotes: pending, rejected, taken-down and private ones have none.
   const listed = $derived(public_ && !e.flags.private);
-  // Unlisted and private emotes say so beside their labels (ADR 0020): people who got the link
-  // know it isn't in search.
-  const vis = $derived(visibilityOf(e));
 
-  type TabId = 'channels' | 'more' | 'activity';
+  type TabId = 'channels' | 'activity' | 'more';
   const tabs = $derived<{ id: TabId; label: string; short?: string; icon: IconName; n?: string }[]>([
     ...(channels ? [{ id: 'channels' as const, label: 'Channels', icon: 'tv' as const, n: channelCount !== null ? count(channelCount) : undefined }] : []),
-    ...(more.length && e.owner ? [{ id: 'more' as const, label: 'More from creator', short: 'More', icon: 'grid' as const }] : []),
     ...(listed ? [{ id: 'activity' as const, label: 'Activity', icon: 'activity' as const }] : []),
+    ...(more.length && e.owner ? [{ id: 'more' as const, label: `More by ${ownerName}`, short: 'More', icon: 'grid' as const }] : []),
   ]);
   let picked = $state<TabId | null>(null);
   const tab = $derived(tabs.find((x) => x.id === picked)?.id ?? tabs[0]?.id);
-  // The Activity tab loads when it is first opened, then keeps its rows while you switch tabs.
+  // The Activity tab loads when it is first opened, then keeps its pages while you switch tabs.
   let seen = $state(false);
   $effect(() => {
     if (tab === 'activity') seen = true;
   });
+  let channelPager = $state<PagerState | null>(null);
+  let activityPager = $state<PagerState | null>(null);
+  const pager = $derived(tab === 'channels' ? channelPager : tab === 'activity' ? activityPager : null);
 
   // Arrow keys move between the tabs, Home and End jump (one tab stop for the list).
   function tabKey(ev: KeyboardEvent) {
@@ -84,79 +102,77 @@
 </script>
 
 <ColumnLayout top>
-  <div class="emote" class:with-bar={public_}>
+  <div class="emote with-bar">
     <a class="back" href={back.href} onclick={goBack}><Icon name="arrow-left" />{back.label}</a>
-
-    <header class="head">
-      <div class="title">
-        <h1><bdi>{name}</bdi></h1>
-        <div class="meta">
-          {#if e.owner}
-            <a class="creator" href="/users/{e.owner.id}">
-              <Avatar src={e.owner.avatar} name={e.owner.displayName} size={20} />
-              <span><span class="sr-only">By </span><bdi>{ownerName}</bdi></span>
-            </a>
-          {/if}
-          {#if trending}
-            <a class="trend" href="/search?sort=trending" title="{count(trending.channels)} {trending.channels === 1 ? 'channel' : 'channels'} added it in the last 7 days">
-              <Icon name="trending" size={14} />Trending <span class="rank">#{trending.rank}</span><span class="sr-only">this week, added by {count(trending.channels)} {trending.channels === 1 ? 'channel' : 'channels'}</span>
-            </a>
-          {/if}
-          {#if tags.length || vis !== 'PUBLIC'}
-            <ul class="labels" aria-label="Labels">
-              {#if vis === 'UNLISTED'}
-                <li class="label vis" title="Only people with the link can find it"><Icon name="link" size={12} />Unlisted</li>
-              {:else if vis === 'PRIVATE'}
-                <li class="label vis" title="Only its creator can add it to sets"><Icon name="shield" size={12} />Private</li>
-              {/if}
-              {#each tags as l}<li class="label">{l}</li>{/each}
-            </ul>
-          {/if}
-        </div>
-      </div>
-      {#if public_}
-        <div class="head-actions"><EmoteActions emoteId={e.id} {name} {viewer} picture={e} /></div>
-      {/if}
-    </header>
-
-    {#if public_}
-      <div class="bar"><EmoteActions emoteId={e.id} {name} {viewer} variant="bar" picture={e} /></div>
-    {/if}
 
     {#if !public_}
       <p class="notice {t.tone}" role="status"><strong>{t.status}.</strong> Only you and moderators can open this page.</p>
     {/if}
 
-    <div class="panels">
-      <div class="panel"><PreviewStage emote={e} {pool} /></div>
-      <aside class="panel side" aria-label="Details">
-        <EmoteFacts emote={e} channels={channelCount} addedThisWeek={trending?.channels ?? null} />
-        <TrustBlock emote={e} {viewer} />
-      </aside>
-    </div>
-
-    {#if tabs.length === 1}
-      {@const only = tabs[0]}
-      <section class="panel tabbed" aria-labelledby="sec-{only.id}">
-        <div class="block-head">
-          <h2 class="block-title" id="sec-{only.id}">{only.id === 'more' ? `More from ${ownerName}` : only.label}{#if only.n}<span class="n">{only.n}</span>{/if}</h2>
-          {#if only.id === 'more' && e.owner}
-            <a class="link" href="/users/{e.owner.id}">
-              See all
-              <svg class="arrow" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" /></svg>
+    <article class="card main" aria-labelledby="emote-name">
+      <div class="top">
+        {#if e.owner}
+          <a class="creator" href="/users/{e.owner.id}">
+            <Avatar src={e.owner.avatar} name={e.owner.displayName} size={36} />
+            <span class="who">
+              <span class="by"><span class="sr-only">Uploaded by </span><bdi>{ownerName}</bdi></span>
+              {#if uploaded}<span class="when">Uploaded <time datetime={e.createdAt}>{uploaded}</time></span>{/if}
+            </span>
+          </a>
+        {:else if uploaded}
+          <span class="when">Uploaded <time datetime={e.createdAt}>{uploaded}</time></span>
+        {/if}
+        <div class="top-end">
+          {#if trending}
+            <a class="trend" href="/search?sort=trending" title="{count(trending.channels)} {trending.channels === 1 ? 'channel' : 'channels'} added it in the last 7 days">
+              <Icon name="trending" size={14} />Trending <span class="rank">#{trending.rank}</span><span class="sr-only">this week, added by {count(trending.channels)} {trending.channels === 1 ? 'channel' : 'channels'}</span>
             </a>
           {/if}
+          {#if hasStill(e)}
+            <IconButton icon={still ? 'play' : 'pause'} label={still ? 'Play' : 'Pause'} size="s" tip="top" onclick={() => (paused = !still)} />
+          {/if}
         </div>
-        {#if only.id === 'channels' && channels}
-          <UsedIn {channels} total={channelCount} />
-        {:else if only.id === 'activity'}
-          <ActivityTab emoteId={e.id} />
-        {:else}
-          <EmoteGrid items={more} creator={false} skeletons={0} label="More from {ownerName}" />
+      </div>
+
+      <header class="head">
+        <h1 id="emote-name"><bdi>{name}</bdi></h1>
+        {#if flags.length}
+          <ul class="flags" aria-label="Flags">
+            {#each flags as f (f.key)}
+              <li class="flag {f.key}" title={f.tip}><Icon name={f.icon} size={14} />{f.label}<span class="sr-only">: {f.tip}</span></li>
+            {/each}
+          </ul>
         {/if}
-      </section>
-    {:else if tabs.length}
-      <section class="panel tabbed" aria-label="Channels, more from the creator and activity">
+        {#if e.tags.length}
+          <ul class="tags" aria-label="Tags">
+            {#each e.tags as tag (tag)}
+              <li><a class="tag" href="/search?tag={encodeURIComponent(tag)}"><span class="hash" aria-hidden="true">#</span><bdi>{clean(tag)}</bdi></a></li>
+            {/each}
+          </ul>
+        {/if}
+      </header>
+
+      <div class="stage"><SizeRow emote={e} {still} /></div>
+
+      <dl class="facts">
+        {#if channelCount !== null}<div><dt>Channels</dt><dd>{count(channelCount)}</dd></div>{/if}
+        {#if trending}<div><dt>Added in 7 days</dt><dd>{count(trending.channels)}</dd></div>{/if}
+        {#if kinds.length}<div><dt>{kinds.length > 1 ? 'Formats' : 'Format'}</dt><dd>{kinds.join(', ')}</dd></div>{/if}
+        {#if biggest}<div><dt>File at {biggest.scale}x</dt><dd>{bytes(biggest.size)}</dd></div>{/if}
+        {#if public_}<div><dt>Review</dt><dd class="ok"><Icon name="check" size={12} stroke={2.4} />Approved</dd></div>{/if}
+      </dl>
+
+      <div class="head-actions">
+        <EmoteActions emoteId={e.id} {name} {viewer} picture={e} {editHref} addable={public_} reportable={public_} />
+      </div>
+    </article>
+
+    <div class="bar">
+      <EmoteActions emoteId={e.id} {name} {viewer} variant="bar" picture={e} {editHref} addable={public_} reportable={public_} />
+    </div>
+
+    {#if tabs.length}
+      <section class="card tabbed" aria-label="Channels, activity and more by the creator">
         <div class="tabbar">
           <div class="tablist" role="tablist" aria-label="Sections">
             {#each tabs as x (x.id)}
@@ -170,10 +186,12 @@
                 tabindex={tab === x.id ? 0 : -1}
                 onclick={() => (picked = x.id)}
                 onkeydown={tabKey}
-              ><Icon name={x.icon} size={16} />{#if x.short}<span class="long">{x.label}</span><span class="short">{x.short}</span>{:else}{x.label}{/if}{#if x.n}<span class="n">{x.n}</span>{/if}</button>
+              ><Icon name={x.icon} size={16} />{#if x.short}<span class="long"><bdi>{x.label}</bdi></span><span class="short">{x.short}</span>{:else}{x.label}{/if}{#if x.n}<span class="n">{x.n}</span>{/if}</button>
             {/each}
           </div>
-          {#if tab === 'more' && e.owner}
+          {#if pager}
+            <Pager label="{tab === 'channels' ? 'Channels' : 'Activity'} pages" {...pager} />
+          {:else if tab === 'more' && e.owner}
             <a class="link" href="/users/{e.owner.id}">
               See all
               <svg class="arrow" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 8h10M9 4l4 4-4 4" /></svg>
@@ -182,17 +200,17 @@
         </div>
         {#if channels}
           <div role="tabpanel" id="panel-channels" aria-labelledby="tab-channels" hidden={tab !== 'channels'}>
-            <UsedIn {channels} total={channelCount} />
-          </div>
-        {/if}
-        {#if more.length && e.owner}
-          <div role="tabpanel" id="panel-more" aria-labelledby="tab-more" hidden={tab !== 'more'}>
-            <EmoteGrid items={more} creator={false} skeletons={0} label="More from {ownerName}" />
+            <ChannelsTab emoteId={e.id} first={channels} total={channelCount} bind:pager={channelPager} />
           </div>
         {/if}
         {#if listed && seen}
           <div role="tabpanel" id="panel-activity" aria-labelledby="tab-activity" hidden={tab !== 'activity'}>
-            <ActivityTab emoteId={e.id} />
+            <ActivityTab emoteId={e.id} name={e.name} bind:pager={activityPager} />
+          </div>
+        {/if}
+        {#if more.length && e.owner}
+          <div role="tabpanel" id="panel-more" aria-labelledby="tab-more" hidden={tab !== 'more'}>
+            <EmoteGrid items={more} creator={false} skeletons={0} label="More by {ownerName}" />
           </div>
         {/if}
       </section>
@@ -206,49 +224,67 @@
   .back { justify-self: start; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; color: var(--muted); font-size: var(--t-small);
     transition: color var(--dur-color); }
   .back :global(.icon) { transition: transform var(--dur-move) var(--ease); }
-
-  .head { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
-  .title { min-width: 0; flex: 1 1 320px; }
-  h1 { font-size: var(--t-page); line-height: 1.25; letter-spacing: -.02em; overflow-wrap: anywhere; text-wrap: balance; }
-  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
-  .creator { position: relative; display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 10px 0 6px; max-width: 100%; min-width: 0;
-    border: 1px solid var(--border-strong); border-radius: var(--radius-btn); background: var(--surface); color: var(--text);
-    font-size: var(--t-small); font-weight: 500; transition: border-color var(--fast), background-color var(--fast); }
-  .creator::after { content: ''; position: absolute; inset: -6px 0; } /* 44px to hit */
-  .creator > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .labels { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-  .label { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border: 1px solid var(--border);
-    border-radius: var(--radius-btn); font-size: var(--t-label); color: var(--muted); }
-  .label.vis { gap: 4px; padding-left: 6px; color: var(--text); border-color: var(--border-strong); }
-
-  /* Trending: a label like the others, with the accent icon and its rank; it opens the Trending view. */
-  .trend { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border: 1px solid var(--border-strong);
-    border-radius: var(--radius-btn); font-size: var(--t-label); font-weight: 600; color: var(--text); transition: border-color var(--fast); }
-  .trend::after { content: ''; position: absolute; inset: -10px 0; } /* 44px to hit */
-  .trend :global(.icon) { color: var(--accent-text); }
-  .trend .rank { font-variant-numeric: tabular-nums; color: var(--accent-text); }
   .notice { padding: 12px 16px; border: 1px solid var(--border-strong); border-radius: var(--radius-card); background: var(--surface);
     font-size: var(--t-small); max-width: 72ch; }
   .notice strong { font-weight: 600; }
 
-  .panel { min-width: 0; padding: 20px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); }
-  .panels { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: stretch; }
-  .side { display: grid; gap: 16px; }
+  .card { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); }
 
-  .tabbed { padding-top: 12px; }
-  .tabbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+  /* The main card: creator row, then everything centred on one axis. */
+  .main { display: grid; justify-items: center; gap: 0; padding: 16px 20px 24px; }
+  .top { justify-self: stretch; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; min-height: 44px; }
+  .creator { position: relative; flex: 0 1 auto; display: inline-flex; align-items: center; gap: 10px; min-width: 0; max-width: 100%; padding: 4px 10px 4px 4px;
+    margin-left: -4px; border-radius: var(--radius-btn); color: var(--text); transition: background-color var(--fast); }
+  .who { display: grid; min-width: 0; line-height: 1.3; }
+  .by { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-ui); font-weight: 600; }
+  .when { font-size: var(--t-fine); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .top-end { display: flex; align-items: center; gap: 8px; flex: none; margin-left: auto; }
+
+  .trend { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--border-strong);
+    border-radius: var(--radius-btn); font-size: var(--t-small); font-weight: 600; color: var(--text); transition: border-color var(--fast); white-space: nowrap; }
+  .trend::after { content: ''; position: absolute; inset: -8px 0; } /* 44px to hit */
+  .trend :global(.icon) { color: var(--accent-text); }
+  .trend .rank { font-variant-numeric: tabular-nums; color: var(--accent-text); }
+
+  .head { display: grid; justify-items: center; gap: 12px; margin-top: 4px; max-width: 100%; text-align: center; }
+  h1 { font-size: var(--t-page); line-height: 1.2; letter-spacing: -.02em; overflow-wrap: anywhere; text-wrap: balance; }
+  .flags, .tags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; }
+  .flags { gap: 4px 14px; }
+  .flag { display: inline-flex; align-items: center; gap: 5px; font-size: var(--t-small); font-weight: 500; color: var(--muted); }
+  .flag :global(.icon) { color: var(--dim); }
+  .flag.nsfw, .flag.unlisted, .flag.private { color: var(--text); }
+  .flag.nsfw :global(.icon), .flag.unlisted :global(.icon), .flag.private :global(.icon) { color: var(--accent-text); }
+  .tags { gap: 6px; }
+  .tag { display: inline-flex; align-items: center; gap: 1px; height: 30px; padding: 0 11px; border-radius: var(--radius-btn);
+    background: var(--surface-2); color: var(--text); font-size: var(--t-small); font-weight: 500; transition: background-color var(--fast); }
+  .hash { color: var(--dim); }
+
+  .stage { justify-self: stretch; display: grid; place-items: center; padding: clamp(28px, 4vw, 44px) 0 clamp(20px, 3vw, 28px); min-width: 0; }
+
+  /* The facts: one quiet line of label and value pairs, divided by hairlines. */
+  .facts { margin: 0 0 20px; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 0; }
+  .facts > div { display: grid; justify-items: center; gap: 1px; padding: 0 18px; border-left: 1px solid var(--border); }
+  .facts > div:first-child { border-left: 0; }
+  dt { font-size: var(--t-fine); color: var(--muted); white-space: nowrap; }
+  dd { margin: 0; display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-small); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  dd.ok :global(.icon) { color: var(--accent-text); }
+
+  .head-actions { max-width: 100%; }
+
+  /* The tabs card. */
+  .tabbed { padding: 12px 20px 20px; }
+  .tabbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; min-height: 44px; }
   .tablist { display: flex; gap: 4px; padding: 3px; margin: -3px; overflow-x: auto; scrollbar-width: none; min-width: 0; }
   .tabbtn { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; border: 0; border-radius: var(--radius-btn);
-    background: none; color: var(--muted); font: inherit; font-size: var(--t-small); font-weight: 500; white-space: nowrap; cursor: pointer;
-    transition: background-color var(--fast), color var(--fast); touch-action: manipulation; }
+    background: none; color: var(--muted); font: inherit; font-size: var(--t-ui); font-weight: 500; white-space: nowrap; cursor: pointer;
+    transition: color var(--fast); touch-action: manipulation; }
   .tabbtn[aria-selected='true'] { color: var(--text); font-weight: 600; }
   .tabbtn :global(.icon) { color: var(--dim); }
   .tabbtn[aria-selected='true'] :global(.icon) { color: var(--accent-text); }
-  .n { color: var(--dim); font-variant-numeric: tabular-nums; font-size: var(--t-label); }
-  .block-title .n { margin-left: 8px; font-size: var(--t-small); font-weight: 500; }
-  .tabbed .block-head { margin-top: 4px; }
+  .long { max-width: 22ch; overflow: hidden; text-overflow: ellipsis; }
+  .n { color: var(--dim); font-variant-numeric: tabular-nums; font-size: var(--t-small); }
+  .tabbtn[aria-selected='true'] .n { color: var(--muted); }
   .tabbtn:focus-visible { outline-offset: -2px; }
-  .tabbtn[aria-selected='true'] .n { color: inherit; }
   .tabbar .link { flex: none; white-space: nowrap; }
   svg.arrow { fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
@@ -258,28 +294,31 @@
   @media (hover: hover) and (pointer: fine) {
     .back:hover { color: var(--text); }
     .back:hover :global(.icon) { transform: translateX(-3px); }
-    .creator:hover { border-color: var(--accent-border); background: var(--surface-hover); }
+    .creator:hover { background: var(--surface-hover); }
     .trend:hover { border-color: var(--accent-border); }
+    .tag:hover { background: var(--surface-hover); }
     .tabbtn:hover:not([aria-selected='true']) { color: var(--text); }
   }
+  @media (pointer: coarse) { .back, .tabbtn { min-height: 44px; } .tag { height: 36px; } }
 
-  @media (pointer: coarse) { .back, .tabbtn { min-height: 44px; } }
-
-  @media (max-width: 1000px) { .panels { grid-template-columns: minmax(0, 1fr); } }
   @media (max-width: 560px) {
-    .panel { padding: 16px; }
+    .main { padding: 12px 16px 20px; }
+    .tabbed { padding: 8px 12px 16px; }
     .long { display: none; }
     .short { display: inline; }
     .tablist { gap: 0; }
     .tabbtn { padding: 0 8px; gap: 6px; }
+    .facts > div { padding: 0 12px; }
+    .tabbar { flex-wrap: wrap; row-gap: 4px; }
   }
 
   /* Phones: the actions move to a bar fixed to the bottom of the screen, above the home indicator.
-     The page ends 72px higher, so the bar never covers the footer. */
+     The page ends higher, so the bar never covers the footer. */
   @media (max-width: 720px) {
     :global(html:has(.emote.with-bar)) { scroll-padding-bottom: 88px; }
     :global(body:has(.emote.with-bar)) { padding-bottom: calc(65px + env(safe-area-inset-bottom, 0px)); }
     .head-actions { display: none; }
+    .facts { margin-bottom: 0; }
     .bar { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-nav);
       padding: 10px var(--page-pad) calc(10px + env(safe-area-inset-bottom, 0px));
       border-top: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 86%, transparent);

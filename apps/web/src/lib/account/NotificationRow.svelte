@@ -1,5 +1,5 @@
 <script lang="ts">
-  // One notification: an icon, one sentence and when. Unread ones are bold with an accent icon
+  // One notification: an icon, one sentence and when (date and time, how long ago on hover). Unread ones are bold with an accent icon
   // (the cyex rule: no fills, no bars). A link when the notification leads somewhere; the
   // sentence is printed as text, never as HTML. Used by the bell's popover and /me/notifications.
   import Icon from '$lib/components/Icon.svelte';
@@ -17,7 +17,7 @@
   <Icon name={line.icon} />
   <span class="what">
     <span class="sentence">{#each isoParts(line.text) as p}{#if p.name}<bdi>{p.text}</bdi>{:else}{p.text}{/if}{/each}</span>
-    <time class="when" datetime={note.createdAt} title={dateTime(note.createdAt)}>{relative(note.createdAt)}</time>
+    <time class="when" datetime={note.createdAt} title={relative(note.createdAt)}>{dateTime(note.createdAt)}</time>
   </span>
 {/snippet}
 
@@ -34,7 +34,7 @@
   .note :global(svg) { margin-top: 2px; color: var(--muted); }
   .what { display: grid; gap: 2px; min-width: 0; flex: 1; }
   .sentence { overflow-wrap: anywhere; line-height: 1.4; }
-  .when { font-size: var(--t-fine); color: var(--dim); }
+  .when { font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
   .unread .sentence { font-weight: 600; }
   .unread :global(svg) { color: var(--accent-text); }
   .note:focus-visible { outline-offset: -2px; }

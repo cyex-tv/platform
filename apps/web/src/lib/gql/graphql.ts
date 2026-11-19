@@ -1720,7 +1720,8 @@ export type Query = {
   emoteActivityPage: ActivityPage;
   /**
    * Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
-   * default 8. Empty when the emote is unknown or not public.
+   * default 8; `offset` skips that many (0 to 10000, default 0) for paging. Empty when the
+   * emote is unknown or not public.
    */
   emoteChannels: Array<Channel>;
   /**
@@ -2020,6 +2021,7 @@ export type QueryEmoteActivityPageArgs = {
 export type QueryEmoteChannelsArgs = {
   id: Scalars['String']['input'];
   limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -3067,6 +3069,7 @@ export type PublicAccountQuery = { __typename?: 'Query', account?: { __typename?
 export type EmoteChannelsQueryVariables = Exact<{
   id: Scalars['String']['input'];
   limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
 }>;
 
 
@@ -5385,8 +5388,8 @@ export const PublicAccountDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<PublicAccountQuery, PublicAccountQueryVariables>;
 export const EmoteChannelsDocument = new TypedDocumentString(`
-    query EmoteChannels($id: String!, $limit: Int) {
-  emoteChannels(id: $id, limit: $limit) {
+    query EmoteChannels($id: String!, $limit: Int, $offset: Int) {
+  emoteChannels(id: $id, limit: $limit, offset: $offset) {
     platform
     login
     account {

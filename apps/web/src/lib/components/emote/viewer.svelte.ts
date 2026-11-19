@@ -2,7 +2,7 @@
 // the phone action bar and the review block. Only the browser asks (only it has the cookie).
 import { ApiError, gql } from '$lib/api';
 import type { MySetNamesQuery } from '$lib/gql/graphql';
-import { ADD_SET_EMOTE, MY_SET_NAMES, REPORT_EMOTE } from '$lib/queries';
+import { ADD_SET_EMOTE, MY_CHANNELS, MY_SET_NAMES, REPORT_EMOTE } from '$lib/queries';
 
 export type ViewerSet = MySetNamesQuery['mySets'][number];
 
@@ -10,6 +10,8 @@ export class Viewer {
   /** `none`: cyex.tv couldn't be reached, so nothing is offered. */
   who = $state<'loading' | 'out' | 'in' | 'none'>('loading');
   sets = $state<ViewerSet[]>([]);
+  /** Ids of the sets active on one of your own channels ("on your channel"). */
+  live = $state<ReadonlySet<string>>(new Set());
   /** The set the emote was last added to, by id. */
   added = $state<string | null>(null);
   addError = $state<string | null>(null);
@@ -19,9 +21,10 @@ export class Viewer {
 
   constructor(readonly emoteId: string) {}
 
-  /** Sets the emote can go in (not the global one). */
+  /** Sets the emote can go in (not the global one), the ones on your channels first. */
   get own(): ViewerSet[] {
-    return this.sets.filter((s) => s.kind !== 'GLOBAL');
+    const own = this.sets.filter((s) => s.kind !== 'GLOBAL');
+    return [...own.filter((s) => this.live.has(s.id)), ...own.filter((s) => !this.live.has(s.id))];
   }
 
   has(set: ViewerSet): boolean {
@@ -33,7 +36,10 @@ export class Viewer {
     this.started = true;
     try {
       // mySets itself answers signed_out when there is no session, so no separate ME call.
-      this.sets = (await gql(MY_SET_NAMES, {})).mySets;
+      const [names, channels] = await Promise.all([gql(MY_SET_NAMES, {}), gql(MY_CHANNELS, {}).catch(() => null)]);
+      this.sets = names.mySets;
+      // Which set each of your channels shows; a failure only drops the "on your channel" marks.
+      this.live = new Set((channels?.myChannels ?? []).map((c) => c.activeSetId).filter((id): id is string => !!id));
       this.who = 'in';
     } catch (e) {
       // Signed out: offer sign-in. cyex.tv unreachable: offer nothing.
