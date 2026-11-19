@@ -1,6 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { ApiError, gql } from '$lib/api';
-import { channelsUsing, globalPool, moreBy, trendingOf } from '$lib/components/emote/data';
+import { channelsUsing, moreBy, trendingOf } from '$lib/components/emote/data';
 import type { PageEmote } from '$lib/components/emote/emote-page';
 import { EMOTE } from '$lib/queries';
 import { unreachableMessage } from '$lib/components/problem';
@@ -16,12 +16,11 @@ export const load: PageLoad = async ({ fetch, params }) => {
   // The server asks without the session cookie, so pending, rejected and taken-down emotes come
   // back as nothing to it; the page asks again from the browser before it says
   // the emote isn't there.
-  if (!found) return { id: params.id, emote: null, pool: [], more: [], channels: null, trending: null };
-  const [pool, more, channels, trending] = await Promise.all([
-    globalPool(fetch),
+  if (!found) return { id: params.id, emote: null, more: [], channels: null, trending: null };
+  const [more, channels, trending] = await Promise.all([
     moreBy(found, fetch),
     channelsUsing(found, fetch),
     trendingOf(found, fetch),
   ]);
-  return { id: params.id, emote: found, pool, more, channels, trending };
+  return { id: params.id, emote: found, more, channels, trending };
 };

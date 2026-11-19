@@ -28,6 +28,35 @@
             document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.setAttribute('content', '#ffffff'); });
           }
         } catch (e) {}
+        // Reduced motion, per device (Settings → Appearance): "reduce" or "full" override the OS.
+        // Scripts ask matchMedia('(prefers-reduced-motion: …)'); the answer follows the setting.
+        try {
+          var motion = localStorage.getItem('cyexMotion');
+          if (motion === 'reduce' || motion === 'full') document.documentElement.dataset.motion = motion;
+        } catch (e) {}
+        var nativeMatch = window.matchMedia && window.matchMedia.bind(window);
+        if (nativeMatch) {
+          var lists = [];
+          window.matchMedia = function (q) {
+            var list = nativeMatch(q);
+            if (!/prefers-reduced-motion/.test(String(q))) return list;
+            var wantsReduce = /reduce/.test(String(q));
+            try {
+              Object.defineProperty(list, 'matches', { configurable: true, get: function () {
+                var pref = document.documentElement.dataset.motion;
+                if (pref === 'reduce') return wantsReduce;
+                if (pref === 'full') return !wantsReduce;
+                return nativeMatch(q).matches;
+              } });
+            } catch (e) {}
+            lists.push(list);
+            return list;
+          };
+          // The setting changed: tell everyone listening, as the OS query would.
+          window.addEventListener('cyexmotion', function () {
+            lists.forEach(function (l) { try { l.dispatchEvent(new Event('change')); } catch (e) {} });
+          });
+        }
         document.documentElement.classList.add('js');
         var fonts = document.getElementById('fonts');
         if (fonts) {

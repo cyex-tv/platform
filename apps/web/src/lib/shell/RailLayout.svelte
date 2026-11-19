@@ -5,10 +5,12 @@
   //   <RailLayout>{#snippet rail()}<SideRail … />{/snippet}…content…</RailLayout>
   import type { Snippet } from 'svelte';
 
-  let { rail, children }: { rail: Snippet; children: Snippet } = $props();
+  /** `top`: a band across both columns above them (the profile's identity band). */
+  let { rail, top, children }: { rail: Snippet; top?: Snippet; children: Snippet } = $props();
 </script>
 
 <div class="wrap rail-layout">
+  {#if top}<div class="top">{@render top()}</div>{/if}
   {@render rail()}
   <div class="content">{@render children()}</div>
 </div>
@@ -17,8 +19,10 @@
   .rail-layout { display: grid; grid-template-columns: var(--rail-w) minmax(0, 1fr); gap: var(--rail-gap); align-items: start;
     padding-top: var(--rail-gap); }
   .content { min-width: 0; }
+  .top { grid-column: 1 / -1; min-width: 0; }
   @media (max-width: 899.98px) {
     .rail-layout { grid-template-columns: minmax(0, 1fr); gap: 0; padding-top: 0; }
     .content { padding-top: var(--rail-gap); } /* the one page top, with or without the tab strip above */
+    .top { grid-column: auto; margin-top: var(--rail-gap); }
   }
 </style>

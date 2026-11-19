@@ -431,16 +431,19 @@ async fn audit(
             "set_ids": scope.ids(),
         })
     };
-    // A change made through `editors.manage_any` says so (a removal has no `after`; it gets one).
-    let after = match (after.map(shape), staff) {
-        (Some(mut v), true) => {
-            v["via"] = json!(permissions::EDITORS_MANAGE_ANY);
-            Some(v)
-        }
-        (None, true) => Some(json!({ "via": permissions::EDITORS_MANAGE_ANY })),
-        (v, false) => v,
-    };
-    cyex_tv_db::audit::write(
+    // Adding and removing editors shows on the owner's public activity feed (names only, never
+    // the permissions; ADR 0016), so the row names its subject. A change someone else made is
+    // marked: through `editors.manage_any` (a staff action, which the feed leaves out), or as an
+    // account editor (one with `EDITORS`, or an editor leaving), like other editor changes.
+    let mut after = after.map(shape);
+    if staff {
+        let mark = after.get_or_insert_with(|| json!({}));
+        mark["via"] = json!(permissions::EDITORS_MANAGE_ANY);
+    } else if caller.account_id != owner {
+        let mark = after.get_or_insert_with(|| json!({}));
+        mark["via"] = json!("account_editor");
+    }
+    cyex_tv_db::audit::write_for(
         conn,
         &cyex_tv_db::audit::NewEntry {
             actor: Some(caller.account_id),
@@ -450,6 +453,7 @@ async fn audit(
             before: before.map(shape),
             after,
         },
+        Some(owner),
     )
     .await
     .map_err(db_error)?;

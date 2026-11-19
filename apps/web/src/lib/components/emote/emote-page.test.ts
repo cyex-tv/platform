@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backTarget, baseEmote, channelCount, chatLines, formats, kind, labels, scaleFiles, trust, type PageEmote } from './emote-page';
+import { backTarget, baseEmote, channelCount, chatLines, flagsOf, formats, kind, labels, rangeLabel, scaleFiles, trust, type PageEmote } from './emote-page';
 
 const file = (scale: number, opts: Partial<PageEmote['files'][number]> = {}) => ({
   name: `${scale}x${opts.isStatic ? '_static' : ''}.webp`,
@@ -97,5 +97,36 @@ describe('channelCount', () => {
   it('hides the fact when no channel uses the emote', () => {
     expect(channelCount(emote())).toBeNull();
     expect(channelCount(emote({ channelCount: 12 }))).toBe(12);
+  });
+});
+
+describe('flags on the card', () => {
+  it('has none for a still, public, ordinary emote', () => {
+    expect(flagsOf(emote({ animated: false }))).toEqual([]);
+  });
+  it('lists motion, chat behaviour, NSFW, then visibility, in that order', () => {
+    const e = emote({ visibility: 'UNLISTED', flags: { zeroWidth: true, nsfw: true, private: false, wide: true } });
+    expect(flagsOf(e).map((f) => f.key)).toEqual(['animated', 'zero-width', 'wide', 'nsfw', 'unlisted']);
+    expect(flagsOf(e).every((f) => f.tip.length > 0)).toBe(true);
+  });
+  it('marks private emotes, also from the old private flag alone', () => {
+    expect(flagsOf(emote({ visibility: 'PRIVATE' })).at(-1)?.key).toBe('private');
+    expect(flagsOf(emote({ visibility: null as never, flags: { zeroWidth: false, nsfw: false, private: true, wide: false } })).at(-1)?.key).toBe('private');
+  });
+  it('derives wide from the 1x file when the API flag is off', () => {
+    const files = [file(1, { width: 112, height: 32 })];
+    expect(flagsOf(emote({ animated: false, files })).map((f) => f.key)).toEqual(['wide']);
+  });
+});
+
+describe('pager range', () => {
+  it('says which rows show, with the total when known', () => {
+    expect(rangeLabel(0, 24, 26)).toBe('1–24 of 26');
+    expect(rangeLabel(24, 2, 26)).toBe('25–26 of 26');
+    expect(rangeLabel(0, 30)).toBe('1–30');
+    expect(rangeLabel(0, 24, 1500)).toBe('1–24 of 1.500');
+  });
+  it('is empty when nothing shows', () => {
+    expect(rangeLabel(0, 0, 0)).toBe('');
   });
 });

@@ -133,6 +133,15 @@ pub async fn revoke_session(
     Ok((done, done && current))
 }
 
+/// Signs out every session of the caller, the one this request came with too (the account
+/// page's Sign out). Returns how many.
+pub async fn revoke_all_sessions(state: &AppState, caller: &Caller) -> ApiResult<u64> {
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    sessions::delete_for_account(&mut conn, caller.account_id, None)
+        .await
+        .map_err(db_error)
+}
+
 /// Signs out every session of the caller but the one this request came with. Returns how many.
 pub async fn revoke_other_sessions(state: &AppState, caller: &Caller) -> ApiResult<u64> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;

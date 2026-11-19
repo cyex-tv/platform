@@ -11,20 +11,22 @@
 
 use std::collections::{HashMap, HashSet};
 
+use chrono::{DateTime, Utc};
 use cyex_tv_db::cosmetics as cosmetics_db;
 use cyex_tv_db::reads::{self, EmoteRow};
 use cyex_tv_db::sets::Set;
 use cyex_tv_db::{accounts, audit, channels, ids, sets};
 use cyex_tv_shared::error::ApiResult;
 use cyex_tv_shared::model::{
-    AccountSummary, ActivityCosmeticChange, ActivityEmote, ActivityEntry, ActivityKind,
-    ActivityPage, ActivitySet, EmoteState, SetVisibility,
+    AccountSummary, ActivityCosmeticChange, ActivityEmote, ActivityEntry, ActivityFilter,
+    ActivityGroup, ActivityKind, ActivityPage, ActivitySet, EmoteState, SetVisibility,
 };
 use serde_json::Value;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::catalog::{conn, db_error, parse_id};
+use crate::errors::bad;
 use crate::state::AppState;
 use crate::views;
 
@@ -92,6 +94,8 @@ fn refs(rows: &[audit::Entry]) -> Refs {
                 }
             }
             "emote.approved" => r.emotes.extend(target),
+            "account.editor_added" => r.people.extend(id_of(&e.after_json, "editor_id")),
+            "account.editor_removed" => r.people.extend(id_of(&e.before_json, "editor_id")),
             _ => {}
         }
     }
@@ -239,6 +243,7 @@ fn entry(row: &audit::Entry, owner: Uuid, look: &Lookup) -> Option<ActivityEntry
         badge: None,
         paint: None,
         created_at: views::time(row.created_at),
+        editor: None,
     };
     match row.action.as_str() {
         "set.created" => {
@@ -315,6 +320,20 @@ fn entry(row: &audit::Entry, owner: Uuid, look: &Lookup) -> Option<ActivityEntry
             out.kind = ActivityKind::EmoteUploaded;
             out.emote = Some(look.emote_named(target?, None)?);
         }
+        // Names only: the permissions and sets in the row never show. An editor who is gone
+        // (deleted) takes the line with them.
+        "account.editor_added" | "account.editor_removed" => {
+            if target? != owner {
+                return None;
+            }
+            let (kind, side) = if row.action == "account.editor_added" {
+                (ActivityKind::EditorAdded, &row.after_json)
+            } else {
+                (ActivityKind::EditorRemoved, &row.before_json)
+            };
+            out.kind = kind;
+            out.editor = Some(look.people.get(&id_of(side, "editor_id")?)?.clone());
+        }
         _ => return None,
     }
     Some(out)
@@ -340,6 +359,91 @@ pub async fn account_activity_page(
     before: Option<&str>,
     limit: Option<u32>,
 ) -> ApiResult<ActivityPage> {
+    account_activity_where(state, account_id, before, limit, None).await
+}
+
+/// The audit actions behind each group.
+fn actions_of(group: ActivityGroup) -> &'static [&'static str] {
+    match group {
+        ActivityGroup::Emotes => &[
+            "set.emote_added",
+            "set.emote_removed",
+            "set.emote_updated",
+            "emote.approved",
+        ],
+        ActivityGroup::Sets => &["set.created", "set.renamed", "channel.settings_changed"],
+        ActivityGroup::Cosmetics => &["cosmetics.selected"],
+        ActivityGroup::Editors => &["account.editor_added", "account.editor_removed"],
+    }
+}
+
+fn time_of(raw: Option<&str>, field: &str) -> ApiResult<Option<DateTime<Utc>>> {
+    match raw.map(str::trim).filter(|t| !t.is_empty()) {
+        None => Ok(None),
+        Some(t) => DateTime::parse_from_rfc3339(t)
+            .map(|d| Some(d.with_timezone(&Utc)))
+            .map_err(|_| {
+                bad(
+                    "bad_time",
+                    &format!("`{field}` must be an RFC 3339 time, like 2026-11-19T14:05:00Z."),
+                )
+            }),
+    }
+}
+
+/// Every group but editors: the feed as it was before filters.
+fn default_actions() -> Vec<&'static str> {
+    [
+        ActivityGroup::Emotes,
+        ActivityGroup::Sets,
+        ActivityGroup::Cosmetics,
+    ]
+    .into_iter()
+    .flat_map(|g| actions_of(g).iter().copied())
+    .collect()
+}
+
+/// What a filter asks the SQL for.
+fn sql_filter(filter: Option<&ActivityFilter>) -> ApiResult<audit::ActivityFilter> {
+    let Some(f) = filter else {
+        return Ok(audit::ActivityFilter {
+            actions: Some(default_actions()),
+            ..audit::ActivityFilter::default()
+        });
+    };
+    let actions = match &f.groups {
+        Some(groups) if !groups.is_empty() => groups
+            .iter()
+            .flat_map(|g| actions_of(*g).iter().copied())
+            .collect(),
+        _ => default_actions(),
+    };
+    let actor = match f
+        .actor_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+    {
+        Some(raw) => Some(parse_id(raw)?),
+        None => None,
+    };
+    Ok(audit::ActivityFilter {
+        actions: Some(actions),
+        actor,
+        since: time_of(f.since.as_deref(), "since")?,
+        until: time_of(f.until.as_deref(), "until")?,
+    })
+}
+
+/// `account_activity_page`, narrowed by `filter`: groups, who did it, and a time range.
+pub async fn account_activity_where(
+    state: &AppState,
+    account_id: &str,
+    before: Option<&str>,
+    limit: Option<u32>,
+    filter: Option<&ActivityFilter>,
+) -> ApiResult<ActivityPage> {
+    let wanted = sql_filter(filter)?;
     let before_id = before.map(parse_id).transpose()?;
     let limit = limit.unwrap_or(ACTIVITY_PAGE).clamp(1, ACTIVITY_PAGE_MAX) as usize;
     let Some(owner) = ids::from_text(account_id.trim()) else {
@@ -354,7 +458,7 @@ pub async fn account_activity_page(
     }
     let mut page = Page::new(limit, before_id);
     while page.wants_more() {
-        let rows = audit::activity_rows(&mut conn, owner, page.cursor, BATCH)
+        let rows = audit::activity_rows_where(&mut conn, owner, page.cursor, BATCH, &wanted)
             .await
             .map_err(db_error)?;
         let look = lookup(&mut conn, &rows, &[owner], &state.cdn_url).await?;
@@ -498,5 +602,54 @@ impl Page {
             entries: self.out,
             next: self.more_after.map(ids::to_text),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_filter_is_the_old_feed_without_editors() {
+        let actions = sql_filter(None).unwrap().actions.unwrap();
+        assert_eq!(actions.len(), 8);
+        assert!(!actions.iter().any(|a| a.starts_with("account.editor")));
+        let empty = sql_filter(Some(&ActivityFilter::default())).unwrap();
+        assert_eq!(empty.actions.unwrap(), actions);
+    }
+
+    #[test]
+    fn groups_pick_their_actions() {
+        let f = sql_filter(Some(&ActivityFilter {
+            groups: Some(vec![ActivityGroup::Editors, ActivityGroup::Cosmetics]),
+            ..ActivityFilter::default()
+        }))
+        .unwrap();
+        assert_eq!(
+            f.actions.unwrap(),
+            [
+                "account.editor_added",
+                "account.editor_removed",
+                "cosmetics.selected"
+            ]
+        );
+    }
+
+    #[test]
+    fn times_must_be_rfc3339() {
+        let ok = sql_filter(Some(&ActivityFilter {
+            since: Some("2026-11-19T00:00:00+01:00".into()),
+            until: Some(" ".into()),
+            ..ActivityFilter::default()
+        }))
+        .unwrap();
+        assert_eq!(ok.since.unwrap().to_rfc3339(), "2026-11-18T23:00:00+00:00");
+        assert!(ok.until.is_none());
+        let err = sql_filter(Some(&ActivityFilter {
+            until: Some("2026/11/19".into()),
+            ..ActivityFilter::default()
+        }))
+        .unwrap_err();
+        assert_eq!(err.code, "bad_time");
     }
 }

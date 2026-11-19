@@ -19,7 +19,47 @@ Owner feedback 2026/11/19, section J (browse). Web only: no API change (bulk add
 ```
 git push -u origin feat/browse-select
 gh pr create --base main --head feat/browse-select --title "Emotes tab: one toolbar, tile menu, multi-select up to 100" --body-file <file>
+git merge origin/main   (PROGRESS.md resolved)
 gh pr merge 97 --merge
+```
+
+## Emote page, round 3: one card, tabs with pagers, dated activity (branch `feat/emote-page-3`)
+
+Owner feedback 2026/11/19, section H. Additive API; no migration; nothing was deployed.
+
+- [x] One main card: the creator and upload date on top, the name, its flags (Animated, Zero-width, Wide, NSFW, Unlisted or Private, each with a tooltip) and tags (links to the tag search), the four sizes on one baseline with scale and pixel size, one line of facts (channels, added in 7 days, formats, file size at the biggest scale, review), and the actions together: Add to set (sets on your own channels first, marked "On your channel"), Edit (owner, or `emotes.edit_any`), More (Copy link, Copy name, Download, Report). Trending #n and Pause sit top right.
+- [x] The preview background switch (Dark, Light, Checker, Chat) and the side panel are gone from the emote page; the review block's Report moved into More. (The edit page `/me/emotes/[id]` still uses `PreviewStage`, untouched.)
+- [x] A second card with tabs Channels (count), Activity, More by the creator, and a pager in the tab bar ("1–24 of 82", previous, next). Channels page 24 at a time through `emoteChannels(offset:)`; Activity pages by cursor (pages kept, Previous needs no request).
+- [x] Activity rows: icon, a plain sentence, who did it, and the date and time (`2026/11/19 14:05`, how long ago on hover). Notifications show the date and time the same way.
+- [x] Phones: the card stacks, sizes wrap, the actions stay in the fixed bottom bar (Add to set, Edit, More); reduced motion starts on still frames.
+- API: `emoteChannels(id, limit, offset)`, `offset` 0 to 10000 (past it: empty). Postgres test in `apps/api/tests/search_flow.rs`; dev mock and codegen updated.
+- Tests: vitest `emote-page.test.ts` (flags, pager range), `pager.test.ts` (cursor trail).
+- Checked in the running app (vite dev + mock, headless Edge): 375, 768, 1440, 2560, dark and light, signed out and signed in (Add to set, Edit, More, Download panel), keyboard (tab arrows), pager next page, reduced motion. No horizontal scroll. Screens in `.claude/runs/2026-11-19-feedback/screens/h/` (`before-after-1440-dark.png`).
+- Left alone (agent D's files): the profile activity rows (dated by #95) and the sessions list (`apps/web/src/lib/account/SessionsPanel.svelte`, "Last seen" still relative, exact time on hover).
+
+## Profile dashboard, activity filters, settings (branch `feat/profile-dashboard`)
+
+Owner feedback 2026/11/19, sections D and I (profile parts). Additive API; one new migration; nothing was deployed.
+
+- [x] Your profile's dashboard: Overview (`/users/<id>?s=overview`, first rail row for the owner; the account menu's name row opens it): tiles for Channels (and the set each shows), Notifications, Recent uploads with their state, Recent activity, Editors, Cosmetics (what you show, how many you own) and Emote sets, each linking to its tab. Each tile loads and fails on its own.
+- [x] Activity tab: filter bar (Everything / Emotes / Sets / Cosmetics / Editors; By: anyone, the owner or one of its editors; the cyex logs timeframe All time / Day / Month with a "Jump to date" / "Jump to month" popover that refuses future dates). Filters live in the address (`?k=`, `?by=`, `?d=` / `?m=`). Rows show date and time (2026/11/19 14:05) and how long ago, everywhere (the emote page's Activity too). On an account's own feed its own lines drop "by <name>"; editor lines read "Added X as an editor", "Removed X as an editor", "X stopped being an editor".
+- [x] API: `accountActivityPage(filter: ActivityFilter)` with `groups` (`EMOTES`, `SETS`, `COSMETICS`, `EDITORS`), `actorId`, `since`, `until` (RFC 3339, `bad_time`). New kinds `EDITOR_ADDED`, `EDITOR_REMOVED` and `ActivityEntry.editor` (names only, never permissions); editor lines show only when a filter asks for `EDITORS`, so the unfiltered feed is unchanged. Editor add/remove audit rows now name the owner as their subject (an editor's own change is marked `via: account_editor`); older editor rows don't show.
+- [x] Display name: migration `20261207000052_display_platform.sql` (`accounts.display_platform`); `setDisplayPlatform(platform)` (`not_found` when not linked), `Me.displayPlatform`; the chosen identity is listed first and gives the account's name and picture everywhere (summaries, profiles, search results); search still matches every login; unlinking that platform goes back to Twitch first.
+- [x] Sign out everywhere: `signOutEverywhere` ends every session, this one too, and clears the cookie (Settings → Account → Security). The header menu's Sign out stays this session only.
+- [x] Connections: Disconnect with more than one linked; the last never goes (`last_identity`, the website says why). Restricted, ticket-blocked or blocked accounts still can't unlink (identity holds, #83); an account in its deletion window has only the restore session, so it can't either (#89).
+- [x] Settings (account menu → Settings): rail Account / Appearance / Editors (the existing /me/editors page) / Billing (orders). Account: display name choice, connections, security, sessions, data, delete. Appearance: theme and reduced motion (System / On / Off, per device in `cyexMotion`): app.html sets `data-motion` before first paint and makes `matchMedia('(prefers-reduced-motion: …)')` answer by the setting, so every script follows it; `data-motion="reduce"` turns transitions and animations off in CSS. `/me/account` and `/me/settings` redirect to Settings → Account.
+- [x] Profile look: the identity moved out of a 7TV-style centred side card into a left-aligned band across the page (paint-ringed avatar, painted name as h1, roles as flags right after it, a facts line: connections, channel sets, editors by name, member since). The rail is navigation only and runs the full height of the left column. Copy link is gone from profiles; the permissions panel is gone from the account page. Others' profiles show their listed sets, public uploads and editors by name.
+- [x] /help: the index has no scroll bar of its own on wide windows; it runs the full column height with the search pinned.
+- Tests: `apps/api/tests/profile_dashboard_flow.rs` (Postgres, CI: last connection, restricted unlink, display name and search by both logins, sign out everywhere with cookie and app token, activity groups / actor / time / bad input / editor lines), unit tests in `activity.rs`; vitest `lib/profile/timeframe.test.ts`, `lib/account/settings.test.ts`, `activity.test.ts` (editor lines, filter, Overview row).
+- Manual check (2026/11/19): headless Edge against the dev mock (MOCK_KICK=1) at 375, 1440 and 2560, dark and light: overview, activity with filters and the date popover (future date refused), another person's profile, settings account (display name switch updated the header and band), appearance, /me/account redirect, help index; screens in the 2026-11-19-feedback run folder, screens/d.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/profile-dashboard
+gh pr create --base main --head feat/profile-dashboard --title "Profile dashboard, activity filters and settings" --body-file <file>
+git merge origin/main   (four times; PROGRESS.md, ActivityRows.svelte and editors.rs resolved; the display platform migration renumbered to 000052)
+gh pr merge 95 --merge
 ```
 
 ## Paint render fix and global emote/editor permissions (branch `fix/paints-and-global-perms`, ADR 0010 amendment part 3)
@@ -87,7 +127,7 @@ Additive API; no migration; nothing was deployed.
 ```
 git push -u origin feat/upload-v3
 gh pr create --base main --head feat/upload-v3 --title "Upload v3: upload dialog, tag chips, JPEG and 8 MB, guidelines" --body-file <file>
-gh pr merge 97 --merge
+gh pr merge <n> --merge
 ```
 
 ## Admin user dashboard and entitlement graph (branch `feat/admin-dashboard`, ADR 0010 amendment part 2)
@@ -102,7 +142,7 @@ gh pr merge 97 --merge
 ```
 git push -u origin feat/admin-dashboard
 gh pr create --base main --head feat/admin-dashboard --title "Admin: user dashboard and entitlement graph" --body-file <file>
-gh pr merge 97 --merge
+gh pr merge <n> --merge
 ```
 
 ## Owner's answers of 2026/11/19 (branch `feat/owner-answers`)
@@ -132,7 +172,7 @@ Additive API, new migrations only; nothing was deployed. ADR 0014 and 0017 amend
 ```
 git push -u origin feat/sets-editors
 gh pr create --base main --head feat/sets-editors --title "Sets and editors: default sets, use on channel, editor permissions dialog" --body-file <file>
-gh pr merge 97 --merge
+gh pr merge <n> --merge
 ```
 
 ## Header search, nav, notifications and mark (branch `feat/header-search`)
@@ -170,7 +210,7 @@ gh pr merge 86 --merge
 ```
 git push -u origin feat/admin-roles
 gh pr create --base main --head feat/admin-roles --title "Admin: built-in roles, finer permissions, timed restrictions" --body-file <file>
-gh pr merge 97 --merge
+gh pr merge <n> --merge
 ```
 
 ## Front page: 3D logo hero and four boxes (branch `feat/front-page`)
@@ -189,7 +229,7 @@ Owner feedback 2026/11/19, part B. Web only; nothing was deployed.
 ```
 git push -u origin feat/front-page
 gh pr create --base main --head feat/front-page --title "web: front page with a 3D logo hero and four boxes" --body-file <file>
-gh pr merge 97 --merge
+gh pr merge <n> --merge
 ```
 
 ## Admin v2 (branch `feat/admin-v2`)
@@ -215,7 +255,7 @@ The second security review and the sign-off code review (overnight run 2026-11-1
 ```
 git push -u origin fix/signoff-api
 gh pr create --base main --head fix/signoff-api --title "api: sign-off security and correctness fixes" --body-file <file>
-gh pr merge 97 --merge
+gh pr merge <n> --merge
 ```
 
 ## Design harmony pass (branch `polish/harmony`)
@@ -236,7 +276,7 @@ Contact sheets of every route at 1440 and 375, dark and light, read as one produ
 ```
 git push -u origin polish/harmony
 gh pr create --base main --head polish/harmony --title "web: design harmony pass" --body-file <file>
-gh pr merge 97 --merge
+gh pr merge <n> --merge
 ```
 
 ## Shop hardening (branch `fix/shop-hardening`)
@@ -437,7 +477,7 @@ gh pr merge 51 --merge
 ```
 git push -u origin feat/activity
 gh pr create --base main --head feat/activity
-gh pr merge 97 --merge   (only after all checks were green and the new database suite ran in the CI log)
+gh pr merge <n> --merge   (only after all checks were green and the new database suite ran in the CI log)
 ```
 
 ## Chat cosmetics (branch `feat/cosmetics`)
@@ -475,7 +515,7 @@ Report: `docs/security/assessment-2026-11.md`. 0 critical, 2 high, 14 medium, 19
 
 #### GitHub write log
 - `gh pr create --base main` for each fix branch (`sec/web-headers`, `sec/media`, `sec/role-seniority`, `sec/text-sanitize`, `sec/emote-edit-review`, `sec/gql-ws`), `-R cyex-tv/extension` for `sec/extension`, `-R cyex-tv/infra` for `sec/infra`.
-- `gh pr merge 97 --merge` for 40, 41, 42, 39, 43, 38; `gh pr merge 10 -R cyex-tv/extension --merge`.
+- `gh pr merge <n> --merge` for 40, 41, 42, 39, 43, 38; `gh pr merge 10 -R cyex-tv/extension --merge`.
 
 ## Phase 8: Browser extension (merged, in `cyex-tv/extension`)
 

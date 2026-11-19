@@ -483,17 +483,25 @@ pub async fn account(state: &AppState, id: &str) -> ApiResult<Option<AccountSumm
 
 pub const EMOTE_CHANNELS: u32 = 8;
 pub const EMOTE_CHANNELS_MAX: u32 = 50;
+/// How far into the list `offset` may reach (a page past it is empty).
+pub const EMOTE_CHANNELS_OFFSET_MAX: u32 = 10_000;
 
-/// Channels showing a public emote. Unknown, pending, private and deleted emotes have none.
+/// Channels showing a public emote, `offset` rows in (for paging). Unknown, pending, private and
+/// deleted emotes have none.
 pub async fn emote_channels(
     state: &AppState,
     id: &str,
     limit: Option<u32>,
+    offset: Option<u32>,
 ) -> ApiResult<Vec<Channel>> {
     let Some(id) = ids::from_text(id.trim()) else {
         return Ok(Vec::new());
     };
     let limit = limit.unwrap_or(EMOTE_CHANNELS).clamp(1, EMOTE_CHANNELS_MAX);
+    let offset = offset.unwrap_or(0);
+    if offset > EMOTE_CHANNELS_OFFSET_MAX {
+        return Ok(Vec::new());
+    }
     let mut conn = conn(state).await?;
     let rows = reads::emotes(&mut conn, &[id]).await.map_err(db_error)?;
     let row = rows
@@ -507,7 +515,7 @@ pub async fn emote_channels(
     if !public {
         return Ok(Vec::new());
     }
-    let chs = reads::emote_channels(&mut conn, id, i64::from(limit))
+    let chs = reads::emote_channels(&mut conn, id, i64::from(limit), i64::from(offset))
         .await
         .map_err(db_error)?;
     views::channels_of(&mut conn, &chs).await.map_err(db_error)
