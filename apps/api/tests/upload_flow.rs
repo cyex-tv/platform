@@ -99,6 +99,46 @@ struct Reply {
     body: Value,
 }
 
+fn crc32(data: &[u8]) -> u32 {
+    let mut crc = 0xffff_ffffu32;
+    for &byte in data {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            crc = if crc & 1 == 1 {
+                (crc >> 1) ^ 0xedb8_8320
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    !crc
+}
+
+/// A valid small PNG padded to exactly `total` bytes with a private ancillary chunk after IHDR:
+/// a big file that is still a valid (small) picture.
+fn padded_png(seed: u8, total: usize) -> Vec<u8> {
+    let small = png(64, 64, seed);
+    let data_len = total - small.len() - 12;
+    let mut chunk = Vec::with_capacity(data_len + 12);
+    chunk.extend_from_slice(&u32::try_from(data_len).unwrap().to_be_bytes());
+    chunk.extend_from_slice(b"prVt");
+    chunk.resize(8 + data_len, 0x5a);
+    let crc = crc32(&chunk[4..]);
+    chunk.extend_from_slice(&crc.to_be_bytes());
+    let mut out = small[..33].to_vec();
+    out.extend_from_slice(&chunk);
+    out.extend_from_slice(&small[33..]);
+    assert_eq!(out.len(), total);
+    out
+}
+
+fn jpeg(w: u32, h: u32, seed: u8) -> Vec<u8> {
+    let rgb = image::DynamicImage::ImageRgba8(picture(w, h, seed)).to_rgb8();
+    let mut out = Cursor::new(Vec::new());
+    rgb.write_to(&mut out, ImageFormat::Jpeg).unwrap();
+    out.into_inner()
+}
+
 const BOUNDARY: &str = "cyextvboundary7MA4YWxkTrZu0gW";
 
 /// A multipart body: text fields, then the file if given.
@@ -464,7 +504,7 @@ async fn bad_files_are_refused() {
     let svg = b"<?xml version=\"1.0\"?><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\"/>".to_vec();
     let video = b"\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00isommp42".to_vec();
     let mut oversized = png(16, 16, 1);
-    oversized.resize(5 * 1024 * 1024 + 1, 0);
+    oversized.resize(8 * 1024 * 1024 + 1, 0);
 
     for (case, file, status, code) in [
         (
@@ -501,11 +541,18 @@ async fn bad_files_are_refused() {
         let r = w.upload(&alice, "nope", &file).await;
         assert_eq!(r.status, status, "{case}: {:?}", r.body);
         assert_eq!(r.body["error"], code, "{case}");
+        if case == "oversized" {
+            // Said plainly, with the limit in it.
+            assert_eq!(
+                r.body["message"],
+                "The file is over 8 MB, the most an upload can be.",
+            );
+        }
         if code == "invalid_image" {
             // The decoder's own words stay in the logs.
             assert_eq!(
                 r.body["message"],
-                "That file isn't a valid image. Try a PNG, GIF or WebP that opens elsewhere.",
+                "That file isn't a valid image. Try a PNG, GIF, WebP or JPEG that opens elsewhere.",
                 "{case}"
             );
         }
@@ -673,5 +720,107 @@ async fn without_storage_uploads_are_unavailable() {
         (StatusCode::SERVICE_UNAVAILABLE, Some("unavailable"))
     );
     assert_eq!(w.count("SELECT count(*) FROM emotes").await, 0);
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn files_up_to_8_mb_and_jpeg_are_taken() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let alice = w.user("81").await;
+
+    // Over the old 5 MB, under 8 MB: taken, and the original is kept as sent.
+    let six = padded_png(81, 6 * 1024 * 1024);
+    let r = w.upload(&alice, "sixMegs", &six).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
+    let stored = w
+        .store
+        .get(&format!("originals/{}", sha_hex(&six)))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.bytes.len(), six.len());
+
+    // Exactly 8 MB is the most; one byte more is refused before it is decoded.
+    let full = padded_png(82, 8 * 1024 * 1024);
+    let r = w.upload(&alice, "eightMegs", &full).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
+    let over = padded_png(83, 8 * 1024 * 1024 + 1);
+    let r = w.upload(&alice, "overEight", &over).await;
+    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{:?}", r.body);
+    assert_eq!(r.body["error"], "too_large");
+    assert_eq!(
+        r.body["message"],
+        "The file is over 8 MB, the most an upload can be."
+    );
+
+    // JPEG: a still emote, stored as image/jpeg, transcoded like any other.
+    let file = jpeg(96, 64, 84);
+    let r = w.upload(&alice, "jpegOne", &file).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
+    assert_eq!(r.body["animated"], false);
+    let stored = w
+        .store
+        .get(&format!("originals/{}", sha_hex(&file)))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stored.content_type.as_deref(), Some("image/jpeg"));
+    assert_eq!(
+        w.count(
+            "SELECT count(*) FROM files WHERE mime = 'image/jpeg' AND width = 96 AND height = 64"
+        )
+        .await,
+        1
+    );
+    assert_eq!(
+        w.count("SELECT count(*) FROM jobs WHERE kind = 'emote.transcode'")
+            .await,
+        3
+    );
+    // Only the over-limit file left nothing behind.
+    assert_eq!(w.count("SELECT count(*) FROM emotes").await, 3);
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn the_upload_dialog_flags_arrive_together() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let alice = w.user("85").await;
+    // What the website's upload dialog sends: zero-width, NSFW and unlisted at once.
+    let r = w
+        .post(
+            Some(&alice),
+            form(
+                &[
+                    ("name", "rainOver"),
+                    ("tags", "rain,weather,overlay"),
+                    ("zero_width", "true"),
+                    ("nsfw", "true"),
+                    ("visibility", "unlisted"),
+                ],
+                Some(&png(40, 40, 85)),
+            ),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
+    assert_eq!(r.body["flags"]["zero_width"], true);
+    assert_eq!(r.body["flags"]["nsfw"], true);
+    assert_eq!(r.body["flags"]["private"], false);
+    assert_eq!(r.body["visibility"], "unlisted");
+    assert_eq!(r.body["tags"], json!(["overlay", "rain", "weather"]));
+    let stored: (bool, bool, bool, bool) = {
+        let mut conn = w.db.conn().await;
+        sqlx::query_as(
+            "SELECT zero_width, nsfw, private, unlisted FROM emotes WHERE name = 'rainOver'",
+        )
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap()
+    };
+    assert_eq!(stored, (true, true, false, true));
     w.db.close().await;
 }

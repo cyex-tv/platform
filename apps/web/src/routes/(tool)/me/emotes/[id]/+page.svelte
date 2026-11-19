@@ -8,7 +8,8 @@
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
   import { ADD_SET_EMOTE, DELETE_EMOTE, EMOTE, MY_SETS, UPDATE_EMOTE } from '$lib/queries';
   import { sectionHref } from '$lib/profile/rows';
-  import { nameProblem, parseTags, tagsProblem } from '$lib/rules';
+  import { TAG_MAX, cleanTag, nameProblem, tagsProblem } from '$lib/rules';
+  import TagInput from '$lib/components/TagInput.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
@@ -29,7 +30,7 @@
   let target = $state('');
 
   let name = $state('');
-  let tagText = $state('');
+  let tags = $state<string[]>([]);
   let zeroWidth = $state(false);
   let visibility = $state<EmoteVisibility>('PUBLIC');
   let nsfw = $state(false);
@@ -38,7 +39,6 @@
   let adding = $state(false);
 
   const nameError = $derived(nameProblem(name));
-  const tags = $derived(parseTags(tagText));
   const tagError = $derived(tagsProblem(tags));
   const mine = $derived(emote?.owner?.id === session.me?.id);
   // Staff edit and delete anyone's emote with emotes.edit_any / emotes.delete_any (the API checks and audits).
@@ -47,7 +47,7 @@
   const changed = $derived(
     emote !== null &&
       (name.trim() !== emote.name ||
-        tags.join(',') !== emote.tags.join(',') ||
+        [...tags].sort().join(',') !== [...emote.tags].sort().join(',') ||
         zeroWidth !== emote.flags.zeroWidth ||
         visibility !== visibilityOf(emote) ||
         nsfw !== emote.flags.nsfw),
@@ -56,7 +56,7 @@
   function fill(e: EmoteFieldsFragment) {
     emote = e;
     name = e.name;
-    tagText = e.tags.join(', ');
+    tags = [...e.tags];
     zeroWidth = e.flags.zeroWidth;
     visibility = visibilityOf(e);
     nsfw = e.flags.nsfw;
@@ -199,11 +199,11 @@
             <input class="ui-input" bind:value={name} maxlength="100" spellcheck="false" aria-invalid={nameError ? 'true' : undefined} />
             {#if nameError}<span class="ui-error">{nameError}</span>{/if}
           </label>
-          <label class="ui-field">
-            <span class="ui-label">Tags</span>
-            <input class="ui-input" bind:value={tagText} placeholder="cat, dance" aria-invalid={tagError ? 'true' : undefined} />
+          <div class="ui-field">
+            <TagInput label="Tags" showLabel {tags} onchange={(t) => (tags = t)} max={TAG_MAX} clean={cleanTag}
+              placeholder="cat, dance" hint="Enter or a comma adds a tag. Up to {TAG_MAX}." disabled={saving} id="edit-tags" />
             {#if tagError}<span class="ui-error">{tagError}</span>{/if}
-          </label>
+          </div>
           <EmoteFlags id="edit" bind:zeroWidth bind:visibility bind:nsfw disabled={saving} />
           <div class="ui-actions">
             <button class="ui-btn primary" type="submit" disabled={saving || !changed || !!nameError || !!tagError}>

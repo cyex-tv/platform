@@ -1,6 +1,6 @@
 //! `POST /v1/emotes`: an upload becomes a pending emote (PLAN.md Phase 3, steps 1 to 3 and 6).
 //!
-//! 1. The file is read with a hard cap, so an oversized one stops at 5 MB (`too_large`).
+//! 1. The file is read with a hard cap, so an oversized one stops at 8 MB (`too_large`).
 //! 2. It is decoded in full under the limits (`crates/media`), never trusted by name or type.
 //! 3. Its sha256 and dHash are checked against the blocklist. A file seen before is reused:
 //!    same object, same URLs, no second transcode.
@@ -64,10 +64,18 @@ pub fn media_error(err: MediaError) -> ApiError {
 
 /// What a client hears about a file that doesn't decode.
 pub const INVALID_IMAGE: &str =
-    "That file isn't a valid image. Try a PNG, GIF or WebP that opens elsewhere.";
+    "That file isn't a valid image. Try a PNG, GIF, WebP or JPEG that opens elsewhere.";
 
+/// An emote file over 8 MB: refused while it is read, before any of it is decoded.
 pub fn too_large() -> ApiError {
-    media_error(MediaError::TooLarge("the file is over 5 MB".into()))
+    too_large_for(&Limits::emote())
+}
+
+/// A file over `limits.max_bytes`.
+pub fn too_large_for(limits: &Limits) -> ApiError {
+    media_error(MediaError::TooLarge(cyex_tv_media::too_large_message(
+        limits,
+    )))
 }
 
 /// What the form gave us.
@@ -146,7 +154,7 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
     // Decoding is CPU work; keep it off the request threads.
     let file = input.file.clone();
     let probe: Probe =
-        tokio::task::spawn_blocking(move || cyex_tv_media::probe(&file, &Limits::default()))
+        tokio::task::spawn_blocking(move || cyex_tv_media::probe(&file, &Limits::emote()))
             .await
             .map_err(|_| ApiError::internal())?
             .map_err(media_error)?;
@@ -314,6 +322,14 @@ mod tests {
             StatusCode::UNSUPPORTED_MEDIA_TYPE
         );
         assert_eq!(too_large().status, StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(
+            too_large().message,
+            "The file is over 8 MB, the most an upload can be."
+        );
+        assert_eq!(
+            too_large_for(&Limits::default()).message,
+            "The file is over 5 MB, the most an upload can be."
+        );
         assert_eq!(
             media_error(MediaError::Invalid("x".into())).code,
             "invalid_image"

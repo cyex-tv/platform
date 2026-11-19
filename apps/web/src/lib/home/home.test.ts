@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { capable, type Env } from './capable';
 import { PINNED, isInstaller, newer, pick, validCache } from './deck-release';
 import { STORES, listed, storeFor } from './stores';
+import { HOLD, REST, TURN, pose } from './logo-motion';
 
 const DL = 'https://github.com/cyex-app/cyex-deck/releases/download/';
 const rel = (tag: string, at: string, o: { draft?: boolean; pre?: boolean; assets?: { name: string; url: string }[] } = {}) => ({
@@ -112,5 +113,44 @@ describe('3D logo gate', () => {
     const env = { ...fine, reducedMotion: true, get webgl() { probed = true; return true; } };
     capable(env);
     expect(probed).toBe(false);
+  });
+});
+
+describe('3D logo motion', () => {
+  const near = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) < eps;
+
+  it('starts in the still pose, the one the static image shows', () => {
+    expect(pose(0)).toEqual(REST);
+    expect(pose(HOLD - 0.01)).toEqual(REST);
+  });
+
+  it('makes one full turn after the hold, and ends where it began', () => {
+    const end = pose(HOLD + TURN);
+    expect(near(end.yaw, REST.yaw + Math.PI * 2)).toBe(true);
+    expect(near(end.pitch, REST.pitch)).toBe(true);
+    expect(near(pose(HOLD + TURN / 2).yaw, REST.yaw + Math.PI)).toBe(true);
+  });
+
+  it('never jumps between frames, through the turn and into the sway', () => {
+    let prev = pose(0);
+    for (let t = 1 / 60; t < 20; t += 1 / 60) {
+      const p = pose(t);
+      expect(Math.abs(p.yaw - prev.yaw)).toBeLessThan(0.11); // the turn peaks at 3 × 2π / TURN rad/s, about 0.1 a frame
+      expect(Math.abs(p.lift - prev.lift)).toBeLessThan(0.05);
+      prev = p;
+    }
+  });
+
+  it('sways visibly once settled, within bounds', () => {
+    const yaws = Array.from({ length: 600 }, (_, i) => pose(HOLD + TURN + 5 + i * 0.05).yaw - Math.PI * 2);
+    expect(Math.max(...yaws) - Math.min(...yaws)).toBeGreaterThan(0.6);
+    expect(Math.max(...yaws.map((y) => Math.abs(y - REST.yaw)))).toBeLessThan(0.5);
+  });
+
+  it('turns further and brings the lit bar forward as the hero scrolls away', () => {
+    const t = HOLD + TURN + 30;
+    expect(pose(t, 1).lift).toBeGreaterThan(pose(t, 0).lift + 2);
+    expect(pose(t, 1).yaw).toBeGreaterThan(pose(t, 0).yaw);
+    expect(pose(t, 5)).toEqual(pose(t, 1));
   });
 });

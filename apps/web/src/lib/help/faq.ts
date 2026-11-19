@@ -57,7 +57,7 @@ export const HELP: HelpGroup[] = [
   ]),
   group('uploading', 'Uploading', [
     ['what-files', 'What files can I upload?',
-      'PNG, APNG, GIF or WebP, up to 5 MB, 1000 × 1000 px and 1000 frames. Square or wide works; very tall emotes look small in chat. You can [upload several at once](/me/upload).'],
+      'PNG, APNG, GIF, WebP or JPEG, up to 8 MB, 1000 × 1000 px and 1000 frames. Square or wide works; very tall emotes look small in chat. You can [upload several at once](/me/upload); the [emote guidelines](/guidelines) say what’s allowed.'],
     ['why-pending', 'Why is my emote pending?',
       'Every upload is checked by a moderator before others can find it. While it’s pending you can already use it in your own sets and channel.'],
     ['zero-width', 'What is a zero-width emote?',

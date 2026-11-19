@@ -2,14 +2,16 @@
 //! that it stays inside the limits, frame by frame, so a small file can't expand into gigabytes.
 //! Also its dHash, for the near-duplicate blocklist.
 //!
-//! Inputs: PNG, APNG, GIF and WebP (still and animated). AVIF is recognised but refused for now:
-//! decoding it needs dav1d, a C library (see PROGRESS.md). SVG and video are refused.
+//! Inputs: PNG, APNG, GIF and WebP (still and animated), and JPEG (still). AVIF is recognised but
+//! refused for now: decoding it needs dav1d, a C library (see PROGRESS.md). SVG and video are
+//! refused.
 //!
 //! Written for emotes, but nothing here is emote-specific, so cosmetic badge art can use it.
 
 use std::io::Cursor;
 
 use image::codecs::gif::GifDecoder;
+use image::codecs::jpeg::JpegDecoder;
 use image::codecs::png::PngDecoder;
 use image::codecs::webp::WebPDecoder;
 use image::imageops::FilterType;
@@ -20,6 +22,8 @@ pub enum Format {
     Png,
     Gif,
     Webp,
+    /// Still only; no alpha.
+    Jpeg,
     Avif,
 }
 
@@ -29,10 +33,16 @@ impl Format {
             Self::Png => "image/png",
             Self::Gif => "image/gif",
             Self::Webp => "image/webp",
+            Self::Jpeg => "image/jpeg",
             Self::Avif => "image/avif",
         }
     }
 }
+
+/// The file size cap of [`Limits::default`] (cosmetic pictures): 5 MB.
+pub const DEFAULT_MAX_BYTES: usize = 5 * 1024 * 1024;
+/// The file size cap of an emote upload ([`Limits::emote`]): 8 MB.
+pub const EMOTE_MAX_BYTES: usize = 8 * 1024 * 1024;
 
 /// Upload limits (PLAN.md Phase 3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -47,12 +57,31 @@ pub struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Self {
-            max_bytes: 5 * 1024 * 1024,
+            max_bytes: DEFAULT_MAX_BYTES,
             max_side: 1000,
             max_frames: 1000,
             max_total_pixels: 100_000_000,
         }
     }
+}
+
+impl Limits {
+    /// An emote upload's limits: the defaults, with files up to 8 MB. The API checks uploads with
+    /// these and the worker decodes the originals with them, so the two always agree.
+    pub fn emote() -> Self {
+        Self {
+            max_bytes: EMOTE_MAX_BYTES,
+            ..Self::default()
+        }
+    }
+}
+
+/// What a client hears about a file over `limits.max_bytes`.
+pub fn too_large_message(limits: &Limits) -> String {
+    format!(
+        "The file is over {} MB, the most an upload can be.",
+        limits.max_bytes / (1024 * 1024)
+    )
 }
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -94,6 +123,9 @@ pub fn sniff(bytes: &[u8]) -> Option<Format> {
     }
     if bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP" {
         return Some(Format::Webp);
+    }
+    if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        return Some(Format::Jpeg);
     }
     if bytes.len() >= 12 && &bytes[4..8] == b"ftyp" && matches!(&bytes[8..12], b"avif" | b"avis") {
         return Some(Format::Avif);
@@ -189,13 +221,10 @@ pub fn decode_frames(
     on_frame: &mut OnFrame<'_>,
 ) -> Result<(Canvas, u32), MediaError> {
     if bytes.len() > limits.max_bytes {
-        return Err(MediaError::TooLarge(format!(
-            "the file is over {} MB",
-            limits.max_bytes / (1024 * 1024)
-        )));
+        return Err(MediaError::TooLarge(too_large_message(limits)));
     }
     let format = sniff(bytes).ok_or(MediaError::Unsupported(
-        "Upload PNG, APNG, GIF or WebP. SVG and video aren't supported.",
+        "Upload PNG, APNG, GIF, WebP or JPEG. SVG and video aren't supported.",
     ))?;
     let canvas = |width, height| Canvas {
         format,
@@ -204,7 +233,7 @@ pub fn decode_frames(
     };
     match format {
         Format::Avif => Err(MediaError::Unsupported(
-            "AVIF uploads aren't supported yet. Upload PNG, APNG, GIF or WebP.",
+            "AVIF uploads aren't supported yet. Upload PNG, APNG, GIF, WebP or JPEG.",
         )),
         Format::Png => {
             let mut decoder = PngDecoder::new(Cursor::new(bytes)).map_err(invalid)?;
@@ -227,6 +256,15 @@ pub fn decode_frames(
             check_side(width, height, limits)?;
             let c = canvas(width, height);
             let count = walk(decoder.into_frames(), &c, limits, on_frame)?;
+            Ok((c, count))
+        }
+        Format::Jpeg => {
+            let mut decoder = JpegDecoder::new(Cursor::new(bytes)).map_err(invalid)?;
+            decoder.set_limits(decoder_limits()).map_err(invalid)?;
+            let (width, height) = decoder.dimensions();
+            check_side(width, height, limits)?;
+            let c = canvas(width, height);
+            let count = still(decoder, &c, on_frame)?;
             Ok((c, count))
         }
         Format::Webp => {
