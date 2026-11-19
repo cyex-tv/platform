@@ -18,3 +18,9 @@
 ## Consequences
 - A private set the caller may not see answers exactly like a set that doesn't exist (null, 404), so its existence doesn't leak.
 - Making a set unlisted or private also hides its past activity lines, since the feed checks the set's visibility now, not when the line was written.
+
+## Amendment (owner feedback, 2026/11/19): default sets
+- Every account has a default set: a listed channel set named after its display name (cut to 100 characters), owned like any other set. The sign-in flow makes it when a sign-in creates the account (`sets::create_default`); linking a second platform doesn't make another.
+- Migration `20261207000011_default_sets.sql` gives every live account that has no channel set of that name (any case) one, with a ULID stamped with the account's creation time so it sorts before the account's other sets. Running it again adds nothing.
+- It isn't made the channels' active set: the owner picks it with "Use on my channel" on the set page (`updateChannelSettings`), like any other set.
+- Tests: `default_sets_are_backfilled_once_for_accounts_without_one` and the sign-in checks in `auth_flow.rs`.

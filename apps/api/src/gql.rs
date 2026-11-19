@@ -1098,7 +1098,8 @@ impl Mutation {
 
     /// Make someone an editor of your account, or of an account you edit with `EDITORS` (ADR
     /// 0014). Give their account ID, or a platform and login. You can only grant permissions you
-    /// hold. At most 20 editors per account. Audited.
+    /// hold. `setIds` limits them to some of the account's sets; leave it out for every set, new
+    /// ones included. At most 50 editors per account (`too_many_editors`). Audited.
     async fn add_account_editor(
         &self,
         ctx: &Context<'_>,
@@ -1111,6 +1112,7 @@ impl Mutation {
     }
 
     /// Change an account editor's permissions. `ownerId` is the account edited; empty for yours.
+    /// `setIds` changes which sets they work on: empty for every set, left out to keep them.
     /// Audited.
     async fn update_account_editor(
         &self,
@@ -1118,6 +1120,7 @@ impl Mutation {
         owner_id: Option<String>,
         account_id: String,
         permissions: Vec<EditorPermission>,
+        set_ids: Option<Vec<String>>,
     ) -> Result<AccountEditor> {
         let caller = caller(ctx)?;
         editors::update(
@@ -1126,6 +1129,7 @@ impl Mutation {
             owner_id.as_deref(),
             &account_id,
             &permissions,
+            set_ids.as_deref(),
         )
         .await
         .map_err(api_error)

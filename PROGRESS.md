@@ -2,6 +2,26 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Sets and editors (branch `feat/sets-editors`, owner feedback 2026/11/19 section E)
+
+Additive API, new migrations only; nothing was deployed. ADR 0014 and 0017 amended.
+
+- [x] Default sets: a new account gets a listed channel set named after its display name at sign-up (`sets::create_default`, from the sign-in flow); migration `20261207000011_default_sets.sql` gives one to every live account without a channel set of that name.
+- [x] Set page: "Use on my channel" lists the owner's channels (yours, or theirs when you hold `CHANNELS`/`SETS`) and sets the active set through `updateChannelSettings`; the line under the title names the channels showing it.
+- [x] Set page "Add emotes": one search field, searched on Enter only; your matching uploads first (pending too, except for a personal set), then everyone's; a list with its own scroll and an Add button per row; empty and error states.
+- [x] The per-set editors field is gone from the set page; a card links to the Editors page.
+- [x] Editors page: find people by name (`searchAccounts`), Add opens the permissions dialog (groups: Emote sets, Emotes, Profile, Channels, Billing and subscription, Editors; "Everything"; "Sets they can edit", default all sets). Change opens the same dialog. 50 editors per account (`too_many_editors`).
+- [x] API: new flags `CHANNELS`, `EMOTE_UPLOAD`, `EMOTE_MANAGE`, `EMOTE_TRANSFER`, `BILLING_PAYMENT`, `BILLING_SUBSCRIPTION` (migration `20261207000010_sets_editors.sql`); set scope (`allSets`, `setIds`) on grants, enforced in every set mutation, private-set reads, `editorSets` and the active set; limited managers can't widen scopes; `AccountProfile.editors` (names only). Audit rows carry the scope.
+- Tests: `apps/api/tests/sets_editors_flow.rs` (scope can/can't, limited managers, new flags, 50-editor cap, public editors, backfill), `auth_flow.rs` (default set at sign-up, none on re-sign-in or link), `sec_account_editors.rs` (rate limit), unit tests in `editors.rs`; vitest `lib/tool/editors.test.ts` (dialog permission model), `lib/tool/add-emotes.test.ts`.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/sets-editors
+gh pr create --base main --head feat/sets-editors --title "Sets and editors: default sets, use on channel, editor permissions dialog" --body-file <file>
+gh pr merge <n> --merge
+```
+
 ## Header search, nav, notifications and mark (branch `feat/header-search`)
 
 Owner feedback 2026/11/19, section A. Additive API; nothing was deployed.

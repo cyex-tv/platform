@@ -144,6 +144,18 @@ pub async fn create_with(
     })
 }
 
+/// A new account's default set: a listed channel set named after the account (ADR 0017). The
+/// name is cut to the 100 characters a set name may have.
+pub async fn create_default(conn: &mut PgConnection, owner: Uuid, name: &str) -> DbResult<Set> {
+    let name: String = name.chars().take(100).collect();
+    let name = if name.trim().is_empty() {
+        "Emotes".to_owned()
+    } else {
+        name
+    };
+    create_with(conn, owner, &name, SetKind::Channel, None).await
+}
+
 /// The global set (D12), made on first use.
 pub async fn ensure_global(conn: &mut PgConnection) -> DbResult<Set> {
     let select = format!("SELECT {SET} FROM emote_sets WHERE kind = 'global'");
@@ -187,6 +199,17 @@ pub async fn list_for_owner(conn: &mut PgConnection, owner: Uuid) -> DbResult<Ve
         "SELECT {SET} FROM emote_sets WHERE owner_account_id = $1 ORDER BY id"
     ))
     .bind(owner)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// Which of `ids` are sets `owner` owns (any kind but global).
+pub async fn owned_ids(conn: &mut PgConnection, owner: Uuid, ids: &[Uuid]) -> DbResult<Vec<Uuid>> {
+    Ok(sqlx::query_scalar(
+        "SELECT id FROM emote_sets WHERE owner_account_id = $1 AND id = ANY($2) ORDER BY id",
+    )
+    .bind(owner)
+    .bind(ids)
     .fetch_all(conn)
     .await?)
 }

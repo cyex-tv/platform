@@ -565,6 +565,9 @@ const AUDIT = Array.from({ length: 64 }, (_, i) => ({
   before: i % 4 === 3 ? JSON.stringify({ uploads_blocked: false, blocked: false }) : null,
   after: JSON.stringify({ state: 'APPROVED', n: i }), createdAt: new Date(Date.UTC(2026, 10, 16, 22, 0, 0) - i * 600_000).toISOString(),
 }));
+// Every account has a default set named after it (made at sign-up).
+SETS.push({ id: '01JD8XSET000000000000DEFLT', name: ME_SUMMARY.displayName, kind: 'CHANNEL', capacity: 1000, owner: ME_SUMMARY,
+  emotes: [], editors: [], visibility: 'LISTED', createdAt: '2026-11-10T12:00:00.000Z' });
 const CHANNELS = [
   { platform: 'TWITCH', platformChannelId: '141981764', login: 'lumen_fox', activeSetId: SETS[0].id, allowPersonalEmotes: true, account: ME_SUMMARY },
 ];
@@ -588,15 +591,39 @@ else if (Number(process.env.MOCK_NOTES) > NOTES.length) {
   NOTES.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 // Account editors (ADR 0014): two people work on the mock account, and it works on two others'.
-const EDITOR_FLAGS = ['EMOTES', 'SETS', 'EDITORS', 'PROFILE'];
+// Flags in the API's order; SETS brings CHANNELS. A grant covers every set (allSets) or setIds.
+const EDITOR_FLAGS = ['EMOTES', 'SETS', 'EDITORS', 'PROFILE', 'CHANNELS', 'EMOTE_UPLOAD', 'EMOTE_MANAGE', 'EMOTE_TRANSFER', 'BILLING_PAYMENT', 'BILLING_SUBSCRIPTION'];
+const MAX_EDITORS = 50;
+const withImplied = (flags) => EDITOR_FLAGS.filter((f) => flags.includes(f) || (f === 'CHANNELS' && flags.includes('SETS')));
 const ACCOUNT_EDITORS = [
-  { account: OTHERS[1], permissions: ['EMOTES'], grantedBy: ME_SUMMARY, grantedAt: '2026-11-12T10:00:00.000Z', updatedAt: '2026-11-12T10:00:00.000Z' },
-  { account: OTHERS[2], permissions: ['EMOTES', 'SETS', 'EDITORS'], grantedBy: ME_SUMMARY, grantedAt: '2026-11-14T18:30:00.000Z', updatedAt: '2026-11-14T18:30:00.000Z' },
+  { account: OTHERS[1], permissions: ['EMOTES'], allSets: false, setIds: ['01JD8XSET00000000000000MAIN'], grantedBy: ME_SUMMARY, grantedAt: '2026-11-12T10:00:00.000Z', updatedAt: '2026-11-12T10:00:00.000Z' },
+  { account: OTHERS[2], permissions: ['EMOTES', 'SETS', 'EDITORS', 'CHANNELS'], allSets: true, setIds: [], grantedBy: ME_SUMMARY, grantedAt: '2026-11-14T18:30:00.000Z', updatedAt: '2026-11-14T18:30:00.000Z' },
 ];
 const EDITOR_OF = [
-  { account: OTHERS[0], permissions: ['EMOTES', 'SETS'], grantedAt: '2026-11-13T09:00:00.000Z' },
-  { account: OTHERS[4], permissions: ['EMOTES', 'PROFILE'], grantedAt: '2026-11-15T20:00:00.000Z' },
+  { account: OTHERS[0], permissions: ['EMOTES', 'SETS', 'CHANNELS'], allSets: true, setIds: [], grantedAt: '2026-11-13T09:00:00.000Z' },
+  { account: OTHERS[4], permissions: ['EMOTES', 'PROFILE'], allSets: true, setIds: [], grantedAt: '2026-11-15T20:00:00.000Z' },
 ];
+// MOCK_EDITORS=50: the account is at the editor limit.
+if (process.env.MOCK_EDITORS === '50') {
+  for (let i = ACCOUNT_EDITORS.length; i < MAX_EDITORS; i++) {
+    ACCOUNT_EDITORS.push({ account: { id: `01JD8X00000000000000ED${String(i).padStart(4, '0')}`, displayName: `editor_${i}`, avatar: null },
+      permissions: ['EMOTES'], allSets: true, setIds: [], grantedBy: ME_SUMMARY, grantedAt: '2026-11-16T10:00:00.000Z', updatedAt: '2026-11-16T10:00:00.000Z' });
+  }
+}
+// Which sets the mock account's grant on an owner covers.
+const coversSet = (ownerId, setId) => {
+  if (ownerId === ME_ID) return true;
+  const g = EDITOR_OF.find((x) => x.account.id === ownerId);
+  return !!g && (g.allSets || g.setIds.includes(setId));
+};
+// The sets of ME_ID's account an add or change names, or an error.
+const scopeFrom = (setIds) => {
+  const ids = [...new Set(setIds ?? [])];
+  if (!ids.length) return { allSets: true, setIds: [] };
+  if (ids.length > 200) return { error: err('Pick at most 200 sets, or let them work on every set.', 'too_many_sets') };
+  if (!ids.every((id) => SETS.some((s) => s.id === id && s.owner?.id === ME_ID))) return { error: err('Pick sets of this account.', 'bad_set') };
+  return { allSets: false, setIds: ids };
+};
 const SHARED_SETS = [
   { id: '01JD8XSET0000000000000OAKAL', name: 'quietoak cozy', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[0],
     emotes: ALL.slice(70, 78).map((e) => member(e)), editors: [], visibility: 'PRIVATE', createdAt: '2026-11-13T09:10:00.000Z' },
@@ -629,9 +656,9 @@ const EDITOR_CHANNELS = [
   { platform: 'TWITCH', platformChannelId: '55500003', login: 'sunnyfern', activeSetId: SHARED_SETS[1].id, allowPersonalEmotes: true, account: OTHERS[4] },
 ];
 // The sets of the accounts the mock account edits: theirs among SETS (per-set grants) and SHARED_SETS.
-const editorSets = () => [...SETS, ...SHARED_SETS].filter((s) => s.owner && EDITOR_OF.some((g) => g.account.id === s.owner.id));
+const editorSets = () => [...SETS, ...SHARED_SETS].filter((s) => s.owner && EDITOR_OF.some((g) => g.account.id === s.owner.id) && coversSet(s.owner.id, s.id));
 const editorChannels = () => EDITOR_CHANNELS.filter((c) => EDITOR_OF.some((g) => g.account.id === c.account.id));
-const flagsOn = (ownerId) => (ownerId === ME_ID ? EDITOR_FLAGS : EDITOR_OF.find((g) => g.account.id === ownerId)?.permissions ?? []);
+const flagsOn = (ownerId) => (ownerId === ME_ID ? EDITOR_FLAGS : withImplied(EDITOR_OF.find((g) => g.account.id === ownerId)?.permissions ?? []));
 const editorOfOut = () => EDITOR_OF.map((g) => ({ ...g }));
 
 const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view', 'cosmetics.manage', 'cosmetics.grant', 'shop.manage', 'shop.orders', 'codes.manage',
@@ -1388,8 +1415,9 @@ function signedIn(body, v, ADMIN) {
       return { data: { reportEmote: { id: 'R' + Date.now() } } };
     case 'EditSet': {
       const s = findSet(v.id);
-      if (!s) return { data: { set: null, setEditors: [], editorOf: editorOfOut() } };
-      return { data: { set: setOut(s), setEditors: s.editors, editorOf: editorOfOut() } };
+      const channels = { myChannels: CHANNELS, editorChannels: editorChannels() };
+      if (!s) return { data: { set: null, setEditors: [], editorOf: editorOfOut(), ...channels } };
+      return { data: { set: setOut(s), setEditors: s.editors, editorOf: editorOfOut(), ...channels } };
     }
     case 'CreateSet': {
       const ownerId = v.input.ownerId || ME_ID;
@@ -1467,8 +1495,14 @@ function signedIn(body, v, ADMIN) {
     }
     case 'UpdateChannel': {
       const c = [...CHANNELS, ...editorChannels()].find((x) => x.platform === v.platform && x.platformChannelId === v.id);
-      if (!c || !flagsOn(c.account.id).includes('SETS'))
-        return err('Only the channel’s owner and its account editors with the sets permission can change it.', 'forbidden');
+      if (!c || !flagsOn(c.account.id).includes('CHANNELS'))
+        return err('Only the channel’s owner and its account editors with the channels permission can change it.', 'forbidden');
+      if (v.input.activeSetId) {
+        const target = findSet(v.input.activeSetId);
+        if (!target || target.kind !== 'CHANNEL' || target.owner?.id !== c.account.id)
+          return err('The active set must be one of the channel owner’s channel sets.', 'invalid_active_set');
+        if (!coversSet(c.account.id, target.id)) return err('You can only show sets you work on. Ask the owner to add this one to your sets.', 'forbidden');
+      }
       if (v.input.activeSetId !== undefined) c.activeSetId = v.input.activeSetId || null;
       if (v.input.allowPersonalEmotes !== undefined) c.allowPersonalEmotes = v.input.allowPersonalEmotes;
       return { data: { updateChannelSettings: { activeSetId: c.activeSetId, allowPersonalEmotes: c.allowPersonalEmotes } } };
@@ -1492,18 +1526,20 @@ function signedIn(body, v, ADMIN) {
       return { data: { accountRoles: rolesOf(v.accountId) } };
     }
     case 'Editors':
-      return { data: { accountEditors: ACCOUNT_EDITORS, editorOf: editorOfOut() } };
+      return { data: { accountEditors: ACCOUNT_EDITORS, editorOf: editorOfOut(), mySets: SETS.map((x) => ({ id: x.id, name: x.name, kind: x.kind, owner: x.owner ? { id: x.owner.id } : null })) } };
     case 'AddAccountEditor': {
-      const { login, permissions } = v.input;
+      const { login, accountId, permissions } = v.input;
       if (!permissions?.length) return err('Pick at least one permission.', 'no_permissions');
-      if (ACCOUNT_EDITORS.length >= 20) return err('An account can have at most 20 editors.', 'too_many_editors');
+      if (ACCOUNT_EDITORS.length >= MAX_EDITORS) return err('An account can have at most 50 editors. Remove one to add someone else.', 'too_many_editors');
+      const scope = scopeFrom(v.input.setIds);
+      if (scope.error) return scope.error;
       const name = String(login ?? '').trim().replace(/^@/, '').toLowerCase();
-      if (name === ME_SUMMARY.displayName.toLowerCase()) return err('The account’s owner can do all of this already.', 'already_owner');
-      const a = OTHERS.find((o) => o.displayName.toLowerCase() === name);
+      if (accountId === ME_ID || (!accountId && name === ME_SUMMARY.displayName.toLowerCase())) return err('The account’s owner can do all of this already.', 'already_owner');
+      const a = accountId ? OTHERS.find((o) => o.id === accountId) : OTHERS.find((o) => o.displayName.toLowerCase() === name);
       if (!a) return err('Not found.', 'not_found');
       if (ACCOUNT_EDITORS.some((e) => e.account.id === a.id)) return err('They are an editor already.', 'already_editor');
       const now = new Date().toISOString();
-      const ed = { account: a, permissions: EDITOR_FLAGS.filter((f) => permissions.includes(f)), grantedBy: ME_SUMMARY, grantedAt: now, updatedAt: now };
+      const ed = { account: a, permissions: withImplied(permissions), ...scope, grantedBy: ME_SUMMARY, grantedAt: now, updatedAt: now };
       ACCOUNT_EDITORS.push(ed);
       return { data: { addAccountEditor: ed } };
     }
@@ -1511,7 +1547,12 @@ function signedIn(body, v, ADMIN) {
       const ed = ACCOUNT_EDITORS.find((e) => e.account.id === v.accountId);
       if (!ed) return err('Not found.', 'not_found');
       if (!v.permissions?.length) return err('Pick at least one permission.', 'no_permissions');
-      ed.permissions = EDITOR_FLAGS.filter((f) => v.permissions.includes(f));
+      if (v.setIds) {
+        const scope = scopeFrom(v.setIds);
+        if (scope.error) return scope.error;
+        Object.assign(ed, scope);
+      }
+      ed.permissions = withImplied(v.permissions);
       ed.updatedAt = new Date().toISOString();
       return { data: { updateAccountEditor: ed } };
     }
@@ -1701,7 +1742,9 @@ function accountProfile(id) {
     const set = findSet(c.activeSetId);
     return set ? { platform: c.platform, login: c.login, setId: set.id, setName: set.name } : null;
   }).filter(Boolean);
-  return { account, identities, roles, activeSets, createdAt: id === ME_ID ? '2026-11-10T12:00:00.000Z' : '2026-11-08T09:00:00.000Z' };
+  // Editors, names only (never their permissions).
+  const editors = id === ME_ID ? ACCOUNT_EDITORS.map((e) => e.account) : [];
+  return { account, identities, roles, activeSets, editors, createdAt: id === ME_ID ? '2026-11-10T12:00:00.000Z' : '2026-11-08T09:00:00.000Z' };
 }
 // accountCosmetics(accountIds): what each account shows, with the badge and paint themselves.
 function accountCosmetics(ids) {
