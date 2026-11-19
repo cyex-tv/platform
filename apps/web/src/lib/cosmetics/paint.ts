@@ -59,7 +59,7 @@ function stopList(stops: readonly PaintStop[]): string | null {
 }
 
 /** The image paint's picture: the first frame when `still` (reduced motion) and it has one. */
-function imageUrl(img: PaintImage | null | undefined, still: boolean): string | null {
+function savedImageUrl(img: PaintImage | null | undefined, still: boolean): string | null {
   if (!img || img.ready === false || !img.host) return null;
   const names = new Set(img.files.map((f) => f.name));
   const name = still && img.animated && names.has('1x_static.webp') ? '1x_static.webp' : '1x.webp';
@@ -67,11 +67,26 @@ function imageUrl(img: PaintImage | null | undefined, still: boolean): string | 
   return safeUrl(`${img.host.replace(/\/+$/, '')}/${name}`);
 }
 
-/** The paint's `background-image` value (gradient or url), or null when it can't be drawn. */
-export function paintImage(p: PaintLike, still = false): string | null {
+/**
+ * An address a preview may draw from: http(s) as for saved paints, or a `blob:` URL the page made
+ * itself (the paint studio's render or picked file, not on the CDN yet). Null for anything else.
+ */
+export function safePreviewUrl(u: string | null | undefined): string | null {
+  if (!u) return null;
+  // Characters that could close url("…") are percent-encoded rather than refused.
+  const e = u.replace(/["'\\\n\r()\s<>]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0')}`);
+  if (e.startsWith('blob:')) return safeUrl(e.slice(5)) ? e : null;
+  return safeUrl(e);
+}
+
+/**
+ * The paint's `background-image` value (gradient or url), or null when it can't be drawn.
+ * `imageUrl` replaces an image paint's own picture (the paint studio's local preview).
+ */
+export function paintImage(p: PaintLike, still = false, imageUrl?: string | null): string | null {
   const rep = p.repeat ? 'repeating-' : '';
   if (p.kind === 'IMAGE') {
-    const url = imageUrl(p.image, still);
+    const url = imageUrl !== undefined ? safePreviewUrl(imageUrl) : savedImageUrl(p.image, still);
     return url ? `url("${url}")` : null;
   }
   const stops = stopList(p.stops);
@@ -102,17 +117,20 @@ export function paintColor(p: PaintLike): string | null {
 /**
  * Style declarations that draw the paint into text (`style="…"` on an inline element). Without a
  * drawable paint, only the fallback colour (or nothing). `still` uses an image paint's first frame.
+ * This is the one renderer: the site, the admin lists and the paint studio's previews and CSS
+ * export all draw through it (the studio passes `imageUrl` for a picture not saved yet).
  */
-export function paintStyle(p: PaintLike | null | undefined, still = false): string {
+export function paintStyle(p: PaintLike | null | undefined, still = false, imageUrl?: string | null): string {
   if (!p) return '';
   const fallback = paintColor(p);
-  const image = paintImage(p, still);
+  const image = paintImage(p, still, imageUrl);
   const out: string[] = [];
   if (fallback) out.push(`color: ${fallback}`);
   if (image && p.kind === 'IMAGE') {
     // The text itself is transparent, so a picture that doesn't load (blocked by the CSP, missing
-    // on the CDN, still on its way) would leave the name invisible. A flat layer in the plain
-    // colour (or the surrounding text colour) sits under the picture and shows wherever it doesn't.
+    // on the CDN, still on its way) or has see-through parts would leave the name (or part of it)
+    // invisible. A flat layer in the plain colour (or the surrounding text colour) sits under the
+    // picture and shows wherever it doesn't.
     out.push(
       `background-image: ${image}, linear-gradient(currentColor, currentColor)`,
       `background-size: ${p.repeat ? 'auto 100%' : 'cover'}, 100% 100%`,
@@ -207,4 +225,16 @@ export function paintFloor(p: PaintLike | null | undefined): 'light' | 'dark' | 
   const light = cs.some((c) => contrast(c, GROUND.light) < FLOOR_RATIO);
   const dark = cs.some((c) => contrast(c, GROUND.dark) < FLOOR_RATIO);
   return light && dark ? 'both' : light ? 'light' : dark ? 'dark' : null;
+}
+
+/** The readability floor's halo on each ground (PaintedName draws the same in its styles). */
+export const FLOOR_FILTER = {
+  light: 'drop-shadow(0 0 0.5px rgb(0 0 0 / 0.55))',
+  dark: 'drop-shadow(0 0 0.5px rgb(255 255 255 / 0.55))',
+} as const;
+
+/** The halo a paint needs on this ground ('' when it reads without one): for previews drawn on a fixed ground. */
+export function floorFilter(p: PaintLike | null | undefined, ground: 'light' | 'dark'): string {
+  const f = paintFloor(p);
+  return f === 'both' || f === ground ? FLOOR_FILTER[ground] : '';
 }
