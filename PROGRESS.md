@@ -1077,3 +1077,24 @@ gh api -X PUT repos/cyex-tv/infra/branches/main/protection --input protection.js
 ```
 
 infra `main` is now `Initial commit` → `b31fc33`. The protection was read back afterwards and matches the other repos.
+
+## Hero shadows (branch `feat/hero-shadows`)
+
+Owner feedback 2026/11/19: "the landing page hero looks better now but it needs shadows to look more realistic". Web only; nothing was deployed.
+
+- [x] Real shadows between the bars: the key light is now a spot (it falls off across the mark, so faces read with depth) casting a soft PCF shadow map (1536 px, wide noisy kernel; three 0.187 folded the old "soft" mode into `PCFShadowMap`); every bar casts and receives.
+- [x] Ground: a transparent shadow-catcher floor under the mark (tilted with the logo's pitch, faded out toward its edges so no floor edge shows), a soft contact shadow that loosens and lightens as the mark floats up and follows the lit bar coming forward, and a faint pool of the lit bar's light.
+- [x] Both themes: dark has deep shadows and an accent pool added as light; light has lighter, cooler, softer ones (lower shadow intensity, wider kernel).
+- [x] Still images `static/home/logo-3d-{dark,light}.webp` remade with `window.__logoSnap()`; reduced motion shows them. Lazy load, off-screen pause and CLS unchanged (CLS 0).
+- Dev-only probes (stripped from production): `?logoperf` times each draw, `window.__logoBench(n)` the mean GPU-synced draw.
+- Frame cost (headless Edge on a fast GPU, `__logoBench`, mean of 5 x 200 draws): about 0.04 ms before, 0.07 ms after at 1x; with CPU throttle 4x about 0.2-1.0 ms before, 0.3-0.9 ms after. The 5 s rAF sample is vsync-less here (360 Hz), p95 2.9 ms, 0 frames over 20 ms, CLS 0, so it can only show the headroom: the added work is one more depth pass over three meshes and three small transparent quads.
+- Screens in `.claude/runs/2026-11-19-feedback/screens/hero-shadows/`.
+
+### GitHub write log for this PR
+2026/11/19, account `sery-yx`.
+
+```
+git push -u origin feat/hero-shadows
+gh pr create --base main --head feat/hero-shadows --title "Hero: real soft shadows, a ground shadow and light falloff" --body-file <file>
+gh pr merge <n> --merge
+```
