@@ -258,7 +258,7 @@
 
     <div class="toolbar" bind:this={gridTop}>
       <div class="sorts">
-        <Segmented label="Sort" size="s" options={sorts} value={view.sort} onchange={(v) => go({ sort: v }, true)} />
+        <Segmented label="Sort" size="s" compact options={sorts} value={view.sort} onchange={(v) => go({ sort: v }, true)} />
         {#if trending}
           <Segmented label="Trending window" size="s" options={windows} value={view.window} onchange={(v: Window) => go({ window: v }, true)} />
         {/if}

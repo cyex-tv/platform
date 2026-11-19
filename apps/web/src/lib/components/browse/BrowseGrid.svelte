@@ -9,6 +9,8 @@
   //     empty spot it also turns Select mode on), scrolling the window near its edges.
   //   - Touch: long-press turns Select mode on with that tile (in Select mode: a range).
   // Everything goes through the pure model in ./selection, which keeps the cap.
+  // Tiles load their emote's page on tap, not on hover (each page is four queries, and a drag
+  // across the grid would fetch dozens), and not at all while Select mode is on.
   import { isWide } from '$lib/emote';
   import { clean } from '$lib/format';
   import EmoteSkeleton from '../EmoteSkeleton.svelte';
@@ -216,6 +218,7 @@
   class="pick-area"
   class:selecting
   bind:this={root}
+  data-sveltekit-preload-data={selecting ? 'off' : 'tap'}
   {onpointerdown}
   onclickcapture={onclickcapture}
   onkeydowncapture={onkeydowncapture}
@@ -297,6 +300,8 @@
     .more:hover { color: var(--text); border-color: var(--border-strong); }
   }
   @media (hover: none) { .more { opacity: 1; background: none; } }
+  /* Touch: 28px to see, 44px to hit (8px of invisible reach on every side). */
+  @media (pointer: coarse) { .more::after { content: ''; position: absolute; inset: -8px; } }
 
   /* The drag rectangle: a hairline in the accent over a faint tint of it. */
   .band { position: absolute; z-index: 2; pointer-events: none; border: 1px solid var(--accent-border); border-radius: 2px;

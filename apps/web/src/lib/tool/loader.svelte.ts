@@ -1,7 +1,7 @@
 // Loading for the signed-in pages: one request at a time per page, the newest one wins, and
 // a request that is replaced (the page's inputs changed, or the page closed) is aborted.
 import { untrack } from 'svelte';
-import { ApiError } from '$lib/api';
+import { ApiError, fetchWith } from '$lib/api';
 import { causeOfCode, type Cause } from '$lib/components/problem';
 import { fail, notify } from './notices.svelte';
 
@@ -42,7 +42,7 @@ export function loader<T>(fn: (ctx: LoadCtx) => Promise<T>): Loader<T> {
       cause = null;
     }
     loading = true;
-    const f: typeof fetch = (input, init) => fetch(input, { ...init, signal: c.signal });
+    const f = fetchWith(c.signal);
     let run: Promise<T>;
     try {
       run = fn({ signal: c.signal, fetch: f });

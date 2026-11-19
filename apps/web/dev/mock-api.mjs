@@ -2510,12 +2510,17 @@ createServer(async (req, res) => {
     res.writeHead(204, { 'set-cookie': ['mock_session=; Path=/; Max-Age=0', 'mock_restore=; Path=/; Max-Age=0'] });
     return res.end();
   }
+  // A route that never answers, for timeout checks.
+  if (url.pathname === '/mock/hang') return;
   if (req.method === 'POST' && url.pathname === '/v1/emotes') {
-    const raw = (await read(req)).toString('latin1');
+    // UTF-8, as the API reads it: names in any script and emoji arrive whole.
+    const raw = (await read(req)).toString('utf8');
     if (!session) return json(res, 401, { error: 'signed_out', message: 'Sign in to upload.' });
     const field = (k) => raw.match(new RegExp(`name="${k}"\\r\\n\\r\\n([^\\r]*)`))?.[1];
     const name = field('name') ?? 'upload';
     // Names that stand in for the API's refusals, to see how the upload form explains them.
+    // Never answers (the request is read, then left open), to see the stall timeout and Cancel.
+    if (name === 'hang') return;
     if (name === 'blocked') return json(res, 422, { error: 'blocked', message: 'This image can’t be uploaded to cyex.tv.' });
     if (name === 'ratelimited') return json(res, 429, { error: 'rate_limited', message: 'That’s a lot of uploads. Try again in an hour.' });
     if (name === 'toobig') return json(res, 413, { error: 'too_large', message: 'The file is over 8 MB, the most an upload can be.' });
