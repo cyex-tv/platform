@@ -167,13 +167,17 @@ async fn the_owner_holds_everything() {
     let r = w
         .gql(&owner, "{ roles { name position permissions } }", json!({}))
         .await;
-    // After the owners' top role.
-    assert_eq!(r["data"]["roles"][1]["name"], "Admins", "{r}");
+    // Beside the built-in roles (the owners' top role first).
+    assert_eq!(r["data"]["roles"][0]["name"], "Owner", "{r}");
+    let admins = r["data"]["roles"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["name"] == "Admins")
+        .unwrap();
+    assert_eq!(admins["position"], 1000);
     assert_eq!(
-        r["data"]["roles"][1]["permissions"]
-            .as_array()
-            .unwrap()
-            .len(),
+        admins["permissions"].as_array().unwrap().len(),
         permissions::ALL.len()
     );
 
