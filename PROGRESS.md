@@ -15,7 +15,7 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 ```
 git push -u origin fix/paints-and-global-perms
 gh pr create --base main --head fix/paints-and-global-perms --title "Paint render fix and global emote/editor permissions" --body-file <file>
-gh pr merge <n> --merge
+gh pr merge 94 --merge
 ```
 
 ## Front page, round 2: a real 3D hero and the zig-zag (branch `feat/front-page-2`)
