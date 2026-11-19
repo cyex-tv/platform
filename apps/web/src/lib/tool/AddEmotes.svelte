@@ -1,17 +1,20 @@
 <script lang="ts">
-  import Segmented from '$lib/components/Segmented.svelte';
-  // Find emotes to add: public search, or your own uploads (pending ones too, except for a
-  // personal set, which takes approved emotes only).
+  // Find emotes to add: one plain search field, searched when you press Enter (never while you
+  // type). Results are your own matching uploads first (pending ones too, except for a personal
+  // set, which takes approved emotes only), then everyone's approved emotes, in a list of its own
+  // height with an Add button on each.
   import { tick } from 'svelte';
-  import { gql } from '$lib/api';
+  import { ApiError, gql } from '$lib/api';
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
   import { ADD_SET_EMOTE, MY_EMOTES, SEARCH } from '$lib/queries';
-  import EmoteGrid from '$lib/components/EmoteGrid.svelte';
-  import { iso } from '$lib/format';
+  import Icon from '$lib/components/Icon.svelte';
+  import { clean, iso } from '$lib/format';
   import State from '$lib/components/State.svelte';
+  import Thumb from './Thumb.svelte';
   import { session } from './session.svelte';
   import { STATE_LABEL } from './state';
   import { fail, notify } from './notices.svelte';
+  import { mergeResults } from './add-emotes';
 
   let {
     setId,
@@ -21,41 +24,44 @@
     full,
     onadded,
   }: { setId: string; personal: boolean; taken: Set<string>; names: Set<string>; full: boolean; onadded: () => unknown } = $props();
-  let gridEl = $state<HTMLElement>();
+  let listEl = $state<HTMLElement>();
   let findEl = $state<HTMLInputElement>();
 
-  let source = $state<'search' | 'mine'>('search');
   let query = $state('');
+  let searched = $state('');
   let results = $state<EmoteFieldsFragment[] | null>(null);
+  let searching = $state(false);
+  let problem = $state<string | null>(null);
   let busy = $state<string | null>(null);
-  const byId = $derived(new Map((results ?? []).map((r) => [r.id, r])));
-  let timer: ReturnType<typeof setTimeout> | undefined;
   let token = 0;
 
-  async function run() {
-    const mine = token + 1;
-    token = mine;
+  async function search(e?: SubmitEvent) {
+    e?.preventDefault();
+    const text = query.trim();
+    if (!text) {
+      results = null;
+      problem = null;
+      return;
+    }
+    const mine = ++token;
+    searching = true;
+    problem = null;
     try {
-      const items =
-        source === 'search'
-          ? (await gql(SEARCH, { query: query.trim(), page: 1, perPage: 30 })).searchEmotes.items
-          : (await gql(MY_EMOTES, { page: 1, perPage: 100 })).myEmotes.items.filter((e) => {
-              const q = query.trim().toLowerCase();
-              return (e.state === 'APPROVED' || (e.state === 'PENDING' && !personal)) && (!q || e.name.toLowerCase().includes(q));
-            });
-      if (mine === token) results = items;
+      const [everyone, own] = await Promise.all([
+        gql(SEARCH, { query: text, page: 1, perPage: 40 }),
+        session.me ? gql(MY_EMOTES, { page: 1, perPage: 100 }) : Promise.resolve(null),
+      ]);
+      if (mine !== token) return;
+      results = mergeResults(text, own?.myEmotes.items ?? [], everyone.searchEmotes.items, personal);
+      searched = text;
     } catch (err) {
-      if (mine === token) fail(err);
+      if (mine !== token) return;
+      results = null;
+      problem = err instanceof ApiError && err.code === 'rate_limited' ? err.message : 'Searching didn’t work. Check your connection and try again.';
+    } finally {
+      if (mine === token) searching = false;
     }
   }
-
-  $effect(() => {
-    void source;
-    void query;
-    clearTimeout(timer);
-    timer = setTimeout(run, 250);
-    return () => clearTimeout(timer);
-  });
 
   async function add(e: EmoteFieldsFragment) {
     if (busy) return;
@@ -68,7 +74,7 @@
       await onadded();
       busy = null;
       await tick();
-      const buttons = [...(gridEl?.querySelectorAll<HTMLButtonElement>('.below button') ?? [])];
+      const buttons = [...(listEl?.querySelectorAll<HTMLButtonElement>('button.add') ?? [])];
       const next = buttons.slice(at + 1).find((b) => !b.disabled) ?? buttons.slice(0, at).reverse().find((b) => !b.disabled);
       (next ?? findEl)?.focus();
     } catch (err) {
@@ -80,46 +86,57 @@
 </script>
 
 <section class="ui-panel">
-  <header>
-    <h2>Add emotes</h2>
-    <Segmented label="Where from" options={[{ value: 'search', label: 'Search', icon: 'search' }, { value: 'mine', label: 'Your uploads', icon: 'upload' }]} value={source} onchange={(v) => (source = v)} />
-  </header>
-  <div class="find">
-    <input class="ui-input" type="search" bind:this={findEl} bind:value={query} placeholder={source === 'search' ? 'Search by name or tag…' : 'Filter your uploads…'} aria-label="Find emotes" />
-    {#if full}<p class="ui-error">This set is full. Remove something first.</p>{/if}
-  </div>
-  {#if results === null}
-    <State bare kind="loading" title="Loading…" />
-  {:else if results.length === 0}
-    <State bare title={source === 'search' ? 'Nothing found' : 'No uploads to add'}>
-      {source === 'search' ? 'Try another name or tag.' : 'Pending and approved uploads you haven’t added yet show up here.'}
-    </State>
-  {:else}
-    <div class="grid" bind:this={gridEl}>
-      <EmoteGrid
-        items={results}
-        density="compact"
-        label="Results"
-        href={(e) => (byId.get(e.id)?.owner?.id === session.me?.id ? `/me/emotes/${e.id}` : `/emotes/${e.id}`)}
-        note={(e) => {
-          const st = byId.get(e.id)?.state;
-          return st && st !== 'APPROVED' ? STATE_LABEL[st].toLowerCase() : undefined;
-        }}
-      >
-        {#snippet below(e)}
-          {@const inSet = taken.has(e.id)}
-          {@const clash = !inSet && names.has(e.name)}
-          <button class="ui-btn small {inSet ? 'ghost' : 'secondary'}" type="button" disabled={inSet || clash || full || busy === e.id}
-            title={clash ? 'Another emote here has this name. Rename that one first.' : undefined} aria-label="{inSet ? 'Added' : clash ? 'Name taken' : 'Add'} {iso(e.name)}" onclick={() => byId.get(e.id) && add(byId.get(e.id)!)}>
-            {inSet ? 'Added' : clash ? 'Name taken' : 'Add'}
-          </button>
-        {/snippet}
-      </EmoteGrid>
+  <header><h2><label for="add-find">Add emotes</label></h2></header>
+  <form class="find" role="search" onsubmit={search}>
+    <div class="field">
+      <input id="add-find" class="ui-input" type="search" bind:this={findEl} bind:value={query} placeholder="Search emotes by name or tag"
+        autocomplete="off" spellcheck="false" enterkeyhint="search" aria-describedby="add-hint" />
+      <button class="ui-btn secondary" type="submit" disabled={searching}><Icon name="search" size={15} />{searching ? 'Searching…' : 'Search'}</button>
     </div>
+    <p class="ui-hint" id="add-hint">Press Enter to search. Your own uploads come first{personal ? '' : ', pending ones too'}.</p>
+    {#if full}<p class="ui-error">This set is full. Remove something first.</p>{/if}
+  </form>
+  {#if problem}
+    <State bare kind="error" title="Couldn’t search">
+      {problem}
+      {#snippet actions()}<button class="ui-btn secondary small" type="button" onclick={() => search()}>Try again</button>{/snippet}
+    </State>
+  {:else if results && results.length === 0}
+    <State bare title="Nothing found">No emotes match {searched}. Try another name or tag.</State>
+  {:else if results}
+    <ul class="ui-list results" bind:this={listEl} aria-label="Emotes found for {searched}">
+      {#each results as e (e.id)}
+        {@const inSet = taken.has(e.id)}
+        {@const clash = !inSet && names.has(e.name)}
+        {@const mine = e.owner?.id === session.me?.id}
+        <li>
+          <Thumb emote={e} name="" box={40} />
+          <a class="who" href={mine ? `/me/emotes/${e.id}` : `/emotes/${e.id}`}>
+            <bdi class="name">{e.name}</bdi>
+            <span class="ui-hint">
+              {#if mine}Yours{:else if e.owner}by <bdi>{clean(e.owner.displayName)}</bdi>{/if}{#if e.state !== 'APPROVED'} · {STATE_LABEL[e.state].toLowerCase()}{/if}
+            </span>
+          </a>
+          <button class="ui-btn small add {inSet ? 'ghost' : 'secondary'}" type="button" disabled={inSet || clash || full || busy === e.id}
+            title={clash ? 'Another emote here has this name. Rename that one first.' : undefined}
+            aria-label="{inSet ? 'Added' : clash ? 'Name taken' : 'Add'} {iso(e.name)}" onclick={() => add(e)}>
+            {inSet ? 'Added' : clash ? 'Name taken' : busy === e.id ? 'Adding…' : 'Add'}
+          </button>
+        </li>
+      {/each}
+    </ul>
   {/if}
 </section>
 
 <style>
-  .find { display: grid; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
-  .grid { padding: 16px; }
+  .find { display: grid; gap: 8px; padding: 12px 16px; }
+  .field { display: flex; gap: 8px; }
+  .field input { flex: 1; }
+  .field .ui-btn { flex: none; }
+  .results { max-height: 360px; overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--border); }
+  .results > li { padding: 6px 16px; }
+  .who { display: grid; flex: 1; min-width: 0; line-height: 1.3; color: inherit; text-decoration: none; }
+  .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  @media (hover: hover) and (pointer: fine) { .who:hover .name { text-decoration: underline; } }
+  .add { flex: none; }
 </style>
