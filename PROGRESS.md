@@ -2,6 +2,20 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Emote transfers: the owner must accept (branch `fix/transfer-accept`, ADR 0014 amendment)
+
+Owner decision after #100: an editor's transfer waits for the owner.
+- [x] API (additive): an editor's `transferEmote` makes a pending request (migration `20261207000081`, one open per emote, 7 days); `emoteTransferRequests`, `acceptEmoteTransfer` (rules checked again), `declineEmoteTransfer`, `cancelEmoteTransfer`. The owner's own transfer stays immediate and closes any open request. Every step audited and notified.
+- [x] Website: the emote's edit page lists open requests (Accept and Decline for the owner, Cancel for the editor) and says the owner has to accept; the `emote.transfer_requested` notification has Accept and Decline; sentences for every transfer notification. Dev mock: one seeded request on the mock account.
+- [x] Tests: `editor_emotes_flow.rs` (request, then the owner accepts and it moves; decline, cancel and expiry leave it; neither the editor nor the receiver can accept; holds refuse at accept time; one open request; the owner's immediate transfer closes the open one); vitest `account.test.ts`.
+
+### GitHub write log for this PR
+
+```
+git push -u origin fix/transfer-accept
+gh pr create --base main --head fix/transfer-accept --title "Emote transfers: the owner accepts an editor's request" --body-file <file>
+```
+
 ## Account editors' emote permissions (branch `feat/editor-emote-perms`, ADR 0014 amendment of 2026/11/19)
 
 The owner asked for `EMOTE_UPLOAD`, `EMOTE_MANAGE` and `EMOTE_TRANSFER` to work (billing flags stay stored only).
