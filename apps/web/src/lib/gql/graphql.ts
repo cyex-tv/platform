@@ -782,8 +782,8 @@ export type Me = {
 export type Mutation = {
   __typename?: 'Mutation';
   /**
-   * Make someone an editor of your account, or of an account you edit with `EDITORS` (ADR
-   * 0014). Give their account ID, or a platform and login. You can only grant permissions you
+   * Make someone an editor of your account, of an account you edit with `EDITORS` (ADR
+   * 0014), or of anyone's with `editors.manage_any` (audited with `via`). Give their account ID, or a platform and login. You can only grant permissions you
    * hold. `setIds` limits them to some of the account's sets; leave it out for every set, new
    * ones included. At most 50 editors per account (`too_many_editors`). Audited.
    */
@@ -851,7 +851,10 @@ export type Mutation = {
    * `cosmetics.manage`. Audited.
    */
   deleteBadge: Scalars['Boolean']['output'];
-  /** Delete your emote. It is removed from every set. */
+  /**
+   * Delete your emote, or anyone's with `emotes.delete_any` (audited). It is removed from
+   * every set.
+   */
   deleteEmote: Scalars['Boolean']['output'];
   /**
    * Delete a paint: everyone loses it and stops showing it. False when there was none. Needs
@@ -922,7 +925,7 @@ export type Mutation = {
   /** Reject a pending emote with a reason. Needs `emotes.review`. Audited. */
   rejectEmote: Emote;
   /**
-   * Remove an account editor: the owner, an editor with `EDITORS`, or the editor themselves
+   * Remove an account editor: the owner, an editor with `EDITORS`, `editors.manage_any`, or the editor themselves
    * (with `ownerId` set to the account they leave). False when they weren't one. Audited.
    */
   removeAccountEditor: Scalars['Boolean']['output'];
@@ -993,6 +996,7 @@ export type Mutation = {
   unlinkIdentity: Me;
   /**
    * Change an account editor's permissions. `ownerId` is the account edited; empty for yours.
+   * The owner, an editor with `EDITORS`, or `editors.manage_any`.
    * `setIds` changes which sets they work on: empty for every set, left out to keep them.
    * Audited.
    */
@@ -1583,12 +1587,12 @@ export type Query = {
   accountCosmetics: Array<AccountCosmetics>;
   /**
    * An account's editors (ADR 0014): yours, or, with `accountId`, those of an account you edit
-   * with the `EDITORS` permission.
+   * with the `EDITORS` permission, or anyone's with `editors.manage_any`.
    */
   accountEditors: Array<AccountEditor>;
   /**
-   * An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`
-   * or `emotes.takedown`. `perPage` is 1 to 100, default 50.
+   * An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`,
+   * `emotes.takedown`, `emotes.edit_any` or `emotes.delete_any`. `perPage` is 1 to 100, default 50.
    */
   accountEmotes: EmotePage;
   /**
