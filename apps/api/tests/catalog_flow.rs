@@ -57,6 +57,28 @@ impl World {
         })
     }
 
+    /// With the read cache on and a feeder keeping it current, as the api binary runs.
+    async fn cached() -> Option<(Self, tokio::task::JoinHandle<()>)> {
+        let db = TestDb::new().await?;
+        let auth = Arc::new(Auth::new(AuthConfig::from_source(|_| None).unwrap()).unwrap());
+        let state = AppState::new(db.pool.clone(), auth)
+            .with_cdn_url("https://cdn.example.test/")
+            .with_read_cache(std::time::Duration::from_secs(60));
+        let feeder = tokio::spawn({
+            let (db, hub) = (state.db.clone(), state.hub.clone());
+            async move {
+                let _ = cyex_tv_hub::feeder::run(db, hub, std::future::pending()).await;
+            }
+        });
+        Some((
+            Self {
+                app: cyex_tv_api::app(state),
+                db,
+            },
+            feeder,
+        ))
+    }
+
     /// A Twitch user with a channel and an app session.
     async fn user(&self, twitch_id: &str) -> User {
         let mut conn = self.db.conn().await;
@@ -218,6 +240,74 @@ impl World {
         .await
         .unwrap()
     }
+}
+
+/// The chat-client reads are shared from the cache until an event says they changed.
+#[tokio::test]
+async fn cached_reads_follow_events() {
+    let Some((w, feeder)) = World::cached().await else {
+        return;
+    };
+    let alice = w.user("151").await;
+    let set = w.create_set(&alice, "Main", "CHANNEL").await;
+    let first = w
+        .emote(&alice, "cacheOne", EmoteState::Approved, false)
+        .await;
+    let second = w
+        .emote(&alice, "cacheTwo", EmoteState::Approved, false)
+        .await;
+    w.add(&alice, &set, &first, None).await;
+    // Wait until the feeder has handed the add over, so it can't drop the entry made below.
+    let uri = format!("/v1/sets/{set}");
+    let mut ready = false;
+    for _ in 0..100 {
+        if w.get(&uri, None).await.body["emotes"]
+            .as_array()
+            .map(Vec::len)
+            == Some(1)
+        {
+            ready = true;
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert!(ready, "the set never showed its emote");
+    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+    let read = w.get(&uri, None).await;
+    let etag = read.headers["etag"].to_str().unwrap().to_owned();
+
+    // A change that makes no event isn't seen while the entry lasts...
+    let mut conn = w.db.conn().await;
+    sqlx::query("UPDATE emote_sets SET name = 'Renamed' WHERE id = $1")
+        .bind(ids::from_text(&set).unwrap())
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    drop(conn);
+    let same = w.get(&uri, Some(&etag)).await;
+    assert_eq!(same.status, StatusCode::NOT_MODIFIED);
+    // ...and an event about the set drops it: the next read has both changes.
+    w.add(&alice, &set, &second, None).await;
+    let mut fresh = None;
+    for _ in 0..100 {
+        let r = w.get(&uri, Some(&etag)).await;
+        if r.status == StatusCode::OK {
+            fresh = Some(r);
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let fresh = fresh.expect("the event never dropped the cached set");
+    assert_eq!(fresh.body["name"], "Renamed");
+    assert_eq!(fresh.body["emotes"].as_array().unwrap().len(), 2);
+    assert_ne!(fresh.headers["etag"].to_str().unwrap(), etag);
+
+    // Not found is shared too, and still a 404 with the error body.
+    let r = w.get("/v1/sets/01HZZZZZZZZZZZZZZZZZZZZZZZ", None).await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    assert_eq!(r.body["error"], "not_found");
+    feeder.abort();
+    w.db.close().await;
 }
 
 #[tokio::test]
