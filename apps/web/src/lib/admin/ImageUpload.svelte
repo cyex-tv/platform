@@ -1,88 +1,147 @@
 <script lang="ts">
-  // A badge or paint picture: pick a file, upload it (POST /v1/cosmetics/images), then ask every
-  // 1,5 s whether its files are made (cosmeticImage.ready); only a ready picture can be saved.
-  // `imageId` is bound: set when the picture is ready, cleared when a new one is picked.
+  // A badge or paint picture: pick a file (or drop or paste one), check it against the API's
+  // rules here, upload it (POST /v1/cosmetics/images), then read it back through GraphQL until its
+  // files are made (cosmeticImage.ready). `imageId` is bound: set when the picture is ready,
+  // cleared when a new one is picked. `busy` is bound too, so the form can wait for the picture
+  // instead of refusing to save.
   import { onDestroy } from 'svelte';
   import { gql, uploadCosmeticImage } from '$lib/api';
   import type { CosmeticImageFieldsFragment } from '$lib/gql/graphql';
   import { COSMETIC_IMAGE } from '$lib/queries';
   import { safeUrl } from '$lib/cosmetics/paint';
+  import { checkFile, checkSize, PICTURE_ACCEPT, waitReady } from '$lib/cosmetics/upload';
 
-  type Props = { kind: 'badge' | 'paint'; imageId?: string; current?: CosmeticImageFieldsFragment | null; label: string };
-  let { kind, imageId = $bindable(''), current = null, label }: Props = $props();
+  type Props = {
+    kind: 'badge' | 'paint';
+    imageId?: string;
+    busy?: boolean;
+    current?: CosmeticImageFieldsFragment | null;
+    label: string;
+  };
+  let { kind, imageId = $bindable(''), busy = $bindable(false), current = null, label }: Props = $props();
 
   let phase = $state<'idle' | 'uploading' | 'making' | 'ready' | 'failed'>('idle');
   let problem = $state('');
   let image = $state<CosmeticImageFieldsFragment | null>(null);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let tries = 0;
-  onDestroy(() => clearTimeout(timer));
+  let local = $state<string | null>(null);
+  let over = $state(false);
+  let stop: AbortController | null = null;
+  onDestroy(() => {
+    stop?.abort();
+    if (local) URL.revokeObjectURL(local);
+  });
+
+  $effect(() => {
+    busy = phase === 'uploading' || phase === 'making';
+  });
 
   const shown = $derived(image ?? current);
-  const preview = $derived(shown && shown.ready ? safeUrl(`${shown.host.replace(/\/+$/, '')}/${kind === 'badge' ? '2x' : '1x'}.webp`) : null);
+  const remote = $derived(shown && shown.ready ? safeUrl(`${shown.host.replace(/\/+$/, '')}/${kind === 'badge' ? '2x' : '1x'}.webp`) : null);
+  // The picked file shows at once; the made file replaces it when it's ready.
+  const preview = $derived(phase === 'ready' ? (remote ?? local) : (local ?? remote));
 
-  async function poll(id: string) {
-    tries += 1;
-    try {
-      const img = (await gql(COSMETIC_IMAGE, { id })).cosmeticImage;
-      if (img?.ready) {
-        image = img;
-        imageId = img.id;
-        phase = 'ready';
-        return;
-      }
-    } catch {
-      // Ask again; a blip shouldn't lose the upload.
-    }
-    if (tries > 40) {
-      phase = 'failed';
-      problem = 'The picture is taking long to process. Try again in a minute.';
-      return;
-    }
-    timer = setTimeout(() => poll(id), 1500);
+  function setLocal(file: File | null) {
+    if (local) URL.revokeObjectURL(local);
+    local = file ? URL.createObjectURL(file) : null;
   }
 
-  async function picked(e: Event & { currentTarget: HTMLInputElement }) {
-    const file = e.currentTarget.files?.[0];
+  async function size(file: File): Promise<{ width: number; height: number } | null> {
+    try {
+      const bmp = await createImageBitmap(file);
+      const out = { width: bmp.width, height: bmp.height };
+      bmp.close();
+      return out;
+    } catch {
+      return null;
+    }
+  }
+
+  async function use(file: File | undefined | null) {
     if (!file) return;
-    clearTimeout(timer);
+    stop?.abort();
+    stop = new AbortController();
+    const signal = stop.signal;
     imageId = '';
     image = null;
     problem = '';
-    tries = 0;
+    const bad = checkFile(file);
+    const dims = bad ? null : await size(file);
+    const why = bad ?? (dims ? checkSize(kind, dims.width, dims.height) : 'That file isn’t a picture this browser can open. Try another one.');
+    if (why) {
+      setLocal(null);
+      phase = 'failed';
+      problem = why;
+      return;
+    }
+    setLocal(file);
     phase = 'uploading';
     try {
-      const up = await uploadCosmeticImage(file, kind);
+      const up = await uploadCosmeticImage(file, kind, signal);
       phase = 'making';
-      if (up.ready) await poll(up.id);
-      else timer = setTimeout(() => poll(up.id), 1500);
+      const img = await waitReady(async () => (await gql(COSMETIC_IMAGE, { id: up.id })).cosmeticImage, { signal });
+      if (signal.aborted) return;
+      image = img;
+      imageId = img.id;
+      phase = 'ready';
     } catch (err) {
+      if (signal.aborted) return;
       phase = 'failed';
-      problem = err instanceof Error ? err.message : 'The upload didn’t work.';
+      problem = err instanceof Error ? err.message : 'The upload didn’t work. Try again.';
     }
+  }
+
+  function picked(e: Event & { currentTarget: HTMLInputElement }) {
+    const file = e.currentTarget.files?.[0];
+    // Cleared, so picking the same file again (after a failure, say) is a change too.
+    e.currentTarget.value = '';
+    void use(file);
+  }
+
+  function dropped(e: DragEvent) {
+    e.preventDefault();
+    over = false;
+    void use(e.dataTransfer?.files?.[0]);
+  }
+
+  function pasted(e: ClipboardEvent) {
+    const file = [...(e.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'));
+    if (!file) return;
+    e.preventDefault();
+    void use(file);
   }
 </script>
 
 <div class="ui-field">
   <span class="ui-label">{label}</span>
-  <div class="pick">
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div
+    class="pick"
+    class:over
+    ondragover={(e) => { if (e.dataTransfer?.types.includes('Files')) { e.preventDefault(); over = true; } }}
+    ondragleave={() => (over = false)}
+    ondrop={dropped}
+    onpaste={pasted}
+  >
     <span class="prev {kind}" aria-hidden="true">
-      {#if preview}<img src={preview} alt="" />{:else if phase === 'uploading' || phase === 'making'}<span class="ui-spinner"></span>{/if}
+      {#if preview}<img src={preview} alt="" />{/if}
+      {#if phase === 'uploading' || phase === 'making'}<span class="ui-spinner"></span>{/if}
     </span>
     <label class="ui-btn secondary">
-      {shown ? 'Replace picture' : 'Choose a picture'}
-      <input class="file" type="file" accept="image/png,image/apng,image/gif,image/webp" onchange={picked} />
+      {shown || local ? 'Replace picture' : 'Choose a picture'}
+      <input class="file" type="file" accept={PICTURE_ACCEPT} onchange={picked} />
     </label>
     <span class="ui-hint" role="status">
-      {#if phase === 'uploading'}Uploading…{:else if phase === 'making'}Making the files…{:else if phase === 'ready'}Ready.{:else if kind === 'badge'}Square, at least 72 × 72 px.{:else}At least 64 px tall, up to 8:1.{/if}
+      {#if phase === 'uploading'}Uploading…{:else if phase === 'making'}Making the files…{:else if phase === 'ready'}Ready.{:else if kind === 'badge'}Square, at least 72 × 72 px. PNG, GIF or WebP, up to 5 MB. Or drop it here.{:else}At least 64 px tall, up to 8:1. PNG, GIF or WebP, up to 5 MB.{/if}
     </span>
   </div>
   {#if problem}<span class="ui-error" role="alert">{problem}</span>{/if}
 </div>
 
 <style>
-  .pick { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-  .prev { display: grid; place-items: center; flex: none; height: 48px; border-radius: var(--radius); background: var(--elevated-2); overflow: hidden; }
+  .pick { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; border-radius: var(--radius); outline: 1px dashed transparent; outline-offset: 6px; }
+  .pick.over { outline-color: var(--accent); }
+  .prev { position: relative; display: grid; place-items: center; flex: none; height: 48px; border-radius: var(--radius); background: var(--elevated-2); overflow: hidden; }
+  .prev > * { grid-area: 1 / 1; }
   .prev.badge { width: 48px; }
   .prev.paint { width: 120px; }
   .prev img { max-width: 100%; max-height: 100%; object-fit: contain; }

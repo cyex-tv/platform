@@ -71,9 +71,10 @@
   .badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius-pill);
     background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 600; line-height: 18px; text-align: center;
     font-variant-numeric: tabular-nums; box-shadow: 0 0 0 2px var(--bg); }
-  .head { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding: 0 4px 0 12px; }
+  /* The popover's own body is the one scroll container; the title row stays in view. */
+  .head { position: sticky; top: -8px; z-index: 1; background: var(--elevated); display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding: 0 4px 0 12px; }
   .head h2 { margin: 0; font-size: var(--t-ui); font-weight: 600; }
-  .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: min(460px, 60dvh); overflow-y: auto; overscroll-behavior: contain; }
+  .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
   .phone { border-color: transparent; }
   .phone .badge { top: 0; right: 0; }
   .all { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 28px; margin: -2px 0; padding: 0 8px;

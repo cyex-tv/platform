@@ -1,7 +1,8 @@
 <script lang="ts">
   // The paint on names: a large name and several sample names on the dark and light grounds,
   // then Twitch- and Kick-style chat frames with the painted name in a conversation.
-  import { paintStyleText } from '../css';
+  import { floorFilter } from '$lib/cosmetics/paint';
+  import { like, paintStyleText } from '../css';
   import type { StudioPaint } from '../format';
   import Seg from './Seg.svelte';
 
@@ -10,6 +11,8 @@
 
   const SAMPLES = ['lumen_fox', 'quietoak', 'nora_byte', 'pixelmoth', 'Ab', 'sunnyfern_streams_daily'];
   const style = $derived(paintStyleText(paint, imageUrl));
+  // The site's readability floor on each ground, so a pale paint looks here as it will on cyex.tv.
+  const floor = $derived({ dark: floorFilter(like(paint), 'dark'), light: floorFilter(like(paint), 'light') });
   const shown = $derived(name.trim() || 'lumen_fox');
   let ground = $state<'dark' | 'light'>('dark');
   const others = [
@@ -29,8 +32,8 @@
       {#each ['dark', 'light'] as g (g)}
         <div class="ps-stage {g}">
           <span class="ps-stagelabel">{g === 'dark' ? 'Dark' : 'Light'}</span>
-          <span class="ps-painted ps-big" {style}>{shown}</span>
-          <div class="ps-names">
+          <span class="ps-floor" style:filter={floor[g as 'dark' | 'light'] || null}><span class="ps-painted ps-big" {style}>{shown}</span></span>
+          <div class="ps-names" style:filter={floor[g as 'dark' | 'light'] || null}>
             {#each SAMPLES as s (s)}<span class="ps-painted ps-mid" {style}>{s}</span>{/each}
           </div>
         </div>
@@ -50,7 +53,7 @@
               {#if line.who}
                 <span class="who" style:color={ground === 'dark' ? line.who.colour : line.who.ink}>{line.who.user}</span>
               {:else}
-                <span class="who ps-painted" {style}>{shown}</span>
+                <span class="ps-floor" style:filter={floor[ground] || null}><span class="who ps-painted" {style}>{shown}</span></span>
               {/if}<span class="colon">:</span>{line.text}
             </li>
           {/each}

@@ -154,20 +154,26 @@ export async function signOut(): Promise<void> {
   if (!response.ok && response.status !== 401) throw await restError(response);
 }
 
-/** A badge or paint picture's answer: not ready until the worker made its files. */
-export type CosmeticUpload = { id: string; kind: 'BADGE' | 'PAINT'; ready: boolean };
+/**
+ * `POST /v1/cosmetics/images`'s answer, in the REST shape (snake_case, lower-case kind). Only the
+ * ID is used: the picture is always read back through GraphQL (`cosmeticImage`), because bytes the
+ * API already has come back at once, ready, and a REST file list isn't the GraphQL one.
+ */
+export type CosmeticUpload = { id: string; kind: 'badge' | 'paint'; ready: boolean; created_at?: string };
 
 /** Uploads a badge or paint picture (`POST /v1/cosmetics/images`, staff). Poll `cosmeticImage(id)` until ready. */
-export async function uploadCosmeticImage(file: File, kind: 'badge' | 'paint'): Promise<CosmeticUpload> {
+export async function uploadCosmeticImage(file: File, kind: 'badge' | 'paint', signal?: AbortSignal): Promise<CosmeticUpload> {
   const form = new FormData();
   form.set('kind', kind);
   form.set('file', file);
   let response: Response;
   try {
-    response = await fetch(`${apiUrl()}/v1/cosmetics/images`, { method: 'POST', credentials: 'include', body: form });
+    response = await fetch(`${apiUrl()}/v1/cosmetics/images`, { method: 'POST', credentials: 'include', body: form, signal });
   } catch {
+    if (signal?.aborted) throw new ApiError('Stopped.', 'aborted');
     throw new ApiError(unreachableMessage(), 'offline');
   }
+  if (response.status === 429) throw new ApiError('Too many uploads. Try again in a moment.', 'rate_limited');
   if (!response.ok) throw await restError(response);
   return (await response.json()) as CosmeticUpload;
 }

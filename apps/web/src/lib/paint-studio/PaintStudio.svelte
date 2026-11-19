@@ -480,7 +480,7 @@
             {#if source === 'file'}
               <div class="ps-field">
                 <label for="ps-file">GIF, PNG, APNG or WebP</label>
-                <input id="ps-file" type="file" accept="image/gif,image/png,image/apng,image/webp" onchange={(e) => pickFile(e.currentTarget.files?.[0])} />
+                <input id="ps-file" type="file" accept="image/gif,image/png,image/apng,image/webp" onchange={(e) => { const f = e.currentTarget.files?.[0]; e.currentTarget.value = ''; pickFile(f); }} />
                 {#if picked}<p class="ps-hint">{picked.width} × {picked.height} px, {fmtBytes(picked.file.size)}</p>{/if}
                 {#each pickError as m (m)}<p class="ps-msg" role="alert">{m}</p>{/each}
                 <p class="ps-hint">At least 64 px tall, at most 1.000 px a side and 5 MB. Up to 8:1; wider pictures are scaled to fit.</p>
@@ -571,7 +571,7 @@
     </div>
     <div class="ps-field">
       <label for="ps-import-f">Or open a file</label>
-      <input id="ps-import-f" type="file" accept="application/json,.json" onchange={(e) => importFile(e.currentTarget.files?.[0])} />
+      <input id="ps-import-f" type="file" accept="application/json,.json" onchange={(e) => { const f = e.currentTarget.files?.[0]; e.currentTarget.value = ''; importFile(f); }} />
     </div>
   </div>
   <footer>
