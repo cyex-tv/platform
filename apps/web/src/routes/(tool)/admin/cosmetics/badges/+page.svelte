@@ -18,8 +18,8 @@
   import { fail, notify } from '$lib/tool/notices.svelte';
   import { can } from '$lib/tool/session.svelte';
 
-  const manage = can('cosmetics.manage');
-  const grant = can('cosmetics.grant');
+  const manage = $derived(can('cosmetics.manage'));
+  const grant = $derived(can('cosmetics.grant'));
 
   const L = loader(async () => {
     forgetCatalog();
@@ -48,17 +48,23 @@
   let name = $state('');
   let tooltip = $state('');
   let imageId = $state('');
+  // The picture is uploading or its files are being made: saving waits for it.
+  let picturing = $state(false);
+  // A fresh picture field each time the dialog opens (no picture left over from the last badge).
+  let opened = $state(0);
   let tried = $state(false);
   let saving = $state(false);
   const nameError = $derived(tried && !name.trim() ? 'Give it a name (1 to 32 characters).' : null);
   const tipError = $derived(tried && !tooltip.trim() ? 'Give it a tooltip (1 to 64 characters).' : null);
-  const imageError = $derived(tried && !editing && !imageId ? 'Add a picture and wait until it is ready.' : null);
+  const imageError = $derived(tried && !editing && !imageId && !picturing ? 'Add a picture.' : null);
 
   function edit(b: Badge | null) {
     editing = b;
     name = b?.name ?? '';
     tooltip = b?.tooltip ?? '';
     imageId = '';
+    picturing = false;
+    opened += 1;
     tried = false;
     dialog.showModal();
   }
@@ -70,6 +76,11 @@
     if (nameError || tipError || imageError) return;
     saving = true;
     try {
+      // Saved while the picture is still on its way: wait for it, then save with it.
+      // A picture that then fails says why in its field; nothing is saved without it.
+      const waited = picturing;
+      while (picturing) await new Promise((r) => setTimeout(r, 200));
+      if (!dialog.open || ((waited || !editing) && !imageId)) return;
       if (editing) {
         await gql(UPDATE_BADGE, { id: editing.id, input: { name: name.trim(), tooltip: tooltip.trim(), imageId: imageId || null } });
         notify(`${iso(name.trim())} saved.`);
@@ -165,14 +176,14 @@
         <input class="ui-input" bind:value={tooltip} maxlength="64" placeholder="What chat sees on hover" aria-invalid={tipError ? 'true' : undefined} aria-describedby={tipError ? 'b-tip-err' : undefined} />
         {#if tipError}<span class="ui-error" id="b-tip-err">{tipError}</span>{/if}
       </label>
-      {#key editing?.id ?? 'new'}
-        <ImageUpload kind="badge" label="Picture" bind:imageId current={editing?.image ?? null} />
+      {#key opened}
+        <ImageUpload kind="badge" label="Picture" bind:imageId bind:busy={picturing} current={editing?.image ?? null} />
       {/key}
       {#if imageError}<span class="ui-error" role="alert">{imageError}</span>{/if}
     </div>
     <footer>
       <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="ui-btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : editing ? 'Save' : 'Make badge'}</button>
+      <button class="ui-btn primary" type="submit" disabled={saving}>{saving ? (picturing ? 'Waiting for the picture…' : 'Saving…') : editing ? 'Save' : 'Make badge'}</button>
     </footer>
   </form>
 </dialog>

@@ -791,7 +791,10 @@ const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'set
 // ---- Chat cosmetics (ADR 0015) ----------------------------------------------------------
 // SAMPLE DATA ONLY: two made-up badges (simple SVG drawn here) and three sample paints, so the
 // site can be built before any real cosmetics exist. Pictures are served by this mock as SVG under
-// /cosmetics/badges/<key>/<n>x.webp. Operations are recognised by their root field; arguments are
+// /cosmetics/badges/<key>/<n>x.webp. Uploaded badge and paint pictures (POST /v1/cosmetics/images)
+// are kept as sent and served back at /cosmetics/uploads/<id>/<n>x[_static].webp: the same bytes for
+// every size (nothing is transcoded here), so a paint made in the studio shows its own render.
+// Operations are recognised by their root field; arguments are
 // read from variables named like the arguments ($id, $input, $badgeId, $paintId, $ownerId,
 // $accountId, $kind, $cosmeticId, $platform, $userIds, $reason, $page, $perPage).
 const BADGE_ART = {
@@ -958,7 +961,7 @@ function cosmeticsAnswer(q, v, session, admin) {
         if (field === 'updateBadge' && !before) return err('Not found.', 'not_found');
         const name = input.name ?? before?.name;
         if (typeof name !== 'string' || !name.trim() || name.trim().length > 32) return err('Names are 1 to 32 characters.', 'bad_name');
-        if (BADGES.some((b) => b !== before && b.name.toLowerCase() === name.trim().toLowerCase())) return err('A badge or paint with that name exists already.', 'name_taken');
+        if (BADGES.some((b) => b !== before && b.name.toLowerCase() === name.trim().toLowerCase())) return err('A badge with that name exists already.', 'name_taken');
         const tooltip = input.tooltip ?? before?.tooltip;
         if (typeof tooltip !== 'string' || !tooltip.trim() || tooltip.trim().length > 64) return err('Tooltips are 1 to 64 characters.', 'bad_tooltip');
         const image = input.imageId ? C_IMAGES.find((i) => i.id === input.imageId && i.kind === 'BADGE') : before?.image;
@@ -985,7 +988,7 @@ function cosmeticsAnswer(q, v, session, admin) {
         if (field === 'updatePaint' && !before) return err('Not found.', 'not_found');
         const bad = checkPaint(input);
         if (bad) return err(...bad);
-        if (PAINTS.some((x) => x !== before && x.name.toLowerCase() === input.name.trim().toLowerCase())) return err('A badge or paint with that name exists already.', 'name_taken');
+        if (PAINTS.some((x) => x !== before && x.name.toLowerCase() === input.name.trim().toLowerCase())) return err('A paint with that name exists already.', 'name_taken');
         if (input.imageId && !C_IMAGES.some((i) => i.id === input.imageId && i.kind === 'PAINT')) return err('No paint picture with that ID.', 'bad_image');
         const paint = paintFrom(before?.id ?? `01JD8XPNT${String(100 + cosmeticSeq++).padStart(17, '0')}`, input, before);
         if (before) PAINTS[PAINTS.indexOf(before)] = paint;
@@ -2318,6 +2321,56 @@ function baseAnswer(body, session, admin) {
   return err('Not in the mock.', 'not_implemented');
 }
 
+// Uploaded cosmetic pictures (image id -> bytes), served under /cosmetics/uploads/<id>/<n>x.webp.
+const UPLOAD_FILES = new Map();
+
+/** A multipart/form-data body as { name: { data: Buffer, type } }, or null when it isn't one. */
+function multipart(body, contentType = '') {
+  const boundary = /boundary=(?:"([^"]+)"|([^;]+))/i.exec(contentType);
+  if (!boundary) return null;
+  const sep = Buffer.from(`--${boundary[1] ?? boundary[2]}`);
+  const out = {};
+  let at = body.indexOf(sep);
+  while (at >= 0) {
+    const start = at + sep.length;
+    if (body.subarray(start, start + 2).toString() === '--') break;
+    const next = body.indexOf(sep, start);
+    if (next < 0) break;
+    const part = body.subarray(start + 2, next - 2); // drop the CRLF after the boundary and before the next
+    const headEnd = part.indexOf('\r\n\r\n');
+    if (headEnd >= 0) {
+      const head = part.subarray(0, headEnd).toString('utf8');
+      const name = /name="([^"]*)"/i.exec(head)?.[1];
+      if (name && !(name in out)) out[name] = { data: part.subarray(headEnd + 4), type: /content-type:\s*([^\r\n]+)/i.exec(head)?.[1] ?? '' };
+    }
+    at = next;
+  }
+  return out;
+}
+
+/** Format, size and animation of a PNG/APNG, GIF or WebP from its bytes (null for anything else). */
+function probeImage(b) {
+  if (b.length > 24 && b.readUInt32BE(0) === 0x89504e47) {
+    return { mime: 'image/png', width: b.readUInt32BE(16), height: b.readUInt32BE(20), animated: b.includes(Buffer.from('acTL')) };
+  }
+  if (b.length > 10 && b.subarray(0, 4).toString('latin1') === 'GIF8') {
+    // more than one image descriptor (0x2C after a graphic control block) is an animation
+    const frames = b.toString('latin1').split('\x21\xF9\x04').length - 1;
+    return { mime: 'image/gif', width: b.readUInt16LE(6), height: b.readUInt16LE(8), animated: frames > 1 };
+  }
+  if (b.length > 30 && b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP') {
+    const chunk = b.subarray(12, 16).toString('latin1');
+    const animated = b.includes(Buffer.from('ANIM'));
+    if (chunk === 'VP8X') return { mime: 'image/webp', width: 1 + b.readUIntLE(24, 3), height: 1 + b.readUIntLE(27, 3), animated };
+    if (chunk === 'VP8 ') return { mime: 'image/webp', width: b.readUInt16LE(26) & 0x3fff, height: b.readUInt16LE(28) & 0x3fff, animated };
+    if (chunk === 'VP8L') {
+      const v = b.readUInt32LE(21);
+      return { mime: 'image/webp', width: (v & 0x3fff) + 1, height: ((v >> 14) & 0x3fff) + 1, animated };
+    }
+  }
+  return null;
+}
+
 function read(req) {
   return new Promise((resolve) => {
     const chunks = [];
@@ -2390,25 +2443,51 @@ createServer(async (req, res) => {
     return json(res, 200, { users: out.map((u) => ({ platform_user_id: u.platformUserId, badge_id: u.badgeId, paint_id: u.paintId })) });
   }
   if (req.method === 'POST' && url.pathname === '/v1/cosmetics/images') {
-    const raw = (await read(req)).toString('latin1');
+    const body = await read(req);
     if (!session) return json(res, 401, { error: 'signed_out', message: 'Sign in to upload.' });
     if (!admin) return json(res, 403, { error: 'forbidden', message: 'This needs cosmetics.manage.' });
-    const kind = raw.match(/name="kind"\r\n\r\n([^\r]*)/)?.[1]?.trim();
-    const file = raw.match(/name="file"[^\r]*\r\n(?:[^\r]+\r\n)*\r\n([\s\S]*?)\r\n--/)?.[1];
+    const parts = multipart(body, req.headers['content-type']);
+    if (!parts) return json(res, 400, { error: 'bad_form', message: 'The form couldn’t be read.' });
+    const kind = parts.kind?.data.toString('utf8').trim();
     if (kind === undefined) return json(res, 400, { error: 'bad_form', message: 'Say what it is for: kind=badge or kind=paint.' });
     if (kind !== 'badge' && kind !== 'paint') return json(res, 400, { error: 'bad_kind', message: 'kind is badge or paint.' });
-    if (file === undefined) return json(res, 400, { error: 'bad_form', message: 'Attach the image as `file`.' });
-    // The same bytes give the same picture again (the API keys pictures by their SHA-256).
-    const sha = createHash('sha256').update(file, 'latin1').digest('hex');
+    const file = parts.file?.data;
+    if (!file?.length) return json(res, 400, { error: 'bad_form', message: 'Attach the image as `file`.' });
+    if (file.length > 5 * 1024 * 1024) return json(res, 413, { error: 'too_large', message: 'Pictures are at most 5 MB.' });
+    // The uploaded picture itself is kept and served back (as the worker's files would be), so what
+    // was uploaded is what the site shows. The checks are the API's (cosmetics::check_dimensions).
+    const probe = probeImage(file);
+    if (!probe) return json(res, 415, { error: 'unsupported_format', message: 'Use a PNG, APNG, GIF or WebP.' });
+    if (kind === 'badge' && !(probe.width === probe.height && probe.width >= 72))
+      return json(res, 422, { error: 'bad_dimensions', message: 'Badge pictures are square and at least 72×72 px.' });
+    if (kind === 'paint' && probe.height < 64) return json(res, 422, { error: 'bad_dimensions', message: 'Paint pictures are at least 64 px tall.' });
+    // The real POST answers in the REST shape, and the same bytes give the same picture again
+    // (the API keys pictures by their SHA-256), already ready.
+    const sha = createHash('sha256').update(file).digest('hex');
     const again = UPLOADED.get(sha);
     if (again) return json(res, 202, restOf(again));
-    // Uploads reuse the sample star picture; the files are "made" two seconds later.
-    const img = { ...cImage('sample-star', kind.toUpperCase()), id: `01JD8XIMG${String(100 + cosmeticSeq++).padStart(17, '0')}`, ready: false, files: [], createdAt: new Date().toISOString() };
-    if (kind === 'paint') img.host = `${BASE}/cosmetics/badges/sample-star`;
+    const id = `01JD8XIMG${String(100 + cosmeticSeq++).padStart(17, '0')}`;
+    const base = kind === 'badge' ? 18 : 64;
+    const files = [1, 2, 4].flatMap((k) => {
+      const h = base * k;
+      const w = Math.round((probe.width / probe.height) * h);
+      return (probe.animated ? [false, true] : [false]).map((still) => ({ name: `${k}x${still ? '_static' : ''}.webp`, format: 'WEBP', scale: k, width: w, height: h, size: file.length, isStatic: still }));
+    });
+    UPLOAD_FILES.set(id, { bytes: file, mime: probe.mime });
+    const img = { id, kind: kind.toUpperCase(), host: `${BASE}/cosmetics/uploads/${id}`, animated: probe.animated, width: probe.width, height: probe.height,
+      ready: false, files: [], createdAt: new Date().toISOString() };
     C_IMAGES.push(img);
     UPLOADED.set(sha, img);
-    setTimeout(() => Object.assign(img, { ready: true, files: cImage('sample-star').files }), 2000);
+    // The files are "made" a moment later, as the worker would.
+    setTimeout(() => Object.assign(img, { ready: true, files }), Number(process.env.MOCK_IMAGE_DELAY ?? 2000));
     return json(res, 202, restOf(img));
+  }
+  const uploaded = url.pathname.match(/^\/cosmetics\/uploads\/([0-9A-Z]+)\/[124]x(?:_static)?\.(?:webp|avif)$/);
+  if (uploaded) {
+    const u = UPLOAD_FILES.get(uploaded[1]);
+    if (!u) return res.writeHead(404).end();
+    res.writeHead(200, { 'content-type': u.mime, 'cache-control': 'no-store' });
+    return res.end(u.bytes);
   }
   const av = url.pathname.match(/^\/avatars\/(\d+)\.svg$/);
   if (av) {
