@@ -29,8 +29,8 @@ use cyex_tv_shared::model::{
     Entitlement, EntitlementPage, Event, GrantCosmetic, Identity, Me, Notification, OwnedCosmetics,
     Paint, PaintInput, PendingDeletion, PersonalSetEntry, Platform, QuickSearch, Report,
     ReportAction, ReportQueue, ReviewQueue, ReviewQueueFilter, Role, SearchResults, SetEmote,
-    SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole,
-    UpdateSet, UpdateSetEmote, UserCosmetics,
+    SetEmotePage, SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote,
+    UpdateRole, UpdateSet, UpdateSetEmote, UserCosmetics,
 };
 use cyex_tv_shared::model::{
     Checkout, CodeBatch, CodeBatchInput, CodeBatchPage, CreatedCodeBatch, Order, OrderPage,
@@ -319,6 +319,30 @@ impl Query {
         catalog::set(state(ctx), caller_opt(ctx), &id)
             .await
             .map_err(api_error)
+    }
+
+    /// A page of a set's emotes, oldest first, for sets too big to read whole. Who may see what is
+    /// the rule of `set`; an unknown or hidden set is an empty page. `query` keeps the emotes whose
+    /// name in the set or own name contains it (case-insensitive). `perPage` is 1 to 200, default
+    /// 120; `total` counts every match.
+    async fn set_emotes(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        query: Option<String>,
+        page: Option<u32>,
+        per_page: Option<u32>,
+    ) -> Result<SetEmotePage> {
+        catalog::set_emotes(
+            state(ctx),
+            caller_opt(ctx),
+            &id,
+            query.as_deref(),
+            page,
+            per_page,
+        )
+        .await
+        .map_err(api_error)
     }
 
     /// An account's `LISTED` sets as profile cards, oldest first, at most 50. `preview` is how

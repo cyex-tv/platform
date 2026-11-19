@@ -8,13 +8,15 @@
   import { gql } from '$lib/api';
   import { ACCEPT_EMOTE_TRANSFER, DECLINE_EMOTE_TRANSFER } from '$lib/queries';
   import { fail, notify } from '$lib/tool/notices.svelte';
-  import { describe } from './notifications';
+  import { closedRequest, describe } from './notifications';
   import { answered, type Note } from './inbox.svelte';
 
   type Props = { note: Note; onpick?: (n: Note) => void };
   let { note, onpick }: Props = $props();
   const line = $derived(describe(note.kind, note.payload));
 
+  // What the request is now (answered elsewhere, withdrawn or run out): the buttons go, the state stays.
+  const closed = $derived(closedRequest(note.transferState));
   // A transfer request is answered here too (ADR 0014); the emote's edit page lists it as well.
   let busy = $state(false);
   async function answer(accept: boolean) {
@@ -51,7 +53,7 @@
 {/if}
 {#if line.request}
   <div class="answer">
-    {#if answered[line.request]}<span class="ui-hint" role="status">{answered[line.request]}</span>
+    {#if answered[line.request] ?? closed}<span class="ui-hint" role="status">{answered[line.request] ?? closed}</span>
     {:else}
       <button class="ui-btn primary small" type="button" disabled={busy} onclick={() => answer(true)}>Accept</button>
       <button class="ui-btn secondary small" type="button" disabled={busy} onclick={() => answer(false)}>Decline</button>

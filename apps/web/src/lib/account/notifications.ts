@@ -16,6 +16,26 @@ export type Line = {
   request?: string | null;
 };
 
+/**
+ * What a transfer request's notification says once the request is no longer open, from the state
+ * the API reports now (`ACCEPTED`, `DECLINED`, `CANCELLED`, `EXPIRED`); null while it is pending
+ * or when the state isn't known (then the buttons stay, and the API answers if it is closed).
+ */
+export function closedRequest(state: string | null | undefined): string | null {
+  switch (state) {
+    case 'ACCEPTED':
+      return 'Accepted: it moved.';
+    case 'DECLINED':
+      return 'Declined: it stays yours.';
+    case 'CANCELLED':
+      return 'Withdrawn: it stays yours.';
+    case 'EXPIRED':
+      return 'Expired: nobody answered in time.';
+    default:
+      return null;
+  }
+}
+
 /** The payload as an object, or an empty one when it isn't JSON or isn't an object. */
 export function parsePayload(payload: string | null | undefined): Record<string, unknown> {
   if (typeof payload !== 'string' || !payload) return {};

@@ -545,6 +545,16 @@ const SETS = [
   { id: '01JD8XSET000000000000000OAK', name: 'quietoak main', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[0],
     emotes: ALL.slice(60, 70).map((e) => member(e)), editors: [ME_SUMMARY], visibility: 'LISTED', createdAt: '2026-11-08T09:00:00.000Z' },
 ];
+// MOCK_SET_SIZE=1000: the "Main" set holds that many emotes (a real set can hold 1.000), to try
+// paging and the filter in the set editor. The extra ones are copies of the mock emotes under
+// their own ids and numbered names.
+if (Number(process.env.MOCK_SET_SIZE) > SETS[0].emotes.length) {
+  const want = Math.min(1000, Number(process.env.MOCK_SET_SIZE));
+  for (let i = SETS[0].emotes.length; i < want; i++) {
+    const base = ALL[i % ALL.length];
+    SETS[0].emotes.push(member({ ...base, id: `${base.id}-big${i}`, name: `${base.name}${i}`, createdAt: new Date(Date.parse('2026-11-01T00:00:00Z') + i * 60_000).toISOString() }));
+  }
+}
 const GLOBAL = { id: '01JD8XSET0000000000000GLOBL', name: 'Global', kind: 'GLOBAL', capacity: 200, owner: null,
   emotes: ALL.slice(0, 24).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-01T00:00:00.000Z' };
 SETS.push(GLOBAL);
@@ -1615,7 +1625,20 @@ function signedIn(body, v, ADMIN) {
       // Private sets of others answer as if they did not exist; a visible set you can't edit is forbidden.
       if (!s || !mayView(s, true)) return { data: { set: null, setEditors: [], editorOf: editorOfOut(), ...channels } };
       if (!setRights(s, ADMIN).emotes) return forbidden();
-      return { data: { set: setOut(s), setEditors: s.editors, editorOf: editorOfOut(), ...channels } };
+      return { data: { set: { ...setOut(s), emotes: undefined }, setEditors: s.editors, editorOf: editorOfOut(), ...channels } };
+    }
+    // setEmotes: a page of a set's members, oldest first; query keeps the name in the set or the
+    // emote's own name (any case, literally); perPage is 1 to 200, default 120.
+    case 'SetEmotes':
+    case 'SetMembers': {
+      const s = findSet(v.id);
+      if (!s || !mayView(s, true)) return { data: { setEmotes: { total: 0, items: [] } } };
+      const q = (v.query ?? '').trim().toLowerCase();
+      const all = [...s.emotes].sort((a, b) => a.addedAt.localeCompare(b.addedAt))
+        .filter((m) => !q || m.name.toLowerCase().includes(q) || m.emote.name.toLowerCase().includes(q));
+      const per = Math.min(200, Math.max(1, v.perPage ?? 120));
+      const from = (Math.max(1, v.page ?? 1) - 1) * per;
+      return { data: { setEmotes: { total: all.length, items: all.slice(from, from + per) } } };
     }
     case 'CreateSet': {
       const ownerId = v.input.ownerId || ME_ID;
@@ -1809,7 +1832,12 @@ function signedIn(body, v, ADMIN) {
       return { data: { unlinkIdentity: { id: ME_ID } } };
     }
     case 'MyNotifications':
-      return { data: { myNotifications: NOTES.slice(0, 100) } };
+      // transferState: where the request of an emote.transfer_requested note stands now.
+      return { data: { myNotifications: NOTES.slice(0, 100).map((n) => {
+        if (n.kind !== 'emote.transfer_requested') return n;
+        const t = TRANSFERS.find((x) => x.id === JSON.parse(n.payload).request_id);
+        return { ...n, transferState: t ? (t.state === 'PENDING' && Date.parse(t.expiresAt) <= Date.now() ? 'EXPIRED' : t.state) : null };
+      }) } };
     case 'Emote':
       return { data: { emote: findEmote(v.id) ?? PENDING.find((e) => e.id === v.id) ?? null } };
     case 'AdminCounts':
