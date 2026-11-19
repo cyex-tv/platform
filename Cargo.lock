@@ -614,6 +614,7 @@ dependencies = [
  "chrono",
  "cyex-tv-auth",
  "cyex-tv-db",
+ "cyex-tv-events",
  "cyex-tv-hub",
  "cyex-tv-media",
  "cyex-tv-paddle",
