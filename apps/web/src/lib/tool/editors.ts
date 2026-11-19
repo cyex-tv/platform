@@ -3,7 +3,13 @@
 import type { EditorPermission } from '$lib/gql/graphql';
 
 export type PermissionInfo = { key: EditorPermission; label: string; line: string; reserved?: boolean };
-export type PermissionGroup = { label: string; note?: string; items: PermissionInfo[] };
+export type PermissionGroup = {
+  label: string;
+  note?: string;
+  /** Its permissions count only on a grant covering every set (the API's rule for emotes). */
+  needsAllSets?: boolean;
+  items: PermissionInfo[];
+};
 
 /** The dialog's groups, in order. `reserved` flags are stored now and checked once their feature exists. */
 export const GROUPS: PermissionGroup[] = [
@@ -16,11 +22,11 @@ export const GROUPS: PermissionGroup[] = [
   },
   {
     label: 'Emotes',
-    note: 'Saved now; used once uploads and transfers for others arrive.',
+    needsAllSets: true,
     items: [
-      { key: 'EMOTE_UPLOAD', label: 'Upload', line: 'Upload emotes for the account.', reserved: true },
-      { key: 'EMOTE_MANAGE', label: 'Manage', line: 'Rename, retag and delete its emotes.', reserved: true },
-      { key: 'EMOTE_TRANSFER', label: 'Transfer', line: 'Give its emotes to someone else.', reserved: true },
+      { key: 'EMOTE_UPLOAD', label: 'Upload', line: 'Upload emotes the account owns.' },
+      { key: 'EMOTE_MANAGE', label: 'Manage', line: 'Rename, retag, hide and delete its emotes.' },
+      { key: 'EMOTE_TRANSFER', label: 'Transfer', line: 'Give its emotes to an account that trusts them.' },
     ],
   },
   {
@@ -168,6 +174,64 @@ export function canManage(
   theirScope: Scope = ALL_SETS,
 ): boolean {
   return held.has('EDITORS') && implied(theirs).every((p) => held.has(p)) && within(theirScope, mine);
+}
+
+// Emotes belong to the account, not to a set: the emote permissions count only on a grant that
+// covers every set (the API refuses them otherwise).
+
+export const EMOTE_PERMISSIONS: readonly EditorPermission[] = ['EMOTE_UPLOAD', 'EMOTE_MANAGE', 'EMOTE_TRANSFER'];
+
+type EmoteGrant = { account: { id: string }; permissions: readonly EditorPermission[]; allSets?: boolean };
+
+/** What a grant lets you do, as the API checks it: the emote permissions drop out on a set-limited grant. */
+export function effective(g: { permissions: readonly EditorPermission[]; allSets?: boolean }): EditorPermission[] {
+  const perms = implied(g.permissions);
+  return g.allSets === false ? perms.filter((p) => !EMOTE_PERMISSIONS.includes(p)) : perms;
+}
+
+/** Whether a grant holds emote permissions that its set limit switches off. */
+export function emotePermissionsIdle(g: { permissions: readonly EditorPermission[]; allSets?: boolean }): boolean {
+  return g.allSets === false && g.permissions.some((p) => EMOTE_PERMISSIONS.includes(p));
+}
+
+/** Whether you may use one emote permission on `ownerId`'s emotes: always on your own. */
+export function emoteCan(
+  grants: readonly EmoteGrant[] | null | undefined,
+  ownerId: string | null | undefined,
+  me: string | null | undefined,
+  key: EditorPermission,
+): boolean {
+  if (!ownerId || !me) return false;
+  if (ownerId === me) return true;
+  const g = grants?.find((x) => x.account.id === ownerId);
+  return !!g && effective(g).includes(key);
+}
+
+export type UploadTarget = { id: string; displayName: string; self: boolean };
+
+/** Who you can upload for: yourself first, then the accounts where you hold Upload, by name. */
+export function uploadTargets(
+  me: { id: string; displayName: string } | null | undefined,
+  grants: readonly (EmoteGrant & { account: { id: string; displayName: string } })[] | null | undefined,
+): UploadTarget[] {
+  if (!me) return [];
+  const others = (grants ?? [])
+    .filter((g) => g.account.id !== me.id && effective(g).includes('EMOTE_UPLOAD'))
+    .map((g) => ({ id: g.account.id, displayName: g.account.displayName, self: false }))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName));
+  return [{ id: me.id, displayName: me.displayName, self: true }, ...others];
+}
+
+/**
+ * Where an emote can go: yourself (unless it's yours already), and the accounts where you hold
+ * Upload, so nobody gets an emote from someone they never trusted.
+ */
+export function transferTargets(
+  me: { id: string; displayName: string } | null | undefined,
+  grants: readonly (EmoteGrant & { account: { id: string; displayName: string } })[] | null | undefined,
+  ownerId: string | null | undefined,
+): UploadTarget[] {
+  return uploadTargets(me, grants).filter((t) => t.id !== ownerId);
 }
 
 /** The most editors an account can have (the API's `too_many_editors`). */

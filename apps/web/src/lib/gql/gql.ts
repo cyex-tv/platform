@@ -98,6 +98,7 @@ type Documents = {
     "\n  query MySetNames {\n    mySets {\n      id\n      name\n      kind\n      emotes {\n        emote {\n          id\n        }\n      }\n    }\n  }\n": typeof types.MySetNamesDocument,
     "\n  query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: \"\", owner: $owner, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.SearchByOwnerDocument,
     "\n  query AdminAccount($accountId: String!) {\n    adminAccount(accountId: $accountId) {\n      id\n      displayName\n      avatar\n      createdAt\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.AdminAccountDocument,
+    "\n  mutation TransferEmote($id: String!, $toAccountId: String!) {\n    transferEmote(id: $id, toAccountId: $toAccountId) {\n      ...EmoteFields\n    }\n  }\n": typeof types.TransferEmoteDocument,
     "\n  query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {\n    accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.AccountEmotesDocument,
     "\n  query AccountReports($accountId: String!) {\n    accountReports(accountId: $accountId) {\n      about {\n        ...ReportFields\n      }\n      by {\n        ...ReportFields\n      }\n    }\n  }\n": typeof types.AccountReportsDocument,
     "\n  query PublicAccount($id: String!) {\n    account(id: $id) {\n      id\n      displayName\n      avatar\n    }\n  }\n": typeof types.PublicAccountDocument,
@@ -121,7 +122,7 @@ type Documents = {
     "\n  mutation RevokeCosmetic($accountId: String!, $kind: CosmeticKind!, $cosmeticId: String!, $reason: String) {\n    revokeCosmetic(accountId: $accountId, kind: $kind, cosmeticId: $cosmeticId, reason: $reason)\n  }\n": typeof types.RevokeCosmeticDocument,
     "\n  query AccountRoles($accountId: String!) {\n    accountRoles(accountId: $accountId) {\n      id\n      name\n      position\n    }\n  }\n": typeof types.AccountRolesDocument,
     "\n  query AccountEditors($accountId: String) {\n    accountEditors(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n    }\n  }\n": typeof types.AccountEditorsDocument,
-    "\n  query EditorOf {\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n    }\n  }\n": typeof types.EditorOfDocument,
+    "\n  query EditorOf {\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n      allSets\n    }\n  }\n": typeof types.EditorOfDocument,
     "\n  query AccountSets($accountId: String!) {\n    accountSets(accountId: $accountId, preview: 12) {\n      id\n      name\n      kind\n      capacity\n      slotsUsed\n      active\n      preview {\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": typeof types.AccountSetsDocument,
     "\n  query ProfileMine {\n    myChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n    }\n    mySets {\n      ...SetFields\n    }\n  }\n": typeof types.ProfileMineDocument,
     "\n  query ProfileEdited {\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorSets {\n      ...SetFields\n    }\n  }\n": typeof types.ProfileEditedDocument,
@@ -240,6 +241,7 @@ const documents: Documents = {
     "\n  query MySetNames {\n    mySets {\n      id\n      name\n      kind\n      emotes {\n        emote {\n          id\n        }\n      }\n    }\n  }\n": types.MySetNamesDocument,
     "\n  query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: \"\", owner: $owner, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.SearchByOwnerDocument,
     "\n  query AdminAccount($accountId: String!) {\n    adminAccount(accountId: $accountId) {\n      id\n      displayName\n      avatar\n      createdAt\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n": types.AdminAccountDocument,
+    "\n  mutation TransferEmote($id: String!, $toAccountId: String!) {\n    transferEmote(id: $id, toAccountId: $toAccountId) {\n      ...EmoteFields\n    }\n  }\n": types.TransferEmoteDocument,
     "\n  query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {\n    accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.AccountEmotesDocument,
     "\n  query AccountReports($accountId: String!) {\n    accountReports(accountId: $accountId) {\n      about {\n        ...ReportFields\n      }\n      by {\n        ...ReportFields\n      }\n    }\n  }\n": types.AccountReportsDocument,
     "\n  query PublicAccount($id: String!) {\n    account(id: $id) {\n      id\n      displayName\n      avatar\n    }\n  }\n": types.PublicAccountDocument,
@@ -263,7 +265,7 @@ const documents: Documents = {
     "\n  mutation RevokeCosmetic($accountId: String!, $kind: CosmeticKind!, $cosmeticId: String!, $reason: String) {\n    revokeCosmetic(accountId: $accountId, kind: $kind, cosmeticId: $cosmeticId, reason: $reason)\n  }\n": types.RevokeCosmeticDocument,
     "\n  query AccountRoles($accountId: String!) {\n    accountRoles(accountId: $accountId) {\n      id\n      name\n      position\n    }\n  }\n": types.AccountRolesDocument,
     "\n  query AccountEditors($accountId: String) {\n    accountEditors(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n    }\n  }\n": types.AccountEditorsDocument,
-    "\n  query EditorOf {\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n    }\n  }\n": types.EditorOfDocument,
+    "\n  query EditorOf {\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n      allSets\n    }\n  }\n": types.EditorOfDocument,
     "\n  query AccountSets($accountId: String!) {\n    accountSets(accountId: $accountId, preview: 12) {\n      id\n      name\n      kind\n      capacity\n      slotsUsed\n      active\n      preview {\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": types.AccountSetsDocument,
     "\n  query ProfileMine {\n    myChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n    }\n    mySets {\n      ...SetFields\n    }\n  }\n": types.ProfileMineDocument,
     "\n  query ProfileEdited {\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorSets {\n      ...SetFields\n    }\n  }\n": types.ProfileEditedDocument,
@@ -634,6 +636,10 @@ export function graphql(source: "\n  query AdminAccount($accountId: String!) {\n
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
+export function graphql(source: "\n  mutation TransferEmote($id: String!, $toAccountId: String!) {\n    transferEmote(id: $id, toAccountId: $toAccountId) {\n      ...EmoteFields\n    }\n  }\n"): typeof import('./graphql').TransferEmoteDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
 export function graphql(source: "\n  query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {\n    accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n"): typeof import('./graphql').AccountEmotesDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
@@ -726,7 +732,7 @@ export function graphql(source: "\n  query AccountEditors($accountId: String) {\
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query EditorOf {\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n    }\n  }\n"): typeof import('./graphql').EditorOfDocument;
+export function graphql(source: "\n  query EditorOf {\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n      allSets\n    }\n  }\n"): typeof import('./graphql').EditorOfDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

@@ -14,6 +14,8 @@
   import { bytes, clean, count, date } from '$lib/format';
   import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
   import { can, session } from '$lib/tool/session.svelte';
+  import { editorOf, type Grant } from '$lib/profile/data.svelte';
+  import { emoteCan } from '$lib/tool/editors';
   import ActivityTab from './ActivityTab.svelte';
   import ChannelsTab from './ChannelsTab.svelte';
   import Pager from './Pager.svelte';
@@ -46,9 +48,20 @@
   const uploaded = $derived(date(e.createdAt));
   const kinds = $derived(formats(e.files));
   const biggest = $derived(scaleFiles(e.files).at(-1));
-  // Edit: the owner, and staff who may change any emote (the API checks again).
+  // Edit: the owner, editors of the owner's account with Manage on every set (ADR 0014), and staff
+  // who may change any emote (the API checks again).
+  let grants = $state<readonly Grant[] | null>(null);
+  $effect(() => {
+    const me = session.me;
+    if (!me || !e.owner || e.owner.id === me.id) return;
+    editorOf()
+      .then((g) => (grants = g))
+      .catch(() => {});
+  });
   const editHref = $derived(
-    session.me && (e.owner?.id === session.me.id || can('emotes.edit_any')) ? `/me/emotes/${encodeURIComponent(e.id)}` : null,
+    session.me && (emoteCan(grants, e.owner?.id, session.me.id, 'EMOTE_MANAGE') || can('emotes.edit_any'))
+      ? `/me/emotes/${encodeURIComponent(e.id)}`
+      : null,
   );
 
   // Pause: null follows the reader's motion setting (decided by CSS before the script runs).

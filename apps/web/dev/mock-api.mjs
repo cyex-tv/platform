@@ -701,7 +701,8 @@ const ACCOUNT_EDITORS = [
   { account: OTHERS[2], permissions: ['EMOTES', 'SETS', 'EDITORS', 'CHANNELS'], allSets: true, setIds: [], grantedBy: ME_SUMMARY, grantedAt: '2026-11-14T18:30:00.000Z', updatedAt: '2026-11-14T18:30:00.000Z' },
 ];
 const EDITOR_OF = [
-  { account: OTHERS[0], permissions: ['EMOTES', 'SETS', 'CHANNELS'], allSets: true, setIds: [], grantedAt: '2026-11-13T09:00:00.000Z' },
+  // The emote permissions (ADR 0014): upload as, manage and transfer OTHERS[0]'s emotes.
+  { account: OTHERS[0], permissions: ['EMOTES', 'SETS', 'CHANNELS', 'EMOTE_UPLOAD', 'EMOTE_MANAGE', 'EMOTE_TRANSFER'], allSets: true, setIds: [], grantedAt: '2026-11-13T09:00:00.000Z' },
   { account: OTHERS[4], permissions: ['EMOTES', 'PROFILE'], allSets: true, setIds: [], grantedAt: '2026-11-15T20:00:00.000Z' },
 ];
 // MOCK_EDITORS=50: the account is at the editor limit.
@@ -1471,6 +1472,10 @@ const ACTIVE_SET_IDS = () => new Set([...CHANNELS, ...EDITOR_CHANNELS].map((c) =
 const mayView = (s, session) => s.visibility !== 'PRIVATE' || ACTIVE_SET_IDS().has(s.id)
   || (session && (s.owner?.id === ME_ID || s.editors.some((e) => e.id === ME_ID) || EDITOR_OF.some((g) => g.account.id === s.owner?.id)));
 const err = (message, code) => ({ data: null, errors: [{ message, extensions: { code } }] });
+// The API's rule for the emote permissions: held on a grant that covers every set.
+const emoteGrant = (ownerId, flag) => EDITOR_OF.some((g) => g.account.id === ownerId && g.allSets && g.permissions.includes(flag));
+const managed = (e) => !!e && !!e.owner && e.owner.id !== ME_ID && emoteGrant(e.owner.id, 'EMOTE_MANAGE');
+const anyEmote = (id) => findEmote(id) ?? PENDING.find((e) => e.id === id);
 const setOut = (s) => ({ ...s, editors: undefined, visibility: s.visibility ?? 'LISTED', listed: (s.visibility ?? 'LISTED') === 'LISTED',
   slotsUsed: s.emotes.length, createdAt: s.createdAt ?? '2026-11-10T12:00:00.000Z' });
 const setCard = (s, preview = 12) => {
@@ -1527,7 +1532,7 @@ function signedIn(body, v, ADMIN) {
     }
     case 'UpdateEmote': {
       // Staff with emotes.edit_any (the mock admin) change anyone's.
-      const e = MINE.find((x) => x.id === v.id) ?? (ADMIN ? findEmote(v.id) : null);
+      const e = MINE.find((x) => x.id === v.id) ?? (ADMIN || managed(anyEmote(v.id)) ? anyEmote(v.id) : null);
       if (!e) return err('Only the emote’s owner can change it.', 'forbidden');
       if (v.input.name !== undefined) e.name = v.input.name;
       if (v.input.tags) e.tags = v.input.tags;
@@ -1545,8 +1550,13 @@ function signedIn(body, v, ADMIN) {
     }
     case 'DeleteEmote': {
       const i = MINE.findIndex((x) => x.id === v.id);
-      // Staff with emotes.delete_any (the mock admin) delete anyone's.
-      const j = i < 0 && ADMIN ? ALL.findIndex((x) => x.id === v.id) : -1;
+      // Staff with emotes.delete_any (the mock admin), and editors with EMOTE_MANAGE, delete others'.
+      const j = i < 0 && (ADMIN || managed(anyEmote(v.id))) ? ALL.findIndex((x) => x.id === v.id) : -1;
+      const k = i < 0 && j < 0 && managed(anyEmote(v.id)) ? PENDING.findIndex((x) => x.id === v.id) : -1;
+      if (k >= 0) {
+        PENDING.splice(k, 1);
+        return { data: { deleteEmote: true } };
+      }
       if (i < 0 && j < 0) return err(findEmote(v.id) ? 'Only the emote’s owner can delete it.' : 'Not found.', findEmote(v.id) ? 'forbidden' : 'not_found');
       if (i >= 0) MINE.splice(i, 1);
       else ALL.splice(j, 1);
@@ -1798,8 +1808,30 @@ function signedIn(body, v, ADMIN) {
       const idn = (platform, n) => ({ platform, platformUserId: '5550' + a.id.slice(-3) + n, login: a.displayName.toLowerCase(), displayName: a.displayName, avatar: a.avatar });
       return { data: { adminAccount: { ...a, createdAt: '2026-10-02T09:30:00.000Z', ...st, identities: a.id === ME_ID ? IDENTITIES : [idn('TWITCH', 1), ...(a.id.endsWith('NORA') ? [idn('KICK', 2)] : [])] } } };
     }
+    case 'TransferEmote': {
+      // Owner or EMOTE_TRANSFER; the receiver is you or an account where you hold EMOTE_UPLOAD.
+      const e = anyEmote(v.id);
+      if (!e?.owner) return err('Not found.', 'not_found');
+      const mine = e.owner.id === ME_ID;
+      if (!mine && !emoteGrant(e.owner.id, 'EMOTE_TRANSFER')) return err('Only the emote’s owner and its editors with the transfer permission can give it away.', 'forbidden');
+      if (v.toAccountId === e.owner.id) return err('That account owns it already.', 'same_owner');
+      if (v.toAccountId !== ME_ID && !emoteGrant(v.toAccountId, 'EMOTE_UPLOAD'))
+        return err('You can give it to yourself, or to an account you edit with the upload permission on every set.', 'forbidden');
+      const to = v.toAccountId === ME_ID ? ME_SUMMARY : EDITOR_OF.find((g) => g.account.id === v.toAccountId).account;
+      if (mine) {
+        MINE.splice(MINE.indexOf(e), 1);
+        ALL.unshift(e);
+      } else if (to === ME_SUMMARY) {
+        const at = ALL.indexOf(e);
+        if (at >= 0) ALL.splice(at, 1);
+        MINE.unshift(e);
+      }
+      e.owner = to;
+      return { data: { transferEmote: e } };
+    }
     case 'AccountEmotes': {
-      if (!ADMIN) return err('This needs users.view or emotes.review.', 'forbidden');
+      if (!ADMIN && v.accountId !== ME_ID && !emoteGrant(v.accountId, 'EMOTE_MANAGE'))
+        return err('This needs users.view or emotes.review, or the account’s emote manage permission.', 'forbidden');
       const all = [...MINE, ...PENDING, ...ALL].filter((e) => e.owner?.id === v.accountId);
       const per = v.perPage ?? 50;
       const from = ((v.page ?? 1) - 1) * per;
@@ -2360,8 +2392,14 @@ createServer(async (req, res) => {
     if (field('private') !== undefined && visField && flags.private !== (visibility === 'PRIVATE'))
       return json(res, 400, { error: 'bad_form', message: 'visibility and private say different things.' });
     flags.private = visibility === 'PRIVATE';
+    // Upload as (ADR 0014): an account where you hold EMOTE_UPLOAD on every set owns it.
+    const ownerId = (field('owner_id') ?? '').trim();
+    const forOther = ownerId && ownerId !== ME_ID;
+    if (forOther && !emoteGrant(ownerId, 'EMOTE_UPLOAD'))
+      return json(res, 403, { error: 'forbidden', message: 'You can upload for another account only as its editor with the upload permission on every set.' });
     await new Promise((r) => setTimeout(r, 700)); // long enough to see the progress
-    const e = emote(700 + uploads++, ME_SUMMARY, 'PENDING');
+    const owner = forOther ? EDITOR_OF.find((g) => g.account.id === ownerId).account : ME_SUMMARY;
+    const e = emote(700 + uploads++, owner, 'PENDING');
     e.name = name;
     e.flags = { ...flags, wide: false };
     e.visibility = visibility;
@@ -2369,7 +2407,8 @@ createServer(async (req, res) => {
     e.host = '';
     e.files = [];
     e.createdAt = new Date().toISOString();
-    MINE.unshift(e);
+    if (forOther) PENDING.unshift(e);
+    else MINE.unshift(e);
     // The worker "finishes" the files a few seconds later.
     setTimeout(() => {
       Object.assign(e, { host: emote(700).host, files: emote(700).files });

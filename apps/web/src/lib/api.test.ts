@@ -44,6 +44,12 @@ describe('uploadForm', () => {
     expect(priv.get('visibility')).toBe('private');
     expect(priv.get('private')).toBe('true');
   });
+
+  it('names the owner only when uploading for an account you edit', async () => {
+    const { uploadForm } = await import('./api');
+    expect(uploadForm(new Blob(['x']), 'a', [], {}, 'OWNER1').get('owner_id')).toBe('OWNER1');
+    expect(uploadForm(new Blob(['x']), 'a', [], {}, null).get('owner_id')).toBeNull();
+  });
 });
 
 describe('ApiError messages for a request with no answer', () => {

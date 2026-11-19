@@ -184,6 +184,9 @@
             {/each}
           </div>
           {#if g.note}<p class="ui-hint note">{g.note}</p>{/if}
+          {#if g.needsAllSets && !scope.all && g.items.some((p) => picked.includes(p.key))}
+            <p class="ui-hint note">These work only with All sets: an account’s emotes aren’t in any one set.</p>
+          {/if}
         </fieldset>
       {/each}
 

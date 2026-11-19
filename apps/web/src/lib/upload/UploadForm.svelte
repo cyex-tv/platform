@@ -7,13 +7,19 @@
   // then sent one after another with a progress bar; a refusal is explained in words and the file
   // stays in the queue to fix or retry. Uploading needs the guidelines box ticked once per batch.
   // One file that goes through opens its page; a batch stays with a link per emote.
+  // "Upload as" (ADR 0014) lists you and the accounts where you hold Upload on every set; you by
+  // default, or the account in ?for= when you may upload for it. The account owns what you upload.
   import { goto } from '$app/navigation';
+  import { page } from '$app/state';
   import { onDestroy } from 'svelte';
   import { ApiError, uploadEmote, type EmoteVisibility, type Uploaded } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import TagInput from '$lib/components/TagInput.svelte';
-  import { bytes, count, iso } from '$lib/format';
+  import { bytes, clean, count, iso } from '$lib/format';
+  import { editorOf, type Grant } from '$lib/profile/data.svelte';
+  import { emoteCan, uploadTargets } from '$lib/tool/editors';
+  import { session } from '$lib/tool/session.svelte';
   import {
     QUEUE_MAX,
     TAG_MAX,
@@ -70,6 +76,24 @@
   let dropButton: HTMLButtonElement;
   let acceptBox: HTMLInputElement;
   let nextKey = 0;
+
+  let grants = $state<readonly Grant[] | null>(null);
+  $effect(() => {
+    if (!session.me) return;
+    editorOf()
+      .then((g) => (grants = g))
+      .catch(() => {});
+  });
+  const me = $derived(session.me ? { id: session.me.id, displayName: session.me.identities[0]?.displayName ?? 'You' } : null);
+  const targets = $derived(uploadTargets(me, grants));
+  let picked = $state<string | null>(null);
+  // Your own account unless you picked another, or the page asked for one you may upload for.
+  const asked = $derived(page.url?.searchParams.get('for') ?? null);
+  const owner = $derived(targets.find((t) => t.id === (picked ?? asked)) ?? targets[0] ?? null);
+  const forOther = $derived(!!owner && !owner.self);
+  /** Where an upload opens: its edit page when you may edit it, else the account it went to. */
+  const openHref = (id: string) =>
+    !forOther || emoteCan(grants, owner?.id, session.me?.id, 'EMOTE_MANAGE') ? `/me/emotes/${id}` : `/users/${encodeURIComponent(owner!.id)}`;
 
   const waiting = $derived(items.filter((i) => i.status === 'ready' || i.status === 'failed'));
   const doneCount = $derived(items.filter((i) => i.status === 'done').length);
@@ -168,6 +192,7 @@
         item.tags,
         { zeroWidth: item.zeroWidth, visibility: item.visibility, nsfw: item.nsfw },
         (p) => (item.progress = p),
+        forOther ? owner!.id : null,
       );
       item.status = 'done';
       item.open = false;
@@ -210,12 +235,13 @@
     const failed = batch.filter((i) => i.status === 'failed').length;
     if (batch.length === 1 && ok === 1) {
       const made = batch[0].made!;
-      notify(`${iso(made.name)} uploaded. It’s pending until a moderator looks at it.`);
+      notify(`${iso(made.name)} uploaded${forOther ? ` for ${iso(clean(owner!.displayName))}` : ''}. It’s pending until a moderator looks at it.`);
+      const href = openHref(made.id);
       clearDone();
       accepted = false;
       tried = false;
       onclose?.();
-      await goto(`/me/emotes/${made.id}`);
+      await goto(href);
       return;
     }
     if (ok) notify(`${count(ok)} ${ok === 1 ? 'emote' : 'emotes'} uploaded${failed ? `, ${count(failed)} didn’t go through` : ''}. New emotes are pending until a moderator looks at them.`);
@@ -225,6 +251,15 @@
 </script>
 
 <form class="ui-form up-form" class:in-dialog={inDialog} onsubmit={submit} novalidate>
+  {#if targets.length > 1}
+    <label class="ui-field as">
+      <span class="ui-label">Upload as</span>
+      <select class="ui-input" value={owner?.id} onchange={(e) => (picked = e.currentTarget.value)} disabled={busy} aria-describedby="as-hint">
+        {#each targets as t (t.id)}<option value={t.id}>{t.self ? `${clean(t.displayName)} (you)` : clean(t.displayName)}</option>{/each}
+      </select>
+      <span class="ui-hint" id="as-hint">{forOther ? `${clean(owner!.displayName)} owns what you upload here; it counts toward both your hourly limits.` : 'You own what you upload. You can also upload for accounts you edit.'}</span>
+    </label>
+  {/if}
   <button
     type="button"
     class="drop"
@@ -271,7 +306,7 @@
                 <span class="bar" role="progressbar" aria-label="Uploading {item.name}" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(item.progress * 100)}><span style:transform="scaleX({Math.max(0.04, item.progress)})"></span></span>
               {:else if item.status === 'done' && item.made}
                 <span class="ui-chip pending">Pending</span>
-                <a class="ui-btn ghost small" href="/me/emotes/{item.made.id}" onclick={() => onclose?.()}>Open</a>
+                <a class="ui-btn ghost small" href={openHref(item.made.id)} onclick={() => onclose?.()}>Open</a>
               {:else if item.status === 'failed'}
                 <span class="ui-chip rejected">Didn’t go through</span>
               {:else if bad}
@@ -362,6 +397,7 @@
   @media (hover: hover) and (pointer: fine) { .drop:hover { border-color: var(--accent-border); background: var(--surface-hover); } }
   .drop.invalid { border-color: var(--red); }
   #drop-hint { margin: -8px 0 0; }
+  .as { max-width: 420px; }
 
   .queue { container-type: inline-size; list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
   .item { padding: 12px 14px; }
