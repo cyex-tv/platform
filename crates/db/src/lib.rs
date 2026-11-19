@@ -5,6 +5,7 @@
 //! Functions that need more than one statement open a nested transaction (a savepoint) themselves.
 
 pub mod accounts;
+pub mod app_auth;
 pub mod audit;
 pub mod blocklist;
 pub mod channels;

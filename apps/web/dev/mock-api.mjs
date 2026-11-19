@@ -2082,10 +2082,10 @@ function accountCosmetics(ids) {
 
 // Sessions (mySessions, revokeSession, revokeOtherSessions): where the mock account is signed in.
 const SESSIONS = [
-  { id: '01JD8XSESS0000000000000001', kind: 'SITE', device: 'Firefox on Windows', createdAt: '2026-11-10T12:00:00.000Z', lastSeenAt: '2026-11-17T22:40:00.000Z', expiresAt: '2026-12-17T22:40:00.000Z', current: true },
-  { id: '01JD8XSESS0000000000000002', kind: 'SITE', device: 'Safari on iPhone', createdAt: '2026-11-12T08:15:00.000Z', lastSeenAt: '2026-11-16T07:55:00.000Z', expiresAt: '2026-12-16T07:55:00.000Z', current: false },
-  { id: '01JD8XSESS0000000000000003', kind: 'APP', device: 'cyex.tv app', createdAt: '2026-11-11T18:00:00.000Z', lastSeenAt: '2026-11-17T21:05:00.000Z', expiresAt: '2027-02-15T21:05:00.000Z', current: false },
-  { id: '01JD8XSESS0000000000000004', kind: 'SITE', device: 'Chrome on Android', createdAt: '2026-11-02T10:00:00.000Z', lastSeenAt: '2026-11-03T10:00:00.000Z', expiresAt: '2026-12-03T10:00:00.000Z', current: false },
+  { id: '01JD8XSESS0000000000000001', kind: 'SITE', device: 'Firefox on Windows', createdAt: '2026-11-10T12:00:00.000Z', lastSeenAt: '2026-11-17T22:40:00.000Z', expiresAt: '2026-12-17T22:40:00.000Z', current: true, appClientId: null },
+  { id: '01JD8XSESS0000000000000002', kind: 'SITE', device: 'Safari on iPhone', createdAt: '2026-11-12T08:15:00.000Z', lastSeenAt: '2026-11-16T07:55:00.000Z', expiresAt: '2026-12-16T07:55:00.000Z', current: false, appClientId: null },
+  { id: '01JD8XSESS0000000000000003', kind: 'APP', device: 'cyex deck', createdAt: '2026-11-11T18:00:00.000Z', lastSeenAt: '2026-11-17T21:05:00.000Z', expiresAt: '2027-01-16T21:05:00.000Z', current: false, appClientId: 'cyex-deck' },
+  { id: '01JD8XSESS0000000000000004', kind: 'SITE', device: 'Chrome on Android', createdAt: '2026-11-02T10:00:00.000Z', lastSeenAt: '2026-11-03T10:00:00.000Z', expiresAt: '2026-12-03T10:00:00.000Z', current: false, appClientId: null },
 ];
 let exports = 0;
 if (process.env.MOCK_LONG === '1') SESSIONS[1].device = 'Mozilla Firefox Developer Edition on Windows 11 Enterprise N with a rather long device name that keeps going and going';
@@ -2398,6 +2398,52 @@ createServer(async (req, res) => {
   if (av) {
     res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' });
     return res.end(avatar(Number(av[1])));
+  }
+  // App sign-in (ADR 0021), as the API answers it: authorize -> the site's /authorize consent page ->
+  // consent (cookie) -> the loopback redirect with a code -> token. Codes and tokens are fakes.
+  if (url.pathname.startsWith('/v1/auth/app/')) {
+    const loopback = (raw) => /^http:\/\/(127\.0\.0\.1|\[::1\])(:\d{1,5})?\/callback$/.test(raw ?? '');
+    const back = (redirect, pairs) => `${redirect}?${new URLSearchParams(pairs)}`;
+    if (req.method === 'GET' && url.pathname === '/v1/auth/app/authorize') {
+      const p = url.searchParams;
+      if (p.get('client_id') !== 'cyex-deck') return json(res, 400, { error: 'unknown_client', message: 'Unknown client_id.' });
+      if (!loopback(p.get('redirect_uri'))) return json(res, 400, { error: 'bad_redirect_uri', message: 'redirect_uri must be http://127.0.0.1:<port>/callback or http://[::1]:<port>/callback.' });
+      const state = p.get('state') ?? '';
+      const challenge = p.get('code_challenge') ?? '';
+      if (p.get('code_challenge_method') !== 'S256' || !/^[A-Za-z0-9_-]{43}$/.test(challenge) || !state) {
+        res.writeHead(303, { location: back(p.get('redirect_uri'), { error: 'invalid_request', error_description: 'Bad request.', ...(state ? { state } : {}) }) });
+        return res.end();
+      }
+      const q = new URLSearchParams({ client_id: 'cyex-deck', redirect_uri: p.get('redirect_uri'), code_challenge: challenge, code_challenge_method: 'S256', state });
+      res.writeHead(303, { location: `${SITE}/authorize?${q}` });
+      return res.end();
+    }
+    if (req.method === 'GET' && url.pathname.startsWith('/v1/auth/app/clients/')) {
+      if (decodeURIComponent(url.pathname.slice('/v1/auth/app/clients/'.length)) !== 'cyex-deck') return json(res, 404, { error: 'unknown_client', message: 'Unknown client_id.' });
+      return json(res, 200, { clientId: 'cyex-deck', name: 'cyex deck', scopes: [
+        { id: 'sets.emotes', description: 'Manage emotes in sets you can edit' },
+        { id: 'cosmetics.select', description: 'Pick your cosmetics' },
+      ] });
+    }
+    if (req.method === 'POST' && url.pathname === '/v1/auth/app/consent') {
+      if (!session) return json(res, 401, { error: 'signed_out', message: 'Sign in on cyex.tv to allow an app.' });
+      const body = JSON.parse((await read(req)).toString('utf8') || '{}');
+      if (body.clientId !== 'cyex-deck') return json(res, 400, { error: 'unknown_client', message: 'Unknown client_id.' });
+      if (!loopback(body.redirectUri)) return json(res, 400, { error: 'bad_redirect_uri', message: 'redirect_uri must be a loopback /callback.' });
+      const location = body.allow
+        ? back(body.redirectUri, { code: `mockcode${String(Date.now()).padStart(35, '0')}`, state: body.state ?? '' })
+        : back(body.redirectUri, { error: 'access_denied', state: body.state ?? '' });
+      return json(res, 200, { location });
+    }
+    if (req.method === 'POST' && url.pathname === '/v1/auth/app/token') {
+      const form = new URLSearchParams((await read(req)).toString('utf8'));
+      if (form.get('client_id') !== 'cyex-deck') return json(res, 401, { error: 'invalid_client', error_description: 'Unknown client_id.', message: 'Unknown client_id.' });
+      const grant = form.get('grant_type');
+      if (grant !== 'authorization_code' && grant !== 'refresh_token') return json(res, 400, { error: 'unsupported_grant_type', error_description: 'grant_type must be authorization_code or refresh_token.', message: 'grant_type must be authorization_code or refresh_token.' });
+      const fake = () => `mock${Math.random().toString(36).slice(2).padEnd(39, '0')}`.slice(0, 43);
+      return json(res, 200, { access_token: fake(), token_type: 'Bearer', expires_in: 3600, refresh_token: fake(), scope: 'sets.emotes cosmetics.select' });
+    }
+    if (req.method === 'POST' && url.pathname === '/v1/auth/app/revoke') return res.writeHead(200).end();
   }
   if (req.method === 'GET' && /^\/v1\/auth\/(twitch|kick)\/login$/.test(url.pathname)) {
     if (url.searchParams.get('link') === 'true' && !IDENTITIES.some((i) => i.platform === 'KICK') && url.pathname.includes('kick'))

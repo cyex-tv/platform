@@ -89,7 +89,16 @@ pub(crate) fn session_view(s: &sessions::Session, caller: &Caller) -> AccountSes
             SessionKind::Site => SessionKindView::Site,
             SessionKind::App => SessionKindView::App,
         },
-        device: device_name(s.kind, s.user_agent.as_deref()),
+        // An app signed in through `/v1/auth/app` (ADR 0021) is named after itself.
+        device: s
+            .app_client_id
+            .as_deref()
+            .and_then(cyex_tv_auth::app::client)
+            .map_or_else(
+                || device_name(s.kind, s.user_agent.as_deref()),
+                |c| c.name.to_owned(),
+            ),
+        app_client_id: s.app_client_id.clone(),
         created_at: views::time(s.created_at),
         last_seen_at: views::time(s.last_seen_at),
         expires_at: views::time(s.expires_at),

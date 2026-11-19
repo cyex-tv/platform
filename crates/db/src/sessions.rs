@@ -67,10 +67,14 @@ pub struct Session {
     /// The public handle (`mySessions`, `revokeSession`). Never the token or its hash.
     pub id: Uuid,
     pub user_agent: Option<String>,
+    /// The app client that signed in through `/v1/auth/app` (ADR 0021); `None` otherwise.
+    pub app_client_id: Option<String>,
+    /// When the access token of an app sign-in (ADR 0021) dies; a refresh gives a new one.
+    /// `expires_at` is then when the refresh token stops working. `None` for other sessions.
+    pub access_expires_at: Option<DateTime<Utc>>,
 }
 
-const SESSION: &str =
-    "id_hash, account_id, kind, created_at, expires_at, last_seen_at, id, user_agent";
+pub(crate) const SESSION: &str = "id_hash, account_id, kind, created_at, expires_at, last_seen_at, id, user_agent,      app_client_id, access_expires_at";
 
 /// The longest user agent kept.
 pub const USER_AGENT_MAX: usize = 512;
@@ -140,10 +144,11 @@ pub async fn delete_by_id(conn: &mut PgConnection, account_id: Uuid, id: Uuid) -
 pub async fn find_active(conn: &mut PgConnection, hash: &TokenHash) -> DbResult<Option<Session>> {
     Ok(sqlx::query_as(
         "SELECT s.id_hash, s.account_id, s.kind, s.created_at, s.expires_at, s.last_seen_at,
-                s.id, s.user_agent
+                s.id, s.user_agent, s.app_client_id, s.access_expires_at
          FROM sessions s
          JOIN accounts a ON a.id = s.account_id
          WHERE s.id_hash = $1 AND s.expires_at > now()
+           AND (s.access_expires_at IS NULL OR s.access_expires_at > now())
            AND a.deleted_at IS NULL AND (a.blocked_at IS NULL OR a.blocked_until <= now())",
     )
     .bind(&hash[..])
@@ -159,7 +164,7 @@ pub async fn find_restorable(
 ) -> DbResult<Option<Session>> {
     Ok(sqlx::query_as(
         "SELECT s.id_hash, s.account_id, s.kind, s.created_at, s.expires_at, s.last_seen_at,
-                s.id, s.user_agent
+                s.id, s.user_agent, s.app_client_id, s.access_expires_at
          FROM sessions s
          JOIN accounts a ON a.id = s.account_id
          WHERE s.id_hash = $1 AND s.expires_at > now() AND s.kind = 'site'
@@ -171,7 +176,8 @@ pub async fn find_restorable(
 }
 
 /// Marks the session as used and slides its expiry to `now + ttl` (never shortens it). Callers
-/// decide how often to call it, so a busy client doesn't write on every request.
+/// decide how often to call it, so a busy client doesn't write on every request. An app sign-in's
+/// session (ADR 0021) keeps its expiry: only a refresh moves it.
 pub async fn touch(
     conn: &mut PgConnection,
     hash: &TokenHash,
@@ -179,7 +185,9 @@ pub async fn touch(
 ) -> DbResult<Option<Session>> {
     Ok(sqlx::query_as(&format!(
         "UPDATE sessions
-         SET last_seen_at = now(), expires_at = greatest(expires_at, now() + $2)
+         SET last_seen_at = now(),
+             expires_at = CASE WHEN access_expires_at IS NULL
+                               THEN greatest(expires_at, now() + $2) ELSE expires_at END
          WHERE id_hash = $1 AND expires_at > now()
          RETURNING {SESSION}"
     ))

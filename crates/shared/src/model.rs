@@ -145,6 +145,10 @@ pub struct AccountSession {
     pub expires_at: String,
     /// The session this request came with.
     pub current: bool,
+    /// The app that signed in through `/v1/auth/app` (ADR 0021), such as `cyex-deck`; null for
+    /// website sessions.
+    #[serde(default)]
+    pub app_client_id: Option<String>,
 }
 
 /// A short reference to an account, for owners and editors.
@@ -266,6 +270,45 @@ pub enum ChannelRole {
 pub struct EditableChannel {
     pub role: ChannelRole,
     pub channel: Channel,
+}
+
+/// How you may change a set's emotes (`channelEditableSets`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "snake_case")]
+pub enum SetAccess {
+    /// The set is yours.
+    Owner,
+    /// You are an account editor of its owner with `EMOTES`, and your grant covers this set.
+    AccountEditor,
+    /// You are an editor of this set.
+    SetEditor,
+    /// Through a staff permission (`sets.edit_any`); your changes are audited.
+    Staff,
+}
+
+/// A set you may add, rename and remove emotes in.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct EditableSet {
+    /// The set, without preview emotes. `capacity - slotsUsed` is what still fits.
+    pub set: SetSummary,
+    /// The channel shows this set now (`channel.activeSetId`).
+    pub active_here: bool,
+    pub access: SetAccess,
+}
+
+/// A channel and the sets of its account you may change (`channelEditableSets`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct ChannelEditableSets {
+    pub channel: Channel,
+    /// Your highest role on the channel; null when you have none.
+    pub role: Option<ChannelRole>,
+    /// The channel's active set can take your changes (it is among `sets`).
+    pub can_edit_active_set: bool,
+    /// Oldest first. Empty when you may change none.
+    pub sets: Vec<EditableSet>,
 }
 
 /// Where an emote transfer request stands (ADR 0014).

@@ -27,6 +27,9 @@ pub struct Caller {
     pub token_hash: TokenHash,
     pub kind: SessionKind,
     pub via: Via,
+    /// The app that signed in through `/v1/auth/app` (ADR 0021). Such a session may run only the
+    /// mutations its scopes name (`app::allows_mutation`).
+    pub app_client: Option<String>,
 }
 
 /// How long a session lasts after its last use (ADR 0009): site 30 days, app 90 days.
@@ -96,6 +99,7 @@ impl Auth {
             token_hash: hash,
             kind,
             via,
+            app_client: session.app_client_id,
         }))
     }
 
@@ -131,6 +135,7 @@ impl Auth {
             token_hash: hash,
             kind: SessionKind::Site,
             via: Via::Cookie,
+            app_client: None,
         }))
     }
 

@@ -35,7 +35,7 @@ Version 3, 2026/11/16:
 | D16 | **Borrowed code:** none from 7TV or BTTV, because their licences forbid it (Commons Clause, and a restrictive custom licence). Their public protocols and API shapes may be studied. FFZ code (Apache-2.0) may be reused with its notice kept. |
 | D17 | **Cosmetics are two separate things.**<br>**cyex deck supporter badges** belong to cyex.app. They are bought in the deck's store, served by cyex-api, and have nothing to do with the emote platform.<br>**cyex.tv chat cosmetics** (badges and name paints) are a possible later feature of cyex.tv itself. They get their own phase and their own data, and never mix with the deck's. |
 | D18 | **Licence:** AGPL-3.0 for all three cyex-tv repos. Clients that only call the public API are not affected. |
-| D19 | **Deck in v1:** it shows cyex.tv emotes only. No cyex.tv sign-in and no editing in the deck yet. |
+| D19 | **Deck in v1:** it shows cyex.tv emotes only. No cyex.tv sign-in and no editing in the deck yet.<br>**Changed 2026/11/19 (owner):** the deck gets cyex.tv sign-in (app sign-in, ADR 0021) for emote commands and a cosmetic picker. |
 | D20 | **Set capacity:** 1.000 emotes by default. Admins can change it per set. |
 | D21 | **Personal sets in v1:** each account gets one small personal set (default 5 slots, as in 7TV), usable in any channel. Only **approved** emotes can go in it, because they show in other people's chats. Channel owners can turn off other people's personal emotes in their channel. |
 
@@ -341,7 +341,7 @@ Tasks
 2. Fetch the global set and the channel's active set, then subscribe to events (once Phase 5 lands; poll with `If-None-Match` until then).
 3. Images: the webview loads WebP and AVIF straight from `cdn.cyex.tv`. Check `app/src/sys/cache.rs` first, and only add a disk cache if the existing one doesn't cover emotes.
 4. A settings toggle for the cyex.tv provider, matching the existing provider toggles.
-5. v1 is read-only in the deck (D19); no cyex.tv sign-in is needed.
+5. v1 was read-only in the deck (D19). Since 2026/11/19 the deck signs in through app sign-in (ADR 0021) for emote add, rename and remove commands and the cosmetic picker.
 6. Personal emotes (D21): map them to the deck's existing `Scope::Personal`. They apply only to that user's messages, and respect the channel's `allow_personal_emotes`.
 7. Tests: mapping fixtures, name lookup with cyex.tv alongside the other providers, personal emotes only on their owner's messages, and the offline fallback to the last known set.
 

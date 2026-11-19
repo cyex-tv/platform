@@ -34,7 +34,7 @@ describe('REST reference', () => {
 });
 
 describe('guides', () => {
-  const ids = new Set([...restOperations().map((o) => o.id), ...graphqlReference().queries.map((o) => o.id), ...guides.map((g) => g.id), 'ws-events', 'gql-subscription-events']);
+  const ids = new Set([...restOperations().map((o) => o.id), ...graphqlReference().queries.map((o) => o.id), ...graphqlReference().mutations.map((o) => o.id), ...guides.map((g) => g.id), 'ws-events', 'gql-subscription-events']);
 
   it('link only to sections that exist', () => {
     for (const g of guides)

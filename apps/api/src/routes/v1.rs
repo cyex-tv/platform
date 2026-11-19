@@ -212,6 +212,18 @@ async fn logout(
 
 // Upload
 
+/// App sign-in sessions (ADR 0021) can't upload: no scope covers it.
+fn no_app_scope(caller: &cyex_tv_auth::Caller) -> ApiResult<()> {
+    match caller.app_client {
+        Some(_) => Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "insufficient_scope",
+            "This app may not do that. Use cyex.tv for it.",
+        )),
+        None => Ok(()),
+    }
+}
+
 /// Upload an emote. It starts `pending`: usable in your own sets, hidden from everyone else until a
 /// moderator approves it. Manage it afterwards through GraphQL.
 ///
@@ -244,6 +256,7 @@ async fn upload_emote(
     mut form: Multipart,
 ) -> ApiResult<(StatusCode, Json<Emote>)> {
     let caller = caller.ok_or_else(|| ApiError::from(AuthError::SignedOut))?;
+    no_app_scope(&caller)?;
     let bad_form = |message: &str| ApiError::new(StatusCode::BAD_REQUEST, "bad_form", message);
     let mut name = None;
     let mut tags = None;
@@ -401,6 +414,7 @@ async fn upload_cosmetic_image(
     mut form: Multipart,
 ) -> ApiResult<(StatusCode, Json<CosmeticImage>)> {
     let caller = caller.ok_or_else(|| ApiError::from(AuthError::SignedOut))?;
+    no_app_scope(&caller)?;
     let bad_form = |message: &str| ApiError::new(StatusCode::BAD_REQUEST, "bad_form", message);
     let mut kind = None;
     let mut file: Option<Vec<u8>> = None;
