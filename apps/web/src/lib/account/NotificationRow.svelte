@@ -9,7 +9,7 @@
   import { ACCEPT_EMOTE_TRANSFER, DECLINE_EMOTE_TRANSFER } from '$lib/queries';
   import { fail, notify } from '$lib/tool/notices.svelte';
   import { describe } from './notifications';
-  import { answered, type Note } from './inbox.svelte';
+  import { answered, markRead, type Note } from './inbox.svelte';
 
   type Props = { note: Note; onpick?: (n: Note) => void };
   let { note, onpick }: Props = $props();
@@ -26,10 +26,13 @@
       else await gql(DECLINE_EMOTE_TRANSFER, { id: req });
       answered[req] = accept ? 'Accepted: it moved.' : 'Declined: it stays yours.';
       notify(answered[req]);
+      // Answered is seen: the row stops being unread and the count follows.
+      if (!note.read) void markRead([note.id]);
     } catch (err) {
       // Closed already (expired, withdrawn or answered): say so once, then leave it.
       fail(err);
       answered[req] = 'This request is closed.';
+      if (!note.read) void markRead([note.id]);
     } finally {
       busy = false;
     }
