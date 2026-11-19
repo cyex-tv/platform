@@ -5,10 +5,13 @@
   import { page } from '$app/state';
   import { ApiError, gql } from '$lib/api';
   import { problemTitle } from '$lib/components/problem';
+  import Segmented from '$lib/components/Segmented.svelte';
+  import State from '$lib/components/State.svelte';
+  import { visibilityHint, visibilityOptions } from '$lib/sets/visibility';
   import { clean, count, iso } from '$lib/format';
   import { sectionHref } from '$lib/profile/rows';
   import Name from '$lib/components/Name.svelte';
-  import type { EditSetQuery, EditorPermission } from '$lib/gql/graphql';
+  import type { EditSetQuery, EditorPermission, SetVisibility } from '$lib/gql/graphql';
   import { EDIT_SET, DELETE_SET, REMOVE_SET_EDITOR, UPDATE_CHANNEL, UPDATE_SET } from '$lib/queries';
   import Icon from '$lib/components/Icon.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
@@ -16,8 +19,8 @@
   import Confirm from '$lib/tool/Confirm.svelte';
   import SetEmotes from '$lib/tool/SetEmotes.svelte';
   import AddEmotes from '$lib/tool/AddEmotes.svelte';
-  import { session } from '$lib/tool/session.svelte';
-  import { covers, grantOn, permissionLabels, scopeOf } from '$lib/tool/editors';
+  import { can, session } from '$lib/tool/session.svelte';
+  import { covers, grantOn, permissionLabels, scopeOf, setAccess } from '$lib/tool/editors';
   import { fail, notify } from '$lib/tool/notices.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
 
@@ -30,6 +33,7 @@
   let name = $state('');
   let saving = $state(false);
   let deleting = $state(false);
+  let changing = $state(false);
 
   const narrow = new MediaQuery('max-width: 1000px');
   const id = $derived(page.params.id ?? '');
@@ -40,8 +44,14 @@
   const covered = $derived(!!set && covers(scopeOf(grant), set.id));
   const held = $derived(owner || !covered ? new Set<EditorPermission>() : grantOn(grants, set?.owner?.id, session.me?.id));
   const setEditor = $derived(editors.some((e) => e.id === session.me?.id));
-  const canRename = $derived(owner || setEditor || held.has('SETS'));
-  const canDelete = $derived(owner || held.has('SETS'));
+  // Staff may edit any set, and the global set with its own permission.
+  const staff = $derived(can('sets.edit_any') || (set?.kind === 'GLOBAL' && can('global_set.edit')));
+  const access = $derived(setAccess({ owner, setEditor, staff, held }));
+  const canRename = $derived(access.rename);
+  const canDelete = $derived(access.manage);
+  const canSee = $derived(access.manage && set?.kind !== 'GLOBAL');
+  // Channels (yours or the ones you change) that show this set right now: it can't be deleted then.
+  const shownOn = $derived(channels.filter((c) => c.activeSetId === set?.id));
   // The channels this set can be shown on: the owner's, when you may change their settings.
   const usable = $derived(set?.kind === 'CHANNEL' && (owner || held.has('CHANNELS')) ? channels.filter((c) => c.account.id === set?.owner?.id) : []);
   const showing = $derived(usable.filter((c) => c.activeSetId === set?.id));
@@ -54,7 +64,11 @@
     try {
       r = await gql(EDIT_SET, { id: want }, fetch);
     } catch (e) {
-      if (e instanceof ApiError && e.code === 'forbidden') throw new ApiError('Only the set’s owner and editors can change it.', 'forbidden');
+      // Not yours to edit: the set's own page is the place for you.
+      if (e instanceof ApiError && e.code === 'forbidden') {
+        await goto(`/sets/${encodeURIComponent(want)}`, { replaceState: true });
+        throw new ApiError('Only the set’s owner and editors can change it.', 'forbidden');
+      }
       throw e;
     }
     if (!r.set) throw new ApiError('This set doesn’t exist.', 'not_found');
@@ -82,6 +96,20 @@
       fail(err);
     } finally {
       saving = false;
+    }
+  }
+
+  async function setVisibility(v: SetVisibility) {
+    if (!set || changing || v === set.visibility) return;
+    changing = true;
+    try {
+      const r = await gql(UPDATE_SET, { id: set.id, input: { visibility: v } });
+      set.visibility = r.updateSet.visibility;
+      notify(`${visibilityOptions(set.kind).find((o) => o.value === set!.visibility)?.label ?? 'Visibility'} saved.`);
+    } catch (err) {
+      fail(err);
+    } finally {
+      changing = false;
     }
   }
 
@@ -165,8 +193,13 @@
     <section class="ui-card">
       {#if canDelete}
         <h2>Delete set</h2>
-        <p class="ui-hint">The emotes stay; only this set goes. A channel’s active set can’t be deleted: pick another one first.</p>
-        <div class="ui-actions gap"><Confirm label="Delete set" confirm="Click again to delete" busy={deleting} onconfirm={remove} /></div>
+        {#if shownOn.length}
+          <p class="ui-hint">{shownOn.map((c) => `${platformName(c.platform)} ${c.login}`).join(' and ')} shows this set. Pick another active set in <a href="/me/channels">Channels</a> first.</p>
+          <div class="ui-actions gap"><button class="ui-btn danger" type="button" disabled>Delete set</button></div>
+        {:else}
+          <p class="ui-hint">The emotes stay; only this set goes.</p>
+          <div class="ui-actions gap"><Confirm label="Delete set" confirm="Click again to delete" busy={deleting} onconfirm={remove} /></div>
+        {/if}
       {:else if setEditor}
         <h2>Stop editing</h2>
         <p class="ui-hint">You lose access to this set until the owner adds you again.</p>
@@ -184,7 +217,9 @@
   missing={{ title: 'No set here.', body: 'It may have been deleted, or the address is off.' }}
 >
 {#snippet children()}
-{#if set}
+{#if set && !access.emotes}
+  <State kind="loading" title="Opening the set…" />
+{:else if set}
   <PageHead
     name
     title={clean(set.name)}
@@ -206,13 +241,22 @@
     </div>
     <aside class="ui-stack">
       {#if canRename}
-      <form class="ui-card ui-form" onsubmit={rename}>
-        <h2><label for="set-name">Name</label></h2>
-        <div class="row">
-          <input id="set-name" class="ui-input" bind:value={name} maxlength="100" />
-          <button class="ui-btn secondary" type="submit" disabled={saving || !name.trim() || name.trim() === set.name}>Rename</button>
-        </div>
-      </form>
+      <section class="ui-card ui-form">
+        <form onsubmit={rename}>
+          <h2><label for="set-name">Name</label></h2>
+          <div class="row">
+            <input id="set-name" class="ui-input" bind:value={name} maxlength="100" />
+            <button class="ui-btn secondary" type="submit" disabled={saving || !name.trim() || name.trim() === set.name}>Rename</button>
+          </div>
+        </form>
+        {#if canSee}
+          <div class="vis">
+            <h3 id="vis-label">Who can open it</h3>
+            <Segmented label="Who can open it" size="s" options={visibilityOptions(set.kind)} value={set.visibility} onchange={setVisibility} />
+            <p class="ui-hint" aria-live="polite">{visibilityHint(set.visibility)}{#if set.kind === 'PERSONAL'} A personal set can’t be private.{/if}</p>
+          </div>
+        {/if}
+      </section>
       {/if}
 
       {#if usable.length}{@render channelBlock()}{/if}
@@ -237,6 +281,12 @@
   .row { display: flex; gap: 8px; }
   .row input { min-width: 0; }
   .gap { margin-top: 12px; }
+  .vis { display: grid; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .vis h3 { margin: 0; font-size: var(--t-ui); font-weight: 600; }
+  .vis .ui-hint { margin: 0; }
+  /* Three options in a 276px card: tighter than the default 12px padding. */
+  .vis :global(.seg button) { padding: 0 8px; gap: 5px; }
+  .vis :global(.seg) { margin-left: -8px; }
   .chans { margin: 0 -22px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
   .chans > li { padding: 8px 22px; min-height: 52px; }
   .chans :global(svg) { flex: none; }
@@ -246,5 +296,6 @@
   .live :global(svg) { color: var(--accent); }
   .fold > summary { cursor: pointer; padding: 10px 14px; font-weight: 600; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
   .fold[open] > summary { margin-bottom: 8px; }
-  @media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr); } aside { order: -1; } }
+  /* Narrow: the emotes come first, the settings under them. */
+  @media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr); } }
 </style>

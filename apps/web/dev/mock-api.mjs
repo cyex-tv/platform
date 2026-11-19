@@ -1496,6 +1496,20 @@ const ACTIVE_SET_IDS = () => new Set([...CHANNELS, ...EDITOR_CHANNELS].map((c) =
 // account editors, or anyone while a channel shows it.
 const mayView = (s, session) => s.visibility !== 'PRIVATE' || ACTIVE_SET_IDS().has(s.id)
   || (session && (s.owner?.id === ME_ID || s.editors.some((e) => e.id === ME_ID) || EDITOR_OF.some((g) => g.account.id === s.owner?.id)));
+// What the mock account may do with a set, as the API checks it: the owner and staff everything;
+// an account editor with Sets everything on the sets the grant covers, with Emotes the emotes; a
+// per-set editor the emotes and the name. Anyone else nothing (the API answers forbidden).
+const setRights = (s, ADMIN) => {
+  const none = { emotes: false, rename: false, manage: false };
+  if (!s) return none;
+  if (ADMIN || s.owner?.id === ME_ID) return { emotes: true, rename: true, manage: true };
+  const owner = s.owner?.id;
+  const flags = owner && coversSet(owner, s.id) ? flagsOn(owner) : [];
+  const manage = flags.includes('SETS');
+  const rename = manage || s.editors.some((e) => e.id === ME_ID);
+  return { manage, rename, emotes: rename || flags.includes('EMOTES') };
+};
+const forbidden = () => err('Only the set’s owner and editors can change it.', 'forbidden');
 const err = (message, code) => ({ data: null, errors: [{ message, extensions: { code } }] });
 // The API's rule for the emote permissions: held on a grant that covers every set.
 const emoteGrant = (ownerId, flag) => EDITOR_OF.some((g) => g.account.id === ownerId && g.allSets && g.permissions.includes(flag));
@@ -1598,7 +1612,9 @@ function signedIn(body, v, ADMIN) {
     case 'EditSet': {
       const s = findSet(v.id);
       const channels = { myChannels: CHANNELS, editorChannels: editorChannels() };
-      if (!s) return { data: { set: null, setEditors: [], editorOf: editorOfOut(), ...channels } };
+      // Private sets of others answer as if they did not exist; a visible set you can't edit is forbidden.
+      if (!s || !mayView(s, true)) return { data: { set: null, setEditors: [], editorOf: editorOfOut(), ...channels } };
+      if (!setRights(s, ADMIN).emotes) return forbidden();
       return { data: { set: setOut(s), setEditors: s.editors, editorOf: editorOfOut(), ...channels } };
     }
     case 'CreateSet': {
@@ -1619,18 +1635,23 @@ function signedIn(body, v, ADMIN) {
     }
     case 'UpdateSet': {
       const s = findSet(v.id);
-      if (!s) return err('Not found.', 'not_found');
+      if (!s || !mayView(s, true)) return err('Not found.', 'not_found');
       if (v.input.visibility) {
         if (s.kind === 'GLOBAL' || (s.kind === 'PERSONAL' && v.input.visibility === 'PRIVATE'))
           return err('Personal sets can’t be private, and the global set is always listed.', 'bad_visibility');
-        if (!flagsOn(s.owner?.id).includes('SETS'))
+        if (!setRights(s, ADMIN).manage)
           return err('Only the set’s owner and their editors with the sets permission can change who sees it.', 'forbidden');
         s.visibility = v.input.visibility;
       }
-      if (v.input.name) s.name = v.input.name;
+      if (v.input.name) {
+        if (!setRights(s, ADMIN).rename) return forbidden();
+        s.name = v.input.name;
+      }
       return { data: { updateSet: setOut(s) } };
     }
     case 'DeleteSet': {
+      if (!findSet(v.id) || !mayView(findSet(v.id), true)) return err('Not found.', 'not_found');
+      if (!setRights(findSet(v.id), ADMIN).manage) return forbidden();
       if ([...CHANNELS, ...EDITOR_CHANNELS].some((c) => c.activeSetId === v.id)) return err('A channel shows this set. Pick another active set first.', 'set_in_use');
       const list = SETS.some((s) => s.id === v.id) ? SETS : SHARED_SETS;
       list.splice(list.findIndex((s) => s.id === v.id), 1);
@@ -1638,6 +1659,8 @@ function signedIn(body, v, ADMIN) {
     }
     case 'AddSetEmote': {
       const s = findSet(v.setId);
+      if (!s || !mayView(s, true)) return err('Not found.', 'not_found');
+      if (!setRights(s, ADMIN).emotes) return forbidden();
       const e = findEmote(v.emoteId);
       if (s.emotes.length >= s.capacity) return err('The set is full.', 'set_full');
       if (s.emotes.some((m) => m.name === e.name)) return err('Another emote in this set has that name.', 'name_taken');
@@ -1645,6 +1668,9 @@ function signedIn(body, v, ADMIN) {
       return { data: { addSetEmote: { name: e.name } } };
     }
     case 'UpdateSetEmote': {
+      const own = findSet(v.setId);
+      if (!own || !mayView(own, true)) return err('Not found.', 'not_found');
+      if (!setRights(own, ADMIN).emotes) return forbidden();
       const m = findSet(v.setId).emotes.find((x) => x.emote.id === v.emoteId);
       if (v.input.name) m.name = v.input.name;
       if (v.input.zeroWidth !== undefined) m.zeroWidth = v.input.zeroWidth;
@@ -1652,6 +1678,8 @@ function signedIn(body, v, ADMIN) {
     }
     case 'RemoveSetEmote': {
       const s = findSet(v.setId);
+      if (!s || !mayView(s, true)) return err('Not found.', 'not_found');
+      if (!setRights(s, ADMIN).emotes) return forbidden();
       s.emotes = s.emotes.filter((m) => m.emote.id !== v.emoteId);
       return { data: { removeSetEmote: true } };
     }

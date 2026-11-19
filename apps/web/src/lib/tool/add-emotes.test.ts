@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mergeResults, ownMatches } from './add-emotes';
+import { freeName, mergeResults, ownMatches } from './add-emotes';
 
 const e = (id: string, name: string, state = 'APPROVED', tags: string[] = []) => ({ id, name, state, tags });
 
@@ -21,5 +21,18 @@ describe('add emotes results', () => {
     const own = [e('1', 'CatJam'), e('2', 'Dog')];
     const everyone = [e('3', 'CatDance'), e('1', 'CatJam')];
     expect(mergeResults('cat', own, everyone, false).map((x) => x.id)).toEqual(['1', '3']);
+  });
+});
+
+describe('a name for an emote that clashes', () => {
+  it('adds the first free number', () => {
+    expect(freeName('KEKW', new Set(['KEKW']))).toBe('KEKW2');
+    expect(freeName('KEKW', new Set(['KEKW', 'KEKW2', 'KEKW3']))).toBe('KEKW4');
+  });
+  it('stays within 100 characters', () => {
+    const long = 'a'.repeat(100);
+    const out = freeName(long, new Set([long]));
+    expect([...out]).toHaveLength(100);
+    expect(out.endsWith('2')).toBe(true);
   });
 });
