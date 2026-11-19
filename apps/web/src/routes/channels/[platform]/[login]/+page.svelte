@@ -114,7 +114,7 @@
       </div>
     {:else}
       <p class="fine slots">
-        {#if needle}{count(matches.length)} of {count(items.length)} match · {/if}<Capacity used={items.length} capacity={set.capacity} /> emotes
+        <span>{#if needle}{count(matches.length)} of {count(items.length)} match · {/if}<Capacity used={items.length} capacity={set.capacity} /> emotes</span>
         {#if fill >= 4}<span class="meter" aria-hidden="true"><span style:width="{fill}%"></span></span>{/if}
       </p>
       <p class="sr-only" role="status">{needle ? `${count(matches.length)} of ${count(items.length)} match` : ''}</p>

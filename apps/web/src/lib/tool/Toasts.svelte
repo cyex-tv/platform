@@ -6,10 +6,35 @@
   import { flip } from 'svelte/animate';
   import { fade, fly } from 'svelte/transition';
   import { dur } from '$lib/motion';
+  import { barNodes, barsVersion, lift } from './bottom-bars.svelte';
   import { dismiss, toasts } from './notices.svelte';
 
   const notices = $derived(toasts.filter((t) => !t.error));
   const errors = $derived(toasts.filter((t) => t.error));
+
+  // Bottom bars (the select bar, the emote page's phone bar) push the stacks up so a toast never
+  // covers their buttons. Measured only while a toast shows, on scroll, resize and bar changes.
+  let raise = $state(0);
+  $effect(() => {
+    barsVersion();
+    if (!toasts.length) return;
+    let frame = 0;
+    const measure = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => (raise = lift(barNodes().map((n) => n.getBoundingClientRect()), innerHeight)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    for (const n of barNodes()) ro.observe(n);
+    addEventListener('scroll', measure, { passive: true, capture: true });
+    addEventListener('resize', measure, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      ro.disconnect();
+      removeEventListener('scroll', measure, { capture: true });
+      removeEventListener('resize', measure);
+    };
+  });
 </script>
 
 {#snippet list(items: typeof toasts, from: number)}
@@ -30,12 +55,12 @@
   {/each}
 {/snippet}
 
-<div class="stack notices" aria-live="polite">{@render list(notices, 16)}</div>
-<div class="stack errors" aria-live="assertive">{@render list(errors, -16)}</div>
+<div class="stack notices" style:--raise="{raise}px" aria-live="polite">{@render list(notices, 16)}</div>
+<div class="stack errors" style:--raise="{raise}px" aria-live="assertive">{@render list(errors, -16)}</div>
 
 <style>
-  .stack { position: fixed; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: var(--z-toast); display: grid; gap: 8px;
-    width: min(380px, calc(100vw - 36px)); }
+  .stack { position: fixed; z-index: var(--z-toast); display: grid; gap: 8px; width: min(380px, calc(100vw - 36px));
+    bottom: max(calc(18px + env(safe-area-inset-bottom, 0px)), calc(var(--raise, 0px) + 10px)); }
   .notices { right: 18px; }
   .errors { left: 18px; }
   .toast { position: relative; padding: 12px 34px 13px 14px; background: var(--elevated, var(--surface-2)); color: var(--text);

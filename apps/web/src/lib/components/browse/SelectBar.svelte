@@ -5,6 +5,7 @@
   // page passes a calm note that shows here for a few seconds. Signed out, Add asks you to sign in.
   import { ApiError } from '$lib/api';
   import { clean, count } from '$lib/format';
+  import { bottomBar } from '$lib/tool/bottom-bars.svelte';
   import { session } from '$lib/tool/session.svelte';
   import { plan, summary } from './bulk';
   import { CAP } from './selection';
@@ -63,7 +64,7 @@
   }
 </script>
 
-<div class="bar" role="region" aria-label="Selection">
+<div class="bar" role="region" aria-label="Selection" use:bottomBar>
   <p class="n" aria-live="polite">
     {#if run}Adding {count(run.done)} of {count(run.total)}…
     {:else if note}<span class="note">{note}</span>

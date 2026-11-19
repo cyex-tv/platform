@@ -7,7 +7,7 @@
   import { ACCOUNT_SUBSCRIPTIONS, ADMIN_ORDERS } from '$lib/queries';
   import Icon from '$lib/components/Icon.svelte';
   import State from '$lib/components/State.svelte';
-  import { count, date, iso } from '$lib/format';
+  import { count, date, dateTime, iso } from '$lib/format';
   import { orderRow, orderStatusText, price } from '$lib/shop/shop';
 
   type Orders = AdminOrdersQuery['orders'];
@@ -85,7 +85,7 @@
         {#each orders.items as o (o.id)}
           {@const r = orderRow(o, accountId, iso)}
           <li>
-            <span class="what"><strong><bdi>{iso(o.itemName)}</bdi></strong><span class="ui-hint"><span class="ui-num">{date(o.createdAt)}</span>{#if r.note} · {r.note}{/if}</span></span>
+            <span class="what"><strong><bdi>{iso(o.itemName)}</bdi></strong><span class="ui-hint"><span class="ui-num">{dateTime(o.createdAt)}</span>{#if r.note} · {r.note}{/if}</span></span>
             <span class="amount"><span class="ui-num">{r.received ? 'Gift' : price(o.paidTotalCents ?? o.amountCents, o.paidCurrency ?? o.currency)}</span><span class="ui-hint">{orderStatusText(o.status)}</span></span>
           </li>
         {/each}

@@ -7,7 +7,7 @@
   import LoadMore from '$lib/components/LoadMore.svelte';
   import State from '$lib/components/State.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
-  import type { CardEmote } from '$lib/components/EmoteCard.svelte';
+  import type { CardEmote } from '$lib/components/EmoteTile.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import { count } from '$lib/format';
   import { SEARCH_BY_OWNER } from '$lib/queries';

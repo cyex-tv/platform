@@ -2,6 +2,27 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Final pass of the 2026/11/19 feedback round (branch `fix/final-pass`)
+
+Known fixes, each with a test that fails before and passes after:
+- [x] Toasts stack above bottom bars: the /search select bar and the emote page's phone action bar register with `use:bottomBar` (`lib/tool/bottom-bars.svelte.ts`); the toast stacks sit above whichever reaches into the bottom of the screen. Vitest `bottom-bars.test.ts`; CDP `screens/final/toast-lift.mjs` (1440 and 375 select bar, 375 emote bar: failed before, passes now).
+- [x] Sideways scroll at 375 on /admin/cosmetics/owners: not reproducible on main (the empty toast stacks fit the viewport). The sweep checks every route at 320, 375, 768, 1440 and 2560 signed out, signed in and as admin: no page scrolls sideways.
+- [x] The stray "animated" label on a tile: the hover/focus type mark drawn over the picture in `EmoteTile`; removed (the marks stay in the link's accessible name). The unused `EmoteCard` is gone. Vitest `emote-tile.test.ts`.
+- [x] The emote edit page shows the plain size row; the Dark / Light / Checker / Chat switch (`PreviewStage`) is deleted. Vitest `no-preview-grounds.test.ts`.
+- [x] Profile band facts read with real spaces ("Twitch: lumen_fox (opens in a new tab)", "Main on lumen_fox (Twitch)", "Member since 2026/11/10"); they looked right but read run together. Vitest `header-facts.test.ts`.
+- [x] Sessions: Last seen as `2026/11/17 23:40`, relative on hover. CDP `screens/final/fixes.mjs`.
+- [x] One TagInput (there was only one component), now with one cleaning rule: /search used its own (spaces to `_`, only a-z, 0-9, `_`), so a tag like `pepe-the-frog` or `猫ダンス` could never be searched for. The browse filters and the URL use `lib/rules` `cleanTag`, and the API's search accepts every tag an upload may carry (1 to 32 letters, digits, `-`, `_`; additive, it only accepts more). Vitest `tag-input.single.test.ts`; Rust unit test in `crates/db/src/search.rs`.
+
+Harmony sweep (`screens/final/sweep.mjs`, contact sheets in `screens/final/sheets/`): every route at 375 and 1440, dark and light, plus 2560 dark for the main pages. Fixed: date and time on the admin account panels, holders, reports and shop orders; roles positions in cyex numbers; one button size in the profile band; the channel page's count line; the cosmetics chat sample's colon; the help answer on cost (now mentions the shop and codes); a Svelte dev warning in the admin names lookup. Checked in `screens/final/harmony-fixes.mjs`. Infra: cyex-tv/infra #8 passes PUBLIC_API_URL and PUBLIC_CDN_URL to the web image build.
+
+### GitHub write log for this PR
+
+```
+git push -u origin fix/final-pass
+gh pr create --base main --head fix/final-pass --title "Final pass: toasts, tiles, edit page, profile facts, sessions, tags, harmony" --body-file <file>
+gh pr merge 99 --merge
+```
+
 ## Admin: review queue, owners lookup, studio library previews (branch `feat/admin-queue`, owner feedback 2026/11/19 section J)
 - Review queue (/admin/review): tabs Public / Unlisted and private / Resolved with counts, a search by emote name or uploader (login or display name), sort (upload date, review date on Resolved, uploader, name) and order, 50 dense cards a page from the server (thousands pending cost the same as fifty; cards use `content-visibility`). A card: the moving picture, name, uploader, flags (visibility, NSFW, zero-width, wide), tag count, upload date and time, and its verdicts: approve, approve as unlisted, approve for its owner only, reject with a reason (ready reasons one click away). The detail dialog: "n / total" with previous and next across pages, kind, name, uploader, visibility, state, flags, tags, ID, the picture at 1x-4x with dimensions and file size, Activity (the emote's audit trail, with date and time, plus its upload) and Notes (reviewers' notes). Keyboard: arrows move, Enter opens, A approves, U unlisted, P owner only, R rejects, Esc closes; after a verdict the next upload is up (in the grid and in the dialog). Merge into an existing emote is left out: the API has no emote merge.
 - API (additive): `reviewQueue(filter: ReviewQueueFilter)` (tab, search, sort, descending; no filter = the old behaviour) and `ReviewQueue.counts`; `approveEmote(visibility:)` sets public, unlisted or private in the same step (audited with the visibility, told to the owner); `emoteNotes`, `addEmoteNote`, `deleteEmoteNote` (`emotes.review`, audited `emote.note_added` / `emote.note_deleted`); `emoteHistory` (the emote's audit entries, `emotes.review`). Migration `20261207000075_emote_notes.sql` (table `emote_notes`, index for the resolved tab).

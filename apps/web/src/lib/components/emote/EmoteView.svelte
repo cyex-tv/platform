@@ -21,6 +21,7 @@
   import { flagsOf, formats, scaleFiles, trust, type EmoteChannel, type PageEmote } from './emote-page';
   import type { PagerState } from './pager';
   import { Viewer } from './viewer.svelte';
+  import { bottomBar } from '$lib/tool/bottom-bars.svelte';
 
   type Props = {
     emote: PageEmote;
@@ -167,7 +168,7 @@
       </div>
     </article>
 
-    <div class="bar">
+    <div class="bar" use:bottomBar>
       <EmoteActions emoteId={e.id} {name} {viewer} variant="bar" picture={e} {editHref} addable={public_} reportable={public_} />
     </div>
 

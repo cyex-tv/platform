@@ -13,7 +13,9 @@ export function lookUp(ids: Iterable<string | null | undefined>) {
     if (!id || asked.has(id)) continue;
     asked.add(id);
     gql(ACCOUNT, { id })
-      .then((r) => (known[id] = r.account ? { name: r.account.displayName, avatar: r.account.avatar ?? null } : null))
+      .then((r) => {
+        known[id] = r.account ? { name: r.account.displayName, avatar: r.account.avatar ?? null } : null;
+      })
       .catch(() => asked.delete(id));
   }
 }

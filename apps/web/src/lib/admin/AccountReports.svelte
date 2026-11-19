@@ -1,7 +1,7 @@
 <script lang="ts">
   // Reports about an account's emotes and the reports it filed (accountReports), newest first.
   import { gql } from '$lib/api';
-  import { clean, date } from '$lib/format';
+  import { clean, dateTime } from '$lib/format';
   import type { AccountReportsQuery } from '$lib/gql/graphql';
   import { ACCOUNT_REPORTS } from '$lib/queries';
   import State from '$lib/components/State.svelte';
@@ -47,7 +47,7 @@
             </strong>
             <span class="reason">“<bdi>{clean(r.reason)}</bdi>”</span>
             <span class="ui-hint ui-num">
-              {date(r.createdAt)}
+              {dateTime(r.createdAt)}
               {#if who === 'reporter' && r.reporterId}{' · by '}<AccountLink id={r.reporterId} />{/if}
               {#if who === 'owner' && r.emote?.owner}{' · emote by '}<AccountLink id={r.emote.owner.id} name={r.emote.owner.displayName} />{/if}
               {#if r.resolution}{' · '}<bdi>{clean(r.resolution)}</bdi>{/if}

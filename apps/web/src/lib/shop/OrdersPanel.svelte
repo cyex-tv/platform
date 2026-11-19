@@ -5,7 +5,7 @@
   import { gql } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import State from '$lib/components/State.svelte';
-  import { clean, count, date, iso } from '$lib/format';
+  import { clean, count, dateTime, iso } from '$lib/format';
   import type { OrderFieldsFragment } from '$lib/gql/graphql';
   import { MY_ORDERS } from '$lib/queries';
   import { fail } from '$lib/tool/notices.svelte';
@@ -47,7 +47,7 @@
 
   const mine = $derived(session.me?.id);
   const row = (o: OrderFieldsFragment) => orderRow(o, mine, iso);
-  const sub = (o: OrderFieldsFragment) => [date(o.createdAt), row(o).note].filter(Boolean).join(' · ');
+  const sub = (o: OrderFieldsFragment) => [dateTime(o.createdAt), row(o).note].filter(Boolean).join(' · ');
 </script>
 
 <section class="ui-panel" aria-labelledby="orders-h">

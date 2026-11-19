@@ -3,6 +3,8 @@
 // or a shared link gives the same view. Every filter is the API's, so the total is always the real
 // one. Pure, so it is unit tested.
 
+import { cleanTag } from '$lib/rules';
+
 export type Sort = 'relevance' | 'trending' | 'top' | 'new';
 export type Kind = 'all' | 'animated' | 'still';
 /** How far back Trending counts the channels that added an emote. */
@@ -150,10 +152,8 @@ export function without(b: Browse, key: Active['key']): Partial<Browse> {
 
 export const CLEARED: Partial<Browse> = { kind: 'all', zeroWidth: false, wide: false, nsfw: false, tags: [], exact: false };
 
-/** A tag as the URL keeps it: trimmed, lower case, no leading #, at most 30 characters (the API's limit). */
-export function cleanTag(t: string): string {
-  return t.trim().replace(/^#+/, '').toLowerCase().slice(0, 30);
-}
+/** A tag as the URL keeps it: the one rule uploads, edits and search share (lib/rules). */
+export { cleanTag };
 
 /** Tags cleaned, without empties or repeats, MAX_TAGS at most. */
 export function cleanTags(tags: readonly string[]): string[] {
