@@ -14,6 +14,15 @@ Owner feedback 2026/11/19, part I ("not 3d enough", "animation too subtle", "sta
 - Tests: `home.test.ts` (still pose at start, the full turn ends where it began, no jumps between frames, sway range, scroll response).
 - Checked in the running app (vite dev + mock, headless Edge): 375, 768, 1440, 2560, dark and light, reduced motion (system and site attribute switched live). Frame sample 1440 dark, 5 s: 56.6 fps, p50 17.6 ms, p95 18.4 ms, max 20 ms, CLS 0. Screens in `.claude/runs/2026-11-19-feedback/screens/i-front/`.
 
+### GitHub write log for this PR
+2026/11/19, account `sery-yx`.
+
+```
+git push -u origin feat/front-page-2
+gh pr create --base main --head feat/front-page-2 --title "Front page: a deeper 3D hero and the ways in as a zig-zag" --body-file <file>
+gh pr merge 93 --merge
+```
+
 ## Admin user dashboard and entitlement graph (branch `feat/admin-dashboard`, ADR 0010 amendment part 2)
 - Owner feedback F (2026/11/19, later additions): "an entitlement graph like 7tv has" and "a large admin dashboard" per user.
 - API (additive): migration `20261207000022_staff_notes.sql` (staff notes, an index for the graph's audit reads); `staffNotes`, `addStaffNote`, `deleteStaffNote` (users.notes, audited), `accountSessions` (users.sessions), `accountSubscriptions` (empty until subscriptions exist), `entitlementGraph`, `entitlementHolders` (entitlements.view or cosmetics.grant); `orders(accountId)` also for billing.view. ADR 0010 and ADR 0016 amended.
