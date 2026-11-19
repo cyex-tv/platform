@@ -86,6 +86,39 @@ pub async fn open(
     Ok((items, total))
 }
 
+/// Reports on emotes `owner` owns, in every state, newest first.
+pub async fn about_owner(
+    conn: &mut PgConnection,
+    owner: Uuid,
+    limit: i64,
+) -> DbResult<Vec<Report>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {REPORT} FROM reports
+         WHERE emote_id IN (SELECT id FROM emotes WHERE owner_account_id = $1)
+         ORDER BY created_at DESC, id DESC LIMIT $2"
+    ))
+    .bind(owner)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// Reports `reporter` filed, in every state, newest first.
+pub async fn by_reporter(
+    conn: &mut PgConnection,
+    reporter: Uuid,
+    limit: i64,
+) -> DbResult<Vec<Report>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {REPORT} FROM reports WHERE reporter_id = $1
+         ORDER BY created_at DESC, id DESC LIMIT $2"
+    ))
+    .bind(reporter)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
+}
+
 /// Closes an open report. `None` if it wasn't open.
 pub async fn resolve(
     conn: &mut PgConnection,

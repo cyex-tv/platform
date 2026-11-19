@@ -1136,6 +1136,27 @@ async fn audit_entries_page_newest_first() {
         ..audit::Filter::default()
     };
     assert_eq!(audit::list(&mut c, &by_actor, 100).await.unwrap().len(), 5);
+    let by_action = audit::Filter {
+        action: Some("emotes.approve"),
+        ..audit::Filter::default()
+    };
+    assert_eq!(audit::list(&mut c, &by_action, 100).await.unwrap().len(), 1);
+    let future = audit::Filter {
+        since: Some(chrono::Utc::now() + chrono::Duration::days(1)),
+        ..audit::Filter::default()
+    };
+    assert!(audit::list(&mut c, &future, 100).await.unwrap().is_empty());
+    let past = audit::Filter {
+        until: Some(chrono::Utc::now() - chrono::Duration::days(1)),
+        ..audit::Filter::default()
+    };
+    assert!(audit::list(&mut c, &past, 100).await.unwrap().is_empty());
+    let window = audit::Filter {
+        since: Some(chrono::Utc::now() - chrono::Duration::days(1)),
+        until: Some(chrono::Utc::now() + chrono::Duration::days(1)),
+        ..audit::Filter::default()
+    };
+    assert_eq!(audit::list(&mut c, &window, 100).await.unwrap().len(), 6);
     let one = audit::Filter {
         target_kind: Some("emote"),
         target_id: Some("e1"),

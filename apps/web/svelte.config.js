@@ -66,7 +66,8 @@ export default {
         'style-src-attr': ['unsafe-inline'],
         'font-src': ['self', 'https://fonts.gstatic.com'],
         'img-src': ['self', 'data:', 'blob:', 'https://cdn.cyex.tv', ...AVATARS, api, ...mock],
-        'connect-src': ['self', api, ...mock],
+        // GitHub's release list: the front page reads which cyex deck installer is newest (src/lib/home/deck.svelte.ts).
+        'connect-src': ['self', api, 'https://api.github.com', ...mock],
         'frame-src': ['self', ...PADDLE_FRAME],
         'form-action': ['self'],
         'base-uri': ['self'],
