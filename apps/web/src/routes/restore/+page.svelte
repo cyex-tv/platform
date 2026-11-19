@@ -102,7 +102,7 @@
         </div>
         <p class="lead">
           You deleted this account on {date(pending.requestedAt)}. It’s hidden now, and it will be deleted for good on
-          <strong>{date(pending.eraseAfter)}</strong>{#if days > 0} ({days === 1 ? 'tomorrow' : `in ${days} days`}){/if}.
+          <strong>{date(pending.eraseAfter)}</strong>{#if days > 0}{' '}({days === 1 ? 'tomorrow' : `in ${days} days`}){/if}.
         </p>
         <p class="lead">Restore it to bring back your profile, sets, emotes and channels as they were.</p>
         {#if problem}<p class="ui-error" role="alert">{problem}</p>{/if}
