@@ -78,6 +78,9 @@ export const ADMIN_PERMISSIONS = [
   'entitlements.view',
   'billing.view',
   'subscriptions.manage',
+  'emotes.edit_any',
+  'emotes.delete_any',
+  'editors.manage_any',
 ];
 
 /** Whether the account may open any part of the admin pages. */

@@ -16,6 +16,10 @@ const dev = !process.argv.includes('build') && !process.argv.includes('preview')
 // API origin must set PUBLIC_API_URL at build time too (the Dockerfile passes it as a build arg).
 const env = { ...loadEnv(dev ? 'development' : 'production', process.cwd(), 'PUBLIC_'), ...process.env };
 const api = new URL(env.PUBLIC_API_URL || 'https://api.cyex.tv').origin;
+// Where emote, badge and paint pictures are served (the API's CYEX_TV_CDN_URL), when it isn't
+// https://cdn.cyex.tv: a local stack's S3 server, say. Without it the CSP blocks those pictures,
+// and a painted name drawn from a blocked picture used to vanish.
+const cdn = env.PUBLIC_CDN_URL ? [new URL(env.PUBLIC_CDN_URL).origin] : [];
 // The dev mock (dev/mock-api.mjs) on its default port, in dev only.
 const mock = dev ? ['http://localhost:8787'] : [];
 
@@ -65,7 +69,7 @@ export default {
         'style-src-elem': ['self', 'https://fonts.googleapis.com', ...PADDLE_STYLE],
         'style-src-attr': ['unsafe-inline'],
         'font-src': ['self', 'https://fonts.gstatic.com'],
-        'img-src': ['self', 'data:', 'blob:', 'https://cdn.cyex.tv', ...AVATARS, api, ...mock],
+        'img-src': ['self', 'data:', 'blob:', 'https://cdn.cyex.tv', ...cdn, ...AVATARS, api, ...mock],
         // GitHub's release list: the front page reads which cyex deck installer is newest (src/lib/home/deck.svelte.ts).
         'connect-src': ['self', api, 'https://api.github.com', ...mock],
         'frame-src': ['self', ...PADDLE_FRAME],

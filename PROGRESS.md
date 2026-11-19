@@ -9,7 +9,7 @@ Owner feedback 2026/11/19, sections D and I (profile parts). Additive API; one n
 - [x] Your profile's dashboard: Overview (`/users/<id>?s=overview`, first rail row for the owner; the account menu's name row opens it): tiles for Channels (and the set each shows), Notifications, Recent uploads with their state, Recent activity, Editors, Cosmetics (what you show, how many you own) and Emote sets, each linking to its tab. Each tile loads and fails on its own.
 - [x] Activity tab: filter bar (Everything / Emotes / Sets / Cosmetics / Editors; By: anyone, the owner or one of its editors; the cyex logs timeframe All time / Day / Month with a "Jump to date" / "Jump to month" popover that refuses future dates). Filters live in the address (`?k=`, `?by=`, `?d=` / `?m=`). Rows show date and time (2026/11/19 14:05) and how long ago, everywhere (the emote page's Activity too). On an account's own feed its own lines drop "by <name>"; editor lines read "Added X as an editor", "Removed X as an editor", "X stopped being an editor".
 - [x] API: `accountActivityPage(filter: ActivityFilter)` with `groups` (`EMOTES`, `SETS`, `COSMETICS`, `EDITORS`), `actorId`, `since`, `until` (RFC 3339, `bad_time`). New kinds `EDITOR_ADDED`, `EDITOR_REMOVED` and `ActivityEntry.editor` (names only, never permissions); editor lines show only when a filter asks for `EDITORS`, so the unfiltered feed is unchanged. Editor add/remove audit rows now name the owner as their subject (an editor's own change is marked `via: account_editor`); older editor rows don't show.
-- [x] Display name: migration `20261207000051_display_platform.sql` (`accounts.display_platform`); `setDisplayPlatform(platform)` (`not_found` when not linked), `Me.displayPlatform`; the chosen identity is listed first and gives the account's name and picture everywhere (summaries, profiles, search results); search still matches every login; unlinking that platform goes back to Twitch first.
+- [x] Display name: migration `20261207000052_display_platform.sql` (`accounts.display_platform`); `setDisplayPlatform(platform)` (`not_found` when not linked), `Me.displayPlatform`; the chosen identity is listed first and gives the account's name and picture everywhere (summaries, profiles, search results); search still matches every login; unlinking that platform goes back to Twitch first.
 - [x] Sign out everywhere: `signOutEverywhere` ends every session, this one too, and clears the cookie (Settings → Account → Security). The header menu's Sign out stays this session only.
 - [x] Connections: Disconnect with more than one linked; the last never goes (`last_identity`, the website says why). Restricted, ticket-blocked or blocked accounts still can't unlink (identity holds, #83); an account in its deletion window has only the restore session, so it can't either (#89).
 - [x] Settings (account menu → Settings): rail Account / Appearance / Editors (the existing /me/editors page) / Billing (orders). Account: display name choice, connections, security, sessions, data, delete. Appearance: theme and reduced motion (System / On / Off, per device in `cyexMotion`): app.html sets `data-motion` before first paint and makes `matchMedia('(prefers-reduced-motion: …)')` answer by the setting, so every script follows it; `data-motion="reduce"` turns transitions and animations off in CSS. `/me/account` and `/me/settings` redirect to Settings → Account.
@@ -23,9 +23,25 @@ Owner feedback 2026/11/19, sections D and I (profile parts). Additive API; one n
 ```
 git push -u origin feat/profile-dashboard
 gh pr create --base main --head feat/profile-dashboard --title "Profile dashboard, activity filters and settings" --body-file <file>
-gh pr merge <n> --merge
+git merge origin/main   (four times; PROGRESS.md, ActivityRows.svelte and editors.rs resolved; the display platform migration renumbered to 000052)
+gh pr merge 95 --merge
 ```
 
+## Paint render fix and global emote/editor permissions (branch `fix/paints-and-global-perms`, ADR 0010 amendment part 3)
+- Owner feedback I (2026/11/19): "paints seem to not render properly on the website" (an image paint, "Icy Wave", showed as an empty radio in the cosmetics picker) and "perms to edit someones emotes and editors globally for a role".
+- Paint cause: a painted name is transparent text (`-webkit-text-fill-color: transparent`) showing its background through `background-clip: text`. For an image paint the only background was the picture, so whenever the picture didn't load (blocked by the CSP's `img-src`, missing on the CDN, still on its way) the name drew nothing. A local stack serves pictures from `CYEX_TV_CDN_URL` (the S3 server), which the CSP never allowed; the studio previews render locally, so they looked fine. Fix: `paintStyle` (and the studio's `paintStyleText`) put a flat layer in the text colour under the picture; `PUBLIC_CDN_URL` adds the pictures' origin to `img-src` (svelte.config.js, Dockerfile build arg, .env.example).
+- Permissions (additive): `emotes.delete_any` (delete anyone's emote, audited `emote.deleted` with `via`) and `editors.manage_any` (list, add, change, remove anyone's editors with every flag, audited with `via`); `emotes.edit_any` already covered name, tags, flags and visibility and is unchanged. Migration `20261207000051_global_emote_editor_perms.sql` gives both to the built-in Admin role. `accountEmotes` also takes `emotes.edit_any` / `emotes.delete_any`.
+- Web: role editor labels, tooltips and groups (`lib/admin/permissions.ts`); admin account page Editors panel (`lib/admin/AccountEditorsPanel.svelte`); emote page shows the edit form and delete to holders; dev mock updated.
+- Tests: vitest `paint.test.ts` (fails before the fix: no layer under the picture), `studio.test.ts`; Postgres `apps/api/tests/global_perms_flow.rs` (allow and deny for each, audit rows, owner's own actions unmarked).
+- Manual check (2026/11/19): headless Edge against the dev mock, `.claude/runs/2026-11-17-overnight/screens/i-paint/paint-visible.mjs` clones the image-painted name with a CSP-blocked and a 404 picture and counts visible pixels: 0.0% before, 29% after, dark and light. Editors panel at 1440 dark and 375 light.
+
+### GitHub write log for this PR
+
+```
+git push -u origin fix/paints-and-global-perms
+gh pr create --base main --head fix/paints-and-global-perms --title "Paint render fix and global emote/editor permissions" --body-file <file>
+gh pr merge 94 --merge
+```
 
 ## Emote browse: animated everywhere, one grid, flags and tags filters, trending (branch `feat/emote-browse`)
 
