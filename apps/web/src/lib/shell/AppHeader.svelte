@@ -1,11 +1,15 @@
 <script lang="ts">
   // The one header, identical on every route (public, signed in, admin, docs, errors, sign in):
   // 56px, sticky, flat on the ground with a hairline, its content in the 1520 wrapper. Left the
-  // mark + cyex.tv and Emotes; centre a search field that opens the command palette; right
-  // Upload (signed in) or Sign in, the theme toggle and the AccountMenu. Nothing in it depends
-  // on the route. No shortcut hint in the field; "/" and Ctrl K still open search (CommandPalette).
-  // 720px and narrower: the mark, a search button and a menu button that opens a
-  // sheet with the account menu's items plus Emotes and Developers.
+  // mark + cyex.tv and the main links (Emotes; signed in also Store, Subscription for
+  // subscribers and Admin for staff: nav.ts); centre the search field, which is the search
+  // itself (HeaderSearch: results drop down under it, no popup); right Upload (signed in) or
+  // Sign in, the theme toggle, the notification bell and the AccountMenu. "/" outside a field
+  // focuses the search (a page's own field marked data-page-search takes it instead); no hint.
+  // 720px and narrower: the mark, a search button that turns the bar into the field (no
+  // modal), the bell, and a menu button that opens a sheet with the account menu's items plus
+  // the main links and Developers.
+  import { tick } from 'svelte';
   import { page } from '$app/state';
   import Avatar from '$lib/components/Avatar.svelte';
   import BottomSheet from '$lib/components/BottomSheet.svelte';
@@ -13,14 +17,17 @@
   import IconButton from '$lib/components/IconButton.svelte';
   import Mark from '$lib/components/Mark.svelte';
   import ThemeToggle from '$lib/components/ThemeToggle.svelte';
-  import { openPalette } from '$lib/components/palette.svelte';
   import { clean } from '$lib/format';
-  import { session } from '$lib/tool/session.svelte';
+  import { isAdmin, session } from '$lib/tool/session.svelte';
   import NotificationBell from '$lib/account/NotificationBell.svelte';
-  import { inbox, watchInbox } from '$lib/account/inbox.svelte';
+  import NotificationToasts from '$lib/account/NotificationToasts.svelte';
+  import { watchInbox } from '$lib/account/inbox.svelte';
   import AccountLinks from './AccountLinks.svelte';
   import AccountMenu from './AccountMenu.svelte';
-  import { EMOTES } from './account';
+  import HeaderSearch from './HeaderSearch.svelte';
+  import { headerLinks } from './nav';
+  import { typing } from './search';
+  import { headerSearch } from './search.svelte';
 
   let { account = $bindable(false) }: { account?: boolean } = $props();
 
@@ -28,31 +35,65 @@
   const me = $derived(session.me);
   const who = $derived(me?.identities[0]);
   const path = $derived(page.url.pathname);
+  const links = $derived(headerLinks(me, isAdmin(me)));
   // Back to where you were after signing in (the sign-in page itself sends you to /me).
   const signin = $derived(path === '/signin' ? '/signin' : `/signin?back=${encodeURIComponent(path)}`);
 
-  // Keep the unread count fresh while signed in (the bell and the phone menu both show it).
+  // Keep the unread count fresh while signed in (the bell and the toasts read it).
   $effect(() => (me ? watchInbox() : undefined));
 
-  function search() {
+  // Phones: the search button turns the bar into the field; it closes again when the field
+  // empties and loses focus, on Cancel, on Escape, or when a result is opened.
+  async function openPhoneSearch() {
     menu = false;
-    openPalette();
+    headerSearch.phoneOpen = true;
+    await tick();
+    headerSearch.focusTick += 1;
+  }
+  function closePhoneSearch() {
+    headerSearch.phoneOpen = false;
+    headerSearch.query = '';
+  }
+  // Phone or not: only one search field is mounted (so only one asks the API), and wider than a
+  // phone again the bar is back to normal.
+  let narrow = $state(false);
+  $effect(() => {
+    const mq = matchMedia('(max-width: 720px)');
+    narrow = mq.matches;
+    const on = () => {
+      narrow = mq.matches;
+      if (!mq.matches) headerSearch.phoneOpen = false;
+    };
+    mq.addEventListener('change', on);
+    return () => mq.removeEventListener('change', on);
+  });
+
+  function onwindowkey(e: KeyboardEvent) {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return;
+    e.preventDefault();
+    const own = document.querySelector<HTMLInputElement>('input[data-page-search]');
+    if (own) own.focus();
+    else if (matchMedia('(max-width: 720px)').matches) void openPhoneSearch();
+    else headerSearch.focusTick += 1;
   }
 </script>
 
+<svelte:window onkeydown={onwindowkey} />
+
 <header class="app-header">
-  <div class="wrap bar">
+  <div class="wrap bar" class:searching={headerSearch.phoneOpen}>
     <div class="start">
-      <a class="brand" href="/" aria-label="cyex.tv home"><Mark /><span>cyex.tv</span></a>
-      <nav class="links" aria-label="Main">
-        <a href={EMOTES.href} aria-current={EMOTES.match(path) ? 'page' : undefined}><Icon name={EMOTES.icon} size={16} /><span class="lb" data-t={EMOTES.label}>{EMOTES.label}</span></a>
+      <a class="brand" href="/" aria-label="cyex.tv home"><Mark size={24} /><span>cyex.tv</span></a>
+      <nav class="links" class:many={links.length > 1} aria-label="Main">
+        {#each links as l (l.href)}
+          <a href={l.href} aria-current={l.match(path) ? 'page' : undefined} title={links.length > 1 ? l.label : undefined}>
+            <Icon name={l.icon} size={16} /><span class="lb" data-t={l.label}>{l.label}</span>
+          </a>
+        {/each}
       </nav>
     </div>
 
-    <button class="search" type="button" onclick={search} aria-label="Search emotes, channels and pages" aria-haspopup="dialog">
-      <Icon name="search" />
-      <span class="ph">Search emotes</span>
-    </button>
+    <div class="search">{#if !narrow}<HeaderSearch />{/if}</div>
 
     <div class="end">
       {#if me}
@@ -70,13 +111,23 @@
     </div>
 
     <div class="phone">
-      <IconButton icon="search" label="Search" tip="none" onclick={search} />
-      <button class="menu-btn" type="button" aria-label={me && inbox.count ? 'Menu, you have unread notifications' : 'Menu'} aria-expanded={menu} aria-haspopup="dialog" onclick={() => (menu = true)}>
-        {#if me}<Avatar src={who?.avatar} name={clean(who?.displayName)} size={28} />{#if inbox.count}<span class="dot" aria-hidden="true"></span>{/if}{:else}<Icon name="menu" size={18} />{/if}
+      <IconButton icon="search" label="Search" tip="none" onclick={openPhoneSearch} />
+      {#if me}<NotificationBell phone />{/if}
+      <button class="menu-btn" type="button" aria-label="Menu" aria-expanded={menu} aria-haspopup="dialog" onclick={() => (menu = true)}>
+        {#if me}<Avatar src={who?.avatar} name={clean(who?.displayName)} size={28} />{:else}<Icon name="menu" size={18} />{/if}
       </button>
     </div>
+
+    {#if narrow && headerSearch.phoneOpen}
+      <div class="phone-search">
+        <HeaderSearch phone onclose={closePhoneSearch} />
+        <button class="cancel" type="button" onclick={closePhoneSearch}>Cancel</button>
+      </div>
+    {/if}
   </div>
 </header>
+
+{#if me}<NotificationToasts />{/if}
 
 <BottomSheet bind:open={menu} label="Menu">
   <AccountLinks emotes touch {signin} onpick={() => (menu = false)} />
@@ -93,6 +144,7 @@
   .brand { flex: none; display: flex; align-items: center; gap: 9px; min-height: 40px;
     font-size: 16px; font-weight: 600; letter-spacing: -.01em; color: var(--text); }
   .links { display: flex; height: 100%; }
+  .links a { white-space: nowrap; }
   /* The current item is bold with an accent icon: no underline, bar or fill (owner rule). */
   .links a { position: relative; display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: var(--t-nav); font-weight: 500;
     color: var(--muted); transition: color var(--fast); }
@@ -104,11 +156,8 @@
   .links a:active { opacity: .6; transition: none; }
   .links a:focus-visible { outline-offset: -2px; }
 
-  .search { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; height: 40px; padding: 0 8px 0 12px;
-    border: 1px solid var(--border); border-radius: var(--radius-btn); background: var(--surface); color: var(--muted);
-    font: inherit; font-size: var(--t-nav); cursor: text; text-align: left;
-    transition: border-color var(--fast), color var(--fast); }
-  .ph { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .search { display: flex; min-width: 0; }
+  .phone-search { display: none; }
 
   .end { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
   /* Flat in the bar, by design: the primary button's glow (app.css, cyex-web allows it on a page's
@@ -121,20 +170,18 @@
   .menu-btn { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--radius-btn);
     background: none; color: var(--muted); cursor: pointer; transition: transform var(--dur-press) ease-out; }
   .menu-btn { position: relative; }
-  .dot { position: absolute; top: 6px; right: 5px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--bg); }
   .menu-btn:active { transform: scale(var(--press)); }
   @media (pointer: coarse) {
     .menu-btn { width: 44px; height: 44px; }
     .brand { min-height: 44px; }
     .hb { min-height: 0; } /* 40px to see, 44px to hit (the ::after below) */
-    .search, .hb { position: relative; }
-    .search::after, .hb::after { content: ''; position: absolute; inset: -2px 0; }
+    .hb { position: relative; }
+    .hb::after { content: ''; position: absolute; inset: -2px 0; }
     .up::after { inset: -2px; } /* icon-only Upload: 44 by 44 */
   }
 
   @media (hover: hover) and (pointer: fine) {
     .links a:hover { color: var(--text); }
-    .search:hover { border-color: var(--border-strong); color: var(--text); }
     .hb:hover { box-shadow: none; }
     .menu-btn:hover { color: var(--text); }
   }
@@ -143,10 +190,22 @@
     .up { width: 40px; padding: 0; }
     .hl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   }
+  /* Tighter: the main links keep their icons (name, title and aria-current stay). */
+  @media (max-width: 1080px) {
+    .many a { padding: 0 9px; }
+    .many .lb { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  }
   @media (max-width: 720px) {
-    .bar { grid-template-columns: minmax(0, 1fr) auto; }
+    .bar { position: relative; grid-template-columns: minmax(0, 1fr) auto; }
     .links, .search, .end { display: none; }
     .phone { display: flex; }
+    /* The search button turned the bar into the field: it covers the row, nothing else moves. */
+    .phone-search { position: absolute; inset: 0 var(--page-pad); display: flex; align-items: center; gap: 8px; background: var(--bg); }
+    .phone-search :global(.hs) { flex: 1; }
+    .cancel { flex: none; height: 44px; padding: 0 4px; border: 0; background: none; color: var(--accent-text); font: inherit;
+      font-size: var(--t-ui); font-weight: 500; cursor: pointer; }
+    .cancel:active { opacity: .6; }
+    .searching > .start, .searching > .phone { visibility: hidden; }
   }
   @media (forced-colors: active) {
     .app-header { border-bottom-color: CanvasText; }

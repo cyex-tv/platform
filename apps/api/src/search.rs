@@ -1,4 +1,5 @@
-//! `searchEmotes` (ADR 0004), through `cyex_tv_db::search::EmoteSearch`, and `searchAccounts`.
+//! `searchEmotes` (ADR 0004), through `cyex_tv_db::search::EmoteSearch`, `searchAccounts` and
+//! `quickSearch`.
 
 use std::collections::HashMap;
 
@@ -7,8 +8,12 @@ use cyex_tv_db::search::{ACCOUNT_QUERY_MIN, EmoteSearch, PgSearch, Query};
 use cyex_tv_db::{ids, reads};
 use cyex_tv_shared::error::ApiResult;
 use cyex_tv_shared::model::{
-    AccountHit, AccountResults, AccountSummary, EmoteSort, PublicIdentity, SearchResults,
+    AccountHit, AccountResults, AccountSummary, EmoteSort, PublicIdentity, QuickSearch,
+    SearchResults,
 };
+
+use sqlx::PgConnection;
+use uuid::Uuid;
 
 use crate::catalog::db_error;
 use crate::errors::sqlx_error;
@@ -70,14 +75,23 @@ pub async fn accounts(
     )
     .await
     .map_err(db_error)?;
-    let summaries = reads::summaries(&mut conn, &hits.ids)
+    let items = account_hits(&mut conn, &hits.ids).await?;
+    Ok(AccountResults {
+        items,
+        total: u64::try_from(hits.total).unwrap_or(0),
+        total_capped: hits.capped,
+        page,
+        per_page,
+    })
+}
+
+/// The public view of the accounts `ids`, in that order. Accounts that vanished are skipped.
+async fn account_hits(conn: &mut PgConnection, ids: &[Uuid]) -> ApiResult<Vec<AccountHit>> {
+    let summaries = reads::summaries(conn, ids).await.map_err(db_error)?;
+    let mut identities = cyex_tv_db::accounts::identities_many(conn, ids)
         .await
         .map_err(db_error)?;
-    let mut identities = cyex_tv_db::accounts::identities_many(&mut conn, &hits.ids)
-        .await
-        .map_err(db_error)?;
-    let items = hits
-        .ids
+    Ok(ids
         .iter()
         .filter_map(|id| {
             let s = summaries.get(id)?;
@@ -95,14 +109,44 @@ pub async fn accounts(
                     .collect(),
             })
         })
-        .collect();
-    Ok(AccountResults {
-        items,
-        total: u64::try_from(hits.total).unwrap_or(0),
-        total_capped: hits.capped,
-        page,
-        per_page,
-    })
+        .collect())
+}
+
+/// Emotes shown by `quickSearch`.
+pub const QUICK_EMOTES: i64 = 5;
+/// Accounts shown by `quickSearch`.
+pub const QUICK_USERS: i64 = 3;
+
+/// `quickSearch`: the top 5 emotes (`cyex_tv_db::search::quick`) and the top 3 accounts
+/// (`searchAccounts` ranking; a leading `@` is ignored, under two characters finds no one).
+/// Public. Limited per account, or per IP when signed out.
+pub async fn quick(
+    state: &AppState,
+    caller: Option<&Caller>,
+    ip: &str,
+    text: &str,
+) -> ApiResult<QuickSearch> {
+    limits::quick_search(state, caller, ip)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let ids = cyex_tv_db::search::quick(&mut conn, text, QUICK_EMOTES)
+        .await
+        .map_err(db_error)?;
+    let rows = reads::emotes(&mut conn, &ids).await.map_err(db_error)?;
+    let mut by_id: HashMap<_, _> = rows.into_iter().map(|r| (r.id, r)).collect();
+    let ordered: Vec<reads::EmoteRow> = ids.iter().filter_map(|id| by_id.remove(id)).collect();
+    let emotes = views::emotes(&mut conn, &ordered, &state.cdn_url)
+        .await
+        .map_err(db_error)?;
+    let name = text.trim().trim_start_matches('@').trim();
+    let users = if name.chars().count() < ACCOUNT_QUERY_MIN {
+        Vec::new()
+    } else {
+        let hits = cyex_tv_db::search::accounts(&mut conn, name, QUICK_USERS, 0)
+            .await
+            .map_err(db_error)?;
+        account_hits(&mut conn, &hits.ids).await?
+    };
+    Ok(QuickSearch { emotes, users })
 }
 
 pub async fn search(state: &AppState, p: &Params<'_>) -> ApiResult<SearchResults> {
