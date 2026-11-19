@@ -62,7 +62,7 @@ pub struct PgSearch {
 }
 
 /// `%` and `_` mean something in `LIKE`; a search for them means the characters.
-fn like_escape(text: &str) -> String {
+pub(crate) fn like_escape(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
         if matches!(c, '%' | '_' | '\\') {

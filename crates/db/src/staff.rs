@@ -72,6 +72,76 @@ pub async fn delete_note(conn: &mut PgConnection, id: Uuid, by: Uuid) -> DbResul
     Ok(done.rows_affected() > 0)
 }
 
+// Emote notes
+
+/// A note reviewers keep on one emote. Only staff with `emotes.review` see it.
+#[derive(Clone, Debug, PartialEq, Eq, FromRow)]
+pub struct EmoteNote {
+    pub id: Uuid,
+    pub emote_id: Uuid,
+    pub author_id: Option<Uuid>,
+    pub body: String,
+    pub created_at: DateTime<Utc>,
+}
+
+const EMOTE_NOTE: &str = "id, emote_id, author_id, body, created_at";
+
+pub async fn add_emote_note(
+    conn: &mut PgConnection,
+    emote_id: Uuid,
+    author_id: Uuid,
+    body: &str,
+) -> DbResult<EmoteNote> {
+    Ok(sqlx::query_as(&format!(
+        "INSERT INTO emote_notes (id, emote_id, author_id, body) VALUES ($1, $2, $3, $4)
+         RETURNING {EMOTE_NOTE}"
+    ))
+    .bind(new_id())
+    .bind(emote_id)
+    .bind(author_id)
+    .bind(body)
+    .fetch_one(conn)
+    .await?)
+}
+
+/// An emote's notes that aren't deleted, newest first (at most `limit`).
+pub async fn emote_notes(
+    conn: &mut PgConnection,
+    emote_id: Uuid,
+    limit: i64,
+) -> DbResult<Vec<EmoteNote>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {EMOTE_NOTE} FROM emote_notes WHERE emote_id = $1 AND deleted_at IS NULL
+         ORDER BY created_at DESC, id DESC LIMIT $2"
+    ))
+    .bind(emote_id)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
+}
+
+pub async fn emote_note(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<EmoteNote>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {EMOTE_NOTE} FROM emote_notes WHERE id = $1 AND deleted_at IS NULL"
+    ))
+    .bind(id)
+    .fetch_optional(conn)
+    .await?)
+}
+
+/// Marks an emote note deleted (it stays for the audit trail). False if it was gone already.
+pub async fn delete_emote_note(conn: &mut PgConnection, id: Uuid, by: Uuid) -> DbResult<bool> {
+    let done = sqlx::query(
+        "UPDATE emote_notes SET deleted_at = now(), deleted_by = $2
+         WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .bind(by)
+    .execute(conn)
+    .await?;
+    Ok(done.rows_affected() > 0)
+}
+
 // The entitlement graph
 
 /// One badge or paint an account holds now, with where it came from.

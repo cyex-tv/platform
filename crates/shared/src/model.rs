@@ -875,7 +875,78 @@ pub struct QuickSearch {
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct ReviewQueue {
     pub items: Vec<Emote>,
+    /// How many match the read in all (its tab and search).
     pub total: u64,
+    /// How many wait in each pending tab, whatever the read asked for.
+    #[serde(default)]
+    pub counts: ReviewCounts,
+}
+
+/// How many emotes wait for review, by tab.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct ReviewCounts {
+    /// Pending and public.
+    pub public: u64,
+    /// Pending and unlisted or private.
+    pub limited: u64,
+}
+
+/// A part of the review queue.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "lowercase")]
+pub enum ReviewTab {
+    /// Every pending emote. The default.
+    #[default]
+    Pending,
+    /// Pending and public: search shows it once approved.
+    Public,
+    /// Pending and unlisted or private.
+    Limited,
+    /// Approved or rejected by a reviewer.
+    Resolved,
+}
+
+/// How the review queue is ordered. Ties go by upload time.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "lowercase")]
+pub enum ReviewSort {
+    /// Upload time. The default for the pending tabs.
+    #[default]
+    Uploaded,
+    /// Review time. The default for `RESOLVED`.
+    Reviewed,
+    /// The uploader's display name.
+    Uploader,
+    /// The emote's name.
+    Name,
+}
+
+/// What `reviewQueue` lists. Every field is optional: none is every pending emote, oldest first.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
+#[cfg_attr(feature = "graphql", graphql(name = "ReviewQueueFilter"))]
+pub struct ReviewQueueFilter {
+    pub tab: Option<ReviewTab>,
+    /// Part of the emote's name or of its uploader's login or display name, any case.
+    pub search: Option<String>,
+    pub sort: Option<ReviewSort>,
+    /// Newest (or Z) first. Default: oldest first, except `RESOLVED`, latest review first.
+    pub descending: Option<bool>,
+}
+
+/// A note reviewers keep on one emote (`emotes.review`). The uploader never sees it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct EmoteNote {
+    pub id: String,
+    pub emote_id: String,
+    /// Empty when the author's account is gone.
+    pub author_id: Option<String>,
+    pub body: String,
+    pub created_at: String,
 }
 
 /// A page of emotes and how many there are in all.

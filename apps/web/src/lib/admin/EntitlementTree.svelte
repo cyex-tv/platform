@@ -7,7 +7,7 @@
   import State from '$lib/components/State.svelte';
   import { dateTime } from '$lib/format';
   import AccountLink from './AccountLink.svelte';
-  import { branches, KIND_LABEL, tally, type Grant } from './graph';
+  import { branches, KIND_LABEL, SOURCE_LABEL, tally, type Grant } from './graph';
 
   let {
     grants,
@@ -25,9 +25,7 @@
   let show = $state<'all' | 'held'>('all');
   const groups = $derived(branches(grants, by, show));
   const t = $derived(tally(grants));
-  const SOURCE: Record<Grant['source'], string> = {
-    STAFF: 'Given by staff', PURCHASE: 'Bought', CODE: 'Redeemed a code', EVENT: 'Event', DEFAULT: 'Every account', OWNER: 'Owner list',
-  };
+  const SOURCE = SOURCE_LABEL;
   const shown = $derived(show === 'held' ? grants.filter((g) => g.active) : grants);
   const itemHref = (g: Grant) =>
     g.kind === 'ROLE' ? `/admin/entitlements?role=${encodeURIComponent(g.itemId)}` : `/admin/entitlements?${g.kind.toLowerCase()}=${encodeURIComponent(g.itemId)}`;

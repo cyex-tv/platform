@@ -24,12 +24,13 @@ use cyex_tv_shared::model::{
     AccountEditor, AccountReports, AccountResults, AccountSession, AccountStatus, AccountSummary,
     ActivityEntry, ActivityPage, AddAccountEditor, AddSetEmote, AdminAccount, AuditEntry, Badge,
     Channel, ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge, CreateRole,
-    CreateSet, EditableChannel, EditedAccount, EditorPermission, Emote, EmoteFlag, EmotePage,
-    EmoteSet, EmoteSort, EmoteTrending, Entitlement, EntitlementPage, Event, GrantCosmetic,
-    Identity, Me, Notification, OwnedCosmetics, Paint, PaintInput, PendingDeletion,
-    PersonalSetEntry, Platform, QuickSearch, Report, ReportAction, ReportQueue, ReviewQueue, Role,
-    SearchResults, SetEmote, SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings,
-    UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote, UserCosmetics,
+    CreateSet, EditableChannel, EditedAccount, EditorPermission, Emote, EmoteFlag, EmoteNote,
+    EmotePage, EmoteSet, EmoteSort, EmoteTrending, EmoteVisibility, Entitlement, EntitlementPage,
+    Event, GrantCosmetic, Identity, Me, Notification, OwnedCosmetics, Paint, PaintInput,
+    PendingDeletion, PersonalSetEntry, Platform, QuickSearch, Report, ReportAction, ReportQueue,
+    ReviewQueue, ReviewQueueFilter, Role, SearchResults, SetEmote, SetSummary, SetVisibility,
+    UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote,
+    UserCosmetics,
 };
 use cyex_tv_shared::model::{
     Checkout, CodeBatch, CodeBatchInput, CodeBatchPage, CreatedCodeBatch, Order, OrderPage,
@@ -828,14 +829,34 @@ impl Query {
     }
 
     /// Pending emotes, oldest first. Needs `emotes.review`. `perPage` is 1 to 100, default 50.
+    /// With `filter`: one tab (public, unlisted and private, or resolved), a search by name or
+    /// uploader, and an order.
     async fn review_queue(
         &self,
         ctx: &Context<'_>,
         page: Option<u32>,
         per_page: Option<u32>,
+        filter: Option<ReviewQueueFilter>,
     ) -> Result<ReviewQueue> {
         let caller = caller(ctx)?;
-        moderation::review_queue(state(ctx), caller, page, per_page)
+        moderation::review_queue(state(ctx), caller, page, per_page, filter.as_ref())
+            .await
+            .map_err(api_error)
+    }
+
+    /// Reviewers' notes on an emote, newest first (the latest 200). Needs `emotes.review`.
+    async fn emote_notes(&self, ctx: &Context<'_>, emote_id: String) -> Result<Vec<EmoteNote>> {
+        let caller = caller(ctx)?;
+        moderation::notes(state(ctx), caller, &emote_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// What happened to one emote, newest first: the latest 100 audit entries about it
+    /// (upload, edits, reviews, notes, takedowns). Needs `emotes.review`.
+    async fn emote_history(&self, ctx: &Context<'_>, emote_id: String) -> Result<Vec<AuditEntry>> {
+        let caller = caller(ctx)?;
+        moderation::history(state(ctx), caller, &emote_id)
             .await
             .map_err(api_error)
     }
@@ -1572,10 +1593,38 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Approve a pending emote. Needs `emotes.review`. Audited.
-    async fn approve_emote(&self, ctx: &Context<'_>, id: String) -> Result<Emote> {
+    /// Approve a pending emote. Needs `emotes.review`. Audited. With `visibility`, it is also
+    /// made public, unlisted or private in the same step (for example, approved for personal use
+    /// only).
+    async fn approve_emote(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        visibility: Option<EmoteVisibility>,
+    ) -> Result<Emote> {
         let caller = caller(ctx)?;
-        moderation::approve(state(ctx), caller, &id)
+        moderation::approve(state(ctx), caller, &id, visibility)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Add a reviewers' note to an emote (1 to 2000 characters). Needs `emotes.review`. Audited.
+    async fn add_emote_note(
+        &self,
+        ctx: &Context<'_>,
+        emote_id: String,
+        body: String,
+    ) -> Result<EmoteNote> {
+        let caller = caller(ctx)?;
+        moderation::add_note(state(ctx), caller, &emote_id, &body)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Delete an emote note: its author may, and the owner. False if it was gone. Audited.
+    async fn delete_emote_note(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
+        let caller = caller(ctx)?;
+        moderation::delete_note(state(ctx), caller, &id)
             .await
             .map_err(api_error)
     }

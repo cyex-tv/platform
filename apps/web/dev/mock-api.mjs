@@ -542,7 +542,38 @@ const SETS = [
 const GLOBAL = { id: '01JD8XSET0000000000000GLOBL', name: 'Global', kind: 'GLOBAL', capacity: 200, owner: null,
   emotes: ALL.slice(0, 24).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-01T00:00:00.000Z' };
 SETS.push(GLOBAL);
-const PENDING = Array.from({ length: 7 }, (_, i) => emote(800 + i, OTHERS[i % 2], 'PENDING'));
+// The review queue: MOCK_PENDING uploads (default 60; try 3000 for a busy day), every 5th unlisted
+// and every 7th private, each a few minutes after the last, all mixed across uploaders.
+const PENDING = Array.from({ length: Number(process.env.MOCK_PENDING ?? 60) }, (_, i) => {
+  const e = emote(800 + i, OTHERS[i % OTHERS.length], 'PENDING');
+  e.createdAt = new Date(NOW - (i + 1) * 7 * 60_000).toISOString();
+  if (i % 7 === 3) Object.assign(e, { visibility: 'PRIVATE', flags: { ...e.flags, private: true } });
+  else if (i % 5 === 2) e.visibility = 'UNLISTED';
+  if (i % 9 === 4) e.flags = { ...e.flags, nsfw: true };
+  return e;
+});
+// Reviewed this session (the Resolved tab), the latest first, with when.
+const RESOLVED = [];
+const EMOTE_NOTES = { [PENDING[0]?.id]: [{ id: 'ENOTE1', authorId: OTHERS[0].id, body: 'Same uploader sent a near copy last week; compare before approving.', createdAt: new Date(NOW - 3600_000).toISOString() }] };
+const EMOTE_LOG = {};
+const logEmote = (id, action, after = null) => (EMOTE_LOG[id] ??= []).unshift({ id: 'ELOG' + Math.random().toString(36).slice(2, 10), actorId: ME_ID, action, before: null, after: after && JSON.stringify(after), createdAt: new Date().toISOString() });
+function reviewQueueAnswer(v) {
+  const f = v.filter ?? {};
+  const tab = f.tab ?? 'PENDING';
+  const q = (f.search ?? '').trim().toLowerCase();
+  let rows = tab === 'RESOLVED' ? RESOLVED.slice() : PENDING.filter((e) => tab === 'PENDING' || (tab === 'PUBLIC') === (e.visibility === 'PUBLIC'));
+  if (q) rows = rows.filter((e) => e.name.toLowerCase().includes(q) || (e.owner?.displayName ?? '').toLowerCase().includes(q));
+  const resolved = tab === 'RESOLVED';
+  const sort = f.sort ?? (resolved ? 'REVIEWED' : 'UPLOADED');
+  const desc = f.descending ?? resolved;
+  const key = (e) => (sort === 'NAME' ? e.name.toLowerCase() : sort === 'UPLOADER' ? (e.owner?.displayName ?? '').toLowerCase() : sort === 'REVIEWED' ? e.reviewedAt ?? '' : e.createdAt);
+  rows.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : a.createdAt.localeCompare(b.createdAt)) * (desc && sort !== 'UPLOADER' && sort !== 'NAME' ? -1 : 1));
+  if (desc && (sort === 'UPLOADER' || sort === 'NAME')) rows.reverse();
+  const per = Math.min(100, Math.max(1, v.perPage ?? 50));
+  const page = Math.max(1, v.page ?? 1);
+  const counts = { public: PENDING.filter((e) => e.visibility === 'PUBLIC').length, limited: PENDING.filter((e) => e.visibility !== 'PUBLIC').length };
+  return { data: { reviewQueue: { total: rows.length, counts, items: rows.slice((page - 1) * per, page * per) } } };
+}
 const REPORTS = [
   { id: 'R1', reason: 'This is a copy of my emote.', reporterId: OTHERS[1].id, state: 'OPEN', createdAt: '2026-11-16T18:00:00.000Z', emote: ALL[5] },
   { id: 'R2', reason: 'Spam', reporterId: OTHERS[0].id, state: 'OPEN', createdAt: '2026-11-16T19:30:00.000Z', emote: ALL[8] },
@@ -1722,12 +1753,40 @@ function signedIn(body, v, ADMIN) {
       return { data: { reviewQueue: { total: PENDING.length }, reportQueue: { total: REPORTS.length }, globalSet: { id: GLOBAL.id } } };
     case 'ReviewQueue':
       if (!ADMIN) return err('This needs emotes.review.', 'forbidden');
-      return { data: { reviewQueue: { total: PENDING.length, items: PENDING.slice(0, v.perPage ?? 50) } } };
+      return reviewQueueAnswer(v);
     case 'Approve':
     case 'Reject': {
-      const e = PENDING.splice(PENDING.findIndex((x) => x.id === v.id), 1)[0];
+      const at = PENDING.findIndex((x) => x.id === v.id);
+      if (at < 0) return err('Only pending emotes can be approved or rejected.', 'not_pending');
+      const e = PENDING.splice(at, 1)[0];
       e.state = op === 'Approve' ? 'APPROVED' : 'REJECTED';
-      return { data: { [op === 'Approve' ? 'approveEmote' : 'rejectEmote']: { id: e.id, state: e.state } } };
+      if (op === 'Approve' && v.visibility) Object.assign(e, { visibility: v.visibility, flags: { ...e.flags, private: v.visibility === 'PRIVATE' } });
+      e.reviewedAt = new Date().toISOString();
+      RESOLVED.unshift(e);
+      logEmote(e.id, op === 'Approve' ? 'emote.approved' : 'emote.rejected', { state: e.state.toLowerCase(), reason: v.reason ?? null, visibility: e.visibility.toLowerCase() });
+      return { data: { [op === 'Approve' ? 'approveEmote' : 'rejectEmote']: { id: e.id, state: e.state, visibility: e.visibility } } };
+    }
+    case 'EmoteHistory': {
+      const e = PENDING.find((x) => x.id === v.emoteId) ?? RESOLVED.find((x) => x.id === v.emoteId);
+      const tagged = e?.tags.length ? [{ id: 'ELOGTG' + e.id.slice(-4), actorId: e.owner?.id ?? null, action: 'emote.updated', before: JSON.stringify({ tags: [] }), after: JSON.stringify({ tags: e.tags }), createdAt: new Date(Date.parse(e.createdAt) + 90_000).toISOString() }] : [];
+      return { data: { emoteHistory: [...(EMOTE_LOG[v.emoteId] ?? []), ...tagged] } };
+    }
+    case 'EmoteNotes':
+      return { data: { emoteNotes: EMOTE_NOTES[v.emoteId] ?? [] } };
+    case 'AddEmoteNote': {
+      const body = (v.body ?? '').trim();
+      if (!body || body.length > 2000) return err('Notes are 1 to 2000 characters.', 'bad_note');
+      const n = { id: 'ENOTE' + Date.now(), authorId: ME_ID, body, createdAt: new Date().toISOString() };
+      (EMOTE_NOTES[v.emoteId] ??= []).unshift(n);
+      logEmote(v.emoteId, 'emote.note_added', { body });
+      return { data: { addEmoteNote: n } };
+    }
+    case 'DeleteEmoteNote': {
+      for (const [id, list] of Object.entries(EMOTE_NOTES)) {
+        const i = list.findIndex((n) => n.id === v.id);
+        if (i >= 0) { list.splice(i, 1); logEmote(id, 'emote.note_deleted'); return { data: { deleteEmoteNote: true } }; }
+      }
+      return { data: { deleteEmoteNote: false } };
     }
     case 'ReportQueue':
       return { data: { reportQueue: { total: REPORTS.length, items: REPORTS } } };
@@ -1847,7 +1906,11 @@ function signedIn(body, v, ADMIN) {
     case 'EntitlementGraph':
       return { data: { entitlementGraph: graphOf(v.accountId) } };
     case 'EntitlementHolders': {
-      const all = [ME_ID, ...OTHERS.map((o) => o.id)].flatMap(graphOf).filter((g) => g.kind === v.kind && g.itemId === v.id);
+      // Catalog items stand in for the made-up ones: odd ones held now by most, even ones taken back from some.
+      const stand = { BADGE: ['BADGE1', 'BADGE2'], PAINT: ['PAINT1', 'PAINT2', 'PAINT3'] }[v.kind];
+      const like = stand && !stand.includes(v.id) ? stand[[...v.id].reduce((n, c) => n + c.charCodeAt(0), 0) % stand.length] : v.id;
+      const all = [ME_ID, ...OTHERS.map((o) => o.id)].flatMap((id, i) => graphOf(id).map((g) => ({ ...g, grantedAt: g.grantedAt && new Date(Date.parse(g.grantedAt) - i * 5 * 3600_000).toISOString() })))
+        .filter((g) => g.kind === v.kind && g.itemId === like).map((g) => ({ ...g, itemId: v.id }));
       return { data: { entitlementHolders: all } };
     }
     case 'AccountRestrictions': {
