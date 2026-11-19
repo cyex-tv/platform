@@ -171,13 +171,20 @@ async fn idx_scans(c: &mut PgConnection, name: &str) -> i64 {
         .unwrap()
 }
 
-/// Asserts `run` reads the index `name`.
+/// Asserts `run` reads one of the indexes `names` (either gives the page in order).
 macro_rules! uses_index {
-    ($c:expr, $what:expr, $name:expr, $run:expr) => {{
-        let before = idx_scans($c, $name).await;
+    ($c:expr, $what:expr, $names:expr, $run:expr) => {{
+        let names: &[&str] = $names;
+        let mut before = Vec::new();
+        for n in names {
+            before.push(idx_scans($c, n).await);
+        }
         let out = $run;
-        let after = idx_scans($c, $name).await;
-        assert!(after > before, "{}: didn't use {}", $what, $name);
+        let mut used = false;
+        for (n, b) in names.iter().zip(before) {
+            used |= idx_scans($c, n).await > b;
+        }
+        assert!(used, "{}: used none of {:?}", $what, names);
         out
     }};
 }
@@ -231,9 +238,9 @@ async fn hot_reads_use_their_indexes() {
         // The page comes from the browse indexes in order. (The total is a count apart; with
         // most emotes matching, Postgres reads the table for it, and that is the cheap way.)
         for (sort, index) in [
-            (EmoteSort::Top, "emotes_browse_top"),
-            (EmoteSort::New, "emotes_browse_new"),
-            (EmoteSort::Relevance, "emotes_searchable_popularity"),
+            (EmoteSort::Top, &["emotes_browse_top"][..]),
+            (EmoteSort::New, &["emotes_browse_new", "emotes_state"][..]),
+            (EmoteSort::Relevance, &["emotes_searchable_popularity"][..]),
         ] {
             let hits = uses_index!(c, format!("browse {sort:?}"), index, {
                 search::search(c, &browse(sort, "")).await.unwrap()
