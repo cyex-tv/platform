@@ -210,6 +210,84 @@ async fn restricting_an_account() {
 }
 
 #[tokio::test]
+async fn timed_holds_end_and_follow_the_person() {
+    use accounts::Hold;
+    use chrono::{Duration, Utc};
+    let db = db!();
+    let mut c = db.conn().await;
+    let id = account(&mut c, "71").await;
+    accounts::link(&mut c, id, kick("72", "kick72"))
+        .await
+        .unwrap();
+
+    // Tickets for a week, uploads for good.
+    let week = Utc::now() + Duration::days(7);
+    let a = accounts::set_hold(&mut c, id, Hold::Tickets, true, Some(week))
+        .await
+        .unwrap();
+    assert!(a.tickets_blocked_at.is_some());
+    assert!(a.tickets_blocked_until.is_some());
+    let a = accounts::set_hold(&mut c, id, Hold::Uploads, true, None)
+        .await
+        .unwrap();
+    assert!(a.restricted_at.is_some() && a.restricted_until.is_none());
+    assert!(a.held());
+
+    // Unlinking leaves a hold with the end; the next account with that identity gets both.
+    accounts::unlink(&mut c, id, Platform::Kick).await.unwrap();
+    let fresh = accounts::sign_in(&mut c, kick("72", "kick72"))
+        .await
+        .unwrap();
+    assert!(fresh.created);
+    assert!(fresh.account.restricted_at.is_some());
+    assert_eq!(fresh.account.restricted_until, None);
+    let until = fresh.account.tickets_blocked_until.unwrap();
+    assert!((until - week).num_seconds().abs() <= 1, "{until} vs {week}");
+    assert_eq!(fresh.account.blocked_at, None);
+
+    // An end in the past reads as no hold at all, without anything sweeping it away.
+    sqlx::query(
+        "UPDATE accounts SET tickets_blocked_until = now() - interval '1 second' WHERE id = $1",
+    )
+    .bind(id)
+    .execute(&mut *c)
+    .await
+    .unwrap();
+    let a = accounts::get(&mut c, id).await.unwrap().unwrap();
+    assert_eq!(a.tickets_blocked_at, None);
+    assert_eq!(a.tickets_blocked_until, None);
+    assert!(a.restricted_at.is_some());
+    // Lifted: gone, end and all.
+    let a = accounts::set_hold(&mut c, id, Hold::Uploads, false, None)
+        .await
+        .unwrap();
+    assert!(!a.held());
+
+    // The history keeps every hold; a newer one of the same kind ends the running one.
+    let first = accounts::record_hold(&mut c, id, Hold::Account, Some("spam"), None, None)
+        .await
+        .unwrap();
+    let second = accounts::record_hold(&mut c, id, Hold::Account, Some("worse"), Some(week), None)
+        .await
+        .unwrap();
+    let rows = accounts::restrictions(&mut c, id, 10).await.unwrap();
+    assert_eq!(rows.len(), 2);
+    let old = rows.iter().find(|r| r.id == first.id).unwrap();
+    assert!(old.lifted_at.is_some());
+    let new = rows.iter().find(|r| r.id == second.id).unwrap();
+    assert!(new.lifted_at.is_none());
+    assert_eq!(
+        accounts::end_records(&mut c, id, Hold::Account, None)
+            .await
+            .unwrap(),
+        1
+    );
+
+    drop(c);
+    db.close().await;
+}
+
+#[tokio::test]
 async fn the_schema_rejects_bad_rows() {
     let db = db!();
     let mut c = db.conn().await;
@@ -1008,7 +1086,8 @@ async fn roles_and_their_permissions() {
         .into_iter()
         .map(|r| r.name)
         .collect();
-    assert_eq!(names, ["Staff", "Moderator"]);
+    // With the built-in roles (migration default_roles) around them.
+    assert_eq!(names, ["Owner", "Admin", "Staff", "Moderator", "User"]);
     assert_eq!(
         roles::roles_of(&mut c, admin).await.unwrap()[0].id,
         staff.id

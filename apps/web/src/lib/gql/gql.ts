@@ -69,22 +69,25 @@ type Documents = {
     "\n  query ReportQueue($page: Int, $perPage: Int) {\n    reportQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        id\n        reason\n        reporterId\n        state\n        createdAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": typeof types.ReportQueueDocument,
     "\n  mutation ResolveReport($id: String!, $action: ReportAction!, $note: String) {\n    resolveReport(id: $id, action: $action, note: $note) {\n      id\n      state\n    }\n  }\n": typeof types.ResolveReportDocument,
     "\n  mutation Takedown($id: String!, $reason: String!) {\n    takedownEmote(id: $id, reason: $reason) {\n      id\n      state\n    }\n  }\n": typeof types.TakedownDocument,
-    "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    public\n  }\n": typeof types.RoleFieldsFragmentDoc,
+    "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    public\n    builtIn\n    editable\n    assignable\n  }\n": typeof types.RoleFieldsFragmentDoc,
     "\n  query Roles {\n    roles {\n      ...RoleFields\n    }\n    permissions\n  }\n": typeof types.RolesDocument,
     "\n  mutation CreateRole($input: CreateRoleInput!) {\n    createRole(input: $input) {\n      ...RoleFields\n    }\n  }\n": typeof types.CreateRoleDocument,
     "\n  mutation UpdateRole($id: String!, $input: UpdateRoleInput!) {\n    updateRole(id: $id, input: $input) {\n      ...RoleFields\n    }\n  }\n": typeof types.UpdateRoleDocument,
     "\n  mutation DeleteRole($id: String!) {\n    deleteRole(id: $id)\n  }\n": typeof types.DeleteRoleDocument,
     "\n  query User($platform: Platform!, $login: String!) {\n    channelByLogin(platform: $platform, login: $login) {\n      platform\n      platformChannelId\n      login\n      account {\n        id\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.UserDocument,
-    "\n  query UserDetails($accountId: String!, $status: Boolean!, $roles: Boolean!) {\n    accountStatus(accountId: $accountId) @include(if: $status) {\n      uploadsBlocked\n      blocked\n    }\n    accountRoles(accountId: $accountId) @include(if: $roles) {\n      ...RoleFields\n    }\n  }\n": typeof types.UserDetailsDocument,
+    "\n  query UserDetails($accountId: String!, $status: Boolean!, $roles: Boolean!) {\n    accountStatus(accountId: $accountId) @include(if: $status) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n    accountRoles(accountId: $accountId) @include(if: $roles) {\n      ...RoleFields\n    }\n  }\n": typeof types.UserDetailsDocument,
     "\n  query AllRoles {\n    roles {\n      ...RoleFields\n    }\n  }\n": typeof types.AllRolesDocument,
-    "\n  mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {\n    restrictAccount(accountId: $accountId, uploadsBlocked: $uploadsBlocked, blocked: $blocked) {\n      uploadsBlocked\n      blocked\n    }\n  }\n": typeof types.RestrictDocument,
+    "\n  mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {\n    restrictAccount(accountId: $accountId, uploadsBlocked: $uploadsBlocked, blocked: $blocked) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n  }\n": typeof types.RestrictDocument,
+    "\n  mutation PlaceRestriction($accountId: String!, $input: RestrictionInput!) {\n    placeRestriction(accountId: $accountId, input: $input) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n  }\n": typeof types.PlaceRestrictionDocument,
+    "\n  mutation LiftRestriction($accountId: String!, $kind: RestrictionKind!, $reason: String) {\n    liftRestriction(accountId: $accountId, kind: $kind, reason: $reason) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n  }\n": typeof types.LiftRestrictionDocument,
+    "\n  query AccountRestrictions($accountId: String!) {\n    accountRestrictions(accountId: $accountId) {\n      id\n      kind\n      reason\n      endsAt\n      createdBy\n      createdAt\n      liftedAt\n      liftedBy\n      active\n    }\n  }\n": typeof types.AccountRestrictionsDocument,
     "\n  mutation AssignRole($accountId: String!, $roleId: String!) {\n    assignRole(accountId: $accountId, roleId: $roleId)\n  }\n": typeof types.AssignRoleDocument,
     "\n  mutation UnassignRole($accountId: String!, $roleId: String!) {\n    unassignRole(accountId: $accountId, roleId: $roleId)\n  }\n": typeof types.UnassignRoleDocument,
     "\n  query Audit(\n    $targetKind: String\n    $targetId: String\n    $actorId: String\n    $action: String\n    $since: String\n    $until: String\n    $before: String\n    $limit: Int\n  ) {\n    auditLog(\n      targetKind: $targetKind\n      targetId: $targetId\n      actorId: $actorId\n      action: $action\n      since: $since\n      until: $until\n      before: $before\n      limit: $limit\n    ) {\n      id\n      actorId\n      action\n      targetKind\n      targetId\n      before\n      after\n      createdAt\n    }\n  }\n": typeof types.AuditDocument,
     "\n  mutation ReportEmote($id: String!, $reason: String!) {\n    reportEmote(id: $id, reason: $reason) {\n      id\n    }\n  }\n": typeof types.ReportEmoteDocument,
     "\n  query MySetNames {\n    mySets {\n      id\n      name\n      kind\n      emotes {\n        emote {\n          id\n        }\n      }\n    }\n  }\n": typeof types.MySetNamesDocument,
     "\n  query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: \"\", owner: $owner, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.SearchByOwnerDocument,
-    "\n  query AdminAccount($accountId: String!) {\n    adminAccount(accountId: $accountId) {\n      id\n      displayName\n      avatar\n      createdAt\n      uploadsBlocked\n      blocked\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.AdminAccountDocument,
+    "\n  query AdminAccount($accountId: String!) {\n    adminAccount(accountId: $accountId) {\n      id\n      displayName\n      avatar\n      createdAt\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.AdminAccountDocument,
     "\n  query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {\n    accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.AccountEmotesDocument,
     "\n  query AccountReports($accountId: String!) {\n    accountReports(accountId: $accountId) {\n      about {\n        ...ReportFields\n      }\n      by {\n        ...ReportFields\n      }\n    }\n  }\n": typeof types.AccountReportsDocument,
     "\n  query PublicAccount($id: String!) {\n    account(id: $id) {\n      id\n      displayName\n      avatar\n    }\n  }\n": typeof types.PublicAccountDocument,
@@ -190,22 +193,25 @@ const documents: Documents = {
     "\n  query ReportQueue($page: Int, $perPage: Int) {\n    reportQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        id\n        reason\n        reporterId\n        state\n        createdAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": types.ReportQueueDocument,
     "\n  mutation ResolveReport($id: String!, $action: ReportAction!, $note: String) {\n    resolveReport(id: $id, action: $action, note: $note) {\n      id\n      state\n    }\n  }\n": types.ResolveReportDocument,
     "\n  mutation Takedown($id: String!, $reason: String!) {\n    takedownEmote(id: $id, reason: $reason) {\n      id\n      state\n    }\n  }\n": types.TakedownDocument,
-    "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    public\n  }\n": types.RoleFieldsFragmentDoc,
+    "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    public\n    builtIn\n    editable\n    assignable\n  }\n": types.RoleFieldsFragmentDoc,
     "\n  query Roles {\n    roles {\n      ...RoleFields\n    }\n    permissions\n  }\n": types.RolesDocument,
     "\n  mutation CreateRole($input: CreateRoleInput!) {\n    createRole(input: $input) {\n      ...RoleFields\n    }\n  }\n": types.CreateRoleDocument,
     "\n  mutation UpdateRole($id: String!, $input: UpdateRoleInput!) {\n    updateRole(id: $id, input: $input) {\n      ...RoleFields\n    }\n  }\n": types.UpdateRoleDocument,
     "\n  mutation DeleteRole($id: String!) {\n    deleteRole(id: $id)\n  }\n": types.DeleteRoleDocument,
     "\n  query User($platform: Platform!, $login: String!) {\n    channelByLogin(platform: $platform, login: $login) {\n      platform\n      platformChannelId\n      login\n      account {\n        id\n        displayName\n        avatar\n      }\n    }\n  }\n": types.UserDocument,
-    "\n  query UserDetails($accountId: String!, $status: Boolean!, $roles: Boolean!) {\n    accountStatus(accountId: $accountId) @include(if: $status) {\n      uploadsBlocked\n      blocked\n    }\n    accountRoles(accountId: $accountId) @include(if: $roles) {\n      ...RoleFields\n    }\n  }\n": types.UserDetailsDocument,
+    "\n  query UserDetails($accountId: String!, $status: Boolean!, $roles: Boolean!) {\n    accountStatus(accountId: $accountId) @include(if: $status) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n    accountRoles(accountId: $accountId) @include(if: $roles) {\n      ...RoleFields\n    }\n  }\n": types.UserDetailsDocument,
     "\n  query AllRoles {\n    roles {\n      ...RoleFields\n    }\n  }\n": types.AllRolesDocument,
-    "\n  mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {\n    restrictAccount(accountId: $accountId, uploadsBlocked: $uploadsBlocked, blocked: $blocked) {\n      uploadsBlocked\n      blocked\n    }\n  }\n": types.RestrictDocument,
+    "\n  mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {\n    restrictAccount(accountId: $accountId, uploadsBlocked: $uploadsBlocked, blocked: $blocked) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n  }\n": types.RestrictDocument,
+    "\n  mutation PlaceRestriction($accountId: String!, $input: RestrictionInput!) {\n    placeRestriction(accountId: $accountId, input: $input) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n  }\n": types.PlaceRestrictionDocument,
+    "\n  mutation LiftRestriction($accountId: String!, $kind: RestrictionKind!, $reason: String) {\n    liftRestriction(accountId: $accountId, kind: $kind, reason: $reason) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n  }\n": types.LiftRestrictionDocument,
+    "\n  query AccountRestrictions($accountId: String!) {\n    accountRestrictions(accountId: $accountId) {\n      id\n      kind\n      reason\n      endsAt\n      createdBy\n      createdAt\n      liftedAt\n      liftedBy\n      active\n    }\n  }\n": types.AccountRestrictionsDocument,
     "\n  mutation AssignRole($accountId: String!, $roleId: String!) {\n    assignRole(accountId: $accountId, roleId: $roleId)\n  }\n": types.AssignRoleDocument,
     "\n  mutation UnassignRole($accountId: String!, $roleId: String!) {\n    unassignRole(accountId: $accountId, roleId: $roleId)\n  }\n": types.UnassignRoleDocument,
     "\n  query Audit(\n    $targetKind: String\n    $targetId: String\n    $actorId: String\n    $action: String\n    $since: String\n    $until: String\n    $before: String\n    $limit: Int\n  ) {\n    auditLog(\n      targetKind: $targetKind\n      targetId: $targetId\n      actorId: $actorId\n      action: $action\n      since: $since\n      until: $until\n      before: $before\n      limit: $limit\n    ) {\n      id\n      actorId\n      action\n      targetKind\n      targetId\n      before\n      after\n      createdAt\n    }\n  }\n": types.AuditDocument,
     "\n  mutation ReportEmote($id: String!, $reason: String!) {\n    reportEmote(id: $id, reason: $reason) {\n      id\n    }\n  }\n": types.ReportEmoteDocument,
     "\n  query MySetNames {\n    mySets {\n      id\n      name\n      kind\n      emotes {\n        emote {\n          id\n        }\n      }\n    }\n  }\n": types.MySetNamesDocument,
     "\n  query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {\n    searchEmotes(query: \"\", owner: $owner, page: $page, perPage: $perPage, sort: $sort) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.SearchByOwnerDocument,
-    "\n  query AdminAccount($accountId: String!) {\n    adminAccount(accountId: $accountId) {\n      id\n      displayName\n      avatar\n      createdAt\n      uploadsBlocked\n      blocked\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n": types.AdminAccountDocument,
+    "\n  query AdminAccount($accountId: String!) {\n    adminAccount(accountId: $accountId) {\n      id\n      displayName\n      avatar\n      createdAt\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n": types.AdminAccountDocument,
     "\n  query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {\n    accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.AccountEmotesDocument,
     "\n  query AccountReports($accountId: String!) {\n    accountReports(accountId: $accountId) {\n      about {\n        ...ReportFields\n      }\n      by {\n        ...ReportFields\n      }\n    }\n  }\n": types.AccountReportsDocument,
     "\n  query PublicAccount($id: String!) {\n    account(id: $id) {\n      id\n      displayName\n      avatar\n    }\n  }\n": types.PublicAccountDocument,
@@ -476,7 +482,7 @@ export function graphql(source: "\n  mutation Takedown($id: String!, $reason: St
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    public\n  }\n"): typeof import('./graphql').RoleFieldsFragmentDoc;
+export function graphql(source: "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    public\n    builtIn\n    editable\n    assignable\n  }\n"): typeof import('./graphql').RoleFieldsFragmentDoc;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -500,7 +506,7 @@ export function graphql(source: "\n  query User($platform: Platform!, $login: St
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query UserDetails($accountId: String!, $status: Boolean!, $roles: Boolean!) {\n    accountStatus(accountId: $accountId) @include(if: $status) {\n      uploadsBlocked\n      blocked\n    }\n    accountRoles(accountId: $accountId) @include(if: $roles) {\n      ...RoleFields\n    }\n  }\n"): typeof import('./graphql').UserDetailsDocument;
+export function graphql(source: "\n  query UserDetails($accountId: String!, $status: Boolean!, $roles: Boolean!) {\n    accountStatus(accountId: $accountId) @include(if: $status) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n    accountRoles(accountId: $accountId) @include(if: $roles) {\n      ...RoleFields\n    }\n  }\n"): typeof import('./graphql').UserDetailsDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -508,7 +514,19 @@ export function graphql(source: "\n  query AllRoles {\n    roles {\n      ...Rol
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {\n    restrictAccount(accountId: $accountId, uploadsBlocked: $uploadsBlocked, blocked: $blocked) {\n      uploadsBlocked\n      blocked\n    }\n  }\n"): typeof import('./graphql').RestrictDocument;
+export function graphql(source: "\n  mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {\n    restrictAccount(accountId: $accountId, uploadsBlocked: $uploadsBlocked, blocked: $blocked) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n  }\n"): typeof import('./graphql').RestrictDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation PlaceRestriction($accountId: String!, $input: RestrictionInput!) {\n    placeRestriction(accountId: $accountId, input: $input) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n  }\n"): typeof import('./graphql').PlaceRestrictionDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation LiftRestriction($accountId: String!, $kind: RestrictionKind!, $reason: String) {\n    liftRestriction(accountId: $accountId, kind: $kind, reason: $reason) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n  }\n"): typeof import('./graphql').LiftRestrictionDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AccountRestrictions($accountId: String!) {\n    accountRestrictions(accountId: $accountId) {\n      id\n      kind\n      reason\n      endsAt\n      createdBy\n      createdAt\n      liftedAt\n      liftedBy\n      active\n    }\n  }\n"): typeof import('./graphql').AccountRestrictionsDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -536,7 +554,7 @@ export function graphql(source: "\n  query SearchByOwner($owner: String!, $page:
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query AdminAccount($accountId: String!) {\n    adminAccount(accountId: $accountId) {\n      id\n      displayName\n      avatar\n      createdAt\n      uploadsBlocked\n      blocked\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n"): typeof import('./graphql').AdminAccountDocument;
+export function graphql(source: "\n  query AdminAccount($accountId: String!) {\n    adminAccount(accountId: $accountId) {\n      id\n      displayName\n      avatar\n      createdAt\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n      identities {\n        platform\n        platformUserId\n        login\n        displayName\n        avatar\n      }\n    }\n  }\n"): typeof import('./graphql').AdminAccountDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

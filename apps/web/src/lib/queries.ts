@@ -638,6 +638,9 @@ export const ROLE_FIELDS = graphql(`
     position
     permissions
     public
+    builtIn
+    editable
+    assignable
   }
 `);
 
@@ -691,7 +694,11 @@ export const USER_DETAILS = graphql(`
   query UserDetails($accountId: String!, $status: Boolean!, $roles: Boolean!) {
     accountStatus(accountId: $accountId) @include(if: $status) {
       uploadsBlocked
+      ticketsBlocked
       blocked
+      uploadsBlockedUntil
+      ticketsBlockedUntil
+      blockedUntil
     }
     accountRoles(accountId: $accountId) @include(if: $roles) {
       ...RoleFields
@@ -711,7 +718,53 @@ export const RESTRICT = graphql(`
   mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {
     restrictAccount(accountId: $accountId, uploadsBlocked: $uploadsBlocked, blocked: $blocked) {
       uploadsBlocked
+      ticketsBlocked
       blocked
+      uploadsBlockedUntil
+      ticketsBlockedUntil
+      blockedUntil
+    }
+  }
+`);
+
+export const PLACE_RESTRICTION = graphql(`
+  mutation PlaceRestriction($accountId: String!, $input: RestrictionInput!) {
+    placeRestriction(accountId: $accountId, input: $input) {
+      uploadsBlocked
+      ticketsBlocked
+      blocked
+      uploadsBlockedUntil
+      ticketsBlockedUntil
+      blockedUntil
+    }
+  }
+`);
+
+export const LIFT_RESTRICTION = graphql(`
+  mutation LiftRestriction($accountId: String!, $kind: RestrictionKind!, $reason: String) {
+    liftRestriction(accountId: $accountId, kind: $kind, reason: $reason) {
+      uploadsBlocked
+      ticketsBlocked
+      blocked
+      uploadsBlockedUntil
+      ticketsBlockedUntil
+      blockedUntil
+    }
+  }
+`);
+
+export const ACCOUNT_RESTRICTIONS = graphql(`
+  query AccountRestrictions($accountId: String!) {
+    accountRestrictions(accountId: $accountId) {
+      id
+      kind
+      reason
+      endsAt
+      createdBy
+      createdAt
+      liftedAt
+      liftedBy
+      active
     }
   }
 `);
@@ -807,7 +860,11 @@ export const ADMIN_ACCOUNT = graphql(`
       avatar
       createdAt
       uploadsBlocked
+      ticketsBlocked
       blocked
+      uploadsBlockedUntil
+      ticketsBlockedUntil
+      blockedUntil
       identities {
         platform
         platformUserId

@@ -68,6 +68,16 @@ export const ADMIN_PERMISSIONS = [
   'shop.manage',
   'shop.orders',
   'codes.manage',
+  'roles.assign',
+  'reports.manage',
+  'users.restrict_uploads',
+  'users.restrict_tickets',
+  'users.block',
+  'users.sessions',
+  'users.notes',
+  'entitlements.view',
+  'billing.view',
+  'subscriptions.manage',
 ];
 
 /** Whether the account may open any part of the admin pages. */

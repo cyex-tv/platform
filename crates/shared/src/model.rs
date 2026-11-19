@@ -675,6 +675,30 @@ pub struct Role {
     /// Shown on its holders' public profiles (`accountProfile`). Off by default.
     #[serde(default)]
     pub public: bool,
+    /// Set on the built-in roles: `USER` (every account holds it), `ADMIN` and `ROOT` (the
+    /// owners' top role, shown only to its holders).
+    #[serde(default)]
+    pub built_in: Option<BuiltInRole>,
+    /// Whether you may change it: below your highest role, not one you hold, not the top role.
+    #[serde(default)]
+    pub editable: bool,
+    /// Whether you may give it to someone (and take it away): below your highest role, you hold
+    /// what it grants, and not the User or top role.
+    #[serde(default)]
+    pub assignable: bool,
+}
+
+/// The roles cyex.tv comes with (ADR 0010).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "lowercase")]
+pub enum BuiltInRole {
+    /// "User": every account holds it without an assignment. Starts with no permissions.
+    User,
+    /// "Admin": can't be deleted.
+    Admin,
+    /// The top role: every permission, held by the owners only, never granted or edited.
+    Root,
 }
 
 /// A role as anyone may see it on a profile.
@@ -774,6 +798,16 @@ pub struct AdminAccount {
     pub created_at: String,
     pub uploads_blocked: bool,
     pub blocked: bool,
+    /// No reports or tickets.
+    #[serde(default)]
+    pub tickets_blocked: bool,
+    /// When each hold ends; empty while it is off or for good.
+    #[serde(default)]
+    pub uploads_blocked_until: Option<String>,
+    #[serde(default)]
+    pub blocked_until: Option<String>,
+    #[serde(default)]
+    pub tickets_blocked_until: Option<String>,
 }
 
 /// Something the platform tells you, such as a takedown of your emote.
@@ -798,6 +832,61 @@ pub struct AccountStatus {
     pub uploads_blocked: bool,
     /// No sign-in, no sessions.
     pub blocked: bool,
+    /// No reports or tickets.
+    #[serde(default)]
+    pub tickets_blocked: bool,
+    /// When each hold ends; empty while it is off or for good.
+    #[serde(default)]
+    pub uploads_blocked_until: Option<String>,
+    #[serde(default)]
+    pub blocked_until: Option<String>,
+    #[serde(default)]
+    pub tickets_blocked_until: Option<String>,
+}
+
+/// What a restriction stops.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "lowercase")]
+pub enum RestrictionKind {
+    /// Uploading emotes (`users.restrict_uploads`).
+    Uploads,
+    /// Filing reports and tickets (`users.restrict_tickets`).
+    Tickets,
+    /// The whole account: no sign-in, sessions ended (`users.block`).
+    Account,
+}
+
+/// One restriction placed on an account, running or over.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct Restriction {
+    pub id: String,
+    pub kind: RestrictionKind,
+    /// Why, as staff wrote it. Empty on restrictions made without one (`restrictAccount`).
+    pub reason: Option<String>,
+    /// When it ends; empty for good.
+    pub ends_at: Option<String>,
+    /// The staff account that placed it.
+    pub created_by: Option<String>,
+    pub created_at: String,
+    /// When staff lifted it early, or a newer restriction of the same kind replaced it.
+    pub lifted_at: Option<String>,
+    pub lifted_by: Option<String>,
+    /// Still holding now.
+    pub active: bool,
+}
+
+/// A restriction to place.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
+#[cfg_attr(feature = "graphql", graphql(name = "RestrictionInput"))]
+pub struct RestrictionInput {
+    pub kind: RestrictionKind,
+    /// When it ends (RFC 3339, in the future, at most ten years out); empty for good.
+    pub until: Option<String>,
+    /// Why: 1 to 500 characters. Staff see it; the account doesn't.
+    pub reason: String,
 }
 
 // Account activity (ADR 0016)

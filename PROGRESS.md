@@ -7,7 +7,7 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 Owner feedback 2026/11/19, section A. Additive API; nothing was deployed.
 
 - [x] The Ctrl K command palette is gone. The header field is the search: typing drops a list under it (ARIA combobox: ↑ ↓, Enter, Escape, Tab) with the top 5 emotes and top 3 people from the new `quickSearch(query)`; Enter with no row picked opens `/search?q=`. Requests wait 150ms and a newer one aborts the older. `/` outside a field focuses it (a page field marked `data-page-search` keeps it). Phones: the search button turns the header row into the field, no modal.
-- [x] `quickSearch` ranks names in tiers: exact, exact ignoring case, prefix, word or initials prefix (`point` and `pp` find `PepePoint`), substring, then near misses (pg_trgm similarity, 3+ characters); most used (channel count) first inside a tier. Migration `20261207000001_quick_search.sql` adds the stored `emotes.name_words` / `name_initials` columns and their indexes. 240 a minute per account or IP (`rate_limited`).
+- [x] `quickSearch` ranks names in tiers: exact, exact ignoring case, prefix, word or initials prefix (`point` and `pp` find `PepePoint`), substring, then near misses (pg_trgm similarity, 3+ characters); most used (channel count) first inside a tier. Migration `20261207000030_quick_search.sql` adds the stored `emotes.name_words` / `name_initials` columns and their indexes. 240 a minute per account or IP (`rate_limited`).
 - [x] Focusing the empty field lists `myEditableChannels`: your channels, then those of accounts you edit, then those whose sets you edit, A to Z inside a role, each channel once under its highest role. Signed out: a hint line.
 - [x] Header links signed in: Emotes, Store (/shop), Subscription (only with an active subscription: `hasSubscription()` is false until subscriptions exist; placeholder `/me/subscription`), Admin for staff. Signed out unchanged. Under 1080px the links keep their icons. The account menu no longer repeats Admin.
 - [x] Notifications: the bell is in the header on every width (a sheet on phones), and new ones pop up as toasts under it (NotificationToasts; only ones newer than the page's first count).
@@ -21,8 +21,23 @@ Owner feedback 2026/11/19, section A. Additive API; nothing was deployed.
 ```
 git push -u origin feat/header-search
 gh pr create --base main --head feat/header-search --title "Header search, nav, notifications and the new mark" --body-file <file>
-git merge origin/main   (PROGRESS.md and gql.rs imports resolved)
+git merge origin/main   (twice; PROGRESS.md and gql.rs imports resolved)
 gh pr merge 86 --merge
+```
+
+## Admin roles and moderation (branch `feat/admin-roles`, ADR 0010 amendment 2026/11/19)
+- Owner feedback F (2026/11/19): built-in roles, finer permissions, timed restrictions, the admin rail's height.
+- API (additive): migrations `20261207000020_default_roles.sql` (roles.system; User, Admin and the owners' top role) and `20261207000021_timed_restrictions.sql` (`*_until` ends, the tickets hold, `account_restrictions` history, identity holds carry both). `Role` gains `builtIn`, `editable`, `assignable`; `AccountStatus`/`AdminAccount` gain `ticketsBlocked` and the three ends; new `placeRestriction`, `liftRestriction`, `accountRestrictions`. Ten new permissions (`roles.assign`, `reports.manage`, `users.restrict_uploads`, `users.restrict_tickets`, `users.block`, `users.sessions`, `users.notes`, `entitlements.view`, `billing.view`, `subscriptions.manage`); each broad permission keeps working. Rules: nobody edits a role they hold (`own_role`), built-in roles (`built_in_role`), the top role is `not_found` to everyone but the owners, custom positions 1 to 999 999 (`bad_position`). Reports refuse `tickets_blocked`. Audit rows: `account.restriction_placed`, `account.restriction_lifted`.
+- Tests (Postgres, run in CI): `apps/api/tests/builtin_roles_flow.rs` (top role hidden and untouchable, User role is everyone's, own role, granting at or above, roles.assign), `abuse_flow.rs` (`timed_restrictions_end_on_their_own`, `a_ticket_ban_stops_reports_until_lifted`), `crates/db/tests/queries.rs` (`timed_holds_end_and_follow_the_person`); existing role tests updated for the seeded roles. Unit: rbac `nobody_edits_a_role_they_hold`, positions, restriction ends; vitest `src/lib/admin/permissions.test.ts` (every API permission labelled, group checkbox states).
+- Web: the role editor groups permissions (Emotes, Sets, Users, Moderation, Tickets and reports, Cosmetics, Shop and billing, Roles, System) with plain names, a tooltip on hover and focus, and a group checkbox (indeterminate when partial); roles list marks built-in and your own roles and says why one can't be edited. The account page's restrictions panel places uploads, reports or full blocks for 1 hour, 1 day, 7 days, 30 days, until a date, or for good, with a reason, shows ends, lifts them and lists the history. SideRail (shared): no scroll inside the rail any more; a rail taller than the window scrolls with the page; new `fill` prop (the admin rail uses it) runs the full height of the left side.
+- Manual check (2026/11/19): headless Edge against the dev mock at 1440 and 375, dark and light, keyboard focus on the permission tooltips; screens in .claude/runs/2026-11-19-feedback/screens/f.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/admin-roles
+gh pr create --base main --head feat/admin-roles --title "Admin: built-in roles, finer permissions, timed restrictions" --body-file <file>
+gh pr merge <n> --merge
 ```
 
 ## Front page: 3D logo hero and four boxes (branch `feat/front-page`)

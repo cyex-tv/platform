@@ -203,7 +203,7 @@ async fn accounts_window(
                                  similarity(lower(i.display_name), $1))) AS score
              FROM identities i
              JOIN accounts a ON a.id = i.account_id
-                            AND a.deleted_at IS NULL AND a.blocked_at IS NULL
+                            AND a.deleted_at IS NULL AND (a.blocked_at IS NULL OR a.blocked_until <= now())
              WHERE lower(i.login) LIKE '%' || $2 || '%'
                 OR lower(i.display_name) LIKE '%' || $2 || '%'
                 OR lower(i.login) % $1

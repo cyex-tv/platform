@@ -25,6 +25,7 @@
   import State from '$lib/components/State.svelte';
   import { loadShopCounts, shopCounts } from '$lib/shop/counts.svelte';
   import { can, isAdmin, loadMe, session } from '$lib/tool/session.svelte';
+  import { USER_PAGE_PERMISSIONS } from '$lib/admin/permissions';
 
   let { children } = $props();
   useToolButtons(); // the tool pages' buttons are .ui-btn; shared components follow
@@ -46,7 +47,7 @@
   $effect(() => {
     if (!admin) return;
     const review = can('emotes.review');
-    const reports = review || can('emotes.takedown');
+    const reports = review || can('emotes.takedown') || can('reports.manage');
     if (!review && !reports) return;
     gql(ADMIN_COUNTS, { review, reports })
       .then((r) => (counts = r))
@@ -59,7 +60,7 @@
 
   const adminRail = $derived.by<RailGroup[]>(() => {
     void session.me; // permissions come from the account
-    const tickets = can('emotes.review') || can('emotes.takedown');
+    const tickets = can('emotes.review') || can('emotes.takedown') || can('reports.manage');
     const cosmetics = can('cosmetics.manage') || can('cosmetics.grant');
     const groups: RailGroup[] = [
       { items: row('/admin', 'Overview', 'gauge') },
@@ -89,8 +90,8 @@
       {
         toggle: { label: 'People', icon: 'users' },
         items: [
-          ...row('/admin/users', 'Users', 'users', can('users.view') || can('users.restrict') || can('roles.manage') || can('cosmetics.grant')),
-          ...row('/admin/roles', 'Roles', 'key', can('roles.manage')),
+          ...row('/admin/users', 'Users', 'users', USER_PAGE_PERMISSIONS.some(can)),
+          ...row('/admin/roles', 'Roles', 'key', can('roles.manage') || can('roles.assign')),
         ],
       },
       { toggle: { label: 'System', icon: 'settings' }, items: row('/admin/audit', 'Audit log', 'scroll', can('audit.view')) },
@@ -117,7 +118,7 @@
 <RailLayout>
   {#snippet rail()}
     {#if admin}
-      <SideRail label="Admin" groups={adminRail}>
+      <SideRail label="Admin" groups={adminRail} fill>
         {#snippet head()}
           <div class="title"><strong>Admin</strong><span class="ui-chip">Staff</span></div>
         {/snippet}
