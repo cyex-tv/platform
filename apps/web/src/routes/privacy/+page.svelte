@@ -34,7 +34,7 @@
     <h2>How long</h2>
     <ul>
       <li>Sessions expire. Signing out ends yours at once.</li>
-      <li>To delete your account, write to <a class="link" href="mailto:privacy@cyex.tv">privacy@cyex.tv</a> from a channel you signed in with, or name it in your message. Its data is removed within 30 days.</li>
+      <li>To delete your account, use Delete account under Settings, Account. The account is hidden at once and erased for good after 30 days; signing in before then undoes it. Approved emotes that sit in other people's sets stay, shown as made by "Deleted user". You can also write to <a class="link" href="mailto:privacy@cyex.tv">privacy@cyex.tv</a> from a channel you signed in with.</li>
       <li>Backups rotate after 14 days, so deleted data is gone from them by then.</li>
     </ul>
 
