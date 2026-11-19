@@ -318,6 +318,106 @@ async fn report_then_dismiss() {
 }
 
 #[tokio::test]
+async fn staff_look_up_an_account() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("21", &[]).await;
+    let bob = w.user("22", &[]).await;
+    let reviewer = w.user("23", &["emotes.review"]).await;
+    let viewer = w.user("24", &["users.view", "audit.view"]).await;
+    let (emote, _) = w.live_emote(&alice, &reviewer, "aliceSeen", &png(21)).await;
+    let r = w
+        .gql(&bob, REPORT, json!({ "id": emote, "r": "spam" }))
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+
+    let about = "query($a: String!) { accountReports(accountId: $a) { about { reason emote { name } } by { reason } } }";
+    let alice_id = ids::to_text(alice.id);
+    let bob_id = ids::to_text(bob.id);
+    assert_eq!(
+        code(&w.gql(&bob, about, json!({ "a": alice_id })).await),
+        "forbidden"
+    );
+    let r = w.gql(&reviewer, about, json!({ "a": alice_id })).await;
+    assert_eq!(
+        r["data"]["accountReports"]["about"][0]["reason"], "spam",
+        "{r}"
+    );
+    assert_eq!(
+        r["data"]["accountReports"]["about"][0]["emote"]["name"],
+        "aliceSeen"
+    );
+    assert_eq!(
+        r["data"]["accountReports"]["by"].as_array().unwrap().len(),
+        0
+    );
+    let r = w.gql(&reviewer, about, json!({ "a": bob_id })).await;
+    assert_eq!(
+        r["data"]["accountReports"]["by"][0]["reason"], "spam",
+        "{r}"
+    );
+    assert_eq!(
+        r["data"]["accountReports"]["about"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+
+    let account = "query($a: String!) { adminAccount(accountId: $a) { id displayName identities { platform login } blocked uploadsBlocked } }";
+    assert_eq!(
+        code(&w.gql(&reviewer, account, json!({ "a": alice_id })).await),
+        "forbidden"
+    );
+    let r = w.gql(&viewer, account, json!({ "a": alice_id })).await;
+    assert_eq!(r["data"]["adminAccount"]["displayName"], "user21", "{r}");
+    assert_eq!(
+        r["data"]["adminAccount"]["identities"][0]["platform"],
+        "TWITCH"
+    );
+    assert_eq!(r["data"]["adminAccount"]["blocked"], false);
+    let unknown = ids::to_text(ids::new_id());
+    assert_eq!(
+        code(&w.gql(&viewer, account, json!({ "a": unknown })).await),
+        "not_found"
+    );
+
+    let emotes =
+        "query($a: String!) { accountEmotes(accountId: $a) { total items { name state } } }";
+    assert_eq!(
+        code(&w.gql(&bob, emotes, json!({ "a": alice_id })).await),
+        "forbidden"
+    );
+    let r = w.gql(&viewer, emotes, json!({ "a": alice_id })).await;
+    assert_eq!(r["data"]["accountEmotes"]["total"], 1, "{r}");
+    assert_eq!(r["data"]["accountEmotes"]["items"][0]["state"], "APPROVED");
+
+    // The audit log narrows by actor, action and time.
+    let log = "query($actor: String, $action: String, $since: String, $until: String) { auditLog(actorId: $actor, action: $action, since: $since, until: $until) { action actorId } }";
+    let r = w
+        .gql(&viewer, log, json!({ "actor": ids::to_text(reviewer.id) }))
+        .await;
+    let rows = r["data"]["auditLog"].as_array().unwrap();
+    assert!(!rows.is_empty(), "{r}");
+    assert!(
+        rows.iter()
+            .all(|e| e["actorId"] == ids::to_text(reviewer.id))
+    );
+    let r = w
+        .gql(&viewer, log, json!({ "action": "no.such.action" }))
+        .await;
+    assert!(r["data"]["auditLog"].as_array().unwrap().is_empty(), "{r}");
+    let r = w
+        .gql(&viewer, log, json!({ "since": "2999-01-01T00:00:00Z" }))
+        .await;
+    assert!(r["data"]["auditLog"].as_array().unwrap().is_empty(), "{r}");
+    let r = w.gql(&viewer, log, json!({ "since": "yesterday" })).await;
+    assert_eq!(code(&r), "bad_time", "{r}");
+    let r = w.gql(&viewer, log, json!({ "actor": "nope" })).await;
+    assert!(!r["errors"].is_null(), "{r}");
+    w.close().await;
+}
+
+#[tokio::test]
 async fn reports_are_limited_per_account() {
     let Some(w) = World::new().await else { return };
     let alice = w.user("11", &[]).await;

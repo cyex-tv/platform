@@ -21,13 +21,47 @@
   let rejecting = $state<EmoteFieldsFragment | null>(null);
   let dialog: ReturnType<typeof ReasonDialog>;
 
+  // The focused tile: J and K move it, A approves it, R opens the reject reason. It is the one
+  // tab stop of the grid and the one the size comparison shows.
+  let cur = $state<string | null>(null);
+  const focused = $derived(items?.find((e) => e.id === cur) ?? items?.[0] ?? null);
+  const SCALES = [1, 2, 4] as const;
+
+  const tileEl = (id: string) => document.querySelector<HTMLElement>(`[data-card="${CSS.escape(id)}"]`);
+  function focusTile(id: string) {
+    cur = id;
+    const el = tileEl(id);
+    el?.focus();
+    el?.scrollIntoView({ block: 'nearest' });
+  }
+
+  function onkeydown(ev: KeyboardEvent) {
+    if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.defaultPrevented || !items?.length) return;
+    const t = ev.target as HTMLElement | null;
+    if (t?.closest('input, textarea, select, dialog, [contenteditable]') || document.querySelector('dialog[open]')) return;
+    const key = ev.key.toLowerCase();
+    const at = Math.max(0, items.findIndex((e) => e.id === focused?.id));
+    if (key === 'j' || key === 'k') {
+      ev.preventDefault();
+      focusTile(items[Math.min(items.length - 1, Math.max(0, at + (key === 'j' ? 1 : -1)))].id);
+    } else if ((key === 'a' || key === 'r') && focused && !ev.repeat) {
+      // Only on the grid (or nothing focused), never on a button of its own.
+      if (t && t !== document.body && !t.closest('[data-card]')) return;
+      ev.preventDefault();
+      if (key === 'a') {
+        if (ready(focused) && busy !== focused.id) approve(focused);
+      } else if (busy !== focused.id) askReject(focused);
+    }
+  }
+
   function done(id: string) {
     const q = L.data;
     if (!q) return;
     const at = q.items.findIndex((e) => e.id === id);
     const nextId = (q.items[at + 1] ?? q.items[at - 1])?.id;
+    cur = nextId ?? null;
     tick().then(() => {
-      const next = nextId ? document.querySelector<HTMLElement>(`[data-card="${CSS.escape(nextId)}"] .approve`) : null;
+      const next = nextId ? tileEl(nextId) : null;
       (next ?? document.querySelector<HTMLElement>('h1'))?.focus();
     });
     const left = q.items.filter((e) => e.id !== id);
@@ -69,6 +103,8 @@
 
 <svelte:head><title>Review - cyex.tv</title></svelte:head>
 
+<svelte:window {onkeydown} />
+
 <div class="ui-head"><div><h1 tabindex="-1">Review queue</h1><p>{#if items}<span class="ui-mono">{count(total)}</span> pending, oldest first{:else}Oldest first{/if}</p></div></div>
 
 <LoadGate source={L} label="Loading the queue…">
@@ -77,10 +113,30 @@
 {#if items.length === 0}
   <State title="Nothing waiting.">New uploads show up here.</State>
 {:else}
+  <p class="help">J and K move between uploads. A approves, R rejects. Tab reaches the buttons.</p>
+
+  {#if focused && ready(focused)}
+    {@const f = focused}
+    {@const d = size(f)}
+    <section class="compare" aria-label="Size comparison for {clean(f.name)}">
+      <div class="who"><strong><bdi>{clean(f.name)}</bdi></strong><span class="ui-hint">1x, 2x and 4x, as chat draws them</span></div>
+      <div class="sizes">
+        {#each SCALES as s (s)}
+          <figure>
+            <img src={src(f, s)} width={d.width * s} height={d.height * s} alt="" decoding="async" />
+            <figcaption class="ui-mono">{s}x <span>{d.width * s}×{d.height * s}</span></figcaption>
+          </figure>
+        {/each}
+      </div>
+    </section>
+  {/if}
+
   <ul class="queue">
     {#each items as e (e.id)}
       {@const dims = size(e)}
-      <li class="tile" data-card={e.id}>
+      <!-- The tile is the grid's one tab stop (J and K move it); its buttons stay reachable with Tab. -->
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+      <li class="tile" class:cur={e.id === focused?.id} data-card={e.id} tabindex={e.id === focused?.id ? 0 : -1} aria-label="{clean(e.name)}, by {clean(e.owner?.displayName) || 'unknown'}" onfocus={() => (cur = e.id)} onclick={(ev) => { if (!(ev.target as HTMLElement).closest('a, button')) focusTile(e.id); }}>
         <span class="status"><span class="ui-chip pending">Pending</span></span>
         <span class="art">
           {#if ready(e)}
@@ -116,6 +172,18 @@
 
 <style>
   h1:focus { outline: none; }
+  .help { margin: 0 0 12px; font-size: var(--text-hint); color: var(--dim); }
+  .compare { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 32px; margin-bottom: 16px; padding: 14px 16px;
+    border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); }
+  .compare .who { display: grid; gap: 2px; min-width: 120px; max-width: 220px; }
+  .compare .who strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sizes { display: flex; align-items: flex-end; gap: 24px; max-width: 100%; overflow-x: auto; padding-bottom: 2px; }
+  .sizes figure { display: grid; justify-items: start; gap: 6px; margin: 0; }
+  .sizes img { display: block; max-width: none; }
+  .sizes figcaption { font-size: 12px; font-weight: 600; color: var(--muted); }
+  .sizes figcaption span { font-weight: 400; color: var(--dim); }
+  .tile.cur { border-color: var(--border-strong); }
+  .tile:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-color: var(--border-strong); }
   /* The anatomy of EmoteTile (surface card, hairline, art box, name, creator), with the verdict
      buttons under it. Not an EmoteTile itself: that is one link, and a pending emote has no public page. */
   .queue { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(var(--emote-tile, 150px), 100%), 1fr)); gap: 12px; }

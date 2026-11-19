@@ -1,7 +1,7 @@
 <script lang="ts">
   // Admin: accounts found by name or login (searchAccounts, the same public search the site uses,
   // so blocked accounts are not listed: look one up by its exact login to see or lift a block).
-  // Each row opens the account's admin page through its first login.
+  // Each row opens the account's admin page.
   import { gql } from '$lib/api';
   import Avatar from '$lib/components/Avatar.svelte';
   import State from '$lib/components/State.svelte';
@@ -20,10 +20,7 @@
   });
 
   const where = (p: string) => (p === 'KICK' ? 'Kick' : 'Twitch');
-  const open = (h: { identities: { platform: string; login: string }[] }) => {
-    const i = h.identities[0];
-    return i ? `/admin/users?platform=${i.platform.toLowerCase()}&login=${encodeURIComponent(i.login)}` : '';
-  };
+  const open = (h: { account: { id: string } }) => `/admin/users/${encodeURIComponent(h.account.id)}`;
 </script>
 
 <LoadGate source={L} label="Searching…">
