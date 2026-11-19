@@ -23,11 +23,12 @@ use cyex_tv_shared::model::{
     AccountEditor, AccountReports, AccountResults, AccountSession, AccountStatus, AccountSummary,
     ActivityEntry, ActivityPage, AddAccountEditor, AddSetEmote, AdminAccount, AuditEntry, Badge,
     Channel, ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge, CreateRole,
-    CreateSet, EditedAccount, EditorPermission, Emote, EmotePage, EmoteSet, EmoteSort, Entitlement,
-    EntitlementPage, Event, GrantCosmetic, Identity, Me, Notification, OwnedCosmetics, Paint,
-    PaintInput, PendingDeletion, PersonalSetEntry, Platform, Report, ReportAction, ReportQueue,
-    ReviewQueue, Role, SearchResults, SetEmote, SetSummary, SetVisibility, UpdateBadge,
-    UpdateChannelSettings, UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote, UserCosmetics,
+    CreateSet, EditableChannel, EditedAccount, EditorPermission, Emote, EmotePage, EmoteSet,
+    EmoteSort, Entitlement, EntitlementPage, Event, GrantCosmetic, Identity, Me, Notification,
+    OwnedCosmetics, Paint, PaintInput, PendingDeletion, PersonalSetEntry, Platform, QuickSearch,
+    Report, ReportAction, ReportQueue, ReviewQueue, Role, SearchResults, SetEmote, SetSummary,
+    SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole, UpdateSet,
+    UpdateSetEmote, UserCosmetics,
 };
 use cyex_tv_shared::model::{
     Checkout, CodeBatch, CodeBatchInput, CodeBatchPage, CreatedCodeBatch, Order, OrderPage,
@@ -377,6 +378,19 @@ impl Query {
             .map_err(api_error)
     }
 
+    /// The header search: the top 5 emotes for `query` by the name matcher (exact name, same
+    /// ignoring case, name prefix, word or initials prefix such as `point` or `pp` for
+    /// `PepePoint`, substring, then similar names for 3+ characters; most used first within a
+    /// tier), and the top 3 accounts (`searchAccounts` ranking, a leading `@` ignored, under 2
+    /// characters finds none). Approved, listed, non-NSFW emotes only. 240 searches a minute per
+    /// account, or per IP signed out (`rate_limited`).
+    async fn quick_search(&self, ctx: &Context<'_>, query: String) -> Result<QuickSearch> {
+        let ip = client_ip(ctx);
+        search::quick(state(ctx), caller_opt(ctx), ip, &query)
+            .await
+            .map_err(api_error)
+    }
+
     /// An account's public profile: linked Twitch and Kick logins (no IDs), roles marked public,
     /// and each channel's active set ("Active emotes"). Listed sets: `accountSets`. Null when the
     /// account is unknown, deleted or blocked.
@@ -552,6 +566,17 @@ impl Query {
     async fn my_channels(&self, ctx: &Context<'_>) -> Result<Vec<Channel>> {
         let caller = caller(ctx)?;
         catalog::my_channels(state(ctx), caller)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Channels you can manage: yours (`OWNER`), those of accounts you are an account editor of
+    /// (`ACCOUNT_EDITOR`), and those of accounts where you edit at least one set (`SET_EDITOR`).
+    /// Each channel once, under your highest role; sorted by role (`OWNER`, `ACCOUNT_EDITOR`,
+    /// `SET_EDITOR`), then login (ignoring case), then platform. Signed-in only.
+    async fn my_editable_channels(&self, ctx: &Context<'_>) -> Result<Vec<EditableChannel>> {
+        let caller = caller(ctx)?;
+        editors::my_editable_channels(state(ctx), caller)
             .await
             .map_err(api_error)
     }

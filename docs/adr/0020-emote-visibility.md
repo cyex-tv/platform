@@ -7,7 +7,7 @@
 Emotes had one flag, `private`: only the owner can add it to sets, and search leaves it out. Sets have had three states since ADR 0017. The owner asked (answers of 2026/11/19) for an unlisted emote too: one people can share by link and add to their sets, which doesn't show in search, browse or the creator's page.
 
 ## Decision
-- Migration `20261207000031_emote_unlisted.sql` adds `emotes.unlisted boolean NOT NULL DEFAULT false` and a CHECK that an emote is never both unlisted and private. Existing emotes keep what they were.
+- Migration `20261207000041_emote_unlisted.sql` adds `emotes.unlisted boolean NOT NULL DEFAULT false` and a CHECK that an emote is never both unlisted and private. Existing emotes keep what they were.
 - The API shows `Emote.visibility`: `PUBLIC`, `UNLISTED` or `PRIVATE` (enum `EmoteVisibility`). `flags.private` stays, true exactly for `PRIVATE`.
 - Writing it: `updateEmote(input: { visibility })` and the upload form field `visibility` (`public`, `unlisted`, `private`). The old `private` flag keeps working for clients that only know it: `private: true` makes the emote private; `private: false` makes a private emote public and leaves an unlisted one unlisted. Both at once must agree (`bad_visibility`, or `bad_form` on the upload).
 - Unlisted: `emote(id)` opens it for anyone (with an "Unlisted" mark on the website), anyone can add it to their sets and clone it with a set, and its channels and its own activity show on its page. `searchEmotes` (search, browse and the creator's page, which is search by owner) and account activity feeds leave it out for everyone; its owner sees it in `myEmotes`.

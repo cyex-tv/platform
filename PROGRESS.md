@@ -6,11 +6,34 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 
 Additive API; two new migrations; nothing was deployed.
 
-- [x] Account deletion has a 30-day undo window (ADR 0019, amends 0009). `deleteAccount` hides the account at once (migration `20261207000030_deletion_window.sql`: `accounts.erase_after`; `deleted_at` is set too, so every public read hides it), ends its sessions, clears the cookie and tells chat clients its channels, personal set and cosmetics went; audited `account.deletion_scheduled`. Its emotes leave `emote`, search, `emoteChannels` and emote activity; its sets leave `set(id)`; others can't add its emotes. Signing in within 30 days lands on `/restore` with a session only `pendingDeletion` and `restoreAccount` accept; restoring brings everything back (audited `account.restored`). The worker's hourly clean-up erases accounts past the window (`privacy::erase_account`, the old erase and file purge, audited `account.deleted`). Restricted or blocked accounts still can't delete; a block during the window refuses sign-in; a restriction survives restore and, through the identity hold, the erase.
-- [x] Emote visibility `PUBLIC` / `UNLISTED` / `PRIVATE` (ADR 0020, migration `20261207000031_emote_unlisted.sql`). `Emote.visibility`, `updateEmote(input: { visibility })`, the upload field `visibility`; `private` keeps working for old clients. Unlisted emotes open by link and can be added by anyone; search, browse, the creator's page and activity feeds leave them out.
+- [x] Account deletion has a 30-day undo window (ADR 0019, amends 0009). `deleteAccount` hides the account at once (migration `20261207000040_deletion_window.sql`: `accounts.erase_after`; `deleted_at` is set too, so every public read hides it), ends its sessions, clears the cookie and tells chat clients its channels, personal set and cosmetics went; audited `account.deletion_scheduled`. Its emotes leave `emote`, search, `emoteChannels` and emote activity; its sets leave `set(id)`; others can't add its emotes. Signing in within 30 days lands on `/restore` with a session only `pendingDeletion` and `restoreAccount` accept; restoring brings everything back (audited `account.restored`). The worker's hourly clean-up erases accounts past the window (`privacy::erase_account`, the old erase and file purge, audited `account.deleted`). Restricted or blocked accounts still can't delete; a block during the window refuses sign-in; a restriction survives restore and, through the identity hold, the erase.
+- [x] Emote visibility `PUBLIC` / `UNLISTED` / `PRIVATE` (ADR 0020, migration `20261207000041_emote_unlisted.sql`). `Emote.visibility`, `updateEmote(input: { visibility })`, the upload field `visibility`; `private` keeps working for old clients. Unlisted emotes open by link and can be added by anyone; search, browse, the creator's page and activity feeds leave them out.
 - [x] `me.roles`: every role you hold with `public`, so your own profile marks the hidden ones; `accountProfile.roles` is unchanged.
 - [x] Website: Account → Delete account copy, the Help answers (deletion, unlisted/private), the `/restore` page, the Public / Unlisted / Private control on upload and edit, the "Unlisted" mark on the emote page, hidden roles on your own profile ("Hidden" with an eye-off icon), and "Clone to my sets" makes a listed copy again. Dev mock follows all of it.
 - Tests: `apps/api/tests/auth_flow.rs` (restore within 30 days, past the window, blocked, restriction kept through restore and erase), `apps/api/tests/account_hub_flow.rs` (hidden at once, then erased), `apps/api/tests/visibility_flow.rs` (unlisted, own roles), `apps/worker/tests/erase.rs` (only due accounts erased), unit tests in `crates/shared` (visibility rules), web `visibility.test.ts`, `api.test.ts`, `faq.test.ts`.
+
+## Header search, nav, notifications and mark (branch `feat/header-search`)
+
+Owner feedback 2026/11/19, section A. Additive API; nothing was deployed.
+
+- [x] The Ctrl K command palette is gone. The header field is the search: typing drops a list under it (ARIA combobox: ↑ ↓, Enter, Escape, Tab) with the top 5 emotes and top 3 people from the new `quickSearch(query)`; Enter with no row picked opens `/search?q=`. Requests wait 150ms and a newer one aborts the older. `/` outside a field focuses it (a page field marked `data-page-search` keeps it). Phones: the search button turns the header row into the field, no modal.
+- [x] `quickSearch` ranks names in tiers: exact, exact ignoring case, prefix, word or initials prefix (`point` and `pp` find `PepePoint`), substring, then near misses (pg_trgm similarity, 3+ characters); most used (channel count) first inside a tier. Migration `20261207000030_quick_search.sql` adds the stored `emotes.name_words` / `name_initials` columns and their indexes. 240 a minute per account or IP (`rate_limited`).
+- [x] Focusing the empty field lists `myEditableChannels`: your channels, then those of accounts you edit, then those whose sets you edit, A to Z inside a role, each channel once under its highest role. Signed out: a hint line.
+- [x] Header links signed in: Emotes, Store (/shop), Subscription (only with an active subscription: `hasSubscription()` is false until subscriptions exist; placeholder `/me/subscription`), Admin for staff. Signed out unchanged. Under 1080px the links keep their icons. The account menu no longer repeats Admin.
+- [x] Notifications: the bell is in the header on every width (a sheet on phones), and new ones pop up as toasts under it (NotificationToasts; only ones newer than the page's first count).
+- [x] The mark is the owner's logo: three outlined bars, the middle one offset and lit with a soft glow (an SVG filter, left out under 20px and with more contrast or forced colours). Header, footer, eyebrows; favicon.svg / -dark / -light (the tab icon follows the site theme), favicon.png and apple-touch-icon.png.
+- [x] Account menu: the name row at the top opens your profile dashboard (`/users/<id>`; the separate Profile row is gone). Sign out ends this session only (`POST /v1/auth/logout`).
+- Tests: `apps/api/tests/quick_search_flow.rs` and `crates/db/tests/queries.rs` (Postgres, CI): tier order, popularity tie-break, camelCase and initials, typo, hidden emotes, rate limit, editable channel roles and order. Vitest: `lib/shell/nav.test.ts` (nav visibility, role sort), `lib/shell/search.test.ts`, `lib/account/toasts.test.ts`.
+- Manual check: 375, 768, 1440 and 2560, dark and light, keyboard (screens in the 2026-11-19-feedback run folder, screens/a).
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/header-search
+gh pr create --base main --head feat/header-search --title "Header search, nav, notifications and the new mark" --body-file <file>
+git merge origin/main   (twice; PROGRESS.md and gql.rs imports resolved)
+gh pr merge 86 --merge
+```
 
 ## Admin roles and moderation (branch `feat/admin-roles`, ADR 0010 amendment 2026/11/19)
 - Owner feedback F (2026/11/19): built-in roles, finer permissions, timed restrictions, the admin rail's height.

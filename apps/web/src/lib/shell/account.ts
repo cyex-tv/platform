@@ -40,11 +40,6 @@ export const EMOTES: ShellLink = {
   match: (p) => p.startsWith('/search') || p.startsWith('/emotes'),
 };
 
-/** The account rows after the library: Account, then Admin for staff. */
-export function settingsLinks(admin: boolean): ShellLink[] {
-  return admin ? [ACCOUNT, ADMIN] : [ACCOUNT];
-}
-
 /** "TWITCH" → "Twitch". */
 export function platformName(p: string | null | undefined): string | null {
   return p ? `${p.charAt(0)}${p.slice(1).toLowerCase()}` : null;

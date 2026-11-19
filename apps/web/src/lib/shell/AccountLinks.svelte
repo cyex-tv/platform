@@ -1,7 +1,9 @@
 <script lang="ts">
   // The account menu's content, shared by the AccountMenu popover (desktop) and the phone menu
-  // sheet, so both list the same places in the same order: who you are, your library, account
-  // (and Admin for staff), sign out. The header already has Upload and the theme toggle on
+  // sheet, so both list the same places in the same order: who you are (the row is the link to
+  // your profile dashboard), your library, account, sign out (this session only). Admin, Store
+  // and Subscription are in the header's links (nav.ts), so the sheet lists them with the site's
+  // links and the desktop menu doesn't repeat them. The header already has Upload and the theme toggle on
   // desktop, so those two rows only appear in the phone sheet (`touch`), whose header has neither. `emotes` adds the site's own links first (the
   // phone header has no room for them). `touch` makes the rows 48px for fingers.
   import { page } from '$app/state';
@@ -9,7 +11,8 @@
   import Icon from '$lib/components/Icon.svelte';
   import { clean } from '$lib/format';
   import { isAdmin, session } from '$lib/tool/session.svelte';
-  import { EMOTES, UPLOAD, menuLinks, platformName, profileLink, settingsLinks, type ShellLink } from './account';
+  import { ACCOUNT, UPLOAD, menuLinks, platformName, profileLink, type ShellLink } from './account';
+  import { headerLinks } from './nav';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { loadOwned, looks, NO_LOOK } from '$lib/cosmetics/store.svelte';
   import { rolesOf, type Role } from '$lib/profile/data.svelte';
@@ -40,7 +43,8 @@
       if (me?.id === id) role = r[0] ?? null;
     });
   });
-  const settings = $derived(settingsLinks(isAdmin(me)));
+  const profile = $derived(me ? profileLink(me.id) : null);
+  const site = $derived(headerLinks(me, isAdmin(me)));
 
   async function out() {
     onpick?.();
@@ -56,7 +60,7 @@
 
 <div class="acct" class:touch>
   {#if me}
-    <div class="head">
+    <a class="head" href={profile?.href} aria-current={profile?.match(path, search) ? 'page' : undefined} onclick={() => onpick?.()}>
       <Avatar src={who?.avatar} {name} size={40} />
       <span class="id">
         <strong><PaintedName {name} paint={look.paint} badge={look.badge} /></strong>
@@ -65,18 +69,19 @@
           {#if platform}<span class="plat">{platform}{#if who?.login && who.login !== name.toLowerCase()} · <bdi>{who.login}</bdi>{/if}</span>{/if}
         </span>
       </span>
-    </div>
+      <span class="sr-only">, your profile</span>
+      <Icon name="chevron-right" size={14} />
+    </a>
   {/if}
   <nav class="list" aria-label={me ? 'Your account' : 'Menu'}>
     {#if emotes}
-      {@render row(EMOTES)}
+      {#each site as l (l.href)}{@render row(l)}{/each}
       <a href="/developers" aria-current={path.startsWith('/developers') ? 'page' : undefined} onclick={() => onpick?.()}>
         <Icon name="file" /><span>Developers</span>
       </a>
       <hr />
     {/if}
     {#if me}
-      {@render row(profileLink(me.id))}
       {#each menuLinks(me.id) as l (l.href)}{@render row(l)}{/each}
       {#if touch}
         {@render row(UPLOAD)}
@@ -85,7 +90,7 @@
         </a>
       {/if}
       <hr />
-      {#each settings as l (l.href)}{@render row(l)}{/each}
+      {@render row(ACCOUNT)}
       <hr />
     {/if}
     {#if touch}
@@ -105,7 +110,13 @@
 <style>
   .acct { --row: 36px; display: grid; font-size: var(--t-nav); }
   .touch { --row: 48px; font-size: var(--t-ui); }
-  .head { display: flex; align-items: center; gap: 12px; padding: 6px 8px 12px; margin-bottom: 4px; border-bottom: 1px solid var(--border); }
+  .head { position: relative; display: flex; align-items: center; gap: 12px; padding: 6px 8px 12px; margin-bottom: 4px; border-bottom: 1px solid var(--border);
+    border-radius: var(--radius) var(--radius) 0 0; color: var(--text); text-decoration: none; transition: background-color var(--fast); }
+  .head > :global(svg) { flex: none; margin-left: auto; color: var(--dim); transition: color var(--fast), transform var(--fast); }
+  .head[aria-current='page'] .id strong { font-weight: 700; }
+  .head[aria-current='page'] > :global(svg) { color: var(--accent-text); }
+  .head:focus-visible { outline-offset: -2px; }
+  .head:active { opacity: .6; transition: none; }
   .id { display: grid; min-width: 0; line-height: 1.3; }
   .id strong { font-size: var(--t-ui); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .id strong { display: flex; min-width: 0; }
@@ -125,6 +136,8 @@
   .value { margin-left: auto; color: var(--dim); }
   hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid var(--border); }
   @media (hover: hover) and (pointer: fine) {
+    .head:hover { background: var(--row-hover); }
+    .head:hover > :global(svg) { color: var(--text); transform: translateX(2px); }
     .list a:hover, .list button:hover { background: var(--row-hover); }
     .list a[aria-current='page']:hover { color: var(--text); }
   }

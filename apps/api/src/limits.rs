@@ -52,6 +52,8 @@ pub struct Rates {
     pub data_export: Rate,
     /// `searchAccounts`, per account, or per IP when signed out.
     pub account_search: Rate,
+    /// `quickSearch`, per account, or per IP when signed out. Typed live, so generous.
+    pub quick_search: Rate,
     /// The public reads that fan out into many lookups (`accountActivity`, `emoteActivity`,
     /// `accountSets`), per account, or per IP when signed out.
     pub heavy_reads: Rate,
@@ -75,6 +77,7 @@ impl Default for Rates {
             set_clones: Rate::per_hour(30),
             data_export: Rate::per_hour(5),
             account_search: Rate::per_minute(60),
+            quick_search: Rate::per_minute(240),
             heavy_reads: Rate::per_minute(120),
             delete_account: Rate::per_hour(3),
         }
@@ -97,6 +100,7 @@ pub struct Limits {
     pub set_clones: Limiter,
     pub data_export: Limiter,
     pub account_search: Limiter,
+    pub quick_search: Limiter,
     pub heavy_reads: Limiter,
     pub delete_account: Limiter,
     /// Take the client IP from `CF-Connecting-IP` (`CYEX_TV_TRUST_CLOUDFLARE=true`).
@@ -120,6 +124,7 @@ impl Limits {
             set_clones: Limiter::new(rates.set_clones),
             data_export: Limiter::new(rates.data_export),
             account_search: Limiter::new(rates.account_search),
+            quick_search: Limiter::new(rates.quick_search),
             heavy_reads: Limiter::new(rates.heavy_reads),
             delete_account: Limiter::new(rates.delete_account),
             trust_cloudflare,
@@ -215,6 +220,15 @@ pub fn account_search(state: &AppState, caller: Option<&Caller>, ip: &str) -> Ap
     state
         .limits
         .account_search
+        .check(&person_key(caller, ip))
+        .map_err(|_| rate_limited("That's a lot of searches. Try again in a minute."))
+}
+
+/// Takes one token of the `quick_search` limit.
+pub fn quick_search(state: &AppState, caller: Option<&Caller>, ip: &str) -> ApiResult<()> {
+    state
+        .limits
+        .quick_search
         .check(&person_key(caller, ip))
         .map_err(|_| rate_limited("That's a lot of searches. Try again in a minute."))
 }

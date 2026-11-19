@@ -291,6 +291,15 @@ export type Channel = {
   platformChannelId: Scalars['String']['output'];
 };
 
+/** Who you are on a channel you can manage, highest first. */
+export type ChannelRole =
+  /** You are an editor of the channel's account. */
+  | 'ACCOUNT_EDITOR'
+  /** The channel is yours. */
+  | 'OWNER'
+  /** You edit at least one set of the channel's account. */
+  | 'SET_EDITOR';
+
 /**
  * What `startCheckout` gives: open Paddle's checkout for this transaction (Paddle.js
  * `Paddle.Checkout.open({ transactionId })` with `clientToken`, or go to `checkoutUrl`). The
@@ -436,6 +445,13 @@ export type CreatedCodeBatch = {
   __typename?: 'CreatedCodeBatch';
   batch: CodeBatch;
   codes: Array<Scalars['String']['output']>;
+};
+
+/** A channel you can manage, with your highest role on it. */
+export type EditableChannel = {
+  __typename?: 'EditableChannel';
+  channel: Channel;
+  role: ChannelRole;
 };
 
 /** An account you edit, with what you may do there. */
@@ -1572,6 +1588,13 @@ export type Query = {
    * `PROFILE`.
    */
   myCosmetics: OwnedCosmetics;
+  /**
+   * Channels you can manage: yours (`OWNER`), those of accounts you are an account editor of
+   * (`ACCOUNT_EDITOR`), and those of accounts where you edit at least one set (`SET_EDITOR`).
+   * Each channel once, under your highest role; sorted by role (`OWNER`, `ACCOUNT_EDITOR`,
+   * `SET_EDITOR`), then login (ignoring case), then platform. Signed-in only.
+   */
+  myEditableChannels: Array<EditableChannel>;
   /** Your own emotes in every state, newest first. `perPage` is 1 to 100, default 50. */
   myEmotes: EmotePage;
   /**
@@ -1616,6 +1639,15 @@ export type Query = {
   personalSet?: Maybe<EmoteSet>;
   /** Personal sets for up to 100 chatters at once. */
   personalSets: Array<PersonalSetEntry>;
+  /**
+   * The header search: the top 5 emotes for `query` by the name matcher (exact name, same
+   * ignoring case, name prefix, word or initials prefix such as `point` or `pp` for
+   * `PepePoint`, substring, then similar names for 3+ characters; most used first within a
+   * tier), and the top 3 accounts (`searchAccounts` ranking, a leading `@` ignored, under 2
+   * characters finds none). Approved, listed, non-NSFW emotes only. 240 searches a minute per
+   * account, or per IP signed out (`rate_limited`).
+   */
+  quickSearch: QuickSearch;
   /** Open reports, oldest first. Needs `emotes.review` or `emotes.takedown`. */
   reportQueue: ReportQueue;
   /** Pending emotes, oldest first. Needs `emotes.review`. `perPage` is 1 to 100, default 50. */
@@ -1855,6 +1887,11 @@ export type QueryPersonalSetsArgs = {
 };
 
 
+export type QueryQuickSearchArgs = {
+  query: Scalars['String']['input'];
+};
+
+
 export type QueryReportQueueArgs = {
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
@@ -1908,6 +1945,13 @@ export type QueryShopItemsArgs = {
 export type QueryUserCosmeticsArgs = {
   platform: Platform;
   userIds: Array<Scalars['String']['input']>;
+};
+
+/** The header search: the best emotes and accounts for one query. */
+export type QuickSearch = {
+  __typename?: 'QuickSearch';
+  emotes: Array<Emote>;
+  users: Array<AccountHit>;
 };
 
 /** Who gets a gift: their Twitch or Kick login. */
@@ -3067,6 +3111,18 @@ export type ShopCountsQueryVariables = Exact<{
 
 
 export type ShopCountsQuery = { __typename?: 'Query', shopItems?: Array<{ __typename?: 'ShopItem', id: string }>, orders?: { __typename?: 'OrderPage', total: number }, codeBatches?: { __typename?: 'CodeBatchPage', total: number } };
+
+export type QuickSearchQueryVariables = Exact<{
+  query: Scalars['String']['input'];
+}>;
+
+
+export type QuickSearchQuery = { __typename?: 'Query', quickSearch: { __typename?: 'QuickSearch', emotes: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }>, users: Array<{ __typename?: 'AccountHit', account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }> }> } };
+
+export type EditableChannelsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type EditableChannelsQuery = { __typename?: 'Query', myEditableChannels: Array<{ __typename?: 'EditableChannel', role: ChannelRole, channel: { __typename?: 'Channel', platform: Platform, login: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } } }> };
 
 export class TypedDocumentString<TResult, TVariables>
   extends String
@@ -6233,3 +6289,69 @@ export const ShopCountsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ShopCountsQuery, ShopCountsQueryVariables>;
+export const QuickSearchDocument = new TypedDocumentString(`
+    query QuickSearch($query: String!) {
+  quickSearch(query: $query) {
+    emotes {
+      ...EmoteFields
+    }
+    users {
+      account {
+        id
+        displayName
+        avatar
+      }
+      identities {
+        platform
+        login
+        displayName
+      }
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    nsfw
+    private
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<QuickSearchQuery, QuickSearchQueryVariables>;
+export const EditableChannelsDocument = new TypedDocumentString(`
+    query EditableChannels {
+  myEditableChannels {
+    role
+    channel {
+      platform
+      login
+      account {
+        id
+        displayName
+        avatar
+      }
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<EditableChannelsQuery, EditableChannelsQueryVariables>;
