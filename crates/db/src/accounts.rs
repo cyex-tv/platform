@@ -24,9 +24,17 @@ pub struct Account {
     /// Can't file reports or tickets.
     pub tickets_blocked_at: Option<DateTime<Utc>>,
     pub tickets_blocked_until: Option<DateTime<Utc>>,
+    /// Set while a deletion is pending (with `deleted_at`): the account is hidden, and signing in
+    /// before this time can restore it; after it, the worker erases it (ADR 0019).
+    pub erase_after: Option<DateTime<Utc>>,
 }
 
 impl Account {
+    /// Deleted, but still within the undo window.
+    pub fn restorable(&self, now: DateTime<Utc>) -> bool {
+        self.deleted_at.is_some() && self.erase_after.is_some_and(|t| t > now)
+    }
+
     /// Any hold at all (uploads, tickets or the whole account).
     pub fn held(&self) -> bool {
         self.restricted_at.is_some()
@@ -117,7 +125,8 @@ const ACCOUNT: &str = "id, created_at, deleted_at,
     CASE WHEN blocked_until IS NULL OR blocked_until > now() THEN blocked_at END AS blocked_at,
     CASE WHEN blocked_until > now() THEN blocked_until END AS blocked_until,
     CASE WHEN tickets_blocked_until IS NULL OR tickets_blocked_until > now() THEN tickets_blocked_at END AS tickets_blocked_at,
-    CASE WHEN tickets_blocked_until > now() THEN tickets_blocked_until END AS tickets_blocked_until";
+    CASE WHEN tickets_blocked_until > now() THEN tickets_blocked_until END AS tickets_blocked_until,
+    erase_after";
 const IDENTITY: &str =
     "platform, platform_user_id, account_id, login, display_name, avatar, linked_at, refreshed_at";
 

@@ -9,10 +9,40 @@ Owner feedback 2026/11/19, section G. Additive API; nothing was deployed.
 - [x] Animated emotes play everywhere without hover (tiles, cards, the set page's table, profile set thumbs, activity rows, small thumbs) through one `EmotePicture`: a `<picture>` whose reduced-motion source is the still frame, lazy and `decoding=async`.
 - [x] One grid: the grid, compact and table switch on /search is gone (`view=` is ignored now). The table stays only on the public set page, which is a real list (columns for creator, type, channels, date). Tiles in a row share its height (checked in the running app on /search, profiles and set pages).
 - [x] One filter model, all in the API (totals are real now): Type (All, Animated, Still), Flags as toggle chips (Zero-width, Wide, NSFW: each narrows to emotes with that flag), Tags as a `TagInput` (Enter adds a chip, Backspace or × removes) plus the results' common tags to add in one tap. `searchEmotes` gains `flags: [EmoteFlag!]`, `tags: [String!]` (all must match, 10 at most) and `exact`; `EmoteFlags.wide` (1x file at least 1.75 times as wide as tall, derived).
-- [x] Trending: sort `TRENDING` with `window: DAY | WEEK | MONTH`, ranked by net distinct channels that added the emote in the window. Migration `20261207000001_trending.sql` (`emote_channel_adds`, hourly buckets), filled by the worker's hourly run from the outbox's `set.emote_added`/`set.emote_removed` events (their `channel:*` topics) before the outbox is pruned. Tiles show `#1`, `#2` … in the Trending view; the emote page shows "Trending #n" and "Added in the last 7 days" for the top 100 of the last 7 days (`emoteTrending(id, window)`).
+- [x] Trending: sort `TRENDING` with `window: DAY | WEEK | MONTH`, ranked by net distinct channels that added the emote in the window. Migration `20261207000050_trending.sql` (`emote_channel_adds`, hourly buckets), filled by the worker's hourly run from the outbox's `set.emote_added`/`set.emote_removed` events (their `channel:*` topics) before the outbox is pruned. Tiles show `#1`, `#2` … in the Trending view; the emote page shows "Trending #n" and "Added in the last 7 days" for the top 100 of the last 7 days (`emoteTrending(id, window)`).
 - [x] Dev mock: flags, tags, exact, NSFW emotes, `wide`, trending windows and `emoteTrending`.
 - Tests: `apps/api/tests/browse_flow.rs` (flags, tags, exact, trending windows, `emoteTrending`), `crates/db/tests/queries.rs` (rollup: distinct channels per hour, idempotent), unit tests for tag cleaning; vitest `tag-input.test.ts` (rules and markup) and `params.test.ts` (filter and trending URL state, API variables).
 - Manual check: /search, Trending (3 windows), filters, the filter sheet, emote page at 375, 768, 1440 and 2560 in both themes; keyboard (tag field Enter/Backspace/paste/×, flag chips with Space, window with arrow keys); reduced motion shows the still frames (screens in the run folder, `2026-11-19-feedback/screens/g`).
+## Owner's answers of 2026/11/19 (branch `feat/owner-answers`)
+
+Additive API; two new migrations; nothing was deployed.
+
+- [x] Account deletion has a 30-day undo window (ADR 0019, amends 0009). `deleteAccount` hides the account at once (migration `20261207000040_deletion_window.sql`: `accounts.erase_after`; `deleted_at` is set too, so every public read hides it), ends its sessions, clears the cookie and tells chat clients its channels, personal set and cosmetics went; audited `account.deletion_scheduled`. Its emotes leave `emote`, search, `emoteChannels` and emote activity; its sets leave `set(id)`; others can't add its emotes. Signing in within 30 days lands on `/restore` with a session only `pendingDeletion` and `restoreAccount` accept; restoring brings everything back (audited `account.restored`). The worker's hourly clean-up erases accounts past the window (`privacy::erase_account`, the old erase and file purge, audited `account.deleted`). Restricted or blocked accounts still can't delete; a block during the window refuses sign-in; a restriction survives restore and, through the identity hold, the erase.
+- [x] Emote visibility `PUBLIC` / `UNLISTED` / `PRIVATE` (ADR 0020, migration `20261207000041_emote_unlisted.sql`). `Emote.visibility`, `updateEmote(input: { visibility })`, the upload field `visibility`; `private` keeps working for old clients. Unlisted emotes open by link and can be added by anyone; search, browse, the creator's page and activity feeds leave them out.
+- [x] `me.roles`: every role you hold with `public`, so your own profile marks the hidden ones; `accountProfile.roles` is unchanged.
+- [x] Website: Account → Delete account copy, the Help answers (deletion, unlisted/private), the `/restore` page, the Public / Unlisted / Private control on upload and edit, the "Unlisted" mark on the emote page, hidden roles on your own profile ("Hidden" with an eye-off icon), and "Clone to my sets" makes a listed copy again. Dev mock follows all of it.
+- Tests: `apps/api/tests/auth_flow.rs` (restore within 30 days, past the window, blocked, restriction kept through restore and erase), `apps/api/tests/account_hub_flow.rs` (hidden at once, then erased), `apps/api/tests/visibility_flow.rs` (unlisted, own roles), `apps/worker/tests/erase.rs` (only due accounts erased), unit tests in `crates/shared` (visibility rules), web `visibility.test.ts`, `api.test.ts`, `faq.test.ts`.
+
+## Sets and editors (branch `feat/sets-editors`, owner feedback 2026/11/19 section E)
+
+Additive API, new migrations only; nothing was deployed. ADR 0014 and 0017 amended.
+
+- [x] Default sets: a new account gets a listed channel set named after its display name at sign-up (`sets::create_default`, from the sign-in flow); migration `20261207000011_default_sets.sql` gives one to every live account without a channel set of that name.
+- [x] Set page: "Use on my channel" lists the owner's channels (yours, or theirs when you hold `CHANNELS`/`SETS`) and sets the active set through `updateChannelSettings`; the line under the title names the channels showing it.
+- [x] Set page "Add emotes": one search field, searched on Enter only; your matching uploads first (pending too, except for a personal set), then everyone's; a list with its own scroll and an Add button per row; empty and error states.
+- [x] The per-set editors field is gone from the set page; a card links to the Editors page.
+- [x] Editors page: find people by name (`searchAccounts`), Add opens the permissions dialog (groups: Emote sets, Emotes, Profile, Channels, Billing and subscription, Editors; "Everything"; "Sets they can edit", default all sets). Change opens the same dialog. 50 editors per account (`too_many_editors`).
+- [x] API: new flags `CHANNELS`, `EMOTE_UPLOAD`, `EMOTE_MANAGE`, `EMOTE_TRANSFER`, `BILLING_PAYMENT`, `BILLING_SUBSCRIPTION` (migration `20261207000010_sets_editors.sql`); set scope (`allSets`, `setIds`) on grants, enforced in every set mutation, private-set reads, `editorSets` and the active set; limited managers can't widen scopes; `AccountProfile.editors` (names only). Audit rows carry the scope.
+- Tests: `apps/api/tests/sets_editors_flow.rs` (scope can/can't, limited managers, new flags, 50-editor cap, public editors, backfill), `auth_flow.rs` (default set at sign-up, none on re-sign-in or link), `sec_account_editors.rs` (rate limit), unit tests in `editors.rs`; vitest `lib/tool/editors.test.ts` (dialog permission model), `lib/tool/add-emotes.test.ts`.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/sets-editors
+gh pr create --base main --head feat/sets-editors --title "Sets and editors: default sets, use on channel, editor permissions dialog" --body-file <file>
+gh pr merge <n> --merge
+```
+
 ## Header search, nav, notifications and mark (branch `feat/header-search`)
 
 Owner feedback 2026/11/19, section A. Additive API; nothing was deployed.

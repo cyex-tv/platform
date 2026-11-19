@@ -22,6 +22,7 @@ function emote(over: Partial<PageEmote> = {}): PageEmote {
     host: 'https://cdn.example/emotes/1',
     createdAt: '2026-11-17T10:00:00.000Z',
     channelCount: 0,
+    visibility: 'PUBLIC',
     flags: { zeroWidth: false, nsfw: false, private: false, wide: false },
     owner: { id: 'A1', displayName: 'nora_byte', avatar: null },
     files: [1, 2, 3, 4].flatMap((s) => [file(s), file(s, { isStatic: true, size: 400 * s })]),

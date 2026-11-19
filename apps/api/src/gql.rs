@@ -26,10 +26,10 @@ use cyex_tv_shared::model::{
     Channel, ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge, CreateRole,
     CreateSet, EditableChannel, EditedAccount, EditorPermission, Emote, EmoteFlag, EmotePage,
     EmoteSet, EmoteSort, EmoteTrending, Entitlement, EntitlementPage, Event, GrantCosmetic,
-    Identity, Me, Notification, OwnedCosmetics, Paint, PaintInput, PersonalSetEntry, Platform,
-    QuickSearch, Report, ReportAction, ReportQueue, ReviewQueue, Role, SearchResults, SetEmote,
-    SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole,
-    UpdateSet, UpdateSetEmote, UserCosmetics,
+    Identity, Me, Notification, OwnedCosmetics, Paint, PaintInput, PendingDeletion,
+    PersonalSetEntry, Platform, QuickSearch, Report, ReportAction, ReportQueue, ReviewQueue, Role,
+    SearchResults, SetEmote, SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings,
+    UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote, UserCosmetics,
 };
 use cyex_tv_shared::model::{
     Checkout, CodeBatch, CodeBatchInput, CodeBatchPage, CreatedCodeBatch, Order, OrderPage,
@@ -177,6 +177,22 @@ fn state<'a>(ctx: &Context<'a>) -> &'a AppState {
     ctx.data_unchecked::<AppState>()
 }
 
+/// The cookie session of an account whose deletion can still be undone (ADR 0019), when the
+/// request has no live session. Only `pendingDeletion` and `restoreAccount` read it.
+pub struct Restorable(pub Option<Caller>);
+
+/// The restorable session, or `signed_out`.
+fn restorable<'a>(ctx: &Context<'a>) -> Result<&'a Caller> {
+    ctx.data_opt::<Restorable>()
+        .and_then(|r| r.0.as_ref())
+        .ok_or_else(|| {
+            coded(
+                "signed_out",
+                "Sign in to the deleted account to restore it.",
+            )
+        })
+}
+
 /// The signed-in caller, or `signed_out`.
 fn caller<'a>(ctx: &Context<'a>) -> Result<&'a Caller> {
     ctx.data_opt::<Option<Caller>>()
@@ -206,10 +222,21 @@ async fn me_of(ctx: &Context<'_>, caller: &Caller) -> Result<Me> {
     let permissions = catalog::permissions_of(&mut conn, caller)
         .await
         .map_err(api_error)?;
+    let roles = cyex_tv_db::roles::roles_of(&mut conn, account.id)
+        .await
+        .map_err(internal)?
+        .into_iter()
+        .map(|r| cyex_tv_shared::model::OwnRole {
+            id: ids::to_text(r.id),
+            name: r.name,
+            public: r.public,
+        })
+        .collect();
     Ok(Me {
         id: ids::to_text(account.id),
         identities,
         permissions,
+        roles,
         created_at: account
             .created_at
             .to_rfc3339_opts(SecondsFormat::Millis, true),
@@ -224,6 +251,18 @@ impl Query {
     async fn me(&self, ctx: &Context<'_>) -> Result<Me> {
         let caller = caller(ctx)?;
         me_of(ctx, caller).await
+    }
+
+    /// The deletion you can still undo: set only for the cookie session that signing in to a
+    /// deleted account within its 30 days gave (`restoreAccount` undoes it). Null otherwise,
+    /// including for every normal session.
+    async fn pending_deletion(&self, ctx: &Context<'_>) -> Result<Option<PendingDeletion>> {
+        let Some(pending) = ctx.data_opt::<Restorable>().and_then(|r| r.0.as_ref()) else {
+            return Ok(None);
+        };
+        account::pending_deletion(state(ctx), pending)
+            .await
+            .map_err(api_error)
     }
 
     /// A channel by its platform ID.
@@ -1138,7 +1177,8 @@ impl Mutation {
 
     /// Make someone an editor of your account, or of an account you edit with `EDITORS` (ADR
     /// 0014). Give their account ID, or a platform and login. You can only grant permissions you
-    /// hold. At most 20 editors per account. Audited.
+    /// hold. `setIds` limits them to some of the account's sets; leave it out for every set, new
+    /// ones included. At most 50 editors per account (`too_many_editors`). Audited.
     async fn add_account_editor(
         &self,
         ctx: &Context<'_>,
@@ -1151,6 +1191,7 @@ impl Mutation {
     }
 
     /// Change an account editor's permissions. `ownerId` is the account edited; empty for yours.
+    /// `setIds` changes which sets they work on: empty for every set, left out to keep them.
     /// Audited.
     async fn update_account_editor(
         &self,
@@ -1158,6 +1199,7 @@ impl Mutation {
         owner_id: Option<String>,
         account_id: String,
         permissions: Vec<EditorPermission>,
+        set_ids: Option<Vec<String>>,
     ) -> Result<AccountEditor> {
         let caller = caller(ctx)?;
         editors::update(
@@ -1166,6 +1208,7 @@ impl Mutation {
             owner_id.as_deref(),
             &account_id,
             &permissions,
+            set_ids.as_deref(),
         )
         .await
         .map_err(api_error)
@@ -1562,11 +1605,14 @@ impl Mutation {
         account::export(state(ctx), caller).await.map_err(api_error)
     }
 
-    /// Delete your account now. `confirm` is one of your Twitch or Kick logins. Website only
+    /// Delete your account. `confirm` is one of your Twitch or Kick logins. Website only
     /// (`website_only` with an app token); the owner's account can't be (`owner_protected`).
-    /// Your sessions, identities, channels, sets, editor grants, cosmetics and notifications go;
-    /// your approved emotes that are in other people's sets stay, shown as by a deleted user;
-    /// your other emotes are deleted. Signing in again later makes a new account. Audited.
+    /// The account is hidden at once (profile, sets, emotes and channels read as gone, every
+    /// session ends, the cookie is cleared) and erased for good 30 days later: then your
+    /// identities, channels, sets, editor grants, cosmetics and notifications go, your approved
+    /// emotes that are in other people's sets stay, shown as by a deleted user, and your other
+    /// emotes are deleted. Signing in again before then offers to undo it (`pendingDeletion`,
+    /// `restoreAccount`); after it, signing in makes a new account. Audited.
     /// `confirm_mismatch` when `confirm` isn't one of your logins; `restricted` while the account's
     /// uploads or sign-in are blocked. 3 tries an hour (`rate_limited`).
     async fn delete_account(&self, ctx: &Context<'_>, confirm: String) -> Result<bool> {
@@ -1578,6 +1624,18 @@ impl Mutation {
             axum::http::header::SET_COOKIE,
             cyex_tv_auth::cookies::clear_session(state(ctx).auth.config()),
         );
+        Ok(true)
+    }
+
+    /// Undo `deleteAccount` within 30 days, signed in with the cookie that signing in to the
+    /// deleted account gave (the website's restore page). Everything shows again and the session
+    /// works as before. `signed_out` without such a session; `nothing_to_restore` when the window
+    /// has passed. Audited.
+    async fn restore_account(&self, ctx: &Context<'_>) -> Result<bool> {
+        let pending = restorable(ctx)?;
+        account::restore_account(state(ctx), pending)
+            .await
+            .map_err(api_error)?;
         Ok(true)
     }
 

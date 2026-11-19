@@ -1,8 +1,9 @@
 <script lang="ts">
-  // The danger zone at the bottom of the account page: what goes and what stays in two
-  // sentences, then a dialog that asks you to type one of your logins. Wrong login, a protected or
-  // restricted account and the app-only restriction are answered inline in words; on success the
-  // API has already cleared the cookie, so the site forgets you and goes to the front page.
+  // The danger zone at the bottom of the account page: the 30-day undo window and what goes and
+  // what stays, then a dialog that asks you to type one of your logins. Wrong login, a protected
+  // or restricted account and the app-only restriction are answered inline in words; on success
+  // the API has already cleared the cookie, so the site forgets you and goes to the front page.
+  // Signing in again within 30 days lands on /restore (ADR 0019).
   import { gql } from '$lib/api';
   import { DELETE_ACCOUNT } from '$lib/queries';
   import { leftSession } from '$lib/shell/signout';
@@ -35,7 +36,7 @@
       return;
     }
     dialog.close();
-    notify('Your account was deleted.');
+    notify('Your account is hidden. Sign in within 30 days to undo it.');
     await leftSession();
     busy = false;
   }
@@ -44,7 +45,7 @@
 <section class="ui-panel" aria-labelledby="delete-h">
   <header><h2 id="delete-h">Delete account</h2></header>
   <p class="ui-hint pad">
-    This happens at once and can’t be undone: your emotes, sets, channels, cosmetics and notifications are deleted. Approved emotes that other people have in their sets stay, shown as made by “Deleted user”.
+    Your account is hidden at once and deleted for good after 30 days. Sign in before then to undo it. After that, your emotes, sets, channels, cosmetics and notifications are gone; approved emotes that other people have in their sets stay, shown as made by “Deleted user”.
   </p>
   <div class="ui-actions row pad"><button class="ui-btn danger" type="button" onclick={open}>Delete account…</button></div>
 </section>
@@ -53,7 +54,7 @@
   <form onsubmit={submit} novalidate>
     <div class="body">
       <h2 id="delete-title">Delete your account?</h2>
-      <p id="delete-desc" class="ui-hint">To confirm, type one of your logins{#if logins.length}: <bdi class="ui-mono">{logins.join(', ')}</bdi>{/if}.</p>
+      <p id="delete-desc" class="ui-hint">Your account is hidden at once and deleted for good after 30 days. Sign in before then to undo it. To confirm, type one of your logins{#if logins.length}: <bdi class="ui-mono">{logins.join(', ')}</bdi>{/if}.</p>
       <label class="ui-field">
         <span class="ui-label">Login</span>
         <input

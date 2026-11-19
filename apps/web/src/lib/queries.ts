@@ -11,6 +11,7 @@ export const EMOTE_FIELDS = graphql(`
     host
     createdAt
     channelCount
+    visibility
     flags {
       zeroWidth
       nsfw
@@ -308,6 +309,26 @@ export const EDIT_SET = graphql(`
         id
       }
       permissions
+      allSets
+      setIds
+    }
+    myChannels {
+      platform
+      platformChannelId
+      login
+      activeSetId
+      account {
+        id
+      }
+    }
+    editorChannels {
+      platform
+      platformChannelId
+      login
+      activeSetId
+      account {
+        id
+      }
     }
   }
 `);
@@ -451,6 +472,8 @@ export const ACCOUNT_EDITOR_FIELDS = graphql(`
       avatar
     }
     permissions
+    allSets
+    setIds
     grantedBy {
       id
       displayName
@@ -471,7 +494,17 @@ export const EDITORS = graphql(`
         avatar
       }
       permissions
+      allSets
+      setIds
       grantedAt
+    }
+    mySets {
+      id
+      name
+      kind
+      owner {
+        id
+      }
     }
   }
 `);
@@ -485,8 +518,8 @@ export const ADD_ACCOUNT_EDITOR = graphql(`
 `);
 
 export const UPDATE_ACCOUNT_EDITOR = graphql(`
-  mutation UpdateAccountEditor($ownerId: String, $accountId: String!, $permissions: [EditorPermission!]!) {
-    updateAccountEditor(ownerId: $ownerId, accountId: $accountId, permissions: $permissions) {
+  mutation UpdateAccountEditor($ownerId: String, $accountId: String!, $permissions: [EditorPermission!]!, $setIds: [String!]) {
+    updateAccountEditor(ownerId: $ownerId, accountId: $accountId, permissions: $permissions, setIds: $setIds) {
       ...AccountEditorFields
     }
   }
@@ -565,6 +598,38 @@ export const EXPORT_MY_DATA = graphql(`
 export const DELETE_ACCOUNT = graphql(`
   mutation DeleteAccount($confirm: String!) {
     deleteAccount(confirm: $confirm)
+  }
+`);
+
+// The 30-day undo window (ADR 0019): only the session that signing in to a deleted account gave.
+export const PENDING_DELETION = graphql(`
+  query PendingDeletion {
+    pendingDeletion {
+      requestedAt
+      eraseAfter
+      displayName
+      avatar
+    }
+  }
+`);
+
+export const RESTORE_ACCOUNT = graphql(`
+  mutation RestoreAccount {
+    restoreAccount
+  }
+`);
+
+// Your own roles, hidden ones too (only for your own profile).
+export const MY_ROLES = graphql(`
+  query MyRoles {
+    me {
+      id
+      roles {
+        id
+        name
+        public
+      }
+    }
   }
 `);
 

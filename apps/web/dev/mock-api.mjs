@@ -346,6 +346,7 @@ const emote = (i, owner = OTHERS[i % OTHERS.length], state = 'APPROVED') => {
     host: `${BASE}/emotes/${i}`,
     createdAt: new Date(NOW - idx * 0.2 * DAY - Math.floor(rngFor(i, 3)() * 0.18 * DAY)).toISOString(),
     flags: { zeroWidth: s.zero, nsfw: false, private: false },
+    visibility: 'PUBLIC',
     // Made-up but stable: a few popular ones, a long tail, some in no channel.
     channelCount: i % 11 === 0 ? 0 : (i * 37) % 91 + (i % 5 === 0 ? 400 : 0),
     owner,
@@ -472,6 +473,7 @@ const twitchEmote = (n, owner = OTHERS[n % OTHERS.length]) => {
     host: `${BASE}/twitch/${n}`,
     createdAt: new Date(NOW - idx * 0.2 * DAY - Math.floor(rngFor(n, 3)() * 0.18 * DAY)).toISOString(),
     flags: { zeroWidth: false, nsfw: false, private: false },
+    visibility: 'PUBLIC',
     channelCount: n % 11 === 0 ? 0 : (n * 37) % 91 + (n % 5 === 0 ? 400 : 0),
     owner,
     files: [1, 2, 3, 4].flatMap((k) => [
@@ -489,12 +491,22 @@ const twitchEmote = (n, owner = OTHERS[n % OTHERS.length]) => {
 NAME_OF.set(10, 'AbsolutelyUnreasonablyLongEmoteNameThatKeepsGoing');
 const ALL = FACES ? Array.from({ length: 300 }, (_, i) => emote(i)) : TWITCH.map((_, n) => twitchEmote(n));
 // The mock account's own uploads: a few of each state.
-// Emote 11 is private (no activity, no tab).
+// Emote 11 is private (no activity, no tab); emote 12 is unlisted (ADR 0020: open by link, never
+// in search or browse).
 ALL[11].flags.private = true;
+ALL[11].visibility = 'PRIVATE';
+ALL[12].visibility = 'UNLISTED';
 // A few NSFW emotes (left out of search unless asked for), and `wide` as the API derives it.
 for (const [n, e] of ALL.entries()) if (n % 23 === 7) e.flags.nsfw = true;
 const MINE = Array.from({ length: 9 }, (_, i) =>
   emote(600 + i, ME_SUMMARY, i < 2 ? 'PENDING' : i === 2 ? 'REJECTED' : 'APPROVED'));
+MINE[4].visibility = 'UNLISTED';
+// A deletion within its 30-day undo window (ADR 0019): set by deleteAccount, cleared by
+// restoreAccount. Signing in while it is set gives the mock_restore cookie, not a session.
+let PENDING_DELETION = null;
+let RESTORE_COOKIE = false;
+const MY_ROLES = () => (ACCOUNT_ROLES[ME_ID] ?? []).map((id) => ROLES.find((r) => r.id === id)).filter(Boolean)
+  .sort((a, b) => b.position - a.position).map((r) => ({ id: r.id, name: r.name, public: r.public }));
 let uploads = 0;
 const wideOf = (e) => {
   const one = e.files.find((f) => f.name === '1x.webp');
@@ -514,7 +526,7 @@ function trendAdds(e, window) {
   return { DAY: day, WEEK: week, MONTH: month }[window in TREND_DAYS ? window : 'WEEK'];
 }
 const trendPool = (window, nsfw) =>
-  ALL.filter((e) => e.state === 'APPROVED' && !e.flags.private && (nsfw || !e.flags.nsfw) && trendAdds(e, window) > 0).sort(
+  ALL.filter((e) => e.state === 'APPROVED' && e.visibility === 'PUBLIC' && (nsfw || !e.flags.nsfw) && trendAdds(e, window) > 0).sort(
     (a, b) => trendAdds(b, window) - trendAdds(a, window) || b.channelCount - a.channelCount || a.id.localeCompare(b.id),
   );
 
@@ -588,6 +600,9 @@ const AUDIT = Array.from({ length: 64 }, (_, i) => ({
   before: i % 4 === 3 ? JSON.stringify({ uploads_blocked: false, blocked: false }) : null,
   after: JSON.stringify({ state: 'APPROVED', n: i }), createdAt: new Date(Date.UTC(2026, 10, 16, 22, 0, 0) - i * 600_000).toISOString(),
 }));
+// Every account has a default set named after it (made at sign-up).
+SETS.push({ id: '01JD8XSET000000000000DEFLT', name: ME_SUMMARY.displayName, kind: 'CHANNEL', capacity: 1000, owner: ME_SUMMARY,
+  emotes: [], editors: [], visibility: 'LISTED', createdAt: '2026-11-10T12:00:00.000Z' });
 const CHANNELS = [
   { platform: 'TWITCH', platformChannelId: '141981764', login: 'lumen_fox', activeSetId: SETS[0].id, allowPersonalEmotes: true, account: ME_SUMMARY },
 ];
@@ -611,15 +626,39 @@ else if (Number(process.env.MOCK_NOTES) > NOTES.length) {
   NOTES.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 // Account editors (ADR 0014): two people work on the mock account, and it works on two others'.
-const EDITOR_FLAGS = ['EMOTES', 'SETS', 'EDITORS', 'PROFILE'];
+// Flags in the API's order; SETS brings CHANNELS. A grant covers every set (allSets) or setIds.
+const EDITOR_FLAGS = ['EMOTES', 'SETS', 'EDITORS', 'PROFILE', 'CHANNELS', 'EMOTE_UPLOAD', 'EMOTE_MANAGE', 'EMOTE_TRANSFER', 'BILLING_PAYMENT', 'BILLING_SUBSCRIPTION'];
+const MAX_EDITORS = 50;
+const withImplied = (flags) => EDITOR_FLAGS.filter((f) => flags.includes(f) || (f === 'CHANNELS' && flags.includes('SETS')));
 const ACCOUNT_EDITORS = [
-  { account: OTHERS[1], permissions: ['EMOTES'], grantedBy: ME_SUMMARY, grantedAt: '2026-11-12T10:00:00.000Z', updatedAt: '2026-11-12T10:00:00.000Z' },
-  { account: OTHERS[2], permissions: ['EMOTES', 'SETS', 'EDITORS'], grantedBy: ME_SUMMARY, grantedAt: '2026-11-14T18:30:00.000Z', updatedAt: '2026-11-14T18:30:00.000Z' },
+  { account: OTHERS[1], permissions: ['EMOTES'], allSets: false, setIds: ['01JD8XSET00000000000000MAIN'], grantedBy: ME_SUMMARY, grantedAt: '2026-11-12T10:00:00.000Z', updatedAt: '2026-11-12T10:00:00.000Z' },
+  { account: OTHERS[2], permissions: ['EMOTES', 'SETS', 'EDITORS', 'CHANNELS'], allSets: true, setIds: [], grantedBy: ME_SUMMARY, grantedAt: '2026-11-14T18:30:00.000Z', updatedAt: '2026-11-14T18:30:00.000Z' },
 ];
 const EDITOR_OF = [
-  { account: OTHERS[0], permissions: ['EMOTES', 'SETS'], grantedAt: '2026-11-13T09:00:00.000Z' },
-  { account: OTHERS[4], permissions: ['EMOTES', 'PROFILE'], grantedAt: '2026-11-15T20:00:00.000Z' },
+  { account: OTHERS[0], permissions: ['EMOTES', 'SETS', 'CHANNELS'], allSets: true, setIds: [], grantedAt: '2026-11-13T09:00:00.000Z' },
+  { account: OTHERS[4], permissions: ['EMOTES', 'PROFILE'], allSets: true, setIds: [], grantedAt: '2026-11-15T20:00:00.000Z' },
 ];
+// MOCK_EDITORS=50: the account is at the editor limit.
+if (process.env.MOCK_EDITORS === '50') {
+  for (let i = ACCOUNT_EDITORS.length; i < MAX_EDITORS; i++) {
+    ACCOUNT_EDITORS.push({ account: { id: `01JD8X00000000000000ED${String(i).padStart(4, '0')}`, displayName: `editor_${i}`, avatar: null },
+      permissions: ['EMOTES'], allSets: true, setIds: [], grantedBy: ME_SUMMARY, grantedAt: '2026-11-16T10:00:00.000Z', updatedAt: '2026-11-16T10:00:00.000Z' });
+  }
+}
+// Which sets the mock account's grant on an owner covers.
+const coversSet = (ownerId, setId) => {
+  if (ownerId === ME_ID) return true;
+  const g = EDITOR_OF.find((x) => x.account.id === ownerId);
+  return !!g && (g.allSets || g.setIds.includes(setId));
+};
+// The sets of ME_ID's account an add or change names, or an error.
+const scopeFrom = (setIds) => {
+  const ids = [...new Set(setIds ?? [])];
+  if (!ids.length) return { allSets: true, setIds: [] };
+  if (ids.length > 200) return { error: err('Pick at most 200 sets, or let them work on every set.', 'too_many_sets') };
+  if (!ids.every((id) => SETS.some((s) => s.id === id && s.owner?.id === ME_ID))) return { error: err('Pick sets of this account.', 'bad_set') };
+  return { allSets: false, setIds: ids };
+};
 const SHARED_SETS = [
   { id: '01JD8XSET0000000000000OAKAL', name: 'quietoak cozy', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[0],
     emotes: ALL.slice(70, 78).map((e) => member(e)), editors: [], visibility: 'PRIVATE', createdAt: '2026-11-13T09:10:00.000Z' },
@@ -652,9 +691,9 @@ const EDITOR_CHANNELS = [
   { platform: 'TWITCH', platformChannelId: '55500003', login: 'sunnyfern', activeSetId: SHARED_SETS[1].id, allowPersonalEmotes: true, account: OTHERS[4] },
 ];
 // The sets of the accounts the mock account edits: theirs among SETS (per-set grants) and SHARED_SETS.
-const editorSets = () => [...SETS, ...SHARED_SETS].filter((s) => s.owner && EDITOR_OF.some((g) => g.account.id === s.owner.id));
+const editorSets = () => [...SETS, ...SHARED_SETS].filter((s) => s.owner && EDITOR_OF.some((g) => g.account.id === s.owner.id) && coversSet(s.owner.id, s.id));
 const editorChannels = () => EDITOR_CHANNELS.filter((c) => EDITOR_OF.some((g) => g.account.id === c.account.id));
-const flagsOn = (ownerId) => (ownerId === ME_ID ? EDITOR_FLAGS : EDITOR_OF.find((g) => g.account.id === ownerId)?.permissions ?? []);
+const flagsOn = (ownerId) => (ownerId === ME_ID ? EDITOR_FLAGS : withImplied(EDITOR_OF.find((g) => g.account.id === ownerId)?.permissions ?? []));
 const editorOfOut = () => EDITOR_OF.map((g) => ({ ...g }));
 
 const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view', 'cosmetics.manage', 'cosmetics.grant', 'shop.manage', 'shop.orders', 'codes.manage',
@@ -1385,7 +1424,9 @@ function signedIn(body, v, ADMIN) {
   const op = (body.query.match(/(?:query|mutation)\s+(\w+)/) ?? [])[1];
   switch (op) {
     case 'Me':
-      return { data: { me: { id: ME_ID, createdAt: '2026-11-10T12:00:00.000Z', permissions: ADMIN ? PERMISSIONS : ROLES.find((r) => r.builtIn === 'USER').permissions, identities: IDENTITIES } } };
+      return { data: { me: { id: ME_ID, createdAt: '2026-11-10T12:00:00.000Z', permissions: ADMIN ? PERMISSIONS : ROLES.find((r) => r.builtIn === 'USER').permissions, identities: IDENTITIES, roles: MY_ROLES() } } };
+    case 'MyRoles':
+      return { data: { me: { id: ME_ID, roles: MY_ROLES() } } };
     case 'MyEmotes': {
       const per = v.perPage ?? 50;
       const page = v.page ?? 1;
@@ -1396,7 +1437,16 @@ function signedIn(body, v, ADMIN) {
       if (!e) return err('Only the emote’s owner can change it.', 'forbidden');
       if (v.input.name !== undefined) e.name = v.input.name;
       if (v.input.tags) e.tags = v.input.tags;
-      for (const k of ['zeroWidth', 'private', 'nsfw']) if (v.input[k] !== undefined) e.flags[k] = v.input[k];
+      for (const k of ['zeroWidth', 'nsfw']) if (v.input[k] !== undefined) e.flags[k] = v.input[k];
+      // As the API (ADR 0020): visibility wins; private alone keeps an unlisted emote unlisted.
+      const vis = v.input.visibility;
+      const priv = v.input.private;
+      if (vis && priv !== undefined && priv !== null && priv !== (vis === 'PRIVATE'))
+        return err('visibility and private say different things.', 'bad_visibility');
+      if (vis) e.visibility = vis;
+      else if (priv === true) e.visibility = 'PRIVATE';
+      else if (priv === false && e.visibility === 'PRIVATE') e.visibility = 'PUBLIC';
+      e.flags.private = e.visibility === 'PRIVATE';
       return { data: { updateEmote: e } };
     }
     case 'DeleteEmote': {
@@ -1415,8 +1465,9 @@ function signedIn(body, v, ADMIN) {
       return { data: { reportEmote: { id: 'R' + Date.now() } } };
     case 'EditSet': {
       const s = findSet(v.id);
-      if (!s) return { data: { set: null, setEditors: [], editorOf: editorOfOut() } };
-      return { data: { set: setOut(s), setEditors: s.editors, editorOf: editorOfOut() } };
+      const channels = { myChannels: CHANNELS, editorChannels: editorChannels() };
+      if (!s) return { data: { set: null, setEditors: [], editorOf: editorOfOut(), ...channels } };
+      return { data: { set: setOut(s), setEditors: s.editors, editorOf: editorOfOut(), ...channels } };
     }
     case 'CreateSet': {
       const ownerId = v.input.ownerId || ME_ID;
@@ -1494,8 +1545,14 @@ function signedIn(body, v, ADMIN) {
     }
     case 'UpdateChannel': {
       const c = [...CHANNELS, ...editorChannels()].find((x) => x.platform === v.platform && x.platformChannelId === v.id);
-      if (!c || !flagsOn(c.account.id).includes('SETS'))
-        return err('Only the channel’s owner and its account editors with the sets permission can change it.', 'forbidden');
+      if (!c || !flagsOn(c.account.id).includes('CHANNELS'))
+        return err('Only the channel’s owner and its account editors with the channels permission can change it.', 'forbidden');
+      if (v.input.activeSetId) {
+        const target = findSet(v.input.activeSetId);
+        if (!target || target.kind !== 'CHANNEL' || target.owner?.id !== c.account.id)
+          return err('The active set must be one of the channel owner’s channel sets.', 'invalid_active_set');
+        if (!coversSet(c.account.id, target.id)) return err('You can only show sets you work on. Ask the owner to add this one to your sets.', 'forbidden');
+      }
       if (v.input.activeSetId !== undefined) c.activeSetId = v.input.activeSetId || null;
       if (v.input.allowPersonalEmotes !== undefined) c.allowPersonalEmotes = v.input.allowPersonalEmotes;
       return { data: { updateChannelSettings: { activeSetId: c.activeSetId, allowPersonalEmotes: c.allowPersonalEmotes } } };
@@ -1519,18 +1576,20 @@ function signedIn(body, v, ADMIN) {
       return { data: { accountRoles: rolesOf(v.accountId) } };
     }
     case 'Editors':
-      return { data: { accountEditors: ACCOUNT_EDITORS, editorOf: editorOfOut() } };
+      return { data: { accountEditors: ACCOUNT_EDITORS, editorOf: editorOfOut(), mySets: SETS.map((x) => ({ id: x.id, name: x.name, kind: x.kind, owner: x.owner ? { id: x.owner.id } : null })) } };
     case 'AddAccountEditor': {
-      const { login, permissions } = v.input;
+      const { login, accountId, permissions } = v.input;
       if (!permissions?.length) return err('Pick at least one permission.', 'no_permissions');
-      if (ACCOUNT_EDITORS.length >= 20) return err('An account can have at most 20 editors.', 'too_many_editors');
+      if (ACCOUNT_EDITORS.length >= MAX_EDITORS) return err('An account can have at most 50 editors. Remove one to add someone else.', 'too_many_editors');
+      const scope = scopeFrom(v.input.setIds);
+      if (scope.error) return scope.error;
       const name = String(login ?? '').trim().replace(/^@/, '').toLowerCase();
-      if (name === ME_SUMMARY.displayName.toLowerCase()) return err('The account’s owner can do all of this already.', 'already_owner');
-      const a = OTHERS.find((o) => o.displayName.toLowerCase() === name);
+      if (accountId === ME_ID || (!accountId && name === ME_SUMMARY.displayName.toLowerCase())) return err('The account’s owner can do all of this already.', 'already_owner');
+      const a = accountId ? OTHERS.find((o) => o.id === accountId) : OTHERS.find((o) => o.displayName.toLowerCase() === name);
       if (!a) return err('Not found.', 'not_found');
       if (ACCOUNT_EDITORS.some((e) => e.account.id === a.id)) return err('They are an editor already.', 'already_editor');
       const now = new Date().toISOString();
-      const ed = { account: a, permissions: EDITOR_FLAGS.filter((f) => permissions.includes(f)), grantedBy: ME_SUMMARY, grantedAt: now, updatedAt: now };
+      const ed = { account: a, permissions: withImplied(permissions), ...scope, grantedBy: ME_SUMMARY, grantedAt: now, updatedAt: now };
       ACCOUNT_EDITORS.push(ed);
       return { data: { addAccountEditor: ed } };
     }
@@ -1538,7 +1597,12 @@ function signedIn(body, v, ADMIN) {
       const ed = ACCOUNT_EDITORS.find((e) => e.account.id === v.accountId);
       if (!ed) return err('Not found.', 'not_found');
       if (!v.permissions?.length) return err('Pick at least one permission.', 'no_permissions');
-      ed.permissions = EDITOR_FLAGS.filter((f) => v.permissions.includes(f));
+      if (v.setIds) {
+        const scope = scopeFrom(v.setIds);
+        if (scope.error) return scope.error;
+        Object.assign(ed, scope);
+      }
+      ed.permissions = withImplied(v.permissions);
       ed.updatedAt = new Date().toISOString();
       return { data: { updateAccountEditor: ed } };
     }
@@ -1728,7 +1792,9 @@ function accountProfile(id) {
     const set = findSet(c.activeSetId);
     return set ? { platform: c.platform, login: c.login, setId: set.id, setName: set.name } : null;
   }).filter(Boolean);
-  return { account, identities, roles, activeSets, createdAt: id === ME_ID ? '2026-11-10T12:00:00.000Z' : '2026-11-08T09:00:00.000Z' };
+  // Editors, names only (never their permissions).
+  const editors = id === ME_ID ? ACCOUNT_EDITORS.map((e) => e.account) : [];
+  return { account, identities, roles, activeSets, editors, createdAt: id === ME_ID ? '2026-11-10T12:00:00.000Z' : '2026-11-08T09:00:00.000Z' };
 }
 // accountCosmetics(accountIds): what each account shows, with the badge and paint themselves.
 function accountCosmetics(ids) {
@@ -1792,7 +1858,10 @@ function accountHub(q, v) {
     const typed = String(v.confirm ?? '').trim().replace(/^@/, '').toLowerCase();
     if (!IDENTITIES.some((i) => i.login.toLowerCase() === typed))
       return err('Type one of your Twitch or Kick logins to confirm.', 'confirm_mismatch');
-    // The mock keeps its data (it would have nothing left to show); it signs you out like the API.
+    // The mock keeps its data (it would have nothing left to show); it signs you out like the API
+    // and remembers the 30-day window, so signing in again lands on /restore.
+    const now = Date.now();
+    PENDING_DELETION = { requestedAt: new Date(now).toISOString(), eraseAfter: new Date(now + 30 * DAY).toISOString(), displayName: IDENTITIES[0]?.displayName ?? null, avatar: IDENTITIES[0]?.avatar ?? null };
     return { data: { deleteAccount: true }, _cookie: 'mock_session=; Path=/; Max-Age=0' };
   }
   if (/\bmarkNotificationsRead\b/.test(q)) {
@@ -1816,6 +1885,13 @@ function newFields(q, v, session) {
   if (hub?._cookie || hub?.errors) return hub;
   if (hub) parts.push(hub);
   const has = (name) => new RegExp(`\\b${name}\\s*\\(`).test(q);
+  // The undo window (ADR 0019): only the restore cookie sees and undoes the deletion.
+  if (/\bpendingDeletion\b/.test(q)) return { data: { pendingDeletion: !session && RESTORE_COOKIE ? PENDING_DELETION : null } };
+  if (/\brestoreAccount\b/.test(q)) {
+    if (session || !RESTORE_COOKIE || !PENDING_DELETION) return err('Sign in to the deleted account to restore it.', 'signed_out');
+    PENDING_DELETION = null;
+    return { data: { restoreAccount: true }, _cookie: 'mock_session=1; Path=/; HttpOnly; SameSite=Lax' };
+  }
   if (has('accountProfile')) parts.push({ data: { accountProfile: accountProfile(id) } });
   if (has('accountCosmetics')) {
     const list = accountCosmetics(v.accountIds ?? v.ids);
@@ -1928,7 +2004,8 @@ function baseAnswer(body, session, admin) {
     const terms = text.split(/\s+/).filter(Boolean);
     const flags = new Set(v.flags ?? []);
     const tags = [...new Set((v.tags ?? []).map((t) => t.trim().replace(/^#+/, '').toLowerCase()).filter(Boolean))].slice(0, 10);
-    let hits = ALL.filter((e) => e.state === 'APPROVED' && !e.flags.private);
+    // Unlisted and private emotes are never in search or browse (ADR 0020).
+    let hits = ALL.filter((e) => e.state === 'APPROVED' && e.visibility === 'PUBLIC');
     hits = v.exact && text
       ? hits.filter((e) => e.name.toLowerCase() === text)
       : hits.filter((e) => terms.every((t) => e.name.toLowerCase().includes(t) || e.tags.some((g) => g.includes(t))));
@@ -1986,6 +2063,7 @@ createServer(async (req, res) => {
   res.setHeader('access-control-allow-headers', 'content-type');
   if (req.method === 'OPTIONS') return res.writeHead(204).end();
   const session = OPEN_ENV || /(?:^|;\s*)mock_session=1/.test(req.headers.cookie ?? '');
+  RESTORE_COOKIE = /(?:^|;\s*)mock_restore=1/.test(req.headers.cookie ?? '');
   const url = new URL(req.url ?? '/', BASE);
   const admin = ADMIN_ENV || /(?:^|;\s*)mock_admin=1/.test(req.headers.cookie ?? '');
   // /mock/notify: one new unread notification now (for the header's toasts); the bell's poll picks it up.
@@ -2052,11 +2130,16 @@ createServer(async (req, res) => {
     if (url.searchParams.get('link') === 'true' && !IDENTITIES.some((i) => i.platform === 'KICK') && url.pathname.includes('kick'))
       IDENTITIES.push({ platform: 'KICK', platformUserId: '4815162', login: 'lumen_fox', displayName: 'lumen_fox', avatar: null });
     const back = url.searchParams.get('return_to') ?? '/';
+    // A deleted account within its 30 days lands on /restore with a restore-only cookie.
+    if (PENDING_DELETION) {
+      res.writeHead(302, { location: SITE + '/restore', 'set-cookie': 'mock_restore=1; Path=/; HttpOnly; SameSite=Lax' });
+      return res.end();
+    }
     res.writeHead(302, { location: SITE + (back.startsWith('/') ? back : '/'), 'set-cookie': 'mock_session=1; Path=/; HttpOnly; SameSite=Lax' });
     return res.end();
   }
   if (req.method === 'POST' && url.pathname === '/v1/auth/logout') {
-    res.writeHead(204, { 'set-cookie': 'mock_session=; Path=/; Max-Age=0' });
+    res.writeHead(204, { 'set-cookie': ['mock_session=; Path=/; Max-Age=0', 'mock_restore=; Path=/; Max-Age=0'] });
     return res.end();
   }
   if (req.method === 'POST' && url.pathname === '/v1/emotes') {
@@ -2077,10 +2160,17 @@ createServer(async (req, res) => {
     };
     const flags = { zeroWidth: flag('zero_width'), private: flag('private'), nsfw: flag('nsfw') };
     if (Object.values(flags).includes(null)) return json(res, 400, { error: 'bad_form', message: 'A flag is true or false.' });
+    const visField = (field('visibility') ?? '').trim().toLowerCase();
+    if (visField && !['public', 'unlisted', 'private'].includes(visField)) return json(res, 400, { error: 'bad_form', message: 'Visibility is public, unlisted or private.' });
+    const visibility = visField ? visField.toUpperCase() : flags.private ? 'PRIVATE' : 'PUBLIC';
+    if (field('private') !== undefined && visField && flags.private !== (visibility === 'PRIVATE'))
+      return json(res, 400, { error: 'bad_form', message: 'visibility and private say different things.' });
+    flags.private = visibility === 'PRIVATE';
     await new Promise((r) => setTimeout(r, 700)); // long enough to see the progress
     const e = emote(700 + uploads++, ME_SUMMARY, 'PENDING');
     e.name = name;
     e.flags = { ...flags, wide: false };
+    e.visibility = visibility;
     e.tags = (field('tags') ?? '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean);
     e.host = '';
     e.files = [];

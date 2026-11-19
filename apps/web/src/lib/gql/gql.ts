@@ -20,7 +20,7 @@ type Documents = {
     "\n  mutation StudioCreatePaint($input: PaintInput!) {\n    createPaint(input: $input) {\n      ...StudioPaintFields\n    }\n  }\n": typeof types.StudioCreatePaintDocument,
     "\n  mutation StudioUpdatePaint($id: String!, $input: PaintInput!) {\n    updatePaint(id: $id, input: $input) {\n      ...StudioPaintFields\n    }\n  }\n": typeof types.StudioUpdatePaintDocument,
     "\n  query StudioCosmeticImage($id: String!) {\n    cosmeticImage(id: $id) {\n      id\n      host\n      ready\n      width\n      height\n      animated\n      files {\n        name\n        format\n        scale\n        width\n        height\n        isStatic\n      }\n    }\n  }\n": typeof types.StudioCosmeticImageDocument,
-    "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    channelCount\n    flags {\n      zeroWidth\n      nsfw\n      private\n      wide\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n": typeof types.EmoteFieldsFragmentDoc,
+    "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    channelCount\n    visibility\n    flags {\n      zeroWidth\n      nsfw\n      private\n      wide\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n": typeof types.EmoteFieldsFragmentDoc,
     "\n  query Search(\n    $query: String!\n    $animated: Boolean\n    $nsfw: Boolean\n    $page: Int\n    $perPage: Int\n    $sort: EmoteSort\n    $flags: [EmoteFlag!]\n    $tags: [String!]\n    $exact: Boolean\n    $window: TrendingWindow\n  ) {\n    searchEmotes(\n      query: $query\n      animated: $animated\n      nsfw: $nsfw\n      page: $page\n      perPage: $perPage\n      sort: $sort\n      flags: $flags\n      tags: $tags\n      exact: $exact\n      window: $window\n    ) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.SearchDocument,
     "\n  query FindPeople($query: String!, $page: Int, $perPage: Int) {\n    searchAccounts(query: $query, page: $page, perPage: $perPage) {\n      total\n      page\n      perPage\n      items {\n        account {\n          id\n          displayName\n          avatar\n        }\n        identities {\n          platform\n          login\n          displayName\n        }\n      }\n    }\n  }\n": typeof types.FindPeopleDocument,
     "\n  query Emote($id: String!) {\n    emote(id: $id) {\n      ...EmoteFields\n    }\n  }\n": typeof types.EmoteDocument,
@@ -36,7 +36,7 @@ type Documents = {
     "\n  mutation DeleteEmote($id: String!) {\n    deleteEmote(id: $id)\n  }\n": typeof types.DeleteEmoteDocument,
     "\n  fragment SetFields on EmoteSet {\n    id\n    name\n    kind\n    capacity\n    owner {\n      id\n      displayName\n      avatar\n    }\n    emotes {\n      name\n      zeroWidth\n      addedAt\n      emote {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.SetFieldsFragmentDoc,
     "\n  query MySets {\n    mySets {\n      ...SetFields\n    }\n    editorSets {\n      ...SetFields\n    }\n    editorOf {\n      account {\n        id\n        displayName\n      }\n      permissions\n    }\n  }\n": typeof types.MySetsDocument,
-    "\n  query EditSet($id: String!) {\n    set(id: $id) {\n      ...SetFields\n    }\n    setEditors(setId: $id) {\n      id\n      displayName\n      avatar\n    }\n    editorOf {\n      account {\n        id\n      }\n      permissions\n    }\n  }\n": typeof types.EditSetDocument,
+    "\n  query EditSet($id: String!) {\n    set(id: $id) {\n      ...SetFields\n    }\n    setEditors(setId: $id) {\n      id\n      displayName\n      avatar\n    }\n    editorOf {\n      account {\n        id\n      }\n      permissions\n      allSets\n      setIds\n    }\n    myChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n  }\n": typeof types.EditSetDocument,
     "\n  mutation CreateSet($input: CreateSetInput!) {\n    createSet(input: $input) {\n      id\n    }\n  }\n": typeof types.CreateSetDocument,
     "\n  mutation UpdateSet($id: String!, $input: UpdateSetInput!) {\n    updateSet(id: $id, input: $input) {\n      id\n      name\n    }\n  }\n": typeof types.UpdateSetDocument,
     "\n  mutation DeleteSet($id: String!) {\n    deleteSet(id: $id)\n  }\n": typeof types.DeleteSetDocument,
@@ -48,10 +48,10 @@ type Documents = {
     "\n  query FindAccount($platform: Platform!, $login: String!) {\n    channelByLogin(platform: $platform, login: $login) {\n      login\n      account {\n        id\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.FindAccountDocument,
     "\n  query MyChannels {\n    myChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      allowPersonalEmotes\n      account {\n        id\n        displayName\n      }\n    }\n    mySets {\n      id\n      name\n      kind\n      owner {\n        id\n      }\n    }\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      allowPersonalEmotes\n      account {\n        id\n        displayName\n      }\n    }\n    editorSets {\n      id\n      name\n      kind\n      owner {\n        id\n      }\n    }\n    editorOf {\n      account {\n        id\n      }\n      permissions\n    }\n  }\n": typeof types.MyChannelsDocument,
     "\n  mutation UpdateChannel($platform: Platform!, $id: String!, $input: UpdateChannelSettingsInput!) {\n    updateChannelSettings(platform: $platform, id: $id, input: $input) {\n      activeSetId\n      allowPersonalEmotes\n    }\n  }\n": typeof types.UpdateChannelDocument,
-    "\n  fragment AccountEditorFields on AccountEditor {\n    account {\n      id\n      displayName\n      avatar\n    }\n    permissions\n    grantedBy {\n      id\n      displayName\n    }\n    grantedAt\n  }\n": typeof types.AccountEditorFieldsFragmentDoc,
-    "\n  query Editors {\n    accountEditors {\n      ...AccountEditorFields\n    }\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n      grantedAt\n    }\n  }\n": typeof types.EditorsDocument,
+    "\n  fragment AccountEditorFields on AccountEditor {\n    account {\n      id\n      displayName\n      avatar\n    }\n    permissions\n    allSets\n    setIds\n    grantedBy {\n      id\n      displayName\n    }\n    grantedAt\n  }\n": typeof types.AccountEditorFieldsFragmentDoc,
+    "\n  query Editors {\n    accountEditors {\n      ...AccountEditorFields\n    }\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n      allSets\n      setIds\n      grantedAt\n    }\n    mySets {\n      id\n      name\n      kind\n      owner {\n        id\n      }\n    }\n  }\n": typeof types.EditorsDocument,
     "\n  mutation AddAccountEditor($input: AddAccountEditorInput!) {\n    addAccountEditor(input: $input) {\n      ...AccountEditorFields\n    }\n  }\n": typeof types.AddAccountEditorDocument,
-    "\n  mutation UpdateAccountEditor($ownerId: String, $accountId: String!, $permissions: [EditorPermission!]!) {\n    updateAccountEditor(ownerId: $ownerId, accountId: $accountId, permissions: $permissions) {\n      ...AccountEditorFields\n    }\n  }\n": typeof types.UpdateAccountEditorDocument,
+    "\n  mutation UpdateAccountEditor($ownerId: String, $accountId: String!, $permissions: [EditorPermission!]!, $setIds: [String!]) {\n    updateAccountEditor(ownerId: $ownerId, accountId: $accountId, permissions: $permissions, setIds: $setIds) {\n      ...AccountEditorFields\n    }\n  }\n": typeof types.UpdateAccountEditorDocument,
     "\n  mutation RemoveAccountEditor($ownerId: String, $accountId: String!) {\n    removeAccountEditor(ownerId: $ownerId, accountId: $accountId)\n  }\n": typeof types.RemoveAccountEditorDocument,
     "\n  mutation Unlink($platform: Platform!) {\n    unlinkIdentity(platform: $platform) {\n      id\n    }\n  }\n": typeof types.UnlinkDocument,
     "\n  query MyNotifications {\n    myNotifications {\n      id\n      kind\n      payload\n      createdAt\n      read\n    }\n  }\n": typeof types.MyNotificationsDocument,
@@ -62,6 +62,9 @@ type Documents = {
     "\n  mutation RevokeOtherSessions {\n    revokeOtherSessions\n  }\n": typeof types.RevokeOtherSessionsDocument,
     "\n  mutation ExportMyData {\n    exportMyData\n  }\n": typeof types.ExportMyDataDocument,
     "\n  mutation DeleteAccount($confirm: String!) {\n    deleteAccount(confirm: $confirm)\n  }\n": typeof types.DeleteAccountDocument,
+    "\n  query PendingDeletion {\n    pendingDeletion {\n      requestedAt\n      eraseAfter\n      displayName\n      avatar\n    }\n  }\n": typeof types.PendingDeletionDocument,
+    "\n  mutation RestoreAccount {\n    restoreAccount\n  }\n": typeof types.RestoreAccountDocument,
+    "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n      }\n    }\n  }\n": typeof types.MyRolesDocument,
     "\n  query AdminCounts($review: Boolean!, $reports: Boolean!) {\n    reviewQueue(page: 1, perPage: 1) @include(if: $review) {\n      total\n    }\n    reportQueue(page: 1, perPage: 1) @include(if: $reports) {\n      total\n    }\n    globalSet {\n      id\n    }\n  }\n": typeof types.AdminCountsDocument,
     "\n  query ReviewQueue($page: Int, $perPage: Int) {\n    reviewQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.ReviewQueueDocument,
     "\n  mutation Approve($id: String!) {\n    approveEmote(id: $id) {\n      id\n      state\n    }\n  }\n": typeof types.ApproveDocument,
@@ -145,7 +148,7 @@ const documents: Documents = {
     "\n  mutation StudioCreatePaint($input: PaintInput!) {\n    createPaint(input: $input) {\n      ...StudioPaintFields\n    }\n  }\n": types.StudioCreatePaintDocument,
     "\n  mutation StudioUpdatePaint($id: String!, $input: PaintInput!) {\n    updatePaint(id: $id, input: $input) {\n      ...StudioPaintFields\n    }\n  }\n": types.StudioUpdatePaintDocument,
     "\n  query StudioCosmeticImage($id: String!) {\n    cosmeticImage(id: $id) {\n      id\n      host\n      ready\n      width\n      height\n      animated\n      files {\n        name\n        format\n        scale\n        width\n        height\n        isStatic\n      }\n    }\n  }\n": types.StudioCosmeticImageDocument,
-    "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    channelCount\n    flags {\n      zeroWidth\n      nsfw\n      private\n      wide\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n": types.EmoteFieldsFragmentDoc,
+    "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    channelCount\n    visibility\n    flags {\n      zeroWidth\n      nsfw\n      private\n      wide\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n": types.EmoteFieldsFragmentDoc,
     "\n  query Search(\n    $query: String!\n    $animated: Boolean\n    $nsfw: Boolean\n    $page: Int\n    $perPage: Int\n    $sort: EmoteSort\n    $flags: [EmoteFlag!]\n    $tags: [String!]\n    $exact: Boolean\n    $window: TrendingWindow\n  ) {\n    searchEmotes(\n      query: $query\n      animated: $animated\n      nsfw: $nsfw\n      page: $page\n      perPage: $perPage\n      sort: $sort\n      flags: $flags\n      tags: $tags\n      exact: $exact\n      window: $window\n    ) {\n      total\n      page\n      perPage\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.SearchDocument,
     "\n  query FindPeople($query: String!, $page: Int, $perPage: Int) {\n    searchAccounts(query: $query, page: $page, perPage: $perPage) {\n      total\n      page\n      perPage\n      items {\n        account {\n          id\n          displayName\n          avatar\n        }\n        identities {\n          platform\n          login\n          displayName\n        }\n      }\n    }\n  }\n": types.FindPeopleDocument,
     "\n  query Emote($id: String!) {\n    emote(id: $id) {\n      ...EmoteFields\n    }\n  }\n": types.EmoteDocument,
@@ -161,7 +164,7 @@ const documents: Documents = {
     "\n  mutation DeleteEmote($id: String!) {\n    deleteEmote(id: $id)\n  }\n": types.DeleteEmoteDocument,
     "\n  fragment SetFields on EmoteSet {\n    id\n    name\n    kind\n    capacity\n    owner {\n      id\n      displayName\n      avatar\n    }\n    emotes {\n      name\n      zeroWidth\n      addedAt\n      emote {\n        ...EmoteFields\n      }\n    }\n  }\n": types.SetFieldsFragmentDoc,
     "\n  query MySets {\n    mySets {\n      ...SetFields\n    }\n    editorSets {\n      ...SetFields\n    }\n    editorOf {\n      account {\n        id\n        displayName\n      }\n      permissions\n    }\n  }\n": types.MySetsDocument,
-    "\n  query EditSet($id: String!) {\n    set(id: $id) {\n      ...SetFields\n    }\n    setEditors(setId: $id) {\n      id\n      displayName\n      avatar\n    }\n    editorOf {\n      account {\n        id\n      }\n      permissions\n    }\n  }\n": types.EditSetDocument,
+    "\n  query EditSet($id: String!) {\n    set(id: $id) {\n      ...SetFields\n    }\n    setEditors(setId: $id) {\n      id\n      displayName\n      avatar\n    }\n    editorOf {\n      account {\n        id\n      }\n      permissions\n      allSets\n      setIds\n    }\n    myChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n  }\n": types.EditSetDocument,
     "\n  mutation CreateSet($input: CreateSetInput!) {\n    createSet(input: $input) {\n      id\n    }\n  }\n": types.CreateSetDocument,
     "\n  mutation UpdateSet($id: String!, $input: UpdateSetInput!) {\n    updateSet(id: $id, input: $input) {\n      id\n      name\n    }\n  }\n": types.UpdateSetDocument,
     "\n  mutation DeleteSet($id: String!) {\n    deleteSet(id: $id)\n  }\n": types.DeleteSetDocument,
@@ -173,10 +176,10 @@ const documents: Documents = {
     "\n  query FindAccount($platform: Platform!, $login: String!) {\n    channelByLogin(platform: $platform, login: $login) {\n      login\n      account {\n        id\n        displayName\n        avatar\n      }\n    }\n  }\n": types.FindAccountDocument,
     "\n  query MyChannels {\n    myChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      allowPersonalEmotes\n      account {\n        id\n        displayName\n      }\n    }\n    mySets {\n      id\n      name\n      kind\n      owner {\n        id\n      }\n    }\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      allowPersonalEmotes\n      account {\n        id\n        displayName\n      }\n    }\n    editorSets {\n      id\n      name\n      kind\n      owner {\n        id\n      }\n    }\n    editorOf {\n      account {\n        id\n      }\n      permissions\n    }\n  }\n": types.MyChannelsDocument,
     "\n  mutation UpdateChannel($platform: Platform!, $id: String!, $input: UpdateChannelSettingsInput!) {\n    updateChannelSettings(platform: $platform, id: $id, input: $input) {\n      activeSetId\n      allowPersonalEmotes\n    }\n  }\n": types.UpdateChannelDocument,
-    "\n  fragment AccountEditorFields on AccountEditor {\n    account {\n      id\n      displayName\n      avatar\n    }\n    permissions\n    grantedBy {\n      id\n      displayName\n    }\n    grantedAt\n  }\n": types.AccountEditorFieldsFragmentDoc,
-    "\n  query Editors {\n    accountEditors {\n      ...AccountEditorFields\n    }\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n      grantedAt\n    }\n  }\n": types.EditorsDocument,
+    "\n  fragment AccountEditorFields on AccountEditor {\n    account {\n      id\n      displayName\n      avatar\n    }\n    permissions\n    allSets\n    setIds\n    grantedBy {\n      id\n      displayName\n    }\n    grantedAt\n  }\n": types.AccountEditorFieldsFragmentDoc,
+    "\n  query Editors {\n    accountEditors {\n      ...AccountEditorFields\n    }\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n      allSets\n      setIds\n      grantedAt\n    }\n    mySets {\n      id\n      name\n      kind\n      owner {\n        id\n      }\n    }\n  }\n": types.EditorsDocument,
     "\n  mutation AddAccountEditor($input: AddAccountEditorInput!) {\n    addAccountEditor(input: $input) {\n      ...AccountEditorFields\n    }\n  }\n": types.AddAccountEditorDocument,
-    "\n  mutation UpdateAccountEditor($ownerId: String, $accountId: String!, $permissions: [EditorPermission!]!) {\n    updateAccountEditor(ownerId: $ownerId, accountId: $accountId, permissions: $permissions) {\n      ...AccountEditorFields\n    }\n  }\n": types.UpdateAccountEditorDocument,
+    "\n  mutation UpdateAccountEditor($ownerId: String, $accountId: String!, $permissions: [EditorPermission!]!, $setIds: [String!]) {\n    updateAccountEditor(ownerId: $ownerId, accountId: $accountId, permissions: $permissions, setIds: $setIds) {\n      ...AccountEditorFields\n    }\n  }\n": types.UpdateAccountEditorDocument,
     "\n  mutation RemoveAccountEditor($ownerId: String, $accountId: String!) {\n    removeAccountEditor(ownerId: $ownerId, accountId: $accountId)\n  }\n": types.RemoveAccountEditorDocument,
     "\n  mutation Unlink($platform: Platform!) {\n    unlinkIdentity(platform: $platform) {\n      id\n    }\n  }\n": types.UnlinkDocument,
     "\n  query MyNotifications {\n    myNotifications {\n      id\n      kind\n      payload\n      createdAt\n      read\n    }\n  }\n": types.MyNotificationsDocument,
@@ -187,6 +190,9 @@ const documents: Documents = {
     "\n  mutation RevokeOtherSessions {\n    revokeOtherSessions\n  }\n": types.RevokeOtherSessionsDocument,
     "\n  mutation ExportMyData {\n    exportMyData\n  }\n": types.ExportMyDataDocument,
     "\n  mutation DeleteAccount($confirm: String!) {\n    deleteAccount(confirm: $confirm)\n  }\n": types.DeleteAccountDocument,
+    "\n  query PendingDeletion {\n    pendingDeletion {\n      requestedAt\n      eraseAfter\n      displayName\n      avatar\n    }\n  }\n": types.PendingDeletionDocument,
+    "\n  mutation RestoreAccount {\n    restoreAccount\n  }\n": types.RestoreAccountDocument,
+    "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n      }\n    }\n  }\n": types.MyRolesDocument,
     "\n  query AdminCounts($review: Boolean!, $reports: Boolean!) {\n    reviewQueue(page: 1, perPage: 1) @include(if: $review) {\n      total\n    }\n    reportQueue(page: 1, perPage: 1) @include(if: $reports) {\n      total\n    }\n    globalSet {\n      id\n    }\n  }\n": types.AdminCountsDocument,
     "\n  query ReviewQueue($page: Int, $perPage: Int) {\n    reviewQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.ReviewQueueDocument,
     "\n  mutation Approve($id: String!) {\n    approveEmote(id: $id) {\n      id\n      state\n    }\n  }\n": types.ApproveDocument,
@@ -288,7 +294,7 @@ export function graphql(source: "\n  query StudioCosmeticImage($id: String!) {\n
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    channelCount\n    flags {\n      zeroWidth\n      nsfw\n      private\n      wide\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n"): typeof import('./graphql').EmoteFieldsFragmentDoc;
+export function graphql(source: "\n  fragment EmoteFields on Emote {\n    id\n    name\n    state\n    animated\n    tags\n    host\n    createdAt\n    channelCount\n    visibility\n    flags {\n      zeroWidth\n      nsfw\n      private\n      wide\n    }\n    owner {\n      id\n      displayName\n      avatar\n    }\n    files {\n      name\n      format\n      scale\n      width\n      height\n      size\n      isStatic\n    }\n  }\n"): typeof import('./graphql').EmoteFieldsFragmentDoc;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -352,7 +358,7 @@ export function graphql(source: "\n  query MySets {\n    mySets {\n      ...SetF
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query EditSet($id: String!) {\n    set(id: $id) {\n      ...SetFields\n    }\n    setEditors(setId: $id) {\n      id\n      displayName\n      avatar\n    }\n    editorOf {\n      account {\n        id\n      }\n      permissions\n    }\n  }\n"): typeof import('./graphql').EditSetDocument;
+export function graphql(source: "\n  query EditSet($id: String!) {\n    set(id: $id) {\n      ...SetFields\n    }\n    setEditors(setId: $id) {\n      id\n      displayName\n      avatar\n    }\n    editorOf {\n      account {\n        id\n      }\n      permissions\n      allSets\n      setIds\n    }\n    myChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n  }\n"): typeof import('./graphql').EditSetDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -400,11 +406,11 @@ export function graphql(source: "\n  mutation UpdateChannel($platform: Platform!
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  fragment AccountEditorFields on AccountEditor {\n    account {\n      id\n      displayName\n      avatar\n    }\n    permissions\n    grantedBy {\n      id\n      displayName\n    }\n    grantedAt\n  }\n"): typeof import('./graphql').AccountEditorFieldsFragmentDoc;
+export function graphql(source: "\n  fragment AccountEditorFields on AccountEditor {\n    account {\n      id\n      displayName\n      avatar\n    }\n    permissions\n    allSets\n    setIds\n    grantedBy {\n      id\n      displayName\n    }\n    grantedAt\n  }\n"): typeof import('./graphql').AccountEditorFieldsFragmentDoc;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query Editors {\n    accountEditors {\n      ...AccountEditorFields\n    }\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n      grantedAt\n    }\n  }\n"): typeof import('./graphql').EditorsDocument;
+export function graphql(source: "\n  query Editors {\n    accountEditors {\n      ...AccountEditorFields\n    }\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n      allSets\n      setIds\n      grantedAt\n    }\n    mySets {\n      id\n      name\n      kind\n      owner {\n        id\n      }\n    }\n  }\n"): typeof import('./graphql').EditorsDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -412,7 +418,7 @@ export function graphql(source: "\n  mutation AddAccountEditor($input: AddAccoun
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  mutation UpdateAccountEditor($ownerId: String, $accountId: String!, $permissions: [EditorPermission!]!) {\n    updateAccountEditor(ownerId: $ownerId, accountId: $accountId, permissions: $permissions) {\n      ...AccountEditorFields\n    }\n  }\n"): typeof import('./graphql').UpdateAccountEditorDocument;
+export function graphql(source: "\n  mutation UpdateAccountEditor($ownerId: String, $accountId: String!, $permissions: [EditorPermission!]!, $setIds: [String!]) {\n    updateAccountEditor(ownerId: $ownerId, accountId: $accountId, permissions: $permissions, setIds: $setIds) {\n      ...AccountEditorFields\n    }\n  }\n"): typeof import('./graphql').UpdateAccountEditorDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -453,6 +459,18 @@ export function graphql(source: "\n  mutation ExportMyData {\n    exportMyData\n
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation DeleteAccount($confirm: String!) {\n    deleteAccount(confirm: $confirm)\n  }\n"): typeof import('./graphql').DeleteAccountDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query PendingDeletion {\n    pendingDeletion {\n      requestedAt\n      eraseAfter\n      displayName\n      avatar\n    }\n  }\n"): typeof import('./graphql').PendingDeletionDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation RestoreAccount {\n    restoreAccount\n  }\n"): typeof import('./graphql').RestoreAccountDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n      }\n    }\n  }\n"): typeof import('./graphql').MyRolesDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

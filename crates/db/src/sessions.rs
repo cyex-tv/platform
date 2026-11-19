@@ -151,6 +151,25 @@ pub async fn find_active(conn: &mut PgConnection, hash: &TokenHash) -> DbResult<
     .await?)
 }
 
+/// A site session of an account whose deletion is pending and can still be restored (ADR 0019).
+/// `find_active` never returns these: such a session can only look at and undo the deletion.
+pub async fn find_restorable(
+    conn: &mut PgConnection,
+    hash: &TokenHash,
+) -> DbResult<Option<Session>> {
+    Ok(sqlx::query_as(
+        "SELECT s.id_hash, s.account_id, s.kind, s.created_at, s.expires_at, s.last_seen_at,
+                s.id, s.user_agent
+         FROM sessions s
+         JOIN accounts a ON a.id = s.account_id
+         WHERE s.id_hash = $1 AND s.expires_at > now() AND s.kind = 'site'
+           AND a.erase_after > now() AND (a.blocked_at IS NULL OR a.blocked_until <= now())",
+    )
+    .bind(&hash[..])
+    .fetch_optional(conn)
+    .await?)
+}
+
 /// Marks the session as used and slides its expiry to `now + ttl` (never shortens it). Callers
 /// decide how often to call it, so a busy client doesn't write on every request.
 pub async fn touch(

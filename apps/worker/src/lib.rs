@@ -16,7 +16,9 @@ use std::time::Duration;
 
 use chrono::Utc;
 use cyex_tv_db::jobs::{self, Job};
-use cyex_tv_db::{audit, event_sessions, ids, oauth_states, outbox, search, sessions, shop};
+use cyex_tv_db::{
+    audit, event_sessions, ids, oauth_states, outbox, privacy, search, sessions, shop,
+};
 use cyex_tv_shared::metrics::{self, Labels, Registry};
 use cyex_tv_storage::Store;
 use sqlx::PgPool;
@@ -386,10 +388,44 @@ pub async fn cancel_stale_checkouts(
     Ok(n)
 }
 
+/// Accounts erased per clean-up, at most. More wait for the next one.
+pub const ERASE_BATCH: i64 = 50;
+
+/// Erases the accounts whose 30-day undo window has passed (ADR 0019), each in its own
+/// transaction with its events and audit row (`privacy::erase_account`); their files go through
+/// `files.delete`. One that fails is logged and tried again at the next clean-up. Returns how many
+/// were erased.
+pub async fn erase_due_accounts(db: &PgPool) -> Result<u64, cyex_tv_db::DbError> {
+    let mut conn = db.acquire().await?;
+    let due = privacy::due_for_erase(&mut conn, ERASE_BATCH).await?;
+    let mut erased = 0;
+    for account_id in due {
+        let mut tx = sqlx::Connection::begin(&mut *conn).await?;
+        match privacy::erase_account(&mut tx, account_id).await {
+            Ok(done) => {
+                tx.commit().await?;
+                erased += 1;
+                tracing::info!(
+                    account = %ids::to_text(account_id),
+                    emotes_deleted = done.emotes_deleted,
+                    files_deleted = done.files_deleted,
+                    "account erased"
+                );
+            }
+            Err(err) => {
+                tx.rollback().await?;
+                tracing::error!(account = %ids::to_text(account_id), error = %err, "erasing an account failed");
+            }
+        }
+    }
+    Ok(erased)
+}
+
 /// Removes what has expired: sessions, sign-ins never finished, outbox events past the replay
 /// window (48 h, ADR 0005), event socket sessions after 24 h, finished jobs after a week, shop
 /// orders pending for a day (failed, see [`expire_orders`]) and Paddle webhook events after 90
-/// days. Puts staff refunds stuck for an hour back to paid ([`revert_refunds`]). Also refreshes
+/// days. Erases accounts deleted over 30 days ago ([`erase_due_accounts`]). Puts staff refunds
+/// stuck for an hour back to paid ([`revert_refunds`]). Also refreshes
 /// the search ranking and the trending counts. The worker's loop also runs [`cancel_stale_checkouts`] after it.
 pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
     let mut conn = db.acquire().await?;
@@ -414,6 +450,7 @@ pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
     drop(conn);
     let orders_expired = expire_orders(db).await?;
     let refunds_reverted = revert_refunds(db).await?;
+    let accounts_erased = erase_due_accounts(db).await?;
     tracing::info!(
         sessions,
         states,
@@ -424,6 +461,7 @@ pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
         paddle_events,
         orders_expired,
         refunds_reverted,
+        accounts_erased,
         ranked,
         "cleaned up"
     );

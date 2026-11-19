@@ -1,7 +1,8 @@
 <script lang="ts">
   // The profile's rail (7TV's profile side bar, cyex styling), the same on /users/<id> and on the
   // /me pages that belong to it, so managing your emotes never feels like another area. Head:
-  // avatar ringed in the paint, the name in the paint with the badge, public role chips; then the
+  // avatar ringed in the paint, the name in the paint with the badge, public role chips (on your
+  // own profile your hidden roles too, marked "Hidden", which only you see); then the
   // collapsible Connections (everyone's, each linking to the platform), Active on (channel and its set), Editors (yours, or with EDITORS) and Member since; then the sections;
   // "Admin ›" pinned at the bottom for staff on their own profile. Under 900px the head becomes one
   // compact row (avatar, painted name, a disclosure that opens roles, actions, connections and the
@@ -17,7 +18,7 @@
   import { platformName } from '$lib/shell/account';
   import SideRail from '$lib/shell/SideRail.svelte';
   import { isAdmin, session } from '$lib/tool/session.svelte';
-  import { editorsOf, profileOf, type Editor, type PublicProfile } from './data.svelte';
+  import { editorsOf, myRoles, profileOf, type Editor, type PublicProfile } from './data.svelte';
   import { connectionUrl } from './public';
   import { canEditors, canProfile, profileRail, stripExtra, stripTabs, type RailKey, type Relation } from './rows';
 
@@ -48,7 +49,11 @@
 
   let fetched = $state<{ id: string; profile: PublicProfile | null } | null>(null);
   const profile = $derived(given ?? (fetched?.id === account.id ? fetched.profile : null));
-  const roles = $derived(profile?.roles ?? []);
+  // Others see the public roles; you see all of yours, the hidden ones marked.
+  let own = $state<{ id: string; roles: { id: string; name: string; public: boolean }[] } | null>(null);
+  const roles = $derived<{ id: string; name: string; public: boolean }[]>(
+    relation.mine && own?.id === account.id ? own.roles : (profile?.roles ?? []).map((r) => ({ ...r, public: true })),
+  );
   const connections = $derived(profile?.identities ?? []);
   const active = $derived(profile?.activeSets ?? []);
   let editors = $state<Editor[] | null>(null);
@@ -84,6 +89,15 @@
     const r = relation;
     if (canProfile(r)) loadOwned(account.id, r.mine).catch(() => {});
   });
+  $effect(() => {
+    const id = account.id;
+    if (!relation.mine) return;
+    myRoles()
+      .then((list) => {
+        if (id === account.id) own = { id, roles: list };
+      })
+      .catch(() => {});
+  });
 </script>
 
 {#snippet who(size: number)}
@@ -99,7 +113,11 @@
 {#snippet extras()}
   {#if roles.length}
     <ul class="roles" aria-label="Roles">
-      {#each roles as r (r.id)}<li class="role"><bdi>{clean(r.name)}</bdi></li>{/each}
+      {#each roles as r (r.id)}
+        <li class="role" class:hidden={!r.public}>
+          {#if !r.public}<Icon name="eye-off" size={12} />{/if}<bdi>{clean(r.name)}</bdi>{#if !r.public}<span class="hid">Hidden</span>{/if}
+        </li>
+      {/each}
     </ul>
   {/if}
   {#if actions}<div class="acts">{@render actions()}</div>{/if}
@@ -211,6 +229,10 @@
   .roles { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
   .role { display: inline-flex; align-items: center; height: 22px; padding: 0 7px; border-radius: var(--radius);
     background: var(--neutral-chip); color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
+  /* A role only you see: the same neutral chip, with an eye-off icon and "Hidden" after the name. */
+  .role.hidden { gap: 4px; padding-left: 5px; }
+  .role .hid { font-weight: 500; color: var(--dim); }
+  .role .hid::before { content: '·'; margin-right: 4px; }
 
   .acts { display: flex; flex-wrap: wrap; gap: 8px; }
   .head .acts { justify-content: center; }

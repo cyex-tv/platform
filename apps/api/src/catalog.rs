@@ -3,7 +3,8 @@
 //! Who may change a set:
 //! - the global set: holders of `global_set.edit`;
 //! - any other set: its owner, its editors, and the owner's account editors holding the flag the
-//!   change needs (ADR 0014); anyone else needs `sets.edit_any`;
+//!   change needs whose grant covers the set (every set, or a list naming it; ADR 0014); anyone
+//!   else needs `sets.edit_any`;
 //! - deleting a set and managing its editors: its owner, account editors with `sets` (delete) or
 //!   `editors` and `emotes` (set editors), or `sets.edit_any`.
 //!
@@ -32,7 +33,7 @@ use serde_json::json;
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
-use crate::editors::has_flag;
+use crate::editors::{has_flag, has_flag_on_all_sets, has_flag_on_set};
 use crate::errors::{bad, conflict, rate_limited, sqlx_error};
 use crate::moderation::{QUEUE_PAGE, QUEUE_PAGE_MAX};
 use crate::state::AppState;
@@ -78,7 +79,7 @@ pub fn db_error(err: DbError) -> ApiError {
         DbError::UnknownPermission(_) => bad("unknown_permission", "Unknown permission name."),
         DbError::TooManyEditors => conflict(
             "too_many_editors",
-            "An account can have at most 20 editors.",
+            "An account can have at most 50 editors. Remove one to add someone else.",
         ),
         DbError::AlreadyEditor => conflict("already_editor", "They are an editor already."),
         DbError::CosmeticNameTaken => conflict(
@@ -187,7 +188,7 @@ async fn edit_grant(
         return Ok(Grant::Owner);
     }
     if let Some(owner) = set.owner_account_id
-        && has_flag(conn, owner, account, need).await?
+        && has_flag_on_set(conn, owner, account, need, set.id).await?
     {
         return Ok(Grant::AccountEditor(need));
     }
@@ -495,9 +496,14 @@ pub async fn emote_channels(
     let limit = limit.unwrap_or(EMOTE_CHANNELS).clamp(1, EMOTE_CHANNELS_MAX);
     let mut conn = conn(state).await?;
     let rows = reads::emotes(&mut conn, &[id]).await.map_err(db_error)?;
-    let public = rows
-        .first()
-        .is_some_and(|e| e.state == cyex_tv_shared::model::EmoteState::Approved && !e.private);
+    let row = rows
+        .into_iter()
+        .next()
+        .filter(|e| e.state == cyex_tv_shared::model::EmoteState::Approved && !e.private);
+    let public = match row {
+        Some(e) => !crate::moderation::owner_hidden(&mut conn, e.owner).await?,
+        None => false,
+    };
     if !public {
         return Ok(Vec::new());
     }
@@ -551,6 +557,19 @@ pub(crate) async fn may_view(
     caller: Option<&Caller>,
     set: &Set,
 ) -> ApiResult<bool> {
+    // The sets of an account whose deletion is pending are hidden with it (ADR 0019), from
+    // everyone but staff.
+    if let Some(owner) = set.owner_account_id
+        && accounts::get(conn, owner)
+            .await
+            .map_err(db_error)?
+            .is_some_and(|a| a.deleted_at.is_some())
+    {
+        return match caller {
+            Some(c) => holds(conn, c, permissions::SETS_EDIT_ANY).await,
+            None => Ok(false),
+        };
+    }
     if set.visibility != SetVisibility::Private {
         return Ok(true);
     }
@@ -569,10 +588,9 @@ pub(crate) async fn may_view(
         return Ok(true);
     }
     if let Some(owner) = set.owner_account_id
-        && cyex_tv_db::editors::permissions_of(conn, owner, account)
+        && cyex_tv_db::editors::covers_set(conn, owner, account, set.id)
             .await
             .map_err(db_error)?
-            .is_some()
     {
         return Ok(true);
     }
@@ -657,12 +675,14 @@ pub async fn account_profile(
             })
         })
         .collect();
+    let editors = crate::editors::public_editors(&mut conn, id).await?;
     Ok(Some(AccountProfile {
         account: summary,
         identities,
         roles,
         active_sets,
         created_at: views::time(row.created_at),
+        editors,
     }))
 }
 
@@ -880,10 +900,8 @@ pub async fn create_set(
     let mut conn = conn(state).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let by_editor = owner != caller.account_id;
-    if by_editor && !has_flag(&mut tx, owner, caller.account_id, EditorPermission::Sets).await? {
-        return Err(forbidden(
-            "Only the account's owner and its editors with the sets permission can make sets for it.",
-        ));
+    if by_editor {
+        may_make_sets(&mut tx, owner, caller.account_id).await?;
     }
     let set = sets::create_with(&mut tx, owner, &name, input.kind, input.visibility)
         .await
@@ -912,6 +930,22 @@ pub async fn create_set(
     tx.commit().await.map_err(sqlx_error)?;
     drop(conn);
     built(state, caller, set.id).await
+}
+
+/// An account editor making a set for the owner needs `sets` on every set: one limited to some
+/// sets couldn't work on the new one.
+async fn may_make_sets(conn: &mut PgConnection, owner: Uuid, editor: Uuid) -> ApiResult<()> {
+    if has_flag_on_all_sets(conn, owner, editor, EditorPermission::Sets).await? {
+        return Ok(());
+    }
+    if has_flag(conn, owner, editor, EditorPermission::Sets).await? {
+        return Err(forbidden(
+            "You work on some of this account's sets only, so you can't make new ones for it.",
+        ));
+    }
+    Err(forbidden(
+        "Only the account's owner and its editors with the sets permission can make sets for it.",
+    ))
 }
 
 /// Copies a set the caller may open into a new channel set owned by the caller, or by an account
@@ -943,10 +977,8 @@ pub async fn clone_set(
         return Err(not_found());
     }
     let by_editor = owner != caller.account_id;
-    if by_editor && !has_flag(&mut tx, owner, caller.account_id, EditorPermission::Sets).await? {
-        return Err(forbidden(
-            "Only the account's owner and its editors with the sets permission can make sets for it.",
-        ));
+    if by_editor {
+        may_make_sets(&mut tx, owner, caller.account_id).await?;
     }
     let name = match name {
         Some(name) => name,
@@ -1190,6 +1222,12 @@ pub async fn add_set_emote(
         .await
         .map_err(db_error)?
         .ok_or_else(|| db_error(DbError::EmoteUnavailable))?;
+    // An emote of an account whose deletion is pending is hidden with it (ADR 0019).
+    if emote.owner_account_id != Some(caller.account_id)
+        && crate::moderation::owner_hidden(&mut tx, emote.owner_account_id).await?
+    {
+        return Err(db_error(DbError::EmoteUnavailable));
+    }
     // An account editor with `emotes` may use the owner's own private emotes in the owner's sets.
     let owners_own = matches!(grant, Grant::AccountEditor(_))
         && emote.owner_account_id.is_some()
@@ -1409,8 +1447,9 @@ pub async fn remove_set_editor(
     Ok(removed)
 }
 
-/// The channel's owner, or the owner's account editors with `sets` (audited). The active set must
-/// be one of the owner's channel sets; an empty `activeSetId` clears it.
+/// The channel's owner, or the owner's account editors with `channels` (which `sets` brings;
+/// audited). The active set must be one of the owner's channel sets, and one an editor's grant
+/// covers; an empty `activeSetId` clears it.
 pub async fn update_channel_settings(
     state: &AppState,
     caller: &Caller,
@@ -1430,12 +1469,12 @@ pub async fn update_channel_settings(
             &mut tx,
             ch.account_id,
             caller.account_id,
-            EditorPermission::Sets,
+            EditorPermission::Channels,
         )
         .await?
     {
         return Err(forbidden(
-            "Only the channel's owner and its account editors with the sets permission can change it.",
+            "Only the channel's owner and its account editors with the channels permission can change it.",
         ));
     }
     let mut updated = ch.clone();
@@ -1448,6 +1487,20 @@ pub async fn update_channel_settings(
                 return Err(bad(
                     "invalid_active_set",
                     "The active set must be one of the channel owner's channel sets.",
+                ));
+            }
+            if by_editor
+                && !cyex_tv_db::editors::covers_set(
+                    &mut tx,
+                    ch.account_id,
+                    caller.account_id,
+                    set.id,
+                )
+                .await
+                .map_err(db_error)?
+            {
+                return Err(forbidden(
+                    "You can only show sets you work on. Ask the owner to add this one to your sets.",
                 ));
             }
             Some(set.id)

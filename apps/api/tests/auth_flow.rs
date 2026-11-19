@@ -491,11 +491,27 @@ async fn twitch_sign_in_end_to_end() {
         json!([{ "platform": "TWITCH", "platformChannelId": "141981764", "login": "twitch141981764" }])
     );
 
-    // Signing in again reuses the account.
+    // A new account starts with a listed channel set named after it.
+    let sets = h
+        .gql("{ mySets { name kind visibility } }", Some(&session))
+        .await;
+    assert_eq!(
+        sets["data"]["mySets"],
+        json!([{ "name": "Twitch141981764", "kind": "CHANNEL", "visibility": "LISTED" }]),
+        "{sets}"
+    );
+
+    // Signing in again reuses the account, and makes no second default set.
     let again = h.sign_in(Platform::Twitch, "141981764", None, false).await;
     assert_eq!(
         h.me(&again).await["data"]["me"]["id"],
         me["data"]["me"]["id"]
+    );
+    let sets = h.gql("{ mySets { name } }", Some(&again)).await;
+    assert_eq!(
+        sets["data"]["mySets"].as_array().map(Vec::len),
+        Some(1),
+        "{sets}"
     );
     h.db.close().await;
 }
@@ -591,6 +607,14 @@ async fn linking_both_platforms_to_one_account() {
     // Signing in with Kick now lands on the same account.
     let via_kick = h.sign_in(Platform::Kick, "2002", None, false).await;
     assert_eq!(h.me(&via_kick).await["data"]["me"]["id"], account);
+
+    // Linking adds no second default set.
+    let sets = h.gql("{ mySets { name } }", Some(&via_kick)).await;
+    assert_eq!(
+        sets["data"]["mySets"].as_array().map(Vec::len),
+        Some(1),
+        "{sets}"
+    );
 
     // Linking Kick again with a different Kick user: one Kick per account.
     let reply = h
@@ -1096,5 +1120,187 @@ async fn permissions_come_from_roles() {
     // The permission passes, and the (empty) queue comes back.
     let reply = h.gql("{ reviewQueue { total } }", Some(&s)).await;
     assert_eq!(reply["data"]["reviewQueue"]["total"], 0, "{reply}");
+    h.db.close().await;
+}
+
+// The 30-day undo window (ADR 0019)
+
+const DELETE_ME: &str = r#"mutation { deleteAccount(confirm: "twitch9601") }"#;
+const PENDING: &str = "{ pendingDeletion { requestedAt eraseAfter displayName } }";
+
+#[tokio::test]
+async fn a_deleted_account_can_be_restored_within_30_days() {
+    let Some(h) = Harness::new().await else {
+        return;
+    };
+    let s = h.sign_in(Platform::Twitch, "9601", None, false).await;
+    let id = h.me(&s).await["data"]["me"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // A normal session has nothing pending.
+    assert!(h.gql(PENDING, Some(&s)).await["data"]["pendingDeletion"].is_null());
+    let r = h.gql(DELETE_ME, Some(&s)).await;
+    assert_eq!(r["data"]["deleteAccount"], true, "{r}");
+    // Signed out at once, and hidden.
+    assert_eq!(gql_code(&h.me(&s).await), "signed_out");
+    assert!(h.gql(PENDING, Some(&s)).await["data"]["pendingDeletion"].is_null());
+    let r = h
+        .gql(
+            &format!(r#"{{ accountProfile(accountId: "{id}") {{ account {{ id }} }} }}"#),
+            None,
+        )
+        .await;
+    assert!(r["data"]["accountProfile"].is_null(), "{r}");
+
+    // Signing in again lands on the restore page, with a session that can only restore.
+    let reply = h.sign_in_reply(Platform::Twitch, "9601", None, false).await;
+    assert_eq!(reply.status, StatusCode::FOUND, "{:?}", reply.body);
+    assert_eq!(reply.location().path(), "/restore");
+    let r_cookie = reply.cookie("cyex_tv_session").expect("session cookie");
+    assert_eq!(gql_code(&h.me(&r_cookie).await), "signed_out");
+    let r = h.gql("mutation { exportMyData }", Some(&r_cookie)).await;
+    assert_eq!(gql_code(&r), "signed_out", "{r}");
+    let r = h.gql(DELETE_ME, Some(&r_cookie)).await;
+    assert_eq!(gql_code(&r), "signed_out", "{r}");
+    let r = h.gql(PENDING, Some(&r_cookie)).await;
+    let pending = &r["data"]["pendingDeletion"];
+    assert_eq!(pending["displayName"], "Twitch9601", "{r}");
+    assert!(pending["eraseAfter"].as_str().unwrap() > pending["requestedAt"].as_str().unwrap());
+    // Without that cookie nothing restores.
+    let r = h.gql("mutation { restoreAccount }", None).await;
+    assert_eq!(gql_code(&r), "signed_out", "{r}");
+
+    let r = h.gql("mutation { restoreAccount }", Some(&r_cookie)).await;
+    assert_eq!(r["data"]["restoreAccount"], true, "{r}");
+    assert_eq!(h.me(&r_cookie).await["data"]["me"]["id"], id.as_str());
+    let r = h
+        .gql(
+            &format!(r#"{{ accountProfile(accountId: "{id}") {{ account {{ id }} }} }}"#),
+            None,
+        )
+        .await;
+    assert_eq!(
+        r["data"]["accountProfile"]["account"]["id"],
+        id.as_str(),
+        "{r}"
+    );
+    let mut conn = h.db.conn().await;
+    let (deleted, erase): (
+        Option<chrono::DateTime<chrono::Utc>>,
+        Option<chrono::DateTime<chrono::Utc>>,
+    ) = sqlx::query_as("SELECT deleted_at, erase_after FROM accounts")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert!(deleted.is_none() && erase.is_none());
+    let actions: Vec<String> =
+        sqlx::query_scalar("SELECT action FROM audit_log ORDER BY created_at, id")
+            .fetch_all(&mut *conn)
+            .await
+            .unwrap();
+    assert!(
+        actions.contains(&"account.deletion_scheduled".to_owned()),
+        "{actions:?}"
+    );
+    assert!(
+        actions.contains(&"account.restored".to_owned()),
+        "{actions:?}"
+    );
+    drop(conn);
+    // Restoring twice: the session is a normal one now, with nothing to restore.
+    let r = h.gql("mutation { restoreAccount }", Some(&r_cookie)).await;
+    assert_eq!(gql_code(&r), "signed_out", "{r}");
+    h.db.close().await;
+}
+
+#[tokio::test]
+async fn past_the_window_or_blocked_there_is_nothing_to_restore() {
+    let Some(h) = Harness::new().await else {
+        return;
+    };
+    let s = h.sign_in(Platform::Twitch, "9601", None, false).await;
+    let r = h.gql(DELETE_ME, Some(&s)).await;
+    assert_eq!(r["data"]["deleteAccount"], true, "{r}");
+
+    // Blocked while pending: signing in is refused, as for any blocked account.
+    h.sql("UPDATE accounts SET blocked_at = now()").await;
+    let reply = h.sign_in_reply(Platform::Twitch, "9601", None, false).await;
+    assert_eq!(reply.status, StatusCode::FORBIDDEN);
+    assert_eq!(reply.code(), "account_blocked");
+    h.sql("UPDATE accounts SET blocked_at = NULL").await;
+
+    // A session made inside the window stops restoring once it has passed.
+    let r_cookie = h.sign_in(Platform::Twitch, "9601", None, false).await;
+    h.sql("UPDATE accounts SET erase_after = now() - interval '1 minute'")
+        .await;
+    assert!(h.gql(PENDING, Some(&r_cookie)).await["data"]["pendingDeletion"].is_null());
+    let r = h.gql("mutation { restoreAccount }", Some(&r_cookie)).await;
+    assert_eq!(gql_code(&r), "signed_out", "{r}");
+    // And signing in again is refused like a deleted account.
+    let reply = h.sign_in_reply(Platform::Twitch, "9601", None, false).await;
+    assert_eq!(reply.status, StatusCode::FORBIDDEN);
+    assert_eq!(reply.code(), "account_deleted");
+    h.db.close().await;
+}
+
+#[tokio::test]
+async fn a_restriction_survives_the_window_and_the_erase() {
+    let Some(h) = Harness::new().await else {
+        return;
+    };
+    let s = h.sign_in(Platform::Twitch, "9601", None, false).await;
+    let r = h.gql(DELETE_ME, Some(&s)).await;
+    assert_eq!(r["data"]["deleteAccount"], true, "{r}");
+    // Staff restrict it while it is pending: restoring keeps the restriction.
+    h.sql("UPDATE accounts SET restricted_at = now()").await;
+    let r_cookie = h.sign_in(Platform::Twitch, "9601", None, false).await;
+    let r = h.gql("mutation { restoreAccount }", Some(&r_cookie)).await;
+    assert_eq!(r["data"]["restoreAccount"], true, "{r}");
+    let mut conn = h.db.conn().await;
+    let restricted: bool = sqlx::query_scalar("SELECT restricted_at IS NOT NULL FROM accounts")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    assert!(restricted);
+    drop(conn);
+    // A restricted account can't delete itself.
+    let r = h.gql(DELETE_ME, Some(&r_cookie)).await;
+    assert_eq!(gql_code(&r), "restricted", "{r}");
+
+    // Restricted after the deletion and then erased: the identity keeps a hold, and the next
+    // account made with it is restricted too.
+    h.sql("UPDATE accounts SET restricted_at = NULL").await;
+    let r = h.gql(DELETE_ME, Some(&r_cookie)).await;
+    assert_eq!(r["data"]["deleteAccount"], true, "{r}");
+    h.sql("UPDATE accounts SET restricted_at = now()").await;
+    let mut conn = h.db.conn().await;
+    let old: uuid::Uuid = sqlx::query_scalar("SELECT id FROM accounts")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    let mut tx = sqlx::Connection::begin(&mut *conn).await.unwrap();
+    cyex_tv_db::privacy::erase_account(&mut tx, old)
+        .await
+        .unwrap();
+    tx.commit().await.unwrap();
+    drop(conn);
+    let fresh = h.sign_in(Platform::Twitch, "9601", None, false).await;
+    let fresh_id = h.me(&fresh).await["data"]["me"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_ne!(fresh_id, cyex_tv_db::ids::to_text(old));
+    let mut conn = h.db.conn().await;
+    let restricted: bool = sqlx::query_scalar(
+        "SELECT a.restricted_at IS NOT NULL FROM accounts a
+           JOIN identities i ON i.account_id = a.id
+          WHERE i.platform = 'twitch' AND i.platform_user_id = '9601'",
+    )
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    assert!(restricted, "the hold applied");
+    drop(conn);
     h.db.close().await;
 }

@@ -26,6 +26,7 @@ pub struct MemberRow {
     /// The emote's own zero-width flag; `zero_width` is the set's.
     pub emote_zero_width: bool,
     pub private: bool,
+    pub unlisted: bool,
     pub nsfw: bool,
     pub animated: bool,
     pub state: EmoteState,
@@ -42,6 +43,7 @@ pub struct EmoteRow {
     pub name: String,
     pub zero_width: bool,
     pub private: bool,
+    pub unlisted: bool,
     pub nsfw: bool,
     pub animated: bool,
     pub state: EmoteState,
@@ -59,6 +61,7 @@ impl MemberRow {
             name: self.emote_name.clone(),
             zero_width: self.emote_zero_width,
             private: self.private,
+            unlisted: self.unlisted,
             nsfw: self.nsfw,
             animated: self.animated,
             state: self.state,
@@ -70,7 +73,7 @@ impl MemberRow {
 }
 
 const EMOTE_ROW: &str = "SELECT e.id, e.owner_account_id AS owner, e.name, e.zero_width, e.private,
-            e.nsfw, e.animated, e.state, e.created_at, f.sha256, f.variants
+            e.unlisted, e.nsfw, e.animated, e.state, e.created_at, f.sha256, f.variants
      FROM emotes e
      LEFT JOIN files f ON f.id = e.file_id";
 
@@ -137,7 +140,7 @@ macro_rules! member_columns {
     () => {
         "m.set_id, m.emote_id, m.name, m.zero_width, m.added_by, m.added_at,
                 e.owner_account_id AS emote_owner, e.name AS emote_name,
-                e.zero_width AS emote_zero_width, e.private, e.nsfw,
+                e.zero_width AS emote_zero_width, e.private, e.unlisted, e.nsfw,
                 e.animated, e.state, e.created_at AS emote_created_at,
                 f.sha256, f.variants"
     };

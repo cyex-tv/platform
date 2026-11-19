@@ -11,8 +11,8 @@ use cyex_tv_db::reads::{self, EmoteRow, MemberRow, Summary};
 use cyex_tv_db::sets::Set;
 use cyex_tv_db::{DbResult, channels, editors, ids, sets};
 use cyex_tv_shared::model::{
-    AccountSummary, Channel, Emote, EmoteFile, EmoteFlags, EmoteSet, EmoteState, SetEmote,
-    SetSummary, SetVisibility,
+    AccountSummary, Channel, Emote, EmoteFile, EmoteFlags, EmoteSet, EmoteState, EmoteVisibility,
+    SetEmote, SetSummary, SetVisibility,
 };
 use sqlx::PgConnection;
 use uuid::Uuid;
@@ -84,6 +84,7 @@ fn emote(
             nsfw: row.nsfw,
             wide: is_wide(&files),
         },
+        visibility: EmoteVisibility::of(row.private, row.unlisted),
         animated: row.animated,
         tags: tags.get(&row.id).cloned().unwrap_or_default(),
         host: row
@@ -153,14 +154,16 @@ async fn editable(
     Ok(out)
 }
 
-/// An account editor of the set's owner who works on sets (`emotes` or `sets`, ADR 0014).
+/// An account editor of the set's owner who works on sets (`emotes` or `sets`, ADR 0014) and
+/// whose grant covers this one.
 async fn account_editor(conn: &mut PgConnection, set: &Set, account: Uuid) -> DbResult<bool> {
     let Some(owner) = set.owner_account_id else {
         return Ok(false);
     };
-    Ok(editors::permissions_of(conn, owner, account)
+    let works_on_sets = editors::permissions_of(conn, owner, account)
         .await?
-        .is_some_and(|flags| flags.iter().any(|f| f == "emotes" || f == "sets")))
+        .is_some_and(|flags| flags.iter().any(|f| f == "emotes" || f == "sets"));
+    Ok(works_on_sets && editors::covers_set(conn, owner, account, set.id).await?)
 }
 
 fn set_emote(
