@@ -7,7 +7,8 @@ use cyex_tv_db::search::{ACCOUNT_QUERY_MIN, EmoteSearch, PgSearch, Query};
 use cyex_tv_db::{ids, reads};
 use cyex_tv_shared::error::ApiResult;
 use cyex_tv_shared::model::{
-    AccountHit, AccountResults, AccountSummary, EmoteSort, PublicIdentity, SearchResults,
+    AccountHit, AccountResults, AccountSummary, EmoteFlag, EmoteSort, EmoteTrending,
+    PublicIdentity, SearchResults, TrendingWindow,
 };
 
 use crate::catalog::db_error;
@@ -18,6 +19,8 @@ use crate::views;
 
 pub const PER_PAGE: u32 = 50;
 pub const PER_PAGE_MAX: u32 = 100;
+/// `emoteTrending` ranks the top this many emotes.
+pub const TRENDING_TOP: i64 = 100;
 
 #[derive(Clone, Debug, Default)]
 pub struct Params<'a> {
@@ -25,6 +28,10 @@ pub struct Params<'a> {
     pub animated: Option<bool>,
     pub owner: Option<&'a str>,
     pub nsfw: bool,
+    pub flags: &'a [EmoteFlag],
+    pub tags: &'a [String],
+    pub exact: bool,
+    pub window: TrendingWindow,
     pub sort: EmoteSort,
     pub page: Option<u32>,
     pub per_page: Option<u32>,
@@ -131,6 +138,10 @@ pub async fn search(state: &AppState, p: &Params<'_>) -> ApiResult<SearchResults
             animated: p.animated,
             owner,
             nsfw: p.nsfw,
+            flags: p.flags,
+            tags: p.tags,
+            exact: p.exact,
+            window: p.window,
             sort: p.sort,
             limit: i64::from(per_page),
             offset: i64::from(page - 1) * i64::from(per_page),
@@ -153,4 +164,26 @@ pub async fn search(state: &AppState, p: &Params<'_>) -> ApiResult<SearchResults
         page,
         per_page,
     })
+}
+
+/// `emoteTrending`: where the emote stands among the top 100 of the `TRENDING` sort in `window`.
+/// Null when the ID isn't one, the emote isn't approved and listed, or it is not in the top 100.
+pub async fn trending(
+    state: &AppState,
+    id: &str,
+    window: Option<TrendingWindow>,
+) -> ApiResult<Option<EmoteTrending>> {
+    let window = window.unwrap_or_default();
+    let Some(id) = ids::from_text(id.trim()) else {
+        return Ok(None);
+    };
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let found = cyex_tv_db::search::trending_rank(&mut conn, id, window.days(), TRENDING_TOP)
+        .await
+        .map_err(db_error)?;
+    Ok(found.map(|(rank, net)| EmoteTrending {
+        rank: u32::try_from(rank).unwrap_or(u32::MAX),
+        channels: u32::try_from(net).unwrap_or(u32::MAX),
+        window,
+    }))
 }

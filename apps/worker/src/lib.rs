@@ -390,11 +390,14 @@ pub async fn cancel_stale_checkouts(
 /// window (48 h, ADR 0005), event socket sessions after 24 h, finished jobs after a week, shop
 /// orders pending for a day (failed, see [`expire_orders`]) and Paddle webhook events after 90
 /// days. Puts staff refunds stuck for an hour back to paid ([`revert_refunds`]). Also refreshes
-/// the search ranking. The worker's loop also runs [`cancel_stale_checkouts`] after it.
+/// the search ranking and the trending counts. The worker's loop also runs [`cancel_stale_checkouts`] after it.
 pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
     let mut conn = db.acquire().await?;
     let sessions = sessions::delete_expired(&mut conn).await?;
     let states = oauth_states::delete_expired(&mut conn).await?;
+    // Trending (ADR 0004): count channel adds from the outbox first, then it may be pruned. A
+    // failure stops here, so nothing is pruned before it is counted.
+    let trending = search::rollup_channel_adds(&mut conn).await?;
     let events =
         outbox::delete_older_than(&mut conn, Utc::now() - chrono::Duration::hours(48)).await?;
     let done = jobs::delete_done_before(&mut conn, Utc::now() - chrono::Duration::days(7)).await?;
@@ -414,6 +417,7 @@ pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
     tracing::info!(
         sessions,
         states,
+        trending,
         events,
         done,
         sockets,

@@ -57,6 +57,14 @@ fn files(variants: Option<&serde_json::Value>) -> Vec<EmoteFile> {
     }
 }
 
+/// The 1x file is at least 1.75 times as wide as it is tall.
+fn is_wide(files: &[EmoteFile]) -> bool {
+    files
+        .iter()
+        .find(|f| f.name == "1x.webp")
+        .is_some_and(|f| u32::from(f.width) * 4 >= u32::from(f.height) * 7)
+}
+
 fn emote(
     row: &EmoteRow,
     tags: &HashMap<Uuid, Vec<String>>,
@@ -64,6 +72,7 @@ fn emote(
     counts: &HashMap<Uuid, u32>,
     cdn_url: &str,
 ) -> Emote {
+    let files = files(row.variants.as_ref());
     Emote {
         id: ids::to_text(row.id),
         name: row.name.clone(),
@@ -73,6 +82,7 @@ fn emote(
             zero_width: row.zero_width,
             private: row.private,
             nsfw: row.nsfw,
+            wide: is_wide(&files),
         },
         animated: row.animated,
         tags: tags.get(&row.id).cloned().unwrap_or_default(),
@@ -81,7 +91,7 @@ fn emote(
             .as_deref()
             .map(|sha| format!("{cdn_url}/emotes/{}", hex(sha)))
             .unwrap_or_default(),
-        files: files(row.variants.as_ref()),
+        files,
         created_at: time(row.created_at),
         channel_count: counts.get(&row.id).copied().unwrap_or(0),
     }

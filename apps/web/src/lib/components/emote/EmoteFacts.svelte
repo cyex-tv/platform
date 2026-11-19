@@ -1,12 +1,12 @@
 <script lang="ts">
   // The facts row: type, formats, size at 1x, frames (when known), added date, file sizes and,
-  // once the API sends it, how many channels use it.
+  // once the API sends it, how many channels use it (and, when it is trending, how many added it this week).
   import { size } from '$lib/emote';
   import { bytes, count, date } from '$lib/format';
   import { formats, kind, scaleFiles, type PageEmote } from './emote-page';
 
-  type Props = { emote: PageEmote; channels?: number | null; frames?: number | null };
-  let { emote: e, channels = null, frames = null }: Props = $props();
+  type Props = { emote: PageEmote; channels?: number | null; frames?: number | null; addedThisWeek?: number | null };
+  let { emote: e, channels = null, frames = null, addedThisWeek = null }: Props = $props();
 
   const one = $derived(size(e));
   const files = $derived(scaleFiles(e.files));
@@ -18,7 +18,10 @@
   <h2 id="facts-h" class="sr-only">Facts</h2>
   <dl class="facts">
     {#if channels !== null}
-      <div class="wide-fact"><dt>Channels using it</dt><dd class="figure">{count(channels)}</dd></div>
+      <div class={addedThisWeek === null ? 'wide-fact' : ''}><dt>Channels using it</dt><dd class="figure">{count(channels)}</dd></div>
+    {/if}
+    {#if addedThisWeek !== null}
+      <div class={channels === null ? 'wide-fact' : ''}><dt>Added in the last 7 days</dt><dd class="figure">{count(addedThisWeek)}</dd></div>
     {/if}
     <div><dt>Type</dt><dd>{kind(e)}</dd></div>
     {#if kinds.length}<div><dt>{kinds.length > 1 ? 'Formats' : 'Format'}</dt><dd>{kinds.join(', ')}</dd></div>{/if}

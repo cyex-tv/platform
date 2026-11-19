@@ -5,7 +5,8 @@
   import Icon, { type IconName } from '$lib/components/Icon.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { looks, NO_LOOK, wantLooks, type Catalog } from '$lib/cosmetics/store.svelte';
-  import { ready, src, srcset } from '$lib/emote';
+  import EmotePicture from '$lib/components/EmotePicture.svelte';
+  import { ready } from '$lib/emote';
   import { clean } from '$lib/format';
   import { relative, type ActivityItem, type ActivityKind } from './activity';
 
@@ -23,7 +24,7 @@
 {#snippet emote(i: ActivityItem)}
   {#if i.emote}
     <strong><bdi>{clean(i.emote.name)}</bdi></strong>
-    {#if pictures && ready(i.emote.picture)}<img class="pic" src={src(i.emote.picture, 1)} srcset={srcset(i.emote.picture)} alt="" loading="lazy" />{/if}
+    {#if pictures && ready(i.emote.picture)}<EmotePicture emote={i.emote.picture} class="pic" />{/if}
   {/if}
 {/snippet}
 {#snippet setName(i: ActivityItem)}
@@ -72,7 +73,7 @@
   .line { font-size: var(--t-ui); line-height: 28px; overflow-wrap: anywhere; color: var(--muted); }
   .line strong { font-weight: 600; color: var(--text); }
   .line a { color: var(--text); font-weight: 500; text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
-  .pic { display: inline-block; height: 28px; width: auto; max-width: 64px; margin: 0 2px; vertical-align: middle; }
+  li :global(.pic) { display: inline-block; height: 28px; width: auto; max-width: 64px; margin: 0 2px; vertical-align: middle; }
   time { font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
   @media (hover: hover) and (pointer: fine) { .line a:hover { text-decoration-color: currentColor; } }
 </style>

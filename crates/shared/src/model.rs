@@ -271,6 +271,9 @@ pub struct EmoteFlags {
     /// Only its owner can add it to sets.
     pub private: bool,
     pub nsfw: bool,
+    /// About twice as wide as tall or more: the 1x file is at least 1.75 times as wide as it is
+    /// tall. Derived from the files, not set by the uploader.
+    pub wide: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -606,6 +609,57 @@ pub enum EmoteSort {
     Top,
     /// The newest first.
     New,
+    /// Most channels added it in the `window` (net of removals), then the most used.
+    Trending,
+}
+
+/// A flag `searchEmotes` can require.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "snake_case")]
+pub enum EmoteFlag {
+    /// Overlays the emote before it.
+    ZeroWidth,
+    /// About twice as wide as tall or more.
+    Wide,
+    /// Only NSFW emotes (they are listed even without `nsfw: true`).
+    Nsfw,
+}
+
+/// How far back `TRENDING` counts channel adds.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "lowercase")]
+pub enum TrendingWindow {
+    /// The last day.
+    Day,
+    /// The last 7 days. The default.
+    #[default]
+    Week,
+    /// The last 30 days.
+    Month,
+}
+
+impl TrendingWindow {
+    pub fn days(self) -> i32 {
+        match self {
+            Self::Day => 1,
+            Self::Week => 7,
+            Self::Month => 30,
+        }
+    }
+}
+
+/// Where an emote stands among the trending ones.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct EmoteTrending {
+    /// 1 is the most added emote in the window.
+    pub rank: u32,
+    /// Channels that added it in the window, net of removals.
+    pub channels: u32,
+    /// The window the rank is in.
+    pub window: TrendingWindow,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]

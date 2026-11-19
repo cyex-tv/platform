@@ -1,5 +1,5 @@
 import { ApiError, gql } from '$lib/api';
-import { apiQuery, apiSort, PER_PAGE, parse, USERS_PER_PAGE } from '$lib/components/browse/params';
+import { apiVars, PER_PAGE, parse, USERS_PER_PAGE } from '$lib/components/browse/params';
 import { SEARCH, SEARCH_ACCOUNTS } from '$lib/queries';
 import type { Browse } from '$lib/components/browse/params';
 import type { FindPeopleQuery } from '$lib/gql/graphql';
@@ -28,18 +28,7 @@ export const load: PageLoad = async ({ fetch, url }) => {
   const view = parse(url.searchParams);
   if (view.tab === 'users') return loadUsers(view, fetch);
   const ask = (page: number) =>
-    gql(
-      SEARCH,
-      {
-        query: apiQuery(view),
-        animated: view.kind === 'animated' ? true : view.kind === 'still' ? false : null,
-        nsfw: view.nsfw ? true : null,
-        sort: apiSort(view.sort),
-        page,
-        perPage: PER_PAGE,
-      },
-      fetch,
-    ).then((r) => r.searchEmotes);
+    gql(SEARCH, apiVars(view, page), fetch).then((r) => r.searchEmotes);
   try {
     // A shared link with n=3 renders three pages at once, so the view matches.
     const first = await ask(1);
