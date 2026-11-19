@@ -126,13 +126,10 @@
             {/if}
             {#if mode === 'gift'}
               <div class="gift">
-                <label class="ui-field">
+                <div class="ui-field">
                   <span class="ui-label">Platform</span>
-                  <select class="ui-input" bind:value={platform}>
-                    <option value="TWITCH">Twitch</option>
-                    <option value="KICK">Kick</option>
-                  </select>
-                </label>
+                  <Segmented label="Their platform" size="s" options={[{ value: 'TWITCH', label: 'Twitch', icon: 'twitch' }, { value: 'KICK', label: 'Kick', icon: 'kick' }]} value={platform} onchange={(v) => (platform = v)} />
+                </div>
                 <label class="ui-field">
                   <span class="ui-label">Their login</span>
                   <input class="ui-input" bind:this={loginInput} bind:value={login} maxlength="64" autocomplete="off" autocapitalize="off" spellcheck="false"
@@ -171,7 +168,6 @@
   .own { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; color: var(--text); }
   .own :global(svg) { color: var(--accent-text); }
   .who { display: grid; gap: 12px; justify-items: start; }
-  .gift { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 12px; width: 100%; align-items: start; }
+  .gift { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; width: 100%; align-items: start; }
   .problem { margin: 0; font-size: var(--t-small); color: var(--red); }
-  @media (max-width: 520px) { .gift { grid-template-columns: minmax(0, 1fr); } }
 </style>

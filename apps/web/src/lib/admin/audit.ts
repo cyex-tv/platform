@@ -79,3 +79,8 @@ export function dayAfter(day: string): string | null {
 
 /** Accepts an account's ID: 26 characters of Crockford base32. */
 export const looksLikeId = (s: string) => /^[0-9A-HJKMNP-TV-Z]{26}$/i.test(s.trim());
+
+/** A `YYYY-MM-DD` day in the cyex format, `2026/11/20`; nothing for anything else. */
+export function dayLabel(day: string): string {
+  return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day.replaceAll('-', '/') : '';
+}

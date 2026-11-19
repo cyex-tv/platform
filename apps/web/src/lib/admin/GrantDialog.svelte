@@ -7,7 +7,7 @@
   import type { CosmeticKind, Platform } from '$lib/gql/graphql';
   import { iso } from '$lib/format';
   import { GRANT_COSMETIC, USER } from '$lib/queries';
-  import { fail, notify } from '$lib/tool/notices.svelte';
+  import { notify } from '$lib/tool/notices.svelte';
 
   type Choice = { id: string; name: string };
   type Props = {
@@ -65,7 +65,7 @@
       notify(`${iso(what.name)} given to ${iso(to.displayName)}.`);
       ongranted?.();
     } catch (err) {
-      fail(err);
+      problem = err instanceof Error ? err.message : 'That didn’t work.';
     } finally {
       busy = false;
     }
