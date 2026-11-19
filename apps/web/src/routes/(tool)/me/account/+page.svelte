@@ -1,5 +1,6 @@
 <script lang="ts">
   import { gql, linkUrl } from '$lib/api';
+  import { unlinkMessage } from '$lib/account/errors';
   import DataPanel from '$lib/account/DataPanel.svelte';
   import DeleteAccount from '$lib/account/DeleteAccount.svelte';
   import SessionsPanel from '$lib/account/SessionsPanel.svelte';
@@ -11,7 +12,7 @@
   import Avatar from '$lib/components/Avatar.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
   import { loadMe, session } from '$lib/tool/session.svelte';
-  import { fail, notify } from '$lib/tool/notices.svelte';
+  import { notify } from '$lib/tool/notices.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
 
   const PLATFORMS: { id: Platform; name: string; slug: 'twitch' | 'kick' }[] = [
@@ -27,7 +28,7 @@
       await loadMe({ fresh: true });
       notify(`${name} unlinked.`);
     } catch (err) {
-      fail(err);
+      notify(unlinkMessage(err), true);
     }
   }
 </script>
