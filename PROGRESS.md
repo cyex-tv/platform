@@ -13,13 +13,14 @@ Known fixes, each with a test that fails before and passes after:
 - [x] Sessions: Last seen as `2026/11/17 23:40`, relative on hover. CDP `screens/final/fixes.mjs`.
 - [x] One TagInput (there was only one component), now with one cleaning rule: /search used its own (spaces to `_`, only a-z, 0-9, `_`), so a tag like `pepe-the-frog` or `猫ダンス` could never be searched for. The browse filters and the URL use `lib/rules` `cleanTag`, and the API's search accepts every tag an upload may carry (1 to 32 letters, digits, `-`, `_`; additive, it only accepts more). Vitest `tag-input.single.test.ts`; Rust unit test in `crates/db/src/search.rs`.
 
-Harmony sweep (`screens/final/sweep.mjs`, contact sheets in `screens/final/sheets/`): every route at 375 and 1440, dark and light, plus 2560 dark for the main pages. Fixed: date and time on the admin account panels, holders, reports and shop orders; roles positions in cyex numbers; one button size in the profile band; the channel page's count line; the cosmetics chat sample's colon; the help answer on cost (now mentions the shop and codes); a Svelte dev warning in the admin names lookup. Checked in `screens/final/harmony-fixes.mjs`.
+Harmony sweep (`screens/final/sweep.mjs`, contact sheets in `screens/final/sheets/`): every route at 375 and 1440, dark and light, plus 2560 dark for the main pages. Fixed: date and time on the admin account panels, holders, reports and shop orders; roles positions in cyex numbers; one button size in the profile band; the channel page's count line; the cosmetics chat sample's colon; the help answer on cost (now mentions the shop and codes); a Svelte dev warning in the admin names lookup. Checked in `screens/final/harmony-fixes.mjs`. Infra: cyex-tv/infra #8 passes PUBLIC_API_URL and PUBLIC_CDN_URL to the web image build.
 
 ### GitHub write log for this PR
 
 ```
 git push -u origin fix/final-pass
 gh pr create --base main --head fix/final-pass --title "Final pass: toasts, tiles, edit page, profile facts, sessions, tags, harmony" --body-file <file>
+gh pr merge 99 --merge
 ```
 
 ## Admin: review queue, owners lookup, studio library previews (branch `feat/admin-queue`, owner feedback 2026/11/19 section J)
