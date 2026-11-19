@@ -34,7 +34,7 @@ getrandom = "0.3"
 hmac = "0.12"
 http-body-util = "0.1"
 # Decoding only here; encoders come with the transcoder.
-image = { version = "0.25", default-features = false, features = ["gif", "png", "webp"] }
+image = { version = "0.25", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
 ravif = { version = "0.13", default-features = false, features = ["threading"] }
 reqwest = { version = "0.13", default-features = false, features = ["form", "http2", "json", "query", "rustls-no-provider"] }
 # The ring provider, not aws-lc: aws-lc-sys carries the OpenSSL licence, which ADR 0007 doesn't allow.
