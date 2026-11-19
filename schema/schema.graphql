@@ -692,6 +692,11 @@ type Emote {
 	owner: AccountSummary
 	state: EmoteState!
 	flags: EmoteFlags!
+	"""
+	`PUBLIC`, `UNLISTED` or `PRIVATE` (ADR 0020). `flags.private` says the same for
+	`PRIVATE`, for clients from before `UNLISTED`.
+	"""
+	visibility: EmoteVisibility!
 	animated: Boolean!
 	tags: [String!]!
 	"""
@@ -734,7 +739,7 @@ type EmoteFile {
 type EmoteFlags {
 	zeroWidth: Boolean!
 	"""
-	Only its owner can add it to sets.
+	Only its owner can add it to sets. True exactly when `visibility` is `PRIVATE`.
 	"""
 	private: Boolean!
 	nsfw: Boolean!
@@ -795,6 +800,25 @@ enum EmoteState {
 	APPROVED
 	REJECTED
 	TAKEN_DOWN
+}
+
+"""
+Who can find an emote and add it to sets (ADR 0020).
+"""
+enum EmoteVisibility {
+	"""
+	Found by search and browse, listed on its creator's page. New emotes start here.
+	"""
+	PUBLIC
+	"""
+	Anyone with its link can open it and add it to sets; search, browse, activity feeds and
+	its creator's page leave it out for everyone but its owner.
+	"""
+	UNLISTED
+	"""
+	Only its owner can add it to sets, and it is left out of listings (`flags.private`).
+	"""
+	PRIVATE
 }
 
 """
@@ -1025,6 +1049,11 @@ type Me {
 	"""
 	permissions: [String!]!
 	createdAt: String!
+	"""
+	Every role the account holds, public or not, most senior first. Only you see the ones
+	that aren't public: your profile marks them hidden; others see `AccountProfile.roles`.
+	"""
+	roles: [OwnRole!]!
 }
 
 type Mutation {
@@ -1267,15 +1296,25 @@ type Mutation {
 	"""
 	exportMyData: String!
 	"""
-	Delete your account now. `confirm` is one of your Twitch or Kick logins. Website only
+	Delete your account. `confirm` is one of your Twitch or Kick logins. Website only
 	(`website_only` with an app token); the owner's account can't be (`owner_protected`).
-	Your sessions, identities, channels, sets, editor grants, cosmetics and notifications go;
-	your approved emotes that are in other people's sets stay, shown as by a deleted user;
-	your other emotes are deleted. Signing in again later makes a new account. Audited.
+	The account is hidden at once (profile, sets, emotes and channels read as gone, every
+	session ends, the cookie is cleared) and erased for good 30 days later: then your
+	identities, channels, sets, editor grants, cosmetics and notifications go, your approved
+	emotes that are in other people's sets stay, shown as by a deleted user, and your other
+	emotes are deleted. Signing in again before then offers to undo it (`pendingDeletion`,
+	`restoreAccount`); after it, signing in makes a new account. Audited.
 	`confirm_mismatch` when `confirm` isn't one of your logins; `restricted` while the account's
 	uploads or sign-in are blocked. 3 tries an hour (`rate_limited`).
 	"""
 	deleteAccount(confirm: String!): Boolean!
+	"""
+	Undo `deleteAccount` within 30 days, signed in with the cookie that signing in to the
+	deleted account gave (the website's restore page). Everything shows again and the session
+	works as before. `signed_out` without such a session; `nothing_to_restore` when the window
+	has passed. Audited.
+	"""
+	restoreAccount: Boolean!
 	"""
 	Create a role. You can only grant permissions you hold. Needs `roles.manage`. Audited.
 	"""
@@ -1394,6 +1433,18 @@ enum OrderStatus {
 	taken).
 	"""
 	FAILED
+}
+
+"""
+One of your own roles, as `me.roles` lists it.
+"""
+type OwnRole {
+	id: String!
+	name: String!
+	"""
+	Shown on your public profile. When false, only you see it.
+	"""
+	public: Boolean!
 }
 
 """
@@ -1589,6 +1640,25 @@ input PaintStopInput {
 	color: String!
 }
 
+"""
+A deleted account that can still be restored (ADR 0019), for the page signing in to it opens.
+"""
+type PendingDeletion {
+	"""
+	When `deleteAccount` was called.
+	"""
+	requestedAt: String!
+	"""
+	When it will be erased for good, unless restored first.
+	"""
+	eraseAfter: String!
+	"""
+	The name and avatar it showed, Twitch first.
+	"""
+	displayName: String
+	avatar: String
+}
+
 type PersonalSetEntry {
 	platformUserId: String!
 	set: EmoteSet!
@@ -1624,6 +1694,12 @@ type Query {
 	The signed-in account.
 	"""
 	me: Me!
+	"""
+	The deletion you can still undo: set only for the cookie session that signing in to a
+	deleted account within its 30 days gave (`restoreAccount` undoes it). Null otherwise,
+	including for every normal session.
+	"""
+	pendingDeletion: PendingDeletion
 	"""
 	A channel by its platform ID.
 	"""
@@ -2348,8 +2424,17 @@ input UpdateEmoteInput {
 	name: String
 	tags: [String!]
 	zeroWidth: Boolean
+	"""
+	`true` makes it private; `false` makes a private emote public (an unlisted one stays
+	unlisted). Prefer `visibility`.
+	"""
 	private: Boolean
 	nsfw: Boolean
+	"""
+	`PUBLIC`, `UNLISTED` or `PRIVATE`. With `private` too, the two must agree
+	(`bad_visibility`).
+	"""
+	visibility: EmoteVisibility
 }
 
 input UpdateRoleInput {

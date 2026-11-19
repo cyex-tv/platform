@@ -1,6 +1,6 @@
 # 0009: Accounts and identities
 
-- Status: accepted
+- Status: accepted (amended by 0019: deleting an account has a 30-day undo window)
 - Date: 2026/11/16
 
 ## Context

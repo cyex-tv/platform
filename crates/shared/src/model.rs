@@ -82,6 +82,34 @@ pub struct Me {
     /// Permission names from the account's roles (ADR 0010).
     pub permissions: Vec<String>,
     pub created_at: String,
+    /// Every role the account holds, public or not, most senior first. Only you see the ones
+    /// that aren't public: your profile marks them hidden; others see `AccountProfile.roles`.
+    #[serde(default)]
+    #[schema(required = false)]
+    pub roles: Vec<OwnRole>,
+}
+
+/// A deleted account that can still be restored (ADR 0019), for the page signing in to it opens.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct PendingDeletion {
+    /// When `deleteAccount` was called.
+    pub requested_at: String,
+    /// When it will be erased for good, unless restored first.
+    pub erase_after: String,
+    /// The name and avatar it showed, Twitch first.
+    pub display_name: Option<String>,
+    pub avatar: Option<String>,
+}
+
+/// One of your own roles, as `me.roles` lists it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct OwnRole {
+    pub id: String,
+    pub name: String,
+    /// Shown on your public profile. When false, only you see it.
+    pub public: bool,
 }
 
 /// How a session signed in.
@@ -340,9 +368,81 @@ impl FromStr for EmoteState {
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct EmoteFlags {
     pub zero_width: bool,
-    /// Only its owner can add it to sets.
+    /// Only its owner can add it to sets. True exactly when `visibility` is `PRIVATE`.
     pub private: bool,
     pub nsfw: bool,
+}
+
+/// Who can find an emote and add it to sets (ADR 0020).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "lowercase")]
+pub enum EmoteVisibility {
+    /// Found by search and browse, listed on its creator's page. New emotes start here.
+    #[default]
+    Public,
+    /// Anyone with its link can open it and add it to sets; search, browse, activity feeds and
+    /// its creator's page leave it out for everyone but its owner.
+    Unlisted,
+    /// Only its owner can add it to sets, and it is left out of listings (`flags.private`).
+    Private,
+}
+
+impl EmoteVisibility {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Public => "public",
+            Self::Unlisted => "unlisted",
+            Self::Private => "private",
+        }
+    }
+
+    /// From the two stored flags (never both set).
+    pub fn of(private: bool, unlisted: bool) -> Self {
+        if private {
+            Self::Private
+        } else if unlisted {
+            Self::Unlisted
+        } else {
+            Self::Public
+        }
+    }
+
+    /// The stored flags: `(private, unlisted)`.
+    pub fn flags(self) -> (bool, bool) {
+        (self == Self::Private, self == Self::Unlisted)
+    }
+
+    /// The visibility after a change that may name it, the old `private` flag, or both, from
+    /// `current`. `private: true` means private; `private: false` makes a private emote public
+    /// and leaves an unlisted one unlisted, so clients that only know the flag keep working.
+    /// `None` when the two say different things.
+    pub fn after(current: Self, visibility: Option<Self>, private: Option<bool>) -> Option<Self> {
+        match (visibility, private) {
+            (Some(v), Some(p)) if p != (v == Self::Private) => None,
+            (Some(v), _) => Some(v),
+            (None, Some(true)) => Some(Self::Private),
+            (None, Some(false)) if current == Self::Private => Some(Self::Public),
+            (None, _) => Some(current),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[error("unknown emote visibility: {0}")]
+pub struct UnknownEmoteVisibility(pub String);
+
+impl FromStr for EmoteVisibility {
+    type Err = UnknownEmoteVisibility;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "public" => Ok(Self::Public),
+            "unlisted" => Ok(Self::Unlisted),
+            "private" => Ok(Self::Private),
+            other => Err(UnknownEmoteVisibility(other.to_owned())),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -378,6 +478,11 @@ pub struct Emote {
     pub owner: Option<AccountSummary>,
     pub state: EmoteState,
     pub flags: EmoteFlags,
+    /// `PUBLIC`, `UNLISTED` or `PRIVATE` (ADR 0020). `flags.private` says the same for
+    /// `PRIVATE`, for clients from before `UNLISTED`.
+    #[serde(default)]
+    #[schema(required = false)]
+    pub visibility: EmoteVisibility,
     pub animated: bool,
     pub tags: Vec<String>,
     /// For example `https://cdn.cyex.tv/emotes/<sha256>`.
@@ -400,6 +505,9 @@ pub struct UploadEmote {
     pub zero_width: Option<String>,
     /// As `zero_width`. Only its owner can add it to sets, and search leaves it out.
     pub private: Option<String>,
+    /// `public` (default), `unlisted` or `private` (ADR 0020). With `private` too, the two
+    /// must agree.
+    pub visibility: Option<String>,
     /// As `zero_width`. Search leaves it out unless asked for NSFW.
     pub nsfw: Option<String>,
     #[schema(value_type = String, format = Binary)]
@@ -413,8 +521,13 @@ pub struct UpdateEmote {
     pub name: Option<String>,
     pub tags: Option<Vec<String>>,
     pub zero_width: Option<bool>,
+    /// `true` makes it private; `false` makes a private emote public (an unlisted one stays
+    /// unlisted). Prefer `visibility`.
     pub private: Option<bool>,
     pub nsfw: Option<bool>,
+    /// `PUBLIC`, `UNLISTED` or `PRIVATE`. With `private` too, the two must agree
+    /// (`bad_visibility`).
+    pub visibility: Option<EmoteVisibility>,
 }
 
 // Sets
@@ -1330,4 +1443,38 @@ pub struct EntitlementGrant {
     pub revoke_reason: Option<String>,
     /// Held now.
     pub active: bool,
+}
+
+#[cfg(test)]
+mod visibility_tests {
+    use super::EmoteVisibility as V;
+
+    #[test]
+    fn emote_visibility_follows_both_fields() {
+        // Named: wins.
+        assert_eq!(
+            V::after(V::Public, Some(V::Unlisted), None),
+            Some(V::Unlisted)
+        );
+        // The old flag alone.
+        assert_eq!(V::after(V::Unlisted, None, Some(true)), Some(V::Private));
+        assert_eq!(V::after(V::Private, None, Some(false)), Some(V::Public));
+        assert_eq!(V::after(V::Unlisted, None, Some(false)), Some(V::Unlisted));
+        assert_eq!(V::after(V::Public, None, None), Some(V::Public));
+        // Both, agreeing or not.
+        assert_eq!(
+            V::after(V::Public, Some(V::Private), Some(true)),
+            Some(V::Private)
+        );
+        assert_eq!(
+            V::after(V::Public, Some(V::Unlisted), Some(false)),
+            Some(V::Unlisted)
+        );
+        assert_eq!(V::after(V::Public, Some(V::Public), Some(true)), None);
+        assert_eq!(V::after(V::Public, Some(V::Private), Some(false)), None);
+        assert_eq!(V::of(true, false).flags(), (true, false));
+        assert_eq!(V::of(false, true), V::Unlisted);
+        assert_eq!(" Unlisted ".parse::<V>(), Ok(V::Unlisted));
+        assert!("hidden".parse::<V>().is_err());
+    }
 }

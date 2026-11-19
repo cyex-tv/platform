@@ -17,6 +17,16 @@ gh pr create --base main --head feat/admin-dashboard --title "Admin: user dashbo
 gh pr merge <n> --merge
 ```
 
+## Owner's answers of 2026/11/19 (branch `feat/owner-answers`)
+
+Additive API; two new migrations; nothing was deployed.
+
+- [x] Account deletion has a 30-day undo window (ADR 0019, amends 0009). `deleteAccount` hides the account at once (migration `20261207000040_deletion_window.sql`: `accounts.erase_after`; `deleted_at` is set too, so every public read hides it), ends its sessions, clears the cookie and tells chat clients its channels, personal set and cosmetics went; audited `account.deletion_scheduled`. Its emotes leave `emote`, search, `emoteChannels` and emote activity; its sets leave `set(id)`; others can't add its emotes. Signing in within 30 days lands on `/restore` with a session only `pendingDeletion` and `restoreAccount` accept; restoring brings everything back (audited `account.restored`). The worker's hourly clean-up erases accounts past the window (`privacy::erase_account`, the old erase and file purge, audited `account.deleted`). Restricted or blocked accounts still can't delete; a block during the window refuses sign-in; a restriction survives restore and, through the identity hold, the erase.
+- [x] Emote visibility `PUBLIC` / `UNLISTED` / `PRIVATE` (ADR 0020, migration `20261207000041_emote_unlisted.sql`). `Emote.visibility`, `updateEmote(input: { visibility })`, the upload field `visibility`; `private` keeps working for old clients. Unlisted emotes open by link and can be added by anyone; search, browse, the creator's page and activity feeds leave them out.
+- [x] `me.roles`: every role you hold with `public`, so your own profile marks the hidden ones; `accountProfile.roles` is unchanged.
+- [x] Website: Account → Delete account copy, the Help answers (deletion, unlisted/private), the `/restore` page, the Public / Unlisted / Private control on upload and edit, the "Unlisted" mark on the emote page, hidden roles on your own profile ("Hidden" with an eye-off icon), and "Clone to my sets" makes a listed copy again. Dev mock follows all of it.
+- Tests: `apps/api/tests/auth_flow.rs` (restore within 30 days, past the window, blocked, restriction kept through restore and erase), `apps/api/tests/account_hub_flow.rs` (hidden at once, then erased), `apps/api/tests/visibility_flow.rs` (unlisted, own roles), `apps/worker/tests/erase.rs` (only due accounts erased), unit tests in `crates/shared` (visibility rules), web `visibility.test.ts`, `api.test.ts`, `faq.test.ts`.
+
 ## Sets and editors (branch `feat/sets-editors`, owner feedback 2026/11/19 section E)
 
 Additive API, new migrations only; nothing was deployed. ADR 0014 and 0017 amended.

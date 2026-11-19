@@ -135,9 +135,24 @@ async fn graphql(
     State(state): State<AppState>,
     Extension(schema): Extension<ApiSchema>,
     ip: Option<Extension<limits::ClientIp>>,
+    method: axum::http::Method,
+    headers: axum::http::HeaderMap,
     MaybeCaller(caller): MaybeCaller,
     request: GraphQLRequest,
 ) -> axum::response::Response {
+    // Without a live session, the cookie may still belong to an account whose deletion can be
+    // undone (ADR 0019): `pendingDeletion` and `restoreAccount` use it, nothing else does.
+    let restorable = match &caller {
+        Some(_) => None,
+        None => match state
+            .auth
+            .restorable_caller(&state.db, &method, &headers)
+            .await
+        {
+            Ok(found) => found,
+            Err(err) => return cyex_tv_shared::error::ApiError::from(err).into_response(),
+        },
+    };
     if let Some(caller) = &caller
         && let Err(wait) = state
             .limits
@@ -148,7 +163,13 @@ async fn graphql(
     }
     let ip = ip.map_or_else(|| limits::ClientIp(String::new()), |Extension(ip)| ip);
     let response: GraphQLResponse = schema
-        .execute(request.into_inner().data(caller).data(ip))
+        .execute(
+            request
+                .into_inner()
+                .data(caller)
+                .data(gql::Restorable(restorable))
+                .data(ip),
+        )
         .await
         .into();
     response.into_response()

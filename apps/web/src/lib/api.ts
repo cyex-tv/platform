@@ -86,16 +86,23 @@ async function restError(response: Response): Promise<ApiError> {
 /** The upload's answer: the new emote, pending while its files are made. */
 export type Uploaded = { id: string; name: string; state: string };
 
-/** The flags an upload may set at once (all off when left out). */
-export type UploadFlags = { zeroWidth: boolean; private: boolean; nsfw: boolean };
+/** Who can find an emote (ADR 0020): public, unlisted (by link only) or private. */
+export type EmoteVisibility = 'PUBLIC' | 'UNLISTED' | 'PRIVATE';
 
-/** The multipart form of an upload: name, tags (comma-separated), the flags that are on, the file. */
+/** The flags an upload may set at once (all off, and public, when left out). */
+export type UploadFlags = { zeroWidth: boolean; visibility: EmoteVisibility; nsfw: boolean };
+
+/**
+ * The multipart form of an upload: name, tags (comma-separated), the flags that are on, the
+ * visibility unless public (a private one also sends the older `private` flag), the file.
+ */
 export function uploadForm(file: Blob, name: string, tags: string[], flags?: Partial<UploadFlags>): FormData {
   const form = new FormData();
   form.set('name', name);
   if (tags.length) form.set('tags', tags.join(','));
   if (flags?.zeroWidth) form.set('zero_width', 'true');
-  if (flags?.private) form.set('private', 'true');
+  if (flags?.visibility === 'PRIVATE') form.set('private', 'true');
+  if (flags?.visibility && flags.visibility !== 'PUBLIC') form.set('visibility', flags.visibility.toLowerCase());
   if (flags?.nsfw) form.set('nsfw', 'true');
   form.set('file', file);
   return form;

@@ -496,9 +496,14 @@ pub async fn emote_channels(
     let limit = limit.unwrap_or(EMOTE_CHANNELS).clamp(1, EMOTE_CHANNELS_MAX);
     let mut conn = conn(state).await?;
     let rows = reads::emotes(&mut conn, &[id]).await.map_err(db_error)?;
-    let public = rows
-        .first()
-        .is_some_and(|e| e.state == cyex_tv_shared::model::EmoteState::Approved && !e.private);
+    let row = rows
+        .into_iter()
+        .next()
+        .filter(|e| e.state == cyex_tv_shared::model::EmoteState::Approved && !e.private);
+    let public = match row {
+        Some(e) => !crate::moderation::owner_hidden(&mut conn, e.owner).await?,
+        None => false,
+    };
     if !public {
         return Ok(Vec::new());
     }
@@ -552,6 +557,19 @@ pub(crate) async fn may_view(
     caller: Option<&Caller>,
     set: &Set,
 ) -> ApiResult<bool> {
+    // The sets of an account whose deletion is pending are hidden with it (ADR 0019), from
+    // everyone but staff.
+    if let Some(owner) = set.owner_account_id
+        && accounts::get(conn, owner)
+            .await
+            .map_err(db_error)?
+            .is_some_and(|a| a.deleted_at.is_some())
+    {
+        return match caller {
+            Some(c) => holds(conn, c, permissions::SETS_EDIT_ANY).await,
+            None => Ok(false),
+        };
+    }
     if set.visibility != SetVisibility::Private {
         return Ok(true);
     }
@@ -1204,6 +1222,12 @@ pub async fn add_set_emote(
         .await
         .map_err(db_error)?
         .ok_or_else(|| db_error(DbError::EmoteUnavailable))?;
+    // An emote of an account whose deletion is pending is hidden with it (ADR 0019).
+    if emote.owner_account_id != Some(caller.account_id)
+        && crate::moderation::owner_hidden(&mut tx, emote.owner_account_id).await?
+    {
+        return Err(db_error(DbError::EmoteUnavailable));
+    }
     // An account editor with `emotes` may use the owner's own private emotes in the owner's sets.
     let owners_own = matches!(grant, Grant::AccountEditor(_))
         && emote.owner_account_id.is_some()
