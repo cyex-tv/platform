@@ -5,7 +5,9 @@
   import Footer from '$lib/components/Footer.svelte';
   import AppHeader from '$lib/shell/AppHeader.svelte';
   import Toasts from '$lib/tool/Toasts.svelte';
-  import { loadMe } from '$lib/tool/session.svelte';
+  import { loadMe, session } from '$lib/tool/session.svelte';
+  import UploadDialog from '$lib/upload/UploadDialog.svelte';
+  import { openUpload, opensDialog } from '$lib/upload/upload.svelte';
 
   let { children } = $props();
   // One shell for every route: AppHeader, main, Footer. Pages (and the signed-in group's layout)
@@ -16,6 +18,23 @@
   // asks too (to send you to sign in), and loadMe() shares one request between the two.
   $effect(() => {
     loadMe().catch(() => {});
+  });
+
+  // Signed in, every link to the upload page (the header's Upload, an empty "Your emotes", help
+  // answers) opens the upload dialog over the current page instead. Ctrl/⌘-click and middle
+  // click still open the page in a new tab; signed out, the link goes to sign in as before.
+  function uploadLinks(e: MouseEvent) {
+    if (!session.me) return;
+    const link = (e.target as Element | null)?.closest?.('a[href]');
+    if (!(link instanceof HTMLAnchorElement)) return;
+    if (!opensDialog(e, link, new URL(location.href))) return;
+    e.preventDefault();
+    openUpload();
+  }
+  // Capture, so this runs before the router's own click handler (which skips prevented clicks).
+  $effect(() => {
+    document.addEventListener('click', uploadLinks, true);
+    return () => document.removeEventListener('click', uploadLinks, true);
   });
 
   // A thin bar under the nav while a page loads: it shows only after a short delay, crawls to
@@ -50,6 +69,7 @@
 </main>
 <Footer slim={page.data.footer === 'slim'} />
 <Toasts />
+{#if session.me}<UploadDialog />{/if}
 
 <style>
   main:focus { outline: none; }

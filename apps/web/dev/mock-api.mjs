@@ -2104,7 +2104,8 @@ createServer(async (req, res) => {
     // Names that stand in for the API's refusals, to see how the upload form explains them.
     if (name === 'blocked') return json(res, 422, { error: 'blocked', message: 'This image can’t be uploaded to cyex.tv.' });
     if (name === 'ratelimited') return json(res, 429, { error: 'rate_limited', message: 'That’s a lot of uploads. Try again in an hour.' });
-    if (name === 'broken') return json(res, 422, { error: 'invalid_image', message: 'That file isn’t a valid image. Try a PNG, GIF or WebP that opens elsewhere.' });
+    if (name === 'toobig') return json(res, 413, { error: 'too_large', message: 'The file is over 8 MB, the most an upload can be.' });
+    if (name === 'broken') return json(res, 422, { error: 'invalid_image', message: 'That file isn’t a valid image. Try a PNG, GIF, WebP or JPEG that opens elsewhere.' });
     // The flags, as the API reads them (POST /v1/emotes): true/1/on, false/0/off/empty.
     const flag = (k) => {
       const v = (field(k) ?? '').trim().toLowerCase();
