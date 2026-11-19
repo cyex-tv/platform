@@ -10,6 +10,7 @@
   import type { CardEmote } from '$lib/components/EmoteTile.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import { count } from '$lib/format';
+  import PageHead from '$lib/tool/PageHead.svelte';
   import { SEARCH_BY_OWNER } from '$lib/queries';
 
   type Sort = 'top' | 'new';
@@ -75,9 +76,9 @@
   }
 </script>
 
-<section aria-labelledby="up-h">
+<section aria-label="Uploaded emotes">
+  <PageHead title="Uploaded emotes" line="{count(total)} {total === 1 ? 'emote' : 'emotes'}." />
   <div class="bar">
-    <h2 class="page-title" id="up-h">Uploaded emotes<span class="n" aria-hidden="true">{count(total)}</span><span class="sr-only">, {count(total)}</span></h2>
     <label class="find">
       <span class="sr-only">Filter uploads</span>
       <Icon name="search" size={16} />
@@ -109,7 +110,6 @@
 <style>
   .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-bottom: 20px; }
   .bar :global([role='radiogroup']) { margin-left: auto; }
-  .n { margin-left: 6px; font-size: var(--t-small); font-weight: 500; color: var(--dim); font-variant-numeric: tabular-nums; }
   .find { position: relative; display: block; flex: 0 1 280px; min-width: 0; }
   .find :global(svg) { position: absolute; left: 12px; top: 50%; translate: 0 -50%; color: var(--muted); pointer-events: none; }
   .find .input { width: 100%; height: 40px; padding-left: 36px; }
