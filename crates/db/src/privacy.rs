@@ -81,11 +81,41 @@ pub async fn disown_deleted(conn: &mut PgConnection, account_id: Uuid) -> DbResu
     Ok(done.rows_affected())
 }
 
+/// Free text staff or the account wrote about the account, as audit rows carry it (a note's
+/// `body`, a hold's `reason`, a report's `note`): erasure takes these keys out of every row about
+/// the account, and keeps the rest of the row (who did what, when).
+const AUDIT_TEXT_KEYS: &[&str] = &["body", "reason", "note"];
+
 /// Removes everything else that belongs to or names the account, then marks it deleted. The
 /// caller has taken the account's emotes out of sets and deleted or disowned them, and deleted
 /// its sets and channels, publishing their events first.
+///
+/// Staff notes on the account go, its restrictions keep their dates but lose their reasons, and
+/// the audit rows about it (its subject, or the account as target) lose their free text
+/// ([`AUDIT_TEXT_KEYS`]).
+///
+/// What stays on purpose: `identity_holds` keeps the platform user ID of a restricted or blocked
+/// account's identities (written by a trigger when the identities go, below), with the hold's
+/// dates and no name or reason, so the same Twitch or Kick user can't sign in fresh to escape a
+/// restriction (ban evasion; ADR 0019, amendment 2026/11/20). It is used up when that identity
+/// signs in again.
 pub async fn erase(conn: &mut PgConnection, account_id: Uuid) -> DbResult<()> {
+    sqlx::query(
+        "UPDATE audit_log
+            SET before_json = CASE WHEN jsonb_typeof(before_json) = 'object'
+                                   THEN before_json - $3::text[] ELSE before_json END,
+                after_json = CASE WHEN jsonb_typeof(after_json) = 'object'
+                                  THEN after_json - $3::text[] ELSE after_json END
+          WHERE subject_account_id = $1 OR (target_kind = 'account' AND target_id = $2)",
+    )
+    .bind(account_id)
+    .bind(ids::to_text(account_id))
+    .bind(AUDIT_TEXT_KEYS)
+    .execute(&mut *conn)
+    .await?;
     for sql in [
+        "DELETE FROM staff_notes WHERE account_id = $1",
+        "UPDATE account_restrictions SET reason = NULL WHERE account_id = $1",
         "DELETE FROM set_editors WHERE account_id = $1",
         "DELETE FROM account_editors WHERE account_id = $1 OR editor_id = $1",
         "DELETE FROM cosmetic_selections WHERE account_id = $1",

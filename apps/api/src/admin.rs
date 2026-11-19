@@ -510,7 +510,23 @@ pub async fn update(
     let before = view(&mut tx, &role, &actor).await?;
     if let Some(perms) = &perms {
         let added = perms.iter().filter(|p| !before.permissions.contains(p));
-        actor.may_grant(added.map(String::as_str)).map_err(rule)?;
+        actor
+            .may_grant(added.clone().map(String::as_str))
+            .map_err(rule)?;
+        // Every account holds the User role: a staff permission there is everyone's, so only
+        // the owners add one (ADR 0010, amendment 2026/11/20). Taking one away is fine.
+        if role.is(roles::SYSTEM_USER)
+            && !caller.owner
+            && added
+                .into_iter()
+                .any(|p| !permissions::USER_ROLE_ALLOWED.contains(&p.as_str()))
+        {
+            return Err(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "owner_only",
+                "Only the owner can give the User role a staff permission: every account holds it.",
+            ));
+        }
     }
     let managers_before = managers(state, &mut tx).await?;
 

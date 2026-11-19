@@ -44,6 +44,13 @@ describe('rules', () => {
     expect(cleanTag('w!ow?')).toBe('wow');
     expect(cleanTag('!!!')).toBe('');
     expect(cleanTag('猫ダンス')).toBe('猫ダンス');
+    // NFC on both sides, as the API: a decomposed "café" is the composed one, and combining
+    // marks without a composed form stay (the API takes \p{M} too).
+    expect(cleanTag('CAFÉ')).toBe('café');
+    expect(cleanTag('q́')).toBe('q́');
+    expect(cleanTag('नमस्ते')).toBe('नमस्ते');
+    expect(parseTags('café, café')).toEqual(['café']);
+    expect(tagsProblem(['q́', 'नमस्ते'])).toBeNull();
     expect([...cleanTag('x'.repeat(40))]).toHaveLength(32);
     // Every cleaned tag passes the API's check.
     for (const raw of ['Ab C', '#_x-', 'ü ß', 'a'.repeat(50)]) expect(tagsProblem([cleanTag(raw)])).toBeNull();

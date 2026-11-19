@@ -700,7 +700,7 @@ const MAX_EDITORS = 50;
 const withImplied = (flags) => EDITOR_FLAGS.filter((f) => flags.includes(f) || (f === 'CHANNELS' && flags.includes('SETS')));
 const ACCOUNT_EDITORS = [
   { account: OTHERS[1], permissions: ['EMOTES'], allSets: false, setIds: ['01JD8XSET00000000000000MAIN'], grantedBy: ME_SUMMARY, grantedAt: '2026-11-12T10:00:00.000Z', updatedAt: '2026-11-12T10:00:00.000Z' },
-  { account: OTHERS[2], permissions: ['EMOTES', 'SETS', 'EDITORS', 'CHANNELS'], allSets: true, setIds: [], grantedBy: ME_SUMMARY, grantedAt: '2026-11-14T18:30:00.000Z', updatedAt: '2026-11-14T18:30:00.000Z' },
+  { account: OTHERS[2], permissions: ['EMOTES', 'SETS', 'EDITORS', 'CHANNELS', 'EMOTE_TRANSFER'], allSets: true, setIds: [], grantedBy: ME_SUMMARY, grantedAt: '2026-11-14T18:30:00.000Z', updatedAt: '2026-11-14T18:30:00.000Z' },
 ];
 // Emote transfer requests (ADR 0014): an editor's transfer waits for the owner. One is seeded: an
 // editor of the mock account asks to give one of its emotes to themselves.
@@ -1873,13 +1873,21 @@ function signedIn(body, v, ADMIN) {
     case 'DeclineEmoteTransfer':
     case 'CancelEmoteTransfer': {
       const t = TRANSFERS.find((x) => x.id === v.id);
-      if (!t) return err('Not found.', 'not_found');
+      // Anyone but its owner and the editor who asked is told it doesn't exist.
+      if (!t || (t.from.id !== ME_ID && t.requestedBy.id !== ME_ID)) return err('Not found.', 'not_found');
       if (!openTransfers().includes(t)) return err('That transfer request isn’t open any more.', 'not_pending');
       const cancel = op === 'CancelEmoteTransfer';
       if (cancel ? t.requestedBy.id !== ME_ID : t.from.id !== ME_ID)
         return err(cancel ? 'Only the editor who asked can cancel the request.' : 'Only the emote’s owner can answer its transfer.', 'forbidden');
       const at = new Date().toISOString();
       if (op === 'AcceptEmoteTransfer') {
+        // As the API: the editor who asked must still hold EMOTE_TRANSFER on every set, or the
+        // request closes instead.
+        const asker = ACCOUNT_EDITORS.find((x) => x.account.id === t.requestedBy.id);
+        if (!asker || !asker.allSets || !asker.permissions.includes('EMOTE_TRANSFER')) {
+          Object.assign(t, { state: 'CANCELLED', resolvedAt: at });
+          return err('The editor who asked can’t transfer your emotes any more, so the request is closed.', 'not_pending');
+        }
         const e = anyEmote(t.emoteId);
         const i = MINE.indexOf(e);
         if (i >= 0) MINE.splice(i, 1);
@@ -2216,7 +2224,8 @@ function quickTier(name, q) {
 function quickSearch(v) {
   const q = String(v.query ?? '').trim().slice(0, 100);
   if (!q) return { data: { quickSearch: { emotes: [], users: [] } } };
-  const emotes = ALL.filter((e) => e.state === 'APPROVED' && !e.flags.private && !e.flags.nsfw)
+  // The same listed-emote rule as search and trending (crates/db search::LISTED_EMOTE): public only.
+  const emotes = ALL.filter((e) => e.state === 'APPROVED' && e.visibility === 'PUBLIC' && !e.flags.nsfw)
     .map((e) => ({ e, t: quickTier(e.name, q), s: similar(e.name, q) }))
     .filter((h) => h.t > 0)
     .sort((a, b) => a.t - b.t || (a.t === 6 ? b.s - a.s : 0) || b.e.channelCount - a.e.channelCount || a.e.name.length - b.e.name.length || a.e.name.localeCompare(b.e.name))

@@ -472,3 +472,54 @@ async fn roles_assign_gives_and_takes_without_editing() {
     );
     w.db.close().await;
 }
+
+/// Only the owner gives the User role a staff permission: an Admin with `roles.manage` adding
+/// one there would hand it to every account. Renaming it and taking permissions away stay open.
+#[tokio::test]
+async fn only_the_owner_adds_staff_permissions_to_the_user_role() {
+    let Some(w) = World::new().await else { return };
+    let owner = w.user("900").await;
+    let admin = w.user("930").await;
+    let plain = w.user("931").await;
+    let user_role = w.system("user").await;
+    let admin_role = w.system("admin").await;
+    w.gql(&owner, ASSIGN, json!({ "a": admin.tid(), "r": admin_role }))
+        .await;
+    let me = "{ me { permissions } }";
+
+    let r = w
+        .gql(
+            &admin,
+            UPDATE,
+            json!({ "id": user_role, "perms": ["users.block"] }),
+        )
+        .await;
+    assert_eq!(r["errors"][0]["extensions"]["code"], "owner_only", "{r}");
+    assert_eq!(
+        w.gql(&plain, me, json!({})).await["data"]["me"]["permissions"],
+        json!([])
+    );
+    // A rename is fine.
+    let r = w
+        .gql(&admin, UPDATE, json!({ "id": user_role, "n": "Members" }))
+        .await;
+    assert_eq!(r["data"]["updateRole"]["name"], "Members", "{r}");
+    // The owner may; then the Admin may take it away again.
+    let r = w
+        .gql(
+            &owner,
+            UPDATE,
+            json!({ "id": user_role, "perms": ["audit.view"] }),
+        )
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+    let r = w
+        .gql(&admin, UPDATE, json!({ "id": user_role, "perms": [] }))
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+    assert_eq!(
+        w.gql(&plain, me, json!({})).await["data"]["me"]["permissions"],
+        json!([])
+    );
+    w.db.close().await;
+}

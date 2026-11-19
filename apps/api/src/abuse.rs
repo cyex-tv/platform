@@ -519,8 +519,9 @@ fn until(raw: Option<&str>) -> ApiResult<Option<chrono::DateTime<Utc>>> {
     Ok(Some(at))
 }
 
-/// Who may restrict `account_id` for `holds`: the owner can't be, nobody acts on an account at or
-/// above their own highest role, and each hold needs its permission (or `users.restrict`).
+/// Who may restrict `account_id` for `holds`: the owner can't be, nobody acts on their own account
+/// or one at or above their own highest role, and each hold needs its permission (or
+/// `users.restrict`).
 async fn may_restrict(
     state: &AppState,
     conn: &mut PgConnection,
@@ -558,15 +559,22 @@ async fn may_restrict(
             "The owner's account can't be restricted.",
         ));
     }
-    if account_id != caller.account_id {
-        let target_highest = cyex_tv_db::roles::highest_position(conn, account_id)
-            .await
-            .map_err(db_error)?;
-        actor(conn, caller)
-            .await?
-            .may_act_on(target_highest)
-            .map_err(rule)?;
+    // Nobody places, changes or lifts their own holds: lifting one would undo what someone
+    // more senior decided.
+    if account_id == caller.account_id {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "own_account",
+            "You can't change restrictions on your own account.",
+        ));
     }
+    let target_highest = cyex_tv_db::roles::highest_position(conn, account_id)
+        .await
+        .map_err(db_error)?;
+    actor(conn, caller)
+        .await?
+        .may_act_on(target_highest)
+        .map_err(rule)?;
     Ok(before)
 }
 

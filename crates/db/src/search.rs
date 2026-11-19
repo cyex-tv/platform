@@ -16,6 +16,14 @@ use uuid::Uuid;
 use crate::error::DbResult;
 use crate::ids;
 
+/// The rule every emote search shares (`search`, `quick`, `trending_rank`), so they can't drift:
+/// approved, not deleted, public (not private or unlisted), and not of an account whose deletion
+/// is pending (ADR 0019). The emote is `e`. NSFW is each caller's own rule.
+pub const LISTED_EMOTE: &str = "e.state = 'approved' AND e.deleted_at IS NULL
+     AND NOT e.private AND NOT e.unlisted
+     AND NOT EXISTS (SELECT 1 FROM accounts oa
+                     WHERE oa.id = e.owner_account_id AND oa.deleted_at IS NOT NULL)";
+
 /// What to look for. `query` is trimmed and at most 100 characters.
 #[derive(Clone, Debug, Default)]
 pub struct Query<'a> {
@@ -83,7 +91,7 @@ pub const TAG_LEN_MAX: usize = 32;
 fn clean_tags(tags: &[String]) -> Option<Vec<String>> {
     let mut out: Vec<String> = Vec::new();
     for raw in tags {
-        let tag = raw.trim().to_lowercase();
+        let tag = cyex_tv_shared::text::normalize_tag(raw);
         let tag = tag.trim_start_matches('#');
         if tag.is_empty() || out.iter().any(|t| t == tag) {
             continue;
@@ -96,9 +104,7 @@ fn clean_tags(tags: &[String]) -> Option<Vec<String>> {
     // The same rule uploads and edits store tags by (1 to 32 letters, digits, `-` or `_`), so
     // every stored tag can be searched for.
     let valid = |t: &String| {
-        t.chars().count() <= TAG_LEN_MAX
-            && t.chars()
-                .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        t.chars().count() <= TAG_LEN_MAX && t.chars().all(cyex_tv_shared::text::is_tag_char)
     };
     out.iter().all(valid).then_some(out)
 }
@@ -149,10 +155,7 @@ pub async fn search(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<Hits> {
         "SELECT e.id, count(*) OVER () AS total
          FROM emotes e
          {join}
-         WHERE e.state = 'approved' AND e.deleted_at IS NULL AND NOT e.private
-           AND NOT e.unlisted
-           AND NOT EXISTS (SELECT 1 FROM accounts oa
-                           WHERE oa.id = e.owner_account_id AND oa.deleted_at IS NOT NULL)
+         WHERE {LISTED_EMOTE}
            AND ($2::boolean IS NULL OR e.animated = $2)
            AND ($3::uuid IS NULL OR e.owner_account_id = $3)
            AND ($4 OR $10 OR NOT e.nsfw)
@@ -206,7 +209,7 @@ pub async fn quick(conn: &mut PgConnection, text: &str, limit: i64) -> DbResult<
     }
     let lower = text.to_lowercase();
     let pattern = like_escape(&lower);
-    let rows: Vec<(Uuid,)> = sqlx::query_as(
+    let rows: Vec<(Uuid,)> = sqlx::query_as(&format!(
         "SELECT id FROM (
              SELECT e.id, e.name, e.popularity,
                     CASE WHEN e.name = $1 THEN 1
@@ -218,7 +221,7 @@ pub async fn quick(conn: &mut PgConnection, text: &str, limit: i64) -> DbResult<
                          ELSE 6 END AS tier,
                     similarity(e.name, $1) AS sim
              FROM emotes e
-             WHERE e.state = 'approved' AND e.deleted_at IS NULL AND NOT e.private
+             WHERE {LISTED_EMOTE}
                AND NOT e.nsfw
                AND (e.name ILIKE '%' || $3 || '%'
                     OR (' ' || e.name_words) LIKE '% ' || $3 || '%'
@@ -231,8 +234,8 @@ pub async fn quick(conn: &mut PgConnection, text: &str, limit: i64) -> DbResult<
                   CASE WHEN tier < 6 THEN char_length(name) END,
                   CASE WHEN tier < 6 THEN lower(name) END,
                   id
-         LIMIT $5",
-    )
+         LIMIT $5"
+    ))
     .bind(&text)
     .bind(&lower)
     .bind(&pattern)
@@ -434,10 +437,7 @@ pub async fn trending_rank(
                     row_number() OVER (ORDER BY tr.net DESC, e.popularity DESC, e.id) AS rank
              FROM emotes e
              JOIN ({net}) tr ON tr.emote_id = e.id
-             WHERE e.state = 'approved' AND e.deleted_at IS NULL AND NOT e.private
-               AND NOT e.unlisted
-               AND NOT EXISTS (SELECT 1 FROM accounts oa
-                               WHERE oa.id = e.owner_account_id AND oa.deleted_at IS NOT NULL)
+             WHERE {LISTED_EMOTE}
                AND (NOT e.nsfw OR coalesce((SELECT nsfw FROM emotes WHERE id = $1), false))
          ) ranked
          WHERE id = $1 AND rank <= $2"

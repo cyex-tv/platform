@@ -195,3 +195,92 @@ async fn unassigning_respects_seniority() {
     assert_eq!(r["data"]["unassignRole"], true, "{r}");
     w.db.close().await;
 }
+
+const ADD_EDITOR: &str = "mutation($o: String, $a: String!, $f: [EditorPermission!]!) {
+    addAccountEditor(input: { ownerId: $o, accountId: $a, permissions: $f }) { account { id } }
+}";
+const UPDATE_EDITOR: &str = "mutation($o: String, $a: String!, $f: [EditorPermission!]!) {
+    updateAccountEditor(ownerId: $o, accountId: $a, permissions: $f) { account { id } }
+}";
+const REMOVE_EDITOR: &str =
+    "mutation($o: String, $a: String!) { removeAccountEditor(ownerId: $o, accountId: $a) }";
+const LIST_EDITORS: &str = "query($o: String) { accountEditors(accountId: $o) { account { id } } }";
+
+impl World {
+    /// `by` makes `who` an editor of `of` with `SETS` and `EDITORS`.
+    async fn add_editor(&self, by: &User, of: &User, who: &User) -> Value {
+        let vars = json!({ "o": of.text_id(), "a": who.text_id(), "f": ["SETS", "EDITORS"] });
+        self.gql(by, ADD_EDITOR, vars).await
+    }
+}
+
+/// `editors.manage_any` (staff) never reaches the owner's account, and only accounts below the
+/// staff member's own highest role.
+#[tokio::test]
+async fn staff_editor_management_respects_the_owner_and_seniority() {
+    let Some(w) = World::new().await else { return };
+    let owner = w.user("900").await;
+    let moderator = w.user("901").await;
+    let admin = w.user("902").await;
+    let plain = w.user("903").await;
+    w.role("Mods", 10, &["editors.manage_any"], Some(&moderator))
+        .await;
+    w.role("Admins", 100, &["editors.manage_any"], Some(&admin))
+        .await;
+
+    // The Admin can't make itself the owner's editor, nor read, change or remove theirs.
+    let r = w.add_editor(&admin, &owner, &admin).await;
+    assert_eq!(code(&r), "owner_protected", "{r}");
+    let r = w
+        .gql(
+            &owner,
+            ADD_EDITOR,
+            json!({ "o": null, "a": plain.text_id(), "f": ["SETS"] }),
+        )
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+    let r = w
+        .gql(&admin, LIST_EDITORS, json!({ "o": owner.text_id() }))
+        .await;
+    assert_eq!(code(&r), "owner_protected", "{r}");
+    let r = w
+        .gql(
+            &admin,
+            UPDATE_EDITOR,
+            json!({ "o": owner.text_id(), "a": plain.text_id(), "f": ["EDITORS", "SETS"] }),
+        )
+        .await;
+    assert_eq!(code(&r), "owner_protected", "{r}");
+    let r = w
+        .gql(
+            &admin,
+            REMOVE_EDITOR,
+            json!({ "o": owner.text_id(), "a": plain.text_id() }),
+        )
+        .await;
+    assert_eq!(code(&r), "owner_protected", "{r}");
+
+    // On a lower account it can, with every flag; the moderator can't on the Admin's.
+    let r = w.add_editor(&admin, &plain, &admin).await;
+    assert!(r["errors"].is_null(), "{r}");
+    let r = w.add_editor(&admin, &moderator, &admin).await;
+    assert!(r["errors"].is_null(), "{r}");
+    let r = w.add_editor(&moderator, &admin, &moderator).await;
+    assert_eq!(code(&r), "not_below_you", "{r}");
+    let r = w
+        .gql(&moderator, LIST_EDITORS, json!({ "o": admin.text_id() }))
+        .await;
+    assert_eq!(code(&r), "not_below_you", "{r}");
+    // Same rank is not below.
+    let peer = w.user("904").await;
+    w.role("Mods2", 10, &[], Some(&peer)).await;
+    let r = w.add_editor(&moderator, &peer, &moderator).await;
+    assert_eq!(code(&r), "not_below_you", "{r}");
+    let r = w.add_editor(&moderator, &plain, &moderator).await;
+    assert!(r["errors"].is_null(), "{r}");
+
+    // The owner may still manage anyone's.
+    let r = w.add_editor(&owner, &admin, &owner).await;
+    assert!(r["errors"].is_null(), "{r}");
+    w.db.close().await;
+}

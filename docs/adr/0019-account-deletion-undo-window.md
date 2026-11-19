@@ -18,3 +18,7 @@
 - For 30 days the data stays in the database. The privacy page's "its data is removed" now means within 30 days, and the privacy text (legal PR) should say so.
 - A row with `deleted_at` set and `erase_after` NULL is erased for good; one with both set is pending. A CHECK keeps `erase_after` from being set on a live account.
 - The erase now runs without a person waiting on it: a failure is logged and retried at the next clean-up.
+
+## Amendment (security review, 2026/11/20): what the erase scrubs and what it keeps
+- **Scrubbed:** staff notes on the account are deleted; its restriction records (`account_restrictions`) keep kind, dates and who, but lose their reason; and audit rows about it (its activity subject, or the account as target) lose their free text: the `body`, `reason` and `note` keys of `before_json` and `after_json` (`privacy::AUDIT_TEXT_KEYS`). The rest of each row (action, actor, time, IDs) stays, so the trail still says what happened.
+- **Kept on purpose:** `identity_holds` keeps the Twitch or Kick user ID of each identity of an account that was restricted or blocked when its identities went, with the hold's dates and no name or reason. That is what stops the same person from deleting the account and signing in fresh to escape a restriction (ban evasion). The row is used up when that identity signs in or is linked again. The privacy text (legal PR) should name this.

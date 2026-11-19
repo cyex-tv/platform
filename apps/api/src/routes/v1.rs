@@ -7,6 +7,7 @@
 //! The others answer `501 not_implemented` until their phase builds them.
 
 use axum::Json;
+use axum::extract::multipart::Field;
 use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
 use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, ETAG, IF_NONE_MATCH, LOCATION, SET_COOKIE};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
@@ -212,6 +213,24 @@ async fn logout(
 
 // Upload
 
+/// A text form field, read chunk by chunk and refused (`bad_form`) as soon as it passes `max`
+/// bytes, so a long field is never held whole.
+async fn capped_text(field: &mut Field<'_>, max: usize) -> ApiResult<String> {
+    let bad_form = |message: &str| ApiError::new(StatusCode::BAD_REQUEST, "bad_form", message);
+    let mut bytes = Vec::new();
+    while let Some(chunk) = field
+        .chunk()
+        .await
+        .map_err(|_| bad_form("A form field couldn't be read."))?
+    {
+        if bytes.len() + chunk.len() > max {
+            return Err(bad_form("A form field is too long."));
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    String::from_utf8(bytes).map_err(|_| bad_form("A form field couldn't be read."))
+}
+
 /// Upload an emote. It starts `pending`: usable in your own sets, hidden from everyone else until a
 /// moderator approves it. Manage it afterwards through GraphQL.
 ///
@@ -276,13 +295,7 @@ async fn upload_emote(
             }
             Some(key @ ("name" | "tags")) => {
                 let key = key.to_owned();
-                let text = field
-                    .text()
-                    .await
-                    .map_err(|_| bad_form("A form field couldn't be read."))?;
-                if text.len() > 1000 {
-                    return Err(bad_form("A form field is too long."));
-                }
+                let text = capped_text(&mut field, 1000).await?;
                 if key == "name" {
                     name = Some(text);
                 } else {
@@ -291,10 +304,7 @@ async fn upload_emote(
             }
             Some(key @ ("zero_width" | "private" | "nsfw")) => {
                 let key = key.to_owned();
-                let text = field
-                    .text()
-                    .await
-                    .map_err(|_| bad_form("A form field couldn't be read."))?;
+                let text = capped_text(&mut field, 16).await?;
                 let on = upload::parse_flag(&text)
                     .ok_or_else(|| bad_form("A flag is true or false."))?;
                 match key.as_str() {
@@ -304,20 +314,10 @@ async fn upload_emote(
                 }
             }
             Some("owner_id") => {
-                let text = field
-                    .text()
-                    .await
-                    .map_err(|_| bad_form("A form field couldn't be read."))?;
-                if text.len() > 64 {
-                    return Err(bad_form("A form field is too long."));
-                }
-                owner_id = Some(text);
+                owner_id = Some(capped_text(&mut field, 64).await?);
             }
             Some("visibility") => {
-                let text = field
-                    .text()
-                    .await
-                    .map_err(|_| bad_form("A form field couldn't be read."))?;
+                let text = capped_text(&mut field, 16).await?;
                 visibility = Some(
                     text.parse()
                         .map_err(|_| bad_form("Visibility is public, unlisted or private."))?,

@@ -665,10 +665,15 @@ async fn editor_transfers_wait_for_the_owner_and_go_only_to_trusting_accounts() 
     let r = w.gql(&carol, REQUESTS, json!({ "e": first })).await;
     assert_eq!(r["data"]["emoteTransferRequests"], json!([]), "{r}");
 
-    // Only the owner accepts: not the editor who asked, not the receiver.
-    for who in [&bob, &gina, &carol] {
-        let r = w.gql(who, ACCEPT, json!({ "id": request })).await;
-        assert_eq!(code(&r), "forbidden", "{r}");
+    // Only the owner accepts: not the editor who asked. To anyone else (the receiver too) the
+    // request doesn't exist, whatever they try.
+    let r = w.gql(&bob, ACCEPT, json!({ "id": request })).await;
+    assert_eq!(code(&r), "forbidden", "{r}");
+    for who in [&gina, &carol] {
+        for q in [ACCEPT, DECLINE, CANCEL] {
+            let r = w.gql(who, q, json!({ "id": request })).await;
+            assert_eq!(code(&r), "not_found", "{r}");
+        }
     }
     // Holds still refuse at accept time: the receiver, or the editor who asked.
     for held in [&gina, &bob] {
@@ -790,5 +795,65 @@ async fn editor_transfers_wait_for_the_owner_and_go_only_to_trusting_accounts() 
     assert!(rows[0].0.after_json.as_ref().unwrap().get("via").is_none());
     let r = w.gql(&bob, REQUESTS, json!({ "e": second })).await;
     assert_eq!(r["data"]["emoteTransferRequests"], json!([]), "{r}");
+    w.db.close().await;
+}
+
+/// A request lasts only while the editor who made it can transfer the owner's emotes: accepting
+/// after their `emote_transfer` went (or their grant did) closes it instead, audited.
+#[tokio::test]
+async fn accepting_rechecks_the_editors_transfer_permission() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("7401").await; // the owner
+    let bob = w.user("7402").await; // EMOTE_TRANSFER on Alice, then only EMOTE_MANAGE
+    let gina = w.user("7403").await; // trusts Bob with uploads
+    w.grant(&alice, &bob, &["EMOTE_TRANSFER"], &[]).await;
+    w.grant(&gina, &bob, &["EMOTE_UPLOAD"], &[]).await;
+    let first = w.emote(&alice, "first", EmoteState::Approved, false).await;
+    let second = w.emote(&alice, "second", EmoteState::Approved, false).await;
+    for emote in [&first, &second] {
+        ok(&w
+            .gql(&bob, TRANSFER, json!({ "id": emote, "to": gina.tid() }))
+            .await);
+    }
+    let one = w.open(&alice, &first).await;
+    let two = w.open(&alice, &second).await;
+
+    // The flag is taken away: accepting closes the request and nothing moves.
+    let r = w
+        .gql(
+            &alice,
+            "mutation($a: String!, $f: [EditorPermission!]!) {
+                updateAccountEditor(accountId: $a, permissions: $f) { permissions }
+            }",
+            json!({ "a": bob.tid(), "f": ["EMOTE_MANAGE"] }),
+        )
+        .await;
+    ok(&r);
+    let r = w.gql(&alice, ACCEPT, json!({ "id": one })).await;
+    assert_eq!(code(&r), "not_pending", "{r}");
+    assert_eq!(w.owner_and_uploader(&first).await.0, Some(alice.id));
+    let rows = w.audits("emote.transfer_cancelled").await;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        rows[0].0.after_json.as_ref().unwrap()["reason"],
+        "editor_permission"
+    );
+    let r = w.gql(&alice, ACCEPT, json!({ "id": one })).await;
+    assert_eq!(code(&r), "not_pending", "{r}");
+
+    // The grant is removed altogether: the same.
+    let r = w
+        .gql(
+            &alice,
+            "mutation($a: String!) { removeAccountEditor(accountId: $a) }",
+            json!({ "a": bob.tid() }),
+        )
+        .await;
+    ok(&r);
+    let r = w.gql(&alice, ACCEPT, json!({ "id": two })).await;
+    assert_eq!(code(&r), "not_pending", "{r}");
+    assert_eq!(w.owner_and_uploader(&second).await.0, Some(alice.id));
+    assert_eq!(w.audits("emote.transfer_cancelled").await.len(), 2);
+    assert!(w.audits("emote.transferred").await.is_empty());
     w.db.close().await;
 }

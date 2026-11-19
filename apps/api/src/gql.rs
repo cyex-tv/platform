@@ -1833,7 +1833,7 @@ impl Mutation {
     }
 
     /// Sign out everywhere, here too: every site and app session ends and the cookie is cleared.
-    /// Returns how many sessions ended.
+    /// Returns how many sessions ended. With an app token, only that app session ends.
     async fn sign_out_everywhere(&self, ctx: &Context<'_>) -> Result<u64> {
         let caller = caller(ctx)?;
         let n = account::revoke_all_sessions(state(ctx), caller)
@@ -1848,7 +1848,8 @@ impl Mutation {
         Ok(n)
     }
 
-    /// Sign out everywhere but here. Returns how many sessions ended.
+    /// Sign out everywhere but here. Returns how many sessions ended. Website only
+    /// (`website_only` with an app token).
     async fn revoke_other_sessions(&self, ctx: &Context<'_>) -> Result<u64> {
         let caller = caller(ctx)?;
         account::revoke_other_sessions(state(ctx), caller)
@@ -1858,8 +1859,8 @@ impl Mutation {
 
     /// A copy of everything about your account, as JSON text (`format`, `version`, `account`,
     /// `identities`, `sessions`, `channels`, `emotes`, `sets`, `set_editors`, `account_editors`,
-    /// `editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`). 5 an hour
-    /// (`rate_limited`). Audited.
+    /// `editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`). Website
+    /// only (`website_only` with an app token). 5 an hour (`rate_limited`). Audited.
     async fn export_my_data(&self, ctx: &Context<'_>) -> Result<String> {
         let caller = caller(ctx)?;
         account::export(state(ctx), caller).await.map_err(api_error)
