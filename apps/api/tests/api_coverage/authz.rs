@@ -17,6 +17,7 @@ const PUBLIC: &[&str] = &[
     "channel",
     "channelByLogin",
     "set",
+    "setEmotes",
     "accountSets",
     "globalSet",
     "emote",
