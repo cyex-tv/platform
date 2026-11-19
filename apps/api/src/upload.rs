@@ -6,6 +6,11 @@
 //!    same object, same URLs, no second transcode.
 //! 4. The original goes to storage (`originals/{sha256}`, never public), the emote is made
 //!    `pending`, and a transcode job is queued, all before the transaction commits.
+//!
+//! An account editor with `emote_upload` on every set may upload for the account they edit
+//! (`owner_id`, ADR 0014): it owns the emote, `uploaded_by` names the editor, and the upload is
+//! audited (`emote.uploaded`, `"via": "account_editor"`). A hold on uploads of either account
+//! refuses it, and the hourly limit counts it against both.
 
 use axum::http::StatusCode;
 use bytes::Bytes;
@@ -13,16 +18,16 @@ use chrono::Utc;
 use cyex_tv_auth::Caller;
 use cyex_tv_db::emotes::{self, NewEmote};
 use cyex_tv_db::files::{self, NewFile};
-use cyex_tv_db::{DbError, accounts, blocklist, ids, jobs, reads};
+use cyex_tv_db::{DbError, accounts, audit, blocklist, ids, jobs, reads};
 use cyex_tv_media::{Limits, MediaError, Probe};
 use cyex_tv_shared::error::{ApiError, ApiResult};
-use cyex_tv_shared::model::Emote;
+use cyex_tv_shared::model::{EditorPermission, Emote};
 use cyex_tv_storage::{Put, original_key, sigv4};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use sqlx::Connection;
 
-use crate::catalog::{db_error, member_name};
+use crate::catalog::{db_error, forbidden, member_name, parse_id};
 use crate::moderation::clean_tags;
 use crate::state::AppState;
 use crate::views;
@@ -83,6 +88,9 @@ pub struct Upload {
     pub name: String,
     pub tags: Vec<String>,
     pub flags: Flags,
+    /// The account to upload for (an account the caller edits with `emote_upload`); the caller's
+    /// own when `None` or empty.
+    pub owner_id: Option<String>,
     pub file: Bytes,
 }
 
@@ -124,6 +132,29 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
     };
 
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let owner = match input
+        .owner_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(raw) => parse_id(raw)?,
+        None => caller.account_id,
+    };
+    let for_someone = owner != caller.account_id;
+    if for_someone
+        && !crate::editors::has_emote_flag(
+            &mut conn,
+            owner,
+            caller.account_id,
+            EditorPermission::EmoteUpload,
+        )
+        .await?
+    {
+        return Err(forbidden(
+            "You can upload for another account only as its editor with the upload permission on every set.",
+        ));
+    }
     let account = accounts::get(&mut conn, caller.account_id)
         .await
         .map_err(db_error)?
@@ -135,18 +166,35 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
             "Your account can't upload right now.",
         ));
     }
-    let recent = emotes::count_since(
-        &mut conn,
-        caller.account_id,
-        Utc::now() - chrono::Duration::hours(1),
-    )
-    .await
-    .map_err(db_error)?;
-    if recent >= PER_HOUR && !caller.owner {
+    if for_someone
+        && accounts::get(&mut conn, owner)
+            .await
+            .map_err(db_error)?
+            .is_none_or(|a| a.restricted_at.is_some())
+    {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "restricted",
+            "That account can't upload right now, so nobody can upload for it.",
+        ));
+    }
+    let hour_ago = Utc::now() - chrono::Duration::hours(1);
+    // What you uploaded, for yourself and for others, and what the account got from anyone.
+    let mine = emotes::count_uploaded_since(&mut conn, caller.account_id, hour_ago)
+        .await
+        .map_err(db_error)?;
+    let theirs = emotes::count_since(&mut conn, owner, hour_ago)
+        .await
+        .map_err(db_error)?;
+    if (mine >= PER_HOUR || theirs >= PER_HOUR) && !caller.owner {
         return Err(ApiError::new(
             StatusCode::TOO_MANY_REQUESTS,
             "rate_limited",
-            "That's a lot of uploads. Try again in an hour.",
+            if mine >= PER_HOUR || !for_someone {
+                "That's a lot of uploads. Try again in an hour."
+            } else {
+                "That account has had a lot of uploads this hour. Try again later."
+            },
         ));
     }
     drop(conn);
@@ -235,7 +283,7 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
     let emote = emotes::create(
         &mut tx,
         &NewEmote {
-            owner_account_id: caller.account_id,
+            owner_account_id: owner,
             file_id: Some(file.id),
             name: &name,
             animated: probe.animated,
@@ -251,6 +299,30 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
         emotes::set_tags(&mut tx, emote.id, &tags)
             .await
             .map_err(db_error)?;
+    }
+    if for_someone {
+        emotes::set_uploader(&mut tx, emote.id, caller.account_id)
+            .await
+            .map_err(db_error)?;
+        audit::write_for(
+            &mut tx,
+            &audit::NewEntry {
+                actor: Some(caller.account_id),
+                action: "emote.uploaded",
+                target_kind: "emote",
+                target_id: &ids::to_text(emote.id),
+                before: None,
+                after: Some(json!({
+                    "name": name,
+                    "owner_id": ids::to_text(owner),
+                    "uploaded_by": ids::to_text(caller.account_id),
+                    "via": "account_editor",
+                })),
+            },
+            Some(owner),
+        )
+        .await
+        .map_err(db_error)?;
     }
     tx.commit().await.map_err(sqlx_error)?;
     tracing::info!(

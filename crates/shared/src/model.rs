@@ -518,6 +518,9 @@ pub struct UploadEmote {
     pub visibility: Option<String>,
     /// As `zero_width`. Search leaves it out unless asked for NSFW.
     pub nsfw: Option<String>,
+    /// The account that will own the emote: yours by default, or one you edit with
+    /// `EMOTE_UPLOAD` on every set (ADR 0014).
+    pub owner_id: Option<String>,
     #[schema(value_type = String, format = Binary)]
     pub file: Vec<u8>,
 }

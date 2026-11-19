@@ -14,6 +14,7 @@ import type {
 } from '$lib/gql/graphql';
 import { ACCOUNT_EDITORS, ACCOUNT_PROFILE, ACCOUNT_ROLES, ACCOUNT_SETS, EDITOR_OF, MY_ROLES, PROFILE_EDITED, PROFILE_MINE } from '$lib/queries';
 import { session, type Me } from '$lib/tool/session.svelte';
+import { effective } from '$lib/tool/editors';
 import { NOBODY, type Relation } from './rows';
 
 const asks = new Map<string, Promise<unknown>>();
@@ -44,11 +45,12 @@ export type ProfileSet = ProfileMineQuery['mySets'][number];
 /** The accounts you edit, with what you may do on each. */
 export const editorOf = () => once('grants', () => gql(EDITOR_OF, {}).then((r) => r.editorOf));
 
-/** What `me` may do on `accountId`. */
+/** What `me` may do on `accountId`: the grant as the API checks it (emote permissions need every set). */
 export function relationTo(accountId: string, me: Me | null, grants: readonly Grant[] | null): Relation {
   if (!me) return NOBODY;
   if (me.id === accountId) return { mine: true, perms: new Set<EditorPermission>(['EMOTES', 'SETS', 'EDITORS', 'PROFILE']) };
-  return { mine: false, perms: new Set(grants?.find((g) => g.account.id === accountId)?.permissions ?? []) };
+  const g = grants?.find((x) => x.account.id === accountId);
+  return { mine: false, perms: new Set(g ? effective(g) : []) };
 }
 
 /** An account's roles: yours, or anyone's for staff with users.view or roles.manage. Highest first; [] when not allowed. */

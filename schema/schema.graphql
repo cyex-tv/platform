@@ -1349,12 +1349,19 @@ type Mutation {
 	"""
 	disableCodeBatch(id: String!): CodeBatch!
 	"""
-	Change an emote's name, tags or flags. Owner, or `emotes.edit_any`.
+	Change an emote's name, tags or flags. Owner, an account editor of the owner with
+	`EMOTE_MANAGE` on every set (audited), or `emotes.edit_any`.
 	"""
 	updateEmote(id: String!, input: UpdateEmoteInput!): Emote!
 	"""
-	Delete your emote, or anyone's with `emotes.delete_any` (audited). It is removed from
-	every set.
+	Give an emote to another account (ADR 0014). Its owner, or an account editor of the owner
+	with `EMOTE_TRANSFER` on every set. The receiver is you, or an account you edit with
+	`EMOTE_UPLOAD` on every set. Audited (`emote.transferred`); both owners are told. 60 an hour.
+	"""
+	transferEmote(id: String!, toAccountId: String!): Emote!
+	"""
+	Delete your emote, an emote of an account you edit with `EMOTE_MANAGE`, or anyone's with
+	`emotes.delete_any` (audited). It is removed from every set.
 	"""
 	deleteEmote(id: String!): Boolean!
 	"""
@@ -2126,7 +2133,8 @@ type Query {
 	unreadNotificationCount: Int!
 	"""
 	An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`,
-	`emotes.takedown`, `emotes.edit_any` or `emotes.delete_any`. `perPage` is 1 to 100, default 50.
+	`emotes.takedown`, `emotes.edit_any` or `emotes.delete_any`, or to be the account or its
+	editor with `EMOTE_MANAGE` on every set. `perPage` is 1 to 100, default 50.
 	"""
 	accountEmotes(accountId: String!, page: Int, perPage: Int): EmotePage!
 	"""

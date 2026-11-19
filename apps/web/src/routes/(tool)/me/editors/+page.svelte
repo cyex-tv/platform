@@ -11,7 +11,7 @@
   import { ADD_ACCOUNT_EDITOR, EDITORS, REMOVE_ACCOUNT_EDITOR, SEARCH_ACCOUNTS, UPDATE_ACCOUNT_EDITOR } from '$lib/queries';
   import Confirm from '$lib/tool/Confirm.svelte';
   import EditorDialog from '$lib/tool/EditorDialog.svelte';
-  import { ALL_SETS, MAX_EDITORS, grantOn, permissionLabels, scopeInput, scopeLabel, scopeOf, type Scope } from '$lib/tool/editors';
+  import { ALL_SETS, MAX_EDITORS, effective, emotePermissionsIdle, grantOn, permissionLabels, scopeInput, scopeLabel, scopeOf, type Scope } from '$lib/tool/editors';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
@@ -212,11 +212,12 @@
       {#if data.editorOf.length}
         <ul class="ui-list">
           {#each data.editorOf as acc (acc.account.id)}
+            {@const can = effective(acc)}
             <li>
               <Avatar src={acc.account.avatar} name={acc.account.displayName} size={32} tone="tool" />
               <span class="who">
                 <strong><bdi>{clean(acc.account.displayName)}</bdi></strong>
-                <span class="ui-hint">You can: {permissionLabels(acc.permissions)}{acc.allSets ? '' : ` · ${acc.setIds.length === 1 ? '1 set' : `${acc.setIds.length} sets`}`}</span>
+                <span class="ui-hint">You can: {permissionLabels(acc.permissions)}{acc.allSets ? '' : ` · ${acc.setIds.length === 1 ? '1 set' : `${acc.setIds.length} sets`}`}{emotePermissionsIdle(acc) ? '. Uploads, emote managing and transfers need all sets, so they’re off' : ''}</span>
               </span>
               <span class="ui-actions">
                 {#if acc.permissions.includes('EMOTES') || acc.permissions.includes('SETS') || acc.permissions.includes('EDITORS')}
@@ -224,6 +225,12 @@
                 {/if}
                 {#if acc.permissions.includes('CHANNELS') || acc.permissions.includes('SETS')}
                   <a class="ui-btn ghost small" href="/me/channels#of-{acc.account.id}">Channels</a>
+                {/if}
+                {#if can.includes('EMOTE_MANAGE')}
+                  <a class="ui-btn ghost small" href="/users/{encodeURIComponent(acc.account.id)}">Emotes</a>
+                {/if}
+                {#if can.includes('EMOTE_UPLOAD')}
+                  <a class="ui-btn ghost small" href="/me/upload?for={encodeURIComponent(acc.account.id)}">Upload</a>
                 {/if}
                 <Confirm small label="Leave" confirm="Click again to leave" busy={busyId === acc.account.id}
                   onconfirm={() => leave(acc.account.id, acc.account.displayName)} />

@@ -7,6 +7,11 @@ import {
   allOn,
   canManage,
   covers,
+  effective,
+  emoteCan,
+  emotePermissionsIdle,
+  transferTargets,
+  uploadTargets,
   grantOn,
   grantable,
   locked,
@@ -32,6 +37,18 @@ describe('account editor permissions', () => {
     for (const p of PERMISSIONS) expect(p.line.length).toBeLessThan(80);
     // The ones nothing checks yet say so in their group.
     for (const g of GROUPS) if (g.items.some((p) => p.reserved)) expect(g.note).toBeTruthy();
+  });
+
+  it('checks the emote permissions now: no "saved now" note, and they need every set', () => {
+    const emotes = GROUPS.find((g) => g.label === 'Emotes')!;
+    expect(emotes.note).toBeUndefined();
+    expect(emotes.needsAllSets).toBe(true);
+    expect(emotes.items.map((p) => p.key)).toEqual(['EMOTE_UPLOAD', 'EMOTE_MANAGE', 'EMOTE_TRANSFER']);
+    expect(emotes.items.some((p) => p.reserved)).toBe(false);
+    // Billing still waits for its feature.
+    const billing = GROUPS.find((g) => g.label === 'Billing and subscription')!;
+    expect(billing.note).toBeTruthy();
+    expect(billing.items.every((p) => p.reserved)).toBe(true);
   });
 
   it('names permissions in order, folding channels into sets', () => {
@@ -76,6 +93,51 @@ describe('account editor permissions', () => {
     expect(canManage(held, ['EMOTES'])).toBe(true);
     expect(canManage(held, ['EMOTES', 'SETS'])).toBe(false);
     expect(canManage(new Set(perms('EMOTES')), ['EMOTES'])).toBe(false);
+  });
+});
+
+describe('emote permissions on another account', () => {
+  const me = { id: 'ME', displayName: 'Me' };
+  const grants = [
+    { account: { id: 'A', displayName: 'Zed' }, permissions: perms('EMOTE_UPLOAD', 'EMOTE_MANAGE'), allSets: true },
+    { account: { id: 'B', displayName: 'Ann' }, permissions: perms('EMOTE_UPLOAD', 'EMOTE_TRANSFER', 'EMOTES'), allSets: false },
+    { account: { id: 'C', displayName: 'Bo' }, permissions: perms('EMOTE_UPLOAD', 'EMOTE_TRANSFER') },
+    { account: { id: 'D', displayName: 'Cy' }, permissions: perms('SETS') },
+  ];
+
+  it('drops them on a grant limited to some sets', () => {
+    expect(effective(grants[1])).toEqual(['EMOTES']);
+    expect(effective(grants[0])).toEqual(['EMOTE_UPLOAD', 'EMOTE_MANAGE']);
+    expect(effective(grants[3])).toEqual(['SETS', 'CHANNELS']);
+    expect(emotePermissionsIdle(grants[1])).toBe(true);
+    expect(emotePermissionsIdle(grants[0])).toBe(false);
+    expect(emotePermissionsIdle({ permissions: ['EMOTES'], allSets: false })).toBe(false);
+  });
+
+  it('allows editing your own emotes and those of accounts where you manage emotes', () => {
+    expect(emoteCan(grants, 'ME', 'ME', 'EMOTE_MANAGE')).toBe(true);
+    expect(emoteCan(grants, 'A', 'ME', 'EMOTE_MANAGE')).toBe(true);
+    expect(emoteCan(grants, 'B', 'ME', 'EMOTE_MANAGE')).toBe(false);
+    expect(emoteCan(grants, 'B', 'ME', 'EMOTE_TRANSFER')).toBe(false);
+    expect(emoteCan(grants, 'C', 'ME', 'EMOTE_TRANSFER')).toBe(true);
+    expect(emoteCan(grants, 'Z', 'ME', 'EMOTE_MANAGE')).toBe(false);
+    expect(emoteCan(grants, 'A', null, 'EMOTE_MANAGE')).toBe(false);
+    expect(emoteCan(null, 'A', 'ME', 'EMOTE_MANAGE')).toBe(false);
+  });
+
+  it('offers yourself first for uploads, then accounts where you hold Upload on every set', () => {
+    expect(uploadTargets(me, grants)).toEqual([
+      { id: 'ME', displayName: 'Me', self: true },
+      { id: 'C', displayName: 'Bo', self: false },
+      { id: 'A', displayName: 'Zed', self: false },
+    ]);
+    expect(uploadTargets(me, null)).toEqual([{ id: 'ME', displayName: 'Me', self: true }]);
+    expect(uploadTargets(null, grants)).toEqual([]);
+  });
+
+  it('transfers only to yourself or accounts that trust you with uploads, never the owner', () => {
+    expect(transferTargets(me, grants, 'A').map((t) => t.id)).toEqual(['ME', 'C']);
+    expect(transferTargets(me, grants, 'ME').map((t) => t.id)).toEqual(['C', 'A']);
   });
 });
 

@@ -15,7 +15,7 @@ use chrono::{DateTime, Utc};
 use cyex_tv_db::cosmetics as cosmetics_db;
 use cyex_tv_db::reads::{self, EmoteRow};
 use cyex_tv_db::sets::Set;
-use cyex_tv_db::{accounts, audit, channels, ids, sets};
+use cyex_tv_db::{accounts, audit, channels, emotes as emotes_db, ids, sets};
 use cyex_tv_shared::error::ApiResult;
 use cyex_tv_shared::model::{
     AccountSummary, ActivityCosmeticChange, ActivityEmote, ActivityEntry, ActivityFilter,
@@ -47,6 +47,8 @@ struct Lookup {
     badges: HashMap<Uuid, String>,
     paints: HashMap<Uuid, String>,
     people: HashMap<Uuid, AccountSummary>,
+    /// The account editor who uploaded an emote for its owner (ADR 0014), when one did.
+    uploaders: HashMap<Uuid, Uuid>,
 }
 
 fn text(v: &Option<Value>, key: &str) -> Option<String> {
@@ -113,8 +115,12 @@ async fn lookup(
     cdn_url: &str,
 ) -> ApiResult<Lookup> {
     let mut r = refs(rows);
-    // An approval shows the owner as its actor.
+    // An approval shows the owner as its actor, or the editor who uploaded it for them.
     r.people.extend(owners.iter().copied());
+    let uploaders = emotes_db::uploaders(conn, &list(&r.emotes))
+        .await
+        .map_err(db_error)?;
+    r.people.extend(uploaders.values().copied());
     let sets = sets::get_many(conn, &list(&r.sets))
         .await
         .map_err(db_error)?
@@ -177,6 +183,7 @@ async fn lookup(
         badges,
         paints,
         people,
+        uploaders,
     })
 }
 
@@ -224,10 +231,13 @@ fn change(
 /// The feed line a row stands for, or `None` when it must not show.
 fn entry(row: &audit::Entry, owner: Uuid, look: &Lookup) -> Option<ActivityEntry> {
     let target = ids::from_text(&row.target_id);
-    // An upload is shown as the owner's: the approver (the audit actor) isn't shown and may
-    // be gone. Every other line needs its own actor.
+    // An upload is shown as the owner's, or "by" the account editor who uploaded it for them: the
+    // approver (the audit actor) isn't shown and may be gone. Every other line needs its own actor.
     let actor = if row.action == "emote.approved" {
-        look.people.get(&owner)?
+        target
+            .and_then(|t| look.uploaders.get(&t))
+            .and_then(|u| look.people.get(u))
+            .or_else(|| look.people.get(&owner))?
     } else {
         look.people.get(&row.actor_account_id?)?
     }

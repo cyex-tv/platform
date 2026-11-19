@@ -298,6 +298,63 @@ pub async fn count_since(
     .await?)
 }
 
+/// How many emotes an account has uploaded since `since`, for itself or as an account editor for
+/// someone else, deleted ones included (the uploader's side of the hourly limit).
+pub async fn count_uploaded_since(
+    conn: &mut PgConnection,
+    uploader: Uuid,
+    since: DateTime<Utc>,
+) -> DbResult<i64> {
+    Ok(sqlx::query_scalar(
+        "SELECT count(*) FROM emotes
+         WHERE ((owner_account_id = $1 AND uploaded_by IS NULL) OR uploaded_by = $1)
+           AND created_at >= $2",
+    )
+    .bind(uploader)
+    .bind(since)
+    .fetch_one(conn)
+    .await?)
+}
+
+/// Marks an emote as uploaded by an account editor of its owner (ADR 0014).
+pub async fn set_uploader(conn: &mut PgConnection, id: Uuid, uploader: Uuid) -> DbResult<()> {
+    sqlx::query("UPDATE emotes SET uploaded_by = $2 WHERE id = $1")
+        .bind(id)
+        .bind(uploader)
+        .execute(conn)
+        .await?;
+    Ok(())
+}
+
+/// Who uploaded each emote for its owner, for the emotes an account editor uploaded; the owner's
+/// own uploads aren't in the map.
+pub async fn uploaders(
+    conn: &mut PgConnection,
+    ids: &[Uuid],
+) -> DbResult<std::collections::HashMap<Uuid, Uuid>> {
+    let rows: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT id, uploaded_by FROM emotes WHERE id = ANY($1) AND uploaded_by IS NOT NULL",
+    )
+    .bind(ids)
+    .fetch_all(conn)
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
+/// Gives a live emote to another account. False when there was none.
+pub async fn transfer(conn: &mut PgConnection, id: Uuid, to: Uuid) -> DbResult<bool> {
+    Ok(sqlx::query(
+        "UPDATE emotes SET owner_account_id = $2, updated_at = now()
+         WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .bind(to)
+    .execute(conn)
+    .await?
+    .rows_affected()
+        == 1)
+}
+
 /// The emotes made from one file (the same image, uploaded by anyone).
 pub async fn by_file(conn: &mut PgConnection, file_id: Uuid) -> DbResult<Vec<Emote>> {
     Ok(sqlx::query_as(&format!(

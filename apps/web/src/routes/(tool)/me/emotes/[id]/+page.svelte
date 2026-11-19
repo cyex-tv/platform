@@ -6,7 +6,9 @@
   import { ready } from '$lib/emote';
   import { clean, date, iso } from '$lib/format';
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
-  import { ADD_SET_EMOTE, DELETE_EMOTE, EMOTE, MY_SETS, UPDATE_EMOTE } from '$lib/queries';
+  import { ADD_SET_EMOTE, DELETE_EMOTE, EMOTE, MY_SETS, TRANSFER_EMOTE, UPDATE_EMOTE } from '$lib/queries';
+  import { editorOf, forgetProfile, type Grant } from '$lib/profile/data.svelte';
+  import { emoteCan, transferTargets } from '$lib/tool/editors';
   import { sectionHref } from '$lib/profile/rows';
   import { TAG_MAX, cleanTag, nameProblem, tagsProblem } from '$lib/rules';
   import TagInput from '$lib/components/TagInput.svelte';
@@ -37,13 +39,32 @@
   let saving = $state(false);
   let deleting = $state(false);
   let adding = $state(false);
+  let grants = $state<readonly Grant[] | null>(null);
+  let giveTo = $state('');
+  let giving = $state(false);
 
   const nameError = $derived(nameProblem(name));
   const tagError = $derived(tagsProblem(tags));
   const mine = $derived(emote?.owner?.id === session.me?.id);
-  // Staff edit and delete anyone's emote with emotes.edit_any / emotes.delete_any (the API checks and audits).
-  const canEdit = $derived(mine || can('emotes.edit_any'));
-  const canDelete = $derived(mine || can('emotes.delete_any'));
+  // Editors of the owner's account with Manage on every set edit and delete as the owner does, and
+  // with Transfer give it away (ADR 0014). Staff edit and delete anyone's emote with
+  // emotes.edit_any / emotes.delete_any. The API checks and audits.
+  const manages = $derived(!mine && emoteCan(grants, emote?.owner?.id, session.me?.id, 'EMOTE_MANAGE'));
+  const canEdit = $derived(mine || manages || can('emotes.edit_any'));
+  const canDelete = $derived(mine || manages || can('emotes.delete_any'));
+  const canGive = $derived(emoteCan(grants, emote?.owner?.id, session.me?.id, 'EMOTE_TRANSFER'));
+  const me = $derived(session.me ? { id: session.me.id, displayName: session.me.identities[0]?.displayName ?? 'You' } : null);
+  const receivers = $derived(transferTargets(me, grants, emote?.owner?.id));
+  $effect(() => {
+    if (!receivers.some((r) => r.id === giveTo)) giveTo = receivers[0]?.id ?? '';
+  });
+  $effect(() => {
+    if (!session.me) return;
+    editorOf()
+      .then((g) => (grants = g))
+      .catch(() => {});
+  });
+  const ownerHome = $derived(emote?.owner ? `/users/${encodeURIComponent(emote.owner.id)}` : '/me');
   const changed = $derived(
     emote !== null &&
       (name.trim() !== emote.name ||
@@ -127,10 +148,27 @@
     try {
       await gql(DELETE_EMOTE, { id: emote.id });
       notify(`${iso(emote.name)} deleted.`);
-      await goto(mine || !emote.owner ? '/me' : `/admin/users/${encodeURIComponent(emote.owner.id)}`);
+      await goto(mine || !emote.owner ? '/me' : manages ? ownerHome : `/admin/users/${encodeURIComponent(emote.owner.id)}`);
     } catch (err) {
       fail(err);
       deleting = false;
+    }
+  }
+
+  async function give() {
+    if (!emote || !giveTo) return;
+    const to = receivers.find((r) => r.id === giveTo);
+    giving = true;
+    try {
+      const r = await gql(TRANSFER_EMOTE, { id: emote.id, toAccountId: giveTo });
+      forgetProfile('library');
+      notify(`${iso(emote.name)} now belongs to ${to ? (to.self ? 'you' : iso(clean(to.displayName))) : 'that account'}.`);
+      if (emoteCan(grants, r.transferEmote.owner?.id, session.me?.id, 'EMOTE_MANAGE')) fill(r.transferEmote);
+      else await goto(to?.self ? '/me' : `/users/${encodeURIComponent(giveTo)}`);
+    } catch (err) {
+      fail(err);
+    } finally {
+      giving = false;
     }
   }
 
@@ -165,11 +203,11 @@
   <PageHead
     name
     title={clean(emote.name)}
-    back={mine ? { href: '/me', label: 'Your emotes' } : can('emotes.review') ? { href: '/admin', label: 'Admin' } : { href: '/search', label: 'Emotes' }}
+    back={mine ? { href: '/me', label: 'Your emotes' } : manages ? { href: ownerHome, label: `${clean(emote.owner?.displayName ?? '')}’s emotes` } : can('emotes.review') ? { href: '/admin', label: 'Admin' } : { href: '/search', label: 'Emotes' }}
   >
     {#snippet line()}
       <span class="ui-chip {emote!.state.toLowerCase()}">{STATE_LABEL[emote!.state]}</span>
-      Uploaded <span>{date(emote!.createdAt)}</span>
+      Uploaded <span>{date(emote!.createdAt)}</span>{#if !mine && emote!.owner && (manages || canGive)}{' · '}<bdi>{clean(emote!.owner.displayName)}</bdi>’s emote, you edit their account{/if}
     {/snippet}
     {#snippet actions()}
       {#if emote!.state === 'APPROVED'}
@@ -228,6 +266,23 @@
             </div>
           {:else}
             <p class="ui-hint">It’s in all your sets already, or you have none yet. <a href="/me/sets">Your sets</a></p>
+          {/if}
+        </section>
+      {/if}
+
+      {#if canGive && (receivers.length || !mine)}
+        <section class="ui-card">
+          <h2>Give to another account</h2>
+          {#if receivers.length}
+            <p class="ui-hint">It moves with its name, tags and sets. Only you, or accounts where you can upload, can take it.</p>
+            <div class="add gap">
+              <select class="ui-input" bind:value={giveTo} aria-label="Give to">
+                {#each receivers as r (r.id)}<option value={r.id}>{r.self ? `${clean(r.displayName)} (you)` : clean(r.displayName)}</option>{/each}
+              </select>
+              <Confirm label="Give" confirm="Click again to give it" busy={giving} onconfirm={give} />
+            </div>
+          {:else}
+            <p class="ui-hint">You can give it only to yourself or to accounts where you can upload; there are none yet.</p>
           {/if}
         </section>
       {/if}

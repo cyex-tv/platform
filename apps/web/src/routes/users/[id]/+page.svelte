@@ -103,6 +103,8 @@
       {#key data.id}<ActivityFeed accountId={data.id} name={data.creator.displayName} />{/key}
     {:else if relation.mine}
       <MyUploads />
+    {:else if relation.perms.has('EMOTE_MANAGE')}
+      {#key data.id}<MyUploads accountId={data.id} name={data.creator.displayName} canUpload={relation.perms.has('EMOTE_UPLOAD')} />{/key}
     {:else}
       {#key data.id}
         <Uploads id={data.id} {name} first={data.items} total={data.total} />

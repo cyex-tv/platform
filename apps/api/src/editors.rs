@@ -10,6 +10,8 @@
 //! - `sets` also allows what `channels` does (it did before that flag existed), so holding `sets`
 //!   counts as holding `channels` in every check. Grants are listed as stored.
 //! - Grants of blocked or deleted accounts, and grants on them, count for nothing.
+//! - The emote flags (`emote_upload`, `emote_manage`, `emote_transfer`) need a grant on every set
+//!   (`has_emote_flag`): an account's emotes aren't in any one set.
 //!
 //! Every change writes `audit_log` with before and after, in the change's transaction.
 
@@ -183,6 +185,25 @@ pub async fn has_flag_on_all_sets(
         return Ok(false);
     }
     Ok(scope_of(conn, owner, editor).await?.is_all())
+}
+
+/// True if `editor` may use an emote flag (`emote_upload`, `emote_manage`, `emote_transfer`) on
+/// `owner`'s emotes: an account editor holding it on a grant that covers every set. Emotes belong
+/// to the account, not to a set, so a grant limited to some sets is too narrow for them. False for
+/// the owner, as `has_flag`.
+pub async fn has_emote_flag(
+    conn: &mut PgConnection,
+    owner: Uuid,
+    editor: Uuid,
+    flag: EditorPermission,
+) -> ApiResult<bool> {
+    debug_assert!(matches!(
+        flag,
+        EditorPermission::EmoteUpload
+            | EditorPermission::EmoteManage
+            | EditorPermission::EmoteTransfer
+    ));
+    has_flag_on_all_sets(conn, owner, editor, flag).await
 }
 
 /// True if `editor` is an account editor of `owner` holding `flag` and their grant covers `set`.

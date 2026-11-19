@@ -50,3 +50,20 @@ Streamers hand their emotes to a team: moderators who add and rename emotes, a m
 - **API (additive):** `AccountEditor.allSets`/`setIds`, `EditedAccount.allSets`/`setIds`, `AddAccountEditorInput.setIds`, `updateAccountEditor(setIds:)` (empty: every set; left out: unchanged), and `AccountProfile.editors`: who edits an account, names only, for anyone (never their flags or sets). The audit rows of grants carry `all_sets` and `set_ids` before and after.
 - **Website:** the Editors page finds people by name (`searchAccounts`, no platform picker), and adding or changing an editor opens one permissions dialog (grouped flags, "Everything", and a "Sets they can edit" list defaulting to all sets). A grant applies when saved. The set page no longer manages per-set editors; it links to the Editors page. Per-set editors keep working in the API.
 - Tests: `apps/api/tests/sets_editors_flow.rs`.
+
+## Amendment (owner feedback, 2026/11/19): the emote permissions are checked
+The owner asked for the emote flags to work now (billing stays stored only). They replace "stored now; checked once …" in the table above.
+
+| Flag | Allows, on the owner's account |
+|---|---|
+| `emote_upload` | upload an emote the owner owns: `POST /v1/emotes` with `owner_id`. `emotes.uploaded_by` names the editor (migration `20261207000080`), and the owner's public feed shows the upload "by" them once it is approved |
+| `emote_manage` | see the owner's emotes in every state (`emote`, `accountEmotes`), and change their name, tags, flags and visibility (`updateEmote`, with the owner's resubmit rule) or delete them (`deleteEmote`) |
+| `emote_transfer` | give one of the owner's emotes to another account (`transferEmote`), under the receiver rule below |
+
+- **Every set:** the three count only on a grant covering every set (`has_emote_flag`). Emotes belong to the account, not to a set, so a grant narrowed to some sets is too narrow for them; the website says so on the Editors page and in the permissions dialog.
+- **Restrictions:** an uploads hold (`restricted_at`, #87) on the editor or on the owner refuses all three, as it refuses the owner's own changes.
+- **Upload limit:** an editor's upload counts against them (20 an hour, their own and everyone else's together) and against the owner (20 an hour received, from anyone).
+- **Transfer, the receiver's consent:** the receiver must be the caller or an account where the caller holds `emote_upload` on every set. That account already lets the caller put emotes on it, so nobody can push an emote onto an account that never trusted them, and nobody gets an emote they couldn't have uploaded. The owner follows the same rule. There is no accept step: it was the larger feature (a pending transfer, a notification with Accept, expiry), and the rule above gives the same protection for the cases editors need (moving emotes between accounts they look after). Transfers are 60 an hour per caller; the emote keeps its state, visibility, tags and set memberships (a private emote stays in the sets it was in; from then on only its new owner can add it to more). Both owners get an `emote.transferred` notification unless they did it.
+- **Audit:** `emote.uploaded`, `emote.updated`, `emote.deleted` and `emote.transferred`, actor the editor, `"via": "account_editor"` in `after`, subject the owner. An owner's own transfer is audited without `via`; staff edits keep `"via": "emotes.delete_any"` and no subject.
+- **API (additive):** `owner_id` on the upload form, `transferEmote(id, toAccountId)`, `accountEmotes` also for the account itself and its managers; no field changed meaning.
+- Tests: `apps/api/tests/editor_emotes_flow.rs`.

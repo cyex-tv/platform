@@ -96,9 +96,11 @@ export type UploadFlags = { zeroWidth: boolean; visibility: EmoteVisibility; nsf
  * The multipart form of an upload: name, tags (comma-separated), the flags that are on, the
  * visibility unless public (a private one also sends the older `private` flag), the file.
  */
-export function uploadForm(file: Blob, name: string, tags: string[], flags?: Partial<UploadFlags>): FormData {
+export function uploadForm(file: Blob, name: string, tags: string[], flags?: Partial<UploadFlags>, ownerId?: string | null): FormData {
   const form = new FormData();
   form.set('name', name);
+  // Upload as (ADR 0014): an account you edit with Upload owns it. Left out for your own.
+  if (ownerId) form.set('owner_id', ownerId);
   if (tags.length) form.set('tags', tags.join(','));
   if (flags?.zeroWidth) form.set('zero_width', 'true');
   if (flags?.visibility === 'PRIVATE') form.set('private', 'true');
@@ -118,8 +120,9 @@ export function uploadEmote(
   tags: string[],
   flags?: Partial<UploadFlags>,
   progress?: (share: number) => void,
+  ownerId?: string | null,
 ): Promise<Uploaded> {
-  const form = uploadForm(file, name, tags, flags);
+  const form = uploadForm(file, name, tags, flags, ownerId);
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `${apiUrl()}/v1/emotes`);

@@ -3,6 +3,11 @@
 //! Who sees an emote that isn't approved: its owner and `emotes.review` holders. Deleted emotes
 //! are gone for everyone. Approving or rejecting needs `emotes.review` and works only on pending
 //! emotes; both are audited, and so is any edit made through `emotes.edit_any`.
+//!
+//! Account editors (ADR 0014) with `emote_manage` on every set see, change and delete the owner's
+//! emotes as the owner does; with `emote_transfer` they give them to another account
+//! (`transfer`). Each such change is audited with the editor as actor, `"via": "account_editor"`
+//! and the owner as subject. A hold on uploads of the editor or the owner refuses them.
 
 use std::collections::BTreeSet;
 
@@ -12,8 +17,8 @@ use cyex_tv_db::emotes::{self, EmotePatch};
 use cyex_tv_db::{DbError, accounts, audit, ids, reads, sets, staff};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
-    AuditEntry, Emote, EmoteNote, EmotePage, EmoteState, EmoteVisibility, EventType, ReviewCounts,
-    ReviewQueue, ReviewQueueFilter, ReviewSort, ReviewTab, UpdateEmote,
+    AuditEntry, EditorPermission, Emote, EmoteNote, EmotePage, EmoteState, EmoteVisibility,
+    EventType, ReviewCounts, ReviewQueue, ReviewQueueFilter, ReviewSort, ReviewTab, UpdateEmote,
 };
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
@@ -139,6 +144,73 @@ async fn write_audit(
     Ok(())
 }
 
+/// `write_audit` for a change an account editor made on the owner's emote: marked
+/// `"via": "account_editor"` and shown to the owner as theirs (the subject).
+async fn write_editor_audit(
+    conn: &mut PgConnection,
+    caller: &Caller,
+    action: &str,
+    emote_id: Uuid,
+    owner: Uuid,
+    before: Option<Value>,
+    after: Option<Value>,
+) -> ApiResult<()> {
+    let mut after = after.unwrap_or_else(|| json!({}));
+    after["via"] = json!("account_editor");
+    audit::write_for(
+        conn,
+        &audit::NewEntry {
+            actor: Some(caller.account_id),
+            action,
+            target_kind: "emote",
+            target_id: &ids::to_text(emote_id),
+            before,
+            after: Some(after),
+        },
+        Some(owner),
+    )
+    .await
+    .map_err(db_error)?;
+    Ok(())
+}
+
+/// True if the caller is an account editor of the emote's owner with `flag` on every set.
+async fn editor_of_owner(
+    conn: &mut PgConnection,
+    caller: &Caller,
+    owner: Option<Uuid>,
+    flag: EditorPermission,
+) -> ApiResult<bool> {
+    match owner {
+        Some(owner) if owner != caller.account_id => {
+            crate::editors::has_emote_flag(conn, owner, caller.account_id, flag).await
+        }
+        _ => Ok(false),
+    }
+}
+
+fn restricted(message: &str) -> ApiError {
+    ApiError::new(StatusCode::FORBIDDEN, "restricted", message)
+}
+
+/// Refuses while uploads of `account` are held (#87): the account can't change emotes, and
+/// nobody can change them for it.
+async fn not_restricted(conn: &mut PgConnection, account: Uuid, message: &str) -> ApiResult<()> {
+    let held = accounts::get(conn, account)
+        .await
+        .map_err(db_error)?
+        .is_none_or(|a| a.restricted_at.is_some());
+    if held {
+        Err(restricted(message))
+    } else {
+        Ok(())
+    }
+}
+
+const YOU_RESTRICTED: &str = "Your account can't change emotes right now.";
+const OWNER_RESTRICTED: &str =
+    "That account can't change emotes right now, so nobody can change them for it.";
+
 // Reads
 
 /// Whether the emote's owner is an account whose deletion is pending (ADR 0019): its emotes are
@@ -171,7 +243,11 @@ pub async fn emote(
         let allowed = match caller {
             None => false,
             Some(c) if found.owner == Some(c.account_id) => true,
-            Some(c) => holds(&mut conn, c, permissions::EMOTES_REVIEW).await?,
+            Some(c) => {
+                holds(&mut conn, c, permissions::EMOTES_REVIEW).await?
+                    || editor_of_owner(&mut conn, c, found.owner, EditorPermission::EmoteManage)
+                        .await?
+            }
         };
         if !allowed {
             return Ok(None);
@@ -279,7 +355,8 @@ impl QueueRead {
     }
 }
 
-/// An account's emotes in every state, newest first. For `users.view` and moderators.
+/// An account's emotes in every state, newest first. For `users.view`, moderators, the account
+/// itself, and its editors with `emote_manage` on every set.
 pub async fn account_emotes(
     state: &AppState,
     caller: &Caller,
@@ -297,8 +374,19 @@ pub async fn account_emotes(
         permissions::EMOTES_EDIT_ANY,
         permissions::EMOTES_DELETE_ANY,
     ];
-    if !held.iter().any(|p| may.contains(&p.as_str())) {
-        return Err(forbidden("This needs users.view or emotes.review."));
+    if !held.iter().any(|p| may.contains(&p.as_str()))
+        && owner != caller.account_id
+        && !crate::editors::has_emote_flag(
+            &mut conn,
+            owner,
+            caller.account_id,
+            EditorPermission::EmoteManage,
+        )
+        .await?
+    {
+        return Err(forbidden(
+            "This needs users.view or emotes.review, or the account's emote manage permission.",
+        ));
     }
     let per_page = per_page.unwrap_or(QUEUE_PAGE).clamp(1, QUEUE_PAGE_MAX);
     let page = page.unwrap_or(1).max(1);
@@ -547,9 +635,11 @@ pub async fn history(
     Ok(entries.into_iter().map(crate::admin::audit_view).collect())
 }
 
-/// The owner, or `emotes.edit_any` (audited). A restricted owner can't edit. When an owner
-/// without `emotes.review` or `emotes.edit_any` changes the name or tags of an approved emote, it
-/// goes back to review (audited as `emote.resubmitted`); flags alone don't.
+/// The owner, an account editor with `emote_manage` (audited, `"via": "account_editor"`), or
+/// `emotes.edit_any` (audited). A restricted owner can't edit, nor can a restricted editor, nor
+/// anyone for a restricted owner. When an owner or editor without `emotes.review` or
+/// `emotes.edit_any` changes the name or tags of an approved emote, it goes back to review
+/// (audited as `emote.resubmitted`); flags alone don't.
 pub async fn update(
     state: &AppState,
     caller: &Caller,
@@ -564,21 +654,18 @@ pub async fn update(
     let before = row(&mut tx, id).await?.ok_or_else(not_found)?;
     let owner = before.owner == Some(caller.account_id);
     let edit_any = holds(&mut tx, caller, permissions::EMOTES_EDIT_ANY).await?;
-    if !owner && !edit_any {
+    // Staff with `emotes.edit_any` act as staff even when they also edit the account.
+    let editor = !owner
+        && !edit_any
+        && editor_of_owner(&mut tx, caller, before.owner, EditorPermission::EmoteManage).await?;
+    if !owner && !edit_any && !editor {
         return Err(forbidden("Only the emote's owner can change it."));
     }
-    if owner {
-        let account = accounts::get(&mut tx, caller.account_id)
-            .await
-            .map_err(db_error)?
-            .ok_or_else(not_found)?;
-        if account.restricted_at.is_some() {
-            return Err(ApiError::new(
-                StatusCode::FORBIDDEN,
-                "restricted",
-                "Your account can't change emotes right now.",
-            ));
-        }
+    if owner || editor {
+        not_restricted(&mut tx, caller.account_id, YOU_RESTRICTED).await?;
+    }
+    if editor && let Some(o) = before.owner {
+        not_restricted(&mut tx, o, OWNER_RESTRICTED).await?;
     }
     let current = EmoteVisibility::of(before.private, before.unlisted);
     let visibility =
@@ -632,8 +719,19 @@ pub async fn update(
         )
         .await?;
     }
-    if !owner {
-        let snap = |r: &reads::EmoteRow, tags: &[String]| json!({ "name": r.name, "zero_width": r.zero_width, "private": r.private, "unlisted": r.unlisted, "nsfw": r.nsfw, "tags": tags });
+    let snap = |r: &reads::EmoteRow, tags: &[String]| json!({ "name": r.name, "zero_width": r.zero_width, "private": r.private, "unlisted": r.unlisted, "nsfw": r.nsfw, "tags": tags });
+    if editor && let Some(o) = before.owner {
+        write_editor_audit(
+            &mut tx,
+            caller,
+            "emote.updated",
+            id,
+            o,
+            Some(snap(&before, &old_tags)),
+            Some(snap(&after, &new_tags)),
+        )
+        .await?;
+    } else if !owner {
         write_audit(
             &mut tx,
             caller,
@@ -653,8 +751,10 @@ pub async fn update(
     build(state, &mut conn, &after).await
 }
 
-/// The owner, or `emotes.delete_any` (audited as `emote.deleted`), deletes an emote: it leaves
-/// every set at once. False if there was none.
+/// The owner, an account editor with `emote_manage` (audited as `emote.deleted`, `"via":
+/// "account_editor"`), or `emotes.delete_any` (audited as `emote.deleted`) deletes an emote: it
+/// leaves every set at once. A restricted editor can't, nor anyone for a restricted owner. False
+/// if there was none.
 pub async fn delete(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bool> {
     let id = parse_id(id)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
@@ -663,27 +763,47 @@ pub async fn delete(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bo
         return Ok(false);
     };
     let owner = found.owner == Some(caller.account_id);
-    if !owner && !holds(&mut tx, caller, permissions::EMOTES_DELETE_ANY).await? {
+    let delete_any = !owner && holds(&mut tx, caller, permissions::EMOTES_DELETE_ANY).await?;
+    let editor = !owner
+        && !delete_any
+        && editor_of_owner(&mut tx, caller, found.owner, EditorPermission::EmoteManage).await?;
+    if !owner && !delete_any && !editor {
         return Err(forbidden("Only the emote's owner can delete it."));
     }
     if !owner {
         let tags = emotes::tags(&mut tx, id).await.map_err(db_error)?;
-        write_audit(
-            &mut tx,
-            caller,
-            "emote.deleted",
-            id,
-            Some(json!({
-                "name": found.name,
-                "owner_id": found.owner.map(ids::to_text),
-                "state": found.state,
-                "private": found.private,
-                "unlisted": found.unlisted,
-                "tags": tags,
-            })),
-            Some(json!({ "via": permissions::EMOTES_DELETE_ANY })),
-        )
-        .await?;
+        let snapshot = json!({
+            "name": found.name,
+            "owner_id": found.owner.map(ids::to_text),
+            "state": found.state,
+            "private": found.private,
+            "unlisted": found.unlisted,
+            "tags": tags,
+        });
+        if editor && let Some(o) = found.owner {
+            not_restricted(&mut tx, caller.account_id, YOU_RESTRICTED).await?;
+            not_restricted(&mut tx, o, OWNER_RESTRICTED).await?;
+            write_editor_audit(
+                &mut tx,
+                caller,
+                "emote.deleted",
+                id,
+                o,
+                Some(snapshot),
+                None,
+            )
+            .await?;
+        } else {
+            write_audit(
+                &mut tx,
+                caller,
+                "emote.deleted",
+                id,
+                Some(snapshot),
+                Some(json!({ "via": permissions::EMOTES_DELETE_ANY })),
+            )
+            .await?;
+        }
     }
     for (set_id, name) in emotes::remove_from_all_sets(&mut tx, id)
         .await
@@ -698,6 +818,130 @@ pub async fn delete(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bo
     let deleted = emotes::delete(&mut tx, id).await.map_err(db_error)?;
     tx.commit().await.map_err(sqlx_error)?;
     Ok(deleted)
+}
+
+/// Gives an emote to another account (ADR 0014, amended 2026/11/19). Allowed for its owner and
+/// for an account editor of the owner with `emote_transfer` on every set. The receiving account
+/// must be the caller, or one the caller edits with `emote_upload` on every set: the receiver
+/// agreed by making them an uploader there, so nobody can push emotes onto an account that never
+/// trusted them, and nobody gains an emote they couldn't have uploaded. Blocked, deleted and
+/// restricted accounts (either side, and the caller) are refused. The emote keeps its state,
+/// visibility, tags and sets; it is audited as `emote.transferred` (subject: the old owner) and
+/// both owners hear about it unless they did it.
+pub async fn transfer(
+    state: &AppState,
+    caller: &Caller,
+    id: &str,
+    to_account_id: &str,
+) -> ApiResult<Emote> {
+    let id = parse_id(id)?;
+    let to = parse_id(to_account_id)?;
+    state
+        .limits
+        .emote_transfers
+        .check(&ids::to_text(caller.account_id))
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::TOO_MANY_REQUESTS,
+                "rate_limited",
+                "That's a lot of transfers. Try again in a while.",
+            )
+        })?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    let lock = emotes::lock(&mut tx, id).await.map_err(db_error)?;
+    let before = row(&mut tx, id).await?.ok_or_else(not_found)?;
+    let (Some(_), Some(from)) = (lock, before.owner) else {
+        return Err(not_found());
+    };
+    let owner = from == caller.account_id;
+    let editor = !owner
+        && editor_of_owner(&mut tx, caller, Some(from), EditorPermission::EmoteTransfer).await?;
+    if !owner && !editor {
+        // An emote others can't see yet answers as if it weren't there.
+        if before.state != EmoteState::Approved {
+            return Err(not_found());
+        }
+        return Err(forbidden(
+            "Only the emote's owner and its editors with the transfer permission can give it away.",
+        ));
+    }
+    if to == from {
+        return Err(bad("same_owner", "That account owns it already."));
+    }
+    let receiver_ok = to == caller.account_id
+        || crate::editors::has_emote_flag(
+            &mut tx,
+            to,
+            caller.account_id,
+            EditorPermission::EmoteUpload,
+        )
+        .await?;
+    if !receiver_ok {
+        return Err(forbidden(
+            "You can give it to yourself, or to an account you edit with the upload permission on every set.",
+        ));
+    }
+    let receiver = accounts::get(&mut tx, to)
+        .await
+        .map_err(db_error)?
+        .filter(|a| a.deleted_at.is_none() && a.blocked_at.is_none())
+        .ok_or_else(not_found)?;
+    not_restricted(&mut tx, caller.account_id, YOU_RESTRICTED).await?;
+    not_restricted(&mut tx, from, OWNER_RESTRICTED).await?;
+    if receiver.restricted_at.is_some() {
+        return Err(restricted("That account can't take emotes right now."));
+    }
+    if !emotes::transfer(&mut tx, id, to).await.map_err(db_error)? {
+        return Err(not_found());
+    }
+    let mut after = json!({ "owner_id": ids::to_text(to) });
+    if editor {
+        after["via"] = json!("account_editor");
+    }
+    audit::write_for(
+        &mut tx,
+        &audit::NewEntry {
+            actor: Some(caller.account_id),
+            action: "emote.transferred",
+            target_kind: "emote",
+            target_id: &ids::to_text(id),
+            before: Some(json!({ "owner_id": ids::to_text(from), "name": before.name })),
+            after: Some(after),
+        },
+        Some(from),
+    )
+    .await
+    .map_err(db_error)?;
+    let names = reads::summaries(&mut tx, &[from, to, caller.account_id])
+        .await
+        .map_err(db_error)?;
+    let name = |a: Uuid| names.get(&a).map(|s| s.display_name.clone());
+    let payload = |role: &str| {
+        json!({
+            "role": role,
+            "emote_id": ids::to_text(id),
+            "name": before.name,
+            "from_id": ids::to_text(from),
+            "from_name": name(from),
+            "to_id": ids::to_text(to),
+            "to_name": name(to),
+            "actor_id": ids::to_text(caller.account_id),
+            "actor_name": name(caller.account_id),
+        })
+    };
+    if caller.account_id != from {
+        crate::account::notify(&mut tx, from, "emote.transferred", &payload("from")).await?;
+    }
+    if caller.account_id != to {
+        crate::account::notify(&mut tx, to, "emote.transferred", &payload("to")).await?;
+    }
+    if before.state == EmoteState::Approved {
+        announce(&mut tx, id, EventType::EmoteUpdated).await?;
+    }
+    tx.commit().await.map_err(sqlx_error)?;
+    let after = row(&mut conn, id).await?.ok_or_else(not_found)?;
+    build(state, &mut conn, &after).await
 }
 
 #[cfg(test)]

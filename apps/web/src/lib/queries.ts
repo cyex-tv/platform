@@ -1039,6 +1039,14 @@ export const ADMIN_ACCOUNT = graphql(`
   }
 `);
 
+export const TRANSFER_EMOTE = graphql(`
+  mutation TransferEmote($id: String!, $toAccountId: String!) {
+    transferEmote(id: $id, toAccountId: $toAccountId) {
+      ...EmoteFields
+    }
+  }
+`);
+
 export const ACCOUNT_EMOTES = graphql(`
   query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {
     accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {
@@ -1354,6 +1362,7 @@ export const EDITOR_OF = graphql(`
         avatar
       }
       permissions
+      allSets
     }
   }
 `);

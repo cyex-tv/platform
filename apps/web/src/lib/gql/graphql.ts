@@ -942,8 +942,8 @@ export type Mutation = {
    */
   deleteBadge: Scalars['Boolean']['output'];
   /**
-   * Delete your emote, or anyone's with `emotes.delete_any` (audited). It is removed from
-   * every set.
+   * Delete your emote, an emote of an account you edit with `EMOTE_MANAGE`, or anyone's with
+   * `emotes.delete_any` (audited). It is removed from every set.
    */
   deleteEmote: Scalars['Boolean']['output'];
   /** Delete an emote note: its author may, and the owner. False if it was gone. Audited. */
@@ -1088,6 +1088,12 @@ export type Mutation = {
    */
   takedownEmote: Emote;
   /**
+   * Give an emote to another account (ADR 0014). Its owner, or an account editor of the owner
+   * with `EMOTE_TRANSFER` on every set. The receiver is you, or an account you edit with
+   * `EMOTE_UPLOAD` on every set. Audited (`emote.transferred`); both owners are told. 60 an hour.
+   */
+  transferEmote: Emote;
+  /**
    * Take a role from an account. The owner and the last `roles.manage` holder are protected.
    * Needs `roles.manage` or `roles.assign`. Audited.
    */
@@ -1111,7 +1117,10 @@ export type Mutation = {
    * with `SETS`.
    */
   updateChannelSettings: Channel;
-  /** Change an emote's name, tags or flags. Owner, or `emotes.edit_any`. */
+  /**
+   * Change an emote's name, tags or flags. Owner, an account editor of the owner with
+   * `EMOTE_MANAGE` on every set (audited), or `emotes.edit_any`.
+   */
   updateEmote: Emote;
   /** Replace every field of a paint. Needs `cosmetics.manage`. Audited. */
   updatePaint: Paint;
@@ -1377,6 +1386,12 @@ export type MutationStartCheckoutArgs = {
 export type MutationTakedownEmoteArgs = {
   id: Scalars['String']['input'];
   reason: Scalars['String']['input'];
+};
+
+
+export type MutationTransferEmoteArgs = {
+  id: Scalars['String']['input'];
+  toAccountId: Scalars['String']['input'];
 };
 
 
@@ -1716,7 +1731,8 @@ export type Query = {
   accountEditors: Array<AccountEditor>;
   /**
    * An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`,
-   * `emotes.takedown`, `emotes.edit_any` or `emotes.delete_any`. `perPage` is 1 to 100, default 50.
+   * `emotes.takedown`, `emotes.edit_any` or `emotes.delete_any`, or to be the account or its
+   * editor with `EMOTE_MANAGE` on every set. `perPage` is 1 to 100, default 50.
    */
   accountEmotes: EmotePage;
   /**
@@ -3254,6 +3270,14 @@ export type AdminAccountQueryVariables = Exact<{
 
 export type AdminAccountQuery = { __typename?: 'Query', adminAccount: { __typename?: 'AdminAccount', id: string, displayName: string, avatar?: string | null, createdAt: string, uploadsBlocked: boolean, ticketsBlocked: boolean, blocked: boolean, uploadsBlockedUntil?: string | null, ticketsBlockedUntil?: string | null, blockedUntil?: string | null, identities: Array<{ __typename?: 'Identity', platform: Platform, platformUserId: string, login: string, displayName: string, avatar?: string | null }> } };
 
+export type TransferEmoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  toAccountId: Scalars['String']['input'];
+}>;
+
+
+export type TransferEmoteMutation = { __typename?: 'Mutation', transferEmote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } };
+
 export type AccountEmotesQueryVariables = Exact<{
   accountId: Scalars['String']['input'];
   page?: InputMaybe<Scalars['Int']['input']>;
@@ -3416,7 +3440,7 @@ export type AccountEditorsQuery = { __typename?: 'Query', accountEditors: Array<
 export type EditorOfQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type EditorOfQuery = { __typename?: 'Query', editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } }> };
+export type EditorOfQuery = { __typename?: 'Query', editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, allSets: boolean, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } }> };
 
 export type AccountSetsQueryVariables = Exact<{
   accountId: Scalars['String']['input'];
@@ -5552,6 +5576,43 @@ export const AdminAccountDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<AdminAccountQuery, AdminAccountQueryVariables>;
+export const TransferEmoteDocument = new TypedDocumentString(`
+    mutation TransferEmote($id: String!, $toAccountId: String!) {
+  transferEmote(id: $id, toAccountId: $toAccountId) {
+    ...EmoteFields
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    nsfw
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<TransferEmoteMutation, TransferEmoteMutationVariables>;
 export const AccountEmotesDocument = new TypedDocumentString(`
     query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {
   accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {
@@ -6057,6 +6118,7 @@ export const EditorOfDocument = new TypedDocumentString(`
       avatar
     }
     permissions
+    allSets
   }
 }
     `) as unknown as TypedDocumentString<EditorOfQuery, EditorOfQueryVariables>;
