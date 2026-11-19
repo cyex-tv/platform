@@ -32,12 +32,20 @@ function hasWebgl(): boolean {
   }
 }
 
+/**
+ * Whether the reader wants things still: the system setting, or the site's own (a
+ * `data-motion="reduce"` attribute on <html>, where the site sets one). Read now.
+ */
+export function motionReduced(): boolean {
+  return document.documentElement.dataset.motion === 'reduce' || matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 type Nav = Navigator & { connection?: { saveData?: boolean }; deviceMemory?: number };
 
 export function readEnv(): Env {
   const nav = navigator as Nav;
   return {
-    reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
+    reducedMotion: motionReduced(),
     saveData: nav.connection?.saveData === true,
     memory: typeof nav.deviceMemory === 'number' ? nav.deviceMemory : undefined,
     cores: typeof nav.hardwareConcurrency === 'number' && nav.hardwareConcurrency > 0 ? nav.hardwareConcurrency : undefined,

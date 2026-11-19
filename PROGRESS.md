@@ -13,6 +13,27 @@ Owner feedback 2026/11/19, section G. Additive API; nothing was deployed.
 - [x] Dev mock: flags, tags, exact, NSFW emotes, `wide`, trending windows and `emoteTrending`.
 - Tests: `apps/api/tests/browse_flow.rs` (flags, tags, exact, trending windows, `emoteTrending`), `crates/db/tests/queries.rs` (rollup: distinct channels per hour, idempotent), unit tests for tag cleaning; vitest `tag-input.test.ts` (rules and markup) and `params.test.ts` (filter and trending URL state, API variables).
 - Manual check: /search, Trending (3 windows), filters, the filter sheet, emote page at 375, 768, 1440 and 2560 in both themes; keyboard (tag field Enter/Backspace/paste/×, flag chips with Space, window with arrow keys); reduced motion shows the still frames (screens in the run folder, `2026-11-19-feedback/screens/g`).
+## Front page, round 2: a real 3D hero and the zig-zag (branch `feat/front-page-2`)
+
+Owner feedback 2026/11/19, part I ("not 3d enough", "animation too subtle", "stacked more vertically ... zig zag"). Web only; nothing was deployed.
+
+- [x] Hero (`apps/web/src/lib/home/logo-scene.ts`): the three bars are now deep frames (2.6 grid units, a bar is 6 tall) with a rounded 4-step bevel, seen from above and to the side, under a key, a rim and a studio environment map, so tops, sides and fronts read apart. The lit bar stands 2.4 units in front, its front face glowing more than its sides, with glow around it and light inside its opening; its light spills onto the other two.
+- [x] Motion (`logo-motion.ts`, pure and tested): the still pose, one full turn (3.2 s, eased), then a sway of about ±24°, a float and the lit bar breathing in and out; scrolling the hero away turns it further and brings the lit bar forward. Nothing follows the pointer. Draws every frame up to 60 fps (was 30), only while on screen and the tab is visible.
+- [x] Still image: `static/home/logo-3d-{dark,light}.webp` (920 px, the still pose rendered by the scene; remake with `window.__logoSnap()` in dev) replaces the flat SVG as first paint, fallback and reduced-motion frame. `LogoMark.svelte` is gone.
+- [x] Reduced motion: the system setting or a site-level `data-motion="reduce"` on `<html>` (`motionReduced()` in `capable.ts`), watched live: the scene stops and the still image comes back.
+- [x] The ways in are stacked one under the other, picture and text trading sides each row, each with a heading and one or two sentences; extension browser menu and latest deck download kept; one column below 720 px. Rows reveal once on scroll (`reveal.ts`), not under reduced motion.
+- Tests: `home.test.ts` (still pose at start, the full turn ends where it began, no jumps between frames, sway range, scroll response).
+- Checked in the running app (vite dev + mock, headless Edge): 375, 768, 1440, 2560, dark and light, reduced motion (system and site attribute switched live). Frame sample 1440 dark, 5 s: 56.6 fps, p50 17.6 ms, p95 18.4 ms, max 20 ms, CLS 0. Screens in `.claude/runs/2026-11-19-feedback/screens/i-front/`.
+
+### GitHub write log for this PR
+2026/11/19, account `sery-yx`.
+
+```
+git push -u origin feat/front-page-2
+gh pr create --base main --head feat/front-page-2 --title "Front page: a deeper 3D hero and the ways in as a zig-zag" --body-file <file>
+gh pr merge 93 --merge
+```
+
 ## Upload v3 (branch `feat/upload-v3`, owner feedback 2026/11/19 section C)
 
 Additive API; no migration; nothing was deployed.
