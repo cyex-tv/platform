@@ -305,7 +305,7 @@
     .row:hover :global(svg) { color: var(--muted); }
     .row[aria-current='page']:hover, .tab[aria-current='page']:hover { color: var(--text); }
   }
-  @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .chev { transition: none; } }
   @media (forced-colors: active) {
     .row[aria-current='page'], .tab[aria-current='page'] { outline: 2px solid Highlight; outline-offset: -2px; }
   }

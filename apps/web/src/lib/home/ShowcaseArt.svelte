@@ -75,8 +75,8 @@
   :global([data-theme='light']) .edge { stroke: color-mix(in srgb, var(--accent) 60%, #00323d); }
   :global([data-theme='light']) .fill { opacity: .45; }
   .lit { transition: transform var(--dur-move) var(--ease); }
-  @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-    :global(.show:hover) .lit { transform: translateX(3px); }
+  @media (hover: hover) and (pointer: fine) {
+    :global(html:not([data-motion='reduce']) .show:hover) .lit { transform: translateX(3px); }
   }
   @media (forced-colors: active) {
     .ink, .dim, .edge { stroke: CanvasText; }

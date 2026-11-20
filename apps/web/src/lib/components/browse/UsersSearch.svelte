@@ -178,5 +178,5 @@
   .more { padding: 32px 0 8px; min-height: 96px; }
   .state { margin-top: 16px; }
   @media (max-width: 480px) { .title { flex-direction: column; align-items: flex-start; gap: 0; } }
-  @media (prefers-reduced-motion: reduce) { .results { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .results { transition: none; } }
 </style>

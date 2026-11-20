@@ -5,6 +5,8 @@
   // the button is borderless like the other phone header buttons. Enter or Space opens it,
   // Escape closes it with focus back on the bell. The count is kept fresh by watchInbox (the
   // AppHeader starts it); new ones also pop up as NotificationToasts.
+  import { tick } from 'svelte';
+  import { dur } from '$lib/motion';
   import Icon from '$lib/components/Icon.svelte';
   import Popover from '$lib/components/Popover.svelte';
   import Problem from '$lib/components/Problem.svelte';
@@ -20,6 +22,22 @@
 
   $effect(() => {
     if (open) void loadInbox();
+  });
+
+  // A little bump on the badge when the count goes up. Not on the first count after a page load
+  // (the baseline) and not when it goes down.
+  let badgeEl = $state<HTMLElement>();
+  let last: number | null = null;
+  $effect(() => {
+    const c = inbox.count;
+    const known = inbox.known;
+    if (!known) return;
+    const was = last;
+    last = c;
+    const ms = dur(300);
+    if (was === null || c <= was || !ms) return;
+    // After the badge is in the DOM (a first unread shows it for the first time).
+    void tick().then(() => badgeEl?.animate([{ scale: 1 }, { scale: 1.3, offset: 0.4 }, { scale: 1 }], { duration: ms, easing: 'cubic-bezier(.22, 1, .36, 1)' }));
   });
 
   function pick(n: Note) {
@@ -38,7 +56,7 @@
       aria-label={inbox.count ? `Notifications, ${shown === '99+' ? 'more than 99' : shown} unread` : 'Notifications'}
     >
       <Icon name="bell" size={18} />
-      {#if shown}<span class="badge" aria-hidden="true">{shown}</span>{/if}
+      {#if shown}<span class="badge" aria-hidden="true" bind:this={badgeEl}>{shown}</span>{/if}
     </button>
   {/snippet}
   <div class="head">

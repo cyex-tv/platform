@@ -22,5 +22,5 @@
   .by { width: 40%; height: 10px; }
   .sk > * { animation: breathe 1.6s ease-in-out infinite alternate; }
   @keyframes breathe { from { opacity: 1; } to { opacity: .55; } }
-  @media (prefers-reduced-motion: reduce) { .sk > * { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .sk > * { animation: none; } }
 </style>

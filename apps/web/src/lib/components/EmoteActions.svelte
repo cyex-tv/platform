@@ -12,6 +12,7 @@
   import Icon from './Icon.svelte';
   import { unreachableMessage } from './problem';
   import Name from './Name.svelte';
+  import SwapIcon from './SwapIcon.svelte';
   import Popover from './Popover.svelte';
   import EmoteDownload from './emote/EmoteDownload.svelte';
   import type { PageEmote } from './emote/emote-page';
@@ -124,12 +125,12 @@
       <ul class="menu" onkeydown={roving}>
         <li>
           <button type="button" class="item" onclick={() => linkCopy.copy(link())}>
-            <Icon name={linkCopy.copied ? 'check' : 'link'} />{linkCopy.copied ? 'Link copied' : linkCopy.failed ? 'Couldn’t copy' : 'Copy link'}
+            <SwapIcon a="link" b="check" on={linkCopy.copied} />{linkCopy.copied ? 'Link copied' : linkCopy.failed ? 'Couldn’t copy' : 'Copy link'}
           </button>
         </li>
         <li>
           <button type="button" class="item" onclick={() => nameCopy.copy(name)}>
-            <Icon name={nameCopy.copied ? 'check' : 'copy'} />{nameCopy.copied ? 'Name copied' : nameCopy.failed ? 'Couldn’t copy' : 'Copy name'}
+            <SwapIcon a="copy" b="check" on={nameCopy.copied} />{nameCopy.copied ? 'Name copied' : nameCopy.failed ? 'Couldn’t copy' : 'Copy name'}
           </button>
         </li>
         {#if canDownload}
@@ -173,6 +174,7 @@
     touch-action: manipulation; user-select: none; -webkit-user-select: none; }
   .set { min-height: 44px; padding-block: 4px; }
   .item :global(.icon) { color: var(--muted); }
+  .item :global(.swap) { color: var(--muted); }
   .back { gap: 6px; margin-bottom: 4px; padding-left: 4px; font-weight: 600; }
   .back :global(.icon) { color: var(--muted); }
   .set:active:not([aria-disabled='true']), .item:active, .back:active { transform: scale(var(--press)); }
@@ -187,5 +189,5 @@
   @media (hover: hover) and (pointer: fine) {
     .set:hover:not([aria-disabled='true']), .item:hover, .back:hover { background: var(--surface-2); }
   }
-  @media (prefers-reduced-motion: reduce) { .set, .item, .back { transition: background-color var(--dur-color); } }
+  @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .set, :global(html:not([data-motion='full'])) .item, :global(html:not([data-motion='full'])) .back { transition: background-color var(--dur-color); } }
 </style>

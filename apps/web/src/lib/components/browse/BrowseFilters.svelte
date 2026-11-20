@@ -200,5 +200,5 @@
     .opt:not(.check).on:hover { color: var(--text); }
     .tag:hover { border-color: var(--border-strong); color: var(--text); }
   }
-  @media (prefers-reduced-motion: reduce) { summary :global(svg) { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) summary :global(svg) { transition: none; } }
 </style>
