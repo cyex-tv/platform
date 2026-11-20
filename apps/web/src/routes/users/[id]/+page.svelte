@@ -59,7 +59,6 @@
 
 <svelte:head>
   <title>{data.creator ? `${section === 'uploads' ? name : `${TITLE[section]} · ${name}`} - cyex.tv` : data.error ? problemTitle('server') : 'Nothing here - cyex.tv'}</title>
-  {#if name}<meta name="description" content="{name} on cyex.tv: emotes, sets and cosmetics." />{/if}
 </svelte:head>
 
 {#if data.error}

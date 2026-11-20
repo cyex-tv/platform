@@ -2,6 +2,22 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Batch K1: link previews, keyboard shortcuts, changelog, tile marks (branch `feat/k1-previews-shortcuts`, 2026/11/20)
+
+From the 7TV gap study (`.claude/runs/2026-11-20-overnight/gap-7tv-2.md`), ideas only, in cyex design. Web only; no API change.
+- [x] Link previews: `lib/meta.ts` builds Open Graph and Twitter tags for emote (4x still frame, kind, creator, channel count), set (its first 4 emote stills in set order, owner, slots, first names), profile (avatar, platforms, emotes made, channels) and channel pages (avatar, platform, active set and size), in each page's load, so they are in the server's HTML; canonical URL from `PUBLIC_SITE_URL`; `noindex` for unlisted, private, pending and missing. Every other page gets the site card `static/og.png` (1200 × 630, the mark and wordmark on the page ground) and keeps its own title and description. The root layout renders them with `Meta.svelte`.
+- [x] Keyboard shortcuts: `?` (outside fields, without modifiers) or Keyboard shortcuts in the footer opens a modal sheet (`ShortcutSheet.svelte`); pages register their keys beside their handlers (`registerShortcuts`, `shell/shortcuts.svelte.ts`): Emotes and Select mode on /search, the review queue and its open upload, the emote page's tabs, /developers' filter, /help's search, plus the site-wide keys and the header search. Not shown on touch-only screens.
+- [x] Changelog: `/changelog` on the docs layout, prerendered from `lib/changelog/entries.ts` (dates as 2026/11/20, entries of this week); "What's new" in the account menu and the phone menu, with a dot (and on the avatar) until this device has opened the newest entry (`cyex.changelog.seen` in localStorage); a Changelog link in the footer.
+- [x] Tiles: "In set" (accent tick and word) on browse tiles already in the target set, following Add and Remove; your own unlisted and private emotes show an Unlisted or Private mark with the emote page's wording, wherever they appear to you.
+- [x] Tests: vitest `meta.test.ts`, `shortcuts.test.ts`, `changelog/entries.test.ts`, `changelog/seen.test.ts`, `tile-marks.test.ts`, loaders now check each page's card; `dev/e2e/link-previews.mjs` fetches the SSR HTML of each page type and checks the tags (not in CI). CDP: `.claude/runs/2026-11-20-overnight/screens/k1/k1.mjs` (sheet open, focus, Escape, focus return, fields, groups per page; dot and seen; marks; 375, 1440, 2560, dark and light; reduced motion).
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/k1-previews-shortcuts
+gh pr create --base main --head feat/k1-previews-shortcuts --title "Link previews, keyboard shortcut sheet, changelog, tile marks" --body-file <file>
+```
+
 ## Security fixes S1 (branch `fix/security-s1`, ADR 0004, 0010, 0014, 0019, 0020 amendments of 2026/11/20)
 
 From the 2026/11/20 security review (findings A4). Each with a test that fails before and passes after:

@@ -7,7 +7,7 @@
   import { fade, fly } from 'svelte/transition';
   import { dur } from '$lib/motion';
   import { barNodes, barsVersion, lift } from './bottom-bars.svelte';
-  import { dismiss, toasts } from './notices.svelte';
+  import { dismiss, pauseToast, resumeToast, toasts } from './notices.svelte';
 
   const notices = $derived(toasts.filter((t) => !t.error));
   const errors = $derived(toasts.filter((t) => t.error));
@@ -69,6 +69,10 @@
       in:fly={{ x: from, duration: dur(200), opacity: 0 }}
       out:fade={{ duration: dur(120) }}
       animate:flip={{ duration: dur(200) }}
+      onpointerenter={() => pauseToast(t.id)}
+      onpointerleave={() => resumeToast(t.id)}
+      onfocusin={() => pauseToast(t.id)}
+      onfocusout={() => resumeToast(t.id)}
     >
       <p>{t.text}{#if t.count > 1}<span class="count">×{t.count}</span>{/if}{#if t.action}{@const act = t.action}{#if act.href}<a class="act" href={typeof act.href === 'function' ? act.href() : act.href} onclick={(e) => { if (typeof act.href === 'function') e.currentTarget.href = act.href(); dismiss(t.id); act.run?.(); }}>{act.label}</a>{:else}<button class="act" type="button" onclick={() => { dismiss(t.id); act.run?.(); }}>{act.label}</button>{/if}{/if}</p>
       {#if t.ms}<span class="line" style:animation-duration="{t.ms}ms" aria-hidden="true"></span>{/if}

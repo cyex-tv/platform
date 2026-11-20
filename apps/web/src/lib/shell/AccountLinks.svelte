@@ -20,6 +20,7 @@
   import { inbox } from '$lib/account/inbox.svelte';
   import { leave } from './signout';
   import { theme, toggleTheme } from './theme.svelte';
+  import { whatsNew } from '$lib/changelog/seen.svelte';
 
   /** `menu`: the items are menuitems of the Popover's role="menu" (the desktop account menu); otherwise a nav of links. */
   type Props = { emotes?: boolean; touch?: boolean; menu?: boolean; onpick?: () => void; signin?: string };
@@ -93,7 +94,13 @@
       {/if}
       <hr />
       {@render row(ACCOUNT)}
-      <hr />
+    {/if}
+    {#if me || touch}
+      <!-- What's new: the changelog, with a dot until this device has seen its newest entry. -->
+      <a href="/changelog" role={item} aria-current={path.startsWith('/changelog') ? 'page' : undefined} onclick={() => { whatsNew.markSeen(); onpick?.(); }}>
+        <Icon name="sparkles" /><span>What’s new</span>{#if whatsNew.unseen && me}<span class="dot" aria-hidden="true"></span><span class="sr-only">, new since your last visit</span>{/if}
+      </a>
+      {#if me}<hr />{/if}
     {/if}
     {#if touch}
     <button type="button" class="theme-row" role={item} onclick={toggleTheme} aria-label={theme.light ? 'Theme: light. Switch to dark' : 'Theme: dark. Switch to light'}>
@@ -136,6 +143,9 @@
   .list a:focus-visible, .list button:focus-visible { outline-offset: -2px; }
   .list a:active, .list button:active { opacity: .6; transition: none; }
   .value { margin-left: auto; color: var(--dim); }
+  /* New: a small accent dot at the row's end (the text says it too, for screen readers). */
+  .dot { flex: none; width: 8px; height: 8px; margin-left: auto; border-radius: 50%; background: var(--accent); }
+  @media (forced-colors: active) { .dot { background: Highlight; } }
   hr { width: 100%; margin: 4px 0; border: 0; border-top: 1px solid var(--border); }
   @media (hover: hover) and (pointer: fine) {
     .head:hover { background: var(--row-hover); }

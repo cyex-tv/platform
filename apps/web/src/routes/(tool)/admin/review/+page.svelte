@@ -9,7 +9,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { gql } from '$lib/api';
-  import { ready, size, src, srcsetW } from '$lib/emote';
+  import { pictureFor, ready, size } from '$lib/emote';
+  import { display } from '$lib/dpr.svelte';
   import { onDestroy, tick } from 'svelte';
   import { clean, count, dateTime, iso } from '$lib/format';
   import type { EmoteFieldsFragment, EmoteVisibility, ReviewSort, ReviewTab } from '$lib/gql/graphql';
@@ -23,6 +24,8 @@
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
+  import { REVIEW_DETAIL_KEYS, REVIEW_KEYS } from '$lib/admin/review-keys';
+  import { registerShortcuts } from '$lib/shell/shortcuts.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { dismiss, fail, notify } from '$lib/tool/notices.svelte';
 
@@ -70,6 +73,13 @@
   const total = $derived(L.data?.total ?? 0);
   const pages = $derived(Math.max(1, Math.ceil(total / PER_PAGE)));
   const counts = $derived(L.data?.counts);
+
+  // Its keys (onkeydown below and ReviewDetail's), in the shortcut sheet.
+  $effect(() => {
+    const a = registerShortcuts(REVIEW_KEYS);
+    const b = registerShortcuts(REVIEW_DETAIL_KEYS);
+    return () => (a(), b());
+  });
 
   let busy = $state<string | null>(null);
   let rejecting = $state<EmoteFieldsFragment | null>(null);
@@ -343,7 +353,9 @@
         onfocus={() => (cur = e.id)} onclick={(ev) => { if (!(ev.target as HTMLElement).closest('a, button')) openDetail(e.id); }}>
         <span class="art">
           {#if ready(e)}
-            <img src={src(e, 1)} srcset={srcsetW(e)} sizes="{Math.round((64 * d.width) / d.height)}px" width={d.width} height={d.height} alt="" loading="lazy" decoding="async" />
+            {@const shownW = Math.round((64 * d.width) / d.height)}
+            {@const pic = pictureFor(e, display.dpr, false, shownW)}
+            <img src={pic.src} srcset={pic.srcset} sizes={pic.srcset ? `${shownW}px` : undefined} width={d.width} height={d.height} alt="" loading="lazy" decoding="async" />
           {:else}
             <span class="ui-spinner" aria-hidden="true"></span>
           {/if}
