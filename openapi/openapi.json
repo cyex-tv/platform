@@ -632,7 +632,7 @@
           "cosmetics"
         ],
         "summary": "Upload a badge or paint picture (staff, `cosmetics.manage`).",
-        "description": "The worker makes its files (WebP and AVIF at 1x, 2x and 4x) under `cosmetics/`; poll\n`cosmeticImage(id)` until `ready`, then use the ID in `createBadge` or `createPaint`. Badges:\nsquare, at least 72×72 px. Paints: at least 64 px tall. PNG, APNG, GIF or WebP, at most 5 MB.\nThe same bytes give the same picture again.",
+        "description": "The worker makes its files (WebP and AVIF) under `cosmetics/`; poll `cosmeticImage(id)` until\n`ready`, then use the ID in `createBadge` or `createPaint`.\n\nBadges follow the cyex badge size ladder: square 18, 36 and 72 px (`1x`, `2x`, `4x`), then\n128, 256 and 512 px (`128.webp`, `256.webp`, `512.webp`), all scaled from one 512 px master.\nPNG, APNG, JPEG, WebP or GIF, square, at least 72×72 px (at most 2048), up to 8 MB. Animated:\nat most 120 frames, 10 seconds and 64 MP (width × height × frames), and at most 512 KB per\nchat size once converted; 128, 256 and 512 px animate only within 1, 2 and 4 MB (their\n`_static` files always exist). Paints: at least 64 px tall, PNG, APNG, JPEG, GIF or WebP, at\nmost 5 MB.\n\nThe same bytes give the same picture again; for a badge made before the larger sizes, they\nare made then (as `remakeCosmeticImage` does).",
         "operationId": "upload_cosmetic_image",
         "requestBody": {
           "content": {
@@ -1510,7 +1510,7 @@
           "scale": {
             "type": "integer",
             "format": "int32",
-            "description": "1 to 4.",
+            "description": "1 to 4. A badge's larger sizes (`128`, `256`, `512`) carry their px ÷ 18, rounded: 7, 14\nand 28; read `width` for the size.",
             "minimum": 0
           },
           "size": {

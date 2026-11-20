@@ -543,6 +543,14 @@ async fn every_site_operation_runs_against_the_real_api() {
     // Cosmetics (staff), and picking them.
     c.op(os, "CosmeticImage", json!({ "id": badge_image }))
         .await;
+    // Its original is stored: making its files again is queued.
+    let data = c
+        .op(os, "RemakeCosmeticImage", json!({ "id": badge_image }))
+        .await;
+    c.check(
+        data["remakeCosmeticImage"]["id"] == badge_image.as_str(),
+        format!("RemakeCosmeticImage: the same picture: {data}"),
+    );
     c.op(os, "StudioCosmeticImage", json!({ "id": paint_image }))
         .await;
     let badge = c

@@ -17,6 +17,7 @@ use bytes::Bytes;
 use cyex_tv_auth::Caller;
 use cyex_tv_db::cosmetics::{self as db, Image, NewImage, PaintFields};
 use cyex_tv_db::{accounts, audit, ids, jobs, outbox, reads};
+use cyex_tv_media::encode::Profile;
 use cyex_tv_media::{Limits, Probe};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
@@ -231,6 +232,30 @@ pub fn paint_input(input: &PaintInput) -> ApiResult<CheckedPaint> {
         shadows: shadows(&input.shadows)?,
         image_id,
     })
+}
+
+/// The limits a kind of picture is checked under, the same the worker decodes it with: badges
+/// the cyex badge rules (PNG, JPEG, WebP or GIF up to 8 MB; animated at most 120 frames, 10
+/// seconds and 64 MP of frames), paints the cosmetic defaults (5 MB).
+pub fn picture_limits(kind: CosmeticKind) -> Limits {
+    match kind {
+        CosmeticKind::Badge => Limits::badge(),
+        CosmeticKind::Paint => Limits::default(),
+    }
+}
+
+/// The sizes a kind of picture is made at (the worker's `cosmetics::profile`).
+pub fn picture_profile(kind: CosmeticKind) -> &'static Profile {
+    match kind {
+        CosmeticKind::Badge => &Profile::BADGE,
+        CosmeticKind::Paint => &Profile::PAINT,
+    }
+}
+
+/// Whether a made picture lacks a size its kind is made at now (a badge from before 128, 256
+/// and 512 px): making it again fills them in.
+pub fn lacks_sizes(kind: CosmeticKind, files: &[EmoteFile]) -> bool {
+    !files.is_empty() && !picture_profile(kind).is_complete(files.iter().map(|f| f.name.as_str()))
 }
 
 /// Checks a picture for its kind: badges square and at least 72×72, paints at least 64 tall.
@@ -798,12 +823,23 @@ pub async fn upload_image(
         return Err(ApiError::unavailable("Uploads aren't available right now."));
     };
     let bytes = file.clone();
-    let probe: Probe =
-        tokio::task::spawn_blocking(move || cyex_tv_media::probe(&bytes, &Limits::default()))
-            .await
-            .map_err(|_| ApiError::internal())?
-            .map_err(media_error)?;
+    let limits = picture_limits(kind);
+    let probe: Probe = tokio::task::spawn_blocking(move || cyex_tv_media::probe(&bytes, &limits))
+        .await
+        .map_err(|_| ApiError::internal())?
+        .map_err(media_error)?;
     check_dimensions(kind, probe.width, probe.height)?;
+    if probe.animated && picture_profile(kind).max_animated_scale_bytes.is_some() {
+        // An animated badge must animate in chat: its 72 px file at most 512 KB. Said now, not
+        // after the worker tried.
+        let bytes = file.clone();
+        tokio::task::spawn_blocking(move || {
+            cyex_tv_media::encode::check_animated_scales(&bytes, &limits, picture_profile(kind))
+        })
+        .await
+        .map_err(|_| ApiError::internal())?
+        .map_err(media_error)?;
+    }
     let sha256: [u8; 32] = Sha256::digest(&file).into();
     let sha_hex = sigv4::hex(&sha256);
     let key = cosmetic_original_key(&sha_hex);
@@ -887,8 +923,9 @@ pub async fn upload_image(
         )
         .await?;
     }
-    if created || !view.ready {
-        // Again for a picture whose files never got made: the job is safe to repeat.
+    if created || !view.ready || lacks_sizes(kind, &view.files) {
+        // Again for a picture whose files never got made, or were made before a size existed:
+        // the job is safe to repeat.
         jobs::enqueue(
             &mut tx,
             TRANSCODE_JOB,
@@ -917,6 +954,54 @@ pub async fn image(
         .await
         .map_err(db_error)?
         .map(|i| image_view(&i, &state.cdn_url)))
+}
+
+/// Makes a picture's files again from its stored original (a badge made before 128, 256 and 512
+/// px gets them). The files it has stay in use until the new set is recorded. Needs
+/// `cosmetics.manage`. Audited as `cosmetic_image.remade`.
+pub async fn remake_image(state: &AppState, caller: &Caller, id: &str) -> ApiResult<CosmeticImage> {
+    let mut conn = acquire(state).await?;
+    require(&mut conn, caller, permissions::COSMETICS_MANAGE).await?;
+    rate_limited(state, caller)?;
+    let Some(store) = state.store.clone() else {
+        return Err(ApiError::unavailable("Pictures can't be made right now."));
+    };
+    let image = match ids::from_text(id.trim()) {
+        Some(id) => db::get_image(&mut conn, id).await.map_err(db_error)?,
+        None => None,
+    }
+    .ok_or_else(not_found)?;
+    let original = store.exists(&image.storage_key).await.map_err(|err| {
+        tracing::error!(error = %err, "checking a cosmetic original in storage failed");
+        ApiError::unavailable("Pictures can't be made right now.")
+    })?;
+    if !original {
+        return Err(conflict(
+            "original_missing",
+            "This picture's original is gone from storage. Upload the picture again to make it.",
+        ));
+    }
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    jobs::enqueue(
+        &mut tx,
+        TRANSCODE_JOB,
+        &json!({ "image_id": ids::to_text(image.id) }),
+        5,
+    )
+    .await
+    .map_err(db_error)?;
+    write_audit(
+        &mut tx,
+        caller,
+        "cosmetic_image.remade",
+        "cosmetic_image",
+        image.id,
+        None,
+        Some(json!({ "kind": image.kind, "sha256": sigv4::hex(&image.sha256) })),
+    )
+    .await?;
+    tx.commit().await.map_err(sqlx_error)?;
+    Ok(image_view(&image, &state.cdn_url))
 }
 
 /// A picture of `kind` whose files are made.
@@ -1573,6 +1658,65 @@ mod tests {
         let mut short = gradient(vec![stop(0.0, "#000000")]);
         short.kind = PaintKind::RadialGradient;
         assert_eq!(paint_input(&short).unwrap_err().code, "bad_stops");
+    }
+
+    fn file(name: &str) -> EmoteFile {
+        EmoteFile {
+            name: name.into(),
+            format: ImageFormat::Webp,
+            scale: 1,
+            width: 18,
+            height: 18,
+            size: 1,
+            is_static: false,
+        }
+    }
+
+    #[test]
+    fn badges_take_the_badge_limits() {
+        let badge = picture_limits(CosmeticKind::Badge);
+        assert_eq!(badge.max_bytes, 8 * 1024 * 1024);
+        assert_eq!(
+            (
+                badge.max_frames,
+                badge.max_duration_ms,
+                badge.max_total_pixels
+            ),
+            (120, 10_000, 64_000_000)
+        );
+        // Paints keep theirs.
+        assert_eq!(picture_limits(CosmeticKind::Paint), Limits::default());
+        assert_eq!(
+            picture_limits(CosmeticKind::Paint).max_bytes,
+            5 * 1024 * 1024
+        );
+    }
+
+    #[test]
+    fn badges_from_before_the_ladder_lack_sizes() {
+        let old: Vec<_> = ["1x.webp", "2x.webp", "4x.webp"].map(file).into();
+        assert!(lacks_sizes(CosmeticKind::Badge, &old));
+        let full: Vec<_> = [
+            "1x.webp", "2x.webp", "4x.webp", "128.webp", "256.webp", "512.webp",
+        ]
+        .map(file)
+        .into();
+        assert!(!lacks_sizes(CosmeticKind::Badge, &full));
+        // An animated badge whose large sizes were too heavy to animate keeps their stills.
+        let stills: Vec<_> = [
+            "1x.webp",
+            "2x.webp",
+            "4x.webp",
+            "128_static.webp",
+            "256_static.webp",
+            "512_static.webp",
+        ]
+        .map(file)
+        .into();
+        assert!(!lacks_sizes(CosmeticKind::Badge, &stills));
+        // Not made yet is not lacking (that's `ready`); paints have no new sizes.
+        assert!(!lacks_sizes(CosmeticKind::Badge, &[]));
+        assert!(!lacks_sizes(CosmeticKind::Paint, &old));
     }
 
     #[test]

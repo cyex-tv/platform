@@ -995,7 +995,8 @@ type EmoteFile {
 	name: String!
 	format: ImageFormat!
 	"""
-	1 to 4.
+	1 to 4. A badge's larger sizes (`128`, `256`, `512`) carry their px ÷ 18, rounded: 7, 14
+	and 28; read `width` for the size.
 	"""
 	scale: Int!
 	width: Int!
@@ -1602,6 +1603,13 @@ type Mutation {
 	`cosmetics.manage`. Audited.
 	"""
 	deleteBadge(id: String!): Boolean!
+	"""
+	Make a badge or paint picture's files again from its stored original: a badge made
+	before the 128, 256 and 512 px sizes gets them. Its files stay in use until the new set
+	is made; read `cosmeticImage(id)` to see it. `original_missing` when the original is
+	gone (upload it again). Needs `cosmetics.manage`. Audited.
+	"""
+	remakeCosmeticImage(id: String!): CosmeticImage!
 	"""
 	Make a paint. Needs `cosmetics.manage`. Audited; publishes `cosmetic.created`.
 	"""

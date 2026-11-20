@@ -1758,6 +1758,17 @@ impl Mutation {
             .map_err(api_error)
     }
 
+    /// Make a badge or paint picture's files again from its stored original: a badge made
+    /// before the 128, 256 and 512 px sizes gets them. Its files stay in use until the new set
+    /// is made; read `cosmeticImage(id)` to see it. `original_missing` when the original is
+    /// gone (upload it again). Needs `cosmetics.manage`. Audited.
+    async fn remake_cosmetic_image(&self, ctx: &Context<'_>, id: String) -> Result<CosmeticImage> {
+        let caller = caller(ctx)?;
+        cosmetics::remake_image(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
+    }
+
     /// Make a paint. Needs `cosmetics.manage`. Audited; publishes `cosmetic.created`.
     async fn create_paint(&self, ctx: &Context<'_>, input: PaintInput) -> Result<Paint> {
         let caller = caller(ctx)?;

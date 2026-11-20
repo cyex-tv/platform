@@ -244,6 +244,7 @@ const OVERRIDES: Record<string, (c: Ctx) => Record<string, unknown>> = {
   MyCosmetics: () => ({}),
   SelectCosmetics: (c) => ({ badgeId: c.badgeId, paintId: c.paintId }),
   CosmeticImage: (c) => ({ id: c.imageId }),
+  RemakeCosmeticImage: (c) => ({ id: c.imageId }),
   StudioCosmeticImage: (c) => ({ id: c.imageId }),
   Entitlements: () => ({ kind: 'BADGE', page: 1, perPage: 5 }),
   CreateBadge: (c) => ({ input: { name: 'Conformance badge', tooltip: 'A mock tooltip', imageId: c.imageId } }),

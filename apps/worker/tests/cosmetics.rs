@@ -1,5 +1,7 @@
 //! The `cosmetic.transcode` job (ADR 0015) against a real Postgres and the in-memory store: a
-//! badge picture becomes 18, 36 and 72 px files under `cosmetics/badges/`, recorded on its row.
+//! badge picture becomes the size ladder (18, 36, 72, 128, 256 and 512 px) under
+//! `cosmetics/badges/`, recorded on its row, and running the job again remakes a picture made
+//! before the larger sizes.
 //! Runs when `CYEX_TV_TEST_DATABASE_URL` is set (CI sets it), skips otherwise.
 
 use std::io::Cursor;
@@ -101,8 +103,18 @@ async fn a_badge_picture_is_transcoded_under_cosmetics() {
         .filter(|f| f.format == ImageFormat::Webp)
         .map(|f| (f.name.as_str(), f.width))
         .collect();
-    assert_eq!(webp, [("1x.webp", 18), ("2x.webp", 36), ("4x.webp", 72)]);
-    assert_eq!(files.len(), 6);
+    assert_eq!(
+        webp,
+        [
+            ("1x.webp", 18),
+            ("2x.webp", 36),
+            ("4x.webp", 72),
+            ("128.webp", 128),
+            ("256.webp", 256),
+            ("512.webp", 512)
+        ]
+    );
+    assert_eq!(files.len(), 12);
     for f in &files {
         let object = store
             .get(&format!("cosmetics/badges/{hex}/{}", f.name))
@@ -113,5 +125,37 @@ async fn a_badge_picture_is_transcoded_under_cosmetics() {
     }
     // Nothing went to the emote prefix.
     assert!(!store.keys().iter().any(|k| k.starts_with("emotes/")));
+
+    // A picture made before the ladder (only 1x, 2x and 4x recorded): the job again remakes it.
+    let old: Vec<&EmoteFile> = files
+        .iter()
+        .filter(|f| ["1x", "2x", "4x"].iter().any(|p| f.name.starts_with(p)))
+        .collect();
+    assert_eq!(old.len(), 6);
+    cosmetics::set_image_variants(&mut conn, image.id, &serde_json::to_value(&old).unwrap())
+        .await
+        .unwrap();
+    jobs::enqueue(
+        &mut conn,
+        job::KIND,
+        &json!({ "image_id": ids::to_text(image.id) }),
+        3,
+    )
+    .await
+    .unwrap();
+    drop(conn);
+    let (_, outcome) = run_one(&ctx, &handlers, limits()).await.unwrap().unwrap();
+    assert_eq!(outcome, Outcome::Done);
+    let mut conn = db.conn().await;
+    let row = cosmetics::get_image(&mut conn, image.id)
+        .await
+        .unwrap()
+        .unwrap();
+    let again: Vec<EmoteFile> = serde_json::from_value(row.variants).unwrap();
+    let names = |f: &[EmoteFile]| -> Vec<(String, u16)> {
+        f.iter().map(|f| (f.name.clone(), f.width)).collect()
+    };
+    assert_eq!(names(&again), names(&files));
+    drop(conn);
     db.close().await;
 }

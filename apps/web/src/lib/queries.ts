@@ -1371,6 +1371,14 @@ export const UPDATE_BADGE = graphql(`
   }
 `);
 
+export const REMAKE_COSMETIC_IMAGE = graphql(`
+  mutation RemakeCosmeticImage($id: String!) {
+    remakeCosmeticImage(id: $id) {
+      ...CosmeticImageFields
+    }
+  }
+`);
+
 export const DELETE_BADGE = graphql(`
   mutation DeleteBadge($id: String!) {
     deleteBadge(id: $id)

@@ -2,8 +2,12 @@
 //! files, the emote pipeline at the cosmetic's sizes (`Profile::BADGE`, `Profile::PAINT`), stored
 //! under `cosmetics/{badges|paints}/{sha256}/{name}` with an immutable cache header.
 //!
+//! Badges follow the cyex badge size ladder: `1x`, `2x` and `4x` (18, 36 and 72 px, the names
+//! clients already read), then `128`, `256` and `512`, all from one 512 px master.
+//!
 //! WebP first, recorded so the image can be used, then AVIF. Running the job again is safe: the
-//! keys are content-addressed.
+//! keys are content-addressed, and the files recorded are replaced by the new set, so a picture
+//! made before a size existed gets it by running the job again (`remakeCosmeticImage`).
 
 use cyex_tv_db::cosmetics;
 use cyex_tv_db::jobs::Job;
@@ -30,9 +34,17 @@ pub fn profile(kind: CosmeticKind) -> &'static Profile {
     }
 }
 
+/// The limits a kind of cosmetic picture is decoded under (the API checks uploads with the same).
+pub fn limits(kind: CosmeticKind) -> Limits {
+    match kind {
+        CosmeticKind::Badge => Limits::badge(),
+        CosmeticKind::Paint => Limits::default(),
+    }
+}
+
 /// Decodes and encodes a picture at its kind's sizes. CPU work: run it off the async threads.
 pub fn make(kind: CosmeticKind, bytes: &[u8]) -> Result<Encoded, MediaError> {
-    encode::transcode_with(bytes, &Limits::default(), profile(kind))
+    encode::transcode_with(bytes, &limits(kind), profile(kind))
 }
 
 /// The file entries, in the shape emote files are recorded in.
@@ -180,7 +192,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_badge_becomes_18_36_and_72_px_under_cosmetics() {
+    async fn a_badge_becomes_the_size_ladder_under_cosmetics() {
         let encoded = make(CosmeticKind::Badge, &png(128, 128)).unwrap();
         let store = Store::memory();
         store_all(&store, CosmeticKind::Badge, "abcd", &encoded.webp)
@@ -191,33 +203,59 @@ mod tests {
             .unwrap();
         let mut keys = store.keys();
         keys.sort();
-        assert_eq!(
-            keys,
-            [
-                "cosmetics/badges/abcd/1x.avif",
-                "cosmetics/badges/abcd/1x.webp",
-                "cosmetics/badges/abcd/2x.avif",
-                "cosmetics/badges/abcd/2x.webp",
-                "cosmetics/badges/abcd/4x.avif",
-                "cosmetics/badges/abcd/4x.webp",
-            ]
-        );
-        let object = store
-            .get("cosmetics/badges/abcd/4x.webp")
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(object.content_type.as_deref(), Some("image/webp"));
-        assert_eq!(object.cache_control.as_deref(), Some(IMMUTABLE));
+        let mut want: Vec<String> = ["1x", "2x", "4x", "128", "256", "512"]
+            .iter()
+            .flat_map(|stem| {
+                ["avif", "webp"].map(|ext| format!("cosmetics/badges/abcd/{stem}.{ext}"))
+            })
+            .collect();
+        want.sort();
+        assert_eq!(keys, want);
+        for name in ["4x.webp", "512.webp"] {
+            let object = store
+                .get(&format!("cosmetics/badges/abcd/{name}"))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(object.content_type.as_deref(), Some("image/webp"));
+            assert_eq!(object.cache_control.as_deref(), Some(IMMUTABLE));
+        }
 
         let all: Vec<&Variant> = encoded.webp.iter().chain(&encoded.avif).collect();
         let files: Vec<EmoteFile> = serde_json::from_value(entries(&all)).unwrap();
         let sizes: Vec<_> = files
             .iter()
             .filter(|f| f.format == ImageFormat::Webp)
-            .map(|f| (f.scale, f.width, f.height))
+            .map(|f| (f.name.as_str(), f.scale, f.width, f.height))
             .collect();
-        assert_eq!(sizes, [(1, 18, 18), (2, 36, 36), (4, 72, 72)]);
+        assert_eq!(
+            sizes,
+            [
+                ("1x.webp", 1, 18, 18),
+                ("2x.webp", 2, 36, 36),
+                ("4x.webp", 4, 72, 72),
+                ("128.webp", 7, 128, 128),
+                ("256.webp", 14, 256, 256),
+                ("512.webp", 28, 512, 512)
+            ]
+        );
+        assert!(Profile::BADGE.is_complete(files.iter().map(|f| f.name.as_str())));
+    }
+
+    #[test]
+    fn badges_take_the_badge_limits_and_paints_keep_theirs() {
+        assert_eq!(limits(CosmeticKind::Badge), Limits::badge());
+        assert_eq!(limits(CosmeticKind::Paint), Limits::default());
+        // A 1024 px badge is scaled down to the 512 px master; a paint that wide is over its limit.
+        assert!(make(CosmeticKind::Badge, &png(1024, 1024)).is_ok());
+        assert!(make(CosmeticKind::Paint, &png(1024, 128)).is_err());
+        // 121 frames is over a badge's 120, not a paint's.
+        let long = gif(8, 8, 121);
+        assert!(matches!(
+            cyex_tv_media::probe(&long, &limits(CosmeticKind::Badge)),
+            Err(MediaError::TooLarge(_))
+        ));
+        assert!(cyex_tv_media::probe(&long, &limits(CosmeticKind::Paint)).is_ok());
     }
 
     #[tokio::test]
@@ -227,6 +265,8 @@ mod tests {
         assert_eq!(encoded.frames, 4);
         let names: Vec<&str> = encoded.webp.iter().map(|v| v.name.as_str()).collect();
         assert!(names.contains(&"1x.webp") && names.contains(&"4x_static.webp"));
+        // Small enough to animate at every size.
+        assert!(names.contains(&"512.webp") && names.contains(&"512_static.webp"));
         assert!(
             encoded
                 .avif

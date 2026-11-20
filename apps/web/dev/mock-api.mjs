@@ -866,9 +866,11 @@ const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'set
 // ---- Chat cosmetics (ADR 0015) ----------------------------------------------------------
 // SAMPLE DATA ONLY: two made-up badges (simple SVG drawn here) and three sample paints, so the
 // site can be built before any real cosmetics exist. Pictures are served by this mock as SVG under
-// /cosmetics/badges/<key>/<n>x.webp. Uploaded badge and paint pictures (POST /v1/cosmetics/images)
-// are kept as sent and served back at /cosmetics/uploads/<id>/<n>x[_static].webp: the same bytes for
-// every size (nothing is transcoded here), so a paint made in the studio shows its own render.
+// /cosmetics/badges/<key>/<file>.webp on the badge size ladder (1x, 2x, 4x, 128, 256, 512); the
+// star is a picture made before the ladder (1x, 2x and 4x only) until "Make larger sizes"
+// (remakeCosmeticImage) fills it in. Uploaded badge and paint pictures (POST /v1/cosmetics/images)
+// are kept as sent and served back at /cosmetics/uploads/<id>/<file>[_static].webp: the same bytes
+// for every size (nothing is transcoded here), so a paint made in the studio shows its own render.
 // Operations are recognised by their root field; arguments are
 // read from variables named like the arguments ($id, $input, $badgeId, $paintId, $ownerId,
 // $accountId, $kind, $cosmeticId, $platform, $userIds, $reason, $page, $perPage).
@@ -877,14 +879,19 @@ const BADGE_ART = {
   'sample-shield': (k) => `<svg xmlns="http://www.w3.org/2000/svg" width="${18 * k}" height="${18 * k}" viewBox="0 0 18 18"><path d="M9 1l7 2.6v5c0 4.2-3 7.3-7 8.4-4-1.1-7-4.2-7-8.4v-5z" fill="hsl(160 60% 38%)"/><path d="M5.6 9.2l2.3 2.3 4.6-4.7" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
 };
 const C_TIME = '2026-11-17T12:00:00.000Z';
-const cImage = (key, kind = 'BADGE') => ({
+// The badge size ladder (crates/media Profile::BADGE): file stem, scale and px.
+const BADGE_LADDER = [['1x', 1, 18], ['2x', 2, 36], ['4x', 4, 72], ['128', 7, 128], ['256', 14, 256], ['512', 28, 512]];
+const ladderFiles = (animated = false, size = 300, sizes = BADGE_LADDER) =>
+  sizes.flatMap(([stem, scale, px]) =>
+    (animated ? [false, true] : [false]).map((still) => ({ name: `${stem}${still ? '_static' : ''}.webp`, format: 'WEBP', scale, width: px, height: px, size, isStatic: still })));
+const cImage = (key, kind = 'BADGE', full = true) => ({
   id: `01JD8XIMG${key.replace(/[^a-z]/g, '').toUpperCase().padEnd(17, '0').slice(0, 17)}`,
   kind, host: `${BASE}/cosmetics/${kind === 'BADGE' ? 'badges' : 'paints'}/${key}`, animated: false,
-  width: 72, height: 72, ready: true, createdAt: C_TIME,
-  files: [1, 2, 4].map((k) => ({ name: `${k}x.webp`, format: 'WEBP', scale: k, width: 18 * k, height: 18 * k, size: 300 * k, isStatic: false })),
+  width: 512, height: 512, ready: true, createdAt: C_TIME,
+  files: ladderFiles(false, 300, full ? BADGE_LADDER : BADGE_LADDER.slice(0, 3)),
 });
 const UPLOADED = new Map(); // SHA-256 of an uploaded file -> its picture
-const C_IMAGES = [cImage('sample-star'), cImage('sample-shield')];
+const C_IMAGES = [cImage('sample-star', 'BADGE', false), cImage('sample-shield')];
 const BADGES = [
   { id: '01JD8XBDG000000000000000001', name: 'Sample: Early', tooltip: 'Sample badge (mock data)', image: C_IMAGES[0], createdAt: C_TIME, updatedAt: C_TIME },
   { id: '01JD8XBDG000000000000000002', name: 'Sample: Helper', tooltip: 'Sample badge (mock data)', image: C_IMAGES[1], createdAt: C_TIME, updatedAt: C_TIME },
@@ -1032,6 +1039,16 @@ function cosmeticsAnswer(q, v, session, admin) {
       return err('You can only show cosmetics the account owns.', 'not_owned');
     Object.assign(sel, next);
     return { data: { selectCosmetics: ownedOut(who) } };
+  }
+  if (has('remakeCosmeticImage')) {
+    const denied = staff('cosmetics.manage');
+    if (denied) return denied;
+    const img = C_IMAGES.find((i) => i.id === v.id);
+    if (!img) return err('Not found.', 'not_found');
+    // The job runs again: a badge gets every size of the ladder a moment later.
+    if (img.kind === 'BADGE')
+      setTimeout(() => Object.assign(img, { files: ladderFiles(img.animated, img.files[0]?.size ?? 300) }), Number(process.env.MOCK_IMAGE_DELAY ?? 2000));
+    return { data: { remakeCosmeticImage: img } };
   }
   for (const [field, perm] of [['createBadge', 'manage'], ['updateBadge', 'manage'], ['deleteBadge', 'manage'], ['createPaint', 'manage'],
     ['updatePaint', 'manage'], ['deletePaint', 'manage'], ['grantCosmetic', 'grant'], ['revokeCosmetic', 'grant']]) {
@@ -2834,6 +2851,17 @@ function multipart(body, contentType = '') {
 
 /** Format, size and animation of a PNG/APNG, GIF or WebP from its bytes (null for anything else). */
 function probeImage(b) {
+  if (b.length > 4 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) {
+    // A JPEG: the size is in the first start-of-frame segment.
+    for (let i = 2; i + 9 < b.length; ) {
+      if (b[i] !== 0xff) break;
+      const marker = b[i + 1];
+      if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker))
+        return { mime: 'image/jpeg', width: b.readUInt16BE(i + 7), height: b.readUInt16BE(i + 5), animated: false };
+      i += 2 + b.readUInt16BE(i + 2);
+    }
+    return null;
+  }
   if (b.length > 24 && b.readUInt32BE(0) === 0x89504e47) {
     return { mime: 'image/png', width: b.readUInt32BE(16), height: b.readUInt32BE(20), animated: b.includes(Buffer.from('acTL')) };
   }
@@ -2914,10 +2942,11 @@ createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' });
     return res.end(picture(Number(img[1]), Number(img[2]), Boolean(img[3])));
   }
-  const badgeArt = url.pathname.match(/^\/cosmetics\/badges\/([a-z-]+)\/([124])x\.webp$/);
+  const badgeArt = url.pathname.match(/^\/cosmetics\/badges\/([a-z-]+)\/([124]x|128|256|512)\.webp$/);
   if (badgeArt && BADGE_ART[badgeArt[1]]) {
     res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' });
-    return res.end(BADGE_ART[badgeArt[1]](Number(badgeArt[2])));
+    const step = BADGE_LADDER.find(([stem]) => stem === badgeArt[2]);
+    return res.end(BADGE_ART[badgeArt[1]](step[2] / 18));
   }
   if (req.method === 'GET' && url.pathname === '/v1/cosmetics') {
     const c = releasedCatalog(admin);
@@ -2940,7 +2969,8 @@ createServer(async (req, res) => {
     if (kind !== 'badge' && kind !== 'paint') return json(res, 400, { error: 'bad_kind', message: 'kind is badge or paint.' });
     const file = parts.file?.data;
     if (!file?.length) return json(res, 400, { error: 'bad_form', message: 'Attach the image as `file`.' });
-    if (file.length > 5 * 1024 * 1024) return json(res, 413, { error: 'too_large', message: 'Pictures are at most 5 MB.' });
+    const most = kind === 'badge' ? 8 : 5;
+    if (file.length > most * 1024 * 1024) return json(res, 413, { error: 'too_large', message: `The file is over ${most} MB, the most an upload can be.` });
     // The uploaded picture itself is kept and served back (as the worker's files would be), so what
     // was uploaded is what the site shows. The checks are the API's (cosmetics::check_dimensions).
     const probe = probeImage(file);
@@ -2955,7 +2985,7 @@ createServer(async (req, res) => {
     if (again) return json(res, 202, restOf(again));
     const id = `01JD8XIMG${String(100 + cosmeticSeq++).padStart(17, '0')}`;
     const base = kind === 'badge' ? 18 : 64;
-    const files = [1, 2, 4].flatMap((k) => {
+    const files = kind === 'badge' ? ladderFiles(probe.animated, file.length) : [1, 2, 4].flatMap((k) => {
       const h = base * k;
       const w = Math.round((probe.width / probe.height) * h);
       return (probe.animated ? [false, true] : [false]).map((still) => ({ name: `${k}x${still ? '_static' : ''}.webp`, format: 'WEBP', scale: k, width: w, height: h, size: file.length, isStatic: still }));
@@ -2969,7 +2999,7 @@ createServer(async (req, res) => {
     setTimeout(() => Object.assign(img, { ready: true, files }), Number(process.env.MOCK_IMAGE_DELAY ?? 2000));
     return json(res, 202, restOf(img));
   }
-  const uploaded = url.pathname.match(/^\/cosmetics\/uploads\/([0-9A-Z]+)\/[124]x(?:_static)?\.(?:webp|avif)$/);
+  const uploaded = url.pathname.match(/^\/cosmetics\/uploads\/([0-9A-Z]+)\/(?:[124]x|128|256|512)(?:_static)?\.(?:webp|avif)$/);
   if (uploaded) {
     const u = UPLOAD_FILES.get(uploaded[1]);
     if (!u) return res.writeHead(404).end();

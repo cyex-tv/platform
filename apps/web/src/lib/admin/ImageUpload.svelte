@@ -9,7 +9,12 @@
   import type { CosmeticImageFieldsFragment } from '$lib/gql/graphql';
   import { COSMETIC_IMAGE } from '$lib/queries';
   import { safeUrl } from '$lib/cosmetics/paint';
-  import { checkFile, checkSize, PICTURE_ACCEPT, waitReady } from '$lib/cosmetics/upload';
+  import { animationOf, checkAnimation, checkFile, checkSize, pictureAccept, waitReady } from '$lib/cosmetics/upload';
+  import { pickBadgeFile } from '$lib/cosmetics/badgeFile';
+  import { display } from '$lib/dpr.svelte';
+
+  // A badge's preview shows it at 72 px, the file picked from its size ladder for the screen.
+  const BADGE_PREVIEW = 72;
 
   type Props = {
     kind: 'badge' | 'paint';
@@ -39,7 +44,14 @@
   });
 
   const shown = $derived(image ?? current);
-  const remote = $derived(shown && shown.ready ? safeUrl(`${shown.host.replace(/\/+$/, '')}/${kind === 'badge' ? '2x' : '1x'}.webp`) : null);
+  const madeName = $derived(
+    !shown || !shown.ready
+      ? null
+      : kind === 'badge'
+        ? (pickBadgeFile(shown.files.map((f) => f.name), BADGE_PREVIEW, display.dpr)?.name ?? '4x.webp')
+        : '1x.webp',
+  );
+  const remote = $derived(shown && madeName ? safeUrl(`${shown.host.replace(/\/+$/, '')}/${madeName}`) : null);
   // The picked file shows at once; the made file replaces it when it's ready (unless it won't load).
   const preview = $derived(remote && refused === remote ? local : phase === 'ready' ? (remote ?? local) : (local ?? remote));
   const cdnHost = $derived(remote ? new URL(remote).host : '');
@@ -60,6 +72,23 @@
     }
   }
 
+  async function animation(file: File) {
+    try {
+      const bytes =
+        typeof file.arrayBuffer === 'function'
+          ? await file.arrayBuffer()
+          : await new Promise<ArrayBuffer>((ok, no) => {
+              const r = new FileReader();
+              r.onload = () => ok(r.result as ArrayBuffer);
+              r.onerror = () => no(r.error);
+              r.readAsArrayBuffer(file);
+            });
+      return animationOf(new Uint8Array(bytes));
+    } catch {
+      return null;
+    }
+  }
+
   async function use(file: File | undefined | null) {
     if (!file) return;
     stop?.abort();
@@ -71,10 +100,15 @@
     refused = null;
     // Reading the picture's size takes a moment; the form waits for it, and a newer pick wins.
     phase = 'checking';
-    const bad = checkFile(file);
+    const bad = checkFile(file, kind);
     const dims = bad ? null : await size(file);
+    const anim = !bad && dims && kind === 'badge' ? await animation(file) : null;
     if (signal.aborted) return;
-    const why = bad ?? (dims ? checkSize(kind, dims.width, dims.height) : 'That file isn’t a picture this browser can open. Try another one.');
+    const why =
+      bad ??
+      (dims
+        ? (checkSize(kind, dims.width, dims.height) ?? checkAnimation(kind, anim, dims.width, dims.height))
+        : 'That file isn’t a picture this browser can open. Try another one.');
     if (why) {
       setLocal(null);
       phase = 'failed';
@@ -136,10 +170,10 @@
     </span>
     <label class="ui-btn secondary">
       {shown || local ? 'Replace picture' : 'Choose a picture'}
-      <input class="file" type="file" accept={PICTURE_ACCEPT} onchange={picked} />
+      <input class="file" type="file" accept={pictureAccept(kind)} onchange={picked} />
     </label>
     <span class="ui-hint" role="status">
-      {#if phase === 'checking'}Checking the file…{:else if phase === 'uploading'}Uploading…{:else if phase === 'making'}Making the files…{:else if phase === 'ready'}Ready.{:else if kind === 'badge'}Square, at least 72 × 72 px. PNG, GIF or WebP, up to 5 MB. Or drop it here.{:else}At least 64 px tall, up to 8:1. PNG, GIF or WebP, up to 5 MB.{/if}
+      {#if phase === 'checking'}Checking the file…{:else if phase === 'uploading'}Uploading…{:else if phase === 'making'}Making the files…{:else if phase === 'ready'}Ready.{:else if kind === 'badge'}Square, at least 72 × 72 px. PNG, JPEG, GIF or WebP, up to 8 MB; animated up to 120 frames and 10 seconds. Or drop it here.{:else}At least 64 px tall, up to 8:1. PNG, GIF or WebP, up to 5 MB.{/if}
     </span>
   </div>
   {#if problem}<span class="ui-error" role="alert">{problem}</span>
@@ -151,7 +185,8 @@
   .pick.over { outline-color: var(--accent); }
   .prev { position: relative; display: grid; place-items: center; flex: none; height: 48px; border-radius: var(--radius); background: var(--elevated-2); overflow: hidden; }
   .prev > * { grid-area: 1 / 1; }
-  .prev.badge { width: 48px; }
+  .prev.badge { width: 72px; height: 72px; }
+  .prev.badge img { width: 72px; height: 72px; }
   .prev.paint { width: 120px; }
   .prev img { max-width: 100%; max-height: 100%; object-fit: contain; }
   .prev.paint img { width: 100%; height: 100%; object-fit: cover; }

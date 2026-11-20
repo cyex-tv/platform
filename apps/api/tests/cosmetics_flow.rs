@@ -2,8 +2,8 @@
 //! create, change and delete badges and paints; grants and revokes; a selection only of owned
 //! cosmetics, cleared by a revoke or a delete; permissions (non-staff, a manage-only role,
 //! account editors with and without `profile`); the batch lookups (GraphQL and REST); the events;
-//! validation; the picture upload. Runs when `CYEX_TV_TEST_DATABASE_URL` is set (CI sets it) and
-//! skips otherwise.
+//! validation; the picture upload and its badge rules, and making old badges again. Runs when
+//! `CYEX_TV_TEST_DATABASE_URL` is set (CI sets it) and skips otherwise.
 
 mod common;
 
@@ -1194,4 +1194,197 @@ async fn known_pictures_whose_original_is_gone_are_stored_and_made_again() {
     drop(conn);
     let same = w.upload(&owner, "badge", &png(72, 72)).await;
     assert_eq!(same.body["ready"], true, "{}", same.body);
+}
+
+/// A 16-bit RGBA PNG of noise: it doesn't compress, so it is about `side² × 8` bytes.
+fn noise_png(side: u32) -> Vec<u8> {
+    let mut seed = 0x2545_f491_4f6c_dd1du64;
+    let mut next = move || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed as u16
+    };
+    let picture: image::ImageBuffer<Rgba<u16>, Vec<u16>> =
+        image::ImageBuffer::from_fn(side, side, |_, _| Rgba([next(), next(), next(), 65535]));
+    let mut out = Cursor::new(Vec::new());
+    picture.write_to(&mut out, ImageFormat::Png).unwrap();
+    out.into_inner()
+}
+
+fn gif(side: u32, frames: u32, delay_ms: u32) -> Vec<u8> {
+    use image::codecs::gif::{GifEncoder, Repeat};
+    use image::{Delay, Frame};
+    let mut out = Vec::new();
+    {
+        let mut enc = GifEncoder::new(&mut out);
+        enc.set_repeat(Repeat::Infinite).unwrap();
+        for i in 0..frames {
+            let frame = RgbaImage::from_fn(side, side, |x, y| {
+                Rgba([(x * 3) as u8, (y * 3) as u8, (i * 2) as u8, 255])
+            });
+            enc.encode_frame(Frame::from_parts(
+                frame,
+                0,
+                0,
+                Delay::from_numer_denom_ms(delay_ms, 1),
+            ))
+            .unwrap();
+        }
+    }
+    out
+}
+
+fn jpeg(side: u32) -> Vec<u8> {
+    let mut out = Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgba8(RgbaImage::from_fn(side, side, |x, y| {
+        Rgba([x as u8, y as u8, 40, 255])
+    }))
+    .to_rgb8()
+    .write_to(&mut out, ImageFormat::Jpeg)
+    .unwrap();
+    out.into_inner()
+}
+
+const REMAKE: &str = "mutation($id: String!) { remakeCosmeticImage(id: $id) { id ready } }";
+
+impl World {
+    /// What the worker records for a badge made on the size ladder.
+    async fn finish_ladder(&self, image_id: &str) {
+        let files: Vec<Value> = [
+            ("1x", 1, 18),
+            ("2x", 2, 36),
+            ("4x", 4, 72),
+            ("128", 7, 128),
+            ("256", 14, 256),
+            ("512", 28, 512),
+        ]
+        .iter()
+        .map(|(stem, scale, px)| {
+            json!({ "name": format!("{stem}.webp"), "format": "webp", "scale": scale, "width": px, "height": px, "size": 100, "is_static": false })
+        })
+        .collect();
+        let mut conn = self.db.conn().await;
+        cosmetics::set_image_variants(&mut conn, ids::from_text(image_id).unwrap(), &json!(files))
+            .await
+            .unwrap();
+    }
+
+    async fn transcode_jobs(&self) -> i64 {
+        let mut conn = self.db.conn().await;
+        sqlx::query_scalar("SELECT count(*) FROM jobs WHERE kind = 'cosmetic.transcode'")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap()
+    }
+}
+
+#[tokio::test]
+async fn badge_pictures_follow_the_badge_upload_rules() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+
+    // Up to 8 MB for a badge; a paint keeps its 5 MB.
+    let big = noise_png(900);
+    assert!(big.len() > 5 * 1024 * 1024 && big.len() < 8 * 1024 * 1024);
+    let r = w.upload(&owner, "badge", &big).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{}", r.body);
+    let r = w.upload(&owner, "paint", &big).await;
+    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{}", r.body);
+    assert_eq!(
+        r.body["message"],
+        "The file is over 5 MB, the most an upload can be."
+    );
+    let over = noise_png(1060);
+    assert!(over.len() > 8 * 1024 * 1024);
+    let r = w.upload(&owner, "badge", &over).await;
+    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{}", r.body);
+    assert_eq!(r.body["error"], "too_large");
+
+    // JPEG is a badge picture too; still square and at least 72 px.
+    let r = w.upload(&owner, "badge", &jpeg(96)).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{}", r.body);
+    assert_eq!(
+        w.upload(&owner, "badge", &jpeg(64)).await.body["error"],
+        "bad_dimensions"
+    );
+
+    // Animated: at most 120 frames and 10 seconds.
+    let r = w.upload(&owner, "badge", &gif(72, 120, 50)).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{}", r.body);
+    assert_eq!(r.body["animated"], true);
+    let r = w.upload(&owner, "badge", &gif(72, 121, 50)).await;
+    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{}", r.body);
+    assert_eq!(
+        r.body["message"],
+        "The animation has more than 120 frames, the most it can have."
+    );
+    let r = w.upload(&owner, "badge", &gif(72, 6, 2000)).await;
+    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{}", r.body);
+    assert_eq!(
+        r.body["message"],
+        "The animation runs longer than 10 seconds, the most it can."
+    );
+    // Paints keep their own rules: no 120-frame or 10-second cap.
+    let r = w.upload(&owner, "paint", &gif(72, 6, 2000)).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{}", r.body);
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn badges_made_before_the_ladder_are_made_again() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let nobody = w.user("11").await;
+    // Made with 1x, 2x and 4x only (`finish`): the same bytes again queue the larger sizes.
+    let id = w.picture(&owner, "badge", 80).await;
+    let before = w.transcode_jobs().await;
+    let r = w.upload(&owner, "badge", &png(80, 80)).await;
+    assert_eq!(r.body["id"], id.as_str());
+    assert_eq!(r.body["ready"], true, "its files stay in use meanwhile");
+    assert_eq!(w.transcode_jobs().await, before + 1);
+    // Made on the ladder: nothing to do.
+    w.finish_ladder(&id).await;
+    w.upload(&owner, "badge", &png(80, 80)).await;
+    assert_eq!(w.transcode_jobs().await, before + 1);
+
+    // Staff can ask for it outright, audited; others can't.
+    assert_eq!(
+        code(&w.gql(Some(&nobody), REMAKE, json!({ "id": id })).await),
+        "forbidden"
+    );
+    let r = w.gql(Some(&owner), REMAKE, json!({ "id": id })).await;
+    assert_eq!(r["data"]["remakeCosmeticImage"]["id"], id.as_str(), "{r}");
+    assert_eq!(r["data"]["remakeCosmeticImage"]["ready"], true);
+    assert_eq!(w.transcode_jobs().await, before + 2);
+    assert!(
+        w.audit_actions()
+            .await
+            .contains(&"cosmetic_image.remade".to_owned())
+    );
+    assert_eq!(
+        code(
+            &w.gql(
+                Some(&owner),
+                REMAKE,
+                json!({ "id": ids::to_text(ids::new_id()) })
+            )
+            .await
+        ),
+        "not_found"
+    );
+    // The original gone: say so, queue nothing.
+    for key in w.store.keys() {
+        w.store.delete(&key).await.unwrap();
+    }
+    assert_eq!(
+        code(&w.gql(Some(&owner), REMAKE, json!({ "id": id })).await),
+        "original_missing"
+    );
+    assert_eq!(w.transcode_jobs().await, before + 2);
+    w.db.close().await;
 }
