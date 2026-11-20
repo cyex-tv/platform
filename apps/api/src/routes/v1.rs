@@ -433,11 +433,14 @@ async fn upload_cosmetic_image(
     let bad_form = |message: &str| ApiError::new(StatusCode::BAD_REQUEST, "bad_form", message);
     let mut kind = None;
     let mut file: Option<Vec<u8>> = None;
-    while let Some(mut field) = form
-        .next_field()
-        .await
-        .map_err(|_| bad_form("The form couldn't be read."))?
-    {
+    while let Some(mut field) = form.next_field().await.map_err(|err| {
+        // A body over the upload limit can fail here, before the file field is read.
+        if err.status() == StatusCode::PAYLOAD_TOO_LARGE {
+            upload::too_large_for(&cyex_tv_media::Limits::badge())
+        } else {
+            bad_form("The form couldn't be read.")
+        }
+    })? {
         match field.name() {
             Some("file") if file.is_none() => file = Some(file_field(&mut field, bad_form).await?),
             Some("kind") if kind.is_none() => {
