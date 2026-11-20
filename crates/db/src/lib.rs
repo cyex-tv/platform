@@ -17,6 +17,7 @@ pub mod emotes;
 mod error;
 pub mod event_sessions;
 pub mod files;
+pub mod idempotency;
 pub mod ids;
 pub mod jobs;
 pub mod notifications;

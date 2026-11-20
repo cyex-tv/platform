@@ -665,3 +665,60 @@ async fn the_same_file_check_hides_emotes_of_deleted_and_blocked_accounts() {
     assert_eq!(body["data"]["emotesWithSameFile"], json!([]), "{body}");
     w.db.close().await;
 }
+
+#[tokio::test]
+async fn verdicts_retried_with_their_key_answer_the_first_outcome() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    const APPROVE: &str = "mutation($id: String!, $k: String) { approveEmote(id: $id, idempotencyKey: $k) { id state } }";
+    const REVIEW_KEYED: &str = "mutation($ids: [String!]!, $v: ReviewVerdict!, $r: String, $k: String) { reviewEmotes(ids: $ids, verdict: $v, reason: $r, idempotencyKey: $k) { done failed { id code } } }";
+    let reviewer = w.user("991", "keyreviewer", &["emotes.review"]).await;
+    let alice = w.user("992", "keyalice", &[]).await;
+    let a = w
+        .emote(&alice, "KeyA", None, EmoteState::Pending, false)
+        .await;
+    let b = w
+        .emote(&alice, "KeyB", None, EmoteState::Pending, false)
+        .await;
+    let c = w
+        .emote(&alice, "KeyC", None, EmoteState::Pending, false)
+        .await;
+    let audits = "SELECT count(*) FROM audit_log WHERE action = $1";
+
+    let key = ids::new_id().to_string();
+    let first = w
+        .gql(Some(&reviewer), APPROVE, json!({ "id": a, "k": key }))
+        .await;
+    assert_eq!(
+        first["data"]["approveEmote"]["state"], "APPROVED",
+        "{first}"
+    );
+    let again = w
+        .gql(Some(&reviewer), APPROVE, json!({ "id": a, "k": key }))
+        .await;
+    assert_eq!(again["data"], first["data"], "{again}");
+    assert_eq!(w.count(audits, "emote.approved").await, 1);
+    // Without it, the second approval says it isn't pending any more.
+    let r = w.gql(Some(&reviewer), APPROVE, json!({ "id": a })).await;
+    assert_eq!(code(&r), "not_pending", "{r}");
+    // The same key for another emote: refused, and that one stays pending.
+    let r = w
+        .gql(Some(&reviewer), APPROVE, json!({ "id": b, "k": key }))
+        .await;
+    assert_eq!(code(&r), "idempotency_key_reused", "{r}");
+    assert_eq!(w.state_of(&b).await, "pending");
+
+    let key = ids::new_id().to_string();
+    let vars = json!({ "ids": [b, c], "v": "REJECT", "r": "Blurry", "k": key });
+    let first = w.gql(Some(&reviewer), REVIEW_KEYED, vars.clone()).await;
+    assert_eq!(
+        first["data"]["reviewEmotes"]["done"],
+        json!([b, c]),
+        "{first}"
+    );
+    let again = w.gql(Some(&reviewer), REVIEW_KEYED, vars).await;
+    assert_eq!(again["data"], first["data"], "{again}");
+    assert_eq!(w.count(audits, "emote.rejected").await, 2);
+    w.db.close().await;
+}

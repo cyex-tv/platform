@@ -9,6 +9,7 @@
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { loadOwned } from '$lib/cosmetics/store.svelte';
   import { clean } from '$lib/format';
+  import { keyKeeper } from '$lib/idempotency';
   import type { RedeemCodeMutation } from '$lib/gql/graphql';
   import { REDEEM_CODE } from '$lib/queries';
   import { sectionHref } from '$lib/profile/rows';
@@ -24,6 +25,7 @@
   let now = $state(Date.now());
   let tick: ReturnType<typeof setInterval> | undefined;
   let input = $state<HTMLInputElement>();
+  const keys = keyKeeper();
 
   const me = $derived(session.me);
   const known = $derived(session.known);
@@ -57,7 +59,9 @@
     }
     busy = true;
     try {
-      result = (await gql(REDEEM_CODE, { code: normalised })).redeemCode;
+      // The same code tried again (after a timeout, say) sends the same key: redeemed once.
+      result = (await gql(REDEEM_CODE, { code: normalised, idempotencyKey: keys.key(normalised) })).redeemCode;
+      keys.done();
       code = '';
       if (me) loadOwned(me.id, true, true).catch(() => {});
     } catch (err) {
