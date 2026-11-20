@@ -1545,6 +1545,11 @@ type Notification {
 	payload: String!
 	createdAt: String!
 	read: Boolean!
+	"""
+	For `emote.transfer_requested`: where the request stands now (it may have been answered,
+	withdrawn or run out since). Null for other kinds.
+	"""
+	transferState: TransferRequestState
 }
 
 type Order {
@@ -1902,6 +1907,13 @@ type Query {
 	its owner, an editor or staff (a channel's active set is always public).
 	"""
 	set(id: String!): EmoteSet
+	"""
+	A page of a set's emotes, oldest first, for sets too big to read whole. Who may see what is
+	the rule of `set`; an unknown or hidden set is an empty page. `query` keeps the emotes whose
+	name in the set or own name contains it (case-insensitive). `perPage` is 1 to 200, default
+	120; `total` counts every match.
+	"""
+	setEmotes(id: String!, query: String, page: Int, perPage: Int): SetEmotePage!
 	"""
 	An account's `LISTED` sets as profile cards, oldest first, at most 50. `preview` is how
 	many of each set's newest emotes to include, 0 to 50, default 12. Empty when the account
@@ -2512,6 +2524,17 @@ type SetEmote {
 	addedBy: String
 	addedAt: String!
 	emote: Emote!
+}
+
+"""
+A page of a set's members and how many match, in all (`setEmotes`).
+"""
+type SetEmotePage {
+	items: [SetEmote!]!
+	"""
+	Members the viewer may see that match `query`, over every page.
+	"""
+	total: Int!
 }
 
 enum SetKind {

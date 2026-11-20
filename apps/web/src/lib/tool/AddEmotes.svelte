@@ -8,14 +8,14 @@
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
   import { ADD_SET_EMOTE, MY_EMOTES, SEARCH } from '$lib/queries';
   import Icon from '$lib/components/Icon.svelte';
-  import { clean, iso } from '$lib/format';
+  import { clean, count, iso } from '$lib/format';
   import State from '$lib/components/State.svelte';
   import Thumb from './Thumb.svelte';
   import { session } from './session.svelte';
   import { STATE_LABEL } from './state';
   import { fail, notify } from './notices.svelte';
   import { nameProblem } from '$lib/rules';
-  import { freeName, mergeResults } from './add-emotes';
+  import { RESULT_PAGE, appendResults, freeName, mergeResults, showingLine } from './add-emotes';
 
   let {
     setId,
@@ -32,6 +32,12 @@
   let searched = $state('');
   let results = $state<EmoteFieldsFragment[] | null>(null);
   let searching = $state(false);
+  /** How many public results the search found in all, and how many of them are in the list. */
+  let found = $state(0);
+  let fetched = $state(0);
+  let nextPage = $state(2);
+  let moreBusy = $state(false);
+  let moreProblem = $state('');
   let problem = $state<string | null>(null);
   let busy = $state<string | null>(null);
   /** The emote whose name is taken here, being added under another name. */
@@ -62,18 +68,42 @@
     problem = null;
     try {
       const [everyone, own] = await Promise.all([
-        gql(SEARCH, { query: text, page: 1, perPage: 40 }),
+        gql(SEARCH, { query: text, page: 1, perPage: RESULT_PAGE }),
         session.me ? gql(MY_EMOTES, { page: 1, perPage: 100 }) : Promise.resolve(null),
       ]);
       if (mine !== token) return;
       results = mergeResults(text, own?.myEmotes.items ?? [], everyone.searchEmotes.items, personal);
       searched = text;
+      found = everyone.searchEmotes.total;
+      fetched = everyone.searchEmotes.items.length;
+      nextPage = 2;
+      moreProblem = '';
     } catch (err) {
       if (mine !== token) return;
       results = null;
       problem = err instanceof ApiError && err.code === 'rate_limited' ? err.message : 'Searching didn’t work. Check your connection and try again.';
     } finally {
       if (mine === token) searching = false;
+    }
+  }
+
+  /** The next page of public results, after the ones on screen. */
+  async function loadMore() {
+    if (moreBusy || !results) return;
+    const mine = token;
+    moreBusy = true;
+    moreProblem = '';
+    try {
+      const r = await gql(SEARCH, { query: searched, page: nextPage, perPage: RESULT_PAGE });
+      if (mine !== token || !results) return;
+      results = appendResults(results, r.searchEmotes.items);
+      fetched += r.searchEmotes.items.length;
+      found = r.searchEmotes.total;
+      nextPage += 1;
+    } catch (err) {
+      moreProblem = err instanceof ApiError && err.code === 'rate_limited' ? err.message : 'That page didn’t load. Try again.';
+    } finally {
+      moreBusy = false;
     }
   }
 
@@ -155,6 +185,14 @@
         </li>
       {/each}
     </ul>
+    {#if found > fetched || moreProblem}
+      <div class="more">
+        <p class="ui-hint" role="status">{moreProblem || showingLine(fetched, found, count)}</p>
+        <button class="ui-btn secondary small" type="button" disabled={moreBusy} aria-busy={moreBusy} onclick={loadMore}>
+          {moreBusy ? 'Loading…' : moreProblem ? 'Try again' : 'Load more'}
+        </button>
+      </div>
+    {/if}
   {/if}
 </section>
 
@@ -173,4 +211,6 @@
   .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   @media (hover: hover) and (pointer: fine) { .who:hover .name { text-decoration: underline; } }
   .add { flex: none; }
+  .more { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--border); }
+  .more p { margin: 0; }
 </style>

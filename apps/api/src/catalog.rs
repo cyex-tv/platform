@@ -24,8 +24,8 @@ use cyex_tv_db::{DbError, accounts, audit, channels, emotes, ids, outbox, reads,
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
     AccountSummary, AddSetEmote, Channel, ClonedSet, CreateSet, EditorPermission, EmotePage,
-    EmoteSet, EmoteState, EventType, PersonalSetEntry, Platform, SetEmote, SetKind, SetSummary,
-    SetVisibility, UpdateChannelSettings, UpdateSet, UpdateSetEmote,
+    EmoteSet, EmoteState, EventType, PersonalSetEntry, Platform, SetEmote, SetEmotePage, SetKind,
+    SetSummary, SetVisibility, UpdateChannelSettings, UpdateSet, UpdateSetEmote,
 };
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
@@ -556,6 +556,51 @@ pub async fn set(
         .await
         .map(Some)
         .map_err(db_error)
+}
+
+/// A page of a set's emotes, oldest first, with the same visibility rule as `set`: `query` keeps
+/// the members whose name in the set or own name contains it; `perPage` is 1 to 200 (default 120).
+pub async fn set_emotes(
+    state: &AppState,
+    caller: Option<&Caller>,
+    id: &str,
+    query: Option<&str>,
+    page: Option<u32>,
+    per_page: Option<u32>,
+) -> ApiResult<SetEmotePage> {
+    let empty = SetEmotePage {
+        items: Vec::new(),
+        total: 0,
+    };
+    let Some(id) = ids::from_text(id.trim()) else {
+        return Ok(empty);
+    };
+    let per_page = per_page.unwrap_or(120).clamp(1, 200);
+    let page = page.unwrap_or(1).max(1);
+    let offset = i64::from(page - 1) * i64::from(per_page);
+    let mut conn = conn(state).await?;
+    let Some(set) = sets::get(&mut conn, id).await.map_err(db_error)? else {
+        return Ok(empty);
+    };
+    if !may_view(&mut conn, caller, &set).await? {
+        return Ok(empty);
+    }
+    let viewer = viewer(&mut conn, caller).await?;
+    let (items, total) = views::set_emotes(
+        &mut conn,
+        &set,
+        &viewer,
+        &state.cdn_url,
+        query,
+        i64::from(per_page),
+        offset,
+    )
+    .await
+    .map_err(db_error)?;
+    Ok(SetEmotePage {
+        items,
+        total: u64::try_from(total).unwrap_or(0),
+    })
 }
 
 /// Whether the caller may open `set` (the module's rule). A private set the caller may not see
