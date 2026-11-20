@@ -128,3 +128,73 @@ describe('cleanup', () => {
     stop = initDocs(document, { headerOffset: 0 });
   });
 });
+
+describe('lazy groups', () => {
+  // Two groups: a closed one whose body arrives through `load`, and the guides.
+  const LAZY = `
+<div class="docs">
+  <aside class="docs-nav">
+    <div class="nav-search"><input aria-label="Filter" /><span class="nav-kbd"></span><button class="input-clear" type="button">Clear</button></div>
+    <nav class="nav-scroll">
+      <p data-filter-status></p>
+      <div class="nav-group" data-group="gql-types" data-open="false">
+        <button type="button" class="group-toggle nav-group-title" data-group-toggle="gql-types" aria-expanded="false"></button>
+        <div class="collapse" id="nav-gql-types"><div class="collapse-inner"><a class="nav-item" href="#gql-type-Emote" data-search="graphql type object">Emote</a></div></div>
+      </div>
+      <p class="nav-empty" hidden></p>
+    </nav>
+  </aside>
+  <main>
+    <div class="op-group" data-group="gql-types" data-open="false">
+      <h2><button type="button" class="group-toggle" data-group-toggle="gql-types" aria-expanded="false"></button></h2>
+      <div class="collapse" id="body-gql-types" data-lazy><div class="collapse-inner"></div></div>
+    </div>
+  </main>
+</div>`;
+  const drawn: string[] = [];
+  const load = async (id: string) => {
+    drawn.push(id);
+    document.querySelector('#body-gql-types .collapse-inner')!.innerHTML = '<section id="gql-type-Emote">Emote</section>';
+  };
+  const open = (opts = {}) => {
+    stop();
+    document.body.innerHTML = LAZY;
+    drawn.length = 0;
+    stop = initDocs(document, { headerOffset: 0, load, ...opts });
+  };
+
+  it('draws nothing until the group is opened, then draws it once', async () => {
+    const user = userEvent.setup();
+    open();
+    expect(drawn).toEqual([]);
+    const toggle = document.querySelector<HTMLElement>('.op-group [data-group-toggle]')!;
+    await user.click(toggle);
+    expect(drawn).toEqual(['gql-types']);
+    expect(document.querySelector('.op-group')!.getAttribute('data-open')).toBe('true');
+    await user.click(toggle); // close
+    await user.click(toggle); // open again
+    expect(drawn).toEqual(['gql-types']);
+  });
+
+  it('finds an entry of a closed group by the index alone, and a click on it opens and draws the group', async () => {
+    const user = userEvent.setup();
+    open();
+    await user.type(input(), 'object');
+    expect(item('gql-type-Emote').hidden).toBe(false);
+    expect(drawn).toEqual([]); // filtering needs only the index
+    await user.click(item('gql-type-Emote'));
+    expect(drawn).toEqual(['gql-types']);
+    expect(document.querySelector('.op-group')!.getAttribute('data-open')).toBe('true');
+    expect(document.getElementById('gql-type-Emote')).not.toBeNull();
+  });
+
+  it('a deep link to an operation in a closed group opens and draws it on load', async () => {
+    location.hash = '#gql-type-Emote';
+    open();
+    await Promise.resolve();
+    expect(drawn).toEqual(['gql-types']);
+    expect(document.querySelector('.op-group')!.getAttribute('data-open')).toBe('true');
+    expect(item('gql-type-Emote').classList.contains('active')).toBe(true);
+    location.hash = '';
+  });
+});

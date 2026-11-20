@@ -18,6 +18,7 @@ cyex-tv-shared = { workspace = true, features = ["sqlx"] }
 serde_json.workspace = true
 sqlx.workspace = true
 thiserror.workspace = true
+tracing.workspace = true
 ulid.workspace = true
 uuid.workspace = true
 
