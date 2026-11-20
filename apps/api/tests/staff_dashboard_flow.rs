@@ -235,7 +235,7 @@ async fn sessions_and_subscriptions_for_staff() {
     let r = w.gql(&sessions_staff, q, json!({ "a": a })).await;
     let list = r["data"]["accountSessions"].as_array().unwrap();
     assert_eq!(list.len(), 1, "{r}");
-    assert_eq!(list[0]["kind"], "APP");
+    assert_eq!(list[0]["kind"], "SITE");
     assert_eq!(list[0]["current"], false);
     assert!(!r.to_string().contains("token"), "{r}");
 
