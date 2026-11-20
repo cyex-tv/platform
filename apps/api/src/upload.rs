@@ -379,7 +379,21 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
     let revived = !created
         && file.purged_at.is_some()
         && files::revive(&mut tx, file.id).await.map_err(db_error)?;
-    if created || revived {
+    // Bytes we know whose original is gone from storage (it moved, or lost it): store it and make
+    // the files again, and forget the old files until they are.
+    let lost = !created && !revived && {
+        let gone = |err| {
+            tracing::error!(error = %err, "checking an emote file in storage failed");
+            ApiError::unavailable("Uploads aren't available right now.")
+        };
+        !store.exists(&key).await.map_err(gone)?
+    };
+    if lost {
+        files::set_variants(&mut tx, file.id, &json!([]))
+            .await
+            .map_err(db_error)?;
+    }
+    if created || revived || lost {
         store
             .put(
                 &key,

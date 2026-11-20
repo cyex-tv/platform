@@ -1159,3 +1159,39 @@ async fn chatters_are_looked_up_in_batches() {
     );
     w.db.close().await;
 }
+
+#[tokio::test]
+async fn known_pictures_whose_original_is_gone_are_stored_and_made_again() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    // A finished picture, then the storage moved and took everything with it.
+    let id = w.picture(&owner, "badge", 72).await;
+    for key in w.store.keys() {
+        w.store.delete(&key).await.unwrap();
+    }
+    // The same bytes again: the same picture, not ready, its original back and a new job queued.
+    let r = w.upload(&owner, "badge", &png(72, 72)).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{}", r.body);
+    assert_eq!(r.body["id"], id.as_str());
+    assert_eq!(r.body["ready"], false);
+    assert!(
+        w.store
+            .keys()
+            .iter()
+            .any(|k| k.starts_with("originals/cosmetics/"))
+    );
+    let mut conn = w.db.conn().await;
+    let queued: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM jobs WHERE kind = 'cosmetic.transcode'")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    assert_eq!(queued, 2);
+    // A picture whose original is still there stays as it was.
+    w.finish(&id).await;
+    drop(conn);
+    let same = w.upload(&owner, "badge", &png(72, 72)).await;
+    assert_eq!(same.body["ready"], true, "{}", same.body);
+}

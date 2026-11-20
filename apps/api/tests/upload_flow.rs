@@ -904,3 +904,46 @@ async fn over_long_text_fields_are_refused() {
     assert_eq!(w.count("SELECT count(*) FROM emotes").await, 0);
     w.db.close().await;
 }
+
+#[tokio::test]
+async fn known_bytes_whose_original_is_gone_are_stored_and_made_again() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let alice = w.user("43").await;
+    let file = png(64, 64, 43);
+    assert_eq!(
+        w.upload(&alice, "first", &file).await.status,
+        StatusCode::ACCEPTED
+    );
+    // Its files were made, then the storage moved and took everything with it.
+    {
+        let mut conn = w.db.conn().await;
+        sqlx::query("UPDATE files SET variants = '[{\"name\":\"1x.webp\",\"format\":\"webp\",\"scale\":1,\"width\":32,\"height\":32,\"size\":10,\"is_static\":false}]'")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+    }
+    for key in w.store.keys() {
+        w.store.delete(&key).await.unwrap();
+    }
+    // The same bytes again: the original is back, the old files forgotten, a new job queued.
+    let r = w.upload(&alice, "again", &file).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
+    assert_eq!(r.body["files"], json!([]));
+    assert_eq!(
+        w.store.keys(),
+        vec![format!("originals/{}", sha_hex(&file))]
+    );
+    assert_eq!(
+        w.count("SELECT count(*) FROM jobs WHERE kind = 'emote.transcode'")
+            .await,
+        2
+    );
+    assert_eq!(
+        w.count("SELECT count(*) FROM files WHERE variants = '[]'::jsonb")
+            .await,
+        1
+    );
+    w.db.close().await;
+}
