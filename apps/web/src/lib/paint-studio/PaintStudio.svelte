@@ -449,7 +449,7 @@
   <div class="ps-status" class:bad={status?.bad} id="ps-status" role="status" aria-live="polite">
     {#if status}
       <span>{status.text}</span>
-      {#if status.progress != null}<span class="ps-progress" aria-hidden="true"><span style:width="{Math.round(status.progress * 100)}%"></span></span>{/if}
+      {#if status.progress != null}<span class="ps-progress" aria-hidden="true"><span style:transform="scaleX({Math.round(status.progress * 100) / 100})"></span></span>{/if}
     {/if}
   </div>
   {#if warnings.length}

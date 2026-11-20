@@ -99,5 +99,5 @@
     .item label:hover { background: var(--row-hover); }
     .item:hover .tip { opacity: 1; transform: none; transition-delay: var(--delay-tip, .4s); }
   }
-  @media (prefers-reduced-motion: reduce) { .tip { transform: none; transition: opacity var(--fast); } }
+  @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .tip { transform: none; transition: opacity var(--fast); } }
 </style>

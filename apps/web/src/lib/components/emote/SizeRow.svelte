@@ -4,7 +4,8 @@
   // screen shrinks to fit). `still` shows the first frame; with `still` null the reader's motion
   // setting decides, and before the script runs a <picture> source keeps them still under
   // reduced motion.
-  import { ready } from '$lib/emote';
+  import { ready, stillBy } from '$lib/emote';
+  import { motion } from '$lib/shell/motion.svelte';
   import { scaleFiles, type PageEmote } from './emote-page';
 
   let { emote: e, still = null }: { emote: PageEmote; still?: boolean | null } = $props();
@@ -22,13 +23,13 @@
     {#each files as f (f.name)}
       <li>
         <span class="cell" style:--w="{f.width}px" style:aspect-ratio="{f.width} / {f.height}">
-          {#if hasStill && still === null}
+          {#if hasStill && still === null && stillBy(motion.pref) === 'browser'}
             <picture>
               <source media="(prefers-reduced-motion: reduce)" srcset={stillName(f.scale)} />
               <img src={moving(f.name)} width={f.width} height={f.height} alt={f.scale === 4 ? e.name : ''} />
             </picture>
           {:else}
-            <img src={hasStill && still ? stillName(f.scale) : moving(f.name)} width={f.width} height={f.height} alt={f.scale === 4 ? e.name : ''} />
+            <img src={hasStill && (still ?? stillBy(motion.pref) === 'still') ? stillName(f.scale) : moving(f.name)} width={f.width} height={f.height} alt={f.scale === 4 ? e.name : ''} />
           {/if}
         </span>
         <span class="cap"><span class="x">{f.scale}x</span><span class="px">{f.width} × {f.height}</span></span>

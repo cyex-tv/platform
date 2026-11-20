@@ -3,8 +3,10 @@
   // all shown, Clear. Adding sends each emote with the same mutation the set editor uses, one
   // after another, with progress and a summary; a full set takes what fits. Over the cap, the
   // page passes a calm note that shows here for a few seconds. Signed out, Add asks you to sign in.
+  import { fade, fly } from 'svelte/transition';
   import { ApiError } from '$lib/api';
   import { clean, count } from '$lib/format';
+  import { dur } from '$lib/motion';
   import { bottomBar } from '$lib/tool/bottom-bars.svelte';
   import { session } from '$lib/tool/session.svelte';
   import { addState, plan, summary } from './bulk';
@@ -65,7 +67,7 @@
   }
 </script>
 
-<div class="bar" role="region" aria-label="Selection" use:bottomBar>
+<div class="bar" role="region" aria-label="Selection" use:bottomBar in:fly|global={{ y: 8, duration: dur(200) }} out:fade|global={{ duration: dur(120) }}>
   <p class="n" aria-live="polite">
     {#if run}Adding {count(run.done)} of {count(run.total)}…
     {:else if note}<span class="note">{note}</span>

@@ -407,5 +407,5 @@
     .acts { margin-left: 0; }
   }
   @media (max-width: 480px) { .title { flex-direction: column; align-items: flex-start; gap: 0; } }
-  @media (prefers-reduced-motion: reduce) { .results, .track, .track::before { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .results, :global(html:not([data-motion='full'])) .track, :global(html:not([data-motion='full'])) .track::before { transition: none; } }
 </style>

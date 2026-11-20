@@ -13,11 +13,14 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { onDestroy } from 'svelte';
+  import { flip } from 'svelte/animate';
+  import { fade, fly } from 'svelte/transition';
   import { ApiError, uploadEmote, type EmoteVisibility, type Uploaded } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import TagInput from '$lib/components/TagInput.svelte';
   import { bytes, clean, count, iso } from '$lib/format';
+  import { dur } from '$lib/motion';
   import { editorOf, type Grant } from '$lib/profile/data.svelte';
   import { emoteCan, uploadTargets } from '$lib/tool/editors';
   import { session } from '$lib/tool/session.svelte';
@@ -319,7 +322,7 @@
         {@const te = tagError(item)}
         {@const bad = !!(fe || (tried && (nameProblem(item.name) || te)))}
         {@const wide = !!item.width && isWide(item.width, item.height)}
-        <li class="item ui-card" class:bad class:done={item.status === 'done'} id="item-{item.key}">
+        <li class="item ui-card" class:bad class:done={item.status === 'done'} id="item-{item.key}" in:fly={{ y: 8, duration: dur(200) }} out:fade={{ duration: dur(120) }} animate:flip={{ duration: dur(200) }}>
           <div class="head">
             <button type="button" class="toggle" aria-expanded={item.open} aria-controls="body-{item.key}" onclick={() => (item.open = !item.open)} disabled={item.status === 'done'}>
               <span class="thumb"><img src={item.url} alt="" /></span>
@@ -445,7 +448,7 @@
   .state { flex: none; display: flex; align-items: center; gap: 8px; }
   .bar { display: block; width: 96px; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
   .bar span { display: block; height: 100%; background: var(--accent); transform-origin: 0 50%; transition: transform var(--fast) linear; }
-  @media (prefers-reduced-motion: reduce) { .bar span { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .bar span { transition: none; } }
   .small { min-height: 32px; height: 32px; padding: 0 10px; }
   .err { margin: 10px 0 0; outline: none; }
 

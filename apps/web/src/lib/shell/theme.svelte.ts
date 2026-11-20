@@ -36,6 +36,12 @@ function apply() {
 export function toggleTheme() {
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
   const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
-  if (!still && doc.startViewTransition) doc.startViewTransition(apply);
-  else apply();
+  if (!still && doc.startViewTransition) {
+    const root = document.documentElement;
+    root.classList.add('theme-switching');
+    const t = doc.startViewTransition(apply) as { finished?: Promise<unknown> };
+    const done = () => root.classList.remove('theme-switching');
+    if (t.finished) void t.finished.then(done, done);
+    else done();
+  } else apply();
 }
