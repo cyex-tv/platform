@@ -80,7 +80,7 @@
         session.me ? gql(MY_FAVOURITES, { query: text, perPage: 20 }).catch(() => null) : Promise.resolve(null),
       ]);
       if (mine !== token) return;
-      const fav = (favs?.myFavourites.items ?? []).filter((e) => e.state === 'APPROVED' || (e.state === 'PENDING' && !personal));
+      const fav = (favs?.myFavourites?.items ?? []).filter((e) => e.state === 'APPROVED' || (e.state === 'PENDING' && !personal));
       const rest = mergeResults(text, own?.myEmotes.items ?? [], lists.visible(everyone.searchEmotes.items), personal);
       results = favouritesFirst(fav, rest, Infinity);
       searched = text;

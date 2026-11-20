@@ -164,36 +164,66 @@ async fn hiding_and_unhiding_emotes_and_creators() {
     let b = w.emote(maker, "HideB", EmoteState::Approved).await;
 
     // Newly hidden is true, again is false; the list is the latest first.
-    assert_eq!(ok(&w.gql(Some(&t), HIDE, json!({ "id": a })).await)["hideEmote"], true);
-    assert_eq!(ok(&w.gql(Some(&t), HIDE, json!({ "id": a })).await)["hideEmote"], false);
+    assert_eq!(
+        ok(&w.gql(Some(&t), HIDE, json!({ "id": a })).await)["hideEmote"],
+        true
+    );
+    assert_eq!(
+        ok(&w.gql(Some(&t), HIDE, json!({ "id": a })).await)["hideEmote"],
+        false
+    );
     ok(&w.gql(Some(&t), HIDE, json!({ "id": b })).await);
     let r = w.gql(Some(&t), HIDDEN, json!({})).await;
     assert_eq!(names(&ok(&r)["hiddenEmotes"], "emote"), ["HideB", "HideA"]);
     assert!(ok(&r)["hiddenEmotes"][0]["hiddenAt"].is_string());
 
     // Unhide: true once, then false; a malformed ID is just false.
-    assert_eq!(ok(&w.gql(Some(&t), UNHIDE, json!({ "id": b })).await)["unhideEmote"], true);
-    assert_eq!(ok(&w.gql(Some(&t), UNHIDE, json!({ "id": b })).await)["unhideEmote"], false);
-    assert_eq!(ok(&w.gql(Some(&t), UNHIDE, json!({ "id": "nope" })).await)["unhideEmote"], false);
+    assert_eq!(
+        ok(&w.gql(Some(&t), UNHIDE, json!({ "id": b })).await)["unhideEmote"],
+        true
+    );
+    assert_eq!(
+        ok(&w.gql(Some(&t), UNHIDE, json!({ "id": b })).await)["unhideEmote"],
+        false
+    );
+    assert_eq!(
+        ok(&w.gql(Some(&t), UNHIDE, json!({ "id": "nope" })).await)["unhideEmote"],
+        false
+    );
 
     // A creator: by account, never yourself, never an unknown or deleted account.
     let maker_id = ids::to_text(maker);
-    let r = w.gql(Some(&t), HIDE_CREATOR, json!({ "id": maker_id })).await;
+    let r = w
+        .gql(Some(&t), HIDE_CREATOR, json!({ "id": maker_id }))
+        .await;
     assert_eq!(ok(&r)["hideCreator"], true);
-    let r = w.gql(Some(&t), HIDE_CREATOR, json!({ "id": ids::to_text(me) })).await;
+    let r = w
+        .gql(Some(&t), HIDE_CREATOR, json!({ "id": ids::to_text(me) }))
+        .await;
     assert_eq!(code(&r), "own_account", "{r}");
-    let r = w.gql(Some(&t), HIDE_CREATOR, json!({ "id": ids::to_text(ids::new_id()) })).await;
+    let r = w
+        .gql(
+            Some(&t),
+            HIDE_CREATOR,
+            json!({ "id": ids::to_text(ids::new_id()) }),
+        )
+        .await;
     assert_eq!(code(&r), "not_found", "{r}");
     let gone = w.account("3", "gone").await;
-    w.sql("UPDATE accounts SET deleted_at = now() WHERE id = $1", gone).await;
-    let r = w.gql(Some(&t), HIDE_CREATOR, json!({ "id": ids::to_text(gone) })).await;
+    w.sql("UPDATE accounts SET deleted_at = now() WHERE id = $1", gone)
+        .await;
+    let r = w
+        .gql(Some(&t), HIDE_CREATOR, json!({ "id": ids::to_text(gone) }))
+        .await;
     assert_eq!(code(&r), "not_found", "{r}");
     let r = w.gql(Some(&t), HIDDEN, json!({})).await;
     let creators = &ok(&r)["hiddenCreators"];
     assert_eq!(creators.as_array().unwrap().len(), 1, "{r}");
     assert_eq!(creators[0]["accountId"], maker_id);
     assert_eq!(creators[0]["account"]["displayName"], "maker");
-    let r = w.gql(Some(&t), UNHIDE_CREATOR, json!({ "id": maker_id })).await;
+    let r = w
+        .gql(Some(&t), UNHIDE_CREATOR, json!({ "id": maker_id }))
+        .await;
     assert_eq!(ok(&r)["unhideCreator"], true);
 
     // A deleted emote stays listed (so it can be unhidden) without its view.
@@ -220,7 +250,12 @@ async fn only_emotes_you_can_see_can_be_listed() {
     let rejected = w.emote(maker, "Nope", EmoteState::Rejected).await;
     let mine = w.emote(me, "MinePending", EmoteState::Pending).await;
     for q in [HIDE, FAV] {
-        for id in [pending.as_str(), rejected.as_str(), "nope", &ids::to_text(ids::new_id())] {
+        for id in [
+            pending.as_str(),
+            rejected.as_str(),
+            "nope",
+            &ids::to_text(ids::new_id()),
+        ] {
             let r = w.gql(Some(&t), q, json!({ "id": id })).await;
             assert_eq!(code(&r), "not_found", "{q} {id}: {r}");
         }
@@ -241,10 +276,16 @@ async fn favourites_page_filter_and_ids() {
     let mut all = Vec::new();
     for name in ["FavOne", "FavTwo", "OtherThree"] {
         let id = w.emote(maker, name, EmoteState::Approved).await;
-        assert_eq!(ok(&w.gql(Some(&t), FAV, json!({ "id": id })).await)["favouriteEmote"], true);
+        assert_eq!(
+            ok(&w.gql(Some(&t), FAV, json!({ "id": id })).await)["favouriteEmote"],
+            true
+        );
         all.push(id);
     }
-    assert_eq!(ok(&w.gql(Some(&t), FAV, json!({ "id": all[0] })).await)["favouriteEmote"], false);
+    assert_eq!(
+        ok(&w.gql(Some(&t), FAV, json!({ "id": all[0] })).await)["favouriteEmote"],
+        false
+    );
 
     let r = w.gql(Some(&t), FAVS, json!({})).await;
     let d = ok(&r);
@@ -267,7 +308,9 @@ async fn favourites_page_filter_and_ids() {
     // The name filter (any case) and paging.
     let r = w.gql(Some(&t), FAVS, json!({ "q": "fav" })).await;
     assert_eq!(ok(&r)["myFavourites"]["total"], 2);
-    let r = w.gql(Some(&t), FAVS, json!({ "page": 2, "perPage": 2 })).await;
+    let r = w
+        .gql(Some(&t), FAVS, json!({ "page": 2, "perPage": 2 }))
+        .await;
     assert_eq!(ok(&r)["myFavourites"]["items"][0]["name"], "FavOne");
     // `%` means itself.
     let r = w.gql(Some(&t), FAVS, json!({ "q": "%" })).await;
@@ -297,17 +340,28 @@ async fn lists_are_private_to_their_account() {
     ok(&w.gql(Some(&ta), HIDE, json!({ "id": e })).await);
     ok(&w.gql(Some(&ta), FAV, json!({ "id": e })).await);
     ok(&w
-        .gql(Some(&ta), HIDE_CREATOR, json!({ "id": ids::to_text(maker) }))
+        .gql(
+            Some(&ta),
+            HIDE_CREATOR,
+            json!({ "id": ids::to_text(maker) }),
+        )
         .await);
 
     // Bob sees his own (empty) lists, never Alice's; there is no account argument to ask with.
     let r = w.gql(Some(&tb), HIDDEN, json!({})).await;
     assert!(ok(&r)["hiddenEmotes"].as_array().unwrap().is_empty(), "{r}");
-    assert!(ok(&r)["hiddenCreators"].as_array().unwrap().is_empty(), "{r}");
+    assert!(
+        ok(&r)["hiddenCreators"].as_array().unwrap().is_empty(),
+        "{r}"
+    );
     let r = w.gql(Some(&tb), FAVS, json!({})).await;
     assert_eq!(ok(&r)["myFavourites"]["total"], 0);
     let r = w
-        .gql(Some(&tb), "{ hiddenEmotes(accountId: \"x\") { emoteId } }", json!({}))
+        .gql(
+            Some(&tb),
+            "{ hiddenEmotes(accountId: \"x\") { emoteId } }",
+            json!({}),
+        )
         .await;
     assert!(r["errors"].is_array(), "{r}");
     // Bob's undo touches only his list: Alice's entry stays.
@@ -396,11 +450,18 @@ async fn lists_stop_at_their_caps() {
         .fetch_one(&w.db.pool)
         .await
         .unwrap();
-    let r = w.gql(Some(&t), HIDE, json!({ "id": ids::to_text(listed) })).await;
+    let r = w
+        .gql(Some(&t), HIDE, json!({ "id": ids::to_text(listed) }))
+        .await;
     assert_eq!(ok(&r)["hideEmote"], false);
     // Unhiding one makes room.
-    ok(&w.gql(Some(&t), UNHIDE, json!({ "id": ids::to_text(listed) })).await);
-    assert_eq!(ok(&w.gql(Some(&t), HIDE, json!({ "id": extra })).await)["hideEmote"], true);
+    ok(&w
+        .gql(Some(&t), UNHIDE, json!({ "id": ids::to_text(listed) }))
+        .await);
+    assert_eq!(
+        ok(&w.gql(Some(&t), HIDE, json!({ "id": extra })).await)["hideEmote"],
+        true
+    );
     let r = w.gql(Some(&t), HIDDEN, json!({})).await;
     assert_eq!(ok(&r)["hiddenEmotes"].as_array().unwrap().len(), 1000);
 

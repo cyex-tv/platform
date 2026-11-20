@@ -8,7 +8,6 @@
 //! against a per-account rate (`rate_limited`). Hiding or favouriting needs an emote the caller may
 //! see (`not_found` otherwise); a creator must be a live account other than the caller.
 
-use axum::http::StatusCode;
 use cyex_tv_auth::Caller;
 use cyex_tv_db::personal::{self, Added, List};
 use cyex_tv_db::{ids, reads};
@@ -18,8 +17,7 @@ use sqlx::Connection;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::catalog::{conn, db_error, not_found, parse_id};
-use crate::errors::{bad, rate_limited, sqlx_error};
+use crate::errors::{bad, conflict, conn, db_error, limited, not_found, parse_id, sqlx_error};
 use crate::state::AppState;
 use crate::views;
 
@@ -30,15 +28,15 @@ pub const FAVOURITES_PAGE: u32 = 50;
 pub const FAVOURITES_PAGE_MAX: u32 = 100;
 
 fn limit_reached(message: &str) -> ApiError {
-    ApiError::new(StatusCode::CONFLICT, "limit_reached", message)
+    conflict("limit_reached", message)
 }
 
 fn take_rate(state: &AppState, caller: &Caller) -> ApiResult<()> {
-    state
-        .limits
-        .personal_lists
-        .check(&ids::to_text(caller.account_id))
-        .map_err(|_| rate_limited("That's a lot of changes at once. Try again in a minute."))
+    limited(
+        &state.limits.personal_lists,
+        &ids::to_text(caller.account_id),
+        "",
+    )
 }
 
 /// The emote, when the caller may see it: approved, or their own.
@@ -112,7 +110,7 @@ pub async fn hide_emote(state: &AppState, caller: &Caller, id: &str) -> ApiResul
         List::HiddenEmotes,
         id,
         HIDDEN_EMOTES_MAX,
-        "You've hidden 1,000 emotes, the most there can be. Unhide some first.",
+        "You've hidden 1.000 emotes, the most there can be. Unhide some first.",
     )
     .await
 }
@@ -200,7 +198,7 @@ pub async fn favourite_emote(state: &AppState, caller: &Caller, id: &str) -> Api
         List::Favourites,
         id,
         FAVOURITES_MAX,
-        "You have 1,000 favourites, the most there can be. Remove some first.",
+        "You have 1.000 favourites, the most there can be. Remove some first.",
     )
     .await
 }

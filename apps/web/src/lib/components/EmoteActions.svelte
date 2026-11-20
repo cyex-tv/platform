@@ -96,7 +96,7 @@
     }
   }
   const favSaid = $derived(fav ? 'In your favourites' : '');
-  const moreWidth = $derived(mode === 'report' ? '340px' : mode === 'download' ? '300px' : '220px');
+  const moreWidth = $derived(mode === 'report' ? '340px' : mode === 'download' ? '300px' : signedIn && canHideCreator ? '280px' : '220px');
 </script>
 
 <div class="actions-row {variant}">

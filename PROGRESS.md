@@ -1184,3 +1184,8 @@ gh pr merge <n> --merge
 - Dev mock: `MOCK_SET_SIZE=1000` fills the Main set.
 - At 1.000 emotes (headless Edge, dev server, warm): first render about 600 ms before, 320 ms after; JS heap 95 MB before, 20 MB after; 1000 tiles before, 120 after.
 - Screens in `.claude/runs/2026-11-20-overnight/screens/f-u2b/`.
+## Hide for me and favourites (feat/k2-hide-favourites, 2026/11/20)
+- API (additive, ADR 0022): `hiddenEmotes`, `hiddenCreators`, `myFavourites(query, page, perPage)`, `favouriteEmoteIds`; `hideEmote`/`unhideEmote`, `hideCreator`/`unhideCreator`, `favouriteEmote`/`unfavouriteEmote`. Private to the caller (no account argument), caps 1000 / 200 / 1000 (`limit_reached`), only emotes the caller may see, never yourself as a creator (`own_account`), 120 changes a minute per account (`personal_lists`). In the data export, erased with the account. Migration `20261208000920_personal_lists.sql`. Postgres tests: `personal_lists_flow` (allow/deny, caps, privacy, rate, erase) and the contract run.
+- Web: tile menu Favourite / Hide for me / Hide everything by <creator> (with Undo); emote page heart beside More, More → Hide for me / Hide everything by <creator> (Show again once hidden); hidden emotes drop out of browse, search, trending, the header search and Add emotes for you only (client-side filter, see the ADR); Settings → Hidden lists both with Show again; profile tab Favourites (owner only) with a name filter, `/me/favourites` goes there; favourites come first, with a heart, in the header search and the set editor's Add emotes.
+- Extension: unchanged. It has no cyex.tv sign-in, so its device-only hidden list stays as it is.
+- Dev mock answers all of it.

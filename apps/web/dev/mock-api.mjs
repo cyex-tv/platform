@@ -2222,7 +2222,7 @@ const seeable = (id) => {
   return e && (e.state === 'APPROVED' || e.owner?.id === ME_ID) ? e : null;
 };
 function personalLists(q, v) {
-  const has = (name) => new RegExp(`\b${name}\b`).test(q);
+  const has = (name) => new RegExp(`\\b${name}\\b`).test(q);
   const data = {};
   const add = (map, id, cap, full) => {
     if (map.has(id)) return false;
@@ -2231,8 +2231,8 @@ function personalLists(q, v) {
     return true;
   };
   for (const [field, map, cap, full] of [
-    ['hideEmote', HIDDEN_EMOTES, 1000, 'You’ve hidden 1,000 emotes, the most there can be. Unhide some first.'],
-    ['favouriteEmote', FAVOURITES, 1000, 'You have 1,000 favourites, the most there can be. Remove some first.'],
+    ['hideEmote', HIDDEN_EMOTES, 1000, 'You’ve hidden 1.000 emotes, the most there can be. Unhide some first.'],
+    ['favouriteEmote', FAVOURITES, 1000, 'You have 1.000 favourites, the most there can be. Remove some first.'],
   ]) {
     if (!has(field)) continue;
     if (!seeable(v.id)) return err('Not found.', 'not_found');
@@ -2275,7 +2275,7 @@ function newFields(q, v, session) {
   if (hub?._cookie || hub?.errors) return hub;
   if (hub) parts.push(hub);
   const has = (name) => new RegExp(`\\b${name}\\s*\\(`).test(q);
-  if (PERSONAL_FIELDS.some((f) => new RegExp(`\b${f}\b`).test(q))) {
+  if (PERSONAL_FIELDS.some((f) => new RegExp(`\\b${f}\\b`).test(q))) {
     if (!session) return err('Sign in to use this.', 'signed_out');
     const lists = personalLists(q, v);
     if (lists.errors) return lists;

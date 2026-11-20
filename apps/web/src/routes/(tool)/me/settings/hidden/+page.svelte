@@ -43,7 +43,7 @@
         <section class="ui-panel" aria-labelledby="hidden-emotes-h">
           <header>
             <h2 id="hidden-emotes-h">Emotes</h2>
-            <span class="ui-hint n">{count(lists.hiddenEmotes.length)} of 1,000</span>
+            <span class="ui-hint n">{count(lists.hiddenEmotes.length)} of {count(1000)}</span>
           </header>
           {#if lists.hiddenEmotes.length === 0}
             <p class="ui-hint pad">Nothing hidden. Pick “Hide for me” in an emote’s menu and it stops showing in browse, search and trending for you.</p>
@@ -65,7 +65,7 @@
                       <span class="name">{label}</span>
                     {/if}
                     <span class="ui-hint meta">
-                      {#if h.emote?.owner}by <bdi>{clean(h.emote.owner.displayName)}</bdi> · {/if}Hidden <time datetime={h.hiddenAt}>{date(h.hiddenAt)}</time>
+                      {#if h.emote?.owner}by <bdi>{clean(h.emote.owner.displayName)}</bdi>{' · '}{/if}Hidden <time datetime={h.hiddenAt}>{date(h.hiddenAt)}</time>
                     </span>
                   </span>
                   {#if shown[key]}
@@ -85,7 +85,7 @@
         <section class="ui-panel" aria-labelledby="hidden-creators-h">
           <header>
             <h2 id="hidden-creators-h">Creators</h2>
-            <span class="ui-hint n">{count(lists.hiddenCreators.length)} of 200</span>
+            <span class="ui-hint n">{count(lists.hiddenCreators.length)} of {count(200)}</span>
           </header>
           {#if lists.hiddenCreators.length === 0}
             <p class="ui-hint pad">No creators hidden. “Hide everything by …” in an emote’s menu hides all their emotes for you, new ones too.</p>

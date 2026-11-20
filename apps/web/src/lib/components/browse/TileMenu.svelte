@@ -49,15 +49,19 @@
   const creatorName = $derived(clean(emote.owner?.displayName ?? ''));
   const mine = $derived(!!creatorId && creatorId === session.me?.id);
 
+  // The grid drops this menu (and its props) on close, so every value is read before that.
   async function toggleFavourite() {
+    const id = emote.id;
+    const name = clean(emote.name);
+    const was = fav;
     onclose(true);
     try {
-      if (fav) {
-        await personal.unfavourite(emote.id);
-        notify(`Removed ${clean(emote.name)} from your favourites.`);
+      if (was) {
+        await personal.unfavourite(id);
+        notify(`Removed ${name} from your favourites.`);
       } else {
-        await personal.favourite(emote.id);
-        notify(`Added ${clean(emote.name)} to your favourites.`);
+        await personal.favourite(id);
+        notify(`Added ${name} to your favourites.`);
       }
     } catch (e) {
       notify(listError(e), true);
@@ -65,27 +69,24 @@
   }
 
   async function hide(creator: boolean) {
-    onclose(false);
+    const id = emote.id;
     const name = clean(emote.name);
+    const who = creatorId;
+    const whoName = creatorName;
+    onclose(false);
+    const undo = (run: () => Promise<unknown>) => ({ label: 'Undo', run: () => void run().catch((e) => notify(listError(e), true)) });
     try {
       if (creator) {
-        await personal.hideCreator(creatorId);
-        notify(`Hid everything by ${creatorName} for you.`, false, {
-          ms: 6000,
-          action: { label: 'Undo', run: () => personal.unhideCreator(creatorId).catch((e) => notify(listError(e), true)) },
-        });
+        await personal.hideCreator(who);
+        notify(`Hid everything by ${whoName} for you.`, false, { ms: 6000, action: undo(() => personal.unhideCreator(who)) });
       } else {
-        await personal.hideEmote(emote.id);
-        notify(`Hid ${name} for you.`, false, {
-          ms: 6000,
-          action: { label: 'Undo', run: () => personal.unhideEmote(emote.id).catch((e) => notify(listError(e), true)) },
-        });
+        await personal.hideEmote(id);
+        notify(`Hid ${name} for you.`, false, { ms: 6000, action: undo(() => personal.unhideEmote(id)) });
       }
     } catch (e) {
       notify(listError(e), true);
     }
   }
-
   $effect(() => {
     void x;
     void y;
@@ -214,7 +215,7 @@
   </a>
   <button role="menuitem" class="item" type="button" tabindex="-1" onclick={copyLink}><Icon name="link" size={14} /><span>Copy emote link</span></button>
   {#if session.me}
-    <button role="menuitem" class="item" class:fav type="button" tabindex="-1" aria-pressed={fav} onclick={toggleFavourite}>
+    <button role="menuitem" class="item" class:fav type="button" tabindex="-1" onclick={toggleFavourite}>
       <Icon name="heart" size={14} /><span>{fav ? 'Remove from favourites' : 'Favourite'}</span>
     </button>
     <hr />
