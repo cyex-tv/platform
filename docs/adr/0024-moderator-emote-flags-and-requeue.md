@@ -9,7 +9,7 @@ The owner's answers of 2026/11/20: moderators and above with the right permissio
 
 ## Decision
 **Emote flags**
-- Permission `emotes.flags` ("Edit emote flags" in the role editor's Emotes group; its tooltip says it covers the hidden flags too). Migration `20261210003002_emote_flags_permission.sql` gives it to the built-in Admin role; no other role changes. `emotes.edit_any`, which already changes everything about an emote, also covers it.
+- Permission `emotes.flags` ("Edit emote flags" in the role editor's Emotes group; its tooltip says it covers the hidden flags too). Migration `20261210006002_emote_flags_permission.sql` gives it to the built-in Admin role; no other role changes. `emotes.edit_any`, which already changes everything about an emote, also covers it.
 - `setEmoteFlags(id, input: { visibility, nsfw, zeroWidth })`: any field left out stays. Works on an emote in any state, not only during review, and never changes its name, tags or review state.
 - Audited as `emote.flags_changed` (before and after: visibility, nsfw, zero_width; `via: emotes.flags`). A call that changes nothing writes nothing.
 - When the visibility changes, the owner gets `emote.visibility_changed` (`{ emote_id, name, visibility, was }`), which can't be turned off, as a takedown can't. Not sent when staff change their own emote.
@@ -18,7 +18,7 @@ The owner's answers of 2026/11/20: moderators and above with the right permissio
 
 **Requeue on undo**
 - An approval waits 5 seconds on the reviewer's page before it is sent (the API has no way to take one back), so the server never saw it. On Undo the page puts the card at the end of what it shows and calls `requeueEmotes(ids)` (needs `emotes.review`, up to 100, audited as `emote.requeued`, not-pending ones listed in `failed`).
-- Migration `20261210003001_emotes_requeued_at.sql` adds `emotes.requeued_at`. The queue's upload-time order reads `coalesce(requeued_at, created_at)`, so for every reviewer the upload sorts after everything that was waiting. A verdict clears it.
+- Migration `20261210006001_emotes_requeued_at.sql` adds `emotes.requeued_at`. The queue's upload-time order reads `coalesce(requeued_at, created_at)`, so for every reviewer the upload sorts after everything that was waiting. A verdict clears it.
 
 ## Consequences
 - Newest-first (`descending`) shows a requeued upload first, as it is the latest to (re)enter the queue.
