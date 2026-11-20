@@ -4057,7 +4057,7 @@ export type AccountProfileQueryVariables = Exact<{
 }>;
 
 
-export type AccountProfileQuery = { __typename?: 'Query', accountProfile?: { __typename?: 'AccountProfile', createdAt: string, collectionPublic: boolean, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }>, roles: Array<{ __typename?: 'PublicRole', id: string, name: string }>, activeSets: Array<{ __typename?: 'ActiveChannelSet', platform: Platform, login: string, setId: string, setName: string }>, editors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }> } | null };
+export type AccountProfileQuery = { __typename?: 'Query', accountProfile?: { __typename?: 'AccountProfile', createdAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }>, roles: Array<{ __typename?: 'PublicRole', id: string, name: string }>, activeSets: Array<{ __typename?: 'ActiveChannelSet', platform: Platform, login: string, setId: string, setName: string }>, editors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }> } | null };
 
 export type MyCosmeticsQueryVariables = Exact<{
   accountId?: InputMaybe<Scalars['String']['input']>;
@@ -4494,20 +4494,6 @@ export type SetNotificationPrefsMutationVariables = Exact<{
 
 
 export type SetNotificationPrefsMutation = { __typename?: 'Mutation', setNotificationPrefs: Array<{ __typename?: 'NotificationPref', kind: string, notify: boolean, toast: boolean, required: boolean }> };
-
-export type AccountCollectionQueryVariables = Exact<{
-  accountId: Scalars['String']['input'];
-}>;
-
-
-export type AccountCollectionQuery = { __typename?: 'Query', accountCollection?: { __typename?: 'AccountCollection', accountId: string, public: boolean, items: Array<{ __typename?: 'CollectionItem', kind: GrantKind, cosmeticId: string, name: string, ownedSince: string, source: GrantSource }> } | null };
-
-export type SetCollectionPublicMutationVariables = Exact<{
-  public: Scalars['Boolean']['input'];
-}>;
-
-
-export type SetCollectionPublicMutation = { __typename?: 'Mutation', setCollectionPublic: { __typename?: 'AccountCollection', accountId: string, public: boolean, items: Array<{ __typename?: 'CollectionItem', kind: GrantKind, cosmeticId: string, name: string, ownedSince: string, source: GrantSource }> } };
 
 export type PersonalListsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -6893,7 +6879,6 @@ export const AccountProfileDocument = new TypedDocumentString(`
       avatar
     }
     createdAt
-    collectionPublic
   }
 }
     `) as unknown as TypedDocumentString<AccountProfileQuery, AccountProfileQueryVariables>;
@@ -8553,36 +8538,6 @@ export const SetNotificationPrefsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetNotificationPrefsMutation, SetNotificationPrefsMutationVariables>;
-export const AccountCollectionDocument = new TypedDocumentString(`
-    query AccountCollection($accountId: String!) {
-  accountCollection(accountId: $accountId) {
-    accountId
-    public
-    items {
-      kind
-      cosmeticId
-      name
-      ownedSince
-      source
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<AccountCollectionQuery, AccountCollectionQueryVariables>;
-export const SetCollectionPublicDocument = new TypedDocumentString(`
-    mutation SetCollectionPublic($public: Boolean!) {
-  setCollectionPublic(public: $public) {
-    accountId
-    public
-    items {
-      kind
-      cosmeticId
-      name
-      ownedSince
-      source
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<SetCollectionPublicMutation, SetCollectionPublicMutationVariables>;
 export const PersonalListsDocument = new TypedDocumentString(`
     query PersonalLists {
   hiddenEmotes {

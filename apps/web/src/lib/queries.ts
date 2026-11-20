@@ -1290,7 +1290,6 @@ export const ACCOUNT_PROFILE = graphql(`
         avatar
       }
       createdAt
-      collectionPublic
     }
   }
 `);
@@ -2144,39 +2143,6 @@ export const SET_NOTIFICATION_PREFS = graphql(`
       notify
       toast
       required
-    }
-  }
-`);
-
-// The profile's Collection tab.
-export const ACCOUNT_COLLECTION = graphql(`
-  query AccountCollection($accountId: String!) {
-    accountCollection(accountId: $accountId) {
-      accountId
-      public
-      items {
-        kind
-        cosmeticId
-        name
-        ownedSince
-        source
-      }
-    }
-  }
-`);
-
-export const SET_COLLECTION_PUBLIC = graphql(`
-  mutation SetCollectionPublic($public: Boolean!) {
-    setCollectionPublic(public: $public) {
-      accountId
-      public
-      items {
-        kind
-        cosmeticId
-        name
-        ownedSince
-        source
-      }
     }
   }
 `);

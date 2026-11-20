@@ -3,6 +3,8 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HeaderSearch from './HeaderSearch.svelte';
 import { headerSearch } from './search.svelte';
+import { session } from '$lib/tool/session.svelte';
+import { EDITABLE_CHANNELS } from '$lib/queries';
 
 const { goto, gql } = vi.hoisted(() => ({ goto: vi.fn(), gql: vi.fn() }));
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
@@ -17,9 +19,11 @@ beforeEach(() => {
   gql.mockReset();
   gql.mockResolvedValue({ quickSearch: { emotes: [emote('E1', 'Pog'), emote('E2', 'PogChamp')], users: [person] } });
   headerSearch.query = '';
+  session.me = null;
+  session.known = false;
 });
 
-const box = () => screen.getByRole('combobox', { name: 'Search emotes and people' }) as HTMLInputElement;
+const box = () => screen.getByRole('combobox', { name: 'Search' }) as HTMLInputElement;
 const active = () => box().getAttribute('aria-activedescendant');
 
 async function search(user: ReturnType<typeof userEvent.setup>, text = 'pog') {
@@ -111,47 +115,56 @@ describe('HeaderSearch errors', () => {
   });
 });
 
-describe('HeaderSearch recents', () => {
+describe('HeaderSearch: the field is just "Search"', () => {
+  it('is named and labelled Search, still finding emotes and people', async () => {
+    const user = userEvent.setup();
+    await search(user);
+    expect(box().getAttribute('placeholder')).toBe('Search');
+    expect(screen.getAllByRole('option').map((o) => o.getAttribute('href'))).toContain('/users/U1');
+  });
+});
+
+describe('HeaderSearch: no recent searches', () => {
   beforeEach(() => localStorage.clear());
 
-  it('remembers what was searched and lists it when the empty field is focused', async () => {
+  it('forgets the old recent searches key on load and never lists or stores searches', async () => {
+    localStorage.setItem('cyex.search.recent', JSON.stringify(['kappa', 'pog']));
     const user = userEvent.setup();
     await search(user);
+    expect(localStorage.getItem('cyex.search.recent')).toBeNull();
     await user.keyboard('{Enter}');
-    expect(JSON.parse(localStorage.getItem('cyex.search.recent')!)).toEqual(['pog']);
+    expect(goto).toHaveBeenCalledWith('/search?q=pog');
+    expect(localStorage.getItem('cyex.search.recent')).toBeNull();
     cleanup();
     render(HeaderSearch);
     await user.click(box());
-    const opts = screen.getAllByRole('option');
-    expect(opts.map((o) => o.textContent?.trim())).toEqual(['pog', 'Clear recent searches']);
-    expect(opts[0].getAttribute('href')).toBe('/search?q=pog');
-  });
-
-  it('is reachable with the arrow keys, opens a recent one and clears them all', async () => {
-    localStorage.setItem('cyex.search.recent', JSON.stringify(['kappa', 'pog']));
-    const user = userEvent.setup();
-    render(HeaderSearch);
-    await user.click(box());
-    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{Enter}'); // the clear row
     expect(screen.queryAllByRole('option')).toHaveLength(0);
-    expect(localStorage.getItem('cyex.search.recent')).toBeNull();
-    expect(goto).not.toHaveBeenCalled();
-    cleanup();
-    localStorage.setItem('cyex.search.recent', JSON.stringify(['kappa', 'pog']));
+    expect(screen.queryByText(/Recent searches/)).toBeNull();
+    expect(screen.getByText(/Type to search emotes by name, or people by login/)).toBeTruthy();
+  });
+});
+
+describe('HeaderSearch: the empty field lists the channels you edit', () => {
+  const chan = (role: string, login: string, platform = 'TWITCH') => ({ role, channel: { platform, login, account: { id: `A-${login}`, displayName: login, avatar: null } } });
+
+  it('by role (owner, editor, set editor), then name A to Z, every one of them, in a capped list', async () => {
+    session.me = { id: 'ME', identities: [], permissions: [], roles: [] } as never;
+    session.known = true;
+    const many = Array.from({ length: 40 }, (_, i) => chan('SET_EDITOR', `zz${String(i).padStart(2, '0')}`));
+    gql.mockImplementation(async (doc: unknown) =>
+      doc === EDITABLE_CHANNELS
+        ? { myEditableChannels: [chan('SET_EDITOR', 'bob'), chan('ACCOUNT_EDITOR', 'Zed'), chan('OWNER', 'me'), chan('ACCOUNT_EDITOR', 'amy'), ...many] }
+        : { quickSearch: { emotes: [], users: [] } },
+    );
+    const user = userEvent.setup();
     render(HeaderSearch);
     await user.click(box());
-    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
-    expect(goto).toHaveBeenCalledWith('/search?q=pog');
-    expect(JSON.parse(localStorage.getItem('cyex.search.recent')!)[0]).toBe('pog');
-  });
-
-  it('stores nothing when the browser refuses, and still searches', async () => {
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('denied'); });
-    const user = userEvent.setup();
-    await search(user);
-    await user.keyboard('{Enter}');
-    expect(goto).toHaveBeenCalledWith('/search?q=pog');
-    vi.restoreAllMocks();
-    expect(localStorage.getItem('cyex.search.recent')).toBeNull();
+    await vi.waitFor(() => expect(screen.getAllByRole('option').length).toBe(44));
+    const logins = screen.getAllByRole('option').map((o) => o.getAttribute('href')!.split('/').pop());
+    expect(logins.slice(0, 5)).toEqual(['me', 'amy', 'Zed', 'bob', 'zz00']);
+    expect(screen.queryByText(/Recent searches/)).toBeNull();
+    expect(screen.getByRole('listbox').getAttribute('aria-label')).toBe('Channels you edit');
+    // 44 rows never grow the page: the list scrolls inside its capped height.
+    expect(screen.getByRole('listbox').classList.contains('list')).toBe(true);
   });
 });

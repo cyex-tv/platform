@@ -161,7 +161,7 @@
       </SideRail>
     {:else if meAccount}
       <!-- The same band and rail as your public profile (/users/<id>), so moving between them never shifts them. -->
-      <ProfileRail account={meAccount} relation={meRelation} current={railKeyForPath(path)} activity={ACTIVITY_READY} />
+      <ProfileRail account={meAccount} current={railKeyForPath(path)} activity={ACTIVITY_READY} />
     {:else}
       <SideRail label="Your account" wait>
         {#snippet head()}

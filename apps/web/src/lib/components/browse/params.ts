@@ -9,12 +9,10 @@ export type Sort = 'relevance' | 'trending' | 'top' | 'new';
 export type Kind = 'all' | 'animated' | 'still';
 /** How far back Trending counts the channels that added an emote. */
 export type Window = 'day' | 'week' | 'month';
-/** What /search looks for: emotes (the default) or people (`tab=users`). */
-export type Tab = 'emotes' | 'users';
 export type Flag = 'zeroWidth' | 'wide' | 'nsfw';
 
+// Emotes only: people are found from the header search (an old ?tab=users address reads as this).
 export type Browse = {
-  tab: Tab;
   q: string;
   sort: Sort;
   /** Only used by the Trending sort; `week` unless the URL says otherwise. */
@@ -35,8 +33,6 @@ export type Browse = {
 };
 
 export const PER_PAGE = 48;
-/** People per page on the Users tab. */
-export const USERS_PER_PAGE = 24;
 export const MAX_PAGES = 10;
 /** The API looks at ten tags at most. */
 export const MAX_TAGS = 10;
@@ -70,7 +66,6 @@ export function parse(p: URLSearchParams): Browse {
   const t = p.get('t');
   const n = Number.parseInt(p.get('n') ?? '1', 10);
   return {
-    tab: p.get('tab') === 'users' ? 'users' : 'emotes',
     q,
     sort,
     window: t === 'day' || t === 'month' ? t : 'week',
@@ -88,13 +83,6 @@ export function parse(p: URLSearchParams): Browse {
 /** The query string for a state; defaults are left out. */
 export function toSearch(b: Browse): string {
   const p = new URLSearchParams();
-  if (b.tab === 'users') {
-    // People have a name and pages, nothing else: none of the emote filters apply.
-    p.set('tab', 'users');
-    if (b.q) p.set('q', b.q);
-    if (b.pages > 1) p.set('n', String(b.pages));
-    return `?${p}`;
-  }
   if (b.q) p.set('q', b.q);
   if (b.sort !== defaultSort(b.q)) p.set('sort', b.sort);
   if (b.sort === 'trending' && b.window !== 'week') p.set('t', b.window);
@@ -114,11 +102,6 @@ export function toSearch(b: Browse): string {
 export function change(b: Browse, over: Partial<Browse>): Browse {
   const next = { ...b, ...over, pages: over.pages ?? 1 };
   if (over.tags) next.tags = cleanTags(over.tags);
-  // Changing tab keeps the typed name, and starts that tab from its defaults.
-  if (over.tab && over.tab !== b.tab) {
-    next.sort = defaultSort(next.q);
-    next.select = false;
-  }
   if (next.sort === 'relevance' && !next.q) next.sort = 'top';
   if (!next.q) next.exact = false;
   // Typing a first query switches the default order to relevance (Trending and New stay).

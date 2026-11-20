@@ -1,5 +1,7 @@
 <script lang="ts">
-  // Your profile's dashboard (Overview, ?s=overview; the account menu opens it): the crucial
+  // Your profile's dashboard (Overview, ?s=overview; the account menu and the band's Dashboard
+  // button open it, never the rail, which is public). It links on to what only you open: Active
+  // emotes, Favourites, Channels and Notifications. The crucial
   // things at a glance, each tile a short list that links on to the detailed tab. Channels and the
   // set each shows, notifications, your latest uploads with their state, the latest activity,
   // editors (names), cosmetics (what you show, how many you own) and your sets. Every tile loads on
@@ -59,7 +61,12 @@
   {:else}<div class="pad" aria-busy="true"><span class="line ui-skeleton"></span><span class="line short ui-skeleton"></span></div>{/if}
 {/snippet}
 
-<PageHead title="Overview" line="Your channels, uploads, editors and what happened lately, at a glance." />
+<PageHead title="Overview" line="Your channels, uploads, editors and what happened lately, at a glance. Only you see this page.">
+  {#snippet actions()}
+    <a class="btn btn-s" href={sectionHref(accountId, 'active')}><Icon name="zap" size={15} />Active emotes</a>
+    <a class="btn btn-s" href={sectionHref(accountId, 'favourites')}><Icon name="heart" size={15} />Favourites</a>
+  {/snippet}
+</PageHead>
 
 <div class="grid">
   <section class="ui-panel span6" aria-labelledby="ov-ch">
