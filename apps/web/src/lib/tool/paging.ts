@@ -29,3 +29,11 @@ export function pageToken() {
     },
   };
 }
+
+/**
+ * The total to show after a page arrived. An empty page after the first means the list has ended
+ * whatever the count said (a row can drop out between pages), so "Load more" stops there.
+ */
+export function totalAfterPage(shown: number, received: number, total: number, firstPage: boolean): number {
+  return !firstPage && received === 0 ? shown : total;
+}

@@ -27,6 +27,23 @@ pub async fn get(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Prefs> {
     .unwrap_or_default())
 }
 
+/// The same as [`get`], but locks the row until the transaction ends (the row is created first
+/// when there is none), so two changes to the same account's prefs take turns instead of the
+/// later one overwriting the earlier one's merge.
+pub async fn get_for_update(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Prefs> {
+    sqlx::query("INSERT INTO account_prefs (account_id) VALUES ($1) ON CONFLICT DO NOTHING")
+        .bind(account_id)
+        .execute(&mut *conn)
+        .await?;
+    Ok(sqlx::query_as(
+        "SELECT notify_off, toast_off, show_collection FROM account_prefs
+         WHERE account_id = $1 FOR UPDATE",
+    )
+    .bind(account_id)
+    .fetch_one(conn)
+    .await?)
+}
+
 pub async fn set_notifications(
     conn: &mut PgConnection,
     account_id: Uuid,

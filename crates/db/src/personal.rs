@@ -128,8 +128,8 @@ pub async fn all(conn: &mut PgConnection, list: List, account_id: Uuid) -> DbRes
     .await?)
 }
 
-/// A page of the account's favourites that still exist, the latest added first, and how many
-/// there are; `name` keeps those whose name holds it (any case).
+/// A page of the account's favourites that still exist and that the account may see (approved,
+/// or its own), the latest added first, and how many there are by the same rule; `name` keeps those whose name holds it (any case).
 pub async fn favourites_page(
     conn: &mut PgConnection,
     account_id: Uuid,
@@ -141,8 +141,9 @@ pub async fn favourites_page(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| format!("%{}%", crate::search::like_escape(s)));
-    let filter =
-        "f.account_id = $1 AND e.deleted_at IS NULL AND ($2::text IS NULL OR e.name ILIKE $2)";
+    let filter = "f.account_id = $1 AND e.deleted_at IS NULL
+         AND (e.state = 'approved' OR e.owner_account_id = $1)
+         AND ($2::text IS NULL OR e.name ILIKE $2)";
     let ids = sqlx::query_scalar(&format!(
         "SELECT f.emote_id FROM favourite_emotes f JOIN emotes e ON e.id = f.emote_id
          WHERE {filter} ORDER BY f.created_at DESC, f.emote_id DESC LIMIT $3 OFFSET $4"

@@ -2378,17 +2378,37 @@ function collectionOf(id, session) {
   return { accountId: id, public: !!COLLECTION_PUBLIC[id], items };
 }
 function annInput(i, now = Date.now()) {
+  // The same checks, in the same order, as apps/api/src/site.rs (fields, then check_refs).
   const text = String(i?.text ?? '').trim();
   if (!text || [...text].length > 200 || /[\u0000-\u001f]/.test(text)) return err('The announcement is one line of 1 to 200 characters.', 'bad_text');
   const link = String(i.linkUrl ?? '').trim() || null;
-  if (link && !((link.startsWith('/') && !link.startsWith('//')) || /^https:\/\/\S+$/.test(link))) return err('Links start with https:// or are a path on cyex.tv, like /shop.', 'bad_link');
+  const linkOk = (u) => [...u].length <= 500 && !/[\s\u0000-\u001f\u007f]/.test(u)
+    && ((u.startsWith('/') && !u.startsWith('//') && !u.startsWith('/\\')) || (u.startsWith('https://') && u.length > 'https://'.length));
+  if (link && !linkOk(link)) return err('Links start with https:// or are a path on cyex.tv, like /shop.', 'bad_link');
   const label = String(i.linkLabel ?? '').trim() || null;
+  if (label && ([...label].length > 40 || /[\u0000-\u001f]/.test(label))) return err('Link words are up to 40 characters.', 'bad_label');
   if (label && !link) return err('Link words need a link.', 'bad_label');
-  if (i.emoteId && !findEmote(i.emoteId)) return err('That emote doesn’t exist or isn’t approved.', 'bad_emote');
-  if (i.badgeId && !BADGES.some((b) => b.id === i.badgeId)) return err('That badge doesn’t exist.', 'bad_badge');
-  if (i.endsAt && Date.parse(i.endsAt) <= now) return err('The end has to be in the future.', 'bad_time');
-  if (i.endsAt && i.startsAt && Date.parse(i.endsAt) <= Date.parse(i.startsAt)) return err('The end has to come after the start.', 'bad_time');
-  return { kind: i.kind ?? 'INFO', text, linkUrl: link, linkLabel: label, emoteId: i.emoteId || null, badgeId: i.badgeId || null, startsAt: i.startsAt || null, endsAt: i.endsAt || null };
+  const emoteId = String(i.emoteId ?? '').trim() || null;
+  const badgeId = String(i.badgeId ?? '').trim() || null;
+  const time = (raw, field) => {
+    const t = String(raw ?? '').trim();
+    if (!t) return null;
+    // RFC 3339: a date, a time and a zone.
+    return /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)$/i.test(t) && !Number.isNaN(Date.parse(t))
+      ? new Date(Date.parse(t)).toISOString()
+      : err(`${field} isn’t a date and time.`, 'bad_time');
+  };
+  const startsAt = time(i.startsAt, 'The start');
+  if (startsAt?.errors) return startsAt;
+  const endsAt = time(i.endsAt, 'The end');
+  if (endsAt?.errors) return endsAt;
+  if (endsAt && Date.parse(endsAt) <= now) return err('The end has to be in the future.', 'bad_time');
+  if (endsAt && startsAt && Date.parse(endsAt) <= Date.parse(startsAt)) return err('The end has to come after the start.', 'bad_time');
+  // The emote must be approved and public, as the API's listed-emote read says.
+  const emote = emoteId ? findEmote(emoteId) : null;
+  if (emoteId && !(emote && emote.state === 'APPROVED' && emote.visibility === 'PUBLIC')) return err('That emote doesn’t exist or isn’t approved.', 'bad_emote');
+  if (badgeId && !BADGES.some((b) => b.id === badgeId)) return err('That badge doesn’t exist.', 'bad_badge');
+  return { kind: i.kind ?? 'INFO', text, linkUrl: link, linkLabel: label, emoteId, badgeId, startsAt, endsAt };
 }
 /** Whether a kind is turned off (the API never creates it). */
 const noteOff = (kind) => NOTE_PREFS.off.has(kind) && !NOTE_KINDS.find(([k]) => k === kind)?.[1];
@@ -2400,7 +2420,7 @@ function siteAnswer(q, v, session, admin) {
   if (/\{\s*announcements\s*\{/.test(q)) {
     const no = needAdmin();
     if (no) return no;
-    data.announcements = [...ANNOUNCEMENTS].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).map(annOut);
+    data.announcements = [...ANNOUNCEMENTS].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).slice(0, 50).map(annOut);
   }
   if (field('createAnnouncement') || field('updateAnnouncement')) {
     const no = needAdmin();
@@ -2434,14 +2454,20 @@ function siteAnswer(q, v, session, admin) {
   }
   if (field('setNotificationPrefs')) {
     if (!session) return err('Sign in to use this.', 'signed_out');
+    if ((v.prefs ?? []).length > NOTE_KINDS.length) return err('Too many kinds at once.', 'too_many');
+    const seen = new Set();
     for (const p of v.prefs ?? []) {
-      const known = NOTE_KINDS.find(([k]) => k === p.kind);
+      const kind = String(p.kind ?? '').trim();
+      const known = NOTE_KINDS.find(([k]) => k === kind);
       if (!known) return err('That isn’t a kind of notification.', 'unknown_kind');
+      if (seen.has(kind)) return err('Each kind once.', 'unknown_kind');
+      seen.add(kind);
       if (known[1] && !p.notify) return err('Hand-over requests and takedowns always notify you.', 'required_kind');
     }
     for (const p of v.prefs ?? []) {
-      NOTE_PREFS.off[p.notify ? 'delete' : 'add'](p.kind);
-      NOTE_PREFS.quiet[p.toast ? 'delete' : 'add'](p.kind);
+      const kind = String(p.kind).trim();
+      NOTE_PREFS.off[p.notify ? 'delete' : 'add'](kind);
+      NOTE_PREFS.quiet[p.toast ? 'delete' : 'add'](kind);
     }
     data.setNotificationPrefs = prefsOut();
   }

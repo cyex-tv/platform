@@ -93,6 +93,20 @@ describe('a toast held by the pointer or focus', () => {
     expect(toasts.some((t) => t.id === id)).toBe(false);
   });
 
+  it('stays held while focus is inside after the pointer left, and runs on once both let go', async () => {
+    const { pauseToast, resumeToast } = await import('./notices.svelte');
+    vi.useFakeTimers();
+    const id = notify('Saved.');
+    pauseToast(id, 'pointer');
+    pauseToast(id, 'focus');
+    resumeToast(id, 'pointer');
+    vi.advanceTimersByTime(60_000);
+    expect(toasts.some((t) => t.id === id)).toBe(true);
+    resumeToast(id, 'focus');
+    vi.advanceTimersByTime(3600);
+    expect(toasts.some((t) => t.id === id)).toBe(false);
+  });
+
   it('never holds a toast with a live Undo: its send time follows the clock', async () => {
     const { pauseToast } = await import('./notices.svelte');
     vi.useFakeTimers();

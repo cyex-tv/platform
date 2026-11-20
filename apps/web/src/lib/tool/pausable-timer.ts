@@ -24,3 +24,19 @@ export function pausableTimer(run: () => void, ms: number): PausableTimer {
     },
   };
 }
+
+export type HoldReason = 'pointer' | 'focus';
+
+/**
+ * Holds a timer for as long as any reason is active: the pointer on a toast and focus inside it
+ * are separate, so the pointer leaving while a button in it still has focus does not restart it.
+ */
+export function holds(timer: Pick<PausableTimer, 'pause' | 'resume'>) {
+  const on = new Set<HoldReason>();
+  return (reason: HoldReason, held: boolean) => {
+    if (held) on.add(reason);
+    else on.delete(reason);
+    if (on.size) timer.pause();
+    else timer.resume();
+  };
+}

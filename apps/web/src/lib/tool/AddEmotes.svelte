@@ -63,12 +63,14 @@
     if (!text) {
       // An empty field ends the search in flight too: its answer must not fill the list again.
       token++;
+      moreBusy = false;
       searching = false;
       results = null;
       problem = null;
       return;
     }
     const mine = ++token;
+    moreBusy = false; // a page of the old search no longer holds the button
     searching = true;
     problem = null;
     try {
@@ -111,9 +113,10 @@
       found = r.searchEmotes.total;
       nextPage += 1;
     } catch (err) {
+      if (mine !== token) return;
       moreProblem = err instanceof ApiError && err.code === 'rate_limited' ? err.message : 'That page didn’t load. Try again.';
     } finally {
-      moreBusy = false;
+      if (mine === token) moreBusy = false;
     }
   }
 
