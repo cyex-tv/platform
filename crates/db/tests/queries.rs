@@ -1891,6 +1891,11 @@ async fn every_reference_to_an_account_is_handled_by_erase() {
         ("emote_notes", "author_id", "who wrote a review note"),
         ("emote_notes", "deleted_by", "who deleted a review note"),
         (
+            "review_reasons",
+            "updated_by",
+            "who last changed the ready reject reasons",
+        ),
+        (
             "emote_transfer_requests",
             "resolved_by",
             "who answered a request",
