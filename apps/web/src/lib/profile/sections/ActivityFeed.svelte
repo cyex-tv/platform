@@ -5,6 +5,8 @@
   // time. A filter bar narrows it: what (Everything, Emotes, Sets, Cosmetics, Editors), by whom
   // (anyone, the owner, or one of the account's editors) and when (the cyex logs timeframe and
   // date picker). The filters live in the address (?k=, ?by=, ?d= or ?m=), so a view can be shared.
+  import RetryNote from '$lib/components/RetryNote.svelte';
+  import { quiet } from '$lib/quiet';
   import { onMount, untrack } from 'svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
@@ -44,11 +46,14 @@
 
   // Who can be picked under "By": the owner and the account's editors (public, names only).
   let editors = $state<{ id: string; displayName: string }[]>([]);
+  let editorsFailed = $state(false);
+  function loadEditors() {
+    editorsFailed = false;
+    void quiet(profileOf(accountId).then((p) => (editors = p?.editors ?? [])), 'activity editors', () => (editorsFailed = true));
+  }
   onMount(() => {
-    profileOf(accountId)
-      .then((p) => (editors = p?.editors ?? []))
-      .catch(() => {});
-    loadCatalog().then((c) => (catalog = c)).catch(() => {});
+    loadEditors();
+    void quiet(loadCatalog().then((c) => (catalog = c)), 'cosmetics catalog');
   });
   const people = $derived([{ id: accountId, displayName: name }, ...editors.filter((e) => e.id !== accountId)]);
 
@@ -144,6 +149,9 @@
   </div>
   <TimeframePicker value={frame} onchange={setFrame} />
 </div>
+{#if editorsFailed}
+  <RetryNote onretry={loadEditors}>Couldn’t load the editors to pick under “By”.</RetryNote>
+{/if}
 
 {#if first}
   <State kind="loading" title="Loading activity…" />

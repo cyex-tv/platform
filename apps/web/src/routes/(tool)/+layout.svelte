@@ -3,6 +3,7 @@
   // draws the one AppHeader and Footer; this layout only signs you in (or sends you to /signin)
   // and puts the page in a RailLayout with the /me rail or, under /admin, the admin rail.
   import { onMount } from 'svelte';
+  import { quiet } from '$lib/quiet';
   import { useToolButtons } from '$lib/components/btn';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
@@ -49,9 +50,7 @@
   $effect(() => {
     const id = session.me?.id;
     if (!id) return;
-    profileOf(id)
-      .then((p) => (meProfile = p))
-      .catch(() => {});
+    void quiet(profileOf(id).then((p) => (meProfile = p)), 'your profile');
   });
 
   // Open tickets for the admin rail's counts.
@@ -61,9 +60,7 @@
     const review = can('emotes.review');
     const reports = review || can('emotes.takedown') || can('reports.manage');
     if (!review && !reports) return;
-    gql(ADMIN_COUNTS, { review, reports })
-      .then((r) => (counts = r))
-      .catch(() => {});
+    void quiet(gql(ADMIN_COUNTS, { review, reports }).then((r) => (counts = r)), 'admin counts');
   });
 
   $effect(() => {

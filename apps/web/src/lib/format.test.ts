@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clean, iso, isoParts } from './format';
+import { clean, date, dateTime, dateTimeSeconds, fromLocalInput, iso, isoParts, pad, toLocalInput } from './format';
 
 describe('clean', () => {
   it('removes bidi embeddings, overrides and isolates', () => {
@@ -45,5 +45,37 @@ describe('isoParts', () => {
   });
   it('leaves a sentence without names whole', () => {
     expect(isoParts('Your emote was approved.')).toEqual([{ text: 'Your emote was approved.', name: false }]);
+  });
+});
+
+describe('time helpers', () => {
+  const at = new Date(2026, 10, 16, 20, 1, 2); // local time, so the test holds in any zone
+
+  it('pads to two digits', () => {
+    expect(pad(7)).toBe('07');
+    expect(pad(12)).toBe('12');
+  });
+
+  it('formats date, minutes and seconds in the cyex way', () => {
+    expect(date(at.toISOString())).toBe('2026/11/16');
+    expect(dateTime(at.toISOString())).toBe('2026/11/16 20:01');
+    expect(dateTimeSeconds(at.toISOString())).toBe('2026/11/16 20:01:02');
+  });
+
+  it('prints nothing, not NaN, for an invalid time', () => {
+    expect(dateTimeSeconds('not a date')).toBe('');
+    expect(dateTimeSeconds('')).toBe('');
+    expect(dateTime('nope')).toBe('');
+  });
+
+  it('round-trips a datetime-local value', () => {
+    expect(toLocalInput(at)).toBe('2026-11-16T20:01');
+    expect(toLocalInput(at.toISOString())).toBe('2026-11-16T20:01');
+    expect(toLocalInput(null)).toBe('');
+    expect(toLocalInput('garbage')).toBe('');
+    expect(toLocalInput(new Date(NaN))).toBe('');
+    expect(fromLocalInput('')).toBeNull();
+    expect(fromLocalInput('garbage')).toBeNull();
+    expect(fromLocalInput('2026-11-16T20:01')).toBe(new Date(2026, 10, 16, 20, 1).toISOString());
   });
 });
