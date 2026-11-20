@@ -435,6 +435,9 @@ pub async fn redeem(
             granted.push((*kind, *cosmetic));
         }
     }
+    for (kind, cosmetic) in &granted {
+        crate::cosmetics::announce_release(&mut tx, &state.cdn_url, *kind, *cosmetic, true).await?;
+    }
     db::record_redemption(&mut tx, code.id, caller.account_id)
         .await
         .map_err(db_error)?;

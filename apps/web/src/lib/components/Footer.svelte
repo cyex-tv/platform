@@ -13,7 +13,6 @@
   const links = [
     { href: '/search', label: 'Browse emotes' },
     { href: '/download', label: 'Download' },
-    { href: '/cosmetics', label: 'Cosmetics' },
     { href: '/shop', label: 'Shop' },
     { href: '/help', label: 'Help' },
     { href: '/guidelines', label: 'Guidelines' },

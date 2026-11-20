@@ -37,7 +37,7 @@ const ROUTES = process.env.ROUTES
       '/search',
       '/search?q=pog',
       '/emotes/1',
-      '/cosmetics',
+      '/shop',
     ];
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));

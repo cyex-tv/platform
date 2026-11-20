@@ -329,6 +329,57 @@ pub async fn paints(conn: &mut PgConnection, ids: Option<&[Uuid]>) -> DbResult<V
     .await?)
 }
 
+// Released: held or for sale
+
+/// The cosmetics of `kind` that are public: held by at least one account, or in a shop item on
+/// sale at `now` (visible, not deleted, inside its window). The rest are unreleased: staff
+/// see them, nobody else does.
+pub async fn released_ids(
+    conn: &mut PgConnection,
+    kind: CosmeticKind,
+    now: DateTime<Utc>,
+) -> DbResult<Vec<Uuid>> {
+    let (table, column) = table(kind);
+    let parent = match kind {
+        CosmeticKind::Badge => "badges",
+        CosmeticKind::Paint => "paints",
+    };
+    Ok(sqlx::query_scalar(&format!(
+        "SELECT c.id FROM {parent} c
+         WHERE EXISTS (SELECT 1 FROM {table} e WHERE e.{column} = c.id)
+            OR EXISTS (SELECT 1 FROM shop_item_cosmetics s
+                       JOIN shop_items i ON i.id = s.item_id
+                       WHERE s.{column} = c.id AND i.deleted_at IS NULL AND i.visible
+                         AND (i.active_from IS NULL OR i.active_from <= $1)
+                         AND (i.active_to IS NULL OR i.active_to > $1))
+         ORDER BY c.id"
+    ))
+    .bind(now)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// Whether one cosmetic is released (see `released_ids`).
+pub async fn is_released(
+    conn: &mut PgConnection,
+    kind: CosmeticKind,
+    id: Uuid,
+    now: DateTime<Utc>,
+) -> DbResult<bool> {
+    Ok(released_ids(conn, kind, now).await?.contains(&id))
+}
+
+/// How many accounts hold the cosmetic.
+pub async fn holders(conn: &mut PgConnection, kind: CosmeticKind, id: Uuid) -> DbResult<i64> {
+    let (table, column) = table(kind);
+    Ok(
+        sqlx::query_scalar(&format!("SELECT count(*) FROM {table} WHERE {column} = $1"))
+            .bind(id)
+            .fetch_one(conn)
+            .await?,
+    )
+}
+
 // Entitlements
 
 /// The entitlement table and its cosmetic column for a kind. Constants only, never input.
