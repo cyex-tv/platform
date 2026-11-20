@@ -1206,3 +1206,14 @@ gh pr merge <n> --merge
 - Dev mock: all of the above; `MOCK_ANNOUNCE=0` starts without an announcement; `/mock/notify?kind=…` respects turned-off kinds.
 - Screens in `.claude/runs/2026-11-20-overnight/screens/k3/`.
 - GitHub write log (2026/11/20, account `sery-yx`): `git push -u origin feat/k3-banner-prefs-collection`; `gh pr create --base main --head feat/k3-banner-prefs-collection --title "Site announcements, notification preferences and a public collection" --body-file <file>` (#125); `gh pr merge 125 --merge` once green.
+## Hide for me and favourites (feat/k2-hide-favourites, 2026/11/20)
+- API (additive, ADR 0022): `hiddenEmotes`, `hiddenCreators`, `myFavourites(query, page, perPage)`, `favouriteEmoteIds`; `hideEmote`/`unhideEmote`, `hideCreator`/`unhideCreator`, `favouriteEmote`/`unfavouriteEmote`. Private to the caller (no account argument), caps 1000 / 200 / 1000 (`limit_reached`), only emotes the caller may see, never yourself as a creator (`own_account`), 120 changes a minute per account (`personal_lists`). In the data export, erased with the account. Migration `20261208000920_personal_lists.sql`. Postgres tests: `personal_lists_flow` (allow/deny, caps, privacy, rate, erase) and the contract run.
+- Web: tile menu Favourite / Hide for me / Hide everything by <creator> (with Undo); emote page heart beside More, More → Hide for me / Hide everything by <creator> (Show again once hidden); hidden emotes drop out of browse, search, trending, the header search and Add emotes for you only (client-side filter, see the ADR); Settings → Hidden lists both with Show again; profile tab Favourites (owner only) with a name filter, `/me/favourites` goes there; favourites come first, with a heart, in the header search and the set editor's Add emotes.
+- Extension: unchanged. It has no cyex.tv sign-in, so its device-only hidden list stays as it is.
+- Dev mock answers all of it.
+- GitHub write log:
+```
+git push -u origin feat/k2-hide-favourites
+gh pr create --repo cyex-tv/platform --base main --head feat/k2-hide-favourites --title "Hide for me and favourites (personal lists)" --body-file <file>
+gh pr merge 126 --merge
+```

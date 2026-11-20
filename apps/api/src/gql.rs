@@ -26,11 +26,11 @@ use cyex_tv_shared::model::{
     Channel, ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge, CreateRole,
     CreateSet, EditableChannel, EditedAccount, EditorPermission, Emote, EmoteFlag, EmoteNote,
     EmotePage, EmoteSet, EmoteSort, EmoteTransferRequest, EmoteTrending, EmoteVisibility,
-    Entitlement, EntitlementPage, Event, GrantCosmetic, Identity, Me, Notification, OwnedCosmetics,
-    Paint, PaintInput, PendingDeletion, PersonalSetEntry, Platform, QuickSearch, Report,
-    ReportAction, ReportQueue, ReviewQueue, ReviewQueueFilter, Role, SearchResults, SetEmote,
-    SetEmotePage, SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote,
-    UpdateRole, UpdateSet, UpdateSetEmote, UserCosmetics,
+    Entitlement, EntitlementPage, Event, GrantCosmetic, HiddenCreator, HiddenEmote, Identity, Me,
+    Notification, OwnedCosmetics, Paint, PaintInput, PendingDeletion, PersonalSetEntry, Platform,
+    QuickSearch, Report, ReportAction, ReportQueue, ReviewQueue, ReviewQueueFilter, Role,
+    SearchResults, SetEmote, SetEmotePage, SetSummary, SetVisibility, UpdateBadge,
+    UpdateChannelSettings, UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote, UserCosmetics,
 };
 use cyex_tv_shared::model::{
     Checkout, CodeBatch, CodeBatchInput, CodeBatchPage, CreatedCodeBatch, Order, OrderPage,
@@ -44,8 +44,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::state::AppState;
 use crate::{
-    abuse, account, activity, admin, catalog, codes, cosmetics, editors, moderation, search, shop,
-    site, staff, transfers,
+    abuse, account, activity, admin, catalog, codes, cosmetics, editors, moderation, personal,
+    search, shop, site, staff, transfers,
 };
 use cyex_tv_shared::model::{
     AccountCollection, Announcement, AnnouncementInput, NotificationPref, NotificationPrefInput,
@@ -654,6 +654,48 @@ impl Query {
     ) -> Result<EmotePage> {
         let caller = caller(ctx)?;
         catalog::my_emotes(state(ctx), caller, page, per_page)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Emotes you hid from your own view ("Hide for me"), the latest first: all of them, up to
+    /// 1000. Only you can read it; the public reads stay the same for everyone, so filter with
+    /// this list (and `hiddenCreators`) on your side.
+    async fn hidden_emotes(&self, ctx: &Context<'_>) -> Result<Vec<HiddenEmote>> {
+        let caller = caller(ctx)?;
+        personal::hidden_emotes(state(ctx), caller)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Creators whose emotes you hid from your own view, the latest first: all of them, up to 200.
+    /// Only you can read it.
+    async fn hidden_creators(&self, ctx: &Context<'_>) -> Result<Vec<HiddenCreator>> {
+        let caller = caller(ctx)?;
+        personal::hidden_creators(state(ctx), caller)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Your favourite emotes, the latest added first. `query` keeps the ones whose name holds it
+    /// (any case). `perPage` is 1 to 100, default 50. Only you can read it.
+    async fn my_favourites(
+        &self,
+        ctx: &Context<'_>,
+        query: Option<String>,
+        page: Option<u32>,
+        per_page: Option<u32>,
+    ) -> Result<EmotePage> {
+        let caller = caller(ctx)?;
+        personal::my_favourites(state(ctx), caller, query.as_deref(), page, per_page)
+            .await
+            .map_err(api_error)
+    }
+
+    /// The IDs of all your favourite emotes (up to 1000), the latest first: for marking them.
+    async fn favourite_emote_ids(&self, ctx: &Context<'_>) -> Result<Vec<String>> {
+        let caller = caller(ctx)?;
+        personal::favourite_ids(state(ctx), caller)
             .await
             .map_err(api_error)
     }
@@ -1955,6 +1997,57 @@ impl Mutation {
             .map_err(api_error)
     }
 
+    /// Hide an emote from your own view. True when newly hidden, false when it was already.
+    /// `not_found` for an emote you can't see, `limit_reached` at 1000 hidden emotes.
+    async fn hide_emote(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
+        let caller = caller(ctx)?;
+        personal::hide_emote(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Show an emote you hid again. False when it wasn't hidden.
+    async fn unhide_emote(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
+        let caller = caller(ctx)?;
+        personal::unhide_emote(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Hide every emote by a creator from your own view. True when newly hidden. `not_found` for
+    /// an unknown account, `own_account` for yourself, `limit_reached` at 200 creators.
+    async fn hide_creator(&self, ctx: &Context<'_>, account_id: String) -> Result<bool> {
+        let caller = caller(ctx)?;
+        personal::hide_creator(state(ctx), caller, &account_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Show a creator's emotes again. False when they weren't hidden.
+    async fn unhide_creator(&self, ctx: &Context<'_>, account_id: String) -> Result<bool> {
+        let caller = caller(ctx)?;
+        personal::unhide_creator(state(ctx), caller, &account_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Add an emote to your favourites. True when newly added. `not_found` for an emote you can't
+    /// see, `limit_reached` at 1000 favourites.
+    async fn favourite_emote(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
+        let caller = caller(ctx)?;
+        personal::favourite_emote(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Take an emote off your favourites. False when it wasn't one.
+    async fn unfavourite_emote(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
+        let caller = caller(ctx)?;
+        personal::unfavourite_emote(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
+    }
+
     /// Sign out one of your sessions, the current one too (then the cookie is cleared). False
     /// when you have none with that ID.
     async fn revoke_session(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
@@ -1998,7 +2091,8 @@ impl Mutation {
 
     /// A copy of everything about your account, as JSON text (`format`, `version`, `account`,
     /// `identities`, `sessions`, `channels`, `emotes`, `sets`, `set_editors`, `account_editors`,
-    /// `editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`). Website
+    /// `editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`,
+    /// `hidden_emotes`, `hidden_creators`, `favourite_emotes`). Website
     /// only (`website_only` with an app token). 5 an hour (`rate_limited`). Audited.
     async fn export_my_data(&self, ctx: &Context<'_>) -> Result<String> {
         let caller = caller(ctx)?;

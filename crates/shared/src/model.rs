@@ -1504,6 +1504,27 @@ pub struct CallbackQuery {
     pub error: Option<String>,
 }
 
+// Personal lists ("Hide for me" and favourites)
+
+/// An emote you hid from your own view. `emote` is null once the emote is gone or you may no
+/// longer see it; unhiding it by `emoteId` still works.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct HiddenEmote {
+    pub emote_id: String,
+    pub emote: Option<Emote>,
+    pub hidden_at: String,
+}
+
+/// A creator whose emotes you hid from your own view. `account` is null once the account is gone.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct HiddenCreator {
+    pub account_id: String,
+    pub account: Option<AccountSummary>,
+    pub hidden_at: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

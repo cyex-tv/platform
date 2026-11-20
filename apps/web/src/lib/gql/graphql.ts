@@ -930,6 +930,25 @@ export type GrantSource =
   /** Given by staff (a cosmetic grant or a role assignment). */
   | 'STAFF';
 
+/** A creator whose emotes you hid from your own view. `account` is null once the account is gone. */
+export type HiddenCreator = {
+  __typename?: 'HiddenCreator';
+  account?: Maybe<AccountSummary>;
+  accountId: Scalars['String']['output'];
+  hiddenAt: Scalars['String']['output'];
+};
+
+/**
+ * An emote you hid from your own view. `emote` is null once the emote is gone or you may no
+ * longer see it; unhiding it by `emoteId` still works.
+ */
+export type HiddenEmote = {
+  __typename?: 'HiddenEmote';
+  emote?: Maybe<Emote>;
+  emoteId: Scalars['String']['output'];
+  hiddenAt: Scalars['String']['output'];
+};
+
 /** A Twitch or Kick account linked to a cyex.tv account. */
 export type Identity = {
   __typename?: 'Identity';
@@ -1090,12 +1109,28 @@ export type Mutation = {
   /**
    * A copy of everything about your account, as JSON text (`format`, `version`, `account`,
    * `identities`, `sessions`, `channels`, `emotes`, `sets`, `set_editors`, `account_editors`,
-   * `editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`). Website
+   * `editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`,
+   * `hidden_emotes`, `hidden_creators`, `favourite_emotes`). Website
    * only (`website_only` with an app token). 5 an hour (`rate_limited`). Audited.
    */
   exportMyData: Scalars['String']['output'];
+  /**
+   * Add an emote to your favourites. True when newly added. `not_found` for an emote you can't
+   * see, `limit_reached` at 1000 favourites.
+   */
+  favouriteEmote: Scalars['Boolean']['output'];
   /** Give an account a badge or paint, with a reason. Needs `cosmetics.grant`. Audited. */
   grantCosmetic: Entitlement;
+  /**
+   * Hide every emote by a creator from your own view. True when newly hidden. `not_found` for
+   * an unknown account, `own_account` for yourself, `limit_reached` at 200 creators.
+   */
+  hideCreator: Scalars['Boolean']['output'];
+  /**
+   * Hide an emote from your own view. True when newly hidden, false when it was already.
+   * `not_found` for an emote you can't see, `limit_reached` at 1000 hidden emotes.
+   */
+  hideEmote: Scalars['Boolean']['output'];
   /**
    * Lift a restriction early, with an optional reason. Needs the same permission as placing
    * it. Audited.
@@ -1227,6 +1262,12 @@ export type Mutation = {
    * Needs `roles.manage` or `roles.assign`. Audited.
    */
   unassignRole: Scalars['Boolean']['output'];
+  /** Take an emote off your favourites. False when it wasn't one. */
+  unfavouriteEmote: Scalars['Boolean']['output'];
+  /** Show a creator's emotes again. False when they weren't hidden. */
+  unhideCreator: Scalars['Boolean']['output'];
+  /** Show an emote you hid again. False when it wasn't hidden. */
+  unhideEmote: Scalars['Boolean']['output'];
   /**
    * Unlink a platform from your account. The last identity can't be removed, and a
    * restricted or blocked account can't unlink (`restricted`).
@@ -1430,8 +1471,23 @@ export type MutationEndAnnouncementArgs = {
 };
 
 
+export type MutationFavouriteEmoteArgs = {
+  id: Scalars['String']['input'];
+};
+
+
 export type MutationGrantCosmeticArgs = {
   input: GrantCosmeticInput;
+};
+
+
+export type MutationHideCreatorArgs = {
+  accountId: Scalars['String']['input'];
+};
+
+
+export type MutationHideEmoteArgs = {
+  id: Scalars['String']['input'];
 };
 
 
@@ -1564,6 +1620,21 @@ export type MutationTransferEmoteArgs = {
 export type MutationUnassignRoleArgs = {
   accountId: Scalars['String']['input'];
   roleId: Scalars['String']['input'];
+};
+
+
+export type MutationUnfavouriteEmoteArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type MutationUnhideCreatorArgs = {
+  accountId: Scalars['String']['input'];
+};
+
+
+export type MutationUnhideEmoteArgs = {
+  id: Scalars['String']['input'];
 };
 
 
@@ -2085,8 +2156,21 @@ export type Query = {
    * `entitlements.view` or `cosmetics.grant`.
    */
   entitlementHolders: Array<EntitlementGrant>;
+  /** The IDs of all your favourite emotes (up to 1000), the latest first: for marking them. */
+  favouriteEmoteIds: Array<Scalars['String']['output']>;
   /** The cyex.tv global set, shown in every channel. */
   globalSet: EmoteSet;
+  /**
+   * Creators whose emotes you hid from your own view, the latest first: all of them, up to 200.
+   * Only you can read it.
+   */
+  hiddenCreators: Array<HiddenCreator>;
+  /**
+   * Emotes you hid from your own view ("Hide for me"), the latest first: all of them, up to
+   * 1000. Only you can read it; the public reads stay the same for everyone, so filter with
+   * this list (and `hiddenCreators`) on your side.
+   */
+  hiddenEmotes: Array<HiddenEmote>;
   /** The signed-in account. */
   me: Me;
   /** Your channels: one per linked platform you have signed in with. */
@@ -2105,6 +2189,11 @@ export type Query = {
   myEditableChannels: Array<EditableChannel>;
   /** Your own emotes in every state, newest first. `perPage` is 1 to 100, default 50. */
   myEmotes: EmotePage;
+  /**
+   * Your favourite emotes, the latest added first. `query` keeps the ones whose name holds it
+   * (any case). `perPage` is 1 to 100, default 50. Only you can read it.
+   */
+  myFavourites: EmotePage;
   /**
    * Every notification kind and what you chose for it: created at all (`notify`) and popping
    * up on the website (`toast`). `required` kinds always notify.
@@ -2429,6 +2518,13 @@ export type QueryMyCosmeticsArgs = {
 export type QueryMyEmotesArgs = {
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryMyFavouritesArgs = {
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+  query?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -3995,6 +4091,67 @@ export type SetCollectionPublicMutationVariables = Exact<{
 
 
 export type SetCollectionPublicMutation = { __typename?: 'Mutation', setCollectionPublic: { __typename?: 'AccountCollection', accountId: string, public: boolean, items: Array<{ __typename?: 'CollectionItem', kind: GrantKind, cosmeticId: string, name: string, ownedSince: string, source: GrantSource }> } };
+
+export type PersonalListsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type PersonalListsQuery = { __typename?: 'Query', favouriteEmoteIds: Array<string>, hiddenEmotes: Array<{ __typename?: 'HiddenEmote', emoteId: string }>, hiddenCreators: Array<{ __typename?: 'HiddenCreator', accountId: string }> };
+
+export type HiddenListsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type HiddenListsQuery = { __typename?: 'Query', hiddenEmotes: Array<{ __typename?: 'HiddenEmote', emoteId: string, hiddenAt: string, emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null }>, hiddenCreators: Array<{ __typename?: 'HiddenCreator', accountId: string, hiddenAt: string, account?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null }> };
+
+export type MyFavouritesQueryVariables = Exact<{
+  query?: InputMaybe<Scalars['String']['input']>;
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type MyFavouritesQuery = { __typename?: 'Query', myFavourites: { __typename?: 'EmotePage', total: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+
+export type HideEmoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type HideEmoteMutation = { __typename?: 'Mutation', hideEmote: boolean };
+
+export type UnhideEmoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type UnhideEmoteMutation = { __typename?: 'Mutation', unhideEmote: boolean };
+
+export type HideCreatorMutationVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type HideCreatorMutation = { __typename?: 'Mutation', hideCreator: boolean };
+
+export type UnhideCreatorMutationVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type UnhideCreatorMutation = { __typename?: 'Mutation', unhideCreator: boolean };
+
+export type FavouriteEmoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type FavouriteEmoteMutation = { __typename?: 'Mutation', favouriteEmote: boolean };
+
+export type UnfavouriteEmoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type UnfavouriteEmoteMutation = { __typename?: 'Mutation', unfavouriteEmote: boolean };
 
 export class TypedDocumentString<TResult, TVariables>
   extends String
@@ -7792,3 +7949,134 @@ export const SetCollectionPublicDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetCollectionPublicMutation, SetCollectionPublicMutationVariables>;
+export const PersonalListsDocument = new TypedDocumentString(`
+    query PersonalLists {
+  hiddenEmotes {
+    emoteId
+  }
+  hiddenCreators {
+    accountId
+  }
+  favouriteEmoteIds
+}
+    `) as unknown as TypedDocumentString<PersonalListsQuery, PersonalListsQueryVariables>;
+export const HiddenListsDocument = new TypedDocumentString(`
+    query HiddenLists {
+  hiddenEmotes {
+    emoteId
+    hiddenAt
+    emote {
+      ...EmoteFields
+    }
+  }
+  hiddenCreators {
+    accountId
+    hiddenAt
+    account {
+      id
+      displayName
+      avatar
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    nsfw
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<HiddenListsQuery, HiddenListsQueryVariables>;
+export const MyFavouritesDocument = new TypedDocumentString(`
+    query MyFavourites($query: String, $page: Int, $perPage: Int) {
+  myFavourites(query: $query, page: $page, perPage: $perPage) {
+    total
+    items {
+      ...EmoteFields
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    nsfw
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<MyFavouritesQuery, MyFavouritesQueryVariables>;
+export const HideEmoteDocument = new TypedDocumentString(`
+    mutation HideEmote($id: String!) {
+  hideEmote(id: $id)
+}
+    `) as unknown as TypedDocumentString<HideEmoteMutation, HideEmoteMutationVariables>;
+export const UnhideEmoteDocument = new TypedDocumentString(`
+    mutation UnhideEmote($id: String!) {
+  unhideEmote(id: $id)
+}
+    `) as unknown as TypedDocumentString<UnhideEmoteMutation, UnhideEmoteMutationVariables>;
+export const HideCreatorDocument = new TypedDocumentString(`
+    mutation HideCreator($accountId: String!) {
+  hideCreator(accountId: $accountId)
+}
+    `) as unknown as TypedDocumentString<HideCreatorMutation, HideCreatorMutationVariables>;
+export const UnhideCreatorDocument = new TypedDocumentString(`
+    mutation UnhideCreator($accountId: String!) {
+  unhideCreator(accountId: $accountId)
+}
+    `) as unknown as TypedDocumentString<UnhideCreatorMutation, UnhideCreatorMutationVariables>;
+export const FavouriteEmoteDocument = new TypedDocumentString(`
+    mutation FavouriteEmote($id: String!) {
+  favouriteEmote(id: $id)
+}
+    `) as unknown as TypedDocumentString<FavouriteEmoteMutation, FavouriteEmoteMutationVariables>;
+export const UnfavouriteEmoteDocument = new TypedDocumentString(`
+    mutation UnfavouriteEmote($id: String!) {
+  unfavouriteEmote(id: $id)
+}
+    `) as unknown as TypedDocumentString<UnfavouriteEmoteMutation, UnfavouriteEmoteMutationVariables>;

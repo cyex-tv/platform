@@ -1298,6 +1298,25 @@ enum GrantSource {
 }
 
 """
+A creator whose emotes you hid from your own view. `account` is null once the account is gone.
+"""
+type HiddenCreator {
+	accountId: String!
+	account: AccountSummary
+	hiddenAt: String!
+}
+
+"""
+An emote you hid from your own view. `emote` is null once the emote is gone or you may no
+longer see it; unhiding it by `emoteId` still works.
+"""
+type HiddenEmote {
+	emoteId: String!
+	emote: Emote
+	hiddenAt: String!
+}
+
+"""
 A Twitch or Kick account linked to a cyex.tv account.
 """
 type Identity {
@@ -1626,6 +1645,33 @@ type Mutation {
 	"""
 	markNotificationsRead(ids: [String!]): Int!
 	"""
+	Hide an emote from your own view. True when newly hidden, false when it was already.
+	`not_found` for an emote you can't see, `limit_reached` at 1000 hidden emotes.
+	"""
+	hideEmote(id: String!): Boolean!
+	"""
+	Show an emote you hid again. False when it wasn't hidden.
+	"""
+	unhideEmote(id: String!): Boolean!
+	"""
+	Hide every emote by a creator from your own view. True when newly hidden. `not_found` for
+	an unknown account, `own_account` for yourself, `limit_reached` at 200 creators.
+	"""
+	hideCreator(accountId: String!): Boolean!
+	"""
+	Show a creator's emotes again. False when they weren't hidden.
+	"""
+	unhideCreator(accountId: String!): Boolean!
+	"""
+	Add an emote to your favourites. True when newly added. `not_found` for an emote you can't
+	see, `limit_reached` at 1000 favourites.
+	"""
+	favouriteEmote(id: String!): Boolean!
+	"""
+	Take an emote off your favourites. False when it wasn't one.
+	"""
+	unfavouriteEmote(id: String!): Boolean!
+	"""
 	Sign out one of your sessions, the current one too (then the cookie is cleared). False
 	when you have none with that ID.
 	"""
@@ -1643,7 +1689,8 @@ type Mutation {
 	"""
 	A copy of everything about your account, as JSON text (`format`, `version`, `account`,
 	`identities`, `sessions`, `channels`, `emotes`, `sets`, `set_editors`, `account_editors`,
-	`editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`). Website
+	`editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`,
+	`hidden_emotes`, `hidden_creators`, `favourite_emotes`). Website
 	only (`website_only` with an app token). 5 an hour (`rate_limited`). Audited.
 	"""
 	exportMyData: String!
@@ -2230,6 +2277,26 @@ type Query {
 	Your own emotes in every state, newest first. `perPage` is 1 to 100, default 50.
 	"""
 	myEmotes(page: Int, perPage: Int): EmotePage!
+	"""
+	Emotes you hid from your own view ("Hide for me"), the latest first: all of them, up to
+	1000. Only you can read it; the public reads stay the same for everyone, so filter with
+	this list (and `hiddenCreators`) on your side.
+	"""
+	hiddenEmotes: [HiddenEmote!]!
+	"""
+	Creators whose emotes you hid from your own view, the latest first: all of them, up to 200.
+	Only you can read it.
+	"""
+	hiddenCreators: [HiddenCreator!]!
+	"""
+	Your favourite emotes, the latest added first. `query` keeps the ones whose name holds it
+	(any case). `perPage` is 1 to 100, default 50. Only you can read it.
+	"""
+	myFavourites(query: String, page: Int, perPage: Int): EmotePage!
+	"""
+	The IDs of all your favourite emotes (up to 1000), the latest first: for marking them.
+	"""
+	favouriteEmoteIds: [String!]!
 	"""
 	A set's editors. For its owner, its editors and `sets.edit_any`.
 	"""
