@@ -61,12 +61,32 @@ impl AppState {
     pub fn with_read_cache(mut self, ttl: std::time::Duration) -> Self {
         let cache = Arc::new(ReadCache::new(ttl));
         let tapped = cache.clone();
+        let announcement = self.announcement.clone();
         self.hub
             .tap(Arc::new(move |event: &cyex_tv_db::outbox::Event| {
-                tapped.on_event(event)
+                tapped.on_event(event);
+                if event.event_type == cyex_tv_db::outbox::CACHE_FORGET
+                    && cyex_tv_db::outbox::forget_keys(event)
+                        .iter()
+                        .any(|k| k == crate::read_cache::ANNOUNCEMENT_KEY)
+                {
+                    announcement.clear();
+                }
             }));
         self.reads = cache;
         self
+    }
+
+    /// Drops `keys` from this instance's caches now. Others drop them when their feeder hands
+    /// over the `cache.forget` event the change published (`outbox::publish_cache_forget`).
+    pub fn forget_cached(&self, keys: &[String]) {
+        for key in keys {
+            if key == crate::read_cache::ANNOUNCEMENT_KEY {
+                self.announcement.clear();
+            } else {
+                self.reads.forget(key);
+            }
+        }
     }
 
     pub fn with_limits(mut self, limits: Limits) -> Self {

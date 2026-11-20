@@ -31,6 +31,7 @@ use uuid::Uuid;
 
 use crate::catalog::permissions_of;
 use crate::errors::{bad, db_error, forbidden, limited, not_found, parse_id, sqlx_error};
+use crate::read_cache::ANNOUNCEMENT_KEY;
 use crate::state::AppState;
 use crate::views;
 
@@ -45,29 +46,56 @@ const COLLECTION_MAX: i64 = 500;
 
 // The site announcement
 
-/// The live announcement as last read, and when.
+/// The live announcement as last read, and when. `clear` bumps a generation; a read that started
+/// before it doesn't store what it loaded, so a slow read can't bring back an edited or ended
+/// line after the change cleared it.
 #[derive(Default)]
 pub struct AnnouncementCache {
-    slot: Mutex<Option<(Instant, Option<Announcement>)>>,
+    slot: Mutex<Slot>,
 }
 
+/// The generation, and the announcement read (with when) if one is kept.
+type Slot = (u64, Option<(Instant, Option<Announcement>)>);
+
 impl AnnouncementCache {
+    fn lock(&self) -> std::sync::MutexGuard<'_, Slot> {
+        self.slot.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
     fn get(&self, ttl: std::time::Duration) -> Option<Option<Announcement>> {
-        let slot = self.slot.lock().unwrap_or_else(PoisonError::into_inner);
-        match &*slot {
+        match &self.lock().1 {
             Some((at, a)) if at.elapsed() < ttl => Some(a.clone()),
             _ => None,
         }
     }
 
-    fn put(&self, a: Option<Announcement>) {
-        *self.slot.lock().unwrap_or_else(PoisonError::into_inner) = Some((Instant::now(), a));
+    /// The generation now: take it before reading, hand it to `put`.
+    pub fn generation(&self) -> u64 {
+        self.lock().0
     }
 
-    /// Forgets it: the next read builds it again.
-    pub fn clear(&self) {
-        *self.slot.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    /// Stores `a`, read since `generation`, unless a `clear` ran meanwhile.
+    pub fn put(&self, generation: u64, a: Option<Announcement>) {
+        let mut slot = self.lock();
+        if slot.0 == generation {
+            slot.1 = Some((Instant::now(), a));
+        }
     }
+
+    /// Forgets it: the next read builds it again, and reads already running don't store theirs.
+    pub fn clear(&self) {
+        let mut slot = self.lock();
+        slot.0 = slot.0.wrapping_add(1);
+        slot.1 = None;
+    }
+}
+
+/// Every api instance drops its cached announcement once the change commits.
+async fn forget_announcement(conn: &mut PgConnection) -> ApiResult<()> {
+    cyex_tv_db::outbox::publish_cache_forget(conn, &[ANNOUNCEMENT_KEY.to_owned()])
+        .await
+        .map_err(db_error)?;
+    Ok(())
 }
 
 async fn require_announce(conn: &mut PgConnection, caller: &Caller) -> ApiResult<()> {
@@ -125,6 +153,7 @@ pub async fn active(state: &AppState) -> ApiResult<Option<Announcement>> {
                 .is_none_or(|e| e > Utc::now())
         }));
     }
+    let generation = state.announcement.generation();
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let row = db::live_at(&mut conn, Utc::now()).await.map_err(db_error)?;
     drop(conn);
@@ -133,7 +162,7 @@ pub async fn active(state: &AppState) -> ApiResult<Option<Announcement>> {
         None => None,
     };
     if !ttl.is_zero() {
-        state.announcement.put(out.clone());
+        state.announcement.put(generation, out.clone());
     }
     Ok(out)
 }
@@ -327,8 +356,9 @@ pub async fn create(
         Some(audit_json(&row)),
     )
     .await?;
+    forget_announcement(&mut tx).await?;
     tx.commit().await.map_err(sqlx_error)?;
-    state.announcement.clear();
+    state.forget_cached(&[ANNOUNCEMENT_KEY.to_owned()]);
     view(state, &row).await
 }
 
@@ -361,8 +391,9 @@ pub async fn update(
         Some(audit_json(&row)),
     )
     .await?;
+    forget_announcement(&mut tx).await?;
     tx.commit().await.map_err(sqlx_error)?;
-    state.announcement.clear();
+    state.forget_cached(&[ANNOUNCEMENT_KEY.to_owned()]);
     view(state, &row).await
 }
 
@@ -391,8 +422,9 @@ pub async fn end(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Annou
         }
         None => before,
     };
+    forget_announcement(&mut tx).await?;
     tx.commit().await.map_err(sqlx_error)?;
-    state.announcement.clear();
+    state.forget_cached(&[ANNOUNCEMENT_KEY.to_owned()]);
     view(state, &row).await
 }
 
@@ -587,6 +619,41 @@ pub async fn set_collection_public(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn line(text: &str) -> Announcement {
+        Announcement {
+            id: "a".into(),
+            kind: AnnouncementKind::Info,
+            text: text.into(),
+            link_url: None,
+            link_label: None,
+            emote: None,
+            badge_id: None,
+            starts_at: None,
+            ends_at: None,
+            ended_at: None,
+            created_at: "2026-11-20T00:00:00Z".into(),
+            updated_at: "2026-11-20T00:00:00Z".into(),
+            live: true,
+        }
+    }
+
+    /// A read that started before a change cleared the cache doesn't store the old line.
+    #[test]
+    fn a_read_from_before_a_clear_is_not_stored() {
+        let ttl = std::time::Duration::from_secs(60);
+        let cache = AnnouncementCache::default();
+        let slow = cache.generation();
+        cache.clear();
+        cache.put(slow, Some(line("old")));
+        assert_eq!(cache.get(ttl), None);
+
+        let fresh = cache.generation();
+        cache.put(fresh, Some(line("new")));
+        assert_eq!(cache.get(ttl), Some(Some(line("new"))));
+        cache.clear();
+        assert_eq!(cache.get(ttl), None);
+    }
 
     fn input() -> AnnouncementInput {
         AnnouncementInput {

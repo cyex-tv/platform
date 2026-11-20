@@ -22,13 +22,17 @@ macro_rules! listed_emote {
         "e.state = 'approved' AND e.deleted_at IS NULL
      AND NOT e.private AND NOT e.unlisted
      AND NOT EXISTS (SELECT 1 FROM accounts oa
-                     WHERE oa.id = e.owner_account_id AND oa.deleted_at IS NOT NULL)"
+                     WHERE oa.id = e.owner_account_id
+                       AND (oa.deleted_at IS NOT NULL
+                            OR (oa.blocked_at IS NOT NULL
+                                AND (oa.blocked_until IS NULL OR oa.blocked_until > now()))))"
     };
 }
 
 /// The rule every emote search shares (`search` and its count, `quick`, `trending_rank`), so
 /// they can't drift: approved, not deleted, public (not private or unlisted), and not of an
-/// account whose deletion is pending (ADR 0019). The emote is `e`. NSFW is each caller's own rule.
+/// account whose deletion is pending (ADR 0019) or that is blocked right now (an ended block
+/// lists them again). The emote is `e`. NSFW is each caller's own rule.
 pub const LISTED_EMOTE: &str = listed_emote!();
 
 /// What to look for. `query` is trimmed and at most 100 characters.
