@@ -824,3 +824,78 @@ async fn the_upload_dialog_flags_arrive_together() {
     assert_eq!(stored, (true, true, false, true));
     w.db.close().await;
 }
+
+/// Uploads at the same time can't overshoot the hourly limit: with one left, of four at once
+/// exactly one gets in.
+#[tokio::test]
+async fn concurrent_uploads_respect_the_hourly_limit() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let alice = w.user("10").await;
+    let mut conn = w.db.conn().await;
+    for i in 0..19 {
+        emotes::create(
+            &mut conn,
+            &emotes::NewEmote {
+                owner_account_id: alice.id,
+                name: &format!("e{i}"),
+                ..emotes::NewEmote::default()
+            },
+        )
+        .await
+        .unwrap();
+    }
+    drop(conn);
+    let (a, b, c, d) = (
+        png(20, 20, 11),
+        png(20, 20, 12),
+        png(20, 20, 13),
+        png(20, 20, 14),
+    );
+    let got = tokio::join!(
+        w.upload(&alice, "racea", &a),
+        w.upload(&alice, "raceb", &b),
+        w.upload(&alice, "racec", &c),
+        w.upload(&alice, "raced", &d),
+    );
+    let statuses = [got.0.status, got.1.status, got.2.status, got.3.status];
+    let accepted = statuses
+        .iter()
+        .filter(|s| **s == StatusCode::ACCEPTED)
+        .count();
+    assert_eq!(accepted, 1, "{statuses:?}");
+    assert!(
+        statuses
+            .iter()
+            .all(|s| *s == StatusCode::ACCEPTED || *s == StatusCode::TOO_MANY_REQUESTS),
+        "{statuses:?}"
+    );
+    assert_eq!(w.count("SELECT count(*) FROM emotes").await, 20);
+    w.db.close().await;
+}
+
+/// A text field longer than its cap is refused, however long it is.
+#[tokio::test]
+async fn over_long_text_fields_are_refused() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let alice = w.user("11").await;
+    let file = png(20, 20, 3);
+    let long = "a".repeat(200_000);
+    for key in ["name", "tags", "owner_id", "visibility", "nsfw"] {
+        let mut fields = vec![(key, long.as_str())];
+        if key != "name" {
+            fields.push(("name", "ok"));
+        }
+        let r = w.post(Some(&alice), form(&fields, Some(&file))).await;
+        assert_eq!(
+            (r.status, r.body["error"].as_str()),
+            (StatusCode::BAD_REQUEST, Some("bad_form")),
+            "{key}"
+        );
+    }
+    assert_eq!(w.count("SELECT count(*) FROM emotes").await, 0);
+    w.db.close().await;
+}

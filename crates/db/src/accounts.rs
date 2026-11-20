@@ -207,6 +207,19 @@ async fn refresh(conn: &mut PgConnection, profile: Profile<'_>) -> DbResult<Opti
     .await?)
 }
 
+/// Which of `ids` are deleted or have their deletion pending.
+pub async fn deleted_among(conn: &mut PgConnection, ids: &[Uuid]) -> DbResult<Vec<Uuid>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(
+        sqlx::query_scalar("SELECT id FROM accounts WHERE id = ANY($1) AND deleted_at IS NOT NULL")
+            .bind(ids)
+            .fetch_all(conn)
+            .await?,
+    )
+}
+
 pub async fn get(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Account>> {
     Ok(
         sqlx::query_as(&format!("SELECT {ACCOUNT} FROM accounts WHERE id = $1"))

@@ -76,3 +76,9 @@ This replaces "There is no accept step" in the amendment above.
 - When the emote moves any other way (the owner's own transfer, or another request accepted), open requests for it are cancelled.
 - Every step is audited with the owner as subject: `emote.transfer_requested` (actor the editor, `"via": "account_editor"`), `emote.transfer_accepted` and `emote.transferred` (actor the owner; `requested_by` in `after`), `emote.transfer_declined`, `emote.transfer_cancelled`, `emote.transfer_expired` (no actor). The other side is notified at each step.
 - API (additive): `emoteTransferRequests(emoteId)` (open requests on your emotes and the ones you made), `acceptEmoteTransfer`, `declineEmoteTransfer`, `cancelEmoteTransfer`; `EmoteTransferRequest`, `TransferRequestState`. Accepting, declining and cancelling share the 60-an-hour transfer limit.
+
+## Amendment (security review, 2026/11/20)
+- Accepting a transfer request also checks that the editor who asked still holds `emote_transfer` on every set of the owner (their grant can have been narrowed or removed since). If not, the request is closed as cancelled (`emote.transfer_cancelled` with `"reason": "editor_permission"`) and the owner gets `409 not_pending`.
+- `acceptEmoteTransfer`, `declineEmoteTransfer` and `cancelEmoteTransfer` answer `not_found` to anyone but the owner and the editor who asked, whatever state the request is in, so request IDs can't be probed. The two parties keep the `forbidden` answers for the step that isn't theirs.
+- Accepting takes its locks in the order `transferEmote` does (the emote, then its requests), so an accept and the owner's own transfer of the same emote at once can't deadlock.
+- Staff with `editors.manage_any` act only on accounts below them and never on the owners' (ADR 0010, amendment 2026/11/20).

@@ -401,11 +401,14 @@ pub async fn open_requests(
     Ok(out)
 }
 
-/// The request, still open (callers expire due requests first, in their own transaction).
-async fn open_request(conn: &mut PgConnection, id: Uuid) -> ApiResult<Request> {
+/// The request, still open (callers expire due requests first, in their own transaction). Anyone
+/// but its owner and the editor who asked is told it doesn't exist, so request IDs can't be
+/// probed.
+async fn open_request(conn: &mut PgConnection, caller: &Caller, id: Uuid) -> ApiResult<Request> {
     let r = transfers::lock(conn, id)
         .await
         .map_err(db_error)?
+        .filter(|r| caller.account_id == r.from_account_id || caller.account_id == r.requested_by)
         .ok_or_else(not_found)?;
     if r.state == "pending" && r.expires_at <= Utc::now() {
         return Err(conflict(
@@ -422,6 +425,29 @@ async fn open_request(conn: &mut PgConnection, id: Uuid) -> ApiResult<Request> {
     Ok(r)
 }
 
+/// Closes a request that can't go ahead any more (`reason`: `moved`, `editor_permission`),
+/// audited as cancelled.
+async fn cancel_moot(
+    conn: &mut PgConnection,
+    caller: &Caller,
+    r: &Request,
+    reason: &str,
+) -> ApiResult<()> {
+    transfers::resolve(conn, r.id, "cancelled", Some(caller.account_id))
+        .await
+        .map_err(db_error)?;
+    write(
+        conn,
+        Some(caller.account_id),
+        "emote.transfer_cancelled",
+        r.emote_id,
+        r.from_account_id,
+        Some(request_json(r)),
+        Some(json!({ "reason": reason })),
+    )
+    .await
+}
+
 /// `acceptEmoteTransfer`: the owner agrees and the emote moves, if the rules still allow it.
 pub async fn accept(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Emote> {
     let id = parse_id(id)?;
@@ -429,33 +455,46 @@ pub async fn accept(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Em
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     expire_now(&mut conn).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    let r = open_request(&mut tx, id).await?;
+    // Locks in the order `transferEmote` takes them, the emote and then its requests, so the two
+    // can't wait on each other (a deadlock would be a 500).
+    let emote_id = transfers::get(&mut tx, id)
+        .await
+        .map_err(db_error)?
+        .filter(|r| caller.account_id == r.from_account_id || caller.account_id == r.requested_by)
+        .ok_or_else(not_found)?
+        .emote_id;
+    emotes::lock(&mut tx, emote_id).await.map_err(db_error)?;
+    let r = open_request(&mut tx, caller, id).await?;
     if r.from_account_id != caller.account_id {
         return Err(forbidden("Only the emote's owner can accept its transfer."));
     }
-    emotes::lock(&mut tx, r.emote_id).await.map_err(db_error)?;
     let emote = row(&mut tx, r.emote_id).await?;
     let Some(emote) = emote.filter(|e| e.owner == Some(r.from_account_id)) else {
         // It moved or went away since: the request is moot.
-        transfers::resolve(&mut tx, r.id, "cancelled", Some(caller.account_id))
-            .await
-            .map_err(db_error)?;
-        write(
-            &mut tx,
-            Some(caller.account_id),
-            "emote.transfer_cancelled",
-            r.emote_id,
-            r.from_account_id,
-            Some(request_json(&r)),
-            Some(json!({ "reason": "moved" })),
-        )
-        .await?;
+        cancel_moot(&mut tx, caller, &r, "moved").await?;
         tx.commit().await.map_err(sqlx_error)?;
         return Err(conflict(
             "not_pending",
             "That emote isn't yours any more, so the request is closed.",
         ));
     };
+    // The editor who asked must still hold `emote_transfer` on every set: a request outlives
+    // neither their grant nor that flag.
+    if !crate::editors::has_emote_flag(
+        &mut tx,
+        r.from_account_id,
+        r.requested_by,
+        EditorPermission::EmoteTransfer,
+    )
+    .await?
+    {
+        cancel_moot(&mut tx, caller, &r, "editor_permission").await?;
+        tx.commit().await.map_err(sqlx_error)?;
+        return Err(conflict(
+            "not_pending",
+            "The editor who asked can't transfer your emotes any more, so the request is closed.",
+        ));
+    }
     // As they stand now: the editor still may give it there, and nobody is held.
     receiver_checks(&mut tx, r.requested_by, r.from_account_id, r.to_account_id).await?;
     transfers::resolve(&mut tx, r.id, "accepted", Some(caller.account_id))
@@ -498,7 +537,7 @@ async fn close(
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     expire_now(&mut conn).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    let r = open_request(&mut tx, id).await?;
+    let r = open_request(&mut tx, caller, id).await?;
     let (allowed, to_state, action, tell, kind) = if as_owner {
         (
             r.from_account_id == caller.account_id,

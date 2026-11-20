@@ -2,6 +2,32 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Security fixes S1 (branch `fix/security-s1`, ADR 0004, 0010, 0014, 0019, 0020 amendments of 2026/11/20)
+
+From the 2026/11/20 security review (findings A4). Each with a test that fails before and passes after:
+- [x] HIGH `quickSearch` showed unlisted emotes and those of accounts pending deletion: one `search::LISTED_EMOTE` fragment for `search` (every sort), `quick` and `trending_rank`. Test `every_search_uses_the_listed_emote_rule` (crates/db/tests/queries.rs: public, unlisted, private, NSFW and a pending-deletion owner through all three).
+- [x] HIGH `editors.manage_any` reached the owner's account: staff now get `owner_protected` on the owners' accounts and `not_below_you` on accounts at or above their rank (reads too). Test `staff_editor_management_respects_the_owner_and_seniority` (sec_roles.rs).
+- [x] MED the built-in User role could be given a staff permission by any `roles.manage` holder: adding one needs the owner (`owner_only`) unless it is on `USER_ROLE_ALLOWED` (empty). Test `only_the_owner_adds_staff_permissions_to_the_user_role` (builtin_roles_flow.rs).
+- [x] MED accepting a transfer re-checks the asking editor's `emote_transfer`; without it the request closes (`reason: editor_permission`). Test `accepting_rechecks_the_editors_transfer_permission` (editor_emotes_flow.rs).
+- [x] MED erasure deletes staff notes, blanks restriction reasons and strips `body`, `reason`, `note` from audit rows about the account; `identity_holds` retention documented (ADR 0019, `privacy::erase`). Test `erasure_scrubs_notes_reasons_and_audit_text` (queries.rs).
+- [x] LOW upload hourly limit re-checked under a per-account advisory lock (`emotes::lock_upload_quota`); text form fields read chunk by chunk with a cap. Tests `concurrent_uploads_respect_the_hourly_limit`, `over_long_text_fields_are_refused` (upload_flow.rs).
+- [x] LOW nobody changes their own holds (`own_account`). Test in `restricting_and_blocking_accounts` (abuse_flow.rs).
+- [x] LOW app tokens: `exportMyData` and `revokeOtherSessions` are website only (`website_only`); `signOutEverywhere` with an app token ends only that session. Tests in account_hub_flow.rs.
+- [x] LOW activity: an unlisted emote's own feed shows its lines; emotes of pending-deletion owners leave every feed. Test `unlisted_and_leaving_emotes_in_feeds` (emote_activity_flow.rs).
+- [x] LOW tags: NFC on both sides, combining marks allowed (`text::normalize_tag`, `text::is_tag_char`; web `rules.ts`). Unit tests in shared text.rs, moderation.rs and rules.test.ts.
+- [x] LOW transfer answers are `not_found` to anyone but the two parties. Test in `editor_transfers_wait_for_the_owner_and_go_only_to_trusting_accounts`.
+- [x] Code review: erase also clears `emotes.uploaded_by`, deletes `oauth_states` and closes open transfer requests the account is a party to. Tests `every_reference_to_an_account_is_handled_by_erase` (every FK to accounts from information_schema, handled or kept with a reason) and `erasure_clears_uploader_and_closes_its_transfer_requests` (queries.rs).
+- [x] Code review: `acceptEmoteTransfer` locks the emote before the request, as `transferEmote` does (no deadlock). Test `accept_and_owner_transfer_at_once_dont_deadlock` (editor_emotes_flow.rs).
+- [x] Dev mock: `quickSearch` public only; transfers `not_found` to non-parties and the editor re-check on accept (the seeded requester holds `EMOTE_TRANSFER`).
+
+### GitHub write log for this PR
+
+```
+git push -u origin fix/security-s1
+gh pr create --base main --head fix/security-s1 --title "Security fixes S1: search visibility, staff editor rank, User role, transfers, erasure, app tokens" --body-file <file>
+git push
+```
+
 ## Scale: hot reads at 100k emotes, 50k accounts, 20k channels (branch `perf/scale-1`)
 
 Owner: "make sure everything is already laid out for a higher scale deployment like thousands of emotes and users". Audit with file:line and the proposals: `.claude/runs/2026-11-19-feedback/scale-audit.md`.
