@@ -394,6 +394,23 @@ pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
             })
         })
         .collect();
+    let mut lists = serde_json::Map::new();
+    for (key, list) in [
+        ("hidden_emotes", cyex_tv_db::personal::List::HiddenEmotes),
+        (
+            "hidden_creators",
+            cyex_tv_db::personal::List::HiddenCreators,
+        ),
+        ("favourite_emotes", cyex_tv_db::personal::List::Favourites),
+    ] {
+        let entries: Vec<Value> = cyex_tv_db::personal::all(&mut conn, list, account_id)
+            .await
+            .map_err(db_error)?
+            .into_iter()
+            .map(|e| json!({ "id": ids::to_text(e.id), "added_at": views::time(e.created_at) }))
+            .collect();
+        lists.insert(key.to_owned(), Value::Array(entries));
+    }
     let orders_out = export_orders(&mut conn, account_id).await?;
     let redemptions_out: Vec<Value> = cyex_tv_db::codes::redemptions_of(&mut conn, account_id)
         .await
@@ -434,6 +451,9 @@ pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
         "notifications": notes,
         "orders": orders_out,
         "code_redemptions": redemptions_out,
+        "hidden_emotes": lists["hidden_emotes"],
+        "hidden_creators": lists["hidden_creators"],
+        "favourite_emotes": lists["favourite_emotes"],
     });
 
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;

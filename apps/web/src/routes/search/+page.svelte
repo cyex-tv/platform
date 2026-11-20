@@ -10,6 +10,7 @@
   import Popover from '$lib/components/Popover.svelte';
   import BrowseFilters from '$lib/components/browse/BrowseFilters.svelte';
   import BrowseGrid from '$lib/components/browse/BrowseGrid.svelte';
+  import { personal } from '$lib/personal/lists.svelte';
   import SelectBar from '$lib/components/browse/SelectBar.svelte';
   import TargetSet from '$lib/components/browse/TargetSet.svelte';
   import { all, CAP, EMPTY, toggle, type Selection, type Step } from '$lib/components/browse/selection';
@@ -64,7 +65,9 @@
 
   const totalPages = $derived(Math.ceil(data.total / PER_PAGE));
   const hasMore = $derived(pageNo < totalPages);
-  const shown = $derived(loaded);
+  // What you hid for yourself ("Hide for me") drops out here; the API answers the same for everyone.
+  $effect(() => personal.ensure());
+  const shown = $derived(personal.visible(loaded));
   const tags = $derived(topTags(loaded, 12, view.tags));
   const switching = $derived(!!navigating.to);
   const trending = $derived(view.sort === 'trending');

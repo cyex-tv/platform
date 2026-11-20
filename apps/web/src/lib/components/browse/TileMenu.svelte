@@ -1,7 +1,8 @@
 <script lang="ts">
   // The one cyex menu for an emote tile (right-click, the ⋯ button, the context-menu key):
-  // Add to / Remove from the target set, Open in new tab, Copy emote link, and Select (starts
-  // multi-select with this emote). Placed at the pointer (or under the ⋯), kept 8px inside the
+  // Add to / Remove from the target set, Open in new tab, Copy emote link, Favourite, Hide for me
+  // and Hide everything by the creator (signed in), and Select (starts multi-select with this
+  // emote). Placed at the pointer (or under the ⋯), kept 8px inside the
   // window, in the top layer so nothing clips it. Arrow keys, Home and End move; Escape, a click
   // outside, scrolling or Tab close it, and focus goes back to the tile.
   import { tick } from 'svelte';
@@ -12,11 +13,12 @@
   import { pop } from '$lib/motion';
   import { notify } from '$lib/tool/notices.svelte';
   import { session } from '$lib/tool/session.svelte';
+  import { listError, personal } from '$lib/personal/lists.svelte';
   import Icon from '../Icon.svelte';
   import { target } from './target.svelte';
 
   type Props = {
-    emote: { id: string; name: string };
+    emote: { id: string; name: string; owner?: { id?: string; displayName: string } | null };
     x: number;
     y: number;
     /** Multi-select is on (the Select item is left out then). */
@@ -39,7 +41,50 @@
 
   $effect(() => {
     target.ensure();
+    personal.ensure();
   });
+
+  const fav = $derived(personal.favourites.has(emote.id));
+  const creatorId = $derived(emote.owner?.id ?? '');
+  const creatorName = $derived(clean(emote.owner?.displayName ?? ''));
+  const mine = $derived(!!creatorId && creatorId === session.me?.id);
+
+  async function toggleFavourite() {
+    onclose(true);
+    try {
+      if (fav) {
+        await personal.unfavourite(emote.id);
+        notify(`Removed ${clean(emote.name)} from your favourites.`);
+      } else {
+        await personal.favourite(emote.id);
+        notify(`Added ${clean(emote.name)} to your favourites.`);
+      }
+    } catch (e) {
+      notify(listError(e), true);
+    }
+  }
+
+  async function hide(creator: boolean) {
+    onclose(false);
+    const name = clean(emote.name);
+    try {
+      if (creator) {
+        await personal.hideCreator(creatorId);
+        notify(`Hid everything by ${creatorName} for you.`, false, {
+          ms: 6000,
+          action: { label: 'Undo', run: () => personal.unhideCreator(creatorId).catch((e) => notify(listError(e), true)) },
+        });
+      } else {
+        await personal.hideEmote(emote.id);
+        notify(`Hid ${name} for you.`, false, {
+          ms: 6000,
+          action: { label: 'Undo', run: () => personal.unhideEmote(emote.id).catch((e) => notify(listError(e), true)) },
+        });
+      }
+    } catch (e) {
+      notify(listError(e), true);
+    }
+  }
 
   $effect(() => {
     void x;
@@ -168,6 +213,18 @@
     <Icon name="arrow-right" size={14} /><span>Open in new tab</span>
   </a>
   <button role="menuitem" class="item" type="button" tabindex="-1" onclick={copyLink}><Icon name="link" size={14} /><span>Copy emote link</span></button>
+  {#if session.me}
+    <button role="menuitem" class="item" class:fav type="button" tabindex="-1" aria-pressed={fav} onclick={toggleFavourite}>
+      <Icon name="heart" size={14} /><span>{fav ? 'Remove from favourites' : 'Favourite'}</span>
+    </button>
+    <hr />
+    <button role="menuitem" class="item" type="button" tabindex="-1" onclick={() => hide(false)}><Icon name="eye-off" size={14} /><span>Hide for me</span></button>
+    {#if creatorId && !mine}
+      <button role="menuitem" class="item" type="button" tabindex="-1" onclick={() => hide(true)}>
+        <Icon name="user-x" size={14} /><span class="lbl">Hide everything by <bdi>{creatorName}</bdi></span>
+      </button>
+    {/if}
+  {/if}
   {#if !selecting}
     <hr />
     <button role="menuitem" class="item" type="button" tabindex="-1" onclick={onselect}><Icon name="check" size={14} /><span>Select</span></button>
@@ -187,6 +244,7 @@
   .item[aria-disabled='true'] { color: var(--muted); cursor: default; }
   .item[aria-busy='true'] { opacity: .6; }
   .danger { color: var(--red); }
+  .fav :global(svg) { color: var(--accent-text); fill: currentColor; }
   .danger :global(svg) { color: var(--red); }
   hr { margin: 4px 0; border: 0; border-top: 1px solid var(--border); }
   @media (hover: hover) and (pointer: fine) { .item:not([aria-disabled='true']):hover { background: var(--surface-hover); } }

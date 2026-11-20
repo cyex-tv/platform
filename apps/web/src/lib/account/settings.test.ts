@@ -5,9 +5,9 @@ const one = [{ platform: 'TWITCH' }];
 const two = [{ platform: 'TWITCH' }, { platform: 'KICK' }];
 
 describe('settings', () => {
-  it('lists Account, Appearance, Editors and Billing, the current one marked', () => {
+  it('lists Account, Appearance, Hidden, Editors and Billing, the current one marked', () => {
     const rows = settingsRail('/me/settings/appearance')[0].items;
-    expect(rows.map((r) => r.label)).toEqual(['Account', 'Appearance', 'Editors', 'Billing']);
+    expect(rows.map((r) => r.label)).toEqual(['Account', 'Appearance', 'Hidden', 'Editors', 'Billing']);
     expect(rows.filter((r) => r.current).map((r) => r.label)).toEqual(['Appearance']);
     expect(settingsRail('/me/editors')[0].items.find((r) => r.current)?.href).toBe('/me/editors');
   });

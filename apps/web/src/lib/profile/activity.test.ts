@@ -56,8 +56,15 @@ describe('profile rows', () => {
     expect(sectionsFor(NOBODY, true)).toEqual(['uploads', 'sets', 'activity']);
   });
   it('gives the owner everything, activity only when the API has it', () => {
-    expect(sectionsFor(mine, false)).toEqual(['overview', 'active', 'uploads', 'sets', 'cosmetics']);
+    expect(sectionsFor(mine, false)).toEqual(['overview', 'active', 'uploads', 'sets', 'favourites', 'cosmetics']);
     expect(sectionsFor(mine, true)).toContain('activity');
+  });
+  it('gives the owner alone Favourites (private)', () => {
+    expect(sectionsFor(NOBODY, true)).not.toContain('favourites');
+    expect(sectionsFor(editor, true)).not.toContain('favourites');
+    expect(sectionsFor(profiler, true)).not.toContain('favourites');
+    expect(sectionHref('a1', 'favourites')).toBe('/users/a1?s=favourites');
+    expect(railKeyForPath('/me/favourites')).toBe('favourites');
   });
   it('gives editors cosmetics only with PROFILE', () => {
     expect(sectionsFor(editor, false)).not.toContain('cosmetics');

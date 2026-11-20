@@ -20,6 +20,7 @@ pub mod jobs;
 pub mod notifications;
 pub mod oauth_states;
 pub mod outbox;
+pub mod personal;
 pub mod privacy;
 pub mod reads;
 pub mod reports;

@@ -25,6 +25,7 @@
   import ActiveEmotes from '$lib/profile/sections/ActiveEmotes.svelte';
   import ActivityFeed from '$lib/profile/sections/ActivityFeed.svelte';
   import CosmeticsPicker from '$lib/profile/sections/CosmeticsPicker.svelte';
+  import Favourites from '$lib/profile/sections/Favourites.svelte';
   import MyUploads from '$lib/profile/sections/MyUploads.svelte';
   import SetCards from '$lib/profile/sections/SetCards.svelte';
   import Uploads from './Uploads.svelte';
@@ -49,7 +50,7 @@
   // A section only the owner or an editor has, asked for before the session is known: wait for it.
   const waiting = $derived(!!asked && asked !== section && (!session.known || (!!session.me && !granted)));
 
-  const TITLE: Record<SectionKey, string> = { overview: 'Overview', uploads: 'Uploaded emotes', active: 'Active emotes', sets: 'Emote sets', cosmetics: 'Cosmetics', activity: 'Activity' };
+  const TITLE: Record<SectionKey, string> = { overview: 'Overview', uploads: 'Uploaded emotes', active: 'Active emotes', sets: 'Emote sets', favourites: 'Favourites', cosmetics: 'Cosmetics', activity: 'Activity' };
 </script>
 
 {#snippet actions()}
@@ -97,6 +98,8 @@
       {#key data.id}<ActiveEmotes accountId={data.id} mine={relation.mine} />{/key}
     {:else if section === 'sets'}
       {#key data.id}<SetCards accountId={data.id} mine={relation.mine} canCreate={canSets(relation)} {name} />{/key}
+    {:else if section === 'favourites'}
+      <Favourites />
     {:else if section === 'cosmetics'}
       {#key data.id}<CosmeticsPicker accountId={data.id} mine={relation.mine} {name} />{/key}
     {:else if section === 'activity'}
