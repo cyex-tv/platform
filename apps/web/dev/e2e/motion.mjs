@@ -166,11 +166,11 @@ for (const [pref, os, on] of COMBOS) {
 
   // Animated emotes: which file the <img> chose.
   await go('/search');
-  await until(`document.querySelectorAll('picture img').length > 8`, 8000);
+  await until(`document.querySelectorAll('img[data-still]').length > 8`, 8000);
   await wait(800);
-  const pics = await ev(`[...document.querySelectorAll('picture')].slice(0, 24).map((p) => ({ source: !!p.querySelector('source'), src: p.querySelector('img').currentSrc || '' }))`);
+  const pics = await ev(`[...document.querySelectorAll('img[data-still]')].slice(0, 24).map((i) => ({ src: i.currentSrc || '' }))`);
   if (pref === 'system' && os === 'no-preference') {
-    pics.forEach((p, i) => { if (p.source) stillIdx[i] = true; });
+    pics.forEach((p, i) => { stillIdx[i] = true; });
   }
   const ids = Object.keys(stillIdx).map(Number);
   if (pref === 'system' && os === 'no-preference') check(`${tag} the page has animated emotes with a still`, ids.length > 0, `${ids.length} of ${pics.length}`);
@@ -178,7 +178,8 @@ for (const [pref, os, on] of COMBOS) {
     const wrong = ids.filter((i) => pics[i] && pics[i].src.includes('_static') === on);
     check(`${tag} animated emotes load the ${on ? 'moving' : 'still'} file`, wrong.length === 0, `${ids.length - wrong.length}/${ids.length} right`);
   }
-  if (pref === 'system') check(`${tag} the <source media> stays for System (works without script)`, ids.length === 0 || (await ev(`!!document.querySelector('picture source[media*="reduced-motion"]')`)));
+  // No <source media> anywhere: Chromium leaks template-cloned ones (see dev/e2e/leak.mjs).
+  check(`${tag} no <picture><source media> on the page`, !(await ev(`!!document.querySelector('picture source[media]')`)));
 
   // ---- Phone: the bell as a bottom sheet
   await setup(pref, os, true);
