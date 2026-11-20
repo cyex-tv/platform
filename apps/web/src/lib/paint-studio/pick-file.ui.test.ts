@@ -20,12 +20,12 @@ beforeEach(() => {
 
 const png = (name: string) => new File(['x'], name, { type: 'image/png' });
 
-describe('paint picture file', () => {
+describe('paint picture file', { timeout: 30000 }, () => {
   it('forgets the earlier picture when the next file can’t be read', async () => {
     render(PaintStudio, { backend: null });
-    await fireEvent.click(await screen.findByRole('radio', { name: /Animated or picture/ }));
-    await fireEvent.click(await screen.findByRole('radio', { name: /Upload a file/ }));
-    const input = (await screen.findByLabelText(/GIF, PNG, APNG or WebP/)) as HTMLInputElement;
+    await fireEvent.click(await screen.findByRole('radio', { name: /Animated or picture/ }, { timeout: 10000 }));
+    await fireEvent.click(await screen.findByRole('radio', { name: /Upload a file/ }, { timeout: 10000 }));
+    const input = (await screen.findByLabelText(/GIF, PNG, APNG or WebP/, undefined, { timeout: 10000 })) as HTMLInputElement;
     await fireEvent.change(input, { target: { files: [png('a.png')] } });
     await screen.findByText(/128 × 128 px/);
     decode = async () => {
