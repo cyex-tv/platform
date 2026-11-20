@@ -1572,8 +1572,8 @@ pub struct UploadQuota {
     pub account_id: String,
     /// Its emotes waiting for review, ones still being processed included.
     pub pending: i32,
-    /// How many may wait at once; an upload at this many is refused (`too_many_pending`).
-    pub pending_max: i32,
+    /// How many may wait at once; an upload at this many is refused (`too_many_pending`). Null when the caller isn't capped (the owners).
+    pub pending_max: Option<i32>,
     /// Emotes it got in the last hour.
     pub uploads_this_hour: i32,
     pub uploads_per_hour: i32,

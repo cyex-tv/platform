@@ -3415,9 +3415,9 @@ type UploadQuota {
 	"""
 	pending: Int!
 	"""
-	How many may wait at once; an upload at this many is refused (`too_many_pending`).
+	How many may wait at once; an upload at this many is refused (`too_many_pending`). Null when the caller isn't capped (the owners).
 	"""
-	pendingMax: Int!
+	pendingMax: Int
 	"""
 	Emotes it got in the last hour.
 	"""

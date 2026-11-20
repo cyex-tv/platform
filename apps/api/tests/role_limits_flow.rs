@@ -597,3 +597,17 @@ async fn changing_limits_follows_the_role_edit_rules() {
     assert_eq!(stored, json!({}));
     w.db.close().await;
 }
+
+#[tokio::test]
+async fn the_owner_isnt_capped() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let owner = w.user("900").await;
+    w.pending(&owner, 20).await;
+    let q = w.quota(&owner, None).await;
+    assert_eq!(q["data"]["uploadQuota"]["pending"], 20, "{q}");
+    assert!(q["data"]["uploadQuota"]["pendingMax"].is_null(), "{q}");
+    let r = w.upload(&owner, "ownerMore", 2, None).await;
+    assert_ne!(r.status, StatusCode::CONFLICT, "{:?}", r.body);
+}

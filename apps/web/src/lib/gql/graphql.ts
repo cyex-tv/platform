@@ -3358,8 +3358,8 @@ export type UploadQuota = {
   accountId: Scalars['String']['output'];
   /** Its emotes waiting for review, ones still being processed included. */
   pending: Scalars['Int']['output'];
-  /** How many may wait at once; an upload at this many is refused (`too_many_pending`). */
-  pendingMax: Scalars['Int']['output'];
+  /** How many may wait at once; an upload at this many is refused (`too_many_pending`). Null when the caller isn't capped (the owners). */
+  pendingMax?: Maybe<Scalars['Int']['output']>;
   uploadsPerHour: Scalars['Int']['output'];
   /** Emotes it got in the last hour. */
   uploadsThisHour: Scalars['Int']['output'];
@@ -3826,7 +3826,7 @@ export type UploadQuotaQueryVariables = Exact<{
 }>;
 
 
-export type UploadQuotaQuery = { __typename?: 'Query', uploadQuota: { __typename?: 'UploadQuota', accountId: string, pending: number, pendingMax: number, uploadsThisHour: number, uploadsPerHour: number } };
+export type UploadQuotaQuery = { __typename?: 'Query', uploadQuota: { __typename?: 'UploadQuota', accountId: string, pending: number, pendingMax?: number | null, uploadsThisHour: number, uploadsPerHour: number } };
 
 export type CreateRoleMutationVariables = Exact<{
   input: CreateRoleInput;

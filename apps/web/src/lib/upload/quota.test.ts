@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { quotaView } from './quota';
 
-const q = (pending: number, pendingMax = 20) => ({ accountId: 'A', pending, pendingMax, uploadsThisHour: 0, uploadsPerHour: 20 });
+const q = (pending: number, pendingMax: number | null = 20) => ({ accountId: 'A', pending, pendingMax, uploadsThisHour: 0, uploadsPerHour: 20 });
 
 describe('the upload quota line', () => {
   it('counts what waits and how much room is left', () => {
@@ -15,5 +15,13 @@ describe('the upload quota line', () => {
     expect(quotaView(q(1, 1), true)?.refusal).toBe('That account has 1 emote waiting for review. Upload more once some are reviewed.');
     // A role lowered the cap below what already waits.
     expect(quotaView(q(30, 25))).toMatchObject({ full: true, room: 0 });
+  });
+});
+
+describe('quotaView without a cap', () => {
+  it('shows the count and never blocks (the owners)', () => {
+    const v = quotaView(q(250, null));
+    expect(v).toMatchObject({ line: '250 waiting for review.', full: false, refusal: null });
+    expect(v!.room).toBe(Infinity);
   });
 });

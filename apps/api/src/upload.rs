@@ -192,10 +192,15 @@ pub fn too_many_pending(max: u32, for_someone: bool) -> ApiError {
 /// At most `pending_emotes` of the owner's emotes wait for review at once.
 async fn pending_limit(
     conn: &mut PgConnection,
+    caller: &Caller,
     owner: Uuid,
     for_someone: bool,
     allowed: &Allowed,
 ) -> ApiResult<()> {
+    // The owners aren't capped, like the hourly limit.
+    if caller.owner {
+        return Ok(());
+    }
     let pending = emotes::count_pending(conn, owner).await.map_err(db_error)?;
     let max = allowed.theirs.get(AccountLimit::PendingEmotes);
     if pending >= i64::from(max) {
@@ -241,7 +246,7 @@ pub async fn quota(
     Ok(UploadQuota {
         account_id: ids::to_text(owner),
         pending: int(pending),
-        pending_max: lim(AccountLimit::PendingEmotes),
+        pending_max: (!caller.owner).then(|| lim(AccountLimit::PendingEmotes)),
         uploads_this_hour: int(hour),
         uploads_per_hour: lim(AccountLimit::UploadsPerHour),
     })
@@ -307,7 +312,7 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
     };
     // Checked early so a refused upload isn't decoded, and again under the lock below.
     hourly_limit(&mut conn, caller, owner, &allowed).await?;
-    pending_limit(&mut conn, owner, for_someone, &allowed).await?;
+    pending_limit(&mut conn, caller, owner, for_someone, &allowed).await?;
     drop(conn);
 
     // Decoding is CPU work; keep it off the request threads.
@@ -353,7 +358,7 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
         .await
         .map_err(db_error)?;
     hourly_limit(&mut tx, caller, owner, &allowed).await?;
-    pending_limit(&mut tx, owner, for_someone, &allowed).await?;
+    pending_limit(&mut tx, caller, owner, for_someone, &allowed).await?;
     let side = |v: u32| i32::try_from(v).unwrap_or(i32::MAX);
     let key = original_key(&sha_hex);
     let (file, created) = files::insert_or_get(

@@ -21,6 +21,8 @@ const emotes = (n: number) => (n === 1 ? '1 emote' : `${count(n)} emotes`);
 
 export function quotaView(q: Quota | null | undefined, forOther = false): QuotaView | null {
   if (!q) return null;
+  // No cap (the owners): only the count, never full.
+  if (q.pendingMax == null) return { line: `${count(q.pending)} waiting for review.`, full: false, refusal: null, room: Infinity };
   const room = Math.max(0, q.pendingMax - q.pending);
   const full = room === 0;
   const who = forOther ? 'That account has' : 'You have';
