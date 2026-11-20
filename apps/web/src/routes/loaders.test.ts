@@ -12,8 +12,8 @@ vi.mock('$lib/components/emote/data', () => ({
 }));
 
 const { ApiError } = await import('$lib/api');
-const { SEARCH, SEARCH_ACCOUNTS, SEARCH_BY_OWNER, ACCOUNT_PROFILE, ACCOUNT_COSMETICS, EMOTE, PUBLIC_SET, SHOP_ITEMS } = await import('$lib/queries');
-const { PER_PAGE, USERS_PER_PAGE } = await import('$lib/components/browse/params');
+const { SEARCH, SEARCH_BY_OWNER, ACCOUNT_PROFILE, ACCOUNT_COSMETICS, EMOTE, PUBLIC_SET, SHOP_ITEMS } = await import('$lib/queries');
+const { PER_PAGE } = await import('$lib/components/browse/params');
 
 const fetch = vi.fn() as unknown as typeof globalThis.fetch;
 const at = (path: string) => new URL(`http://localhost${path}`);
@@ -69,27 +69,16 @@ describe('/search', () => {
     expect(b.error).toBe('Search isn’t available right now.');
   });
 
-  it('the Users tab asks for nobody without a name', async () => {
-    const out = await call(await page(), { url: at('/search?tab=users') });
+  it('an old Users tab link lands on the emote search, the name kept, without asking for people', async () => {
+    for (const [from, to] of [['/search?tab=users&q=ana&n=2', '/search?q=ana&n=2'], ['/search?tab=users', '/search']]) {
+      try {
+        await call(await page(), { url: at(from) });
+        expect.unreachable();
+      } catch (e) {
+        expect(e).toMatchObject({ status: 308, location: to });
+      }
+    }
     expect(gql).not.toHaveBeenCalled();
-    expect(out).toMatchObject({ people: [], total: 0, error: null });
-  });
-
-  it('the Users tab searches people, page by page', async () => {
-    gql.mockImplementation(async (_d: unknown, v: { page: number }) => ({
-      searchAccounts: { total: USERS_PER_PAGE + 1, items: [{ account: { id: `U${v.page}` } }] },
-    }));
-    const out = await call(await page(), { url: at('/search?tab=users&q=ana&n=2') });
-    expect(gql.mock.calls.every(([d]) => d === SEARCH_ACCOUNTS)).toBe(true);
-    expect(gql.mock.calls[0][1]).toMatchObject({ query: 'ana', perPage: USERS_PER_PAGE });
-    expect(out.people).toHaveLength(2);
-    expect(out.pages).toBe(2);
-  });
-
-  it('the Users tab words a failure too', async () => {
-    gql.mockRejectedValue(new ApiError('Nope.', 'server'));
-    const out = await call(await page(), { url: at('/search?tab=users&q=ana') });
-    expect(out.error).toBe('Nope.');
   });
 });
 
@@ -106,7 +95,21 @@ describe('/emotes redirects to /search with the query kept', () => {
 });
 
 describe('/users/[id]', () => {
-  const page = async () => (await import('./users/[id]/+page')).load;
+  const page = async () => {
+    const { load } = await import('./users/[id]/+page');
+    // SvelteKit's event: the address and untrack, which these loads read.
+    return (e: Record<string, unknown>) => (load as (e: unknown) => unknown)({ url: at(`/users/${(e.params as { id: string }).id}`), untrack: (f: () => unknown) => f(), ...e });
+  };
+
+  it('an old Collection link opens the Cosmetics tab, asking nothing', async () => {
+    try {
+      await call(await page(), { params: { id: 'U 1' }, url: at('/users/U%201?s=collection') });
+      expect.unreachable();
+    } catch (e) {
+      expect(e).toMatchObject({ status: 308, location: '/users/U%201?s=cosmetics' });
+    }
+    expect(gql).not.toHaveBeenCalled();
+  });
 
   it('asks for the person’s emotes, profile and look by the id in the address', async () => {
     gql.mockImplementation(async (doc: unknown) => {

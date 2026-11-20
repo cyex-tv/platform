@@ -2,8 +2,7 @@
   // Settings → Account: the name you go by (with more than one connection, pick which login is
   // your name and picture on cyex.tv; every login still finds you), your connections (Disconnect
   // while more than one is linked; the last one always stays, and the API refuses it too),
-  // Profile (whether your collection of badges and paints is on your public profile; off by
-  // default), Security (sign out everywhere, this device too; the sessions list for one device at a time),
+  // Security (sign out everywhere, this device too; the sessions list for one device at a time),
   // your data, and deleting the account.
   import { gql, linkUrl } from '$lib/api';
   import { unlinkMessage } from '$lib/account/errors';
@@ -17,9 +16,7 @@
   import { date } from '$lib/format';
   import type { Platform } from '$lib/gql/graphql';
   import { forgetProfile } from '$lib/profile/data.svelte';
-  import { ACCOUNT_COLLECTION, SET_DISPLAY_PLATFORM, SIGN_OUT_EVERYWHERE, UNLINK } from '$lib/queries';
-  import CollectionToggle from '$lib/profile/CollectionToggle.svelte';
-  import { onMount } from 'svelte';
+  import { SET_DISPLAY_PLATFORM, SIGN_OUT_EVERYWHERE, UNLINK } from '$lib/queries';
   import { leftSession } from '$lib/shell/signout';
   import { forgetLooks } from '$lib/cosmetics/store.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
@@ -39,14 +36,6 @@
   let busy = $state<string | null>(null);
   // The radio shows this; a save that fails puts it back on `current`.
   let picked = $derived<Platform | null>(current);
-
-  // Whether the collection is public: asked once; until then the switch waits.
-  let collectionPublic = $state<boolean | null>(null);
-  onMount(() => {
-    gql(ACCOUNT_COLLECTION, { accountId: me.id })
-      .then((r) => (collectionPublic = r.accountCollection?.public ?? false))
-      .catch(() => {});
-  });
 
   async function refresh() {
     forgetProfile();
@@ -150,16 +139,6 @@
         {/each}
       </ul>
       <p class="ui-hint pad">Connect both to sign in with either. You always keep at least one: the last connection can’t be disconnected. cyex.tv keeps the user ID, login, display name and picture.</p>
-    </section>
-
-    <section class="ui-panel" aria-labelledby="prof-h">
-      <header><h2 id="prof-h">Profile</h2></header>
-      {#if collectionPublic === null}
-        <p class="ui-hint pad">Loading…</p>
-      {:else}
-        <CollectionToggle value={collectionPublic} onchange={(c) => (collectionPublic = c.public)} />
-        <p class="ui-hint pad">See it as others do on <a href="/users/{encodeURIComponent(me.id)}?s=collection">your Collection tab</a>.</p>
-      {/if}
     </section>
 
     <section class="ui-panel" aria-labelledby="sec-h">

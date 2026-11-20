@@ -1,3 +1,4 @@
+import { redirect } from '@sveltejs/kit';
 import { ApiError, gql } from '$lib/api';
 import type { Look } from '$lib/cosmetics/store.svelte';
 import { missingMeta, profileMeta } from '$lib/meta';
@@ -6,7 +7,12 @@ import type { PageLoad } from './$types';
 
 const PER_PAGE = 60;
 
-export const load: PageLoad = async ({ fetch, params }) => {
+export const load: PageLoad = async ({ fetch, params, url, untrack }) => {
+  // The Collection tab is gone: its old links open Cosmetics. Read without tracking, so switching
+  // tabs (?s=) never loads the page again.
+  if (untrack(() => url.searchParams.get('s')) === 'collection') {
+    redirect(308, `/users/${encodeURIComponent(params.id)}?s=cosmetics`);
+  }
   try {
     const [{ searchEmotes }, { accountProfile }, { accountCosmetics }] = await Promise.all([
       gql(SEARCH_BY_OWNER, { owner: params.id, page: 1, perPage: PER_PAGE, sort: 'TOP' }, fetch),

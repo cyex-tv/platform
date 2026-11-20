@@ -2,7 +2,8 @@
   // An account's sets as cards (7TV's emote sets view): two rows of emotes, the name, how full it
   // is, and a mark on the set a channel shows. The owner and editors see all their sets, open them
   // in the editor and get "New set" (with SETS); everyone else sees the listed ones, which open
-  // the public set page (/sets/<id>).
+  // the public set page (/sets/<id>). Built for hundreds of sets: the first SETS_STEP cards, then
+  // "Show more" with how many show of how many, and a name filter once there are more than a few.
   import EmoteThumbs from './EmoteThumbs.svelte';
   import Capacity from '$lib/components/Capacity.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -16,6 +17,7 @@
   import { loader } from '$lib/tool/loader.svelte';
   import { libraryOf, publicSetsOf } from '../data.svelte';
   import NewSetDialog from '../NewSetDialog.svelte';
+  import { byName, moreText, SETS_FILTER_FROM, SETS_STEP, shown, showing } from '../scale';
   import type { Picture } from '$lib/emote';
 
   let { accountId, mine, canCreate, name = '' }: { accountId: string; mine: boolean; canCreate: boolean; name?: string } = $props();
@@ -39,6 +41,8 @@
     };
   });
   let dlg = $state<NewSetDialog>();
+  let steps = $state(1);
+  let find = $state('');
   const kindLabel = (k: string) => (k === 'PERSONAL' ? 'Personal' : k === 'GLOBAL' ? 'Global' : 'Channel');
 </script>
 
@@ -59,8 +63,23 @@
         {/snippet}
       </State>
     {:else}
+      {@const matching = byName(lib.cards, find)}
+      {@const visible = matching.slice(0, shown(matching.length, steps, SETS_STEP))}
+      {#if lib.cards.length > SETS_FILTER_FROM}
+        <div class="filter">
+          <label class="find">
+            <span class="sr-only">Filter sets by name</span>
+            <Icon name="search" size={15} />
+            <input class="input" type="search" placeholder="Filter sets" autocomplete="off" bind:value={find} oninput={() => (steps = 1)} />
+          </label>
+          {#if find.trim()}<span class="ui-hint ui-num" aria-live="polite">{count(matching.length)} of {count(lib.cards.length)}</span>{/if}
+        </div>
+      {/if}
+      {#if !matching.length}
+        <State bare title="No set matches “{find.trim()}”." />
+      {/if}
       <ul class="cards">
-        {#each lib.cards as s (s.id)}
+        {#each visible as s (s.id)}
           {@const p = fillPercent(s.used, s.capacity)}
           {@const mark = setMark(s.visibility)}
           <li>
@@ -82,12 +101,23 @@
           </li>
         {/each}
       </ul>
+      {#if visible.length < matching.length}
+        <div class="more">
+          <span class="ui-hint ui-num">{showing(visible.length, matching.length)}</span>
+          <button class="btn btn-s" type="button" onclick={() => steps++}>{moreText(visible.length, matching.length, SETS_STEP)}</button>
+        </div>
+      {/if}
     {/if}
     <NewSetDialog bind:this={dlg} ownerId={accountId} {mine} hasPersonal={lib.hasPersonal} />
   {/snippet}
 </LoadGate>
 
 <style>
+  .filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+  .find { position: relative; display: block; width: min(280px, 100%); }
+  .find :global(svg) { position: absolute; left: 10px; top: 50%; translate: 0 -50%; color: var(--muted); pointer-events: none; }
+  .find .input { width: 100%; height: 34px; padding-left: 32px; font-size: var(--t-small); }
+  .more { display: grid; justify-items: center; gap: 10px; padding: 24px 0 8px; }
   .cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); gap: 12px; }
   .card { display: grid; gap: 8px; height: 100%; padding: 12px; color: var(--text); text-decoration: none;
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card);

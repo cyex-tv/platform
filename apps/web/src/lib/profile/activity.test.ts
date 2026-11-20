@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { filterOf, relative, toItem } from './activity';
-import { profileRail, railKeyForPath, stripExtra, stripTabs, sectionFrom, sectionHref, sectionsFor, NOBODY, type Relation } from './rows';
+import { profileRail, railKeyForPath, stripExtra, stripTabs, sectionFrom, sectionHref, sectionsFor, NOBODY, RAIL_SECTIONS, type Relation } from './rows';
 
 const now = Date.UTC(2026, 10, 17, 12, 0, 0);
 const ago = (s: number) => new Date(now - s * 1000).toISOString();
@@ -51,74 +51,75 @@ describe('editor lines and the filter', () => {
 });
 
 describe('profile rows', () => {
-  it('gives the public the uploads, the listed sets and the activity', () => {
-    expect(sectionsFor(NOBODY, false)).toEqual(['uploads', 'sets']);
-    expect(sectionsFor(NOBODY, true)).toEqual(['uploads', 'sets', 'activity']);
+  it('gives the public the uploads, the listed sets, the cosmetics and the activity', () => {
+    expect(sectionsFor(NOBODY, false)).toEqual(['uploads', 'sets', 'cosmetics']);
+    expect(sectionsFor(NOBODY, true)).toEqual(['uploads', 'sets', 'cosmetics', 'activity']);
   });
-  it('gives the owner everything, activity only when the API has it', () => {
-    expect(sectionsFor(mine, false)).toEqual(['overview', 'active', 'uploads', 'sets', 'favourites', 'cosmetics', 'collection']);
+  it('has no Collection any more, for anyone', () => {
+    for (const r of [NOBODY, editor, profiler, mine]) expect(sectionsFor(r, true)).not.toContain('collection');
+    expect(profileRail('a1', 'uploads', true).flatMap((g) => g.items).some((r) => r.label === 'Collection')).toBe(false);
+  });
+  it('lets the owner open every section, activity only when the API has it', () => {
+    expect(sectionsFor(mine, false)).toEqual(['overview', 'active', 'uploads', 'sets', 'favourites', 'cosmetics']);
     expect(sectionsFor(mine, true)).toContain('activity');
   });
-  it('gives the owner alone Favourites (private)', () => {
-    expect(sectionsFor(NOBODY, true, true)).not.toContain('favourites');
-    expect(sectionsFor(editor, true)).not.toContain('favourites');
-    expect(sectionsFor(profiler, true)).not.toContain('favourites');
-    expect(sectionHref('a1', 'favourites')).toBe('/users/a1?s=favourites');
+  it('gives the owner alone Favourites and Overview (private, never in the rail)', () => {
+    for (const r of [NOBODY, editor, profiler]) {
+      expect(sectionsFor(r, true)).not.toContain('favourites');
+      expect(sectionsFor(r, true)).not.toContain('overview');
+    }
+    expect(sectionHref('a1', 'overview')).toBe('/users/a1?s=overview');
     expect(railKeyForPath('/me/favourites')).toBe('favourites');
   });
-  it('gives everyone the Collection only when the account shows it; the owner always', () => {
-    expect(sectionsFor(NOBODY, true)).not.toContain('collection');
-    expect(sectionsFor(NOBODY, true, true)).toEqual(['uploads', 'sets', 'collection', 'activity']);
-    expect(sectionsFor(editor, false, false)).not.toContain('collection');
-    const rows = profileRail('a1', NOBODY, 'collection', true, true).flatMap((g) => g.items);
-    expect(rows.find((r) => r.label === 'Collection')).toMatchObject({ href: '/users/a1?s=collection', current: true });
-  });
-  it('gives editors cosmetics only with PROFILE', () => {
-    expect(sectionsFor(editor, false)).not.toContain('cosmetics');
-    expect(sectionsFor(profiler, false)).toContain('cosmetics');
-  });
-  it('gives the owner alone the Overview, first in the rail', () => {
-    expect(sectionsFor(editor, true)).not.toContain('overview');
-    expect(sectionsFor(NOBODY, true)).not.toContain('overview');
-    expect(sectionHref('a1', 'overview')).toBe('/users/a1?s=overview');
-    const first = profileRail('a1', mine, 'overview', true)[0].items;
-    expect(first.map((r) => [r.label, r.current])).toEqual([['Overview', true]]);
-    expect(profileRail('a1', editor, null, true)[0].items.some((r) => r.label === 'Overview')).toBe(false);
+  it('the rail is the same public rows for every viewer: uploads, sets, cosmetics, activity', () => {
+    const rows = profileRail('a1', null, true).flatMap((g) => g.items);
+    expect(rows.map((r) => r.label)).toEqual(['Uploaded emotes', 'Emote sets', 'Cosmetics', 'Activity']);
+    expect(rows.map((r) => r.href)).toEqual(['/users/a1', '/users/a1?s=sets', '/users/a1?s=cosmetics', '/users/a1?s=activity']);
+    expect(RAIL_SECTIONS.every((k) => sectionsFor(NOBODY, true).includes(k))).toBe(true);
+    // Nothing that only the owner may open: no /me page, no Overview, Active emotes, Favourites or Channels.
+    expect(rows.some((r) => r.href.startsWith('/me'))).toBe(false);
+    expect(profileRail('a1', null, false).flatMap((g) => g.items).map((r) => r.label)).toEqual(['Uploaded emotes', 'Emote sets', 'Cosmetics']);
   });
   it('links the default section without a parameter', () => {
     expect(sectionHref('a1', 'uploads')).toBe('/users/a1');
     expect(sectionHref('a1', 'sets')).toBe('/users/a1?s=sets');
   });
   it('falls back to uploads for sections the viewer lacks', () => {
-    expect(sectionFrom(new URLSearchParams('s=cosmetics'), ['uploads'])).toBe('uploads');
+    expect(sectionFrom(new URLSearchParams('s=overview'), sectionsFor(NOBODY, true))).toBe('uploads');
     expect(sectionFrom(new URLSearchParams('s=sets'), sectionsFor(mine, false))).toBe('sets');
+    expect(sectionFrom(new URLSearchParams('s=cosmetics'), sectionsFor(NOBODY, false))).toBe('cosmetics');
   });
   it('puts the /me pages under their row', () => {
     expect(railKeyForPath('/me/sets/x')).toBe('sets');
     expect(railKeyForPath('/me/emotes/x')).toBe('uploads');
     expect(railKeyForPath('/me/upload')).toBe('uploads');
+    expect(railKeyForPath('/me/cosmetics')).toBe('cosmetics');
     expect(railKeyForPath('/me/account')).toBe('connections');
   });
-  it('marks one current row, with Channels for the owner only', () => {
-    const rows = profileRail('a1', mine, 'sets', false).flatMap((g) => g.items);
+  it('marks one current row; an owner-only section marks none', () => {
+    const rows = profileRail('a1', 'sets', false).flatMap((g) => g.items);
     expect(rows.filter((r) => r.current).map((r) => r.label)).toEqual(['Emote sets']);
-    expect(rows.some((r) => r.href === '/me/channels')).toBe(true);
-    expect(profileRail('a1', editor, null, false).flatMap((g) => g.items).some((r) => r.href === '/me/channels')).toBe(false);
+    expect(profileRail('a1', 'overview', true).flatMap((g) => g.items).some((r) => r.current)).toBe(false);
   });
 });
 
-describe('the phone strip on /me pages without a row', () => {
-  it('names Upload, Notifications, Account and Editors, nothing else', () => {
+describe('the phone strip on pages without a rail row', () => {
+  it('names Upload, Notifications, Account, Editors, Channels, Favourites, and the owner-only sections', () => {
     expect(stripExtra('/me/upload')?.label).toBe('Upload');
     expect(stripExtra('/me/notifications')?.label).toBe('Notifications');
     expect(stripExtra('/me/account')?.label).toBe('Account');
     expect(stripExtra('/me/editors')?.label).toBe('Editors');
+    expect(stripExtra('/me/channels')?.label).toBe('Channels');
+    expect(stripExtra('/me/favourites')?.label).toBe('Favourites');
+    expect(stripExtra('/users/a1', 'overview')).toMatchObject({ label: 'Overview', href: '/users/a1?s=overview', current: true });
+    expect(stripExtra('/users/a1', 'active')?.label).toBe('Active emotes');
+    expect(stripExtra('/users/a1', 'sets')).toBeNull();
     expect(stripExtra('/me/sets')).toBeNull();
     expect(stripExtra('/me/uploads-old')).toBeNull();
     expect(stripExtra('/users/x')).toBeNull();
   });
   it('marks the extra tab and no other', () => {
-    const groups = profileRail('a', { mine: true, perms: new Set() }, 'uploads', false);
+    const groups = profileRail('a', 'uploads', false);
     expect(stripTabs(groups, stripExtra('/me/upload')).filter((t) => t.current).map((t) => t.label)).toEqual(['Upload']);
     expect(stripTabs(groups, null).filter((t) => t.current).map((t) => t.label)).toEqual(['Uploaded emotes']);
   });

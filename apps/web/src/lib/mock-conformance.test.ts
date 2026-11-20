@@ -273,8 +273,6 @@ const OVERRIDES: Record<string, (c: Ctx) => Record<string, unknown>> = {
   UpdateAnnouncement: (c) => ({ id: c.announcementId, input: { kind: 'INFO', text: 'Conformance announcement 2' } }),
   EndAnnouncement: (c) => ({ id: c.announcementId }),
   SetNotificationPrefs: () => ({ prefs: [{ kind: 'cosmetic.granted', notify: true, toast: false }] }),
-  AccountCollection: (c) => ({ accountId: c.otherAccount }),
-  SetCollectionPublic: () => ({ public: true }),
   QuickSearch: () => ({ query: 'cat' }),
   StaffNotes: (c) => ({ accountId: c.otherAccount }),
   AddStaffNote: (c) => ({ accountId: c.otherAccount, body: 'A mock note' }),

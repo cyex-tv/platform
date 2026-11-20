@@ -131,21 +131,10 @@ describe('exact and select', () => {
   });
 });
 
-describe('browse params: the Users tab', () => {
-  it('is emotes unless the address says users', () => {
-    expect(u('').tab).toBe('emotes');
-    expect(u('tab=zzz').tab).toBe('emotes');
-    expect(u('tab=users').tab).toBe('users');
-  });
-  it('keeps only the name and pages in the address', () => {
-    const b = u('tab=users&q=fox&kind=animated&nsfw=1&sort=new&tag=cat&n=2');
-    expect(toSearch(b)).toBe('?tab=users&q=fox&n=2');
-    expect(toSearch(u('tab=users'))).toBe('?tab=users');
-  });
-  it('switching tab keeps the name and starts at the first page', () => {
-    const users = change(u('q=fox&n=3'), { tab: 'users' });
-    expect(users).toMatchObject({ tab: 'users', q: 'fox', pages: 1, select: false });
-    const back = change(users, { tab: 'emotes' });
-    expect(toSearch(back)).toBe('?q=fox');
+describe('browse params: emotes only (people are found from the header search)', () => {
+  it('has no tab: an old ?tab=users address reads as the emote search', () => {
+    expect('tab' in u('tab=users')).toBe(false);
+    expect(toSearch(u('tab=users&q=fox&n=2'))).toBe('?q=fox&n=2');
+    expect(toSearch(u('tab=users'))).toBe('');
   });
 });

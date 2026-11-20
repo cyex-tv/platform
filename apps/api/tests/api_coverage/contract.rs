@@ -997,20 +997,12 @@ async fn every_site_operation_runs_against_the_real_api() {
     c.op(os, "EndAnnouncement", json!({ "id": announcement }))
         .await;
 
-    // Notification preferences and the collection.
+    // Notification preferences.
     c.op(fs, "NotificationPrefs", json!({})).await;
     c.op(
         fs,
         "SetNotificationPrefs",
         json!({ "prefs": [{ "kind": "emote.approved", "notify": true, "toast": false }] }),
-    )
-    .await;
-    c.op(fs, "SetCollectionPublic", json!({ "public": true }))
-        .await;
-    c.op(
-        As::Nobody,
-        "AccountCollection",
-        json!({ "accountId": f.tid() }),
     )
     .await;
 
