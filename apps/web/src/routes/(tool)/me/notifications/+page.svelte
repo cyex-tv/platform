@@ -1,16 +1,13 @@
 <script lang="ts">
   // Every notification (the API keeps the latest 100), newest first, in pages of 20 here, with the
   // same rows as the bell. Mark all read in the header; a row marks itself read when opened.
-  import { onMount, setContext } from 'svelte';
+  import { onMount } from 'svelte';
   import { inbox, loadInbox, markRead, type Note } from '$lib/account/inbox.svelte';
   import NotificationRow from '$lib/account/NotificationRow.svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
   import Problem from '$lib/components/Problem.svelte';
   import State from '$lib/components/State.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
-
-  // Your profile's name above is the page's h1; this title is a section heading like the profile tabs'.
-  setContext('heading-level', 2);
 
   const PAGE = 20;
   let shown = $state(PAGE);

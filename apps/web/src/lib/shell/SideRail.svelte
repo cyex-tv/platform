@@ -42,8 +42,10 @@
     tabs?: RailItem[];
     /** Wide windows: the rail runs the full height of the left side (the window below the header), its foot at the bottom. */
     fill?: boolean;
+    /** The rows aren't known yet: a narrow window keeps the strip's place (blank) so nothing moves when they arrive. */
+    wait?: boolean;
   };
-  let { label, groups = [], head, children, foot, collapse = 'tabs', sheetLabel = 'Menu', bar, sheetCount = 0, tabs, fill = false }: Props = $props();
+  let { label, groups = [], head, children, foot, collapse = 'tabs', sheetLabel = 'Menu', bar, sheetCount = 0, tabs, fill = false, wait = false }: Props = $props();
 
   // Collapsible groups the reader closed, by their label. A group holding the current row stays open.
   let closed = $state<Record<string, boolean>>({});
@@ -208,6 +210,8 @@
       </a>
     {/each}
   </nav>
+  {:else if wait}
+  <div class="strip hold" aria-hidden="true"></div>
   {/if}
 {:else}
   <div class="sheet-bar" class:with-bar={!!bar}>
@@ -275,6 +279,7 @@
     --fs: 0px; --fe: 0px;
     -webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--fs), #000 calc(100% - var(--fe)), transparent);
     mask-image: linear-gradient(90deg, transparent, #000 var(--fs), #000 calc(100% - var(--fe)), transparent); }
+  .strip.hold { min-height: 57px; }
   .strip.fade-start { --fs: 28px; }
   .strip.fade-end { --fe: 28px; }
   .strip::-webkit-scrollbar { display: none; }
