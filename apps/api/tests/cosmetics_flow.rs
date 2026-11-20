@@ -239,7 +239,11 @@ impl World {
             request = request.header("if-none-match", tag);
         }
         if let Some(user) = user {
-            request = request.header("authorization", format!("Bearer {}", user.token));
+            // A site session (unscoped app tokens are retired, ADR 0021).
+            request = request.header(
+                "cookie",
+                format!("{}={}", cyex_tv_auth::cookies::SESSION, user.token),
+            );
         }
         let response = self
             .app
