@@ -12,7 +12,7 @@ use cyex_tv_api::state::AppState;
 use cyex_tv_auth::{Auth, AuthConfig};
 use cyex_tv_db::accounts::{self, Profile};
 use cyex_tv_db::emotes::{self, EmotePatch, NewEmote};
-use cyex_tv_db::{channels, ids, search, sets};
+use cyex_tv_db::{channel_counts, channels, ids, search, sets};
 use cyex_tv_shared::model::{EmoteState, Platform, SetKind};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -159,6 +159,8 @@ async fn seed(db: &TestDb) -> Made {
             .unwrap();
     }
     assert!(search::refresh_popularity(&mut c).await.unwrap() >= 2);
+    // The worker's minutely round: the stored channel counts.
+    assert!(channel_counts::refresh_queued(&mut c).await.unwrap() >= 2);
     Made { owner, other }
 }
 
@@ -430,6 +432,8 @@ async fn emote_channels_lists_public_channels_and_clamps_the_limit() {
     accounts::set_blocked(&mut c, made.other, true)
         .await
         .unwrap();
+    // The stored count follows on the worker's next round.
+    channel_counts::refresh_queued(&mut c).await.unwrap();
     drop(c);
     let data = gql(&app, &q(&format!(r#"id: "{pogu}""#))).await;
     assert_eq!(logins(&data), ["user1"]);
