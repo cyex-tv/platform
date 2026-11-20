@@ -438,7 +438,7 @@ async fn unscoped_app_sessions_are_retired() {
     .unwrap();
     let migration = cyex_tv_db::MIGRATOR
         .iter()
-        .find(|m| m.version == 20_261_210_002_001)
+        .find(|m| m.version == 20_261_210_005_001)
         .expect("the retire migration");
     c.execute(&*migration.sql).await.unwrap();
 

@@ -46,7 +46,7 @@ ADR 0009 kept `app` sessions (Bearer) in the model but left how an app gets one 
 
 ## Amendment: unscoped app sessions retired (2026/11/20)
 The owner decided on 2026/11/20 to retire the `app` sessions made before this flow: they had no client and no scopes, so their Bearer token carried the account's full rights (staff grants included).
-- Migration `20261210002001_retire_unscoped_app_sessions.sql` signs every `app` session without an `app_client_id` out (their refresh tokens go by CASCADE) and adds `CHECK (kind <> 'app' OR app_client_id IS NOT NULL)`, so none can be made again. `sessions::create` makes site sessions; an app session comes only from `/v1/auth/app/token`.
+- Migration `20261210005001_retire_unscoped_app_sessions.sql` signs every `app` session without an `app_client_id` out (their refresh tokens go by CASCADE) and adds `CHECK (kind <> 'app' OR app_client_id IS NOT NULL)`, so none can be made again. `sessions::create` makes site sessions; an app session comes only from `/v1/auth/app/token`.
 - `Auth::caller` answers signed out for a Bearer token whose session names no client, as a second line behind the CHECK.
 - The website's cookie session is unaffected. The only Bearer callers left are app sign-ins, with their scopes.
 - Tests that used an unscoped app session as a convenient full-rights token now use a site session (cookie plus the site's `Origin`).
