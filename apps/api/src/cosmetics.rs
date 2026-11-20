@@ -827,7 +827,40 @@ pub async fn upload_image(
     )
     .await
     .map_err(db_error)?;
-    let view = image_view(&image, &state.cdn_url);
+    let mut view = image_view(&image, &state.cdn_url);
+    // Bytes we know whose original is gone from storage (it moved, or lost it): the record still
+    // says made, so nothing would happen. Store the original again, forget the files and make
+    // them again.
+    if !created {
+        let gone = |err| {
+            tracing::error!(error = %err, "checking a cosmetic picture in storage failed");
+            ApiError::unavailable("Uploads aren't available right now.")
+        };
+        let lost_original = !store.exists(&key).await.map_err(gone)?;
+        if lost_original {
+            store
+                .put(
+                    &key,
+                    file.clone(),
+                    Put {
+                        content_type: probe.format.mime(),
+                        cache_control: None,
+                    },
+                )
+                .await
+                .map_err(|err| {
+                    tracing::error!(error = %err, "storing a cosmetic original again failed");
+                    ApiError::unavailable("Uploads aren't available right now.")
+                })?;
+        }
+        if lost_original {
+            db::set_image_variants(&mut tx, image.id, &json!([]))
+                .await
+                .map_err(db_error)?;
+            view.files.clear();
+            view.ready = false;
+        }
+    }
     if created {
         store
             .put(
