@@ -21,6 +21,7 @@ pub mod jobs;
 pub mod notifications;
 pub mod oauth_states;
 pub mod outbox;
+pub mod personal;
 pub mod prefs;
 pub mod privacy;
 pub mod reads;

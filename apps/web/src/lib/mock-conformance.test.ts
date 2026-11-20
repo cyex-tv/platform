@@ -291,6 +291,13 @@ const OVERRIDES: Record<string, (c: Ctx) => Record<string, unknown>> = {
   ReviewQueue: () => ({ page: 1, perPage: 5 }),
   ReportQueue: () => ({ page: 1, perPage: 5 }),
   MyOrders: () => ({ page: 1, perPage: 5 }),
+  HideEmote: (c) => ({ id: c.emoteId }),
+  UnhideEmote: (c) => ({ id: c.emoteId }),
+  FavouriteEmote: (c) => ({ id: c.emoteId }),
+  UnfavouriteEmote: (c) => ({ id: c.emoteId }),
+  HideCreator: (c) => ({ accountId: c.otherAccount }),
+  UnhideCreator: (c) => ({ accountId: c.otherAccount }),
+  MyFavourites: () => ({ page: 1, perPage: 5 }),
 };
 const PAINT_INPUT = (name: string) => ({
   name,

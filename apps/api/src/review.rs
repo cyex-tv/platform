@@ -156,6 +156,7 @@ pub async fn set_reasons(
     if !holds(&mut tx, caller, permissions::REVIEW_SETTINGS).await? {
         return Err(forbidden("This needs review.settings."));
     }
+    review::lock(&mut tx).await.map_err(db_error)?;
     let before = review::reasons(&mut tx).await.map_err(db_error)?;
     if before != next {
         review::replace_reasons(&mut tx, &next, caller.account_id)
@@ -229,6 +230,12 @@ pub async fn accounts_by_login(
             "This needs cosmetics.grant, roles.assign, roles.manage or users.view.",
         ));
     }
+    // A list of logins is a batch of account lookups: it takes from the account search limit.
+    crate::errors::limited(
+        &state.limits.account_search,
+        &format!("a:{}", ids::to_text(caller.account_id)),
+        "That's a lot of login checks. Try again in a minute.",
+    )?;
     let mut found: Vec<(String, Result<Uuid, &'static str>)> = Vec::with_capacity(wanted.len());
     for login in wanted {
         let Some((platform, name)) = parse_login(&login) else {

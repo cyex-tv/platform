@@ -174,6 +174,15 @@ type Documents = {
     "\n  mutation SetNotificationPrefs($prefs: [NotificationPrefInput!]!) {\n    setNotificationPrefs(prefs: $prefs) {\n      kind\n      notify\n      toast\n      required\n    }\n  }\n": typeof types.SetNotificationPrefsDocument,
     "\n  query AccountCollection($accountId: String!) {\n    accountCollection(accountId: $accountId) {\n      accountId\n      public\n      items {\n        kind\n        cosmeticId\n        name\n        ownedSince\n        source\n      }\n    }\n  }\n": typeof types.AccountCollectionDocument,
     "\n  mutation SetCollectionPublic($public: Boolean!) {\n    setCollectionPublic(public: $public) {\n      accountId\n      public\n      items {\n        kind\n        cosmeticId\n        name\n        ownedSince\n        source\n      }\n    }\n  }\n": typeof types.SetCollectionPublicDocument,
+    "\n  query PersonalLists {\n    hiddenEmotes {\n      emoteId\n    }\n    hiddenCreators {\n      accountId\n    }\n    favouriteEmoteIds\n  }\n": typeof types.PersonalListsDocument,
+    "\n  query HiddenLists {\n    hiddenEmotes {\n      emoteId\n      hiddenAt\n      emote {\n        ...EmoteFields\n      }\n    }\n    hiddenCreators {\n      accountId\n      hiddenAt\n      account {\n        id\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.HiddenListsDocument,
+    "\n  query MyFavourites($query: String, $page: Int, $perPage: Int) {\n    myFavourites(query: $query, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.MyFavouritesDocument,
+    "\n  mutation HideEmote($id: String!) {\n    hideEmote(id: $id)\n  }\n": typeof types.HideEmoteDocument,
+    "\n  mutation UnhideEmote($id: String!) {\n    unhideEmote(id: $id)\n  }\n": typeof types.UnhideEmoteDocument,
+    "\n  mutation HideCreator($accountId: String!) {\n    hideCreator(accountId: $accountId)\n  }\n": typeof types.HideCreatorDocument,
+    "\n  mutation UnhideCreator($accountId: String!) {\n    unhideCreator(accountId: $accountId)\n  }\n": typeof types.UnhideCreatorDocument,
+    "\n  mutation FavouriteEmote($id: String!) {\n    favouriteEmote(id: $id)\n  }\n": typeof types.FavouriteEmoteDocument,
+    "\n  mutation UnfavouriteEmote($id: String!) {\n    unfavouriteEmote(id: $id)\n  }\n": typeof types.UnfavouriteEmoteDocument,
 };
 const documents: Documents = {
     "\n  fragment StudioPaintFields on Paint {\n    id\n    name\n    kind\n    angle\n    repeat\n    shape\n    color\n    stops {\n      at\n      color\n    }\n    shadows {\n      x\n      y\n      radius\n      color\n    }\n    image {\n      id\n      host\n      ready\n      width\n      height\n      animated\n      files {\n        name\n        format\n        scale\n        width\n        height\n        isStatic\n      }\n    }\n    updatedAt\n  }\n": types.StudioPaintFieldsFragmentDoc,
@@ -335,6 +344,15 @@ const documents: Documents = {
     "\n  mutation SetNotificationPrefs($prefs: [NotificationPrefInput!]!) {\n    setNotificationPrefs(prefs: $prefs) {\n      kind\n      notify\n      toast\n      required\n    }\n  }\n": types.SetNotificationPrefsDocument,
     "\n  query AccountCollection($accountId: String!) {\n    accountCollection(accountId: $accountId) {\n      accountId\n      public\n      items {\n        kind\n        cosmeticId\n        name\n        ownedSince\n        source\n      }\n    }\n  }\n": types.AccountCollectionDocument,
     "\n  mutation SetCollectionPublic($public: Boolean!) {\n    setCollectionPublic(public: $public) {\n      accountId\n      public\n      items {\n        kind\n        cosmeticId\n        name\n        ownedSince\n        source\n      }\n    }\n  }\n": types.SetCollectionPublicDocument,
+    "\n  query PersonalLists {\n    hiddenEmotes {\n      emoteId\n    }\n    hiddenCreators {\n      accountId\n    }\n    favouriteEmoteIds\n  }\n": types.PersonalListsDocument,
+    "\n  query HiddenLists {\n    hiddenEmotes {\n      emoteId\n      hiddenAt\n      emote {\n        ...EmoteFields\n      }\n    }\n    hiddenCreators {\n      accountId\n      hiddenAt\n      account {\n        id\n        displayName\n        avatar\n      }\n    }\n  }\n": types.HiddenListsDocument,
+    "\n  query MyFavourites($query: String, $page: Int, $perPage: Int) {\n    myFavourites(query: $query, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.MyFavouritesDocument,
+    "\n  mutation HideEmote($id: String!) {\n    hideEmote(id: $id)\n  }\n": types.HideEmoteDocument,
+    "\n  mutation UnhideEmote($id: String!) {\n    unhideEmote(id: $id)\n  }\n": types.UnhideEmoteDocument,
+    "\n  mutation HideCreator($accountId: String!) {\n    hideCreator(accountId: $accountId)\n  }\n": types.HideCreatorDocument,
+    "\n  mutation UnhideCreator($accountId: String!) {\n    unhideCreator(accountId: $accountId)\n  }\n": types.UnhideCreatorDocument,
+    "\n  mutation FavouriteEmote($id: String!) {\n    favouriteEmote(id: $id)\n  }\n": types.FavouriteEmoteDocument,
+    "\n  mutation UnfavouriteEmote($id: String!) {\n    unfavouriteEmote(id: $id)\n  }\n": types.UnfavouriteEmoteDocument,
 };
 
 /**
@@ -973,6 +991,42 @@ export function graphql(source: "\n  query AccountCollection($accountId: String!
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation SetCollectionPublic($public: Boolean!) {\n    setCollectionPublic(public: $public) {\n      accountId\n      public\n      items {\n        kind\n        cosmeticId\n        name\n        ownedSince\n        source\n      }\n    }\n  }\n"): typeof import('./graphql').SetCollectionPublicDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query PersonalLists {\n    hiddenEmotes {\n      emoteId\n    }\n    hiddenCreators {\n      accountId\n    }\n    favouriteEmoteIds\n  }\n"): typeof import('./graphql').PersonalListsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query HiddenLists {\n    hiddenEmotes {\n      emoteId\n      hiddenAt\n      emote {\n        ...EmoteFields\n      }\n    }\n    hiddenCreators {\n      accountId\n      hiddenAt\n      account {\n        id\n        displayName\n        avatar\n      }\n    }\n  }\n"): typeof import('./graphql').HiddenListsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query MyFavourites($query: String, $page: Int, $perPage: Int) {\n    myFavourites(query: $query, page: $page, perPage: $perPage) {\n      total\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n"): typeof import('./graphql').MyFavouritesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation HideEmote($id: String!) {\n    hideEmote(id: $id)\n  }\n"): typeof import('./graphql').HideEmoteDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UnhideEmote($id: String!) {\n    unhideEmote(id: $id)\n  }\n"): typeof import('./graphql').UnhideEmoteDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation HideCreator($accountId: String!) {\n    hideCreator(accountId: $accountId)\n  }\n"): typeof import('./graphql').HideCreatorDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UnhideCreator($accountId: String!) {\n    unhideCreator(accountId: $accountId)\n  }\n"): typeof import('./graphql').UnhideCreatorDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation FavouriteEmote($id: String!) {\n    favouriteEmote(id: $id)\n  }\n"): typeof import('./graphql').FavouriteEmoteDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UnfavouriteEmote($id: String!) {\n    unfavouriteEmote(id: $id)\n  }\n"): typeof import('./graphql').UnfavouriteEmoteDocument;
 
 
 export function graphql(source: string) {

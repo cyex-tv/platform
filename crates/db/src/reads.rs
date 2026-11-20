@@ -572,22 +572,22 @@ pub async fn duplicates(
     .await?)
 }
 
-/// Public emotes made from the file with this sha256: approved, neither unlisted nor private, not
-/// deleted, and not of an account being deleted. Oldest first.
+/// Public emotes made from the file with this sha256: listed by the rule every emote search
+/// shares ([`crate::search::LISTED_EMOTE`]), so the uploader is never told about an emote search
+/// wouldn't show. Oldest first.
 pub async fn public_by_sha256(
     conn: &mut PgConnection,
     sha256: &[u8],
     limit: i64,
 ) -> DbResult<Vec<Uuid>> {
-    Ok(sqlx::query_scalar(
+    Ok(sqlx::query_scalar(&format!(
         "SELECT e.id FROM files f
          JOIN emotes e ON e.file_id = f.id
-         JOIN accounts a ON a.id = e.owner_account_id AND a.deleted_at IS NULL
-         WHERE f.sha256 = $1 AND e.deleted_at IS NULL AND e.state = 'approved'
-           AND NOT e.private AND NOT e.unlisted
+         WHERE f.sha256 = $1 AND e.owner_account_id IS NOT NULL AND {}
          ORDER BY e.created_at, e.id
          LIMIT $2",
-    )
+        crate::search::LISTED_EMOTE
+    ))
     .bind(sha256)
     .bind(limit)
     .fetch_all(conn)

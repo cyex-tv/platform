@@ -14,6 +14,15 @@ pub async fn reasons(conn: &mut PgConnection) -> DbResult<Vec<String>> {
     )
 }
 
+/// Holds the reasons for the rest of the caller's transaction, so two staff saving at once take
+/// turns (the second sees the first's list as its `before`) instead of colliding on the rows.
+pub async fn lock(conn: &mut PgConnection) -> DbResult<()> {
+    sqlx::query("SELECT pg_advisory_xact_lock(hashtext('review_reasons'))")
+        .execute(conn)
+        .await?;
+    Ok(())
+}
+
 /// Replaces the whole list with `reasons` (in order), in one step. The caller checks the words
 /// and the count.
 pub async fn replace_reasons(

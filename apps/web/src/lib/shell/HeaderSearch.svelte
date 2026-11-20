@@ -1,9 +1,11 @@
 <script lang="ts">
   // The header search: the field itself is the search (no popup, no dialog). Typing shows a list
   // attached under the field with the top 5 emotes (the API's name matcher: exact, prefix, word
-  // and initials prefix, substring, then near misses) and the top 3 people. Focusing the empty
-  // field lists the channels you can manage, by your role then name, and under them (signed out:
-  // alone) up to 5 recent searches from this device (recents.ts) with a row that clears them.
+  // and initials prefix, substring, then near misses) and the top 3 people. Signed in, your
+  // favourites whose name holds the text come first (marked with a heart), and emotes you hid for
+  // yourself are left out. Focusing the empty field lists the channels you can manage, by your
+  // role then name, and under them (signed out: alone) up to 5 recent searches from this device
+  // (recents.ts) with a row that clears them.
   //
   // An ARIA 1.2 combobox: the input owns a listbox, ↑ ↓ move the active row (aria-activedescendant,
   // focus stays in the field), Enter opens the active row or, with none, /search for the text,
@@ -18,7 +20,8 @@
   import { display } from '$lib/dpr.svelte';
   import { clean } from '$lib/format';
   import type { EditableChannelsQuery, QuickSearchQuery } from '$lib/gql/graphql';
-  import { EDITABLE_CHANNELS, QUICK_SEARCH } from '$lib/queries';
+  import { EDITABLE_CHANNELS, MY_FAVOURITES, QUICK_SEARCH } from '$lib/queries';
+  import { favouritesFirst, personal } from '$lib/personal/lists.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import { session } from '$lib/tool/session.svelte';
@@ -139,9 +142,14 @@
       const ctl = new AbortController();
       inflight = ctl;
       try {
-        const r = await gql(QUICK_SEARCH, { query: q }, fetchWith(ctl.signal));
+        const signal = fetchWith(ctl.signal);
+        const [r, favs] = await Promise.all([
+          gql(QUICK_SEARCH, { query: q }, signal),
+          // Favourites are a bonus: a failure there never fails the search.
+          me ? gql(MY_FAVOURITES, { query: q, perPage: 5 }, signal).catch(() => null) : null,
+        ]);
         if (ctl.signal.aborted) return;
-        emotes = r.quickSearch.emotes.slice(0, 5);
+        emotes = favouritesFirst(personal.visible((favs?.myFavourites?.items ?? []).filter((e) => !e.flags.nsfw)), personal.visible(r.quickSearch.emotes), 5);
         people = r.quickSearch.users.slice(0, 3);
         failed = false;
       } catch {
@@ -186,6 +194,8 @@
   $effect(() => {
     if (headerSearch.focusTick) input?.focus();
   });
+
+  $effect(() => personal.ensure());
 
   function onfocus() {
     focused = true;
@@ -339,7 +349,7 @@
                       <img src={pic.src} srcset={pic.srcset} sizes={pic.srcset ? `${emoteWidth(r.emote)}px` : undefined} width={emoteWidth(r.emote)} height="28" alt="" decoding="async" />
                     {/if}
                   </span>
-                  <span class="label"><bdi>{clean(r.emote.name)}</bdi></span>
+                  <span class="label"><bdi>{clean(r.emote.name)}</bdi>{#if personal.favourites.has(r.emote.id)}<span class="fav" title="Favourite"><Icon name="heart" size={12} /><span class="sr-only">, favourite</span></span>{/if}</span>
                   {#if r.emote.owner}<span class="hint"><span>by <bdi>{clean(r.emote.owner.displayName)}</bdi></span></span>{/if}
                 {/if}
               {/snippet}
@@ -459,6 +469,8 @@
   .row[aria-selected='true'] .art :global(svg) { color: var(--accent-text); }
   .row[aria-selected='true'] .hint { color: var(--text); }
   .art { flex: none; display: inline-grid; place-items: center; min-width: 32px; height: 28px; color: var(--muted); }
+  .fav { display: inline-flex; margin-left: 6px; vertical-align: -1px; color: var(--accent-text); }
+  .fav :global(svg) { fill: currentColor; }
   .emote-art img { display: block; height: 28px; width: auto; max-width: 56px; object-fit: contain; }
   .label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
   .hint { margin-left: auto; padding-left: 12px; flex: none; display: inline-flex; align-items: center; gap: 6px; max-width: 50%;

@@ -180,12 +180,12 @@
       </dl>
 
       <div class="head-actions">
-        <EmoteActions emoteId={e.id} {name} {viewer} picture={e} {editHref} addable={public_} reportable={canReport(e, session.me?.id)} />
+        <EmoteActions emoteId={e.id} {name} {viewer} picture={e} {editHref} addable={public_} reportable={canReport(e, session.me?.id)} owner={e.owner} />
       </div>
     </article>
 
     <div class="bar" use:bottomBar>
-      <EmoteActions emoteId={e.id} {name} {viewer} variant="bar" picture={e} {editHref} addable={public_} reportable={canReport(e, session.me?.id)} />
+      <EmoteActions emoteId={e.id} {name} {viewer} variant="bar" picture={e} {editHref} addable={public_} reportable={canReport(e, session.me?.id)} owner={e.owner} />
     </div>
 
     {#if tabs.length}

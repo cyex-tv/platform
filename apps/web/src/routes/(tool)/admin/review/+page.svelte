@@ -17,6 +17,7 @@
   import { pictureFor, ready, size } from '$lib/emote';
   import { display } from '$lib/dpr.svelte';
   import { onDestroy, tick, untrack } from 'svelte';
+  import { SvelteMap } from 'svelte/reactivity';
   import { clean, count, dateTime, iso } from '$lib/format';
   import type { EmoteFieldsFragment, EmoteVisibility, ReviewSort, ReviewTab } from '$lib/gql/graphql';
   import { APPROVE, REJECT, REVIEW_EMOTES, REVIEW_QUEUE, REVIEW_REASONS } from '$lib/queries';
@@ -29,7 +30,7 @@
   import PickBox from '$lib/admin/PickBox.svelte';
   import { batchSummary } from '$lib/admin/bulk';
   import { all as pickAll, EMPTY, range as pickRange, toggle as pickToggle, type Selection, type Step } from '$lib/components/browse/selection';
-  import { after, approveFailure, step } from '$lib/admin/queue';
+  import { after, approveFailure, step, withheld } from '$lib/admin/queue';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
@@ -76,7 +77,10 @@
     typing = setTimeout(() => go({ q: search.trim() || null }, true), 250);
   }
 
+  // When the last load started: an approval sent after it is still in what it brought.
+  let loadedAt = 0;
   const L = loader(async ({ fetch }) => {
+    loadedAt = Date.now();
     const filter = {
       tab: tab.toUpperCase() as ReviewTab,
       search: p.get('q') || null,
@@ -85,10 +89,16 @@
     };
     return (await gql(REVIEW_QUEUE, { page: pageNo, perPage: PER_PAGE, filter }, fetch)).reviewQueue;
   });
-  const items = $derived(L.data?.items ?? []);
-  const total = $derived(L.data?.total ?? 0);
+  // Approvals waiting out their undo time (see approve below), and the uploads in them.
+  const waiting = new SvelteMap<string, Waiting>();
+  const held = $derived([...waiting.values()].flatMap((w) => w.es));
+  // What the page shows: the loaded queue without the approvals still waiting out their undo time
+  // (the server has them pending until they are sent, so every load brings them back).
+  const view = $derived(withheld(L.data, held, tab.toUpperCase()));
+  const items = $derived(view.items);
+  const total = $derived(view.total);
   const pages = $derived(Math.max(1, Math.ceil(total / PER_PAGE)));
-  const counts = $derived(L.data?.counts);
+  const counts = $derived(L.data ? view.counts : undefined);
 
   // Its keys (onkeydown below and ReviewDetail's), in the shortcut sheet.
   $effect(() => {
@@ -122,9 +132,8 @@
   }
   // A new page, tab or search, or a card gone: what isn't shown any more drops out.
   $effect(() => {
-    const list = L.data?.items;
-    if (!list) return;
-    const shown = new Set(list.map((e) => e.id));
+    if (!L.data) return;
+    const shown = new Set(items.map((e) => e.id));
     untrack(() => {
       if (resolved && sel.ids.length) sel = EMPTY;
       else if (sel.ids.some((id) => !shown.has(id))) sel = { ids: sel.ids.filter((id) => shown.has(id)), anchor: sel.anchor && shown.has(sel.anchor) ? sel.anchor : null };
@@ -141,8 +150,8 @@
 
   $effect(() => {
     // A new page: put focus state on its first card, or open the one the dialog walked to.
-    const list = L.data?.items;
-    if (!list) return;
+    if (!L.data) return;
+    const list = items;
     if (openAfterLoad && list.length) {
       const e = openAfterLoad === 'first' ? list[0] : list[list.length - 1];
       openAfterLoad = null;
@@ -244,14 +253,15 @@
   function done(id: string) {
     const q = L.data;
     if (!q) return;
-    const i = q.items.findIndex((e) => e.id === id);
-    const n = after(i, q.items.length);
-    const left = q.items.filter((e) => e.id !== id);
+    // Next is reckoned on the cards shown (approvals still waiting are not).
+    const i = items.findIndex((e) => e.id === id);
+    const n = after(i, items.length);
+    const left = items.filter((e) => e.id !== id);
     const nextId = n === null ? null : left[n]?.id ?? null;
     const inDialog = shownId === id;
-    const gone = q.items[i];
+    const gone = q.items.find((e) => e.id === id);
     const counts = resolved || !gone ? q.counts : gone.visibility === 'PUBLIC' ? { ...q.counts, public: Math.max(0, q.counts.public - 1) } : { ...q.counts, limited: Math.max(0, q.counts.limited - 1) };
-    L.set({ ...q, items: left, total: Math.max(0, q.total - 1), counts });
+    L.set({ ...q, items: q.items.filter((e) => e.id !== id), total: Math.max(0, q.total - 1), counts });
     if (inDialog) {
       if (nextId) shownId = cur = nextId;
       else if (q.total - 1 > 0) {
@@ -272,83 +282,111 @@
   const UNDO_MS = 5000;
   const VERB: Record<EmoteVisibility, string> = { PUBLIC: 'approved', UNLISTED: 'approved as unlisted', PRIVATE: 'approved for its owner only' };
   // One entry per approval: one card, or a batch picked together (sent as one reviewEmotes call).
-  type Waiting = { es: EmoteFieldsFragment[]; ats: number[]; visibility: EmoteVisibility | null; timer: ReturnType<typeof setTimeout>; toast: number };
-  const waiting = new Map<string, Waiting>();
+  type Waiting = { es: EmoteFieldsFragment[]; visibility: EmoteVisibility | null; timer: ReturnType<typeof setTimeout>; toast: number };
   let batchSeq = 0;
+
+  /** Cards leaving the view (approvals waiting): focus, or the dialog, moves on to what follows. */
+  function advance(gone: string[]) {
+    const out = new Set(gone);
+    const first = items.findIndex((e) => out.has(e.id));
+    const left = items.filter((e) => !out.has(e.id));
+    const nextId = first < 0 ? cur : (left[after(first, left.length + 1) ?? -1]?.id ?? null);
+    const more = total - gone.length > 0;
+    if (shownId && out.has(shownId)) {
+      if (nextId) shownId = cur = nextId;
+      else if (more) {
+        openAfterLoad = 'first';
+        L.reload();
+      } else detail.close();
+    } else {
+      cur = nextId;
+      tick().then(() => (nextId ? focusCard(nextId) : document.querySelector<HTMLElement>('h1')?.focus()));
+    }
+  }
+  /** Sent: the cards are gone on the server too, so they leave what was loaded before the call. */
+  function forget(es: EmoteFieldsFragment[], sentAt: number) {
+    const q = L.data;
+    if (!q) return;
+    if (loadedAt >= sentAt) {
+      // Loaded while the call was out: it may or may not hold them. Ask again.
+      L.reload();
+      return;
+    }
+    const out = new Set(es.map((e) => e.id));
+    const pub = es.filter((e) => e.visibility === 'PUBLIC').length;
+    const inTab = tab === 'public' ? pub : tab === 'limited' ? es.length - pub : es.length;
+    L.set({
+      ...q,
+      items: q.items.filter((e) => !out.has(e.id)),
+      total: Math.max(0, q.total - inTab),
+      counts: resolved ? q.counts : { public: Math.max(0, q.counts.public - pub), limited: Math.max(0, q.counts.limited - (es.length - pub)) },
+    });
+  }
 
   function approve(e: EmoteFieldsFragment, visibility?: EmoteVisibility) {
     if (waiting.has(e.id)) return;
     const v = visibility ?? null;
-    const at = Math.max(0, items.findIndex((x) => x.id === e.id));
-    done(e.id);
+    advance([e.id]);
     const toast = notify(`${iso(e.name)} ${VERB[v ?? 'PUBLIC']}.`, false, { ms: UNDO_MS, action: { label: 'Undo', run: () => undo(e.id) } });
-    waiting.set(e.id, { es: [e], ats: [at], visibility: v, toast, timer: setTimeout(() => void send(e.id), UNDO_MS) });
+    waiting.set(e.id, { es: [e], visibility: v, toast, timer: setTimeout(() => void send(e.id), UNDO_MS) });
   }
   /** The picked cards, approved together: they leave at once, with one Undo for all of them. */
   function approveMany(visibility?: EmoteVisibility) {
     const list = items.filter((e) => picked.has(e.id) && ready(e));
     if (!list.length) return;
     const v = visibility ?? null;
-    const ats = list.map((e) => items.findIndex((x) => x.id === e.id));
     const key = `batch-${++batchSeq}`;
     sel = EMPTY;
-    doneMany(list.map((e) => e.id));
+    advance(list.map((e) => e.id));
     const n = list.length;
     const toast = notify(`${count(n)} ${n === 1 ? 'upload' : 'uploads'} ${VERB[v ?? 'PUBLIC']}.`, false, { ms: UNDO_MS, action: { label: 'Undo', run: () => undo(key) } });
-    waiting.set(key, { es: list, ats, visibility: v, toast, timer: setTimeout(() => void send(key), UNDO_MS) });
+    waiting.set(key, { es: list, visibility: v, toast, timer: setTimeout(() => void send(key), UNDO_MS) });
   }
   const keepalive: typeof fetch = (input, init) => fetch(input, { ...init, keepalive: true });
   async function send(key: string, leaving = false) {
     const w = waiting.get(key);
     if (!w) return;
     clearTimeout(w.timer);
-    waiting.delete(key);
     const how = leaving ? keepalive : fetch;
+    const sentAt = Date.now();
     try {
       if (w.es.length === 1) await gql(APPROVE, { id: w.es[0].id, visibility: w.visibility }, how);
       else {
         const out = (await gql(REVIEW_EMOTES, { ids: w.es.map((e) => e.id), verdict: 'APPROVE', visibility: w.visibility }, how)).reviewEmotes;
         if (out.failed.length && !leaving) {
           notify(batchSummary(out, VERB[w.visibility ?? 'PUBLIC']), true);
+          waiting.delete(key);
           L.reload();
+          return;
         }
       }
+      // Out of the waiting list and out of what was loaded, in one step, so nothing flickers back.
+      forget(w.es, sentAt);
+      waiting.delete(key);
     } catch (err) {
+      waiting.delete(key); // back on the page from what it already holds
       if (leaving) return; // the page is going; there is nobody to tell
       if ((err as { code?: unknown } | null)?.code === 'signed_out') {
         // The session ended: the signed-out notice says so once. A reload would fail the same way and
         // blank the queue, so the cards come back from what the page already holds.
         fail(err);
-        restore(w);
       } else {
         notify(approveFailure(err, w.es.length === 1 ? iso(w.es[0].name) : `${count(w.es.length)} uploads`), true);
         L.reload(); // they are still in the queue: bring the cards back
       }
     }
   }
-  /** Puts cards back where they were, with the counts they came off. */
-  function restore(w: Pick<Waiting, 'es' | 'ats'>) {
-    w.es.forEach((e, i) => {
-      const q = L.data;
-      if (!q || q.items.some((x) => x.id === e.id)) return;
-      const list = [...q.items];
-      list.splice(Math.min(w.ats[i], list.length), 0, e);
-      const c = q.counts;
-      const counts = resolved ? c : e.visibility === 'PUBLIC' ? { ...c, public: c.public + 1 } : { ...c, limited: c.limited + 1 };
-      L.set({ ...q, items: list, total: q.total + 1, counts });
-    });
-  }
-  /** Several cards out at once (a batch): counts down, focus on what follows the first of them. */
+  /** Several cards out at once (a batch rejection): counts down, focus on what follows the first of them. */
   function doneMany(gone: string[]) {
     const q = L.data;
     if (!q) return;
     const out = new Set(gone);
-    const first = q.items.findIndex((e) => out.has(e.id));
-    const left = q.items.filter((e) => !out.has(e.id));
+    const first = items.findIndex((e) => out.has(e.id));
+    const left = items.filter((e) => !out.has(e.id));
     const leaving = q.items.filter((e) => out.has(e.id));
     const pub = leaving.filter((e) => e.visibility === 'PUBLIC').length;
     const counts = resolved ? q.counts : { public: Math.max(0, q.counts.public - pub), limited: Math.max(0, q.counts.limited - (leaving.length - pub)) };
-    L.set({ ...q, items: left, total: Math.max(0, q.total - leaving.length), counts });
+    L.set({ ...q, items: q.items.filter((e) => !out.has(e.id)), total: Math.max(0, q.total - leaving.length), counts });
     const nextId = left[Math.min(Math.max(0, first), left.length - 1)]?.id ?? null;
     cur = nextId;
     tick().then(() => (nextId ? focusCard(nextId) : document.querySelector<HTMLElement>('h1')?.focus()));
@@ -358,9 +396,8 @@
     const w = waiting.get(id);
     if (!w) return;
     clearTimeout(w.timer);
-    waiting.delete(id);
+    waiting.delete(id); // the card is still in what was loaded: it shows again where it was
     dismiss(w.toast);
-    L.reload();
   }
   const flush = (leaving = false) => [...waiting.keys()].forEach((id) => void send(id, leaving));
   onDestroy(() => flush());
@@ -472,7 +509,7 @@
 
 <LoadGate source={L} label="Loading the queue…">
 {#snippet children(queue)}
-{#if queue.items.length === 0}
+{#if items.length === 0}
   {#if p.get('q')}
     <State title="Nothing matches.">No upload in this tab has that name or uploader.</State>
   {:else if resolved}
@@ -482,7 +519,7 @@
   {/if}
 {:else}
   <ul class="queue" bind:this={grid} aria-label="Uploads" aria-describedby="queue-keys" aria-busy={L.loading}>
-    {#each queue.items as e (e.id)}
+    {#each items as e (e.id)}
       {@const d = size(e)}
       <!-- The card is the grid's one tab stop (the arrow keys move it); its buttons stay reachable with Tab. -->
       <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->

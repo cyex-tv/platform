@@ -1,5 +1,5 @@
 // Settings (opened from the account menu, like 7TV's): one rail, Account / Appearance /
-// Notifications / Editors / Billing. Editors is the existing /me/editors page, listed in this rail. The old /me/account
+// Notifications / Hidden / Editors / Billing. Editors is the existing /me/editors page, listed in this rail. The old /me/account
 // address goes to Settings → Account. Pure, so it is tested.
 import { markCurrent, type RailGroup } from '$lib/shell/rail';
 
@@ -9,6 +9,7 @@ const ROWS = [
   { href: `${SETTINGS}/account`, label: 'Account', icon: 'user' },
   { href: `${SETTINGS}/appearance`, label: 'Appearance', icon: 'sun' },
   { href: `${SETTINGS}/notifications`, label: 'Notifications', icon: 'bell' },
+  { href: `${SETTINGS}/hidden`, label: 'Hidden', icon: 'eye-off' },
   { href: '/me/editors', label: 'Editors', icon: 'circle-user' },
   { href: `${SETTINGS}/billing`, label: 'Billing', icon: 'shopping-bag' },
 ] as const;

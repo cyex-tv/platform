@@ -554,3 +554,91 @@ async fn pasted_logins_match_accounts() {
     drop(twin_twitch);
     w.db.close().await;
 }
+
+#[tokio::test]
+async fn two_saves_of_the_reasons_at_once_take_turns() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let a = w.user("701", "lead_a", &["review.settings"]).await;
+    let b = w.user("702", "lead_b", &["review.settings"]).await;
+    // Both at once, many times: without the lock the second DELETE + INSERT collides with the
+    // first's rows and answers an internal error.
+    for round in 0..5 {
+        let first = json!({ "r": [format!("A{round} one"), format!("A{round} two")] });
+        let second = json!({ "r": [format!("B{round} one")] });
+        let (ra, rb) = tokio::join!(
+            w.gql(Some(&a), SET_REASONS, first),
+            w.gql(Some(&b), SET_REASONS, second)
+        );
+        assert!(ra["errors"].is_null(), "{ra}");
+        assert!(rb["errors"].is_null(), "{rb}");
+        let now = w.gql(Some(&a), REASONS, json!({})).await;
+        let list = now["data"]["reviewReasons"].clone();
+        assert!(
+            list == ra["data"]["setReviewReasons"] || list == rb["data"]["setReviewReasons"],
+            "one of the two saves wins whole: {list}"
+        );
+    }
+    // Every save is in the audit log, each with the list it replaced.
+    assert_eq!(
+        w.count(
+            "SELECT count(*) FROM audit_log WHERE action = 'review.reasons_changed' AND $1 <> ''",
+            "x",
+        )
+        .await,
+        10
+    );
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn login_checks_take_from_the_account_search_limit() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let granter = w.user("801", "granter", &["cosmetics.grant"]).await;
+    let mut limited = false;
+    for _ in 0..80 {
+        let body = w
+            .gql(Some(&granter), LOGINS, json!({ "l": ["someone"] }))
+            .await;
+        if code(&body) == "rate_limited" {
+            limited = true;
+            break;
+        }
+        assert!(body["errors"].is_null(), "{body}");
+    }
+    assert!(limited, "80 checks in a row were never limited");
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn the_same_file_check_hides_emotes_of_accounts_being_deleted() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let alice = w.user("901", "alice", &[]).await;
+    let leaving = w.user("902", "leaving", &[]).await;
+    let file = w.file(11).await;
+    w.emote(
+        &leaving,
+        "goneSoon",
+        Some(file),
+        EmoteState::Approved,
+        false,
+    )
+    .await;
+    let mut conn = w.db.conn().await;
+    sqlx::query("UPDATE accounts SET deleted_at = now() WHERE id = $1")
+        .bind(leaving.id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    drop(conn);
+    let body = w
+        .gql(Some(&alice), SAME_FILE, json!({ "s": "0b".repeat(32) }))
+        .await;
+    assert_eq!(body["data"]["emotesWithSameFile"], json!([]), "{body}");
+    w.db.close().await;
+}

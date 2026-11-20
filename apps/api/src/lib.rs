@@ -16,6 +16,7 @@ pub mod gql;
 pub mod limits;
 pub mod moderation;
 pub mod paddle;
+pub mod personal;
 pub mod read_cache;
 pub mod review;
 pub mod routes;
