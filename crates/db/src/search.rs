@@ -25,7 +25,6 @@ macro_rules! listed_emote {
                      WHERE oa.id = e.owner_account_id AND oa.deleted_at IS NOT NULL)"
     };
 }
-use listed_emote;
 
 /// The rule every emote search shares (`search` and its count, `quick`, `trending_rank`), so
 /// they can't drift: approved, not deleted, public (not private or unlisted), and not of an
