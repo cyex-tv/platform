@@ -12,7 +12,7 @@ vi.mock('$lib/components/emote/data', () => ({
 }));
 
 const { ApiError } = await import('$lib/api');
-const { SEARCH, SEARCH_ACCOUNTS, SEARCH_BY_OWNER, ACCOUNT_PROFILE, ACCOUNT_COSMETICS, EMOTE, PUBLIC_SET, SHOP_ITEMS, COSMETICS } = await import('$lib/queries');
+const { SEARCH, SEARCH_ACCOUNTS, SEARCH_BY_OWNER, ACCOUNT_PROFILE, ACCOUNT_COSMETICS, EMOTE, PUBLIC_SET, SHOP_ITEMS } = await import('$lib/queries');
 const { PER_PAGE, USERS_PER_PAGE } = await import('$lib/components/browse/params');
 
 const fetch = vi.fn() as unknown as typeof globalThis.fetch;
@@ -201,18 +201,13 @@ describe('/shop', () => {
 });
 
 describe('/cosmetics', () => {
-  const page = async () => (await import('./cosmetics/+page')).load;
-
-  it('hands over the catalog', async () => {
-    gql.mockResolvedValue({ cosmetics: { badges: [{ id: 'B' }], paints: [{ id: 'P' }] } });
-    expect(await call(await page(), {})).toEqual({ badges: [{ id: 'B' }], paints: [{ id: 'P' }], error: null });
-    expect(gql.mock.calls[0][0]).toBe(COSMETICS);
-  });
-
-  it('words a failure', async () => {
-    gql.mockRejectedValueOnce(new ApiError('Nope.', 'server'));
-    expect((await call(await page(), {})).error).toBe('Nope.');
-    gql.mockRejectedValueOnce(new Error('x'));
-    expect((await call(await page(), {})).error).toBe('The cosmetics didn’t load.');
+  it('redirects to the shop (the gallery is gone)', async () => {
+    const { load } = await import('./cosmetics/+page');
+    try {
+      await call(load, {});
+      expect.unreachable();
+    } catch (e) {
+      expect(e).toMatchObject({ status: 308, location: '/shop' });
+    }
   });
 });

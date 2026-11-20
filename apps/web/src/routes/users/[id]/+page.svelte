@@ -20,6 +20,7 @@
   import ProfileHeader from '$lib/profile/ProfileHeader.svelte';
   import ProfileRail from '$lib/profile/ProfileRail.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import AdminLink from '$lib/profile/AdminLink.svelte';
   import Overview from '$lib/profile/sections/Overview.svelte';
   import { canSets, sectionFrom, sectionsFor, type SectionKey } from '$lib/profile/rows';
   import ActiveEmotes from '$lib/profile/sections/ActiveEmotes.svelte';
@@ -116,6 +117,7 @@
         <Uploads id={data.id} {name} first={data.items} total={data.total} />
       {/key}
     {/if}
+    <AdminLink accountId={data.id} />
   </RailLayout>
 {/if}
 

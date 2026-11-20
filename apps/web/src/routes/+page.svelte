@@ -78,8 +78,8 @@
           <h3>Badges and paints</h3>
           <p>A badge beside your name and a paint on it, seen by everyone in chat with cyex.tv. Pick yours in your account and change it whenever you like.</p>
           <div class="foot">
-            <a class="btn btn-s" href="/cosmetics">See cosmetics <span class="arrow"><Icon name="arrow-right" size={16} /></span></a>
-            <p class="fine">Or open the <a class="quiet" href="/shop">shop</a></p>
+            <a class="btn btn-s" href="/shop">Open the shop <span class="arrow"><Icon name="arrow-right" size={16} /></span></a>
+            <p class="fine">Badges and paints for sale</p>
           </div>
         </div>
       </li>
