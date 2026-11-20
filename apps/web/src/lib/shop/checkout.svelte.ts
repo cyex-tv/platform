@@ -6,6 +6,7 @@
 //   idle → starting → paying → confirming → paid
 //                        ↘ cancelled (closed without paying: open it again or dismiss)
 //                                      ↘ slow (still pending after a while: it keeps checking)
+//                                           ↘ stalled (it stopped checking after 15 minutes: Check again)
 //        ↘ failed (an error sentence, or the order was not completed)
 //
 // Polling asks `order(id)` every few seconds until the order is PAID, REFUNDED or FAILED. The order
@@ -18,7 +19,7 @@ import { notify } from '$lib/tool/notices.svelte';
 import { openPaddle, type PaddleEvent } from './paddle';
 import { safeCheckoutUrl, settled, shopMessage, type OrderStatus } from './shop';
 
-export type Phase = 'idle' | 'starting' | 'paying' | 'confirming' | 'slow' | 'cancelled' | 'paid' | 'failed';
+export type Phase = 'idle' | 'starting' | 'paying' | 'confirming' | 'slow' | 'stalled' | 'cancelled' | 'paid' | 'failed';
 export type Recipient = { platform: Platform; login: string } | null;
 /** `to`: who a gift goes to, for the sentence (their login, or their name after a resume). */
 export type Purchase = { itemId: string; itemName: string; gift: Recipient; to: string | null; /** A resumed order carries no recipient, only whether it was a gift. */ resumedGift?: boolean };
@@ -88,6 +89,8 @@ function poll(id: string, mine: number) {
     const waited = Date.now() - since;
     if (waited > GIVE_UP_MS) {
       stop();
+      // Say so instead of going quiet; a payment window still open keeps its own state.
+      if (flow.phase === 'confirming' || flow.phase === 'slow') flow.phase = 'stalled';
       return;
     }
     if (waited > SLOW_MS && flow.phase === 'confirming') flow.phase = 'slow';
@@ -188,6 +191,14 @@ export async function retry(): Promise<void> {
     flow.error = said;
     flow.phase = 'failed';
   }
+}
+
+/** Asks again after the checking stopped: the same wait as a fresh confirmation. */
+export function checkAgain() {
+  if (flow.phase !== 'stalled' || !flow.order) return;
+  since = Date.now();
+  flow.phase = 'confirming';
+  poll(flow.order.id, gen);
 }
 
 /** Opens the payment window again after it was closed. */

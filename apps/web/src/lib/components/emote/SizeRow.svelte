@@ -6,7 +6,7 @@
   import { onMount } from 'svelte';
   import { ready } from '$lib/emote';
   import { reduced, watchReduced } from '$lib/cosmetics/reduced.svelte';
-  import { scaleFiles, type PageEmote } from './emote-page';
+  import { scaleFiles, fileSize, type PageEmote } from './emote-page';
 
   let { emote: e, still = null }: { emote: PageEmote; still?: boolean | null } = $props();
 
@@ -27,7 +27,7 @@
         <span class="cell" style:--w="{f.width}px" style:aspect-ratio="{f.width} / {f.height}">
           <img src={frozen ? stillName(f.scale) : moving(f.name)} width={f.width} height={f.height} alt={f.scale === 4 ? e.name : ''} />
         </span>
-        <span class="cap"><span class="x">{f.scale}x</span><span class="px">{f.width} × {f.height}</span></span>
+        <span class="cap"><span class="x">{f.scale}x</span><span class="px">{f.width} × {f.height}</span>{#if fileSize(f)}<span class="kb">{fileSize(f)}</span>{/if}</span>
       </li>
     {/each}
   </ul>
@@ -45,6 +45,6 @@
     border-top: 1px solid var(--border-strong); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .cap::before { content: ''; position: absolute; top: -4px; left: 50%; width: 1px; height: 7px; background: var(--border-strong); }
   .x { font-size: var(--t-small); font-weight: 600; color: var(--text); }
-  .px { font-size: var(--t-fine); color: var(--muted); }
+  .px, .kb { font-size: var(--t-fine); color: var(--muted); }
   .wait { color: var(--muted); font-size: var(--t-small); text-align: center; max-width: 32ch; margin-inline: auto; padding: 32px 0; }
 </style>

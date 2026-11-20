@@ -3,8 +3,9 @@
   // attached under the field with the top 5 emotes (the API's name matcher: exact, prefix, word
   // and initials prefix, substring, then near misses) and the top 3 people. Signed in, your
   // favourites whose name holds the text come first (marked with a heart), and emotes you hid for
-  // yourself are left out. Focusing the empty
-  // field lists the channels you can manage, by your role then name; signed out, one hint line.
+  // yourself are left out. Focusing the empty field lists the channels you can manage, by your
+  // role then name, and under them (signed out: alone) up to 5 recent searches from this device
+  // (recents.ts) with a row that clears them.
   //
   // An ARIA 1.2 combobox: the input owns a listbox, ↑ ↓ move the active row (aria-activedescendant,
   // focus stays in the field), Enter opens the active row or, with none, /search for the text,
@@ -27,6 +28,7 @@
   import { ROLE_LABEL, sortChannels, type ChannelRole } from './nav';
   import { announce, emptyText, move, searchHref } from './search';
   import { headerSearch } from './search.svelte';
+  import { load as loadRecents, push as pushRecent, save as saveRecents } from './recents';
 
   type Props = { phone?: boolean; onclose?: () => void };
   let { phone = false, onclose }: Props = $props();
@@ -38,7 +40,9 @@
     | { kind: 'emote'; id: string; href: string; emote: Emote }
     | { kind: 'user'; id: string; href: string; person: Person }
     | { kind: 'channel'; id: string; href: string; item: Managed }
-    | { kind: 'all'; id: string; href: string };
+    | { kind: 'all'; id: string; href: string }
+    | { kind: 'recent'; id: string; href: string; query: string }
+    | { kind: 'clear'; id: string; href: string };
 
   const uid = $props.id();
   const listId = `${uid}-list`;
@@ -63,17 +67,28 @@
   let channelsAt = 0;
   let channelsFailed = $state(false);
 
+  // Recent searches of this device, read when the field is focused.
+  let recents = $state<string[]>([]);
+
   const me = $derived(session.me);
   const text = $derived(headerSearch.query.trim());
   const rows = $derived.by<Row[]>(() => {
     if (!text) {
-      if (!me || !channels) return [];
-      return sortChannels(channels).map((c) => ({
-        kind: 'channel' as const,
-        id: `${uid}-c-${c.channel.platform}-${c.channel.login}`,
-        href: `/channels/${c.channel.platform.toLowerCase()}/${encodeURIComponent(c.channel.login)}`,
-        item: c,
-      }));
+      const out: Row[] = [];
+      if (me && channels) {
+        for (const c of sortChannels(channels))
+          out.push({
+            kind: 'channel',
+            id: `${uid}-c-${c.channel.platform}-${c.channel.login}`,
+            href: `/channels/${c.channel.platform.toLowerCase()}/${encodeURIComponent(c.channel.login)}`,
+            item: c,
+          });
+      }
+      if (recents.length) {
+        recents.forEach((q, i) => out.push({ kind: 'recent', id: `${uid}-r-${i}`, href: searchHref(q), query: q }));
+        out.push({ kind: 'clear', id: `${uid}-clear`, href: '/search' });
+      }
+      return out;
     }
     if (shownFor !== text && !emotes.length && !people.length) return [];
     const out: Row[] = [];
@@ -85,10 +100,12 @@
   const emoteRows = $derived(rows.filter((r) => r.kind === 'emote'));
   const userRows = $derived(rows.filter((r) => r.kind === 'user'));
   const channelRows = $derived(rows.filter((r) => r.kind === 'channel'));
+  const recentRows = $derived(rows.filter((r) => r.kind === 'recent'));
+  const clearRow = $derived(rows.find((r) => r.kind === 'clear'));
   const allRow = $derived(rows.find((r) => r.kind === 'all'));
   const nothing = $derived(!!text && shownFor === text && !searching && !failed && !emotes.length && !people.length);
   /** Something to show under the field: rows, a state line or the signed-out hint. */
-  const content = $derived(!!text || !!me || session.known);
+  const content = $derived(!!text || !!me || session.known || recents.length > 0);
   const open = $derived(focused && !dismissed && content);
   const activeId = $derived(open && active >= 0 ? rows[active]?.id : undefined);
 
@@ -183,6 +200,7 @@
   function onfocus() {
     focused = true;
     dismissed = false;
+    recents = loadRecents();
     void loadChannels();
   }
 
@@ -193,9 +211,24 @@
     if (phone && !text) onclose?.();
   }
 
+  /** Remembers what was searched (only what this browser agrees to keep), newest first. */
+  function remember(q: string) {
+    const next = pushRecent(loadRecents(), q);
+    recents = saveRecents(next) ? next : [];
+  }
+
   async function go(row: Row | undefined) {
+    if (row?.kind === 'clear') {
+      recents = [];
+      saveRecents([]);
+      active = -1;
+      input?.focus();
+      return;
+    }
     const href = row ? row.href : text ? searchHref(text) : null;
     if (!href) return;
+    if (row?.kind === 'recent') remember(row.query);
+    else if (text && (!row || row.kind === 'all' || row.kind === 'emote' || row.kind === 'user')) remember(text);
     headerSearch.query = '';
     focused = false;
     input?.blur();
@@ -302,7 +335,7 @@
   </div>
 
   <div class="drop" hidden={!open}>
-    <div class="list" id={listId} role="listbox" aria-label={text ? 'Search results' : 'Your channels'}>
+    <div class="list" id={listId} role="listbox" aria-label={text ? 'Search results' : me ? 'Your channels and recent searches' : 'Recent searches'}>
       {#if text}
         {#if emoteRows.length}
           <div class="group" role="group" aria-labelledby="{uid}-ge">
@@ -376,8 +409,31 @@
             <p class="line">Channels you own or edit show up here.</p>
           {/if}
         </div>
-      {:else}
+      {:else if !recents.length}
         <p class="line">Type to search emotes by name, or people by login.</p>
+      {/if}
+      {#if !text && recentRows.length}
+        <div class="group" role="group" aria-labelledby="{uid}-gr">
+          <p class="group-name" id="{uid}-gr" role="presentation">Recent searches</p>
+          {#each recentRows as r (r.id)}
+            {#snippet recentInner()}
+              {#if r.kind === 'recent'}
+                <span class="art"><Icon name="search" /></span>
+                <span class="label"><bdi>{r.query}</bdi></span>
+              {/if}
+            {/snippet}
+            {@render option(r, recentInner)}
+          {/each}
+          {#if clearRow}
+            <div class="foot" role="presentation">
+              {#snippet clearInner()}
+                <span class="art"><Icon name="trash" /></span>
+                <span class="label">Clear recent searches</span>
+              {/snippet}
+              {@render option(clearRow, clearInner)}
+            </div>
+          {/if}
+        </div>
       {/if}
     </div>
   </div>

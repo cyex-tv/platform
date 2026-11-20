@@ -177,10 +177,19 @@
 
   // ---- picture file ----
 
+  // A file that can't be used leaves no earlier picture (or its size) standing for what was chosen.
+  function clearPicked() {
+    if (!picked) return;
+    drop(picked.url);
+    drop(picked.still);
+    picked = null;
+  }
+
   async function pickFile(file: File | undefined) {
     pickError = [];
     if (!file) return;
     if (!['image/gif', 'image/png', 'image/apng', 'image/webp'].includes(file.type)) {
+      clearPicked();
       pickError = ['Choose a GIF, PNG, APNG or WebP file.'];
       return;
     }
@@ -199,6 +208,7 @@
       pickError = checkPicture({ bytes: file.size, width: bmp.width, height: bmp.height });
       bmp.close();
     } catch {
+      clearPicked();
       pickError = ['Couldn’t read that picture. Try another file.'];
     }
   }

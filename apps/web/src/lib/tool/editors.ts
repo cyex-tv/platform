@@ -197,6 +197,16 @@ export function effective(g: { permissions: readonly EditorPermission[]; allSets
   return g.allSets === false ? perms.filter((p) => !EMOTE_PERMISSIONS.includes(p)) : perms;
 }
 
+/** `permissionPhrase` for what a grant really lets them do: a set-limited grant drops the emote permissions. */
+export function effectivePhrase(g: { permissions: readonly EditorPermission[]; allSets?: boolean }): string {
+  return permissionPhrase(effective(g));
+}
+
+/** `permissionLabels` for what a grant really lets them do. */
+export function effectiveLabels(g: { permissions: readonly EditorPermission[]; allSets?: boolean }): string {
+  return permissionLabels(effective(g));
+}
+
 /** Whether a grant holds emote permissions that its set limit switches off. */
 export function emotePermissionsIdle(g: { permissions: readonly EditorPermission[]; allSets?: boolean }): boolean {
   return g.allSets === false && g.permissions.some((p) => EMOTE_PERMISSIONS.includes(p));
