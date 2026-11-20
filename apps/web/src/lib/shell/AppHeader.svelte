@@ -28,6 +28,7 @@
   import { headerLinks } from './nav';
   import { typing } from './search';
   import { headerSearch } from './search.svelte';
+  import { whatsNew } from '$lib/changelog/seen.svelte';
 
   let { account = $bindable(false) }: { account?: boolean } = $props();
 
@@ -119,7 +120,7 @@
       <IconButton icon="search" label="Search" tip="none" onclick={openPhoneSearch} />
       {#if me}<NotificationBell phone />{/if}
       <button class="menu-btn" type="button" aria-label="Menu" aria-expanded={menu} aria-haspopup="dialog" onclick={() => (menu = true)}>
-        {#if me}<Avatar src={who?.avatar} name={clean(who?.displayName)} size={28} />{:else}<Icon name="menu" size={18} />{/if}
+        {#if me}<Avatar src={who?.avatar} name={clean(who?.displayName)} size={28} />{#if whatsNew.unseen}<span class="dot" aria-hidden="true"></span><span class="sr-only">, something new in What’s new</span>{/if}{:else}<Icon name="menu" size={18} />{/if}
       </button>
     </div>
 
@@ -177,6 +178,8 @@
   .menu-btn { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--radius-btn);
     background: none; color: var(--muted); cursor: pointer; transition: transform var(--dur-press) ease-out; }
   .menu-btn { position: relative; }
+  .menu-btn .dot { position: absolute; top: 4px; right: 4px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--bg); }
+  @media (forced-colors: active) { .menu-btn .dot { background: Highlight; } }
   .menu-btn:active { transform: scale(var(--press)); }
   @media (pointer: coarse) {
     .menu-btn { width: 44px; height: 44px; }

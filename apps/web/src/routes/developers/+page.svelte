@@ -6,6 +6,8 @@
   import { initDocs } from '$lib/docs/behaviour';
   import { defaultOpen, restGroupId } from '$lib/docs/groups';
   import RailLayout from '$lib/shell/RailLayout.svelte';
+  import { registerShortcuts } from '$lib/shell/shortcuts.svelte';
+  import { DOCS_KEYS } from '$lib/docs/keys';
   import Code from '$lib/docs/Code.svelte';
   import Fields from '$lib/docs/Fields.svelte';
   import Inline from '$lib/docs/Inline.svelte';
@@ -28,6 +30,7 @@
     if (alias) location.replace(`#${alias}`);
     return initDocs(root);
   });
+  $effect(() => registerShortcuts(DOCS_KEYS));
 
   const known = $derived(data.gql.types.map((t) => t.name));
   const restCount = $derived(data.rest.reduce((n, g) => n + g.ops.length, 0));

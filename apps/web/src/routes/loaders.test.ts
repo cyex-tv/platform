@@ -111,13 +111,14 @@ describe('/users/[id]', () => {
   it('asks for the person’s emotes, profile and look by the id in the address', async () => {
     gql.mockImplementation(async (doc: unknown) => {
       if (doc === SEARCH_BY_OWNER) return { searchEmotes: { items: [{ id: 'E1' }], total: 1 } };
-      if (doc === ACCOUNT_PROFILE) return { accountProfile: { account: { id: 'U1' } } };
+      if (doc === ACCOUNT_PROFILE) return { accountProfile: { account: { id: 'U1', displayName: 'nora' }, identities: [], activeSets: [] } };
       if (doc === ACCOUNT_COSMETICS) return { accountCosmetics: [{ accountId: 'U1', badge: 'B', paint: 'P' }, { accountId: 'U2', badge: 'x', paint: 'y' }] };
     });
     const out = await call(await page(), { params: { id: 'U1' } });
     expect(gql.mock.calls.find(([d]) => d === SEARCH_BY_OWNER)?.[1]).toMatchObject({ owner: 'U1', page: 1, sort: 'TOP' });
     expect(gql.mock.calls.find(([d]) => d === ACCOUNT_COSMETICS)?.[1]).toEqual({ accountIds: ['U1'] });
     expect(out).toMatchObject({ id: 'U1', creator: { id: 'U1' }, look: { badge: 'B', paint: 'P' }, total: 1, error: null });
+    expect(out.meta).toMatchObject({ title: 'nora', url: 'https://cyex.tv/users/U1', noindex: false });
   });
 
   it('an unknown person has no profile and an empty look', async () => {
@@ -125,7 +126,7 @@ describe('/users/[id]', () => {
       doc === SEARCH_BY_OWNER ? { searchEmotes: { items: [], total: 0 } } : doc === ACCOUNT_PROFILE ? { accountProfile: null } : { accountCosmetics: [] },
     );
     const out = await call(await page(), { params: { id: 'nobody' } });
-    expect(out).toMatchObject({ profile: null, creator: null, look: { badge: null, paint: null } });
+    expect(out).toMatchObject({ profile: null, creator: null, look: { badge: null, paint: null }, meta: { noindex: true } });
   });
 
   it('a failure becomes the page’s error, not a throw', async () => {
@@ -140,16 +141,18 @@ describe('/emotes/[id]', () => {
   const page = async () => (await import('./emotes/[id]/+page')).load;
 
   it('loads the emote and what goes beside it', async () => {
-    gql.mockResolvedValue({ emote: { id: 'E1' } });
+    const emote = { id: 'E1', name: 'pog', state: 'APPROVED', visibility: 'PUBLIC', animated: false, host: '', files: [], flags: { private: false, zeroWidth: false } };
+    gql.mockResolvedValue({ emote });
     const out = await call(await page(), { params: { id: 'E1' } });
     expect(gql.mock.calls[0][0]).toBe(EMOTE);
     expect(gql.mock.calls[0][1]).toEqual({ id: 'E1' });
-    expect(out).toEqual({ id: 'E1', emote: { id: 'E1' }, more: ['more'], channels: ['channels'], trending: ['trending'] });
+    expect(out).toMatchObject({ id: 'E1', emote, more: ['more'], channels: ['channels'], trending: ['trending'] });
+    expect(out.meta).toMatchObject({ title: 'pog', url: 'https://cyex.tv/emotes/E1', noindex: false });
   });
 
   it('no emote for the server: the page asks again in the browser', async () => {
     gql.mockResolvedValue({ emote: null });
-    expect(await call(await page(), { params: { id: 'E9' } })).toEqual({ id: 'E9', emote: null, more: [], channels: null, trending: null });
+    expect(await call(await page(), { params: { id: 'E9' } })).toMatchObject({ id: 'E9', emote: null, more: [], channels: null, trending: null, meta: { noindex: true } });
   });
 
   it('an API failure is a 503 with its message', async () => {
@@ -162,12 +165,13 @@ describe('/sets/[id]', () => {
   const page = async () => (await import('./sets/[id]/+page')).load;
 
   it('loads a public set by id; a private one comes back as nothing', async () => {
-    gql.mockResolvedValue({ set: { id: 'S1' } });
-    expect(await call(await page(), { params: { id: 'S1' } })).toEqual({ id: 'S1', set: { id: 'S1' } });
+    const set = { id: 'S1', name: 'Main', visibility: 'LISTED', capacity: 600, slotsUsed: 0, emotes: [] };
+    gql.mockResolvedValue({ set });
+    expect(await call(await page(), { params: { id: 'S1' } })).toMatchObject({ id: 'S1', set, meta: { title: 'Main', noindex: false } });
     expect(gql.mock.calls[0][0]).toBe(PUBLIC_SET);
     expect(gql.mock.calls[0][1]).toEqual({ id: 'S1' });
     gql.mockResolvedValue({ set: null });
-    expect(await call(await page(), { params: { id: 'S2' } })).toEqual({ id: 'S2', set: null });
+    expect(await call(await page(), { params: { id: 'S2' } })).toMatchObject({ id: 'S2', set: null, meta: { noindex: true } });
   });
 
   it('an API failure is a 503', async () => {

@@ -5,8 +5,10 @@
   export type CardEmote = Picture & {
     id: string;
     name: string;
-    owner?: { displayName: string } | null;
-    flags?: { zeroWidth: boolean } | null;
+    owner?: { id?: string; displayName: string } | null;
+    flags?: { zeroWidth: boolean; private?: boolean } | null;
+    /** Who can find it (EmoteVisibility); your own unlisted and private emotes get a mark. */
+    visibility?: string | null;
     /** The name it has in a set, when that differs from its own. */
     shownName?: string;
   };
@@ -15,6 +17,14 @@
   export const TILE_ART = { comfortable: 88, compact: 60 } as const;
 
   /** A status note's tint: the emote states get their colour, anything else stays neutral. */
+  /** The mark on your own emote's tile when not everyone can find it: the emote page's words (flagsOf). */
+  export function reachMark(e: CardEmote, me: string | null | undefined): { key: 'unlisted' | 'private'; label: string; tip: string } | null {
+    if (!me || !e.owner?.id || e.owner.id !== me) return null;
+    if (e.visibility === 'PRIVATE' || e.flags?.private) return { key: 'private', label: 'Private', tip: 'Only you and your editors can add it to sets' };
+    if (e.visibility === 'UNLISTED') return { key: 'unlisted', label: 'Unlisted', tip: 'Search leaves it out: only people with the link find it' };
+    return null;
+  }
+
   export function noteTone(note: string): string {
     const n = note.toLowerCase().replace(/\s+/g, '_');
     return ['pending', 'approved', 'rejected', 'taken_down'].includes(n) ? n : '';
@@ -33,6 +43,7 @@
   import { clean } from '$lib/format';
   import EmotePicture from './EmotePicture.svelte';
   import Icon from './Icon.svelte';
+  import { session } from '$lib/tool/session.svelte';
 
   type Props = {
     emote: CardEmote;
@@ -50,8 +61,11 @@
     selected?: boolean;
     /** Its place in a ranking (the Trending view), shown as "#1" in the corner. */
     rank?: number;
+    /** The browse target set's name when the emote is already in it: an "In set" mark. */
+    inSet?: string;
   };
-  let { emote: e, density = 'comfortable', creator = true, labels = true, href, eager = false, note, status, onpick, selected = false, rank }: Props = $props();
+  let { emote: e, density = 'comfortable', creator = true, labels = true, href, eager = false, note, status, onpick, selected = false, rank, inSet }: Props = $props();
+  const reach = $derived(reachMark(e, session.me?.id));
   const name = $derived(clean(e.shownName ?? e.name));
   const owner = $derived(e.owner ? clean(e.owner.displayName) : '');
   // A lazy picture that is already cached shows at once; one that loads late fades in.
@@ -87,10 +101,12 @@
   {#if onpick}
     <span class="tick" aria-hidden="true"><Icon name="check" size={14} /></span>
   {/if}
-  {#if status || note || rank}
+  {#if status || note || rank || reach || inSet}
     <span class="status">
       {#if status}{@render status()}{:else if note}<span class="ui-chip {noteTone(note)}">{note}</span>{/if}
       {#if rank}<span class="rank" class:top={rank <= 3}><span class="sr-only">Trending </span>#{rank}</span>{/if}
+      {#if reach}<span class="mark" title={reach.tip}><Icon name={reach.key === 'private' ? 'shield' : 'link'} size={12} /><span class="mk">{reach.label}</span></span>{/if}
+      {#if inSet}<span class="mark in" title="Already in {inSet}"><Icon name="check" size={12} /><span class="mk">In set</span></span>{/if}
     </span>
   {/if}
   <span class="art">
@@ -103,6 +119,8 @@
   <span class="name"><bdi title={name}>{name}</bdi></span>
   {#if creator && owner}<span class="by"><bdi>{owner}</bdi></span>{/if}
   {#if kinds.length}<span class="sr-only">, {kinds.join(', ')}</span>{/if}
+  {#if reach}<span class="sr-only">, {reach.label.toLowerCase()}</span>{/if}
+  {#if inSet}<span class="sr-only">, already in {inSet}</span>{/if}
 </a>
 
 <style>
@@ -124,6 +142,14 @@
   .rank { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border: 1px solid var(--border); border-radius: var(--radius);
     background: var(--bg); color: var(--muted); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
   .rank.top { color: var(--accent-text); border-color: var(--accent-border); }
+  /* Your own unlisted or private emote, and "In set" while browsing for a set: quiet chips on the
+     tile's ground, an icon and a word; In set's tick is the accent (it answers the target set). */
+  .mark { display: inline-flex; align-items: center; gap: 4px; min-width: 0; height: 20px; padding: 0 6px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); color: var(--muted); font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
+  .mark :global(svg) { flex: none; color: var(--dim); }
+  .mark.in :global(svg) { color: var(--accent-text); }
+  .compact .mk { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .compact .mark { padding: 0 4px; }
   .processing { font-size: var(--t-fine); color: var(--muted); }
   /* Truncated names stay centred: the bdi is a block that ends in an ellipsis. */
   .name bdi, .by bdi { display: block; overflow: hidden; text-overflow: ellipsis; }
