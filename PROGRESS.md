@@ -1205,3 +1205,9 @@ gh pr merge <n> --merge
 - Web: tile menu Favourite / Hide for me / Hide everything by <creator> (with Undo); emote page heart beside More, More → Hide for me / Hide everything by <creator> (Show again once hidden); hidden emotes drop out of browse, search, trending, the header search and Add emotes for you only (client-side filter, see the ADR); Settings → Hidden lists both with Show again; profile tab Favourites (owner only) with a name filter, `/me/favourites` goes there; favourites come first, with a heart, in the header search and the set editor's Add emotes.
 - Extension: unchanged. It has no cyex.tv sign-in, so its device-only hidden list stays as it is.
 - Dev mock answers all of it.
+- GitHub write log:
+```
+git push -u origin feat/k2-hide-favourites
+gh pr create --repo cyex-tv/platform --base main --head feat/k2-hide-favourites --title "Hide for me and favourites (personal lists)" --body-file <file>
+gh pr merge 126 --merge
+```
