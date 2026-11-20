@@ -1149,6 +1149,9 @@ gh pr create --base main --head feat/hero-shadows --title "Hero: real soft shado
 gh pr merge <n> --merge
 ```
 
+## 2026/11/20 Test gaps (test/gaps)
+- Web: vitest now has two projects, `unit` (node) and `ui` (jsdom, `*.ui.test.ts`, with @testing-library/svelte and user-event; jsdom shims in `src/lib/test/dom-setup.ts`). New tests: loader, inbox, hooks.server headers, the CSP in svelte.config.js, the public pages' load functions, docs behaviour, Popover, TagInput, Toasts, SelectBar, HeaderSearch keyboard. `npm run test:coverage` prints a coverage summary (CI uses it, no threshold). `npm run test:e2e` runs dev/e2e/cosmetics.mjs, which needs the dev mock, vite dev and a headless browser on a debug port (setup in the file's header); it is not in CI.
+- Rust: sleeps used as synchronisation in apps/api/tests are polling helpers with a deadline (`common::wait_until`, `wait_for_feeders`); `hot_reads_use_their_indexes` runs VACUUM ANALYZE and asserts that an index of the table was used.
 ## Set editor paging, Add emotes paging, transfer notification state (2026/11/20)
 - API (additive): `setEmotes(id, query, page, perPage)` returns a page of a set's emotes, oldest first, with `total`; the visibility rule of `set`; `query` filters by name in the set or own name; `perPage` 1 to 200, default 120. `Notification.transferState` shows where a transfer request stands now (pending, accepted, declined, cancelled, expired); null for other kinds. Postgres tests: `set_emotes_pages_filters_and_keeps_visibility`, `transfer_notifications_show_where_the_request_stands`.
 - Web: `/me/sets/[id]` reads 120 emotes at a time with Load more, Filter asks the API (whole set), ids and names for Add come as slim pages. Add emotes has Load more with "Showing 40 of N". A transfer-request notification whose request was answered, withdrawn or expired elsewhere shows that, not Accept and Decline.

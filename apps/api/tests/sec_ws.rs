@@ -19,6 +19,19 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 type Socket = WebSocketStream<MaybeTlsStream<TcpStream>>;
 
+/// Polls until the hub's subscription count is `n` (ten seconds at most), instead of a fixed wait.
+async fn hub_holds(hub: &Hub, n: usize) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(10);
+    while hub.stats().0 != n {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the hub holds {} subscriptions, expected {n}",
+            hub.stats().0
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
 const EVENTS: &str = "subscription($t: [String!]!) { events(topics: $t) { id } }";
 
 async fn start() -> (SocketAddr, Hub) {
@@ -198,7 +211,7 @@ async fn one_socket_holds_at_most_eight_subscriptions() {
         (done["type"].as_str(), done["id"].as_str()),
         (Some("complete"), Some("0"))
     );
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    hub_holds(&hub, MAX_SOCKET_SUBSCRIPTIONS - 1).await;
     subscribe(&mut ws, "again", EVENTS, json!({ "t": ["channel:kick:1"] })).await;
     quiet(&mut ws).await;
     assert_eq!(hub.stats().0, MAX_SOCKET_SUBSCRIPTIONS);
@@ -211,6 +224,5 @@ async fn one_socket_holds_at_most_eight_subscriptions() {
 
     // Closing the socket ends its streams.
     ws.close(None).await.unwrap();
-    tokio::time::sleep(Duration::from_millis(200)).await;
-    assert_eq!(hub.stats().0, 1);
+    hub_holds(&hub, 1).await;
 }

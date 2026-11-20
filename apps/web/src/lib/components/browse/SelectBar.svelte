@@ -11,7 +11,9 @@
   import { session } from '$lib/tool/session.svelte';
   import { addState, plan, summary } from './bulk';
   import { CAP } from './selection';
-  import { target } from './target.svelte';
+  // Imported as `addTarget`: a binding called `target` breaks Vite's SSR transform of the dev-mode
+  // `new.target` check, so the component couldn't be loaded in a test.
+  import { target as addTarget } from './target.svelte';
 
   type Props = {
     ids: readonly string[];
@@ -31,12 +33,12 @@
   // The last summary, shown until the selection changes again.
   let result = $state<{ text: string; after: string } | null>(null);
   const said = $derived(result && result.after === ids.join() ? result.text : '');
-  const set = $derived(target.current);
+  const set = $derived(addTarget.current);
   const preview = $derived(set ? plan(ids, set.held, set.capacity - set.held.size) : null);
   const addNow = $derived(addState(ids.length, preview));
 
   $effect(() => {
-    target.ensure();
+    addTarget.ensure();
   });
 
   async function add() {
@@ -50,7 +52,7 @@
     run = { done: 0, total: p.add.length };
     for (const [i, id] of p.add.entries()) {
       try {
-        await target.add(id, t);
+        await addTarget.add(id, t);
         sent.push(id);
       } catch (e) {
         const code = e instanceof ApiError ? e.code : '';
@@ -80,7 +82,7 @@
     <button class="link" type="button" onclick={onexit} disabled={!!run}>Done</button>
     {#if !session.me && session.known}
       <a class="btn btn-s btn-primary" href={signin}>Sign in to add</a>
-    {:else if session.me && target.sets && !set}
+    {:else if session.me && addTarget.sets && !set}
       <a class="btn btn-s" href="/me/sets">Make a set to add to</a>
     {:else}
       <button class="btn btn-s btn-primary add" type="button" disabled={!ids.length || !!run || !preview || preview.add.length === 0} onclick={add}>
