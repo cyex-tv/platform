@@ -12,6 +12,13 @@ Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to Git
 - [x] Tests: unit tests in `ratelimit.rs`, `limits.rs`, `admin.rs`, `upload.rs`; `apps/api/tests/role_limits_flow.rs` (Postgres in CI); vitest `role-limits.test.ts`, `role-limits.ui.test.ts`, `quota.test.ts`, `upload-quota.ui.test.ts`.
 - [x] Manual (mock, 1440 dark): Limits section on the Moderator role saves `setRoleLimits`; the upload page shows 2 of 3, and after one upload the cap message with Upload off.
 
+### GitHub write log for this PR
+
+```
+git push -u origin feat/role-limits
+gh pr create --repo cyex-tv/platform --base main --head feat/role-limits --title "Adjustable API limits per role, and at most 20 emotes waiting for review" --body-file <file>
+```
+
 ## App sign-in for cyex deck (branch `feat/app-sign-in`, ADR 0021, owner decision of 2026/11/19, D19 changed)
 
 Handoff `2026-11-19-03-deck-to-cyextv-app-sign-in` from the deck chat.
