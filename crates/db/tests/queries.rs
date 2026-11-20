@@ -1529,7 +1529,7 @@ async fn quick_search_ranks_by_tier_then_use() {
 
 /// One listed-emote rule for every search: `search` (relevance and the trending sort), `quick`
 /// and `trending_rank` all find the public emote and none of the unlisted, private, NSFW (unless
-/// asked) or pending-deletion owner's ones.
+/// asked), pending-deletion owner's or blocked owner's ones; an ended block lists them again.
 #[tokio::test]
 async fn every_search_uses_the_listed_emote_rule() {
     use cyex_tv_shared::model::{EmoteSort, TrendingWindow};
@@ -1537,6 +1537,8 @@ async fn every_search_uses_the_listed_emote_rule() {
     let mut c = db.conn().await;
     let owner = account(&mut c, "1").await;
     let leaving = account(&mut c, "2").await;
+    let blocked = account(&mut c, "3").await;
+    let expired = account(&mut c, "4").await;
     let make = |name: &'static str, patch: EmotePatch<'static>, by: Uuid| (name, patch, by);
     let cases = [
         make("vispublic", EmotePatch::default(), owner),
@@ -1565,6 +1567,8 @@ async fn every_search_uses_the_listed_emote_rule() {
             owner,
         ),
         make("visleaving", EmotePatch::default(), leaving),
+        make("visblocked", EmotePatch::default(), blocked),
+        make("visunblocked", EmotePatch::default(), expired),
     ];
     let mut by_name = Vec::new();
     for (name, patch, by) in &cases {
@@ -1584,6 +1588,16 @@ async fn every_search_uses_the_listed_emote_rule() {
     cyex_tv_db::privacy::schedule_erase(&mut c, leaving, Utc::now() + Duration::days(30))
         .await
         .unwrap();
+    // A running block (for good) hides the owner's emotes; one that has ended shows them again.
+    accounts::set_blocked(&mut c, blocked, true).await.unwrap();
+    sqlx::query(
+        "UPDATE accounts SET blocked_at = now() - interval '2 days',
+                             blocked_until = now() - interval '1 day' WHERE id = $1",
+    )
+    .bind(expired)
+    .execute(&mut *c)
+    .await
+    .unwrap();
     let names = |ids: &[Uuid]| -> Vec<&'static str> {
         let mut out: Vec<&'static str> = ids
             .iter()
@@ -1595,8 +1609,8 @@ async fn every_search_uses_the_listed_emote_rule() {
 
     for sort in [EmoteSort::Relevance, EmoteSort::Trending] {
         for (nsfw, want) in [
-            (false, vec!["vispublic"]),
-            (true, vec!["visnsfw", "vispublic"]),
+            (false, vec!["vispublic", "visunblocked"]),
+            (true, vec!["visnsfw", "vispublic", "visunblocked"]),
         ] {
             let hits = search::search(
                 &mut c,
@@ -1615,10 +1629,10 @@ async fn every_search_uses_the_listed_emote_rule() {
         }
     }
     let quick = search::quick(&mut c, "vis", 50).await.unwrap();
-    assert_eq!(names(&quick), ["vispublic"], "quick");
+    assert_eq!(names(&quick), ["vispublic", "visunblocked"], "quick");
     for (name, id) in &by_name {
         let rank = search::trending_rank(&mut c, *id, 7, 100).await.unwrap();
-        let listed = matches!(*name, "vispublic" | "visnsfw");
+        let listed = matches!(*name, "vispublic" | "visnsfw" | "visunblocked");
         assert_eq!(rank.is_some(), listed, "trending_rank {name}");
     }
     drop(c);
