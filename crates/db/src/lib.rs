@@ -9,6 +9,7 @@ pub mod announcements;
 pub mod app_auth;
 pub mod audit;
 pub mod blocklist;
+pub mod channel_counts;
 pub mod channels;
 pub mod codes;
 pub mod cosmetics;

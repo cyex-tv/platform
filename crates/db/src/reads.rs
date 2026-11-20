@@ -475,26 +475,22 @@ pub async fn summaries(
 }
 
 /// How many channels have each emote in their active set. Channels of deleted or blocked
-/// accounts don't count. Emotes in no channel are missing from the map. One query for any
-/// number of emotes.
+/// accounts don't count. Emotes in no channel are missing from the map. The stored count
+/// (`emotes.channel_count`, see [`crate::channel_counts`]): at most about a minute old, one
+/// primary-key read per emote.
 pub async fn channel_counts(
     conn: &mut PgConnection,
     emote_ids: &[Uuid],
 ) -> DbResult<HashMap<Uuid, u32>> {
-    let rows: Vec<(Uuid, i64)> = sqlx::query_as(
-        "SELECT m.emote_id, count(DISTINCT c.id)
-         FROM emote_set_members m
-         JOIN channels c ON c.active_set_id = m.set_id
-         JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL AND (a.blocked_at IS NULL OR a.blocked_until <= now())
-         WHERE m.emote_id = ANY($1)
-         GROUP BY m.emote_id",
+    let rows: Vec<(Uuid, i32)> = sqlx::query_as(
+        "SELECT id, channel_count FROM emotes WHERE id = ANY($1) AND channel_count > 0",
     )
     .bind(emote_ids)
     .fetch_all(conn)
     .await?;
     Ok(rows
         .into_iter()
-        .map(|(id, n)| (id, u32::try_from(n).unwrap_or(u32::MAX)))
+        .map(|(id, n)| (id, u32::try_from(n).unwrap_or(0)))
         .collect())
 }
 

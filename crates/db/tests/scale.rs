@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 
 use common::TestDb;
 use cyex_tv_db::reads::{self, MemberAccess};
-use cyex_tv_db::{audit, ids, outbox, search};
+use cyex_tv_db::{audit, channel_counts, ids, outbox, search};
 use cyex_tv_shared::model::{EmoteSort, TrendingWindow};
 use sqlx::PgConnection;
 use uuid::Uuid;
@@ -113,6 +113,9 @@ async fn seed(c: &mut PgConnection, s: &Scale) -> Uuid {
         "seeded {members} set members"
     );
     search::refresh_popularity(c).await.unwrap();
+    // The stored channel counts, as the worker's minutely round leaves them (the triggers queued
+    // every seeded member).
+    channel_counts::refresh_queued(c).await.unwrap();
     let top: Uuid = sqlx::query_scalar("SELECT id FROM seed_emotes WHERE n = 1")
         .fetch_one(&mut *c)
         .await
@@ -269,6 +272,29 @@ async fn hot_reads_use_their_indexes() {
                 .unwrap()
         });
         assert_eq!(rows.len(), 50 * 12);
+        let popular: Vec<Uuid> =
+            sqlx::query_scalar("SELECT id FROM seed_emotes ORDER BY n LIMIT 48")
+                .fetch_all(&mut *c)
+                .await
+                .unwrap();
+        let counts = no_seq_scan!(c, "stored channel counts", ["emote_set_members"], {
+            uses_index!(c, "stored channel counts", "emotes", ["emotes_pkey"], {
+                reads::channel_counts(c, &popular).await.unwrap()
+            })
+        });
+        assert_eq!(counts, channel_counts::live(c, &popular).await.unwrap());
+        // The minutely round over a few queued emotes reads only their members.
+        sqlx::query("INSERT INTO emote_channel_count_queue (emote_id) SELECT unnest($1::uuid[])")
+            .bind(&popular)
+            .execute(&mut *c)
+            .await
+            .unwrap();
+        no_seq_scan!(
+            c,
+            "channel count refresh",
+            ["emote_set_members", "emotes"],
+            { channel_counts::refresh_queued(c).await.unwrap() }
+        );
         no_seq_scan!(c, "emote channels", ["emote_set_members"], {
             reads::emote_channels(c, top, 24, 0).await.unwrap()
         });
@@ -518,14 +544,50 @@ async fn timings_at_full_scale() {
             format!("{phase}: one whole set (members)"),
             reads::members(c, &big).await.unwrap()
         );
-        measure!(
-            format!("{phase}: channel counts, 48 popular"),
-            reads::channel_counts(c, &popular[..48]).await.unwrap()
-        );
-        measure!(
-            format!("{phase}: channel counts, 1000 popular"),
-            reads::channel_counts(c, &popular).await.unwrap()
-        );
+        // Before: counted live from the set members (as reads did). After: the stored count.
+        if old {
+            measure!(
+                format!("{phase}: channel counts, 48 popular"),
+                channel_counts::live(c, &popular[..48]).await.unwrap()
+            );
+            measure!(
+                format!("{phase}: channel counts, 1000 popular"),
+                channel_counts::live(c, &popular).await.unwrap()
+            );
+        } else {
+            measure!(
+                format!("{phase}: channel counts, 48 popular"),
+                reads::channel_counts(c, &popular[..48]).await.unwrap()
+            );
+            measure!(
+                format!("{phase}: channel counts, 1000 popular"),
+                reads::channel_counts(c, &popular).await.unwrap()
+            );
+            // What the worker pays for them: a minutely round with the 1000 queued, and the
+            // hourly recount of every emote (once each; they write).
+            sqlx::query(
+                "INSERT INTO emote_channel_count_queue (emote_id) SELECT unnest($1::uuid[])",
+            )
+            .bind(&popular)
+            .execute(&mut *c)
+            .await
+            .unwrap();
+            let start = Instant::now();
+            channel_counts::refresh_queued(c).await.unwrap();
+            lines.push(format!(
+                "{:<44} {:>9.1} ms",
+                format!("{phase}: worker round, 1000 popular queued"),
+                start.elapsed().as_secs_f64() * 1000.0
+            ));
+            let start = Instant::now();
+            let changed = channel_counts::reconcile_all(c).await.unwrap();
+            assert_eq!(changed, 0, "the reconcile found stored counts off");
+            lines.push(format!(
+                "{:<44} {:>9.1} ms",
+                format!("{phase}: worker reconcile, all emotes"),
+                start.elapsed().as_secs_f64() * 1000.0
+            ));
+        }
         measure!(
             format!("{phase}: emote channels page"),
             reads::emote_channels(c, top, 24, 0).await.unwrap()
