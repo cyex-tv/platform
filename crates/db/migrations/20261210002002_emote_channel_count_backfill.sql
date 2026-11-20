@@ -9,8 +9,11 @@ DECLARE
     upto uuid;
 BEGIN
     LOOP
-        SELECT max(id) INTO upto FROM (
-            SELECT id FROM emotes WHERE id > last ORDER BY id LIMIT 2000) b;
+        -- The batch's last ID (uuid has no max()); NULL when no emotes are left.
+        upto := NULL;
+        SELECT b.id INTO upto FROM (
+            SELECT id FROM emotes WHERE id > last ORDER BY id LIMIT 2000) b
+        ORDER BY b.id DESC LIMIT 1;
         EXIT WHEN upto IS NULL;
         UPDATE emotes e SET channel_count = n.c
         FROM (
