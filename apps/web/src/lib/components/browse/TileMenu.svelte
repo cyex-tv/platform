@@ -2,8 +2,8 @@
   // The one cyex menu for an emote tile (right-click, the ⋯ button, the context-menu key):
   // Add to / Remove from the target set, Open in new tab, Copy emote link, Favourite, Hide for me
   // and Hide everything by the creator (signed in), and Select (starts multi-select with this
-  // emote). Placed at the pointer (or under the ⋯), kept 8px inside the
-  // window, in the top layer so nothing clips it. Arrow keys, Home and End move; Escape, a click
+  // emote). Placed at the pointer (or under the ⋯), kept 8px inside the window, in the top layer
+  // so nothing clips it. Arrow keys, Home and End move; Escape, a click
   // outside, scrolling or Tab close it, and focus goes back to the tile.
   import { tick } from 'svelte';
   import { page } from '$app/state';
