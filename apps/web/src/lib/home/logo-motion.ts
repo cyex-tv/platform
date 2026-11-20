@@ -32,3 +32,31 @@ export function pose(t: number, scroll = 0): Pose {
     lift: REST.lift + a * 0.35 * Math.sin((TAU * s) / 5.5) + e * 2.4,
   };
 }
+
+/**
+ * The lit tube striking when the scene starts: two short dips and a quick settle, once, while the
+ * still image hands over. 1 is fully lit. It never goes dark and never repeats; with reduced motion
+ * the scene doesn't run at all, and a still scene stays at 1.
+ */
+export const STRIKE: readonly (readonly [number, number])[] = [
+  [0, 1],
+  [0.55, 1],
+  [0.56, 0.45],
+  [0.61, 0.45],
+  [0.62, 1],
+  [0.69, 1],
+  [0.7, 0.6],
+  [0.74, 0.75],
+  [0.92, 1],
+];
+
+export function strike(t: number): number {
+  for (let i = 1; i < STRIKE.length; i++) {
+    const [t1, v1] = STRIKE[i];
+    if (t <= t1) {
+      const [t0, v0] = STRIKE[i - 1];
+      return v0 + ((v1 - v0) * (t - t0)) / (t1 - t0 || 1);
+    }
+  }
+  return 1;
+}
