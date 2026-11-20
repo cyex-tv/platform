@@ -42,4 +42,11 @@ ADR 0009 kept `app` sessions (Bearer) in the model but left how an app gets one 
 - The deck can sign in without ever seeing a Twitch or Kick token, and the person can sign it out from the website.
 - New apps are a code change (a `CLIENTS` entry and a line in this ADR), not a self-service registration.
 - Only the mutations listed above work with an app token; widening a scope or adding one changes the consent text and needs a note here.
-- App sessions made before this (`sessions::create` with `SessionKind::App`, only in tests) stay unscoped; nothing issued them in production.
+- App sessions made before this (unscoped, with no client) are retired: see the amendment below.
+
+## Amendment: unscoped app sessions retired (2026/11/20)
+The owner decided on 2026/11/20 to retire the `app` sessions made before this flow: they had no client and no scopes, so their Bearer token carried the account's full rights (staff grants included).
+- Migration `20261209006001_retire_unscoped_app_sessions.sql` signs every `app` session without an `app_client_id` out (their refresh tokens go by CASCADE) and adds `CHECK (kind <> 'app' OR app_client_id IS NOT NULL)`, so none can be made again. `sessions::create` makes site sessions; an app session comes only from `/v1/auth/app/token`.
+- `Auth::caller` answers signed out for a Bearer token whose session names no client, as a second line behind the CHECK.
+- The website's cookie session is unaffected. The only Bearer callers left are app sign-ins, with their scopes.
+- Tests that used an unscoped app session as a convenient full-rights token now use a site session (cookie plus the site's `Origin`).
