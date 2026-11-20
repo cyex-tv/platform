@@ -17,11 +17,10 @@
 
 use std::collections::HashSet;
 
-use axum::http::StatusCode;
-use cyex_tv_auth::{AuthError, Caller, rbac};
+use cyex_tv_auth::{Caller, rbac};
 use cyex_tv_db::sets::{self, NewMember, Set};
 use cyex_tv_db::{DbError, accounts, audit, channels, emotes, ids, outbox, reads, roles};
-use cyex_tv_shared::error::{ApiError, ApiResult};
+use cyex_tv_shared::error::ApiResult;
 use cyex_tv_shared::model::{
     AccountSummary, AddSetEmote, Channel, ClonedSet, CreateSet, EditorPermission, EmotePage,
     EmoteSet, EmoteState, EventType, PersonalSetEntry, Platform, SetEmote, SetEmotePage, SetKind,
@@ -44,81 +43,8 @@ pub const LOOKUP_LIMIT: usize = 100;
 
 // Errors
 
-pub fn not_found() -> ApiError {
-    ApiError::new(StatusCode::NOT_FOUND, "not_found", "Not found.")
-}
-
-pub fn forbidden(message: &str) -> ApiError {
-    ApiError::new(StatusCode::FORBIDDEN, "forbidden", message)
-}
-
-/// A database error as an API error with its rule's code.
-pub fn db_error(err: DbError) -> ApiError {
-    match err {
-        DbError::NotFound => not_found(),
-        DbError::PersonalSetExists => {
-            conflict("personal_set_exists", "You already have a personal set.")
-        }
-        DbError::InvalidSetKind => bad(
-            "invalid_set_kind",
-            "Sets of this kind can't be made or changed this way.",
-        ),
-        DbError::SetFull => conflict("set_full", "The set is full."),
-        DbError::CapacityTooLow => conflict(
-            "capacity_too_low",
-            "The set already holds more emotes than that.",
-        ),
-        DbError::NameTaken => conflict("name_taken", "That name is already used in this set."),
-        DbError::AlreadyInSet => conflict("already_in_set", "That emote is already in this set."),
-        DbError::NotApproved => conflict(
-            "not_approved",
-            "That emote isn't approved yet. Until it is, it can only go in its owner's channel sets.",
-        ),
-        DbError::EmoteUnavailable => conflict("emote_unavailable", "That emote can't be used."),
-        DbError::RoleNameTaken => conflict("role_name_taken", "A role with that name exists."),
-        DbError::UnknownPermission(_) => bad("unknown_permission", "Unknown permission name."),
-        DbError::TooManyEditors => conflict(
-            "too_many_editors",
-            "An account can have at most 50 editors. Remove one to add someone else.",
-        ),
-        DbError::AlreadyEditor => conflict("already_editor", "They are an editor already."),
-        DbError::CosmeticNameTaken => conflict(
-            "name_taken",
-            "A badge or paint with that name exists already.",
-        ),
-        DbError::NotOwned => conflict("not_owned", "You can only show cosmetics the account owns."),
-        DbError::CodeTaken => {
-            tracing::error!("a new redeem code collided with an existing one");
-            ApiError::internal()
-        }
-        DbError::PendingOrder => conflict(
-            "checkout_busy",
-            "A checkout for this is starting already. Try again in a moment.",
-        ),
-        DbError::InvalidVisibility => bad(
-            "bad_visibility",
-            "Personal sets can't be private, and the global set is always listed.",
-        ),
-        err @ (DbError::IdentityTaken | DbError::PlatformAlreadyLinked | DbError::LastIdentity) => {
-            AuthError::from(err).into()
-        }
-        DbError::Sqlx(err) => {
-            tracing::error!(error = %err, "database error");
-            ApiError::internal()
-        }
-    }
-}
-
-pub(crate) async fn conn(
-    state: &AppState,
-) -> ApiResult<sqlx::pool::PoolConnection<sqlx::Postgres>> {
-    state.db.acquire().await.map_err(sqlx_error)
-}
-
-/// Parses an ID from the API. A malformed one names nothing, so it is `not_found`.
-pub fn parse_id(raw: &str) -> ApiResult<Uuid> {
-    ids::from_text(raw.trim()).ok_or_else(not_found)
-}
+pub(crate) use crate::errors::conn;
+pub use crate::errors::{db_error, forbidden, not_found, parse_id};
 
 // Permissions
 
@@ -486,6 +412,22 @@ pub const EMOTE_CHANNELS_MAX: u32 = 50;
 /// How far into the list `offset` may reach (a page past it is empty).
 pub const EMOTE_CHANNELS_OFFSET_MAX: u32 = 10_000;
 
+/// Whether anyone may see the emote and what happens to it: approved, not private, not deleted,
+/// and not of an account whose deletion is pending (ADR 0019). Unlisted emotes count: their page
+/// is open to anyone with the link.
+pub(crate) async fn public_emote(conn: &mut PgConnection, id: Uuid) -> ApiResult<bool> {
+    let row = reads::emotes(conn, &[id])
+        .await
+        .map_err(db_error)?
+        .into_iter()
+        .next()
+        .filter(|e| e.state == EmoteState::Approved && !e.private);
+    Ok(match row {
+        Some(e) => !crate::moderation::owner_hidden(conn, e.owner).await?,
+        None => false,
+    })
+}
+
 /// Channels showing a public emote, `offset` rows in (for paging). Unknown, pending, private and
 /// deleted emotes have none.
 pub async fn emote_channels(
@@ -503,16 +445,7 @@ pub async fn emote_channels(
         return Ok(Vec::new());
     }
     let mut conn = conn(state).await?;
-    let rows = reads::emotes(&mut conn, &[id]).await.map_err(db_error)?;
-    let row = rows
-        .into_iter()
-        .next()
-        .filter(|e| e.state == cyex_tv_shared::model::EmoteState::Approved && !e.private);
-    let public = match row {
-        Some(e) => !crate::moderation::owner_hidden(&mut conn, e.owner).await?,
-        None => false,
-    };
-    if !public {
+    if !public_emote(&mut conn, id).await? {
         return Ok(Vec::new());
     }
     let chs = reads::emote_channels(&mut conn, id, i64::from(limit), i64::from(offset))
@@ -1616,6 +1549,8 @@ pub async fn update_channel_settings(
 
 #[cfg(test)]
 mod tests {
+    use axum::http::StatusCode;
+
     use super::*;
 
     #[test]

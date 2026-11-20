@@ -26,6 +26,19 @@ export class ApiError extends Error {
 
 type Fetch = typeof fetch;
 
+// Who wants to know when a call answers `signed_out` (the session ended while the page was open).
+const signedOutListeners = new Set<() => void>();
+/** Calls `fn` whenever any API call answers `signed_out`. Returns a function that stops listening. */
+export function onSignedOut(fn: () => void): () => void {
+  signedOutListeners.add(fn);
+  return () => signedOutListeners.delete(fn);
+}
+/** Tells the listeners when `err` is a `signed_out`, and hands it back for `throw`. */
+function seen(err: ApiError): ApiError {
+  if (err.code === 'signed_out') for (const fn of [...signedOutListeners]) fn();
+  return err;
+}
+
 /** How long a GraphQL call may take before it counts as unanswered. */
 export const GQL_TIMEOUT_MS = 20_000;
 /** An upload that sends nothing for this long has stalled. */
@@ -72,7 +85,7 @@ export async function gql<TResult, TVariables>(
     throw new ApiError(serverMessage(), 'bad_answer');
   }
   const first = body.errors?.[0];
-  if (first) throw new ApiError(first.message, first.extensions?.code ?? 'error');
+  if (first) throw seen(new ApiError(first.message, first.extensions?.code ?? 'error'));
   if (!body.data) throw new ApiError(serverMessage(), 'bad_answer');
   return body.data;
 }
@@ -98,7 +111,7 @@ async function restError(response: Response): Promise<ApiError> {
   if (response.status === 429) return new ApiError('Too many requests. Try again in a moment.', 'rate_limited');
   try {
     const body = (await response.json()) as { error?: string; message?: string };
-    return new ApiError(body.message ?? 'That didn’t work.', body.error ?? 'error');
+    return seen(new ApiError(body.message ?? 'That didn’t work.', body.error ?? 'error'));
   } catch {
     return new ApiError(serverMessage(), 'bad_answer');
   }

@@ -71,7 +71,8 @@ describe('owners lookup', () => {
   it('writes CSV that spreadsheets read safely', () => {
     expect(how(rows[1])).toBe('Bought · Gift');
     const csv = holdersCsv([g({ accountId: 'A9', reason: '=HYPERLINK("x"), ok', grantedAt: '2026-11-10T00:00:00Z' })], () => 'Ann, "the" mod');
-    const [head, line] = csv.trim().split('\r\n');
+    expect(csv.charCodeAt(0)).toBe(0xfeff); // so Excel reads it as UTF-8
+    const [head, line] = csv.slice(1).trim().split('\r\n');
     expect(head.split(',')[0]).toBe('account_id');
     expect(line).toBe('A9,"Ann, ""the"" mod",yes,Given by staff,,2026-11-10T00:00:00Z,"\'=HYPERLINK(""x""), ok",,,');
   });

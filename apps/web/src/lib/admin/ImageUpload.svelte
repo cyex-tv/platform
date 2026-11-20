@@ -20,7 +20,7 @@
   };
   let { kind, imageId = $bindable(''), busy = $bindable(false), current = null, label }: Props = $props();
 
-  let phase = $state<'idle' | 'uploading' | 'making' | 'ready' | 'failed'>('idle');
+  let phase = $state<'idle' | 'checking' | 'uploading' | 'making' | 'ready' | 'failed'>('idle');
   let problem = $state('');
   let image = $state<CosmeticImageFieldsFragment | null>(null);
   let local = $state<string | null>(null);
@@ -32,7 +32,7 @@
   });
 
   $effect(() => {
-    busy = phase === 'uploading' || phase === 'making';
+    busy = phase === 'checking' || phase === 'uploading' || phase === 'making';
   });
 
   const shown = $derived(image ?? current);
@@ -64,8 +64,11 @@
     imageId = '';
     image = null;
     problem = '';
+    // Reading the picture's size takes a moment; the form waits for it, and a newer pick wins.
+    phase = 'checking';
     const bad = checkFile(file);
     const dims = bad ? null : await size(file);
+    if (signal.aborted) return;
     const why = bad ?? (dims ? checkSize(kind, dims.width, dims.height) : 'That file isn’t a picture this browser can open. Try another one.');
     if (why) {
       setLocal(null);
@@ -131,7 +134,7 @@
       <input class="file" type="file" accept={PICTURE_ACCEPT} onchange={picked} />
     </label>
     <span class="ui-hint" role="status">
-      {#if phase === 'uploading'}Uploading…{:else if phase === 'making'}Making the files…{:else if phase === 'ready'}Ready.{:else if kind === 'badge'}Square, at least 72 × 72 px. PNG, GIF or WebP, up to 5 MB. Or drop it here.{:else}At least 64 px tall, up to 8:1. PNG, GIF or WebP, up to 5 MB.{/if}
+      {#if phase === 'checking'}Checking the file…{:else if phase === 'uploading'}Uploading…{:else if phase === 'making'}Making the files…{:else if phase === 'ready'}Ready.{:else if kind === 'badge'}Square, at least 72 × 72 px. PNG, GIF or WebP, up to 5 MB. Or drop it here.{:else}At least 64 px tall, up to 8:1. PNG, GIF or WebP, up to 5 MB.{/if}
     </span>
   </div>
   {#if problem}<span class="ui-error" role="alert">{problem}</span>{/if}
