@@ -6,6 +6,7 @@
   import AppHeader from '$lib/shell/AppHeader.svelte';
   import Toasts from '$lib/tool/Toasts.svelte';
   import { syncMotion } from '$lib/shell/motion.svelte';
+  import { watchDpr } from '$lib/dpr.svelte';
   import { loadMe, session } from '$lib/tool/session.svelte';
   import UploadDialog from '$lib/upload/UploadDialog.svelte';
   import { openUpload, opensDialog } from '$lib/upload/upload.svelte';
@@ -19,6 +20,8 @@
   // asks too (to send you to sign in), and loadMe() shares one request between the two.
   // The reduced-motion setting, for the pictures that choose a still by it.
   $effect(syncMotion);
+  // The screen's pixel ratio, for the pictures that pick their file in script (no srcset).
+  $effect(watchDpr);
   $effect(() => {
     loadMe().catch(() => {});
   });

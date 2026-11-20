@@ -63,7 +63,7 @@
   }
   const wide = $derived(isWide(e));
   const dims = $derived(size(e));
-  // The picture fills 80% of the box height; `sizes` lets the browser pick the right file.
+  // The picture fills 80% of the box height; its shown width picks the right file.
   const shownW = $derived(Math.round((TILE_ART[density] * 0.8 * dims.width) / dims.height));
   // Type marks (animated, zero-width, wide) are in the link's name only; nothing is drawn over the
   // picture (every emote plays anyway, and a label over the art read as a stray tag).
@@ -95,7 +95,7 @@
   {/if}
   <span class="art">
     {#if ready(e)}
-      <EmotePicture emote={e} class="pic" sizes="{shownW}px" {eager} use={settle} />
+      <EmotePicture emote={e} class="pic" shown={shownW} {eager} use={settle} />
     {:else}
       <span class="processing">Processing</span>
     {/if}

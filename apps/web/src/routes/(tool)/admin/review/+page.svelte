@@ -9,7 +9,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { gql } from '$lib/api';
-  import { ready, size, src, srcsetW } from '$lib/emote';
+  import { pictureFor, ready, size } from '$lib/emote';
+  import { display } from '$lib/dpr.svelte';
   import { onDestroy, tick } from 'svelte';
   import { clean, count, dateTime, iso } from '$lib/format';
   import type { EmoteFieldsFragment, EmoteVisibility, ReviewSort, ReviewTab } from '$lib/gql/graphql';
@@ -316,7 +317,9 @@
         onfocus={() => (cur = e.id)} onclick={(ev) => { if (!(ev.target as HTMLElement).closest('a, button')) openDetail(e.id); }}>
         <span class="art">
           {#if ready(e)}
-            <img src={src(e, 1)} srcset={srcsetW(e)} sizes="{Math.round((64 * d.width) / d.height)}px" width={d.width} height={d.height} alt="" loading="lazy" decoding="async" />
+            {@const shownW = Math.round((64 * d.width) / d.height)}
+            {@const pic = pictureFor(e, display.dpr, false, shownW)}
+            <img src={pic.src} srcset={pic.srcset} sizes={pic.srcset ? `${shownW}px` : undefined} width={d.width} height={d.height} alt="" loading="lazy" decoding="async" />
           {:else}
             <span class="ui-spinner" aria-hidden="true"></span>
           {/if}

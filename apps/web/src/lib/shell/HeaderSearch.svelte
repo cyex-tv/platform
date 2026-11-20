@@ -13,7 +13,8 @@
   import { goto } from '$app/navigation';
   import { fetchWith, gql } from '$lib/api';
   import type { Snippet } from 'svelte';
-  import { ready, size, src, srcsetW } from '$lib/emote';
+  import { pictureFor, ready, size } from '$lib/emote';
+  import { display } from '$lib/dpr.svelte';
   import { clean } from '$lib/format';
   import type { EditableChannelsQuery, QuickSearchQuery } from '$lib/gql/graphql';
   import { EDITABLE_CHANNELS, QUICK_SEARCH } from '$lib/queries';
@@ -300,7 +301,8 @@
                 {#if r.kind === 'emote'}
                   <span class="art emote-art">
                     {#if ready(r.emote)}
-                      <img src={src(r.emote, 1)} srcset={srcsetW(r.emote)} sizes="{emoteWidth(r.emote)}px" width={emoteWidth(r.emote)} height="28" alt="" decoding="async" />
+                      {@const pic = pictureFor(r.emote, display.dpr, false, emoteWidth(r.emote))}
+                      <img src={pic.src} srcset={pic.srcset} sizes={pic.srcset ? `${emoteWidth(r.emote)}px` : undefined} width={emoteWidth(r.emote)} height="28" alt="" decoding="async" />
                     {/if}
                   </span>
                   <span class="label"><bdi>{clean(r.emote.name)}</bdi></span>

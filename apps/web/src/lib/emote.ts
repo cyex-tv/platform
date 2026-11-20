@@ -33,19 +33,39 @@ export function hasStill(e: Picture): boolean {
   return e.animated && e.files.some((f) => f.name === '1x_static.webp');
 }
 
-/**
- * Which picture an animated emote with a still gets, by the site's reduced-motion setting:
- * "reduce" the still, "full" the moving one even when the OS asks for less, "system" the
- * browser's call (a `<source media>` in a <picture>, which also holds without script).
- */
-export function stillBy(pref: 'system' | 'reduce' | 'full'): 'still' | 'moving' | 'browser' {
-  return pref === 'reduce' ? 'still' : pref === 'full' ? 'moving' : 'browser';
-}
-
 /** Wide emotes (about twice as wide as tall or more) take two cells in a grid. */
 export function isWide(e: Picture): boolean {
   const { width, height } = size(e);
   return width / height >= 1.75;
+}
+
+/**
+ * The density a `1x, 2x, 4x` srcset would pick on a screen with this pixel ratio, out of the
+ * scales on offer (the smallest that is sharp enough, else the biggest).
+ */
+export function densityFor(dpr: number, scales: readonly number[] = [1, 2, 4]): number {
+  return scales.find((s) => s >= dpr) ?? scales[scales.length - 1] ?? 1;
+}
+
+/**
+ * `src` and `srcset` for an emote's <img>, shown at its 1x size or, with `shown`, at that CSS
+ * width. While `dpr` is 0 (the server render and hydration) it offers a srcset and the browser
+ * picks; after that the file is picked here and there is no srcset: Chromium keeps a removed
+ * <img> that has a srcset (or a <picture><source media>) registered as a viewport listener when
+ * Svelte has moved it through a DocumentFragment, and with it the whole removed page.
+ */
+export function pictureFor(e: Picture, dpr: number, still = false, shown?: number): { src: string; srcset: string | undefined } {
+  if (shown === undefined) {
+    if (dpr === 0) return { src: src(e, 1, still), srcset: srcset(e, still) };
+    return { src: src(e, densityFor(dpr) as 1 | 2 | 4, still), srcset: undefined };
+  }
+  if (dpr === 0) return { src: src(e, 1, still), srcset: srcsetW(e, still) };
+  const suffix = still && e.animated ? '_static' : '';
+  const files = ([1, 2, 3, 4] as const)
+    .map((s) => e.files.find((x) => x.name === `${s}x${suffix}.webp`))
+    .filter((f) => f !== undefined);
+  const best = files.find((f) => f.width >= shown * dpr) ?? files[files.length - 1];
+  return { src: best ? `${e.host}/${best.name}` : src(e, 1, still), srcset: undefined };
 }
 
 /** `srcset` with width descriptors, for an emote shown at a set CSS size (pair it with `sizes`). */

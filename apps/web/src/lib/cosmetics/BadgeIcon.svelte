@@ -6,6 +6,8 @@
   import type { Badge } from './store.svelte';
   import { reduced, watchReduced } from './reduced.svelte';
   import { safeUrl } from './paint';
+  import { densityFor } from '$lib/emote';
+  import { display } from '$lib/dpr.svelte';
 
   type Props = { badge: Pick<Badge, 'name' | 'tooltip' | 'image'>; size?: number; label?: boolean };
   let { badge, size = 18, label = false }: Props = $props();
@@ -17,8 +19,11 @@
     const name = still && files.has(`${k}x_static.webp`) ? `${k}x_static.webp` : `${k}x.webp`;
     return files.has(name) ? safeUrl(`${badge.image.host.replace(/\/+$/, '')}/${name}`) : null;
   };
-  const one = $derived(at(1));
-  const set = $derived([1, 2, 4].map((k) => [at(k), k] as const).filter(([u]) => u).map(([u, k]) => `${u} ${k}x`).join(', '));
+  // Before mount a srcset lets the browser pick; after it the file is picked here, with no srcset
+  // (Chromium keeps removed images that have one in memory: see pictureFor in $lib/emote).
+  const scales = $derived([1, 2, 4].filter((k) => at(k)));
+  const one = $derived(display.dpr === 0 ? at(1) : at(densityFor(display.dpr, scales)));
+  const set = $derived(display.dpr === 0 ? scales.map((k) => `${at(k)} ${k}x`).join(', ') : undefined);
 </script>
 
 {#if one}
