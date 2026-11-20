@@ -57,6 +57,6 @@ export type Look = {
 /** The look for each theme: dark lets the light carry it; on white the rod's colour has to. */
 export function look(light: boolean): Look {
   return light
-    ? { level: 1, hot: 0.7, coreWidth: 0.45, glow: 0.4, air: 0.14, additive: false, spill: 30, inkGlow: 0 }
-    : { level: 1.15, hot: 0.85, coreWidth: 0.55, glow: 0.7, air: 0.24, additive: true, spill: 90, inkGlow: 0.04 };
+    ? { level: 1, hot: 0.5, coreWidth: 0.45, glow: 0.4, air: 0.14, additive: false, spill: 30, inkGlow: 0 }
+    : { level: 1.15, hot: 0.6, coreWidth: 0.35, glow: 0.7, air: 0.24, additive: true, spill: 90, inkGlow: 0.04 };
 }

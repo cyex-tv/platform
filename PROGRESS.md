@@ -1304,11 +1304,16 @@ gh pr merge 126 --merge
 - Kept: turn, sway, float, scroll turn; both themes; lazy load after first paint on capable devices; CLS 0; pixel ratio capped at 2; dispose. Static images `static/home/logo-3d-{dark,light}.webp` remade from `__logoSnap` at 840 px.
 - Frame cost (headless Edge, RTX 5080, GPU-synced `__logoBench`, 1440 at dpr 2): 0.074 ms before, 0.023 ms after (no shadow pass).
 - Tests: `logo-glow.test.ts` (the glow loop is closed, follows the wall and leaves room past the rod; theme look; strike once and never dark), `logo-scene.ui.test.ts` (no shadows/floor/spot light; still draws once and never schedules a frame; every geometry, material and texture, the observers, the scroll listener and the context given back). Screens and timings in `.claude/runs/2026-11-20-overnight/screens/hero-tube/`.
+- Realism round (owner: "still looks a bit too flat ... make it hyper realistic and give it some more depth"): deeper bars (`DEPTH` 4.2, was 2.6) with larger, finely divided rounded bevels (8 steps); a 36° lens (was 26°) so the depth reads at rest. Unlit bars: MeshPhysicalMaterial, a dense polymer with a clear coat, a tileable grain made in code (`logo-surface.ts`) in its roughness and normals; cavity occlusion inside the openings worked out from the shape in the shader (`logo-ao.ts`); key, fill and rim lights; AgX tone mapping. The rod: an emissive core inside a clear sleeve (fresnel edges, not tone mapped so the accent stays exact), two point lights along it with inverse-square falloff tinting the other bars, real bloom (UnrealBloomPass on a separate render of the rod alone, the unlit bars black as occluders, its mips laid over the frame: added as light on dark without touching alpha, laid as colour on white, faded toward the canvas edges) and a faint haze. Quality step-down (`logo-quality.ts`): devices under 8 GB or 6 cores, `?logoquality=low`, or a 60-frame mean over 24 ms after warm-up switch to the shell glow without the bloom pass, for good. The still images keep the glow (the snapshot writes the added light into alpha).
+- Frame cost of this round (same bench, full frame incl. bloom, 1440 at dpr 2, RTX 5080): 0.105 ms high, 0.043 ms low step (the neon-rod round before it: 0.023 ms). A mid GPU at about a tenth to a twentieth of that is roughly 1-2.5 ms: well inside 16.7 ms (estimate, not measured on one).
+- Tests: `logo-realism.test.ts` (cavity occlusion, grain is deterministic, tiling and in range, quality start and step-down), `logo-scene.ui.test.ts` adds AgX and the bloom overlay, and the bloom's target and pass disposed.
 - GitHub writes:
 ```
 git push -u origin feat/hero-tube
 gh pr create --base main --head feat/hero-tube --title "Hero: the mark as real light tubes, no floor or cast shadow" --body-file <file>
 git push   # neon rod rework on feat/hero-tube
 gh pr edit 144 --title "Hero: the mark as a glowing neon rod, no floor or cast shadow" --body-file <file>
+git push   # realism round on feat/hero-tube
+gh pr edit 144 --title "Hero: a realistic neon-rod mark with depth, no floor or cast shadow" --body-file <file>
 ```
   PR #144, not merged (owner reviews).
