@@ -815,6 +815,27 @@ async fn every_site_operation_runs_against_the_real_api() {
     );
     c.op(os, "EmoteDuplicates", json!({ "emoteId": e_batch }))
         .await;
+    // An undone approval goes back last; flags changed after review (ADR 0024).
+    let e_requeue = emote(&w, &o, "covRequeue", EmoteState::Pending).await;
+    let data = c
+        .op(os, "RequeueEmotes", json!({ "ids": [e_requeue] }))
+        .await;
+    c.check(
+        data["requeueEmotes"]["done"] == json!([e_requeue]),
+        format!("RequeueEmotes: {data}"),
+    );
+    let data = c
+        .op(
+            os,
+            "SetEmoteFlags",
+            json!({ "id": e_batch, "input": { "visibility": "PUBLIC", "nsfw": true } }),
+        )
+        .await;
+    c.check(
+        data["setEmoteFlags"]["visibility"] == "PUBLIC"
+            && data["setEmoteFlags"]["flags"]["nsfw"] == true,
+        format!("SetEmoteFlags: {data}"),
+    );
     let data = c.op(os, "ReviewReasons", json!({})).await;
     c.check(
         data["reviewReasons"]
