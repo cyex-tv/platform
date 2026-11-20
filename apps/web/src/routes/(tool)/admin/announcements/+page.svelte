@@ -59,7 +59,7 @@
   let busy = $state(false);
 
   const errors = $derived({
-    text: tried && (!text.trim() || text.trim().length > TEXT_MAX) ? `Write one line of 1 to ${TEXT_MAX} characters.` : null,
+    text: tried && (!text.trim() || [...text.trim()].length > TEXT_MAX) ? `Write one line of 1 to ${TEXT_MAX} characters.` : null,
     link: tried && linkUrl.trim() && !safeLink(linkUrl) ? 'Use https:// or a path on cyex.tv, like /shop.' : null,
     label: tried && linkLabel.trim() && !linkUrl.trim() ? 'Add a link for these words, or leave them empty.' : null,
     emote: tried && emote.trim() && !emoteIdFrom(emote) ? 'Paste an emote’s link or ID.' : null,
@@ -205,8 +205,8 @@
         </div>
         <label class="ui-field">
           <span class="ui-label">Line</span>
-          <input class="ui-input" bind:value={text} maxlength={TEXT_MAX} aria-invalid={errors.text ? 'true' : undefined} />
-          {#if errors.text}<span class="ui-error">{errors.text}</span>{:else}<span class="ui-hint"><span class="ui-num">{text.trim().length}</span> of {TEXT_MAX}. Plain text, one line.</span>{/if}
+          <input class="ui-input" bind:value={text} aria-invalid={errors.text ? 'true' : undefined} />
+          {#if errors.text}<span class="ui-error">{errors.text}</span>{:else}<span class="ui-hint"><span class="ui-num">{[...text.trim()].length}</span> of {TEXT_MAX}. Plain text, one line.</span>{/if}
         </label>
         <div class="two">
           <label class="ui-field">

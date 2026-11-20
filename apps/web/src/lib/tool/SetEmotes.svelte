@@ -64,6 +64,8 @@
   /** Reads the list from the first page: one page, or as many as are on screen when `keep`. */
   async function read(keep: boolean) {
     const mine = ++token;
+    more = false; // a page of the old list no longer holds the button
+    moreProblem = '';
     const pages = keep ? pagesFor(items.length) : 1;
     problem = '';
     if (!keep) loading = true;
@@ -98,9 +100,10 @@
       pageNo += 1;
       removedSince = 0;
     } catch {
+      if (mine !== token) return;
       moreProblem = 'That page didn’t load.';
     } finally {
-      more = false;
+      if (mine === token) more = false;
     }
   }
 

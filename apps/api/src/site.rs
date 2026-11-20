@@ -500,7 +500,7 @@ pub async fn set_notification_prefs(
     rate(state, caller)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    let current = prefs::get(&mut tx, caller.account_id)
+    let current = prefs::get_for_update(&mut tx, caller.account_id)
         .await
         .map_err(db_error)?;
     let (notify_off, toast_off) = merge_prefs(&current, changes)?;

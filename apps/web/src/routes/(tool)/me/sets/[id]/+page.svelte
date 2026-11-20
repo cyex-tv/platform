@@ -7,7 +7,7 @@
   import { problemTitle } from '$lib/components/problem';
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
-  import { latestWins } from '$lib/tool/latest';
+  import { latestWinsBy } from '$lib/tool/latest';
   import { visibilityHint, visibilityOptions } from '$lib/sets/visibility';
   import { clean, count, iso } from '$lib/format';
   import { sectionHref } from '$lib/profile/rows';
@@ -23,7 +23,7 @@
   import { can, session } from '$lib/tool/session.svelte';
   import { covers, grantOn, permissionLabels, scopeOf, setAccess } from '$lib/tool/editors';
   import { fail, notify } from '$lib/tool/notices.svelte';
-  import { applyChange, morePages, type MemberChange } from '$lib/tool/set-paging';
+  import { applyChange, morePages, replayChanges, type MemberChange } from '$lib/tool/set-paging';
   import PageHead from '$lib/tool/PageHead.svelte';
 
   type EditableSet = NonNullable<EditSetQuery['set']>;
@@ -90,13 +90,13 @@
     return r.set;
   });
   const load = (change?: MemberChange) => {
-    if (change) members = applyChange(members, change);
+    if (change) track(change);
     return L.reload();
   };
   // Emotes were added: the pages in the grid are read again too.
   let rev = $state(0);
   async function added(a: { id: string; name: string }) {
-    members = applyChange(members, { kind: 'add', ...a });
+    track({ kind: 'add', ...a });
     await L.reload();
     rev++;
   }
@@ -105,16 +105,24 @@
   // name clashes; the grid itself reads pages of 120 with pictures, so nothing waits for this.
   let members = $state({ ids: new Set<string>(), names: new Set<string>() });
   let membersToken = 0;
+  /** What was done here while the lists were being read: put on top of them when they arrive. */
+  let sinceRead: MemberChange[] = [];
+  function track(change: MemberChange) {
+    sinceRead.push(change);
+    members = applyChange(members, change);
+  }
   /** The set the lists were asked for. */
   let membersFor = '';
   async function readMembers(want: string) {
     const mine = ++membersToken;
+    sinceRead = [];
     try {
       const first = await gql(SET_MEMBERS, { id: want, page: 1, perPage: 200 });
       const rest = await Promise.all(morePages(first.setEmotes.total, 200).map((n) => gql(SET_MEMBERS, { id: want, page: n, perPage: 200 })));
       if (mine !== membersToken) return;
       const all = [first, ...rest].flatMap((r) => r.setEmotes.items);
-      members = { ids: new Set(all.map((m) => m.emote.id)), names: new Set(all.map((m) => m.name)) };
+      members = replayChanges({ ids: new Set(all.map((m) => m.emote.id)), names: new Set(all.map((m) => m.name)) }, sinceRead);
+      sinceRead = [];
     } catch {
       if (mine === membersToken) membersFor = ''; // the next reload asks again
       /* the Add panel then lets the API refuse a repeat */
@@ -137,16 +145,19 @@
   }
 
   // The last pick wins: a click while a save is on its way is kept and sent when that one lands.
-  const saveVisibility = latestWins<SetVisibility>(
-    async (v) => {
-      if (!set) return;
-      const r = await gql(UPDATE_SET, { id: set.id, input: { visibility: v } });
+  // Each pick is saved on the set it was made for, even if the page has moved to another set.
+  const saveVisibility = latestWinsBy<SetVisibility>(
+    async (id, v) => {
+      const r = await gql(UPDATE_SET, { id, input: { visibility: v } });
+      if (set?.id !== id) return;
       set.visibility = r.updateSet.visibility;
       notify(`${visibilityOptions(set.kind).find((o) => o.value === set!.visibility)?.label ?? 'Visibility'} saved.`);
     },
-    (v) => !set || v === set.visibility,
+    (id, v) => set?.id === id && v === set.visibility,
   );
-  const setVisibility = (v: SetVisibility) => saveVisibility(v).catch(fail);
+  const setVisibility = (v: SetVisibility) => {
+    if (set) saveVisibility(set.id, v).catch(fail);
+  };
 
   async function remove() {
     if (!set) return;

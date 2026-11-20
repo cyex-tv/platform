@@ -13,7 +13,7 @@
   import type { MyFavouritesQuery } from '$lib/gql/graphql';
   import { personal } from '$lib/personal/lists.svelte';
   import { MY_FAVOURITES } from '$lib/queries';
-  import { appendUnique } from '$lib/tool/paging';
+  import { appendUnique, totalAfterPage } from '$lib/tool/paging';
   import PageHead from '$lib/tool/PageHead.svelte';
 
   type Item = MyFavouritesQuery['myFavourites']['items'][number];
@@ -39,7 +39,7 @@
       const r = (await gql(MY_FAVOURITES, { query: asked || null, page, perPage: PER_PAGE })).myFavourites;
       if (mine !== token) return;
       items = reset ? r.items : appendUnique(items, r.items);
-      total = r.total;
+      total = totalAfterPage(items.length, r.items.length, r.total, reset);
       next = page + 1;
     } catch (e) {
       if (mine !== token) return;
