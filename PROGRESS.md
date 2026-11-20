@@ -1304,3 +1304,9 @@ gh pr merge 126 --merge
 - Kept: the turn, sway, float and scroll turn; both themes; lazy load after first paint on capable devices; CLS 0; pixel ratio capped at 2; dispose. Static images `static/home/logo-3d-{dark,light}.webp` remade from `__logoSnap` at 840 px.
 - Frame cost (headless Edge, RTX 5080, GPU-synced `__logoBench`, 1440 at dpr 2): 0.074 ms before, 0.076 ms after; at dpr 1: 0.06/0.05 ms before, 0.07/0.05 ms after (dark/light).
 - Tests: `logo-tube.test.ts` (tube inside each bar's outline and reaching its sides, ends into the electrodes, bends rounder than the glass, closed glow loop, theme look, strike once and never dark), `logo-scene.ui.test.ts` (no shadows/floor/spot light; still draws once and never schedules a frame; every geometry, material and texture, the observers, the scroll listener and the context given back). Screens and timings in `.claude/runs/2026-11-20-overnight/screens/hero-tube/`.
+- GitHub writes:
+```
+git push -u origin feat/hero-tube
+gh pr create --base main --head feat/hero-tube --title "Hero: the mark as real light tubes, no floor or cast shadow" --body-file <file>
+```
+  PR #144, not merged (owner reviews).
