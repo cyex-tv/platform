@@ -531,7 +531,7 @@ async fn pasted_logins_match_accounts() {
     let granter = w.user("601", "granter", &["cosmetics.grant"]).await;
     let alice = w.user("602", "alice", &[]).await;
     let twin_twitch = w.user("603", "twin", &[]).await;
-    let twin_kick = w.user_on(Platform::Kick, "k604", "twin", &[]).await;
+    let twin_kick = w.user_on(Platform::Kick, "604", "twin", &[]).await;
 
     let body = w.gql(Some(&alice), LOGINS, json!({ "l": ["alice"] })).await;
     assert_eq!(code(&body), "forbidden", "{body}");
