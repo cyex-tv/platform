@@ -106,7 +106,10 @@
           ...row('/admin/entitlements', 'Entitlement graph', 'network', can('entitlements.view') || can('cosmetics.grant')),
         ],
       },
-      { toggle: { label: 'System', icon: 'settings' }, items: row('/admin/audit', 'Audit log', 'scroll', can('audit.view')) },
+      {
+        toggle: { label: 'System', icon: 'settings' },
+        items: [...row('/admin/announcements', 'Announcements', 'message-square', can('site.announce')), ...row('/admin/audit', 'Audit log', 'scroll', can('audit.view'))],
+      },
     ];
     return markCurrent(groups.filter((g) => g.items.length), path, ['/admin']);
   });

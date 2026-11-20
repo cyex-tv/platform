@@ -17,10 +17,12 @@
     relation: Relation;
     current: RailKey;
     activity?: boolean;
+    /** The account shows its collection (the owner always has the row). */
+    collection?: boolean;
   };
-  let { account, relation, current, activity = false }: Props = $props();
+  let { account, relation, current, activity = false, collection = false }: Props = $props();
 
-  const groups = $derived(profileRail(account.id, relation, current, activity));
+  const groups = $derived(profileRail(account.id, relation, current, activity, collection));
   const staff = $derived(relation.mine && isAdmin(session.me));
   // The /me pages without a row of their own (Upload, Notifications) add their tab to the phone strip.
   const tabs = $derived(relation.mine ? stripTabs(groups, stripExtra(page.url.pathname)) : undefined);

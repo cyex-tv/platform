@@ -92,6 +92,7 @@ pub fn open_rates() -> Rates {
         heavy_reads: r,
         delete_account: r,
         emote_transfers: r,
+        prefs: r,
     }
 }
 

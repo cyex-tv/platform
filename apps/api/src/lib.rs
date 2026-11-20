@@ -21,6 +21,7 @@ pub mod review;
 pub mod routes;
 pub mod search;
 pub mod shop;
+pub mod site;
 pub mod staff;
 pub mod state;
 pub mod transfers;

@@ -50,6 +50,8 @@ pub const EMOTES_DELETE_ANY: &str = "emotes.delete_any";
 pub const EDITORS_MANAGE_ANY: &str = "editors.manage_any";
 /// Change the review queue's ready reject reasons. Audited.
 pub const REVIEW_SETTINGS: &str = "review.settings";
+/// Set, change and end the site announcement under the header. Audited.
+pub const SITE_ANNOUNCE: &str = "site.announce";
 
 /// Every permission that exists. A role can only hold names from this list.
 pub const ALL: &[&str] = &[
@@ -80,6 +82,7 @@ pub const ALL: &[&str] = &[
     EMOTES_DELETE_ANY,
     EDITORS_MANAGE_ANY,
     REVIEW_SETTINGS,
+    SITE_ANNOUNCE,
 ];
 
 /// What anyone with `roles.manage` may add to the built-in User role, which every account holds

@@ -267,6 +267,12 @@ const OVERRIDES: Record<string, (c: Ctx) => Record<string, unknown>> = {
   CodeBatches: () => ({ page: 1, perPage: 5 }),
   CreateCodeBatch: (c) => ({ input: { count: 2, prefix: 'TEST', usesPerCode: 1, badgeIds: [c.newBadgeId], name: 'Conformance batch' } }),
   DisableCodeBatch: (c) => ({ id: c.batchId }),
+  CreateAnnouncement: () => ({ input: { kind: 'CAMPAIGN', text: 'Conformance announcement', linkUrl: '/shop' } }),
+  UpdateAnnouncement: (c) => ({ id: c.announcementId, input: { kind: 'INFO', text: 'Conformance announcement 2' } }),
+  EndAnnouncement: (c) => ({ id: c.announcementId }),
+  SetNotificationPrefs: () => ({ prefs: [{ kind: 'cosmetic.granted', notify: true, toast: false }] }),
+  AccountCollection: (c) => ({ accountId: c.otherAccount }),
+  SetCollectionPublic: () => ({ public: true }),
   QuickSearch: () => ({ query: 'cat' }),
   StaffNotes: (c) => ({ accountId: c.otherAccount }),
   AddStaffNote: (c) => ({ accountId: c.otherAccount, body: 'A mock note' }),
@@ -488,13 +494,14 @@ const CREATES: Record<string, (d: any, c: Ctx) => void> = {
   CreateBadge: (d, c) => (c.newBadgeId = d.createBadge.id),
   StudioCreatePaint: (d, c) => (c.newPaintId = d.createPaint.id),
   CreateShopItem: (d, c) => (c.newItemId = d.createShopItem.id),
+  CreateAnnouncement: (d, c) => (c.announcementId = d.createAnnouncement.id),
   AddEmoteNote: (d, c) => (c.emoteNoteId = d.addEmoteNote?.id),
   AddStaffNote: (d, c) => (c.staffNoteId = d.addStaffNote?.id),
   EmoteTransferRequests: (d, c) => (c.transferId = d.emoteTransferRequests?.[0]?.id),
 };
 // Order matters for state: the ones that make things first, the destructive ones last.
 const FIRST = ['Me', 'EditorOf', 'Search', 'MyEmotes', 'MySets', 'MyChannels', 'Cosmetics', 'ShopItems', 'Roles', 'ReviewQueue', 'ReportQueue', 'MyNotifications', 'MySessions', 'MyOrders', 'CodeBatches'];
-const LAST = ['DeleteEmote', 'DeleteSet', 'SignOutEverywhere', 'RevokeOtherSessions', 'Unlink', 'DeleteAccount', 'RestoreAccount'];
+const LAST = ['EndAnnouncement', 'DeleteEmote', 'DeleteSet', 'SignOutEverywhere', 'RevokeOtherSessions', 'Unlink', 'DeleteAccount', 'RestoreAccount'];
 const AFTER_CREATE = ['RedeemCode', 'TransferEmote', 'EmoteTransferRequests', 'DeclineEmoteTransfer', 'AcceptEmoteTransfer', 'CancelEmoteTransfer'];
 
 describe('mock-api conformance with the real schema', () => {

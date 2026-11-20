@@ -5,6 +5,7 @@
   import Footer from '$lib/components/Footer.svelte';
   import Meta from '$lib/components/Meta.svelte';
   import { siteMeta, type Meta as PageMeta } from '$lib/meta';
+  import AnnouncementBar from '$lib/shell/AnnouncementBar.svelte';
   import AppHeader from '$lib/shell/AppHeader.svelte';
   import ShortcutSheet from '$lib/shell/ShortcutSheet.svelte';
   import { titleTruncated } from '$lib/shell/truncated';
@@ -81,6 +82,7 @@
 <a class="skip" href="#main">Skip to content</a>
 {#if page.data.skipTo}<a class="skip" href="#{page.data.skipTo}">Skip to contents</a>{/if}
 <AppHeader />
+<AnnouncementBar />
 <div class="progress {bar}" aria-hidden="true"></div>
 <main id="main" tabindex="-1">
   {@render children()}

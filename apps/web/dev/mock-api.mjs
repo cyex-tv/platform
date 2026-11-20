@@ -841,7 +841,7 @@ const editorOfOut = () => EDITOR_OF.map((g) => ({ ...g }));
 
 const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view', 'cosmetics.manage', 'cosmetics.grant', 'shop.manage', 'shop.orders', 'codes.manage',
   'roles.assign', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets', 'users.block', 'users.sessions', 'users.notes', 'entitlements.view', 'billing.view', 'subscriptions.manage',
-  'emotes.delete_any', 'editors.manage_any', 'review.settings'];
+  'emotes.delete_any', 'editors.manage_any', 'site.announce', 'review.settings'];
 
 // ---- Chat cosmetics (ADR 0015) ----------------------------------------------------------
 // SAMPLE DATA ONLY: two made-up badges (simple SVG drawn here) and three sample paints, so the
@@ -2247,7 +2247,7 @@ function accountProfile(id) {
   }).filter(Boolean);
   // Editors, names only (never their permissions).
   const editors = id === ME_ID ? ACCOUNT_EDITORS.map((e) => e.account) : id === OTHERS[0].id ? [ME_SUMMARY, OTHERS[3]] : [];
-  return { account, identities, roles, activeSets, editors, createdAt: id === ME_ID ? '2026-11-10T12:00:00.000Z' : '2026-11-08T09:00:00.000Z' };
+  return { account, identities, roles, activeSets, editors, createdAt: id === ME_ID ? '2026-11-10T12:00:00.000Z' : '2026-11-08T09:00:00.000Z', collectionPublic: !!COLLECTION_PUBLIC[id] };
 }
 // accountCosmetics(accountIds): what each account shows, with the badge and paint themselves.
 function accountCosmetics(ids) {
@@ -2333,7 +2333,7 @@ function accountHub(q, v) {
 }
 
 // Fields added after the site's first queries, answered by field name so any operation name works.
-function newFields(q, v, session) {
+function newFields(q, v, session, admin = false) {
   if (/\b(mySessions|unreadNotificationCount|revokeSession|revokeOtherSessions|signOutEverywhere|exportMyData|deleteAccount|markNotificationsRead)\b/.test(q))
     if (!session) return err('Sign in to use this.', 'signed_out');
   // Each handler answers one new field; an operation may ask for several, and for older ones too.
@@ -2360,6 +2360,9 @@ function newFields(q, v, session) {
   if (/\bmyEditableChannels\b/.test(q)) parts.push(session ? { data: { myEditableChannels: myEditableChannels() } } : err('Sign in to use this.', 'signed_out'));
   if (has('cloneSet')) parts.push(session ? cloneSet(v, session) : err('Sign in to use this.', 'signed_out'));
   if (has('accountSets')) parts.push({ data: { accountSets: accountSets(id, v.preview) } });
+  const site = siteAnswer(q, v, session, admin);
+  if (site?.errors) return site;
+  if (site) parts.push(site);
   if (!parts.length) return null;
   const failed = parts.find((p) => p.errors);
   if (failed) return failed;
@@ -2400,9 +2403,122 @@ function myEditableChannels() {
   return list.sort((a, b) => rank[a.role] - rank[b.role] || a.channel.login.localeCompare(b.channel.login, 'en', { sensitivity: 'base' }) || a.channel.platform.localeCompare(b.channel.platform));
 }
 
+// The site announcement, notification preferences and the public collection (apps/api/src/site.rs).
+// MOCK_ANNOUNCE=0 starts without an announcement. As the API: activeAnnouncement is public, the
+// list and writes need site.announce, a kind turned off is never added to NOTES, a collection is
+// only shown to others when its owner shows it.
+const ANNOUNCEMENTS = process.env.MOCK_ANNOUNCE === '0' ? [] : [{
+  id: '01JD8XANN000000000000000001', kind: 'CAMPAIGN', text: 'Winter paints are in the shop until the end of the month.', linkUrl: '/shop', linkLabel: 'See them',
+  badgeId: null, emoteId: null, startsAt: null, endsAt: new Date(NOW + 20 * DAY).toISOString(), endedAt: null,
+  createdAt: new Date(NOW - DAY).toISOString(), updatedAt: new Date(NOW - DAY).toISOString(),
+}];
+let announceSeq = 1;
+const annLive = (a, now = Date.now()) => !a.endedAt && (!a.startsAt || Date.parse(a.startsAt) <= now) && (!a.endsAt || Date.parse(a.endsAt) > now);
+const annOut = (a) => {
+  const { emoteId, ...rest } = a;
+  return { ...rest, emote: emoteId ? (findEmote(emoteId) ?? null) : null, live: annLive(a) };
+};
+const activeAnnouncement = () => {
+  const live = ANNOUNCEMENTS.filter((a) => annLive(a)).sort((a, b) => Date.parse(b.startsAt ?? b.createdAt) - Date.parse(a.startsAt ?? a.createdAt));
+  return live[0] ? annOut(live[0]) : null;
+};
+const NOTE_KINDS = [['emote.approved', false], ['emote.rejected', false], ['emote.taken_down', true], ['emote.transfer_requested', true], ['emote.transferred', false],
+  ['emote.transfer_declined', false], ['emote.transfer_cancelled', false], ['editor.added', false], ['editor.changed', false], ['editor.removed', false],
+  ['cosmetic.granted', false], ['cosmetic.revoked', false]];
+const NOTE_PREFS = { off: new Set(), quiet: new Set() };
+const prefsOut = () => NOTE_KINDS.map(([kind, required]) => ({ kind, notify: required || !NOTE_PREFS.off.has(kind), toast: !NOTE_PREFS.quiet.has(kind), required }));
+const COLLECTION_PUBLIC = { [OTHERS[0].id]: true, [OTHERS[4].id]: true };
+const SOURCES = ['PURCHASE', 'EVENT', 'CODE', 'STAFF'];
+function collectionOf(id, session) {
+  const own = !!session && id === ME_ID;
+  if (!own && (!COLLECTION_PUBLIC[id] || statusOf(id).blocked)) return null;
+  const owned = C_OWNED[id] ?? { BADGE: [], PAINT: [] };
+  const items = [...owned.PAINT.map((c) => ['PAINT', c]), ...owned.BADGE.map((c) => ['BADGE', c])].map(([kind, cosmeticId], n) => ({
+    kind, cosmeticId, name: (kind === 'PAINT' ? PAINTS : BADGES).find((x) => x.id === cosmeticId)?.name ?? '',
+    ownedSince: new Date(NOW - (n * 9 + 3) * DAY).toISOString(), source: SOURCES[n % SOURCES.length],
+  }));
+  return { accountId: id, public: !!COLLECTION_PUBLIC[id], items };
+}
+function annInput(i, now = Date.now()) {
+  const text = String(i?.text ?? '').trim();
+  if (!text || [...text].length > 200 || /[\u0000-\u001f]/.test(text)) return err('The announcement is one line of 1 to 200 characters.', 'bad_text');
+  const link = String(i.linkUrl ?? '').trim() || null;
+  if (link && !((link.startsWith('/') && !link.startsWith('//')) || /^https:\/\/\S+$/.test(link))) return err('Links start with https:// or are a path on cyex.tv, like /shop.', 'bad_link');
+  const label = String(i.linkLabel ?? '').trim() || null;
+  if (label && !link) return err('Link words need a link.', 'bad_label');
+  if (i.emoteId && !findEmote(i.emoteId)) return err('That emote doesn’t exist or isn’t approved.', 'bad_emote');
+  if (i.badgeId && !BADGES.some((b) => b.id === i.badgeId)) return err('That badge doesn’t exist.', 'bad_badge');
+  if (i.endsAt && Date.parse(i.endsAt) <= now) return err('The end has to be in the future.', 'bad_time');
+  if (i.endsAt && i.startsAt && Date.parse(i.endsAt) <= Date.parse(i.startsAt)) return err('The end has to come after the start.', 'bad_time');
+  return { kind: i.kind ?? 'INFO', text, linkUrl: link, linkLabel: label, emoteId: i.emoteId || null, badgeId: i.badgeId || null, startsAt: i.startsAt || null, endsAt: i.endsAt || null };
+}
+/** Whether a kind is turned off (the API never creates it). */
+const noteOff = (kind) => NOTE_PREFS.off.has(kind) && !NOTE_KINDS.find(([k]) => k === kind)?.[1];
+function siteAnswer(q, v, session, admin) {
+  const field = (name) => new RegExp(`\\b${name}\\b`).test(q);
+  const data = {};
+  const needAdmin = () => (!session ? err('Sign in to use this.', 'signed_out') : !admin ? err('This needs site.announce.', 'forbidden') : null);
+  if (field('activeAnnouncement')) data.activeAnnouncement = activeAnnouncement();
+  if (/\{\s*announcements\s*\{/.test(q)) {
+    const no = needAdmin();
+    if (no) return no;
+    data.announcements = [...ANNOUNCEMENTS].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt)).map(annOut);
+  }
+  if (field('createAnnouncement') || field('updateAnnouncement')) {
+    const no = needAdmin();
+    if (no) return no;
+    const f = annInput(v.input);
+    if (f.errors) return f;
+    const at = new Date().toISOString();
+    if (field('createAnnouncement')) {
+      const a = { id: `01JD8XANN${String(++announceSeq).padStart(18, '0')}`, ...f, endedAt: null, createdAt: at, updatedAt: at };
+      ANNOUNCEMENTS.push(a);
+      data.createAnnouncement = annOut(a);
+    } else {
+      const a = ANNOUNCEMENTS.find((x) => x.id === v.id);
+      if (!a) return err('Not found.', 'not_found');
+      if (a.endedAt) return err('This announcement has ended. Make a new one.', 'ended');
+      Object.assign(a, f, { updatedAt: at });
+      data.updateAnnouncement = annOut(a);
+    }
+  }
+  if (field('endAnnouncement')) {
+    const no = needAdmin();
+    if (no) return no;
+    const a = ANNOUNCEMENTS.find((x) => x.id === v.id);
+    if (!a) return err('Not found.', 'not_found');
+    if (!a.endedAt) Object.assign(a, { endedAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+    data.endAnnouncement = annOut(a);
+  }
+  if (field('myNotificationPrefs')) {
+    if (!session) return err('Sign in to use this.', 'signed_out');
+    data.myNotificationPrefs = prefsOut();
+  }
+  if (field('setNotificationPrefs')) {
+    if (!session) return err('Sign in to use this.', 'signed_out');
+    for (const p of v.prefs ?? []) {
+      const known = NOTE_KINDS.find(([k]) => k === p.kind);
+      if (!known) return err('That isn’t a kind of notification.', 'unknown_kind');
+      if (known[1] && !p.notify) return err('Hand-over requests and takedowns always notify you.', 'required_kind');
+    }
+    for (const p of v.prefs ?? []) {
+      NOTE_PREFS.off[p.notify ? 'delete' : 'add'](p.kind);
+      NOTE_PREFS.quiet[p.toast ? 'delete' : 'add'](p.kind);
+    }
+    data.setNotificationPrefs = prefsOut();
+  }
+  if (field('accountCollection')) data.accountCollection = collectionOf(v.accountId ?? '', session);
+  if (field('setCollectionPublic')) {
+    if (!session) return err('Sign in to use this.', 'signed_out');
+    COLLECTION_PUBLIC[ME_ID] = !!v.public;
+    data.setCollectionPublic = collectionOf(ME_ID, session);
+  }
+  return Object.keys(data).length ? { data } : null;
+}
+
 // New fields merge with whatever else the same operation asks for (the older handlers below).
 function answer(body, session, admin) {
-  const added = newFields(body.query ?? '', body.variables ?? {}, session);
+  const added = newFields(body.query ?? '', body.variables ?? {}, session, admin);
   if (!added) return baseAnswer(body, session, admin);
   if (added.errors || !added.data) return added;
   const base = baseAnswer(body, session, admin);
@@ -2563,8 +2679,11 @@ createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', BASE);
   const admin = ADMIN_ENV || /(?:^|;\s*)mock_admin=1/.test(req.headers.cookie ?? '');
   // /mock/notify: one new unread notification now (for the header's toasts); the bell's poll picks it up.
+  // ?kind=cosmetic.granted for another kind; a kind turned off in Settings → Notifications is skipped, as the API does.
   if (url.pathname === '/mock/notify') {
-    NOTES.unshift({ id: `01JD8XLIVE${String(Date.now()).padStart(16, '0')}`, kind: 'emote.approved', payload: JSON.stringify({ emote_id: MINE[0].id, name: MINE[0].name }), createdAt: new Date().toISOString(), read: false });
+    const kind = url.searchParams.get('kind') || 'emote.approved';
+    if (!noteOff(kind))
+      NOTES.unshift({ id: `01JD8XLIVE${String(Date.now()).padStart(16, '0')}`, kind, payload: JSON.stringify({ emote_id: MINE[0].id, name: MINE[0].name, kind: 'paint' }), createdAt: new Date().toISOString(), read: false });
     res.writeHead(200, { 'content-type': 'text/plain' });
     return res.end('ok');
   }

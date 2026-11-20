@@ -20,21 +20,26 @@ pub struct Notification {
 
 const NOTIFICATION: &str = "id, account_id, kind, payload, created_at, read_at";
 
+/// Creates a notification, unless the account turned this kind off (Settings, Notifications):
+/// then nothing is stored and `None` comes back.
 pub async fn create(
     conn: &mut PgConnection,
     account_id: Uuid,
     kind: &str,
     payload: &Value,
-) -> DbResult<Uuid> {
+) -> DbResult<Option<Uuid>> {
     Ok(sqlx::query_scalar(
-        "INSERT INTO notifications (id, account_id, kind, payload) VALUES ($1, $2, $3, $4)
+        "INSERT INTO notifications (id, account_id, kind, payload)
+         SELECT $1, $2, $3, $4
+         WHERE NOT EXISTS (SELECT 1 FROM account_prefs p
+                           WHERE p.account_id = $2 AND $3 = ANY(p.notify_off))
          RETURNING id",
     )
     .bind(new_id())
     .bind(account_id)
     .bind(kind)
     .bind(payload)
-    .fetch_one(conn)
+    .fetch_optional(conn)
     .await?)
 }
 

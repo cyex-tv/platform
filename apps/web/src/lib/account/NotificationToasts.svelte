@@ -14,6 +14,7 @@
   import { dur } from '$lib/motion';
   import { describe } from './notifications';
   import { inbox, loadInbox, markRead, type Note } from './inbox.svelte';
+  import { loadPrefs, quietKinds } from './prefs.svelte';
   import { fresh } from './toasts';
   import { pausableTimer, type PausableTimer } from '$lib/tool/pausable-timer';
 
@@ -44,10 +45,12 @@
     const up = count > baseline;
     baseline = count;
     if (!up) return;
-    await loadInbox();
+    await Promise.all([loadInbox(), loadPrefs()]);
     const add = fresh(inbox.items ?? [], seen, since);
     for (const n of add) seen.add(n.id);
-    for (const n of add.slice(0, 3).reverse()) push(n);
+    // Kinds whose pop-up is off (Settings → Notifications) still count as seen, just quietly.
+    const quiet = quietKinds();
+    for (const n of add.filter((x) => !quiet.has(x.kind)).slice(0, 3).reverse()) push(n);
   }
 
   function push(note: Note) {
