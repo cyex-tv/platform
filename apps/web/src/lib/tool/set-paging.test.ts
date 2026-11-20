@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SET_PAGE, appendPage, applyChange, morePages, pagesAfter, pagesFor } from './set-paging';
+import { SET_PAGE, appendPage, applyChange, morePages, replayChanges, pagesAfter, pagesFor } from './set-paging';
 import { appendResults, showingLine } from './add-emotes';
 
 const m = (id: string) => ({ emote: { id } });
@@ -47,5 +47,14 @@ describe('Add emotes paging', () => {
     expect(showingLine(40, 213, c)).toBe('Showing 40 of 213.');
     expect(showingLine(40, 40, c)).toBeNull();
     expect(showingLine(0, 0, c)).toBeNull();
+  });
+});
+
+describe('replayChanges', () => {
+  it('keeps what was added here while a slow read was on its way', () => {
+    const read = { ids: new Set(['a']), names: new Set(['A']) };
+    const m = replayChanges(read, [{ kind: 'add', id: 'z', name: 'Z' }, { kind: 'remove', id: 'a', name: 'A' }]);
+    expect([...m.ids]).toEqual(['z']);
+    expect([...m.names]).toEqual(['Z']);
   });
 });

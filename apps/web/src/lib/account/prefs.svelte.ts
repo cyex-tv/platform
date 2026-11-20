@@ -8,16 +8,20 @@ import type { Pref } from './prefs';
 export const notePrefs = $state<{ items: Pref[] | null; error: boolean; saving: string | null }>({ items: null, error: false, saving: null });
 
 let asked: Promise<void> | null = null;
+// Which load is the newest; an older answer, or one that lands after signing out, is dropped.
+let seq = 0;
 
 /** Loads them (once, unless `fresh`). */
 export function loadPrefs(fresh = false): Promise<void> {
   if (asked && !fresh) return asked;
   notePrefs.error = false;
+  const n = ++seq;
   const mine = gql(NOTIFICATION_PREFS, {})
     .then((r) => {
-      notePrefs.items = r.myNotificationPrefs;
+      if (n === seq) notePrefs.items = r.myNotificationPrefs;
     })
     .catch(() => {
+      if (n !== seq) return;
       notePrefs.error = true;
       if (asked === mine) asked = null;
     });
@@ -46,6 +50,8 @@ export async function savePref(kind: string, change: { notify?: boolean; toast?:
 
 /** Forget them (signing out). */
 export function forgetPrefs() {
+  seq++;
   asked = null;
+  notePrefs.error = false;
   notePrefs.items = null;
 }

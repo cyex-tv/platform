@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendUnique, pageToken } from './paging';
+import { appendUnique, pageToken, totalAfterPage } from './paging';
 
 describe('appendUnique', () => {
   it('drops rows already shown and keeps order', () => {
@@ -19,5 +19,13 @@ describe('pageToken', () => {
     const c = t.begin();
     expect(b()).toBe(false);
     expect(c()).toBe(true);
+  });
+});
+
+describe('totalAfterPage', () => {
+  it('ends the list on an empty later page, however high the count said', () => {
+    expect(totalAfterPage(60, 0, 75, false)).toBe(60);
+    expect(totalAfterPage(60, 10, 75, false)).toBe(75);
+    expect(totalAfterPage(0, 0, 0, true)).toBe(0);
   });
 });
