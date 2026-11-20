@@ -109,3 +109,28 @@ describe('checkout that stopped checking', () => {
     expect(flow.phase).toBe('paid');
   });
 });
+
+describe('idempotency keys', () => {
+  afterEach(() => dismiss());
+
+  it('a start that failed sends the same key when the same purchase is tried again; one that answered ends it', async () => {
+    const keys: unknown[] = [];
+    gql.mockImplementation(async (q: string, v: { idempotencyKey?: string }) => {
+      if (q !== 'START') return { order: order('PENDING') };
+      keys.push(v.idempotencyKey);
+      if (keys.length === 1) throw Object.assign(new Error('slow'), { code: 'timeout' });
+      return started({ clientToken: null, checkoutUrl: null });
+    });
+    const purchase = { itemId: 'i', itemName: 'Item', gift: null, to: null };
+    expect(await buy({ ...purchase })).toBeTruthy(); // timed out
+    await buy({ ...purchase }); // the same item again, from a fresh click
+    expect(keys[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(keys[1]).toBe(keys[0]);
+    dismiss();
+    await buy({ ...purchase }); // a new purchase after one that started
+    expect(keys[2]).not.toBe(keys[0]);
+    dismiss();
+    await buy({ ...purchase, gift: { platform: 'TWITCH', login: 'friend' } }); // another recipient
+    expect(keys[3]).not.toBe(keys[2]);
+  });
+});

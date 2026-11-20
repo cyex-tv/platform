@@ -45,8 +45,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::state::AppState;
 use crate::{
-    abuse, account, activity, admin, catalog, codes, cosmetics, editors, moderation, personal,
-    review, search, shop, site, staff, transfers,
+    abuse, account, activity, admin, catalog, codes, cosmetics, editors, idempotency, moderation,
+    personal, review, search, shop, site, staff, transfers,
 };
 use cyex_tv_shared::model::{
     AccountCollection, Announcement, AnnouncementInput, NotificationPref, NotificationPrefInput,
@@ -1822,16 +1822,33 @@ impl Mutation {
     /// `checkout_unavailable` while Paddle isn't set up or the item has no Paddle price. Asking
     /// again for the same item and recipient within the hour hands out the same transaction
     /// (one pending order each); `checkout_busy` while another request is starting it.
+    ///
+    /// `idempotencyKey` (optional, a UUID the client makes once per purchase and sends again on
+    /// a retry): a repeat within 24 hours answers what the first one did (as it was then; poll
+    /// `order(id)` for where it stands) instead of starting another order.
+    /// `idempotency_key_reused` when the key went with another item or recipient,
+    /// `idempotency_in_progress` while the first is still running. A request that failed gives
+    /// its key back.
     async fn start_checkout(
         &self,
         ctx: &Context<'_>,
         item_id: String,
         recipient: Option<Recipient>,
+        idempotency_key: Option<String>,
     ) -> Result<Checkout> {
         let caller = caller(ctx)?;
-        shop::start_checkout(state(ctx), caller, &item_id, recipient.as_ref())
-            .await
-            .map_err(api_error)
+        let state = state(ctx);
+        let request = serde_json::json!({ "itemId": item_id.trim(), "recipient": recipient });
+        idempotency::once(
+            state,
+            caller,
+            idempotency::op::START_CHECKOUT,
+            idempotency_key.as_deref(),
+            request,
+            || shop::start_checkout(state, caller, &item_id, recipient.as_ref()),
+        )
+        .await
+        .map_err(api_error)
     }
 
     /// Refund a paid order: asks Paddle for a full refund when it is set up, and takes the
@@ -1850,14 +1867,33 @@ impl Mutation {
     /// Redeem a code (case, spaces and dashes don't matter). Wrong codes lock you out for a
     /// while after a few tries (`locked_out`). Each cosmetic it gives sends a `cosmetic.granted`
     /// notification (`source` `code`).
-    async fn redeem_code(&self, ctx: &Context<'_>, code: String) -> Result<RedeemResult> {
+    ///
+    /// `idempotencyKey` (optional UUID, one per attempt, sent again on a retry): a repeat within
+    /// 24 hours answers what the first redeem gave instead of `already_redeemed`.
+    /// `idempotency_key_reused` when the key went with another code.
+    async fn redeem_code(
+        &self,
+        ctx: &Context<'_>,
+        code: String,
+        idempotency_key: Option<String>,
+    ) -> Result<RedeemResult> {
         let caller = caller(ctx)?;
+        let state = state(ctx);
         let ip = ctx
             .data_opt::<crate::limits::ClientIp>()
             .map(|i| i.0.as_str());
-        codes::redeem(state(ctx), caller, ip, &code)
-            .await
-            .map_err(api_error)
+        // Hashed, never stored: the same code however it was typed.
+        let request = serde_json::json!({ "code": codes::normalize(&code) });
+        idempotency::once(
+            state,
+            caller,
+            idempotency::op::REDEEM_CODE,
+            idempotency_key.as_deref(),
+            request,
+            || codes::redeem(state, caller, ip, &code),
+        )
+        .await
+        .map_err(api_error)
     }
 
     /// Make a batch of 1 to 1000 redeem codes. The answer holds the codes in plain text; this is
@@ -1956,17 +1992,31 @@ impl Mutation {
 
     /// Approve a pending emote. Needs `emotes.review`. Audited. With `visibility`, it is also
     /// made public, unlisted or private in the same step (for example, approved for personal use
-    /// only).
+    /// only). `idempotencyKey` (optional UUID): a retry with it within 24 hours answers what the
+    /// first approval did instead of `not_pending`.
     async fn approve_emote(
         &self,
         ctx: &Context<'_>,
         id: String,
         visibility: Option<EmoteVisibility>,
+        idempotency_key: Option<String>,
     ) -> Result<Emote> {
         let caller = caller(ctx)?;
-        moderation::approve(state(ctx), caller, &id, visibility)
-            .await
-            .map_err(api_error)
+        let state = state(ctx);
+        let request = serde_json::json!({
+            "id": id.trim(),
+            "visibility": visibility.map(|v| format!("{v:?}")),
+        });
+        idempotency::once(
+            state,
+            caller,
+            idempotency::op::APPROVE_EMOTE,
+            idempotency_key.as_deref(),
+            request,
+            || moderation::approve(state, caller, &id, visibility),
+        )
+        .await
+        .map_err(api_error)
     }
 
     /// Add a reviewers' note to an emote (1 to 2000 characters). Needs `emotes.review`. Audited.
@@ -2001,6 +2051,8 @@ impl Mutation {
     /// Approve (optionally as `visibility`) or reject (with `reason`) up to 100 pending emotes in
     /// one step. All of it commits together, with one audit row and one notice per emote; emotes
     /// that aren't pending are left alone and listed in `failed`. Needs `emotes.review`.
+    /// `idempotencyKey` (optional UUID): a retry with it within 24 hours answers the first
+    /// outcome instead of listing every emote as `not_pending`.
     async fn review_emotes(
         &self,
         ctx: &Context<'_>,
@@ -2008,15 +2060,32 @@ impl Mutation {
         verdict: ReviewVerdict,
         visibility: Option<EmoteVisibility>,
         reason: Option<String>,
+        idempotency_key: Option<String>,
     ) -> Result<BatchOutcome> {
         let caller = caller(ctx)?;
-        moderation::review_batch(
-            state(ctx),
+        let state = state(ctx);
+        let request = serde_json::json!({
+            "ids": ids,
+            "verdict": format!("{verdict:?}"),
+            "visibility": visibility.map(|v| format!("{v:?}")),
+            "reason": reason,
+        });
+        idempotency::once(
+            state,
             caller,
-            &ids,
-            verdict,
-            visibility,
-            reason.as_deref(),
+            idempotency::op::REVIEW_EMOTES,
+            idempotency_key.as_deref(),
+            request,
+            || {
+                moderation::review_batch(
+                    state,
+                    caller,
+                    &ids,
+                    verdict,
+                    visibility,
+                    reason.as_deref(),
+                )
+            },
         )
         .await
         .map_err(api_error)

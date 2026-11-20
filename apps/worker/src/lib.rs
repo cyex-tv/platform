@@ -17,7 +17,7 @@ use std::time::Duration;
 use chrono::Utc;
 use cyex_tv_db::jobs::{self, Job};
 use cyex_tv_db::{
-    audit, event_sessions, ids, oauth_states, outbox, privacy, search, sessions, shop,
+    audit, event_sessions, idempotency, ids, oauth_states, outbox, privacy, search, sessions, shop,
 };
 use cyex_tv_shared::metrics::{self, Labels, Registry};
 use cyex_tv_storage::Store;
@@ -423,9 +423,10 @@ pub async fn erase_due_accounts(db: &PgPool) -> Result<u64, cyex_tv_db::DbError>
 
 /// Removes what has expired: sessions, sign-ins never finished, outbox events past the replay
 /// window (48 h, ADR 0005), event socket sessions after 24 h, finished jobs after a week, shop
-/// orders pending for a day (failed, see [`expire_orders`]) and Paddle webhook events after 90
-/// days. Erases accounts deleted over 30 days ago ([`erase_due_accounts`]). Puts staff refunds
-/// stuck for an hour back to paid ([`revert_refunds`]). Also refreshes
+/// orders pending for a day (failed, see [`expire_orders`]), Paddle webhook events after 90
+/// days and idempotency keys after 24 h. Erases accounts deleted over 30 days ago
+/// ([`erase_due_accounts`]). Puts staff refunds stuck for an hour back to paid
+/// ([`revert_refunds`]). Also refreshes
 /// the search ranking and the trending counts. The worker's loop also runs [`cancel_stale_checkouts`] after it.
 pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
     let mut conn = db.acquire().await?;
@@ -445,6 +446,11 @@ pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
         Utc::now() - chrono::Duration::days(PADDLE_EVENT_DAYS),
     )
     .await?;
+    let idempotency_keys = idempotency::delete_older_than(
+        &mut conn,
+        Utc::now() - chrono::Duration::hours(idempotency::KEEP_HOURS),
+    )
+    .await?;
     // Search ranking (ADR 0004): channels showing each emote.
     let ranked = search::refresh_popularity(&mut conn).await?;
     drop(conn);
@@ -459,6 +465,7 @@ pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
         done,
         sockets,
         paddle_events,
+        idempotency_keys,
         orders_expired,
         refunds_reverted,
         accounts_erased,

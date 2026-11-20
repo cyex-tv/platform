@@ -14,6 +14,7 @@ import {
   type GraphQLOutputType,
   type GraphQLSchema,
 } from 'graphql';
+import { typeId } from './lazy';
 import sdl from '../../../../../schema/schema.graphql?raw';
 import { EXAMPLE_TAGS, SESSION_ENV, exampleBool, exampleNumber, exampleString, paragraphs, py, shellQuote, type Segment } from './example';
 import { COOKIE, SITE, baseUrl } from './rest';
@@ -66,7 +67,8 @@ export interface GqlReference {
 }
 
 const SCALARS = new Set(['String', 'Int', 'Float', 'Boolean', 'ID']);
-export const typeId = (name: string) => `gql-type-${name}`;
+
+export { typeId };
 
 function inputExample(type: GraphQLInputType, name: string, seen: string[] = [], ctx = ''): unknown {
   if (isNonNullType(type)) return inputExample(type.ofType, name, seen, ctx);
