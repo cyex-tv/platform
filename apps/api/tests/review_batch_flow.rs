@@ -614,7 +614,7 @@ async fn login_checks_take_from_the_account_search_limit() {
 }
 
 #[tokio::test]
-async fn the_same_file_check_hides_emotes_of_accounts_being_deleted() {
+async fn the_same_file_check_hides_emotes_of_deleted_and_blocked_accounts() {
     let Some(w) = World::new().await else {
         return;
     };
@@ -638,6 +638,29 @@ async fn the_same_file_check_hides_emotes_of_accounts_being_deleted() {
     drop(conn);
     let body = w
         .gql(Some(&alice), SAME_FILE, json!({ "s": "0b".repeat(32) }))
+        .await;
+    assert_eq!(body["data"]["emotesWithSameFile"], json!([]), "{body}");
+
+    // Nor of blocked accounts: the rule every emote search shares.
+    let blocked = w.user("903", "blocked", &[]).await;
+    let file = w.file(12).await;
+    w.emote(
+        &blocked,
+        "blockedOne",
+        Some(file),
+        EmoteState::Approved,
+        false,
+    )
+    .await;
+    let mut conn = w.db.conn().await;
+    sqlx::query("UPDATE accounts SET blocked_at = now() WHERE id = $1")
+        .bind(blocked.id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    drop(conn);
+    let body = w
+        .gql(Some(&alice), SAME_FILE, json!({ "s": "0c".repeat(32) }))
         .await;
     assert_eq!(body["data"]["emotesWithSameFile"], json!([]), "{body}");
     w.db.close().await;
