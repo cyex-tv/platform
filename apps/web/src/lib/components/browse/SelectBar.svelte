@@ -105,6 +105,8 @@
   .note { color: var(--text); }
   .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-width: 0; }
   .add { max-width: 100%; min-width: 0; }
+  /* Not pressable (nothing picked, full, already in): the quiet disabled look, not the accent. */
+  .add:disabled { background: var(--surface); border-color: var(--border-strong); color: var(--muted); opacity: .5; cursor: not-allowed; }
   .add .lbl { min-width: 0; max-width: 28ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .link { min-height: 40px; padding: 0 4px; border: 0; background: none; color: var(--accent-text); font: inherit; font-size: var(--t-small); cursor: pointer; }
   .link:disabled { color: var(--dim); cursor: default; }

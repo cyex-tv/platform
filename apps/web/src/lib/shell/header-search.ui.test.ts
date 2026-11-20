@@ -96,3 +96,17 @@ describe('HeaderSearch keyboard', () => {
     expect(gql).not.toHaveBeenCalled();
   });
 });
+
+describe('HeaderSearch errors', () => {
+  it('a new request clears the last one’s error line while it is pending', async () => {
+    const user = userEvent.setup();
+    gql.mockRejectedValueOnce(new Error('down'));
+    render(HeaderSearch);
+    await user.type(box(), 'p');
+    await vi.waitFor(() => expect(screen.getByText(/Search isn.t available right now/)).toBeTruthy(), { timeout: 2000 });
+    gql.mockReturnValueOnce(new Promise(() => {})); // the next request hangs
+    await user.type(box(), 'o');
+    expect(screen.queryByText(/Search isn.t available right now/)).toBeNull();
+    expect(screen.getByText('Searching…')).toBeTruthy();
+  });
+});
