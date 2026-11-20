@@ -581,6 +581,19 @@ async fn the_export_is_yours_complete_limited_and_audited() {
         .emote(&bob, "bobSecret", EmoteState::Approved, false)
         .await;
 
+    // Her own choices travel with the export.
+    {
+        let mut conn = w.db.conn().await;
+        sqlx::query(
+            "INSERT INTO account_prefs (account_id, notify_off, toast_off, show_collection)
+             VALUES ($1, ARRAY['editor.added'], ARRAY['emote.approved'], true)",
+        )
+        .bind(alice.id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    }
+
     // Website only: an app token can't take a copy of everything.
     let r = w.gql(&alice, "mutation { exportMyData }", json!({})).await;
     assert_eq!(code(&r), "website_only", "{r}");
@@ -602,6 +615,14 @@ async fn the_export_is_yours_complete_limited_and_audited() {
     assert_eq!(doc["sets"][0]["emotes"][0]["name"], "aliceOk");
     assert_eq!(doc["channels"][0]["login"], alice.login.as_str());
     assert_eq!(doc["sessions"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        doc["preferences"],
+        json!({
+            "notifications_off": ["editor.added"],
+            "popups_off": ["emote.approved"],
+            "show_collection": true,
+        })
+    );
     for key in [
         "cosmetics",
         "account_editors",

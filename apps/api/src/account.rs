@@ -237,7 +237,9 @@ fn to_json<T: serde::Serialize>(value: &T) -> ApiResult<Value> {
 /// Everything about the caller's account, as one JSON document: the account, identities,
 /// sessions (no tokens), channels, emotes in every state with their tags, sets with their emotes
 /// and editors, account editors both ways, cosmetics owned and shown, roles, reports filed,
-/// notifications, shop orders (bought and received) and redeemed codes. Website only
+/// notifications, shop orders (bought and received), redeemed codes, hidden and favourite lists
+/// and the account's own preferences (notification kinds off, pop-ups off, collection shown).
+/// Website only
 /// (`website_only` with an app token). 5 an hour. Audited (`account.exported`, no content).
 pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
     if caller.via != Via::Cookie {
@@ -411,6 +413,9 @@ pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
             .collect();
         lists.insert(key.to_owned(), Value::Array(entries));
     }
+    let prefs = cyex_tv_db::prefs::get(&mut conn, account_id)
+        .await
+        .map_err(db_error)?;
     let orders_out = export_orders(&mut conn, account_id).await?;
     let redemptions_out: Vec<Value> = cyex_tv_db::codes::redemptions_of(&mut conn, account_id)
         .await
@@ -454,6 +459,11 @@ pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
         "hidden_emotes": lists["hidden_emotes"],
         "hidden_creators": lists["hidden_creators"],
         "favourite_emotes": lists["favourite_emotes"],
+        "preferences": {
+            "notifications_off": prefs.notify_off,
+            "popups_off": prefs.toast_off,
+            "show_collection": prefs.show_collection,
+        },
     });
 
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;

@@ -8,8 +8,9 @@
 //!
 //! Entries are dropped as soon as this instance's feeder sees an event about them (the set, its
 //! channel, the cosmetics catalog; every entry for events that may touch any read, such as an
-//! emote change). Changes that make no event (a set renamed, an emote deleted) show within `ttl`,
-//! well inside the `max-age` the answers already allow clients and the CDN.
+//! emote change). Changes clients aren't told about (a set renamed, made private or deleted)
+//! publish the internal `cache.forget` event naming the entries, which every instance's feeder
+//! hands here too; the instance that made the change drops them at once as well.
 //! Only reads made without a caller are cached, so every viewer would get the same answer.
 
 use std::collections::HashMap;
@@ -54,6 +55,8 @@ pub fn set_key(id: Uuid) -> String {
 
 pub const GLOBAL_SET_KEY: &str = "set:global";
 pub const COSMETICS_KEY: &str = outbox::COSMETICS_TOPIC;
+/// Not a read-cache entry: the live announcement (`site`), dropped by the same event.
+pub const ANNOUNCEMENT_KEY: &str = "announcement";
 
 pub fn emote_key(id: Uuid) -> String {
     format!("emote:{}", cyex_tv_db::ids::to_text(id))
@@ -152,6 +155,12 @@ impl ReadCache {
                 if let Some(set) = event.set_id {
                     slots.remove(&set_key(set));
                     slots.remove(GLOBAL_SET_KEY);
+                }
+            }
+            outbox::CACHE_FORGET => {
+                let mut slots = self.slots();
+                for key in outbox::forget_keys(event) {
+                    slots.remove(&key);
                 }
             }
             // `emote.updated`, `resync`, and anything new.
@@ -280,6 +289,16 @@ mod tests {
         assert_eq!(left, want);
         cache.on_event(&event("cosmetic.updated", &[COSMETICS_KEY], None));
         assert_eq!(cache.len(), 1);
+        let mut forget = event(outbox::CACHE_FORGET, &[outbox::INTERNAL_TOPIC], None);
+        forget.payload = serde_json::json!({ "keys": [set_key(other), "nope"] });
+        cache.on_event(&forget);
+        assert!(cache.is_empty());
+        for key in [set_key(set), set_key(other)] {
+            cache
+                .get_or_load(&key, || async { Ok(body("x")) })
+                .await
+                .unwrap();
+        }
         cache.on_event(&event("emote.updated", &["emote:x"], None));
         assert!(cache.is_empty());
     }

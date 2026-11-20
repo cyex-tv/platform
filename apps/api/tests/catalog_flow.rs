@@ -325,6 +325,143 @@ async fn cached_reads_follow_events() {
     w.db.close().await;
 }
 
+/// A running feeder and the watermark it reached.
+type Fed = (tokio::task::JoinHandle<()>, Arc<AtomicI64>);
+
+/// An api instance's router with the read cache on, as the api binary runs it, and (`feed`) a
+/// feeder keeping it current, with the watermark it reached.
+fn instance(db: &TestDb, feed: bool) -> (Router, Option<Fed>) {
+    let auth = Arc::new(Auth::new(AuthConfig::from_source(|_| None).unwrap()).unwrap());
+    let state = AppState::new(db.pool.clone(), auth)
+        .with_cdn_url("https://cdn.example.test/")
+        .with_read_cache(std::time::Duration::from_secs(60));
+    let feeder = feed.then(|| {
+        let fed = Arc::new(AtomicI64::new(0));
+        let task = tokio::spawn({
+            let (db, hub, fed) = (state.db.clone(), state.hub.clone(), fed.clone());
+            async move {
+                let mut feeder = Feeder::new(0).with_gap_wait(std::time::Duration::from_millis(50));
+                loop {
+                    while let Ok((_, true)) = feeder.tick(&db, &hub).await {}
+                    fed.store(feeder.watermark(), Ordering::SeqCst);
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
+            }
+        });
+        (task, fed)
+    });
+    (cyex_tv_api::app(state), feeder)
+}
+
+async fn status_on(app: &Router, uri: &str) -> (StatusCode, Value) {
+    let response = app
+        .clone()
+        .oneshot(Request::get(uri).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
+}
+
+/// Making a set private, renaming it or deleting it makes no client event, but every instance's
+/// cached read of it goes: at once on the instance that made the change (it has no feeder here),
+/// and on another instance as soon as its feeder hands over the `cache.forget` event.
+#[tokio::test]
+async fn set_privacy_rename_and_delete_drop_cached_reads_everywhere() {
+    let Some(db) = TestDb::new().await else {
+        return;
+    };
+    let (here, _) = instance(&db, false);
+    let (there, feeder) = instance(&db, true);
+    let (feeder, fed) = feeder.unwrap();
+    let w = World { db, app: here };
+    let alice = w.user("161").await;
+    let hidden = w.create_set(&alice, "Main", "CHANNEL").await;
+    let renamed = w.create_set(&alice, "Second", "CHANNEL").await;
+    let deleted = w.create_set(&alice, "Third", "CHANNEL").await;
+    let last = {
+        let mut conn = w.db.conn().await;
+        outbox::latest_id(&mut conn).await.unwrap()
+    };
+    common::wait_until("the other feeder to hand over every event", || async {
+        fed.load(Ordering::SeqCst) >= last
+    })
+    .await;
+    for _ in 0..10 {
+        tokio::task::yield_now().await;
+    }
+    let uri = |set: &str| format!("/v1/sets/{set}");
+    for set in [&hidden, &renamed, &deleted] {
+        assert_eq!(w.get(&uri(set), None).await.status, StatusCode::OK);
+        assert_eq!(status_on(&there, &uri(set)).await.0, StatusCode::OK);
+    }
+
+    let update = "mutation($id: String!, $input: UpdateSetInput!) { updateSet(id: $id, input: $input) { id } }";
+    let r = w
+        .gql(
+            Some(&alice),
+            update,
+            json!({ "id": hidden, "input": { "visibility": "PRIVATE" } }),
+        )
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+    let r = w
+        .gql(
+            Some(&alice),
+            update,
+            json!({ "id": renamed, "input": { "name": "Renamed" } }),
+        )
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+    let r = w
+        .gql(
+            Some(&alice),
+            "mutation($id: String!) { deleteSet(id: $id) }",
+            json!({ "id": deleted }),
+        )
+        .await;
+    assert_eq!(r["data"]["deleteSet"], true, "{r}");
+
+    // Here: at once, with no feeder.
+    assert_eq!(
+        w.get(&uri(&hidden), None).await.status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(w.get(&uri(&renamed), None).await.body["name"], "Renamed");
+    assert_eq!(
+        w.get(&uri(&deleted), None).await.status,
+        StatusCode::NOT_FOUND
+    );
+    // There: once its feeder has the event (the entries would last a minute otherwise).
+    common::wait_until("the other instance to drop the private set", || async {
+        status_on(&there, &uri(&hidden)).await.0 == StatusCode::NOT_FOUND
+    })
+    .await;
+    common::wait_until("the other instance to show the new name", || async {
+        status_on(&there, &uri(&renamed)).await.1["name"] == "Renamed"
+    })
+    .await;
+    common::wait_until("the other instance to drop the deleted set", || async {
+        status_on(&there, &uri(&deleted)).await.0 == StatusCode::NOT_FOUND
+    })
+    .await;
+    // The internal event reaches no client topic.
+    let forgets: Vec<_> = w
+        .events()
+        .await
+        .into_iter()
+        .filter(|e| e.event_type == outbox::CACHE_FORGET)
+        .collect();
+    assert_eq!(forgets.len(), 3, "{forgets:?}");
+    assert!(forgets.iter().all(|e| e.topics == [outbox::INTERNAL_TOPIC]));
+    feeder.abort();
+    w.db.close().await;
+}
+
 #[tokio::test]
 async fn channel_sets_pending_emotes_and_public_reads() {
     let Some(w) = World::new().await else { return };
