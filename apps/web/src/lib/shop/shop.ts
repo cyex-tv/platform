@@ -224,6 +224,14 @@ export function codesText(codes: readonly string[]): string {
   return `${codes.join('\n')}\n`;
 }
 
+/** A whole number typed by a person: "1000" or the site's own "1.000" (dots between groups of three digits); NaN for anything else. */
+export function parseCount(s: string): number {
+  const t = s.trim();
+  if (/^\d{1,9}$/.test(t)) return Number(t);
+  if (/^\d{1,3}(\.\d{3})+$/.test(t) && t.length <= 11) return Number(t.replace(/\./g, ''));
+  return NaN;
+}
+
 /** `cyex-tv-codes-<name>.txt`, with the name reduced to letters, digits and dashes. */
 export function codesFilename(name: string): string {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);

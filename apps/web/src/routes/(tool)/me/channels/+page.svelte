@@ -70,7 +70,7 @@
       <div class="body">
         <label class="ui-row">
           <div><strong>Active set</strong><span class="ui-hint">What everyone in {owner ? 'its' : 'your'} chat sees.</span></div>
-          <select class="ui-input pick" disabled={busy} value={ch.activeSetId ?? ''}
+          <select class="ui-input pick" aria-disabled={busy} value={ch.activeSetId ?? ''}
             onchange={(e) => { const el = e.currentTarget; update(ch, { activeSetId: el.value }, () => (el.value = ch.activeSetId ?? '')); }}>
             <option value="">None</option>
             {#each options as s}<option value={s.id}>{iso(s.name)}</option>{/each}
@@ -81,7 +81,7 @@
         {/if}
         <label class="ui-row">
           <div><strong>Personal emotes</strong><span class="ui-hint">Show chatters’ personal sets in {owner ? 'its' : 'your'} chat.</span></div>
-          <input class="ui-switch" type="checkbox" disabled={busy} checked={ch.allowPersonalEmotes}
+          <input class="ui-switch" type="checkbox" aria-disabled={busy} checked={ch.allowPersonalEmotes}
             onchange={(e) => { const el = e.currentTarget; update(ch, { allowPersonalEmotes: el.checked }, () => (el.checked = ch.allowPersonalEmotes)); }} />
         </label>
       </div>
@@ -118,6 +118,8 @@
 
 <style>
   .body { padding: 2px 14px 8px; }
+  /* Busy keeps focus (a disabled control would drop it): dim it instead. */
+  [aria-disabled='true'] { opacity: .55; cursor: progress; }
   .ui-row .ui-hint { display: block; }
   .pick { width: auto; min-width: 0; max-width: min(100%, 260px); text-overflow: ellipsis; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--twitch-logo); flex: none; }
