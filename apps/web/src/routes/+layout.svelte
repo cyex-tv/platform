@@ -4,6 +4,7 @@
   import { navigating, page } from '$app/state';
   import Footer from '$lib/components/Footer.svelte';
   import AppHeader from '$lib/shell/AppHeader.svelte';
+  import { titleTruncated } from '$lib/shell/truncated';
   import Toasts from '$lib/tool/Toasts.svelte';
   import { syncMotion } from '$lib/shell/motion.svelte';
   import { loadMe, session } from '$lib/tool/session.svelte';
@@ -63,6 +64,8 @@
   });
 </script>
 
+<svelte:document onpointerover={titleTruncated} />
+
 <a class="skip" href="#main">Skip to content</a>
 {#if page.data.skipTo}<a class="skip" href="#{page.data.skipTo}">Skip to contents</a>{/if}
 <AppHeader />
@@ -76,6 +79,9 @@
 
 <style>
   main:focus { outline: none; }
+  /* While something on the page is still loading (a loading state, a grid fetching), the footer waits, hidden
+     but in place: a page growing under a visible footer would shove it down. */
+  :global(main:has([aria-busy='true']) + .footer) { visibility: hidden; }
   .progress { position: fixed; top: calc(var(--nav-h) + 1px + env(safe-area-inset-top, 0px)); left: 0; right: 0; height: 2px;
     z-index: var(--z-nav); pointer-events: none; background: var(--accent); transform-origin: 0 50%;
     opacity: 0; transform: scaleX(0); }

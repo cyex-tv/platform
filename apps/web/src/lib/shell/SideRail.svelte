@@ -42,8 +42,10 @@
     tabs?: RailItem[];
     /** Wide windows: the rail runs the full height of the left side (the window below the header), its foot at the bottom. */
     fill?: boolean;
+    /** The rows aren't known yet: a narrow window keeps the strip's place (blank) so nothing moves when they arrive. */
+    wait?: boolean;
   };
-  let { label, groups = [], head, children, foot, collapse = 'tabs', sheetLabel = 'Menu', bar, sheetCount = 0, tabs, fill = false }: Props = $props();
+  let { label, groups = [], head, children, foot, collapse = 'tabs', sheetLabel = 'Menu', bar, sheetCount = 0, tabs, fill = false, wait = false }: Props = $props();
 
   // Collapsible groups the reader closed, by their label. A group holding the current row stays open.
   let closed = $state<Record<string, boolean>>({});
@@ -196,7 +198,10 @@
   {#if foot && !narrow}<div class="foot">{@render foot()}</div>{/if}
 {/snippet}
 
-{#if narrow && collapse === 'tabs'}
+<!-- The strip (or the sheet button) and the rail are both in the markup, whichever the width: CSS
+     shows one (the rail from 900px, the strip or button below), so the server's page already has
+     the right one and nothing is inserted above the content once the browser has the script. -->
+{#if collapse === 'tabs'}
   {#if navigable}
   <nav class="strip" class:fade-start={fadeStart} class:fade-end={fadeEnd} aria-label={label} bind:this={strip} use:arrowNav={'horizontal'}>
     {#each strips as i (i.href)}
@@ -205,8 +210,10 @@
       </a>
     {/each}
   </nav>
+  {:else if wait}
+  <div class="strip hold" aria-hidden="true"></div>
   {/if}
-{:else if narrow}
+{:else}
   <div class="sheet-bar" class:with-bar={!!bar}>
     {#if bar}<div class="bar-extra">{@render bar()}</div>{/if}
     <button class="btn sheet-btn" type="button" aria-haspopup="dialog" aria-expanded={sheet} onclick={() => (sheet = true)}>
@@ -215,22 +222,21 @@
       {#if sheetCount > 0}<span class="sheet-n">{sheetCount}<span class="sr-only"> on</span></span>{/if}
     </button>
   </div>
-  <BottomSheet bind:open={sheet} label={sheetLabel === 'Menu' ? label : sheetLabel}>
-    <div class="in-sheet">{@render body(() => (sheet = false))}</div>
-  </BottomSheet>
-{:else}
-  <aside class="rail" class:footed={!!foot} class:fill class:tall aria-label={label} bind:this={aside}>
-    {@render body()}
-  </aside>
+  {#if narrow}
+    <BottomSheet bind:open={sheet} label={sheetLabel === 'Menu' ? label : sheetLabel}>
+      <div class="in-sheet">{@render body(() => (sheet = false))}</div>
+    </BottomSheet>
+  {/if}
 {/if}
+<aside class="rail" class:footed={!!foot} class:fill class:tall aria-label={label} bind:this={aside}>
+  {@render body()}
+</aside>
 
 <style>
   .rail { position: sticky; top: calc(var(--nav-h) + env(safe-area-inset-top, 0px) + var(--rail-gap)); align-self: start;
     width: var(--rail-w); padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
   /* Taller than the window: it scrolls with the page (sticky would hide its bottom rows). */
   .rail.tall { position: relative; top: auto; }
-  /* Before hydration on a narrow screen: no full rail above the content, the strip follows. */
-  @media (max-width: 899.98px) { .rail { display: none; } }
   .head { padding: 2px 2px 12px; margin-bottom: 10px; border-bottom: 1px solid var(--border); }
   .head.alone { border-bottom: 0; margin-bottom: 0; }
   .group + .group { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
@@ -273,10 +279,11 @@
     --fs: 0px; --fe: 0px;
     -webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--fs), #000 calc(100% - var(--fe)), transparent);
     mask-image: linear-gradient(90deg, transparent, #000 var(--fs), #000 calc(100% - var(--fe)), transparent); }
+  .strip.hold { min-height: 57px; }
   .strip.fade-start { --fs: 28px; }
   .strip.fade-end { --fe: 28px; }
   .strip::-webkit-scrollbar { display: none; }
-  .tab { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px; scroll-snap-align: start;
+  .tab { position: relative; flex: none; display: inline-flex; align-items: center; gap: 6px; height: 40px; padding: 0 12px; scroll-snap-align: start;
     border-radius: var(--radius); font-size: var(--t-nav); font-weight: 500; color: var(--muted); white-space: nowrap;
     transition: background-color var(--fast), color var(--fast); }
   .tab :global(svg) { color: var(--dim); }
@@ -299,6 +306,9 @@
   .in-sheet .row { min-height: 48px; font-size: var(--t-ui); }
   /* Short landscape phones: the header alone stays pinned, the strip scrolls with the page. */
   @media (max-height: 499.98px) { .strip, .sheet-bar { position: static; } }
+  /* The rail takes over from 900px; the strip and the sheet button are for narrower windows. */
+  @media (min-width: 900px) { .strip, .sheet-bar { display: none; } }
+  @media (max-width: 899.98px) { aside.rail { display: none; } }
 
   @media (hover: hover) and (pointer: fine) {
     .row:hover, .tab:hover { background: var(--row-hover); color: var(--text); }

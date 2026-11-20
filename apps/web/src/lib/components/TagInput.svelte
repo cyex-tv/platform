@@ -135,7 +135,7 @@
     border: 1px solid var(--border-strong); border-radius: var(--radius-btn); background: var(--surface);
     color: var(--text); font-size: 13px; font-weight: 500; white-space: nowrap; }
   .chip bdi { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-  .x { position: relative; flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0;
+  .x { position: relative; flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0;
     border-radius: var(--radius-btn); background: none; color: var(--muted); cursor: pointer;
     transition: color var(--fast), background-color var(--fast); }
   .x::after { content: ''; position: absolute; inset: -9px -4px; } /* 40px to hit */

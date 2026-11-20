@@ -64,7 +64,7 @@
       <header>
         <span class="dot" aria-hidden="true"></span>
         <h2><Name value={ch.login} /></h2>
-        <span class="ui-hint">{platformName(ch.platform)}{#if owner}{' '}· <bdi>{clean(owner)}</bdi>’s channel{/if}</span>
+        <span class="ui-hint" title={owner ? `${platformName(ch.platform)} · ${clean(owner)}’s channel` : undefined}>{platformName(ch.platform)}{#if owner}{' '}· <bdi>{clean(owner)}</bdi>’s channel{/if}</span>
         <a class="ui-btn ghost small" href="/channels/{ch.platform.toLowerCase()}/{encodeURIComponent(ch.login)}">Public page</a>
       </header>
       <div class="body">

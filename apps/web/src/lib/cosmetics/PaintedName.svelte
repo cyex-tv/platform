@@ -31,9 +31,9 @@
 <span class="pn {cls}">
   {#if badge}<BadgeIcon {badge} size={badgeSize} />{/if}
   {#if floor}
-    <span class="fl" class:l={floor !== 'dark'} class:d={floor !== 'light'}><bdi class="txt painted" {style}>{clean(name)}</bdi></span>
+    <span class="fl" class:l={floor !== 'dark'} class:d={floor !== 'light'}><bdi class="txt painted" {style} title={clean(name)}>{clean(name)}</bdi></span>
   {:else}
-    <bdi class="txt" class:painted={!!style} {style}>{clean(name)}</bdi>
+    <bdi class="txt" class:painted={!!style} {style} title={clean(name)}>{clean(name)}</bdi>
   {/if}
 </span>
 

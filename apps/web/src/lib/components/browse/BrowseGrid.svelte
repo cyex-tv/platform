@@ -36,6 +36,17 @@
   let { items, label, loading = false, skeletons = 10, eager = 0, ranked = false, selecting, sel, onstep, onstart }: Props = $props();
 
   let root = $state<HTMLDivElement>();
+
+  // A long grid is a long Tab walk: a "Skip results" link ahead of the tiles (shown when it has
+  // focus, like the page's skip link) moves focus to a marker just after them.
+  const endId = $props.id();
+  const long = $derived(items.length > 8);
+  function skip(e: MouseEvent) {
+    e.preventDefault();
+    const end = document.getElementById(endId);
+    end?.focus();
+    end?.scrollIntoView({ block: 'center' });
+  }
   const order = $derived(items.map((e) => e.id));
   const picked = $derived(new Set(sel.ids));
 
@@ -227,6 +238,7 @@
     if (selecting) e.preventDefault();
   }}
 >
+  {#if long}<a class="skip" href="#{endId}" onclick={skip}>Skip results</a>{/if}
   <ul class="grid" aria-label={label} aria-busy={loading}>
     {#each items as e, i (e.id)}
       <li class:wide={isWide(e)} data-id={e.id}>
@@ -250,6 +262,7 @@
       {/each}
     {/if}
   </ul>
+  {#if long}<span class="end" id={endId} tabindex="-1"></span>{/if}
   {#if band && root}
     {@const o = root.getBoundingClientRect()}
     <div
@@ -280,6 +293,7 @@
 
 <style>
   .pick-area { position: relative; }
+  .end { position: absolute; width: 0; height: 0; outline: none; }
   .grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px;
     grid-template-columns: repeat(auto-fill, minmax(var(--emote-tile), 1fr)); grid-auto-flow: row dense; }
   .wide { grid-column: span 2; }

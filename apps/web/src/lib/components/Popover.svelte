@@ -10,9 +10,16 @@
   // transform, overflow) can clip it or paint over it. It follows the trigger while the page
   // scrolls and closes once the trigger has scrolled out of view.
   //
-  // `kind="disclosure"` (the account menu) is a plain show/hide region of links: the trigger
+  // `kind="disclosure"` (the extension menu) is a plain show/hide region of links: the trigger
   // carries aria-expanded and aria-controls only, the panel has no dialog role, and focus stays
   // on the trigger (Tab walks straight into the links, which follow it in the DOM).
+  //
+  // `kind="menu"` (the account menu) is a real menu, like the emote tile's: opening it moves focus
+  // to the first item, ↑ ↓ Home End move between the items (the content marks them
+  // role="menuitem"), Escape closes it and returns focus to the trigger, and ↓ on the trigger opens it.
+  //
+  // Whatever the kind, the panel keeps inside the window: it opens on the side with more room
+  // and shrinks (its body scrolls) to the room there is.
   //
   //   <Popover label="Filters" sheet>
   //     {#snippet trigger(props)}<button class="btn btn-s" {...props}>Filters</button>{/snippet}
@@ -29,7 +36,7 @@
     align?: 'start' | 'end';
     width?: string;
     sheet?: boolean;
-    kind?: 'dialog' | 'disclosure';
+    kind?: 'dialog' | 'disclosure' | 'menu';
     onclose?: () => void;
     trigger: Snippet<[Record<string | symbol, unknown>]>;
     children: Snippet;
@@ -44,6 +51,7 @@
   let triggerEl: HTMLElement | null = null;
   let above = $state(false);
   let top = $state(0);
+  let maxH = $state(560);
   let left = $state(0);
   let phone = $state(false);
 
@@ -68,8 +76,14 @@
   const triggerProps = $derived({
     'aria-expanded': open,
     'aria-controls': open ? id : undefined, // only while the panel exists
-    'aria-haspopup': kind === 'dialog' ? 'dialog' : undefined,
+    'aria-haspopup': kind === 'dialog' ? 'dialog' : kind === 'menu' ? 'menu' : undefined,
     onclick: () => (open ? close() : (open = true)),
+    onkeydown: (e: KeyboardEvent) => {
+      if (kind === 'menu' && !open && e.key === 'ArrowDown') {
+        e.preventDefault();
+        open = true;
+      }
+    },
     [createAttachmentKey()]: (el: HTMLElement) => {
       triggerEl = el;
     },
@@ -105,6 +119,10 @@
     }
     place(true);
     if (kind === 'disclosure') return;
+    if (kind === 'menu') {
+      items()[0]?.focus({ preventScroll: true });
+      return;
+    }
     const first = panel.querySelector<HTMLElement>('a[href], button:not([disabled]), input, select, textarea, [tabindex="0"]');
     (first ?? panel).focus({ preventScroll: true });
   }
@@ -118,20 +136,42 @@
       return;
     }
     const w = panel.offsetWidth;
-    const h = panel.offsetHeight;
-    if (flip) above = t.bottom + h + 12 > innerHeight && t.top - h - 12 > 0;
+    // The height it wants (its body unscrolled), not the one it has now.
+    const want = (panel.firstElementChild?.scrollHeight ?? 0) + (panel.children[1]?.clientHeight ?? 0) + 2;
+    const edge = 8;
+    const below = innerHeight - t.bottom - 6 - edge;
+    const room = t.top - 6 - edge;
+    if (flip) above = want > below && room > below;
+    const cap = Math.max(120, Math.min(560, innerHeight * 0.7, above ? room : below));
+    maxH = Math.floor(cap);
+    const h = Math.min(want, cap);
     const gutter = 16;
     let x = align === 'end' ? t.right - w : t.left;
     x = Math.min(Math.max(x, gutter), innerWidth - gutter - w);
     left = Math.round(x);
-    top = Math.round(above ? t.top - 6 - h : t.bottom + 6);
+    top = Math.round(Math.max(edge, Math.min(above ? t.top - 6 - h : t.bottom + 6, innerHeight - edge - h)));
+  }
+
+  const items = () => [...(panel?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])].filter((el) => el.offsetParent !== null);
+  function menuKeys(e: KeyboardEvent) {
+    const list = items();
+    if (!list.length) return;
+    const at = list.indexOf(document.activeElement as HTMLElement);
+    let next = -1;
+    if (e.key === 'ArrowDown') next = (at + 1) % list.length;
+    else if (e.key === 'ArrowUp') next = (at - 1 + list.length) % list.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = list.length - 1;
+    if (next < 0) return;
+    e.preventDefault();
+    list[next]?.focus();
   }
 
   function onkeydown(e: KeyboardEvent) {
     if (open && !asSheet && e.key === 'Escape') {
       e.stopPropagation();
       close(true);
-    }
+    } else if (open && !asSheet && kind === 'menu' && panel?.contains(e.target as Node)) menuKeys(e);
   }
   function onpointerdown(e: PointerEvent) {
     if (open && !asSheet && !root.contains(e.target as Node)) close();
@@ -153,12 +193,13 @@
       class="pop {align}"
       class:above
       {id}
-      role={kind === 'dialog' ? 'dialog' : undefined}
-      aria-label={kind === 'dialog' ? label : undefined}
+      role={kind === 'dialog' ? 'dialog' : kind === 'menu' ? 'menu' : undefined}
+      aria-label={kind === 'disclosure' ? undefined : label}
       tabindex="-1"
       popover="manual"
       bind:this={panel}
       style:width
+      style:max-height="{maxH}px"
       style:top="{top}px"
       style:left="{left}px"
       in:pop

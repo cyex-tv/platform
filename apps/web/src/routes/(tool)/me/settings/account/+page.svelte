@@ -144,7 +144,7 @@
     <section class="ui-panel" aria-labelledby="sec-h">
       <header><h2 id="sec-h">Security</h2></header>
       <div class="row pad">
-        <p class="what"><strong>Sign out everywhere</strong><span class="ui-hint">Ends every session: this browser, other browsers and the cyex.tv apps. You sign in again after.</span></p>
+        <p class="what"><strong title="Sign out everywhere">Sign out everywhere</strong><span class="ui-hint">Ends every session: this browser, other browsers and the cyex.tv apps. You sign in again after.</span></p>
         <Confirm small label="Sign out everywhere" confirm="Click again to sign out" busy={busy !== null} onconfirm={everywhere} />
       </div>
     </section>

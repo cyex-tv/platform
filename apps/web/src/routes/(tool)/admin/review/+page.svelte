@@ -258,7 +258,7 @@
   const VIS_CHIP: Record<EmoteVisibility, string> = { PUBLIC: '', UNLISTED: 'Unlisted', PRIVATE: 'Private' };
 </script>
 
-<svelte:head><title>Review - cyex.tv</title></svelte:head>
+<svelte:head><title>Review - Admin - cyex.tv</title></svelte:head>
 
 <svelte:window {onkeydown} onpagehide={flush} />
 
