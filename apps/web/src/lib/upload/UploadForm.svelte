@@ -5,18 +5,24 @@
   // and flags, and a preview at real sizes (1x to 4x). Wide is worked out from the
   // picture, as the API does. Files are checked in the browser first (type, 8 MB, 1000 × 1000 px),
   // then sent one after another with a progress bar; a refusal is explained in words and the file
-  // stays in the queue to fix or retry. Uploading needs the guidelines box ticked once per batch.
+  // stays in the queue to fix or retry. A file that sends nothing for 30 s stalls (and can be retried);
+  // Cancel on the sending row stops it. Uploading needs the guidelines box ticked once per batch.
   // One file that goes through opens its page; a batch stays with a link per emote.
   // "Upload as" (ADR 0014) lists you and the accounts where you hold Upload on every set; you by
   // default, or the account in ?for= when you may upload for it. The account owns what you upload.
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { onDestroy } from 'svelte';
+  import { flip } from 'svelte/animate';
+  import { fade, fly } from 'svelte/transition';
   import { ApiError, uploadEmote, type EmoteVisibility, type Uploaded } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import TagInput from '$lib/components/TagInput.svelte';
   import { bytes, clean, count, iso } from '$lib/format';
+  import { dur } from '$lib/motion';
+  import RetryNote from '$lib/components/RetryNote.svelte';
+  import { quiet } from '$lib/quiet';
   import { editorOf, type Grant } from '$lib/profile/data.svelte';
   import { emoteCan, uploadTargets } from '$lib/tool/editors';
   import { session } from '$lib/tool/session.svelte';
@@ -76,13 +82,17 @@
   let dropButton: HTMLButtonElement;
   let acceptBox: HTMLInputElement;
   let nextKey = 0;
+  /** The running upload of each file, so its Cancel can stop it. */
+  const running = new Map<number, AbortController>();
 
   let grants = $state<readonly Grant[] | null>(null);
+  let grantsFailed = $state(false);
+  function loadGrants() {
+    grantsFailed = false;
+    void quiet(editorOf().then((g) => (grants = g)), 'upload-as list', () => (grantsFailed = true));
+  }
   $effect(() => {
-    if (!session.me) return;
-    editorOf()
-      .then((g) => (grants = g))
-      .catch(() => {});
+    if (session.me) loadGrants();
   });
   const me = $derived(session.me ? { id: session.me.id, displayName: session.me.identities[0]?.displayName ?? 'You' } : null);
   const targets = $derived(uploadTargets(me, grants));
@@ -181,10 +191,17 @@
     notify(`Tags and flags copied to ${count(rest.length)} ${rest.length === 1 ? 'file' : 'files'}.`);
   }
 
+  /** Stops the file that is being sent; it goes back to waiting, and the rest of the batch waits too. */
+  function cancel(item: Item) {
+    running.get(item.key)?.abort();
+  }
+
   async function send(item: Item) {
     item.status = 'uploading';
     item.progress = 0;
     item.error = null;
+    const ctl = new AbortController();
+    running.set(item.key, ctl);
     try {
       item.made = await uploadEmote(
         item.file,
@@ -193,16 +210,30 @@
         { zeroWidth: item.zeroWidth, visibility: item.visibility, nsfw: item.nsfw },
         (p) => (item.progress = p),
         forOther ? owner!.id : null,
+        { signal: ctl.signal },
       );
       item.status = 'done';
       item.open = false;
       return true;
     } catch (err) {
+      if (err instanceof ApiError && err.code === 'aborted') {
+        item.status = 'ready';
+        item.progress = 0;
+        return 'stop';
+      }
       item.status = 'failed';
       item.error = err instanceof ApiError ? uploadProblem(err.code, err.message) : 'The upload didn’t go through.';
       item.open = true;
       return err instanceof ApiError && err.code === 'rate_limited' ? 'stop' : false;
+    } finally {
+      running.delete(item.key);
     }
+  }
+
+  /** Sends one failed file again (the row's Retry). */
+  function retry(item: Item) {
+    if (busy || !accepted) return;
+    void run([item]);
   }
 
   async function submit(e: SubmitEvent) {
@@ -223,8 +254,11 @@
       acceptBox.focus();
       return;
     }
+    await run([...waiting]);
+  }
+
+  async function run(batch: Item[]) {
     busy = true;
-    const batch = [...waiting];
     let ok = 0;
     for (const item of batch) {
       const r = await send(item);
@@ -233,7 +267,7 @@
     }
     busy = false;
     const failed = batch.filter((i) => i.status === 'failed').length;
-    if (batch.length === 1 && ok === 1) {
+    if (batch.length === 1 && ok === 1 && items.length === 1) {
       const made = batch[0].made!;
       notify(`${iso(made.name)} uploaded${forOther ? ` for ${iso(clean(owner!.displayName))}` : ''}. It’s pending until a moderator looks at it.`);
       const href = openHref(made.id);
@@ -251,6 +285,9 @@
 </script>
 
 <form class="ui-form up-form" class:in-dialog={inDialog} onsubmit={submit} novalidate>
+  {#if grantsFailed}
+    <RetryNote onretry={loadGrants}>Couldn’t load the accounts you can upload for. You can still upload as yourself.</RetryNote>
+  {/if}
   {#if targets.length > 1}
     <label class="ui-field as">
       <span class="ui-label">Upload as</span>
@@ -292,7 +329,7 @@
         {@const te = tagError(item)}
         {@const bad = !!(fe || (tried && (nameProblem(item.name) || te)))}
         {@const wide = !!item.width && isWide(item.width, item.height)}
-        <li class="item ui-card" class:bad class:done={item.status === 'done'} id="item-{item.key}">
+        <li class="item ui-card" class:bad class:done={item.status === 'done'} id="item-{item.key}" in:fly={{ y: 8, duration: dur(200) }} out:fade={{ duration: dur(120) }} animate:flip={{ duration: dur(200) }}>
           <div class="head">
             <button type="button" class="toggle" aria-expanded={item.open} aria-controls="body-{item.key}" onclick={() => (item.open = !item.open)} disabled={item.status === 'done'}>
               <span class="thumb"><img src={item.url} alt="" /></span>
@@ -304,11 +341,13 @@
             <span class="state">
               {#if item.status === 'uploading'}
                 <span class="bar" role="progressbar" aria-label="Uploading {item.name}" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(item.progress * 100)}><span style:transform="scaleX({Math.max(0.04, item.progress)})"></span></span>
+                <button type="button" class="ui-btn ghost small" onclick={() => cancel(item)} aria-label="Cancel uploading {item.file.name}">Cancel</button>
               {:else if item.status === 'done' && item.made}
                 <span class="ui-chip pending">Pending</span>
                 <a class="ui-btn ghost small" href={openHref(item.made.id)} onclick={() => onclose?.()}>Open</a>
               {:else if item.status === 'failed'}
                 <span class="ui-chip rejected">Didn’t go through</span>
+                <button type="button" class="ui-btn secondary small" onclick={() => retry(item)} disabled={busy || !accepted} aria-label="Retry {item.file.name}">Retry</button>
               {:else if bad}
                 <span class="ui-chip rejected">Needs a fix</span>
               {/if}
@@ -416,7 +455,7 @@
   .state { flex: none; display: flex; align-items: center; gap: 8px; }
   .bar { display: block; width: 96px; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
   .bar span { display: block; height: 100%; background: var(--accent); transform-origin: 0 50%; transition: transform var(--fast) linear; }
-  @media (prefers-reduced-motion: reduce) { .bar span { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .bar span { transition: none; } }
   .small { min-height: 32px; height: 32px; padding: 0 10px; }
   .err { margin: 10px 0 0; outline: none; }
 
@@ -432,6 +471,11 @@
   .accept .ui-check a { color: var(--accent-text, var(--accent)); text-decoration: underline; text-underline-offset: 2px; }
   .accept .ui-hint { margin: 0; }
   .foot { flex-wrap: wrap; padding-top: 4px; }
+  /* In the dialog the buttons stay at the foot of what scrolls, so a short window (a phone on its
+     side, 200% zoom) never leaves Upload below the fold. The dialog's own padding is bridged by
+     the negative margins, and the bar has the dialog's ground. */
+  .in-dialog .foot { position: sticky; bottom: calc(-16px - env(safe-area-inset-bottom, 0px)); z-index: 2; margin: 0 -16px calc(-16px - env(safe-area-inset-bottom, 0px));
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px)); background: var(--elevated); border-top: 1px solid var(--border); }
   .ui-spinner.small { width: 13px; height: 13px; border-color: color-mix(in srgb, var(--accent-ink) 35%, transparent); border-top-color: var(--accent-ink); }
   @container (max-width: 700px) { .body { grid-template-columns: minmax(0, 1fr); } }
   @media (max-width: 520px) {

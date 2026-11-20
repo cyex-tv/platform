@@ -12,6 +12,33 @@ Handoff `2026-11-19-03-deck-to-cyextv-app-sign-in` from the deck chat.
 - [x] Website: `/authorize` consent page (cyex app layer: one card, the app, what it may do, the account with Not you?, Deny and Allow; sign-in buttons when signed out; one error state for bad links). Dev mock: the whole flow. Docs: App sign-in guide on /developers, the five endpoints in the reference.
 - [x] Tests: `apps/api/tests/app_sign_in_flow.rs` (Postgres in CI), unit tests in `crates/auth/src/app.rs`, vitest `app-auth.test.ts`.
 - [x] Manual (CDP, `.claude/runs/2026-11-20-overnight/screens/app-sign-in/shots.mjs`, 375 and 1440, dark and light): consent, sign-in and invalid states; Allow and Deny go back to the loopback address.
+
+## Security fixes S1 (branch `fix/security-s1`, ADR 0004, 0010, 0014, 0019, 0020 amendments of 2026/11/20)
+
+From the 2026/11/20 security review (findings A4). Each with a test that fails before and passes after:
+- [x] HIGH `quickSearch` showed unlisted emotes and those of accounts pending deletion: one `search::LISTED_EMOTE` fragment for `search` (every sort), `quick` and `trending_rank`. Test `every_search_uses_the_listed_emote_rule` (crates/db/tests/queries.rs: public, unlisted, private, NSFW and a pending-deletion owner through all three).
+- [x] HIGH `editors.manage_any` reached the owner's account: staff now get `owner_protected` on the owners' accounts and `not_below_you` on accounts at or above their rank (reads too). Test `staff_editor_management_respects_the_owner_and_seniority` (sec_roles.rs).
+- [x] MED the built-in User role could be given a staff permission by any `roles.manage` holder: adding one needs the owner (`owner_only`) unless it is on `USER_ROLE_ALLOWED` (empty). Test `only_the_owner_adds_staff_permissions_to_the_user_role` (builtin_roles_flow.rs).
+- [x] MED accepting a transfer re-checks the asking editor's `emote_transfer`; without it the request closes (`reason: editor_permission`). Test `accepting_rechecks_the_editors_transfer_permission` (editor_emotes_flow.rs).
+- [x] MED erasure deletes staff notes, blanks restriction reasons and strips `body`, `reason`, `note` from audit rows about the account; `identity_holds` retention documented (ADR 0019, `privacy::erase`). Test `erasure_scrubs_notes_reasons_and_audit_text` (queries.rs).
+- [x] LOW upload hourly limit re-checked under a per-account advisory lock (`emotes::lock_upload_quota`); text form fields read chunk by chunk with a cap. Tests `concurrent_uploads_respect_the_hourly_limit`, `over_long_text_fields_are_refused` (upload_flow.rs).
+- [x] LOW nobody changes their own holds (`own_account`). Test in `restricting_and_blocking_accounts` (abuse_flow.rs).
+- [x] LOW app tokens: `exportMyData` and `revokeOtherSessions` are website only (`website_only`); `signOutEverywhere` with an app token ends only that session. Tests in account_hub_flow.rs.
+- [x] LOW activity: an unlisted emote's own feed shows its lines; emotes of pending-deletion owners leave every feed. Test `unlisted_and_leaving_emotes_in_feeds` (emote_activity_flow.rs).
+- [x] LOW tags: NFC on both sides, combining marks allowed (`text::normalize_tag`, `text::is_tag_char`; web `rules.ts`). Unit tests in shared text.rs, moderation.rs and rules.test.ts.
+- [x] LOW transfer answers are `not_found` to anyone but the two parties. Test in `editor_transfers_wait_for_the_owner_and_go_only_to_trusting_accounts`.
+- [x] Code review: erase also clears `emotes.uploaded_by`, deletes `oauth_states` and closes open transfer requests the account is a party to. Tests `every_reference_to_an_account_is_handled_by_erase` (every FK to accounts from information_schema, handled or kept with a reason) and `erasure_clears_uploader_and_closes_its_transfer_requests` (queries.rs).
+- [x] Code review: `acceptEmoteTransfer` locks the emote before the request, as `transferEmote` does (no deadlock). Test `accept_and_owner_transfer_at_once_dont_deadlock` (editor_emotes_flow.rs).
+- [x] Dev mock: `quickSearch` public only; transfers `not_found` to non-parties and the editor re-check on accept (the seeded requester holds `EMOTE_TRANSFER`).
+
+### GitHub write log for this PR
+
+```
+git push -u origin fix/security-s1
+gh pr create --base main --head fix/security-s1 --title "Security fixes S1: search visibility, staff editor rank, User role, transfers, erasure, app tokens" --body-file <file>
+git push
+```
+
 ## Scale: hot reads at 100k emotes, 50k accounts, 20k channels (branch `perf/scale-1`)
 
 Owner: "make sure everything is already laid out for a higher scale deployment like thousands of emotes and users". Audit with file:line and the proposals: `.claude/runs/2026-11-19-feedback/scale-audit.md`.
@@ -1158,3 +1185,13 @@ git push -u origin feat/hero-shadows
 gh pr create --base main --head feat/hero-shadows --title "Hero: real soft shadows, a ground shadow and light falloff" --body-file <file>
 gh pr merge <n> --merge
 ```
+
+## 2026/11/20 Test gaps (test/gaps)
+- Web: vitest now has two projects, `unit` (node) and `ui` (jsdom, `*.ui.test.ts`, with @testing-library/svelte and user-event; jsdom shims in `src/lib/test/dom-setup.ts`). New tests: loader, inbox, hooks.server headers, the CSP in svelte.config.js, the public pages' load functions, docs behaviour, Popover, TagInput, Toasts, SelectBar, HeaderSearch keyboard. `npm run test:coverage` prints a coverage summary (CI uses it, no threshold). `npm run test:e2e` runs dev/e2e/cosmetics.mjs, which needs the dev mock, vite dev and a headless browser on a debug port (setup in the file's header); it is not in CI.
+- Rust: sleeps used as synchronisation in apps/api/tests are polling helpers with a deadline (`common::wait_until`, `wait_for_feeders`); `hot_reads_use_their_indexes` runs VACUUM ANALYZE and asserts that an index of the table was used.
+## Set editor paging, Add emotes paging, transfer notification state (2026/11/20)
+- API (additive): `setEmotes(id, query, page, perPage)` returns a page of a set's emotes, oldest first, with `total`; the visibility rule of `set`; `query` filters by name in the set or own name; `perPage` 1 to 200, default 120. `Notification.transferState` shows where a transfer request stands now (pending, accepted, declined, cancelled, expired); null for other kinds. Postgres tests: `set_emotes_pages_filters_and_keeps_visibility`, `transfer_notifications_show_where_the_request_stands`.
+- Web: `/me/sets/[id]` reads 120 emotes at a time with Load more, Filter asks the API (whole set), ids and names for Add come as slim pages. Add emotes has Load more with "Showing 40 of N". A transfer-request notification whose request was answered, withdrawn or expired elsewhere shows that, not Accept and Decline.
+- Dev mock: `MOCK_SET_SIZE=1000` fills the Main set.
+- At 1.000 emotes (headless Edge, dev server, warm): first render about 600 ms before, 320 ms after; JS heap 95 MB before, 20 MB after; 1000 tiles before, 120 after.
+- Screens in `.claude/runs/2026-11-20-overnight/screens/f-u2b/`.

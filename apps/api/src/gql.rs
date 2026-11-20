@@ -29,8 +29,8 @@ use cyex_tv_shared::model::{
     Entitlement, EntitlementPage, Event, GrantCosmetic, Identity, Me, Notification, OwnedCosmetics,
     Paint, PaintInput, PendingDeletion, PersonalSetEntry, Platform, QuickSearch, Report,
     ReportAction, ReportQueue, ReviewQueue, ReviewQueueFilter, Role, SearchResults, SetEmote,
-    SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote, UpdateRole,
-    UpdateSet, UpdateSetEmote, UserCosmetics,
+    SetEmotePage, SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote,
+    UpdateRole, UpdateSet, UpdateSetEmote, UserCosmetics,
 };
 use cyex_tv_shared::model::{
     Checkout, CodeBatch, CodeBatchInput, CodeBatchPage, CreatedCodeBatch, Order, OrderPage,
@@ -355,6 +355,30 @@ impl Query {
         catalog::set(state(ctx), caller_opt(ctx), &id)
             .await
             .map_err(api_error)
+    }
+
+    /// A page of a set's emotes, oldest first, for sets too big to read whole. Who may see what is
+    /// the rule of `set`; an unknown or hidden set is an empty page. `query` keeps the emotes whose
+    /// name in the set or own name contains it (case-insensitive). `perPage` is 1 to 200, default
+    /// 120; `total` counts every match.
+    async fn set_emotes(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        query: Option<String>,
+        page: Option<u32>,
+        per_page: Option<u32>,
+    ) -> Result<SetEmotePage> {
+        catalog::set_emotes(
+            state(ctx),
+            caller_opt(ctx),
+            &id,
+            query.as_deref(),
+            page,
+            per_page,
+        )
+        .await
+        .map_err(api_error)
     }
 
     /// An account's `LISTED` sets as profile cards, oldest first, at most 50. `preview` is how
@@ -1911,7 +1935,7 @@ impl Mutation {
     }
 
     /// Sign out everywhere, here too: every site and app session ends and the cookie is cleared.
-    /// Returns how many sessions ended.
+    /// Returns how many sessions ended. With an app token, only that app session ends.
     async fn sign_out_everywhere(&self, ctx: &Context<'_>) -> Result<u64> {
         let caller = caller(ctx)?;
         let n = account::revoke_all_sessions(state(ctx), caller)
@@ -1926,7 +1950,8 @@ impl Mutation {
         Ok(n)
     }
 
-    /// Sign out everywhere but here. Returns how many sessions ended.
+    /// Sign out everywhere but here. Returns how many sessions ended. Website only
+    /// (`website_only` with an app token).
     async fn revoke_other_sessions(&self, ctx: &Context<'_>) -> Result<u64> {
         let caller = caller(ctx)?;
         account::revoke_other_sessions(state(ctx), caller)
@@ -1936,8 +1961,8 @@ impl Mutation {
 
     /// A copy of everything about your account, as JSON text (`format`, `version`, `account`,
     /// `identities`, `sessions`, `channels`, `emotes`, `sets`, `set_editors`, `account_editors`,
-    /// `editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`). 5 an hour
-    /// (`rate_limited`). Audited.
+    /// `editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`). Website
+    /// only (`website_only` with an app token). 5 an hour (`rate_limited`). Audited.
     async fn export_my_data(&self, ctx: &Context<'_>) -> Result<String> {
         let caller = caller(ctx)?;
         account::export(state(ctx), caller).await.map_err(api_error)

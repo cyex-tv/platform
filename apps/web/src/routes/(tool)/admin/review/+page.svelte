@@ -5,12 +5,12 @@
   // tag count and upload time, with the verdicts on it: approve, approve as unlisted, approve for
   // its owner only, reject with a reason. A card opens the detail dialog. Keyboard first: the
   // arrows move between cards, Enter opens one, A approves, U and P approve unlisted and
-  // private, R rejects, Esc closes; after a verdict the next upload is up.
+  // private, R rejects, Z undoes an approval (5 s), Esc closes; after a verdict the next upload is up.
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { gql } from '$lib/api';
   import { ready, size, src, srcsetW } from '$lib/emote';
-  import { tick } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import { clean, count, dateTime, iso } from '$lib/format';
   import type { EmoteFieldsFragment, EmoteVisibility, ReviewSort, ReviewTab } from '$lib/gql/graphql';
   import { APPROVE, REJECT, REVIEW_QUEUE } from '$lib/queries';
@@ -24,7 +24,7 @@
   import PageHead from '$lib/tool/PageHead.svelte';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
   import { loader } from '$lib/tool/loader.svelte';
-  import { fail, notify } from '$lib/tool/notices.svelte';
+  import { dismiss, fail, notify } from '$lib/tool/notices.svelte';
 
   const PER_PAGE = 50;
   const REASONS = ['Low quality or blurry', 'Already uploaded (a duplicate)', 'Not an emote', 'NSFW but not marked', 'Hateful or harassing', 'The name breaks the rules'];
@@ -101,7 +101,7 @@
     cur = id;
     const el = card(id);
     el?.focus();
-    el?.scrollIntoView({ block: 'nearest' });
+    el?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
   }
   const columns = () => (grid ? getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length : 1);
 
@@ -155,6 +155,10 @@
       else if (k === 'p' && ready(e)) (ev.preventDefault(), approve(e, 'PRIVATE'));
       else if (k === 'r') (ev.preventDefault(), askReject(e));
     }
+    if (k === 'z' && !ev.repeat && waiting.size) {
+      ev.preventDefault();
+      undo([...waiting.keys()].pop()!);
+    }
   }
 
   // A verdict takes the card out; the next one gets focus (or the dialog shows it).
@@ -182,19 +186,42 @@
     }
   }
 
+  // An approval is not sent at once: the card leaves, a toast offers Undo for UNDO_MS, and only
+  // then does the call go out (the API has no way to take an approval back, so waiting is the undo).
+  // Leaving the page sends what is waiting; Z undoes the latest.
+  const UNDO_MS = 5000;
   const VERB: Record<EmoteVisibility, string> = { PUBLIC: 'approved', UNLISTED: 'approved as unlisted', PRIVATE: 'approved for its owner only' };
-  async function approve(e: EmoteFieldsFragment, visibility?: EmoteVisibility) {
-    busy = e.id;
+  const waiting = new Map<string, { e: EmoteFieldsFragment; visibility: EmoteVisibility | null; timer: ReturnType<typeof setTimeout>; toast: number }>();
+
+  function approve(e: EmoteFieldsFragment, visibility?: EmoteVisibility) {
+    if (waiting.has(e.id)) return;
+    const v = visibility ?? null;
+    done(e.id);
+    const toast = notify(`${iso(e.name)} ${VERB[v ?? 'PUBLIC']}.`, false, { ms: UNDO_MS, action: { label: 'Undo', run: () => undo(e.id) } });
+    waiting.set(e.id, { e, visibility: v, toast, timer: setTimeout(() => void send(e.id), UNDO_MS) });
+  }
+  async function send(id: string) {
+    const w = waiting.get(id);
+    if (!w) return;
+    clearTimeout(w.timer);
+    waiting.delete(id);
     try {
-      await gql(APPROVE, { id: e.id, visibility: visibility ?? null });
-      notify(`${iso(e.name)} ${VERB[visibility ?? 'PUBLIC']}.`);
-      done(e.id);
+      await gql(APPROVE, { id, visibility: w.visibility });
     } catch (err) {
       fail(err);
-    } finally {
-      busy = null;
+      L.reload(); // it is still in the queue: bring the card back
     }
   }
+  function undo(id: string) {
+    const w = waiting.get(id);
+    if (!w) return;
+    clearTimeout(w.timer);
+    waiting.delete(id);
+    dismiss(w.toast);
+    L.reload();
+  }
+  const flush = () => [...waiting.keys()].forEach((id) => void send(id));
+  onDestroy(flush);
 
   function askReject(e: EmoteFieldsFragment) {
     rejecting = e;
@@ -231,9 +258,9 @@
   const VIS_CHIP: Record<EmoteVisibility, string> = { PUBLIC: '', UNLISTED: 'Unlisted', PRIVATE: 'Private' };
 </script>
 
-<svelte:head><title>Review - cyex.tv</title></svelte:head>
+<svelte:head><title>Review - Admin - cyex.tv</title></svelte:head>
 
-<svelte:window {onkeydown} />
+<svelte:window {onkeydown} onpagehide={flush} />
 
 <PageHead title="Review queue">
   {#snippet line()}{#if counts}<span class="ui-num">{count(counts.public + counts.limited)}</span> waiting{:else}Uploads waiting for a verdict{/if}{/snippet}
@@ -266,7 +293,7 @@
     <IconButton label="Refresh" icon="refresh" variant="outline" disabled={L.loading} onclick={() => L.reload()} />
   </div>
 </div>
-<p class="sr-only" id="queue-keys">Arrow keys move between uploads. Enter opens one. A approves, U approves as unlisted, P approves for its owner only, R rejects.</p>
+<p class="sr-only" id="queue-keys">Arrow keys move between uploads. Enter opens one. A approves, U approves as unlisted, P approves for its owner only, R rejects. Z undoes the last approval while its notice shows.</p>
 
 <LoadGate source={L} label="Loading the queue…">
 {#snippet children(queue)}

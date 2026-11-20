@@ -1,7 +1,7 @@
 <script lang="ts">
   import Name from '$lib/components/Name.svelte';
   import { clean, iso } from '$lib/format';
-  import { permissionLabels } from '$lib/tool/editors';
+  import { ownerSetsHref, permissionLabels } from '$lib/tool/editors';
   import { gql } from '$lib/api';
   import type { MyChannelsQuery } from '$lib/gql/graphql';
   import { MY_CHANNELS, UPDATE_CHANNEL } from '$lib/queries';
@@ -15,7 +15,8 @@
   type Channel = MyChannelsQuery['myChannels'][number];
   const L = loader(({ fetch }) => gql(MY_CHANNELS, {}, fetch));
   const sets = $derived(L.data?.mySets ?? []);
-  let saving = $state<string | null>(null);
+  /** Channels with a save on its way: one at a time per channel, however fast the controls are used. */
+  let saving = $state(new Set<string>());
 
   const channelSets = $derived(sets.filter((s) => s.kind === 'CHANNEL' && s.owner?.id === session.me?.id));
   // Account editing (ADR 0014): channels of accounts you edit with the channels permission (which
@@ -32,18 +33,23 @@
       .filter((g) => g.channels.length),
   );
 
-  async function update(ch: Channel, input: { activeSetId?: string; allowPersonalEmotes?: boolean }) {
+  async function update(ch: Channel, input: { activeSetId?: string; allowPersonalEmotes?: boolean }, revert: () => void) {
     const key = `${ch.platform}:${ch.platformChannelId}`;
-    saving = key;
+    if (saving.has(key)) return revert();
+    saving = new Set([...saving, key]);
     try {
       const r = await gql(UPDATE_CHANNEL, { platform: ch.platform, id: ch.platformChannelId, input });
       ch.activeSetId = r.updateChannelSettings.activeSetId;
       ch.allowPersonalEmotes = r.updateChannelSettings.allowPersonalEmotes;
       notify('Saved. Chat picks it up within seconds.');
     } catch (err) {
+      // The control goes back to what is saved, not the value that failed.
+      revert();
       fail(err);
     } finally {
-      saving = null;
+      const left = new Set(saving);
+      left.delete(key);
+      saving = left;
     }
   }
 
@@ -53,30 +59,30 @@
 <svelte:head><title>Channels - cyex.tv</title></svelte:head>
 
 {#snippet panel(ch: Channel, options: { id: string; name: string }[], owner?: string)}
-  {@const busy = saving === `${ch.platform}:${ch.platformChannelId}`}
+  {@const busy = saving.has(`${ch.platform}:${ch.platformChannelId}`)}
     <section class="ui-panel" data-platform={ch.platform.toLowerCase()}>
       <header>
         <span class="dot" aria-hidden="true"></span>
         <h2><Name value={ch.login} /></h2>
-        <span class="ui-hint">{platformName(ch.platform)}{#if owner} · <bdi>{clean(owner)}</bdi>’s channel{/if}</span>
+        <span class="ui-hint" title={owner ? `${platformName(ch.platform)} · ${clean(owner)}’s channel` : undefined}>{platformName(ch.platform)}{#if owner}{' '}· <bdi>{clean(owner)}</bdi>’s channel{/if}</span>
         <a class="ui-btn ghost small" href="/channels/{ch.platform.toLowerCase()}/{encodeURIComponent(ch.login)}">Public page</a>
       </header>
       <div class="body">
         <label class="ui-row">
           <div><strong>Active set</strong><span class="ui-hint">What everyone in {owner ? 'its' : 'your'} chat sees.</span></div>
           <select class="ui-input pick" disabled={busy} value={ch.activeSetId ?? ''}
-            onchange={(e) => update(ch, { activeSetId: e.currentTarget.value })}>
+            onchange={(e) => { const el = e.currentTarget; update(ch, { activeSetId: el.value }, () => (el.value = ch.activeSetId ?? '')); }}>
             <option value="">None</option>
             {#each options as s}<option value={s.id}>{iso(s.name)}</option>{/each}
           </select>
         </label>
         {#if options.length === 0}
-          <p class="ui-hint">{owner ? `${iso(owner)} has` : 'You have'} no channel sets yet. <a href={owner ? `/me/sets#of-${ch.account.id}` : "/me/sets"}>Make one</a>.</p>
+          <p class="ui-hint">{owner ? `${iso(owner)} has` : 'You have'} no channel sets yet. <a href={owner ? ownerSetsHref(ch.account.id) : '/me/sets'}>Make one</a>.</p>
         {/if}
         <label class="ui-row">
           <div><strong>Personal emotes</strong><span class="ui-hint">Show chatters’ personal sets in {owner ? 'its' : 'your'} chat.</span></div>
           <input class="ui-switch" type="checkbox" disabled={busy} checked={ch.allowPersonalEmotes}
-            onchange={(e) => update(ch, { allowPersonalEmotes: e.currentTarget.checked })} />
+            onchange={(e) => { const el = e.currentTarget; update(ch, { allowPersonalEmotes: el.checked }, () => (el.checked = ch.allowPersonalEmotes)); }} />
         </label>
       </div>
     </section>
@@ -113,7 +119,7 @@
 <style>
   .body { padding: 2px 14px 8px; }
   .ui-row .ui-hint { display: block; }
-  .pick { width: auto; min-width: 0; max-width: 100%; }
+  .pick { width: auto; min-width: 0; max-width: min(100%, 260px); text-overflow: ellipsis; }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--twitch-logo); flex: none; }
   [data-platform='kick'] .dot { background: var(--kick); }
   header h2 { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

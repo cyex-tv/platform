@@ -24,7 +24,7 @@
   {/if}
   <div class="row">
     <div class="text">
-      <svelte:element this={level} class="title">{#if name}<bdi>{title}</bdi>{:else}{title}{/if}</svelte:element>
+      <svelte:element this={level} class="title" class:name>{#if name}<bdi>{title}</bdi>{:else}{title}{/if}</svelte:element>
       {#if line}<p class="line">{#if typeof line === 'string'}{line}{:else}{@render line()}{/if}</p>{/if}
     </div>
     {#if actions}<div class="actions">{@render actions()}</div>{/if}
@@ -39,6 +39,8 @@
   .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
   .text { min-width: 0; flex: 1 1 280px; }
   .title { margin: 0; font-size: var(--t-page); font-weight: 600; line-height: 1.25; letter-spacing: -.02em; overflow-wrap: anywhere; text-wrap: balance; }
+  /* A name may carry stacked marks (zalgo): they are cut at the title's own box, not drawn over the page. */
+  .title.name { overflow: clip; }
   .line { margin: 8px 0 0; max-width: 64ch; font-size: var(--t-ui); line-height: 1.5; color: var(--muted); font-variant-numeric: tabular-nums; text-wrap: pretty; overflow-wrap: anywhere; }
   .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 </style>

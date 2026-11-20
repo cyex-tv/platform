@@ -16,7 +16,10 @@ import {
   grantable,
   locked,
   ordered,
+  ownerSetsHref,
   permissionLabels,
+  permissionPhrase,
+  setAccess,
   scopeInput,
   scopeLabel,
   scopeOf,
@@ -53,8 +56,8 @@ describe('account editor permissions', () => {
 
   it('names permissions in order, folding channels into sets', () => {
     expect(ordered(['EDITORS', 'EMOTES', 'EMOTES'])).toEqual(['EMOTES', 'EDITORS']);
-    expect(permissionLabels(['SETS', 'EMOTES', 'CHANNELS'])).toBe('Set emotes and Sets');
-    expect(permissionLabels(['CHANNELS'])).toBe('Channels');
+    expect(permissionLabels(['SETS', 'EMOTES', 'CHANNELS'])).toBe('Edit set emotes and manage sets');
+    expect(permissionLabels(['CHANNELS'])).toBe('Change channel settings');
     expect(permissionLabels([])).toBe('Nothing');
     expect(permissionLabels(PERMISSIONS.map((p) => p.key))).toBe('Everything');
   });
@@ -180,5 +183,39 @@ describe('sets an editor may edit', () => {
     const held = new Set(perms('EMOTES', 'EDITORS'));
     expect(canManage(held, ['EMOTES'], mine, { all: false, ids: ['s1'] })).toBe(true);
     expect(canManage(held, ['EMOTES'], mine, ALL_SETS)).toBe(false);
+  });
+});
+
+describe('wording of what an editor can do', () => {
+  it('reads as actions, not bare nouns', () => {
+    expect(permissionLabels(['EMOTES', 'SETS', 'EDITORS'])).toBe('Edit set emotes, manage sets and manage editors');
+    expect(permissionPhrase(['EMOTES', 'PROFILE'])).toBe('edit set emotes and change the profile');
+    expect(permissionPhrase([])).toBe('do nothing');
+  });
+});
+
+describe('the Sets link of an account you edit', () => {
+  it('uses the query the sets page reads, not a hash it ignores', () => {
+    expect(ownerSetsHref('01ABC')).toBe('/me/sets?owner=01ABC');
+    expect(ownerSetsHref('a b')).toBe('/me/sets?owner=a%20b');
+  });
+});
+
+describe('what you may do with a set', () => {
+  const none = new Set<EditorPermission>();
+  it('gives a stranger nothing', () => {
+    expect(setAccess({ owner: false, setEditor: false, staff: false, held: none })).toEqual({ emotes: false, rename: false, manage: false });
+  });
+  it('gives the owner and staff everything', () => {
+    expect(setAccess({ owner: true, setEditor: false, staff: false, held: none })).toEqual({ emotes: true, rename: true, manage: true });
+    expect(setAccess({ owner: false, setEditor: false, staff: true, held: none })).toEqual({ emotes: true, rename: true, manage: true });
+  });
+  it('lets a per-set editor change the emotes and name but not who sees it', () => {
+    expect(setAccess({ owner: false, setEditor: true, staff: false, held: none })).toEqual({ emotes: true, rename: true, manage: false });
+  });
+  it('follows the account grant: Emotes edits emotes only, Sets manages', () => {
+    expect(setAccess({ owner: false, setEditor: false, staff: false, held: new Set<EditorPermission>(['EMOTES']) })).toEqual({ emotes: true, rename: false, manage: false });
+    expect(setAccess({ owner: false, setEditor: false, staff: false, held: new Set<EditorPermission>(['SETS']) })).toEqual({ emotes: true, rename: true, manage: true });
+    expect(setAccess({ owner: false, setEditor: false, staff: false, held: new Set<EditorPermission>(['PROFILE', 'CHANNELS']) }).emotes).toBe(false);
   });
 });

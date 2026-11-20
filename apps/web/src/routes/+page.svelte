@@ -127,7 +127,7 @@
   .text > p { margin: 14px 0 0; font-size: var(--t-body); line-height: 1.6; color: var(--muted); text-wrap: pretty; }
   .foot { display: grid; justify-items: start; gap: 10px; margin-top: 24px; }
   .fine { margin: 0; font-size: var(--t-fine); color: var(--dim); }
-  .quiet { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+  .quiet { display: inline-flex; align-items: center; min-height: 24px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
   @media (hover: hover) and (pointer: fine) { .quiet:hover { color: var(--text); } }
 
   /* Phones: one column, the picture above its text in every row. */
@@ -140,10 +140,8 @@
   }
 
   /* Reveal once on scroll (reveal.ts marks a row while it waits). Under reduced motion: none. */
-  @media (prefers-reduced-motion: no-preference) {
-    .show:global([data-reveal]) > * { transition: opacity var(--dur-reveal) var(--ease), translate var(--dur-reveal) var(--ease); }
-    .show:global([data-reveal]) > .text { transition-delay: var(--stagger); }
-    .show:global([data-reveal='wait']) > * { opacity: 0; translate: 0 28px; }
-  }
+  .show:global([data-reveal]) > * { transition: opacity var(--dur-reveal) var(--ease), translate var(--dur-reveal) var(--ease); }
+  .show:global([data-reveal]) > .text { transition-delay: var(--stagger); }
+  .show:global([data-reveal='wait']) > * { opacity: 0; translate: 0 28px; }
   :global(html[data-motion='reduce']) .show > * { transition: none; opacity: 1; translate: none; }
 </style>

@@ -69,7 +69,14 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
   // to straddle it, and then it lights the section you are leaving.
   // Only sections whose group is open count: a closed group's sections have no height of their own.
   let tops: { id: string; top: number }[] = [];
+  // The first measurement forces layout of the whole (very long) page. Without a deep link to jump
+  // to, it waits until the page has painted, so it isn't one more long task on top of hydrating.
+  let deferFirst = !location.hash;
   const measure = () => {
+    if (deferFirst) {
+      dirty = true;
+      return;
+    }
     tops = sections.filter((s) => s.closest('[data-group]')?.getAttribute('data-open') !== 'false').map((s) => ({ id: s.id, top: s.getBoundingClientRect().top + scrollY }));
   };
   let dirty = false;
@@ -431,6 +438,15 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
   on(window, 'resize', onResize);
   // Sections change height as fonts land and samples fill in; cached offsets go stale.
   // The nav is watched too: its height sets the offset.
+  if (deferFirst) {
+    const f = requestAnimationFrame(() =>
+      setTimeout(() => {
+        deferFirst = false;
+        onResize();
+      }),
+    );
+    cleanups.push(() => cancelAnimationFrame(f));
+  }
   const ro = new ResizeObserver(onResize);
   ro.observe(document.body);
   if (header) ro.observe(header);

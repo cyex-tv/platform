@@ -79,7 +79,9 @@
   .scroll { overflow: hidden auto; overscroll-behavior: contain; padding: 16px; }
   /* Phones: the whole screen; the title bar stays put while the form scrolls. */
   @media (max-width: 640px) {
-    .upload-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0; }
+    .upload-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0;
+      /* Full screen: it fades in place, with no scale (it would show the page edge behind it). */
+      transition-property: opacity, overlay, display; scale: 1; }
     .panel { height: 100dvh; max-height: 100dvh; }
     .top { padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
     .scroll { padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }

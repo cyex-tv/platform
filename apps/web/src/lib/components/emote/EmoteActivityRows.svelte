@@ -1,12 +1,16 @@
 <script lang="ts">
   // The emote page's activity rows: an icon, one plain sentence about this emote (it is the page's
-  // subject, so it isn't named again unless a set calls it something else), who did it (unless that is you), and the
-  // date and time it happened (2026/11/19 14:05, how long ago on hover).
-  import Icon, { type IconName } from '$lib/components/Icon.svelte';
+  // subject, so it isn't named again unless a set calls it something else), who did it (unless that
+  // is you), and when (ActivityWhen). The sentence switch is exhaustive: a new ActivityKind is a
+  // type error here until it has a sentence. The icons and the "by" rule are shared
+  // (activity-view.ts).
+  import Icon from '$lib/components/Icon.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { looks, NO_LOOK, wantLooks } from '$lib/cosmetics/store.svelte';
-  import { clean, dateTime } from '$lib/format';
-  import { namesActor, relative, type ActivityItem, type ActivityKind } from '$lib/profile/activity';
+  import { clean } from '$lib/format';
+  import ActivityWhen from '$lib/profile/ActivityWhen.svelte';
+  import type { ActivityItem } from '$lib/profile/activity';
+  import { ICON, namesActor } from '$lib/profile/activity-view';
   import { session } from '$lib/tool/session.svelte';
 
   /** `name`: the emote's own name, so a row only spells out a different one (an alias in a set). */
@@ -14,9 +18,8 @@
 
   $effect(() => wantLooks(items.map((i) => i.actor?.id)));
 
-  const ICON: Record<ActivityKind, IconName> = {
-    added: 'plus', removed: 'minus', renamed: 'pencil', active: 'zap', cosmetics: 'brush', uploaded: 'upload', created: 'folder', setRenamed: 'pencil', editorAdded: 'user-plus', editorRemoved: 'user-minus',
-  };
+  /** Fails to compile when a new `ActivityKind` has no sentence above. */
+  const unreachable = (kind: never): string => String(kind);
   const alias = (i: ActivityItem) => (i.emote && clean(i.emote.name) !== clean(name) ? clean(i.emote.name) : null);
 </script>
 
@@ -35,10 +38,11 @@
         {:else if i.kind === 'added'}Added to {@render setName(i)}{#if as}{' as '}<strong><bdi>{as}</bdi></strong>{/if}
         {:else if i.kind === 'removed'}Removed from {@render setName(i)}
         {:else if i.kind === 'renamed'}Renamed{#if i.from}{' from '}<strong><bdi>{clean(i.from)}</bdi></strong>{/if}{' to '}<strong><bdi>{as ?? clean(name)}</bdi></strong> in {@render setName(i)}
-        {:else}Changed in {@render setName(i)}{/if}
+        {:else if i.kind === 'active' || i.kind === 'cosmetics' || i.kind === 'created' || i.kind === 'setRenamed' || i.kind === 'editorAdded' || i.kind === 'editorRemoved'}Changed in {@render setName(i)}
+        {:else}{unreachable(i.kind)}{/if}
         {#if i.actor && namesActor(i, session.me?.id)}{' by '}<a href="/users/{encodeURIComponent(i.actor.id)}"><PaintedName name={i.actor.displayName} paint={(looks[i.actor.id] ?? NO_LOOK).paint} badge={(looks[i.actor.id] ?? NO_LOOK).badge} badgeSize={16} /></a>{/if}
       </span>
-      <time datetime={i.at} title={relative(i.at)}>{dateTime(i.at)}</time>
+      <span class="when"><ActivityWhen at={i.at} /></span>
     </li>
   {/each}
 </ol>
@@ -53,12 +57,12 @@
   .line { font-size: var(--t-ui); line-height: 1.45; overflow-wrap: anywhere; color: var(--muted); }
   .line strong { font-weight: 600; color: var(--text); }
   .line a { color: var(--text); font-weight: 500; text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
-  time { font-size: var(--t-small); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .when { font-size: var(--t-small); color: var(--muted); }
   @media (hover: hover) and (pointer: fine) { .line a:hover { text-decoration-color: currentColor; } }
   /* Phones: the date and time go under the sentence. */
   @media (max-width: 560px) {
     .item { grid-template-columns: 28px minmax(0, 1fr); align-items: start; row-gap: 2px; }
     .ic { grid-row: span 2; }
-    time { font-size: var(--t-fine); }
+    .when { font-size: var(--t-fine); }
   }
 </style>

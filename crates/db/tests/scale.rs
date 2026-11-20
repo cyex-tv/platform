@@ -141,7 +141,12 @@ async fn seed(c: &mut PgConnection, s: &Scale) -> Uuid {
     .execute(&mut *c)
     .await
     .unwrap();
-    sqlx::query("ANALYZE").execute(&mut *c).await.unwrap();
+    // Fresh statistics and a current visibility map, so the planner judges the seeded sizes and
+    // the reads below don't depend on whether autovacuum got there first.
+    sqlx::query("VACUUM (ANALYZE)")
+        .execute(&mut *c)
+        .await
+        .unwrap();
     top
 }
 
@@ -158,33 +163,36 @@ async fn seq_scans(c: &mut PgConnection, table: &str) -> i64 {
         .unwrap()
 }
 
-/// Scans of the index `name` so far, flushed from this session first.
-async fn idx_scans(c: &mut PgConnection, name: &str) -> i64 {
+/// Index scans on `table` so far (all of its indexes together), flushed from this session first.
+async fn idx_scans(c: &mut PgConnection, table: &str) -> i64 {
     sqlx::query("SELECT pg_stat_force_next_flush()")
         .execute(&mut *c)
         .await
         .unwrap();
-    sqlx::query_scalar("SELECT idx_scan FROM pg_stat_user_indexes WHERE indexrelname = $1")
-        .bind(name)
-        .fetch_one(&mut *c)
-        .await
-        .unwrap()
+    sqlx::query_scalar(
+        "SELECT coalesce(sum(idx_scan), 0)::bigint FROM pg_stat_user_indexes WHERE relname = $1",
+    )
+    .bind(table)
+    .fetch_one(&mut *c)
+    .await
+    .unwrap()
 }
 
-/// Asserts `run` reads one of the indexes `names` (either gives the page in order).
+/// Asserts `run` reads `table` through some index. Which index (the browse index for the sort, or
+/// a filter's) is the planner's choice and may change with the data; that it isn't a whole-table
+/// read is what the page's speed rests on. `expected` names the index meant, for the message.
 macro_rules! uses_index {
-    ($c:expr, $what:expr, $names:expr, $run:expr) => {{
-        let names: &[&str] = $names;
-        let mut before = Vec::new();
-        for n in names {
-            before.push(idx_scans($c, n).await);
-        }
+    ($c:expr, $what:expr, $table:expr, $expected:expr, $run:expr) => {{
+        let before = idx_scans($c, $table).await;
         let out = $run;
-        let mut used = false;
-        for (n, b) in names.iter().zip(before) {
-            used |= idx_scans($c, n).await > b;
-        }
-        assert!(used, "{}: used none of {:?}", $what, names);
+        let after = idx_scans($c, $table).await;
+        assert!(
+            after > before,
+            "{}: read {} through no index (expected something like {:?})",
+            $what,
+            $table,
+            $expected
+        );
         out
     }};
 }
@@ -242,7 +250,7 @@ async fn hot_reads_use_their_indexes() {
             (EmoteSort::New, &["emotes_browse_new", "emotes_state"][..]),
             (EmoteSort::Relevance, &["emotes_searchable_popularity"][..]),
         ] {
-            let hits = uses_index!(c, format!("browse {sort:?}"), index, {
+            let hits = uses_index!(c, format!("browse {sort:?}"), "emotes", index, {
                 search::search(c, &browse(sort, "")).await.unwrap()
             });
             assert_eq!(hits.ids.len(), 48);

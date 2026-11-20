@@ -33,6 +33,15 @@ export function hasStill(e: Picture): boolean {
   return e.animated && e.files.some((f) => f.name === '1x_static.webp');
 }
 
+/**
+ * Which picture an animated emote with a still gets, by the site's reduced-motion setting:
+ * "reduce" the still, "full" the moving one even when the OS asks for less, "system" the
+ * browser's call (a `<source media>` in a <picture>, which also holds without script).
+ */
+export function stillBy(pref: 'system' | 'reduce' | 'full'): 'still' | 'moving' | 'browser' {
+  return pref === 'reduce' ? 'still' : pref === 'full' ? 'moving' : 'browser';
+}
+
 /** Wide emotes (about twice as wide as tall or more) take two cells in a grid. */
 export function isWide(e: Picture): boolean {
   const { width, height } = size(e);

@@ -276,6 +276,34 @@ impl World {
         user
     }
 
+    /// A GraphQL request on a website session of `user` (the cookie and the site's Origin), for
+    /// what only the website may do.
+    async fn site_gql(&self, user: &User, query: &str) -> Value {
+        let mut conn = self.db.conn().await;
+        let token = tokens::random_token();
+        sessions::create(
+            &mut conn,
+            &tokens::hash(&token),
+            user.id,
+            SessionKind::Site,
+            Duration::days(1),
+        )
+        .await
+        .unwrap();
+        drop(conn);
+        let mut request = Request::post("/v1/gql")
+            .header("content-type", "application/json")
+            .header("cookie", format!("cyex_tv_session={token}"))
+            .header("origin", "https://cyex.tv")
+            .body(Body::from(json!({ "query": query }).to_string()))
+            .unwrap();
+        request.extensions_mut().insert(ConnectInfo(PEER));
+        let response = self.app.clone().oneshot(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = response.into_body().collect().await.unwrap().to_bytes();
+        serde_json::from_slice(&bytes).unwrap()
+    }
+
     /// A GraphQL request from 127.0.0.1 (every request of a test comes from the same peer).
     async fn gql(&self, user: Option<&User>, query: &str, variables: Value) -> Value {
         self.gql_from(Some(PEER), user, query, variables).await
@@ -1468,9 +1496,7 @@ async fn refunding_one_order_keeps_what_other_orders_and_codes_cover() {
     );
 
     // The export lists both orders and the code (no Paddle price, no staff note).
-    let r = w
-        .gql(Some(&buyer), "mutation { exportMyData }", json!({}))
-        .await;
+    let r = w.site_gql(&buyer, "mutation { exportMyData }").await;
     let text = r["data"]["exportMyData"]
         .as_str()
         .unwrap_or_else(|| panic!("{r}"));

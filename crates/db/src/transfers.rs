@@ -65,6 +65,16 @@ pub async fn expire_due(conn: &mut PgConnection, emote: Option<Uuid>) -> DbResul
     .await?)
 }
 
+/// One request, not locked: for finding its emote before taking locks in order.
+pub async fn get(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Request>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {REQUEST} FROM emote_transfer_requests WHERE id = $1"
+    ))
+    .bind(id)
+    .fetch_optional(conn)
+    .await?)
+}
+
 /// One request, locked for the rest of the transaction.
 pub async fn lock(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Request>> {
     Ok(sqlx::query_as(&format!(
@@ -107,6 +117,18 @@ pub async fn close_open_for_emote(
     ))
     .bind(emote)
     .bind(by)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// Where each of these requests stands now, as `state`; a pending one past its time reads as
+/// `expired` even before the sweep marks it. Unknown IDs are missing.
+pub async fn states_of(conn: &mut PgConnection, ids: &[Uuid]) -> DbResult<Vec<(Uuid, String)>> {
+    Ok(sqlx::query_as(
+        "SELECT id, CASE WHEN state = 'pending' AND expires_at <= now() THEN 'expired' ELSE state END
+         FROM emote_transfer_requests WHERE id = ANY($1)",
+    )
+    .bind(ids)
     .fetch_all(conn)
     .await?)
 }

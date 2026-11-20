@@ -3,33 +3,38 @@
   // (the cyex rule: no fills, no bars). A link when the notification leads somewhere; the
   // sentence is printed as text, never as HTML. Used by the bell's popover and /me/notifications.
   import Icon from '$lib/components/Icon.svelte';
-  import { dateTime, isoParts } from '$lib/format';
-  import { relative } from '$lib/profile/activity';
+  import { isoParts } from '$lib/format';
+  import ActivityWhen from '$lib/profile/ActivityWhen.svelte';
   import { gql } from '$lib/api';
   import { ACCEPT_EMOTE_TRANSFER, DECLINE_EMOTE_TRANSFER } from '$lib/queries';
   import { fail, notify } from '$lib/tool/notices.svelte';
-  import { describe } from './notifications';
-  import type { Note } from './inbox.svelte';
+  import { closedRequest, describe } from './notifications';
+  import { answered, markRead, type Note } from './inbox.svelte';
 
   type Props = { note: Note; onpick?: (n: Note) => void };
   let { note, onpick }: Props = $props();
   const line = $derived(describe(note.kind, note.payload));
 
+  // What the request is now (answered elsewhere, withdrawn or run out): the buttons go, the state stays.
+  const closed = $derived(closedRequest(note.transferState));
   // A transfer request is answered here too (ADR 0014); the emote's edit page lists it as well.
   let busy = $state(false);
-  let answered = $state<string | null>(null);
   async function answer(accept: boolean) {
-    if (!line.request || busy) return;
+    const req = line.request;
+    if (!req || busy) return;
     busy = true;
     try {
-      if (accept) await gql(ACCEPT_EMOTE_TRANSFER, { id: line.request });
-      else await gql(DECLINE_EMOTE_TRANSFER, { id: line.request });
-      answered = accept ? 'Accepted: it moved.' : 'Declined: it stays yours.';
-      notify(answered);
+      if (accept) await gql(ACCEPT_EMOTE_TRANSFER, { id: req });
+      else await gql(DECLINE_EMOTE_TRANSFER, { id: req });
+      answered[req] = accept ? 'Accepted: it moved.' : 'Declined: it stays yours.';
+      notify(answered[req]);
+      // Answered is seen: the row stops being unread and the count follows.
+      if (!note.read) void markRead([note.id]);
     } catch (err) {
       // Closed already (expired, withdrawn or answered): say so once, then leave it.
       fail(err);
-      answered = 'This request is closed.';
+      answered[req] = 'This request is closed.';
+      if (!note.read) void markRead([note.id]);
     } finally {
       busy = false;
     }
@@ -40,7 +45,7 @@
   <Icon name={line.icon} />
   <span class="what">
     <span class="sentence">{#each isoParts(line.text) as p}{#if p.name}<bdi>{p.text}</bdi>{:else}{p.text}{/if}{/each}</span>
-    <time class="when" datetime={note.createdAt} title={relative(note.createdAt)}>{dateTime(note.createdAt)}</time>
+    <span class="when"><ActivityWhen at={note.createdAt} /></span>
   </span>
 {/snippet}
 
@@ -51,7 +56,7 @@
 {/if}
 {#if line.request}
   <div class="answer">
-    {#if answered}<span class="ui-hint" role="status">{answered}</span>
+    {#if answered[line.request] ?? closed}<span class="ui-hint" role="status">{answered[line.request] ?? closed}</span>
     {:else}
       <button class="ui-btn primary small" type="button" disabled={busy} onclick={() => answer(true)}>Accept</button>
       <button class="ui-btn secondary small" type="button" disabled={busy} onclick={() => answer(false)}>Decline</button>

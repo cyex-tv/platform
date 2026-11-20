@@ -312,7 +312,7 @@ pub struct ChannelEditableSets {
 }
 
 /// Where an emote transfer request stands (ADR 0014).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
 #[serde(rename_all = "lowercase")]
 pub enum TransferRequestState {
@@ -744,6 +744,15 @@ pub struct EmoteSet {
     pub slots_used: u32,
     #[serde(default)]
     pub created_at: String,
+}
+
+/// A page of a set's members and how many match, in all (`setEmotes`).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct SetEmotePage {
+    pub items: Vec<SetEmote>,
+    /// Members the viewer may see that match `query`, over every page.
+    pub total: u64,
 }
 
 /// A set as a card on a profile: its facts and the first few emotes (`accountSets`).
@@ -1210,6 +1219,10 @@ pub struct Notification {
     pub payload: String,
     pub created_at: String,
     pub read: bool,
+    /// For `emote.transfer_requested`: where the request stands now (it may have been answered,
+    /// withdrawn or run out since). Null for other kinds.
+    #[serde(default)]
+    pub transfer_state: Option<TransferRequestState>,
 }
 
 /// What an account may do (`users.restrict`).

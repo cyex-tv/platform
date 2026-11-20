@@ -545,6 +545,16 @@ const SETS = [
   { id: '01JD8XSET000000000000000OAK', name: 'quietoak main', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[0],
     emotes: ALL.slice(60, 70).map((e) => member(e)), editors: [ME_SUMMARY], visibility: 'LISTED', createdAt: '2026-11-08T09:00:00.000Z' },
 ];
+// MOCK_SET_SIZE=1000: the "Main" set holds that many emotes (a real set can hold 1.000), to try
+// paging and the filter in the set editor. The extra ones are copies of the mock emotes under
+// their own ids and numbered names.
+if (Number(process.env.MOCK_SET_SIZE) > SETS[0].emotes.length) {
+  const want = Math.min(1000, Number(process.env.MOCK_SET_SIZE));
+  for (let i = SETS[0].emotes.length; i < want; i++) {
+    const base = ALL[i % ALL.length];
+    SETS[0].emotes.push(member({ ...base, id: `${base.id}-big${i}`, name: `${base.name}${i}`, createdAt: new Date(Date.parse('2026-11-01T00:00:00Z') + i * 60_000).toISOString() }));
+  }
+}
 const GLOBAL = { id: '01JD8XSET0000000000000GLOBL', name: 'Global', kind: 'GLOBAL', capacity: 200, owner: null,
   emotes: ALL.slice(0, 24).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-01T00:00:00.000Z' };
 SETS.push(GLOBAL);
@@ -643,7 +653,7 @@ const graphOf = (id) => {
   const base = [grant({ kind: 'ROLE', itemId: 'ROLEUSER', itemName: 'User', accountId: id, source: 'DEFAULT' })];
   if (id === ME_ID) return [grant({ kind: 'ROLE', itemId: 'ROLEROOT', itemName: 'Owner', accountId: id, source: 'OWNER' }), ...base];
   const roles = (ACCOUNT_ROLES[id] ?? []).map((r) => ROLES.find((x) => x.id === r)).filter(Boolean)
-    .map((r, i) => grant({ kind: 'ROLE', itemId: r.id, itemName: r.name, accountId: id, source: 'STAFF', grantedBy: ME_ID, grantedAt: `2026-11-0${i + 2}T10:00:00.000Z` }));
+    .map((r, i) => grant({ kind: 'ROLE', itemId: r.id, itemName: r.name, accountId: id, source: 'STAFF', grantedBy: ME_ID, grantedAt: `2026-11-${String((i % 8) + 2).padStart(2, '0')}T10:00:00.000Z` }));
   return [
     ...roles,
     grant({ kind: 'BADGE', itemId: 'BADGE1', itemName: 'Early supporter', accountId: id, source: 'STAFF', reason: 'Beta tester', grantedBy: ME_ID, grantedAt: '2026-11-05T12:00:00.000Z' }),
@@ -704,7 +714,7 @@ const MAX_EDITORS = 50;
 const withImplied = (flags) => EDITOR_FLAGS.filter((f) => flags.includes(f) || (f === 'CHANNELS' && flags.includes('SETS')));
 const ACCOUNT_EDITORS = [
   { account: OTHERS[1], permissions: ['EMOTES'], allSets: false, setIds: ['01JD8XSET00000000000000MAIN'], grantedBy: ME_SUMMARY, grantedAt: '2026-11-12T10:00:00.000Z', updatedAt: '2026-11-12T10:00:00.000Z' },
-  { account: OTHERS[2], permissions: ['EMOTES', 'SETS', 'EDITORS', 'CHANNELS'], allSets: true, setIds: [], grantedBy: ME_SUMMARY, grantedAt: '2026-11-14T18:30:00.000Z', updatedAt: '2026-11-14T18:30:00.000Z' },
+  { account: OTHERS[2], permissions: ['EMOTES', 'SETS', 'EDITORS', 'CHANNELS', 'EMOTE_TRANSFER'], allSets: true, setIds: [], grantedBy: ME_SUMMARY, grantedAt: '2026-11-14T18:30:00.000Z', updatedAt: '2026-11-14T18:30:00.000Z' },
 ];
 // Emote transfer requests (ADR 0014): an editor's transfer waits for the owner. One is seeded: an
 // editor of the mock account asks to give one of its emotes to themselves.
@@ -1496,6 +1506,20 @@ const ACTIVE_SET_IDS = () => new Set([...CHANNELS, ...EDITOR_CHANNELS].map((c) =
 // account editors, or anyone while a channel shows it.
 const mayView = (s, session) => s.visibility !== 'PRIVATE' || ACTIVE_SET_IDS().has(s.id)
   || (session && (s.owner?.id === ME_ID || s.editors.some((e) => e.id === ME_ID) || EDITOR_OF.some((g) => g.account.id === s.owner?.id)));
+// What the mock account may do with a set, as the API checks it: the owner and staff everything;
+// an account editor with Sets everything on the sets the grant covers, with Emotes the emotes; a
+// per-set editor the emotes and the name. Anyone else nothing (the API answers forbidden).
+const setRights = (s, ADMIN) => {
+  const none = { emotes: false, rename: false, manage: false };
+  if (!s) return none;
+  if (ADMIN || s.owner?.id === ME_ID) return { emotes: true, rename: true, manage: true };
+  const owner = s.owner?.id;
+  const flags = owner && coversSet(owner, s.id) ? flagsOn(owner) : [];
+  const manage = flags.includes('SETS');
+  const rename = manage || s.editors.some((e) => e.id === ME_ID);
+  return { manage, rename, emotes: rename || flags.includes('EMOTES') };
+};
+const forbidden = () => err('Only the set’s owner and editors can change it.', 'forbidden');
 const err = (message, code) => ({ data: null, errors: [{ message, extensions: { code } }] });
 // The API's rule for the emote permissions: held on a grant that covers every set.
 const emoteGrant = (ownerId, flag) => EDITOR_OF.some((g) => g.account.id === ownerId && g.allSets && g.permissions.includes(flag));
@@ -1598,8 +1622,23 @@ function signedIn(body, v, ADMIN) {
     case 'EditSet': {
       const s = findSet(v.id);
       const channels = { myChannels: CHANNELS, editorChannels: editorChannels() };
-      if (!s) return { data: { set: null, setEditors: [], editorOf: editorOfOut(), ...channels } };
-      return { data: { set: setOut(s), setEditors: s.editors, editorOf: editorOfOut(), ...channels } };
+      // Private sets of others answer as if they did not exist; a visible set you can't edit is forbidden.
+      if (!s || !mayView(s, true)) return { data: { set: null, setEditors: [], editorOf: editorOfOut(), ...channels } };
+      if (!setRights(s, ADMIN).emotes) return forbidden();
+      return { data: { set: { ...setOut(s), emotes: undefined }, setEditors: s.editors, editorOf: editorOfOut(), ...channels } };
+    }
+    // setEmotes: a page of a set's members, oldest first; query keeps the name in the set or the
+    // emote's own name (any case, literally); perPage is 1 to 200, default 120.
+    case 'SetEmotes':
+    case 'SetMembers': {
+      const s = findSet(v.id);
+      if (!s || !mayView(s, true)) return { data: { setEmotes: { total: 0, items: [] } } };
+      const q = (v.query ?? '').trim().toLowerCase();
+      const all = [...s.emotes].sort((a, b) => a.addedAt.localeCompare(b.addedAt))
+        .filter((m) => !q || m.name.toLowerCase().includes(q) || m.emote.name.toLowerCase().includes(q));
+      const per = Math.min(200, Math.max(1, v.perPage ?? 120));
+      const from = (Math.max(1, v.page ?? 1) - 1) * per;
+      return { data: { setEmotes: { total: all.length, items: all.slice(from, from + per) } } };
     }
     case 'CreateSet': {
       const ownerId = v.input.ownerId || ME_ID;
@@ -1619,18 +1658,23 @@ function signedIn(body, v, ADMIN) {
     }
     case 'UpdateSet': {
       const s = findSet(v.id);
-      if (!s) return err('Not found.', 'not_found');
+      if (!s || !mayView(s, true)) return err('Not found.', 'not_found');
       if (v.input.visibility) {
         if (s.kind === 'GLOBAL' || (s.kind === 'PERSONAL' && v.input.visibility === 'PRIVATE'))
           return err('Personal sets can’t be private, and the global set is always listed.', 'bad_visibility');
-        if (!flagsOn(s.owner?.id).includes('SETS'))
+        if (!setRights(s, ADMIN).manage)
           return err('Only the set’s owner and their editors with the sets permission can change who sees it.', 'forbidden');
         s.visibility = v.input.visibility;
       }
-      if (v.input.name) s.name = v.input.name;
+      if (v.input.name) {
+        if (!setRights(s, ADMIN).rename) return forbidden();
+        s.name = v.input.name;
+      }
       return { data: { updateSet: setOut(s) } };
     }
     case 'DeleteSet': {
+      if (!findSet(v.id) || !mayView(findSet(v.id), true)) return err('Not found.', 'not_found');
+      if (!setRights(findSet(v.id), ADMIN).manage) return forbidden();
       if ([...CHANNELS, ...EDITOR_CHANNELS].some((c) => c.activeSetId === v.id)) return err('A channel shows this set. Pick another active set first.', 'set_in_use');
       const list = SETS.some((s) => s.id === v.id) ? SETS : SHARED_SETS;
       list.splice(list.findIndex((s) => s.id === v.id), 1);
@@ -1638,6 +1682,8 @@ function signedIn(body, v, ADMIN) {
     }
     case 'AddSetEmote': {
       const s = findSet(v.setId);
+      if (!s || !mayView(s, true)) return err('Not found.', 'not_found');
+      if (!setRights(s, ADMIN).emotes) return forbidden();
       const e = findEmote(v.emoteId);
       if (s.emotes.length >= s.capacity) return err('The set is full.', 'set_full');
       if (s.emotes.some((m) => m.name === e.name)) return err('Another emote in this set has that name.', 'name_taken');
@@ -1645,6 +1691,9 @@ function signedIn(body, v, ADMIN) {
       return { data: { addSetEmote: { name: e.name } } };
     }
     case 'UpdateSetEmote': {
+      const own = findSet(v.setId);
+      if (!own || !mayView(own, true)) return err('Not found.', 'not_found');
+      if (!setRights(own, ADMIN).emotes) return forbidden();
       const m = findSet(v.setId).emotes.find((x) => x.emote.id === v.emoteId);
       if (v.input.name) m.name = v.input.name;
       if (v.input.zeroWidth !== undefined) m.zeroWidth = v.input.zeroWidth;
@@ -1652,24 +1701,16 @@ function signedIn(body, v, ADMIN) {
     }
     case 'RemoveSetEmote': {
       const s = findSet(v.setId);
+      if (!s || !mayView(s, true)) return err('Not found.', 'not_found');
+      if (!setRights(s, ADMIN).emotes) return forbidden();
       s.emotes = s.emotes.filter((m) => m.emote.id !== v.emoteId);
       return { data: { removeSetEmote: true } };
-    }
-    case 'AddSetEditor': {
-      const s = findSet(v.setId);
-      if (s.editors.some((e) => e.id === v.accountId)) return { data: { addSetEditor: false } };
-      s.editors.push([...OTHERS, ME_SUMMARY].find((a) => a.id === v.accountId));
-      return { data: { addSetEditor: true } };
     }
     case 'RemoveSetEditor': {
       const s = findSet(v.setId);
       s.editors = s.editors.filter((e) => e.id !== v.accountId);
       if (v.accountId === ME_ID) SETS.splice(SETS.indexOf(s), 1);
       return { data: { removeSetEditor: true } };
-    }
-    case 'FindAccount': {
-      const a = OTHERS.find((o) => o.displayName === v.login);
-      return { data: { channelByLogin: a ? { login: v.login, account: a } : null } };
     }
     case 'MyChannels': {
       const short = (s) => ({ id: s.id, name: s.name, kind: s.kind, owner: s.owner ? { id: s.owner.id } : null });
@@ -1781,7 +1822,12 @@ function signedIn(body, v, ADMIN) {
       return { data: { unlinkIdentity: { id: ME_ID } } };
     }
     case 'MyNotifications':
-      return { data: { myNotifications: NOTES.slice(0, 100) } };
+      // transferState: where the request of an emote.transfer_requested note stands now.
+      return { data: { myNotifications: NOTES.slice(0, 100).map((n) => {
+        if (n.kind !== 'emote.transfer_requested') return n;
+        const t = TRANSFERS.find((x) => x.id === JSON.parse(n.payload).request_id);
+        return { ...n, transferState: t ? (t.state === 'PENDING' && Date.parse(t.expiresAt) <= Date.now() ? 'EXPIRED' : t.state) : null };
+      }) } };
     case 'Emote':
       return { data: { emote: findEmote(v.id) ?? PENDING.find((e) => e.id === v.id) ?? null } };
     case 'AdminCounts':
@@ -1800,17 +1846,6 @@ function signedIn(body, v, ADMIN) {
       RESOLVED.unshift(e);
       logEmote(e.id, op === 'Approve' ? 'emote.approved' : 'emote.rejected', { state: e.state.toLowerCase(), reason: v.reason ?? null, visibility: e.visibility.toLowerCase() });
       return { data: { [op === 'Approve' ? 'approveEmote' : 'rejectEmote']: { id: e.id, state: e.state, visibility: e.visibility } } };
-    }
-    case 'Takedown': {
-      if (!ADMIN) return err('This needs emotes.takedown.', 'forbidden');
-      const e = anyEmote(v.id);
-      if (!e) return err('Not found.', 'not_found');
-      if (e.state === 'TAKEN_DOWN') return err('That emote is taken down already.', 'already_taken_down');
-      if (!String(v.reason ?? '').trim()) return err('Say why.', 'bad_reason');
-      e.state = 'TAKEN_DOWN';
-      for (const set of ALL_SETS()) set.emotes = set.emotes.filter((m) => m.id !== e.id);
-      logEmote(e.id, 'emote.taken_down', { state: 'taken_down', reason: v.reason });
-      return { data: { takedownEmote: e } };
     }
     case 'EmoteHistory': {
       const e = PENDING.find((x) => x.id === v.emoteId) ?? RESOLVED.find((x) => x.id === v.emoteId);
@@ -1880,13 +1915,21 @@ function signedIn(body, v, ADMIN) {
     case 'DeclineEmoteTransfer':
     case 'CancelEmoteTransfer': {
       const t = TRANSFERS.find((x) => x.id === v.id);
-      if (!t) return err('Not found.', 'not_found');
+      // Anyone but its owner and the editor who asked is told it doesn't exist.
+      if (!t || (t.from.id !== ME_ID && t.requestedBy.id !== ME_ID)) return err('Not found.', 'not_found');
       if (!openTransfers().includes(t)) return err('That transfer request isn’t open any more.', 'not_pending');
       const cancel = op === 'CancelEmoteTransfer';
       if (cancel ? t.requestedBy.id !== ME_ID : t.from.id !== ME_ID)
         return err(cancel ? 'Only the editor who asked can cancel the request.' : 'Only the emote’s owner can answer its transfer.', 'forbidden');
       const at = new Date().toISOString();
       if (op === 'AcceptEmoteTransfer') {
+        // As the API: the editor who asked must still hold EMOTE_TRANSFER on every set, or the
+        // request closes instead.
+        const asker = ACCOUNT_EDITORS.find((x) => x.account.id === t.requestedBy.id);
+        if (!asker || !asker.allSets || !asker.permissions.includes('EMOTE_TRANSFER')) {
+          Object.assign(t, { state: 'CANCELLED', resolvedAt: at });
+          return err('The editor who asked can’t transfer your emotes any more, so the request is closed.', 'not_pending');
+        }
         const e = anyEmote(t.emoteId);
         const i = MINE.indexOf(e);
         if (i >= 0) MINE.splice(i, 1);
@@ -1952,13 +1995,6 @@ function signedIn(body, v, ADMIN) {
     case 'UserDetails': {
       return { data: { ...(v.status ? { accountStatus: statusOf(v.accountId) } : {}), ...(v.roles ? { accountRoles: rolesOf(v.accountId) } : {}) } };
     }
-    case 'Restrict': {
-      if (v.accountId === ME_ID) return err('The owner’s account can’t be restricted.', 'owner_protected');
-      const st = (STATUS[v.accountId] ??= {});
-      if (v.uploadsBlocked !== undefined && v.uploadsBlocked !== null) Object.assign(st, { uploadsBlocked: v.uploadsBlocked, uploadsBlockedUntil: null });
-      if (v.blocked !== undefined && v.blocked !== null) Object.assign(st, { blocked: v.blocked, blockedUntil: null });
-      return { data: { restrictAccount: statusOf(v.accountId) } };
-    }
     case 'PlaceRestriction': {
       if (v.accountId === ME_ID) return err('The owner’s account can’t be restricted.', 'owner_protected');
       const reason = (v.input.reason ?? '').trim();
@@ -2010,7 +2046,7 @@ function signedIn(body, v, ADMIN) {
       // Catalog items stand in for the made-up ones: odd ones held now by most, even ones taken back from some.
       const stand = { BADGE: ['BADGE1', 'BADGE2'], PAINT: ['PAINT1', 'PAINT2', 'PAINT3'] }[v.kind];
       const like = stand && !stand.includes(v.id) ? stand[[...v.id].reduce((n, c) => n + c.charCodeAt(0), 0) % stand.length] : v.id;
-      const all = [ME_ID, ...OTHERS.map((o) => o.id)].flatMap((id, i) => graphOf(id).map((g) => ({ ...g, grantedAt: g.grantedAt && new Date(Date.parse(g.grantedAt) - i * 5 * 3600_000).toISOString() })))
+      const all = [ME_ID, ...OTHERS.map((o) => o.id)].flatMap((id, i) => graphOf(id).map((g) => ({ ...g, grantedAt: g.grantedAt ? new Date(Date.parse(g.grantedAt) - i * 5 * 3600_000).toISOString() : null })))
         .filter((g) => g.kind === v.kind && g.itemId === like).map((g) => ({ ...g, itemId: v.id }));
       return { data: { entitlementHolders: all } };
     }
@@ -2212,7 +2248,8 @@ function newFields(q, v, session) {
 function quickSearch(v) {
   const q = String(v.query ?? '').trim().slice(0, 100);
   if (!q) return { data: { quickSearch: { emotes: [], users: [] } } };
-  const emotes = ALL.filter((e) => e.state === 'APPROVED' && !e.flags.private && !e.flags.nsfw)
+  // The same listed-emote rule as search and trending (crates/db search::LISTED_EMOTE): public only.
+  const emotes = ALL.filter((e) => e.state === 'APPROVED' && e.visibility === 'PUBLIC' && !e.flags.nsfw)
     .map((e) => ({ e, t: quickTier(e.name, q), s: similar(e.name, q) }))
     .filter((h) => h.t > 0)
     .sort((a, b) => a.t - b.t || (a.t === 6 ? b.s - a.s : 0) || b.e.channelCount - a.e.channelCount || a.e.name.length - b.e.name.length || a.e.name.localeCompare(b.e.name))
@@ -2276,7 +2313,6 @@ function baseAnswer(body, session, admin) {
   }
   if (q.includes('query Me') || /^\s*mutation/.test(q) || q.includes('query My') || q.includes('query EditSet'))
     return err('Sign in to use this.', 'signed_out');
-  if (q.includes('query GlobalSet')) return { data: { globalSet: { id: GLOBAL.id, name: 'Global', emotes: GLOBAL.emotes } } };
   if (q.includes('query EmoteTrending')) {
     const e = ALL.find((x) => x.id === v.id);
     const window = v.window ?? 'WEEK';
@@ -2309,7 +2345,7 @@ function baseAnswer(body, session, admin) {
     return { data: { searchEmotes: { total: hits.length, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
   }
   if (q.includes('query Emote(')) return { data: { emote: ALL.find((e) => e.id === v.id) ?? null } };
-  if (q.includes('query Channel') || q.includes('query FindAccount')) {
+  if (q.includes('query Channel')) {
     const c = channelByLogin(v.platform, v.login);
     return { data: { channelByLogin: c } };
   }
@@ -2556,12 +2592,17 @@ createServer(async (req, res) => {
     res.writeHead(204, { 'set-cookie': ['mock_session=; Path=/; Max-Age=0', 'mock_restore=; Path=/; Max-Age=0'] });
     return res.end();
   }
+  // A route that never answers, for timeout checks.
+  if (url.pathname === '/mock/hang') return;
   if (req.method === 'POST' && url.pathname === '/v1/emotes') {
-    const raw = (await read(req)).toString('latin1');
+    // UTF-8, as the API reads it: names in any script and emoji arrive whole.
+    const raw = (await read(req)).toString('utf8');
     if (!session) return json(res, 401, { error: 'signed_out', message: 'Sign in to upload.' });
     const field = (k) => raw.match(new RegExp(`name="${k}"\\r\\n\\r\\n([^\\r]*)`))?.[1];
     const name = field('name') ?? 'upload';
     // Names that stand in for the API's refusals, to see how the upload form explains them.
+    // Never answers (the request is read, then left open), to see the stall timeout and Cancel.
+    if (name === 'hang') return;
     if (name === 'blocked') return json(res, 422, { error: 'blocked', message: 'This image can’t be uploaded to cyex.tv.' });
     if (name === 'ratelimited') return json(res, 429, { error: 'rate_limited', message: 'That’s a lot of uploads. Try again in an hour.' });
     if (name === 'toobig') return json(res, 413, { error: 'too_large', message: 'The file is over 8 MB, the most an upload can be.' });

@@ -249,8 +249,11 @@ struct Manager {
 }
 
 /// The flags and sets the caller may manage editors of `owner` with: all of them for the owner
-/// and for staff with `editors.manage_any`, theirs for an editor holding `editors`.
+/// and for staff with `editors.manage_any`, theirs for an editor holding `editors`. Staff act only
+/// on accounts below their own highest role, and never on the owners' (`CYEX_TV_OWNER_IDS`):
+/// otherwise an Admin could make themselves an editor of the owner with every flag.
 async fn manager_access(
+    state: &AppState,
     conn: &mut PgConnection,
     caller: &Caller,
     owner: Uuid,
@@ -272,6 +275,26 @@ async fn manager_access(
         {
             return Err(not_found());
         }
+        if !caller.owner
+            && state
+                .auth
+                .is_owner(conn, owner)
+                .await
+                .map_err(ApiError::from)?
+        {
+            return Err(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "owner_protected",
+                "Only the owner manages the owner's editors.",
+            ));
+        }
+        let target_highest = cyex_tv_db::roles::highest_position(conn, owner)
+            .await
+            .map_err(db_error)?;
+        crate::admin::actor(conn, caller)
+            .await?
+            .may_act_on(target_highest)
+            .map_err(crate::admin::rule)?;
         return Ok(Manager {
             flags: all_flags(),
             scope: Scope::All,
@@ -492,7 +515,7 @@ pub async fn account_editors(
 ) -> ApiResult<Vec<AccountEditor>> {
     let owner = owner_of(caller, owner_id)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    manager_access(&mut conn, caller, owner).await?;
+    manager_access(state, &mut conn, caller, owner).await?;
     let grants = editors::list_for_account(&mut conn, owner)
         .await
         .map_err(db_error)?;
@@ -736,7 +759,7 @@ pub async fn add(
     rate_limited(state, caller)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    let m = manager_access(&mut tx, caller, owner).await?;
+    let m = manager_access(state, &mut tx, caller, owner).await?;
     no_escalation(&m.flags, &flags)?;
     let scope = requested_scope(&mut tx, owner, input.set_ids.as_deref()).await?;
     no_wider_scope(&m.scope, &scope)?;
@@ -811,7 +834,7 @@ pub async fn update(
     rate_limited(state, caller)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    let m = manager_access(&mut tx, caller, owner).await?;
+    let m = manager_access(state, &mut tx, caller, owner).await?;
     let before = editors::get(&mut tx, owner, editor)
         .await
         .map_err(db_error)?
@@ -879,7 +902,7 @@ pub async fn remove(
     let current_scope = scope_of(&mut tx, owner, editor).await?;
     let mut staff = false;
     if editor != caller.account_id {
-        let m = manager_access(&mut tx, caller, owner).await?;
+        let m = manager_access(state, &mut tx, caller, owner).await?;
         staff = m.staff;
         if let Some(current) = editors::get(&mut tx, owner, editor)
             .await

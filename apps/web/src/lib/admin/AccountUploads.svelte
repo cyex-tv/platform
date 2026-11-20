@@ -76,4 +76,6 @@
   .what a { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .what .ui-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .more { display: flex; justify-content: center; padding: 10px; border-top: 1px solid var(--border); }
+  /* a touch target of at least 24px (WCAG 2.5.8) */
+  a { display: inline-flex; align-items: center; min-height: 24px; }
 </style>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  // A picked file before it is uploaded, as cyex.tv will show it: 1x, 2x and 4x at their real pixel
+  // A picked file before it is uploaded, as cyex.tv will show it: 1x, 2x, 3x and 4x at their real pixel
   // sizes (1x is 32 px tall, as the worker makes it) standing on one baseline with the scale and
   // size under each, the same plain row as the emote page. No ground or chat switch.
   type Props = { src: string; width: number; height: number; name: string };
@@ -10,7 +10,7 @@
 </script>
 
 <ul class="sizes" aria-label="Sizes">
-  {#each [1, 2, 4] as k (k)}
+  {#each [1, 2, 3, 4] as k (k)}
     {@const s = at(32 * k)}
     <li>
       <span class="cell" style:--w="{s.w}px" style:aspect-ratio="{s.w} / {s.h}">

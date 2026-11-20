@@ -6,6 +6,7 @@
   // not seen yet and newer than the first count is shown. That first count after a page load
   // only sets the baseline, so unread ones from before never pop up.
   import { untrack } from 'svelte';
+  import { flip } from 'svelte/animate';
   import { fade, fly } from 'svelte/transition';
   import { goto } from '$app/navigation';
   import Icon from '$lib/components/Icon.svelte';
@@ -78,6 +79,7 @@
       role="status"
       in:fly={{ y: -8, duration: dur(200), opacity: 0 }}
       out:fade={{ duration: dur(140) }}
+      animate:flip={{ duration: dur(200) }}
       onpointerenter={() => hold(t)}
       onpointerleave={() => arm(t)}
       onfocusin={() => hold(t)}

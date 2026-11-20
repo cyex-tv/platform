@@ -2,9 +2,9 @@
 // jump popover): the feed starts on everything recent, newest first; a day or a month narrows it,
 // picked in a small popover ("Jump to date" with a date field, "Jump to month" with a year and a
 // month), and a future date is refused with a line saying so. The label is the cyex date format:
-// 2026/11/19 for a day, 2026/11 for a month, and for "All time" the span of what has loaded
-// (2026/11/02 – 2026/11/19), like logs' Date stat. Days and months are the reader's own calendar.
+// 2026/11/19 for a day, 2026/11 for a month; All time has no date to show. Days and months are the reader's own calendar.
 // Pure, so it is tested (timeframe.test.ts).
+import { pad } from '$lib/format';
 
 export type Timeframe =
   | { frame: 'all' }
@@ -13,7 +13,7 @@ export type Timeframe =
 
 export type Frame = Timeframe['frame'];
 
-const pad = (n: number) => String(n).padStart(2, '0');
+
 
 /** `YYYY-MM-DD` of `d` in the reader's time zone (what `<input type="date">` takes). */
 export function dayOf(d: Date): string {
@@ -68,23 +68,22 @@ export function monthProblem(year: number, month: number, now = new Date()): str
 }
 
 /** `2026/11/19` from a `YYYY-MM-DD`. */
-const slashDay = (day: string) => day.replaceAll('-', '/');
+export const slashDay = (day: string) => day.replaceAll('-', '/');
 
-/**
- * The timeframe's label in cyex format. "All time" names the span of the loaded lines
- * (`shown`, RFC 3339), one date when they share a day, "All time" when there are none.
- */
-export function labelOf(t: Timeframe, shown: readonly string[] = []): string {
+/** The timeframe's label in cyex format: a day `2026/11/19`, a month `2026/11`, "All time". */
+export function labelOf(t: Timeframe): string {
   if (t.frame === 'day') return slashDay(t.day);
   if (t.frame === 'month') return `${t.year}/${pad(t.month)}`;
-  const days = shown
-    .map((iso) => new Date(iso))
-    .filter((d) => !Number.isNaN(d.getTime()))
-    .map(dayOf)
-    .sort();
-  if (!days.length) return 'All time';
-  const [a, b] = [days[0], days[days.length - 1]];
-  return a === b ? slashDay(a) : `${slashDay(a)} – ${slashDay(b)}`;
+  return 'All time';
+}
+
+/** What was typed in the date field (`2026/11/19`, `2026-11-19` too), as a day, or the line saying why not. */
+export function readDay(text: string, now = new Date()): { day: string } | { problem: string } {
+  const m = /^\s*(\d{4})\s*[/.-]\s*(\d{1,2})\s*[/.-]\s*(\d{1,2})\s*$/.exec(text);
+  if (!m) return { problem: 'Type a date like 2026/11/19.' };
+  const day = `${m[1]}-${pad(Number(m[2]))}-${pad(Number(m[3]))}`;
+  const problem = dayProblem(day, now);
+  return problem ? { problem: problem === 'Pick a date.' ? 'That isn’t a date. Type one like 2026/11/19.' : problem } : { day };
 }
 
 /** The timeframe in the address: `d=2026-11-19` or `m=2026-11`; nothing for all time. */

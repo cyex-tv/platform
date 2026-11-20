@@ -9,6 +9,8 @@
   //     empty spot it also turns Select mode on), scrolling the window near its edges.
   //   - Touch: long-press turns Select mode on with that tile (in Select mode: a range).
   // Everything goes through the pure model in ./selection, which keeps the cap.
+  // Tiles load their emote's page on tap, not on hover (each page is four queries, and a drag
+  // across the grid would fetch dozens), and not at all while Select mode is on.
   import { isWide } from '$lib/emote';
   import { clean } from '$lib/format';
   import EmoteSkeleton from '../EmoteSkeleton.svelte';
@@ -34,6 +36,17 @@
   let { items, label, loading = false, skeletons = 10, eager = 0, ranked = false, selecting, sel, onstep, onstart }: Props = $props();
 
   let root = $state<HTMLDivElement>();
+
+  // A long grid is a long Tab walk: a "Skip results" link ahead of the tiles (shown when it has
+  // focus, like the page's skip link) moves focus to a marker just after them.
+  const endId = $props.id();
+  const long = $derived(items.length > 8);
+  function skip(e: MouseEvent) {
+    e.preventDefault();
+    const end = document.getElementById(endId);
+    end?.focus();
+    end?.scrollIntoView({ block: 'center' });
+  }
   const order = $derived(items.map((e) => e.id));
   const picked = $derived(new Set(sel.ids));
 
@@ -216,6 +229,7 @@
   class="pick-area"
   class:selecting
   bind:this={root}
+  data-sveltekit-preload-data={selecting ? 'off' : 'tap'}
   {onpointerdown}
   onclickcapture={onclickcapture}
   onkeydowncapture={onkeydowncapture}
@@ -224,6 +238,7 @@
     if (selecting) e.preventDefault();
   }}
 >
+  {#if long}<a class="skip" href="#{endId}" onclick={skip}>Skip results</a>{/if}
   <ul class="grid" aria-label={label} aria-busy={loading}>
     {#each items as e, i (e.id)}
       <li class:wide={isWide(e)} data-id={e.id}>
@@ -247,6 +262,7 @@
       {/each}
     {/if}
   </ul>
+  {#if long}<span class="end" id={endId} tabindex="-1"></span>{/if}
   {#if band && root}
     {@const o = root.getBoundingClientRect()}
     <div
@@ -277,6 +293,7 @@
 
 <style>
   .pick-area { position: relative; }
+  .end { position: absolute; width: 0; height: 0; outline: none; }
   .grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px;
     grid-template-columns: repeat(auto-fill, minmax(var(--emote-tile), 1fr)); grid-auto-flow: row dense; }
   .wide { grid-column: span 2; }
@@ -297,6 +314,8 @@
     .more:hover { color: var(--text); border-color: var(--border-strong); }
   }
   @media (hover: none) { .more { opacity: 1; background: none; } }
+  /* Touch: 28px to see, 44px to hit (8px of invisible reach on every side). */
+  @media (pointer: coarse) { .more::after { content: ''; position: absolute; inset: -8px; } }
 
   /* The drag rectangle: a hairline in the accent over a faint tint of it. */
   .band { position: absolute; z-index: 2; pointer-events: none; border: 1px solid var(--accent-border); border-radius: 2px;

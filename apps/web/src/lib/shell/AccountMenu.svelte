@@ -1,7 +1,7 @@
 <script lang="ts">
   // The one account menu: the same trigger (avatar, name, chevron) and the same popover on every
-  // page, public or signed in. A disclosure: the trigger says expanded or not, the panel is a
-  // list of links (AccountLinks, shared with the phone menu sheet). Renders nothing signed out;
+  // page, public or signed in. A menu: the trigger says expanded or not, the panel is a
+  // list of menu items (AccountLinks, shared with the phone menu sheet). Renders nothing signed out;
   // the AppHeader shows Sign in in that slot instead.
   import Avatar from '$lib/components/Avatar.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -17,7 +17,7 @@
 </script>
 
 {#if session.me}
-  <Popover label="Your account" kind="disclosure" align="end" width="260px" bind:open>
+  <Popover label="Your account" kind="menu" align="end" width="260px" bind:open>
     {#snippet trigger(props)}
       <button class="who" type="button" {...props}>
         <Avatar src={who?.avatar} {name} size={24} />
@@ -26,8 +26,12 @@
         <Icon name="chevron-down" size={14} />
       </button>
     {/snippet}
-    <AccountLinks onpick={() => (open = false)} />
+    <AccountLinks menu onpick={() => (open = false)} />
   </Popover>
+{:else if !session.known}
+  <!-- Who you are isn't known yet (the first answer is on its way): the trigger's shape with a
+       blank avatar, so the box isn't empty and nothing moves when the answer lands. -->
+  <span class="who hold" data-account-hold aria-hidden="true"><span class="ghost"></span><Icon name="chevron-down" size={14} /></span>
 {/if}
 
 <style>
@@ -37,6 +41,8 @@
     transition: background-color var(--fast), border-color var(--fast), transform var(--dur-press) ease-out; }
   .who:active { transform: scale(var(--press)); }
   .who[aria-expanded='true'] { background: var(--surface-hover); border-color: var(--border-strong); }
+  .hold { cursor: default; pointer-events: none; }
+  .ghost { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--neutral-chip, var(--surface-2)); }
   .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .who :global(svg) { color: var(--muted); }
   @media (hover: hover) and (pointer: fine) { .who:hover { background: var(--surface-hover); border-color: var(--border-strong); } }

@@ -258,7 +258,7 @@
 
     <div class="toolbar" bind:this={gridTop}>
       <div class="sorts">
-        <Segmented label="Sort" size="s" options={sorts} value={view.sort} onchange={(v) => go({ sort: v }, true)} />
+        <Segmented label="Sort" size="s" compact options={sorts} value={view.sort} onchange={(v) => go({ sort: v }, true)} />
         {#if trending}
           <Segmented label="Trending window" size="s" options={windows} value={view.window} onchange={(v: Window) => go({ window: v }, true)} />
         {/if}
@@ -407,5 +407,5 @@
     .acts { margin-left: 0; }
   }
   @media (max-width: 480px) { .title { flex-direction: column; align-items: flex-start; gap: 0; } }
-  @media (prefers-reduced-motion: reduce) { .results, .track, .track::before { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .results, :global(html:not([data-motion='full'])) .track, :global(html:not([data-motion='full'])) .track::before { transition: none; } }
 </style>

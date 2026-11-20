@@ -18,6 +18,16 @@ export function plan(ids: readonly string[], inSet: ReadonlySet<string>, free: n
   return { add: fresh.slice(0, room), already, overflow: fresh.slice(room) };
 }
 
+/**
+ * What the Add button says about a plan: `add` (something will go in), `already` (every pick is in
+ * the set), `full` (nothing fits), `none` (nothing picked yet).
+ */
+export function addState(picked: number, p: BulkPlan | null): 'none' | 'add' | 'already' | 'full' {
+  if (!picked || !p) return 'none';
+  if (p.add.length) return 'add';
+  return p.already.length >= picked ? 'already' : 'full';
+}
+
 export type BulkResult = { added: number; already: number; overflow: number; taken: number; failed: number };
 
 /** "Added 8 to Main. 2 were already there. 1 didn't fit: the set is full." */

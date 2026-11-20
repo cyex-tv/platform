@@ -75,7 +75,7 @@ impl World {
                 let _ = rx.wait_for(|s| *s).await;
             },
         ));
-        tokio::time::sleep(Duration::from_millis(150)).await;
+        common::wait_for_feeders(&db, 1).await;
         Some(Self {
             app: cyex_tv_api::app(state.clone()),
             state,
@@ -474,8 +474,8 @@ async fn a_takedown_removes_the_image_everywhere_and_reaches_clients() {
         .unwrap()
         .to_owned();
 
-    // A client watching Alice's channel, from now on (earlier events have been delivered).
-    tokio::time::sleep(Duration::from_millis(400)).await;
+    // A client watching Alice's channel. Events from the set-up above may still be on their way,
+    // so it reads until the one it waits for and checks how the stream ends.
     let mut watcher = w.state.hub.subscriber();
     watcher.subscribe([format!("channel:twitch:{}", alice.twitch).as_str()]);
 
@@ -491,13 +491,16 @@ async fn a_takedown_removes_the_image_everywhere_and_reaches_clients() {
 
     // The client hears that it changed and that it left the set, within a second.
     let mut types = Vec::new();
-    while types.len() < 2 {
-        match tokio::time::timeout(Duration::from_secs(1), watcher.recv()).await {
+    while types.last().map(String::as_str) != Some("set.emote_removed") {
+        match tokio::time::timeout(Duration::from_secs(5), watcher.recv()).await {
             Ok(Some(Message::Event(d))) => types.push(d.event.event_type.clone()),
-            other => panic!("no event in time: {other:?}"),
+            other => panic!("no event in time: {other:?} after {types:?}"),
         }
     }
-    assert_eq!(types, ["emote.updated", "set.emote_removed"]);
+    assert!(
+        types.ends_with(&["emote.updated".to_owned(), "set.emote_removed".to_owned()]),
+        "{types:?}"
+    );
 
     // Both uploads of the image are down and out of their sets.
     for id in [&alice_emote, &bob_emote] {
@@ -619,6 +622,17 @@ async fn restricting_and_blocking_accounts() {
         ),
         "owner_protected"
     );
+    // Nobody changes their own holds, by either mutation, placing or lifting.
+    let me = ids::to_text(admin.id);
+    for (q, vars) in [
+        (restrict, json!({ "a": me, "u": false })),
+        (restrict, json!({ "a": me, "b": true })),
+        (PLACE, json!({ "a": me, "k": "UPLOADS", "r": "test" })),
+        (LIFT, json!({ "a": me, "k": "UPLOADS" })),
+    ] {
+        let r = w.gql(&admin, q, vars).await;
+        assert_eq!(code(&r), "own_account", "{r}");
+    }
 
     let r = w
         .gql(

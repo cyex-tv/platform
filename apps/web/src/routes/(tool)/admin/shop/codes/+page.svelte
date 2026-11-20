@@ -202,7 +202,7 @@
       .join(' + ') || 'Nothing';
 </script>
 
-<svelte:head><title>Codes - cyex.tv</title></svelte:head>
+<svelte:head><title>Codes - Admin - cyex.tv</title></svelte:head>
 
 <Gate permission="codes.manage">
   <PageHead title="Codes" line="Batches of redeem codes for giveaways and events. The codes are shown once, when you make the batch.">

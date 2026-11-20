@@ -170,7 +170,7 @@
       <p class="links">
         <a href="/users/{encodeURIComponent(account.id)}">Public profile</a>
         {#if canGraph}<a href="/admin/entitlements?account={encodeURIComponent(account.id)}">Entitlement graph</a>{/if}
-        {#if can('audit.view')}<a href="/admin/audit?targetKind=account&targetId={encodeURIComponent(account.id)}">Audit log</a>{/if}
+        {#if can('audit.view')}<a href="/admin/audit?kind=account&id={encodeURIComponent(account.id)}">Audit log</a>{/if}
       </p>
     </section>
 
@@ -288,4 +288,6 @@
   .what { display: grid; flex: 1; min-width: 0; }
   .give { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--border); }
   .give select { flex: 1; background: var(--bg); }
+  /* a touch target of at least 24px (WCAG 2.5.8) */
+  dd a, .links a, .jump a, .what a { display: inline-flex; align-items: center; min-height: 24px; }
 </style>

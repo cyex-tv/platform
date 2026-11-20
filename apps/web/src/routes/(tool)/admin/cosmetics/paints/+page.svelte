@@ -58,7 +58,7 @@
   }
 </script>
 
-<svelte:head><title>Paints - cyex.tv</title></svelte:head>
+<svelte:head><title>Paints - Admin - cyex.tv</title></svelte:head>
 
 <PageHead title="Paints" line="Name paints people show in chat. Deleting one takes it from everyone.">
   {#snippet actions()}

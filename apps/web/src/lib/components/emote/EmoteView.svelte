@@ -20,7 +20,7 @@
   import ChannelsTab from './ChannelsTab.svelte';
   import Pager from './Pager.svelte';
   import SizeRow from './SizeRow.svelte';
-  import { flagsOf, formats, scaleFiles, trust, type EmoteChannel, type PageEmote } from './emote-page';
+  import { canReport, flagsOf, formats, scaleFiles, trust, type EmoteChannel, type PageEmote } from './emote-page';
   import type { PagerState } from './pager';
   import { Viewer } from './viewer.svelte';
   import { bottomBar } from '$lib/tool/bottom-bars.svelte';
@@ -177,12 +177,12 @@
       </dl>
 
       <div class="head-actions">
-        <EmoteActions emoteId={e.id} {name} {viewer} picture={e} {editHref} addable={public_} reportable={public_} />
+        <EmoteActions emoteId={e.id} {name} {viewer} picture={e} {editHref} addable={public_} reportable={canReport(e, session.me?.id)} />
       </div>
     </article>
 
     <div class="bar" use:bottomBar>
-      <EmoteActions emoteId={e.id} {name} {viewer} variant="bar" picture={e} {editHref} addable={public_} reportable={public_} />
+      <EmoteActions emoteId={e.id} {name} {viewer} variant="bar" picture={e} {editHref} addable={public_} reportable={canReport(e, session.me?.id)} />
     </div>
 
     {#if tabs.length}
@@ -335,8 +335,7 @@
     .facts { margin-bottom: 0; }
     .bar { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-nav);
       padding: 10px var(--page-pad) calc(10px + env(safe-area-inset-bottom, 0px));
-      border-top: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 86%, transparent);
-      backdrop-filter: blur(14px) saturate(1.4); -webkit-backdrop-filter: blur(14px) saturate(1.4); }
+      border-top: 1px solid var(--border); background: var(--bg); }
   }
   @media (max-width: 720px) and (max-height: 500px) {
     .bar { position: static; margin-inline: calc(-1 * var(--page-pad)); border-bottom: 1px solid var(--border); }
@@ -345,5 +344,5 @@
   @media (max-width: 720px) and ((prefers-reduced-transparency: reduce) or (prefers-contrast: more)) {
     .bar { background: var(--bg); backdrop-filter: none; -webkit-backdrop-filter: none; border-top-color: var(--border-strong); }
   }
-  @media (prefers-reduced-motion: reduce) { .back :global(.icon) { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .back :global(.icon) { transition: none; } }
 </style>

@@ -34,6 +34,8 @@
   // The API lists the identity you go by first.
   const current = $derived(me.identities[0]?.platform ?? null);
   let busy = $state<string | null>(null);
+  // The radio shows this; a save that fails puts it back on `current`.
+  let picked = $derived<Platform | null>(current);
 
   async function refresh() {
     forgetProfile();
@@ -50,6 +52,7 @@
       const id = me.identities.find((i) => i.platform === p);
       notify(`You go by your ${nameOf(p)} name${id ? `, ${id.displayName}` : ''}, now.`);
     } catch (err) {
+      picked = current;
       fail(err);
     } finally {
       busy = null;
@@ -99,7 +102,7 @@
             {#each me.identities as id (id.platform)}
               <li>
                 <label class="pick">
-                  <input type="radio" name="display" value={id.platform} checked={id.platform === current} onchange={() => choose(id.platform)} />
+                  <input type="radio" name="display" value={id.platform} bind:group={picked} onchange={() => choose(id.platform)} />
                   <Avatar src={id.avatar} name={id.displayName} size={28} tone="tool" />
                   <span class="what"><strong><Name value={id.displayName} /></strong><span class="ui-hint">{nameOf(id.platform)} · {id.login}</span></span>
                   {#if id.platform === current}<span class="now"><Icon name="check" size={14} />Your name</span>{/if}
@@ -141,7 +144,7 @@
     <section class="ui-panel" aria-labelledby="sec-h">
       <header><h2 id="sec-h">Security</h2></header>
       <div class="row pad">
-        <p class="what"><strong>Sign out everywhere</strong><span class="ui-hint">Ends every session: this browser, other browsers and the cyex.tv apps. You sign in again after.</span></p>
+        <p class="what"><strong title="Sign out everywhere">Sign out everywhere</strong><span class="ui-hint">Ends every session: this browser, other browsers and the cyex.tv apps. You sign in again after.</span></p>
         <Confirm small label="Sign out everywhere" confirm="Click again to sign out" busy={busy !== null} onconfirm={everywhere} />
       </div>
     </section>

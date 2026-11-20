@@ -957,6 +957,8 @@ async fn app_tokens_run_only_their_scopes() {
     for (query, variables) in [
         (CREATE_SET, json!({ "n": "nope" })),
         ("mutation { revokeOtherSessions }", json!({})),
+        ("mutation { exportMyData }", json!({})),
+        ("mutation { signOutEverywhere }", json!({})),
         ("mutation { x: revokeOtherSessions }", json!({})),
         (
             "mutation { ...F } fragment F on Mutation { revokeOtherSessions }",

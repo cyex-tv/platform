@@ -81,11 +81,76 @@ pub async fn disown_deleted(conn: &mut PgConnection, account_id: Uuid) -> DbResu
     Ok(done.rows_affected())
 }
 
+/// Free text staff or the account wrote about the account, as audit rows carry it (a note's
+/// `body`, a hold's `reason`, a report's `note`): erasure takes these keys out of every row about
+/// the account, and keeps the rest of the row (who did what, when).
+const AUDIT_TEXT_KEYS: &[&str] = &["body", "reason", "note"];
+
 /// Removes everything else that belongs to or names the account, then marks it deleted. The
 /// caller has taken the account's emotes out of sets and deleted or disowned them, and deleted
 /// its sets and channels, publishing their events first.
+///
+/// Staff notes on the account go, its restrictions keep their dates but lose their reasons, and
+/// the audit rows about it (its subject, or the account as target) lose their free text
+/// ([`AUDIT_TEXT_KEYS`]).
+///
+/// What stays on purpose: `identity_holds` keeps the platform user ID of a restricted or blocked
+/// account's identities (written by a trigger when the identities go, below), with the hold's
+/// dates and no name or reason, so the same Twitch or Kick user can't sign in fresh to escape a
+/// restriction (ban evasion; ADR 0019, amendment 2026/11/20). It is used up when that identity
+/// signs in again.
 pub async fn erase(conn: &mut PgConnection, account_id: Uuid) -> DbResult<()> {
+    sqlx::query(
+        "UPDATE audit_log
+            SET before_json = CASE WHEN jsonb_typeof(before_json) = 'object'
+                                   THEN before_json - $3::text[] ELSE before_json END,
+                after_json = CASE WHEN jsonb_typeof(after_json) = 'object'
+                                  THEN after_json - $3::text[] ELSE after_json END
+          WHERE subject_account_id = $1 OR (target_kind = 'account' AND target_id = $2)",
+    )
+    .bind(account_id)
+    .bind(ids::to_text(account_id))
+    .bind(AUDIT_TEXT_KEYS)
+    .execute(&mut *conn)
+    .await?;
+    // Open transfer requests the account is a party to can't go ahead: each is closed as
+    // cancelled, audited with no actor (nobody did it), like an expiry.
+    let closed: Vec<(Uuid, Uuid, Uuid, Uuid, Uuid)> = sqlx::query_as(
+        "UPDATE emote_transfer_requests
+            SET state = 'cancelled', resolved_at = now(), resolved_by = NULL
+          WHERE state = 'pending'
+            AND (from_account_id = $1 OR to_account_id = $1 OR requested_by = $1)
+          RETURNING id, emote_id, from_account_id, to_account_id, requested_by",
+    )
+    .bind(account_id)
+    .fetch_all(&mut *conn)
+    .await?;
+    for (id, emote, from, to, by) in closed {
+        audit::write_for(
+            conn,
+            &audit::NewEntry {
+                actor: None,
+                action: "emote.transfer_cancelled",
+                target_kind: "emote",
+                target_id: &ids::to_text(emote),
+                before: Some(json!({
+                    "request_id": ids::to_text(id),
+                    "from_id": ids::to_text(from),
+                    "to_id": ids::to_text(to),
+                    "requested_by": ids::to_text(by),
+                })),
+                after: Some(json!({ "reason": "account_deleted" })),
+            },
+            // The owner's feed, unless the owner is the one going.
+            (from != account_id).then_some(from),
+        )
+        .await?;
+    }
     for sql in [
+        "DELETE FROM staff_notes WHERE account_id = $1",
+        "UPDATE emotes SET uploaded_by = NULL WHERE uploaded_by = $1",
+        "DELETE FROM oauth_states WHERE link_account_id = $1",
+        "UPDATE account_restrictions SET reason = NULL WHERE account_id = $1",
         "DELETE FROM set_editors WHERE account_id = $1",
         "DELETE FROM account_editors WHERE account_id = $1 OR editor_id = $1",
         "DELETE FROM cosmetic_selections WHERE account_id = $1",

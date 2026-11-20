@@ -31,7 +31,8 @@ export function fillPercent(used: number, capacity: number): number {
 export function cloneOutcome(copied: number, skipped: number): string {
   const c = `${count(copied)} ${copied === 1 ? 'emote' : 'emotes'} copied.`;
   if (skipped <= 0) return c;
-  return `${c} ${count(skipped)} left out: over the size of a set, not approved yet, or someone else’s private emote.`;
+  // A full set (1000) is the one reason that shows in the numbers; otherwise it was approval or privacy.
+  return `${c} ${count(skipped)} left out: ${copied >= 1000 ? 'the set is full.' : 'not approved yet, or private to someone else.'}`;
 }
 
 /** The sentence for a failed clone, from the API's error code. */

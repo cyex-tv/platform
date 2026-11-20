@@ -108,6 +108,12 @@ pub(crate) fn session_view(s: &sessions::Session, caller: &Caller) -> AccountSes
 
 // Sessions
 
+/// What only the website (the cookie session) may do: an app token that leaks must not be able
+/// to take a copy of everything, or sign the person out of the website and keep itself.
+fn website_only(message: &str) -> ApiError {
+    ApiError::new(StatusCode::FORBIDDEN, "website_only", message)
+}
+
 /// The caller's live sessions, the most recently used first.
 pub async fn my_sessions(state: &AppState, caller: &Caller) -> ApiResult<Vec<AccountSession>> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
@@ -143,16 +149,28 @@ pub async fn revoke_session(
 }
 
 /// Signs out every session of the caller, the one this request came with too (the account
-/// page's Sign out). Returns how many.
+/// page's Sign out). Returns how many. With an app token, only that app session ends.
 pub async fn revoke_all_sessions(state: &AppState, caller: &Caller) -> ApiResult<u64> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    if caller.via != Via::Cookie {
+        let done = sessions::delete(&mut conn, &caller.token_hash)
+            .await
+            .map_err(db_error)?;
+        return Ok(u64::from(done));
+    }
     sessions::delete_for_account(&mut conn, caller.account_id, None)
         .await
         .map_err(db_error)
 }
 
 /// Signs out every session of the caller but the one this request came with. Returns how many.
+/// Website only (`website_only` with an app token).
 pub async fn revoke_other_sessions(state: &AppState, caller: &Caller) -> ApiResult<u64> {
+    if caller.via != Via::Cookie {
+        return Err(website_only(
+            "Sign out other sessions on cyex.tv, signed in there.",
+        ));
+    }
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     sessions::delete_for_account(&mut conn, caller.account_id, Some(&caller.token_hash))
         .await
@@ -228,8 +246,14 @@ fn to_json<T: serde::Serialize>(value: &T) -> ApiResult<Value> {
 /// Everything about the caller's account, as one JSON document: the account, identities,
 /// sessions (no tokens), channels, emotes in every state with their tags, sets with their emotes
 /// and editors, account editors both ways, cosmetics owned and shown, roles, reports filed,
-/// notifications, shop orders (bought and received) and redeemed codes. 5 an hour. Audited (`account.exported`, no content).
+/// notifications, shop orders (bought and received) and redeemed codes. Website only
+/// (`website_only` with an app token). 5 an hour. Audited (`account.exported`, no content).
 pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
+    if caller.via != Via::Cookie {
+        return Err(website_only(
+            "Download your data on cyex.tv, signed in there.",
+        ));
+    }
     state
         .limits
         .data_export

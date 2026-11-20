@@ -21,8 +21,10 @@
   import { leave } from './signout';
   import { theme, toggleTheme } from './theme.svelte';
 
-  type Props = { emotes?: boolean; touch?: boolean; onpick?: () => void; signin?: string };
-  let { emotes = false, touch = false, onpick, signin = '/signin' }: Props = $props();
+  /** `menu`: the items are menuitems of the Popover's role="menu" (the desktop account menu); otherwise a nav of links. */
+  type Props = { emotes?: boolean; touch?: boolean; menu?: boolean; onpick?: () => void; signin?: string };
+  let { emotes = false, touch = false, menu = false, onpick, signin = '/signin' }: Props = $props();
+  const item = $derived(menu ? 'menuitem' : undefined);
 
   const me = $derived(session.me);
   const who = $derived(me?.identities[0]);
@@ -53,14 +55,14 @@
 </script>
 
 {#snippet row(l: ShellLink)}
-  <a href={l.href} aria-current={l.match(path, search) ? 'page' : undefined} onclick={() => onpick?.()}>
+  <a href={l.href} role={item} aria-current={l.match(path, search) ? 'page' : undefined} onclick={() => onpick?.()}>
     <Icon name={l.icon} /><span>{l.label}</span>
   </a>
 {/snippet}
 
-<div class="acct" class:touch>
+<div class="acct" class:touch role={menu ? 'none' : undefined}>
   {#if me}
-    <a class="head" href={profile?.href} aria-current={profile?.match(path, search) ? 'page' : undefined} onclick={() => onpick?.()}>
+    <a class="head" href={profile?.href} role={item} aria-current={profile?.match(path, search) ? 'page' : undefined} onclick={() => onpick?.()}>
       <Avatar src={who?.avatar} {name} size={40} />
       <span class="id">
         <strong><PaintedName {name} paint={look.paint} badge={look.badge} /></strong>
@@ -73,10 +75,10 @@
       <Icon name="chevron-right" size={14} />
     </a>
   {/if}
-  <nav class="list" aria-label={me ? 'Your account' : 'Menu'}>
+  <svelte:element this={menu ? 'div' : 'nav'} class="list" role={menu ? 'none' : undefined} aria-label={menu ? undefined : me ? 'Your account' : 'Menu'}>
     {#if emotes}
       {#each site as l (l.href)}{@render row(l)}{/each}
-      <a href="/developers" aria-current={path.startsWith('/developers') ? 'page' : undefined} onclick={() => onpick?.()}>
+      <a href="/developers" role={item} aria-current={path.startsWith('/developers') ? 'page' : undefined} onclick={() => onpick?.()}>
         <Icon name="file" /><span>Developers</span>
       </a>
       <hr />
@@ -85,7 +87,7 @@
       {#each menuLinks(me.id) as l (l.href)}{@render row(l)}{/each}
       {#if touch}
         {@render row(UPLOAD)}
-        <a href="/me/notifications" aria-current={path.startsWith('/me/notifications') ? 'page' : undefined} onclick={() => onpick?.()}>
+        <a href="/me/notifications" role={item} aria-current={path.startsWith('/me/notifications') ? 'page' : undefined} onclick={() => onpick?.()}>
           <Icon name="bell" /><span>Notifications</span>{#if badge(inbox.count)}<span class="value" aria-label="{inbox.count} unread">{badge(inbox.count)}</span>{/if}
         </a>
       {/if}
@@ -94,17 +96,17 @@
       <hr />
     {/if}
     {#if touch}
-    <button type="button" class="theme-row" onclick={toggleTheme} aria-label={theme.light ? 'Theme: light. Switch to dark' : 'Theme: dark. Switch to light'}>
+    <button type="button" class="theme-row" role={item} onclick={toggleTheme} aria-label={theme.light ? 'Theme: light. Switch to dark' : 'Theme: dark. Switch to light'}>
       <Icon name={theme.light ? 'sun' : 'moon'} /><span>Theme</span><span class="value">{theme.light ? 'Light' : 'Dark'}</span>
     </button>
     {/if}
     {#if me}
       {#if touch}<hr />{/if}
-      <button type="button" onclick={out}><Icon name="log-out" /><span>Sign out</span></button>
+      <button type="button" role={item} onclick={out}><Icon name="log-out" /><span>Sign out</span></button>
     {:else if session.known && !session.failed}
-      <a href={signin} onclick={() => onpick?.()}><Icon name="user" /><span>Sign in</span></a>
+      <a href={signin} role={item} onclick={() => onpick?.()}><Icon name="user" /><span>Sign in</span></a>
     {/if}
-  </nav>
+  </svelte:element>
 </div>
 
 <style>

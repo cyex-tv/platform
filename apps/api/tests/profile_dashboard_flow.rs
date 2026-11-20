@@ -365,7 +365,8 @@ async fn sign_out_everywhere_ends_every_session_and_clears_the_cookie() {
     let r = w.gql(&bob, ME, json!({})).await;
     assert!(r["errors"].is_null(), "{r}");
 
-    // An app token signs out everywhere too, without a cookie to clear.
+    // An app token signs out only itself (security review 2026/11/20): a leaked token can't
+    // sign the person out of the website. No cookie to clear.
     let (r, cookie) = w
         .post(
             Some((&bob.token, false)),
@@ -373,10 +374,12 @@ async fn sign_out_everywhere_ends_every_session_and_clears_the_cookie() {
             json!({}),
         )
         .await;
-    assert_eq!(r["data"]["signOutEverywhere"], 2, "{r}");
+    assert_eq!(r["data"]["signOutEverywhere"], 1, "{r}");
     assert!(cookie.is_none());
-    let (r, _) = w.post(Some((&bob.cookie, true)), ME, json!({})).await;
+    let r = w.gql(&bob, ME, json!({})).await;
     assert_eq!(code(&r), "signed_out", "{r}");
+    let (r, _) = w.post(Some((&bob.cookie, true)), ME, json!({})).await;
+    assert!(r["errors"].is_null(), "{r}");
     w.db.close().await;
 }
 

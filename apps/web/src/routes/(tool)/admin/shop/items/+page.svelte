@@ -151,7 +151,7 @@
       .join(' and ');
 </script>
 
-<svelte:head><title>Shop items - cyex.tv</title></svelte:head>
+<svelte:head><title>Shop items - Admin - cyex.tv</title></svelte:head>
 
 <Gate permission="shop.manage">
 <PageHead title="Shop items" line="What is for sale: a bundle of badges and paints with a price. Hidden and scheduled items show here too.">

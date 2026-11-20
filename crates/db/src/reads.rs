@@ -309,6 +309,64 @@ pub async fn newest_members(
     .await?)
 }
 
+/// A page of one set's members that `access` shows, oldest first (the order `members` reads),
+/// narrowed to the ones whose name in the set or own name contains `query` (case-insensitive,
+/// literally), with how many match in all.
+pub async fn members_page(
+    conn: &mut PgConnection,
+    set_id: Uuid,
+    access: &MemberAccess<'_>,
+    query: Option<&str>,
+    limit: i64,
+    offset: i64,
+) -> DbResult<(Vec<MemberRow>, i64)> {
+    let pattern = query.map(str::trim).filter(|q| !q.is_empty()).map(|q| {
+        let escaped = q
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
+        format!("%{escaped}%")
+    });
+    const RULE: &str = "m.set_id = $1
+               AND (e.state = 'approved'
+                    OR (e.state = 'pending'
+                        AND ($2 OR m.set_id = ANY($3) OR e.owner_account_id = $4)))
+               AND ($5::text IS NULL OR m.name ILIKE $5 OR e.name ILIKE $5)";
+    let rows = sqlx::query_as(&format!(
+        "SELECT {}
+         FROM emote_set_members m
+         JOIN emotes e ON e.id = m.emote_id AND e.deleted_at IS NULL
+         LEFT JOIN files f ON f.id = e.file_id
+         WHERE {RULE}
+         ORDER BY m.added_at, m.emote_id
+         LIMIT $6 OFFSET $7",
+        member_columns!()
+    ))
+    .bind(set_id)
+    .bind(access.reviewer)
+    .bind(access.edit_sets)
+    .bind(access.account)
+    .bind(pattern.as_deref())
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(&mut *conn)
+    .await?;
+    let total = sqlx::query_scalar(&format!(
+        "SELECT count(*)
+         FROM emote_set_members m
+         JOIN emotes e ON e.id = m.emote_id AND e.deleted_at IS NULL
+         WHERE {RULE}"
+    ))
+    .bind(set_id)
+    .bind(access.reviewer)
+    .bind(access.edit_sets)
+    .bind(access.account)
+    .bind(pattern.as_deref())
+    .fetch_one(conn)
+    .await?;
+    Ok((rows, total))
+}
+
 /// How many members of each given set `access` shows (the rule of `newest_members`). Sets with
 /// none are missing.
 pub async fn visible_counts(

@@ -25,6 +25,7 @@ thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+unicode-normalization.workspace = true
 utoipa.workspace = true
 
 [lints]

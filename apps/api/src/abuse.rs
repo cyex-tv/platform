@@ -28,6 +28,7 @@ use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
     AccountReports, AccountStatus, AdminAccount, Emote, EmoteState, EventType, Notification,
     Report, ReportAction, ReportQueue, ReportState, Restriction, RestrictionInput, RestrictionKind,
+    TransferRequestState,
 };
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
@@ -519,8 +520,9 @@ fn until(raw: Option<&str>) -> ApiResult<Option<chrono::DateTime<Utc>>> {
     Ok(Some(at))
 }
 
-/// Who may restrict `account_id` for `holds`: the owner can't be, nobody acts on an account at or
-/// above their own highest role, and each hold needs its permission (or `users.restrict`).
+/// Who may restrict `account_id` for `holds`: the owner can't be, nobody acts on their own account
+/// or one at or above their own highest role, and each hold needs its permission (or
+/// `users.restrict`).
 async fn may_restrict(
     state: &AppState,
     conn: &mut PgConnection,
@@ -558,15 +560,22 @@ async fn may_restrict(
             "The owner's account can't be restricted.",
         ));
     }
-    if account_id != caller.account_id {
-        let target_highest = cyex_tv_db::roles::highest_position(conn, account_id)
-            .await
-            .map_err(db_error)?;
-        actor(conn, caller)
-            .await?
-            .may_act_on(target_highest)
-            .map_err(rule)?;
+    // Nobody places, changes or lifts their own holds: lifting one would undo what someone
+    // more senior decided.
+    if account_id == caller.account_id {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "own_account",
+            "You can't change restrictions on your own account.",
+        ));
     }
+    let target_highest = cyex_tv_db::roles::highest_position(conn, account_id)
+        .await
+        .map_err(db_error)?;
+    actor(conn, caller)
+        .await?
+        .may_act_on(target_highest)
+        .map_err(rule)?;
     Ok(before)
 }
 
@@ -888,20 +897,41 @@ pub async fn my_notifications(
     unread_only: bool,
 ) -> ApiResult<Vec<Notification>> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    Ok(
-        notifications::list(&mut conn, caller.account_id, unread_only)
+    let rows = notifications::list(&mut conn, caller.account_id, unread_only)
+        .await
+        .map_err(db_error)?;
+    let request_of = |n: &notifications::Notification| {
+        (n.kind == "emote.transfer_requested")
+            .then(|| {
+                n.payload
+                    .get("request_id")?
+                    .as_str()
+                    .and_then(ids::from_text)
+            })
+            .flatten()
+    };
+    let wanted: Vec<Uuid> = rows.iter().filter_map(request_of).collect();
+    let states: std::collections::HashMap<Uuid, TransferRequestState> = if wanted.is_empty() {
+        std::collections::HashMap::new()
+    } else {
+        cyex_tv_db::transfers::states_of(&mut conn, &wanted)
             .await
             .map_err(db_error)?
             .into_iter()
-            .map(|n| Notification {
-                id: ids::to_text(n.id),
-                kind: n.kind,
-                payload: n.payload.to_string(),
-                created_at: views::time(n.created_at),
-                read: n.read_at.is_some(),
-            })
-            .collect(),
-    )
+            .filter_map(|(id, s)| Some((id, TransferRequestState::parse(&s)?)))
+            .collect()
+    };
+    Ok(rows
+        .into_iter()
+        .map(|n| Notification {
+            transfer_state: request_of(&n).and_then(|id| states.get(&id).copied()),
+            id: ids::to_text(n.id),
+            kind: n.kind,
+            payload: n.payload.to_string(),
+            created_at: views::time(n.created_at),
+            read: n.read_at.is_some(),
+        })
+        .collect())
 }
 
 #[cfg(test)]

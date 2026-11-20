@@ -128,12 +128,13 @@
 .ps-presets { display: flex; flex-wrap: wrap; gap: 8px; }
 .ps-preset { display: inline-flex; align-items: center; min-height: 40px; padding: 0 12px; font: inherit; font-weight: 600; font-size: 15px; cursor: pointer;
   background: var(--stage-dark); border: 1px solid var(--border-strong); border-radius: var(--radius-btn); }
+.ps-preset.light { background: var(--stage-light); }
 .ps-preset:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 .ps-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 24px; font-size: var(--text-sub); color: var(--muted); }
 .ps-status.bad { color: var(--red); }
 .ps-progress { flex: 1 1 120px; height: 4px; max-width: 220px; background: var(--border-strong); border-radius: 2px; overflow: hidden; }
-.ps-progress > span { display: block; height: 100%; background: var(--accent); transition: width var(--fast) linear; }
+.ps-progress > span { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: 0 50%; transition: transform var(--fast) linear; }
 .ps-issues { margin: 0; padding-left: 18px; color: var(--red); font-size: var(--text-sub); display: grid; gap: 2px; }
 .ps-code { margin: 0; padding: 12px; max-height: 280px; overflow: auto; font: 13px/1.6 var(--font-mono); background: var(--elevated-2); border-radius: var(--radius); white-space: pre; color: var(--text); }
 textarea.ps-text { min-height: 180px; font-family: var(--font-mono); font-size: 14px; resize: vertical; }

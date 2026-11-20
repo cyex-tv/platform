@@ -5,7 +5,10 @@ import { gql } from '$lib/api';
 import { MARK_READ, MY_NOTIFICATIONS, UNREAD_COUNT } from '$lib/queries';
 import { session } from '$lib/tool/session.svelte';
 
-export type Note = { id: string; kind: string; payload: string; createdAt: string; read: boolean };
+export type Note = { id: string; kind: string; payload: string; createdAt: string; read: boolean; transferState?: string | null };
+
+/** Transfer requests answered here: the bell and /me/notifications both show the answer, not the buttons. */
+export const answered = $state<Record<string, string>>({});
 
 export const inbox = $state<{ count: number; known: boolean; items: Note[] | null; loading: boolean; error: string | null; marking: boolean }>({
   count: 0,

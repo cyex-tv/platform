@@ -29,12 +29,10 @@
   function show() {
     back = document.activeElement as HTMLElement | null;
     dialog.showModal();
+    // Reduced motion (the OS's or the site's): it simply appears.
+    if (still()) return;
     const d = ms('--dur-sheet');
-    if (still()) {
-      panel.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' });
-    } else {
-      panel.animate([{ transform: 'translateY(100%)' }, { transform: 'translateY(0)' }], { duration: d, easing: ease() });
-    }
+    panel.animate([{ transform: 'translateY(100%)' }, { transform: 'translateY(0)' }], { duration: d, easing: ease() });
     try {
       dialog.animate([{ opacity: 0 }, { opacity: 1 }], { duration: d, easing: 'ease-out', pseudoElement: '::backdrop' });
     } catch {}
@@ -43,14 +41,13 @@
   async function hide(from = 0) {
     if (closing || !dialog.open) return;
     closing = true;
-    const d = Math.round(ms('--dur-sheet') * 0.75);
-    const frames = still()
-      ? [{ opacity: 1 }, { opacity: 0 }]
-      : [{ transform: `translateY(${from}px)` }, { transform: 'translateY(100%)' }];
-    try {
-      dialog.animate([{ opacity: 1 }, { opacity: 0 }], { duration: d, easing: 'ease-out', pseudoElement: '::backdrop', fill: 'forwards' });
-    } catch {}
-    await panel.animate(frames, { duration: still() ? 120 : d, easing: 'ease-out', fill: 'forwards' }).finished.catch(() => {});
+    if (!still()) {
+      const d = Math.round(ms('--dur-sheet') * 0.75);
+      try {
+        dialog.animate([{ opacity: 1 }, { opacity: 0 }], { duration: d, easing: 'ease-out', pseudoElement: '::backdrop', fill: 'forwards' });
+      } catch {}
+      await panel.animate([{ transform: `translateY(${from}px)` }, { transform: 'translateY(100%)' }], { duration: d, easing: 'ease-out', fill: 'forwards' }).finished.catch(() => {});
+    }
     dialog.close();
     for (const a of [...panel.getAnimations(), ...dialog.getAnimations({ subtree: false })]) a.cancel();
     panel.style.transform = '';

@@ -4,7 +4,9 @@
   import { navigating, page } from '$app/state';
   import Footer from '$lib/components/Footer.svelte';
   import AppHeader from '$lib/shell/AppHeader.svelte';
+  import { titleTruncated } from '$lib/shell/truncated';
   import Toasts from '$lib/tool/Toasts.svelte';
+  import { syncMotion } from '$lib/shell/motion.svelte';
   import { loadMe, session } from '$lib/tool/session.svelte';
   import UploadDialog from '$lib/upload/UploadDialog.svelte';
   import { openUpload, opensDialog } from '$lib/upload/upload.svelte';
@@ -16,6 +18,8 @@
 
   // Only the browser has the session cookie; signed out is the default. The signed-in layout
   // asks too (to send you to sign in), and loadMe() shares one request between the two.
+  // The reduced-motion setting, for the pictures that choose a still by it.
+  $effect(syncMotion);
   $effect(() => {
     loadMe().catch(() => {});
   });
@@ -60,6 +64,8 @@
   });
 </script>
 
+<svelte:document onpointerover={titleTruncated} />
+
 <a class="skip" href="#main">Skip to content</a>
 {#if page.data.skipTo}<a class="skip" href="#{page.data.skipTo}">Skip to contents</a>{/if}
 <AppHeader />
@@ -73,6 +79,9 @@
 
 <style>
   main:focus { outline: none; }
+  /* While something on the page is still loading (a loading state, a grid fetching), the footer waits, hidden
+     but in place: a page growing under a visible footer would shove it down. */
+  :global(main:has([aria-busy='true']) + .footer) { visibility: hidden; }
   .progress { position: fixed; top: calc(var(--nav-h) + 1px + env(safe-area-inset-top, 0px)); left: 0; right: 0; height: 2px;
     z-index: var(--z-nav); pointer-events: none; background: var(--accent); transform-origin: 0 50%;
     opacity: 0; transform: scaleX(0); }
@@ -81,6 +90,7 @@
   .progress.done { opacity: 0; transform: scaleX(1);
     transition: transform var(--dur-color) ease-out, opacity var(--dur-color) ease-out var(--dur-color); }
   /* Reduced motion: no crawl and no static full-width bar; the bar stays hidden. */
-  @media (prefers-reduced-motion: reduce) { .progress { display: none; } }
+  @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .progress { display: none; } }
+  :global(html[data-motion='reduce']) .progress { display: none; }
   @media (forced-colors: active) { .progress { background: Highlight; } }
 </style>

@@ -4,7 +4,7 @@
   // line for screen readers. The button family follows the page it sits on.
   import { useCopied } from '$lib/clipboard.svelte';
   import { btnClass, btnFamily } from './btn';
-  import Icon from './Icon.svelte';
+  import SwapIcon from './SwapIcon.svelte';
 
   type Props = {
     /** The address to copy, read at the moment of the click. */
@@ -17,7 +17,7 @@
 </script>
 
 <button class="{cls} copy" type="button" onclick={() => link.copy(url())}>
-  <Icon name={link.copied ? 'check' : 'copy'} size={16} />
+  <SwapIcon a="copy" b="check" on={link.copied} />
   <span class="labels">
     <span class:off={link.state !== 'idle'}>Copy link</span>
     <span class:off={!link.copied} aria-hidden="true">Copied</span>

@@ -129,29 +129,6 @@ export const CHANNEL = graphql(`
   }
 `);
 
-export const SET = graphql(`
-  query Set($id: String!) {
-    set(id: $id) {
-      id
-      name
-      kind
-      capacity
-      owner {
-        id
-        displayName
-      }
-      emotes {
-        name
-        zeroWidth
-        addedAt
-        emote {
-          ...EmoteFields
-        }
-      }
-    }
-  }
-`);
-
 // The public set page (/sets/<id>): listed and unlisted sets open for anyone; a private one only
 // for its owner and editors, and for everyone else it answers as if it did not exist.
 export const PUBLIC_SET = graphql(`
@@ -189,22 +166,6 @@ export const CLONE_SET = graphql(`
       set {
         id
         name
-      }
-    }
-  }
-`);
-
-export const GLOBAL_SET = graphql(`
-  query GlobalSet {
-    globalSet {
-      id
-      name
-      emotes {
-        name
-        zeroWidth
-        emote {
-          ...EmoteFields
-        }
       }
     }
   }
@@ -260,6 +221,7 @@ export const SET_FIELDS = graphql(`
     id
     name
     kind
+    visibility
     capacity
     owner {
       id
@@ -295,10 +257,21 @@ export const MY_SETS = graphql(`
   }
 `);
 
+// A set without its emotes (a set can hold a thousand): the editor reads those a page at a time.
 export const EDIT_SET = graphql(`
   query EditSet($id: String!) {
     set(id: $id) {
-      ...SetFields
+      id
+      name
+      kind
+      visibility
+      capacity
+      slotsUsed
+      owner {
+        id
+        displayName
+        avatar
+      }
     }
     setEditors(setId: $id) {
       id
@@ -334,6 +307,38 @@ export const EDIT_SET = graphql(`
   }
 `);
 
+// One page of a set's emotes, oldest first, narrowed by the filter on the server.
+export const SET_EMOTES = graphql(`
+  query SetEmotes($id: String!, $query: String, $page: Int, $perPage: Int) {
+    setEmotes(id: $id, query: $query, page: $page, perPage: $perPage) {
+      total
+      items {
+        name
+        zeroWidth
+        addedAt
+        emote {
+          ...EmoteFields
+        }
+      }
+    }
+  }
+`);
+
+// Who is in the set, no pictures: ids and names, for "Added" and name clashes in Add emotes.
+export const SET_MEMBERS = graphql(`
+  query SetMembers($id: String!, $page: Int, $perPage: Int) {
+    setEmotes(id: $id, page: $page, perPage: $perPage) {
+      total
+      items {
+        name
+        emote {
+          id
+        }
+      }
+    }
+  }
+`);
+
 export const CREATE_SET = graphql(`
   mutation CreateSet($input: CreateSetInput!) {
     createSet(input: $input) {
@@ -347,6 +352,7 @@ export const UPDATE_SET = graphql(`
     updateSet(id: $id, input: $input) {
       id
       name
+      visibility
     }
   }
 `);
@@ -380,28 +386,9 @@ export const REMOVE_SET_EMOTE = graphql(`
   }
 `);
 
-export const ADD_SET_EDITOR = graphql(`
-  mutation AddSetEditor($setId: String!, $accountId: String!) {
-    addSetEditor(setId: $setId, accountId: $accountId)
-  }
-`);
-
 export const REMOVE_SET_EDITOR = graphql(`
   mutation RemoveSetEditor($setId: String!, $accountId: String!) {
     removeSetEditor(setId: $setId, accountId: $accountId)
-  }
-`);
-
-export const FIND_ACCOUNT = graphql(`
-  query FindAccount($platform: Platform!, $login: String!) {
-    channelByLogin(platform: $platform, login: $login) {
-      login
-      account {
-        id
-        displayName
-        avatar
-      }
-    }
   }
 `);
 
@@ -565,6 +552,7 @@ export const MY_NOTIFICATIONS = graphql(`
       payload
       createdAt
       read
+      transferState
     }
   }
 `);
@@ -784,15 +772,6 @@ export const RESOLVE_REPORT = graphql(`
   }
 `);
 
-export const TAKEDOWN = graphql(`
-  mutation Takedown($id: String!, $reason: String!) {
-    takedownEmote(id: $id, reason: $reason) {
-      id
-      state
-    }
-  }
-`);
-
 export const ROLE_FIELDS = graphql(`
   fragment RoleFields on Role {
     id
@@ -873,19 +852,6 @@ export const ALL_ROLES = graphql(`
   query AllRoles {
     roles {
       ...RoleFields
-    }
-  }
-`);
-
-export const RESTRICT = graphql(`
-  mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {
-    restrictAccount(accountId: $accountId, uploadsBlocked: $uploadsBlocked, blocked: $blocked) {
-      uploadsBlocked
-      ticketsBlocked
-      blocked
-      uploadsBlockedUntil
-      ticketsBlockedUntil
-      blockedUntil
     }
   }
 `);

@@ -2,7 +2,9 @@
 //! They run when `CYEX_TV_TEST_DATABASE_URL` is set (CI sets it) and skip otherwise. The role in
 //! that URL needs `CREATEDB`.
 
+use std::future::Future;
 use std::str::FromStr;
+use std::time::{Duration, Instant};
 
 use sqlx::postgres::{PgConnectOptions, PgPool, PgPoolOptions};
 use sqlx::{ConnectOptions, Connection, Executor, PgConnection};
@@ -56,4 +58,35 @@ impl TestDb {
             .await
             .unwrap();
     }
+}
+
+/// Polls `check` every 20 ms until it says yes, or panics after ten seconds naming `what`. Use it
+/// instead of a fixed sleep wherever a test waits for something to have happened.
+#[allow(dead_code)]
+pub async fn wait_until<F, Fut>(what: &str, mut check: F)
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = bool>,
+{
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while !check().await {
+        assert!(Instant::now() < deadline, "timed out waiting for {what}");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+/// Waits until `n` event feeders are listening on the test database. A feeder reads where the
+/// outbox ends before it starts to listen, so once it listens, anything written later reaches it.
+#[allow(dead_code)]
+pub async fn wait_for_feeders(db: &TestDb, n: i64) {
+    wait_until("the event feeders to listen", || async {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT count(*) FROM pg_stat_activity              WHERE datname = current_database() AND state = 'idle' AND query ILIKE 'LISTEN %'",
+        )
+        .fetch_one(&db.pool)
+        .await
+        .map(|c| c >= n)
+        .unwrap_or(false)
+    })
+    .await;
 }

@@ -7,7 +7,7 @@
 
 <svelte:head><title>Paint studio - cyex.tv</title></svelte:head>
 
-<main class="wrap ui-page" style:padding-block="26px 60px">
+<div class="wrap ui-page" style:padding-block="26px 60px">
   <div class="ui-head">
     <div>
       <h1>Paint studio</h1>
@@ -15,4 +15,4 @@
     </div>
   </div>
   <PaintStudio {backend} paintId={data.paintId} />
-</main>
+</div>

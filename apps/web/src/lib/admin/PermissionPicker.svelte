@@ -34,11 +34,23 @@
     return { update: (v: boolean) => (node.indeterminate = v) };
   }
 
+  // Escape puts the tooltip away (WCAG 1.4.13) without closing the dialog around it: the first
+  // Escape hides it, the tooltip comes back for the next row you reach, a second Escape closes the dialog.
+  let hushed = $state<string | null>(null);
+  let shown = $state<string | null>(null); // the row whose tooltip is up (hover or focus)
+  function onkeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && shown && hushed !== shown) {
+      e.stopPropagation();
+      e.preventDefault();
+      hushed = shown;
+    }
+  }
+
   const count = (g: PermissionGroup) => g.items.filter((i) => set.has(i.key)).length;
   const locked = (g: PermissionGroup) => disabled || g.items.every((i) => !canChange(i.key));
 </script>
 
-<div class="groups">
+<div class="groups" role="presentation" {onkeydown}>
   {#each groups as g (g.id)}
     {@const state = groupState(g, picked)}
     <fieldset class="group">
@@ -53,7 +65,9 @@
         {#each g.items as i (i.key)}
           {@const on = set.has(i.key)}
           {@const can = !disabled && canChange(i.key)}
-          <li class="item" class:off={!can}>
+          <li class="item" class:off={!can} class:hushed={hushed === i.key}
+            onfocusin={() => ((shown = i.key), hushed !== i.key && (hushed = null))} onfocusout={() => (shown = hushed = null)}
+            onpointerenter={() => ((shown = i.key), hushed !== i.key && (hushed = null))} onpointerleave={() => (shown = hushed = null)}>
             <label>
               <input type="checkbox" checked={on} disabled={!can} aria-describedby="{idPrefix}-{i.key}"
                 onchange={(e) => toggle(i.key, e.currentTarget.checked)} />
@@ -92,6 +106,7 @@
     padding: 7px 9px; border-radius: var(--radius-btn); background: var(--elevated, var(--surface)); color: var(--text);
     border: 1px solid var(--border-strong); box-shadow: var(--shadow-pop); font-size: 12px; line-height: 1.45; font-weight: 400;
     opacity: 0; transform: translateY(-2px); pointer-events: none; transition: opacity var(--fast), transform var(--fast); }
+  .item.hushed .tip { opacity: 0 !important; transition: none; }
   .why { color: var(--muted); }
   .key { color: var(--dim); font-size: 11px; }
   .item:has(input:focus-visible) .tip { opacity: 1; transform: none; }
@@ -99,5 +114,5 @@
     .item label:hover { background: var(--row-hover); }
     .item:hover .tip { opacity: 1; transform: none; transition-delay: var(--delay-tip, .4s); }
   }
-  @media (prefers-reduced-motion: reduce) { .tip { transform: none; transition: opacity var(--fast); } }
+  @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .tip { transform: none; transition: opacity var(--fast); } }
 </style>

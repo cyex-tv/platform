@@ -9,6 +9,8 @@
   import State from '$lib/components/State.svelte';
   import { clean, count } from '$lib/format';
   import { fillPercent } from '$lib/sets/public';
+  import { setMark } from '$lib/sets/visibility';
+  import type { SetVisibility } from '$lib/gql/graphql';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
   import { loader } from '$lib/tool/loader.svelte';
@@ -18,7 +20,7 @@
 
   let { accountId, mine, canCreate, name = '' }: { accountId: string; mine: boolean; canCreate: boolean; name?: string } = $props();
 
-  type Card = { id: string; name: string; kind: string; used: number; capacity: number; thumbs: Picture[]; chat: string | null };
+  type Card = { id: string; name: string; kind: string; used: number; capacity: number; thumbs: Picture[]; chat: string | null; visibility?: SetVisibility };
   type Shown = { cards: Card[]; hasPersonal: boolean };
 
   const managed = $derived(mine || canCreate);
@@ -32,7 +34,7 @@
     const active = new Map(lib.channels.filter((c) => c.activeSetId).map((c) => [c.activeSetId!, c.platform]));
     return {
       hasPersonal: lib.sets.some((s) => s.kind === 'PERSONAL'),
-      cards: lib.sets.map((s) => ({ id: s.id, name: s.name, kind: s.kind, used: s.emotes.length, capacity: s.capacity, thumbs: s.emotes.map((m) => m.emote),
+      cards: lib.sets.map((s) => ({ id: s.id, name: s.name, kind: s.kind, used: s.emotes.length, capacity: s.capacity, thumbs: s.emotes.map((m) => m.emote), visibility: s.visibility,
         chat: active.has(s.id) ? platformLabel(active.get(s.id)!) : null })),
     };
   });
@@ -60,11 +62,13 @@
       <ul class="cards">
         {#each lib.cards as s (s.id)}
           {@const p = fillPercent(s.used, s.capacity)}
+          {@const mark = setMark(s.visibility)}
           <li>
             <a class="card" href="{managed ? '/me/sets' : '/sets'}/{s.id}">
               <EmoteThumbs emotes={s.thumbs} />
               <span class="row">
                 <strong class="nm"><bdi>{clean(s.name)}</bdi></strong>
+                {#if mark}<span class="vis" title={mark.label}><Icon name={mark.icon} size={14} /><span class="sr-only">{mark.label}</span></span>{/if}
                 {#if s.chat}<span class="on" title={s.chat === 'chat' ? 'Shown in chat' : `Active in ${s.chat} chat`}><Icon name="zap" size={15} /><span class="sr-only">{s.chat === 'chat' ? 'Shown in chat' : `Active in ${s.chat} chat`}</span></span>{/if}
               </span>
               <span class="meta">{kindLabel(s.kind)} · <Capacity used={s.used} capacity={s.capacity} /></span>
@@ -91,6 +95,7 @@
   @media (hover: hover) and (pointer: fine) { .card:hover { background: var(--surface-hover); border-color: var(--border-strong); } }
   .row { display: flex; align-items: center; gap: 8px; min-width: 0; margin-top: 2px; }
   .nm { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .vis { display: inline-grid; color: var(--dim); }
   .on { display: inline-grid; color: var(--accent-text); }
   .meta { font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
   .cap { position: relative; display: block; height: 18px; border-radius: var(--radius); background: var(--elevated-2); overflow: hidden; }

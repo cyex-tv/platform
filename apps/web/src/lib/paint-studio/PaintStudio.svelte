@@ -16,6 +16,7 @@
   import Colour from './ui/Colour.svelte';
   import Glyph from './ui/Glyph.svelte';
   import Preview from './ui/Preview.svelte';
+  import LeaveGuard from '$lib/tool/LeaveGuard.svelte';
   import Seg from './ui/Seg.svelte';
   import Shadows from './ui/Shadows.svelte';
   import StaticEditor from './ui/StaticEditor.svelte';
@@ -57,6 +58,13 @@
   let format = $state<Format>('webp');
   let made = $state<{ blob: Blob; url: string; key: string } | null>(null);
 
+  // Unsaved changes: a snapshot of what the studio holds is taken when it opens clean, after a
+  // paint is opened and after a save; any difference is unsaved work (LeaveGuard asks before it goes).
+  const signature = $derived(JSON.stringify([paint, mode, source, mode === 'animated' ? doc : null, picked?.file.name ?? null]));
+  let clean = $state<string | null>(null);
+  const dirty = $derived(clean !== null && signature !== clean);
+  const markClean = () => (clean = signature);
+
   const preview = createRenderer();
   const output = createRenderer();
   const urls = new Set<string>();
@@ -82,6 +90,7 @@
     };
     mq.addEventListener('change', on);
     if (backend && paintId) void openById(paintId);
+    else markClean();
     return () => mq.removeEventListener('change', on);
   });
   onDestroy(() => {
@@ -260,6 +269,7 @@
         if (source === 'file') source = 'existing';
       }
       status = { text: `Saved “${saved.paint.name}” to cyex.tv.` };
+      markClean();
       onsaved?.(saved);
     } catch (e) {
       if (!(e instanceof Cancelled)) status = { text: (e as Error).message || 'Couldn’t save. Try again.', bad: true };
@@ -295,6 +305,7 @@
         return;
       }
       await load(found);
+      markClean();
       status = null;
     } catch (e) {
       status = { text: (e as Error).message || 'Couldn’t open the paint.', bad: true };
@@ -417,6 +428,7 @@
 </script>
 
 <svelte:window onkeydown={onkey} />
+<LeaveGuard {dirty} what="the changes to this paint" />
 
 <div class="ps">
   <div class="ps-top">
@@ -437,7 +449,7 @@
   <div class="ps-status" class:bad={status?.bad} id="ps-status" role="status" aria-live="polite">
     {#if status}
       <span>{status.text}</span>
-      {#if status.progress != null}<span class="ps-progress" aria-hidden="true"><span style:width="{Math.round(status.progress * 100)}%"></span></span>{/if}
+      {#if status.progress != null}<span class="ps-progress" aria-hidden="true"><span style:transform="scaleX({Math.round(status.progress * 100) / 100})"></span></span>{/if}
     {/if}
   </div>
   {#if warnings.length}
@@ -592,7 +604,7 @@
     {:else}
       <div class="ps-cards">
         {#each list as s (s.id)}
-          <button type="button" class="ps-card" onclick={() => load(s)}>
+          <button type="button" class="ps-card" onclick={async () => { await load(s); markClean(); }}>
             <span class="ps-stage dark ps-chip"><b class="ps-painted ps-mid" style={paintStyleText(s.paint, s.paint.kind === 'IMAGE' ? (reduced ? s.still : s.paint.image?.url) : null)}>{s.paint.name}</b></span>
             <span>{s.paint.kind === 'IMAGE' ? 'Picture' : s.paint.kind === 'LINEAR_GRADIENT' ? 'Linear gradient' : 'Radial gradient'}</span>
           </button>
