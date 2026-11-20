@@ -4,6 +4,7 @@
 //   - Everyone: Uploaded emotes and Emote sets (the account's listed sets, ADR 0017).
 //   - The owner, and editors of the account: Active emotes, and all their sets; the owner also Channels.
 //   - The owner, and editors with PROFILE: Cosmetics.
+//   - Everyone: Collection (owned badges and paints), when the account shows it; the owner always.
 //   - Everyone: Activity (public, ADR 0016), when the API has it.
 // Sections are query-param tabs on /users/<id> (?s=sets); Uploaded emotes is the default (no
 // parameter), so the server-rendered public page and the owner's page share one address.
@@ -11,7 +12,7 @@
 import type { EditorPermission } from '$lib/gql/graphql';
 import type { RailGroup, RailItem } from '$lib/shell/rail';
 
-export const SECTIONS = ['overview', 'uploads', 'active', 'sets', 'cosmetics', 'activity'] as const;
+export const SECTIONS = ['overview', 'uploads', 'active', 'sets', 'cosmetics', 'collection', 'activity'] as const;
 export type SectionKey = (typeof SECTIONS)[number];
 /** A profile section, or a /me page that sits in the profile's rail. */
 export type RailKey = SectionKey | 'channels' | 'connections' | 'editors' | null;
@@ -34,13 +35,14 @@ export function sectionHref(accountId: string, key: SectionKey): string {
 }
 
 /** The sections this viewer has on this account, in rail order. */
-export function sectionsFor(r: Relation, activity: boolean): SectionKey[] {
+export function sectionsFor(r: Relation, activity: boolean, collection = false): SectionKey[] {
   const out: SectionKey[] = [];
   if (r.mine) out.push('overview');
   if (manages(r)) out.push('active');
   out.push('uploads');
   out.push('sets');
   if (canProfile(r)) out.push('cosmetics');
+  if (r.mine || collection) out.push('collection');
   if (activity) out.push('activity');
   return out;
 }
@@ -68,6 +70,7 @@ const LABEL: Record<SectionKey, string> = {
   uploads: 'Uploaded emotes',
   sets: 'Emote sets',
   cosmetics: 'Cosmetics',
+  collection: 'Collection',
   activity: 'Activity',
 };
 const ICON: Record<SectionKey, RailItem['icon']> = {
@@ -76,16 +79,17 @@ const ICON: Record<SectionKey, RailItem['icon']> = {
   uploads: 'upload',
   sets: 'folder',
   cosmetics: 'brush',
+  collection: 'badge',
   activity: 'activity',
 };
 
 /** The profile's rail rows: emotes first, then cosmetics and activity, the current one marked. */
-export function profileRail(accountId: string, r: Relation, current: RailKey, activity: boolean): RailGroup[] {
-  const keys = sectionsFor(r, activity);
+export function profileRail(accountId: string, r: Relation, current: RailKey, activity: boolean, collection = false): RailGroup[] {
+  const keys = sectionsFor(r, activity, collection);
   const item = (k: SectionKey): RailItem => ({ href: sectionHref(accountId, k), label: LABEL[k], icon: ICON[k], current: current === k });
   const emotes: RailItem[] = keys.filter((k) => k === 'active' || k === 'uploads' || k === 'sets').map(item);
   if (r.mine) emotes.push({ href: '/me/channels', label: 'Channels', icon: 'tv', current: current === 'channels' });
-  const more = keys.filter((k) => k === 'cosmetics' || k === 'activity').map(item);
+  const more = keys.filter((k) => k === 'cosmetics' || k === 'collection' || k === 'activity').map(item);
   const head = keys.includes('overview') ? [{ items: [item('overview')] }] : [];
   return [...head, { items: emotes }, ...(more.length ? [{ items: more }] : [])];
 }

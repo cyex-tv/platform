@@ -890,6 +890,43 @@ async fn every_site_operation_runs_against_the_real_api() {
     .await;
     c.op(os, "Audit", json!({ "limit": 20 })).await;
 
+    // The site announcement.
+    let announcement = c
+        .id(
+            os,
+            "CreateAnnouncement",
+            json!({ "input": { "kind": "CAMPAIGN", "text": "Contract test", "linkUrl": "/shop", "linkLabel": "Shop" } }),
+            "/createAnnouncement/id",
+        )
+        .await;
+    c.op(
+        os,
+        "UpdateAnnouncement",
+        json!({ "id": announcement, "input": { "kind": "INFO", "text": "Contract test two" } }),
+    )
+    .await;
+    c.op(As::Nobody, "ActiveAnnouncement", json!({})).await;
+    c.op(os, "Announcements", json!({})).await;
+    c.op(os, "EndAnnouncement", json!({ "id": announcement }))
+        .await;
+
+    // Notification preferences and the collection.
+    c.op(fs, "NotificationPrefs", json!({})).await;
+    c.op(
+        fs,
+        "SetNotificationPrefs",
+        json!({ "prefs": [{ "kind": "emote.approved", "notify": true, "toast": false }] }),
+    )
+    .await;
+    c.op(fs, "SetCollectionPublic", json!({ "public": true }))
+        .await;
+    c.op(
+        As::Nobody,
+        "AccountCollection",
+        json!({ "accountId": f.tid() }),
+    )
+    .await;
+
     // The account hub.
     c.op(fs, "MyNotifications", json!({})).await;
     c.op(fs, "UnreadCount", json!({})).await;

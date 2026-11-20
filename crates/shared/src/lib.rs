@@ -11,6 +11,7 @@ pub mod permissions;
 pub mod ratelimit;
 pub mod shop;
 pub mod shutdown;
+pub mod site;
 #[cfg(feature = "sqlx")]
 mod sql;
 pub mod text;
