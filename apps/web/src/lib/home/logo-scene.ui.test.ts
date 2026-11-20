@@ -92,7 +92,7 @@ describe('3D logo scene', () => {
     const { scene } = mount(false);
     const meshes: Mesh[] = [];
     rendered.at(-1)!.traverse((o) => o instanceof Mesh && meshes.push(o));
-    expect(meshes.length).toBeGreaterThan(9);
+    expect(meshes.length).toBeGreaterThanOrEqual(4); // three bars and the halo
     const geos = new Set(meshes.map((m) => m.geometry));
     const mats = new Set(meshes.flatMap((m) => (Array.isArray(m.material) ? m.material : [m.material])));
 

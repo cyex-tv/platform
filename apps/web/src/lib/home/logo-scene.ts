@@ -1,17 +1,17 @@
-// The hero's 3D logo as real light tubes: each open bar of logo.ts is a clear glass tube bent into
-// a rounded rectangle (logo-tube.ts), its two ends turning back into metal electrode caps. The
-// middle tube is lit: a bright core inside the glass, whitest in the middle, with a soft halo and a
-// wider bloom around it, and its light tints the glass and cores of the other two. Those two are
-// off: clear glass with a dim core in the mark's ink colour. The glass is thin: nearly clear face
-// on, with edges that thicken and catch the light (fresnel) and the studio's reflections.
+// The hero's 3D logo: the three open bars of logo.ts as deep, bevelled frames, seen from above
+// and to the side so their tops and sides show, made of neon. The middle bar stands well in
+// front and glows: it gives light rather than taking it, in the accent, running white along the
+// middle of its wall (a hot core, on every face), with a soft halo and a wide, faint glow around
+// it; its light spills onto the other two. Those two are the same bars, off: the mark's ink,
+// lit by the room and tinted by the lit bar.
 //
-// No shadow maps and no floor: the glow is drawn by the tubes themselves (shells around the lit
-// tube that fade toward their edge), so it reads from every angle at no extra pass. All of it is
-// drawn into the same canvas (transparent), so the page shows through.
+// No shadow maps and no floor: the glow is drawn by the bar itself (shells along its wall that
+// fade toward their outline, and a soft sprite), so it reads from every angle with no extra pass.
+// All of it is drawn into the same canvas (transparent), so the page shows through.
 //
 // Motion: it first shows the still pose (the same one as the static image under it) while the lit
-// tube strikes once, makes one slow full turn, then sways and floats on its own, and turns further
-// and lets the lit tube come forward as the hero scrolls away. It never follows the pointer (cyex-web).
+// bar strikes once, makes one slow full turn, then sways and floats on its own, and turns further
+// and lets the lit bar come forward as the hero scrolls away. It never follows the pointer (cyex-web).
 //
 // Loaded on its own (dynamic import, after first paint, capable devices only: see LogoHero),
 // so three.js never sits in the page's first bundle. It draws only while the hero is on screen and
@@ -19,35 +19,35 @@
 import {
   AdditiveBlending,
   AmbientLight,
-  BackSide,
-  CapsuleGeometry,
   Color,
   DataTexture,
   DirectionalLight,
-  FrontSide,
+  ExtrudeGeometry,
   Group,
   Mesh,
-  MeshPhysicalMaterial,
   MeshStandardMaterial,
   NormalBlending,
+  Path,
   PerspectiveCamera,
   PMREMGenerator,
   PointLight,
   Scene,
   ShaderMaterial,
+  Shape,
   Sprite,
   SpriteMaterial,
   SRGBColorSpace,
   TubeGeometry,
+  Vector2,
   WebGLRenderer,
   type BufferGeometry,
   type Material,
   type Texture,
 } from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { BARS, CENTER, GRID } from './logo';
+import { BARS, CENTER, GRID, STROKE, type Bar } from './logo';
+import { look, loopPath, halfSize, segmentsFor, shellLimit } from './logo-glow';
 import { REST, pose, strike, type Pose } from './logo-motion';
-import { TUBE, ends, halfSize, look, loopPath, segmentsFor, tubePath } from './logo-tube';
 
 export type LogoScene = { dispose(): void };
 
@@ -60,15 +60,84 @@ type Options = {
   still?: boolean;
 };
 
+const DEPTH = 2.6; // how deep each frame is, in grid units (a bar is 6 tall)
+const BEVEL = 0.34;
 const FOV = 26;
 const FIT = GRID * 1.1; // the view holds this many units, so the turned logo and its glow fit
-const RADIAL = 18; // round enough for the glass's edge highlight to stay smooth
-/** The glow shells around the lit tube: how much wider than the glass, and how fast they fade out. */
-const HALO = { scale: 2.3, power: 2.2 };
-const BLOOM = { scale: 3.4, power: 1.4 };
 
-// A shell's light is strongest where it faces the camera (over the tube) and fades to nothing at
-// its own outline: a soft halo that follows the tube at any angle.
+/** One open bar: a rectangle with a rectangular hole, extruded with a rounded bevel, centred on its own middle. */
+function frame(b: Bar): ExtrudeGeometry {
+  // The bevel grows the outline, so the shape is drawn that much smaller to keep the footprint.
+  const w = b.w / 2 - BEVEL;
+  const h = b.h / 2 - BEVEL;
+  const iw = b.w / 2 - STROKE + BEVEL;
+  const ih = b.h / 2 - STROKE + BEVEL;
+  const outer = new Shape().moveTo(-w, -h).lineTo(w, -h).lineTo(w, h).lineTo(-w, h).lineTo(-w, -h);
+  outer.holes.push(new Path().moveTo(-iw, -ih).lineTo(-iw, ih).lineTo(iw, ih).lineTo(iw, -ih).lineTo(-iw, -ih));
+  const body = DEPTH - BEVEL * 2;
+  const geo = new ExtrudeGeometry(outer, { depth: body, bevelEnabled: true, bevelThickness: BEVEL, bevelSize: BEVEL * 0.9, bevelSegments: 4, curveSegments: 1 });
+  geo.translate(0, 0, -body / 2);
+  return geo;
+}
+
+/** A soft round falloff (close to a gaussian), white with the light in its alpha: the wide glow. */
+function softDot(n = 64): DataTexture {
+  const data = new Uint8Array(n * n * 4);
+  const floor = Math.exp(-4.5);
+  for (let y = 0; y < n; y++)
+    for (let x = 0; x < n; x++) {
+      const dx = (x + 0.5) / n - 0.5;
+      const dy = (y + 0.5) / n - 0.5;
+      const i = (y * n + x) * 4;
+      data[i] = data[i + 1] = data[i + 2] = 255;
+      data[i + 3] = Math.round((255 * Math.max(0, Math.exp(-(dx * dx + dy * dy) * 18) - floor)) / (1 - floor));
+    }
+  const t = new DataTexture(data, n, n);
+  t.needsUpdate = true;
+  return t;
+}
+
+// The lit rod: its light is the accent at its edges, running white along the middle of its wall.
+// `vLocal` is the bar's own space: on its front and back the core is where the wall's middle line
+// is (across the wall); on its sides, top and bottom, where its depth's middle is.
+const rodVertex = /* glsl */ `
+  varying vec3 vLocal;
+  varying vec3 vN;
+  varying vec3 vV;
+  void main() {
+    vLocal = position;
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    vN = normalMatrix * normal;
+    vV = -mv.xyz;
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+const rodFragment = /* glsl */ `
+  uniform vec3 uColor;
+  uniform vec2 uHalf;   // half size of the wall's middle line
+  uniform float uWall;  // half the wall's width
+  uniform float uDepth; // half the bar's depth
+  uniform float uHot;
+  uniform float uCore;
+  uniform float uLevel;
+  varying vec3 vLocal;
+  varying vec3 vN;
+  varying vec3 vV;
+  void main() {
+    vec2 q = abs(vLocal.xy) - uHalf;
+    float across = abs(length(max(q, 0.0)) + min(max(q.x, q.y), 0.0)) / uWall;
+    float deep = abs(vLocal.z) / uDepth;
+    float core = 1.0 - smoothstep(0.0, uCore, min(across, deep));
+    float facing = clamp(dot(normalize(vN), normalize(vV)), 0.0, 1.0);
+    vec3 c = mix(uColor, vec3(1.0), uHot * core * (0.55 + 0.45 * facing));
+    // Faces turned away are a little deeper in colour, so the rod's shape still reads.
+    c *= mix(0.72, 1.0, facing);
+    gl_FragColor = vec4(c * uLevel, 1.0);
+    #include <colorspace_fragment>
+  }
+`;
+// A glow shell is strongest where it faces the camera (over the rod) and fades to nothing at its
+// own outline: a soft halo that follows the bar at any angle.
 const shellVertex = /* glsl */ `
   varying vec3 vN;
   varying vec3 vV;
@@ -91,35 +160,6 @@ const glowFragment = /* glsl */ `
     #include <colorspace_fragment>
   }
 `;
-// The lit core: the accent at its sides, running toward white in its middle, as a hot tube does.
-const coreFragment = /* glsl */ `
-  uniform vec3 uColor;
-  uniform float uHot;
-  uniform float uLevel;
-  varying vec3 vN;
-  varying vec3 vV;
-  void main() {
-    float f = clamp(dot(normalize(vN), normalize(vV)), 0.0, 1.0);
-    gl_FragColor = vec4(mix(uColor, vec3(1.0), uHot * f * f) * uLevel, 1.0);
-    #include <colorspace_fragment>
-  }
-`;
-
-/** A soft round falloff (close to a gaussian), white with the light in its alpha: the wide glow. */
-function softDot(n = 64): DataTexture {
-  const data = new Uint8Array(n * n * 4);
-  for (let y = 0; y < n; y++)
-    for (let x = 0; x < n; x++) {
-      const dx = (x + 0.5) / n - 0.5;
-      const dy = (y + 0.5) / n - 0.5;
-      const i = (y * n + x) * 4;
-      data[i] = data[i + 1] = data[i + 2] = 255;
-      data[i + 3] = Math.round(255 * Math.max(0, Math.exp(-(dx * dx + dy * dy) * 18) - Math.exp(-4.5)) / (1 - Math.exp(-4.5)));
-    }
-  const t = new DataTexture(data, n, n);
-  t.needsUpdate = true;
-  return t;
-}
 
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const isLight = () => document.documentElement.dataset.theme === 'light';
@@ -132,6 +172,7 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
 
   const scene = new Scene();
   const camera = new PerspectiveCamera(FOV, 1, 1, 400);
+  // The stage is tilted like the logo (its pitch); the mark turns inside it.
   const stage = new Group();
   const logo = new Group();
   stage.add(logo);
@@ -143,7 +184,7 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
   const own = <T extends Material>(m: T) => (mats.push(m), m);
   const geo = <T extends BufferGeometry>(g: T) => (geos.push(g), g);
 
-  // A soft studio for the glass to reflect: it is what makes it read as glass.
+  // A soft studio light for the reflections on the unlit bars' bevels: it is what makes them read.
   const pmrem = new PMREMGenerator(renderer);
   const room = new RoomEnvironment();
   const env = pmrem.fromScene(room, 0.04).texture;
@@ -152,166 +193,110 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
   pmrem.dispose();
   scene.environment = env;
 
-  // Thin glass: nearly clear face on; toward its outline it grows opaque and catches light (or,
-  // on white, darkens), as the light crosses more glass there.
-  const edge = { uEdge: { value: new Color() }, uEdgeAlpha: { value: 0 }, uEdgePower: { value: 2 } };
-  const makeGlass = (side: typeof FrontSide | typeof BackSide) => {
-    const m = own(new MeshPhysicalMaterial({ transparent: true, depthWrite: false, side, roughness: 0.06, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04, ior: 1.5, specularIntensity: 1 }));
-    m.onBeforeCompile = (sh) => {
-      Object.assign(sh.uniforms, edge);
-      sh.fragmentShader = sh.fragmentShader
-        .replace('void main() {', 'uniform vec3 uEdge; uniform float uEdgeAlpha; uniform float uEdgePower;\nvoid main() {')
-        .replace(
-          '#include <opaque_fragment>',
-          `float fres = pow(1.0 - clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0), uEdgePower);
-           outgoingLight = outgoingLight + uEdge * fres;
-           diffuseColor.a = mix(diffuseColor.a, uEdgeAlpha, fres);
-           #include <opaque_fragment>`,
-        );
-    };
-    return m;
-  };
-  // The far wall of each tube first, then what's inside, then the near wall.
-  const glassBack = makeGlass(BackSide);
-  const glassFront = makeGlass(FrontSide);
-  // The lit tube's glass carries some of its light.
-  const litBack = makeGlass(BackSide);
-  const litFront = makeGlass(FrontSide);
-
-  const shellUniforms = () => ({ uColor: { value: new Color() }, uOpacity: { value: 0 }, uPower: { value: 2 } });
-  const shell = (power: number) => {
-    const m = own(new ShaderMaterial({ vertexShader: shellVertex, fragmentShader: glowFragment, uniforms: shellUniforms(), transparent: true, depthWrite: false }));
-    m.uniforms.uPower.value = power;
-    return m;
-  };
-  const halo = shell(HALO.power);
-  const bloom = shell(BLOOM.power);
-  const wide = own(new SpriteMaterial({ transparent: true, depthWrite: false }));
-  const core = own(new ShaderMaterial({ vertexShader: shellVertex, fragmentShader: coreFragment, uniforms: { uColor: { value: new Color() }, uHot: { value: 0 }, uLevel: { value: 1 } } }));
-  const inkCore = own(new MeshStandardMaterial({ roughness: 0.75, metalness: 0 }));
-  const electrode = own(new MeshStandardMaterial({ roughness: 0.45, metalness: 0.85 }));
-
-  const capGeo = geo(new CapsuleGeometry(TUBE.cap, TUBE.capLength, 4, 14));
-  capGeo.rotateX(Math.PI / 2);
+  // ExtrudeGeometry draws its caps (front and back) with the first material, its sides and bevels
+  // with the second, so the two can be lit differently.
+  const inkCap = own(new MeshStandardMaterial({ roughness: 0.42, metalness: 0.1 }));
+  const inkSide = own(new MeshStandardMaterial({ roughness: 0.5, metalness: 0.1 }));
+  const rod = own(
+    new ShaderMaterial({
+      vertexShader: rodVertex,
+      fragmentShader: rodFragment,
+      uniforms: {
+        uColor: { value: new Color() },
+        uHalf: { value: new Vector2() },
+        uWall: { value: STROKE / 2 },
+        uDepth: { value: DEPTH / 2 },
+        uHot: { value: 0 },
+        uCore: { value: 0.5 },
+        uLevel: { value: 1 },
+      },
+    }),
+  );
+  const shell = (power: number) =>
+    own(new ShaderMaterial({ vertexShader: shellVertex, fragmentShader: glowFragment, uniforms: { uColor: { value: new Color() }, uOpacity: { value: 0 }, uPower: { value: power } }, transparent: true, depthWrite: false }));
+  const halo = shell(1.6);
+  const air = own(new SpriteMaterial({ transparent: true, depthWrite: false }));
 
   let litBar: Group | null = null;
   for (const b of BARS) {
     const bar = new Group();
     bar.position.set(b.x + b.w / 2 - CENTER.x, CENTER.y - (b.y + b.h / 2), b.lit ? REST.lift : 0);
-    const path = tubePath(b);
-    const n = segmentsFor(path);
-    const tube = (radius: number, radial: number) => geo(new TubeGeometry(path, n, radius, radial, false));
-
-    const glass = tube(TUBE.radius, RADIAL);
-    const back = new Mesh(glass, b.lit ? litBack : glassBack);
-    back.renderOrder = 1;
-    const inner = new Mesh(tube(b.lit ? TUBE.core : TUBE.coreOff, 10), b.lit ? core : inkCore);
-    const front = new Mesh(glass, b.lit ? litFront : glassFront);
-    front.renderOrder = 3;
-    bar.add(back, inner, front);
-
-    // The electrodes, behind the bottom edge where the ends turn back.
-    const { hh } = halfSize(b);
-    for (const x of Object.values(ends(b))) {
-      const cap = new Mesh(capGeo, electrode);
-      cap.position.set(x, -hh, -TUBE.back - TUBE.capLength / 2);
-      bar.add(cap);
-    }
+    const body = new Mesh(geo(frame(b)), b.lit ? rod : [inkCap, inkSide]);
+    bar.add(body);
 
     if (b.lit) {
+      const { hw, hh } = halfSize(b);
+      rod.uniforms.uHalf.value.set(hw, hh);
+      // The halo: a shell along the wall's middle, as wide as its corners allow.
       const loop = loopPath(b);
-      for (const [m, scale, order] of [[halo, HALO.scale, 4], [bloom, BLOOM.scale, 5]] as const) {
-        const s = new Mesh(geo(new TubeGeometry(loop, segmentsFor(loop), TUBE.radius * scale, 12, true)), m);
-        s.renderOrder = order;
-        bar.add(s);
-      }
-      // The wide, faint light the tube throws into the air around it, always toward the camera.
-      wide.map = softDot();
-      texs.push(wide.map);
-      const air = new Sprite(wide);
-      air.scale.set(b.w * 1.7, b.h * 3.2, 1);
-      air.position.z = -TUBE.radius;
-      air.renderOrder = 0;
-      bar.add(air);
+      const h = new Mesh(geo(new TubeGeometry(loop, segmentsFor(loop), shellLimit(b) * 0.98, 14, true)), halo);
+      h.renderOrder = 2;
+      bar.add(h);
+      // The wide, faint light it throws into the air around it, always toward the camera.
+      air.map = softDot();
+      texs.push(air.map);
+      const a = new Sprite(air);
+      a.scale.set(b.w * 1.8, b.h * 3.4, 1);
+      a.position.z = -DEPTH / 2;
+      a.renderOrder = 1;
+      bar.add(a);
       litBar = bar;
     }
     logo.add(bar);
   }
 
-  const ambient = new AmbientLight(0xffffff, 0.3);
-  // Key from the upper left and in front, rim from behind on the right: the glass's highlights.
-  const key = new DirectionalLight(0xffffff, 1.6);
+  const ambient = new AmbientLight(0xffffff, 0.25);
+  // Key from the upper left and in front: the unlit bars' tops and left sides catch it.
+  const key = new DirectionalLight(0xffffff, 1.3);
   key.position.set(-12, 31, 14);
+  // Rim from behind on the right, so their far edges separate.
   const rim = new DirectionalLight(0xffffff, 1.4);
   rim.position.set(12, 4, -10);
-  // The lit tube's light, falling on the glass and cores of the other two. It rides with the lit
-  // tube as it comes forward.
-  const spill = new PointLight(0xffffff, 60, 20, 1.4);
-  spill.position.set(-1.2, 0, 0);
+  // The lit bar's light falls on the inner edges of the other two; it rides with the lit bar.
+  const spill = new PointLight(0xffffff, 80, 20, 1.5);
+  spill.position.set(-2, 0, -DEPTH * 0.6);
   litBar?.add(spill);
   scene.add(ambient, key, rim);
 
-  let level = 1; // the strike: how lit the lit tube is right now
-  let spillBase = 0;
-  let haloBase = 0;
-  let bloomBase = 0;
-  let wideBase = 0;
-  let coreBase = 1;
+  let level = 1; // the strike: how lit the lit bar is right now
+  let base = { level: 1, glow: 0, air: 0, spill: 0 };
 
   function paint() {
     const light = isLight();
     const L = look(light);
     const accent = new Color(css('--accent') || (light ? '#14e6ff' : '#145aff'));
     const markInk = new Color(css('--mark-ink') || (light ? '#1b1c20' : '#e8e8ea'));
-
-    for (const m of [glassBack, glassFront, litBack, litFront]) {
-      // On white the edges have to darken to show: a dark tint does that through normal blending.
-      m.color.set(L.edgeDark ? 0x363944 : 0xffffff);
-      m.opacity = L.glassOpacity;
-      m.envMapIntensity = L.reflect;
-      m.emissive.set(0x000000);
-    }
-    // The lit tube's glass glows faintly from the core inside it.
-    for (const m of [litBack, litFront]) m.emissive.copy(accent).multiplyScalar(light ? 0.18 : 0.35);
-    edge.uEdge.value.set(light ? 0x000000 : 0xffffff).multiplyScalar(L.edgeLight);
-    edge.uEdgeAlpha.value = L.edgeAlpha;
-    edge.uEdgePower.value = L.edgePower;
-
-    core.uniforms.uColor.value.copy(accent);
-    core.uniforms.uHot.value = L.coreHot;
-    coreBase = L.coreLevel;
-    for (const m of [halo, bloom]) {
-      m.uniforms.uColor.value.copy(accent);
-      m.blending = L.additive ? AdditiveBlending : NormalBlending;
-    }
-    wide.color.copy(accent);
-    wide.blending = L.additive ? AdditiveBlending : NormalBlending;
-    wideBase = L.air;
-    haloBase = L.glow;
-    bloomBase = L.bloom;
-
-    inkCore.color.copy(markInk).multiplyScalar(L.inkCore);
-    inkCore.emissive.copy(markInk).multiplyScalar(L.inkGlow);
-    electrode.color.set(light ? 0x4a4e58 : 0x5a5f6a);
-    electrode.envMapIntensity = light ? 1.2 : 0.7;
-
+    // Dark: pale grey frames; light: near-black ones whose shape shows in their reflections.
+    inkCap.color.copy(markInk).multiplyScalar(light ? 1 : 0.62);
+    inkSide.color.copy(markInk).multiplyScalar(light ? 1 : 0.5);
+    for (const m of [inkCap, inkSide]) m.emissive.copy(markInk).multiplyScalar(L.inkGlow);
+    // The room's reflections (three applies the scene's strength to every lit material): soft on
+    // dark so the unlit bars stay grey beside the lit one, full on white where they shape the bars.
+    scene.environmentIntensity = light ? 1.1 : 0.45;
+    inkCap.roughness = light ? 0.32 : 0.42;
+    rod.uniforms.uColor.value.copy(accent);
+    rod.uniforms.uHot.value = L.hot;
+    rod.uniforms.uCore.value = L.coreWidth;
+    halo.uniforms.uColor.value.copy(accent);
+    air.color.copy(accent);
+    // On dark the glow adds light; on white it has to lay colour down instead.
+    halo.blending = air.blending = L.additive ? AdditiveBlending : NormalBlending;
     spill.color.copy(accent);
-    spillBase = L.spill;
-    ambient.intensity = L.ambient;
-    key.intensity = L.key;
+    key.intensity = light ? 2.2 : 1.3;
+    ambient.intensity = light ? 0.45 : 0.18;
+    base = { level: L.level, glow: L.glow, air: L.air, spill: L.spill };
     for (const m of mats) m.needsUpdate = true;
     setLevel(level);
     draw();
   }
 
-  /** Set how lit the lit tube is (the strike), 0-1. */
+  /** How lit the lit bar is (the strike), 0-1. */
   function setLevel(k: number) {
     level = k;
-    core.uniforms.uLevel.value = coreBase * (0.35 + 0.65 * k);
-    halo.uniforms.uOpacity.value = haloBase * k;
-    bloom.uniforms.uOpacity.value = bloomBase * k * k;
-    wide.opacity = wideBase * k * k;
-    spill.intensity = spillBase * k;
+    rod.uniforms.uLevel.value = base.level * (0.4 + 0.6 * k);
+    halo.uniforms.uOpacity.value = base.glow * k;
+    air.opacity = base.air * k * k;
+    spill.intensity = base.spill * k;
   }
 
   function fit() {
