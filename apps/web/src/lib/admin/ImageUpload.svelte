@@ -25,6 +25,9 @@
   let image = $state<CosmeticImageFieldsFragment | null>(null);
   let local = $state<string | null>(null);
   let over = $state(false);
+  // The made file wouldn't load (cdn.cyex.tv refused it or it's missing): the picture is saved,
+  // but it shows nowhere, so say so instead of leaving an empty preview.
+  let refused = $state<string | null>(null);
   let stop: AbortController | null = null;
   onDestroy(() => {
     stop?.abort();
@@ -37,8 +40,9 @@
 
   const shown = $derived(image ?? current);
   const remote = $derived(shown && shown.ready ? safeUrl(`${shown.host.replace(/\/+$/, '')}/${kind === 'badge' ? '2x' : '1x'}.webp`) : null);
-  // The picked file shows at once; the made file replaces it when it's ready.
-  const preview = $derived(phase === 'ready' ? (remote ?? local) : (local ?? remote));
+  // The picked file shows at once; the made file replaces it when it's ready (unless it won't load).
+  const preview = $derived(remote && refused === remote ? local : phase === 'ready' ? (remote ?? local) : (local ?? remote));
+  const cdnHost = $derived(remote ? new URL(remote).host : '');
 
   function setLocal(file: File | null) {
     if (local) URL.revokeObjectURL(local);
@@ -64,6 +68,7 @@
     imageId = '';
     image = null;
     problem = '';
+    refused = null;
     // Reading the picture's size takes a moment; the form waits for it, and a newer pick wins.
     phase = 'checking';
     const bad = checkFile(file);
@@ -126,7 +131,7 @@
     onpaste={pasted}
   >
     <span class="prev {kind}" aria-hidden="true">
-      {#if preview}<img src={preview} alt="" />{/if}
+      {#if preview}<img src={preview} alt="" onerror={() => { if (preview === remote) refused = remote; }} />{/if}
       {#if phase === 'uploading' || phase === 'making'}<span class="ui-spinner"></span>{/if}
     </span>
     <label class="ui-btn secondary">
@@ -137,7 +142,8 @@
       {#if phase === 'checking'}Checking the file…{:else if phase === 'uploading'}Uploading…{:else if phase === 'making'}Making the files…{:else if phase === 'ready'}Ready.{:else if kind === 'badge'}Square, at least 72 × 72 px. PNG, GIF or WebP, up to 5 MB. Or drop it here.{:else}At least 64 px tall, up to 8:1. PNG, GIF or WebP, up to 5 MB.{/if}
     </span>
   </div>
-  {#if problem}<span class="ui-error" role="alert">{problem}</span>{/if}
+  {#if problem}<span class="ui-error" role="alert">{problem}</span>
+  {:else if remote && refused === remote}<span class="ui-error" role="alert">The picture is made, but {cdnHost} won’t send it, so it shows nowhere yet. If every picture does this, the CDN’s firewall rule is blocking /cosmetics/.</span>{/if}
 </div>
 
 <style>
