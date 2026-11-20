@@ -311,7 +311,8 @@ async fn sessions_are_yours_only_and_never_tokens() {
     assert_eq!(current[0]["kind"], "SITE");
     assert_eq!(current[0]["device"], "Firefox on Windows");
     let site = list.iter().find(|s| s["kind"] == "APP").unwrap();
-    assert_eq!(site["device"], "cyex.tv app");
+    // A signed-in app is named after its client (ADR 0021).
+    assert_eq!(site["device"], "cyex deck");
     // No token, no hash, no raw user agent anywhere.
     let text = r.to_string();
     assert!(!text.contains(&alice.token) && !text.contains(&alice.cookie));
