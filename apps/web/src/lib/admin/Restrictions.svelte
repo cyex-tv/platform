@@ -32,6 +32,8 @@
   type Row = AccountRestrictionsQuery['accountRestrictions'][number];
   let history = $state<Row[] | null>(null);
   let problem = $state(false);
+  let showAll = $state(false);
+  const FIRST = 8;
   let seq = 0;
 
   async function loadHistory() {
@@ -47,6 +49,7 @@
   $effect(() => {
     void accountId;
     history = null;
+    showAll = false;
     loadHistory();
   });
 
@@ -162,7 +165,7 @@
       <p class="ui-hint">Never restricted.</p>
     {:else}
       <ul class="rows">
-        {#each history.slice(0, 8) as r (r.id)}
+        {#each showAll ? history : history.slice(0, FIRST) as r (r.id)}
           <li>
             <span class="k"><strong>{label(r.kind)}</strong>
               {#if r.active}<span class="ui-chip pending">Running</span>{/if}</span>
@@ -175,6 +178,9 @@
           </li>
         {/each}
       </ul>
+      {#if history.length > FIRST}
+        <button class="ui-btn ghost small more" type="button" aria-expanded={showAll} onclick={() => (showAll = !showAll)}>{showAll ? 'Show fewer' : `Show all ${history.length}`}</button>
+      {/if}
     {/if}
   </div>
 </section>
@@ -225,6 +231,7 @@
   .pad { padding: 0 14px 10px; margin: 0; }
   .history { padding: 10px 14px 12px; border-top: 1px solid var(--border); display: grid; gap: 8px; }
   .history h3 { margin: 0; }
+  .more { justify-self: start; }
   .rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
   .rows li { display: grid; gap: 2px; min-width: 0; }
   .k { display: flex; align-items: center; gap: 8px; font-size: var(--text-sub); }

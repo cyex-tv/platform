@@ -110,6 +110,11 @@
   }
 
   function cancel(e: Event) {
+    // A save is on its way: closing now would hide whether it worked. Wait for the answer.
+    if (busy) {
+      e.preventDefault();
+      return;
+    }
     if (setsOpen) {
       e.preventDefault();
       setsOpen = false;
@@ -124,7 +129,7 @@
       <div class="title">
         {#if who}<Avatar src={who.avatar} name={who.displayName} size={32} tone="tool" />{/if}
         <h2 id="ed-title">{#if who}What <bdi>{clean(who.displayName)}</bdi> can do{/if}</h2>
-        <button class="ui-icon close" type="button" aria-label="Close" onclick={() => dialog.close()}><Icon name="x" size={18} /></button>
+        <button class="ui-icon close" type="button" aria-label="Close" disabled={busy} onclick={() => dialog.close()}><Icon name="x" size={18} /></button>
       </div>
 
       <div class="ui-field sets">
@@ -195,7 +200,7 @@
       {#if problem}<p class="ui-error" role="alert">{problem}</p>{/if}
     </div>
     <footer>
-      <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
+      <button class="ui-btn secondary" type="button" disabled={busy} onclick={() => dialog.close()}>Cancel</button>
       <button class="ui-btn primary" type="submit" disabled={busy || !picked.length || !scopeOk}>
         {busy ? 'Saving…' : mode === 'add' ? 'Add editor' : 'Save'}
       </button>

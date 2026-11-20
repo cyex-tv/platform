@@ -15,7 +15,7 @@ vi.mock('./paddle', () => ({
 }));
 
 import { safeCheckoutUrl } from './shop';
-import { buy, dismiss, flow } from './checkout.svelte';
+import { buy, checkAgain, dismiss, flow } from './checkout.svelte';
 
 const order = (status: string) => ({ id: 'o1', status, itemId: 'i', itemName: 'Item', gift: false });
 const started = (extra: object = {}) => ({
@@ -84,5 +84,28 @@ describe('checkout after the poll gave up', () => {
     gql.mockImplementation(async () => started({ clientToken: null, checkoutUrl: 'javascript:alert(1)' }));
     await buy({ itemId: 'i', itemName: 'Item', gift: null, to: null });
     expect(flow.phase).toBe('failed');
+  });
+});
+
+describe('checkout that stopped checking', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    gql.mockReset();
+  });
+  afterEach(() => {
+    dismiss();
+    vi.useRealTimers();
+  });
+
+  it('says so after 15 minutes, and Check again asks once more', async () => {
+    gql.mockImplementation(async (q: string) => (q === 'START' ? started({ clientToken: null }) : { order: order('PENDING') }));
+    await buy({ itemId: 'i', itemName: 'Item', gift: null, to: null });
+    await vi.advanceTimersByTimeAsync(16 * 60_000);
+    expect(flow.phase).toBe('stalled');
+    gql.mockImplementation(async () => ({ order: order('PAID') }));
+    checkAgain();
+    expect(flow.phase).toBe('confirming');
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(flow.phase).toBe('paid');
   });
 });

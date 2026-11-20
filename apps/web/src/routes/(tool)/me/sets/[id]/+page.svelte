@@ -7,6 +7,7 @@
   import { problemTitle } from '$lib/components/problem';
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
+  import { latestWins } from '$lib/tool/latest';
   import { visibilityHint, visibilityOptions } from '$lib/sets/visibility';
   import { clean, count, iso } from '$lib/format';
   import { sectionHref } from '$lib/profile/rows';
@@ -34,7 +35,6 @@
   let name = $state('');
   let saving = $state(false);
   let deleting = $state(false);
-  let changing = $state(false);
 
   const narrow = new MediaQuery('max-width: 1000px');
   const id = $derived(page.params.id ?? '');
@@ -136,19 +136,17 @@
     }
   }
 
-  async function setVisibility(v: SetVisibility) {
-    if (!set || changing || v === set.visibility) return;
-    changing = true;
-    try {
+  // The last pick wins: a click while a save is on its way is kept and sent when that one lands.
+  const saveVisibility = latestWins<SetVisibility>(
+    async (v) => {
+      if (!set) return;
       const r = await gql(UPDATE_SET, { id: set.id, input: { visibility: v } });
       set.visibility = r.updateSet.visibility;
       notify(`${visibilityOptions(set.kind).find((o) => o.value === set!.visibility)?.label ?? 'Visibility'} saved.`);
-    } catch (err) {
-      fail(err);
-    } finally {
-      changing = false;
-    }
-  }
+    },
+    (v) => !set || v === set.visibility,
+  );
+  const setVisibility = (v: SetVisibility) => saveVisibility(v).catch(fail);
 
   async function remove() {
     if (!set) return;
