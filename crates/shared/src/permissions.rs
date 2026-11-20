@@ -46,6 +46,9 @@ pub const SUBSCRIPTIONS_MANAGE: &str = "subscriptions.manage";
 /// Delete any account's emote, as its owner can (`emotes.edit_any` already renames, retags and
 /// changes the flags and visibility of anyone's emotes). Audited.
 pub const EMOTES_DELETE_ANY: &str = "emotes.delete_any";
+/// Change any emote's flags after review (ADR 0024): its visibility (off the listings, private),
+/// NSFW and zero-width, without its name or tags. Audited; the owner is told of a visibility change.
+pub const EMOTES_FLAGS: &str = "emotes.flags";
 /// Add, change and remove any account's editors on its behalf, as its owner can. Audited.
 pub const EDITORS_MANAGE_ANY: &str = "editors.manage_any";
 /// Change the review queue's ready reject reasons. Audited.
@@ -83,6 +86,7 @@ pub const ALL: &[&str] = &[
     EDITORS_MANAGE_ANY,
     REVIEW_SETTINGS,
     SITE_ANNOUNCE,
+    EMOTES_FLAGS,
 ];
 
 /// What anyone with `roles.manage` may add to the built-in User role, which every account holds

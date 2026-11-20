@@ -5,6 +5,8 @@
   // card with tabs (Channels using it, Activity, More by the creator) and a pager in the tab bar.
   // Phones get the actions in a bar fixed to the bottom of the screen.
   import { onMount } from 'svelte';
+  import { invalidateAll } from '$app/navigation';
+  import EmoteFlagsPanel from '$lib/admin/EmoteFlagsPanel.svelte';
   import EmoteActions from '$lib/components/EmoteActions.svelte';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
@@ -183,6 +185,9 @@
         <EmoteActions emoteId={e.id} {name} {viewer} picture={e} {editHref} addable={public_} reportable={canReport(e, session.me?.id)} owner={e.owner} />
       </div>
     </article>
+
+    <!-- Staff with emotes.flags change its flags after review (ADR 0024); nothing for anyone else. -->
+    <EmoteFlagsPanel emote={e} id="emote-flags" onsaved={() => invalidateAll()} />
 
     <div class="bar" use:bottomBar>
       <EmoteActions emoteId={e.id} {name} {viewer} variant="bar" picture={e} {editHref} addable={public_} reportable={canReport(e, session.me?.id)} owner={e.owner} />

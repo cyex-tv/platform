@@ -1,5 +1,5 @@
 import { describe as group, expect, it } from 'vitest';
-import { after, approveFailure, describe, kindOf, sizes, step, withheld } from './queue';
+import { after, approveFailure, describe, kindOf, sizes, step, toEnd, withheld } from './queue';
 
 const entry = (action: string, before: unknown = null, afterJson: unknown = null) => ({
   id: 'x',
@@ -91,5 +91,35 @@ group('approvals waiting to be sent', () => {
   it('nothing waiting, or nothing loaded', () => {
     expect(withheld(data, [], 'PENDING')).toBe(data);
     expect(withheld(null, [card('y')], 'PENDING')).toEqual({ items: [], total: 0, counts: { public: 0, limited: 0 } });
+  });
+});
+
+group('toEnd (an undone approval goes back last)', () => {
+  const q = { total: 4, items: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }] };
+  it('moves the card to the end, not back to its old place', () => {
+    expect(toEnd(q, ['b']).items.map((e) => e.id)).toEqual(['a', 'c', 'd', 'b']);
+  });
+  it('moves a batch in the order it was approved, keeping the rest', () => {
+    const out = toEnd(q, ['c', 'a']);
+    expect(out.items.map((e) => e.id)).toEqual(['b', 'd', 'c', 'a']);
+    expect(out.total).toBe(4);
+  });
+  it('leaves the queue alone for cards it doesn’t hold', () => {
+    expect(toEnd(q, ['zz'])).toBe(q);
+  });
+});
+
+group('describe (moderator flags and requeue, ADR 0024)', () => {
+  const entry = (action: string, before: object | null, after: object | null) => ({
+    id: 'h', action, actorId: 'a', targetId: 't', createdAt: '2026-11-20T10:00:00Z',
+    before: before && JSON.stringify(before), after: after && JSON.stringify(after),
+  });
+  it('names what the flags change did', () => {
+    const was = { visibility: 'public', nsfw: false, zero_width: false };
+    expect(describe(entry('emote.flags_changed', was, { ...was, visibility: 'unlisted', via: 'emotes.flags' })).text).toBe('Flags: made it unlisted');
+    expect(describe(entry('emote.flags_changed', was, { ...was, nsfw: true, zero_width: true })).text).toBe('Flags: marked it NSFW, made it zero-width');
+  });
+  it('says an undone approval went back last', () => {
+    expect(describe(entry('emote.requeued', null, null)).text).toBe('Approval undone: back at the end of the queue');
   });
 });

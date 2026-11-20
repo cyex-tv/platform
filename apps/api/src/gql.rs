@@ -25,13 +25,13 @@ use cyex_tv_shared::model::{
     ActivityEntry, ActivityPage, AddAccountEditor, AddSetEmote, AdminAccount, AuditEntry, Badge,
     BatchOutcome, Channel, ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge,
     CreateRole, CreateSet, DuplicateCandidate, EditableChannel, EditedAccount, EditorPermission,
-    Emote, EmoteFlag, EmoteNote, EmotePage, EmoteSet, EmoteSort, EmoteTransferRequest,
-    EmoteTrending, EmoteVisibility, Entitlement, EntitlementPage, Event, GrantCosmetic,
-    HiddenCreator, HiddenEmote, Identity, LoginMatch, Me, Notification, OwnedCosmetics, Paint,
-    PaintInput, PendingDeletion, PersonalSetEntry, Platform, QuickSearch, Report, ReportAction,
-    ReportQueue, ReviewQueue, ReviewQueueFilter, ReviewVerdict, Role, SearchResults, SetEmote,
-    SetEmotePage, SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote,
-    UpdateRole, UpdateSet, UpdateSetEmote, UserCosmetics,
+    Emote, EmoteFlag, EmoteFlagsInput, EmoteNote, EmotePage, EmoteSet, EmoteSort,
+    EmoteTransferRequest, EmoteTrending, EmoteVisibility, Entitlement, EntitlementPage, Event,
+    GrantCosmetic, HiddenCreator, HiddenEmote, Identity, LoginMatch, Me, Notification,
+    OwnedCosmetics, Paint, PaintInput, PendingDeletion, PersonalSetEntry, Platform, QuickSearch,
+    Report, ReportAction, ReportQueue, ReviewQueue, ReviewQueueFilter, ReviewVerdict, Role,
+    SearchResults, SetEmote, SetEmotePage, SetSummary, SetVisibility, UpdateBadge,
+    UpdateChannelSettings, UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote, UserCosmetics,
 };
 use cyex_tv_shared::model::{
     Checkout, CodeBatch, CodeBatchInput, CodeBatchPage, CreatedCodeBatch, Order, OrderPage,
@@ -1204,7 +1204,7 @@ impl Query {
     }
 
     /// An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`,
-    /// `emotes.takedown`, `emotes.edit_any` or `emotes.delete_any`, or to be the account or its
+    /// `emotes.takedown`, `emotes.edit_any`, `emotes.delete_any` or `emotes.flags`, or to be the account or its
     /// editor with `EMOTE_MANAGE` on every set. `perPage` is 1 to 100, default 50.
     async fn account_emotes(
         &self,
@@ -1220,7 +1220,8 @@ impl Query {
     }
 
     /// Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
-    /// `emote.rejected`, `emote.taken_down`, `editor.added`, `editor.changed`, `editor.removed`,
+    /// `emote.rejected`, `emote.taken_down`, `emote.visibility_changed` (staff changed its
+    /// visibility, ADR 0024: `visibility` and `was`), `editor.added`, `editor.changed`, `editor.removed`,
     /// `cosmetic.granted` and `cosmetic.revoked`; `payload` is JSON with the IDs and names it is
     /// about (see the API reference). Cosmetics from the shop and from codes carry `source`
     /// (`purchase` or `code`), and from orders `order_id`.
@@ -1891,6 +1892,21 @@ impl Mutation {
             .map_err(api_error)
     }
 
+    /// Change an emote's flags after review: visibility (`UNLISTED` takes it off the listings),
+    /// NSFW and zero-width. Needs `emotes.flags` or `emotes.edit_any`. Audited
+    /// (`emote.flags_changed`); the owner is told when the visibility changes (ADR 0024).
+    async fn set_emote_flags(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        input: EmoteFlagsInput,
+    ) -> Result<Emote> {
+        let caller = caller(ctx)?;
+        moderation::set_flags(state(ctx), caller, &id, &input)
+            .await
+            .map_err(api_error)
+    }
+
     /// Give an emote to another account (ADR 0014). Its owner, or an account editor of the owner
     /// with `EMOTE_TRANSFER` on every set. The receiver is you, or an account you edit with
     /// `EMOTE_UPLOAD` on every set. The owner's transfer is immediate (`emote.transferred`); an
@@ -2016,6 +2032,16 @@ impl Mutation {
         )
         .await
         .map_err(api_error)
+    }
+
+    /// Send up to 100 pending emotes to the end of the review queue for every reviewer (an
+    /// approval taken back within its undo time comes back last, ADR 0024). Emotes that aren't
+    /// pending are listed in `failed`. Needs `emotes.review`. Audited (`emote.requeued`).
+    async fn requeue_emotes(&self, ctx: &Context<'_>, ids: Vec<String>) -> Result<BatchOutcome> {
+        let caller = caller(ctx)?;
+        moderation::requeue_batch(state(ctx), caller, &ids)
+            .await
+            .map_err(api_error)
     }
 
     /// Dismiss up to 100 open reports with one optional note, in one step, one audit row each.

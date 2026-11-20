@@ -231,7 +231,7 @@ pub async fn review(
     Ok(sqlx::query_as(&format!(
         "UPDATE emotes
          SET state = $2, reviewed_by = $3, reviewed_at = now(), review_reason = $4,
-             updated_at = now()
+             requeued_at = NULL, updated_at = now()
          WHERE id = $1 AND deleted_at IS NULL AND state = 'pending'
          RETURNING {EMOTE}"
     ))
@@ -240,6 +240,19 @@ pub async fn review(
     .bind(reviewer)
     .bind(reason)
     .fetch_optional(conn)
+    .await?)
+}
+
+/// Sends pending emotes to the end of the review queue (a reviewer took back an approval in its
+/// undo time, ADR 0024). Returns the ones moved: emotes that aren't pending are left alone.
+pub async fn requeue(conn: &mut PgConnection, ids: &[Uuid]) -> DbResult<Vec<Uuid>> {
+    Ok(sqlx::query_scalar(
+        "UPDATE emotes SET requeued_at = clock_timestamp()
+         WHERE id = ANY($1) AND deleted_at IS NULL AND state = 'pending'
+         RETURNING id",
+    )
+    .bind(ids)
+    .fetch_all(conn)
     .await?)
 }
 

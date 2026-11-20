@@ -15,6 +15,13 @@ export const VISIBILITY_HINT: Record<EmoteVisibility, string> = {
   PRIVATE: 'Only you (and editors you allow) can add it to sets, and search leaves it out. It still shows in chat where your sets are active.',
 };
 
+/** The same states as staff see them on someone else's emote (the Emote flags panel, ADR 0024). */
+export const STAFF_VISIBILITY_HINT: Record<EmoteVisibility, string> = {
+  PUBLIC: 'Listed: search, browse and the creator’s page show it.',
+  UNLISTED: 'Off the listings: anyone with the link can still open it and add it to their sets.',
+  PRIVATE: 'Only its owner (and editors they allow) can add it to sets. It still shows in chat where it is already in a set.',
+};
+
 /** The visibility of an emote as the API answers it; older answers only carry `flags.private`. */
 export function visibilityOf(e: { visibility?: EmoteVisibility | null; flags: { private: boolean } }): EmoteVisibility {
   return e.visibility ?? (e.flags.private ? 'PRIVATE' : 'PUBLIC');

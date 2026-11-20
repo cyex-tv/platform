@@ -158,6 +158,8 @@ type Documents = {
     "\n  query EntitlementGraph($accountId: String!) {\n    entitlementGraph(accountId: $accountId) {\n      ...GrantFields\n    }\n  }\n": typeof types.EntitlementGraphDocument,
     "\n  query EntitlementHolders($kind: GrantKind!, $id: String!) {\n    entitlementHolders(kind: $kind, id: $id) {\n      ...GrantFields\n    }\n  }\n": typeof types.EntitlementHoldersDocument,
     "\n  mutation ReviewEmotes($ids: [String!]!, $verdict: ReviewVerdict!, $visibility: EmoteVisibility, $reason: String) {\n    reviewEmotes(ids: $ids, verdict: $verdict, visibility: $visibility, reason: $reason) {\n      done\n      failed {\n        id\n        code\n        message\n      }\n    }\n  }\n": typeof types.ReviewEmotesDocument,
+    "\n  mutation RequeueEmotes($ids: [String!]!) {\n    requeueEmotes(ids: $ids) {\n      done\n      failed {\n        id\n        code\n        message\n      }\n    }\n  }\n": typeof types.RequeueEmotesDocument,
+    "\n  mutation SetEmoteFlags($id: String!, $input: EmoteFlagsInput!) {\n    setEmoteFlags(id: $id, input: $input) {\n      ...EmoteFields\n    }\n  }\n": typeof types.SetEmoteFlagsDocument,
     "\n  mutation DismissReports($ids: [String!]!, $note: String) {\n    dismissReports(ids: $ids, note: $note) {\n      done\n      failed {\n        id\n        code\n        message\n      }\n    }\n  }\n": typeof types.DismissReportsDocument,
     "\n  query EmoteDuplicates($emoteId: String!) {\n    emoteDuplicates(emoteId: $emoteId) {\n      sameFile\n      similarity\n      emote {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.EmoteDuplicatesDocument,
     "\n  query ReviewReasons {\n    reviewReasons\n  }\n": typeof types.ReviewReasonsDocument,
@@ -328,6 +330,8 @@ const documents: Documents = {
     "\n  query EntitlementGraph($accountId: String!) {\n    entitlementGraph(accountId: $accountId) {\n      ...GrantFields\n    }\n  }\n": types.EntitlementGraphDocument,
     "\n  query EntitlementHolders($kind: GrantKind!, $id: String!) {\n    entitlementHolders(kind: $kind, id: $id) {\n      ...GrantFields\n    }\n  }\n": types.EntitlementHoldersDocument,
     "\n  mutation ReviewEmotes($ids: [String!]!, $verdict: ReviewVerdict!, $visibility: EmoteVisibility, $reason: String) {\n    reviewEmotes(ids: $ids, verdict: $verdict, visibility: $visibility, reason: $reason) {\n      done\n      failed {\n        id\n        code\n        message\n      }\n    }\n  }\n": types.ReviewEmotesDocument,
+    "\n  mutation RequeueEmotes($ids: [String!]!) {\n    requeueEmotes(ids: $ids) {\n      done\n      failed {\n        id\n        code\n        message\n      }\n    }\n  }\n": types.RequeueEmotesDocument,
+    "\n  mutation SetEmoteFlags($id: String!, $input: EmoteFlagsInput!) {\n    setEmoteFlags(id: $id, input: $input) {\n      ...EmoteFields\n    }\n  }\n": types.SetEmoteFlagsDocument,
     "\n  mutation DismissReports($ids: [String!]!, $note: String) {\n    dismissReports(ids: $ids, note: $note) {\n      done\n      failed {\n        id\n        code\n        message\n      }\n    }\n  }\n": types.DismissReportsDocument,
     "\n  query EmoteDuplicates($emoteId: String!) {\n    emoteDuplicates(emoteId: $emoteId) {\n      sameFile\n      similarity\n      emote {\n        ...EmoteFields\n      }\n    }\n  }\n": types.EmoteDuplicatesDocument,
     "\n  query ReviewReasons {\n    reviewReasons\n  }\n": types.ReviewReasonsDocument,
@@ -927,6 +931,14 @@ export function graphql(source: "\n  query EntitlementHolders($kind: GrantKind!,
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation ReviewEmotes($ids: [String!]!, $verdict: ReviewVerdict!, $visibility: EmoteVisibility, $reason: String) {\n    reviewEmotes(ids: $ids, verdict: $verdict, visibility: $visibility, reason: $reason) {\n      done\n      failed {\n        id\n        code\n        message\n      }\n    }\n  }\n"): typeof import('./graphql').ReviewEmotesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation RequeueEmotes($ids: [String!]!) {\n    requeueEmotes(ids: $ids) {\n      done\n      failed {\n        id\n        code\n        message\n      }\n    }\n  }\n"): typeof import('./graphql').RequeueEmotesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SetEmoteFlags($id: String!, $input: EmoteFlagsInput!) {\n    setEmoteFlags(id: $id, input: $input) {\n      ...EmoteFields\n    }\n  }\n"): typeof import('./graphql').SetEmoteFlagsDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

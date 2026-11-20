@@ -1922,6 +1922,27 @@ export const REVIEW_EMOTES = graphql(`
   }
 `);
 
+export const REQUEUE_EMOTES = graphql(`
+  mutation RequeueEmotes($ids: [String!]!) {
+    requeueEmotes(ids: $ids) {
+      done
+      failed {
+        id
+        code
+        message
+      }
+    }
+  }
+`);
+
+export const SET_EMOTE_FLAGS = graphql(`
+  mutation SetEmoteFlags($id: String!, $input: EmoteFlagsInput!) {
+    setEmoteFlags(id: $id, input: $input) {
+      ...EmoteFields
+    }
+  }
+`);
+
 export const DISMISS_REPORTS = graphql(`
   mutation DismissReports($ids: [String!]!, $note: String) {
     dismissReports(ids: $ids, note: $note) {

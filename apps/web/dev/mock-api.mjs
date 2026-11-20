@@ -618,6 +618,9 @@ function duplicatesOf(id) {
     .slice(0, 12);
 }
 const batchIds = (ids) => [...new Set((ids ?? []).map((x) => String(x).trim()))];
+// When an undone approval sent an upload to the end of the queue (requeueEmotes, ADR 0024): the
+// upload-time order reads this before createdAt, as the API reads requeued_at.
+const REQUEUED = new Map();
 function reviewQueueAnswer(v) {
   const f = v.filter ?? {};
   const tab = f.tab ?? 'PENDING';
@@ -627,7 +630,7 @@ function reviewQueueAnswer(v) {
   const resolved = tab === 'RESOLVED';
   const sort = f.sort ?? (resolved ? 'REVIEWED' : 'UPLOADED');
   const desc = f.descending ?? resolved;
-  const key = (e) => (sort === 'NAME' ? e.name.toLowerCase() : sort === 'UPLOADER' ? (e.owner?.displayName ?? '').toLowerCase() : sort === 'REVIEWED' ? e.reviewedAt ?? '' : e.createdAt);
+  const key = (e) => (sort === 'NAME' ? e.name.toLowerCase() : sort === 'UPLOADER' ? (e.owner?.displayName ?? '').toLowerCase() : sort === 'REVIEWED' ? e.reviewedAt ?? '' : (REQUEUED.get(e.id) ?? e.createdAt));
   rows.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : a.createdAt.localeCompare(b.createdAt)) * (desc && sort !== 'UPLOADER' && sort !== 'NAME' ? -1 : 1));
   if (desc && (sort === 'UPLOADER' || sort === 'NAME')) rows.reverse();
   const per = Math.min(100, Math.max(1, v.perPage ?? 50));
@@ -841,7 +844,7 @@ const editorOfOut = () => EDITOR_OF.map((g) => ({ ...g }));
 
 const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view', 'cosmetics.manage', 'cosmetics.grant', 'shop.manage', 'shop.orders', 'codes.manage',
   'roles.assign', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets', 'users.block', 'users.sessions', 'users.notes', 'entitlements.view', 'billing.view', 'subscriptions.manage',
-  'emotes.delete_any', 'editors.manage_any', 'site.announce', 'review.settings'];
+  'emotes.delete_any', 'editors.manage_any', 'site.announce', 'review.settings', 'emotes.flags'];
 
 // ---- Chat cosmetics (ADR 0015) ----------------------------------------------------------
 // SAMPLE DATA ONLY: two made-up badges (simple SVG drawn here) and three sample paints, so the
@@ -1917,6 +1920,37 @@ function signedIn(body, v, ADMIN) {
         done.push(id);
       }
       return { data: { reviewEmotes: { done, failed } } };
+    }
+    case 'RequeueEmotes': {
+      if (!ADMIN) return err('This needs emotes.review.', 'forbidden');
+      const ids = batchIds(v.ids);
+      if (!ids.length || ids.length > 100) return err('Pick 1 to 100 at a time.', 'bad_batch');
+      const done = [], failed = [];
+      for (const id of ids) {
+        if (!PENDING.some((x) => x.id === id)) {
+          failed.push(RESOLVED.some((x) => x.id === id) || anyEmote(id)
+            ? { id, code: 'not_pending', message: 'Only pending emotes go back in the queue.' }
+            : { id, code: 'not_found', message: 'Not found.' });
+          continue;
+        }
+        REQUEUED.set(id, new Date().toISOString());
+        logEmote(id, 'emote.requeued', {});
+        done.push(id);
+      }
+      return { data: { requeueEmotes: { done, failed } } };
+    }
+    case 'SetEmoteFlags': {
+      // The mock admin holds emotes.flags (and emotes.edit_any).
+      if (!ADMIN) return err('This needs emotes.flags.', 'forbidden');
+      const e = anyEmote(v.id) ?? PENDING.find((x) => x.id === v.id) ?? RESOLVED.find((x) => x.id === v.id);
+      if (!e) return err('Not found.', 'not_found');
+      const before = { visibility: e.visibility.toLowerCase(), nsfw: e.flags.nsfw, zero_width: e.flags.zeroWidth };
+      for (const k of ['zeroWidth', 'nsfw']) if (v.input[k] !== undefined && v.input[k] !== null) e.flags[k] = v.input[k];
+      if (v.input.visibility) e.visibility = v.input.visibility;
+      e.flags.private = e.visibility === 'PRIVATE';
+      const after = { visibility: e.visibility.toLowerCase(), nsfw: e.flags.nsfw, zero_width: e.flags.zeroWidth };
+      if (JSON.stringify(before) !== JSON.stringify(after)) logEmote(e.id, 'emote.flags_changed', { ...after, via: 'emotes.flags' });
+      return { data: { setEmoteFlags: e } };
     }
     case 'EmoteDuplicates': {
       if (!ADMIN) return err('This needs emotes.review.', 'forbidden');

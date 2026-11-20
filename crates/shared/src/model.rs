@@ -631,6 +631,16 @@ pub struct UpdateEmote {
     pub visibility: Option<EmoteVisibility>,
 }
 
+/// What `setEmoteFlags` changes (ADR 0024). Every field is optional: what is left out stays.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
+pub struct EmoteFlagsInput {
+    /// `UNLISTED` takes a public emote off search, browse and its creator's page.
+    pub visibility: Option<EmoteVisibility>,
+    pub nsfw: Option<bool>,
+    pub zero_width: Option<bool>,
+}
+
 // Sets
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]

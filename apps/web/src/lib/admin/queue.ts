@@ -52,6 +52,17 @@ export function describe(e: HistoryEntry): { text: string; detail?: string } {
       return { text: 'Added a note', detail: typeof after.body === 'string' ? after.body : undefined };
     case 'emote.note_deleted':
       return { text: 'Deleted a note', detail: typeof before.body === 'string' ? before.body : undefined };
+    case 'emote.requeued':
+      return { text: 'Approval undone: back at the end of the queue' };
+    case 'emote.flags_changed': {
+      const was = typeof before.visibility === 'string' ? before.visibility : '';
+      const bits = [
+        vis && vis !== was ? `made it ${vis}` : '',
+        'nsfw' in after && !same(before.nsfw, after.nsfw) ? (after.nsfw ? 'marked it NSFW' : 'took NSFW off') : '',
+        'zero_width' in after && !same(before.zero_width, after.zero_width) ? (after.zero_width ? 'made it zero-width' : 'took zero-width off') : '',
+      ].filter(Boolean);
+      return { text: bits.length ? `Flags: ${bits.join(', ')}` : 'Changed the flags' };
+    }
     case 'emote.updated': {
       const changed = Object.keys(FIELD).filter((k) => k in after && !same(before[k], after[k]));
       if (changed.length === 1 && changed[0] === 'tags') {
@@ -145,4 +156,17 @@ export function withheld<T extends Held>(data: QueueView<T> | null | undefined, 
     total: Math.max(0, data.total - inTab),
     counts: { public: Math.max(0, data.counts.public - pub), limited: Math.max(0, data.counts.limited - lim) },
   };
+}
+
+/**
+ * The loaded queue with `ids` moved to the end, in the order given: an approval taken back within
+ * its undo time puts the upload back last, not where it was (ADR 0024). The server is told too
+ * (`requeueEmotes`), so the next load and every other reviewer see the same order.
+ */
+export function toEnd<T extends { id: string }, Q extends { items: T[] }>(data: Q, ids: readonly string[]): Q {
+  const at = new Map(data.items.map((e) => [e.id, e]));
+  const moved = ids.map((id) => at.get(id)).filter((e): e is T => !!e);
+  if (!moved.length) return data;
+  const out = new Set(moved.map((e) => e.id));
+  return { ...data, items: [...data.items.filter((e) => !out.has(e.id)), ...moved] };
 }

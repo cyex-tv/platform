@@ -1043,6 +1043,18 @@ type EmoteFlags {
 }
 
 """
+What `setEmoteFlags` changes (ADR 0023). Every field is optional: what is left out stays.
+"""
+input EmoteFlagsInput {
+	"""
+	`UNLISTED` takes a public emote off search, browse and its creator's page.
+	"""
+	visibility: EmoteVisibility
+	nsfw: Boolean
+	zeroWidth: Boolean
+}
+
+"""
 A note reviewers keep on one emote (`emotes.review`). The uploader never sees it.
 """
 type EmoteNote {
@@ -1646,6 +1658,12 @@ type Mutation {
 	"""
 	updateEmote(id: String!, input: UpdateEmoteInput!): Emote!
 	"""
+	Change an emote's flags after review: visibility (`UNLISTED` takes it off the listings),
+	NSFW and zero-width. Needs `emotes.flags` or `emotes.edit_any`. Audited
+	(`emote.flags_changed`); the owner is told when the visibility changes (ADR 0023).
+	"""
+	setEmoteFlags(id: String!, input: EmoteFlagsInput!): Emote!
+	"""
 	Give an emote to another account (ADR 0014). Its owner, or an account editor of the owner
 	with `EMOTE_TRANSFER` on every set. The receiver is you, or an account you edit with
 	`EMOTE_UPLOAD` on every set. The owner's transfer is immediate (`emote.transferred`); an
@@ -1695,6 +1713,12 @@ type Mutation {
 	that aren't pending are left alone and listed in `failed`. Needs `emotes.review`.
 	"""
 	reviewEmotes(ids: [String!]!, verdict: ReviewVerdict!, visibility: EmoteVisibility, reason: String): BatchOutcome!
+	"""
+	Send up to 100 pending emotes to the end of the review queue for every reviewer (an
+	approval taken back within its undo time comes back last, ADR 0023). Emotes that aren't
+	pending are listed in `failed`. Needs `emotes.review`. Audited (`emote.requeued`).
+	"""
+	requeueEmotes(ids: [String!]!): BatchOutcome!
 	"""
 	Dismiss up to 100 open reports with one optional note, in one step, one audit row each.
 	Reports already resolved are listed in `failed`. Takedowns stay one at a time
@@ -2604,13 +2628,14 @@ type Query {
 	unreadNotificationCount: Int!
 	"""
 	An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`,
-	`emotes.takedown`, `emotes.edit_any` or `emotes.delete_any`, or to be the account or its
+	`emotes.takedown`, `emotes.edit_any`, `emotes.delete_any` or `emotes.flags`, or to be the account or its
 	editor with `EMOTE_MANAGE` on every set. `perPage` is 1 to 100, default 50.
 	"""
 	accountEmotes(accountId: String!, page: Int, perPage: Int): EmotePage!
 	"""
 	Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
-	`emote.rejected`, `emote.taken_down`, `editor.added`, `editor.changed`, `editor.removed`,
+	`emote.rejected`, `emote.taken_down`, `emote.visibility_changed` (staff changed its
+	visibility, ADR 0023: `visibility` and `was`), `editor.added`, `editor.changed`, `editor.removed`,
 	`cosmetic.granted` and `cosmetic.revoked`; `payload` is JSON with the IDs and names it is
 	about (see the API reference). Cosmetics from the shop and from codes carry `source`
 	(`purchase` or `code`), and from orders `order_id`.

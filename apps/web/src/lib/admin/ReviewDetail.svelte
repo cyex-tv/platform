@@ -22,6 +22,7 @@
   import { useCopied } from '$lib/clipboard.svelte';
   import AccountLink from './AccountLink.svelte';
   import NoteList from './NoteList.svelte';
+  import EmoteFlagsPanel from './EmoteFlagsPanel.svelte';
   import { describe, kindOf, sizes } from './queue';
 
   type Props = {
@@ -41,8 +42,10 @@
     onapprove: (visibility?: EmoteVisibility) => void;
     onreject: () => void;
     onclose: () => void;
+    /** Staff with emotes.flags saved new flags (ADR 0024): the API's answer. */
+    onflags?: (e: EmoteFieldsFragment) => void;
   };
-  let { emote, place, total, busy, resolved, hasPrev, hasNext, onprev, onnext, onskip, onapprove, onreject, onclose }: Props = $props();
+  let { emote, place, total, busy, resolved, hasPrev, hasNext, onprev, onnext, onskip, onapprove, onreject, onclose, onflags }: Props = $props();
 
   let dialog: HTMLDialogElement;
   let tab = $state<'activity' | 'notes'>('activity');
@@ -213,6 +216,9 @@
         </ul>
       {/if}
     </section>
+
+    <!-- Staff with emotes.flags: change its flags after review too (ADR 0024). -->
+    {#if resolved}<EmoteFlagsPanel emote={e} id="rd-flags" onsaved={onflags} />{/if}
 
     <div class="tabs">
       <Segmented label="Show" size="s" value={tab} onchange={(v) => (tab = v)}
