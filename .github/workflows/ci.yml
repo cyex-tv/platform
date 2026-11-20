@@ -168,7 +168,8 @@ jobs:
             exit 1
           fi
       - run: npm run check
-      - run: npm test
+      # One run: the tests, with a coverage summary printed for information (no threshold).
+      - run: npm run test:coverage
       - run: npm run build
 
   build:

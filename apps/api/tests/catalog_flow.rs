@@ -6,6 +6,7 @@
 mod common;
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 
 use axum::Router;
 use axum::body::Body;
@@ -18,6 +19,7 @@ use cyex_tv_db::accounts::{self, Profile};
 use cyex_tv_db::emotes::{self, NewEmote};
 use cyex_tv_db::sessions::{self, SessionKind};
 use cyex_tv_db::{channels, ids, outbox, roles};
+use cyex_tv_hub::feeder::Feeder;
 use cyex_tv_shared::model::{EmoteState, Platform};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -57,17 +59,24 @@ impl World {
         })
     }
 
-    /// With the read cache on and a feeder keeping it current, as the api binary runs.
-    async fn cached() -> Option<(Self, tokio::task::JoinHandle<()>)> {
+    /// With the read cache on and a feeder keeping it current, as the api binary runs. The feeder
+    /// is driven here by ticks, so the test can read how far it got (the number returned).
+    async fn cached() -> Option<(Self, tokio::task::JoinHandle<()>, Arc<AtomicI64>)> {
         let db = TestDb::new().await?;
         let auth = Arc::new(Auth::new(AuthConfig::from_source(|_| None).unwrap()).unwrap());
         let state = AppState::new(db.pool.clone(), auth)
             .with_cdn_url("https://cdn.example.test/")
             .with_read_cache(std::time::Duration::from_secs(60));
+        let fed = Arc::new(AtomicI64::new(0));
         let feeder = tokio::spawn({
-            let (db, hub) = (state.db.clone(), state.hub.clone());
+            let (db, hub, fed) = (state.db.clone(), state.hub.clone(), fed.clone());
             async move {
-                let _ = cyex_tv_hub::feeder::run(db, hub, std::future::pending()).await;
+                let mut feeder = Feeder::new(0).with_gap_wait(std::time::Duration::from_millis(50));
+                loop {
+                    while let Ok((_, true)) = feeder.tick(&db, &hub).await {}
+                    fed.store(feeder.watermark(), Ordering::SeqCst);
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                }
             }
         });
         Some((
@@ -76,6 +85,7 @@ impl World {
                 db,
             },
             feeder,
+            fed,
         ))
     }
 
@@ -245,7 +255,7 @@ impl World {
 /// The chat-client reads are shared from the cache until an event says they changed.
 #[tokio::test]
 async fn cached_reads_follow_events() {
-    let Some((w, feeder)) = World::cached().await else {
+    let Some((w, feeder, fed)) = World::cached().await else {
         return;
     };
     let alice = w.user("151").await;
@@ -257,22 +267,27 @@ async fn cached_reads_follow_events() {
         .emote(&alice, "cacheTwo", EmoteState::Approved, false)
         .await;
     w.add(&alice, &set, &first, None).await;
-    // Wait until the feeder has handed the add over, so it can't drop the entry made below.
+    // Wait until the feeder has handed over every event so far, so none can drop the entry made
+    // below, and let the cache take them in.
     let uri = format!("/v1/sets/{set}");
-    let mut ready = false;
-    for _ in 0..100 {
-        if w.get(&uri, None).await.body["emotes"]
+    let last = {
+        let mut conn = w.db.conn().await;
+        outbox::latest_id(&mut conn).await.unwrap()
+    };
+    common::wait_until("the feeder to hand over every event", || async {
+        fed.load(Ordering::SeqCst) >= last
+    })
+    .await;
+    for _ in 0..10 {
+        tokio::task::yield_now().await;
+    }
+    common::wait_until("the set to show its emote", || async {
+        w.get(&uri, None).await.body["emotes"]
             .as_array()
             .map(Vec::len)
             == Some(1)
-        {
-            ready = true;
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    }
-    assert!(ready, "the set never showed its emote");
-    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+    })
+    .await;
     let read = w.get(&uri, None).await;
     let etag = read.headers["etag"].to_str().unwrap().to_owned();
 
