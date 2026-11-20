@@ -92,7 +92,9 @@ impl Auth {
         {
             tracing::warn!(error = %err, "session touch failed");
         }
-        let owner = self.is_owner(&mut conn, session.account_id).await?;
+        // An app sign-in session (ADR 0021) is never the owner: staff grants don't count for apps.
+        let owner =
+            session.app_client_id.is_none() && self.is_owner(&mut conn, session.account_id).await?;
         Ok(Some(Caller {
             account_id: session.account_id,
             owner,

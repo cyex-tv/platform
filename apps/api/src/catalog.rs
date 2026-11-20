@@ -49,8 +49,13 @@ pub use crate::errors::{db_error, forbidden, not_found, parse_id};
 // Permissions
 
 /// The permissions the caller holds: every one for the owner (ADR 0010), otherwise the union of
-/// their roles'.
+/// their roles'. An app sign-in session (ADR 0021) holds only what every account holds (the
+/// built-in User role): staff grants and the owner's never count for an app, so a deck token
+/// can't edit any set through `sets.edit_any` or read what staff read.
 pub async fn permissions_of(conn: &mut PgConnection, caller: &Caller) -> ApiResult<Vec<String>> {
+    if caller.app_client.is_some() {
+        return roles::everyones_permissions(conn).await.map_err(db_error);
+    }
     if caller.owner {
         return Ok(rbac::all_permissions());
     }
@@ -1611,7 +1616,11 @@ pub async fn channel_editable_sets(
                 });
                 editable.push(set);
             }
-            Err(err) if matches!(err.status, StatusCode::FORBIDDEN | StatusCode::NOT_FOUND) => {}
+            Err(err)
+                if matches!(
+                    err.status,
+                    axum::http::StatusCode::FORBIDDEN | axum::http::StatusCode::NOT_FOUND
+                ) => {}
             Err(err) => return Err(err),
         }
     }

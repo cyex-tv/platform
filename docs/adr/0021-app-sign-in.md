@@ -22,7 +22,7 @@ ADR 0009 kept `app` sessions (Bearer) in the model but left how an app gets one 
 |---|---|---|---|
 | `cyex-deck` | cyex deck | `http://127.0.0.1:<port>/callback`, `http://[::1]:<port>/callback` | `sets.emotes`, `cosmetics.select` |
 
-**Scopes:** an app session runs every GraphQL query (reads, as the signed-in account), but only the mutations its scopes name; anything else answers `insufficient_scope`, checked per resolved field so aliases and fragments change nothing. REST uploads are refused. The rights checks behind the allowed mutations are unchanged (set owner, account editors with `EMOTES` covering the set, set editors, `sets.edit_any`, set capacity).
+**Scopes:** an app session runs only the GraphQL queries `app::APP_QUERIES` lists (public reads; its own account, sets, emotes, channels, lists and cosmetics; `channelEditableSets`; no staff read) and the mutations its scopes name; anything else answers `insufficient_scope`, checked per resolved top-level field so aliases and fragments change nothing. REST uploads are refused. Staff grants never count for an app session (amendment of 2026/11/20, security review S2): it holds only the built-in User role's permissions and is never the owner, so the rights checks behind the allowed mutations are the account's own (set owner, account editors with `EMOTES` covering the set, set editors, set capacity), not `sets.edit_any`.
 - `sets.emotes` ("Manage emotes in sets you can edit"): `addSetEmote`, `updateSetEmote`, `removeSetEmote`.
 - `cosmetics.select` ("Pick your cosmetics"): `selectCosmetics`.
 

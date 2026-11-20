@@ -971,8 +971,30 @@ async fn app_tokens_run_only_their_scopes() {
     // The unscoped session is untouched by that.
     assert!(w.signed_in(&alice.full).await);
     assert_eq!(w.app_sessions(&alice).await.len(), 1);
-    // Queries stay open.
-    ok(&w.gql(&deck.access, SESSIONS, json!({})).await);
+    // Only the listed queries run: public and own reads, nothing staff read, nothing else of
+    // the account's (sessions, orders, notifications). Aliases and fragments change nothing.
+    ok(&w.gql(&deck.access, ME, json!({})).await);
+    ok(&w
+        .gql(
+            &deck.access,
+            "{ a: myEmotes { total } ...F } fragment F on Query { mySets { id } globalSet { id } }",
+            json!({}),
+        )
+        .await);
+    for query in [
+        SESSIONS,
+        "{ auditLog { id } }",
+        "{ x: reviewQueue { total } }",
+        "{ ...F } fragment F on Query { roles { id } }",
+        "query { me { id } ... on Query { announcements { id } } }",
+        "{ myOrders { total } }",
+        "{ myNotifications { id } }",
+    ] {
+        let r = w.gql(&deck.access, query, json!({})).await;
+        assert_eq!(code(&r), "insufficient_scope", "{query}: {r}");
+    }
+    // The website session still runs them.
+    ok(&w.gql(&alice.full, SESSIONS, json!({})).await);
 
     // No uploads.
     let a = w
@@ -986,5 +1008,86 @@ async fn app_tokens_run_only_their_scopes() {
         .await;
     assert_eq!(a.status, StatusCode::FORBIDDEN);
     assert_eq!(a.body["error"], "insufficient_scope");
+    w.db.close().await;
+}
+
+/// Staff grants don't count for an app token (ADR 0021): with every permission (the owner here),
+/// the deck still sees and changes only sets the account itself may edit; the website and the
+/// unscoped session keep `sets.edit_any`.
+#[tokio::test]
+async fn staff_grants_do_not_count_for_app_tokens() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("1701").await;
+    let staff = w.user(STAFF).await;
+    let r = w.gql(&alice.full, CREATE_SET, json!({ "n": "main" })).await;
+    ok(&r);
+    let set = r["data"]["createSet"]["id"].as_str().unwrap().to_owned();
+    ok(&w
+        .gql(
+            &alice.full,
+            ACTIVATE,
+            json!({ "c": alice.twitch_id, "s": set }),
+        )
+        .await);
+    let emote = w.emote(&alice, "staffHi").await;
+
+    // Unscoped, the staff account edits Alice's set through sets.edit_any.
+    let r = w
+        .gql(&staff.full, EDITABLE_BY_ID, json!({ "c": alice.twitch_id }))
+        .await;
+    ok(&r);
+    assert_eq!(
+        r["data"]["channelEditableSets"]["sets"][0]["access"], "STAFF",
+        "{r}"
+    );
+
+    // Through the deck: nothing to edit, and every set emote mutation is refused.
+    let deck = w.sign_in_app(&staff).await;
+    let r = w
+        .gql(
+            &deck.access,
+            EDITABLE_BY_ID,
+            json!({ "c": alice.twitch_id }),
+        )
+        .await;
+    ok(&r);
+    let found = &r["data"]["channelEditableSets"];
+    assert_eq!(found["sets"], json!([]), "{r}");
+    assert_eq!(found["canEditActiveSet"], false);
+    assert_eq!(found["role"], Value::Null);
+    let r = w
+        .gql(&deck.access, ADD, json!({ "s": set, "e": emote }))
+        .await;
+    assert_eq!(code(&r), "forbidden", "{r}");
+
+    // Alice adds it; the deck can't rename or remove it either.
+    ok(&w
+        .gql(&alice.full, ADD, json!({ "s": set, "e": emote }))
+        .await);
+    let r = w
+        .gql(
+            &deck.access,
+            RENAME,
+            json!({ "s": set, "e": emote, "n": "staffHey" }),
+        )
+        .await;
+    assert_eq!(code(&r), "forbidden", "{r}");
+    let r = w
+        .gql(&deck.access, REMOVE, json!({ "s": set, "e": emote }))
+        .await;
+    assert_eq!(code(&r), "forbidden", "{r}");
+    // Staff reads are closed to it as well.
+    let r = w.gql(&deck.access, "{ auditLog { id } }", json!({})).await;
+    assert_eq!(code(&r), "insufficient_scope", "{r}");
+
+    // The unscoped session still can.
+    let r = w
+        .gql(
+            &staff.full,
+            RENAME,
+            json!({ "s": set, "e": emote, "n": "staffHey" }),
+        )
+        .await;
+    assert_eq!(r["data"]["updateSetEmote"]["name"], "staffHey", "{r}");
     w.db.close().await;
 }

@@ -114,7 +114,7 @@ export const guides: Guide[] = [
         ['Sessions', 'The app shows once under Settings → Account → Sessions, named after it, and can be signed out there.'],
         ['Limits', 'The sign-in limit (30 a minute per IP) for `/v1/auth/app/*`; GraphQL counts like any account.'],
       ),
-      p('Scopes say which mutations the token may run. Every query runs as the signed-in account; any other mutation answers `insufficient_scope`, and uploads are refused. The usual rights checks still apply: set owner, account editors with `EMOTES`, set editors and set capacity.'),
+      p('Scopes say which mutations the token may run. Queries are limited to public reads, your own account, sets, emotes, channels and cosmetics, and `channelEditableSets`; any other query or mutation answers `insufficient_scope`, and uploads are refused. The usual rights checks still apply: set owner, account editors with `EMOTES`, set editors and set capacity. Staff permissions never count for an app token.'),
       fmt(
         ['sets.emotes', 'Manage emotes in sets you can edit: [addSetEmote](#gql-mutation-addSetEmote), [updateSetEmote](#gql-mutation-updateSetEmote), [removeSetEmote](#gql-mutation-removeSetEmote).'],
         ['cosmetics.select', 'Pick your cosmetics: [selectCosmetics](#gql-mutation-selectCosmetics), with [myCosmetics](#gql-query-myCosmetics) to list what you own.'],
@@ -123,7 +123,7 @@ export const guides: Guide[] = [
       fmt(
         ['invalid_grant', 'The code or refresh token is wrong, expired or used. Start signing in again.'],
         ['invalid_client', 'Unknown `client_id`.'],
-        ['insufficient_scope', 'The token may not run that mutation. Do it on cyex.tv.'],
+        ['insufficient_scope', 'The token may not run that query or mutation. Do it on cyex.tv.'],
       ),
     ],
   },

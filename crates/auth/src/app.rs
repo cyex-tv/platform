@@ -30,7 +30,7 @@ pub struct Scope {
     pub id: &'static str,
     /// For the consent page: "cyex deck wants to: …".
     pub description: &'static str,
-    /// The GraphQL mutations the scope allows. Every query stays open to app sessions.
+    /// The GraphQL mutations the scope allows. Queries: [`APP_QUERIES`].
     pub mutations: &'static [&'static str],
 }
 
@@ -74,6 +74,55 @@ pub fn client(id: &str) -> Option<&'static AppClient> {
 /// Whether an app session of `client_id` may run the mutation `field`.
 pub fn allows_mutation(client_id: &str, field: &str) -> bool {
     client(client_id).is_some_and(|c| c.scopes.iter().any(|s| s.mutations.contains(&field)))
+}
+
+/// The GraphQL queries an app session may run (ADR 0021): public reads, the caller's own sets,
+/// emotes, channels and cosmetics, and `channelEditableSets`. Everything else, every staff read
+/// among it, answers `insufficient_scope`. Checked per resolved top-level field, so aliases and
+/// fragments change nothing.
+pub const APP_QUERIES: &[&str] = &[
+    // Public reads.
+    "channel",
+    "channelByLogin",
+    "set",
+    "setEmotes",
+    "accountSets",
+    "globalSet",
+    "emote",
+    "searchEmotes",
+    "emoteTrending",
+    "searchAccounts",
+    "quickSearch",
+    "accountProfile",
+    "accountCosmetics",
+    "account",
+    "emoteChannels",
+    "personalSet",
+    "personalSets",
+    "cosmetics",
+    "userCosmetics",
+    "activeAnnouncement",
+    // The caller's own.
+    "me",
+    "mySets",
+    "myEmotes",
+    "myChannels",
+    "myEditableChannels",
+    "editorOf",
+    "editorSets",
+    "editorChannels",
+    "channelEditableSets",
+    "myCosmetics",
+    "hiddenEmotes",
+    "hiddenCreators",
+    "myFavourites",
+    "favouriteEmoteIds",
+];
+
+/// Whether an app session of `client_id` may run the query `field`. `__typename` and the other
+/// introspection fields are always fine.
+pub fn allows_query(client_id: &str, field: &str) -> bool {
+    field.starts_with("__") || (client(client_id).is_some() && APP_QUERIES.contains(&field))
 }
 
 /// The scopes of a client, space-separated, as the token answer's `scope`.
@@ -619,6 +668,33 @@ mod tests {
             assert!(!allows_mutation("cyex-deck", m), "{m}");
         }
         assert!(!allows_mutation("other", "addSetEmote"));
+    }
+
+    #[test]
+    fn app_sessions_run_listed_queries_only() {
+        for q in [
+            "me",
+            "myEmotes",
+            "channelEditableSets",
+            "set",
+            "emote",
+            "myCosmetics",
+            "__typename",
+        ] {
+            assert!(allows_query("cyex-deck", q), "{q}");
+        }
+        for q in [
+            "auditLog",
+            "reviewQueue",
+            "staffNotes",
+            "accountSessions",
+            "roles",
+            "mySessions",
+            "announcements",
+        ] {
+            assert!(!allows_query("cyex-deck", q), "{q}");
+        }
+        assert!(!allows_query("other", "me"));
     }
 
     fn req<'a>(challenge: &'a str, state: &'a str) -> AuthorizeRequest<'a> {

@@ -283,6 +283,18 @@ pub async fn permissions_of(conn: &mut PgConnection, account_id: Uuid) -> DbResu
     .await?)
 }
 
+/// The permissions every account holds: the built-in User role's.
+pub async fn everyones_permissions(conn: &mut PgConnection) -> DbResult<Vec<String>> {
+    Ok(sqlx::query_scalar(
+        "SELECT rp.permission
+         FROM role_permissions rp
+         JOIN roles r ON r.id = rp.role_id AND r.system = 'user'
+         ORDER BY 1",
+    )
+    .fetch_all(conn)
+    .await?)
+}
+
 /// The position of the account's most senior role, if it has any.
 pub async fn highest_position(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Option<i32>> {
     Ok(sqlx::query_scalar(

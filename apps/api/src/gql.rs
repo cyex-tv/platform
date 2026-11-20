@@ -62,8 +62,9 @@ pub fn builder() -> SchemaBuilder<Query, Mutation, Subscription> {
         .extension(AppScopes)
 }
 
-/// App sign-in sessions (ADR 0021) run only the mutations their scopes name; every query stays
-/// open to them. Checked per resolved field, so aliases and fragments change nothing.
+/// App sign-in sessions (ADR 0021) run only the mutations their scopes name and the queries
+/// `app::APP_QUERIES` lists (no staff reads). Checked per resolved top-level field, so aliases
+/// and fragments change nothing.
 struct AppScopes;
 
 impl async_graphql::extensions::ExtensionFactory for AppScopes {
@@ -80,13 +81,16 @@ impl async_graphql::extensions::Extension for AppScopes {
         info: async_graphql::extensions::ResolveInfo<'_>,
         next: async_graphql::extensions::NextResolve<'_>,
     ) -> async_graphql::ServerResult<Option<async_graphql::Value>> {
-        if info.parent_type == "Mutation"
-            && let Some(client) = ctx
-                .data_opt::<Option<Caller>>()
-                .and_then(Option::as_ref)
-                .and_then(|c| c.app_client.as_deref())
-            && !cyex_tv_auth::app::allows_mutation(client, info.name)
-        {
+        let client = ctx
+            .data_opt::<Option<Caller>>()
+            .and_then(Option::as_ref)
+            .and_then(|c| c.app_client.as_deref());
+        let refused = client.is_some_and(|client| match info.parent_type {
+            "Mutation" => !cyex_tv_auth::app::allows_mutation(client, info.name),
+            "Query" => !cyex_tv_auth::app::allows_query(client, info.name),
+            _ => false,
+        });
+        if refused {
             return Err(coded(
                 "insufficient_scope",
                 "This app may not do that. Use cyex.tv for it.",
