@@ -540,7 +540,12 @@ async fn changing_limits_follows_the_role_edit_rules() {
     // A manager: not a role above them, not one they hold.
     let r = w.set_limits(&manager, &above, raise.clone()).await;
     assert_eq!(code(&r), "not_below_you", "{r}");
+    // Their own top role is not below them; a lower one they hold is still theirs.
     let r = w.set_limits(&manager, &managers, raise.clone()).await;
+    assert_eq!(code(&r), "not_below_you", "{r}");
+    let held = w.create_role(&owner, "Held", 10, &[]).await;
+    w.assign(&owner, &manager, &held).await;
+    let r = w.set_limits(&manager, &held, raise.clone()).await;
     assert_eq!(code(&r), "own_role", "{r}");
     // Below them it works.
     let r = w.set_limits(&manager, &below, raise.clone()).await;
