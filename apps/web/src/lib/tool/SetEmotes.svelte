@@ -16,7 +16,7 @@
   import { session } from './session.svelte';
   import { STATE_LABEL } from './state';
   import { fail, notify } from './notices.svelte';
-  import { SET_PAGE, appendPage, nextPage, pagesFor } from './set-paging';
+  import { SET_PAGE, appendPage, pagesAfter, pagesFor, type MemberChange } from './set-paging';
 
   type Member = SetEmotesQuery['setEmotes']['items'][number];
   type Props = {
@@ -25,7 +25,8 @@
     used: number;
     /** Bumped when emotes were added from outside: the pages are read again. */
     rev?: number;
-    onchange: () => unknown;
+    /** The set changed here; `change` says how, so the page can follow without reading it all again. */
+    onchange: (change?: MemberChange) => unknown;
   };
   let { setId, capacity, used, rev = 0, onchange }: Props = $props();
   let gridEl = $state<HTMLElement>();
@@ -34,6 +35,9 @@
   let removing = $state(new Set<string>());
 
   let items = $state<Member[]>([]);
+  /** The last page read, and how many emotes were removed since (they shift the pages after them up). */
+  let pageNo = 1;
+  let removedSince = 0;
   let total = $state(0);
   /** The first page is on its way (or the filter changed). */
   let loading = $state(true);
@@ -69,6 +73,8 @@
       );
       if (mine !== token) return;
       items = got.flatMap((r) => r.setEmotes.items);
+      pageNo = pages;
+      removedSince = 0;
       total = got[0].setEmotes.total;
     } catch (err) {
       if (mine !== token) return;
@@ -84,10 +90,13 @@
     more = true;
     moreProblem = '';
     try {
-      const r = await gql(SET_EMOTES, { id: setId, query: asked || null, page: nextPage(items.length), perPage: SET_PAGE });
+      const asking = pagesAfter(pageNo, removedSince);
+      const got = await Promise.all(asking.map((n) => gql(SET_EMOTES, { id: setId, query: asked || null, page: n, perPage: SET_PAGE })));
       if (mine !== token) return;
-      items = appendPage(items, r.setEmotes.items);
-      total = r.setEmotes.total;
+      for (const r of got) items = appendPage(items, r.setEmotes.items);
+      total = got[got.length - 1].setEmotes.total;
+      pageNo += 1;
+      removedSince = 0;
     } catch {
       moreProblem = 'That page didn’t load.';
     } finally {
@@ -144,10 +153,11 @@
     try {
       await gql(UPDATE_SET_EMOTE, { setId, emoteId: editing, input: { name: alias.trim(), zeroWidth } });
       const id = editing;
+      const from = items.find((m) => m.emote.id === id)?.name ?? '';
       items = items.map((m) => (m.emote.id === id ? { ...m, name: alias.trim(), zeroWidth } : m));
       dialog.close();
       notify('Saved.');
-      void onchange();
+      void onchange({ kind: 'rename', id, from, to: alias.trim() });
     } catch (err) {
       failure = err instanceof ApiError && err.message ? err.message : 'That didn’t work. Try again.';
     } finally {
@@ -166,7 +176,8 @@
       notify(`${iso(m.name)} removed.`);
       items = items.filter((x) => x.emote.id !== id);
       total = Math.max(0, total - 1);
-      await onchange();
+      removedSince += 1;
+      await onchange({ kind: 'remove', id, name: m.name });
       await tick();
       const rows = gridEl?.querySelectorAll<HTMLElement>('.below .danger');
       const next = rows?.length ? rows[Math.min(at, rows.length - 1)] : null;
