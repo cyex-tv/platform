@@ -1130,6 +1130,7 @@ const CODE_BATCHES = [
 ];
 const REDEMPTIONS = []; // { batchId, code, accountId }
 const CODE_FAILS = []; // times of wrong codes (the mock has one signed-in account)
+const IDEMPOTENT = new Map(); // `${account}:${op}:${key}` → { request, answer } (kept until restart)
 const CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
 const itemOf = (id) => SHOP_ITEMS.find((i) => i.id === id);
@@ -1329,9 +1330,33 @@ function shopAnswer(q, v, session, admin) {
       }
     }
   }
+  // idempotencyKey, as the real API: a repeat with the same key answers the first result; the same
+  // key with another request is refused; a failed request gives its key back.
+  const keyed = (op, request, run) => {
+    if (!v.idempotencyKey) return run();
+    const at = `${ME_ID}:${op}:${v.idempotencyKey}`;
+    const seen = IDEMPOTENT.get(at);
+    const same = JSON.stringify(request);
+    if (seen) return seen.request === same ? seen.answer : err('That idempotency key was used for a different request. Make a new one for each action.', 'idempotency_key_reused');
+    const answer = run();
+    if (!answer?.errors) IDEMPOTENT.set(at, { request: same, answer });
+    return answer;
+  };
   if (has('startCheckout')) {
     const denied = signedOut();
     if (denied) return denied;
+    return keyed('startCheckout', [v.itemId, v.recipient ?? null], () => startCheckout(v));
+  }
+  if (has('redeemCode')) {
+    const denied = signedOut();
+    if (denied) return denied;
+    return keyed('redeemCode', [normCode(v.code)], () => redeemCode(v));
+  }
+  return null;
+}
+
+function startCheckout(v) {
+  {
     const item = itemOf(v.itemId);
     if (!item || item.deleted) return err('Not found.', 'not_found');
     if (stockLeftOf(item) === 0) return err('This item is sold out.', 'sold_out');
@@ -1354,9 +1379,10 @@ function shopAnswer(q, v, session, admin) {
     grantAll(recipient.id, item.badgeIds, item.paintIds, 'PURCHASE', `Order ${order.id} (mock data)`);
     return { data: { startCheckout: { order: orderOut(order), transactionId: order.providerTransactionId, checkoutUrl: null, clientToken: null, environment: 'sandbox' } } };
   }
-  if (has('redeemCode')) {
-    const denied = signedOut();
-    if (denied) return denied;
+}
+
+function redeemCode(v) {
+  {
     const now = Date.now();
     while (CODE_FAILS.length && now - CODE_FAILS[0] > 15 * 60 * 1000) CODE_FAILS.shift();
     if (CODE_FAILS.length >= 5) return err('Too many wrong codes. Try again in 15 min.', 'locked_out');
@@ -1377,7 +1403,6 @@ function shopAnswer(q, v, session, admin) {
     REDEMPTIONS.push({ batchId: batch.id, code, accountId: ME_ID });
     return { data: { redeemCode: { name: batch.name, ...fresh } } };
   }
-  return null;
 }
 
 // ---- Account activity (accountActivity) -------------------------------------------------

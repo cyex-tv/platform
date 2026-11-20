@@ -438,7 +438,7 @@ async fn unscoped_app_sessions_are_retired() {
     .unwrap();
     let migration = cyex_tv_db::MIGRATOR
         .iter()
-        .find(|m| m.version == 20_261_209_006_001)
+        .find(|m| m.version == 20_261_210_002_001)
         .expect("the retire migration");
     c.execute(&*migration.sql).await.unwrap();
 
@@ -1885,6 +1885,7 @@ async fn every_reference_to_an_account_is_handled_by_erase() {
         ("reports", "reporter_id", "set to NULL"),
         ("oauth_states", "link_account_id", "deleted"),
         ("app_auth_codes", "account_id", "deleted"),
+        ("idempotency_keys", "account_id", "deleted"),
         (
             "emote_transfer_requests",
             "from_account_id",
@@ -2092,47 +2093,74 @@ async fn erasure_clears_uploader_and_closes_its_transfer_requests() {
 async fn interrupted_concurrent_index_is_rebuilt() {
     let db = db!();
     let mut conn = db.conn().await;
+    let run = |sql: &'static str| sqlx::query(sql);
     // A unique build over duplicate rows fails and leaves an invalid index behind, as an
-    // interrupted build does.
-    sqlx::query("CREATE TABLE ix_probe (a int)")
+    // interrupted build does. One carries the name of an index our migrations create
+    // (`emotes_file_id`, dropped first), the other is someone else's.
+    run("DROP INDEX emotes_file_id")
         .execute(&mut *conn)
         .await
         .unwrap();
-    sqlx::query("INSERT INTO ix_probe VALUES (1), (1)")
+    run("CREATE TABLE ix_probe (a int)")
         .execute(&mut *conn)
         .await
         .unwrap();
-    assert!(
-        sqlx::query("CREATE UNIQUE INDEX CONCURRENTLY ix_probe_a ON ix_probe (a)")
-            .execute(&mut *conn)
-            .await
-            .is_err()
-    );
+    run("INSERT INTO ix_probe VALUES (1), (1)")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    for create in [
+        "CREATE UNIQUE INDEX CONCURRENTLY emotes_file_id ON ix_probe (a)",
+        "CREATE UNIQUE INDEX CONCURRENTLY ix_probe_foreign ON ix_probe (a)",
+    ] {
+        assert!(
+            sqlx::query(create).execute(&mut *conn).await.is_err(),
+            "{create}"
+        );
+    }
     let valid = |name: &'static str| {
         sqlx::query_scalar::<_, bool>(
             "SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass($1)",
         )
         .bind(name)
     };
-    assert!(!valid("ix_probe_a").fetch_one(&mut *conn).await.unwrap());
+    assert!(!valid("emotes_file_id").fetch_one(&mut *conn).await.unwrap());
+    assert!(
+        !valid("ix_probe_foreign")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap()
+    );
 
-    // Still broken: the repair fails loudly instead of leaving it.
+    // Ours is still broken: the repair fails loudly instead of leaving it.
     assert!(cyex_tv_db::repair_invalid_indexes(&mut conn).await.is_err());
 
-    // Once the rows allow it, the repair rebuilds it and it is valid.
-    sqlx::query("DELETE FROM ix_probe WHERE ctid = (SELECT max(ctid) FROM ix_probe)")
+    // Once the rows allow it, the repair rebuilds ours and it is valid. The foreign one is
+    // reported, never dropped or rebuilt: it is still there and still invalid.
+    run("DELETE FROM ix_probe WHERE ctid = (SELECT max(ctid) FROM ix_probe)")
         .execute(&mut *conn)
         .await
         .unwrap();
-    let rebuilt = cyex_tv_db::repair_invalid_indexes(&mut conn).await.unwrap();
-    assert_eq!(rebuilt, ["ix_probe_a"]);
-    assert!(valid("ix_probe_a").fetch_one(&mut *conn).await.unwrap());
-    // Nothing left to do.
+    let repair = cyex_tv_db::repair_invalid_indexes(&mut conn).await.unwrap();
+    assert_eq!(repair.rebuilt, ["emotes_file_id"]);
+    assert_eq!(repair.left_alone, ["ix_probe_foreign"]);
+    assert!(valid("emotes_file_id").fetch_one(&mut *conn).await.unwrap());
     assert!(
-        cyex_tv_db::repair_invalid_indexes(&mut conn)
+        !valid("ix_probe_foreign")
+            .fetch_one(&mut *conn)
             .await
             .unwrap()
-            .is_empty()
+    );
+
+    // Nothing of ours left to do; the foreign one stays as it is, run after run.
+    let again = cyex_tv_db::repair_invalid_indexes(&mut conn).await.unwrap();
+    assert!(again.rebuilt.is_empty());
+    assert_eq!(again.left_alone, ["ix_probe_foreign"]);
+    assert!(
+        !valid("ix_probe_foreign")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap()
     );
     drop(conn);
     db.close().await;

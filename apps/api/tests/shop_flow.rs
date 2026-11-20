@@ -2504,3 +2504,221 @@ async fn gift_recipients_see_paid_gifts_without_the_money() {
     assert_eq!(r["data"]["order"]["amountCents"], 499);
     w.db.close().await;
 }
+
+// Idempotency keys: a retry with the same key answers what the first request did.
+
+const CHECKOUT_KEYED: &str =
+    "mutation($itemId: String!, $recipient: RecipientInput, $key: String) {
+    startCheckout(itemId: $itemId, recipient: $recipient, idempotencyKey: $key) {
+        transactionId order { id status }
+    }
+}";
+const REDEEM_KEYED: &str = "mutation($code: String!, $key: String) {
+    redeemCode(code: $code, idempotencyKey: $key) { name badges { id } paints { id } }
+}";
+
+impl World {
+    async fn count(&self, sql: &str) -> i64 {
+        let mut conn = self.db.conn().await;
+        sqlx::query_scalar(sql).fetch_one(&mut *conn).await.unwrap()
+    }
+
+    async fn sql_text(&self, sql: &str) -> String {
+        let mut conn = self.db.conn().await;
+        sqlx::query_scalar(sql).fetch_one(&mut *conn).await.unwrap()
+    }
+}
+
+#[tokio::test]
+async fn a_checkout_retried_with_its_key_starts_one_order() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let buyer = w.user("971").await;
+    let other = w.user("972").await;
+    let badge = w.badge("Early").await;
+    let paint = w.paint("Sunset").await;
+    let item = w
+        .item(&owner, bundle_input("Starter", &[&badge], &[]))
+        .await;
+    let second = w.item(&owner, bundle_input("Second", &[], &[&paint])).await;
+    let key = ids::new_id().to_string();
+    let vars = json!({ "itemId": item["id"], "key": key });
+
+    // Two at once with the same key (Paddle answers slowly): one starts the order, the other is
+    // told it's in progress.
+    w.fake.delay_ms.store(300, Ordering::SeqCst);
+    let (a, b) = tokio::join!(
+        w.gql(Some(&buyer), CHECKOUT_KEYED, vars.clone()),
+        w.gql(Some(&buyer), CHECKOUT_KEYED, vars.clone())
+    );
+    w.fake.delay_ms.store(0, Ordering::SeqCst);
+    let (first, busy) = if a["errors"].is_null() {
+        (a, b)
+    } else {
+        (b, a)
+    };
+    assert!(first["errors"].is_null(), "{first}");
+    assert_eq!(code(&busy), "idempotency_in_progress", "{busy}");
+    let order = first["data"]["startCheckout"]["order"]["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let txn = first["data"]["startCheckout"]["transactionId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(w.count("SELECT count(*) FROM shop_orders").await, 1);
+
+    // Paid meanwhile; the retry still answers the first checkout, and nothing new starts.
+    assert_eq!(
+        w.hook(completed("evt_key1", &txn, &order)).await,
+        StatusCode::OK
+    );
+    let calls = w.fake.calls.lock().unwrap().len();
+    let again = w.gql(Some(&buyer), CHECKOUT_KEYED, vars.clone()).await;
+    assert!(again["errors"].is_null(), "{again}");
+    assert_eq!(
+        again["data"]["startCheckout"]["order"]["id"],
+        order.as_str()
+    );
+    assert_eq!(
+        again["data"]["startCheckout"]["transactionId"],
+        txn.as_str()
+    );
+    assert_eq!(w.fake.calls.lock().unwrap().len(), calls);
+    assert_eq!(w.count("SELECT count(*) FROM shop_orders").await, 1);
+    // Without the key the same purchase is refused: they own it now.
+    let r = w
+        .gql(Some(&buyer), CHECKOUT, json!({ "itemId": item["id"] }))
+        .await;
+    assert_eq!(code(&r), "already_owned", "{r}");
+
+    // The same key for another item: refused, nothing started.
+    let r = w
+        .gql(
+            Some(&buyer),
+            CHECKOUT_KEYED,
+            json!({ "itemId": second["id"], "key": key }),
+        )
+        .await;
+    assert_eq!(code(&r), "idempotency_key_reused", "{r}");
+    assert_eq!(w.count("SELECT count(*) FROM shop_orders").await, 1);
+    // Keys are per account: someone else's request with it is their own.
+    let r = w.gql(Some(&other), CHECKOUT_KEYED, vars.clone()).await;
+    assert!(r["errors"].is_null(), "{r}");
+    assert_ne!(r["data"]["startCheckout"]["order"]["id"], order.as_str());
+    // Not a UUID.
+    let r = w
+        .gql(
+            Some(&buyer),
+            CHECKOUT_KEYED,
+            json!({ "itemId": item["id"], "key": "twice" }),
+        )
+        .await;
+    assert_eq!(code(&r), "bad_idempotency_key", "{r}");
+
+    // A request that fails gives its key back: the retry acts.
+    let failing = ids::new_id().to_string();
+    w.fake.fail.store(true, Ordering::SeqCst);
+    let r = w
+        .gql(
+            Some(&buyer),
+            CHECKOUT_KEYED,
+            json!({ "itemId": second["id"], "key": failing }),
+        )
+        .await;
+    assert!(!r["errors"].is_null(), "{r}");
+    w.fake.fail.store(false, Ordering::SeqCst);
+    let r = w
+        .gql(
+            Some(&buyer),
+            CHECKOUT_KEYED,
+            json!({ "itemId": second["id"], "key": failing }),
+        )
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+    assert_eq!(r["data"]["startCheckout"]["order"]["status"], "PENDING");
+
+    // Kept 24 hours: an older key is new again (the worker removes it).
+    w.sql(&format!(
+        "UPDATE idempotency_keys SET created_at = now() - interval '25 hours' WHERE key = '{key}'"
+    ))
+    .await;
+    let r = w.gql(Some(&buyer), CHECKOUT_KEYED, vars).await;
+    assert_eq!(code(&r), "already_owned", "{r}");
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn a_redeem_retried_with_its_key_redeems_once() {
+    let Some(w) = World::new(false).await else {
+        return;
+    };
+    let manager = w.staff("981", &["codes.manage"]).await;
+    let alice = w.user("982").await;
+    let badge = w.badge("Early").await;
+    let input = json!({ "name": "Launch", "prefix": "launch", "count": 2, "usesPerCode": 5, "badgeIds": [badge] });
+    let r = w
+        .gql(Some(&manager), CREATE_BATCH, json!({ "input": input }))
+        .await;
+    let codes: Vec<String> =
+        serde_json::from_value(r["data"]["createCodeBatch"]["codes"].clone()).unwrap();
+    assert_eq!(codes.len(), 2, "{r}");
+    let key = ids::new_id().to_string();
+
+    let first = w
+        .gql(
+            Some(&alice),
+            REDEEM_KEYED,
+            json!({ "code": codes[0], "key": key }),
+        )
+        .await;
+    assert!(first["errors"].is_null(), "{first}");
+    assert_eq!(
+        first["data"]["redeemCode"]["badges"][0]["id"],
+        badge.as_str()
+    );
+    // The retry (typed differently, the same code) answers the same, and redeems nothing more.
+    let again = w
+        .gql(
+            Some(&alice),
+            REDEEM_KEYED,
+            json!({ "code": codes[0].to_lowercase(), "key": key }),
+        )
+        .await;
+    assert_eq!(again["data"], first["data"], "{again}");
+    assert_eq!(w.count("SELECT count(*) FROM code_redemptions").await, 1);
+    assert_eq!(
+        w.count("SELECT sum(uses)::bigint FROM redeem_codes").await,
+        1
+    );
+    assert_eq!(w.audit_count("code.redeemed").await, 1);
+    // Without the key it's a second try, and says so.
+    let r = w
+        .gql(Some(&alice), REDEEM, json!({ "code": codes[0] }))
+        .await;
+    assert_eq!(code(&r), "already_redeemed", "{r}");
+    // Another code with the same key: refused, not redeemed.
+    let r = w
+        .gql(
+            Some(&alice),
+            REDEEM_KEYED,
+            json!({ "code": codes[1], "key": key }),
+        )
+        .await;
+    assert_eq!(code(&r), "idempotency_key_reused", "{r}");
+    assert_eq!(w.count("SELECT count(*) FROM code_redemptions").await, 1);
+    // Only a hash of the request is kept, never the code.
+    let dump: String = w
+        .sql_text(
+            "SELECT coalesce(string_agg(row_to_json(k)::text, ' '), '') FROM idempotency_keys k",
+        )
+        .await;
+    for c in &codes {
+        let body = c.trim_start_matches("LAUNCH-").replace('-', "");
+        assert!(!dump.contains(&body), "{c} stored with its key");
+    }
+    w.db.close().await;
+}

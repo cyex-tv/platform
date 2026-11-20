@@ -1,6 +1,6 @@
 <script lang="ts">
   // A GraphQL type written out, with its named type linked when the reference documents it.
-  import { typeId } from './graphql';
+  import { typeId } from './lazy';
   let { type, known }: { type: string; known: string[] } = $props();
   const m = $derived(/^([^\w]*)(\w+)([^\w]*)$/.exec(type));
 </script>
