@@ -1,5 +1,5 @@
 //! Channels, sets, members, editors and the chat-client reads, through the real router against a
-//! real Postgres. Accounts are made directly in the database and call with app (Bearer) sessions,
+//! real Postgres. Accounts are made directly in the database and call with site (cookie) sessions,
 //! so these tests don't depend on the OAuth flow (`auth_flow.rs` covers that). They run when
 //! `CYEX_TV_TEST_DATABASE_URL` is set (CI sets it) and skip otherwise.
 
@@ -89,7 +89,7 @@ impl World {
         ))
     }
 
-    /// A Twitch user with a channel and an app session.
+    /// A Twitch user with a channel and a site session.
     async fn user(&self, twitch_id: &str) -> User {
         let mut conn = self.db.conn().await;
         let login = format!("user{twitch_id}");
@@ -119,7 +119,7 @@ impl World {
             &mut conn,
             &tokens::hash(&token),
             signed.account.id,
-            SessionKind::App,
+            SessionKind::Site,
             Duration::days(1),
         )
         .await
@@ -183,7 +183,12 @@ impl World {
     async fn gql(&self, user: Option<&User>, query: &str, variables: Value) -> Value {
         let mut request = Request::post("/v1/gql").header("content-type", "application/json");
         if let Some(user) = user {
-            request = request.header("authorization", format!("Bearer {}", user.token));
+            request = request
+                .header(
+                    "cookie",
+                    format!("{}={}", cyex_tv_auth::cookies::SESSION, user.token),
+                )
+                .header("origin", "https://cyex.tv");
         }
         let reply = self
             .send(

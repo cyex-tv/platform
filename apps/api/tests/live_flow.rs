@@ -137,7 +137,7 @@ impl Live {
             &mut conn,
             &tokens::hash(&token),
             signed.account.id,
-            SessionKind::App,
+            SessionKind::Site,
             ChronoDuration::days(1),
         )
         .await
@@ -148,7 +148,11 @@ impl Live {
     async fn gql(&self, token: &str, query: &str, variables: Value) -> Value {
         let request = Request::post("/v1/gql")
             .header("content-type", "application/json")
-            .header("authorization", format!("Bearer {token}"))
+            .header(
+                "cookie",
+                format!("{}={token}", cyex_tv_auth::cookies::SESSION),
+            )
+            .header("origin", "https://cyex.tv")
             .body(Body::from(
                 json!({ "query": query, "variables": variables }).to_string(),
             ))

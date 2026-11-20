@@ -60,7 +60,7 @@ impl World {
         })
     }
 
-    /// A Twitch user named `login` with an app session and, optionally, one permission.
+    /// A Twitch user named `login` with a site session and, optionally, one permission.
     async fn user(&self, twitch_id: &str, login: &str, permission: Option<&str>) -> User {
         let mut conn = self.db.conn().await;
         let signed = accounts::sign_in(
@@ -97,7 +97,7 @@ impl World {
             &mut conn,
             &tokens::hash(&token),
             signed.account.id,
-            SessionKind::App,
+            SessionKind::Site,
             Duration::days(1),
         )
         .await
@@ -144,7 +144,12 @@ impl World {
     async fn gql(&self, user: Option<&User>, query: &str, variables: Value) -> Value {
         let mut request = Request::post("/v1/gql").header("content-type", "application/json");
         if let Some(user) = user {
-            request = request.header("authorization", format!("Bearer {}", user.token));
+            request = request
+                .header(
+                    "cookie",
+                    format!("{}={}", cyex_tv_auth::cookies::SESSION, user.token),
+                )
+                .header("origin", "https://cyex.tv");
         }
         let response = self
             .app

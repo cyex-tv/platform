@@ -33,8 +33,6 @@ pub const OWNER: &str = "7001";
 
 pub struct User {
     pub id: Uuid,
-    /// An app session (Bearer).
-    pub token: String,
     /// A site session (the cookie), as the website holds it.
     pub cookie: String,
     pub twitch_id: String,
@@ -51,8 +49,6 @@ impl User {
 #[derive(Clone, Copy)]
 pub enum As<'a> {
     Nobody,
-    /// The Bearer token, as the deck and other apps send it.
-    App(&'a User),
     /// The cookie and the site's `Origin`, as the website sends it.
     Site(&'a User),
     /// A raw cookie value with the site's `Origin`.
@@ -186,7 +182,7 @@ impl World {
         token
     }
 
-    /// A Twitch user `user<id>` with a channel, an app session and a site session.
+    /// A Twitch user `user<id>` with a channel and a site session.
     pub async fn user(&self, twitch_id: &str) -> User {
         let login = format!("user{twitch_id}");
         let id = {
@@ -214,11 +210,9 @@ impl World {
             .unwrap();
             signed.account.id
         };
-        let token = self.session(id, SessionKind::App).await;
         let cookie = self.session(id, SessionKind::Site).await;
         User {
             id,
-            token,
             cookie,
             twitch_id: twitch_id.to_owned(),
             login,
@@ -233,9 +227,6 @@ impl World {
         request = request.header("cf-connecting-ip", "203.0.113.7");
         match who {
             As::Nobody => {}
-            As::App(user) => {
-                request = request.header("authorization", format!("Bearer {}", user.token));
-            }
             As::Site(user) => {
                 request = request
                     .header("cookie", format!("cyex_tv_session={}", user.cookie))

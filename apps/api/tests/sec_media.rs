@@ -117,7 +117,7 @@ impl World {
             &mut conn,
             &tokens::hash(&token),
             signed.account.id,
-            SessionKind::App,
+            SessionKind::Site,
             Duration::days(1),
         )
         .await
@@ -131,7 +131,12 @@ impl World {
             format!("multipart/form-data; boundary={BOUNDARY}"),
         );
         if let Some(user) = user {
-            request = request.header("authorization", format!("Bearer {}", user.token));
+            request = request
+                .header(
+                    "cookie",
+                    format!("{}={}", cyex_tv_auth::cookies::SESSION, user.token),
+                )
+                .header("origin", "https://cyex.tv");
         }
         let response = self
             .app
