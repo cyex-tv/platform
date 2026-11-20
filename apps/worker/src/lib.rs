@@ -17,7 +17,8 @@ use std::time::Duration;
 use chrono::Utc;
 use cyex_tv_db::jobs::{self, Job};
 use cyex_tv_db::{
-    audit, event_sessions, idempotency, ids, oauth_states, outbox, privacy, search, sessions, shop,
+    audit, channel_counts, event_sessions, idempotency, ids, oauth_states, outbox, privacy, search,
+    sessions, shop,
 };
 use cyex_tv_shared::metrics::{self, Labels, Registry};
 use cyex_tv_storage::Store;
@@ -427,7 +428,7 @@ pub async fn erase_due_accounts(db: &PgPool) -> Result<u64, cyex_tv_db::DbError>
 /// days and idempotency keys after 24 h. Erases accounts deleted over 30 days ago
 /// ([`erase_due_accounts`]). Puts staff refunds stuck for an hour back to paid
 /// ([`revert_refunds`]). Also refreshes
-/// the search ranking and the trending counts. The worker's loop also runs [`cancel_stale_checkouts`] after it.
+/// the search ranking, the trending counts and every stored channel count. The worker's loop also runs [`cancel_stale_checkouts`] after it.
 pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
     let mut conn = db.acquire().await?;
     let sessions = sessions::delete_expired(&mut conn).await?;
@@ -453,6 +454,8 @@ pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
     .await?;
     // Search ranking (ADR 0004): channels showing each emote.
     let ranked = search::refresh_popularity(&mut conn).await?;
+    // Stored channel counts, all of them (the minutely refresh only does the queued ones).
+    let counts_reconciled = channel_counts::reconcile_all(&mut conn).await?;
     drop(conn);
     let orders_expired = expire_orders(db).await?;
     let refunds_reverted = revert_refunds(db).await?;
@@ -470,12 +473,24 @@ pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
         refunds_reverted,
         accounts_erased,
         ranked,
+        counts_reconciled,
         "cleaned up"
     );
     Ok(())
 }
 
-/// Runs jobs until `shutdown` resolves, and cleans up every `clean_every`.
+/// How often the queued channel counts are recounted ([`refresh_channel_counts`]).
+pub const CHANNEL_COUNTS_EVERY: Duration = Duration::from_secs(60);
+
+/// Recounts the emotes queued since the last round (a set member added or removed, a channel's
+/// active set switched, an account blocked or deleted). Returns how many counts changed.
+pub async fn refresh_channel_counts(db: &PgPool) -> Result<u64, cyex_tv_db::DbError> {
+    let mut conn = db.acquire().await?;
+    channel_counts::refresh_queued(&mut conn).await
+}
+
+/// Runs jobs until `shutdown` resolves, cleans up every `clean_every` and recounts the queued
+/// channel counts every [`CHANNEL_COUNTS_EVERY`].
 pub async fn run(
     ctx: Ctx,
     handlers: Handlers,
@@ -486,6 +501,8 @@ pub async fn run(
     let mut listener = PgListener::connect_with(&ctx.db).await?;
     listener.listen(jobs::NOTIFY_CHANNEL).await?;
     let mut cleaner = tokio::time::interval(clean_every);
+    let mut counter = tokio::time::interval(CHANNEL_COUNTS_EVERY);
+    counter.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     tokio::pin!(shutdown);
     loop {
         // Drain what's due.
@@ -510,6 +527,13 @@ pub async fn run(
                         Ok(n) => tracing::info!(cancelled = n, "old checkouts cancelled at paddle"),
                         Err(err) => tracing::error!(error = %err, "cancelling old checkouts failed"),
                     }
+                }
+            }
+            _ = counter.tick() => {
+                match refresh_channel_counts(&ctx.db).await {
+                    Ok(0) => {}
+                    Ok(n) => tracing::info!(changed = n, "channel counts refreshed"),
+                    Err(err) => tracing::error!(error = %err, "refreshing channel counts failed"),
                 }
             }
             note = listener.recv() => {
