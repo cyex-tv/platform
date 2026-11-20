@@ -129,29 +129,6 @@ export const CHANNEL = graphql(`
   }
 `);
 
-export const SET = graphql(`
-  query Set($id: String!) {
-    set(id: $id) {
-      id
-      name
-      kind
-      capacity
-      owner {
-        id
-        displayName
-      }
-      emotes {
-        name
-        zeroWidth
-        addedAt
-        emote {
-          ...EmoteFields
-        }
-      }
-    }
-  }
-`);
-
 // The public set page (/sets/<id>): listed and unlisted sets open for anyone; a private one only
 // for its owner and editors, and for everyone else it answers as if it did not exist.
 export const PUBLIC_SET = graphql(`
@@ -189,22 +166,6 @@ export const CLONE_SET = graphql(`
       set {
         id
         name
-      }
-    }
-  }
-`);
-
-export const GLOBAL_SET = graphql(`
-  query GlobalSet {
-    globalSet {
-      id
-      name
-      emotes {
-        name
-        zeroWidth
-        emote {
-          ...EmoteFields
-        }
       }
     }
   }
@@ -425,28 +386,9 @@ export const REMOVE_SET_EMOTE = graphql(`
   }
 `);
 
-export const ADD_SET_EDITOR = graphql(`
-  mutation AddSetEditor($setId: String!, $accountId: String!) {
-    addSetEditor(setId: $setId, accountId: $accountId)
-  }
-`);
-
 export const REMOVE_SET_EDITOR = graphql(`
   mutation RemoveSetEditor($setId: String!, $accountId: String!) {
     removeSetEditor(setId: $setId, accountId: $accountId)
-  }
-`);
-
-export const FIND_ACCOUNT = graphql(`
-  query FindAccount($platform: Platform!, $login: String!) {
-    channelByLogin(platform: $platform, login: $login) {
-      login
-      account {
-        id
-        displayName
-        avatar
-      }
-    }
   }
 `);
 
@@ -830,15 +772,6 @@ export const RESOLVE_REPORT = graphql(`
   }
 `);
 
-export const TAKEDOWN = graphql(`
-  mutation Takedown($id: String!, $reason: String!) {
-    takedownEmote(id: $id, reason: $reason) {
-      id
-      state
-    }
-  }
-`);
-
 export const ROLE_FIELDS = graphql(`
   fragment RoleFields on Role {
     id
@@ -919,19 +852,6 @@ export const ALL_ROLES = graphql(`
   query AllRoles {
     roles {
       ...RoleFields
-    }
-  }
-`);
-
-export const RESTRICT = graphql(`
-  mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {
-    restrictAccount(accountId: $accountId, uploadsBlocked: $uploadsBlocked, blocked: $blocked) {
-      uploadsBlocked
-      ticketsBlocked
-      blocked
-      uploadsBlockedUntil
-      ticketsBlockedUntil
-      blockedUntil
     }
   }
 `);

@@ -21,6 +21,8 @@
   import TagInput from '$lib/components/TagInput.svelte';
   import { bytes, clean, count, iso } from '$lib/format';
   import { dur } from '$lib/motion';
+  import RetryNote from '$lib/components/RetryNote.svelte';
+  import { quiet } from '$lib/quiet';
   import { editorOf, type Grant } from '$lib/profile/data.svelte';
   import { emoteCan, uploadTargets } from '$lib/tool/editors';
   import { session } from '$lib/tool/session.svelte';
@@ -84,11 +86,13 @@
   const running = new Map<number, AbortController>();
 
   let grants = $state<readonly Grant[] | null>(null);
+  let grantsFailed = $state(false);
+  function loadGrants() {
+    grantsFailed = false;
+    void quiet(editorOf().then((g) => (grants = g)), 'upload-as list', () => (grantsFailed = true));
+  }
   $effect(() => {
-    if (!session.me) return;
-    editorOf()
-      .then((g) => (grants = g))
-      .catch(() => {});
+    if (session.me) loadGrants();
   });
   const me = $derived(session.me ? { id: session.me.id, displayName: session.me.identities[0]?.displayName ?? 'You' } : null);
   const targets = $derived(uploadTargets(me, grants));
@@ -281,6 +285,9 @@
 </script>
 
 <form class="ui-form up-form" class:in-dialog={inDialog} onsubmit={submit} novalidate>
+  {#if grantsFailed}
+    <RetryNote onretry={loadGrants}>Couldn’t load the accounts you can upload for. You can still upload as yourself.</RetryNote>
+  {/if}
   {#if targets.length > 1}
     <label class="ui-field as">
       <span class="ui-label">Upload as</span>

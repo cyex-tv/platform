@@ -7,7 +7,9 @@
   import { page } from '$app/state';
   import { gql } from '$lib/api';
   import Problem from '$lib/components/Problem.svelte';
+  import RetryNote from '$lib/components/RetryNote.svelte';
   import State from '$lib/components/State.svelte';
+  import { quiet } from '$lib/quiet';
   import { loadOwned } from '$lib/cosmetics/store.svelte';
   import { clean } from '$lib/format';
   import type { ShopItemFieldsFragment } from '$lib/gql/graphql';
@@ -52,16 +54,23 @@
   const wanted = $derived(page.url.searchParams.get('item'));
   let extra = $state<ShopItemFieldsFragment | null>(null);
   let giftFirst = $state(false);
+  let extraFailed = $state(false);
   const open = $derived(wanted ? (items.find((i) => i.id === wanted) ?? (extra?.id === wanted ? extra : null)) : null);
   $effect(() => {
     const id = wanted;
     if (!id || items.some((i) => i.id === id)) return;
-    gql(SHOP_ITEM, { id })
-      .then((r) => {
-        if (page.url.searchParams.get('item') === id) extra = r.shopItem ?? null;
-      })
-      .catch(() => {});
+    loadExtra(id);
   });
+  function loadExtra(id: string) {
+    extraFailed = false;
+    void quiet(
+      gql(SHOP_ITEM, { id }).then((r) => {
+        if (page.url.searchParams.get('item') === id) extra = r.shopItem ?? null;
+      }),
+      'shop item',
+      () => (extraFailed = true),
+    );
+  }
 
   function show(item: ShopItemFieldsFragment, gift: boolean) {
     giftFirst = gift;
@@ -90,6 +99,10 @@
   </header>
 
   <CheckoutStatus />
+
+  {#if extraFailed && wanted}
+    <RetryNote onretry={() => loadExtra(wanted)}>Couldn’t open the item from that link.</RetryNote>
+  {/if}
 
   {#if failed}
     <Problem cause={data.error === 'offline' ? 'offline' : 'server'} onretry={() => invalidateAll()} />

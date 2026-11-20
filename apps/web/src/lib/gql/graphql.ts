@@ -2864,13 +2864,6 @@ export type ChannelQueryVariables = Exact<{
 
 export type ChannelQuery = { __typename?: 'Query', channelByLogin?: { __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, allowPersonalEmotes: boolean, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } } | null };
 
-export type SetQueryVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type SetQuery = { __typename?: 'Query', set?: { __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, capacity: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> } | null };
-
 export type PublicSetQueryVariables = Exact<{
   id: Scalars['String']['input'];
 }>;
@@ -2886,11 +2879,6 @@ export type CloneSetMutationVariables = Exact<{
 
 
 export type CloneSetMutation = { __typename?: 'Mutation', cloneSet: { __typename?: 'ClonedSet', copied: number, skipped: number, set: { __typename?: 'EmoteSet', id: string, name: string } } };
-
-export type GlobalSetQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type GlobalSetQuery = { __typename?: 'Query', globalSet: { __typename?: 'EmoteSet', id: string, name: string, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> } };
 
 export type MeQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -3001,14 +2989,6 @@ export type RemoveSetEmoteMutationVariables = Exact<{
 
 export type RemoveSetEmoteMutation = { __typename?: 'Mutation', removeSetEmote: boolean };
 
-export type AddSetEditorMutationVariables = Exact<{
-  setId: Scalars['String']['input'];
-  accountId: Scalars['String']['input'];
-}>;
-
-
-export type AddSetEditorMutation = { __typename?: 'Mutation', addSetEditor: boolean };
-
 export type RemoveSetEditorMutationVariables = Exact<{
   setId: Scalars['String']['input'];
   accountId: Scalars['String']['input'];
@@ -3016,14 +2996,6 @@ export type RemoveSetEditorMutationVariables = Exact<{
 
 
 export type RemoveSetEditorMutation = { __typename?: 'Mutation', removeSetEditor: boolean };
-
-export type FindAccountQueryVariables = Exact<{
-  platform: Platform;
-  login: Scalars['String']['input'];
-}>;
-
-
-export type FindAccountQuery = { __typename?: 'Query', channelByLogin?: { __typename?: 'Channel', login: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } } | null };
 
 export type MyChannelsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -3232,14 +3204,6 @@ export type ResolveReportMutationVariables = Exact<{
 
 export type ResolveReportMutation = { __typename?: 'Mutation', resolveReport: { __typename?: 'Report', id: string, state: ReportState } };
 
-export type TakedownMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-  reason: Scalars['String']['input'];
-}>;
-
-
-export type TakedownMutation = { __typename?: 'Mutation', takedownEmote: { __typename?: 'Emote', id: string, state: EmoteState } };
-
 export type RoleFieldsFragment = { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean };
 
 export type RolesQueryVariables = Exact<{ [key: string]: never; }>;
@@ -3290,15 +3254,6 @@ export type AllRolesQueryVariables = Exact<{ [key: string]: never; }>;
 
 
 export type AllRolesQuery = { __typename?: 'Query', roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean }> };
-
-export type RestrictMutationVariables = Exact<{
-  accountId: Scalars['String']['input'];
-  uploadsBlocked?: InputMaybe<Scalars['Boolean']['input']>;
-  blocked?: InputMaybe<Scalars['Boolean']['input']>;
-}>;
-
-
-export type RestrictMutation = { __typename?: 'Mutation', restrictAccount: { __typename?: 'AccountStatus', uploadsBlocked: boolean, ticketsBlocked: boolean, blocked: boolean, uploadsBlockedUntil?: string | null, ticketsBlockedUntil?: string | null, blockedUntil?: string | null } };
 
 export type PlaceRestrictionMutationVariables = Exact<{
   accountId: Scalars['String']['input'];
@@ -4548,58 +4503,6 @@ export const ChannelDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ChannelQuery, ChannelQueryVariables>;
-export const SetDocument = new TypedDocumentString(`
-    query Set($id: String!) {
-  set(id: $id) {
-    id
-    name
-    kind
-    capacity
-    owner {
-      id
-      displayName
-    }
-    emotes {
-      name
-      zeroWidth
-      addedAt
-      emote {
-        ...EmoteFields
-      }
-    }
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    nsfw
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<SetQuery, SetQueryVariables>;
 export const PublicSetDocument = new TypedDocumentString(`
     query PublicSet($id: String!) {
   set(id: $id) {
@@ -4668,51 +4571,6 @@ export const CloneSetDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<CloneSetMutation, CloneSetMutationVariables>;
-export const GlobalSetDocument = new TypedDocumentString(`
-    query GlobalSet {
-  globalSet {
-    id
-    name
-    emotes {
-      name
-      zeroWidth
-      emote {
-        ...EmoteFields
-      }
-    }
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    nsfw
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<GlobalSetQuery, GlobalSetQueryVariables>;
 export const MeDocument = new TypedDocumentString(`
     query Me {
   me {
@@ -5026,28 +4884,11 @@ export const RemoveSetEmoteDocument = new TypedDocumentString(`
   removeSetEmote(setId: $setId, emoteId: $emoteId)
 }
     `) as unknown as TypedDocumentString<RemoveSetEmoteMutation, RemoveSetEmoteMutationVariables>;
-export const AddSetEditorDocument = new TypedDocumentString(`
-    mutation AddSetEditor($setId: String!, $accountId: String!) {
-  addSetEditor(setId: $setId, accountId: $accountId)
-}
-    `) as unknown as TypedDocumentString<AddSetEditorMutation, AddSetEditorMutationVariables>;
 export const RemoveSetEditorDocument = new TypedDocumentString(`
     mutation RemoveSetEditor($setId: String!, $accountId: String!) {
   removeSetEditor(setId: $setId, accountId: $accountId)
 }
     `) as unknown as TypedDocumentString<RemoveSetEditorMutation, RemoveSetEditorMutationVariables>;
-export const FindAccountDocument = new TypedDocumentString(`
-    query FindAccount($platform: Platform!, $login: String!) {
-  channelByLogin(platform: $platform, login: $login) {
-    login
-    account {
-      id
-      displayName
-      avatar
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<FindAccountQuery, FindAccountQueryVariables>;
 export const MyChannelsDocument = new TypedDocumentString(`
     query MyChannels {
   myChannels {
@@ -5464,14 +5305,6 @@ export const ResolveReportDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ResolveReportMutation, ResolveReportMutationVariables>;
-export const TakedownDocument = new TypedDocumentString(`
-    mutation Takedown($id: String!, $reason: String!) {
-  takedownEmote(id: $id, reason: $reason) {
-    id
-    state
-  }
-}
-    `) as unknown as TypedDocumentString<TakedownMutation, TakedownMutationVariables>;
 export const RolesDocument = new TypedDocumentString(`
     query Roles {
   roles {
@@ -5585,22 +5418,6 @@ export const AllRolesDocument = new TypedDocumentString(`
   editable
   assignable
 }`) as unknown as TypedDocumentString<AllRolesQuery, AllRolesQueryVariables>;
-export const RestrictDocument = new TypedDocumentString(`
-    mutation Restrict($accountId: String!, $uploadsBlocked: Boolean, $blocked: Boolean) {
-  restrictAccount(
-    accountId: $accountId
-    uploadsBlocked: $uploadsBlocked
-    blocked: $blocked
-  ) {
-    uploadsBlocked
-    ticketsBlocked
-    blocked
-    uploadsBlockedUntil
-    ticketsBlockedUntil
-    blockedUntil
-  }
-}
-    `) as unknown as TypedDocumentString<RestrictMutation, RestrictMutationVariables>;
 export const PlaceRestrictionDocument = new TypedDocumentString(`
     mutation PlaceRestriction($accountId: String!, $input: RestrictionInput!) {
   placeRestriction(accountId: $accountId, input: $input) {

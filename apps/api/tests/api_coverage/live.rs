@@ -85,14 +85,14 @@ async fn a_set_change_reaches_both_sockets() {
     let events = serve(
         router(EventsState::new(
             w.db.pool.clone(),
-            events_hub,
+            events_hub.clone(),
             stop.subscribe(),
         )),
         &stop,
     )
     .await;
     // Let both feeders take their starting point before anything is written.
-    tokio::time::sleep(Duration::from_millis(300)).await;
+    crate::common::wait_for_feeders(&w.db, 2).await;
 
     let owner = w.user("7301").await;
     let set = w
@@ -165,7 +165,10 @@ async fn a_set_change_reaches_both_sockets() {
     let ack = next(&mut ev).await;
     assert_eq!(ack["op"], "ack", "{ack}");
     assert_eq!(ack["d"]["topics"], json!([topic]), "{ack}");
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    crate::common::wait_until("both subscriptions to register", || async {
+        w.state.hub.stats().0 > 0 && events_hub.stats().0 > 0
+    })
+    .await;
 
     let r = w
         .gql(
@@ -191,6 +194,5 @@ async fn a_set_change_reaches_both_sockets() {
     assert_eq!(got["d"]["data"]["name"], "liveBoth", "{got}");
 
     let _ = stop.send(true);
-    tokio::time::sleep(Duration::from_millis(50)).await;
     w.close().await;
 }

@@ -26,20 +26,43 @@ export function bytes(n: number): string {
   return `${(Math.round((kb / 1024) * 10) / 10).toString().replace('.', ',')} MB`;
 }
 
+/** Two digits, zero-padded: `7` → `07`. */
+export const pad = (v: number): string => String(v).padStart(2, '0');
+
 /** An RFC 3339 time as `2026/11/17`, in the reader's time zone. */
 export function date(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  const p = (v: number) => v.toString().padStart(2, '0');
-  return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())}`;
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
 }
 
 /** An RFC 3339 time as `2026/11/17 22:40`, in the reader's time zone, 24-hour. */
 export function dateTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  const p = (v: number) => v.toString().padStart(2, '0');
-  return `${date(iso)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+  return `${date(iso)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** An RFC 3339 time as `2026/11/16 20:01:02`, in the reader's time zone, 24-hour; '' if invalid. */
+export function dateTimeSeconds(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${dateTime(iso)}:${pad(d.getSeconds())}`;
+}
+
+/** A `datetime-local` value (`2026-12-01T18:30`) from an RFC 3339 time or a Date, or ''. */
+export function toLocalInput(v: string | Date | null | undefined): string {
+  if (!v) return '';
+  const d = v instanceof Date ? v : new Date(v);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** An RFC 3339 time from a `datetime-local` value (read in the reader's time zone), or null. */
+export function fromLocalInput(value: string): string | null {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 /**

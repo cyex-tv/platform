@@ -4,6 +4,7 @@
 // month), and a future date is refused with a line saying so. The label is the cyex date format:
 // 2026/11/19 for a day, 2026/11 for a month; All time has no date to show. Days and months are the reader's own calendar.
 // Pure, so it is tested (timeframe.test.ts).
+import { pad } from '$lib/format';
 
 export type Timeframe =
   | { frame: 'all' }
@@ -12,7 +13,7 @@ export type Timeframe =
 
 export type Frame = Timeframe['frame'];
 
-const pad = (n: number) => String(n).padStart(2, '0');
+
 
 /** `YYYY-MM-DD` of `d` in the reader's time zone (what `<input type="date">` takes). */
 export function dayOf(d: Date): string {

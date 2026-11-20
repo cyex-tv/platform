@@ -1706,21 +1706,11 @@ function signedIn(body, v, ADMIN) {
       s.emotes = s.emotes.filter((m) => m.emote.id !== v.emoteId);
       return { data: { removeSetEmote: true } };
     }
-    case 'AddSetEditor': {
-      const s = findSet(v.setId);
-      if (s.editors.some((e) => e.id === v.accountId)) return { data: { addSetEditor: false } };
-      s.editors.push([...OTHERS, ME_SUMMARY].find((a) => a.id === v.accountId));
-      return { data: { addSetEditor: true } };
-    }
     case 'RemoveSetEditor': {
       const s = findSet(v.setId);
       s.editors = s.editors.filter((e) => e.id !== v.accountId);
       if (v.accountId === ME_ID) SETS.splice(SETS.indexOf(s), 1);
       return { data: { removeSetEditor: true } };
-    }
-    case 'FindAccount': {
-      const a = OTHERS.find((o) => o.displayName === v.login);
-      return { data: { channelByLogin: a ? { login: v.login, account: a } : null } };
     }
     case 'MyChannels': {
       const short = (s) => ({ id: s.id, name: s.name, kind: s.kind, owner: s.owner ? { id: s.owner.id } : null });
@@ -1856,17 +1846,6 @@ function signedIn(body, v, ADMIN) {
       RESOLVED.unshift(e);
       logEmote(e.id, op === 'Approve' ? 'emote.approved' : 'emote.rejected', { state: e.state.toLowerCase(), reason: v.reason ?? null, visibility: e.visibility.toLowerCase() });
       return { data: { [op === 'Approve' ? 'approveEmote' : 'rejectEmote']: { id: e.id, state: e.state, visibility: e.visibility } } };
-    }
-    case 'Takedown': {
-      if (!ADMIN) return err('This needs emotes.takedown.', 'forbidden');
-      const e = anyEmote(v.id);
-      if (!e) return err('Not found.', 'not_found');
-      if (e.state === 'TAKEN_DOWN') return err('That emote is taken down already.', 'already_taken_down');
-      if (!String(v.reason ?? '').trim()) return err('Say why.', 'bad_reason');
-      e.state = 'TAKEN_DOWN';
-      for (const set of ALL_SETS()) set.emotes = set.emotes.filter((m) => m.id !== e.id);
-      logEmote(e.id, 'emote.taken_down', { state: 'taken_down', reason: v.reason });
-      return { data: { takedownEmote: e } };
     }
     case 'EmoteHistory': {
       const e = PENDING.find((x) => x.id === v.emoteId) ?? RESOLVED.find((x) => x.id === v.emoteId);
@@ -2015,13 +1994,6 @@ function signedIn(body, v, ADMIN) {
     }
     case 'UserDetails': {
       return { data: { ...(v.status ? { accountStatus: statusOf(v.accountId) } : {}), ...(v.roles ? { accountRoles: rolesOf(v.accountId) } : {}) } };
-    }
-    case 'Restrict': {
-      if (v.accountId === ME_ID) return err('The owner’s account can’t be restricted.', 'owner_protected');
-      const st = (STATUS[v.accountId] ??= {});
-      if (v.uploadsBlocked !== undefined && v.uploadsBlocked !== null) Object.assign(st, { uploadsBlocked: v.uploadsBlocked, uploadsBlockedUntil: null });
-      if (v.blocked !== undefined && v.blocked !== null) Object.assign(st, { blocked: v.blocked, blockedUntil: null });
-      return { data: { restrictAccount: statusOf(v.accountId) } };
     }
     case 'PlaceRestriction': {
       if (v.accountId === ME_ID) return err('The owner’s account can’t be restricted.', 'owner_protected');
@@ -2341,7 +2313,6 @@ function baseAnswer(body, session, admin) {
   }
   if (q.includes('query Me') || /^\s*mutation/.test(q) || q.includes('query My') || q.includes('query EditSet'))
     return err('Sign in to use this.', 'signed_out');
-  if (q.includes('query GlobalSet')) return { data: { globalSet: { id: GLOBAL.id, name: 'Global', emotes: GLOBAL.emotes } } };
   if (q.includes('query EmoteTrending')) {
     const e = ALL.find((x) => x.id === v.id);
     const window = v.window ?? 'WEEK';
@@ -2374,7 +2345,7 @@ function baseAnswer(body, session, admin) {
     return { data: { searchEmotes: { total: hits.length, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
   }
   if (q.includes('query Emote(')) return { data: { emote: ALL.find((e) => e.id === v.id) ?? null } };
-  if (q.includes('query Channel') || q.includes('query FindAccount')) {
+  if (q.includes('query Channel')) {
     const c = channelByLogin(v.platform, v.login);
     return { data: { channelByLogin: c } };
   }

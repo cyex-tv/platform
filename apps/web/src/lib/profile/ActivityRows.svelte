@@ -1,16 +1,18 @@
 <script lang="ts">
-  // The list of activity rows, shared by the profile's Activity section and the emote page's
-  // Activity tab: an icon, a sentence with the emote's picture and the names (paints drawn in the
-  // paint, sets and people as links), and when: the date and time in cyex format (2026/11/19 14:05)
-  // with how long ago after it. On an account's own feed (`subject`) a line the account made itself
-  // doesn't repeat its name ("by …" only for its editors).
-  import Icon, { type IconName } from '$lib/components/Icon.svelte';
+  // The activity rows of the profile's Activity section: an icon, a sentence with the emote's
+  // picture and the names (paints drawn in the paint, sets and people as links), and when
+  // (ActivityWhen). On an account's own feed (`subject`) a line the account made itself doesn't
+  // repeat its name ("by …" only for its editors). The emote page has its own, shorter rows
+  // (EmoteActivityRows); the icons and the "by" rule are shared (activity-view.ts).
+  import Icon from '$lib/components/Icon.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { looks, NO_LOOK, wantLooks, type Catalog } from '$lib/cosmetics/store.svelte';
   import EmotePicture from '$lib/components/EmotePicture.svelte';
   import { ready } from '$lib/emote';
-  import { clean, dateTime } from '$lib/format';
-  import { namesActor, relative, type ActivityItem, type ActivityKind } from './activity';
+  import { clean } from '$lib/format';
+  import ActivityWhen from './ActivityWhen.svelte';
+  import type { ActivityItem } from './activity';
+  import { ICON, namesActor } from './activity-view';
 
   /** `pictures: false` drops the emote's picture from each row (the emote's own page already shows it). */
   type Props = { items: ActivityItem[]; catalog?: Catalog | null; pictures?: boolean; subject?: string | null };
@@ -18,11 +20,6 @@
 
   // Who did each change, in their paint and badge: the shared cosmetics cache, one batch per list.
   $effect(() => wantLooks(items.flatMap((i) => [i.actor?.id, i.editor?.id])));
-
-  const ICON: Record<ActivityKind, IconName> = {
-    added: 'plus', removed: 'minus', renamed: 'pencil', active: 'zap', cosmetics: 'brush', uploaded: 'upload', created: 'folder', setRenamed: 'pencil',
-    editorAdded: 'user-plus', editorRemoved: 'user-minus',
-  };
 </script>
 
 {#snippet emote(i: ActivityItem)}
@@ -68,7 +65,7 @@
           {:else}Renamed the set <strong><bdi>{clean(i.from)}</bdi></strong> to <strong><bdi>{clean(i.to ?? i.set?.name)}</bdi></strong>{/if}
           {#if i.actor && i.actor.id !== subject && namesActor(i, null)} by {@render person(i.actor)}{/if}
         </span>
-        <span class="when"><time datetime={i.at}>{dateTime(i.at)}</time><span class="ago">{relative(i.at)}</span></span>
+        <span class="when"><ActivityWhen at={i.at} /></span>
       </span>
     </li>
   {/each}
@@ -83,8 +80,6 @@
   .line strong { font-weight: 600; color: var(--text); }
   .line a { color: var(--text); font-weight: 500; text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
   li :global(.pic) { display: inline-block; height: 28px; width: auto; max-width: 64px; margin: 0 2px; vertical-align: middle; }
-  .when { display: flex; flex-wrap: wrap; gap: 0 8px; font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
-  .when time { color: var(--muted); }
-  .ago::before { content: '·'; margin-right: 8px; }
+  .when { font-size: var(--t-fine); color: var(--muted); }
   @media (hover: hover) and (pointer: fine) { .line a:hover { text-decoration-color: currentColor; } }
 </style>
