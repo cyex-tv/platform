@@ -103,6 +103,8 @@ const STAFF: &[&str] = &[
     "assignRole",
     "unassignRole",
     "reviewEmotes",
+    "requeueEmotes",
+    "setEmoteFlags",
     "dismissReports",
     "setReviewReasons",
     "createAnnouncement",

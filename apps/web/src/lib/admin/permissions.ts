@@ -14,6 +14,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     items: [
       p('emotes.review', 'Review uploads', 'Approve or reject emotes waiting in the review queue.'),
       p('emotes.edit_any', 'Edit any emote', "Change the name, tags, flags and visibility of emotes other people uploaded."),
+      p('emotes.flags', 'Edit emote flags', 'Including hidden ones: change the visibility, NSFW and zero-width flags of any emote after review, for example take it off the listings so it is unlisted. The owner is told when the visibility changes.'),
       p('emotes.delete_any', 'Delete any emote', 'Delete emotes other people uploaded, as their owner can. They leave every set they are in.'),
       p('emotes.takedown', 'Take down emotes', 'Remove an emote everywhere it is used and stop its image from being uploaded again.'),
       p('review.settings', 'Edit reject reasons', 'Change the ready reasons reviewers pick from when they reject an upload.'),
@@ -153,6 +154,7 @@ export const USER_PAGE_PERMISSIONS = [
   'editors.manage_any',
   'emotes.edit_any',
   'emotes.delete_any',
+  'emotes.flags',
   'roles.manage',
   'roles.assign',
   'cosmetics.grant',

@@ -435,6 +435,7 @@ pub const NOTIFICATION_KINDS: &[(&str, bool)] = &[
     ("emote.approved", false),
     ("emote.rejected", false),
     ("emote.taken_down", true),
+    ("emote.visibility_changed", true),
     ("emote.transfer_requested", true),
     ("emote.transferred", false),
     ("emote.transfer_declined", false),

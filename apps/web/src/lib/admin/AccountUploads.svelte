@@ -7,10 +7,14 @@
   import State from '$lib/components/State.svelte';
   import Thumb from '$lib/tool/Thumb.svelte';
   import { STATE_LABEL } from '$lib/tool/state';
+  import EmoteFlagsPanel, { canEditFlags } from './EmoteFlagsPanel.svelte';
 
   type Row = AccountEmotesQuery['accountEmotes']['items'][number];
   let { accountId }: { accountId: string } = $props();
   const PER = 20;
+  // The upload whose flags are open (staff with emotes.flags, ADR 0024), one at a time.
+  let open = $state<string | null>(null);
+  const flagsOk = $derived(canEditFlags());
 
   let rows = $state<Row[]>([]);
   let total = $state(0);
@@ -62,7 +66,15 @@
             <span class="ui-hint ui-num">{dateTime(e.createdAt)}{#if e.channelCount}{' · '}{count(e.channelCount)} channels{/if}</span>
           </span>
           <span class="ui-chip {e.state.toLowerCase()}">{STATE_LABEL[e.state]}</span>
+          {#if flagsOk}
+            <button class="ui-btn ghost small" type="button" aria-expanded={open === e.id} aria-controls="up-flags-{e.id}" onclick={() => (open = open === e.id ? null : e.id)}>Flags</button>
+          {/if}
         </li>
+        {#if flagsOk && open === e.id}
+          <li class="flags" id="up-flags-{e.id}">
+            <EmoteFlagsPanel bare emote={e} id="up-f-{e.id}" onsaved={(next) => (rows = rows.map((r) => (r.id === next.id ? { ...r, ...next } : r)))} />
+          </li>
+        {/if}
       {/each}
     </ul>
     {#if rows.length < total}
@@ -75,6 +87,7 @@
   .what { display: grid; flex: 1; min-width: 0; }
   .what a { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .what .ui-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .flags { display: block; padding: 0; background: var(--surface-2, var(--surface)); }
   .more { display: flex; justify-content: center; padding: 10px; border-top: 1px solid var(--border); }
   /* a touch target of at least 24px (WCAG 2.5.8) */
   a { display: inline-flex; align-items: center; min-height: 24px; }

@@ -20,7 +20,7 @@
   import { SvelteMap } from 'svelte/reactivity';
   import { clean, count, dateTime, iso } from '$lib/format';
   import type { EmoteFieldsFragment, EmoteVisibility, ReviewSort, ReviewTab } from '$lib/gql/graphql';
-  import { APPROVE, REJECT, REVIEW_EMOTES, REVIEW_QUEUE, REVIEW_REASONS } from '$lib/queries';
+  import { APPROVE, REJECT, REQUEUE_EMOTES, REVIEW_EMOTES, REVIEW_QUEUE, REVIEW_REASONS } from '$lib/queries';
   import IconButton from '$lib/components/IconButton.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
@@ -30,7 +30,7 @@
   import PickBox from '$lib/admin/PickBox.svelte';
   import { batchSummary } from '$lib/admin/bulk';
   import { all as pickAll, EMPTY, range as pickRange, toggle as pickToggle, type Selection, type Step } from '$lib/components/browse/selection';
-  import { after, approveFailure, step, withheld } from '$lib/admin/queue';
+  import { after, approveFailure, step, toEnd, withheld } from '$lib/admin/queue';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
@@ -396,8 +396,14 @@
     const w = waiting.get(id);
     if (!w) return;
     clearTimeout(w.timer);
-    waiting.delete(id); // the card is still in what was loaded: it shows again where it was
+    waiting.delete(id);
     dismiss(w.toast);
+    // Back in the queue at the end, not where it was (ADR 0024): here at once, and on the server
+    // for the next load and every other reviewer. If that call fails only the order is off.
+    const ids = w.es.map((e) => e.id);
+    if (L.data) L.set(toEnd(L.data, ids));
+    gql(REQUEUE_EMOTES, { ids }).catch(() => {});
+    notify(`${w.es.length === 1 ? iso(w.es[0].name) + ' is' : count(w.es.length) + ' uploads are'} back in the queue, at the end.`, false);
   }
   const flush = (leaving = false) => [...waiting.keys()].forEach((id) => void send(id, leaving));
   onDestroy(() => flush());
@@ -601,6 +607,7 @@
   onapprove={(v) => shown && approve(shown, v)}
   onreject={() => shown && askReject(shown)}
   onclose={closed}
+  onflags={(next) => L.data && L.set({ ...L.data, items: L.data.items.map((x) => (x.id === next.id ? { ...x, ...next } : x)) })}
 />
 
 <ReasonDialog

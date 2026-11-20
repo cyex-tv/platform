@@ -752,6 +752,14 @@ export type EmoteFlags = {
   zeroWidth: Scalars['Boolean']['output'];
 };
 
+/** What `setEmoteFlags` changes (ADR 0024). Every field is optional: what is left out stays. */
+export type EmoteFlagsInput = {
+  nsfw?: InputMaybe<Scalars['Boolean']['input']>;
+  /** `UNLISTED` takes a public emote off search, browse and its creator's page. */
+  visibility?: InputMaybe<EmoteVisibility>;
+  zeroWidth?: InputMaybe<Scalars['Boolean']['input']>;
+};
+
 /** A note reviewers keep on one emote (`emotes.review`). The uploader never sees it. */
 export type EmoteNote = {
   __typename?: 'EmoteNote';
@@ -1258,6 +1266,12 @@ export type Mutation = {
   /** Report an emote you can see, with a reason. At most 10 an hour, one open report per emote. */
   reportEmote: Report;
   /**
+   * Send up to 100 pending emotes to the end of the review queue for every reviewer (an
+   * approval taken back within its undo time comes back last, ADR 0024). Emotes that aren't
+   * pending are listed in `failed`. Needs `emotes.review`. Audited (`emote.requeued`).
+   */
+  requeueEmotes: BatchOutcome;
+  /**
    * Dismiss a report, or take its emote down (`emotes.takedown`). Needs `emotes.review` or
    * `emotes.takedown`. Audited.
    */
@@ -1312,6 +1326,12 @@ export type Mutation = {
    * `not_found` when that platform isn't linked. Unlinking it goes back to the default.
    */
   setDisplayPlatform: Me;
+  /**
+   * Change an emote's flags after review: visibility (`UNLISTED` takes it off the listings),
+   * NSFW and zero-width. Needs `emotes.flags` or `emotes.edit_any`. Audited
+   * (`emote.flags_changed`); the owner is told when the visibility changes (ADR 0024).
+   */
+  setEmoteFlags: Emote;
   /**
    * Turn notification kinds on or off (`notify`: off, the server doesn't create them at all)
    * and choose which pop up (`toast`). Kinds left out keep their setting. `unknown_kind` for a
@@ -1658,6 +1678,11 @@ export type MutationReportEmoteArgs = {
 };
 
 
+export type MutationRequeueEmotesArgs = {
+  ids: Array<Scalars['String']['input']>;
+};
+
+
 export type MutationResolveReportArgs = {
   action: ReportAction;
   id: Scalars['String']['input'];
@@ -1708,6 +1733,12 @@ export type MutationSetCollectionPublicArgs = {
 
 export type MutationSetDisplayPlatformArgs = {
   platform: Platform;
+};
+
+
+export type MutationSetEmoteFlagsArgs = {
+  id: Scalars['String']['input'];
+  input: EmoteFlagsInput;
 };
 
 
@@ -2128,7 +2159,7 @@ export type Query = {
   accountEditors: Array<AccountEditor>;
   /**
    * An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`,
-   * `emotes.takedown`, `emotes.edit_any` or `emotes.delete_any`, or to be the account or its
+   * `emotes.takedown`, `emotes.edit_any`, `emotes.delete_any` or `emotes.flags`, or to be the account or its
    * editor with `EMOTE_MANAGE` on every set. `perPage` is 1 to 100, default 50.
    */
   accountEmotes: EmotePage;
@@ -2352,7 +2383,8 @@ export type Query = {
   myNotificationPrefs: Array<NotificationPref>;
   /**
    * Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
-   * `emote.rejected`, `emote.taken_down`, `editor.added`, `editor.changed`, `editor.removed`,
+   * `emote.rejected`, `emote.taken_down`, `emote.visibility_changed` (staff changed its
+   * visibility, ADR 0024: `visibility` and `was`), `editor.added`, `editor.changed`, `editor.removed`,
    * `cosmetic.granted` and `cosmetic.revoked`; `payload` is JSON with the IDs and names it is
    * about (see the API reference). Cosmetics from the shop and from codes carry `source`
    * (`purchase` or `code`), and from orders `order_id`.
@@ -4237,6 +4269,21 @@ export type ReviewEmotesMutationVariables = Exact<{
 
 
 export type ReviewEmotesMutation = { __typename?: 'Mutation', reviewEmotes: { __typename?: 'BatchOutcome', done: Array<string>, failed: Array<{ __typename?: 'BatchFailure', id: string, code: string, message: string }> } };
+
+export type RequeueEmotesMutationVariables = Exact<{
+  ids: Array<Scalars['String']['input']> | Scalars['String']['input'];
+}>;
+
+
+export type RequeueEmotesMutation = { __typename?: 'Mutation', requeueEmotes: { __typename?: 'BatchOutcome', done: Array<string>, failed: Array<{ __typename?: 'BatchFailure', id: string, code: string, message: string }> } };
+
+export type SetEmoteFlagsMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: EmoteFlagsInput;
+}>;
+
+
+export type SetEmoteFlagsMutation = { __typename?: 'Mutation', setEmoteFlags: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } };
 
 export type DismissReportsMutationVariables = Exact<{
   ids: Array<Scalars['String']['input']> | Scalars['String']['input'];
@@ -8007,6 +8054,55 @@ export const ReviewEmotesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ReviewEmotesMutation, ReviewEmotesMutationVariables>;
+export const RequeueEmotesDocument = new TypedDocumentString(`
+    mutation RequeueEmotes($ids: [String!]!) {
+  requeueEmotes(ids: $ids) {
+    done
+    failed {
+      id
+      code
+      message
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<RequeueEmotesMutation, RequeueEmotesMutationVariables>;
+export const SetEmoteFlagsDocument = new TypedDocumentString(`
+    mutation SetEmoteFlags($id: String!, $input: EmoteFlagsInput!) {
+  setEmoteFlags(id: $id, input: $input) {
+    ...EmoteFields
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    nsfw
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<SetEmoteFlagsMutation, SetEmoteFlagsMutationVariables>;
 export const DismissReportsDocument = new TypedDocumentString(`
     mutation DismissReports($ids: [String!]!, $note: String) {
   dismissReports(ids: $ids, note: $note) {

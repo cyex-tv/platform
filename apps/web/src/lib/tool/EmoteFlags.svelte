@@ -8,10 +8,12 @@
   import { tick } from 'svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import type { EmoteVisibility } from '$lib/api';
-  import { VISIBILITY_HINT, VISIBILITY_OPTIONS } from './visibility';
+  import { STAFF_VISIBILITY_HINT, VISIBILITY_HINT, VISIBILITY_OPTIONS } from './visibility';
 
-  type Props = { zeroWidth: boolean; visibility: EmoteVisibility; nsfw: boolean; id: string; disabled?: boolean };
-  let { zeroWidth = $bindable(), visibility = $bindable(), nsfw = $bindable(), id, disabled = false }: Props = $props();
+  /** `staff`: the hints speak of someone else's emote (the Emote flags panel). */
+  type Props = { zeroWidth: boolean; visibility: EmoteVisibility; nsfw: boolean; id: string; disabled?: boolean; staff?: boolean };
+  let { zeroWidth = $bindable(), visibility = $bindable(), nsfw = $bindable(), id, disabled = false, staff = false }: Props = $props();
+  const hints = $derived(staff ? STAFF_VISIBILITY_HINT : VISIBILITY_HINT);
 
   let asking = $state(false);
   let confirmBtn = $state<HTMLButtonElement>();
@@ -40,7 +42,7 @@
     <span class="ui-label" id="{id}-vis">Visibility</span>
     <Segmented label="Visibility" size="s" options={VISIBILITY_OPTIONS}
       value={visibility} onchange={(v) => !disabled && (visibility = v)} />
-    <span class="ui-hint">{VISIBILITY_HINT[visibility]}</span>
+    <span class="ui-hint">{hints[visibility]}</span>
   </div>
   <label class="ui-row">
     <div><strong>Zero-width</strong><span class="ui-hint">Drawn over the emote before it, like a hat or rain.</span></div>

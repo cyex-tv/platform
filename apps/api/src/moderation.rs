@@ -17,9 +17,9 @@ use cyex_tv_db::emotes::{self, EmotePatch};
 use cyex_tv_db::{accounts, audit, ids, reads, sets, staff};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
-    AuditEntry, BatchFailure, BatchOutcome, EditorPermission, Emote, EmoteNote, EmotePage,
-    EmoteState, EmoteVisibility, EventType, ReviewCounts, ReviewQueue, ReviewQueueFilter,
-    ReviewSort, ReviewTab, ReviewVerdict, UpdateEmote,
+    AuditEntry, BatchFailure, BatchOutcome, EditorPermission, Emote, EmoteFlagsInput, EmoteNote,
+    EmotePage, EmoteState, EmoteVisibility, EventType, ReviewCounts, ReviewQueue,
+    ReviewQueueFilter, ReviewSort, ReviewTab, ReviewVerdict, UpdateEmote,
 };
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
@@ -372,6 +372,7 @@ pub async fn account_emotes(
         permissions::EMOTES_TAKEDOWN,
         permissions::EMOTES_EDIT_ANY,
         permissions::EMOTES_DELETE_ANY,
+        permissions::EMOTES_FLAGS,
     ];
     if !held.iter().any(|p| may.contains(&p.as_str()))
         && owner != caller.account_id
@@ -468,6 +469,51 @@ pub async fn review_batch(
                 out.failed.push(batch_failure(&raw, &err));
             }
             Err(err) => return Err(err),
+        }
+    }
+    tx.commit().await.map_err(sqlx_error)?;
+    Ok(out)
+}
+
+/// Sends up to 100 pending emotes to the end of the review queue, for every reviewer: the website
+/// calls it when a reviewer takes an approval back within its undo time (ADR 0024), so the
+/// upload comes back last instead of where it was. One audit row per emote moved
+/// (`emote.requeued`); emotes that aren't pending are listed in `failed`. Needs `emotes.review`.
+pub async fn requeue_batch(
+    state: &AppState,
+    caller: &Caller,
+    raw_ids: &[String],
+) -> ApiResult<BatchOutcome> {
+    let wanted = batch_ids(raw_ids)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    if !holds(&mut tx, caller, permissions::EMOTES_REVIEW).await? {
+        return Err(forbidden("This needs emotes.review."));
+    }
+    let parsed: Vec<Uuid> = wanted.iter().filter_map(|(_, id)| *id).collect();
+    let moved: BTreeSet<Uuid> = emotes::requeue(&mut tx, &parsed)
+        .await
+        .map_err(db_error)?
+        .into_iter()
+        .collect();
+    let mut out = BatchOutcome::default();
+    for (raw, id) in wanted {
+        match id {
+            Some(id) if moved.contains(&id) => {
+                write_audit(&mut tx, caller, "emote.requeued", id, None, None).await?;
+                out.done.push(ids::to_text(id));
+            }
+            Some(id) if row(&mut tx, id).await?.is_some() => {
+                out.failed.push(batch_failure(
+                    &raw,
+                    &ApiError::new(
+                        StatusCode::CONFLICT,
+                        "not_pending",
+                        "Only pending emotes go back in the queue.",
+                    ),
+                ));
+            }
+            _ => out.failed.push(batch_failure(&raw, &not_found())),
         }
     }
     tx.commit().await.map_err(sqlx_error)?;
@@ -834,6 +880,86 @@ pub async fn update(
     // Only emotes the public could see (before or after) are announced: one that went back to
     // review is dropped by clients when they refetch.
     if before.state == EmoteState::Approved || after.state == EmoteState::Approved {
+        announce(&mut tx, id, EventType::EmoteUpdated).await?;
+    }
+    tx.commit().await.map_err(sqlx_error)?;
+    build(state, &mut conn, &after).await
+}
+
+/// Staff with `emotes.flags` (or `emotes.edit_any`) change an emote's flags after review, without
+/// being its owner (ADR 0024): its visibility (taking a public emote off the listings makes it
+/// unlisted; private), NSFW and zero-width. Audited as `emote.flags_changed`; when the visibility
+/// changes the owner is told (`emote.visibility_changed`). Nothing changed, nothing written.
+pub async fn set_flags(
+    state: &AppState,
+    caller: &Caller,
+    id: &str,
+    input: &EmoteFlagsInput,
+) -> ApiResult<Emote> {
+    let id = parse_id(id)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    if !holds(&mut tx, caller, permissions::EMOTES_FLAGS).await?
+        && !holds(&mut tx, caller, permissions::EMOTES_EDIT_ANY).await?
+    {
+        return Err(forbidden("This needs emotes.flags."));
+    }
+    let before = row(&mut tx, id).await?.ok_or_else(not_found)?;
+    let was = EmoteVisibility::of(before.private, before.unlisted);
+    let visibility = input.visibility.unwrap_or(was);
+    let nsfw = input.nsfw.unwrap_or(before.nsfw);
+    let zero_width = input.zero_width.unwrap_or(before.zero_width);
+    if visibility == was && nsfw == before.nsfw && zero_width == before.zero_width {
+        tx.commit().await.map_err(sqlx_error)?;
+        return build(state, &mut conn, &before).await;
+    }
+    let (private, unlisted) = visibility.flags();
+    emotes::update(
+        &mut tx,
+        id,
+        &EmotePatch {
+            private: Some(private),
+            unlisted: Some(unlisted),
+            nsfw: Some(nsfw),
+            zero_width: Some(zero_width),
+            ..EmotePatch::default()
+        },
+    )
+    .await
+    .map_err(db_error)?;
+    let after = row(&mut tx, id).await?.ok_or_else(not_found)?;
+    write_audit(
+        &mut tx,
+        caller,
+        "emote.flags_changed",
+        id,
+        Some(json!({ "visibility": was, "nsfw": before.nsfw, "zero_width": before.zero_width })),
+        Some(json!({
+            "visibility": visibility,
+            "nsfw": after.nsfw,
+            "zero_width": after.zero_width,
+            "via": permissions::EMOTES_FLAGS,
+        })),
+    )
+    .await?;
+    if visibility != was
+        && let Some(owner) = before.owner
+        && owner != caller.account_id
+    {
+        crate::account::notify(
+            &mut tx,
+            owner,
+            "emote.visibility_changed",
+            &json!({
+                "emote_id": ids::to_text(id),
+                "name": after.name,
+                "visibility": visibility,
+                "was": was,
+            }),
+        )
+        .await?;
+    }
+    if before.state == EmoteState::Approved {
         announce(&mut tx, id, EventType::EmoteUpdated).await?;
     }
     tx.commit().await.map_err(sqlx_error)?;

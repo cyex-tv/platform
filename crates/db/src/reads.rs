@@ -173,7 +173,9 @@ pub async fn review_queue(
     };
     let dir = if q.descending { "DESC" } else { "ASC" };
     let order = match q.sort {
-        QueueSort::Uploaded => format!("e.created_at {dir}, e.id {dir}"),
+        QueueSort::Uploaded => {
+            format!("coalesce(e.requeued_at, e.created_at) {dir}, e.id {dir}")
+        }
         QueueSort::Reviewed => {
             format!("e.reviewed_at {dir} NULLS LAST, e.created_at {dir}, e.id {dir}")
         }

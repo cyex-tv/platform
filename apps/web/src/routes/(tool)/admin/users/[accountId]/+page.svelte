@@ -37,7 +37,7 @@
   const canStatus = ['users.view', 'users.restrict', 'users.restrict_uploads', 'users.restrict_tickets', 'users.block'].some(can);
   const manageRoles = can('roles.manage') || can('roles.assign');
   const canRoles = manageRoles || can('users.view');
-  const canUploads = ['users.view', 'emotes.review', 'emotes.takedown', 'emotes.edit_any', 'emotes.delete_any'].some(can);
+  const canUploads = ['users.view', 'emotes.review', 'emotes.takedown', 'emotes.edit_any', 'emotes.delete_any', 'emotes.flags'].some(can);
   const canEditors = can('editors.manage_any');
   const canReports = can('emotes.review') || can('emotes.takedown');
 
