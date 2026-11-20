@@ -76,3 +76,29 @@ describe('a session that ends mid-use', () => {
     expect(session.me).not.toBeNull();
   });
 });
+
+describe('a toast held by the pointer or focus', () => {
+  it('stops its countdown while held and finishes the time it had left on release', async () => {
+    const { pauseToast, resumeToast } = await import('./notices.svelte');
+    vi.useFakeTimers();
+    const id = notify('Saved.');
+    vi.advanceTimersByTime(2000);
+    pauseToast(id);
+    vi.advanceTimersByTime(60_000);
+    expect(toasts.some((t) => t.id === id)).toBe(true);
+    resumeToast(id);
+    vi.advanceTimersByTime(1400);
+    expect(toasts.some((t) => t.id === id)).toBe(true);
+    vi.advanceTimersByTime(200);
+    expect(toasts.some((t) => t.id === id)).toBe(false);
+  });
+
+  it('never holds a toast with a live Undo: its send time follows the clock', async () => {
+    const { pauseToast } = await import('./notices.svelte');
+    vi.useFakeTimers();
+    const id = notify('Wave approved.', false, { ms: 5000, action: { label: 'Undo', run: () => {} } });
+    pauseToast(id);
+    vi.advanceTimersByTime(5001);
+    expect(toasts.some((t) => t.id === id)).toBe(false);
+  });
+});

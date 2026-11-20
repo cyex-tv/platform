@@ -4,14 +4,31 @@
 export type Toast = { id: number; text: string; error: boolean; count: number; action?: { label: string; run?: () => void; /** A link instead of a button; a function is read when it is clicked, so it follows the page. */ href?: string | (() => string) };
   /** How long a toast with an Undo waits, for its countdown line. */ ms?: number };
 
+import { pausableTimer, type PausableTimer } from './pausable-timer';
+
 export const toasts = $state<Toast[]>([]);
 /** The notice that says the session ended (see `announceSignedOut`). */
 export const SIGNED_OUT_TEXT = 'You’re signed out.';
 let next = 1;
+/** The auto-dismiss timers of passive toasts, held while the pointer or focus is on one. */
+const timers = new Map<number, PausableTimer>();
+
+/** Holds a toast's auto-dismiss while it is hovered or focused. A toast with a live Undo (an action and a deadline) is never held: its send time must match its countdown line. */
+export function pauseToast(id: number) {
+  if (toasts.find((t) => t.id === id)?.ms) return;
+  timers.get(id)?.pause();
+}
+
+/** Lets a held toast run out the time it had left. */
+export function resumeToast(id: number) {
+  timers.get(id)?.resume();
+}
 
 export function dismiss(id: number) {
   const i = toasts.findIndex((t) => t.id === id);
   if (i >= 0) toasts.splice(i, 1);
+  timers.get(id)?.cancel();
+  timers.delete(id);
 }
 
 /**
@@ -28,7 +45,7 @@ export function notify(text: string, error = false, opts: { action?: Toast['acti
   toasts.push(toast);
   const passive = toasts.filter((t) => t.error === error && !t.action);
   if (passive.length > 3) dismiss(passive[0].id);
-  if (!opts.sticky) setTimeout(() => dismiss(toast.id), opts.ms ?? (error ? 9000 : 3500));
+  if (!opts.sticky) timers.set(toast.id, pausableTimer(() => dismiss(toast.id), opts.ms ?? (error ? 9000 : 3500)));
   return toast.id;
 }
 
