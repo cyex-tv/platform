@@ -24,7 +24,7 @@
     names,
     full,
     onadded,
-  }: { setId: string; personal: boolean; taken: Set<string>; names: Set<string>; full: boolean; onadded: () => unknown } = $props();
+  }: { setId: string; personal: boolean; taken: Set<string>; names: Set<string>; full: boolean; onadded: (added: { id: string; name: string }) => unknown } = $props();
   let listEl = $state<HTMLElement>();
   let findEl = $state<HTMLInputElement>();
 
@@ -59,6 +59,9 @@
     e?.preventDefault();
     const text = query.trim();
     if (!text) {
+      // An empty field ends the search in flight too: its answer must not fill the list again.
+      token++;
+      searching = false;
       results = null;
       problem = null;
       return;
@@ -116,7 +119,7 @@
       await gql(ADD_SET_EMOTE, { setId, emoteId: e.id, input: as ? { name: as } : null });
       notify(`${iso(as ?? e.name)} added.`);
       renaming = null;
-      await onadded();
+      await onadded({ id: e.id, name: as ?? e.name });
       busy = null;
       await tick();
       const buttons = [...(listEl?.querySelectorAll<HTMLButtonElement>('button.add') ?? [])];

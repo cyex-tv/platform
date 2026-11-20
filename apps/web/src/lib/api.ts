@@ -43,8 +43,8 @@ function seen(err: ApiError): ApiError {
 export const GQL_TIMEOUT_MS = 20_000;
 /** An upload that sends nothing for this long has stalled. */
 export const UPLOAD_STALL_MS = 30_000;
-/** After the last byte is sent, the API may take longer (it checks the picture) before it answers. */
-export const UPLOAD_ANSWER_MS = 60_000;
+/** After the last byte is sent, the API gets this long to answer (it checks the picture, a second or two), as long as a stall. */
+export const UPLOAD_ANSWER_MS = 30_000;
 
 /**
  * A fetch that also stops when `outer` does, and keeps the call's own deadline (the one `gql`
