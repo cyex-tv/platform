@@ -126,3 +126,29 @@ export function matches(question: Question, text: string): boolean {
   const words = text.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return words.every((w) => question.hay.includes(w));
 }
+
+/** The few questions people open most, shown first on /help (ids into HELP, in this order). */
+export const POPULAR_IDS = ['get-the-extension', 'emotes-not-showing', 'what-files', 'why-pending', 'use-in-channel', 'delete-account'];
+
+export const POPULAR: Question[] = POPULAR_IDS.map((id) => ALL_QUESTIONS.find((q) => q.id === id)).filter((q): q is Question => !!q);
+
+/** The words under the status link: what the API's readiness check said, or that it didn't answer. */
+export function statusText(state: 'checking' | 'ok' | 'down'): string {
+  if (state === 'ok') return 'The service is running.';
+  if (state === 'down') return 'The service isn’t answering right now.';
+  return 'Checking the service…';
+}
+
+/** One readiness check (GET /health/ready): true when the API answered 2xx within `ms`. Never throws. */
+export async function checkStatus(base: string, f: typeof fetch = fetch, ms = 6000): Promise<boolean> {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try {
+    const r = await f(`${base}/health/ready`, { signal: ctl.signal, credentials: 'omit', cache: 'no-store' });
+    return r.ok;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(t);
+  }
+}

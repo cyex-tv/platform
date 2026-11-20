@@ -1,8 +1,8 @@
 <script lang="ts">
-  // The facts row: type, formats, size at 1x, frames (when known), added date, file sizes and,
+  // The facts row: type, formats, size at 1x, frames (when known), added date and,
   // once the API sends it, how many channels use it (and, when it is trending, how many added it this week).
   import { size } from '$lib/emote';
-  import { bytes, count, date } from '$lib/format';
+  import { count, date } from '$lib/format';
   import { formats, kind, scaleFiles, type PageEmote } from './emote-page';
 
   type Props = { emote: PageEmote; channels?: number | null; frames?: number | null; addedThisWeek?: number | null };
@@ -29,16 +29,6 @@
     {#if frames}<div><dt>Frames</dt><dd>{count(frames)}</dd></div>{/if}
     {#if added}<div><dt>Added</dt><dd><time datetime={e.createdAt}>{added}</time></dd></div>{/if}
     {#if e.tags.length}<div class="wide-fact"><dt>Tags</dt><dd>{e.tags.join(', ')}</dd></div>{/if}
-    {#if files.length}
-      <div class="wide-fact">
-        <dt>File sizes</dt>
-        <dd>
-          <ul class="files">
-            {#each files as f (f.name)}<li><span class="x">{f.scale}x</span> {bytes(f.size)}</li>{/each}
-          </ul>
-        </dd>
-      </div>
-    {/if}
   </dl>
 </section>
 
@@ -49,6 +39,4 @@
   dt { color: var(--muted); font-size: var(--t-label); }
   dd { margin: 0; font-size: var(--t-small); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
   .figure { font-size: 22px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; }
-  .files { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; }
-  .x { color: var(--muted); }
 </style>

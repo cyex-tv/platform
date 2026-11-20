@@ -130,3 +130,14 @@ describe('pager range', () => {
     expect(rangeLabel(0, 0, 0)).toBe('');
   });
 });
+
+describe('fileSize', () => {
+  it('formats a known size in cyex numbers and hides an unknown one', async () => {
+    const { fileSize } = await import('./emote-page');
+    expect(fileSize({ size: 900 })).toBe('900 B');
+    expect(fileSize({ size: 1536 })).toBe('1,5 KB');
+    expect(fileSize({ size: 0 })).toBe('');
+    expect(fileSize({})).toBe('');
+    expect(fileSize({ size: null })).toBe('');
+  });
+});
