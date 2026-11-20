@@ -2,7 +2,7 @@ import { describe as suite, expect, it } from 'vitest';
 import { ApiError } from '$lib/api';
 import { deleteMessage, exportMessage, unlinkMessage } from './errors';
 import { exportFilename } from './export';
-import { badge, closedRequest, describe, parsePayload } from './notifications';
+import { badge, closedRequest, describe, parsePayload, requestGone } from './notifications';
 
 const j = (o: unknown) => JSON.stringify(o);
 const strip = (s: string) => s.replace(/[⁨⁩]/g, '');
@@ -140,5 +140,12 @@ suite('unlinkMessage', () => {
     expect(unlinkMessage(new ApiError('raw', 'last_identity'))).toMatch(/only connection/);
     expect(unlinkMessage(new ApiError('As the API says.', 'other'))).toBe('As the API says.');
     expect(unlinkMessage(new Error('x'))).toContain('Nothing was disconnected');
+  });
+
+  it('only an answer that closes the request closes it', () => {
+    for (const code of ['not_pending', 'not_found', 'forbidden']) expect(requestGone({ code })).toBe(true);
+    for (const code of ['offline', 'timeout', 'rate_limited', 'signed_out', 'bad_answer']) expect(requestGone({ code })).toBe(false);
+    expect(requestGone(new Error('x'))).toBe(false);
+    expect(requestGone(null)).toBe(false);
   });
 });

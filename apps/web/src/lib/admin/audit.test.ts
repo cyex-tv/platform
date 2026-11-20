@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionText, changes, dayAfter, dayLabel, dayStart, looksLikeId, targetHref } from './audit';
+import { actionText, changes, dayAfter, dayLabel, dayStart, looksLikeId, rangeProblem, targetHref } from './audit';
 
 describe('audit helpers', () => {
   it('shows a day in the cyex format', () => {
@@ -41,6 +41,26 @@ describe('audit helpers', () => {
     const b = dayAfter('2026-11-17')!;
     expect(new Date(b).getTime() - new Date(a).getTime()).toBeGreaterThanOrEqual(23 * 3600_000);
     expect(dayStart('17/11/2026')).toBeNull();
+  });
+
+  it('keeps years 0 to 99 and refuses days that do not exist', () => {
+    expect(new Date(dayStart('0026-11-17')!).getFullYear()).toBe(26);
+    expect(dayStart('0000-01-01')).toBeNull();
+    expect(dayStart('2026-02-30')).toBeNull();
+    expect(dayAfter('2026-02-30')).toBeNull();
+    expect(dayStart('2026-13-01')).toBeNull();
+    expect(dayStart('2024-02-29')).not.toBeNull();
+    expect(dayStart('2026-02-29')).toBeNull();
+    expect(new Date(dayAfter('2026-12-31')!).getFullYear()).toBe(2027);
+  });
+
+  it('says what is wrong with the range', () => {
+    expect(rangeProblem('', '')).toBeNull();
+    expect(rangeProblem('2026-11-01', '2026-11-20')).toBeNull();
+    expect(rangeProblem('2026-11-20', '2026-11-20')).toBeNull();
+    expect(rangeProblem('2026-11-21', '2026-11-20')).toMatch(/after To/);
+    expect(rangeProblem('2026-02-30', '')).toMatch(/From date/);
+    expect(rangeProblem('', '2026-02-30')).toMatch(/To date/);
   });
 
   it('recognises an account id', () => {

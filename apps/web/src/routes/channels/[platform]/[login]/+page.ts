@@ -2,6 +2,7 @@ import { error, redirect } from '@sveltejs/kit';
 import { ApiError, gql } from '$lib/api';
 import type { Platform } from '$lib/gql/graphql';
 import { CHANNEL, PUBLIC_SET } from '$lib/queries';
+import { channelMeta } from '$lib/meta';
 import type { PageLoad } from './$types';
 
 const PLATFORMS: Record<string, Platform> = { twitch: 'TWITCH', kick: 'KICK' };
@@ -21,7 +22,7 @@ export const load: PageLoad = async ({ fetch, params, url }) => {
     const set = channelByLogin.activeSetId
       ? (await gql(PUBLIC_SET, { id: channelByLogin.activeSetId }, fetch)).set
       : null;
-    return { channel: channelByLogin, set };
+    return { channel: channelByLogin, set, meta: channelMeta(channelByLogin, set ?? null) };
   } catch (e) {
     if (e instanceof ApiError) error(503, e.message);
     throw e;

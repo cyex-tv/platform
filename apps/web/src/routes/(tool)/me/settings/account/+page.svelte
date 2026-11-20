@@ -158,7 +158,8 @@
 </div>
 
 <style>
-  .what { display: grid; flex: 1; min-width: 0; margin: 0; }
+  /* The words get 10rem at least; a button that doesn't fit beside them wraps under instead of squeezing them. */
+  .what { display: grid; flex: 1 1 10rem; min-width: 0; margin: 0; }
   .what strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pad { padding: 10px 14px 12px; margin: 0; }
   .choose { margin: 0; padding: 0; border: 0; min-width: 0; }
@@ -169,7 +170,7 @@
   .now { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-fine); font-weight: 600; color: var(--text); white-space: nowrap; }
   .now :global(svg) { color: var(--accent-text); }
   li > :global(svg) { color: var(--muted); flex: none; }
-  .keep { white-space: nowrap; }
+  .keep { white-space: normal; }
   .row { display: flex; align-items: center; gap: 12px; }
   @media (max-width: 560px) {
     .row { flex-wrap: wrap; }

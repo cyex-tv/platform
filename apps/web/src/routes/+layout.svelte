@@ -3,12 +3,16 @@
   import { untrack } from 'svelte';
   import { navigating, page } from '$app/state';
   import Footer from '$lib/components/Footer.svelte';
+  import Meta from '$lib/components/Meta.svelte';
+  import { siteMeta, type Meta as PageMeta } from '$lib/meta';
   import AppHeader from '$lib/shell/AppHeader.svelte';
+  import ShortcutSheet from '$lib/shell/ShortcutSheet.svelte';
   import { titleTruncated } from '$lib/shell/truncated';
   import Toasts from '$lib/tool/Toasts.svelte';
   import { syncMotion } from '$lib/shell/motion.svelte';
   import { watchDpr } from '$lib/dpr.svelte';
   import { loadMe, session } from '$lib/tool/session.svelte';
+  import { whatsNew } from '$lib/changelog/seen.svelte';
   import UploadDialog from '$lib/upload/UploadDialog.svelte';
   import { openUpload, opensDialog } from '$lib/upload/upload.svelte';
 
@@ -23,6 +27,8 @@
   $effect(syncMotion);
   // The screen's pixel ratio, for the pictures that pick their file in script (no srcset).
   $effect(watchDpr);
+  // Whether this device has seen the newest changelog entry (the account menu's dot).
+  $effect(() => whatsNew.load());
   $effect(() => {
     loadMe().catch(() => {});
   });
@@ -69,6 +75,9 @@
 
 <svelte:document onpointerover={titleTruncated} />
 
+<!-- Link previews: the page's own card (from its load) or the site's. -->
+<Meta meta={(page.data.meta as PageMeta | undefined) ?? siteMeta(page.url.pathname)} />
+
 <a class="skip" href="#main">Skip to content</a>
 {#if page.data.skipTo}<a class="skip" href="#{page.data.skipTo}">Skip to contents</a>{/if}
 <AppHeader />
@@ -78,6 +87,7 @@
 </main>
 <Footer slim={page.data.footer === 'slim'} />
 <Toasts />
+<ShortcutSheet />
 {#if session.me}<UploadDialog />{/if}
 
 <style>

@@ -1,5 +1,6 @@
 import { ApiError, gql } from '$lib/api';
 import type { Look } from '$lib/cosmetics/store.svelte';
+import { missingMeta, profileMeta } from '$lib/meta';
 import { ACCOUNT_COSMETICS, ACCOUNT_PROFILE, SEARCH_BY_OWNER } from '$lib/queries';
 import type { PageLoad } from './$types';
 
@@ -23,9 +24,10 @@ export const load: PageLoad = async ({ fetch, params }) => {
       items: searchEmotes.items,
       total: searchEmotes.total,
       error: null as string | null,
+      meta: accountProfile ? profileMeta(accountProfile, searchEmotes.total) : missingMeta(`/users/${encodeURIComponent(params.id)}`, 'No profile here'),
     };
   } catch (e) {
     const message = e instanceof ApiError ? e.message : 'This page can’t load right now.';
-    return { id: params.id, profile: null, creator: null, look: null, items: [], total: 0, error: message };
+    return { id: params.id, profile: null, creator: null, look: null, items: [], total: 0, error: message, meta: missingMeta(`/users/${encodeURIComponent(params.id)}`, 'cyex.tv') };
   }
 };

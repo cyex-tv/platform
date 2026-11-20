@@ -9,19 +9,22 @@
   import { clean } from '$lib/format';
   import { session } from '$lib/tool/session.svelte';
   import AccountLinks from './AccountLinks.svelte';
+  import { whatsNew } from '$lib/changelog/seen.svelte';
 
   let { open = $bindable(false) }: { open?: boolean } = $props();
 
-  const who = $derived(session.me?.identities[0]);
+  // After the session ends mid-use the menu stops showing the account (the page keeps it).
+  const me = $derived(session.ended ? null : session.me);
+  const who = $derived(me?.identities[0]);
   const name = $derived(clean(who?.displayName));
 </script>
 
-{#if session.me}
+{#if me}
   <Popover label="Your account" kind="menu" align="end" width="260px" bind:open>
     {#snippet trigger(props)}
       <button class="who" type="button" {...props}>
-        <Avatar src={who?.avatar} {name} size={24} />
-        <span class="sr-only">Your account: <bdi>{name}</bdi></span>
+        <span class="pic"><Avatar src={who?.avatar} {name} size={24} />{#if whatsNew.unseen}<span class="dot" aria-hidden="true"></span>{/if}</span>
+        <span class="sr-only">Your account: <bdi>{name}</bdi>{#if whatsNew.unseen}, something new in What’s new{/if}</span>
         <span class="name" aria-hidden="true"><bdi>{name}</bdi></span>
         <Icon name="chevron-down" size={14} />
       </button>
@@ -41,6 +44,11 @@
     transition: background-color var(--fast), border-color var(--fast), transform var(--dur-press) ease-out; }
   .who:active { transform: scale(var(--press)); }
   .who[aria-expanded='true'] { background: var(--surface-hover); border-color: var(--border-strong); }
+  /* Something new in the changelog: a small accent dot on the avatar's corner, ringed in the bar's ground. */
+  .pic { position: relative; display: inline-flex; flex: none; }
+  .dot { position: absolute; top: -2px; right: -2px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent);
+    box-shadow: 0 0 0 2px var(--bg); }
+  @media (forced-colors: active) { .dot { background: Highlight; } }
   .hold { cursor: default; pointer-events: none; }
   .ghost { flex: none; width: 24px; height: 24px; border-radius: 50%; background: var(--neutral-chip, var(--surface-2)); }
   .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

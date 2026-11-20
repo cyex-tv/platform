@@ -1,5 +1,5 @@
 import { describe as group, expect, it } from 'vitest';
-import { after, describe, kindOf, sizes, step } from './queue';
+import { after, approveFailure, describe, kindOf, sizes, step } from './queue';
 
 const entry = (action: string, before: unknown = null, afterJson: unknown = null) => ({
   id: 'x',
@@ -60,5 +60,14 @@ group('grid keys', () => {
     expect(after(0, 3)).toBe(0);
     expect(after(2, 3)).toBe(1);
     expect(after(0, 1)).toBeNull();
+  });
+});
+
+group('approveFailure', () => {
+  it('names the upload', () => {
+    expect(approveFailure(new Error('Not allowed.'), 'Wave')).toBe('Wave wasn’t approved. Not allowed.');
+  });
+  it('says a timeout may have gone through', () => {
+    expect(approveFailure(Object.assign(new Error('x'), { code: 'timeout' }), 'Wave')).toMatch(/Wave may have been approved: check the queue before trying again/);
   });
 });

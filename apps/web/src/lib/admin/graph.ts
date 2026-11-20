@@ -178,5 +178,6 @@ export function holdersCsv(rows: Grant[], nameOf: (id: string) => string | undef
       .map(field)
       .join(','),
   );
-  return [head.join(','), ...lines].join('\r\n') + '\r\n';
+  // The byte order mark first: Excel reads a CSV without one as ANSI and mangles every name that isn't ASCII.
+  return '\uFEFF' + [head.join(','), ...lines].join('\r\n') + '\r\n';
 }
