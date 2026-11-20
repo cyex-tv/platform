@@ -64,6 +64,11 @@ describe('error messages', () => {
       expect(m.length).toBeGreaterThan(10);
     }
   });
+  it('a timeout may have gone through, and says to check before trying again', () => {
+    expect(shopMessage(e('timeout'))).toMatch(/may have started: check Billing .* before trying again/);
+    expect(shopMessage(e('timeout'))).not.toMatch(/Nothing was charged/);
+    expect(redeemMessage(e('timeout'))).toMatch(/may have gone through: check Your cosmetics before trying again/);
+  });
   it('tunes already_owned for a gift', () => {
     expect(shopMessage(e('already_owned'), true)).toBe('They own everything in it already.');
     expect(shopMessage(e('already_owned'))).toContain('You own everything');

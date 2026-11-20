@@ -33,7 +33,8 @@
   let { account = $bindable(false) }: { account?: boolean } = $props();
 
   let menu = $state(false);
-  const me = $derived(session.me);
+  // Once the session has ended the header stops showing the account (the page keeps it).
+  const me = $derived(session.ended ? null : session.me);
   const who = $derived(me?.identities[0]);
   const path = $derived(page.url.pathname);
   const links = $derived(headerLinks(me, isAdmin(me)));

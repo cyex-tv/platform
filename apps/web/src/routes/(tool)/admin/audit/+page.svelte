@@ -9,7 +9,7 @@
   import ActorField from '$lib/admin/ActorField.svelte';
   import DateField from '$lib/components/DateField.svelte';
   import { lookUp } from '$lib/admin/names.svelte';
-  import { actionText, changes, dayAfter, dayStart, targetHref } from '$lib/admin/audit';
+  import { actionText, changes, dayAfter, dayStart, rangeProblem, targetHref } from '$lib/admin/audit';
   import Icon from '$lib/components/Icon.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
@@ -98,6 +98,8 @@
     goto(`?${p}`, { keepFocus: true });
   }
 
+  const problem = $derived(rangeProblem(from, to));
+
   function pretty(json: string | null | undefined): string {
     if (!json) return '';
     try {
@@ -131,6 +133,7 @@
     {#if page.url.search}<a class="ui-btn ghost" href="/admin/audit">Clear</a>{/if}
   </div>
 </form>
+{#if problem}<p class="ui-error range" role="alert">{problem}</p>{/if}
 
 <LoadGate source={L} label="Loading the log…">
 {#snippet children()}
@@ -203,6 +206,7 @@
 </LoadGate>
 
 <style>
+  .range { margin: -8px 0 12px; }
   .filters { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); gap: 8px; align-items: end; margin-bottom: 16px; max-width: 1000px; }
   .rows { list-style: none; margin: 0; padding: 0; }
   .rows li.alt { background: var(--row-alt); }

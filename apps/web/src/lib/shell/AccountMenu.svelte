@@ -13,11 +13,13 @@
 
   let { open = $bindable(false) }: { open?: boolean } = $props();
 
-  const who = $derived(session.me?.identities[0]);
+  // After the session ends mid-use the menu stops showing the account (the page keeps it).
+  const me = $derived(session.ended ? null : session.me);
+  const who = $derived(me?.identities[0]);
   const name = $derived(clean(who?.displayName));
 </script>
 
-{#if session.me}
+{#if me}
   <Popover label="Your account" kind="menu" align="end" width="260px" bind:open>
     {#snippet trigger(props)}
       <button class="who" type="button" {...props}>

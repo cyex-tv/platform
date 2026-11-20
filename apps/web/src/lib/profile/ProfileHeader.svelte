@@ -101,13 +101,13 @@
       {#each active as a (a.platform + a.login)}
         <li>
           <Icon name="zap" size={14} />
-          <span><a href="/sets/{encodeURIComponent(a.setId)}"><bdi>{clean(a.setName)}</bdi></a><span class="dim">{' on '}<bdi>{clean(a.login)}</bdi><span class="sr-only">{` (${platformName(a.platform)})`}</span></span></span>
+          <span class="wrap"><a href="/sets/{encodeURIComponent(a.setId)}"><bdi>{clean(a.setName)}</bdi></a><span class="dim">{' on '}<bdi>{clean(a.login)}</bdi><span class="sr-only">{` (${platformName(a.platform)})`}</span></span></span>
         </li>
       {/each}
       {#if editors.length}
         <li>
           <Icon name="circle-user" size={14} />
-          <span><span class="dim">{'Editors '}</span>{#each editors.slice(0, 4) as e, i (e.id)}{#if i}<span class="dim">{', '}</span>{/if}<a href="/users/{encodeURIComponent(e.id)}"><PaintedName name={e.displayName} paint={looks[e.id]?.paint} /></a>{/each}{#if editors.length > 4}<span class="dim">{` and ${editors.length - 4} more`}</span>{/if}</span>
+          <span class="wrap"><span class="dim">{'Editors '}</span>{#each editors.slice(0, 4) as e, i (e.id)}{#if i}<span class="dim">{', '}</span>{/if}<a href="/users/{encodeURIComponent(e.id)}"><PaintedName name={e.displayName} paint={looks[e.id]?.paint} /></a>{/each}{#if editors.length > 4}<span class="dim">{` and ${editors.length - 4} more`}</span>{/if}</span>
         </li>
       {/if}
       {#if profile?.createdAt}<li class="dim"><Icon name="calendar" size={14} />{'Member since '}<time datetime={profile.createdAt}>{date(profile.createdAt)}</time></li>{/if}
@@ -139,6 +139,8 @@
   .facts li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
   .facts li > :global(svg) { flex: none; color: var(--dim); }
   .facts li > span, .facts li > a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Editors and the set a channel uses can be long: they wrap rather than end in an ellipsis that hides the names. */
+  .facts li > span.wrap { white-space: normal; overflow-wrap: anywhere; overflow: visible; }
   .facts li > a { display: inline-flex; align-items: center; min-height: 24px; }
   .facts a { color: var(--text); font-weight: 500; text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
   .dim, .facts .dim { color: var(--muted); font-weight: 400; }

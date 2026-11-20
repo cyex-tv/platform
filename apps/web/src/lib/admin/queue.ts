@@ -112,3 +112,14 @@ export function after(at: number, n: number): number | null {
   if (n <= 1) return null;
   return Math.min(at, n - 2);
 }
+
+/**
+ * What a failed approval says. It names the upload, and a call that ran out of time says it may have
+ * gone through (the queue is reloaded, so the card shows where it stands).
+ */
+export function approveFailure(err: unknown, name: string): string {
+  const code = (err as { code?: unknown } | null)?.code;
+  if (code === 'timeout') return `cyex.tv didn’t answer in time. ${name} may have been approved: check the queue before trying again.`;
+  const why = err instanceof Error && err.message ? err.message : 'That didn’t work.';
+  return `${name} wasn’t approved. ${why}`;
+}
