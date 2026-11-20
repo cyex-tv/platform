@@ -35,6 +35,7 @@ struct Live {
     db: TestDb,
     app: axum::Router,
     addr: SocketAddr,
+    hub: cyex_tv_hub::Hub,
     stop: watch::Sender<bool>,
 }
 
@@ -43,6 +44,7 @@ impl Live {
         let db = TestDb::new().await?;
         let auth = Arc::new(Auth::new(AuthConfig::from_source(|_| None).unwrap()).unwrap());
         let state = AppState::new(db.pool.clone(), auth);
+        let hub = state.hub.clone();
         let (stop, rx) = watch::channel(false);
         let mut feeder_rx = rx.clone();
         tokio::spawn(cyex_tv_hub::feeder::run(
@@ -65,16 +67,18 @@ impl Live {
                 .await
                 .unwrap();
         });
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        common::wait_for_feeders(&db, 1).await;
         Some(Self {
             db,
             app,
             addr,
+            hub,
             stop,
         })
     }
 
     async fn subscribe(&self, topics: &[&str]) -> Socket {
+        let before = self.hub.stats().0;
         let mut request = format!("ws://{}/v1/gql/ws", self.addr)
             .into_client_request()
             .unwrap();
@@ -97,8 +101,11 @@ impl Live {
             }),
         )
         .await;
-        // Give the subscription a moment to register in the hub.
-        tokio::time::sleep(Duration::from_millis(150)).await;
+        // The subscription is in the hub once the server has read the message.
+        common::wait_until("the subscription to register", || async {
+            self.hub.stats().0 > before
+        })
+        .await;
         ws
     }
 
@@ -145,7 +152,7 @@ impl Live {
 
     async fn stop(self) {
         let _ = self.stop.send(true);
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        // Closing the pool waits for the feeder's connection to come back.
         self.db.close().await;
     }
 }

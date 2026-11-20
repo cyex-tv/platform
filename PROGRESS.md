@@ -1148,3 +1148,7 @@ git push -u origin feat/hero-shadows
 gh pr create --base main --head feat/hero-shadows --title "Hero: real soft shadows, a ground shadow and light falloff" --body-file <file>
 gh pr merge <n> --merge
 ```
+
+## 2026/11/20 Test gaps (test/gaps)
+- Web: vitest now has two projects, `unit` (node) and `ui` (jsdom, `*.ui.test.ts`, with @testing-library/svelte and user-event; jsdom shims in `src/lib/test/dom-setup.ts`). New tests: loader, inbox, hooks.server headers, the CSP in svelte.config.js, the public pages' load functions, docs behaviour, Popover, TagInput, Toasts, SelectBar, HeaderSearch keyboard. `npm run test:coverage` prints a coverage summary (CI uses it, no threshold). `npm run test:e2e` runs dev/e2e/cosmetics.mjs, which needs the dev mock, vite dev and a headless browser on a debug port (setup in the file's header); it is not in CI.
+- Rust: sleeps used as synchronisation in apps/api/tests are polling helpers with a deadline (`common::wait_until`, `wait_for_feeders`); `hot_reads_use_their_indexes` runs VACUUM ANALYZE and asserts that an index of the table was used.
