@@ -58,8 +58,8 @@ export function describe(e: HistoryEntry): { text: string; detail?: string } {
       const was = typeof before.visibility === 'string' ? before.visibility : '';
       const bits = [
         vis && vis !== was ? `made it ${vis}` : '',
-        'nsfw' in after && !same(before.nsfw, after.nsfw) ? (after.nsfw ? 'marked it NSFW' : 'took NSFW off') : '',
-        'zero_width' in after && !same(before.zero_width, after.zero_width) ? (after.zero_width ? 'made it zero-width' : 'took zero-width off') : '',
+        'nsfw' in before && 'nsfw' in after && !same(before.nsfw, after.nsfw) ? (after.nsfw ? 'marked it NSFW' : 'took NSFW off') : '',
+        'zero_width' in before && 'zero_width' in after && !same(before.zero_width, after.zero_width) ? (after.zero_width ? 'made it zero-width' : 'took zero-width off') : '',
       ].filter(Boolean);
       return { text: bits.length ? `Flags: ${bits.join(', ')}` : 'Changed the flags' };
     }

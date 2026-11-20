@@ -752,7 +752,7 @@ export type EmoteFlags = {
   zeroWidth: Scalars['Boolean']['output'];
 };
 
-/** What `setEmoteFlags` changes (ADR 0023). Every field is optional: what is left out stays. */
+/** What `setEmoteFlags` changes (ADR 0024). Every field is optional: what is left out stays. */
 export type EmoteFlagsInput = {
   nsfw?: InputMaybe<Scalars['Boolean']['input']>;
   /** `UNLISTED` takes a public emote off search, browse and its creator's page. */
@@ -1267,7 +1267,7 @@ export type Mutation = {
   reportEmote: Report;
   /**
    * Send up to 100 pending emotes to the end of the review queue for every reviewer (an
-   * approval taken back within its undo time comes back last, ADR 0023). Emotes that aren't
+   * approval taken back within its undo time comes back last, ADR 0024). Emotes that aren't
    * pending are listed in `failed`. Needs `emotes.review`. Audited (`emote.requeued`).
    */
   requeueEmotes: BatchOutcome;
@@ -1329,7 +1329,7 @@ export type Mutation = {
   /**
    * Change an emote's flags after review: visibility (`UNLISTED` takes it off the listings),
    * NSFW and zero-width. Needs `emotes.flags` or `emotes.edit_any`. Audited
-   * (`emote.flags_changed`); the owner is told when the visibility changes (ADR 0023).
+   * (`emote.flags_changed`); the owner is told when the visibility changes (ADR 0024).
    */
   setEmoteFlags: Emote;
   /**
@@ -2382,7 +2382,7 @@ export type Query = {
   /**
    * Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
    * `emote.rejected`, `emote.taken_down`, `emote.visibility_changed` (staff changed its
-   * visibility, ADR 0023: `visibility` and `was`), `editor.added`, `editor.changed`, `editor.removed`,
+   * visibility, ADR 0024: `visibility` and `was`), `editor.added`, `editor.changed`, `editor.removed`,
    * `cosmetic.granted` and `cosmetic.revoked`; `payload` is JSON with the IDs and names it is
    * about (see the API reference). Cosmetics from the shop and from codes carry `source`
    * (`purchase` or `code`), and from orders `order_id`.

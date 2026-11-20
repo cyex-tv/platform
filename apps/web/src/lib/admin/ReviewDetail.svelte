@@ -22,7 +22,7 @@
   import { useCopied } from '$lib/clipboard.svelte';
   import AccountLink from './AccountLink.svelte';
   import NoteList from './NoteList.svelte';
-  import EmoteFlagsPanel from './EmoteFlagsPanel.svelte';
+  import EmoteFlagsPanel, { canEditFlags } from './EmoteFlagsPanel.svelte';
   import { describe, kindOf, sizes } from './queue';
 
   type Props = {
@@ -48,7 +48,12 @@
   let { emote, place, total, busy, resolved, hasPrev, hasNext, onprev, onnext, onskip, onapprove, onreject, onclose, onflags }: Props = $props();
 
   let dialog: HTMLDialogElement;
-  let tab = $state<'activity' | 'notes'>('activity');
+  let tab = $state<'activity' | 'notes' | 'flags'>('activity');
+  // Staff with emotes.flags change a reviewed upload's flags here too (ADR 0024).
+  const flagTab = $derived(resolved && canEditFlags());
+  $effect(() => {
+    if (!flagTab && tab === 'flags') tab = 'activity';
+  });
   let noteCount = $state<number | null>(null);
   let history = $state<EmoteHistoryQuery['emoteHistory'] | null>(null);
   let historyProblem = $state(false);
@@ -217,12 +222,13 @@
       {/if}
     </section>
 
-    <!-- Staff with emotes.flags: change its flags after review too (ADR 0024). -->
-    {#if resolved}<EmoteFlagsPanel emote={e} id="rd-flags" onsaved={onflags} />{/if}
-
     <div class="tabs">
       <Segmented label="Show" size="s" value={tab} onchange={(v) => (tab = v)}
-        options={[{ value: 'activity', label: history ? `Activity (${history.length + 1})` : 'Activity' }, { value: 'notes', label: noteCount === null ? 'Notes' : `Notes (${noteCount})` }]} />
+        options={[
+          { value: 'activity', label: history ? `Activity (${history.length + 1})` : 'Activity' },
+          { value: 'notes', label: noteCount === null ? 'Notes' : `Notes (${noteCount})` },
+          ...(flagTab ? [{ value: 'flags' as const, label: 'Emote flags' }] : []),
+        ]} />
     </div>
     <div class="pane">
       <div hidden={tab !== 'activity'}>
@@ -261,6 +267,11 @@
           oncount={(n) => (noteCount = n)}
         />
       </div>
+      {#if flagTab}
+        <div hidden={tab !== 'flags'}>
+          <EmoteFlagsPanel bare emote={e} id="rd-flags" onsaved={(next) => (onflags?.(next), loadHistory(e.id))} />
+        </div>
+      {/if}
     </div>
 
     {#if !resolved}
