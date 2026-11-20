@@ -35,6 +35,8 @@ export interface DocsOptions {
   langKey?: string;
   /** false: the page filters its own index and body (/help); the filter block is left out. */
   filter?: boolean;
+  /** Draws a group's body the first time it is open (or a link points into it). Resolves once the sections are in the DOM. */
+  load?: (groupId: string) => Promise<void>;
 }
 
 export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): () => void {
@@ -51,7 +53,8 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
   const stacked = () => getComputedStyle(aside).position !== 'sticky';
   const search = root.querySelector<HTMLElement>('.nav-search');
   const input = search?.querySelector('input') ?? null;
-  const sections = [...root.querySelectorAll<HTMLElement>('section[id]')];
+  // Read when measuring: a lazy group's sections arrive after the page has started.
+  const sections = () => [...root.querySelectorAll<HTMLElement>('section[id]')];
   const docs = aside.closest<HTMLElement>('.docs') ?? aside;
   const allBtn = root.querySelector<HTMLButtonElement>('[data-group-all]');
   const tools = root.querySelector<HTMLElement>('.nav-tools');
@@ -77,7 +80,7 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
       dirty = true;
       return;
     }
-    tops = sections.filter((s) => s.closest('[data-group]')?.getAttribute('data-open') !== 'false').map((s) => ({ id: s.id, top: s.getBoundingClientRect().top + scrollY }));
+    tops = sections().filter((s) => s.closest('[data-group]')?.getAttribute('data-open') !== 'false').map((s) => ({ id: s.id, top: s.getBoundingClientRect().top + scrollY }));
   };
   let dirty = false;
 
@@ -188,7 +191,27 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
       else b.removeAttribute('aria-disabled');
     }
     if (allBtn) allBtn.textContent = allOpen(state, groupIds) ? 'Collapse all' : 'Expand all';
+    for (const id of groupIds) if (isOpen(state, id)) request(id);
   }
+  // A lazy group's body is drawn the first time the group is open; afterwards the page is measured
+  // again and the sample tabs get the chosen language. `request` is safe to call again and again.
+  const requested = new Map<string, Promise<void>>();
+  function request(id: string): Promise<void> {
+    let p = requested.get(id);
+    if (!p && opts.load) {
+      p = opts.load(id).then(() => {
+        initLang();
+        onResize();
+      });
+      requested.set(id, p);
+    }
+    return p ?? Promise.resolve();
+  }
+  /** The group an id belongs to: its section when drawn, otherwise its index entry. */
+  const groupOf = (id: string) => (document.getElementById(id) ?? items.get(id))?.closest<HTMLElement>('[data-group]')?.dataset.group;
+  const jump = (id: string) => {
+    if (decodeURIComponent(location.hash.slice(1)) === id) document.getElementById(id)?.scrollIntoView({ behavior: 'instant' });
+  };
   // Changes that must not animate (links, expand all, the first paint) switch the duration to 0 for
   // a couple of frames, so the layout is final before anything scrolls.
   let settle = 0;
@@ -215,10 +238,14 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
 
   /** Opens the group that holds the element with this id. True when that changed anything. */
   function reveal(id: string): boolean {
-    const group = document.getElementById(id)?.closest<HTMLElement>('[data-group]')?.dataset.group;
-    if (!group || isOpen(state, group)) return false;
-    commit(withGroup(state, group, true), true);
-    return true;
+    const group = groupOf(id);
+    if (!group) return false;
+    const opening = !isOpen(state, group);
+    if (opening) commit(withGroup(state, group, true), true);
+    // Not drawn yet: go there once it is.
+    const pending = !document.getElementById(id);
+    if (pending) request(group).then(() => jump(id));
+    return opening || pending;
   }
 
   for (const b of toggles)
@@ -370,16 +397,24 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
     }
     for (const pre of root.querySelectorAll<HTMLElement>('pre[data-lang]')) pre.hidden = pre.dataset.lang !== lang;
   };
-  let lang = root.querySelector<HTMLElement>('.lang-tab')?.dataset.lang;
-  try {
-    const saved = localStorage.getItem(LANG_KEY);
-    if (saved && root.querySelector(`.lang-tab[data-lang="${CSS.escape(saved)}"]`)) lang = saved;
-  } catch {
-    /* storage blocked: the first language it is */
+  let lang: string | undefined;
+  // The saved language where a sample offers it, else the first; again after a lazy group is drawn.
+  function initLang() {
+    if (!lang) {
+      lang = root.querySelector<HTMLElement>('.lang-tab')?.dataset.lang;
+      try {
+        const saved = localStorage.getItem(LANG_KEY);
+        if (saved && root.querySelector(`.lang-tab[data-lang="${CSS.escape(saved)}"]`)) lang = saved;
+      } catch {
+        /* storage blocked: the first language it is */
+      }
+    }
+    if (lang) setLang(lang);
   }
-  if (lang) setLang(lang);
+  initLang();
   const pickLang = (tab: HTMLElement) => {
-    setLang(tab.dataset.lang!);
+    lang = tab.dataset.lang!;
+    setLang(lang);
     try {
       localStorage.setItem(LANG_KEY, tab.dataset.lang!);
     } catch {
@@ -422,14 +457,16 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
   // ---------- start ----------
   const hash = decodeURIComponent(location.hash.slice(1));
   // The saved groups, plus the one a deep link points into, before anything is measured.
-  const hashGroup = hash ? document.getElementById(hash)?.closest<HTMLElement>('[data-group]')?.dataset.group : undefined;
+  const hashGroup = hash ? groupOf(hash) : undefined;
   commit(hashGroup && !isOpen(state, hashGroup) ? withGroup(state, hashGroup, true) : state, true);
   if (hashGroup) {
     // The browser jumped to the fragment before the group was open: go there again.
-    const jump = () => document.getElementById(hash)?.scrollIntoView({ behavior: 'instant' });
-    jump();
-    const t = setTimeout(jump, 120);
+    const again = () => document.getElementById(hash)?.scrollIntoView({ behavior: 'instant' });
+    again();
+    const t = setTimeout(again, 120);
     cleanups.push(() => clearTimeout(t));
+    // A group the browser could not jump into yet: land on the section once it is drawn.
+    if (!document.getElementById(hash)) request(hashGroup).then(() => jump(hash));
   }
   measure();
   if (items.has(hash)) setActive(hash); // a deep link lights its entry before any scrolling
