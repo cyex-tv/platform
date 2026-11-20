@@ -15,6 +15,18 @@ export type Entry = {
 
 export const ENTRIES: Entry[] = [
   {
+    id: '2026-11-20-announcements-notifications-collection',
+    date: '2026-11-20',
+    title: 'Announcements, notification settings and your collection',
+    items: [
+      'News, maintenance and events show as one line under the header. Close it with × and it stays closed on that device until the next one.',
+      'Settings has a Notifications page: choose which kinds notify you at all, and which also pop up while you’re on cyex.tv. Turned off, a kind isn’t kept, so it won’t show up later either.',
+      'Your notifications page has filters: your uploads, hand-overs, editors and cosmetics.',
+      'Profiles can show a Collection: every badge and paint you own, drawn on your own name, with since when and whether it came from the shop, a code, an event or staff. It’s off until you turn it on in Settings → Account or on the tab itself, and never shows who gave you something or what it cost.',
+    ],
+    staff: ['Admin → System → Announcements puts up the line, with a kind, an optional link, emote or badge, and a start and an end. It needs the new Site announcements permission, and every change is in the audit log.'],
+  },
+  {
     id: '2026-11-20-shortcuts-previews',
     date: '2026-11-20',
     title: 'Shortcuts, link previews and this page',

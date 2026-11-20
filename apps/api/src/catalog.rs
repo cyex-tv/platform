@@ -669,6 +669,10 @@ pub async fn account_profile(
         active_sets,
         created_at: views::time(row.created_at),
         editors,
+        collection_public: cyex_tv_db::prefs::get(&mut conn, id)
+            .await
+            .map_err(db_error)?
+            .show_collection,
     }))
 }
 

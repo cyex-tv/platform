@@ -160,6 +160,7 @@ pub async fn erase(conn: &mut PgConnection, account_id: Uuid) -> DbResult<()> {
         "DELETE FROM hidden_emotes WHERE account_id = $1",
         "DELETE FROM hidden_creators WHERE account_id = $1 OR creator_id = $1",
         "DELETE FROM favourite_emotes WHERE account_id = $1",
+        "DELETE FROM account_prefs WHERE account_id = $1",
         "DELETE FROM account_roles WHERE account_id = $1",
         "UPDATE reports SET reporter_id = NULL WHERE reporter_id = $1",
         "UPDATE emote_set_members SET added_by = NULL WHERE added_by = $1",

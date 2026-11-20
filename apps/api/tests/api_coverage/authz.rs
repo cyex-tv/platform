@@ -40,6 +40,8 @@ const PUBLIC: &[&str] = &[
     "shopItems",
     "shopItem",
     "permissions",
+    "activeAnnouncement",
+    "accountCollection",
 ];
 
 /// Fields only staff (a role with the right permission, or the owner) may use.
@@ -65,6 +67,7 @@ const STAFF: &[&str] = &[
     "entitlementGraph",
     "entitlementHolders",
     "roles",
+    "announcements",
     // Mutations.
     "createBadge",
     "updateBadge",
@@ -96,6 +99,9 @@ const STAFF: &[&str] = &[
     "deleteRole",
     "assignRole",
     "unassignRole",
+    "createAnnouncement",
+    "updateAnnouncement",
+    "endAnnouncement",
 ];
 
 /// Staff mutations that check their input before the caller's permission (cheap checks first):

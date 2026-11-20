@@ -26,6 +26,7 @@
   import ActivityFeed from '$lib/profile/sections/ActivityFeed.svelte';
   import CosmeticsPicker from '$lib/profile/sections/CosmeticsPicker.svelte';
   import Favourites from '$lib/profile/sections/Favourites.svelte';
+  import Collection from '$lib/profile/sections/Collection.svelte';
   import MyUploads from '$lib/profile/sections/MyUploads.svelte';
   import SetCards from '$lib/profile/sections/SetCards.svelte';
   import Uploads from './Uploads.svelte';
@@ -36,7 +37,8 @@
   const name = $derived(clean(data.creator?.displayName ?? ''));
   const rel = relationState(() => data.id);
   const relation = $derived(rel.value);
-  const allowed = $derived(sectionsFor(relation, ACTIVITY_READY));
+  const collection = $derived(!!data.profile?.collectionPublic);
+  const allowed = $derived(sectionsFor(relation, ACTIVITY_READY, collection));
   const asked = $derived(page.url.searchParams.get('s'));
   const section = $derived<SectionKey>(sectionFrom(page.url.searchParams, allowed));
   // Grants load after the session; give them a moment before falling back to Uploaded emotes.
@@ -50,7 +52,7 @@
   // A section only the owner or an editor has, asked for before the session is known: wait for it.
   const waiting = $derived(!!asked && asked !== section && (!session.known || (!!session.me && !granted)));
 
-  const TITLE: Record<SectionKey, string> = { overview: 'Overview', uploads: 'Uploaded emotes', active: 'Active emotes', sets: 'Emote sets', favourites: 'Favourites', cosmetics: 'Cosmetics', activity: 'Activity' };
+  const TITLE: Record<SectionKey, string> = { overview: 'Overview', uploads: 'Uploaded emotes', active: 'Active emotes', sets: 'Emote sets', favourites: 'Favourites', cosmetics: 'Cosmetics', collection: 'Collection', activity: 'Activity' };
 </script>
 
 {#snippet actions()}
@@ -86,7 +88,7 @@
       <ProfileHeader {account} {relation} profile={data.profile} seed={data.look} {actions} />
     {/snippet}
     {#snippet rail()}
-      <ProfileRail {account} {relation} current={section} activity={ACTIVITY_READY} />
+      <ProfileRail {account} {relation} current={section} activity={ACTIVITY_READY} {collection} />
     {/snippet}
 
     {#if waiting}
@@ -101,6 +103,8 @@
       <Favourites />
     {:else if section === 'cosmetics'}
       {#key data.id}<CosmeticsPicker accountId={data.id} mine={relation.mine} {name} />{/key}
+    {:else if section === 'collection'}
+      {#key data.id}<Collection accountId={data.id} mine={relation.mine} name={data.creator.displayName} look={data.look} />{/key}
     {:else if section === 'activity'}
       {#key data.id}<ActivityFeed accountId={data.id} name={data.creator.displayName} />{/key}
     {:else if relation.mine}

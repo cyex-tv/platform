@@ -16,6 +16,16 @@ export type Scalars = {
   Float: { input: number; output: number; }
 };
 
+/** The badges and paints an account owns, when it shows them. */
+export type AccountCollection = {
+  __typename?: 'AccountCollection';
+  accountId: Scalars['String']['output'];
+  /** Newest first. */
+  items: Array<CollectionItem>;
+  /** Shown on the public profile. The owner sees their own collection either way. */
+  public: Scalars['Boolean']['output'];
+};
+
 /** What one account shows, with the badge and paint themselves (`accountCosmetics`). */
 export type AccountCosmetics = {
   __typename?: 'AccountCosmetics';
@@ -56,6 +66,8 @@ export type AccountProfile = {
   account: AccountSummary;
   /** Each channel's active set, for channels showing one. */
   activeSets: Array<ActiveChannelSet>;
+  /** The account shows the badges and paints it owns (`accountCollection`). Off by default. */
+  collectionPublic: Scalars['Boolean']['output'];
   createdAt: Scalars['String']['output'];
   /** The account's editors, oldest first: who they are only, never what they may do. */
   editors: Array<AccountSummary>;
@@ -307,6 +319,61 @@ export type AdminAccount = {
   uploadsBlockedUntil?: Maybe<Scalars['String']['output']>;
 };
 
+/** One line staff put under the header for everyone. */
+export type Announcement = {
+  __typename?: 'Announcement';
+  /** A badge (from `cosmetics`) shown small beside the line. */
+  badgeId?: Maybe<Scalars['String']['output']>;
+  createdAt: Scalars['String']['output'];
+  /** An emote shown small beside the line, while it is approved and public. */
+  emote?: Maybe<Emote>;
+  /** When staff ended it early. */
+  endedAt?: Maybe<Scalars['String']['output']>;
+  /** Empty: until staff end it. */
+  endsAt?: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  kind: AnnouncementKind;
+  /** The link's words; empty means "Learn more". */
+  linkLabel?: Maybe<Scalars['String']['output']>;
+  /** An `https://` address or a path on cyex.tv (`/shop`). */
+  linkUrl?: Maybe<Scalars['String']['output']>;
+  /** Shown right now. */
+  live: Scalars['Boolean']['output'];
+  /** Empty: from when it was made. */
+  startsAt?: Maybe<Scalars['String']['output']>;
+  /** The line itself, 1 to 200 characters. Plain text. */
+  text: Scalars['String']['output'];
+  updatedAt: Scalars['String']['output'];
+};
+
+/** What `createAnnouncement` makes and `updateAnnouncement` replaces it with. */
+export type AnnouncementInput = {
+  /** A badge's ID. */
+  badgeId?: InputMaybe<Scalars['String']['input']>;
+  /** An approved emote's ID. */
+  emoteId?: InputMaybe<Scalars['String']['input']>;
+  /** RFC 3339, in the future and after `startsAt`. */
+  endsAt?: InputMaybe<Scalars['String']['input']>;
+  kind: AnnouncementKind;
+  /** Up to 40 characters; only with `linkUrl`. */
+  linkLabel?: InputMaybe<Scalars['String']['input']>;
+  /** `https://…` or a path on cyex.tv starting with `/`, up to 500 characters. */
+  linkUrl?: InputMaybe<Scalars['String']['input']>;
+  /** RFC 3339. */
+  startsAt?: InputMaybe<Scalars['String']['input']>;
+  /** 1 to 200 characters, one line. */
+  text: Scalars['String']['input'];
+};
+
+/** What an announcement is about: its icon and tone under the header. */
+export type AnnouncementKind =
+  /** An event or a sale, often with an emote or a badge. */
+  | 'CAMPAIGN'
+  /** News, a tip. */
+  | 'INFO'
+  /** Downtime or something not working. */
+  | 'MAINTENANCE';
+
 /** One audited change (ADR 0010). `before` and `after` are JSON, as text. */
 export type AuditEntry = {
   __typename?: 'AuditEntry';
@@ -439,6 +506,22 @@ export type CodeBatchPage = {
   __typename?: 'CodeBatchPage';
   items: Array<CodeBatch>;
   total: Scalars['Int']['output'];
+};
+
+/**
+ * One badge or paint in a public collection: what it is, since when and how it came. Never who
+ * gave it, why, or what it cost.
+ */
+export type CollectionItem = {
+  __typename?: 'CollectionItem';
+  /** The badge's or paint's ID in `cosmetics`. */
+  cosmeticId: Scalars['String']['output'];
+  /** `BADGE` or `PAINT`. */
+  kind: GrantKind;
+  name: Scalars['String']['output'];
+  ownedSince: Scalars['String']['output'];
+  /** `STAFF`, `PURCHASE` (the shop), `CODE` or `EVENT`. */
+  source: GrantSource;
 };
 
 /** Every badge and paint, for clients to cache (`GET /v1/cosmetics`). */
@@ -945,6 +1028,11 @@ export type Mutation = {
    */
   cloneSet: ClonedSet;
   /**
+   * Put an announcement under the header: one line, a kind, an optional link, emote or badge,
+   * start and end. Needs `site.announce`; audited.
+   */
+  createAnnouncement: Announcement;
+  /**
    * Make a badge from a ready badge picture (`POST /v1/cosmetics/images`). Needs
    * `cosmetics.manage`. Audited; publishes `cosmetic.created`.
    */
@@ -1016,6 +1104,8 @@ export type Mutation = {
   deleteStaffNote: Scalars['Boolean']['output'];
   /** Turn off every code of a batch. Needs `codes.manage`. Audited. */
   disableCodeBatch: CodeBatch;
+  /** End an announcement now. Needs `site.announce`; audited. */
+  endAnnouncement: Announcement;
   /**
    * A copy of everything about your account, as JSON text (`format`, `version`, `account`,
    * `identities`, `sessions`, `channels`, `emotes`, `sets`, `set_editors`, `account_editors`,
@@ -1126,12 +1216,20 @@ export type Mutation = {
    * with `PROFILE`.
    */
   selectCosmetics: OwnedCosmetics;
+  /** Show (or hide) the badges and paints you own on your public profile. Off by default. */
+  setCollectionPublic: AccountCollection;
   /**
    * Go by the name and picture of your identity on `platform` (when more than one is linked,
    * pick which login you show as). Every linked login still finds you in search.
    * `not_found` when that platform isn't linked. Unlinking it goes back to the default.
    */
   setDisplayPlatform: Me;
+  /**
+   * Turn notification kinds on or off (`notify`: off, the server doesn't create them at all)
+   * and choose which pop up (`toast`). Kinds left out keep their setting. `unknown_kind` for a
+   * kind that doesn't exist, `required_kind` for turning off one that must stay on.
+   */
+  setNotificationPrefs: Array<NotificationPref>;
   /**
    * Sign out everywhere, here too: every site and app session ends and the cookie is cleared.
    * Returns how many sessions ended. With an app token, only that app session ends.
@@ -1182,6 +1280,8 @@ export type Mutation = {
    * Audited.
    */
   updateAccountEditor: AccountEditor;
+  /** Replace every field of an announcement that hasn't ended. Needs `site.announce`; audited. */
+  updateAnnouncement: Announcement;
   /** Change a badge's name, tooltip or picture. Needs `cosmetics.manage`. Audited. */
   updateBadge: Badge;
   /**
@@ -1276,6 +1376,11 @@ export type MutationCloneSetArgs = {
 };
 
 
+export type MutationCreateAnnouncementArgs = {
+  input: AnnouncementInput;
+};
+
+
 export type MutationCreateBadgeArgs = {
   input: CreateBadgeInput;
 };
@@ -1357,6 +1462,11 @@ export type MutationDeleteStaffNoteArgs = {
 
 
 export type MutationDisableCodeBatchArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type MutationEndAnnouncementArgs = {
   id: Scalars['String']['input'];
 };
 
@@ -1474,8 +1584,18 @@ export type MutationSelectCosmeticsArgs = {
 };
 
 
+export type MutationSetCollectionPublicArgs = {
+  public: Scalars['Boolean']['input'];
+};
+
+
 export type MutationSetDisplayPlatformArgs = {
   platform: Platform;
+};
+
+
+export type MutationSetNotificationPrefsArgs = {
+  prefs: Array<NotificationPrefInput>;
 };
 
 
@@ -1528,6 +1648,12 @@ export type MutationUpdateAccountEditorArgs = {
   ownerId?: InputMaybe<Scalars['String']['input']>;
   permissions: Array<EditorPermission>;
   setIds?: InputMaybe<Array<Scalars['String']['input']>>;
+};
+
+
+export type MutationUpdateAnnouncementArgs = {
+  id: Scalars['String']['input'];
+  input: AnnouncementInput;
 };
 
 
@@ -1595,6 +1721,25 @@ export type Notification = {
    * withdrawn or run out since). Null for other kinds.
    */
   transferState?: Maybe<TransferRequestState>;
+};
+
+/** One kind of notification and what the account chose for it. */
+export type NotificationPref = {
+  __typename?: 'NotificationPref';
+  /** For example `emote.approved` (the same as `Notification.kind`). */
+  kind: Scalars['String']['output'];
+  /** Created at all. Off: nothing is stored for this kind. */
+  notify: Scalars['Boolean']['output'];
+  /** Can't be turned off (a hand-over waiting for your answer, a takedown). */
+  required: Scalars['Boolean']['output'];
+  /** Pops up on the website when it arrives. */
+  toast: Scalars['Boolean']['output'];
+};
+
+export type NotificationPrefInput = {
+  kind: Scalars['String']['input'];
+  notify: Scalars['Boolean']['input'];
+  toast: Scalars['Boolean']['input'];
 };
 
 export type Order = {
@@ -1841,6 +1986,13 @@ export type Query = {
    */
   accountActivityPage: ActivityPage;
   /**
+   * The badges and paints an account owns, with since when and how each came (staff, the
+   * shop, a code, an event); never who gave it, why or what it cost. Null unless the account
+   * shows its collection (`AccountProfile.collectionPublic`); the account itself always sees
+   * its own.
+   */
+  accountCollection?: Maybe<AccountCollection>;
+  /**
    * The badge and paint up to 100 accounts show, with the badges and paints themselves, by
    * cyex.tv account ID (for names on profiles, tiles and lists). Only accounts showing
    * something are listed; blocked and deleted ones never. `too_many` over 100.
@@ -1900,10 +2052,20 @@ export type Query = {
    */
   accountSubscriptions: Array<AccountSubscription>;
   /**
+   * The site announcement shown under the header right now, or null. Public; shared for a few
+   * seconds, so a change shows within that.
+   */
+  activeAnnouncement?: Maybe<Announcement>;
+  /**
    * An account as staff see it: identities, created time and restrictions. Needs
    * `users.view` or `users.restrict`.
    */
   adminAccount: AdminAccount;
+  /**
+   * Every site announcement, newest first (the latest 50), ended ones too. Needs
+   * `site.announce`.
+   */
+  announcements: Array<Announcement>;
   /**
    * Audited changes, newest first. Needs `audit.view`. Narrow by target, `actorId`, an exact
    * `action`, and `since` (inclusive) / `until` (exclusive) as RFC 3339 times. Page back with
@@ -2032,6 +2194,11 @@ export type Query = {
    * (any case). `perPage` is 1 to 100, default 50. Only you can read it.
    */
   myFavourites: EmotePage;
+  /**
+   * Every notification kind and what you chose for it: created at all (`notify`) and popping
+   * up on the website (`toast`). `required` kinds always notify.
+   */
+  myNotificationPrefs: Array<NotificationPref>;
   /**
    * Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
    * `emote.rejected`, `emote.taken_down`, `editor.added`, `editor.changed`, `editor.removed`,
@@ -2170,6 +2337,11 @@ export type QueryAccountActivityPageArgs = {
   before?: InputMaybe<Scalars['String']['input']>;
   filter?: InputMaybe<ActivityFilter>;
   limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryAccountCollectionArgs = {
+  accountId: Scalars['String']['input'];
 };
 
 
@@ -3536,7 +3708,7 @@ export type AccountProfileQueryVariables = Exact<{
 }>;
 
 
-export type AccountProfileQuery = { __typename?: 'Query', accountProfile?: { __typename?: 'AccountProfile', createdAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }>, roles: Array<{ __typename?: 'PublicRole', id: string, name: string }>, activeSets: Array<{ __typename?: 'ActiveChannelSet', platform: Platform, login: string, setId: string, setName: string }>, editors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }> } | null };
+export type AccountProfileQuery = { __typename?: 'Query', accountProfile?: { __typename?: 'AccountProfile', createdAt: string, collectionPublic: boolean, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }>, roles: Array<{ __typename?: 'PublicRole', id: string, name: string }>, activeSets: Array<{ __typename?: 'ActiveChannelSet', platform: Platform, login: string, setId: string, setName: string }>, editors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }> } | null };
 
 export type MyCosmeticsQueryVariables = Exact<{
   accountId?: InputMaybe<Scalars['String']['input']>;
@@ -3859,6 +4031,66 @@ export type EntitlementHoldersQueryVariables = Exact<{
 
 
 export type EntitlementHoldersQuery = { __typename?: 'Query', entitlementHolders: Array<{ __typename?: 'EntitlementGrant', kind: GrantKind, itemId: string, itemName: string, accountId: string, source: GrantSource, reason?: string | null, grantedBy?: string | null, grantedAt?: string | null, orderId?: string | null, orderName?: string | null, orderStatus?: string | null, codeBatchId?: string | null, codeBatchName?: string | null, revokedAt?: string | null, revokedBy?: string | null, revokeReason?: string | null, active: boolean }> };
+
+export type AnnouncementFieldsFragment = { __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null };
+
+export type ActiveAnnouncementQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ActiveAnnouncementQuery = { __typename?: 'Query', activeAnnouncement?: { __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null } | null };
+
+export type AnnouncementsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type AnnouncementsQuery = { __typename?: 'Query', announcements: Array<{ __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null }> };
+
+export type CreateAnnouncementMutationVariables = Exact<{
+  input: AnnouncementInput;
+}>;
+
+
+export type CreateAnnouncementMutation = { __typename?: 'Mutation', createAnnouncement: { __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null } };
+
+export type UpdateAnnouncementMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: AnnouncementInput;
+}>;
+
+
+export type UpdateAnnouncementMutation = { __typename?: 'Mutation', updateAnnouncement: { __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null } };
+
+export type EndAnnouncementMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type EndAnnouncementMutation = { __typename?: 'Mutation', endAnnouncement: { __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null } };
+
+export type NotificationPrefsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type NotificationPrefsQuery = { __typename?: 'Query', myNotificationPrefs: Array<{ __typename?: 'NotificationPref', kind: string, notify: boolean, toast: boolean, required: boolean }> };
+
+export type SetNotificationPrefsMutationVariables = Exact<{
+  prefs: Array<NotificationPrefInput> | NotificationPrefInput;
+}>;
+
+
+export type SetNotificationPrefsMutation = { __typename?: 'Mutation', setNotificationPrefs: Array<{ __typename?: 'NotificationPref', kind: string, notify: boolean, toast: boolean, required: boolean }> };
+
+export type AccountCollectionQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type AccountCollectionQuery = { __typename?: 'Query', accountCollection?: { __typename?: 'AccountCollection', accountId: string, public: boolean, items: Array<{ __typename?: 'CollectionItem', kind: GrantKind, cosmeticId: string, name: string, ownedSince: string, source: GrantSource }> } | null };
+
+export type SetCollectionPublicMutationVariables = Exact<{
+  public: Scalars['Boolean']['input'];
+}>;
+
+
+export type SetCollectionPublicMutation = { __typename?: 'Mutation', setCollectionPublic: { __typename?: 'AccountCollection', accountId: string, public: boolean, items: Array<{ __typename?: 'CollectionItem', kind: GrantKind, cosmeticId: string, name: string, ownedSince: string, source: GrantSource }> } };
 
 export type PersonalListsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -4376,6 +4608,34 @@ export const GrantFieldsFragmentDoc = new TypedDocumentString(`
   active
 }
     `, {"fragmentName":"GrantFields"}) as unknown as TypedDocumentString<GrantFieldsFragment, unknown>;
+export const AnnouncementFieldsFragmentDoc = new TypedDocumentString(`
+    fragment AnnouncementFields on Announcement {
+  id
+  kind
+  text
+  linkUrl
+  linkLabel
+  badgeId
+  startsAt
+  endsAt
+  endedAt
+  createdAt
+  updatedAt
+  live
+  emote {
+    id
+    name
+    host
+    animated
+    files {
+      name
+      width
+      height
+      isStatic
+    }
+  }
+}
+    `, {"fragmentName":"AnnouncementFields"}) as unknown as TypedDocumentString<AnnouncementFieldsFragment, unknown>;
 export const StudioPaintsDocument = new TypedDocumentString(`
     query StudioPaints {
   cosmetics {
@@ -6157,6 +6417,7 @@ export const AccountProfileDocument = new TypedDocumentString(`
       avatar
     }
     createdAt
+    collectionPublic
   }
 }
     `) as unknown as TypedDocumentString<AccountProfileQuery, AccountProfileQueryVariables>;
@@ -7478,6 +7739,216 @@ export const EntitlementHoldersDocument = new TypedDocumentString(`
   revokeReason
   active
 }`) as unknown as TypedDocumentString<EntitlementHoldersQuery, EntitlementHoldersQueryVariables>;
+export const ActiveAnnouncementDocument = new TypedDocumentString(`
+    query ActiveAnnouncement {
+  activeAnnouncement {
+    ...AnnouncementFields
+  }
+}
+    fragment AnnouncementFields on Announcement {
+  id
+  kind
+  text
+  linkUrl
+  linkLabel
+  badgeId
+  startsAt
+  endsAt
+  endedAt
+  createdAt
+  updatedAt
+  live
+  emote {
+    id
+    name
+    host
+    animated
+    files {
+      name
+      width
+      height
+      isStatic
+    }
+  }
+}`) as unknown as TypedDocumentString<ActiveAnnouncementQuery, ActiveAnnouncementQueryVariables>;
+export const AnnouncementsDocument = new TypedDocumentString(`
+    query Announcements {
+  announcements {
+    ...AnnouncementFields
+  }
+}
+    fragment AnnouncementFields on Announcement {
+  id
+  kind
+  text
+  linkUrl
+  linkLabel
+  badgeId
+  startsAt
+  endsAt
+  endedAt
+  createdAt
+  updatedAt
+  live
+  emote {
+    id
+    name
+    host
+    animated
+    files {
+      name
+      width
+      height
+      isStatic
+    }
+  }
+}`) as unknown as TypedDocumentString<AnnouncementsQuery, AnnouncementsQueryVariables>;
+export const CreateAnnouncementDocument = new TypedDocumentString(`
+    mutation CreateAnnouncement($input: AnnouncementInput!) {
+  createAnnouncement(input: $input) {
+    ...AnnouncementFields
+  }
+}
+    fragment AnnouncementFields on Announcement {
+  id
+  kind
+  text
+  linkUrl
+  linkLabel
+  badgeId
+  startsAt
+  endsAt
+  endedAt
+  createdAt
+  updatedAt
+  live
+  emote {
+    id
+    name
+    host
+    animated
+    files {
+      name
+      width
+      height
+      isStatic
+    }
+  }
+}`) as unknown as TypedDocumentString<CreateAnnouncementMutation, CreateAnnouncementMutationVariables>;
+export const UpdateAnnouncementDocument = new TypedDocumentString(`
+    mutation UpdateAnnouncement($id: String!, $input: AnnouncementInput!) {
+  updateAnnouncement(id: $id, input: $input) {
+    ...AnnouncementFields
+  }
+}
+    fragment AnnouncementFields on Announcement {
+  id
+  kind
+  text
+  linkUrl
+  linkLabel
+  badgeId
+  startsAt
+  endsAt
+  endedAt
+  createdAt
+  updatedAt
+  live
+  emote {
+    id
+    name
+    host
+    animated
+    files {
+      name
+      width
+      height
+      isStatic
+    }
+  }
+}`) as unknown as TypedDocumentString<UpdateAnnouncementMutation, UpdateAnnouncementMutationVariables>;
+export const EndAnnouncementDocument = new TypedDocumentString(`
+    mutation EndAnnouncement($id: String!) {
+  endAnnouncement(id: $id) {
+    ...AnnouncementFields
+  }
+}
+    fragment AnnouncementFields on Announcement {
+  id
+  kind
+  text
+  linkUrl
+  linkLabel
+  badgeId
+  startsAt
+  endsAt
+  endedAt
+  createdAt
+  updatedAt
+  live
+  emote {
+    id
+    name
+    host
+    animated
+    files {
+      name
+      width
+      height
+      isStatic
+    }
+  }
+}`) as unknown as TypedDocumentString<EndAnnouncementMutation, EndAnnouncementMutationVariables>;
+export const NotificationPrefsDocument = new TypedDocumentString(`
+    query NotificationPrefs {
+  myNotificationPrefs {
+    kind
+    notify
+    toast
+    required
+  }
+}
+    `) as unknown as TypedDocumentString<NotificationPrefsQuery, NotificationPrefsQueryVariables>;
+export const SetNotificationPrefsDocument = new TypedDocumentString(`
+    mutation SetNotificationPrefs($prefs: [NotificationPrefInput!]!) {
+  setNotificationPrefs(prefs: $prefs) {
+    kind
+    notify
+    toast
+    required
+  }
+}
+    `) as unknown as TypedDocumentString<SetNotificationPrefsMutation, SetNotificationPrefsMutationVariables>;
+export const AccountCollectionDocument = new TypedDocumentString(`
+    query AccountCollection($accountId: String!) {
+  accountCollection(accountId: $accountId) {
+    accountId
+    public
+    items {
+      kind
+      cosmeticId
+      name
+      ownedSince
+      source
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<AccountCollectionQuery, AccountCollectionQueryVariables>;
+export const SetCollectionPublicDocument = new TypedDocumentString(`
+    mutation SetCollectionPublic($public: Boolean!) {
+  setCollectionPublic(public: $public) {
+    accountId
+    public
+    items {
+      kind
+      cosmeticId
+      name
+      ownedSince
+      source
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<SetCollectionPublicMutation, SetCollectionPublicMutationVariables>;
 export const PersonalListsDocument = new TypedDocumentString(`
     query PersonalLists {
   hiddenEmotes {

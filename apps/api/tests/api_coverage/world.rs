@@ -93,6 +93,7 @@ pub fn open_rates() -> Rates {
         delete_account: r,
         emote_transfers: r,
         personal_lists: r,
+        prefs: r,
     }
 }
 
