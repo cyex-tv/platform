@@ -4,12 +4,17 @@
   // dimensions and weight, and two tabs: Activity (what happened to it, with date and time) and
   // Notes (what reviewers tell each other). Reject and Approve sit at the bottom with the smaller
   // verdicts (approve as unlisted, approve for its owner only) between them. A approves, R
-  // rejects, U and P approve unlisted and private; after a verdict the page opens the next one.
+  // rejects, U and P approve unlisted and private, S skips to the next; after a verdict the page
+  // opens the next one. Under the facts, "Possible duplicates": other emotes from the very same
+  // file, then ones with a close name (emoteDuplicates), each opening in a new tab.
   import { gql } from '$lib/api';
   import { ready, src } from '$lib/emote';
   import { bytes, clean, count, dateTime } from '$lib/format';
   import type { EmoteFieldsFragment, EmoteHistoryQuery, EmoteVisibility } from '$lib/gql/graphql';
-  import { ADD_EMOTE_NOTE, DELETE_EMOTE_NOTE, EMOTE_HISTORY, EMOTE_NOTES } from '$lib/queries';
+  import { ADD_EMOTE_NOTE, DELETE_EMOTE_NOTE, EMOTE_DUPLICATES, EMOTE_HISTORY, EMOTE_NOTES } from '$lib/queries';
+  import type { EmoteDuplicatesQuery } from '$lib/gql/graphql';
+  import Thumb from '$lib/tool/Thumb.svelte';
+  import { STATE_LABEL } from '$lib/tool/state';
   import IconButton from '$lib/components/IconButton.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
@@ -31,11 +36,13 @@
     hasNext: boolean;
     onprev: () => void;
     onnext: () => void;
+    /** S: on to the next upload without a verdict. */
+    onskip: () => void;
     onapprove: (visibility?: EmoteVisibility) => void;
     onreject: () => void;
     onclose: () => void;
   };
-  let { emote, place, total, busy, resolved, hasPrev, hasNext, onprev, onnext, onapprove, onreject, onclose }: Props = $props();
+  let { emote, place, total, busy, resolved, hasPrev, hasNext, onprev, onnext, onskip, onapprove, onreject, onclose }: Props = $props();
 
   let dialog: HTMLDialogElement;
   let tab = $state<'activity' | 'notes'>('activity');
@@ -69,8 +76,28 @@
   $effect(() => {
     const id = emote?.id;
     noteCount = null;
-    if (id) loadHistory(id);
+    if (id) {
+      loadHistory(id);
+      loadDupes(id);
+    }
   });
+
+  // Possible duplicates: null while loading (the strip keeps its place), [] for none.
+  let dupes = $state<EmoteDuplicatesQuery['emoteDuplicates'] | null>(null);
+  let dupesProblem = $state(false);
+  let dupeSeq = 0;
+  async function loadDupes(id: string) {
+    const mine = ++dupeSeq;
+    dupes = null;
+    dupesProblem = false;
+    try {
+      const r = (await gql(EMOTE_DUPLICATES, { emoteId: id })).emoteDuplicates;
+      if (mine === dupeSeq) dupes = r;
+    } catch {
+      if (mine === dupeSeq) dupesProblem = true;
+    }
+  }
+  const sameFile = $derived(dupes?.filter((d) => d.sameFile).length ?? 0);
 
   function onkeydown(ev: KeyboardEvent) {
     if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.defaultPrevented || !emote) return;
@@ -88,8 +115,13 @@
       if (hasNext) onnext();
       return;
     }
-    if (resolved || busy || ev.repeat) return;
     const k = ev.key.toLowerCase();
+    if (k === 's' && !ev.shiftKey && !ev.repeat) {
+      ev.preventDefault();
+      if (hasNext) onskip();
+      return;
+    }
+    if (resolved || busy || ev.repeat) return;
     if (k === 'a' && ready(emote)) (ev.preventDefault(), onapprove());
     else if (k === 'u' && ready(emote)) (ev.preventDefault(), onapprove('UNLISTED'));
     else if (k === 'p' && ready(emote)) (ev.preventDefault(), onapprove('PRIVATE'));
@@ -149,6 +181,39 @@
       </section>
     </div>
 
+    <section class="dupes" aria-labelledby="rd-dupes">
+      <h3 id="rd-dupes" class="ui-label">
+        Possible duplicates
+        {#if dupes?.length}<span class="ui-num">({count(dupes.length)})</span>{/if}
+        {#if sameFile}<span class="ui-chip warn">{sameFile === 1 ? 'Same file as 1 other' : `Same file as ${count(sameFile)} others`}</span>{/if}
+      </h3>
+      {#if dupesProblem}
+        <p class="ui-hint">Couldn’t check for duplicates. <button class="retry" type="button" onclick={() => loadDupes(e.id)}>Try again</button></p>
+      {:else if dupes === null}
+        <p class="ui-hint" aria-busy="true">Checking…</p>
+      {:else if dupes.length === 0}
+        <p class="ui-hint">None: no other emote has this file or a close name.</p>
+      {:else}
+        <ul class="strip">
+          {#each dupes as d (d.emote.id)}
+            <li>
+              <a href="/emotes/{encodeURIComponent(d.emote.id)}" target="_blank" rel="noopener" title="{clean(d.emote.name)} by {clean(d.emote.owner?.displayName) || 'unknown'}">
+                <span class="dthumb"><Thumb emote={d.emote} name="" box={40} /></span>
+                <span class="dtext">
+                  <span class="dname"><bdi>{clean(d.emote.name)}</bdi></span>
+                  <span class="dby"><bdi>{clean(d.emote.owner?.displayName) || 'Unknown'}</bdi></span>
+                  <span class="dwhy">
+                    {#if d.sameFile}<span class="ui-chip warn">Same file</span>{:else}<span class="ui-chip">Name {Math.round(d.similarity * 100)}%</span>{/if}
+                    {#if d.emote.state !== 'APPROVED'}<span class="ui-chip {d.emote.state.toLowerCase()}">{STATE_LABEL[d.emote.state]}</span>{/if}
+                  </span>
+                </span>
+              </a>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </section>
+
     <div class="tabs">
       <Segmented label="Show" size="s" value={tab} onchange={(v) => (tab = v)}
         options={[{ value: 'activity', label: history ? `Activity (${history.length + 1})` : 'Activity' }, { value: 'notes', label: noteCount === null ? 'Notes' : `Notes (${noteCount})` }]} />
@@ -196,6 +261,7 @@
       <footer>
         <button class="ui-btn danger" type="button" disabled={busy} onclick={onreject}><Icon name="x" size={15} />Reject</button>
         <span class="small">
+          <IconButton label="Skip to the next, no verdict" icon="arrow-right" variant="outline" tip="top" disabled={!hasNext} onclick={onskip} />
           <IconButton label="Approve as unlisted" icon="eye-off" variant="outline" tip="top" disabled={busy || !ready(e)} onclick={() => onapprove('UNLISTED')} />
           <IconButton label="Approve for its owner only" icon="user" variant="outline" tip="top" disabled={busy || !ready(e)} onclick={() => onapprove('PRIVATE')} />
           <IconButton label="Open the uploader’s account" icon="circle-user" variant="outline" tip="top" href={e.owner ? `/admin/users/${encodeURIComponent(e.owner.id)}` : undefined} disabled={!e.owner} />
@@ -234,6 +300,25 @@
   .chips .ui-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-transform: none; letter-spacing: 0; }
   .id { display: flex; align-items: center; gap: 6px; }
   .id .ui-mono { overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+  .dupes { display: grid; gap: 6px; padding: 10px 16px 12px; border-top: 1px solid var(--border); min-width: 0; }
+  .dupes h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; }
+  .dupes .ui-chip, .dwhy .ui-chip { height: 20px; font-size: 11px; text-transform: none; letter-spacing: 0; }
+  .dupes .warn { color: var(--yellow); }
+  .dupes p { margin: 0; min-height: 20px; }
+  .retry { padding: 0; border: 0; background: none; font: inherit; color: var(--accent-text); cursor: pointer; }
+  /* One row that scrolls sideways on a phone; wraps into rows when there is room. */
+  .strip { list-style: none; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(180px, 220px); gap: 8px; margin: 0; padding: 0 0 4px;
+    overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
+  .strip a { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 8px; padding: 6px 8px 6px 6px; min-height: 56px;
+    border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); color: var(--text); text-decoration: none; }
+  @media (hover: hover) and (pointer: fine) { .strip a:hover { border-color: var(--border-strong); } }
+  .strip a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .dthumb { display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--radius); background: var(--bg); }
+  .dtext { display: grid; gap: 1px; min-width: 0; }
+  .dname, .dby { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dname { font-size: var(--text-sub); font-weight: 600; }
+  .dby { font-size: 12px; color: var(--muted); }
+  .dwhy { display: flex; gap: 4px; margin-top: 2px; }
   .tabs { display: flex; justify-content: center; padding: 4px 16px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
   .pane { min-height: 140px; max-height: 280px; overflow: auto; }
   .log > li { align-items: flex-start; justify-content: space-between; gap: 12px; }

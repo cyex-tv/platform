@@ -984,6 +984,57 @@ pub struct ReviewQueue {
     pub counts: ReviewCounts,
 }
 
+/// What a batch review does to every emote in it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewVerdict {
+    Approve,
+    Reject,
+}
+
+/// What a batch did: the IDs it changed, and the ones it left alone with why. Nothing is half
+/// done: the changes commit together.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct BatchOutcome {
+    pub done: Vec<String>,
+    pub failed: Vec<BatchFailure>,
+}
+
+/// One item a batch left alone.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct BatchFailure {
+    pub id: String,
+    /// A machine-readable reason, as an error's `code` (`not_pending`, `not_open`, `not_found`).
+    pub code: String,
+    pub message: String,
+}
+
+/// Another emote that may be the same as one in the review queue.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct DuplicateCandidate {
+    pub emote: Emote,
+    /// Made from the very same file (the same sha256).
+    pub same_file: bool,
+    /// How alike the names are, 0 to 1.
+    pub similarity: f64,
+}
+
+/// One login from a pasted list, and the account it names (none when it names no account, or
+/// two different ones on Twitch and Kick).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct LoginMatch {
+    /// The login as it was asked for, trimmed.
+    pub login: String,
+    pub account: Option<AccountSummary>,
+    /// Why there is no account: `not_found`, `ambiguous` or `bad_login`.
+    pub problem: Option<String>,
+}
+
 /// How many emotes wait for review, by tab.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]

@@ -800,6 +800,72 @@ async fn every_site_operation_runs_against_the_real_api() {
     )
     .await;
 
+    // Many at once, possible duplicates, the ready reasons, pasted logins, the same-file check.
+    let e_batch = emote(&w, &o, "covBatch", EmoteState::Pending).await;
+    let data = c
+        .op(
+            os,
+            "ReviewEmotes",
+            json!({ "ids": [e_batch], "verdict": "APPROVE", "visibility": "UNLISTED" }),
+        )
+        .await;
+    c.check(
+        data["reviewEmotes"]["done"] == json!([e_batch]),
+        format!("ReviewEmotes: {data}"),
+    );
+    c.op(os, "EmoteDuplicates", json!({ "emoteId": e_batch }))
+        .await;
+    let data = c.op(os, "ReviewReasons", json!({})).await;
+    c.check(
+        data["reviewReasons"]
+            .as_array()
+            .is_some_and(|r| r.len() == 6),
+        format!("ReviewReasons: {data}"),
+    );
+    c.op(
+        os,
+        "SetReviewReasons",
+        json!({ "reasons": ["Blurry", "Not an emote"] }),
+    )
+    .await;
+    let e_report2 = emote(&w, &t, "covWorse", EmoteState::Approved).await;
+    let report2 = c
+        .id(
+            fs,
+            "ReportEmote",
+            json!({ "id": e_report2, "reason": "This one too." }),
+            "/reportEmote/id",
+        )
+        .await;
+    let data = c
+        .op(
+            os,
+            "DismissReports",
+            json!({ "ids": [report2], "note": "Fine." }),
+        )
+        .await;
+    c.check(
+        data["dismissReports"]["done"] == json!([report2]),
+        format!("DismissReports: {data}"),
+    );
+    let data = c
+        .op(
+            os,
+            "AccountsByLogin",
+            json!({ "logins": ["kickowner", "nobody_here"] }),
+        )
+        .await;
+    c.check(
+        data["accountsByLogin"][1]["problem"] == "not_found",
+        format!("AccountsByLogin: {data}"),
+    );
+    c.op(
+        fs,
+        "EmotesWithSameFile",
+        json!({ "sha256": "00".repeat(32) }),
+    )
+    .await;
+
     // Staff pages about an account.
     let ttid = t.tid();
     c.op(os, "AdminAccount", json!({ "accountId": ttid })).await;

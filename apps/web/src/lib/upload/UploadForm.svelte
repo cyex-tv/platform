@@ -11,6 +11,8 @@
   // One file that goes through opens its page; a batch stays with a link per emote.
   // "Upload as" (ADR 0014) lists you and the accounts where you hold Upload on every set; you by
   // default, or the account in ?for= when you may upload for it. The account owns what you upload.
+  // A file that is already a public emote (the same bytes) says "Looks like <emote> by <owner>"
+  // with a link (same-file.ts); it can still be uploaded.
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { onDestroy } from 'svelte';
@@ -44,6 +46,7 @@
   import LocalPreview from '$lib/tool/LocalPreview.svelte';
   import LeaveGuard from '$lib/tool/LeaveGuard.svelte';
   import { notify } from '$lib/tool/notices.svelte';
+  import { sameFileEmotes, sameFileLine, type SameFileEmote } from './same-file';
 
   type Props = {
     /** In the dialog: the form scrolls inside it and Cancel closes it. */
@@ -73,6 +76,8 @@
     error: string | null;
     made: Uploaded | null;
     open: boolean;
+    /** Public emotes made from these very bytes; empty when none (or not checked). */
+    same: SameFileEmote[];
   };
 
   let items = $state<Item[]>([]);
@@ -136,6 +141,14 @@
     }
   }
 
+  /** Asks whether the file is already a public emote; signed in only, quietly. */
+  async function checkSame(item: Item) {
+    if (!session.me || fileProblem(item.file)) return;
+    const found = await sameFileEmotes(item.file);
+    const it = items.find((x) => x.key === item.key);
+    if (it && found.length) it.same = found;
+  }
+
   export function add(list: FileList | File[] | null | undefined) {
     if (!list?.length) return;
     const notes: string[] = [];
@@ -155,10 +168,11 @@
       const item: Item = {
         key: nextKey++, file, url: URL.createObjectURL(file), width: 0, height: 0, sizeError: null,
         name, prefilled: name, tags: [], zeroWidth: false, visibility: 'PUBLIC', nsfw: false,
-        status: 'ready', progress: 0, error: null, made: null, open: false,
+        status: 'ready', progress: 0, error: null, made: null, open: false, same: [],
       };
       items.push(item);
       measure(item);
+      checkSame(item);
     }
     // The first new file opens, so its fields are right there.
     if (items.length > firstNew) items.forEach((i, n) => (i.open = n === firstNew));
@@ -365,6 +379,13 @@
             </span>
           </div>
 
+          {#if item.same.length && item.status !== 'done'}
+            {@const line = sameFileLine(item.same)}
+            <p class="same" role="status">
+              <Icon name="copy" size={15} />
+              <span>Looks like <a href="/emotes/{encodeURIComponent(item.same[0].id)}" target="_blank" rel="noopener"><bdi>{clean(item.same[0].name)}</bdi><span class="sr-only"> (opens in a new tab)</span></a>{#if line.by}{' '}<bdi>{clean(line.by)}</bdi>{/if}{line.more}, already on cyex.tv. You can add that one to your sets, or upload this anyway.</span>
+            </p>
+          {/if}
           {#if item.error}<p class="ui-error err" role="alert" tabindex="-1">{item.error}</p>
           {:else if fe}<p class="ui-error err drop-again" tabindex="-1">{fe} Remove it, or fix the file and add it again.</p>{/if}
 
@@ -466,6 +487,10 @@
   @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .bar span { transition: none; } }
   .small { min-height: 32px; height: 32px; padding: 0 10px; }
   .err { margin: 10px 0 0; outline: none; }
+  .same { display: flex; align-items: flex-start; gap: 8px; margin: 10px 0 0; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+    background: var(--bg); font-size: var(--text-sub); color: var(--muted); overflow-wrap: anywhere; }
+  .same :global(svg) { flex: none; margin-top: 2px; color: var(--accent-text); }
+  .same a { color: var(--accent-text); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 
   .body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 24px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
   .fields { display: grid; align-content: start; gap: 14px; min-width: 0; }

@@ -2,11 +2,18 @@
   // Open reports grouped by emote: one row per reported emote with how many reports it has, the
   // reasons, and who reported. Take down (one note, closes every report on the image) or Dismiss
   // (one note, closes this emote's reports). Names link to the account's admin page.
+  // Many at once: tick rows (Shift for a range) and Dismiss closes every report on them with one
+  // note, in one call per 100 reports (dismissReports, one audit row each). Takedowns stay one by one.
   import { gql } from '$lib/api';
   import AccountLink from '$lib/admin/AccountLink.svelte';
   import { clean, count, dateTime, iso } from '$lib/format';
   import type { ReportQueueQuery } from '$lib/gql/graphql';
-  import { REPORT_QUEUE, RESOLVE_REPORT } from '$lib/queries';
+  import { DISMISS_REPORTS, REPORT_QUEUE, RESOLVE_REPORT } from '$lib/queries';
+  import BulkBar from '$lib/admin/BulkBar.svelte';
+  import PickBox from '$lib/admin/PickBox.svelte';
+  import { BATCH_MAX, batchSummary } from '$lib/admin/bulk';
+  import { all as pickAll, EMPTY, range as pickRange, toggle as pickToggle, type Selection, type Step } from '$lib/components/browse/selection';
+  import { untrack } from 'svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
   import State from '$lib/components/State.svelte';
@@ -42,12 +49,14 @@
   let open = $state<string | null>(null);
 
   function ask(g: Group, action: 'DISMISS' | 'TAKE_DOWN') {
+    many = false;
     current = g;
     mode = action;
     dialog.open();
   }
 
   async function resolve(note: string) {
+    if (many) return dismissMany(note);
     const g = current;
     if (!g) return;
     try {
@@ -68,23 +77,81 @@
   }
 
   const name = (g: Group | null) => clean(g?.emote?.name) || 'this emote';
+
+  // Picked rows (by group key) for one dismissal of all their reports.
+  const groups = $derived(L.data ? group(L.data.items) : []);
+  let sel = $state<Selection>(EMPTY);
+  let selNote = $state('');
+  let noteTimer: ReturnType<typeof setTimeout> | undefined;
+  const picked = $derived(new Set(sel.ids));
+  const order = () => groups.map((g) => g.key);
+  function pick(step: Step) {
+    sel = step.sel;
+    if (step.refused) {
+      clearTimeout(noteTimer);
+      selNote = `That’s the most at once: ${BATCH_MAX}.`;
+      noteTimer = setTimeout(() => (selNote = ''), 3000);
+    }
+  }
+  $effect(() => {
+    const shown = new Set(groups.map((g) => g.key));
+    untrack(() => {
+      if (sel.ids.some((k) => !shown.has(k))) sel = { ids: sel.ids.filter((k) => shown.has(k)), anchor: sel.anchor && shown.has(sel.anchor) ? sel.anchor : null };
+    });
+  });
+  const pickedReports = $derived(groups.filter((g) => picked.has(g.key)).flatMap((g) => g.reports));
+  let many = $state(false);
+  function askMany() {
+    if (!pickedReports.length) return;
+    current = null;
+    mode = 'DISMISS';
+    many = true;
+    dialog.open();
+  }
+  async function dismissMany(note: string) {
+    const ids = pickedReports.map((r) => r.id);
+    const out = { done: [] as string[], failed: [] as { id: string; code: string; message: string }[] };
+    try {
+      for (let i = 0; i < ids.length; i += BATCH_MAX) {
+        const r = (await gql(DISMISS_REPORTS, { ids: ids.slice(i, i + BATCH_MAX), note: note || null })).dismissReports;
+        out.done.push(...r.done);
+        out.failed.push(...r.failed);
+      }
+      notify(batchSummary(out, 'dismissed', ['report', 'reports']), out.failed.length > 0);
+      sel = EMPTY;
+    } catch (err) {
+      fail(err);
+      throw err;
+    } finally {
+      await L.reload();
+    }
+  }
+  function onkeydown(ev: KeyboardEvent) {
+    if (ev.key === 'Escape' && sel.ids.length && !document.querySelector('dialog[open]') && !(ev.target as HTMLElement | null)?.closest('input, textarea, select')) {
+      ev.preventDefault();
+      sel = EMPTY;
+    }
+  }
 </script>
 
 <svelte:head><title>Reports - Admin - cyex.tv</title></svelte:head>
+
+<svelte:window {onkeydown} />
 
 <PageHead title="Reports" line={`${count(total)} open, grouped by emote`} />
 
 <LoadGate source={L} label="Loading reports…">
 {#snippet children(queue)}
-{@const groups = group(queue.items)}
-{#if groups.length === 0}
+{#if queue.items.length === 0}
   <State title="No open reports.">Reports from viewers show up here.</State>
 {:else}
   <section class="ui-panel">
     <ul class="ui-list">
       {#each groups as g (g.key)}
         {@const owner = g.emote?.owner}
-        <li class="row">
+        <li class="row" class:picked={picked.has(g.key)}>
+          <PickBox checked={picked.has(g.key)} label="Select the reports on {g.emote ? clean(g.emote.name) : 'a deleted emote'}"
+            onpick={(ev) => pick(ev.shiftKey ? pickRange(sel, order(), g.key) : pickToggle(sel, g.key))} />
           <span class="frame">
             {#if g.emote}<Thumb emote={g.emote} name={clean(g.emote.name)} box={48} />{:else}<span class="gone" aria-hidden="true"></span>{/if}
           </span>
@@ -124,9 +191,15 @@
 {/snippet}
 </LoadGate>
 
+{#if sel.ids.length}
+  <BulkBar n={sel.ids.length} status={selNote} onclear={() => (sel = EMPTY)} onall={sel.ids.length < Math.min(groups.length, BATCH_MAX) ? () => pick(pickAll(sel, order())) : undefined}>
+    <button class="ui-btn secondary small" type="button" onclick={askMany}>Dismiss {count(pickedReports.length)} {pickedReports.length === 1 ? 'report' : 'reports'}</button>
+  </BulkBar>
+{/if}
+
 <ReasonDialog
   bind:this={dialog}
-  title={mode === 'DISMISS' ? `Dismiss the reports on ${name(current)}` : `Take down ${name(current)}`}
+  title={many ? `Dismiss ${count(pickedReports.length)} ${pickedReports.length === 1 ? 'report' : 'reports'} on ${count(sel.ids.length)} ${sel.ids.length === 1 ? 'emote' : 'emotes'}` : mode === 'DISMISS' ? `Dismiss the reports on ${name(current)}` : `Take down ${name(current)}`}
   hint={mode === 'DISMISS'
     ? 'Kept with the reports for the audit log.'
     : 'It leaves every set, its image is blocked and deleted, and its owners are told this note. This can’t be undone.'}
@@ -137,7 +210,9 @@
 />
 
 <style>
-  .row { display: grid; grid-template-columns: 56px minmax(0, 1fr) auto; gap: 14px; align-items: start; padding-block: 12px; }
+  .row { display: grid; grid-template-columns: 32px 56px minmax(0, 1fr) auto; gap: 14px; align-items: start; padding-block: 12px; }
+  .row :global(.pick) { margin-top: 12px; }
+  .row.picked strong a { font-weight: 700; }
   .frame { display: grid; place-items: center; width: 56px; height: 56px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--bg); }
   .what { display: grid; gap: 3px; min-width: 0; }
   .what strong { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -152,7 +227,7 @@
   .tail { margin-top: 16px; text-align: center; }
   .row .ui-actions { justify-content: flex-end; }
   @media (max-width: 760px) {
-    .row { grid-template-columns: 56px minmax(0, 1fr); gap: 8px 12px; }
+    .row { grid-template-columns: 32px 56px minmax(0, 1fr); gap: 8px 12px; }
     .row .ui-actions { grid-column: 1 / -1; justify-content: flex-start; }
   }
   /* a touch target of at least 24px (WCAG 2.5.8) */

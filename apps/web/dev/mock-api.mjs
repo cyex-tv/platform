@@ -566,6 +566,12 @@ const PENDING = Array.from({ length: Number(process.env.MOCK_PENDING ?? 60) }, (
   if (i % 7 === 3) Object.assign(e, { visibility: 'PRIVATE', flags: { ...e.flags, private: true } });
   else if (i % 5 === 2) e.visibility = 'UNLISTED';
   if (i % 9 === 4) e.flags = { ...e.flags, nsfw: true };
+  // Every 6th is a re-upload of an approved sample (the same picture, a near name), so the detail
+  // dialog's "Possible duplicates" has something to show.
+  if (i % 6 === 0) {
+    const twin = ALL[(i * 7) % ALL.length];
+    Object.assign(e, { name: `${twin.name}2`, host: twin.host, files: twin.files, animated: twin.animated });
+  }
   return e;
 });
 // Reviewed this session (the Resolved tab), the latest first, with when.
@@ -573,6 +579,45 @@ const RESOLVED = [];
 const EMOTE_NOTES = { [PENDING[0]?.id]: [{ id: 'ENOTE1', authorId: OTHERS[0].id, body: 'Same uploader sent a near copy last week; compare before approving.', createdAt: new Date(NOW - 3600_000).toISOString() }] };
 const EMOTE_LOG = {};
 const logEmote = (id, action, after = null) => (EMOTE_LOG[id] ??= []).unshift({ id: 'ELOG' + Math.random().toString(36).slice(2, 10), actorId: ME_ID, action, before: null, after: after && JSON.stringify(after), createdAt: new Date().toISOString() });
+// Emotes by the SHA-256 of their file: what the mock's uploads were made from. MOCK_SAME_FILE=<sha>
+// makes that file "the same" as one public sample emote, to see the uploader's warning at once.
+const FILE_EMOTES = {};
+if (process.env.MOCK_SAME_FILE) FILE_EMOTES[process.env.MOCK_SAME_FILE.toLowerCase()] = [ALL[3]];
+// The review queue's ready reject reasons (the API seeds the same six).
+let REVIEW_REASONS = ['Low quality or blurry', 'Already uploaded (a duplicate)', 'Not an emote', 'NSFW but not marked', 'Hateful or harassing', 'The name breaks the rules'];
+// Trigram similarity, as pg_trgm's similarity(): lower-cased words padded with two spaces in front, one behind.
+function trigrams(s) {
+  const out = new Set();
+  for (const w of s.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean)) {
+    const p = `  ${w} `;
+    for (let i = 0; i + 3 <= p.length; i++) out.add(p.slice(i, i + 3));
+  }
+  return out;
+}
+function similarity(a, b) {
+  const x = trigrams(a), y = trigrams(b);
+  if (!x.size || !y.size) return 0;
+  let both = 0;
+  for (const t of x) if (y.has(t)) both++;
+  return both / (x.size + y.size - both);
+}
+// Possible duplicates of an emote, as emoteDuplicates answers: the same file first (in the mock, the
+// same uploaded bytes, or a pending sample drawn with an approved emote's picture), then names at
+// least half alike.
+function duplicatesOf(id) {
+  const me = PENDING.find((e) => e.id === id) ?? RESOLVED.find((e) => e.id === id) ?? findEmote(id);
+  if (!me) return null;
+  const sameFile = new Set(Object.values(FILE_EMOTES).find((list) => list.some((e) => e.id === id)) ?? []);
+  const seen = new Set();
+  return [...ALL, ...PENDING, ...RESOLVED, ...MINE]
+    .filter((e) => e.id !== id)
+    .map((e) => ({ emote: e, sameFile: sameFile.has(e) || Boolean(e.host && e.host === me.host && e.state === 'APPROVED'),
+      similarity: e.name.toLowerCase() === me.name.toLowerCase() ? 1 : Math.round(similarity(e.name, me.name) * 100) / 100 }))
+    .filter((d) => (d.sameFile || d.similarity >= 0.5) && !seen.has(d.emote.id) && seen.add(d.emote.id))
+    .sort((a, b) => Number(b.sameFile) - Number(a.sameFile) || b.similarity - a.similarity)
+    .slice(0, 12);
+}
+const batchIds = (ids) => [...new Set((ids ?? []).map((x) => String(x).trim()))];
 function reviewQueueAnswer(v) {
   const f = v.filter ?? {};
   const tab = f.tab ?? 'PENDING';
@@ -796,7 +841,7 @@ const editorOfOut = () => EDITOR_OF.map((g) => ({ ...g }));
 
 const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view', 'cosmetics.manage', 'cosmetics.grant', 'shop.manage', 'shop.orders', 'codes.manage',
   'roles.assign', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets', 'users.block', 'users.sessions', 'users.notes', 'entitlements.view', 'billing.view', 'subscriptions.manage',
-  'emotes.delete_any', 'editors.manage_any', 'site.announce'];
+  'emotes.delete_any', 'editors.manage_any', 'site.announce', 'review.settings'];
 
 // ---- Chat cosmetics (ADR 0015) ----------------------------------------------------------
 // SAMPLE DATA ONLY: two made-up badges (simple SVG drawn here) and three sample paints, so the
@@ -1847,6 +1892,85 @@ function signedIn(body, v, ADMIN) {
       logEmote(e.id, op === 'Approve' ? 'emote.approved' : 'emote.rejected', { state: e.state.toLowerCase(), reason: v.reason ?? null, visibility: e.visibility.toLowerCase() });
       return { data: { [op === 'Approve' ? 'approveEmote' : 'rejectEmote']: { id: e.id, state: e.state, visibility: e.visibility } } };
     }
+    case 'ReviewEmotes': {
+      if (!ADMIN) return err('This needs emotes.review.', 'forbidden');
+      const ids = batchIds(v.ids);
+      if (!ids.length || ids.length > 100) return err('Pick 1 to 100 at a time.', 'bad_batch');
+      const reason = (v.reason ?? '').trim();
+      if (v.verdict === 'REJECT' && (!reason || reason.length > 500)) return err('Give a reason of 1 to 500 characters; the uploader sees it.', 'bad_reason');
+      if (v.verdict === 'REJECT' && v.visibility) return err('A rejection doesn’t take a visibility.', 'bad_visibility');
+      const done = [], failed = [];
+      for (const id of ids) {
+        const at = PENDING.findIndex((x) => x.id === id);
+        if (at < 0) {
+          failed.push(RESOLVED.some((x) => x.id === id)
+            ? { id, code: 'not_pending', message: 'Only pending emotes can be approved or rejected.' }
+            : { id, code: 'not_found', message: 'Not found.' });
+          continue;
+        }
+        const e = PENDING.splice(at, 1)[0];
+        e.state = v.verdict === 'APPROVE' ? 'APPROVED' : 'REJECTED';
+        if (v.verdict === 'APPROVE' && v.visibility) Object.assign(e, { visibility: v.visibility, flags: { ...e.flags, private: v.visibility === 'PRIVATE' } });
+        e.reviewedAt = new Date().toISOString();
+        RESOLVED.unshift(e);
+        logEmote(e.id, v.verdict === 'APPROVE' ? 'emote.approved' : 'emote.rejected', { state: e.state.toLowerCase(), reason: reason || null, visibility: e.visibility.toLowerCase() });
+        done.push(id);
+      }
+      return { data: { reviewEmotes: { done, failed } } };
+    }
+    case 'EmoteDuplicates': {
+      if (!ADMIN) return err('This needs emotes.review.', 'forbidden');
+      const list = duplicatesOf(v.emoteId);
+      if (!list) return err('Not found.', 'not_found');
+      return { data: { emoteDuplicates: list } };
+    }
+    case 'ReviewReasons':
+      if (!ADMIN) return err('This needs emotes.review or review.settings.', 'forbidden');
+      return { data: { reviewReasons: REVIEW_REASONS } };
+    case 'SetReviewReasons': {
+      if (!ADMIN) return err('This needs review.settings.', 'forbidden');
+      const out = [];
+      for (const r of v.reasons ?? []) {
+        const t = String(r).trim();
+        if (!t || t.length > 200 || /[\u0000-\u001f]/.test(t)) return err('Each reason is 1 to 200 characters on one line.', 'bad_reason');
+        if (!out.some((o) => o.toLowerCase() === t.toLowerCase())) out.push(t);
+      }
+      if (out.length > 12) return err('At most 12 ready reasons.', 'too_many_reasons');
+      REVIEW_REASONS = out;
+      return { data: { setReviewReasons: out } };
+    }
+    case 'EmotesWithSameFile': {
+      if (!/^[0-9a-fA-F]{64}$/.test(v.sha256 ?? '')) return err('Give a sha256 as 64 hex digits.', 'bad_sha256');
+      const list = (FILE_EMOTES[v.sha256.toLowerCase()] ?? []).filter((e) => e.state === 'APPROVED' && e.visibility === 'PUBLIC');
+      return { data: { emotesWithSameFile: list.slice(0, 3) } };
+    }
+    case 'AccountsByLogin': {
+      if (!ADMIN) return err('This needs cosmetics.grant, roles.assign, roles.manage or users.view.', 'forbidden');
+      const seen = new Set();
+      const key = (l) => l.replace(/^@/, '').toLowerCase();
+      const logins = (v.logins ?? []).map((l) => String(l).trim()).filter((l) => l && !seen.has(key(l)) && seen.add(key(l)));
+      if (!logins.length || logins.length > 100) return err('Give 1 to 100 logins at a time.', 'bad_logins');
+      const people = [ME_SUMMARY, ...OWNERS.filter((o) => o.id !== ME_ID)];
+      return { data: { accountsByLogin: logins.map((login) => {
+        const m = login.match(/^(?:(twitch|kick):)?@?([A-Za-z0-9_-]{1,40})$/i);
+        if (!m) return { login, account: null, problem: 'bad_login' };
+        const hit = people.find((p) => p.displayName.toLowerCase() === m[2].toLowerCase());
+        return hit ? { login, account: hit, problem: null } : { login, account: null, problem: 'not_found' };
+      }) } };
+    }
+    case 'DismissReports': {
+      if (!ADMIN) return err('This needs emotes.review, emotes.takedown or reports.manage.', 'forbidden');
+      const ids = batchIds(v.ids);
+      if (!ids.length || ids.length > 100) return err('Pick 1 to 100 at a time.', 'bad_batch');
+      const done = [], failed = [];
+      for (const id of ids) {
+        const at = REPORTS.findIndex((x) => x.id === id);
+        if (at < 0) { failed.push({ id, code: 'not_open', message: 'That report was already resolved.' }); continue; }
+        REPORTS.splice(at, 1);
+        done.push(id);
+      }
+      return { data: { dismissReports: { done, failed } } };
+    }
     case 'EmoteHistory': {
       const e = PENDING.find((x) => x.id === v.emoteId) ?? RESOLVED.find((x) => x.id === v.emoteId);
       const tagged = e?.tags.length ? [{ id: 'ELOGTG' + e.id.slice(-4), actorId: e.owner?.id ?? null, action: 'emote.updated', before: JSON.stringify({ tags: [] }), after: JSON.stringify({ tags: e.tags }), createdAt: new Date(Date.parse(e.createdAt) + 90_000).toISOString() }] : [];
@@ -2804,7 +2928,11 @@ createServer(async (req, res) => {
   if (url.pathname === '/mock/hang') return;
   if (req.method === 'POST' && url.pathname === '/v1/emotes') {
     // UTF-8, as the API reads it: names in any script and emoji arrive whole.
-    const raw = (await read(req)).toString('utf8');
+    const body = await read(req);
+    const raw = body.toString('utf8');
+    // The file's SHA-256, as the API keys files: the same bytes again are "the same file".
+    const fileBytes = multipart(body, req.headers['content-type'])?.file?.data;
+    const fileSha = fileBytes?.length ? createHash('sha256').update(fileBytes).digest('hex') : null;
     if (!session) return json(res, 401, { error: 'signed_out', message: 'Sign in to upload.' });
     const field = (k) => raw.match(new RegExp(`name="${k}"\\r\\n\\r\\n([^\\r]*)`))?.[1];
     const name = field('name') ?? 'upload';
@@ -2847,6 +2975,7 @@ createServer(async (req, res) => {
     e.createdAt = new Date().toISOString();
     if (forOther) PENDING.unshift(e);
     else MINE.unshift(e);
+    if (fileSha) (FILE_EMOTES[fileSha] ??= []).push(e);
     // The worker "finishes" the files a few seconds later.
     setTimeout(() => {
       Object.assign(e, { host: emote(700).host, files: emote(700).files });

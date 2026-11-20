@@ -48,6 +48,8 @@ pub const SUBSCRIPTIONS_MANAGE: &str = "subscriptions.manage";
 pub const EMOTES_DELETE_ANY: &str = "emotes.delete_any";
 /// Add, change and remove any account's editors on its behalf, as its owner can. Audited.
 pub const EDITORS_MANAGE_ANY: &str = "editors.manage_any";
+/// Change the review queue's ready reject reasons. Audited.
+pub const REVIEW_SETTINGS: &str = "review.settings";
 /// Set, change and end the site announcement under the header. Audited.
 pub const SITE_ANNOUNCE: &str = "site.announce";
 
@@ -79,6 +81,7 @@ pub const ALL: &[&str] = &[
     SUBSCRIPTIONS_MANAGE,
     EMOTES_DELETE_ANY,
     EDITORS_MANAGE_ANY,
+    REVIEW_SETTINGS,
     SITE_ANNOUNCE,
 ];
 
