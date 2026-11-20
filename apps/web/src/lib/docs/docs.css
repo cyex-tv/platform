@@ -95,6 +95,10 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .collapse { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows var(--collapse-dur, 200ms) ease-out, visibility 0s linear var(--collapse-dur, 200ms); }
 .docs [data-open='true'] > .collapse, .docs .docs-nav.filtering .nav-group > .collapse { grid-template-rows: 1fr; visibility: visible; transition: grid-template-rows var(--collapse-dur, 200ms) ease-out, visibility 0s; }
 .docs .collapse-inner { min-width: 0; min-height: 0; overflow: clip; }
+/* A closed group's text isn't laid out or painted at all (the page is long: its closed groups are most of it).
+   It stays hidden for the closing animation, then drops out; opening shows it at once. */
+.docs .collapse > .collapse-inner { content-visibility: hidden; transition: content-visibility 0s linear var(--collapse-dur, 200ms) allow-discrete; }
+.docs [data-open='true'] > .collapse > .collapse-inner, .docs .docs-nav.filtering .nav-group > .collapse > .collapse-inner { content-visibility: visible; transition: content-visibility 0s allow-discrete; }
 .docs.no-anim, .docs.no-anim * { --collapse-dur: 0s; }
 @media (prefers-reduced-motion: reduce) { .docs { --collapse-dur: 0s; } }
 

@@ -54,6 +54,11 @@
     headerSearch.phoneOpen = false;
     headerSearch.query = '';
   }
+  // Escape closes the phone search wherever focus is in it (the field handles its own first: it
+  // closes its list, then clears its text, and says so by preventing the default).
+  function phoneEscape(e: KeyboardEvent) {
+    if (e.key === 'Escape' && !e.defaultPrevented && headerSearch.phoneOpen) closePhoneSearch();
+  }
   // Phone or not: only one search field is mounted (so only one asks the API), and wider than a
   // phone again the bar is back to normal.
   let narrow = $state(false);
@@ -132,6 +137,8 @@
 <BottomSheet bind:open={menu} label="Menu">
   <AccountLinks emotes touch {signin} onpick={() => (menu = false)} />
 </BottomSheet>
+
+<svelte:document onkeydown={phoneEscape} />
 
 <style>
   .app-header { position: sticky; top: 0; z-index: var(--z-nav); flex: none; background: var(--bg);

@@ -35,7 +35,8 @@
   const path = $derived(page.url.pathname);
   const who = $derived(session.me?.identities[0]);
   // Under /admin with staff permissions: the admin rail. Anything else: the /me rail.
-  const admin = $derived((path === '/admin' || path.startsWith('/admin/')) && isAdmin(session.me));
+  const adminPath = $derived(path === '/admin' || path.startsWith('/admin/'));
+  const admin = $derived(adminPath && isAdmin(session.me));
 
   const row = (href: string, label: string, icon: IconName, show = true, count?: number) => (show ? [{ href, label, icon, count }] : []);
 
@@ -130,13 +131,18 @@
 
 {#snippet band()}
   {#if meAccount}
-    <ProfileHeader account={meAccount} relation={meRelation} profile={meProfile}>
+    <ProfileHeader account={meAccount} relation={meRelation} profile={meProfile} heading={false}>
       {#snippet actions()}<a class="btn btn-s" href="/me/settings"><Icon name="settings" size={15} />Settings</a>{/snippet}
     </ProfileHeader>
+  {:else}
+    <ProfileHeader account={{ id: '', displayName: '' }} relation={meRelation} profile={null} loading />
   {/if}
 {/snippet}
 
-<RailLayout top={!admin && !settings && meAccount ? band : undefined}>
+<!-- The band is there from the first paint (blank until your account is known), except where the
+     page has no band at all: settings and the staff pages. Before the account is known, the path
+     says which; once it is, whether you are staff does. -->
+<RailLayout top={!settings && !problem && (session.me ? !admin : !adminPath) ? band : undefined}>
   {#snippet rail()}
     {#if admin}
       <SideRail label="Admin" groups={adminRail} fill>
@@ -171,7 +177,7 @@
       </SideRail>
     {/if}
   {/snippet}
-  <div class="ui-page">
+  <div class="ui-page" class:pending={!problem && !session.me}>
     {#if problem}
       <PageTitle title={problemTitle('server')} />
       <Problem cause="server" level={1} onretry={() => signIn(true)} />
@@ -185,6 +191,9 @@
 </RailLayout>
 
 <style>
+  /* While the account is unknown the page is a loading line: the footer waits (hidden, not
+     removed) so the page growing doesn't shove a visible footer down. */
+  :global(main:has(.ui-page.pending) + .footer) { visibility: hidden; }
   .me { display: flex; align-items: center; gap: 12px; min-height: 40px; }
   .plain { font-size: var(--t-ui); font-weight: 600; color: var(--muted); }
   .title { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding-left: 8px; }

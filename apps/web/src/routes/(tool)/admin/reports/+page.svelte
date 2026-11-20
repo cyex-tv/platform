@@ -141,7 +141,7 @@
   .frame { display: grid; place-items: center; width: 56px; height: 56px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--bg); }
   .what { display: grid; gap: 3px; min-width: 0; }
   .what strong { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .what strong a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .what strong a { line-height: 24px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
   .what strong .ui-chip { flex: none; }
   .count { background: color-mix(in srgb, var(--yellow) 18%, transparent); color: var(--yellow); }
   .reasons { list-style: none; display: grid; gap: 4px; margin: 4px 0 0; padding: 0; }

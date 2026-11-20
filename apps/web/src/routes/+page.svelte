@@ -127,7 +127,7 @@
   .text > p { margin: 14px 0 0; font-size: var(--t-body); line-height: 1.6; color: var(--muted); text-wrap: pretty; }
   .foot { display: grid; justify-items: start; gap: 10px; margin-top: 24px; }
   .fine { margin: 0; font-size: var(--t-fine); color: var(--dim); }
-  .quiet { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+  .quiet { display: inline-flex; align-items: center; min-height: 24px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
   @media (hover: hover) and (pointer: fine) { .quiet:hover { color: var(--text); } }
 
   /* Phones: one column, the picture above its text in every row. */

@@ -51,11 +51,23 @@
     onpick,
     ranked = false,
   }: Props = $props();
+
+  // A long grid is a long Tab walk: with enough tiles, a "Skip results" link ahead of them (shown
+  // when it has focus, like the page's skip link) moves focus to a marker just after the grid.
+  const endId = $props.id();
+  const long = $derived(items.length > 8 && !onpick);
+  function skip(e: MouseEvent) {
+    e.preventDefault();
+    const end = document.getElementById(endId);
+    end?.focus();
+    end?.scrollIntoView({ block: 'center' });
+  }
 </script>
 
 {#if items.length === 0 && !loading}
   <p class="none">{empty}</p>
 {:else}
+  {#if long}<a class="skip" href="#{endId}" onclick={skip}>Skip results</a>{/if}
   <ul class="grid {density}" aria-label={label} aria-busy={loading}>
     {#each items as e, i (e.id + (e.shownName ?? ''))}
       <li class:wide={isWide(e)}>
@@ -76,9 +88,11 @@
       {/each}
     {/if}
   </ul>
+  {#if long}<span class="end" id={endId} tabindex="-1"></span>{/if}
 {/if}
 
 <style>
+  .end { position: absolute; width: 0; height: 0; outline: none; }
   .none { padding: 24px 0; color: var(--muted); }
   .grid { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px;
     grid-template-columns: repeat(auto-fill, minmax(var(--emote-tile), 1fr)); grid-auto-flow: row dense; }

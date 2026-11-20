@@ -225,7 +225,7 @@
   .t { font-size: 12px; font-weight: 600; color: var(--dim); }
   .action { font-weight: 600; }
   .id { font-size: .78rem; color: var(--muted); }
-  a.id { color: var(--accent-text); }
+  a.id { display: inline-block; max-width: 100%; line-height: 24px; color: var(--accent-text); }
   .by { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sub); }
   .diff { display: grid; gap: 10px; justify-items: start; padding: 10px 14px 14px; border-bottom: 1px solid var(--border); background: var(--bg); }
   .json { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }

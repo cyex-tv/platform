@@ -71,7 +71,7 @@
           {#each HELP as g (g.id)}
             {@const n = g.questions.filter((q) => shown.has(q.id)).length}
             <div class="nav-group" hidden={!n}>
-              <div class="nav-group-title"><span class="group-name">{g.title}</span>{#if filtering}<span class="group-count" aria-hidden="true">{n}</span>{/if}</div>
+              <div class="nav-group-title"><span class="group-name" title={g.title}>{g.title}</span>{#if filtering}<span class="group-count" aria-hidden="true">{n}</span>{/if}</div>
               {#each g.questions as q (q.id)}
                 <a class="nav-item" href="#{q.id}" hidden={!shown.has(q.id)}><span class="nav-label">{q.q}</span></a>
               {/each}

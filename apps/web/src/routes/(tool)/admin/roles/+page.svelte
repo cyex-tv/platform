@@ -121,7 +121,7 @@
   const BUILT_IN: Record<string, string> = { ROOT: 'Top role', ADMIN: 'Built in', USER: 'Everyone' };
 </script>
 
-<svelte:head><title>Roles - cyex.tv</title></svelte:head>
+<svelte:head><title>Roles - Admin - cyex.tv</title></svelte:head>
 
 <div class="ui-head">
   <div><h1>Roles</h1><p>Higher positions are more senior. You can change roles below your own highest one that you don’t hold, and only grant what you hold.</p></div>
