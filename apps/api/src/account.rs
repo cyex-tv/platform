@@ -258,8 +258,11 @@ pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
     }
     state
         .limits
-        .data_export
-        .check(&ids::to_text(caller.account_id))
+        .take(
+            crate::limits::AccountLimit::DataExport,
+            &ids::to_text(caller.account_id),
+            Some(caller.account_id),
+        )
         .map_err(|_| {
             ApiError::new(
                 StatusCode::TOO_MANY_REQUESTS,

@@ -1028,6 +1028,15 @@ export type ImageFormat =
   | 'AVIF'
   | 'WEBP';
 
+/** Which part of the site a limit covers, for grouping them on the role page. */
+export type LimitGroup =
+  /** Writes to your account: editors, cosmetics, sets, lists, settings, the shop, your data. */
+  | 'ACCOUNT'
+  /** How often an account may call the API and search. */
+  | 'REQUESTS'
+  /** Uploads an hour, and how many may wait for review. */
+  | 'UPLOADS';
+
 /**
  * One login from a pasted list, and the account it names (none when it names no account, or
  * two different ones on Twitch and Kick).
@@ -1343,6 +1352,12 @@ export type Mutation = {
    * order). Needs `review.settings`. Audited.
    */
   setReviewReasons: Array<Scalars['String']['output']>;
+  /**
+   * Set a role's limits: the overrides listed (a null value or a limit left out keeps the
+   * default), for everyone who holds it. Only on a role you may edit, not the User or top
+   * role. Needs `roles.manage`. Audited.
+   */
+  setRoleLimits: Array<RoleLimit>;
   /**
    * Sign out everywhere, here too: every site and app session ends and the cookie is cleared.
    * Returns how many sessions ended. With an app token, only that app session ends.
@@ -1749,6 +1764,12 @@ export type MutationSetNotificationPrefsArgs = {
 
 export type MutationSetReviewReasonsArgs = {
   reasons: Array<Scalars['String']['input']>;
+};
+
+
+export type MutationSetRoleLimitsArgs = {
+  id: Scalars['String']['input'];
+  limits: Array<RoleLimitInput>;
 };
 
 
@@ -2353,6 +2374,11 @@ export type Query = {
    * this list (and `hiddenCreators`) on your side.
    */
   hiddenEmotes: Array<HiddenEmote>;
+  /**
+   * Every per-account limit a role can change, with what everyone gets without one. Needs
+   * `roles.manage`.
+   */
+  limitDefaults: Array<RoleLimit>;
   /** The signed-in account. */
   me: Me;
   /** Your channels: one per linked platform you have signed in with. */
@@ -2447,6 +2473,11 @@ export type Query = {
    */
   reviewReasons: Array<Scalars['String']['output']>;
   /**
+   * A role's limits: each per-account limit with its default and the role's override. An
+   * account counts under the most generous override among its roles. Needs `roles.manage`.
+   */
+  roleLimits: Array<RoleLimit>;
+  /**
    * All roles, most senior first, each with whether you may edit or assign it. Needs
    * `roles.manage` or `roles.assign`. The top role is listed to the owners only.
    */
@@ -2500,6 +2531,11 @@ export type Query = {
   staffNotes: Array<StaffNote>;
   /** How many of your notifications are unread. */
   unreadNotificationCount: Scalars['Int']['output'];
+  /**
+   * Where uploads stand: how many emotes wait for review and how many may, and the uploads
+   * this hour. Yours, or with `ownerId` an account you may upload for.
+   */
+  uploadQuota: UploadQuota;
   /**
    * The badge and paint up to 100 chatters show, as catalog IDs. Only chatters showing
    * something are listed.
@@ -2793,6 +2829,11 @@ export type QueryReviewQueueArgs = {
 };
 
 
+export type QueryRoleLimitsArgs = {
+  id: Scalars['String']['input'];
+};
+
+
 export type QuerySearchAccountsArgs = {
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
@@ -2845,6 +2886,11 @@ export type QueryShopItemsArgs = {
 
 export type QueryStaffNotesArgs = {
   accountId: Scalars['String']['input'];
+};
+
+
+export type QueryUploadQuotaArgs = {
+  ownerId?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -3021,6 +3067,37 @@ export type Role = {
   position: Scalars['Int']['output'];
   /** Shown on its holders' public profiles (`accountProfile`). Off by default. */
   public: Scalars['Boolean']['output'];
+};
+
+/**
+ * One per-account limit and a role's override of it (`roleLimits`, `limitDefaults`). An
+ * account's limit is the most generous override among its roles, else `default`.
+ */
+export type RoleLimit = {
+  __typename?: 'RoleLimit';
+  /** What everyone gets without an override (set when the API starts). */
+  default: Scalars['Int']['output'];
+  group: LimitGroup;
+  /**
+   * `gql_account`, `uploads_per_hour`, `pending_emotes`, `editors`, `cosmetics`,
+   * `set_clones`, `account_search`, `quick_search`, `heavy_reads`, `personal_lists`,
+   * `emote_transfers`, `prefs`, `checkout`, `redeem` or `data_export`.
+   */
+  key: Scalars['String']['output'];
+  /** The role's own count; null when it keeps the default. */
+  value?: Maybe<Scalars['Int']['output']>;
+  /**
+   * The window the count is per, in seconds; null for `pending_emotes`, a cap on how many
+   * wait at once.
+   */
+  windowSeconds?: Maybe<Scalars['Int']['output']>;
+};
+
+/** One override for `setRoleLimits`. */
+export type RoleLimitInput = {
+  key: Scalars['String']['input'];
+  /** 1 to 1,000,000; null keeps the default. */
+  value?: InputMaybe<Scalars['Int']['input']>;
 };
 
 export type SearchResults = {
@@ -3269,6 +3346,23 @@ export type UpdateSetInput = {
   name?: InputMaybe<Scalars['String']['input']>;
   /** Personal sets can't be `PRIVATE`; the global set is always listed. */
   visibility?: InputMaybe<SetVisibility>;
+};
+
+/**
+ * Where an account stands with uploads (`uploadQuota`): how many of its emotes wait for review
+ * and how many may, and its uploads this hour.
+ */
+export type UploadQuota = {
+  __typename?: 'UploadQuota';
+  /** The account uploads go to. */
+  accountId: Scalars['String']['output'];
+  /** Its emotes waiting for review, ones still being processed included. */
+  pending: Scalars['Int']['output'];
+  /** How many may wait at once; an upload at this many is refused (`too_many_pending`). Null when the caller isn't capped (the owners). */
+  pendingMax?: Maybe<Scalars['Int']['output']>;
+  uploadsPerHour: Scalars['Int']['output'];
+  /** Emotes it got in the last hour. */
+  uploadsThisHour: Scalars['Int']['output'];
 };
 
 /** What one chatter shows, as IDs from the catalog. Only chatters showing something are listed. */
@@ -3704,6 +3798,35 @@ export type RolesQueryVariables = Exact<{ [key: string]: never; }>;
 
 
 export type RolesQuery = { __typename?: 'Query', permissions: Array<string>, roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, public: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean }> };
+
+export type RoleLimitFieldsFragment = { __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null };
+
+export type LimitDefaultsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type LimitDefaultsQuery = { __typename?: 'Query', limitDefaults: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null }> };
+
+export type RoleLimitsQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type RoleLimitsQuery = { __typename?: 'Query', roleLimits: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null }> };
+
+export type SetRoleLimitsMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  limits: Array<RoleLimitInput> | RoleLimitInput;
+}>;
+
+
+export type SetRoleLimitsMutation = { __typename?: 'Mutation', setRoleLimits: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null }> };
+
+export type UploadQuotaQueryVariables = Exact<{
+  ownerId?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type UploadQuotaQuery = { __typename?: 'Query', uploadQuota: { __typename?: 'UploadQuota', accountId: string, pending: number, pendingMax?: number | null, uploadsThisHour: number, uploadsPerHour: number } };
 
 export type CreateRoleMutationVariables = Exact<{
   input: CreateRoleInput;
@@ -4648,6 +4771,15 @@ export const RoleFieldsFragmentDoc = new TypedDocumentString(`
   assignable
 }
     `, {"fragmentName":"RoleFields"}) as unknown as TypedDocumentString<RoleFieldsFragment, unknown>;
+export const RoleLimitFieldsFragmentDoc = new TypedDocumentString(`
+    fragment RoleLimitFields on RoleLimit {
+  key
+  group
+  default
+  windowSeconds
+  value
+}
+    `, {"fragmentName":"RoleLimitFields"}) as unknown as TypedDocumentString<RoleLimitFieldsFragment, unknown>;
 export const TransferRequestFieldsFragmentDoc = new TypedDocumentString(`
     fragment TransferRequestFields on EmoteTransferRequest {
   id
@@ -6020,6 +6152,56 @@ export const RolesDocument = new TypedDocumentString(`
   editable
   assignable
 }`) as unknown as TypedDocumentString<RolesQuery, RolesQueryVariables>;
+export const LimitDefaultsDocument = new TypedDocumentString(`
+    query LimitDefaults {
+  limitDefaults {
+    ...RoleLimitFields
+  }
+}
+    fragment RoleLimitFields on RoleLimit {
+  key
+  group
+  default
+  windowSeconds
+  value
+}`) as unknown as TypedDocumentString<LimitDefaultsQuery, LimitDefaultsQueryVariables>;
+export const RoleLimitsDocument = new TypedDocumentString(`
+    query RoleLimits($id: String!) {
+  roleLimits(id: $id) {
+    ...RoleLimitFields
+  }
+}
+    fragment RoleLimitFields on RoleLimit {
+  key
+  group
+  default
+  windowSeconds
+  value
+}`) as unknown as TypedDocumentString<RoleLimitsQuery, RoleLimitsQueryVariables>;
+export const SetRoleLimitsDocument = new TypedDocumentString(`
+    mutation SetRoleLimits($id: String!, $limits: [RoleLimitInput!]!) {
+  setRoleLimits(id: $id, limits: $limits) {
+    ...RoleLimitFields
+  }
+}
+    fragment RoleLimitFields on RoleLimit {
+  key
+  group
+  default
+  windowSeconds
+  value
+}`) as unknown as TypedDocumentString<SetRoleLimitsMutation, SetRoleLimitsMutationVariables>;
+export const UploadQuotaDocument = new TypedDocumentString(`
+    query UploadQuota($ownerId: String) {
+  uploadQuota(ownerId: $ownerId) {
+    accountId
+    pending
+    pendingMax
+    uploadsThisHour
+    uploadsPerHour
+  }
+}
+    `) as unknown as TypedDocumentString<UploadQuotaQuery, UploadQuotaQueryVariables>;
 export const CreateRoleDocument = new TypedDocumentString(`
     mutation CreateRole($input: CreateRoleInput!) {
   createRole(input: $input) {

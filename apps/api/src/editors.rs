@@ -32,7 +32,8 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::catalog::{db_error, forbidden, holds, not_found, parse_id, viewer};
-use crate::errors::{bad, conflict, limited, sqlx_error};
+use crate::errors::{bad, conflict, limited_as, sqlx_error};
+use crate::limits::AccountLimit;
 use crate::state::AppState;
 use crate::views;
 
@@ -385,9 +386,11 @@ fn too_many_editors() -> ApiError {
 }
 
 fn rate_limited(state: &AppState, caller: &Caller) -> ApiResult<()> {
-    limited(
-        &state.limits.editors,
+    limited_as(
+        state,
+        AccountLimit::Editors,
         &ids::to_text(caller.account_id),
+        caller.account_id,
         "That's a lot of editor changes. Try again in a while.",
     )
 }

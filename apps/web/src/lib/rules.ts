@@ -127,6 +127,8 @@ export function uploadProblem(code: string, message: string): string {
     case 'bad_name':
     case 'bad_tag':
     case 'too_many_tags':
+    // "You have 20 emotes waiting for review. ...": the API knows the account's own cap.
+    case 'too_many_pending':
       return message;
     case 'offline':
       return unreachableMessage();

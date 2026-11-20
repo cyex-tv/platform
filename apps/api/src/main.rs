@@ -31,10 +31,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::var("CYEX_TV_TRUST_CLOUDFLARE").as_deref(),
         Ok("true" | "1")
     );
-    let mut state = AppState::new(db, auth).with_limits(cyex_tv_api::limits::Limits::new(
-        cyex_tv_api::limits::Rates::default(),
-        trust_cloudflare,
-    ));
+    // Every limit can be set from the environment (`CYEX_TV_LIMIT_*`, see `.env.example`).
+    let rates = cyex_tv_api::limits::Rates::from_env(|name| std::env::var(name).ok())?;
+    let mut state = AppState::new(db, auth)
+        .with_limits(cyex_tv_api::limits::Limits::new(rates, trust_cloudflare));
     // Chat-client reads shared for a few seconds per instance (`read_cache`); 0 turns it off.
     let read_cache_ms = match std::env::var("CYEX_TV_READ_CACHE_MS") {
         Ok(raw) => raw

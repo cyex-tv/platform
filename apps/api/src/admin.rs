@@ -10,6 +10,10 @@
 //! role is the owners' (`CYEX_TV_OWNER_IDS`), listed to them only, never granted, edited or
 //! deleted. Nobody edits a role they hold. Giving and taking roles needs `roles.manage` or the
 //! narrower `roles.assign`; making and editing them needs `roles.manage`.
+//!
+//! A role can also raise or lower the per-account limits of whoever holds it (`set_limits`,
+//! `limits::AccountLimit`), under the same rules as any other edit; the User role's limits are
+//! the defaults the api was started with, so they aren't set here.
 
 use std::collections::BTreeSet;
 
@@ -19,7 +23,9 @@ use cyex_tv_auth::{AuthError, Caller};
 use cyex_tv_db::roles::{self, NewRole, RolePatch};
 use cyex_tv_db::{accounts, audit, ids};
 use cyex_tv_shared::error::{ApiError, ApiResult};
-use cyex_tv_shared::model::{AuditEntry, BuiltInRole, CreateRole, Role, UpdateRole};
+use cyex_tv_shared::model::{
+    AuditEntry, BuiltInRole, CreateRole, Role, RoleLimit, RoleLimitInput, UpdateRole,
+};
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
 use serde_json::{Value, json};
@@ -28,6 +34,9 @@ use uuid::Uuid;
 
 use crate::catalog::{db_error, forbidden, not_found, parse_id, permissions_of};
 use crate::errors::{bad, sqlx_error};
+use crate::limits::{
+    AccountLimit, MAX_LIMIT, Rates, RoleOverrides, overrides_from_json, overrides_to_json,
+};
 use crate::state::AppState;
 use crate::views;
 
@@ -586,6 +595,7 @@ pub async fn delete(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bo
     let members = roles::members(&mut tx, id).await.map_err(db_error)?;
     let managers_before = managers(state, &mut tx).await?;
     roles::delete(&mut tx, id).await.map_err(db_error)?;
+    state.limits.forget_all();
     let managers_after = managers(state, &mut tx).await?;
     actor
         .keeps_a_manager(&managers_before, &managers_after)
@@ -639,6 +649,7 @@ pub async fn assign(
     let added = roles::assign(&mut tx, account_id, role_id, Some(caller.account_id))
         .await
         .map_err(db_error)?;
+    state.limits.forget(account_id);
     if added {
         write_audit(
             &mut tx,
@@ -689,6 +700,7 @@ pub async fn unassign(
     let removed = roles::unassign(&mut tx, account_id, role_id)
         .await
         .map_err(db_error)?;
+    state.limits.forget(account_id);
     let managers_after = managers(state, &mut tx).await?;
     actor
         .keeps_a_manager(&managers_before, &managers_after)
@@ -709,9 +721,179 @@ pub async fn unassign(
     Ok(removed)
 }
 
+// Limits
+
+/// Every per-account limit with its default, and `overrides`' value where it sets one.
+fn limit_view(rates: &Rates, overrides: &RoleOverrides) -> Vec<RoleLimit> {
+    let int = |n: u32| i32::try_from(n).unwrap_or(i32::MAX);
+    AccountLimit::ALL
+        .into_iter()
+        .map(|l| {
+            let (default, window) = rates.default_of(l);
+            RoleLimit {
+                key: l.key().to_owned(),
+                group: l.group(),
+                default: int(default),
+                window_seconds: window.map(|w| i32::try_from(w.as_secs()).unwrap_or(i32::MAX)),
+                value: overrides.get(&l).copied().map(int),
+            }
+        })
+        .collect()
+}
+
+/// The overrides `setRoleLimits` was given: known keys, each once, 1 to `MAX_LIMIT`; a null
+/// value keeps the default.
+pub fn parse_limits(input: &[RoleLimitInput]) -> ApiResult<RoleOverrides> {
+    let mut out = RoleOverrides::new();
+    let mut seen = BTreeSet::new();
+    for item in input {
+        let key = item.key.trim();
+        let Some(limit) = AccountLimit::from_key(key) else {
+            return Err(bad("unknown_limit", format!("{key:?} is not a limit.")));
+        };
+        if !seen.insert(limit) {
+            return Err(bad("bad_limit", format!("{key} is listed twice.")));
+        }
+        let Some(value) = item.value else { continue };
+        match u32::try_from(value) {
+            Ok(n) if (1..=MAX_LIMIT).contains(&n) => {
+                out.insert(limit, n);
+            }
+            _ => {
+                return Err(bad(
+                    "bad_limit",
+                    format!("Limits are 1 to {MAX_LIMIT}; leave one empty to keep the default."),
+                ));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// The defaults every account gets without a role that sets otherwise. Needs `roles.manage`.
+pub async fn limit_defaults(state: &AppState, caller: &Caller) -> ApiResult<Vec<RoleLimit>> {
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    require(&mut conn, caller, permissions::ROLES_MANAGE).await?;
+    Ok(limit_view(&state.limits.rates, &RoleOverrides::new()))
+}
+
+/// A role's limits: each with its default and the role's override, if any. Needs `roles.manage`.
+pub async fn role_limits(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Vec<RoleLimit>> {
+    let id = parse_id(id)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    require(&mut conn, caller, permissions::ROLES_MANAGE).await?;
+    load_visible(&mut conn, caller, id).await?;
+    let stored = roles::limits(&mut conn, id).await.map_err(db_error)?;
+    Ok(limit_view(
+        &state.limits.rates,
+        &overrides_from_json(&stored),
+    ))
+}
+
+/// Replaces a role's limit overrides with `input` (what it leaves out keeps the default). Only
+/// on a role you may edit: below your highest, not one you hold, not the top role. The User
+/// role's limits are the defaults. Needs `roles.manage`. Audited (`role.limits_changed`).
+pub async fn set_limits(
+    state: &AppState,
+    caller: &Caller,
+    id: &str,
+    input: &[RoleLimitInput],
+) -> ApiResult<Vec<RoleLimit>> {
+    let id = parse_id(id)?;
+    let wanted = parse_limits(input)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    lock(&mut tx).await?;
+    let actor = require(&mut tx, caller, permissions::ROLES_MANAGE).await?;
+    let role = load_visible(&mut tx, caller, id).await?;
+    not_root(&role)?;
+    actor.may_edit(role.id, role.position).map_err(rule)?;
+    if role.is(roles::SYSTEM_USER) {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "built_in_role",
+            "Everyone holds the User role, so its limits are the defaults the API starts with.",
+        ));
+    }
+    let before = overrides_from_json(&roles::limits(&mut tx, id).await.map_err(db_error)?);
+    if before != wanted {
+        let after = overrides_to_json(&wanted);
+        roles::set_limits(&mut tx, id, &after)
+            .await
+            .map_err(db_error)?;
+        write_audit(
+            &mut tx,
+            caller,
+            "role.limits_changed",
+            "role",
+            &ids::to_text(id),
+            Some(json!({ "name": role.name, "limits": overrides_to_json(&before) })),
+            Some(json!({ "name": role.name, "limits": after })),
+        )
+        .await?;
+    }
+    tx.commit().await.map_err(sqlx_error)?;
+    // Everyone who holds it counts under the new limits from their next request on this
+    // instance; others read them again within `limits::ACCOUNT_TTL`.
+    state.limits.forget_all();
+    Ok(limit_view(&state.limits.rates, &wanted))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn item(key: &str, value: Option<i32>) -> RoleLimitInput {
+        RoleLimitInput {
+            key: key.to_owned(),
+            value,
+        }
+    }
+
+    #[test]
+    fn role_limits_take_known_keys_in_range() {
+        let got = parse_limits(&[
+            item("pending_emotes", Some(100)),
+            item(" gql_account ", Some(1)),
+            item("prefs", None),
+        ])
+        .unwrap();
+        assert_eq!(got.len(), 2);
+        assert_eq!(got[&AccountLimit::PendingEmotes], 100);
+        assert_eq!(got[&AccountLimit::GqlAccount], 1);
+        assert!(parse_limits(&[]).unwrap().is_empty());
+        for (bad_input, code) in [
+            (vec![item("auth", Some(5))], "unknown_limit"),
+            (vec![item("nope", Some(5))], "unknown_limit"),
+            (vec![item("redeem", Some(0))], "bad_limit"),
+            (vec![item("redeem", Some(-4))], "bad_limit"),
+            (vec![item("redeem", Some(1_000_001))], "bad_limit"),
+            (
+                vec![item("redeem", Some(3)), item("redeem", None)],
+                "bad_limit",
+            ),
+        ] {
+            assert_eq!(parse_limits(&bad_input).unwrap_err().code, code);
+        }
+    }
+
+    #[test]
+    fn every_limit_shows_its_default_and_window() {
+        let rates = Rates::default();
+        let mut o = RoleOverrides::new();
+        o.insert(AccountLimit::Checkout, 99);
+        let view = limit_view(&rates, &o);
+        assert_eq!(view.len(), AccountLimit::ALL.len());
+        let get = |k: &str| view.iter().find(|l| l.key == k).unwrap();
+        assert_eq!(get("checkout").value, Some(99));
+        assert_eq!(get("checkout").default, 30);
+        assert_eq!(get("checkout").window_seconds, Some(3600));
+        assert_eq!(get("gql_account").window_seconds, Some(60));
+        assert_eq!(get("pending_emotes").window_seconds, None);
+        assert_eq!(get("pending_emotes").default, 20);
+        assert_eq!(get("uploads_per_hour").default, 20);
+        assert!(get("prefs").value.is_none());
+    }
 
     #[test]
     fn inputs_are_checked() {

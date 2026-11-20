@@ -231,9 +231,11 @@ pub async fn accounts_by_login(
         ));
     }
     // A list of logins is a batch of account lookups: it takes from the account search limit.
-    crate::errors::limited(
-        &state.limits.account_search,
+    crate::errors::limited_as(
+        state,
+        crate::limits::AccountLimit::AccountSearch,
         &format!("a:{}", ids::to_text(caller.account_id)),
+        caller.account_id,
         "That's a lot of login checks. Try again in a minute.",
     )?;
     let mut found: Vec<(String, Result<Uuid, &'static str>)> = Vec::with_capacity(wanted.len());

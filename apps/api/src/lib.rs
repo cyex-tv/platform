@@ -161,10 +161,11 @@ async fn graphql(
         },
     };
     if let Some(caller) = &caller
-        && let Err(wait) = state
-            .limits
-            .gql_account
-            .check(&cyex_tv_db::ids::to_text(caller.account_id))
+        && let Err(wait) = state.limits.take(
+            limits::AccountLimit::GqlAccount,
+            &cyex_tv_db::ids::to_text(caller.account_id),
+            Some(caller.account_id),
+        )
     {
         return limits::too_many(wait);
     }

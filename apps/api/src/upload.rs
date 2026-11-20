@@ -11,8 +11,15 @@
 //! (`owner_id`, ADR 0014): it owns the emote, `uploaded_by` names the editor, and the upload is
 //! audited (`emote.uploaded`, `"via": "account_editor"`). A hold on uploads of either account
 //! refuses it, and the hourly limit counts it against both.
+//!
+//! An account has at most `pending_emotes` (20 unless its roles or `CYEX_TV_LIMIT_PENDING_EMOTES`
+//! say otherwise) emotes waiting for review at once; an upload past that is refused
+//! (`too_many_pending`), counted against the emote's owner, under the same lock as the hourly
+//! limit so two uploads at once can't both get the last place.
 
 use axum::http::StatusCode;
+use std::sync::Arc;
+
 use bytes::Bytes;
 use chrono::Utc;
 use cyex_tv_auth::Caller;
@@ -21,7 +28,7 @@ use cyex_tv_db::files::{self, NewFile};
 use cyex_tv_db::{accounts, audit, blocklist, ids, jobs, reads};
 use cyex_tv_media::{Limits, MediaError, Probe};
 use cyex_tv_shared::error::{ApiError, ApiResult};
-use cyex_tv_shared::model::{EditorPermission, Emote};
+use cyex_tv_shared::model::{EditorPermission, Emote, UploadQuota};
 use cyex_tv_storage::{Put, original_key, sigv4};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -30,12 +37,11 @@ use uuid::Uuid;
 
 use crate::catalog::{db_error, forbidden, member_name, parse_id};
 use crate::errors::sqlx_error;
+use crate::limits::{AccountLimit, AccountLimits};
 use crate::moderation::clean_tags;
 use crate::state::AppState;
 use crate::views;
 
-/// Uploads one account may make per hour.
-pub const PER_HOUR: i64 = 20;
 /// The job the worker turns an original into emote files with.
 pub const TRANSCODE_JOB: &str = "emote.transcode";
 
@@ -122,9 +128,24 @@ pub fn split_tags(raw: Option<&str>) -> Vec<String> {
         .collect()
 }
 
-/// At most `PER_HOUR` uploads an hour: what you uploaded, for yourself and for others, and what
-/// the account got from anyone. The owners aren't limited.
-async fn hourly_limit(conn: &mut PgConnection, caller: &Caller, owner: Uuid) -> ApiResult<()> {
+/// What the uploader's and the owner's roles allow (the same when you upload for yourself).
+struct Allowed {
+    mine: Arc<AccountLimits>,
+    theirs: Arc<AccountLimits>,
+}
+
+fn count_of(limits: &AccountLimits, limit: AccountLimit) -> i64 {
+    i64::from(limits.get(limit))
+}
+
+/// At most `uploads_per_hour` uploads an hour: what you uploaded, for yourself and for others,
+/// and what the account got from anyone, each against its own limit. The owners aren't limited.
+async fn hourly_limit(
+    conn: &mut PgConnection,
+    caller: &Caller,
+    owner: Uuid,
+    allowed: &Allowed,
+) -> ApiResult<()> {
     let hour_ago = Utc::now() - chrono::Duration::hours(1);
     let mine = emotes::count_uploaded_since(conn, caller.account_id, hour_ago)
         .await
@@ -132,11 +153,13 @@ async fn hourly_limit(conn: &mut PgConnection, caller: &Caller, owner: Uuid) -> 
     let theirs = emotes::count_since(conn, owner, hour_ago)
         .await
         .map_err(db_error)?;
-    if (mine >= PER_HOUR || theirs >= PER_HOUR) && !caller.owner {
+    let mine_over = mine >= count_of(&allowed.mine, AccountLimit::UploadsPerHour);
+    let theirs_over = theirs >= count_of(&allowed.theirs, AccountLimit::UploadsPerHour);
+    if (mine_over || theirs_over) && !caller.owner {
         return Err(ApiError::new(
             StatusCode::TOO_MANY_REQUESTS,
             "rate_limited",
-            if mine >= PER_HOUR || owner == caller.account_id {
+            if mine_over || owner == caller.account_id {
                 "That's a lot of uploads. Try again in an hour."
             } else {
                 "That account has had a lot of uploads this hour. Try again later."
@@ -144,6 +167,89 @@ async fn hourly_limit(conn: &mut PgConnection, caller: &Caller, owner: Uuid) -> 
         ));
     }
     Ok(())
+}
+
+/// What a refusal at the pending cap says.
+pub fn too_many_pending(max: u32, for_someone: bool) -> ApiError {
+    let waiting = if max == 1 {
+        "1 emote".to_owned()
+    } else {
+        format!("{max} emotes")
+    };
+    ApiError::new(
+        StatusCode::CONFLICT,
+        "too_many_pending",
+        if for_someone {
+            format!(
+                "That account has {waiting} waiting for review. Upload more once some are reviewed."
+            )
+        } else {
+            format!("You have {waiting} waiting for review. Upload more once some are reviewed.")
+        },
+    )
+}
+
+/// At most `pending_emotes` of the owner's emotes wait for review at once.
+async fn pending_limit(
+    conn: &mut PgConnection,
+    caller: &Caller,
+    owner: Uuid,
+    for_someone: bool,
+    allowed: &Allowed,
+) -> ApiResult<()> {
+    // The owners aren't capped, like the hourly limit.
+    if caller.owner {
+        return Ok(());
+    }
+    let pending = emotes::count_pending(conn, owner).await.map_err(db_error)?;
+    let max = allowed.theirs.get(AccountLimit::PendingEmotes);
+    if pending >= i64::from(max) {
+        return Err(too_many_pending(max, for_someone));
+    }
+    Ok(())
+}
+
+/// Where `owner` stands with uploads: its pending emotes and their cap, its uploads this hour
+/// and their limit. Yours, or an account you may upload for (`emote_upload` on every set).
+pub async fn quota(
+    state: &AppState,
+    caller: &Caller,
+    owner_id: Option<&str>,
+) -> ApiResult<UploadQuota> {
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let owner = match owner_id.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(raw) => parse_id(raw)?,
+        None => caller.account_id,
+    };
+    if owner != caller.account_id
+        && !crate::editors::has_emote_flag(
+            &mut conn,
+            owner,
+            caller.account_id,
+            EditorPermission::EmoteUpload,
+        )
+        .await?
+    {
+        return Err(forbidden(
+            "You can see another account's uploads only as its editor with the upload permission on every set.",
+        ));
+    }
+    let limits = state.limits.load(&state.db, owner).await;
+    let pending = emotes::count_pending(&mut conn, owner)
+        .await
+        .map_err(db_error)?;
+    let hour = emotes::count_since(&mut conn, owner, Utc::now() - chrono::Duration::hours(1))
+        .await
+        .map_err(db_error)?;
+    let int = |n: i64| i32::try_from(n).unwrap_or(i32::MAX);
+    let lim = |l: AccountLimit| i32::try_from(limits.get(l)).unwrap_or(i32::MAX);
+    Ok(UploadQuota {
+        account_id: ids::to_text(owner),
+        pending: int(pending),
+        pending_max: (!caller.owner).then(|| lim(AccountLimit::PendingEmotes)),
+        uploads_this_hour: int(hour),
+        uploads_per_hour: lim(AccountLimit::UploadsPerHour),
+    })
 }
 
 pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResult<Emote> {
@@ -200,8 +306,13 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
             "That account can't upload right now, so nobody can upload for it.",
         ));
     }
+    let allowed = Allowed {
+        mine: state.limits.load(&state.db, caller.account_id).await,
+        theirs: state.limits.load(&state.db, owner).await,
+    };
     // Checked early so a refused upload isn't decoded, and again under the lock below.
-    hourly_limit(&mut conn, caller, owner).await?;
+    hourly_limit(&mut conn, caller, owner, &allowed).await?;
+    pending_limit(&mut conn, caller, owner, for_someone, &allowed).await?;
     drop(conn);
 
     // Decoding is CPU work; keep it off the request threads.
@@ -246,7 +357,8 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
     emotes::lock_upload_quota(&mut tx, &[caller.account_id, owner])
         .await
         .map_err(db_error)?;
-    hourly_limit(&mut tx, caller, owner).await?;
+    hourly_limit(&mut tx, caller, owner, &allowed).await?;
+    pending_limit(&mut tx, caller, owner, for_someone, &allowed).await?;
     let side = |v: u32| i32::try_from(v).unwrap_or(i32::MAX);
     let key = original_key(&sha_hex);
     let (file, created) = files::insert_or_get(
@@ -366,6 +478,22 @@ mod tests {
         assert_eq!(err.code, "invalid_image");
         assert_eq!(err.message, INVALID_IMAGE);
         assert!(!err.message.contains("IDAT"));
+    }
+
+    #[test]
+    fn the_pending_refusal_says_how_many_wait() {
+        let err = too_many_pending(20, false);
+        assert_eq!(err.code, "too_many_pending");
+        assert_eq!(err.status, StatusCode::CONFLICT);
+        assert_eq!(
+            err.message,
+            "You have 20 emotes waiting for review. Upload more once some are reviewed."
+        );
+        assert!(
+            too_many_pending(1, true)
+                .message
+                .starts_with("That account has 1 emote waiting")
+        );
     }
 
     #[test]

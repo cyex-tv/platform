@@ -17,7 +17,8 @@ use sqlx::Connection;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::errors::{bad, conflict, conn, db_error, limited, not_found, parse_id, sqlx_error};
+use crate::errors::{bad, conflict, conn, db_error, limited_as, not_found, parse_id, sqlx_error};
+use crate::limits::AccountLimit;
 use crate::state::AppState;
 use crate::views;
 
@@ -32,9 +33,11 @@ fn limit_reached(message: &str) -> ApiError {
 }
 
 fn take_rate(state: &AppState, caller: &Caller) -> ApiResult<()> {
-    limited(
-        &state.limits.personal_lists,
+    limited_as(
+        state,
+        AccountLimit::PersonalLists,
         &ids::to_text(caller.account_id),
+        caller.account_id,
         "",
     )
 }

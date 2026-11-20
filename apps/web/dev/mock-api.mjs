@@ -665,6 +665,23 @@ const roleOut = (r) => {
   return { ...r, builtIn: r.builtIn ?? null, permissions: root ? PERMISSIONS : r.permissions,
     editable: !root && !held, assignable: !root && r.builtIn !== 'USER' };
 };
+// Per-account limits (limits.rs): the defaults the API starts with, and each role's overrides
+// (setRoleLimits). The User and top roles keep the defaults. MOCK_PENDING_MAX lowers the cap on
+// emotes waiting for review, to see the upload form at it.
+const LIMIT_DEFAULTS = [
+  ['gql_account', 'REQUESTS', 600, 60], ['account_search', 'REQUESTS', 60, 60], ['quick_search', 'REQUESTS', 240, 60], ['heavy_reads', 'REQUESTS', 120, 60],
+  ['uploads_per_hour', 'UPLOADS', 20, 3600], ['pending_emotes', 'UPLOADS', Number(process.env.MOCK_PENDING_MAX) || 20, null],
+  ['editors', 'ACCOUNT', 60, 3600], ['cosmetics', 'ACCOUNT', 300, 3600], ['set_clones', 'ACCOUNT', 30, 3600], ['personal_lists', 'ACCOUNT', 120, 60],
+  ['emote_transfers', 'ACCOUNT', 60, 3600], ['prefs', 'ACCOUNT', 120, 3600], ['checkout', 'ACCOUNT', 30, 3600], ['redeem', 'ACCOUNT', 30, 3600], ['data_export', 'ACCOUNT', 5, 3600],
+];
+const ROLE_LIMITS = { ROLE2: { pending_emotes: 100 } };
+const limitsOut = (o = {}) => LIMIT_DEFAULTS.map(([key, group, d, w]) => ({ key, group, default: d, windowSeconds: w, value: o[key] ?? null }));
+/** An account's limit: the most generous override among its roles, else the default. */
+const limitOf = (accountId, key) => {
+  const set = (ACCOUNT_ROLES[accountId] ?? []).map((r) => ROLE_LIMITS[r]?.[key]).filter((n) => n != null);
+  return set.length ? Math.max(...set) : LIMIT_DEFAULTS.find((l) => l[0] === key)[2];
+};
+const pendingOf = (accountId) => [...MINE, ...PENDING].filter((e) => e.owner?.id === accountId && e.state === 'PENDING').length;
 const rolesOf = (accountId) => [
   ...(accountId === ME_ID ? [ROLES[0]] : []),
   ...(ACCOUNT_ROLES[accountId] ?? []).map((id) => ROLES.find((r) => r.id === id)).filter(Boolean),
@@ -2175,6 +2192,40 @@ function signedIn(body, v, ADMIN) {
       ROLES.sort((a, b) => b.position - a.position);
       return { data: { updateRole: roleOut(r) } };
     }
+    case 'LimitDefaults':
+      if (!ADMIN) return err('This needs roles.manage.', 'forbidden');
+      return { data: { limitDefaults: limitsOut() } };
+    case 'RoleLimits': {
+      if (!ADMIN) return err('This needs roles.manage.', 'forbidden');
+      if (!ROLES.some((x) => x.id === v.id)) return err('Not found.', 'not_found');
+      return { data: { roleLimits: limitsOut(ROLE_LIMITS[v.id]) } };
+    }
+    case 'SetRoleLimits': {
+      if (!ADMIN) return err('This needs roles.manage.', 'forbidden');
+      const r = ROLES.find((x) => x.id === v.id);
+      if (!r) return err('Not found.', 'not_found');
+      if (r.builtIn === 'ROOT') return err('This is a built-in role; it can’t be changed this way.', 'built_in_role');
+      if (r.builtIn === 'USER') return err('Everyone holds the User role, so its limits are the defaults the API starts with.', 'built_in_role');
+      if (!roleOut(r).editable) return err('You can’t edit a role you hold. Someone above you has to.', 'own_role');
+      const next = {};
+      for (const l of v.limits ?? []) {
+        if (!LIMIT_DEFAULTS.some((d) => d[0] === l.key.trim())) return err(`"${l.key}" is not a limit.`, 'unknown_limit');
+        if (l.value == null) continue;
+        if (!(Number.isInteger(l.value) && l.value >= 1 && l.value <= 1000000)) return err('Limits are 1 to 1000000; leave one empty to keep the default.', 'bad_limit');
+        next[l.key.trim()] = l.value;
+      }
+      ROLE_LIMITS[r.id] = next;
+      return { data: { setRoleLimits: limitsOut(next) } };
+    }
+    case 'UploadQuota': {
+      const owner = v.ownerId || ME_ID;
+      if (owner !== ME_ID && !emoteGrant(owner, 'EMOTE_UPLOAD'))
+        return err('You can see another account’s uploads only as its editor with the upload permission on every set.', 'forbidden');
+      const hour = Date.now() - 3600_000;
+      return { data: { uploadQuota: { accountId: owner, pending: pendingOf(owner), pendingMax: limitOf(owner, 'pending_emotes'),
+        uploadsThisHour: [...MINE, ...PENDING].filter((e) => e.owner?.id === owner && Date.parse(e.createdAt) > hour).length,
+        uploadsPerHour: limitOf(owner, 'uploads_per_hour') } } };
+    }
     case 'DeleteRole': {
       const r = ROLES.find((x) => x.id === v.id);
       if (r?.builtIn) return err('This is a built-in role; it can’t be changed this way.', 'built_in_role');
@@ -3032,6 +3083,14 @@ createServer(async (req, res) => {
     const forOther = ownerId && ownerId !== ME_ID;
     if (forOther && !emoteGrant(ownerId, 'EMOTE_UPLOAD'))
       return json(res, 403, { error: 'forbidden', message: 'You can upload for another account only as its editor with the upload permission on every set.' });
+    // At most pending_emotes of the owner's emotes wait for review (upload.rs).
+    const cap = limitOf(forOther ? ownerId : ME_ID, 'pending_emotes');
+    if (name === 'toomanypending' || pendingOf(forOther ? ownerId : ME_ID) >= cap) {
+      const waiting = cap === 1 ? '1 emote' : `${cap} emotes`;
+      return json(res, 409, { error: 'too_many_pending', message: forOther
+        ? `That account has ${waiting} waiting for review. Upload more once some are reviewed.`
+        : `You have ${waiting} waiting for review. Upload more once some are reviewed.` });
+    }
     await new Promise((r) => setTimeout(r, 700)); // long enough to see the progress
     const owner = forOther ? EDITOR_OF.find((g) => g.account.id === ownerId).account : ME_SUMMARY;
     const e = emote(700 + uploads++, owner, 'PENDING');

@@ -311,6 +311,18 @@ pub async fn count_since(
     .await?)
 }
 
+/// How many of an account's emotes wait for review: what the review queue lists as pending
+/// (`state = 'pending'`, not deleted), ones still transcoding included.
+pub async fn count_pending(conn: &mut PgConnection, owner: Uuid) -> DbResult<i64> {
+    Ok(sqlx::query_scalar(
+        "SELECT count(*) FROM emotes
+         WHERE owner_account_id = $1 AND state = 'pending' AND deleted_at IS NULL",
+    )
+    .bind(owner)
+    .fetch_one(conn)
+    .await?)
+}
+
 /// Serialises uploads that count against the same accounts' hourly limit, until the transaction
 /// ends: a check made after this sees every upload that got in before. A transaction-scoped
 /// advisory lock per account (in ID order, so two uploads can't wait on each other), so nothing

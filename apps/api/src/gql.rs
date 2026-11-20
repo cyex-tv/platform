@@ -37,6 +37,7 @@ use cyex_tv_shared::model::{
     Checkout, CodeBatch, CodeBatchInput, CodeBatchPage, CreatedCodeBatch, Order, OrderPage,
     OrderStatus, Recipient, RedeemResult, ShopItem, ShopItemInput,
 };
+use cyex_tv_shared::model::{RoleLimit, RoleLimitInput, UploadQuota};
 use cyex_tv_shared::permissions;
 use futures_util::Stream;
 use sqlx::Connection;
@@ -1338,6 +1339,37 @@ impl Query {
         let caller = caller(ctx)?;
         admin::list(state(ctx), caller).await.map_err(api_error)
     }
+
+    /// Every per-account limit a role can change, with what everyone gets without one. Needs
+    /// `roles.manage`.
+    async fn limit_defaults(&self, ctx: &Context<'_>) -> Result<Vec<RoleLimit>> {
+        let caller = caller(ctx)?;
+        admin::limit_defaults(state(ctx), caller)
+            .await
+            .map_err(api_error)
+    }
+
+    /// A role's limits: each per-account limit with its default and the role's override. An
+    /// account counts under the most generous override among its roles. Needs `roles.manage`.
+    async fn role_limits(&self, ctx: &Context<'_>, id: String) -> Result<Vec<RoleLimit>> {
+        let caller = caller(ctx)?;
+        admin::role_limits(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Where uploads stand: how many emotes wait for review and how many may, and the uploads
+    /// this hour. Yours, or with `ownerId` an account you may upload for.
+    async fn upload_quota(
+        &self,
+        ctx: &Context<'_>,
+        owner_id: Option<String>,
+    ) -> Result<UploadQuota> {
+        let caller = caller(ctx)?;
+        crate::upload::quota(state(ctx), caller, owner_id.as_deref())
+            .await
+            .map_err(api_error)
+    }
 }
 
 pub struct Mutation;
@@ -2408,6 +2440,21 @@ impl Mutation {
     async fn update_role(&self, ctx: &Context<'_>, id: String, input: UpdateRole) -> Result<Role> {
         let caller = caller(ctx)?;
         admin::update(state(ctx), caller, &id, &input)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Set a role's limits: the overrides listed (a null value or a limit left out keeps the
+    /// default), for everyone who holds it. Only on a role you may edit, not the User or top
+    /// role. Needs `roles.manage`. Audited.
+    async fn set_role_limits(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        limits: Vec<RoleLimitInput>,
+    ) -> Result<Vec<RoleLimit>> {
+        let caller = caller(ctx)?;
+        admin::set_limits(state(ctx), caller, &id, &limits)
             .await
             .map_err(api_error)
     }

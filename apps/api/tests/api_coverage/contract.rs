@@ -956,6 +956,15 @@ async fn every_site_operation_runs_against_the_real_api() {
         json!({ "id": role, "input": { "description": "", "public": true } }),
     )
     .await;
+    c.op(os, "LimitDefaults", json!({})).await;
+    c.op(
+        os,
+        "SetRoleLimits",
+        json!({ "id": role, "limits": [{ "key": "pending_emotes", "value": 40 }] }),
+    )
+    .await;
+    c.op(os, "RoleLimits", json!({ "id": role })).await;
+    c.op(os, "UploadQuota", json!({ "ownerId": null })).await;
     c.op(
         os,
         "AssignRole",

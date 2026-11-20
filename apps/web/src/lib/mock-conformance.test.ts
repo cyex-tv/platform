@@ -222,6 +222,8 @@ const OVERRIDES: Record<string, (c: Ctx) => Record<string, unknown>> = {
   CreateRole: () => ({ input: { name: 'Mock role', position: 5, permissions: [] } }),
   UpdateRole: (c) => ({ id: c.newRoleId, input: { name: 'Mock role 2' } }),
   DeleteRole: (c) => ({ id: c.newRoleId }),
+  RoleLimits: (c) => ({ id: c.roleId }),
+  SetRoleLimits: (c) => ({ id: c.roleId, limits: [{ key: 'pending_emotes', value: 40 }] }),
   User: () => ({ platform: 'TWITCH', login: 'quietoak' }),
   Channel: () => ({ platform: 'TWITCH', login: 'quietoak' }),
   UserDetails: (c) => ({ accountId: c.otherAccount, status: true, roles: true }),

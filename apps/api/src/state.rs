@@ -118,11 +118,16 @@ impl FromRequestParts<AppState> for MaybeCaller {
     type Rejection = ApiError;
 
     async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, ApiError> {
-        state
+        let caller = state
             .auth
             .caller(&state.db, &parts.method, &parts.headers)
             .await
-            .map(MaybeCaller)
-            .map_err(ApiError::from)
+            .map_err(ApiError::from)?;
+        // What the account's roles allow, read at most every `limits::ACCOUNT_TTL`, so the
+        // limits checked while the request runs never wait on the database.
+        if let Some(c) = &caller {
+            state.limits.load(&state.db, c.account_id).await;
+        }
+        Ok(MaybeCaller(caller))
     }
 }

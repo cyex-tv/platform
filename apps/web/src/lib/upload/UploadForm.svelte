@@ -13,12 +13,17 @@
   // default, or the account in ?for= when you may upload for it. The account owns what you upload.
   // A file that is already a public emote (the same bytes) says "Looks like <emote> by <owner>"
   // with a link (same-file.ts); it can still be uploaded.
+  // An account may have at most pendingMax emotes waiting for review (20 unless its roles say
+  // otherwise): the form says how many wait ("3 of 20 waiting for review", uploadQuota, for the
+  // account picked in Upload as) and, at the cap, says why Upload is off.
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { onDestroy } from 'svelte';
   import { flip } from 'svelte/animate';
   import { fade, fly } from 'svelte/transition';
-  import { ApiError, uploadEmote, type EmoteVisibility, type Uploaded } from '$lib/api';
+  import { ApiError, gql, uploadEmote, type EmoteVisibility, type Uploaded } from '$lib/api';
+  import { UPLOAD_QUOTA } from '$lib/queries';
+  import { quotaView, type Quota } from './quota';
   import Icon from '$lib/components/Icon.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import TagInput from '$lib/components/TagInput.svelte';
@@ -111,6 +116,28 @@
   /** Where an upload opens: its edit page when you may edit it, else the account it went to. */
   const openHref = (id: string) =>
     !forOther || emoteCan(grants, owner?.id, session.me?.id, 'EMOTE_MANAGE') ? `/me/emotes/${id}` : `/users/${encodeURIComponent(owner!.id)}`;
+
+  // Where the account picked stands with emotes waiting for review; null until read (or when it
+  // can't be: the API still refuses at the cap, and the refusal says so).
+  let quota = $state<Quota | null>(null);
+  let quotaFor = 0;
+  function loadQuota() {
+    const id = owner?.id;
+    if (!session.me || !id) return;
+    const mine = ++quotaFor;
+    void quiet(
+      gql(UPLOAD_QUOTA, { ownerId: forOther ? id : null }).then((r) => {
+        if (mine === quotaFor) quota = r.uploadQuota;
+      }),
+      'upload quota',
+    );
+  }
+  $effect(() => {
+    void owner?.id;
+    quota = null;
+    loadQuota();
+  });
+  const room = $derived(quotaView(quota, forOther));
 
   const waiting = $derived(items.filter((i) => i.status === 'ready' || i.status === 'failed'));
   const doneCount = $derived(items.filter((i) => i.status === 'done').length);
@@ -232,6 +259,7 @@
       );
       item.status = 'done';
       item.open = false;
+      if (quota) quota.pending++;
       return true;
     } catch (err) {
       if (err instanceof ApiError && err.code === 'aborted') {
@@ -242,6 +270,10 @@
       item.status = 'failed';
       item.error = err instanceof ApiError ? uploadProblem(err.code, err.message) : 'The upload didn’t go through.';
       item.open = true;
+      if (err instanceof ApiError && err.code === 'too_many_pending') {
+        loadQuota();
+        return 'stop';
+      }
       return err instanceof ApiError && err.code === 'rate_limited' ? 'stop' : false;
     } finally {
       running.delete(item.key);
@@ -272,6 +304,7 @@
       acceptBox.focus();
       return;
     }
+    if (room?.full) return;
     await run([...waiting]);
   }
 
@@ -284,6 +317,7 @@
       if (r === 'stop') break; // the hourly limit: the rest would be refused the same way
     }
     busy = false;
+    loadQuota();
     const failed = batch.filter((i) => i.status === 'failed').length;
     if (batch.length === 1 && ok === 1 && items.length === 1) {
       const made = batch[0].made!;
@@ -318,6 +352,12 @@
       </select>
       <span class="ui-hint" id="as-hint">{forOther ? `${clean(owner!.displayName)} owns what you upload here; it counts toward both your hourly limits.` : 'You own what you upload. You can also upload for accounts you edit.'}</span>
     </label>
+  {/if}
+  {#if room}
+    <p class="quota" class:full={room.full} role="status" id="quota-line">
+      {#if room.full}<span class="ui-error">{room.refusal}</span>
+      {:else}<span class="ui-num">{room.line}</span>{#if waiting.length > room.room} <span class="ui-hint">Only {count(room.room)} more {room.room === 1 ? 'fits' : 'fit'} until some are reviewed.</span>{/if}{/if}
+    </p>
   {/if}
   <button
     type="button"
@@ -439,7 +479,8 @@
   </div>
 
   <div class="ui-actions foot">
-    <button class="ui-btn primary" type="submit" disabled={busy || (!!items.length && !waiting.length)}>
+    <button class="ui-btn primary" type="submit" disabled={busy || (!!items.length && !waiting.length) || !!room?.full}
+      aria-describedby={room ? 'quota-line' : undefined}>
       {#if busy}<span class="ui-spinner small" aria-hidden="true"></span> Uploading…
       {:else if waiting.length > 1}Upload {count(waiting.length)} emotes
       {:else}Upload{/if}
@@ -503,6 +544,8 @@
   .accept .ui-check { align-items: center; gap: 10px; min-height: 40px; font-weight: 500; }
   .accept .ui-check a { color: var(--accent-text, var(--accent)); text-decoration: underline; text-underline-offset: 2px; }
   .accept .ui-hint { margin: 0; }
+  .quota { margin: -4px 0 0; font-size: var(--text-sub); color: var(--muted); }
+  .quota .ui-hint { display: inline; }
   .foot { flex-wrap: wrap; padding-top: 4px; }
   /* In the dialog the buttons stay at the foot of what scrolls, so a short window (a phone on its
      side, 200% zoom) never leaves Upload below the fold. The dialog's own padding is bridged by
