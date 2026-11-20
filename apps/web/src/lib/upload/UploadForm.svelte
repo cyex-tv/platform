@@ -5,7 +5,8 @@
   // and flags, and a preview at real sizes (1x to 4x). Wide is worked out from the
   // picture, as the API does. Files are checked in the browser first (type, 8 MB, 1000 × 1000 px),
   // then sent one after another with a progress bar; a refusal is explained in words and the file
-  // stays in the queue to fix or retry. A file that sends nothing for 30 s stalls (and can be retried);
+  // stays in the queue to fix or retry. A file that sends nothing for 30 s stalls (and can be retried), and so
+  // does one the API hasn't answered 30 s after its last byte (UPLOAD_STALL_MS, UPLOAD_ANSWER_MS);
   // Cancel on the sending row stops it. Uploading needs the guidelines box ticked once per batch.
   // One file that goes through opens its page; a batch stays with a link per emote.
   // "Upload as" (ADR 0014) lists you and the accounts where you hold Upload on every set; you by
@@ -41,6 +42,7 @@
   } from '$lib/rules';
   import EmoteFlags from '$lib/tool/EmoteFlags.svelte';
   import LocalPreview from '$lib/tool/LocalPreview.svelte';
+  import LeaveGuard from '$lib/tool/LeaveGuard.svelte';
   import { notify } from '$lib/tool/notices.svelte';
 
   type Props = {
@@ -180,6 +182,8 @@
 
   function drop(e: DragEvent) {
     e.preventDefault();
+    // The dialog around the form takes drops too: one drop is one add, not two.
+    e.stopPropagation();
     over = false;
     add(e.dataTransfer?.files);
   }
@@ -283,6 +287,10 @@
     if (first) queueMicrotask(() => document.getElementById(`item-${first.key}`)?.querySelector<HTMLElement>('.err')?.focus());
   }
 </script>
+
+<!-- Closing or reloading the tab loses a file that is being sent and the ones waiting; on the page (not in the
+     site-wide dialog, whose queue survives navigation) leaving for another page asks too. -->
+<LeaveGuard dirty={busy || waiting.length > 0} inApp={!inDialog} what={busy ? 'the upload in progress and the files waiting' : 'the files waiting to upload'} />
 
 <form class="ui-form up-form" class:in-dialog={inDialog} onsubmit={submit} novalidate>
   {#if grantsFailed}

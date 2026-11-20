@@ -131,8 +131,8 @@
   }
 
   /** Puts the local view state into the address without loading anything again. */
-  function sync() {
-    replaceState(`/search${toSearch({ ...here, pages: Math.min(pageNo, MAX_PAGES) })}`, page.state);
+  function sync(pages = pageNo) {
+    replaceState(`/search${toSearch({ ...here, pages: Math.min(pages, MAX_PAGES) })}`, page.state);
   }
 
   // ---- Multi-select (up to CAP): picked ids in the order picked, kept while filters change.
@@ -153,7 +153,7 @@
     selecting = on;
     if (!on) sel = EMPTY;
     else if (id && !sel.ids.includes(id)) step(toggle(sel, id));
-    sync();
+    sync(on ? pageNo : 1); // leaving Select mode leaves a plain address: no ?select=, no ?n=
   }
   function unpick(done: string[]) {
     note = '';
