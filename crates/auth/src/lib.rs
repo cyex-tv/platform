@@ -6,8 +6,12 @@
 //!   check for cookie callers on writes.
 //! - [`providers`]: the Twitch and Kick endpoints and response shapes.
 //!
+//! - [`app`]: app sign-in for desktop apps (ADR 0021): authorization code + PKCE with a loopback
+//!   redirect, rotating refresh tokens.
+//!
 //! Platform access tokens are used once, to read the user, then revoked and dropped.
 
+pub mod app;
 pub mod config;
 pub mod cookies;
 mod error;

@@ -198,6 +198,11 @@ const TITLES: Record<string, string> = {
   login: 'Start sign-in',
   callback: 'Finish sign-in',
   logout: 'Sign out',
+  authorize: 'Start app sign-in',
+  get_client: 'Get an app',
+  consent: 'Answer for an app',
+  token: 'Get app tokens',
+  revoke: 'Sign an app out',
   health: 'Check the process',
   ready: 'Check the database',
 };
@@ -211,7 +216,7 @@ const GROUPS: { tag: string; title: string }[] = [
 ];
 
 /** Calls that act for an account: they need the session cookie and the site's Origin. */
-const SIGNED_IN = new Set(['upload_emote', 'logout']);
+const SIGNED_IN = new Set(['upload_emote', 'logout', 'consent']);
 
 export const SITE = 'https://cyex.tv';
 export const COOKIE = 'cyex_tv_session';
@@ -252,6 +257,17 @@ function samplesFor(
       curl.push(`-H 'content-type: application/json'`, `-d ${shellQuote(json(example)!)}`);
       init.push(`headers: { 'content-type': 'application/json' }`, `body: JSON.stringify(${json(example, 2)!.replace(/\n/g, '\n  ')})`);
       pyArgs.push(`json=${py(example, 1)}`);
+    } else if (bodyType === 'application/x-www-form-urlencoded') {
+      // The app sign-in forms (OAuth): every field, as the guide shows them.
+      // The token sample trades a code; refreshing is in the App sign-in guide.
+      const value = (k: string) =>
+        k === 'grant_type' ? 'authorization_code' : k === 'client_id' ? 'cyex-deck' : k === 'redirect_uri' ? 'http://127.0.0.1:53682/callback' : '…';
+      const pairs = Object.keys(s.properties ?? {})
+        .filter((k) => k !== 'token_type_hint' && k !== 'refresh_token')
+        .map((k) => [k, value(k)] as const);
+      for (const [k, v] of pairs) curl.push(`-d ${shellQuote(`${k}=${v}`)}`);
+      init.push(`body: new URLSearchParams(${json(Object.fromEntries(pairs), 2)!.replace(/\n/g, '\n  ')})`);
+      pyArgs.push(`data=${py(Object.fromEntries(pairs), 1)}`);
     } else if (bodyType === 'multipart/form-data') {
       const required = s.required ?? [];
       const parts = Object.keys(s.properties ?? {})
@@ -299,6 +315,7 @@ function samplesFor(
 }
 
 function redirectTarget(id: string | undefined): string {
+  if (id === 'authorize') return 'https://cyex.tv/authorize?client_id=cyex-deck&redirect_uri=…&code_challenge=…&code_challenge_method=S256&state=…';
   if (id === 'login') return 'https://id.twitch.tv/oauth2/authorize?response_type=code&client_id=…&state=…&code_challenge=…';
   return 'https://cyex.tv/me';
 }

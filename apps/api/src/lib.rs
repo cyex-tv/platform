@@ -52,7 +52,7 @@ use crate::state::{AppState, MaybeCaller};
     servers((url = "https://api.cyex.tv", description = "Production")),
     tags(
         (name = "system", description = "Health checks."),
-        (name = "auth", description = "Signing in with Twitch or Kick."),
+        (name = "auth", description = "Signing in with Twitch or Kick, and app sign-in for desktop apps (authorization code with PKCE and a loopback redirect, ADR 0021)."),
         (name = "emotes", description = "Uploading emotes."),
         (name = "cosmetics", description = "cyex.tv chat badges and name paints (ADR 0015): the catalog, chatters' picks, and staff picture uploads."),
         (name = "shop", description = "The cosmetics shop (ADR 0016): Paddle's webhook. Items, checkout, orders and codes are GraphQL."),
@@ -66,6 +66,7 @@ pub fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::with_openapi(ApiDoc::openapi())
         .merge(routes::system::router())
         .merge(routes::v1::router())
+        .merge(routes::app_auth::router())
 }
 
 /// The service, ready to serve: REST, GraphQL (`POST /v1/gql`, GraphiQL on `GET`) and GraphQL

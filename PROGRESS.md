@@ -2,6 +2,17 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## App sign-in for cyex deck (branch `feat/app-sign-in`, ADR 0021, owner decision of 2026/11/19, D19 changed)
+
+Handoff `2026-11-19-03-deck-to-cyextv-app-sign-in` from the deck chat.
+- [x] Flow: authorization code + PKCE S256 with a loopback redirect (RFC 8252, any port on `127.0.0.1` or `[::1]`, path `/callback`). `GET /v1/auth/app/authorize` checks the client and redirect (400, never redirected to, when they fail) and sends the browser to the site's `/authorize` consent page; `POST /v1/auth/app/consent` (site cookie and Origin only) answers where to go (code and state, or `access_denied`); `POST /v1/auth/app/token` (form; `authorization_code` or `refresh_token`); `POST /v1/auth/app/revoke` (RFC 7009); `GET /v1/auth/app/clients/{id}`.
+- [x] Public client `cyex-deck` in `crates/auth/src/app.rs` (no secret). Scopes `sets.emotes` (`addSetEmote`, `updateSetEmote`, `removeSetEmote`) and `cosmetics.select` (`selectCosmetics`); queries allow-listed (`app::APP_QUERIES`: public reads, own reads, `channelEditableSets`; no staff reads), every other query and mutation `insufficient_scope` (checked per resolved field), uploads refused. Staff grants and the owner's never count for an app token (`permissions_of` gives it only the User role's), so `sets.edit_any` doesn't open other sets to the deck.
+- [x] Lifetimes: code 2 minutes, single use (a replay signs out what it gave); access 1 hour, not slid; refresh 60 days, rotated, reuse signs the session out. One `sessions` row per sign-in (migration `20261209005001`: `app_client_id`, `access_expires_at`, `app_auth_codes`, `app_refresh_tokens`), listed once in `mySessions` as the app (`appClientId`), revocable there; refresh tokens go with the session.
+- [x] GraphQL (additive): `channelEditableSets(platform, id | login)` with `role`, `canEditActiveSet` and each set's `access` (`OWNER`, `ACCOUNT_EDITOR`, `SET_EDITOR`, `STAFF`), built on the same rights check as `addSetEmote`. `AccountSession.appClientId`.
+- [x] Website: `/authorize` consent page (cyex app layer: one card, the app, what it may do, the account with Not you?, Deny and Allow; sign-in buttons when signed out; one error state for bad links). Dev mock: the whole flow. Docs: App sign-in guide on /developers, the five endpoints in the reference.
+- [x] Tests: `apps/api/tests/app_sign_in_flow.rs` (Postgres in CI), unit tests in `crates/auth/src/app.rs`, vitest `app-auth.test.ts`.
+- [x] Manual (CDP, `.claude/runs/2026-11-20-overnight/screens/app-sign-in/shots.mjs`, 375 and 1440, dark and light): consent, sign-in and invalid states; Allow and Deny go back to the loopback address.
+
 ## Batch K1: link previews, keyboard shortcuts, changelog, tile marks (branch `feat/k1-previews-shortcuts`, 2026/11/20)
 
 From the 7TV gap study (`.claude/runs/2026-11-20-overnight/gap-7tv-2.md`), ideas only, in cyex design. Web only; no API change.
@@ -985,7 +996,7 @@ Merged after all 6 checks passed on the first run, with `catalog_flow` (7), `aut
 - [x] Migration `20261117000002_oauth_states.sql` (additive): the sign-in in progress, holding the `state` hash, the PKCE verifier (it never reaches the browser), `return_to` and the account being linked.
 - [x] Platform access tokens are used once to read the user, then revoked (best effort) and dropped. Kick's `email` is never read into the model.
 - [x] Site sessions: 256-bit random token, sha256 stored, cookie `cyex_tv_session` with `Domain=cyex.tv; Path=/; Secure; HttpOnly; SameSite=Lax`, 30 days sliding (written back at most hourly). A new session on every sign-in and link; the old one is deleted.
-- [x] App sessions: `Authorization: Bearer`, kind `app`, 90 days. Accepted, not yet issued (D19).
+- [x] App sessions: `Authorization: Bearer`, kind `app`, 90 days. Accepted, not yet issued (D19). Issued since ADR 0021 through app sign-in (1 hour access, 60-day rotating refresh).
 - [x] CSRF by Origin: a cookie caller's writes (any method but GET, HEAD, OPTIONS, so every GraphQL POST) need `Origin: https://cyex.tv`, or fail with `bad_origin`. Bearer callers are exempt.
 - [x] `return_to` must be on the site (paths or full `https://cyex.tv` URLs); anything else is `bad_return_to`.
 - [x] REST: `GET /v1/auth/{platform}/login` (`?return_to`, `?link=true`), `GET /v1/auth/{platform}/callback`, `POST /v1/auth/logout`. Errors: `unknown_platform`, `bad_return_to`, `signed_out`, `bad_state`, `declined`, `identity_taken`, `platform_already_linked`, `account_deleted`, `platform_error`, `unavailable` (client not configured).

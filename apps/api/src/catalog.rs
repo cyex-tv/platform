@@ -49,8 +49,13 @@ pub use crate::errors::{db_error, forbidden, not_found, parse_id};
 // Permissions
 
 /// The permissions the caller holds: every one for the owner (ADR 0010), otherwise the union of
-/// their roles'.
+/// their roles'. An app sign-in session (ADR 0021) holds only what every account holds (the
+/// built-in User role): staff grants and the owner's never count for an app, so a deck token
+/// can't edit any set through `sets.edit_any` or read what staff read.
 pub async fn permissions_of(conn: &mut PgConnection, caller: &Caller) -> ApiResult<Vec<String>> {
+    if caller.app_client.is_some() {
+        return roles::everyones_permissions(conn).await.map_err(db_error);
+    }
     if caller.owner {
         return Ok(rbac::all_permissions());
     }
@@ -1578,6 +1583,111 @@ pub async fn update_channel_settings(
         .await
         .map_err(db_error)?
         .ok_or_else(not_found)
+}
+
+// The sets you can change for a channel (for apps such as cyex deck, ADR 0021)
+
+/// Sets one `channelEditableSets` answer looks at, at most.
+pub const CHANNEL_EDITABLE_SETS_MAX: usize = 200;
+
+/// The channel, found by its platform ID or its login (exactly one), with the sets of its account
+/// the caller may add, rename and remove emotes in: the same check `addSetEmote` makes, so an
+/// app can tell before it sends. `None` when the channel is unknown or its account is hidden.
+pub async fn channel_editable_sets(
+    state: &AppState,
+    caller: &Caller,
+    platform: Platform,
+    id: Option<&str>,
+    login: Option<&str>,
+) -> ApiResult<Option<cyex_tv_shared::model::ChannelEditableSets>> {
+    use cyex_tv_shared::model::{ChannelEditableSets, ChannelRole, EditableSet, SetAccess};
+
+    let id = id.map(str::trim).filter(|s| !s.is_empty());
+    let login = login
+        .map(|l| l.trim().trim_start_matches('@'))
+        .filter(|s| !s.is_empty());
+    let mut conn = conn(state).await?;
+    let found = match (id, login) {
+        (Some(id), None) if id.len() <= 64 => channels::find(&mut conn, platform, id).await,
+        (None, Some(login)) if login.len() <= 64 => {
+            channels::find_by_login(&mut conn, platform, login).await
+        }
+        _ => {
+            return Err(bad(
+                "bad_channel",
+                "Give the channel's id or its login (one of them, up to 64 characters).",
+            ));
+        }
+    }
+    .map_err(db_error)?;
+    let Some(ch) = found else {
+        return Ok(None);
+    };
+    let Some(channel) = views::channel(&mut conn, &ch).await.map_err(db_error)? else {
+        return Ok(None);
+    };
+
+    let mut rows = sets::list_for_owner(&mut conn, ch.account_id)
+        .await
+        .map_err(db_error)?;
+    rows.retain(|s| s.kind != SetKind::Global);
+    rows.truncate(CHANNEL_EDITABLE_SETS_MAX);
+    let mut editable = Vec::new();
+    let mut access = Vec::new();
+    for set in rows {
+        match edit_grant(&mut conn, caller, &set, EditorPermission::Emotes).await {
+            Ok(grant) => {
+                access.push(match grant {
+                    Grant::Owner => SetAccess::Owner,
+                    Grant::AccountEditor(_) => SetAccess::AccountEditor,
+                    Grant::Editor => SetAccess::SetEditor,
+                    Grant::Permission(_) => SetAccess::Staff,
+                });
+                editable.push(set);
+            }
+            Err(err)
+                if matches!(
+                    err.status,
+                    axum::http::StatusCode::FORBIDDEN | axum::http::StatusCode::NOT_FOUND
+                ) => {}
+            Err(err) => return Err(err),
+        }
+    }
+
+    let role = if ch.account_id == caller.account_id {
+        Some(ChannelRole::Owner)
+    } else if cyex_tv_db::editors::get(&mut conn, ch.account_id, caller.account_id)
+        .await
+        .map_err(db_error)?
+        .is_some()
+    {
+        Some(ChannelRole::AccountEditor)
+    } else if access.contains(&SetAccess::SetEditor) {
+        Some(ChannelRole::SetEditor)
+    } else {
+        None
+    };
+
+    let viewer = viewer(&mut conn, Some(caller)).await?;
+    let summaries = views::set_summaries(&mut conn, &editable, &viewer, &state.cdn_url, 0)
+        .await
+        .map_err(db_error)?;
+    let active = channel.active_set_id.clone();
+    let sets: Vec<EditableSet> = summaries
+        .into_iter()
+        .zip(access)
+        .map(|(set, access)| EditableSet {
+            active_here: active.as_deref() == Some(set.id.as_str()),
+            set,
+            access,
+        })
+        .collect();
+    Ok(Some(ChannelEditableSets {
+        can_edit_active_set: sets.iter().any(|s| s.active_here),
+        role,
+        sets,
+        channel,
+    }))
 }
 
 #[cfg(test)]

@@ -67,6 +67,298 @@
         }
       }
     },
+    "/v1/auth/app/authorize": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Start an app sign-in (open this in the browser).",
+        "description": "Checks the client and the loopback `redirect_uri`, then sends the browser to the cyex.tv\nconsent page, where the user signs in with Twitch or Kick if needed and allows or denies.\nA bad client or redirect answers 400 here and is never redirected to; other mistakes go back\nto the redirect as `error=invalid_request` with `state`.",
+        "operationId": "authorize",
+        "parameters": [
+          {
+            "name": "response_type",
+            "in": "query",
+            "description": "`code`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "client_id",
+            "in": "query",
+            "description": "`cyex-deck`.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "description": "`http://127.0.0.1:<port>/callback` or `http://[::1]:<port>/callback`; any port.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code_challenge",
+            "in": "query",
+            "description": "The S256 challenge: base64url(sha256(verifier)), 43 characters.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "code_challenge_method",
+            "in": "query",
+            "description": "`S256` (`plain` is refused).",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "Echoed back to the redirect; 1 to 512 characters.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "To the consent page on cyex.tv, or back to `redirect_uri` with `error=invalid_request`."
+          },
+          "400": {
+            "description": "`unknown_client` or `bad_redirect_uri`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/app/clients/{client_id}": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "A registered app: its name and scopes, for the consent page.",
+        "operationId": "get_client",
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "path",
+            "description": "`cyex-deck`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The app.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppClientInfo"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`unknown_client`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/app/consent": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Allow or deny an app (the consent page).",
+        "description": "Site cookie only, from `https://cyex.tv` (`Origin`); an app token can't consent. Every field of\nthe authorize request is checked again.",
+        "operationId": "consent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsentBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Where to send the browser.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsentAnswer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`unknown_client` or `bad_redirect_uri`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`signed_out`: no site session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`bad_origin`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/app/revoke": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Sign an app out by one of its tokens (RFC 7009).",
+        "description": "Ends the app session the access or refresh token belongs to, refresh tokens included. Answers\n200 whether or not the token was known. `POST /v1/auth/logout` with the Bearer token does the\nsame while the access token is still good.",
+        "operationId": "revoke",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeForm"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Signed out (or nothing to sign out)."
+          },
+          "400": {
+            "description": "`invalid_request`: no form.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/app/token": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Trade a code for tokens, or refresh.",
+        "description": "`grant_type=authorization_code` with `code`, `code_verifier`, `redirect_uri` and `client_id`;\nor `grant_type=refresh_token` with `refresh_token` and `client_id`. No client secret: the app\nis a public client. A code works once, within 2 minutes; a wrong verifier uses it up. A refresh\ntoken works once; presenting a used one signs the session out.",
+        "operationId": "token",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/TokenForm"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Tokens.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenAnswer"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_request`, `invalid_grant` or `unsupported_grant_type`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthErrorBody"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`invalid_client`: unknown `client_id`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OAuthErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/auth/logout": {
       "post": {
         "tags": [
@@ -859,6 +1151,45 @@
           }
         }
       },
+      "AppClientInfo": {
+        "type": "object",
+        "description": "A registered app and what it asks for.",
+        "required": [
+          "clientId",
+          "name",
+          "scopes"
+        ],
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AppScopeInfo"
+            }
+          }
+        }
+      },
+      "AppScopeInfo": {
+        "type": "object",
+        "required": [
+          "id",
+          "description"
+        ],
+        "properties": {
+          "description": {
+            "type": "string",
+            "description": "For people: \"Manage emotes in sets you can edit\"."
+          },
+          "id": {
+            "type": "string"
+          }
+        }
+      },
       "Badge": {
         "type": "object",
         "description": "A chat badge, shown before a chatter's name.",
@@ -924,6 +1255,61 @@
           "platform_channel_id": {
             "type": "string",
             "description": "Twitch: the broadcaster's user ID. Kick: `broadcaster_user_id`."
+          }
+        }
+      },
+      "ConsentAnswer": {
+        "type": "object",
+        "required": [
+          "location"
+        ],
+        "properties": {
+          "location": {
+            "type": "string",
+            "description": "Where to send the browser: the app's loopback address with `code` and `state`, or with\n`error=access_denied`."
+          }
+        }
+      },
+      "ConsentBody": {
+        "type": "object",
+        "description": "The consent page's answer.",
+        "required": [
+          "allow"
+        ],
+        "properties": {
+          "allow": {
+            "type": "boolean",
+            "description": "`true` for Allow, `false` for Deny."
+          },
+          "clientId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "codeChallenge": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "codeChallengeMethod": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "redirectUri": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -1267,6 +1653,27 @@
           "avif"
         ]
       },
+      "OAuthErrorBody": {
+        "type": "object",
+        "description": "An OAuth error answer (RFC 6749 5.2); `message` repeats the description, as elsewhere.",
+        "required": [
+          "error",
+          "error_description",
+          "message"
+        ],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "`invalid_request`, `invalid_client`, `invalid_grant`, `unsupported_grant_type`,\n`server_error` (or `rate_limited`)."
+          },
+          "error_description": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
       "Paint": {
         "type": "object",
         "description": "A name paint: a gradient or a picture drawn into the chatter's name.",
@@ -1471,6 +1878,31 @@
           "kick"
         ]
       },
+      "RevokeForm": {
+        "type": "object",
+        "description": "The revoke request (RFC 7009).",
+        "properties": {
+          "client_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An access or refresh token of the session to sign out."
+          },
+          "token_type_hint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "SetEmote": {
         "type": "object",
         "description": "An emote as it sits in a set: the name it is typed as there, and who added it.",
@@ -1518,6 +1950,88 @@
           "unlisted",
           "private"
         ]
+      },
+      "TokenAnswer": {
+        "type": "object",
+        "description": "A token answer (RFC 6749 5.1).",
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_in",
+          "refresh_token",
+          "scope"
+        ],
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "description": "Send as `Authorization: Bearer <access_token>`."
+          },
+          "expires_in": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Seconds: 3600."
+          },
+          "refresh_token": {
+            "type": "string",
+            "description": "Single use: each refresh answers a new one. Presenting a used one signs the session out."
+          },
+          "scope": {
+            "type": "string",
+            "description": "Space-separated: `sets.emotes cosmetics.select`."
+          },
+          "token_type": {
+            "type": "string",
+            "description": "`Bearer`."
+          }
+        }
+      },
+      "TokenForm": {
+        "type": "object",
+        "description": "The token request (RFC 6749 4.1.3 and 6), `application/x-www-form-urlencoded`.",
+        "properties": {
+          "client_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`cyex-deck`."
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With `authorization_code`."
+          },
+          "code_verifier": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With `authorization_code`: the PKCE verifier."
+          },
+          "grant_type": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`authorization_code` or `refresh_token`."
+          },
+          "redirect_uri": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With `authorization_code`: the same `redirect_uri` as at authorize."
+          },
+          "refresh_token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With `refresh_token`."
+          }
+        }
       },
       "UploadCosmeticImage": {
         "type": "object",
@@ -1644,7 +2158,7 @@
     },
     {
       "name": "auth",
-      "description": "Signing in with Twitch or Kick."
+      "description": "Signing in with Twitch or Kick, and app sign-in for desktop apps (authorization code with PKCE and a loopback redirect, ADR 0021)."
     },
     {
       "name": "emotes",

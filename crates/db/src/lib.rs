@@ -6,6 +6,7 @@
 
 pub mod accounts;
 pub mod announcements;
+pub mod app_auth;
 pub mod audit;
 pub mod blocklist;
 pub mod channels;

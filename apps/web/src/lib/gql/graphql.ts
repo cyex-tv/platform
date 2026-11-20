@@ -101,6 +101,11 @@ export type AccountResults = {
 /** One place you are signed in. Never holds the token or anything made from it. */
 export type AccountSession = {
   __typename?: 'AccountSession';
+  /**
+   * The app that signed in through `/v1/auth/app` (ADR 0021), such as `cyex-deck`; null for
+   * website sessions.
+   */
+  appClientId?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['String']['output'];
   /** The session this request came with. */
   current: Scalars['Boolean']['output'];
@@ -442,6 +447,18 @@ export type Channel = {
   platformChannelId: Scalars['String']['output'];
 };
 
+/** A channel and the sets of its account you may change (`channelEditableSets`). */
+export type ChannelEditableSets = {
+  __typename?: 'ChannelEditableSets';
+  /** The channel's active set can take your changes (it is among `sets`). */
+  canEditActiveSet: Scalars['Boolean']['output'];
+  channel: Channel;
+  /** Your highest role on the channel; null when you have none. */
+  role?: Maybe<ChannelRole>;
+  /** Oldest first. Empty when you may change none. */
+  sets: Array<EditableSet>;
+};
+
 /** Who you are on a channel you can manage, highest first. */
 export type ChannelRole =
   /** You are an editor of the channel's account. */
@@ -629,6 +646,16 @@ export type EditableChannel = {
   __typename?: 'EditableChannel';
   channel: Channel;
   role: ChannelRole;
+};
+
+/** A set you may add, rename and remove emotes in. */
+export type EditableSet = {
+  __typename?: 'EditableSet';
+  access: SetAccess;
+  /** The channel shows this set now (`channel.activeSetId`). */
+  activeHere: Scalars['Boolean']['output'];
+  /** The set, without preview emotes. `capacity - slotsUsed` is what still fits. */
+  set: SetSummary;
 };
 
 /** An account you edit, with what you may do there. */
@@ -2162,6 +2189,14 @@ export type Query = {
   /** A channel by its login or slug. Logins change; store the ID, not the login. */
   channelByLogin?: Maybe<Channel>;
   /**
+   * A channel, by its platform ID (`id`) or its login (`login`; one of the two), with the sets
+   * of its account you may add, rename and remove emotes in, your role on it and whether its
+   * active set is among them. The same rights check as `addSetEmote`, `updateSetEmote` and
+   * `removeSetEmote` (owner, account editors with `EMOTES` covering the set, set editors,
+   * `sets.edit_any`). Null when the channel is unknown. Signed-in only.
+   */
+  channelEditableSets?: Maybe<ChannelEditableSets>;
+  /**
    * Redeem code batches, newest first. Needs `codes.manage`. The codes themselves are shown
    * only once, by `createCodeBatch`.
    */
@@ -2534,6 +2569,13 @@ export type QueryChannelArgs = {
 
 export type QueryChannelByLoginArgs = {
   login: Scalars['String']['input'];
+  platform: Platform;
+};
+
+
+export type QueryChannelEditableSetsArgs = {
+  id?: InputMaybe<Scalars['String']['input']>;
+  login?: InputMaybe<Scalars['String']['input']>;
   platform: Platform;
 };
 
@@ -2943,6 +2985,17 @@ export type SessionKind =
   | 'APP'
   /** The cyex.tv website's cookie. */
   | 'SITE';
+
+/** How you may change a set's emotes (`channelEditableSets`). */
+export type SetAccess =
+  /** You are an account editor of its owner with `EMOTES`, and your grant covers this set. */
+  | 'ACCOUNT_EDITOR'
+  /** The set is yours. */
+  | 'OWNER'
+  /** You are an editor of this set. */
+  | 'SET_EDITOR'
+  /** Through a staff permission (`sets.edit_any`); your changes are audited. */
+  | 'STAFF';
 
 /** An emote as it sits in a set: the name it is typed as there, and who added it. */
 export type SetEmote = {

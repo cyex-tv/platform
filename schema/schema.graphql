@@ -131,6 +131,11 @@ type AccountSession {
 	The session this request came with.
 	"""
 	current: Boolean!
+	"""
+	The app that signed in through `/v1/auth/app` (ADR 0021), such as `cyex-deck`; null for
+	website sessions.
+	"""
+	appClientId: String
 }
 
 """
@@ -601,6 +606,25 @@ type Channel {
 }
 
 """
+A channel and the sets of its account you may change (`channelEditableSets`).
+"""
+type ChannelEditableSets {
+	channel: Channel!
+	"""
+	Your highest role on the channel; null when you have none.
+	"""
+	role: ChannelRole
+	"""
+	The channel's active set can take your changes (it is among `sets`).
+	"""
+	canEditActiveSet: Boolean!
+	"""
+	Oldest first. Empty when you may change none.
+	"""
+	sets: [EditableSet!]!
+}
+
+"""
 Who you are on a channel you can manage, highest first.
 """
 enum ChannelRole {
@@ -859,6 +883,21 @@ A channel you can manage, with your highest role on it.
 type EditableChannel {
 	role: ChannelRole!
 	channel: Channel!
+}
+
+"""
+A set you may add, rename and remove emotes in.
+"""
+type EditableSet {
+	"""
+	The set, without preview emotes. `capacity - slotsUsed` is what still fits.
+	"""
+	set: SetSummary!
+	"""
+	The channel shows this set now (`channel.activeSetId`).
+	"""
+	activeHere: Boolean!
+	access: SetAccess!
 }
 
 """
@@ -2382,6 +2421,14 @@ type Query {
 	"""
 	myEditableChannels: [EditableChannel!]!
 	"""
+	A channel, by its platform ID (`id`) or its login (`login`; one of the two), with the sets
+	of its account you may add, rename and remove emotes in, your role on it and whether its
+	active set is among them. The same rights check as `addSetEmote`, `updateSetEmote` and
+	`removeSetEmote` (owner, account editors with `EMOTES` covering the set, set editors,
+	`sets.edit_any`). Null when the channel is unknown. Signed-in only.
+	"""
+	channelEditableSets(platform: Platform!, id: String, login: String): ChannelEditableSets
+	"""
 	An account's editors (ADR 0014): yours, or, with `accountId`, those of an account you edit
 	with the `EDITORS` permission, or anyone's with `editors.manage_any`.
 	"""
@@ -2890,6 +2937,28 @@ enum SessionKind {
 	A Bearer token for an app (cyex deck, the extension).
 	"""
 	APP
+}
+
+"""
+How you may change a set's emotes (`channelEditableSets`).
+"""
+enum SetAccess {
+	"""
+	The set is yours.
+	"""
+	OWNER
+	"""
+	You are an account editor of its owner with `EMOTES`, and your grant covers this set.
+	"""
+	ACCOUNT_EDITOR
+	"""
+	You are an editor of this set.
+	"""
+	SET_EDITOR
+	"""
+	Through a staff permission (`sets.edit_any`); your changes are audited.
+	"""
+	STAFF
 }
 
 """

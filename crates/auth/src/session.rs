@@ -27,6 +27,9 @@ pub struct Caller {
     pub token_hash: TokenHash,
     pub kind: SessionKind,
     pub via: Via,
+    /// The app that signed in through `/v1/auth/app` (ADR 0021). Such a session may run only the
+    /// mutations its scopes name (`app::allows_mutation`).
+    pub app_client: Option<String>,
 }
 
 /// How long a session lasts after its last use (ADR 0009): site 30 days, app 90 days.
@@ -89,13 +92,16 @@ impl Auth {
         {
             tracing::warn!(error = %err, "session touch failed");
         }
-        let owner = self.is_owner(&mut conn, session.account_id).await?;
+        // An app sign-in session (ADR 0021) is never the owner: staff grants don't count for apps.
+        let owner =
+            session.app_client_id.is_none() && self.is_owner(&mut conn, session.account_id).await?;
         Ok(Some(Caller {
             account_id: session.account_id,
             owner,
             token_hash: hash,
             kind,
             via,
+            app_client: session.app_client_id,
         }))
     }
 
@@ -131,6 +137,7 @@ impl Auth {
             token_hash: hash,
             kind: SessionKind::Site,
             via: Via::Cookie,
+            app_client: None,
         }))
     }
 

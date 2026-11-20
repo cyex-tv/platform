@@ -60,6 +60,46 @@ pub fn builder() -> SchemaBuilder<Query, Mutation, Subscription> {
         .limit_depth(12)
         .limit_complexity(1_000)
         .extension(SocketRunsSubscriptionsOnly)
+        .extension(AppScopes)
+}
+
+/// App sign-in sessions (ADR 0021) run only the mutations their scopes name and the queries
+/// `app::APP_QUERIES` lists (no staff reads). Checked per resolved top-level field, so aliases
+/// and fragments change nothing.
+struct AppScopes;
+
+impl async_graphql::extensions::ExtensionFactory for AppScopes {
+    fn create(&self) -> Arc<dyn async_graphql::extensions::Extension> {
+        Arc::new(AppScopes)
+    }
+}
+
+#[async_trait::async_trait]
+impl async_graphql::extensions::Extension for AppScopes {
+    async fn resolve(
+        &self,
+        ctx: &async_graphql::extensions::ExtensionContext<'_>,
+        info: async_graphql::extensions::ResolveInfo<'_>,
+        next: async_graphql::extensions::NextResolve<'_>,
+    ) -> async_graphql::ServerResult<Option<async_graphql::Value>> {
+        let client = ctx
+            .data_opt::<Option<Caller>>()
+            .and_then(Option::as_ref)
+            .and_then(|c| c.app_client.as_deref());
+        let refused = client.is_some_and(|client| match info.parent_type {
+            "Mutation" => !cyex_tv_auth::app::allows_mutation(client, info.name),
+            "Query" => !cyex_tv_auth::app::allows_query(client, info.name),
+            _ => false,
+        });
+        if refused {
+            return Err(coded(
+                "insufficient_scope",
+                "This app may not do that. Use cyex.tv for it.",
+            )
+            .into_server_error(async_graphql::Pos::default()));
+        }
+        next.run(ctx, info).await
+    }
 }
 
 /// Subscription streams one `/v1/gql/ws` connection may hold at once.
@@ -726,6 +766,30 @@ impl Query {
         editors::my_editable_channels(state(ctx), caller)
             .await
             .map_err(api_error)
+    }
+
+    /// A channel, by its platform ID (`id`) or its login (`login`; one of the two), with the sets
+    /// of its account you may add, rename and remove emotes in, your role on it and whether its
+    /// active set is among them. The same rights check as `addSetEmote`, `updateSetEmote` and
+    /// `removeSetEmote` (owner, account editors with `EMOTES` covering the set, set editors,
+    /// `sets.edit_any`). Null when the channel is unknown. Signed-in only.
+    async fn channel_editable_sets(
+        &self,
+        ctx: &Context<'_>,
+        platform: Platform,
+        id: Option<String>,
+        login: Option<String>,
+    ) -> Result<Option<cyex_tv_shared::model::ChannelEditableSets>> {
+        let caller = caller(ctx)?;
+        catalog::channel_editable_sets(
+            state(ctx),
+            caller,
+            platform,
+            id.as_deref(),
+            login.as_deref(),
+        )
+        .await
+        .map_err(api_error)
     }
 
     /// An account's editors (ADR 0014): yours, or, with `accountId`, those of an account you edit
