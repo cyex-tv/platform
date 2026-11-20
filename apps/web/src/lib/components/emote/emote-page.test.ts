@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backTarget, baseEmote, channelCount, chatLines, flagsOf, formats, kind, labels, rangeLabel, scaleFiles, trust, type PageEmote } from './emote-page';
+import { backTarget, baseEmote, channelCount, chatLines, flagsOf, formats, kind, labels, rangeLabel, scaleFiles, tabFrom, tabUrl, tabUrlStale, trust, type PageEmote } from './emote-page';
 
 const file = (scale: number, opts: Partial<PageEmote['files'][number]> = {}) => ({
   name: `${scale}x${opts.isStatic ? '_static' : ''}.webp`,
@@ -139,5 +139,28 @@ describe('fileSize', () => {
     expect(fileSize({ size: 0 })).toBe('');
     expect(fileSize({})).toBe('');
     expect(fileSize({ size: null })).toBe('');
+  });
+});
+
+describe('emote page tabs in the address', () => {
+  const ids = ['channels', 'activity', 'more'] as const;
+  it('reads the tab, falling back to the first for none, unknown or unavailable', () => {
+    expect(tabFrom('activity', ids)).toBe('activity');
+    expect(tabFrom(null, ids)).toBe('channels');
+    expect(tabFrom('nope', ids)).toBe('channels');
+    expect(tabFrom('channels', ['activity', 'more'])).toBe('activity');
+    expect(tabFrom('more', [])).toBeUndefined();
+  });
+  it('writes ?tab= for other tabs and a clean address for the first, keeping the rest', () => {
+    const here = new URL('http://x/emotes/E1?ref=a#top');
+    expect(tabUrl(here, 'activity', 'channels')).toBe('/emotes/E1?ref=a&tab=activity#top');
+    expect(tabUrl(new URL('http://x/emotes/E1?tab=activity'), 'channels', 'channels')).toBe('/emotes/E1');
+    expect(tabUrl(new URL('http://x/emotes/E1?tab=activity'), 'more', 'channels')).toBe('/emotes/E1?tab=more');
+  });
+  it('tidies an unknown tab and the default spelled out, never a good one', () => {
+    expect(tabUrlStale('nope', 'channels', 'channels')).toBe(true);
+    expect(tabUrlStale('channels', 'channels', 'channels')).toBe(true);
+    expect(tabUrlStale('activity', 'activity', 'channels')).toBe(false);
+    expect(tabUrlStale(null, 'channels', 'channels')).toBe(false);
   });
 });

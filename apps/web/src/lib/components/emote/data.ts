@@ -29,7 +29,7 @@ export async function trendingOf(e: PageEmote, fetcher: typeof fetch = fetch): P
 /** One page of the channels showing the emote, newest first. Throws when the API can't be reached. */
 export async function channelPage(id: string, offset: number, fetcher: typeof fetch = fetch): Promise<EmoteChannel[]> {
   const list = (await gql(EMOTE_CHANNELS, { id, limit: CHANNEL_PAGE, offset }, fetcher)).emoteChannels;
-  return list.map((c) => ({ platform: c.platform, login: c.login, displayName: c.account.displayName, avatar: c.account.avatar }));
+  return list.map((c) => ({ platform: c.platform, login: c.login, accountId: c.account.id, displayName: c.account.displayName, avatar: c.account.avatar }));
 }
 
 /** The first page of channels with the emote in their active set; null (the tab is hidden) when none, or on a failure. */
