@@ -686,6 +686,11 @@ async fn item_write(
         other => db_error(other),
     })?;
     let item = one_item(state, &mut tx, &row, None, true).await?;
+    // Putting a cosmetic on sale releases it: chat clients are told (only when it is on sale now).
+    for (kind, cosmetic) in &checked.bundle {
+        crate::cosmetics::announce_release(&mut tx, &state.cdn_url, *kind, *cosmetic, false)
+            .await?;
+    }
     let to_json = |v: &ShopItem| serde_json::to_value(v).unwrap_or(Value::Null);
     write_audit(
         &mut tx,

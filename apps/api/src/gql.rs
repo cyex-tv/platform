@@ -842,10 +842,14 @@ impl Query {
             .map_err(api_error)
     }
 
-    /// Every cyex.tv chat badge and name paint (ADR 0015). Public; clients cache it
-    /// (`GET /v1/cosmetics` has an ETag) and follow the `cosmetics` topic.
+    /// The cyex.tv chat badges and name paints that are for sale in the shop or held by at least
+    /// one account (ADR 0015). Public; unreleased ones are left out, except for staff with a
+    /// `cosmetics.*` permission. Clients cache it (`GET /v1/cosmetics` has an ETag) and follow
+    /// the `cosmetics` topic.
     async fn cosmetics(&self, ctx: &Context<'_>) -> Result<CosmeticCatalog> {
-        cosmetics::catalog(state(ctx)).await.map_err(api_error)
+        cosmetics::catalog_for(state(ctx), caller_opt(ctx))
+            .await
+            .map_err(api_error)
     }
 
     /// The badge and paint up to 100 chatters show, as catalog IDs. Only chatters showing

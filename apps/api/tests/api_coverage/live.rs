@@ -97,7 +97,7 @@ async fn a_set_change_reaches_both_sockets() {
     let owner = w.user("7301").await;
     let set = w
         .gql(
-            As::App(&owner),
+            As::Site(&owner),
             r#"mutation { createSet(input: { name: "Live", kind: CHANNEL }) { id } }"#,
             json!({}),
         )
@@ -172,7 +172,7 @@ async fn a_set_change_reaches_both_sockets() {
 
     let r = w
         .gql(
-            As::App(&owner),
+            As::Site(&owner),
             "mutation($s: String!, $e: String!) { addSetEmote(setId: $s, emoteId: $e) { name } }",
             json!({ "s": set, "e": emote }),
         )

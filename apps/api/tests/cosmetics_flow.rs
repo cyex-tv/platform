@@ -174,7 +174,7 @@ impl World {
             &mut conn,
             &tokens::hash(&token),
             signed.account.id,
-            SessionKind::App,
+            SessionKind::Site,
             Duration::days(1),
         )
         .await
@@ -211,7 +211,12 @@ impl World {
     async fn gql(&self, user: Option<&User>, query: &str, variables: Value) -> Value {
         let mut request = Request::post("/v1/gql").header("content-type", "application/json");
         if let Some(user) = user {
-            request = request.header("authorization", format!("Bearer {}", user.token));
+            request = request
+                .header(
+                    "cookie",
+                    format!("{}={}", cyex_tv_auth::cookies::SESSION, user.token),
+                )
+                .header("origin", "https://cyex.tv");
         }
         let request = request
             .body(Body::from(
@@ -225,9 +230,16 @@ impl World {
     }
 
     async fn get(&self, uri: &str, if_none_match: Option<&str>) -> Reply {
+        self.get_as(uri, if_none_match, None).await
+    }
+
+    async fn get_as(&self, uri: &str, if_none_match: Option<&str>, user: Option<&User>) -> Reply {
         let mut request = Request::get(uri);
         if let Some(tag) = if_none_match {
             request = request.header("if-none-match", tag);
+        }
+        if let Some(user) = user {
+            request = request.header("authorization", format!("Bearer {}", user.token));
         }
         let response = self
             .app
@@ -255,7 +267,11 @@ impl World {
                 "content-type",
                 format!("multipart/form-data; boundary={BOUNDARY}"),
             )
-            .header("authorization", format!("Bearer {}", user.token))
+            .header(
+                "cookie",
+                format!("{}={}", cyex_tv_auth::cookies::SESSION, user.token),
+            )
+            .header("origin", "https://cyex.tv")
             .body(Body::from(form(kind, file)))
             .unwrap();
         let response = self.app.clone().oneshot(request).await.unwrap();
@@ -356,7 +372,8 @@ async fn staff_create_change_and_delete_badges_and_paints() {
     let badge = w.badge(&owner, "Founder").await;
     let paint = w.paint(&owner, "Sunset").await;
 
-    let catalog = w.gql(None, CATALOG, json!({})).await;
+    // Unreleased (nobody holds them, not in the shop): the owner, as staff, sees them.
+    let catalog = w.gql(Some(&owner), CATALOG, json!({})).await;
     assert_eq!(
         catalog["data"]["cosmetics"]["badges"][0]["id"],
         badge.as_str()
@@ -367,7 +384,7 @@ async fn staff_create_change_and_delete_badges_and_paints() {
     );
 
     // The REST catalog, with its ETag.
-    let rest = w.get("/v1/cosmetics", None).await;
+    let rest = w.get_as("/v1/cosmetics", None, Some(&owner)).await;
     assert_eq!(rest.status, StatusCode::OK);
     assert_eq!(rest.body["badges"][0]["name"], "Founder");
     let host = rest.body["badges"][0]["image"]["host"].as_str().unwrap();
@@ -379,7 +396,9 @@ async fn staff_create_change_and_delete_badges_and_paints() {
     assert_eq!(rest.body["paints"][0]["shadows"][0]["radius"], 2.0);
     let tag = rest.etag.clone().unwrap();
     assert_eq!(
-        w.get("/v1/cosmetics", Some(&tag)).await.status,
+        w.get_as("/v1/cosmetics", Some(&tag), Some(&owner))
+            .await
+            .status,
         StatusCode::NOT_MODIFIED
     );
 
@@ -404,7 +423,9 @@ async fn staff_create_change_and_delete_badges_and_paints() {
     assert_eq!(renamed["data"]["updateBadge"]["name"], "Pioneer");
     assert_eq!(renamed["data"]["updateBadge"]["tooltip"], "Founder badge");
     assert_ne!(
-        w.get("/v1/cosmetics", Some(&tag)).await.status,
+        w.get_as("/v1/cosmetics", Some(&tag), Some(&owner))
+            .await
+            .status,
         StatusCode::NOT_MODIFIED
     );
 
@@ -462,7 +483,7 @@ async fn staff_create_change_and_delete_badges_and_paints() {
             .await["data"]["deletePaint"],
         true
     );
-    let after = w.gql(None, CATALOG, json!({})).await;
+    let after = w.gql(Some(&owner), CATALOG, json!({})).await;
     assert_eq!(after["data"]["cosmetics"]["badges"], json!([]));
     assert_eq!(
         after["data"]["cosmetics"]["paints"]
@@ -489,30 +510,137 @@ async fn staff_create_change_and_delete_badges_and_paints() {
         );
     }
 
-    // And published on the `cosmetics` topic.
+    // The public `cosmetics` topic tells only about released cosmetics: these were never held or
+    // for sale, so nothing about their creation or changes is there, only the deletes.
     let events = w.events().await;
     let on_topic: Vec<&str> = events
         .iter()
         .filter(|e| e.topics == ["cosmetics"])
         .map(|e| e.event_type.as_str())
         .collect();
-    assert_eq!(
-        on_topic,
-        [
-            "cosmetic.created",
-            "cosmetic.created",
-            "cosmetic.updated",
-            "cosmetic.updated",
-            "cosmetic.created",
-            "cosmetic.deleted",
-            "cosmetic.deleted",
-        ]
-    );
-    let created = &events[0];
-    assert_eq!(created.payload["cosmetic_kind"], "badge");
-    assert_eq!(created.payload["cosmetic"]["name"], "Founder");
-    let w_event = cyex_tv_hub::wire(created, "cosmetics");
+    assert_eq!(on_topic, ["cosmetic.deleted", "cosmetic.deleted"]);
+    let w_event = cyex_tv_hub::wire(&events[0], "cosmetics");
     assert_eq!(w_event["cosmetic_id"], badge.as_str());
+    w.db.close().await;
+}
+
+/// The `name`s in a catalog answer, for GraphQL (`data.cosmetics`) or REST (the body itself).
+fn names(catalog: &Value, kind: &str) -> Vec<String> {
+    let list = if catalog["data"].is_null() {
+        &catalog[kind]
+    } else {
+        &catalog["data"]["cosmetics"][kind]
+    };
+    let mut out: Vec<String> = list
+        .as_array()
+        .unwrap_or_else(|| panic!("{catalog}"))
+        .iter()
+        .map(|c| c["name"].as_str().unwrap().to_owned())
+        .collect();
+    out.sort();
+    out
+}
+
+#[tokio::test]
+async fn unreleased_cosmetics_are_for_staff_only() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+    let viewer = w.user("910").await;
+    let granter = w.staff("911", &["cosmetics.grant"]).await;
+    let other_staff = w.staff("912", &["users.view"]).await;
+
+    let secret_badge = w.badge(&owner, "Secret").await;
+    let _secret_paint = w.paint(&owner, "Hidden").await;
+    let held_badge = w.badge(&owner, "Held").await;
+    let held_paint = w.paint(&owner, "Worn").await;
+    let sale_badge = w.badge(&owner, "Sale").await;
+    let later_paint = w.paint(&owner, "Later").await;
+    let after_events = w.events().await.len();
+
+    // Held by an account.
+    let r = w.grant(&owner, &viewer, "BADGE", &held_badge).await;
+    assert!(r["errors"].is_null(), "{r}");
+    let r = w.grant(&owner, &viewer, "PAINT", &held_paint).await;
+    assert!(r["errors"].is_null(), "{r}");
+    // In a shop item: one on sale (visible), and one that is not (hidden).
+    let item = |name: &str, badges: &[&str], paints: &[&str], visible: bool| {
+        json!({
+            "name": name, "description": "x", "priceCents": 499, "paddlePriceId": "pri_01testprice",
+            "badgeIds": badges, "paintIds": paints, "visible": visible,
+        })
+    };
+    for input in [
+        item("On sale", &[&sale_badge], &[], true),
+        item("Hidden", &[], &[&later_paint], false),
+    ] {
+        let r = w
+            .gql(
+                Some(&owner),
+                "mutation($input: ShopItemInput!) { createShopItem(input: $input) { id } }",
+                json!({ "input": input }),
+            )
+            .await;
+        assert!(r["errors"].is_null(), "{r}");
+    }
+
+    let public_badges = ["Held", "Sale"];
+    let public_paints = ["Worn"];
+    let all_badges = ["Held", "Sale", "Secret"];
+    let all_paints = ["Hidden", "Later", "Worn"];
+    // The shape is the same either way; only the list is shorter.
+    let signed_out = w.gql(None, CATALOG, json!({})).await;
+    assert_eq!(names(&signed_out, "badges"), public_badges);
+    assert_eq!(names(&signed_out, "paints"), public_paints);
+    let rest = w.get("/v1/cosmetics", None).await;
+    assert_eq!(rest.status, StatusCode::OK);
+    assert_eq!(names(&rest.body, "badges"), public_badges);
+    assert_eq!(names(&rest.body, "paints"), public_paints);
+    assert!(rest.body["badges"][0]["image"]["host"].is_string());
+    // A signed-in user without a cosmetics permission gets the public list.
+    for who in [&viewer, &other_staff] {
+        let g = w.gql(Some(who), CATALOG, json!({})).await;
+        assert_eq!(names(&g, "badges"), public_badges);
+        let r = w.get_as("/v1/cosmetics", None, Some(who)).await;
+        assert_eq!(names(&r.body, "paints"), public_paints);
+    }
+    // Staff with any cosmetics permission see all of it, over both reads.
+    for who in [&owner, &granter] {
+        let g = w.gql(Some(who), CATALOG, json!({})).await;
+        assert_eq!(names(&g, "badges"), all_badges);
+        assert_eq!(names(&g, "paints"), all_paints);
+        let r = w.get_as("/v1/cosmetics", None, Some(who)).await;
+        assert_eq!(names(&r.body, "badges"), all_badges);
+        assert_eq!(names(&r.body, "paints"), all_paints);
+    }
+
+    // The first grant of the secret badge releases it: it is public, and chat clients are told.
+    let r = w.grant(&owner, &viewer, "BADGE", &secret_badge).await;
+    assert!(r["errors"].is_null(), "{r}");
+    let g = w.gql(None, CATALOG, json!({})).await;
+    assert_eq!(names(&g, "badges"), all_badges);
+    assert_eq!(names(&g, "paints"), public_paints);
+    let events = w.events().await;
+    let told: Vec<(&str, &str)> = events[after_events..]
+        .iter()
+        .filter(|e| e.topics == ["cosmetics"])
+        .map(|e| {
+            (
+                e.event_type.as_str(),
+                e.payload["cosmetic"]["name"].as_str().unwrap_or(""),
+            )
+        })
+        .collect();
+    // Released ones were announced as they were (held, or put on sale); unreleased ones never.
+    assert!(told.contains(&("cosmetic.updated", "Secret")), "{told:?}");
+    assert!(told.contains(&("cosmetic.updated", "Held")), "{told:?}");
+    assert!(told.contains(&("cosmetic.updated", "Sale")), "{told:?}");
+    assert!(
+        told.iter()
+            .all(|(_, name)| *name != "Hidden" && *name != "Later"),
+        "{told:?}"
+    );
     w.db.close().await;
 }
 

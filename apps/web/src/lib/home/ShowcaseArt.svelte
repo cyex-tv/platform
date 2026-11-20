@@ -3,6 +3,7 @@
 </script>
 
 <script lang="ts">
+  import { DECK_PANES } from './showcase-geometry';
   // The small picture at the top of each front-page box, in the hero logo's language: open bars
   // on one 120 × 80 grid, ink lines, and exactly one lit part with the logo's glow. Same size,
   // stroke and light in every box, so the four read as a set. When its box is hovered, the lit
@@ -10,6 +11,7 @@
   type Props = { kind: ArtKind };
   let { kind }: Props = $props();
   const id = $props.id();
+  const panes = DECK_PANES;
 </script>
 
 <svg class="art" viewBox="0 0 120 80" width="120" height="80" aria-hidden="true" focusable="false">
@@ -40,10 +42,13 @@
     <rect class="ink" x="11" y="9" width="98" height="62" />
     <path class="ink" d="M31 9v62" />
     <path class="ink dim" d="M17 18h8M17 26h8M17 34h8" />
-    <rect class="ink" x="38" y="16" width="31" height="23" />
-    <rect class="ink" x="73" y="16" width="29" height="23" />
-    <rect class="ink" x="38" y="44" width="31" height="20" />
-    {@render lit(73, 44, 29, 20)}
+    {#each panes as p (p.id)}
+      {#if p.lit}
+        {@render lit(p.x, p.y, p.w, p.h)}
+      {:else}
+        <rect class="ink pane" x={p.x} y={p.y} width={p.w} height={p.h} />
+      {/if}
+    {/each}
   {:else if kind === 'api'}
     <!-- Two ends of a request, and the one lit bar travelling between them. -->
     <rect class="ink" x="9" y="22" width="32" height="36" />

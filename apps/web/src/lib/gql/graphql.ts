@@ -2261,8 +2261,10 @@ export type Query = {
    */
   cosmeticImage?: Maybe<CosmeticImage>;
   /**
-   * Every cyex.tv chat badge and name paint (ADR 0015). Public; clients cache it
-   * (`GET /v1/cosmetics` has an ETag) and follow the `cosmetics` topic.
+   * The cyex.tv chat badges and name paints that are for sale in the shop or held by at least
+   * one account (ADR 0015). Public; unreleased ones are left out, except for staff with a
+   * `cosmetics.*` permission. Clients cache it (`GET /v1/cosmetics` has an ETag) and follow
+   * the `cosmetics` topic.
    */
   cosmetics: CosmeticCatalog;
   /** The channels of the accounts you edit. */

@@ -18,6 +18,7 @@ use cyex_tv_api::limits::{Limits, Rates};
 use cyex_tv_api::state::AppState;
 use cyex_tv_auth::{Auth, AuthConfig, tokens};
 use cyex_tv_db::accounts::{self, Profile};
+use cyex_tv_db::app_auth;
 use cyex_tv_db::emotes::{self, NewEmote};
 use cyex_tv_db::sessions::{self, SessionKind};
 use cyex_tv_db::{audit, channels, ids, notifications, roles};
@@ -32,7 +33,7 @@ const SITE: &str = "http://localhost:5173";
 
 struct User {
     id: Uuid,
-    /// An app session (Bearer).
+    /// An app session of the deck (Bearer): scoped, so only what the deck may do.
     token: String,
     /// A site session (the cookie).
     cookie: String,
@@ -84,16 +85,34 @@ impl World {
     async fn session(&self, account: Uuid, kind: SessionKind, ua: Option<&str>) -> String {
         let mut conn = self.db.conn().await;
         let token = tokens::random_token();
-        sessions::create_with(
-            &mut conn,
-            &tokens::hash(&token),
-            account,
-            kind,
-            Duration::days(1),
-            ua,
-        )
-        .await
-        .unwrap();
+        match kind {
+            SessionKind::Site => {
+                sessions::create_with(
+                    &mut conn,
+                    &tokens::hash(&token),
+                    account,
+                    kind,
+                    Duration::days(1),
+                    ua,
+                )
+                .await
+                .unwrap();
+            }
+            // An app session names its client, as an app sign-in makes it.
+            SessionKind::App => {
+                app_auth::create_session(
+                    &mut conn,
+                    &tokens::hash(&token),
+                    account,
+                    "cyex-deck",
+                    Duration::days(1),
+                    Duration::days(1),
+                    ua,
+                )
+                .await
+                .unwrap();
+            }
+        }
         token
     }
 
@@ -176,7 +195,15 @@ impl World {
         (serde_json::from_slice(&bytes).unwrap(), cookie)
     }
 
+    /// As the website (the cookie session): full rights.
     async fn gql(&self, user: &User, query: &str, variables: Value) -> Value {
+        self.post(Some((&user.cookie, true)), query, variables)
+            .await
+            .0
+    }
+
+    /// As the deck, with its app token: only what its scopes allow.
+    async fn app(&self, user: &User, query: &str, variables: Value) -> Value {
         self.post(Some((&user.token, false)), query, variables)
             .await
             .0
@@ -281,10 +308,11 @@ async fn sessions_are_yours_only_and_never_tokens() {
     assert_eq!(list.len(), 2, "{r}");
     let current: Vec<&Value> = list.iter().filter(|s| s["current"] == true).collect();
     assert_eq!(current.len(), 1);
-    assert_eq!(current[0]["kind"], "APP");
-    assert_eq!(current[0]["device"], "cyex.tv app");
-    let site = list.iter().find(|s| s["kind"] == "SITE").unwrap();
-    assert_eq!(site["device"], "Firefox on Windows");
+    assert_eq!(current[0]["kind"], "SITE");
+    assert_eq!(current[0]["device"], "Firefox on Windows");
+    let site = list.iter().find(|s| s["kind"] == "APP").unwrap();
+    // A signed-in app is named after its client (ADR 0021).
+    assert_eq!(site["device"], "cyex deck");
     // No token, no hash, no raw user agent anywhere.
     let text = r.to_string();
     assert!(!text.contains(&alice.token) && !text.contains(&alice.cookie));
@@ -306,7 +334,7 @@ async fn sessions_are_yours_only_and_never_tokens() {
     let (r, _) = w.site(&alice, "{ me { id } }", json!({})).await;
     assert_eq!(r["data"]["me"]["id"], alice.tid().as_str(), "{r}");
 
-    // Alice signs her browser out from the app; the cookie stops working.
+    // Alice signs her app out from the website; the app token stops working.
     let r = w
         .gql(
             &alice,
@@ -315,8 +343,10 @@ async fn sessions_are_yours_only_and_never_tokens() {
         )
         .await;
     assert_eq!(r["data"]["revokeSession"], true, "{r}");
-    let (r, _) = w.site(&alice, "{ me { id } }", json!({})).await;
+    let r = w.app(&alice, "{ me { id } }", json!({})).await;
     assert_eq!(code(&r), "signed_out", "{r}");
+    let (r, _) = w.site(&alice, "{ me { id } }", json!({})).await;
+    assert_eq!(r["data"]["me"]["id"], alice.tid().as_str(), "{r}");
     // Signing out the session you're using on the website also clears its cookie.
     let fresh = w.session(alice.id, SessionKind::Site, None).await;
     let (r, _) = w.post(Some((&fresh, true)), SESSIONS, json!({})).await;
@@ -351,15 +381,19 @@ async fn sessions_are_yours_only_and_never_tokens() {
     assert_eq!(r["data"]["revokeSession"], false, "{r}");
 
     // Sign out everywhere else keeps the current session only.
-    let _ = w
+    let deck = w
         .session(alice.id, SessionKind::App, Some("cyex-deck/1.0 (Windows)"))
         .await;
     let _ = w.session(alice.id, SessionKind::Site, None).await;
     // Website only: a leaked app token can't sign the person out and keep itself.
-    let r = w
-        .gql(&alice, "mutation { revokeOtherSessions }", json!({}))
+    let (r, _) = w
+        .post(
+            Some((&deck, false)),
+            "mutation { revokeOtherSessions }",
+            json!({}),
+        )
         .await;
-    assert_eq!(code(&r), "website_only", "{r}");
+    assert_eq!(code(&r), "insufficient_scope", "{r}");
     let keep = w.session(alice.id, SessionKind::Site, None).await;
     let (r, _) = w
         .post(
@@ -368,7 +402,7 @@ async fn sessions_are_yours_only_and_never_tokens() {
             json!({}),
         )
         .await;
-    // Alice's app token and the two new sessions; the site session it came with stays.
+    // Alice's first site session and the two new sessions; the one it came with stays.
     assert_eq!(r["data"]["revokeOtherSessions"], 3, "{r}");
     let (r, _) = w.post(Some((&keep, true)), SESSIONS, json!({})).await;
     assert_eq!(r["data"]["mySessions"].as_array().unwrap().len(), 1, "{r}");
@@ -595,8 +629,8 @@ async fn the_export_is_yours_complete_limited_and_audited() {
     }
 
     // Website only: an app token can't take a copy of everything.
-    let r = w.gql(&alice, "mutation { exportMyData }", json!({})).await;
-    assert_eq!(code(&r), "website_only", "{r}");
+    let r = w.app(&alice, "mutation { exportMyData }", json!({})).await;
+    assert_eq!(code(&r), "insufficient_scope", "{r}");
     let (r, _) = w.site(&alice, "mutation { exportMyData }", json!({})).await;
     let text = r["data"]["exportMyData"]
         .as_str()
@@ -740,8 +774,8 @@ async fn deleting_an_account_removes_it_and_keeps_what_others_use() {
 
     const DELETE: &str = "mutation($c: String!) { deleteAccount(confirm: $c) }";
     // An app token can't; a wrong login can't.
-    let r = w.gql(&alice, DELETE, json!({ "c": alice.login })).await;
-    assert_eq!(code(&r), "website_only", "{r}");
+    let r = w.app(&alice, DELETE, json!({ "c": alice.login })).await;
+    assert_eq!(code(&r), "insufficient_scope", "{r}");
     let (r, _) = w.site(&alice, DELETE, json!({ "c": bob.login })).await;
     assert_eq!(code(&r), "confirm_mismatch", "{r}");
     let (r, _) = w.post(None, DELETE, json!({ "c": alice.login })).await;
@@ -1009,24 +1043,28 @@ async fn the_owner_cannot_delete_their_account() {
     w.db.close().await;
 }
 
-/// `signOutEverywhere` with an app token ends only that app session: the website and other apps
-/// stay signed in.
+/// `signOutEverywhere` is the website's: the deck's app token is refused and nothing ends; from the
+/// website it ends every session of the account, apps included.
 #[tokio::test]
-async fn an_app_token_signs_out_only_itself() {
+async fn only_the_website_signs_out_everywhere() {
     let Some(w) = World::new().await else { return };
     let alice = w.user("4301").await;
     let other_app = w.session(alice.id, SessionKind::App, None).await;
     let r = w
-        .gql(&alice, "mutation { signOutEverywhere }", json!({}))
+        .app(&alice, "mutation { signOutEverywhere }", json!({}))
         .await;
-    assert_eq!(r["data"]["signOutEverywhere"], 1, "{r}");
-    let r = w.gql(&alice, SESSIONS, json!({})).await;
-    assert_eq!(code(&r), "signed_out", "{r}");
+    assert_eq!(code(&r), "insufficient_scope", "{r}");
     let (r, _) = w.site(&alice, SESSIONS, json!({})).await;
-    assert_eq!(r["data"]["mySessions"].as_array().unwrap().len(), 2, "{r}");
+    assert_eq!(r["data"]["mySessions"].as_array().unwrap().len(), 3, "{r}");
+    let (r, _) = w
+        .site(&alice, "mutation { signOutEverywhere }", json!({}))
+        .await;
+    assert_eq!(r["data"]["signOutEverywhere"], 3, "{r}");
+    let r = w.app(&alice, "{ me { id } }", json!({})).await;
+    assert_eq!(code(&r), "signed_out", "{r}");
     let (r, _) = w
         .post(Some((&other_app, false)), "{ me { id } }", json!({}))
         .await;
-    assert_eq!(r["data"]["me"]["id"], alice.tid().as_str(), "{r}");
+    assert_eq!(code(&r), "signed_out", "{r}");
     w.db.close().await;
 }

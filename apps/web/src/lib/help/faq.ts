@@ -93,7 +93,7 @@ export const HELP: HelpGroup[] = [
   ]),
   group('cosmetics', 'Cosmetics', [
     ['what-are-cosmetics', 'What are badges and paints?',
-      'A badge is a small picture before your name in chat; a paint colours your name. People with the cyex.tv extension see them on Twitch and Kick. [See them all](/cosmetics).'],
+      'A badge is a small picture before your name in chat; a paint colours your name. People with the cyex.tv extension see them on Twitch and Kick. Some are for sale in the [shop](/shop).'],
     ['get-cosmetics', 'How do I get one?',
       'For now the cyex.tv team hands them out, for testing, events and helping out. When you have one, pick it on your profile under Cosmetics.'],
     ['who-sees-cosmetics', 'Who can see which ones I own?',

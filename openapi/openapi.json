@@ -607,7 +607,7 @@
         "tags": [
           "cosmetics"
         ],
-        "summary": "Every cyex.tv chat badge and name paint (ADR 0015). Cache it with `If-None-Match`; live\nchanges come as `cosmetic.*` events on the `cosmetics` topic.",
+        "summary": "The cyex.tv chat badges and name paints that are for sale in the shop or held by at least one\naccount (ADR 0015); cosmetics that are neither are left out (staff with a `cosmetics.*`\npermission, signed in, get them too). Cache it with `If-None-Match`; live changes come as\n`cosmetic.*` events on the `cosmetics` topic.",
         "operationId": "get_cosmetics",
         "responses": {
           "200": {

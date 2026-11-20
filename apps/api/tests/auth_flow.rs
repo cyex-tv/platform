@@ -853,15 +853,17 @@ async fn app_sessions_use_bearer_only() {
     let account = h.me(&site).await["data"]["me"]["id"].clone();
     let account_id = cyex_tv_db::ids::from_text(account.as_str().unwrap()).unwrap();
 
-    // App sessions have no sign-in flow yet (D19); make one directly.
+    // Make an app session directly, as an app sign-in does: it names its client.
     let app_token = tokens::random_token();
     let mut conn = h.db.conn().await;
-    sessions::create(
+    cyex_tv_db::app_auth::create_session(
         &mut conn,
         &tokens::hash(&app_token),
         account_id,
-        SessionKind::App,
+        "cyex-deck",
+        chrono::Duration::days(1),
         chrono::Duration::days(90),
+        None,
     )
     .await
     .unwrap();

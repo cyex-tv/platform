@@ -403,6 +403,15 @@ async fn publish_cosmetic(
     id: Uuid,
     cosmetic: Option<Value>,
 ) -> ApiResult<()> {
+    // The public topic only ever tells about released cosmetics (held or for sale); an
+    // unreleased one is announced when it is released (`announce_release`).
+    if event_type != EventType::CosmeticDeleted
+        && !db::is_released(conn, kind, id, chrono::Utc::now())
+            .await
+            .map_err(db_error)?
+    {
+        return Ok(());
+    }
     let mut payload = json!({ "cosmetic_kind": kind.as_str(), "cosmetic_id": ids::to_text(id) });
     if let Some(c) = cosmetic {
         payload["cosmetic"] = c;
@@ -419,6 +428,29 @@ async fn publish_cosmetic(
     .await
     .map_err(db_error)?;
     Ok(())
+}
+
+/// Tells the public topic about a cosmetic that has just been released: it is held by exactly one
+/// account (the first grant) or in a shop item on sale. Chat clients add it to their catalog.
+/// Others are left alone, so a popular item does not make an event per sale.
+pub(crate) async fn announce_release(
+    conn: &mut PgConnection,
+    cdn: &str,
+    kind: CosmeticKind,
+    id: Uuid,
+    only_first_holder: bool,
+) -> ApiResult<()> {
+    if only_first_holder && db::holders(conn, kind, id).await.map_err(db_error)? != 1 {
+        return Ok(());
+    }
+    let body = match kind {
+        CosmeticKind::Badge => one_badge(conn, cdn, id).await.map(|b| to_json(&b)),
+        CosmeticKind::Paint => one_paint(conn, cdn, id).await.map(|p| to_json(&p)),
+    };
+    let Ok(body) = body else {
+        return Ok(());
+    };
+    publish_cosmetic(conn, EventType::CosmeticUpdated, kind, id, Some(body)).await
 }
 
 /// `user.cosmetics_updated` on every identity of the account.
@@ -485,10 +517,52 @@ fn to_json<T: serde::Serialize>(value: &T) -> Value {
 
 // Public reads
 
+/// The catalog everyone sees: the cosmetics held by at least one account or for sale in the shop.
+/// Chat clients need the held ones to draw chatters; the rest stay private until released.
 pub async fn catalog(state: &AppState) -> ApiResult<CosmeticCatalog> {
+    let mut conn = acquire(state).await?;
+    let now = chrono::Utc::now();
+    let badge_ids = db::released_ids(&mut conn, CosmeticKind::Badge, now)
+        .await
+        .map_err(db_error)?;
+    let paint_ids = db::released_ids(&mut conn, CosmeticKind::Paint, now)
+        .await
+        .map_err(db_error)?;
+    let (badges, paints) = build(
+        &mut conn,
+        &state.cdn_url,
+        Some(&badge_ids),
+        Some(&paint_ids),
+    )
+    .await?;
+    Ok(CosmeticCatalog { badges, paints })
+}
+
+/// The whole catalog, unreleased cosmetics too: for staff with a `cosmetics.*` permission.
+pub async fn catalog_all(state: &AppState) -> ApiResult<CosmeticCatalog> {
     let mut conn = acquire(state).await?;
     let (badges, paints) = build(&mut conn, &state.cdn_url, None, None).await?;
     Ok(CosmeticCatalog { badges, paints })
+}
+
+/// The catalog for this caller: all of it for cosmetics staff, the public one for everyone else.
+pub async fn catalog_for(state: &AppState, caller: Option<&Caller>) -> ApiResult<CosmeticCatalog> {
+    if let Some(caller) = caller {
+        let mut conn = acquire(state).await?;
+        if sees_unreleased(&mut conn, caller).await? {
+            drop(conn);
+            return catalog_all(state).await;
+        }
+    }
+    catalog(state).await
+}
+
+/// Whether the caller holds a `cosmetics.*` permission (manage or grant).
+pub async fn sees_unreleased(conn: &mut PgConnection, caller: &Caller) -> ApiResult<bool> {
+    Ok(crate::catalog::permissions_of(conn, caller)
+        .await?
+        .iter()
+        .any(|p| p.starts_with("cosmetics.")))
 }
 
 /// What up to 100 accounts show, with the badges and paints themselves. Only live accounts
@@ -1155,6 +1229,7 @@ pub async fn grant(
         .await?
         .pop()
         .ok_or_else(ApiError::internal)?;
+    announce_release(&mut tx, &state.cdn_url, input.kind, cosmetic, true).await?;
     let name = cosmetic_display_name(&mut tx, input.kind, cosmetic).await?;
     crate::account::notify(
         &mut tx,

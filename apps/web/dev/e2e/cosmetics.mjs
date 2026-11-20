@@ -195,7 +195,6 @@ const surfaces = [
   ['band', `/users/${ME}`, `document.querySelector('h1 .painted')`],
   ['menu', `/users/${ME}`, `(document.querySelector('header .who')?.click(), null)`],
   ['picker', `/users/${ME}?s=cosmetics`, `[...document.querySelectorAll('section[aria-labelledby="paint-h"] .painted')].find((e) => e.textContent.includes(${JSON.stringify(paintName)}))`],
-  ['gallery', '/cosmetics', `[...document.querySelectorAll('.painted')].find((e) => e.closest('li, article, .card')?.textContent.includes(${JSON.stringify(paintName)}))`],
   ['admin-paints', '/admin/cosmetics/paints', `[...document.querySelectorAll('.painted')].find((e) => e.textContent.includes(${JSON.stringify(paintName)}))`],
 ];
 for (const t of ['dark', 'light']) {

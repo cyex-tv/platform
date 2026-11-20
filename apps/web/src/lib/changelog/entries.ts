@@ -15,6 +15,15 @@ export type Entry = {
 
 export const ENTRIES: Entry[] = [
   {
+    id: '2026-11-20-shop-only',
+    date: '2026-11-20',
+    title: 'Badges and paints are in the shop',
+    items: [
+      'The cosmetics gallery is gone; badges and paints for sale are in the shop.',
+      'On a profile, staff with access to the user pages get an Open in admin button at the bottom.',
+    ],
+  },
+  {
     id: '2026-11-20-same-file',
     date: '2026-11-20',
     title: 'Uploads that are already here, and a faster review queue',

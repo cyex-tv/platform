@@ -97,7 +97,7 @@ impl World {
             &mut conn,
             &tokens::hash(&token),
             signed.account.id,
-            SessionKind::App,
+            SessionKind::Site,
             Duration::days(1),
         )
         .await
@@ -111,7 +111,11 @@ impl World {
     async fn gql(&self, user: &User, query: &str, variables: Value) -> Value {
         let request = Request::post("/v1/gql")
             .header("content-type", "application/json")
-            .header("authorization", format!("Bearer {}", user.token))
+            .header(
+                "cookie",
+                format!("{}={}", cyex_tv_auth::cookies::SESSION, user.token),
+            )
+            .header("origin", "https://cyex.tv")
             .body(Body::from(
                 json!({ "query": query, "variables": variables }).to_string(),
             ))
@@ -231,7 +235,7 @@ async fn sessions_and_subscriptions_for_staff() {
     let r = w.gql(&sessions_staff, q, json!({ "a": a })).await;
     let list = r["data"]["accountSessions"].as_array().unwrap();
     assert_eq!(list.len(), 1, "{r}");
-    assert_eq!(list[0]["kind"], "APP");
+    assert_eq!(list[0]["kind"], "SITE");
     assert_eq!(list[0]["current"], false);
     assert!(!r.to_string().contains("token"), "{r}");
 

@@ -642,15 +642,39 @@ async fn lookup_personal_sets(
     Ok(Json(PersonalLookupResult { sets }))
 }
 
-/// Every cyex.tv chat badge and name paint (ADR 0015). Cache it with `If-None-Match`; live
-/// changes come as `cosmetic.*` events on the `cosmetics` topic.
+/// The cyex.tv chat badges and name paints that are for sale in the shop or held by at least one
+/// account (ADR 0015); cosmetics that are neither are left out (staff with a `cosmetics.*`
+/// permission, signed in, get them too). Cache it with `If-None-Match`; live changes come as
+/// `cosmetic.*` events on the `cosmetics` topic.
 #[utoipa::path(
     get,
     path = "/v1/cosmetics",
     tag = "cosmetics",
     responses((status = 200, body = CosmeticCatalog), (status = 304, description = "Not modified."))
 )]
-async fn get_cosmetics(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Response> {
+async fn get_cosmetics(
+    State(state): State<AppState>,
+    MaybeCaller(caller): MaybeCaller,
+    headers: HeaderMap,
+) -> ApiResult<Response> {
+    // Staff see everything, so their answer is built for them and never shared or cached.
+    if let Some(caller) = &caller {
+        let mut conn = state
+            .db
+            .acquire()
+            .await
+            .map_err(crate::errors::sqlx_error)?;
+        if cosmetics::sees_unreleased(&mut conn, caller).await? {
+            drop(conn);
+            let all = cosmetics::catalog_all(&state).await?;
+            // Only for this caller: no shared cache or CDN may keep it.
+            let mut response = cached(&headers, &all, 0)?;
+            response
+                .headers_mut()
+                .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-cache"));
+            return Ok(response);
+        }
+    }
     shared_read(
         &state,
         &headers,

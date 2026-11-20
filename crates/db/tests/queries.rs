@@ -5,6 +5,7 @@ mod common;
 use chrono::{Duration, Utc};
 use common::TestDb;
 use cyex_tv_db::accounts::{self, Profile};
+use cyex_tv_db::app_auth;
 use cyex_tv_db::emotes::{self, EmotePatch, NewEmote};
 use cyex_tv_db::sessions::{self, SessionKind};
 use cyex_tv_db::sets::{self, NewMember};
@@ -12,8 +13,8 @@ use cyex_tv_db::{DbError, audit, channels, files, ids, outbox, roles, search};
 use cyex_tv_shared::model::{EmoteState, EventType, Platform, SetKind};
 use cyex_tv_shared::permissions;
 use serde_json::json;
-use sqlx::PgConnection;
 use sqlx::postgres::PgListener;
+use sqlx::{Executor, PgConnection};
 use uuid::Uuid;
 
 macro_rules! db {
@@ -338,9 +339,18 @@ async fn sessions_expire_slide_and_sign_out() {
         .unwrap();
     assert_eq!(session.kind, SessionKind::Site);
     assert!(session.expires_at > Utc::now() + Duration::days(29));
-    sessions::create(&mut c, &b, id, SessionKind::App, Duration::days(90))
-        .await
-        .unwrap();
+    // An app session names its client (ADR 0021).
+    app_auth::create_session(
+        &mut c,
+        &b,
+        id,
+        "cyex-deck",
+        Duration::days(1),
+        Duration::days(90),
+        None,
+    )
+    .await
+    .unwrap();
     sessions::create(&mut c, &c_hash, id, SessionKind::Site, Duration::days(30))
         .await
         .unwrap();
@@ -386,6 +396,76 @@ async fn sessions_expire_slide_and_sign_out() {
     assert!(sessions::delete(&mut c, &b).await.unwrap());
     assert!(!sessions::delete(&mut c, &b).await.unwrap());
 
+    drop(c);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn unscoped_app_sessions_are_retired() {
+    let db = db!();
+    let mut c = db.conn().await;
+    let id = account(&mut c, "1").await;
+
+    // No new unscoped app session: the CHECK refuses it.
+    assert!(
+        sessions::create(&mut c, &[1u8; 32], id, SessionKind::App, Duration::days(1))
+            .await
+            .is_err()
+    );
+
+    // The migration itself: put the old shape back, then run its SQL.
+    sqlx::query("ALTER TABLE sessions DROP CONSTRAINT sessions_app_has_client")
+        .execute(&mut *c)
+        .await
+        .unwrap();
+    let (unscoped, site, scoped) = ([2u8; 32], [3u8; 32], [4u8; 32]);
+    sessions::create(&mut c, &unscoped, id, SessionKind::App, Duration::days(1))
+        .await
+        .unwrap();
+    sessions::create(&mut c, &site, id, SessionKind::Site, Duration::days(1))
+        .await
+        .unwrap();
+    app_auth::create_session(
+        &mut c,
+        &scoped,
+        id,
+        "cyex-deck",
+        Duration::days(1),
+        Duration::days(30),
+        None,
+    )
+    .await
+    .unwrap();
+    let migration = cyex_tv_db::MIGRATOR
+        .iter()
+        .find(|m| m.version == 20_261_210_005_001)
+        .expect("the retire migration");
+    c.execute(&*migration.sql).await.unwrap();
+
+    assert!(
+        sessions::find_active(&mut c, &unscoped)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        sessions::find_active(&mut c, &site)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        sessions::find_active(&mut c, &scoped)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    // The constraint is back.
+    assert!(
+        sessions::create(&mut c, &[5u8; 32], id, SessionKind::App, Duration::days(1))
+            .await
+            .is_err()
+    );
     drop(c);
     db.close().await;
 }

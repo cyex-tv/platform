@@ -899,6 +899,16 @@ const C_GRANTS = Object.entries(C_OWNED).flatMap(([account, kinds]) => Object.en
 const C_CHATTERS = { '141981764': ME_ID, '55500001': OTHERS[0].id, '55500003': OTHERS[4].id };
 let cosmeticSeq = 0;
 const cosmeticCatalog = () => ({ badges: BADGES, paints: PAINTS });
+// What the public reads list (GraphQL cosmetics, GET /v1/cosmetics): only cosmetics held by an
+// account or in a shop item on sale. Staff with a cosmetics.* permission (the mock's admin) get all.
+const releasedCatalog = (staff) => {
+  if (staff) return cosmeticCatalog();
+  const now = Date.now();
+  const onSale = SHOP_ITEMS.filter((i) => i.visible !== false && !i.deleted && (!i.activeFrom || Date.parse(i.activeFrom) <= now) && (!i.activeTo || Date.parse(i.activeTo) > now));
+  const held = (kind, id) => Object.values(C_OWNED).some((o) => o[kind].includes(id));
+  const sold = (key, id) => onSale.some((i) => (i[key] ?? []).includes(id));
+  return { badges: BADGES.filter((b) => held('BADGE', b.id) || sold('badgeIds', b.id)), paints: PAINTS.filter((p) => held('PAINT', p.id) || sold('paintIds', p.id)) };
+};
 const ownedOut = (accountId) => {
   const owned = C_OWNED[accountId] ?? { BADGE: [], PAINT: [] };
   const sel = C_SELECTED[accountId] ?? { badgeId: null, paintId: null };
@@ -964,7 +974,7 @@ function cosmeticsAnswer(q, v, session, admin) {
     if (!fields.length) return null;
     const data = {};
     for (const f of fields) {
-      if (f === 'cosmetics') data.cosmetics = cosmeticCatalog();
+      if (f === 'cosmetics') data.cosmetics = releasedCatalog(admin);
       if (f === 'userCosmetics') {
         const out = userCosmeticsOut(v.platform ?? 'TWITCH', v.userIds ?? []);
         if (!out) return err('Look up at most 100 users at once.', 'too_many');
@@ -2859,7 +2869,7 @@ createServer(async (req, res) => {
     return res.end(BADGE_ART[badgeArt[1]](Number(badgeArt[2])));
   }
   if (req.method === 'GET' && url.pathname === '/v1/cosmetics') {
-    const c = cosmeticCatalog();
+    const c = releasedCatalog(admin);
     return json(res, 200, restOf(c));
   }
   if (req.method === 'GET' && url.pathname === '/v1/cosmetics/users') {
