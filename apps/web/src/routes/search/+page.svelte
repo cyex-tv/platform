@@ -38,16 +38,13 @@
   import { clean, count, iso } from '$lib/format';
   import { SEARCH } from '$lib/queries';
   import SearchField from '$lib/components/browse/SearchField.svelte';
-  import SearchTabs from '$lib/components/browse/SearchTabs.svelte';
-  import UsersSearch from '$lib/components/browse/UsersSearch.svelte';
   import { registerShortcuts } from '$lib/shell/shortcuts.svelte';
   import { BROWSE_KEYS, SELECT_KEYS } from '$lib/components/browse/keys';
 
   let { data } = $props();
 
-  // The keys of the emote grid and of Select mode, in the shortcut sheet while the Emotes tab shows.
+  // The keys of the emote grid and of Select mode, in the shortcut sheet.
   $effect(() => {
-    if (data.view.tab === 'users') return;
     const a = registerShortcuts(BROWSE_KEYS);
     const b = registerShortcuts(SELECT_KEYS);
     return () => (a(), b());
@@ -256,9 +253,6 @@
 
 <svelte:window {onkeydown} />
 
-{#if view.tab === 'users'}
-  <UsersSearch {data} />
-{:else}
 <ColumnLayout top>
   <div class="browse">
     <div class="head">
@@ -266,7 +260,6 @@
         <h1>Emotes</h1>
         {#if !data.error}<p class="total" aria-live="polite">{countText}</p>{/if}
       </div>
-      <SearchTabs {view} />
     </div>
 
     <div class="toolbar" bind:this={gridTop}>
@@ -371,10 +364,9 @@
     {/if}
   </div>
 </ColumnLayout>
-{/if}
 
 <style>
-  /* Title row: the one page title and the count, Emotes | Users on the right. */
+  /* Title row: the one page title and the count. */
   .head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; min-height: 40px; }
   .title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
   h1 { margin: 0; font-size: var(--t-page); line-height: 1.25; letter-spacing: -.02em; }

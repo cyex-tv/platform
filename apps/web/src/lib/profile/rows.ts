@@ -1,20 +1,24 @@
-// The profile's rail (your profile is your dashboard, the 7TV model): which rows a viewer gets on
-// an account's page, where each goes, and which one is current. Pure, so it is tested.
-//   - The owner: Overview first (?s=overview, the dashboard the account menu opens).
-//   - Everyone: Uploaded emotes and Emote sets (the account's listed sets, ADR 0017).
-//   - The owner, and editors of the account: Active emotes, and all their sets; the owner also Channels.
-//   - The owner alone: Favourites (private; nobody else, editors neither, ever sees it).
-//   - The owner, and editors with PROFILE: Cosmetics.
-//   - Everyone: Collection (owned badges and paints), when the account shows it; the owner always.
-//   - Everyone: Activity (public, ADR 0016), when the API has it.
+// The profile's sections and its rail. The rail is public: every viewer (signed out, an editor,
+// the owner) gets the same rows, and each opens something anyone may see (owner rule, 2026/11/20):
+//   Uploaded emotes, Emote sets (the listed ones, ADR 0017), Cosmetics (what the account shows in
+//   chat) and Activity (public, ADR 0016, when the API has it).
+// Sections that are not for everyone stay openable by address but live off the rail:
+//   - Overview (?s=overview), the owner's dashboard: the account menu opens it, and the band has a
+//     Dashboard button. It links on to Active emotes, Favourites and Channels.
+//   - Active emotes (?s=active): the owner and editors of the account.
+//   - Favourites (?s=favourites): the owner alone (private; nobody else, editors neither).
+// What a section shows can still depend on who looks (the owner's Uploaded emotes lists pending
+// ones, the owner's Cosmetics tab is the picker), but the rows never do.
 // Sections are query-param tabs on /users/<id> (?s=sets); Uploaded emotes is the default (no
 // parameter), so the server-rendered public page and the owner's page share one address.
-// The /me management pages keep their routes and mark the row they belong to.
+// The /me management pages keep their routes and mark the row they belong to. Pure, so it is tested.
 import type { EditorPermission } from '$lib/gql/graphql';
 import type { RailGroup, RailItem } from '$lib/shell/rail';
 
-export const SECTIONS = ['overview', 'uploads', 'active', 'sets', 'favourites', 'cosmetics', 'collection', 'activity'] as const;
+export const SECTIONS = ['overview', 'uploads', 'active', 'sets', 'favourites', 'cosmetics', 'activity'] as const;
 export type SectionKey = (typeof SECTIONS)[number];
+/** The sections in the rail, for everyone. */
+export const RAIL_SECTIONS = ['uploads', 'sets', 'cosmetics', 'activity'] as const satisfies readonly SectionKey[];
 /** A profile section, or a /me page that sits in the profile's rail. */
 export type RailKey = SectionKey | 'channels' | 'connections' | 'editors' | null;
 
@@ -35,16 +39,15 @@ export function sectionHref(accountId: string, key: SectionKey): string {
   return key === 'uploads' ? base : `${base}?s=${key}`;
 }
 
-/** The sections this viewer has on this account, in rail order. */
-export function sectionsFor(r: Relation, activity: boolean, collection = false): SectionKey[] {
+/** The sections this viewer may open on this account (the rail lists the public ones only). */
+export function sectionsFor(r: Relation, activity: boolean): SectionKey[] {
   const out: SectionKey[] = [];
   if (r.mine) out.push('overview');
   if (manages(r)) out.push('active');
   out.push('uploads');
   out.push('sets');
   if (r.mine) out.push('favourites');
-  if (canProfile(r)) out.push('cosmetics');
-  if (r.mine || collection) out.push('collection');
+  out.push('cosmetics');
   if (activity) out.push('activity');
   return out;
 }
@@ -74,7 +77,6 @@ const LABEL: Record<SectionKey, string> = {
   sets: 'Emote sets',
   favourites: 'Favourites',
   cosmetics: 'Cosmetics',
-  collection: 'Collection',
   activity: 'Activity',
 };
 const ICON: Record<SectionKey, RailItem['icon']> = {
@@ -84,32 +86,32 @@ const ICON: Record<SectionKey, RailItem['icon']> = {
   sets: 'folder',
   favourites: 'heart',
   cosmetics: 'brush',
-  collection: 'badge',
   activity: 'activity',
 };
 
-/** The profile's rail rows: emotes first, then cosmetics and activity, the current one marked. */
-export function profileRail(accountId: string, r: Relation, current: RailKey, activity: boolean, collection = false): RailGroup[] {
-  const keys = sectionsFor(r, activity, collection);
+/** The profile's rail: the same public rows for every viewer, emotes first, the current one marked. */
+export function profileRail(accountId: string, current: RailKey, activity: boolean): RailGroup[] {
   const item = (k: SectionKey): RailItem => ({ href: sectionHref(accountId, k), label: LABEL[k], icon: ICON[k], current: current === k });
-  const emotes: RailItem[] = keys.filter((k) => k === 'active' || k === 'uploads' || k === 'sets' || k === 'favourites').map(item);
-  if (r.mine) emotes.push({ href: '/me/channels', label: 'Channels', icon: 'tv', current: current === 'channels' });
-  const more = keys.filter((k) => k === 'cosmetics' || k === 'collection' || k === 'activity').map(item);
-  const head = keys.includes('overview') ? [{ items: [item('overview')] }] : [];
-  return [...head, { items: emotes }, ...(more.length ? [{ items: more }] : [])];
+  const more: SectionKey[] = activity ? ['cosmetics', 'activity'] : ['cosmetics'];
+  return [{ items: (['uploads', 'sets'] as const).map(item) }, { items: more.map(item) }];
 }
 
 /**
- * The /me pages that have no row of their own in the profile rail (Upload, Notifications,
- * Account, Editors), as the extra tab the phone strip shows while you are on one, so the strip
- * always says where you are. Null on every other page.
+ * The pages that have no row in the profile rail (the /me pages Upload, Notifications, Account,
+ * Editors, Channels and Favourites, and the off-rail sections Overview, Active emotes and
+ * Favourites), as the extra tab the phone strip shows while you are on one, so the strip always
+ * says where you are. Null on every other page.
  */
-export function stripExtra(path: string): RailItem | null {
+export function stripExtra(path: string, section?: SectionKey | null): RailItem | null {
   const at = (base: string) => path === base || path.startsWith(`${base}/`);
   if (at('/me/upload')) return { href: '/me/upload', label: 'Upload', icon: 'upload', current: true };
   if (at('/me/notifications')) return { href: '/me/notifications', label: 'Notifications', icon: 'bell', current: true };
   if (at('/me/account')) return { href: '/me/account', label: 'Account', icon: 'user', current: true };
   if (at('/me/editors')) return { href: '/me/editors', label: 'Editors', icon: 'circle-user', current: true };
+  if (at('/me/channels')) return { href: '/me/channels', label: 'Channels', icon: 'tv', current: true };
+  if (at('/me/favourites')) return { href: '/me/favourites', label: 'Favourites', icon: 'heart', current: true };
+  if (path.startsWith('/users/') && (section === 'overview' || section === 'active' || section === 'favourites'))
+    return { href: `${path}?s=${section}`, label: LABEL[section], icon: ICON[section], current: true };
   return null;
 }
 

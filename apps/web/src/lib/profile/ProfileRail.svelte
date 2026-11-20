@@ -1,35 +1,27 @@
 <script lang="ts">
   // The profile's rail: navigation only (the person is in the ProfileHeader band above it), the
   // same on /users/<id> and on the /me pages that belong to it, so managing your emotes never feels
-  // like another area. Rows: Overview (your own profile's dashboard), Active emotes, Uploaded
-  // emotes, Emote sets, Channels, then Cosmetics and Activity; "Admin ›" pinned at the bottom for
-  // staff on their own profile. It runs the full height of the left side and never scrolls inside
-  // itself (SideRail `fill`). Under 900px the rows are a tab strip under the band.
+  // like another area. The rows are public and the same for every viewer (rows.ts): Uploaded
+  // emotes, Emote sets, Cosmetics and Activity. What only the owner (or an editor) opens, the
+  // dashboard, Active emotes, Favourites, Channels and Admin, is reached from the account menu, the
+  // band's buttons and the dashboard, never from here. It runs the full height of the left side and
+  // never scrolls inside itself (SideRail `fill`). Under 900px the rows are a tab strip under the
+  // band, plus a tab for the page you are on when it has no row.
   import { page } from '$app/state';
-  import Icon from '$lib/components/Icon.svelte';
   import { clean } from '$lib/format';
   import SideRail from '$lib/shell/SideRail.svelte';
-  import { isAdmin, session } from '$lib/tool/session.svelte';
-  import { profileRail, stripExtra, stripTabs, type RailKey, type Relation } from './rows';
+  import { profileRail, stripExtra, stripTabs, type RailKey, type SectionKey } from './rows';
 
   type Props = {
     account: { id: string; displayName: string };
-    relation: Relation;
     current: RailKey;
     activity?: boolean;
-    /** The account shows its collection (the owner always has the row). */
-    collection?: boolean;
   };
-  let { account, relation, current, activity = false, collection = false }: Props = $props();
+  let { account, current, activity = false }: Props = $props();
 
-  const groups = $derived(profileRail(account.id, relation, current, activity, collection));
-  const staff = $derived(relation.mine && isAdmin(session.me));
-  // The /me pages without a row of their own (Upload, Notifications) add their tab to the phone strip.
-  const tabs = $derived(relation.mine ? stripTabs(groups, stripExtra(page.url.pathname)) : undefined);
+  const groups = $derived(profileRail(account.id, current, activity));
+  const section = $derived(current && current !== 'channels' && current !== 'connections' && current !== 'editors' ? (current as SectionKey) : null);
+  const tabs = $derived(stripTabs(groups, stripExtra(page.url.pathname, section)));
 </script>
 
-<SideRail label="{clean(account.displayName)}'s profile" {groups} {tabs} collapse="tabs" fill>
-  {#snippet foot()}
-    {#if staff}<a class="rail-foot" href="/admin"><Icon name="wrench" /><span class="lbl">Admin</span><Icon name="chevron-right" size={14} /></a>{/if}
-  {/snippet}
-</SideRail>
+<SideRail label="{clean(account.displayName)}'s profile" {groups} {tabs} collapse="tabs" fill />

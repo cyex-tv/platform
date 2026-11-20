@@ -3,9 +3,10 @@
   // attached under the field with the top 5 emotes (the API's name matcher: exact, prefix, word
   // and initials prefix, substring, then near misses) and the top 3 people. Signed in, your
   // favourites whose name holds the text come first (marked with a heart), and emotes you hid for
-  // yourself are left out. Focusing the empty field lists the channels you can manage, by your
-  // role then name, and under them (signed out: alone) up to 5 recent searches from this device
-  // (recents.ts) with a row that clears them.
+  // yourself are left out. Focusing the empty field lists every channel you own or edit, by your
+  // role (owner, editor, set editor) then name, in a list capped in height that scrolls inside
+  // itself (an editor can have many). Nothing about past searches is kept (the old recent searches
+  // key is removed on load).
   //
   // An ARIA 1.2 combobox: the input owns a listbox, ↑ ↓ move the active row (aria-activedescendant,
   // focus stays in the field), Enter opens the active row or, with none, /search for the text,
@@ -18,7 +19,7 @@
   import type { Snippet } from 'svelte';
   import { pictureFor, ready, size } from '$lib/emote';
   import { display } from '$lib/dpr.svelte';
-  import { clean } from '$lib/format';
+  import { clean, count } from '$lib/format';
   import type { EditableChannelsQuery, QuickSearchQuery } from '$lib/gql/graphql';
   import { EDITABLE_CHANNELS, MY_FAVOURITES, QUICK_SEARCH } from '$lib/queries';
   import { favouritesFirst, personal } from '$lib/personal/lists.svelte';
@@ -27,8 +28,8 @@
   import { session } from '$lib/tool/session.svelte';
   import { ROLE_LABEL, sortChannels, type ChannelRole } from './nav';
   import { announce, emptyText, move, searchHref } from './search';
+  import { onMount } from 'svelte';
   import { headerSearch } from './search.svelte';
-  import { load as loadRecents, push as pushRecent, save as saveRecents } from './recents';
 
   type Props = { phone?: boolean; onclose?: () => void };
   let { phone = false, onclose }: Props = $props();
@@ -40,9 +41,7 @@
     | { kind: 'emote'; id: string; href: string; emote: Emote }
     | { kind: 'user'; id: string; href: string; person: Person }
     | { kind: 'channel'; id: string; href: string; item: Managed }
-    | { kind: 'all'; id: string; href: string }
-    | { kind: 'recent'; id: string; href: string; query: string }
-    | { kind: 'clear'; id: string; href: string };
+    | { kind: 'all'; id: string; href: string };
 
   const uid = $props.id();
   const listId = `${uid}-list`;
@@ -67,9 +66,6 @@
   let channelsAt = 0;
   let channelsFailed = $state(false);
 
-  // Recent searches of this device, read when the field is focused.
-  let recents = $state<string[]>([]);
-
   const me = $derived(session.me);
   const text = $derived(headerSearch.query.trim());
   const rows = $derived.by<Row[]>(() => {
@@ -84,10 +80,6 @@
             item: c,
           });
       }
-      if (recents.length) {
-        recents.forEach((q, i) => out.push({ kind: 'recent', id: `${uid}-r-${i}`, href: searchHref(q), query: q }));
-        out.push({ kind: 'clear', id: `${uid}-clear`, href: '/search' });
-      }
       return out;
     }
     if (shownFor !== text && !emotes.length && !people.length) return [];
@@ -100,12 +92,10 @@
   const emoteRows = $derived(rows.filter((r) => r.kind === 'emote'));
   const userRows = $derived(rows.filter((r) => r.kind === 'user'));
   const channelRows = $derived(rows.filter((r) => r.kind === 'channel'));
-  const recentRows = $derived(rows.filter((r) => r.kind === 'recent'));
-  const clearRow = $derived(rows.find((r) => r.kind === 'clear'));
   const allRow = $derived(rows.find((r) => r.kind === 'all'));
   const nothing = $derived(!!text && shownFor === text && !searching && !failed && !emotes.length && !people.length);
   /** Something to show under the field: rows, a state line or the signed-out hint. */
-  const content = $derived(!!text || !!me || session.known || recents.length > 0);
+  const content = $derived(!!text || !!me || session.known);
   const open = $derived(focused && !dismissed && content);
   const activeId = $derived(open && active >= 0 ? rows[active]?.id : undefined);
 
@@ -197,10 +187,16 @@
 
   $effect(() => personal.ensure());
 
+  // Recent searches were once kept on this device: drop what an older build left behind.
+  onMount(() => {
+    try {
+      localStorage.removeItem('cyex.search.recent');
+    } catch {}
+  });
+
   function onfocus() {
     focused = true;
     dismissed = false;
-    recents = loadRecents();
     void loadChannels();
   }
 
@@ -211,24 +207,9 @@
     if (phone && !text) onclose?.();
   }
 
-  /** Remembers what was searched (only what this browser agrees to keep), newest first. */
-  function remember(q: string) {
-    const next = pushRecent(loadRecents(), q);
-    recents = saveRecents(next) ? next : [];
-  }
-
   async function go(row: Row | undefined) {
-    if (row?.kind === 'clear') {
-      recents = [];
-      saveRecents([]);
-      active = -1;
-      input?.focus();
-      return;
-    }
     const href = row ? row.href : text ? searchHref(text) : null;
     if (!href) return;
-    if (row?.kind === 'recent') remember(row.query);
-    else if (text && (!row || row.kind === 'all' || row.kind === 'emote' || row.kind === 'user')) remember(text);
     headerSearch.query = '';
     focused = false;
     input?.blur();
@@ -319,8 +300,8 @@
       aria-controls={listId}
       aria-activedescendant={activeId}
       aria-autocomplete="list"
-      aria-label="Search emotes and people"
-      placeholder="Search emotes and people"
+      aria-label="Search"
+      placeholder="Search"
       autocomplete="off"
       autocapitalize="none"
       autocorrect="off"
@@ -335,7 +316,7 @@
   </div>
 
   <div class="drop" hidden={!open}>
-    <div class="list" id={listId} role="listbox" aria-label={text ? 'Search results' : me ? 'Your channels and recent searches' : 'Recent searches'}>
+    <div class="list" id={listId} role="listbox" aria-label={text ? 'Search results' : me ? 'Channels you edit' : 'Search'}>
       {#if text}
         {#if emoteRows.length}
           <div class="group" role="group" aria-labelledby="{uid}-ge">
@@ -390,7 +371,7 @@
         {/if}
       {:else if me}
         <div class="group" role="group" aria-labelledby="{uid}-gc">
-          <p class="group-name" id="{uid}-gc" role="presentation">Your channels</p>
+          <p class="group-name stick" id="{uid}-gc" role="presentation">Channels you edit{#if channelRows.length}<span class="n">{count(channelRows.length)}</span>{/if}</p>
           {#each channelRows as r (r.id)}
             {#snippet channelInner()}
               {#if r.kind === 'channel'}
@@ -409,31 +390,8 @@
             <p class="line">Channels you own or edit show up here.</p>
           {/if}
         </div>
-      {:else if !recents.length}
+      {:else}
         <p class="line">Type to search emotes by name, or people by login.</p>
-      {/if}
-      {#if !text && recentRows.length}
-        <div class="group" role="group" aria-labelledby="{uid}-gr">
-          <p class="group-name" id="{uid}-gr" role="presentation">Recent searches</p>
-          {#each recentRows as r (r.id)}
-            {#snippet recentInner()}
-              {#if r.kind === 'recent'}
-                <span class="art"><Icon name="search" /></span>
-                <span class="label"><bdi>{r.query}</bdi></span>
-              {/if}
-            {/snippet}
-            {@render option(r, recentInner)}
-          {/each}
-          {#if clearRow}
-            <div class="foot" role="presentation">
-              {#snippet clearInner()}
-                <span class="art"><Icon name="trash" /></span>
-                <span class="label">Clear recent searches</span>
-              {/snippet}
-              {@render option(clearRow, clearInner)}
-            </div>
-          {/if}
-        </div>
       {/if}
     </div>
   </div>
@@ -462,6 +420,9 @@
   .list { max-height: min(520px, calc(100dvh - var(--nav-h) - 24px)); overflow-y: auto; overscroll-behavior: contain; padding: 6px; }
   .group + .group { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border); }
   .group-name { margin: 0; padding: 8px 10px 6px; font-size: var(--t-fine); font-weight: 500; color: var(--muted); }
+  /* The channels heading stays in view while a long list scrolls under it. */
+  .stick { position: sticky; top: -6px; z-index: 1; background: var(--surface); }
+  .group-name .n { margin-left: 6px; color: var(--dim); font-variant-numeric: tabular-nums; }
   .row { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 6px 10px; border-radius: var(--radius-btn);
     color: var(--text); font-size: var(--t-nav); text-decoration: none; cursor: pointer; }
   /* The active row: bold with an accent icon; no fill, border or bar (owner rule). */
