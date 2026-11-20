@@ -78,6 +78,12 @@ impl Live {
     }
 
     async fn subscribe(&self, topics: &[&str]) -> Socket {
+        self.open(topics, true).await
+    }
+
+    /// Subscribes; with `registered`, returns once the hub holds the subscription (a refused one
+    /// never gets there, so a test of refusals passes false and reads the error instead).
+    async fn open(&self, topics: &[&str], registered: bool) -> Socket {
         let before = self.hub.stats().0;
         let mut request = format!("ws://{}/v1/gql/ws", self.addr)
             .into_client_request()
@@ -102,10 +108,12 @@ impl Live {
         )
         .await;
         // The subscription is in the hub once the server has read the message.
-        common::wait_until("the subscription to register", || async {
-            self.hub.stats().0 > before
-        })
-        .await;
+        if registered {
+            common::wait_until("the subscription to register", || async {
+                self.hub.stats().0 > before
+            })
+            .await;
+        }
         ws
     }
 
@@ -272,7 +280,7 @@ async fn bad_topics_are_refused() {
     let Some(live) = Live::start().await else {
         return;
     };
-    let mut ws = live.subscribe(&["channel:youtube:1"]).await;
+    let mut ws = live.open(&["channel:youtube:1"], false).await;
     let msg = next(&mut ws).await;
     let text = msg.to_string();
     assert!(text.contains("invalid_topic"), "{text}");
