@@ -3,8 +3,8 @@
   // (the cyex rule: no fills, no bars). A link when the notification leads somewhere; the
   // sentence is printed as text, never as HTML. Used by the bell's popover and /me/notifications.
   import Icon from '$lib/components/Icon.svelte';
-  import { dateTime, isoParts } from '$lib/format';
-  import { relative } from '$lib/profile/activity';
+  import { isoParts } from '$lib/format';
+  import ActivityWhen from '$lib/profile/ActivityWhen.svelte';
   import { gql } from '$lib/api';
   import { ACCEPT_EMOTE_TRANSFER, DECLINE_EMOTE_TRANSFER } from '$lib/queries';
   import { fail, notify } from '$lib/tool/notices.svelte';
@@ -45,7 +45,7 @@
   <Icon name={line.icon} />
   <span class="what">
     <span class="sentence">{#each isoParts(line.text) as p}{#if p.name}<bdi>{p.text}</bdi>{:else}{p.text}{/if}{/each}</span>
-    <time class="when" datetime={note.createdAt} title={relative(note.createdAt)}>{dateTime(note.createdAt)}</time>
+    <span class="when"><ActivityWhen at={note.createdAt} /></span>
   </span>
 {/snippet}
 

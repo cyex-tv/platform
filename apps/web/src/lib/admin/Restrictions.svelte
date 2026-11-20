@@ -8,11 +8,11 @@
   import { ACCOUNT_RESTRICTIONS, LIFT_RESTRICTION, PLACE_RESTRICTION } from '$lib/queries';
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
-  import { dateTime } from '$lib/format';
+  import { dateTime, toLocalInput } from '$lib/format';
   import { fail, notify } from '$lib/tool/notices.svelte';
   import { can } from '$lib/tool/session.svelte';
   import AccountLink from './AccountLink.svelte';
-  import { DURATIONS, endFor, HOLDS, localInput, type Duration, type HoldKind } from './restrictions';
+  import { DURATIONS, endFor, HOLDS, type Duration, type HoldKind } from './restrictions';
 
   export type Status = {
     uploadsBlocked: boolean;
@@ -69,8 +69,8 @@
     kind = k;
     length = k === 'ACCOUNT' ? '7d' : '1d';
     const now = new Date();
-    minLocal = localInput(new Date(now.getTime() + 60_000));
-    custom = localInput(new Date(now.getTime() + 14 * 24 * 3_600_000));
+    minLocal = toLocalInput(new Date(now.getTime() + 60_000));
+    custom = toLocalInput(new Date(now.getTime() + 14 * 24 * 3_600_000));
     reason = '';
     error = '';
     dialog.showModal();

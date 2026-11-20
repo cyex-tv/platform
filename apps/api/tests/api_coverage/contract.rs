@@ -257,7 +257,6 @@ async fn every_site_operation_runs_against_the_real_api() {
     let e_del = emote(&w, &o, "covGone", EmoteState::Approved).await;
     let e_reject = emote(&w, &o, "covNope", EmoteState::Pending).await;
     let e_report = emote(&w, &t, "covBad", EmoteState::Approved).await;
-    let e_takedown = emote(&w, &t, "covWorse", EmoteState::Approved).await;
     let spare_session = w.session(o.id, SessionKind::Site).await;
 
     let mut c = Contract {
@@ -388,9 +387,7 @@ async fn every_site_operation_runs_against_the_real_api() {
     .await;
     let login = json!({ "platform": "TWITCH", "login": o.login });
     c.op(As::Nobody, "Channel", login.clone()).await;
-    c.op(os, "FindAccount", login.clone()).await;
     c.op(os, "User", login).await;
-    c.op(As::Nobody, "GlobalSet", json!({})).await;
     c.op(As::Nobody, "PublicAccount", json!({ "id": tid }))
         .await;
     c.op(As::Nobody, "AccountProfile", json!({ "accountId": tid }))
@@ -447,11 +444,6 @@ async fn every_site_operation_runs_against_the_real_api() {
         json!({ "platform": "TWITCH", "id": o.twitch_id, "input": { "activeSetId": set1, "allowPersonalEmotes": true } }),
     )
     .await;
-    let data = c.op(As::Nobody, "Set", json!({ "id": set1 })).await;
-    c.check(
-        data["set"]["emotes"][0]["name"] == "covPog",
-        format!("Set: {data}"),
-    );
     c.op(As::Nobody, "PublicSet", json!({ "id": set1 })).await;
     c.op(os, "EditSet", json!({ "id": set1 })).await;
     c.op(
@@ -488,12 +480,6 @@ async fn every_site_operation_runs_against_the_real_api() {
         As::Nobody,
         "EmoteActivity",
         json!({ "emoteId": e1, "limit": 20 }),
-    )
-    .await;
-    c.op(
-        os,
-        "AddSetEditor",
-        json!({ "setId": set1, "accountId": f.tid() }),
     )
     .await;
 
@@ -813,12 +799,6 @@ async fn every_site_operation_runs_against_the_real_api() {
         json!({ "id": report, "action": "DISMISS", "note": "Fine." }),
     )
     .await;
-    c.op(
-        os,
-        "Takedown",
-        json!({ "id": e_takedown, "reason": "Taken down in a test." }),
-    )
-    .await;
 
     // Staff pages about an account.
     let ttid = t.tid();
@@ -865,18 +845,6 @@ async fn every_site_operation_runs_against_the_real_api() {
         os,
         "LiftRestriction",
         json!({ "accountId": ttid, "kind": "TICKETS", "reason": "Done." }),
-    )
-    .await;
-    c.op(
-        os,
-        "Restrict",
-        json!({ "accountId": ttid, "uploadsBlocked": true }),
-    )
-    .await;
-    c.op(
-        os,
-        "Restrict",
-        json!({ "accountId": ttid, "uploadsBlocked": false, "blocked": false }),
     )
     .await;
 

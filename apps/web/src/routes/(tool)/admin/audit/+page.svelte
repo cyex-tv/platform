@@ -14,6 +14,7 @@
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
   import type { AuditQuery } from '$lib/gql/graphql';
+  import { dateTimeSeconds } from '$lib/format';
   import { AUDIT } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
@@ -97,13 +98,6 @@
     goto(`?${p}`, { keepFocus: true });
   }
 
-  /** `2026-11-16T20:01:02.345Z` as `2026/11/16 20:01:02`, in the viewer's time zone. */
-  function when(iso: string): string {
-    const d = new Date(iso);
-    const p = (n: number) => String(n).padStart(2, '0');
-    return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
-  }
-
   function pretty(json: string | null | undefined): string {
     if (!json) return '';
     try {
@@ -152,7 +146,7 @@
         {@const href = targetHref(e.targetKind, e.targetId)}
         <li class:alt={i % 2 === 1}>
           <div class="row">
-            <span class="ui-mono t">{when(e.createdAt)}</span>
+            <span class="ui-mono t">{dateTimeSeconds(e.createdAt)}</span>
             <span class="action">{actionText(e.action)}</span>
             <span class="target">
               <span class="ui-chip">{e.targetKind}</span>

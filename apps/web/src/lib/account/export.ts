@@ -1,10 +1,11 @@
 // Your data as a download. The API returns the whole document as JSON text; the browser saves it
 // as a file named for the day.
 
+import { pad } from '$lib/format';
+
 /** `cyex-tv-export-2026-11-17.json`, the day in the reader's time zone. */
 export function exportFilename(now: Date = new Date()): string {
-  const p = (v: number) => v.toString().padStart(2, '0');
-  return `cyex-tv-export-${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}.json`;
+  return `cyex-tv-export-${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}.json`;
 }
 
 /** Saves `json` as a file through a temporary link. */

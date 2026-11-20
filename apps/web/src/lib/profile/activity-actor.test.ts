@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { namesActor } from './activity';
+import { namesActor } from './activity-view';
 
 const me = { id: 'me', displayName: 'lumen_fox' };
 const nora = { id: 'nora', displayName: 'Nora' };
