@@ -1205,3 +1205,4 @@ gh pr merge <n> --merge
 - Web: the announcement bar under the header on every page (closed per device and per announcement); `/admin/announcements` (System group); Settings → Notifications; filter chips on `/me/notifications`; pop-ups skip kinds whose pop-up is off; the profile's Collection tab (owner always, others when shown) with the switch there and in Settings → Account; `site.announce` in the role editor (System). Changelog entry.
 - Dev mock: all of the above; `MOCK_ANNOUNCE=0` starts without an announcement; `/mock/notify?kind=…` respects turned-off kinds.
 - Screens in `.claude/runs/2026-11-20-overnight/screens/k3/`.
+- GitHub write log (2026/11/20, account `sery-yx`): `git push -u origin feat/k3-banner-prefs-collection`; `gh pr create --base main --head feat/k3-banner-prefs-collection --title "Site announcements, notification preferences and a public collection" --body-file <file>` (#125); `gh pr merge 125 --merge` once green.
