@@ -70,7 +70,7 @@
       out:fade={{ duration: dur(120) }}
       animate:flip={{ duration: dur(200) }}
     >
-      <p>{t.text}{#if t.count > 1}<span class="count">×{t.count}</span>{/if}{#if t.action}{@const act = t.action}<button class="act" type="button" onclick={() => { dismiss(t.id); act.run(); }}>{act.label}</button>{/if}</p>
+      <p>{t.text}{#if t.count > 1}<span class="count">×{t.count}</span>{/if}{#if t.action}{@const act = t.action}{#if act.href}<a class="act" href={typeof act.href === 'function' ? act.href() : act.href} onclick={(e) => { if (typeof act.href === 'function') e.currentTarget.href = act.href(); dismiss(t.id); act.run?.(); }}>{act.label}</a>{:else}<button class="act" type="button" onclick={() => { dismiss(t.id); act.run?.(); }}>{act.label}</button>{/if}{/if}</p>
       {#if t.ms}<span class="line" style:animation-duration="{t.ms}ms" aria-hidden="true"></span>{/if}
       <button class="close" type="button" aria-label="Dismiss" onclick={() => dismiss(t.id)}>
         <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>

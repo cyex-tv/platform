@@ -86,7 +86,7 @@
 </section>
 
 <style>
-  .what { display: grid; flex: 1; min-width: 0; }
+  .what { display: grid; flex: 1 1 10rem; min-width: 0; }
   .what strong { display: block; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .meta { overflow-wrap: anywhere; }
   .here { font-weight: 600; color: var(--text); }
@@ -96,6 +96,9 @@
   .done { flex: none; padding-inline: 8px; white-space: nowrap; }
   .gone .what { opacity: .6; }
   .pad { padding: 10px 14px 12px; }
+  @media (max-width: 560px) {
+    .ui-list > li { flex-wrap: wrap; }
+  }
   @media (max-width: 480px) {
     .ui-panel > header { flex-wrap: wrap; }
   }

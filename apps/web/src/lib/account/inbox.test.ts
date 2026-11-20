@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const gql = vi.fn();
-vi.mock('$lib/api', () => ({ gql: (...a: unknown[]) => gql(...a) }));
+vi.mock('$lib/api', () => ({ gql: (...a: unknown[]) => gql(...a), onSignedOut: () => () => {} }));
 
 const { forgetInbox, inbox, loadInbox, markRead, refreshCount, watchInbox } = await import('./inbox.svelte');
 const { session } = await import('$lib/tool/session.svelte');

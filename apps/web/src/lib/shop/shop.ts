@@ -67,6 +67,8 @@ const SHOP: Record<string, string> = {
 export function shopMessage(err: unknown, gift = false): string {
   if (!(err instanceof ApiError)) return `${SERVER} Nothing was charged.`;
   if (err.code === 'offline') return unreachableMessage();
+  // A call that ran out of time may still have been done: never promise "nothing was charged".
+  if (err.code === 'timeout') return 'cyex.tv didn’t answer in time. The checkout may have started: check Billing in your settings before trying again.';
   if (err.code === 'already_owned' && gift) return 'They own everything in it already.';
   return SHOP[err.code] ?? err.message;
 }
@@ -97,6 +99,7 @@ export function redeemMessage(err: unknown): string {
       : `Too many wrong codes. You can try again in ${count(n)} ${n === 1 ? 'minute' : 'minutes'}.`;
   }
   if (err.code === 'offline') return unreachableMessage();
+  if (err.code === 'timeout') return 'cyex.tv didn’t answer in time. The code may have gone through: check Your cosmetics before trying again.';
   return REDEEM[err.code] ?? err.message;
 }
 

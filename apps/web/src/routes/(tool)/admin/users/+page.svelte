@@ -54,7 +54,7 @@
 
 <form class="find ui-panel" onsubmit={search}>
   <Segmented label="Platform" options={[{ value: 'TWITCH', label: 'Twitch', icon: 'twitch' }, { value: 'KICK', label: 'Kick', icon: 'kick' }, { value: 'NAME', label: 'Any name', icon: 'user' }]} value={platform} onchange={(v) => (platform = v)} />
-  <input class="ui-input" bind:value={login} placeholder={platform === 'NAME' ? 'Name or login' : 'Login or account ID'} aria-label={platform === 'NAME' ? 'Name or login' : 'Login or account ID'} autocomplete="off" spellcheck="false" />
+  <input class="ui-input" bind:value={login} placeholder={platform === 'NAME' ? 'Name or login' : 'Login or account ID'} aria-label={platform === 'NAME' ? 'Name or login' : 'Login or account ID'} autocomplete="off" spellcheck="false" maxlength="100" />
   <button class="ui-btn primary" type="submit" disabled={!login.trim()}>Find</button>
 </form>
 
@@ -64,7 +64,7 @@
 <LoadGate source={L} label="Looking them up…">
 {#snippet children(result)}
 {#if !result.found}
-  <State title="Nobody found.">No one with that login has signed in to cyex.tv.</State>
+  <div class="empty"><State title="Nobody found.">No one with that login has signed in to cyex.tv.</State></div>
 {:else}
   {@const f = result.found}
   <ul class="ui-panel ui-list result">
@@ -85,7 +85,7 @@
 <style>
   .find { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: var(--measure-form); padding: 10px; margin-bottom: 16px; }
   .find .ui-input { flex: 1; min-width: 160px; }
-  .result { max-width: var(--measure-form); }
+  .result, .empty { max-width: var(--measure-form); }
   .what { display: grid; flex: 1; min-width: 0; }
   .open { font-weight: 600; color: var(--text); }
 </style>

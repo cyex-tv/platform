@@ -8,7 +8,7 @@
   import { gql } from '$lib/api';
   import { ACCEPT_EMOTE_TRANSFER, DECLINE_EMOTE_TRANSFER } from '$lib/queries';
   import { fail, notify } from '$lib/tool/notices.svelte';
-  import { closedRequest, describe } from './notifications';
+  import { closedRequest, describe, requestGone } from './notifications';
   import { answered, markRead, type Note } from './inbox.svelte';
 
   type Props = { note: Note; onpick?: (n: Note) => void };
@@ -31,10 +31,13 @@
       // Answered is seen: the row stops being unread and the count follows.
       if (!note.read) void markRead([note.id]);
     } catch (err) {
-      // Closed already (expired, withdrawn or answered): say so once, then leave it.
       fail(err);
-      answered[req] = 'This request is closed.';
-      if (!note.read) void markRead([note.id]);
+      // Closed already (expired, withdrawn or answered): say so once, then leave it. Any other
+      // failure (offline, a timeout, a rate limit) leaves the request open and the buttons here.
+      if (requestGone(err)) {
+        answered[req] = 'This request is closed.';
+        if (!note.read) void markRead([note.id]);
+      }
     } finally {
       busy = false;
     }

@@ -26,7 +26,7 @@
   let { emotes = false, touch = false, menu = false, onpick, signin = '/signin' }: Props = $props();
   const item = $derived(menu ? 'menuitem' : undefined);
 
-  const me = $derived(session.me);
+  const me = $derived(session.ended ? null : session.me);
   const who = $derived(me?.identities[0]);
   const name = $derived(clean(who?.displayName));
   const platform = $derived(platformName(who?.platform));
