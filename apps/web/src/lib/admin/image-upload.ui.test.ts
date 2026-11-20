@@ -41,3 +41,28 @@ describe('ImageUpload in the decode window', () => {
     expect((upload.mock.calls[0][0] as File).name).toBe('b.png');
   });
 });
+
+describe('ImageUpload when the made file won’t load', () => {
+  const made = { id: 'img1', kind: 'BADGE', host: 'https://cdn.cyex.tv/cosmetics/badges/abc', animated: false, ready: true, width: 72, height: 72, files: [] };
+
+  it('says the CDN refused it and keeps showing the picked file', async () => {
+    upload.mockResolvedValue({ id: 'img1' });
+    gql.mockResolvedValue({ cosmeticImage: made });
+    render(ImageUpload, { kind: 'badge', label: 'Picture' });
+    const f = png('a.png');
+    await pick(f);
+    decoded(f);
+    await vi.waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Ready/));
+    const img = document.querySelector('.prev img') as HTMLImageElement;
+    expect(img.getAttribute('src')).toBe('https://cdn.cyex.tv/cosmetics/badges/abc/2x.webp');
+    await fireEvent.error(img);
+    expect(screen.getByRole('alert').textContent).toMatch(/cdn\.cyex\.tv won’t send it/);
+    expect((document.querySelector('.prev img') as HTMLImageElement).getAttribute('src')).toBe('blob:x');
+  });
+
+  it('warns for a saved picture that won’t load too', async () => {
+    render(ImageUpload, { kind: 'badge', label: 'Picture', current: made as never });
+    await fireEvent.error(document.querySelector('.prev img') as HTMLImageElement);
+    expect(screen.getByRole('alert').textContent).toMatch(/firewall rule is blocking \/cosmetics\//);
+  });
+});

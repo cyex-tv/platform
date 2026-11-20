@@ -109,9 +109,17 @@ export function paintFilter(p: Pick<PaintLike, 'shadows'>): string {
     .join(' ');
 }
 
-/** A plain colour for the paint: its fallback, else its first stop; null when it has neither. */
+/** A colour text can be read in: `#rrggbbaa` below 40% opacity isn't (the name would vanish). */
+function readable(c: string | null): string | null {
+  return c && c.length === 9 && parseInt(c.slice(7), 16) < 0x66 ? null : c;
+}
+
+/**
+ * A plain colour for the paint: its fallback, else its first stop; null when it has neither or
+ * only a see-through one (the name then keeps the surrounding text colour).
+ */
 export function paintColor(p: PaintLike): string | null {
-  return safeColor(p.color) ?? safeColor(p.stops[0]?.color);
+  return readable(safeColor(p.color)) ?? readable(safeColor(p.stops[0]?.color));
 }
 
 /**

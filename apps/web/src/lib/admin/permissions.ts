@@ -57,7 +57,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     id: 'cosmetics',
     label: 'Cosmetics',
     items: [
-      p('cosmetics.manage', 'Make cosmetics', 'Create, change and delete badges and paints.'),
+      p('cosmetics.manage', 'Upload and edit cosmetics', 'Upload badge and paint pictures, make new badges and paints, and change or delete any of them.'),
       p('cosmetics.grant', 'Give cosmetics', 'Give badges and paints to users, take them away, and see who owns what.'),
       p('entitlements.view', 'See where things came from', 'Open the entitlement graph: how each cosmetic and role a user holds was given, and by whom.'),
     ],

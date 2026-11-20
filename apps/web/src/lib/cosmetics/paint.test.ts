@@ -187,3 +187,26 @@ describe('readability floor on a fixed ground (studio preview)', () => {
     expect(floorFilter({ ...base, stops: [{ at: 0, color: '#E8173A' }, { at: 1, color: '#D81B60' }] }, 'light')).toBe('');
   });
 });
+
+describe('a see-through fallback colour', () => {
+  // Live "Icy Wave": an image paint whose fallback is #FF7A4500. With its picture blocked the
+  // name drew in that colour, fully see-through, so it vanished.
+  const icy: PaintLike = {
+    ...base,
+    kind: 'IMAGE',
+    color: '#FF7A4500',
+    image: { host: 'https://cdn.cyex.tv/cosmetics/paints/abc', animated: false, ready: true, files: [{ name: '1x.webp' }] },
+  };
+
+  it('is not used as the name colour', () => {
+    expect(paintColor(icy)).toBeNull();
+    expect(paintStyle(icy)).not.toMatch(/(^|; )color: /);
+    // the layer under the picture then takes the surrounding text colour
+    expect(paintStyle(icy)).toContain('linear-gradient(currentColor, currentColor)');
+  });
+
+  it('keeps colours that are mostly opaque', () => {
+    expect(paintColor({ ...icy, color: '#FF7A45CC' })).toBe('#ff7a45cc');
+    expect(paintColor({ ...icy, color: '#FF7A45' })).toBe('#ff7a45');
+  });
+});
