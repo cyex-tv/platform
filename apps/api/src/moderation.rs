@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 use axum::http::StatusCode;
 use cyex_tv_auth::Caller;
 use cyex_tv_db::emotes::{self, EmotePatch};
-use cyex_tv_db::{DbError, accounts, audit, ids, reads, sets, staff};
+use cyex_tv_db::{accounts, audit, ids, reads, sets, staff};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
     AuditEntry, EditorPermission, Emote, EmoteNote, EmotePage, EmoteState, EmoteVisibility,
@@ -30,6 +30,7 @@ use crate::catalog::{
     db_error, forbidden, holds, load_set, member_name, not_found, parse_id, permissions_of,
     publish_member_event,
 };
+use crate::errors::{bad, sqlx_error};
 use crate::state::AppState;
 use crate::views;
 
@@ -46,14 +47,6 @@ pub const MAX_NOTE_LEN: usize = 2000;
 /// Notes and history entries one read returns at most.
 const NOTES_LIMIT: i64 = 200;
 const HISTORY_LIMIT: i64 = 100;
-
-fn bad(code: &'static str, message: &str) -> ApiError {
-    ApiError::new(StatusCode::BAD_REQUEST, code, message)
-}
-
-fn sqlx_error(err: sqlx::Error) -> ApiError {
-    db_error(DbError::Sqlx(err))
-}
 
 /// Tags: trimmed, NFC, lowercase, 1 to 32 letters, digits, combining marks, `-` or `_`
 /// ([`text::normalize_tag`], [`text::is_tag_char`], as the web checks them); at most 10;

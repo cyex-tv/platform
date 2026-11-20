@@ -16,7 +16,7 @@ use axum::http::StatusCode;
 use bytes::Bytes;
 use cyex_tv_auth::Caller;
 use cyex_tv_db::cosmetics::{self as db, Image, NewImage, PaintFields};
-use cyex_tv_db::{DbError, accounts, audit, ids, jobs, outbox, reads};
+use cyex_tv_db::{accounts, audit, ids, jobs, outbox, reads};
 use cyex_tv_media::{Limits, Probe};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
@@ -34,6 +34,7 @@ use uuid::Uuid;
 
 use crate::catalog::{LOOKUP_LIMIT, db_error, forbidden, holds, not_found, parse_id};
 use crate::editors::has_flag;
+use crate::errors::{bad, conflict, limited, sqlx_error};
 use crate::state::AppState;
 use crate::upload::media_error;
 use crate::views::time;
@@ -58,18 +59,6 @@ pub const ENTITLEMENTS_PAGE_MAX: u32 = 100;
 
 // Errors
 
-fn bad(code: &'static str, message: impl Into<String>) -> ApiError {
-    ApiError::new(StatusCode::BAD_REQUEST, code, message)
-}
-
-fn conflict(code: &'static str, message: &str) -> ApiError {
-    ApiError::new(StatusCode::CONFLICT, code, message)
-}
-
-fn sqlx_error(err: sqlx::Error) -> ApiError {
-    db_error(DbError::Sqlx(err))
-}
-
 async fn acquire(state: &AppState) -> ApiResult<sqlx::pool::PoolConnection<sqlx::Postgres>> {
     state.db.acquire().await.map_err(sqlx_error)
 }
@@ -84,17 +73,11 @@ async fn require(conn: &mut PgConnection, caller: &Caller, permission: &str) -> 
 
 /// Cosmetics writes per account (ADR 0015).
 fn rate_limited(state: &AppState, caller: &Caller) -> ApiResult<()> {
-    state
-        .limits
-        .cosmetics
-        .check(&ids::to_text(caller.account_id))
-        .map_err(|_| {
-            ApiError::new(
-                StatusCode::TOO_MANY_REQUESTS,
-                "rate_limited",
-                "That's a lot of cosmetics changes. Try again in a while.",
-            )
-        })
+    limited(
+        &state.limits.cosmetics,
+        &ids::to_text(caller.account_id),
+        "That's a lot of cosmetics changes. Try again in a while.",
+    )
 }
 
 // Checks on input (pure, unit-tested below)
