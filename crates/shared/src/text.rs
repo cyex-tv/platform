@@ -58,6 +58,24 @@ pub fn has_unsafe(s: &str, allow_newline: bool) -> bool {
         .any(|c| (c.is_control() && !(allow_newline && c == '\n')) || is_hidden(c))
 }
 
+/// A tag as stored and searched: trimmed, NFC-normalised (so `é` typed as one character or as
+/// `e` and a combining accent is the same tag), lower case. The web's `cleanTag` does the same.
+pub fn normalize_tag(raw: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    raw.trim()
+        .nfc()
+        .collect::<String>()
+        .to_lowercase()
+        .nfc()
+        .collect()
+}
+
+/// What a tag is made of: letters, digits, combining marks (`\p{L}`, `\p{N}`, `\p{M}`), `-` and
+/// `_`. The web's tag rule is the same.
+pub fn is_tag_char(c: char) -> bool {
+    c.is_alphanumeric() || unicode_normalization::char::is_combining_mark(c) || c == '-' || c == '_'
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -112,5 +130,19 @@ mod tests {
     fn strips() {
         assert_eq!(strip_hidden("KE\u{200B}KW\u{202E}"), "KEKW");
         assert_eq!(strip_hidden("\u{3164}"), "");
+    }
+
+    #[test]
+    fn tags_are_nfc_and_allow_marks() {
+        // "é" composed, and "e" with a combining acute, are one tag.
+        assert_eq!(normalize_tag(" Caf\u{e9} "), "caf\u{e9}");
+        assert_eq!(normalize_tag("CAFE\u{301}"), "caf\u{e9}");
+        // Marks with no composed form stay, and count as tag characters.
+        let t = normalize_tag("q\u{301}");
+        assert_eq!(t.chars().count(), 2);
+        assert!(t.chars().all(is_tag_char), "{t:?}");
+        assert!("नमस्ते".chars().all(is_tag_char));
+        assert!(!"a b".chars().all(is_tag_char));
+        assert!(!"a!".chars().all(is_tag_char));
     }
 }

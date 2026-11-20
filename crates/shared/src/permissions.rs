@@ -79,6 +79,11 @@ pub const ALL: &[&str] = &[
     EDITORS_MANAGE_ANY,
 ];
 
+/// What anyone with `roles.manage` may add to the built-in User role, which every account holds
+/// (ADR 0010, amendment 2026/11/20): permissions that are fine for everyone. Every permission
+/// today is a staff one, so the list is empty and only the owners add to that role.
+pub const USER_ROLE_ALLOWED: &[&str] = &[];
+
 pub fn is_known(name: &str) -> bool {
     ALL.contains(&name)
 }

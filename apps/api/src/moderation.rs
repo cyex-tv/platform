@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 use axum::http::StatusCode;
 use cyex_tv_auth::Caller;
 use cyex_tv_db::emotes::{self, EmotePatch};
-use cyex_tv_db::{DbError, accounts, audit, ids, reads, sets, staff};
+use cyex_tv_db::{accounts, audit, ids, reads, sets, staff};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
     AuditEntry, EditorPermission, Emote, EmoteNote, EmotePage, EmoteState, EmoteVisibility,
@@ -30,6 +30,7 @@ use crate::catalog::{
     db_error, forbidden, holds, load_set, member_name, not_found, parse_id, permissions_of,
     publish_member_event,
 };
+use crate::errors::{bad, sqlx_error};
 use crate::state::AppState;
 use crate::views;
 
@@ -47,26 +48,15 @@ pub const MAX_NOTE_LEN: usize = 2000;
 const NOTES_LIMIT: i64 = 200;
 const HISTORY_LIMIT: i64 = 100;
 
-fn bad(code: &'static str, message: &str) -> ApiError {
-    ApiError::new(StatusCode::BAD_REQUEST, code, message)
-}
-
-fn sqlx_error(err: sqlx::Error) -> ApiError {
-    db_error(DbError::Sqlx(err))
-}
-
-/// Tags: lowercase, trimmed, 1 to 32 letters, digits, `-` or `_`; at most 10; duplicates dropped.
+/// Tags: trimmed, NFC, lowercase, 1 to 32 letters, digits, combining marks, `-` or `_`
+/// ([`text::normalize_tag`], [`text::is_tag_char`], as the web checks them); at most 10;
+/// duplicates dropped.
 pub fn clean_tags(raw: &[String]) -> ApiResult<Vec<String>> {
     let mut out = BTreeSet::new();
     for tag in raw {
-        let tag = tag.trim().to_lowercase();
+        let tag = text::normalize_tag(tag);
         let len = tag.chars().count();
-        if len == 0
-            || len > MAX_TAG_LEN
-            || !tag
-                .chars()
-                .all(|c| c.is_alphanumeric() || c == '-' || c == '_')
-        {
+        if len == 0 || len > MAX_TAG_LEN || !tag.chars().all(text::is_tag_char) {
             return Err(bad("bad_tag", "Tags are 1 to 32 letters, digits, - or _."));
         }
         out.insert(tag);
@@ -844,6 +834,14 @@ mod tests {
         }
         let many: Vec<String> = (0..11).map(|i| format!("t{i}")).collect();
         assert_eq!(clean_tags(&many).unwrap_err().code, "too_many_tags");
+        // NFC: a composed and a decomposed "café" are one tag; marks without a composed form
+        // (as the web's \p{M}) are taken.
+        assert_eq!(
+            clean_tags(&["caf\u{e9}".into(), "CAFE\u{301}".into()]).unwrap(),
+            ["caf\u{e9}"]
+        );
+        assert_eq!(clean_tags(&["q\u{301}".into()]).unwrap(), ["q\u{301}"]);
+        assert_eq!(clean_tags(&["नमस्ते".into()]).unwrap(), ["नमस्ते"]);
     }
 
     #[test]

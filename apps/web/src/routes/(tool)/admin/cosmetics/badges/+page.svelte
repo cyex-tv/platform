@@ -115,7 +115,7 @@
   }
 </script>
 
-<svelte:head><title>Badges - cyex.tv</title></svelte:head>
+<svelte:head><title>Badges - Admin - cyex.tv</title></svelte:head>
 
 <PageHead title="Badges" line="Chat badges shown before a name. Deleting one takes it from everyone.">
   {#snippet actions()}

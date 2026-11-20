@@ -55,19 +55,19 @@
      the markup is the default state (the notes open, the rest closed), so it reads right before the script runs. -->
 {#snippet navHead(id: string, title: string, count: number)}
   <button type="button" class="group-toggle nav-group-title" data-group-toggle={id} aria-expanded={defaultOpen(id)} aria-controls="nav-{id}">
-    {@render chev()}<span class="group-name">{title}</span><span class="group-count" data-total={count} aria-hidden="true">{count}</span>
+    {@render chev()}<span class="group-name" {title}>{title}</span><span class="group-count" data-total={count} aria-hidden="true">{count}</span>
   </button>
 {/snippet}
 {#snippet bodyHead(id: string, title: string, count: number)}
   <h2 class="op-group-title">
     <button type="button" class="group-toggle" data-group-toggle={id} aria-expanded={defaultOpen(id)} aria-controls="body-{id}">
-      {@render chev()}<span class="group-name">{title}</span><span class="group-count" aria-hidden="true">{count}</span>
+      {@render chev()}<span class="group-name" {title}>{title}</span><span class="group-count" aria-hidden="true">{count}</span>
     </button>
   </h2>
 {/snippet}
 
 <svelte:head>
-  <noscript><style>.docs .collapse { grid-template-rows: 1fr; visibility: visible; } .docs .nav-tools, .docs .group-toggle .chev { display: none; }</style></noscript>
+  <noscript><style>.docs .collapse { grid-template-rows: 1fr; visibility: visible; } .docs .collapse > .collapse-inner { content-visibility: visible; } .docs .nav-tools, .docs .group-toggle .chev { display: none; }</style></noscript>
   <title>API - cyex.tv</title>
   <meta name="description" content="The cyex.tv API: public reads for chat clients, GraphQL, and live events, with every endpoint, parameter and response." />
   <meta property="og:title" content="API reference" />

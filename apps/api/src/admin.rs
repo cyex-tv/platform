@@ -17,7 +17,7 @@ use axum::http::StatusCode;
 use cyex_tv_auth::rbac::{Actor, RuleError};
 use cyex_tv_auth::{AuthError, Caller};
 use cyex_tv_db::roles::{self, NewRole, RolePatch};
-use cyex_tv_db::{DbError, accounts, audit, ids};
+use cyex_tv_db::{accounts, audit, ids};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{AuditEntry, BuiltInRole, CreateRole, Role, UpdateRole};
 use cyex_tv_shared::permissions;
@@ -27,6 +27,7 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::catalog::{db_error, forbidden, not_found, parse_id, permissions_of};
+use crate::errors::{bad, sqlx_error};
 use crate::state::AppState;
 use crate::views;
 
@@ -44,16 +45,8 @@ pub(crate) fn rule(err: RuleError) -> ApiError {
     ApiError::new(status, err.code(), err.message())
 }
 
-fn bad(code: &'static str, message: &str) -> ApiError {
-    ApiError::new(StatusCode::BAD_REQUEST, code, message)
-}
-
 fn auth_error(err: AuthError) -> ApiError {
     err.into()
-}
-
-fn sqlx_error(err: sqlx::Error) -> ApiError {
-    db_error(DbError::Sqlx(err))
 }
 
 pub(crate) async fn actor(conn: &mut PgConnection, caller: &Caller) -> ApiResult<Actor> {
@@ -107,7 +100,7 @@ fn position(p: i32) -> ApiResult<i32> {
     if p <= 0 || p >= roles::ROOT_POSITION {
         return Err(bad(
             "bad_position",
-            &format!(
+            format!(
                 "Positions are 1 to {}: above the User role, below the top role.",
                 roles::ROOT_POSITION - 1
             ),
@@ -191,7 +184,7 @@ fn permission_list(raw: &[String]) -> ApiResult<Vec<String>> {
     if let Some(unknown) = set.iter().find(|p| !permissions::is_known(p)) {
         return Err(bad(
             "unknown_permission",
-            &format!("{unknown:?} is not a permission."),
+            format!("{unknown:?} is not a permission."),
         ));
     }
     Ok(set.into_iter().collect())
@@ -360,7 +353,7 @@ fn instant(raw: Option<&str>, what: &str) -> ApiResult<Instant> {
                 .map_err(|_| {
                     bad(
                         "bad_time",
-                        &format!("{what} must be a time like 2026-11-17T00:00:00Z."),
+                        format!("{what} must be a time like 2026-11-17T00:00:00Z."),
                     )
                 })
         })
@@ -510,7 +503,23 @@ pub async fn update(
     let before = view(&mut tx, &role, &actor).await?;
     if let Some(perms) = &perms {
         let added = perms.iter().filter(|p| !before.permissions.contains(p));
-        actor.may_grant(added.map(String::as_str)).map_err(rule)?;
+        actor
+            .may_grant(added.clone().map(String::as_str))
+            .map_err(rule)?;
+        // Every account holds the User role: a staff permission there is everyone's, so only
+        // the owners add one (ADR 0010, amendment 2026/11/20). Taking one away is fine.
+        if role.is(roles::SYSTEM_USER)
+            && !caller.owner
+            && added
+                .into_iter()
+                .any(|p| !permissions::USER_ROLE_ALLOWED.contains(&p.as_str()))
+        {
+            return Err(ApiError::new(
+                StatusCode::FORBIDDEN,
+                "owner_only",
+                "Only the owner can give the User role a staff permission: every account holds it.",
+            ));
+        }
     }
     let managers_before = managers(state, &mut tx).await?;
 

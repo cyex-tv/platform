@@ -255,3 +255,86 @@ async fn an_emotes_public_history() {
     assert!(w.feed("nope").await.is_empty());
     w.db.close().await;
 }
+
+/// An unlisted emote's own feed shows its lines (its page is open to anyone with the link), but
+/// other people's feeds never name it; an emote of an account whose deletion is pending leaves
+/// every feed.
+#[tokio::test]
+async fn unlisted_and_leaving_emotes_in_feeds() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("5101").await;
+    let bob = w.user("5102").await;
+    let carol = w.user("5103").await;
+    let bobs = w.set(&bob, "Bobs", "LISTED").await;
+    let make = |owner: Uuid, name: &'static str, unlisted: bool| {
+        let pool = w.db.pool.clone();
+        async move {
+            let mut conn = pool.acquire().await.unwrap();
+            let e = emotes::create(
+                &mut conn,
+                &NewEmote {
+                    owner_account_id: owner,
+                    name,
+                    unlisted,
+                    ..NewEmote::default()
+                },
+            )
+            .await
+            .unwrap();
+            emotes::set_state(&mut conn, e.id, cyex_tv_shared::model::EmoteState::Approved)
+                .await
+                .unwrap();
+            ids::to_text(e.id)
+        }
+    };
+    let hidden = make(alice.id, "hiddenwave", true).await;
+    let leaving = make(carol.id, "carolwave", false).await;
+    for e in [&hidden, &leaving] {
+        w.ok(&bob, ADD, json!({ "s": bobs, "e": e, "n": null }))
+            .await;
+    }
+    let world = &w;
+    let account_feed = |who: &User| {
+        let id = ids::to_text(who.id);
+        async move {
+            let r = world
+                .post(
+                    None,
+                    "query($a: String!) { accountActivity(accountId: $a) { kind emote { name } } }",
+                    json!({ "a": id }),
+                )
+                .await;
+            r["data"]["accountActivity"]
+                .as_array()
+                .unwrap_or_else(|| panic!("{r}"))
+                .clone()
+        }
+    };
+
+    // The unlisted emote's own feed has Bob's add.
+    let lines = w.feed(&hidden).await;
+    assert_eq!(lines.len(), 1, "{lines:?}");
+    assert_eq!(lines[0]["emote"]["name"], "hiddenwave");
+    // Bob's feed names Carol's emote, never the unlisted one.
+    let names = |lines: &[Value]| -> Vec<String> {
+        lines
+            .iter()
+            .filter_map(|l| l["emote"]["name"].as_str().map(str::to_owned))
+            .collect()
+    };
+    assert_eq!(names(&account_feed(&bob).await), ["carolwave"]);
+
+    // Carol's deletion is pending: her emote leaves Bob's feed and has no feed of its own.
+    let mut conn = w.db.conn().await;
+    cyex_tv_db::privacy::schedule_erase(
+        &mut conn,
+        carol.id,
+        chrono::Utc::now() + Duration::days(30),
+    )
+    .await
+    .unwrap();
+    drop(conn);
+    assert!(names(&account_feed(&bob).await).is_empty());
+    assert!(w.feed(&leaving).await.is_empty());
+    w.db.close().await;
+}

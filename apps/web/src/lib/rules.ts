@@ -38,15 +38,26 @@ export function nameFromFile(file: string): string {
   return [...base.replace(/[\s\p{Cc}]+/gu, '')].slice(0, 100).join('');
 }
 
-/** Tags from a comma-separated field: trimmed, lowercased, no duplicates. */
-export function parseTags(raw: string): string[] {
-  return [...new Set(raw.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean))];
+/**
+ * A tag as the API stores it: trimmed, NFC (one "é" whether typed as one character or as e and an
+ * accent), lower case. The API does the same (`text::normalize_tag`).
+ */
+function normalizeTag(raw: string): string {
+  return raw.trim().normalize('NFC').toLowerCase().normalize('NFC');
 }
 
-/** The tags' problem, or null: at most 10, each 1 to 32 letters, digits, - or _. */
+/** Letters, digits, combining marks, - and _: what a tag is made of, as the API checks it. */
+const TAG_CHARS = /^[\p{L}\p{N}\p{M}_-]+$/u;
+
+/** Tags from a comma-separated field: trimmed, NFC, lowercased, no duplicates. */
+export function parseTags(raw: string): string[] {
+  return [...new Set(raw.split(',').map(normalizeTag).filter(Boolean))];
+}
+
+/** The tags' problem, or null: at most 10, each 1 to 32 letters, digits, marks, - or _. */
 export function tagsProblem(tags: string[]): string | null {
   if (tags.length > TAG_MAX) return `At most ${TAG_MAX} tags.`;
-  const bad = tags.find((t) => [...t].length > TAG_LENGTH || !/^[\p{L}\p{N}_-]+$/u.test(t));
+  const bad = tags.find((t) => [...t].length > TAG_LENGTH || !TAG_CHARS.test(t));
   return bad ? `“${bad}” isn’t a tag: 1 to 32 letters, digits, - or _.` : null;
 }
 
@@ -76,7 +87,7 @@ function sizeOver(size: number): string {
  * digits, - and _, at most 32 characters. '' when nothing is left (the tag field drops it).
  */
 export function cleanTag(raw: string): string {
-  const t = raw.trim().replace(/^#+/, '').toLowerCase().replace(/\s+/g, '-').replace(/[^\p{L}\p{N}_-]/gu, '');
+  const t = normalizeTag(raw).replace(/^#+/, '').replace(/\s+/g, '-').replace(/[^\p{L}\p{N}\p{M}_-]/gu, '');
   return [...t].slice(0, TAG_LENGTH).join('');
 }
 

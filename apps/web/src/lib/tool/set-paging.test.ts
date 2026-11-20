@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SET_PAGE, appendPage, morePages, nextPage, pagesFor } from './set-paging';
+import { SET_PAGE, appendPage, applyChange, morePages, pagesAfter, pagesFor } from './set-paging';
 import { appendResults, showingLine } from './add-emotes';
 
 const m = (id: string) => ({ emote: { id } });
@@ -7,11 +7,26 @@ const m = (id: string) => ({ emote: { id } });
 describe('set editor paging', () => {
   it('draws 120 at a time, like the public set page', () => {
     expect(SET_PAGE).toBe(120);
-    expect(nextPage(120)).toBe(2);
-    expect(nextPage(240)).toBe(3);
     expect(pagesFor(0)).toBe(1);
     expect(pagesFor(121)).toBe(2);
     expect(pagesFor(1000)).toBe(9);
+  });
+  it('Load more asks for the next page, and after removals also the page the shifted emotes moved up into', () => {
+    expect(pagesAfter(1, 0)).toEqual([2]);
+    expect(pagesAfter(3, 0)).toEqual([4]);
+    // One removal on page 1: 119 on screen, and the emote that moved up is on page 1 still.
+    expect(pagesAfter(1, 1)).toEqual([1, 2]);
+    expect(pagesAfter(2, 1)).toEqual([2, 3]);
+    expect(pagesAfter(1, 120)).toEqual([1, 2]);
+    expect(pagesAfter(2, 130)).toEqual([1, 2, 3]);
+  });
+  it('follows its own add, remove and rename in the member lists', () => {
+    let m = { ids: new Set(['a', 'b']), names: new Set(['A', 'B']) };
+    m = applyChange(m, { kind: 'add', id: 'c', name: 'C' });
+    m = applyChange(m, { kind: 'remove', id: 'a', name: 'A' });
+    m = applyChange(m, { kind: 'rename', id: 'b', from: 'B', to: 'Bee' });
+    expect([...m.ids]).toEqual(['b', 'c']);
+    expect([...m.names].sort()).toEqual(['Bee', 'C']);
   });
   it('lists the pages after the first that a thousand emotes need', () => {
     expect(morePages(1000, 200)).toEqual([2, 3, 4, 5]);

@@ -298,6 +298,25 @@ pub async fn count_since(
     .await?)
 }
 
+/// Serialises uploads that count against the same accounts' hourly limit, until the transaction
+/// ends: a check made after this sees every upload that got in before. A transaction-scoped
+/// advisory lock per account (in ID order, so two uploads can't wait on each other), so nothing
+/// else on the account row waits.
+pub async fn lock_upload_quota(conn: &mut PgConnection, accounts: &[Uuid]) -> DbResult<()> {
+    let mut ids = accounts.to_vec();
+    ids.sort_unstable();
+    ids.dedup();
+    for id in ids {
+        sqlx::query(
+            "SELECT pg_advisory_xact_lock(hashtextextended('emote_upload:' || $1::text, 0))",
+        )
+        .bind(id)
+        .execute(&mut *conn)
+        .await?;
+    }
+    Ok(())
+}
+
 /// How many emotes an account has uploaded since `since`, for itself or as an account editor for
 /// someone else, deleted ones included (the uploader's side of the hourly limit).
 pub async fn count_uploaded_since(

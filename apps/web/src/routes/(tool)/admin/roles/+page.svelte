@@ -121,7 +121,7 @@
   const BUILT_IN: Record<string, string> = { ROOT: 'Top role', ADMIN: 'Built in', USER: 'Everyone' };
 </script>
 
-<svelte:head><title>Roles - cyex.tv</title></svelte:head>
+<svelte:head><title>Roles - Admin - cyex.tv</title></svelte:head>
 
 <div class="ui-head">
   <div><h1>Roles</h1><p>Higher positions are more senior. You can change roles below your own highest one that you don’t hold, and only grant what you hold.</p></div>
@@ -226,7 +226,7 @@
   .pos { color: var(--dim); padding-top: 1px; font-size: var(--text-sub); }
   .what { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
   .perms { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--text-sub); color: var(--muted); padding-top: 1px; }
-  .grp { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+  .grp { display: inline-flex; align-items: center; min-height: 24px; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
   .names { flex-basis: 100%; overflow-wrap: anywhere; }
   .grp .ui-num { color: var(--dim); font-size: 12px; }
   .grp:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius); }

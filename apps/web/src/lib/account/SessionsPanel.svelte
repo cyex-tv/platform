@@ -65,7 +65,7 @@
             <li class:current={s.current} class:gone={gone[s.id]}>
               <Icon name={s.kind === 'APP' ? 'tv' : 'user'} />
               <span class="what">
-                <strong><bdi>{s.device}</bdi></strong>
+                <strong title={s.device}><bdi>{s.device}</bdi></strong>
                 <span class="ui-hint meta">
                   {#if s.current}<span class="here">This device</span>{' · '}{/if}{s.kind === 'APP' ? 'App' : 'Website'} · Last seen <time datetime={s.lastSeenAt} title={relative(s.lastSeenAt)}>{dateTime(s.lastSeenAt)}</time>
                 </span>

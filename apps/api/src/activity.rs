@@ -25,7 +25,7 @@ use serde_json::Value;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use crate::catalog::{conn, db_error, parse_id};
+use crate::catalog::{conn, db_error, parse_id, public_emote};
 use crate::errors::bad;
 use crate::state::AppState;
 use crate::views;
@@ -104,14 +104,24 @@ fn refs(rows: &[audit::Entry]) -> Refs {
     r
 }
 
+/// The feed-line gate for a named emote: approved, not private, and not unlisted unless it is the
+/// one whose own feed this is (`viewed`). The unlisted counterpart of `public_emote`, which lets
+/// unlisted emotes through.
+fn listed_or_viewed(e: &EmoteRow, viewed: Option<Uuid>) -> bool {
+    e.state == EmoteState::Approved && !e.private && (!e.unlisted || viewed == Some(e.id))
+}
+
 fn list(set: &HashSet<Uuid>) -> Vec<Uuid> {
     set.iter().copied().collect()
 }
 
+/// Everything the lines name, as anyone may see it. `viewed` is the emote whose own feed this is:
+/// it shows even when unlisted (its page is open to anyone with the link).
 async fn lookup(
     conn: &mut PgConnection,
     rows: &[audit::Entry],
     owners: &[Uuid],
+    viewed: Option<Uuid>,
     cdn_url: &str,
 ) -> ApiResult<Lookup> {
     let mut r = refs(rows);
@@ -133,12 +143,21 @@ async fn lookup(
         .into_iter()
         .map(|c| (c.id, c))
         .collect();
-    // Only emotes anyone may see: approved, not private or unlisted, not deleted.
+    // Only emotes anyone may see: approved, not private, not deleted, not unlisted (but the
+    // viewed one), and not of an account whose deletion is pending (ADR 0019).
     let emote_rows: Vec<EmoteRow> = reads::emotes(conn, &list(&r.emotes))
         .await
         .map_err(db_error)?
         .into_iter()
-        .filter(|e| e.state == EmoteState::Approved && !e.private && !e.unlisted)
+        .filter(|e| listed_or_viewed(e, viewed))
+        .collect();
+    let emote_owners: Vec<Uuid> = emote_rows.iter().filter_map(|e| e.owner).collect();
+    let leaving = accounts::deleted_among(conn, &emote_owners)
+        .await
+        .map_err(db_error)?;
+    let emote_rows: Vec<EmoteRow> = emote_rows
+        .into_iter()
+        .filter(|e| e.owner.is_none_or(|o| !leaving.contains(&o)))
         .collect();
     let built = views::emotes(conn, &emote_rows, cdn_url)
         .await
@@ -395,7 +414,7 @@ fn time_of(raw: Option<&str>, field: &str) -> ApiResult<Option<DateTime<Utc>>> {
             .map_err(|_| {
                 bad(
                     "bad_time",
-                    &format!("`{field}` must be an RFC 3339 time, like 2026-11-19T14:05:00Z."),
+                    format!("`{field}` must be an RFC 3339 time, like 2026-11-19T14:05:00Z."),
                 )
             }),
     }
@@ -471,7 +490,7 @@ pub async fn account_activity_where(
         let rows = audit::activity_rows_where(&mut conn, owner, page.cursor, BATCH, &wanted)
             .await
             .map_err(db_error)?;
-        let look = lookup(&mut conn, &rows, &[owner], &state.cdn_url).await?;
+        let look = lookup(&mut conn, &rows, &[owner], None, &state.cdn_url).await?;
         let lines = rows.iter().map(|row| (row.id, entry(row, owner, &look)));
         page.round(rows.len(), lines);
     }
@@ -507,19 +526,8 @@ pub async fn emote_activity_page(
         return Ok(ActivityPage::default());
     };
     let mut conn = conn(state).await?;
-    // An unlisted emote's page is open to anyone with the link, its activity too; an emote of an
-    // account whose deletion is pending is hidden with it.
-    let row = reads::emotes(&mut conn, &[emote])
-        .await
-        .map_err(db_error)?
-        .into_iter()
-        .next()
-        .filter(|e| e.state == EmoteState::Approved && !e.private);
-    let public = match row {
-        Some(e) => !crate::moderation::owner_hidden(&mut conn, e.owner).await?,
-        None => false,
-    };
-    if !public {
+    // An unlisted emote's page is open to anyone with the link, its activity too.
+    if !public_emote(&mut conn, emote).await? {
         return Ok(ActivityPage::default());
     }
     let key = ids::to_text(emote);
@@ -535,7 +543,7 @@ pub async fn emote_activity_page(
             .collect::<HashSet<_>>()
             .into_iter()
             .collect();
-        let look = lookup(&mut conn, &entries, &owners, &state.cdn_url).await?;
+        let look = lookup(&mut conn, &entries, &owners, Some(emote), &state.cdn_url).await?;
         let lines = rows
             .iter()
             .map(|r| (r.entry.id, entry(&r.entry, r.subject_account_id, &look)));

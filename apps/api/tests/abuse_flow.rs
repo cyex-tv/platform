@@ -622,6 +622,17 @@ async fn restricting_and_blocking_accounts() {
         ),
         "owner_protected"
     );
+    // Nobody changes their own holds, by either mutation, placing or lifting.
+    let me = ids::to_text(admin.id);
+    for (q, vars) in [
+        (restrict, json!({ "a": me, "u": false })),
+        (restrict, json!({ "a": me, "b": true })),
+        (PLACE, json!({ "a": me, "k": "UPLOADS", "r": "test" })),
+        (LIFT, json!({ "a": me, "k": "UPLOADS" })),
+    ] {
+        let r = w.gql(&admin, q, vars).await;
+        assert_eq!(code(&r), "own_account", "{r}");
+    }
 
     let r = w
         .gql(

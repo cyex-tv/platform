@@ -18,16 +18,18 @@ use chrono::Utc;
 use cyex_tv_auth::Caller;
 use cyex_tv_db::emotes::{self, NewEmote};
 use cyex_tv_db::files::{self, NewFile};
-use cyex_tv_db::{DbError, accounts, audit, blocklist, ids, jobs, reads};
+use cyex_tv_db::{accounts, audit, blocklist, ids, jobs, reads};
 use cyex_tv_media::{Limits, MediaError, Probe};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{EditorPermission, Emote};
 use cyex_tv_storage::{Put, original_key, sigv4};
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use sqlx::Connection;
+use sqlx::{Connection, PgConnection};
+use uuid::Uuid;
 
 use crate::catalog::{db_error, forbidden, member_name, parse_id};
+use crate::errors::sqlx_error;
 use crate::moderation::clean_tags;
 use crate::state::AppState;
 use crate::views;
@@ -36,10 +38,6 @@ use crate::views;
 pub const PER_HOUR: i64 = 20;
 /// The job the worker turns an original into emote files with.
 pub const TRANSCODE_JOB: &str = "emote.transcode";
-
-fn sqlx_error(err: sqlx::Error) -> ApiError {
-    db_error(DbError::Sqlx(err))
-}
 
 pub fn media_error(err: MediaError) -> ApiError {
     match err {
@@ -124,6 +122,30 @@ pub fn split_tags(raw: Option<&str>) -> Vec<String> {
         .collect()
 }
 
+/// At most `PER_HOUR` uploads an hour: what you uploaded, for yourself and for others, and what
+/// the account got from anyone. The owners aren't limited.
+async fn hourly_limit(conn: &mut PgConnection, caller: &Caller, owner: Uuid) -> ApiResult<()> {
+    let hour_ago = Utc::now() - chrono::Duration::hours(1);
+    let mine = emotes::count_uploaded_since(conn, caller.account_id, hour_ago)
+        .await
+        .map_err(db_error)?;
+    let theirs = emotes::count_since(conn, owner, hour_ago)
+        .await
+        .map_err(db_error)?;
+    if (mine >= PER_HOUR || theirs >= PER_HOUR) && !caller.owner {
+        return Err(ApiError::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "rate_limited",
+            if mine >= PER_HOUR || owner == caller.account_id {
+                "That's a lot of uploads. Try again in an hour."
+            } else {
+                "That account has had a lot of uploads this hour. Try again later."
+            },
+        ));
+    }
+    Ok(())
+}
+
 pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResult<Emote> {
     let name = member_name(input.name.trim())?.to_owned();
     let tags = clean_tags(&input.tags)?;
@@ -178,25 +200,8 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
             "That account can't upload right now, so nobody can upload for it.",
         ));
     }
-    let hour_ago = Utc::now() - chrono::Duration::hours(1);
-    // What you uploaded, for yourself and for others, and what the account got from anyone.
-    let mine = emotes::count_uploaded_since(&mut conn, caller.account_id, hour_ago)
-        .await
-        .map_err(db_error)?;
-    let theirs = emotes::count_since(&mut conn, owner, hour_ago)
-        .await
-        .map_err(db_error)?;
-    if (mine >= PER_HOUR || theirs >= PER_HOUR) && !caller.owner {
-        return Err(ApiError::new(
-            StatusCode::TOO_MANY_REQUESTS,
-            "rate_limited",
-            if mine >= PER_HOUR || !for_someone {
-                "That's a lot of uploads. Try again in an hour."
-            } else {
-                "That account has had a lot of uploads this hour. Try again later."
-            },
-        ));
-    }
+    // Checked early so a refused upload isn't decoded, and again under the lock below.
+    hourly_limit(&mut conn, caller, owner).await?;
     drop(conn);
 
     // Decoding is CPU work; keep it off the request threads.
@@ -236,6 +241,12 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
     }
 
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    // Two uploads at once could both pass the early check; under this lock the second one sees
+    // the first.
+    emotes::lock_upload_quota(&mut tx, &[caller.account_id, owner])
+        .await
+        .map_err(db_error)?;
+    hourly_limit(&mut tx, caller, owner).await?;
     let side = |v: u32| i32::try_from(v).unwrap_or(i32::MAX);
     let key = original_key(&sha_hex);
     let (file, created) = files::insert_or_get(

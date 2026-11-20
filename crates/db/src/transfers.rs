@@ -2,11 +2,78 @@
 //! owner decision of 2026/11/19). The api checks who may do what; this only stores.
 
 use chrono::{DateTime, Utc};
-use sqlx::{FromRow, PgConnection};
+use cyex_tv_shared::model::TransferRequestState;
+use sqlx::encode::IsNull;
+use sqlx::error::BoxDynError;
+use sqlx::postgres::{PgArgumentBuffer, PgTypeInfo, PgValueRef};
+use sqlx::{Decode, Encode, FromRow, PgConnection, Postgres, Type};
 use uuid::Uuid;
 
 use crate::error::DbResult;
 use crate::ids::new_id;
+
+/// Where a request stands; stored as text (`emote_transfer_requests.state`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TransferState {
+    Pending,
+    Accepted,
+    Declined,
+    Cancelled,
+    Expired,
+}
+
+impl TransferState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Accepted => "accepted",
+            Self::Declined => "declined",
+            Self::Cancelled => "cancelled",
+            Self::Expired => "expired",
+        }
+    }
+}
+
+impl From<TransferState> for TransferRequestState {
+    fn from(state: TransferState) -> Self {
+        match state {
+            TransferState::Pending => Self::Pending,
+            TransferState::Accepted => Self::Accepted,
+            TransferState::Declined => Self::Declined,
+            TransferState::Cancelled => Self::Cancelled,
+            TransferState::Expired => Self::Expired,
+        }
+    }
+}
+
+impl Type<Postgres> for TransferState {
+    fn type_info() -> PgTypeInfo {
+        <&str as Type<Postgres>>::type_info()
+    }
+
+    fn compatible(ty: &PgTypeInfo) -> bool {
+        <&str as Type<Postgres>>::compatible(ty)
+    }
+}
+
+impl Encode<'_, Postgres> for TransferState {
+    fn encode_by_ref(&self, buf: &mut PgArgumentBuffer) -> Result<IsNull, BoxDynError> {
+        <&str as Encode<Postgres>>::encode(self.as_str(), buf)
+    }
+}
+
+impl<'r> Decode<'r, Postgres> for TransferState {
+    fn decode(value: PgValueRef<'r>) -> Result<Self, BoxDynError> {
+        match <&str as Decode<Postgres>>::decode(value)? {
+            "pending" => Ok(Self::Pending),
+            "accepted" => Ok(Self::Accepted),
+            "declined" => Ok(Self::Declined),
+            "cancelled" => Ok(Self::Cancelled),
+            "expired" => Ok(Self::Expired),
+            other => Err(format!("unknown transfer state: {other}").into()),
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, FromRow)]
 pub struct Request {
@@ -16,8 +83,7 @@ pub struct Request {
     pub from_account_id: Uuid,
     pub to_account_id: Uuid,
     pub requested_by: Uuid,
-    /// `pending`, `accepted`, `declined`, `cancelled` or `expired`.
-    pub state: String,
+    pub state: TransferState,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
     pub resolved_at: Option<DateTime<Utc>>,
@@ -65,6 +131,16 @@ pub async fn expire_due(conn: &mut PgConnection, emote: Option<Uuid>) -> DbResul
     .await?)
 }
 
+/// One request, not locked: for finding its emote before taking locks in order.
+pub async fn get(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Request>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {REQUEST} FROM emote_transfer_requests WHERE id = $1"
+    ))
+    .bind(id)
+    .fetch_optional(conn)
+    .await?)
+}
+
 /// One request, locked for the rest of the transaction.
 pub async fn lock(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Request>> {
     Ok(sqlx::query_as(&format!(
@@ -79,7 +155,7 @@ pub async fn lock(conn: &mut PgConnection, id: Uuid) -> DbResult<Option<Request>
 pub async fn resolve(
     conn: &mut PgConnection,
     id: Uuid,
-    state: &str,
+    state: TransferState,
     by: Option<Uuid>,
 ) -> DbResult<Option<Request>> {
     Ok(sqlx::query_as(&format!(
@@ -113,7 +189,10 @@ pub async fn close_open_for_emote(
 
 /// Where each of these requests stands now, as `state`; a pending one past its time reads as
 /// `expired` even before the sweep marks it. Unknown IDs are missing.
-pub async fn states_of(conn: &mut PgConnection, ids: &[Uuid]) -> DbResult<Vec<(Uuid, String)>> {
+pub async fn states_of(
+    conn: &mut PgConnection,
+    ids: &[Uuid],
+) -> DbResult<Vec<(Uuid, TransferState)>> {
     Ok(sqlx::query_as(
         "SELECT id, CASE WHEN state = 'pending' AND expires_at <= now() THEN 'expired' ELSE state END
          FROM emote_transfer_requests WHERE id = ANY($1)",

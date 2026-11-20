@@ -289,5 +289,5 @@
   .give { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--border); }
   .give select { flex: 1; background: var(--bg); }
   /* a touch target of at least 24px (WCAG 2.5.8) */
-  dd a, .links a, .jump a { display: inline-flex; align-items: center; min-height: 24px; }
+  dd a, .links a, .jump a, .what a { display: inline-flex; align-items: center; min-height: 24px; }
 </style>

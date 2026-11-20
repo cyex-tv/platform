@@ -355,12 +355,25 @@ async fn sessions_are_yours_only_and_never_tokens() {
         .session(alice.id, SessionKind::App, Some("cyex-deck/1.0 (Windows)"))
         .await;
     let _ = w.session(alice.id, SessionKind::Site, None).await;
+    // Website only: a leaked app token can't sign the person out and keep itself.
     let r = w
         .gql(&alice, "mutation { revokeOtherSessions }", json!({}))
         .await;
-    assert_eq!(r["data"]["revokeOtherSessions"], 2, "{r}");
-    let r = w.gql(&alice, SESSIONS, json!({})).await;
+    assert_eq!(code(&r), "website_only", "{r}");
+    let keep = w.session(alice.id, SessionKind::Site, None).await;
+    let (r, _) = w
+        .post(
+            Some((&keep, true)),
+            "mutation { revokeOtherSessions }",
+            json!({}),
+        )
+        .await;
+    // Alice's app token and the two new sessions; the site session it came with stays.
+    assert_eq!(r["data"]["revokeOtherSessions"], 3, "{r}");
+    let (r, _) = w.post(Some((&keep, true)), SESSIONS, json!({})).await;
     assert_eq!(r["data"]["mySessions"].as_array().unwrap().len(), 1, "{r}");
+    let r = w.gql(&alice, SESSIONS, json!({})).await;
+    assert_eq!(code(&r), "signed_out", "{r}");
     // Bob's sessions are untouched.
     let r = w.gql(&bob, SESSIONS, json!({})).await;
     assert_eq!(r["data"]["mySessions"].as_array().unwrap().len(), 2, "{r}");
@@ -568,7 +581,10 @@ async fn the_export_is_yours_complete_limited_and_audited() {
         .emote(&bob, "bobSecret", EmoteState::Approved, false)
         .await;
 
+    // Website only: an app token can't take a copy of everything.
     let r = w.gql(&alice, "mutation { exportMyData }", json!({})).await;
+    assert_eq!(code(&r), "website_only", "{r}");
+    let (r, _) = w.site(&alice, "mutation { exportMyData }", json!({})).await;
     let text = r["data"]["exportMyData"]
         .as_str()
         .unwrap_or_else(|| panic!("{r}"));
@@ -609,9 +625,9 @@ async fn the_export_is_yours_complete_limited_and_audited() {
     assert_eq!(row.actor_account_id, Some(alice.id));
     assert_eq!(row.target_id, alice.tid());
 
-    let r = w.gql(&alice, "mutation { exportMyData }", json!({})).await;
+    let (r, _) = w.site(&alice, "mutation { exportMyData }", json!({})).await;
     assert!(r["errors"].is_null(), "{r}");
-    let r = w.gql(&alice, "mutation { exportMyData }", json!({})).await;
+    let (r, _) = w.site(&alice, "mutation { exportMyData }", json!({})).await;
     assert_eq!(code(&r), "rate_limited", "{r}");
     let (r, _) = w.post(None, "mutation { exportMyData }", json!({})).await;
     assert_eq!(code(&r), "signed_out", "{r}");
@@ -969,5 +985,27 @@ async fn the_owner_cannot_delete_their_account() {
     assert_eq!(code(&r), "owner_protected", "{r}");
     let r = w.gql(&owner, "{ me { id } }", json!({})).await;
     assert_eq!(r["data"]["me"]["id"], owner.tid().as_str(), "{r}");
+    w.db.close().await;
+}
+
+/// `signOutEverywhere` with an app token ends only that app session: the website and other apps
+/// stay signed in.
+#[tokio::test]
+async fn an_app_token_signs_out_only_itself() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("4301").await;
+    let other_app = w.session(alice.id, SessionKind::App, None).await;
+    let r = w
+        .gql(&alice, "mutation { signOutEverywhere }", json!({}))
+        .await;
+    assert_eq!(r["data"]["signOutEverywhere"], 1, "{r}");
+    let r = w.gql(&alice, SESSIONS, json!({})).await;
+    assert_eq!(code(&r), "signed_out", "{r}");
+    let (r, _) = w.site(&alice, SESSIONS, json!({})).await;
+    assert_eq!(r["data"]["mySessions"].as_array().unwrap().len(), 2, "{r}");
+    let (r, _) = w
+        .post(Some((&other_app, false)), "{ me { id } }", json!({}))
+        .await;
+    assert_eq!(r["data"]["me"]["id"], alice.tid().as_str(), "{r}");
     w.db.close().await;
 }

@@ -116,6 +116,7 @@
       return;
     }
     searching = true;
+    failed = false; // a new request: the last one's error is not this one's
     timer = setTimeout(async () => {
       inflight?.abort();
       const ctl = new AbortController();

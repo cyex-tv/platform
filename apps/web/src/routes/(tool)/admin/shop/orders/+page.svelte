@@ -105,7 +105,7 @@
   ];
 </script>
 
-<svelte:head><title>Orders - cyex.tv</title></svelte:head>
+<svelte:head><title>Orders - Admin - cyex.tv</title></svelte:head>
 
 <Gate permission="shop.orders">
   <PageHead title="Orders" line="Every purchase and gift, newest first. A paid order can be refunded here." />

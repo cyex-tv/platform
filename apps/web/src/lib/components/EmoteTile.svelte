@@ -100,7 +100,7 @@
       <span class="processing">Processing</span>
     {/if}
   </span>
-  <span class="name"><bdi>{name}</bdi></span>
+  <span class="name"><bdi title={name}>{name}</bdi></span>
   {#if creator && owner}<span class="by"><bdi>{owner}</bdi></span>{/if}
   {#if kinds.length}<span class="sr-only">, {kinds.join(', ')}</span>{/if}
 </a>

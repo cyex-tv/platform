@@ -17,3 +17,7 @@ Emotes had one flag, `private`: only the owner can add it to sets, and search le
 - An unlisted emote that sits in a public set still shows there, as a private one does: visibility is about being found, not about chat.
 - Activity lines are filtered by the emote's visibility now, not when the line was written, as for sets (ADR 0017).
 - Moderation is unchanged: every new emote is reviewed, whatever its visibility.
+
+## Amendment (security review, 2026/11/20)
+- One rule for "listed": `search::LISTED_EMOTE` (approved, not deleted, not private, not unlisted, owner not pending deletion) is the one SQL fragment `searchEmotes` (every sort, trending included), `quickSearch` and an emote's trending rank use, so they can't drift. `quickSearch` had missed unlisted emotes and pending-deletion owners. NSFW stays each caller's own rule.
+- Activity: an unlisted emote's own feed shows its lines (as its page is open by link); other feeds still leave it out. Emotes of an account whose deletion is pending leave every feed (ADR 0019).

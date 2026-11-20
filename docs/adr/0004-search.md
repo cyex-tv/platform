@@ -23,3 +23,7 @@ Emote search is mostly short-name prefix and fuzzy matching, plus tags, filters 
 ## Consequences
 - No extra service in v1.
 - Relevance is simpler than a dedicated engine.
+
+## Amendment (security review, 2026/11/20)
+- Every emote search shares one visibility rule, `search::LISTED_EMOTE` (ADR 0020 amendment).
+- Tags are NFC-normalised before they are stored or searched for, and may hold combining marks (`\p{M}`) as well as letters, digits, `-` and `_` (`text::normalize_tag`, `text::is_tag_char`); the website's tag field uses the same rule, so a tag it accepts is one the API stores.

@@ -28,8 +28,12 @@
     profile: PublicProfile | null;
     seed?: Look | null;
     actions?: Snippet;
+    /** The page has its own h1 (the /me pages): the name is then plain text with the same look, not a second h1. */
+    heading?: boolean;
+    /** Who this is isn't known yet: the band's shape with blank parts, so nothing moves when it arrives. */
+    loading?: boolean;
   };
-  let { account, relation, profile, seed = null, actions }: Props = $props();
+  let { account, relation, profile, seed = null, actions, heading = true, loading = false }: Props = $props();
 
   const name = $derived(clean(account.displayName));
   const look = $derived(looks[account.id] ?? seed ?? NO_LOOK);
@@ -43,13 +47,14 @@
   );
 
   $effect(() => {
+    if (loading) return;
     if (seed) seedLook(account.id, seed);
     else if (!relation.mine) wantLooks([account.id]);
   });
   $effect(() => wantLooks(editors.map((e) => e.id)));
   $effect(() => {
     const id = account.id;
-    if (!relation.mine) return;
+    if (loading || !relation.mine) return;
     myRoles()
       .then((list) => {
         if (id === account.id) own = { id, roles: list };
@@ -58,11 +63,21 @@
   });
 </script>
 
+{#if loading}
+  <header class="band" aria-hidden="true">
+    <span class="ring"><span class="gap"><span class="ph-av ui-skeleton"></span></span></span>
+    <div class="id">
+      <div class="top"><span class="ph-name ui-skeleton"></span></div>
+      <ul class="facts"><li><span class="ph-fact ui-skeleton"></span></li></ul>
+    </div>
+    <div class="acts"><span class="ph-btn ui-skeleton"></span></div>
+  </header>
+{:else}
 <header class="band">
   <span class="ring" style={paintRing(look.paint)}><span class="gap"><Avatar src={account.avatar} {name} size={64} /></span></span>
   <div class="id">
     <div class="top">
-      <h1 class="name"><PaintedName {name} paint={look.paint} badge={look.badge} badgeSize={22} /></h1>
+      <svelte:element this={heading ? 'h1' : 'p'} class="name"><PaintedName {name} paint={look.paint} badge={look.badge} badgeSize={22} /></svelte:element>
       {#if roles.length}
         <ul class="flags" aria-label="Roles">
           {#each roles as r (r.id)}
@@ -100,6 +115,7 @@
   </div>
   {#if actions}<div class="acts">{@render actions()}</div>{/if}
 </header>
+{/if}
 
 <style>
   .band { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 18px;
@@ -107,7 +123,11 @@
   .ring { display: inline-grid; padding: 2px; border-radius: 50%; background: var(--border); }
   .gap { display: inline-grid; padding: 2px; border-radius: 50%; background: var(--surface); }
   .id { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
-  .top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; }
+  .ph-av { display: block; width: 64px; height: 64px; border-radius: 50%; }
+  .ph-name { display: block; width: 160px; max-width: 100%; height: 24px; border-radius: var(--radius); }
+  .ph-fact { display: block; width: 220px; max-width: 100%; height: 16px; border-radius: var(--radius); }
+  .ph-btn { display: block; width: 104px; height: 40px; border-radius: var(--radius-btn); }
+  .top { min-height: 29px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; }
   .name { margin: 0; min-width: 0; max-width: 100%; font-size: 24px; font-weight: 600; letter-spacing: -.015em; line-height: 1.2; overflow-wrap: anywhere; }
   .flags { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; max-width: 100%; }
   .flag { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 7px; border-radius: var(--radius);
@@ -115,10 +135,11 @@
   .flag.hidden { padding-left: 5px; }
   .flag .hid { font-weight: 500; color: var(--dim); }
   .flag .hid::before { content: '·'; margin-right: 4px; }
-  .facts { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: var(--t-fine); color: var(--text); }
+  .facts { min-height: 20px; list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: var(--t-fine); color: var(--text); }
   .facts li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
   .facts li > :global(svg) { flex: none; color: var(--dim); }
   .facts li > span, .facts li > a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .facts li > a { display: inline-flex; align-items: center; min-height: 24px; }
   .facts a { color: var(--text); font-weight: 500; text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
   .dim, .facts .dim { color: var(--muted); font-weight: 400; }
   .acts { display: flex; gap: 8px; align-self: start; }
@@ -127,5 +148,6 @@
     .band { grid-template-columns: auto minmax(0, 1fr); gap: 12px 14px; padding: 14px; }
     .name { font-size: 20px; }
     .acts { grid-column: 1 / -1; }
+    .ph-fact { height: 30px; } /* about two lines of facts, what a profile usually has on a narrow band */
   }
 </style>

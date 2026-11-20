@@ -165,7 +165,7 @@
 
   async function save(e: SubmitEvent) {
     e.preventDefault();
-    if (!emote || nameError || tagError) return;
+    if (!emote || nameError || tagError || saving) return;
     saving = true;
     try {
       const r = await gql(UPDATE_EMOTE, {
@@ -195,7 +195,7 @@
   }
 
   async function give() {
-    if (!emote || !giveTo) return;
+    if (!emote || !giveTo || giving) return;
     const to = receivers.find((r) => r.id === giveTo);
     giving = true;
     try {

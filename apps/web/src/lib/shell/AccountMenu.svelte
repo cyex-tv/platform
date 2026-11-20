@@ -1,7 +1,7 @@
 <script lang="ts">
   // The one account menu: the same trigger (avatar, name, chevron) and the same popover on every
-  // page, public or signed in. A disclosure: the trigger says expanded or not, the panel is a
-  // list of links (AccountLinks, shared with the phone menu sheet). Renders nothing signed out;
+  // page, public or signed in. A menu: the trigger says expanded or not, the panel is a
+  // list of menu items (AccountLinks, shared with the phone menu sheet). Renders nothing signed out;
   // the AppHeader shows Sign in in that slot instead.
   import Avatar from '$lib/components/Avatar.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -17,7 +17,7 @@
 </script>
 
 {#if session.me}
-  <Popover label="Your account" kind="disclosure" align="end" width="260px" bind:open>
+  <Popover label="Your account" kind="menu" align="end" width="260px" bind:open>
     {#snippet trigger(props)}
       <button class="who" type="button" {...props}>
         <Avatar src={who?.avatar} {name} size={24} />
@@ -26,7 +26,7 @@
         <Icon name="chevron-down" size={14} />
       </button>
     {/snippet}
-    <AccountLinks onpick={() => (open = false)} />
+    <AccountLinks menu onpick={() => (open = false)} />
   </Popover>
 {:else if !session.known}
   <!-- Who you are isn't known yet (the first answer is on its way): the trigger's shape with a
