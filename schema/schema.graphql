@@ -1,4 +1,19 @@
 """
+The badges and paints an account owns, when it shows them.
+"""
+type AccountCollection {
+	accountId: String!
+	"""
+	Shown on the public profile. The owner sees their own collection either way.
+	"""
+	public: Boolean!
+	"""
+	Newest first.
+	"""
+	items: [CollectionItem!]!
+}
+
+"""
 What one account shows, with the badge and paint themselves (`accountCosmetics`).
 """
 type AccountCosmetics {
@@ -63,6 +78,10 @@ type AccountProfile {
 	The account's editors, oldest first: who they are only, never what they may do.
 	"""
 	editors: [AccountSummary!]!
+	"""
+	The account shows the badges and paints it owns (`accountCollection`). Off by default.
+	"""
+	collectionPublic: Boolean!
 }
 
 """
@@ -391,6 +410,105 @@ type AdminAccount {
 }
 
 """
+One line staff put under the header for everyone.
+"""
+type Announcement {
+	id: String!
+	kind: AnnouncementKind!
+	"""
+	The line itself, 1 to 200 characters. Plain text.
+	"""
+	text: String!
+	"""
+	An `https://` address or a path on cyex.tv (`/shop`).
+	"""
+	linkUrl: String
+	"""
+	The link's words; empty means "Learn more".
+	"""
+	linkLabel: String
+	"""
+	An emote shown small beside the line, while it is approved and public.
+	"""
+	emote: Emote
+	"""
+	A badge (from `cosmetics`) shown small beside the line.
+	"""
+	badgeId: String
+	"""
+	Empty: from when it was made.
+	"""
+	startsAt: String
+	"""
+	Empty: until staff end it.
+	"""
+	endsAt: String
+	"""
+	When staff ended it early.
+	"""
+	endedAt: String
+	createdAt: String!
+	updatedAt: String!
+	"""
+	Shown right now.
+	"""
+	live: Boolean!
+}
+
+"""
+What `createAnnouncement` makes and `updateAnnouncement` replaces it with.
+"""
+input AnnouncementInput {
+	kind: AnnouncementKind!
+	"""
+	1 to 200 characters, one line.
+	"""
+	text: String!
+	"""
+	`https://…` or a path on cyex.tv starting with `/`, up to 500 characters.
+	"""
+	linkUrl: String
+	"""
+	Up to 40 characters; only with `linkUrl`.
+	"""
+	linkLabel: String
+	"""
+	An approved emote's ID.
+	"""
+	emoteId: String
+	"""
+	A badge's ID.
+	"""
+	badgeId: String
+	"""
+	RFC 3339.
+	"""
+	startsAt: String
+	"""
+	RFC 3339, in the future and after `startsAt`.
+	"""
+	endsAt: String
+}
+
+"""
+What an announcement is about: its icon and tone under the header.
+"""
+enum AnnouncementKind {
+	"""
+	News, a tip.
+	"""
+	INFO
+	"""
+	Downtime or something not working.
+	"""
+	MAINTENANCE
+	"""
+	An event or a sale, often with an emote or a badge.
+	"""
+	CAMPAIGN
+}
+
+"""
 One audited change (ADR 0010). `before` and `after` are JSON, as text.
 """
 type AuditEntry {
@@ -581,6 +699,27 @@ input CodeBatchInput {
 type CodeBatchPage {
 	items: [CodeBatch!]!
 	total: Int!
+}
+
+"""
+One badge or paint in a public collection: what it is, since when and how it came. Never who
+gave it, why, or what it cost.
+"""
+type CollectionItem {
+	"""
+	`BADGE` or `PAINT`.
+	"""
+	kind: GrantKind!
+	"""
+	The badge's or paint's ID in `cosmetics`.
+	"""
+	cosmeticId: String!
+	name: String!
+	ownedSince: String!
+	"""
+	`STAFF`, `PURCHASE` (the shop), `CODE` or `EVENT`.
+	"""
+	source: GrantSource!
 }
 
 """
@@ -1207,6 +1346,29 @@ type Mutation {
 	"""
 	unlinkIdentity(platform: Platform!): Me!
 	"""
+	Turn notification kinds on or off (`notify`: off, the server doesn't create them at all)
+	and choose which pop up (`toast`). Kinds left out keep their setting. `unknown_kind` for a
+	kind that doesn't exist, `required_kind` for turning off one that must stay on.
+	"""
+	setNotificationPrefs(prefs: [NotificationPrefInput!]!): [NotificationPref!]!
+	"""
+	Show (or hide) the badges and paints you own on your public profile. Off by default.
+	"""
+	setCollectionPublic(public: Boolean!): AccountCollection!
+	"""
+	Put an announcement under the header: one line, a kind, an optional link, emote or badge,
+	start and end. Needs `site.announce`; audited.
+	"""
+	createAnnouncement(input: AnnouncementInput!): Announcement!
+	"""
+	Replace every field of an announcement that hasn't ended. Needs `site.announce`; audited.
+	"""
+	updateAnnouncement(id: String!, input: AnnouncementInput!): Announcement!
+	"""
+	End an announcement now. Needs `site.announce`; audited.
+	"""
+	endAnnouncement(id: String!): Announcement!
+	"""
 	Go by the name and picture of your identity on `platform` (when more than one is linked,
 	pick which login you show as). Every linked login still finds you in search.
 	`not_found` when that platform isn't linked. Unlinking it goes back to the default.
@@ -1551,6 +1713,34 @@ type Notification {
 	withdrawn or run out since). Null for other kinds.
 	"""
 	transferState: TransferRequestState
+}
+
+"""
+One kind of notification and what the account chose for it.
+"""
+type NotificationPref {
+	"""
+	For example `emote.approved` (the same as `Notification.kind`).
+	"""
+	kind: String!
+	"""
+	Created at all. Off: nothing is stored for this kind.
+	"""
+	notify: Boolean!
+	"""
+	Pops up on the website when it arrives.
+	"""
+	toast: Boolean!
+	"""
+	Can't be turned off (a hand-over waiting for your answer, a takedown).
+	"""
+	required: Boolean!
+}
+
+input NotificationPrefInput {
+	kind: String!
+	notify: Boolean!
+	toast: Boolean!
 }
 
 type Order {
@@ -2102,6 +2292,28 @@ type Query {
 	`cosmeticId`. `perPage` is 1 to 100, default 50. Needs `cosmetics.grant`.
 	"""
 	cosmeticEntitlements(kind: CosmeticKind!, accountId: String, cosmeticId: String, page: Int, perPage: Int): EntitlementPage!
+	"""
+	The site announcement shown under the header right now, or null. Public; shared for a few
+	seconds, so a change shows within that.
+	"""
+	activeAnnouncement: Announcement
+	"""
+	Every site announcement, newest first (the latest 50), ended ones too. Needs
+	`site.announce`.
+	"""
+	announcements: [Announcement!]!
+	"""
+	Every notification kind and what you chose for it: created at all (`notify`) and popping
+	up on the website (`toast`). `required` kinds always notify.
+	"""
+	myNotificationPrefs: [NotificationPref!]!
+	"""
+	The badges and paints an account owns, with since when and how each came (staff, the
+	shop, a code, an event); never who gave it, why or what it cost. Null unless the account
+	shows its collection (`AccountProfile.collectionPublic`); the account itself always sees
+	its own.
+	"""
+	accountCollection(accountId: String!): AccountCollection
 	"""
 	Shop items on sale now, by sort order (ADR 0016). Public; signed in, `owned` says whether
 	you own everything in each. With `all: true`, every item that isn't deleted, hidden and

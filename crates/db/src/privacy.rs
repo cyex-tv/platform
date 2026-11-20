@@ -157,6 +157,7 @@ pub async fn erase(conn: &mut PgConnection, account_id: Uuid) -> DbResult<()> {
         "DELETE FROM badge_entitlements WHERE account_id = $1",
         "DELETE FROM paint_entitlements WHERE account_id = $1",
         "DELETE FROM notifications WHERE account_id = $1",
+        "DELETE FROM account_prefs WHERE account_id = $1",
         "DELETE FROM account_roles WHERE account_id = $1",
         "UPDATE reports SET reporter_id = NULL WHERE reporter_id = $1",
         "UPDATE emote_set_members SET added_by = NULL WHERE added_by = $1",

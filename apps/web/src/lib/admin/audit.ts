@@ -24,6 +24,8 @@ export function targetHref(kind: string, id: string): string | null {
       return '/admin/cosmetics/badges';
     case 'paint':
       return '/admin/cosmetics/paints';
+    case 'announcement':
+      return '/admin/announcements';
     default:
       return null;
   }

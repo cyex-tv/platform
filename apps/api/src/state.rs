@@ -36,6 +36,8 @@ pub struct AppState {
     /// The public chat-client reads, shared for a few seconds (`read_cache`). Off unless
     /// `with_read_cache` turns it on; the api binary does, and keeps it current from `hub`.
     pub reads: Arc<ReadCache>,
+    /// The live site announcement, shared for as long as `reads` keeps entries (`site`).
+    pub announcement: Arc<crate::site::AnnouncementCache>,
 }
 
 impl AppState {
@@ -50,6 +52,7 @@ impl AppState {
             metrics: Registry::new(),
             paddle: None,
             reads: Arc::new(ReadCache::disabled()),
+            announcement: Arc::default(),
         }
     }
 

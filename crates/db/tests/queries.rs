@@ -1773,6 +1773,7 @@ async fn every_reference_to_an_account_is_handled_by_erase() {
         ("channels", "account_id", "deleted"),
         ("account_roles", "account_id", "deleted"),
         ("notifications", "account_id", "deleted"),
+        ("account_prefs", "account_id", "deleted"),
         ("account_editors", "account_id", "deleted"),
         ("account_editors", "editor_id", "deleted"),
         ("badge_entitlements", "account_id", "deleted"),
@@ -1860,6 +1861,11 @@ async fn every_reference_to_an_account_is_handled_by_erase() {
             "what an order delivered, kept with the order",
         ),
         ("code_batches", "created_by", "who made a code batch"),
+        (
+            "announcements",
+            "created_by",
+            "who put up a site announcement",
+        ),
         ("code_batches", "disabled_by", "who disabled a code batch"),
         (
             "code_redemptions",

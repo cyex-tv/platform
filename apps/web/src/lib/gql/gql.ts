@@ -110,7 +110,7 @@ type Documents = {
     "\n  query Cosmetics {\n    cosmetics {\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n    }\n  }\n": typeof types.CosmeticsDocument,
     "\n  query UserCosmetics($platform: Platform!, $userIds: [String!]!) {\n    userCosmetics(platform: $platform, userIds: $userIds) {\n      platformUserId\n      badgeId\n      paintId\n    }\n  }\n": typeof types.UserCosmeticsDocument,
     "\n  query AccountCosmetics($accountIds: [String!]!) {\n    accountCosmetics(accountIds: $accountIds) {\n      accountId\n      badge {\n        ...BadgeFields\n      }\n      paint {\n        ...PaintFields\n      }\n    }\n  }\n": typeof types.AccountCosmeticsDocument,
-    "\n  query AccountProfile($accountId: String!) {\n    accountProfile(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      identities {\n        platform\n        login\n        displayName\n      }\n      roles {\n        id\n        name\n      }\n      activeSets {\n        platform\n        login\n        setId\n        setName\n      }\n      editors {\n        id\n        displayName\n        avatar\n      }\n      createdAt\n    }\n  }\n": typeof types.AccountProfileDocument,
+    "\n  query AccountProfile($accountId: String!) {\n    accountProfile(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      identities {\n        platform\n        login\n        displayName\n      }\n      roles {\n        id\n        name\n      }\n      activeSets {\n        platform\n        login\n        setId\n        setName\n      }\n      editors {\n        id\n        displayName\n        avatar\n      }\n      createdAt\n      collectionPublic\n    }\n  }\n": typeof types.AccountProfileDocument,
     "\n  query MyCosmetics($accountId: String) {\n    myCosmetics(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n      badgeId\n      paintId\n    }\n  }\n": typeof types.MyCosmeticsDocument,
     "\n  mutation SelectCosmetics($badgeId: String, $paintId: String, $ownerId: String) {\n    selectCosmetics(badgeId: $badgeId, paintId: $paintId, ownerId: $ownerId) {\n      badgeId\n      paintId\n    }\n  }\n": typeof types.SelectCosmeticsDocument,
     "\n  query CosmeticImage($id: String!) {\n    cosmeticImage(id: $id) {\n      ...CosmeticImageFields\n    }\n  }\n": typeof types.CosmeticImageDocument,
@@ -157,6 +157,16 @@ type Documents = {
     "\n  fragment GrantFields on EntitlementGrant {\n    kind\n    itemId\n    itemName\n    accountId\n    source\n    reason\n    grantedBy\n    grantedAt\n    orderId\n    orderName\n    orderStatus\n    codeBatchId\n    codeBatchName\n    revokedAt\n    revokedBy\n    revokeReason\n    active\n  }\n": typeof types.GrantFieldsFragmentDoc,
     "\n  query EntitlementGraph($accountId: String!) {\n    entitlementGraph(accountId: $accountId) {\n      ...GrantFields\n    }\n  }\n": typeof types.EntitlementGraphDocument,
     "\n  query EntitlementHolders($kind: GrantKind!, $id: String!) {\n    entitlementHolders(kind: $kind, id: $id) {\n      ...GrantFields\n    }\n  }\n": typeof types.EntitlementHoldersDocument,
+    "\n  fragment AnnouncementFields on Announcement {\n    id\n    kind\n    text\n    linkUrl\n    linkLabel\n    badgeId\n    startsAt\n    endsAt\n    endedAt\n    createdAt\n    updatedAt\n    live\n    emote {\n      id\n      name\n      host\n      animated\n      files {\n        name\n        width\n        height\n        isStatic\n      }\n    }\n  }\n": typeof types.AnnouncementFieldsFragmentDoc,
+    "\n  query ActiveAnnouncement {\n    activeAnnouncement {\n      ...AnnouncementFields\n    }\n  }\n": typeof types.ActiveAnnouncementDocument,
+    "\n  query Announcements {\n    announcements {\n      ...AnnouncementFields\n    }\n  }\n": typeof types.AnnouncementsDocument,
+    "\n  mutation CreateAnnouncement($input: AnnouncementInput!) {\n    createAnnouncement(input: $input) {\n      ...AnnouncementFields\n    }\n  }\n": typeof types.CreateAnnouncementDocument,
+    "\n  mutation UpdateAnnouncement($id: String!, $input: AnnouncementInput!) {\n    updateAnnouncement(id: $id, input: $input) {\n      ...AnnouncementFields\n    }\n  }\n": typeof types.UpdateAnnouncementDocument,
+    "\n  mutation EndAnnouncement($id: String!) {\n    endAnnouncement(id: $id) {\n      ...AnnouncementFields\n    }\n  }\n": typeof types.EndAnnouncementDocument,
+    "\n  query NotificationPrefs {\n    myNotificationPrefs {\n      kind\n      notify\n      toast\n      required\n    }\n  }\n": typeof types.NotificationPrefsDocument,
+    "\n  mutation SetNotificationPrefs($prefs: [NotificationPrefInput!]!) {\n    setNotificationPrefs(prefs: $prefs) {\n      kind\n      notify\n      toast\n      required\n    }\n  }\n": typeof types.SetNotificationPrefsDocument,
+    "\n  query AccountCollection($accountId: String!) {\n    accountCollection(accountId: $accountId) {\n      accountId\n      public\n      items {\n        kind\n        cosmeticId\n        name\n        ownedSince\n        source\n      }\n    }\n  }\n": typeof types.AccountCollectionDocument,
+    "\n  mutation SetCollectionPublic($public: Boolean!) {\n    setCollectionPublic(public: $public) {\n      accountId\n      public\n      items {\n        kind\n        cosmeticId\n        name\n        ownedSince\n        source\n      }\n    }\n  }\n": typeof types.SetCollectionPublicDocument,
 };
 const documents: Documents = {
     "\n  fragment StudioPaintFields on Paint {\n    id\n    name\n    kind\n    angle\n    repeat\n    shape\n    color\n    stops {\n      at\n      color\n    }\n    shadows {\n      x\n      y\n      radius\n      color\n    }\n    image {\n      id\n      host\n      ready\n      width\n      height\n      animated\n      files {\n        name\n        format\n        scale\n        width\n        height\n        isStatic\n      }\n    }\n    updatedAt\n  }\n": types.StudioPaintFieldsFragmentDoc,
@@ -254,7 +264,7 @@ const documents: Documents = {
     "\n  query Cosmetics {\n    cosmetics {\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n    }\n  }\n": types.CosmeticsDocument,
     "\n  query UserCosmetics($platform: Platform!, $userIds: [String!]!) {\n    userCosmetics(platform: $platform, userIds: $userIds) {\n      platformUserId\n      badgeId\n      paintId\n    }\n  }\n": types.UserCosmeticsDocument,
     "\n  query AccountCosmetics($accountIds: [String!]!) {\n    accountCosmetics(accountIds: $accountIds) {\n      accountId\n      badge {\n        ...BadgeFields\n      }\n      paint {\n        ...PaintFields\n      }\n    }\n  }\n": types.AccountCosmeticsDocument,
-    "\n  query AccountProfile($accountId: String!) {\n    accountProfile(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      identities {\n        platform\n        login\n        displayName\n      }\n      roles {\n        id\n        name\n      }\n      activeSets {\n        platform\n        login\n        setId\n        setName\n      }\n      editors {\n        id\n        displayName\n        avatar\n      }\n      createdAt\n    }\n  }\n": types.AccountProfileDocument,
+    "\n  query AccountProfile($accountId: String!) {\n    accountProfile(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      identities {\n        platform\n        login\n        displayName\n      }\n      roles {\n        id\n        name\n      }\n      activeSets {\n        platform\n        login\n        setId\n        setName\n      }\n      editors {\n        id\n        displayName\n        avatar\n      }\n      createdAt\n      collectionPublic\n    }\n  }\n": types.AccountProfileDocument,
     "\n  query MyCosmetics($accountId: String) {\n    myCosmetics(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n      badgeId\n      paintId\n    }\n  }\n": types.MyCosmeticsDocument,
     "\n  mutation SelectCosmetics($badgeId: String, $paintId: String, $ownerId: String) {\n    selectCosmetics(badgeId: $badgeId, paintId: $paintId, ownerId: $ownerId) {\n      badgeId\n      paintId\n    }\n  }\n": types.SelectCosmeticsDocument,
     "\n  query CosmeticImage($id: String!) {\n    cosmeticImage(id: $id) {\n      ...CosmeticImageFields\n    }\n  }\n": types.CosmeticImageDocument,
@@ -301,6 +311,16 @@ const documents: Documents = {
     "\n  fragment GrantFields on EntitlementGrant {\n    kind\n    itemId\n    itemName\n    accountId\n    source\n    reason\n    grantedBy\n    grantedAt\n    orderId\n    orderName\n    orderStatus\n    codeBatchId\n    codeBatchName\n    revokedAt\n    revokedBy\n    revokeReason\n    active\n  }\n": types.GrantFieldsFragmentDoc,
     "\n  query EntitlementGraph($accountId: String!) {\n    entitlementGraph(accountId: $accountId) {\n      ...GrantFields\n    }\n  }\n": types.EntitlementGraphDocument,
     "\n  query EntitlementHolders($kind: GrantKind!, $id: String!) {\n    entitlementHolders(kind: $kind, id: $id) {\n      ...GrantFields\n    }\n  }\n": types.EntitlementHoldersDocument,
+    "\n  fragment AnnouncementFields on Announcement {\n    id\n    kind\n    text\n    linkUrl\n    linkLabel\n    badgeId\n    startsAt\n    endsAt\n    endedAt\n    createdAt\n    updatedAt\n    live\n    emote {\n      id\n      name\n      host\n      animated\n      files {\n        name\n        width\n        height\n        isStatic\n      }\n    }\n  }\n": types.AnnouncementFieldsFragmentDoc,
+    "\n  query ActiveAnnouncement {\n    activeAnnouncement {\n      ...AnnouncementFields\n    }\n  }\n": types.ActiveAnnouncementDocument,
+    "\n  query Announcements {\n    announcements {\n      ...AnnouncementFields\n    }\n  }\n": types.AnnouncementsDocument,
+    "\n  mutation CreateAnnouncement($input: AnnouncementInput!) {\n    createAnnouncement(input: $input) {\n      ...AnnouncementFields\n    }\n  }\n": types.CreateAnnouncementDocument,
+    "\n  mutation UpdateAnnouncement($id: String!, $input: AnnouncementInput!) {\n    updateAnnouncement(id: $id, input: $input) {\n      ...AnnouncementFields\n    }\n  }\n": types.UpdateAnnouncementDocument,
+    "\n  mutation EndAnnouncement($id: String!) {\n    endAnnouncement(id: $id) {\n      ...AnnouncementFields\n    }\n  }\n": types.EndAnnouncementDocument,
+    "\n  query NotificationPrefs {\n    myNotificationPrefs {\n      kind\n      notify\n      toast\n      required\n    }\n  }\n": types.NotificationPrefsDocument,
+    "\n  mutation SetNotificationPrefs($prefs: [NotificationPrefInput!]!) {\n    setNotificationPrefs(prefs: $prefs) {\n      kind\n      notify\n      toast\n      required\n    }\n  }\n": types.SetNotificationPrefsDocument,
+    "\n  query AccountCollection($accountId: String!) {\n    accountCollection(accountId: $accountId) {\n      accountId\n      public\n      items {\n        kind\n        cosmeticId\n        name\n        ownedSince\n        source\n      }\n    }\n  }\n": types.AccountCollectionDocument,
+    "\n  mutation SetCollectionPublic($public: Boolean!) {\n    setCollectionPublic(public: $public) {\n      accountId\n      public\n      items {\n        kind\n        cosmeticId\n        name\n        ownedSince\n        source\n      }\n    }\n  }\n": types.SetCollectionPublicDocument,
 };
 
 /**
@@ -686,7 +706,7 @@ export function graphql(source: "\n  query AccountCosmetics($accountIds: [String
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query AccountProfile($accountId: String!) {\n    accountProfile(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      identities {\n        platform\n        login\n        displayName\n      }\n      roles {\n        id\n        name\n      }\n      activeSets {\n        platform\n        login\n        setId\n        setName\n      }\n      editors {\n        id\n        displayName\n        avatar\n      }\n      createdAt\n    }\n  }\n"): typeof import('./graphql').AccountProfileDocument;
+export function graphql(source: "\n  query AccountProfile($accountId: String!) {\n    accountProfile(accountId: $accountId) {\n      account {\n        id\n        displayName\n        avatar\n      }\n      identities {\n        platform\n        login\n        displayName\n      }\n      roles {\n        id\n        name\n      }\n      activeSets {\n        platform\n        login\n        setId\n        setName\n      }\n      editors {\n        id\n        displayName\n        avatar\n      }\n      createdAt\n      collectionPublic\n    }\n  }\n"): typeof import('./graphql').AccountProfileDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -871,6 +891,46 @@ export function graphql(source: "\n  query EntitlementGraph($accountId: String!)
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query EntitlementHolders($kind: GrantKind!, $id: String!) {\n    entitlementHolders(kind: $kind, id: $id) {\n      ...GrantFields\n    }\n  }\n"): typeof import('./graphql').EntitlementHoldersDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment AnnouncementFields on Announcement {\n    id\n    kind\n    text\n    linkUrl\n    linkLabel\n    badgeId\n    startsAt\n    endsAt\n    endedAt\n    createdAt\n    updatedAt\n    live\n    emote {\n      id\n      name\n      host\n      animated\n      files {\n        name\n        width\n        height\n        isStatic\n      }\n    }\n  }\n"): typeof import('./graphql').AnnouncementFieldsFragmentDoc;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query ActiveAnnouncement {\n    activeAnnouncement {\n      ...AnnouncementFields\n    }\n  }\n"): typeof import('./graphql').ActiveAnnouncementDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query Announcements {\n    announcements {\n      ...AnnouncementFields\n    }\n  }\n"): typeof import('./graphql').AnnouncementsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateAnnouncement($input: AnnouncementInput!) {\n    createAnnouncement(input: $input) {\n      ...AnnouncementFields\n    }\n  }\n"): typeof import('./graphql').CreateAnnouncementDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UpdateAnnouncement($id: String!, $input: AnnouncementInput!) {\n    updateAnnouncement(id: $id, input: $input) {\n      ...AnnouncementFields\n    }\n  }\n"): typeof import('./graphql').UpdateAnnouncementDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation EndAnnouncement($id: String!) {\n    endAnnouncement(id: $id) {\n      ...AnnouncementFields\n    }\n  }\n"): typeof import('./graphql').EndAnnouncementDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query NotificationPrefs {\n    myNotificationPrefs {\n      kind\n      notify\n      toast\n      required\n    }\n  }\n"): typeof import('./graphql').NotificationPrefsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SetNotificationPrefs($prefs: [NotificationPrefInput!]!) {\n    setNotificationPrefs(prefs: $prefs) {\n      kind\n      notify\n      toast\n      required\n    }\n  }\n"): typeof import('./graphql').SetNotificationPrefsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AccountCollection($accountId: String!) {\n    accountCollection(accountId: $accountId) {\n      accountId\n      public\n      items {\n        kind\n        cosmeticId\n        name\n        ownedSince\n        source\n      }\n    }\n  }\n"): typeof import('./graphql').AccountCollectionDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SetCollectionPublic($public: Boolean!) {\n    setCollectionPublic(public: $public) {\n      accountId\n      public\n      items {\n        kind\n        cosmeticId\n        name\n        ownedSince\n        source\n      }\n    }\n  }\n"): typeof import('./graphql').SetCollectionPublicDocument;
 
 
 export function graphql(source: string) {
