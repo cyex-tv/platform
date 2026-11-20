@@ -48,6 +48,8 @@ pub const SUBSCRIPTIONS_MANAGE: &str = "subscriptions.manage";
 pub const EMOTES_DELETE_ANY: &str = "emotes.delete_any";
 /// Add, change and remove any account's editors on its behalf, as its owner can. Audited.
 pub const EDITORS_MANAGE_ANY: &str = "editors.manage_any";
+/// Change the review queue's ready reject reasons. Audited.
+pub const REVIEW_SETTINGS: &str = "review.settings";
 
 /// Every permission that exists. A role can only hold names from this list.
 pub const ALL: &[&str] = &[
@@ -77,6 +79,7 @@ pub const ALL: &[&str] = &[
     SUBSCRIPTIONS_MANAGE,
     EMOTES_DELETE_ANY,
     EDITORS_MANAGE_ANY,
+    REVIEW_SETTINGS,
 ];
 
 /// What anyone with `roles.manage` may add to the built-in User role, which every account holds

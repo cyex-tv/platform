@@ -157,6 +157,13 @@ type Documents = {
     "\n  fragment GrantFields on EntitlementGrant {\n    kind\n    itemId\n    itemName\n    accountId\n    source\n    reason\n    grantedBy\n    grantedAt\n    orderId\n    orderName\n    orderStatus\n    codeBatchId\n    codeBatchName\n    revokedAt\n    revokedBy\n    revokeReason\n    active\n  }\n": typeof types.GrantFieldsFragmentDoc,
     "\n  query EntitlementGraph($accountId: String!) {\n    entitlementGraph(accountId: $accountId) {\n      ...GrantFields\n    }\n  }\n": typeof types.EntitlementGraphDocument,
     "\n  query EntitlementHolders($kind: GrantKind!, $id: String!) {\n    entitlementHolders(kind: $kind, id: $id) {\n      ...GrantFields\n    }\n  }\n": typeof types.EntitlementHoldersDocument,
+    "\n  mutation ReviewEmotes($ids: [String!]!, $verdict: ReviewVerdict!, $visibility: EmoteVisibility, $reason: String) {\n    reviewEmotes(ids: $ids, verdict: $verdict, visibility: $visibility, reason: $reason) {\n      done\n      failed {\n        id\n        code\n        message\n      }\n    }\n  }\n": typeof types.ReviewEmotesDocument,
+    "\n  mutation DismissReports($ids: [String!]!, $note: String) {\n    dismissReports(ids: $ids, note: $note) {\n      done\n      failed {\n        id\n        code\n        message\n      }\n    }\n  }\n": typeof types.DismissReportsDocument,
+    "\n  query EmoteDuplicates($emoteId: String!) {\n    emoteDuplicates(emoteId: $emoteId) {\n      sameFile\n      similarity\n      emote {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.EmoteDuplicatesDocument,
+    "\n  query ReviewReasons {\n    reviewReasons\n  }\n": typeof types.ReviewReasonsDocument,
+    "\n  mutation SetReviewReasons($reasons: [String!]!) {\n    setReviewReasons(reasons: $reasons)\n  }\n": typeof types.SetReviewReasonsDocument,
+    "\n  query AccountsByLogin($logins: [String!]!) {\n    accountsByLogin(logins: $logins) {\n      login\n      problem\n      account {\n        id\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.AccountsByLoginDocument,
+    "\n  query EmotesWithSameFile($sha256: String!) {\n    emotesWithSameFile(sha256: $sha256) {\n      id\n      name\n      owner {\n        id\n        displayName\n      }\n    }\n  }\n": typeof types.EmotesWithSameFileDocument,
 };
 const documents: Documents = {
     "\n  fragment StudioPaintFields on Paint {\n    id\n    name\n    kind\n    angle\n    repeat\n    shape\n    color\n    stops {\n      at\n      color\n    }\n    shadows {\n      x\n      y\n      radius\n      color\n    }\n    image {\n      id\n      host\n      ready\n      width\n      height\n      animated\n      files {\n        name\n        format\n        scale\n        width\n        height\n        isStatic\n      }\n    }\n    updatedAt\n  }\n": types.StudioPaintFieldsFragmentDoc,
@@ -301,6 +308,13 @@ const documents: Documents = {
     "\n  fragment GrantFields on EntitlementGrant {\n    kind\n    itemId\n    itemName\n    accountId\n    source\n    reason\n    grantedBy\n    grantedAt\n    orderId\n    orderName\n    orderStatus\n    codeBatchId\n    codeBatchName\n    revokedAt\n    revokedBy\n    revokeReason\n    active\n  }\n": types.GrantFieldsFragmentDoc,
     "\n  query EntitlementGraph($accountId: String!) {\n    entitlementGraph(accountId: $accountId) {\n      ...GrantFields\n    }\n  }\n": types.EntitlementGraphDocument,
     "\n  query EntitlementHolders($kind: GrantKind!, $id: String!) {\n    entitlementHolders(kind: $kind, id: $id) {\n      ...GrantFields\n    }\n  }\n": types.EntitlementHoldersDocument,
+    "\n  mutation ReviewEmotes($ids: [String!]!, $verdict: ReviewVerdict!, $visibility: EmoteVisibility, $reason: String) {\n    reviewEmotes(ids: $ids, verdict: $verdict, visibility: $visibility, reason: $reason) {\n      done\n      failed {\n        id\n        code\n        message\n      }\n    }\n  }\n": types.ReviewEmotesDocument,
+    "\n  mutation DismissReports($ids: [String!]!, $note: String) {\n    dismissReports(ids: $ids, note: $note) {\n      done\n      failed {\n        id\n        code\n        message\n      }\n    }\n  }\n": types.DismissReportsDocument,
+    "\n  query EmoteDuplicates($emoteId: String!) {\n    emoteDuplicates(emoteId: $emoteId) {\n      sameFile\n      similarity\n      emote {\n        ...EmoteFields\n      }\n    }\n  }\n": types.EmoteDuplicatesDocument,
+    "\n  query ReviewReasons {\n    reviewReasons\n  }\n": types.ReviewReasonsDocument,
+    "\n  mutation SetReviewReasons($reasons: [String!]!) {\n    setReviewReasons(reasons: $reasons)\n  }\n": types.SetReviewReasonsDocument,
+    "\n  query AccountsByLogin($logins: [String!]!) {\n    accountsByLogin(logins: $logins) {\n      login\n      problem\n      account {\n        id\n        displayName\n        avatar\n      }\n    }\n  }\n": types.AccountsByLoginDocument,
+    "\n  query EmotesWithSameFile($sha256: String!) {\n    emotesWithSameFile(sha256: $sha256) {\n      id\n      name\n      owner {\n        id\n        displayName\n      }\n    }\n  }\n": types.EmotesWithSameFileDocument,
 };
 
 /**
@@ -871,6 +885,34 @@ export function graphql(source: "\n  query EntitlementGraph($accountId: String!)
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query EntitlementHolders($kind: GrantKind!, $id: String!) {\n    entitlementHolders(kind: $kind, id: $id) {\n      ...GrantFields\n    }\n  }\n"): typeof import('./graphql').EntitlementHoldersDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation ReviewEmotes($ids: [String!]!, $verdict: ReviewVerdict!, $visibility: EmoteVisibility, $reason: String) {\n    reviewEmotes(ids: $ids, verdict: $verdict, visibility: $visibility, reason: $reason) {\n      done\n      failed {\n        id\n        code\n        message\n      }\n    }\n  }\n"): typeof import('./graphql').ReviewEmotesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DismissReports($ids: [String!]!, $note: String) {\n    dismissReports(ids: $ids, note: $note) {\n      done\n      failed {\n        id\n        code\n        message\n      }\n    }\n  }\n"): typeof import('./graphql').DismissReportsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query EmoteDuplicates($emoteId: String!) {\n    emoteDuplicates(emoteId: $emoteId) {\n      sameFile\n      similarity\n      emote {\n        ...EmoteFields\n      }\n    }\n  }\n"): typeof import('./graphql').EmoteDuplicatesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query ReviewReasons {\n    reviewReasons\n  }\n"): typeof import('./graphql').ReviewReasonsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SetReviewReasons($reasons: [String!]!) {\n    setReviewReasons(reasons: $reasons)\n  }\n"): typeof import('./graphql').SetReviewReasonsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AccountsByLogin($logins: [String!]!) {\n    accountsByLogin(logins: $logins) {\n      login\n      problem\n      account {\n        id\n        displayName\n        avatar\n      }\n    }\n  }\n"): typeof import('./graphql').AccountsByLoginDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query EmotesWithSameFile($sha256: String!) {\n    emotesWithSameFile(sha256: $sha256) {\n      id\n      name\n      owner {\n        id\n        displayName\n      }\n    }\n  }\n"): typeof import('./graphql').EmotesWithSameFileDocument;
 
 
 export function graphql(source: string) {

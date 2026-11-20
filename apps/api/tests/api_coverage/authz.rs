@@ -65,6 +65,9 @@ const STAFF: &[&str] = &[
     "entitlementGraph",
     "entitlementHolders",
     "roles",
+    "emoteDuplicates",
+    "reviewReasons",
+    "accountsByLogin",
     // Mutations.
     "createBadge",
     "updateBadge",
@@ -96,6 +99,9 @@ const STAFF: &[&str] = &[
     "deleteRole",
     "assignRole",
     "unassignRole",
+    "reviewEmotes",
+    "dismissReports",
+    "setReviewReasons",
 ];
 
 /// Staff mutations that check their input before the caller's permission (cheap checks first):

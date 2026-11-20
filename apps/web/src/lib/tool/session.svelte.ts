@@ -113,6 +113,7 @@ export const ADMIN_PERMISSIONS = [
   'emotes.edit_any',
   'emotes.delete_any',
   'editors.manage_any',
+  'review.settings',
 ];
 
 /** Whether the account may open any part of the admin pages. */

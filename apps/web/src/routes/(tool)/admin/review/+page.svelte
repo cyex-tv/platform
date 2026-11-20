@@ -5,21 +5,30 @@
   // tag count and upload time, with the verdicts on it: approve, approve as unlisted, approve for
   // its owner only, reject with a reason. A card opens the detail dialog. Keyboard first: the
   // arrows move between cards, Enter opens one, A approves, U and P approve unlisted and
-  // private, R rejects, Z undoes an approval (5 s), Esc closes; after a verdict the next upload is up.
+  // private, R rejects, S skips (on to the next, no verdict), Z undoes an approval (5 s), Esc
+  // closes; after a verdict the next upload is up. The header counts what is left.
+  // Many at once: tick cards (X, Shift for a range, Ctrl+A for the page, at most 100) and a bar
+  // approves, approves as unlisted or for the owner only, or rejects them all with one reason, in
+  // one call (reviewEmotes) with one audit row each. Ready reasons come from the API; staff with
+  // review.settings change them on /admin/review/reasons.
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { gql } from '$lib/api';
   import { pictureFor, ready, size } from '$lib/emote';
   import { display } from '$lib/dpr.svelte';
-  import { onDestroy, tick } from 'svelte';
+  import { onDestroy, tick, untrack } from 'svelte';
   import { clean, count, dateTime, iso } from '$lib/format';
   import type { EmoteFieldsFragment, EmoteVisibility, ReviewSort, ReviewTab } from '$lib/gql/graphql';
-  import { APPROVE, REJECT, REVIEW_QUEUE } from '$lib/queries';
+  import { APPROVE, REJECT, REVIEW_EMOTES, REVIEW_QUEUE, REVIEW_REASONS } from '$lib/queries';
   import IconButton from '$lib/components/IconButton.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import ReviewDetail from '$lib/admin/ReviewDetail.svelte';
+  import BulkBar from '$lib/admin/BulkBar.svelte';
+  import PickBox from '$lib/admin/PickBox.svelte';
+  import { batchSummary } from '$lib/admin/bulk';
+  import { all as pickAll, EMPTY, range as pickRange, toggle as pickToggle, type Selection, type Step } from '$lib/components/browse/selection';
   import { after, approveFailure, step } from '$lib/admin/queue';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
@@ -28,9 +37,16 @@
   import { registerShortcuts } from '$lib/shell/shortcuts.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { dismiss, fail, notify } from '$lib/tool/notices.svelte';
+  import { can } from '$lib/tool/session.svelte';
+  import { quiet } from '$lib/quiet';
 
   const PER_PAGE = 50;
-  const REASONS = ['Low quality or blurry', 'Already uploaded (a duplicate)', 'Not an emote', 'NSFW but not marked', 'Hateful or harassing', 'The name breaks the rules'];
+  // The ready reasons staff keep (reviewReasons); none until they load, and none if that fails.
+  let reasons = $state<string[]>([]);
+  $effect(() => {
+    void quiet(gql(REVIEW_REASONS, {}).then((r) => (reasons = r.reviewReasons)), 'review reasons');
+  });
+  const editReasons = can('review.settings');
   type Tab = 'public' | 'limited' | 'resolved';
   type Sort = 'uploaded' | 'reviewed' | 'uploader' | 'name';
 
@@ -87,6 +103,34 @@
   let detail: ReturnType<typeof ReviewDetail>;
   let grid = $state<HTMLUListElement>();
 
+  // Picked cards (on this page only) for a verdict on many.
+  let sel = $state<Selection>(EMPTY);
+  let selNote = $state('');
+  let noteTimer: ReturnType<typeof setTimeout> | undefined;
+  const picked = $derived(new Set(sel.ids));
+  function pick(step: Step) {
+    sel = step.sel;
+    if (step.refused) {
+      clearTimeout(noteTimer);
+      selNote = 'That’s the most at once: 100.';
+      noteTimer = setTimeout(() => (selNote = ''), 3000);
+    }
+  }
+  const ids = () => items.map((e) => e.id);
+  function pickOne(id: string, shift: boolean) {
+    pick(shift ? pickRange(sel, ids(), id) : pickToggle(sel, id));
+  }
+  // A new page, tab or search, or a card gone: what isn't shown any more drops out.
+  $effect(() => {
+    const list = L.data?.items;
+    if (!list) return;
+    const shown = new Set(list.map((e) => e.id));
+    untrack(() => {
+      if (resolved && sel.ids.length) sel = EMPTY;
+      else if (sel.ids.some((id) => !shown.has(id))) sel = { ids: sel.ids.filter((id) => shown.has(id)), anchor: sel.anchor && shown.has(sel.anchor) ? sel.anchor : null };
+    });
+  });
+
   // The focused card (the grid's one tab stop) and the one the dialog shows.
   let cur = $state<string | null>(null);
   let shownId = $state<string | null>(null);
@@ -140,11 +184,23 @@
   }
 
   function onkeydown(ev: KeyboardEvent) {
-    if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.defaultPrevented || !items.length) return;
+    if (ev.defaultPrevented || !items.length) return;
     if (document.querySelector('dialog[open]')) return;
     const t = ev.target as HTMLElement | null;
-    if (t?.closest('input, textarea, select, [contenteditable], [role="radiogroup"]')) return;
     const onCard = !t || t === document.body || !!t.closest('[data-card]');
+    // Ctrl/⌘+A on the grid: every card on this page (up to the cap).
+    if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && ev.key.toLowerCase() === 'a' && onCard && !resolved && !t?.closest('input, textarea, [contenteditable]')) {
+      ev.preventDefault();
+      pick(pickAll(sel, ids()));
+      return;
+    }
+    if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+    if (ev.key === 'Escape' && sel.ids.length && !t?.closest('input, textarea, select')) {
+      ev.preventDefault();
+      sel = EMPTY;
+      return;
+    }
+    if (t?.closest('input, textarea, select, [contenteditable], [role="radiogroup"]')) return;
     const onButton = !!t?.closest('a, button');
     const next = step(ev.key, at, items.length, columns());
     if (next !== null && onCard && !(onButton && (ev.key === 'Home' || ev.key === 'End'))) {
@@ -159,6 +215,12 @@
     if (ev.key === 'Enter' || ev.key === ' ') {
       ev.preventDefault();
       openDetail(e.id);
+    } else if (k === 's' && !ev.shiftKey) {
+      ev.preventDefault();
+      skip();
+    } else if (k === 'x' && !resolved && !ev.repeat) {
+      ev.preventDefault();
+      pickOne(e.id, ev.shiftKey);
     } else if (!resolved && !ev.repeat && busy !== e.id) {
       if (k === 'a' && ready(e)) (ev.preventDefault(), approve(e));
       else if (k === 'u' && ready(e)) (ev.preventDefault(), approve(e, 'UNLISTED'));
@@ -169,6 +231,13 @@
       ev.preventDefault();
       undo([...waiting.keys()].pop()!);
     }
+  }
+
+  // S: on to the next card (the next page after the last), no verdict; this one stays waiting.
+  function skip() {
+    if (at < items.length - 1) focusCard(items[at + 1].id);
+    else if (pageNo < pages) go({ page: String(pageNo + 1) });
+    else notify('That was the last one on this tab.');
   }
 
   // A verdict takes the card out; the next one gets focus (or the dialog shows it).
@@ -202,7 +271,10 @@
   // reloading, and the browser asks first while one is pending); Z undoes the latest.
   const UNDO_MS = 5000;
   const VERB: Record<EmoteVisibility, string> = { PUBLIC: 'approved', UNLISTED: 'approved as unlisted', PRIVATE: 'approved for its owner only' };
-  const waiting = new Map<string, { e: EmoteFieldsFragment; at: number; visibility: EmoteVisibility | null; timer: ReturnType<typeof setTimeout>; toast: number }>();
+  // One entry per approval: one card, or a batch picked together (sent as one reviewEmotes call).
+  type Waiting = { es: EmoteFieldsFragment[]; ats: number[]; visibility: EmoteVisibility | null; timer: ReturnType<typeof setTimeout>; toast: number };
+  const waiting = new Map<string, Waiting>();
+  let batchSeq = 0;
 
   function approve(e: EmoteFieldsFragment, visibility?: EmoteVisibility) {
     if (waiting.has(e.id)) return;
@@ -210,38 +282,77 @@
     const at = Math.max(0, items.findIndex((x) => x.id === e.id));
     done(e.id);
     const toast = notify(`${iso(e.name)} ${VERB[v ?? 'PUBLIC']}.`, false, { ms: UNDO_MS, action: { label: 'Undo', run: () => undo(e.id) } });
-    waiting.set(e.id, { e, at, visibility: v, toast, timer: setTimeout(() => void send(e.id), UNDO_MS) });
+    waiting.set(e.id, { es: [e], ats: [at], visibility: v, toast, timer: setTimeout(() => void send(e.id), UNDO_MS) });
+  }
+  /** The picked cards, approved together: they leave at once, with one Undo for all of them. */
+  function approveMany(visibility?: EmoteVisibility) {
+    const list = items.filter((e) => picked.has(e.id) && ready(e));
+    if (!list.length) return;
+    const v = visibility ?? null;
+    const ats = list.map((e) => items.findIndex((x) => x.id === e.id));
+    const key = `batch-${++batchSeq}`;
+    sel = EMPTY;
+    doneMany(list.map((e) => e.id));
+    const n = list.length;
+    const toast = notify(`${count(n)} ${n === 1 ? 'upload' : 'uploads'} ${VERB[v ?? 'PUBLIC']}.`, false, { ms: UNDO_MS, action: { label: 'Undo', run: () => undo(key) } });
+    waiting.set(key, { es: list, ats, visibility: v, toast, timer: setTimeout(() => void send(key), UNDO_MS) });
   }
   const keepalive: typeof fetch = (input, init) => fetch(input, { ...init, keepalive: true });
-  async function send(id: string, leaving = false) {
-    const w = waiting.get(id);
+  async function send(key: string, leaving = false) {
+    const w = waiting.get(key);
     if (!w) return;
     clearTimeout(w.timer);
-    waiting.delete(id);
+    waiting.delete(key);
+    const how = leaving ? keepalive : fetch;
     try {
-      await gql(APPROVE, { id, visibility: w.visibility }, leaving ? keepalive : fetch);
+      if (w.es.length === 1) await gql(APPROVE, { id: w.es[0].id, visibility: w.visibility }, how);
+      else {
+        const out = (await gql(REVIEW_EMOTES, { ids: w.es.map((e) => e.id), verdict: 'APPROVE', visibility: w.visibility }, how)).reviewEmotes;
+        if (out.failed.length && !leaving) {
+          notify(batchSummary(out, VERB[w.visibility ?? 'PUBLIC']), true);
+          L.reload();
+        }
+      }
     } catch (err) {
       if (leaving) return; // the page is going; there is nobody to tell
       if ((err as { code?: unknown } | null)?.code === 'signed_out') {
         // The session ended: the signed-out notice says so once. A reload would fail the same way and
-        // blank the queue, so the card comes back from what the page already holds.
+        // blank the queue, so the cards come back from what the page already holds.
         fail(err);
         restore(w);
       } else {
-        notify(approveFailure(err, iso(w.e.name)), true);
-        L.reload(); // it is still in the queue: bring the card back
+        notify(approveFailure(err, w.es.length === 1 ? iso(w.es[0].name) : `${count(w.es.length)} uploads`), true);
+        L.reload(); // they are still in the queue: bring the cards back
       }
     }
   }
-  /** Puts a card back where it was, with the counts it came off. */
-  function restore(w: { e: EmoteFieldsFragment; at: number }) {
+  /** Puts cards back where they were, with the counts they came off. */
+  function restore(w: Pick<Waiting, 'es' | 'ats'>) {
+    w.es.forEach((e, i) => {
+      const q = L.data;
+      if (!q || q.items.some((x) => x.id === e.id)) return;
+      const list = [...q.items];
+      list.splice(Math.min(w.ats[i], list.length), 0, e);
+      const c = q.counts;
+      const counts = resolved ? c : e.visibility === 'PUBLIC' ? { ...c, public: c.public + 1 } : { ...c, limited: c.limited + 1 };
+      L.set({ ...q, items: list, total: q.total + 1, counts });
+    });
+  }
+  /** Several cards out at once (a batch): counts down, focus on what follows the first of them. */
+  function doneMany(gone: string[]) {
     const q = L.data;
-    if (!q || q.items.some((x) => x.id === w.e.id)) return;
-    const list = [...q.items];
-    list.splice(Math.min(w.at, list.length), 0, w.e);
-    const c = q.counts;
-    const counts = resolved ? c : w.e.visibility === 'PUBLIC' ? { ...c, public: c.public + 1 } : { ...c, limited: c.limited + 1 };
-    L.set({ ...q, items: list, total: q.total + 1, counts });
+    if (!q) return;
+    const out = new Set(gone);
+    const first = q.items.findIndex((e) => out.has(e.id));
+    const left = q.items.filter((e) => !out.has(e.id));
+    const leaving = q.items.filter((e) => out.has(e.id));
+    const pub = leaving.filter((e) => e.visibility === 'PUBLIC').length;
+    const counts = resolved ? q.counts : { public: Math.max(0, q.counts.public - pub), limited: Math.max(0, q.counts.limited - (leaving.length - pub)) };
+    L.set({ ...q, items: left, total: Math.max(0, q.total - leaving.length), counts });
+    const nextId = left[Math.min(Math.max(0, first), left.length - 1)]?.id ?? null;
+    cur = nextId;
+    tick().then(() => (nextId ? focusCard(nextId) : document.querySelector<HTMLElement>('h1')?.focus()));
+    if (!left.length && q.total - leaving.length > 0) L.reload();
   }
   function undo(id: string) {
     const w = waiting.get(id);
@@ -262,9 +373,33 @@
 
   function askReject(e: EmoteFieldsFragment) {
     rejecting = e;
+    rejectingMany = null;
+    reasonDialog.open();
+  }
+  // The picked cards, rejected together with one reason (no undo: a rejection never waited).
+  let rejectingMany = $state<EmoteFieldsFragment[] | null>(null);
+  function askRejectMany() {
+    const list = items.filter((e) => picked.has(e.id));
+    if (!list.length) return;
+    rejecting = null;
+    rejectingMany = list;
     reasonDialog.open();
   }
   async function reject(reason: string) {
+    const many = rejectingMany;
+    if (many) {
+      try {
+        const out = (await gql(REVIEW_EMOTES, { ids: many.map((e) => e.id), verdict: 'REJECT', reason })).reviewEmotes;
+        sel = EMPTY;
+        doneMany([...out.done]);
+        notify(batchSummary(out, 'rejected'), out.failed.length > 0);
+        if (out.failed.length) L.reload();
+      } catch (err) {
+        fail(err);
+        throw err;
+      }
+      return;
+    }
     const e = rejecting;
     if (!e) return;
     try {
@@ -300,7 +435,10 @@
 <svelte:window {onkeydown} {onbeforeunload} onpagehide={() => flush(true)} />
 
 <PageHead title="Review queue">
-  {#snippet line()}{#if counts}<span class="ui-num">{count(counts.public + counts.limited)}</span> waiting{:else}Uploads waiting for a verdict{/if}{/snippet}
+  {#snippet line()}{#if counts}<b class="left ui-num">{count(counts.public + counts.limited)}</b> left{:else}Uploads waiting for a verdict{/if}{/snippet}
+  {#snippet actions()}
+    {#if editReasons}<a class="ui-btn secondary small" href="/admin/review/reasons"><Icon name="settings" size={15} />Reject reasons</a>{/if}
+  {/snippet}
 </PageHead>
 
 <div class="bar">
@@ -330,7 +468,7 @@
     <IconButton label="Refresh" icon="refresh" variant="outline" disabled={L.loading} onclick={() => L.reload()} />
   </div>
 </div>
-<p class="sr-only" id="queue-keys">Arrow keys move between uploads. Enter opens one. A approves, U approves as unlisted, P approves for its owner only, R rejects. Z undoes the last approval while its notice shows.</p>
+<p class="sr-only" id="queue-keys">Arrow keys move between uploads. Enter opens one. A approves, U approves as unlisted, P approves for its owner only, R rejects, S skips to the next. X selects for a verdict on many. Z undoes the last approval while its notice shows.</p>
 
 <LoadGate source={L} label="Loading the queue…">
 {#snippet children(queue)}
@@ -349,8 +487,12 @@
       <!-- The card is the grid's one tab stop (the arrow keys move it); its buttons stay reachable with Tab. -->
       <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
       <li class="card" class:cur={e.id === cur} class:gone={busy === e.id} data-card={e.id} tabindex={e.id === cur ? 0 : -1}
-        aria-label="{clean(e.name)}, by {clean(e.owner?.displayName) || 'unknown'}"
-        onfocus={() => (cur = e.id)} onclick={(ev) => { if (!(ev.target as HTMLElement).closest('a, button')) openDetail(e.id); }}>
+        class:picked={picked.has(e.id)}
+        aria-label="{clean(e.name)}, by {clean(e.owner?.displayName) || 'unknown'}{picked.has(e.id) ? ', selected' : ''}"
+        onfocus={() => (cur = e.id)} onclick={(ev) => { if (!(ev.target as HTMLElement).closest('a, button, label, input')) openDetail(e.id); }}>
+        {#if !resolved}
+          <PickBox class="tickbox" checked={picked.has(e.id)} label="Select {clean(e.name)}" onpick={(ev) => pickOne(e.id, ev.shiftKey)} />
+        {/if}
         <span class="art">
           {#if ready(e)}
             {@const shownW = Math.round((64 * d.width) / d.height)}
@@ -398,6 +540,15 @@
 {/snippet}
 </LoadGate>
 
+{#if sel.ids.length && !resolved}
+  <BulkBar n={sel.ids.length} status={selNote} onclear={() => (sel = EMPTY)} onall={sel.ids.length < Math.min(items.length, 100) ? () => pick(pickAll(sel, ids())) : undefined}>
+    <IconButton label="Approve as unlisted" icon="eye-off" variant="outline" tip="top" onclick={() => approveMany('UNLISTED')} />
+    <IconButton label="Approve for their owners only" icon="user" variant="outline" tip="top" onclick={() => approveMany('PRIVATE')} />
+    <button class="ui-btn danger small" type="button" onclick={askRejectMany}><Icon name="x" size={15} />Reject {count(sel.ids.length)}</button>
+    <button class="ui-btn primary small" type="button" onclick={() => approveMany()}><Icon name="check" size={15} />Approve {count(sel.ids.length)}</button>
+  </BulkBar>
+{/if}
+
 <ReviewDetail
   bind:this={detail}
   emote={shown}
@@ -409,6 +560,7 @@
   hasNext={shownAt < items.length - 1 || pageNo < pages}
   onprev={() => move(-1)}
   onnext={() => move(1)}
+  onskip={() => move(1)}
   onapprove={(v) => shown && approve(shown, v)}
   onreject={() => shown && askReject(shown)}
   onclose={closed}
@@ -416,12 +568,12 @@
 
 <ReasonDialog
   bind:this={reasonDialog}
-  title={`Reject ${iso(rejecting?.name)}`}
-  hint="The uploader sees this. Be short and concrete."
+  title={rejectingMany ? `Reject ${count(rejectingMany.length)} ${rejectingMany.length === 1 ? 'upload' : 'uploads'}` : `Reject ${iso(rejecting?.name)}`}
+  hint={rejectingMany ? 'Every uploader sees this reason. Be short and concrete.' : 'The uploader sees this. Be short and concrete.'}
   action="Reject"
   danger
   max={500}
-  presets={REASONS}
+  presets={reasons}
   onsubmit={reject}
 />
 
@@ -447,6 +599,11 @@
   .card.cur { border-color: var(--border-strong); }
   .card:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   .card.gone { opacity: .5; }
+  /* Picked: an accent hairline and a bold name, as a picked browse tile; never a filled box. */
+  .card.picked { border-color: var(--accent-border); }
+  .card.picked .name { font-weight: 700; }
+  .card :global(.tickbox) { position: absolute; top: 2px; left: 2px; z-index: 1; }
+  .left { font-weight: 700; color: var(--text); }
   .art { display: grid; place-items: center; width: 72px; height: 72px; border-radius: var(--radius); background: var(--bg); overflow: hidden; }
   .art img { display: block; height: 64px; width: auto; max-width: 68px; object-fit: contain; }
   .text { display: grid; gap: 2px; min-width: 0; }

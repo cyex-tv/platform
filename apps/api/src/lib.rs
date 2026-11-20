@@ -17,6 +17,7 @@ pub mod limits;
 pub mod moderation;
 pub mod paddle;
 pub mod read_cache;
+pub mod review;
 pub mod routes;
 pub mod search;
 pub mod shop;

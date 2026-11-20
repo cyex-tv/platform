@@ -102,6 +102,7 @@
         items: [
           ...row('/admin/users', 'Users', 'users', USER_PAGE_PERMISSIONS.some(can)),
           ...row('/admin/roles', 'Roles', 'key', can('roles.manage') || can('roles.assign')),
+          ...row('/admin/grants', 'Give to many', 'user-plus', can('cosmetics.grant') || can('roles.assign') || can('roles.manage')),
           ...row('/admin/entitlements', 'Entitlement graph', 'network', can('entitlements.view') || can('cosmetics.grant')),
         ],
       },

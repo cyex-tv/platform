@@ -16,6 +16,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
       p('emotes.edit_any', 'Edit any emote', "Change the name, tags, flags and visibility of emotes other people uploaded."),
       p('emotes.delete_any', 'Delete any emote', 'Delete emotes other people uploaded, as their owner can. They leave every set they are in.'),
       p('emotes.takedown', 'Take down emotes', 'Remove an emote everywhere it is used and stop its image from being uploaded again.'),
+      p('review.settings', 'Edit reject reasons', 'Change the ready reasons reviewers pick from when they reject an upload.'),
     ],
   },
   {

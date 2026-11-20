@@ -335,6 +335,25 @@ export type Badge = {
   updatedAt: Scalars['String']['output'];
 };
 
+/** One item a batch left alone. */
+export type BatchFailure = {
+  __typename?: 'BatchFailure';
+  /** A machine-readable reason, as an error's `code` (`not_pending`, `not_open`, `not_found`). */
+  code: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+  message: Scalars['String']['output'];
+};
+
+/**
+ * What a batch did: the IDs it changed, and the ones it left alone with why. Nothing is half
+ * done: the changes commit together.
+ */
+export type BatchOutcome = {
+  __typename?: 'BatchOutcome';
+  done: Array<Scalars['String']['output']>;
+  failed: Array<BatchFailure>;
+};
+
 /** The roles cyex.tv comes with (ADR 0010). */
 export type BuiltInRole =
   /** "Admin": can't be deleted. */
@@ -510,6 +529,16 @@ export type CreatedCodeBatch = {
   __typename?: 'CreatedCodeBatch';
   batch: CodeBatch;
   codes: Array<Scalars['String']['output']>;
+};
+
+/** Another emote that may be the same as one in the review queue. */
+export type DuplicateCandidate = {
+  __typename?: 'DuplicateCandidate';
+  emote: Emote;
+  /** Made from the very same file (the same sha256). */
+  sameFile: Scalars['Boolean']['output'];
+  /** How alike the names are, 0 to 1. */
+  similarity: Scalars['Float']['output'];
 };
 
 /** A channel you can manage, with your highest role on it. */
@@ -862,6 +891,19 @@ export type ImageFormat =
   | 'AVIF'
   | 'WEBP';
 
+/**
+ * One login from a pasted list, and the account it names (none when it names no account, or
+ * two different ones on Twitch and Kick).
+ */
+export type LoginMatch = {
+  __typename?: 'LoginMatch';
+  account?: Maybe<AccountSummary>;
+  /** The login as it was asked for, trimmed. */
+  login: Scalars['String']['output'];
+  /** Why there is no account: `not_found`, `ambiguous` or `bad_login`. */
+  problem?: Maybe<Scalars['String']['output']>;
+};
+
 /** The signed-in account. */
 export type Me = {
   __typename?: 'Me';
@@ -998,6 +1040,12 @@ export type Mutation = {
   /** Turn off every code of a batch. Needs `codes.manage`. Audited. */
   disableCodeBatch: CodeBatch;
   /**
+   * Dismiss up to 100 open reports with one optional note, in one step, one audit row each.
+   * Reports already resolved are listed in `failed`. Takedowns stay one at a time
+   * (`resolveReport`). Needs `emotes.review`, `emotes.takedown` or `reports.manage`.
+   */
+  dismissReports: BatchOutcome;
+  /**
    * A copy of everything about your account, as JSON text (`format`, `version`, `account`,
    * `identities`, `sessions`, `channels`, `emotes`, `sets`, `set_editors`, `account_editors`,
    * `editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`). Website
@@ -1071,6 +1119,12 @@ export type Mutation = {
    */
   restrictAccount: AccountStatus;
   /**
+   * Approve (optionally as `visibility`) or reject (with `reason`) up to 100 pending emotes in
+   * one step. All of it commits together, with one audit row and one notice per emote; emotes
+   * that aren't pending are left alone and listed in `failed`. Needs `emotes.review`.
+   */
+  reviewEmotes: BatchOutcome;
+  /**
    * Take a badge or paint away; if they showed it, it stops. False when they didn't own it.
    * Needs `cosmetics.grant`. Audited.
    */
@@ -1097,6 +1151,11 @@ export type Mutation = {
    * `not_found` when that platform isn't linked. Unlinking it goes back to the default.
    */
   setDisplayPlatform: Me;
+  /**
+   * Replace the review queue's ready reject reasons (0 to 12, each 1 to 200 characters, in
+   * order). Needs `review.settings`. Audited.
+   */
+  setReviewReasons: Array<Scalars['String']['output']>;
   /**
    * Sign out everywhere, here too: every site and app session ends and the cookie is cleared.
    * Returns how many sessions ended. With an app token, only that app session ends.
@@ -1320,6 +1379,12 @@ export type MutationDisableCodeBatchArgs = {
 };
 
 
+export type MutationDismissReportsArgs = {
+  ids: Array<Scalars['String']['input']>;
+  note?: InputMaybe<Scalars['String']['input']>;
+};
+
+
 export type MutationGrantCosmeticArgs = {
   input: GrantCosmeticInput;
 };
@@ -1398,6 +1463,14 @@ export type MutationRestrictAccountArgs = {
 };
 
 
+export type MutationReviewEmotesArgs = {
+  ids: Array<Scalars['String']['input']>;
+  reason?: InputMaybe<Scalars['String']['input']>;
+  verdict: ReviewVerdict;
+  visibility?: InputMaybe<EmoteVisibility>;
+};
+
+
 export type MutationRevokeCosmeticArgs = {
   accountId: Scalars['String']['input'];
   cosmeticId: Scalars['String']['input'];
@@ -1420,6 +1493,11 @@ export type MutationSelectCosmeticsArgs = {
 
 export type MutationSetDisplayPlatformArgs = {
   platform: Platform;
+};
+
+
+export type MutationSetReviewReasonsArgs = {
+  reasons: Array<Scalars['String']['input']>;
 };
 
 
@@ -1829,6 +1907,13 @@ export type Query = {
    */
   accountSubscriptions: Array<AccountSubscription>;
   /**
+   * Accounts for up to 100 pasted logins (`name`, `@name`, `twitch:name` or `kick:name`), in
+   * order, each with the account or why there is none (`not_found`, `ambiguous`,
+   * `bad_login`). For grants to many at once: needs `cosmetics.grant`, `roles.assign`,
+   * `roles.manage` or `users.view`.
+   */
+  accountsByLogin: Array<LoginMatch>;
+  /**
    * An account as staff see it: identities, created time and restrictions. Needs
    * `users.view` or `users.restrict`.
    */
@@ -1893,6 +1978,11 @@ export type Query = {
    */
   emoteChannels: Array<Channel>;
   /**
+   * Emotes that may duplicate one in the review queue: the same file (sha256) first, then
+   * similar names, closest first; at most 12, any state but deleted. Needs `emotes.review`.
+   */
+  emoteDuplicates: Array<DuplicateCandidate>;
+  /**
    * What happened to one emote, newest first: the latest 100 audit entries about it
    * (upload, edits, reviews, notes, takedowns). Needs `emotes.review`.
    */
@@ -1910,6 +2000,12 @@ export type Query = {
    * an emote ID, the emote isn't approved and listed, or it is not in the top 100.
    */
   emoteTrending?: Maybe<EmoteTrending>;
+  /**
+   * Public emotes already made from the file with this sha256 (64 hex digits), oldest first,
+   * at most 3: the upload form asks before sending, so it can say "looks like" (it never
+   * blocks). Signed in.
+   */
+  emotesWithSameFile: Array<Emote>;
   /**
    * The entitlement graph of an account: every badge, paint and role it holds or held, where
    * each came from (staff, an order, a redeem code, an event, the User role, the owner list),
@@ -2002,6 +2098,11 @@ export type Query = {
    * uploader, and an order.
    */
   reviewQueue: ReviewQueue;
+  /**
+   * The ready reject reasons the review queue offers, in order. Needs `emotes.review` or
+   * `review.settings`.
+   */
+  reviewReasons: Array<Scalars['String']['output']>;
   /**
    * All roles, most senior first, each with whether you may edit or assign it. Needs
    * `roles.manage` or `roles.assign`. The top role is listed to the owners only.
@@ -2142,6 +2243,11 @@ export type QueryAccountSubscriptionsArgs = {
 };
 
 
+export type QueryAccountsByLoginArgs = {
+  logins: Array<Scalars['String']['input']>;
+};
+
+
 export type QueryAdminAccountArgs = {
   accountId: Scalars['String']['input'];
 };
@@ -2217,6 +2323,11 @@ export type QueryEmoteChannelsArgs = {
 };
 
 
+export type QueryEmoteDuplicatesArgs = {
+  emoteId: Scalars['String']['input'];
+};
+
+
 export type QueryEmoteHistoryArgs = {
   emoteId: Scalars['String']['input'];
 };
@@ -2235,6 +2346,11 @@ export type QueryEmoteTransferRequestsArgs = {
 export type QueryEmoteTrendingArgs = {
   id: Scalars['String']['input'];
   window?: InputMaybe<TrendingWindow>;
+};
+
+
+export type QueryEmotesWithSameFileArgs = {
+  sha256: Scalars['String']['input'];
 };
 
 
@@ -2515,6 +2631,11 @@ export type ReviewTab =
   | 'PUBLIC'
   /** Approved or rejected by a reviewer. */
   | 'RESOLVED';
+
+/** What a batch review does to every emote in it. */
+export type ReviewVerdict =
+  | 'APPROVE'
+  | 'REJECT';
 
 export type Role = {
   __typename?: 'Role';
@@ -3763,6 +3884,57 @@ export type EntitlementHoldersQueryVariables = Exact<{
 
 
 export type EntitlementHoldersQuery = { __typename?: 'Query', entitlementHolders: Array<{ __typename?: 'EntitlementGrant', kind: GrantKind, itemId: string, itemName: string, accountId: string, source: GrantSource, reason?: string | null, grantedBy?: string | null, grantedAt?: string | null, orderId?: string | null, orderName?: string | null, orderStatus?: string | null, codeBatchId?: string | null, codeBatchName?: string | null, revokedAt?: string | null, revokedBy?: string | null, revokeReason?: string | null, active: boolean }> };
+
+export type ReviewEmotesMutationVariables = Exact<{
+  ids: Array<Scalars['String']['input']> | Scalars['String']['input'];
+  verdict: ReviewVerdict;
+  visibility?: InputMaybe<EmoteVisibility>;
+  reason?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type ReviewEmotesMutation = { __typename?: 'Mutation', reviewEmotes: { __typename?: 'BatchOutcome', done: Array<string>, failed: Array<{ __typename?: 'BatchFailure', id: string, code: string, message: string }> } };
+
+export type DismissReportsMutationVariables = Exact<{
+  ids: Array<Scalars['String']['input']> | Scalars['String']['input'];
+  note?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type DismissReportsMutation = { __typename?: 'Mutation', dismissReports: { __typename?: 'BatchOutcome', done: Array<string>, failed: Array<{ __typename?: 'BatchFailure', id: string, code: string, message: string }> } };
+
+export type EmoteDuplicatesQueryVariables = Exact<{
+  emoteId: Scalars['String']['input'];
+}>;
+
+
+export type EmoteDuplicatesQuery = { __typename?: 'Query', emoteDuplicates: Array<{ __typename?: 'DuplicateCandidate', sameFile: boolean, similarity: number, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> };
+
+export type ReviewReasonsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ReviewReasonsQuery = { __typename?: 'Query', reviewReasons: Array<string> };
+
+export type SetReviewReasonsMutationVariables = Exact<{
+  reasons: Array<Scalars['String']['input']> | Scalars['String']['input'];
+}>;
+
+
+export type SetReviewReasonsMutation = { __typename?: 'Mutation', setReviewReasons: Array<string> };
+
+export type AccountsByLoginQueryVariables = Exact<{
+  logins: Array<Scalars['String']['input']> | Scalars['String']['input'];
+}>;
+
+
+export type AccountsByLoginQuery = { __typename?: 'Query', accountsByLogin: Array<{ __typename?: 'LoginMatch', login: string, problem?: string | null, account?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null }> };
+
+export type EmotesWithSameFileQueryVariables = Exact<{
+  sha256: Scalars['String']['input'];
+}>;
+
+
+export type EmotesWithSameFileQuery = { __typename?: 'Query', emotesWithSameFile: Array<{ __typename?: 'Emote', id: string, name: string, owner?: { __typename?: 'AccountSummary', id: string, displayName: string } | null }> };
 
 export class TypedDocumentString<TResult, TVariables>
   extends String
@@ -7321,3 +7493,108 @@ export const EntitlementHoldersDocument = new TypedDocumentString(`
   revokeReason
   active
 }`) as unknown as TypedDocumentString<EntitlementHoldersQuery, EntitlementHoldersQueryVariables>;
+export const ReviewEmotesDocument = new TypedDocumentString(`
+    mutation ReviewEmotes($ids: [String!]!, $verdict: ReviewVerdict!, $visibility: EmoteVisibility, $reason: String) {
+  reviewEmotes(
+    ids: $ids
+    verdict: $verdict
+    visibility: $visibility
+    reason: $reason
+  ) {
+    done
+    failed {
+      id
+      code
+      message
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<ReviewEmotesMutation, ReviewEmotesMutationVariables>;
+export const DismissReportsDocument = new TypedDocumentString(`
+    mutation DismissReports($ids: [String!]!, $note: String) {
+  dismissReports(ids: $ids, note: $note) {
+    done
+    failed {
+      id
+      code
+      message
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<DismissReportsMutation, DismissReportsMutationVariables>;
+export const EmoteDuplicatesDocument = new TypedDocumentString(`
+    query EmoteDuplicates($emoteId: String!) {
+  emoteDuplicates(emoteId: $emoteId) {
+    sameFile
+    similarity
+    emote {
+      ...EmoteFields
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    nsfw
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<EmoteDuplicatesQuery, EmoteDuplicatesQueryVariables>;
+export const ReviewReasonsDocument = new TypedDocumentString(`
+    query ReviewReasons {
+  reviewReasons
+}
+    `) as unknown as TypedDocumentString<ReviewReasonsQuery, ReviewReasonsQueryVariables>;
+export const SetReviewReasonsDocument = new TypedDocumentString(`
+    mutation SetReviewReasons($reasons: [String!]!) {
+  setReviewReasons(reasons: $reasons)
+}
+    `) as unknown as TypedDocumentString<SetReviewReasonsMutation, SetReviewReasonsMutationVariables>;
+export const AccountsByLoginDocument = new TypedDocumentString(`
+    query AccountsByLogin($logins: [String!]!) {
+  accountsByLogin(logins: $logins) {
+    login
+    problem
+    account {
+      id
+      displayName
+      avatar
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<AccountsByLoginQuery, AccountsByLoginQueryVariables>;
+export const EmotesWithSameFileDocument = new TypedDocumentString(`
+    query EmotesWithSameFile($sha256: String!) {
+  emotesWithSameFile(sha256: $sha256) {
+    id
+    name
+    owner {
+      id
+      displayName
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<EmotesWithSameFileQuery, EmotesWithSameFileQueryVariables>;

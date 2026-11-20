@@ -15,6 +15,20 @@ export type Entry = {
 
 export const ENTRIES: Entry[] = [
   {
+    id: '2026-11-20-same-file',
+    date: '2026-11-20',
+    title: 'Uploads that are already here, and a faster review queue',
+    items: [
+      'Pick a file that is already a public emote and the upload form says which one and who made it, with a link. You can add that one to your sets instead, or upload yours anyway.',
+    ],
+    staff: [
+      'The review queue counts what is left, S skips to the next upload, and the reject reasons can be edited under Reject reasons.',
+      'Tick uploads (X, Shift for a range) to approve or reject many at once, with one reason. Reports can be dismissed many at once too.',
+      'An open upload lists possible duplicates: the same file, then close names.',
+      'Give to many: paste a list of logins to give one badge, paint or role to each, and see which logins matched.',
+    ],
+  },
+  {
     id: '2026-11-20-shortcuts-previews',
     date: '2026-11-20',
     title: 'Shortcuts, link previews and this page',
