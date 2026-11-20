@@ -103,7 +103,7 @@
           {#each badges as b (b.id)}
             <label class="opt" class:on={owned.badgeId === b.id}>
               <input type="radio" name="badge" disabled={saving} checked={owned.badgeId === b.id} onchange={() => choose(owned, 'badge', b.id)} />
-              <span class="dot" aria-hidden="true"></span><BadgeIcon badge={b} size={24} />
+              <span class="dot" aria-hidden="true"></span><BadgeIcon badge={b} size={28} />
               <span class="lb"><bdi>{clean(b.name)}</bdi></span>
             </label>
           {:else}

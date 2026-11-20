@@ -367,12 +367,14 @@ async fn upload_emote(
     Ok((StatusCode::ACCEPTED, Json(emote)))
 }
 
-/// Reads a multipart file field under the 5 MB limit of cosmetic pictures.
+/// Reads a multipart file field under the 8 MB limit of badge pictures.
 async fn file_field(
     field: &mut axum::extract::multipart::Field<'_>,
     bad_form: impl Fn(&str) -> ApiError,
 ) -> ApiResult<Vec<u8>> {
-    let limits = cyex_tv_media::Limits::default();
+    // The larger of the badge (8 MB) and paint (5 MB) caps: the kind may come after the file, and
+    // the per-kind cap is checked when the picture is decoded.
+    let limits = cyex_tv_media::Limits::badge();
     let mut bytes = Vec::new();
     while let Some(chunk) = field.chunk().await.map_err(|err| {
         if err.status() == StatusCode::PAYLOAD_TOO_LARGE {
@@ -391,10 +393,19 @@ async fn file_field(
 
 /// Upload a badge or paint picture (staff, `cosmetics.manage`).
 ///
-/// The worker makes its files (WebP and AVIF at 1x, 2x and 4x) under `cosmetics/`; poll
-/// `cosmeticImage(id)` until `ready`, then use the ID in `createBadge` or `createPaint`. Badges:
-/// square, at least 72×72 px. Paints: at least 64 px tall. PNG, APNG, GIF or WebP, at most 5 MB.
-/// The same bytes give the same picture again.
+/// The worker makes its files (WebP and AVIF) under `cosmetics/`; poll `cosmeticImage(id)` until
+/// `ready`, then use the ID in `createBadge` or `createPaint`.
+///
+/// Badges follow the cyex badge size ladder: square 18, 36 and 72 px (`1x`, `2x`, `4x`), then
+/// 128, 256 and 512 px (`128.webp`, `256.webp`, `512.webp`), all scaled from one 512 px master.
+/// PNG, APNG, JPEG, WebP or GIF, square, at least 72×72 px (at most 2048), up to 8 MB. Animated:
+/// at most 120 frames, 10 seconds and 64 MP (width × height × frames), and at most 512 KB per
+/// chat size once converted; 128, 256 and 512 px animate only within 1, 2 and 4 MB (their
+/// `_static` files always exist). Paints: at least 64 px tall, PNG, APNG, JPEG, GIF or WebP, at
+/// most 5 MB.
+///
+/// The same bytes give the same picture again; for a badge made before the larger sizes, they
+/// are made then (as `remakeCosmeticImage` does).
 #[utoipa::path(
     post,
     path = "/v1/cosmetics/images",
@@ -422,11 +433,14 @@ async fn upload_cosmetic_image(
     let bad_form = |message: &str| ApiError::new(StatusCode::BAD_REQUEST, "bad_form", message);
     let mut kind = None;
     let mut file: Option<Vec<u8>> = None;
-    while let Some(mut field) = form
-        .next_field()
-        .await
-        .map_err(|_| bad_form("The form couldn't be read."))?
-    {
+    while let Some(mut field) = form.next_field().await.map_err(|err| {
+        // A body over the upload limit can fail here, before the file field is read.
+        if err.status() == StatusCode::PAYLOAD_TOO_LARGE {
+            upload::too_large_for(&cyex_tv_media::Limits::badge())
+        } else {
+            bad_form("The form couldn't be read.")
+        }
+    })? {
         match field.name() {
             Some("file") if file.is_none() => file = Some(file_field(&mut field, bad_form).await?),
             Some("kind") if kind.is_none() => {

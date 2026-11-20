@@ -122,6 +122,7 @@ type Documents = {
     "\n  query Entitlements($kind: CosmeticKind!, $accountId: String, $cosmeticId: String, $page: Int, $perPage: Int) {\n    cosmeticEntitlements(kind: $kind, accountId: $accountId, cosmeticId: $cosmeticId, page: $page, perPage: $perPage) {\n      total\n      items {\n        account {\n          id\n          displayName\n          avatar\n        }\n        kind\n        cosmeticId\n        source\n        reason\n        grantedBy {\n          id\n          displayName\n        }\n        grantedAt\n      }\n    }\n  }\n": typeof types.EntitlementsDocument,
     "\n  mutation CreateBadge($input: CreateBadgeInput!) {\n    createBadge(input: $input) {\n      ...BadgeFields\n    }\n  }\n": typeof types.CreateBadgeDocument,
     "\n  mutation UpdateBadge($id: String!, $input: UpdateBadgeInput!) {\n    updateBadge(id: $id, input: $input) {\n      ...BadgeFields\n    }\n  }\n": typeof types.UpdateBadgeDocument,
+    "\n  mutation RemakeCosmeticImage($id: String!) {\n    remakeCosmeticImage(id: $id) {\n      ...CosmeticImageFields\n    }\n  }\n": typeof types.RemakeCosmeticImageDocument,
     "\n  mutation DeleteBadge($id: String!) {\n    deleteBadge(id: $id)\n  }\n": typeof types.DeleteBadgeDocument,
     "\n  mutation DeletePaint($id: String!) {\n    deletePaint(id: $id)\n  }\n": typeof types.DeletePaintDocument,
     "\n  mutation GrantCosmetic($input: GrantCosmeticInput!) {\n    grantCosmetic(input: $input) {\n      cosmeticId\n    }\n  }\n": typeof types.GrantCosmeticDocument,
@@ -297,6 +298,7 @@ const documents: Documents = {
     "\n  query Entitlements($kind: CosmeticKind!, $accountId: String, $cosmeticId: String, $page: Int, $perPage: Int) {\n    cosmeticEntitlements(kind: $kind, accountId: $accountId, cosmeticId: $cosmeticId, page: $page, perPage: $perPage) {\n      total\n      items {\n        account {\n          id\n          displayName\n          avatar\n        }\n        kind\n        cosmeticId\n        source\n        reason\n        grantedBy {\n          id\n          displayName\n        }\n        grantedAt\n      }\n    }\n  }\n": types.EntitlementsDocument,
     "\n  mutation CreateBadge($input: CreateBadgeInput!) {\n    createBadge(input: $input) {\n      ...BadgeFields\n    }\n  }\n": types.CreateBadgeDocument,
     "\n  mutation UpdateBadge($id: String!, $input: UpdateBadgeInput!) {\n    updateBadge(id: $id, input: $input) {\n      ...BadgeFields\n    }\n  }\n": types.UpdateBadgeDocument,
+    "\n  mutation RemakeCosmeticImage($id: String!) {\n    remakeCosmeticImage(id: $id) {\n      ...CosmeticImageFields\n    }\n  }\n": types.RemakeCosmeticImageDocument,
     "\n  mutation DeleteBadge($id: String!) {\n    deleteBadge(id: $id)\n  }\n": types.DeleteBadgeDocument,
     "\n  mutation DeletePaint($id: String!) {\n    deletePaint(id: $id)\n  }\n": types.DeletePaintDocument,
     "\n  mutation GrantCosmetic($input: GrantCosmeticInput!) {\n    grantCosmetic(input: $input) {\n      cosmeticId\n    }\n  }\n": types.GrantCosmeticDocument,
@@ -793,6 +795,10 @@ export function graphql(source: "\n  mutation CreateBadge($input: CreateBadgeInp
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation UpdateBadge($id: String!, $input: UpdateBadgeInput!) {\n    updateBadge(id: $id, input: $input) {\n      ...BadgeFields\n    }\n  }\n"): typeof import('./graphql').UpdateBadgeDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation RemakeCosmeticImage($id: String!) {\n    remakeCosmeticImage(id: $id) {\n      ...CosmeticImageFields\n    }\n  }\n"): typeof import('./graphql').RemakeCosmeticImageDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

@@ -1,6 +1,6 @@
 # 0015: Chat cosmetics (badges and name paints)
 
-- Status: accepted
+- Status: accepted (badge picture sizes and upload limits amended by 0025)
 - Date: 2026/11/17
 
 ## Context

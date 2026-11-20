@@ -474,40 +474,195 @@ mod encoding {
         assert_eq!(b.size_for(72, 72, 4), (72, 72));
         // Square boxes: a wide picture fits the width.
         assert_eq!(b.size_for(144, 72, 1), (18, 9));
-        assert_eq!(b.all_names().len(), 12);
+        // Six sizes, each as WebP, AVIF and their still forms.
+        assert_eq!(b.all_names().len(), 24);
+        assert_eq!(b.stems(), ["1x", "2x", "4x", "128", "256", "512"]);
         assert!(!b.all_names().contains(&"3x.webp".to_owned()));
+        assert!(b.all_names().contains(&"512_static.avif".to_owned()));
         let p = Profile::PAINT;
         assert_eq!(p.size_for(512, 256, 1), (128, 64));
         assert_eq!(p.size_for(1000, 100, 1), (512, 51));
+        assert_eq!(p.all_names().len(), 12);
 
-        let still = transcode_with(&png(96, 96), &Limits::default(), &b).unwrap();
+        let still = transcode_with(&png(96, 96), &Limits::badge(), &b).unwrap();
         let sizes: Vec<_> = still
             .webp
             .iter()
-            .map(|v| (v.name.as_str(), v.width, v.height))
+            .map(|v| (v.name.as_str(), v.scale, v.width, v.height))
             .collect();
         assert_eq!(
             sizes,
             [
-                ("1x.webp", 18, 18),
-                ("2x.webp", 36, 36),
-                ("4x.webp", 72, 72)
+                ("1x.webp", 1, 18, 18),
+                ("2x.webp", 2, 36, 36),
+                ("4x.webp", 4, 72, 72),
+                ("128.webp", 7, 128, 128),
+                ("256.webp", 14, 256, 256),
+                ("512.webp", 28, 512, 512)
             ]
         );
-        assert_eq!(still.avif.len(), 3);
+        let avif: Vec<_> = still.avif.iter().map(|v| v.name.as_str()).collect();
+        assert_eq!(
+            avif,
+            [
+                "1x.avif", "2x.avif", "4x.avif", "128.avif", "256.avif", "512.avif"
+            ]
+        );
         assert!(still.avif.iter().all(|v| is_avif(&v.bytes)));
+        let (_, _, dims) = webp_frames(&still.webp[5].bytes);
+        assert_eq!(dims, (512, 512));
 
-        let moving = transcode_with(&gif(80, 80, 3), &Limits::default(), &b).unwrap();
+        let moving = transcode_with(&gif(80, 80, 3), &Limits::badge(), &b).unwrap();
         assert!(moving.animated);
-        // Animated WebP at each scale, plus static WebP and AVIF first frames.
-        assert_eq!(moving.webp.len(), 6);
+        // Animated WebP at each size (all within their caps), plus still WebP and AVIF.
+        let names: Vec<_> = moving.webp.iter().map(|v| v.name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "1x.webp",
+                "2x.webp",
+                "4x.webp",
+                "128.webp",
+                "256.webp",
+                "512.webp",
+                "1x_static.webp",
+                "2x_static.webp",
+                "4x_static.webp",
+                "128_static.webp",
+                "256_static.webp",
+                "512_static.webp"
+            ]
+        );
         assert!(moving.avif.iter().all(|v| v.is_static));
+        assert_eq!(moving.avif.len(), 6);
         let (animated, frames, dims) = webp_frames(&moving.webp[0].bytes);
         assert!(animated);
         assert_eq!((frames, dims), (3, (18, 18)));
+        let (animated, frames, dims) = webp_frames(&moving.webp[5].bytes);
+        assert!(animated);
+        assert_eq!((frames, dims), (3, (512, 512)));
         for v in moving.webp.iter().chain(&moving.avif) {
             assert!(b.all_names().contains(&v.name), "{}", v.name);
         }
+    }
+
+    #[test]
+    fn badges_come_from_one_512_px_master() {
+        use crate::encode::{Profile, transcode_with};
+        let b = Profile::BADGE;
+        assert_eq!(b.master_size(72, 72), Some((512, 512)));
+        assert_eq!(b.master_size(2048, 2048), Some((512, 512)));
+        assert_eq!(Profile::EMOTE.master_size(72, 72), None);
+        let sizes = |bytes: &[u8]| -> Vec<(u32, u32)> {
+            transcode_with(bytes, &Limits::badge(), &b)
+                .unwrap()
+                .webp
+                .iter()
+                .map(|v| (v.width, v.height))
+                .collect()
+        };
+        let ladder = [
+            (18, 18),
+            (36, 36),
+            (72, 72),
+            (128, 128),
+            (256, 256),
+            (512, 512),
+        ];
+        // The smallest upload is scaled up, a bigger one down: the same ladder either way.
+        assert_eq!(sizes(&png(72, 72)), ladder);
+        assert_eq!(sizes(&png(1024, 1024)), ladder);
+        // Emotes still never grow past the original.
+        assert_eq!(size_for(20, 20, 4), (20, 20));
+    }
+
+    #[test]
+    fn animated_badges_keep_to_their_caps() {
+        use crate::encode::{
+            BADGE_MAX_ANIMATED_CHAT_BYTES, Large, Profile, check_animated_scales, transcode_with,
+        };
+        assert_eq!(BADGE_MAX_ANIMATED_CHAT_BYTES, 512 * 1024);
+        let caps: Vec<_> = Profile::BADGE
+            .large
+            .iter()
+            .map(|l| (l.px, l.max_animated_bytes))
+            .collect();
+        assert_eq!(
+            caps,
+            [(128, 1 << 20), (256, 2 << 20), (512, 4 << 20)],
+            "1, 2 and 4 MB"
+        );
+        let file = gif(80, 80, 3);
+        assert!(check_animated_scales(&file, &Limits::badge(), &Profile::BADGE).is_ok());
+
+        // A chat size over its cap fails the picture, in the upload check and in the job.
+        let tight = Profile {
+            max_animated_scale_bytes: Some(64),
+            ..Profile::BADGE
+        };
+        let Err(MediaError::TooLarge(message)) =
+            check_animated_scales(&file, &Limits::badge(), &tight)
+        else {
+            panic!("over the chat cap is refused");
+        };
+        assert!(message.contains("at 72 px"), "{message}");
+        assert!(matches!(
+            transcode_with(&file, &Limits::badge(), &tight),
+            Err(MediaError::TooLarge(_))
+        ));
+        // A still picture has nothing to animate.
+        assert!(check_animated_scales(&png(96, 96), &Limits::badge(), &tight).is_ok());
+
+        // A large size over its cap keeps only its still frame.
+        const HEAVY: [Large; 3] = [
+            Large {
+                px: 128,
+                max_animated_bytes: 1 << 20,
+            },
+            Large {
+                px: 256,
+                max_animated_bytes: 64,
+            },
+            Large {
+                px: 512,
+                max_animated_bytes: 64,
+            },
+        ];
+        let heavy = Profile {
+            large: &HEAVY,
+            ..Profile::BADGE
+        };
+        let out = transcode_with(&file, &Limits::badge(), &heavy).unwrap();
+        let names: Vec<_> = out.webp.iter().map(|v| v.name.as_str()).collect();
+        assert!(names.contains(&"128.webp"));
+        assert!(!names.contains(&"256.webp") && !names.contains(&"512.webp"));
+        assert!(names.contains(&"256_static.webp") && names.contains(&"512_static.webp"));
+        assert!(heavy.is_complete(names.iter().copied()));
+    }
+
+    #[test]
+    fn a_picture_made_before_the_ladder_is_not_complete() {
+        use crate::encode::Profile;
+        let b = Profile::BADGE;
+        let old = [
+            "1x.webp", "2x.webp", "4x.webp", "1x.avif", "2x.avif", "4x.avif",
+        ];
+        assert!(!b.is_complete(old));
+        let new = [
+            "1x.webp", "2x.webp", "4x.webp", "128.webp", "256.webp", "512.webp",
+        ];
+        assert!(b.is_complete(new));
+        let animated = [
+            "1x.webp",
+            "2x.webp",
+            "4x.webp",
+            "128.webp",
+            "256_static.webp",
+            "512_static.webp",
+        ];
+        assert!(b.is_complete(animated));
+        // Emotes have no larger sizes: their four scales are all.
+        assert!(Profile::EMOTE.is_complete(["1x.webp", "2x.webp", "3x.webp", "4x.webp"]));
     }
 }
 
@@ -582,4 +737,72 @@ fn emotes_may_be_up_to_8_mb() {
         panic!("an 8 MB + 1 byte file is refused");
     };
     assert_eq!(message, "The file is over 8 MB, the most an upload can be.");
+}
+
+fn gif_with_delay(w: u32, h: u32, frames: u32, delay_ms: u32) -> Vec<u8> {
+    let mut out = Vec::new();
+    {
+        let mut enc = GifEncoder::new(&mut out);
+        enc.set_repeat(Repeat::Infinite).unwrap();
+        for i in 0..frames {
+            enc.encode_frame(Frame::from_parts(
+                gradient(w, h, (i * 40) as u8),
+                0,
+                0,
+                Delay::from_numer_denom_ms(delay_ms, 1),
+            ))
+            .unwrap();
+        }
+    }
+    out
+}
+
+#[test]
+fn badge_limits_follow_the_badge_spec() {
+    let l = Limits::badge();
+    assert_eq!(l.max_bytes, 8 * 1024 * 1024);
+    assert_eq!(l.max_frames, 120);
+    assert_eq!(l.max_duration_ms, 10_000);
+    assert_eq!(l.max_total_pixels, 64_000_000);
+    // A 512×512 animation of 120 frames fits the work cap.
+    assert!(512 * 512 * 120 <= l.max_total_pixels);
+    // Bigger than the master is fine: it is scaled down.
+    assert!(probe(&png(1024, 1024), &l).is_ok());
+    assert!(matches!(
+        probe(&png(2049, 2049), &l),
+        Err(MediaError::TooLarge(_))
+    ));
+
+    assert!(probe(&gif(8, 8, 120), &l).is_ok());
+    let Err(MediaError::TooLarge(message)) = probe(&gif(8, 8, 121), &l) else {
+        panic!("121 frames is refused");
+    };
+    assert_eq!(
+        message,
+        "The animation has more than 120 frames, the most it can have."
+    );
+
+    // 10 seconds exactly fits; one frame more doesn't.
+    assert!(probe(&gif_with_delay(8, 8, 5, 2000), &l).is_ok());
+    let Err(MediaError::TooLarge(message)) = probe(&gif_with_delay(8, 8, 6, 2000), &l) else {
+        panic!("12 seconds is refused");
+    };
+    assert_eq!(
+        message,
+        "The animation runs longer than 10 seconds, the most it can."
+    );
+    // Frames under 20 ms show for 100 ms, so 101 of them run 10.1 s.
+    assert!(matches!(
+        probe(&gif_with_delay(8, 8, 101, 10), &l),
+        Err(MediaError::TooLarge(_))
+    ));
+    // Emotes and paints have no duration cap.
+    assert!(probe(&gif_with_delay(8, 8, 6, 2000), &Limits::default()).is_ok());
+
+    // Over 8 MB is refused, at most 8 MB decodes.
+    assert!(probe(&padded_png(96, 96, BADGE_MAX_BYTES), &l).is_ok());
+    assert!(matches!(
+        probe(&padded_png(96, 96, BADGE_MAX_BYTES + 1), &l),
+        Err(MediaError::TooLarge(_))
+    ));
 }

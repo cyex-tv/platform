@@ -75,6 +75,7 @@ const STAFF: &[&str] = &[
     "createBadge",
     "updateBadge",
     "deleteBadge",
+    "remakeCosmeticImage",
     "createPaint",
     "updatePaint",
     "deletePaint",

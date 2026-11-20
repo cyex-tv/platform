@@ -1,13 +1,17 @@
 <script lang="ts">
   // Every badge: picture, name and tooltip, how many own it; New badge / Edit in one dialog
   // (name, tooltip, picture upload that waits until its files are made); Give, Owners, Delete.
+  // A badge made before the 128, 256 and 512 px sizes offers Make larger sizes (its files made
+  // again from the stored original).
   import { gql } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import State from '$lib/components/State.svelte';
   import BadgeIcon from '$lib/cosmetics/BadgeIcon.svelte';
   import { forgetCatalog, loadCatalog, type Badge } from '$lib/cosmetics/store.svelte';
   import { clean, count, iso } from '$lib/format';
-  import { CREATE_BADGE, DELETE_BADGE, ENTITLEMENTS, UPDATE_BADGE } from '$lib/queries';
+  import { COSMETIC_IMAGE, CREATE_BADGE, DELETE_BADGE, ENTITLEMENTS, REMAKE_COSMETIC_IMAGE, UPDATE_BADGE } from '$lib/queries';
+  import { lacksLadder } from '$lib/cosmetics/badgeFile';
+  import { waitReady } from '$lib/cosmetics/upload';
   import GrantDialog from '$lib/admin/GrantDialog.svelte';
   import ImageUpload from '$lib/admin/ImageUpload.svelte';
   import Owners from '$lib/admin/Owners.svelte';
@@ -101,6 +105,28 @@
     }
   }
 
+  // Badges whose files are being made again.
+  let remaking = $state<Record<string, boolean>>({});
+  const lacks = (b: Badge) => lacksLadder(b.image.files.map((f) => f.name));
+
+  async function remake(b: Badge) {
+    remaking[b.id] = true;
+    try {
+      await gql(REMAKE_COSMETIC_IMAGE, { id: b.image.id });
+      // Done when the picture has every size; its old files stay in use meanwhile.
+      await waitReady(async () => {
+        const img = (await gql(COSMETIC_IMAGE, { id: b.image.id })).cosmeticImage;
+        return img && { ...img, ready: img.ready && !lacksLadder(img.files.map((f) => f.name)) };
+      });
+      notify(`${iso(b.name)} has every size now.`);
+      await L.reload();
+    } catch (e) {
+      fail(e);
+    } finally {
+      remaking[b.id] = false;
+    }
+  }
+
   async function remove(b: Badge) {
     busy = true;
     try {
@@ -147,6 +173,11 @@
                 <button class="ui-btn secondary small" type="button" onclick={() => { giving = b; grantDlg?.open({ id: b.id, name: b.name }); }}>Give</button>
               {/if}
               {#if manage}
+                {#if lacks(b)}
+                  <button class="ui-btn secondary small" type="button" disabled={remaking[b.id]} title="Made before the 128, 256 and 512 px sizes: make them from the stored original" onclick={() => remake(b)}>
+                    {#if remaking[b.id]}<span class="ui-spinner" aria-hidden="true"></span>Making sizes…{:else}<Icon name="refresh" size={14} />Make larger sizes{/if}
+                  </button>
+                {/if}
                 <button class="ui-btn secondary small" type="button" onclick={() => edit(b)}><Icon name="pencil" size={14} />Edit</button>
                 <Confirm small label="Delete" confirm={owners[b.id] ? `Click again: ${count(owners[b.id])} ${owners[b.id] === 1 ? 'owner' : 'owners'}` : 'Click again to delete it for everyone'} {busy} onconfirm={() => remove(b)} />
               {/if}

@@ -723,7 +723,10 @@ export type EmoteFile = {
   isStatic: Scalars['Boolean']['output'];
   /** For example `2x.webp` or `1x_static.avif`. */
   name: Scalars['String']['output'];
-  /** 1 to 4. */
+  /**
+   * 1 to 4. A badge's larger sizes (`128`, `256`, `512`) carry their px ÷ 18, rounded: 7, 14
+   * and 28; read `width` for the size.
+   */
   scale: Scalars['Int']['output'];
   /** Bytes. */
   size: Scalars['Int']['output'];
@@ -1264,6 +1267,13 @@ export type Mutation = {
   /** Reject a pending emote with a reason. Needs `emotes.review`. Audited. */
   rejectEmote: Emote;
   /**
+   * Make a badge or paint picture's files again from its stored original: a badge made
+   * before the 128, 256 and 512 px sizes gets them. Its files stay in use until the new set
+   * is made; read `cosmeticImage(id)` to see it. `original_missing` when the original is
+   * gone (upload it again). Needs `cosmetics.manage`. Audited.
+   */
+  remakeCosmeticImage: CosmeticImage;
+  /**
    * Remove an account editor: the owner, an editor with `EDITORS`, `editors.manage_any`, or the editor themselves
    * (with `ownerId` set to the account they leave). False when they weren't one. Audited.
    */
@@ -1666,6 +1676,11 @@ export type MutationRefundOrderArgs = {
 export type MutationRejectEmoteArgs = {
   id: Scalars['String']['input'];
   reason: Scalars['String']['input'];
+};
+
+
+export type MutationRemakeCosmeticImageArgs = {
+  id: Scalars['String']['input'];
 };
 
 
@@ -4107,6 +4122,13 @@ export type UpdateBadgeMutationVariables = Exact<{
 
 
 export type UpdateBadgeMutation = { __typename?: 'Mutation', updateBadge: { __typename?: 'Badge', id: string, name: string, tooltip: string, image: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } } };
+
+export type RemakeCosmeticImageMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type RemakeCosmeticImageMutation = { __typename?: 'Mutation', remakeCosmeticImage: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } };
 
 export type DeleteBadgeMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -7061,6 +7083,27 @@ fragment BadgeFields on Badge {
     ...CosmeticImageFields
   }
 }`) as unknown as TypedDocumentString<UpdateBadgeMutation, UpdateBadgeMutationVariables>;
+export const RemakeCosmeticImageDocument = new TypedDocumentString(`
+    mutation RemakeCosmeticImage($id: String!) {
+  remakeCosmeticImage(id: $id) {
+    ...CosmeticImageFields
+  }
+}
+    fragment CosmeticImageFields on CosmeticImage {
+  id
+  kind
+  host
+  animated
+  ready
+  width
+  height
+  files {
+    name
+    width
+    height
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<RemakeCosmeticImageMutation, RemakeCosmeticImageMutationVariables>;
 export const DeleteBadgeDocument = new TypedDocumentString(`
     mutation DeleteBadge($id: String!) {
   deleteBadge(id: $id)

@@ -1,21 +1,98 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '$lib/api';
 import { apiBackend } from '$lib/paint-studio/backend';
-import { checkFile, checkSize, waitReady } from './upload';
+import { animationOf, checkAnimation, checkFile, checkSize, PICTURE_RULES, pictureAccept, waitReady } from './upload';
 
 describe('picture checks before an upload', () => {
-  it('takes PNG, APNG, GIF and WebP up to 5 MB', () => {
-    for (const type of ['image/png', 'image/apng', 'image/gif', 'image/webp']) expect(checkFile({ type, size: 1000 })).toBeNull();
-    expect(checkFile({ type: 'image/jpeg', size: 1000 })).toMatch(/PNG, APNG, GIF or WebP/);
-    expect(checkFile({ type: 'image/svg+xml', size: 1000 })).toMatch(/PNG/);
-    expect(checkFile({ type: 'image/png', size: 5 * 1024 * 1024 + 1 })).toMatch(/at most 5 MB \(this one is 5,0 MB\)/);
+  it('takes PNG, APNG, JPEG, GIF and WebP badges up to 8 MB', () => {
+    for (const type of ['image/png', 'image/apng', 'image/jpeg', 'image/gif', 'image/webp']) expect(checkFile({ type, size: 1000 }, 'badge')).toBeNull();
+    expect(checkFile({ type: 'image/svg+xml', size: 1000 }, 'badge')).toMatch(/PNG, JPEG, GIF or WebP/);
+    expect(checkFile({ type: 'image/png', size: 8 * 1024 * 1024 }, 'badge')).toBeNull();
+    expect(checkFile({ type: 'image/png', size: 8 * 1024 * 1024 + 1 }, 'badge')).toMatch(/Badge pictures are at most 8 MB \(this one is 8,0 MB\)/);
+    expect(pictureAccept('badge')).toBe('image/png,image/apng,image/jpeg,image/gif,image/webp');
+  });
+  it('keeps paints at PNG, APNG, GIF and WebP up to 5 MB', () => {
+    for (const type of ['image/png', 'image/apng', 'image/gif', 'image/webp']) expect(checkFile({ type, size: 1000 }, 'paint')).toBeNull();
+    expect(checkFile({ type: 'image/jpeg', size: 1000 }, 'paint')).toMatch(/PNG, APNG, GIF or WebP/);
+    expect(checkFile({ type: 'image/png', size: 5 * 1024 * 1024 + 1 }, 'paint')).toMatch(/at most 5 MB \(this one is 5,0 MB\)/);
+    expect(PICTURE_RULES.paint.maxBytes).toBe(5 * 1024 * 1024);
   });
   it('says what the API would say about the size', () => {
     expect(checkSize('badge', 72, 72)).toBeNull();
+    expect(checkSize('badge', 2048, 2048)).toBeNull();
     expect(checkSize('badge', 96, 80)).toMatch(/square and at least 72 × 72 px \(this one is 96 × 80 px\)/);
     expect(checkSize('badge', 64, 64)).toMatch(/72 × 72/);
+    expect(checkSize('badge', 2049, 2049)).toMatch(/at most 2048 × 2048 px/);
     expect(checkSize('paint', 512, 64)).toBeNull();
     expect(checkSize('paint', 256, 32)).toMatch(/64 px tall \(this one is 32 px\)/);
+  });
+});
+
+// Animated files built by hand: only the parts the reader looks at.
+function gif(frames: number, delayCs: number): Uint8Array {
+  const out = [...'GIF89a'].map((c) => c.charCodeAt(0));
+  out.push(1, 0, 1, 0, 0x80, 0, 0, 0, 0, 0, 255, 255, 255);
+  for (let i = 0; i < frames; i++) {
+    out.push(0x21, 0xf9, 4, 0, delayCs & 255, delayCs >> 8, 0, 0);
+    out.push(0x2c, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 0x44, 0x01, 0);
+  }
+  out.push(0x3b);
+  return new Uint8Array(out);
+}
+function chunk(type: string, data: number[], le = false): number[] {
+  const n = data.length;
+  const len = le ? [n & 255, (n >> 8) & 255, (n >> 16) & 255, n >>> 24] : [n >>> 24, (n >> 16) & 255, (n >> 8) & 255, n & 255];
+  const head = [...type].map((c) => c.charCodeAt(0));
+  return le ? [...head, ...len, ...data, ...(n & 1 ? [0] : [])] : [...len, ...head, ...data, 0, 0, 0, 0];
+}
+function apng(frames: number, delayMs: number): Uint8Array {
+  const out = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...chunk('IHDR', Array(13).fill(0)), ...chunk('acTL', [0, 0, 0, frames, 0, 0, 0, 0])];
+  for (let i = 0; i < frames; i++) {
+    const fc = Array(26).fill(0);
+    fc[20] = delayMs >> 8;
+    fc[21] = delayMs & 255;
+    fc[23] = 1000 & 255;
+    fc[22] = 1000 >> 8;
+    out.push(...chunk('fcTL', fc));
+  }
+  out.push(...chunk('IEND', []));
+  return new Uint8Array(out);
+}
+function webp(frames: number, delayMs: number): Uint8Array {
+  const body = [...'WEBP'].map((c) => c.charCodeAt(0));
+  body.push(...chunk('VP8X', Array(10).fill(0), true), ...chunk('ANIM', Array(6).fill(0), true));
+  for (let i = 0; i < frames; i++) {
+    const data = Array(16).fill(0);
+    data[12] = delayMs & 255;
+    data[13] = (delayMs >> 8) & 255;
+    body.push(...chunk('ANMF', data, true));
+  }
+  const n = body.length;
+  return new Uint8Array([...'RIFF'].map((c) => c.charCodeAt(0)).concat([n & 255, (n >> 8) & 255, (n >> 16) & 255, n >>> 24], body));
+}
+
+describe('animated badge checks before an upload', () => {
+  it('reads frames and run time from GIF, APNG and WebP', () => {
+    expect(animationOf(gif(3, 5))).toEqual({ frames: 3, durationMs: 150 });
+    expect(animationOf(apng(4, 250))).toEqual({ frames: 4, durationMs: 1000 });
+    expect(animationOf(webp(5, 80))).toEqual({ frames: 5, durationMs: 400 });
+    // Under 20 ms counts as 100, as browsers show it.
+    expect(animationOf(gif(2, 1))).toEqual({ frames: 2, durationMs: 200 });
+    // One frame is a still picture; other bytes aren't read.
+    expect(animationOf(gif(1, 5))).toBeNull();
+    expect(animationOf(new Uint8Array([0xff, 0xd8, 0xff, 0]))).toBeNull();
+    expect(animationOf(new Uint8Array([71, 73, 70]))).toBeNull();
+  });
+  it('holds animated badges to 120 frames, 10 seconds and 64 MP', () => {
+    expect(checkAnimation('badge', animationOf(gif(120, 5)), 72, 72)).toBeNull();
+    expect(checkAnimation('badge', animationOf(gif(121, 5)), 72, 72)).toMatch(/at most 120 frames \(this one has 121\)/);
+    expect(checkAnimation('badge', animationOf(gif(5, 200)), 72, 72)).toBeNull();
+    expect(checkAnimation('badge', animationOf(webp(6, 2000)), 72, 72)).toMatch(/at most 10 seconds \(this one runs 12,0 s\)/);
+    expect(checkAnimation('badge', { frames: 120, durationMs: 1000 }, 512, 512)).toBeNull();
+    expect(checkAnimation('badge', { frames: 100, durationMs: 1000 }, 1000, 1000)).toMatch(/over 64 MP/);
+    // Paints keep their own rules; a still picture has nothing to check.
+    expect(checkAnimation('paint', animationOf(gif(121, 5)), 256, 64)).toBeNull();
+    expect(checkAnimation('badge', null, 72, 72)).toBeNull();
   });
 });
 

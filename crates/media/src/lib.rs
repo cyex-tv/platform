@@ -43,6 +43,15 @@ impl Format {
 pub const DEFAULT_MAX_BYTES: usize = 5 * 1024 * 1024;
 /// The file size cap of an emote upload ([`Limits::emote`]): 8 MB.
 pub const EMOTE_MAX_BYTES: usize = 8 * 1024 * 1024;
+/// The file size cap of a badge picture ([`Limits::badge`]): 8 MB.
+pub const BADGE_MAX_BYTES: usize = 8 * 1024 * 1024;
+/// Frames shorter than this show for 100 ms, as browsers do with GIFs.
+pub const MIN_DELAY_MS: u32 = 20;
+
+/// How long a frame with `delay` ms shows: as browsers show it.
+pub fn shown_ms(delay: u32) -> u32 {
+    if delay < MIN_DELAY_MS { 100 } else { delay }
+}
 
 /// Upload limits (PLAN.md Phase 3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,6 +61,8 @@ pub struct Limits {
     pub max_frames: u32,
     /// Width × height × frames, all frames together: the cap on decoding work.
     pub max_total_pixels: u64,
+    /// How long one run of an animation may last, as shown (see [`shown_ms`]).
+    pub max_duration_ms: u64,
 }
 
 impl Default for Limits {
@@ -61,6 +72,7 @@ impl Default for Limits {
             max_side: 1000,
             max_frames: 1000,
             max_total_pixels: 100_000_000,
+            max_duration_ms: u64::MAX,
         }
     }
 }
@@ -72,6 +84,19 @@ impl Limits {
         Self {
             max_bytes: EMOTE_MAX_BYTES,
             ..Self::default()
+        }
+    }
+
+    /// A badge picture's limits (the size ladder of cyex badges): up to 8 MB and 2048 px a side
+    /// (bigger than the 512 px master is scaled down); an animation at most 120 frames, 10
+    /// seconds, and width × height × frames at most 64 MP (512×512 × 120 frames fits).
+    pub fn badge() -> Self {
+        Self {
+            max_bytes: BADGE_MAX_BYTES,
+            max_side: 2048,
+            max_frames: 120,
+            max_total_pixels: 64_000_000,
+            max_duration_ms: 10_000,
         }
     }
 }
@@ -153,7 +178,8 @@ fn check_side(width: u32, height: u32, limits: &Limits) -> Result<(), MediaError
 
 fn decoder_limits() -> image::Limits {
     let mut l = image::Limits::default();
-    // One frame of at most 1000×1000 RGBA is 4 MB; leave room for the decoders' own buffers.
+    // One frame of at most 2048×2048 RGBA (a badge's limit) is 16 MB; leave room for the
+    // decoders' own buffers.
     l.max_alloc = Some(64 * 1024 * 1024);
     l
 }
@@ -179,22 +205,31 @@ fn walk<'a>(
 ) -> Result<u32, MediaError> {
     let per_frame = u64::from(canvas.width) * u64::from(canvas.height);
     let mut count: u32 = 0;
+    let mut duration: u64 = 0;
     for frame in iter {
         let frame = frame.map_err(invalid)?;
         count += 1;
         if count > limits.max_frames {
             return Err(MediaError::TooLarge(format!(
-                "more than {} frames",
+                "The animation has more than {} frames, the most it can have.",
                 limits.max_frames
             )));
         }
         if u64::from(count) * per_frame > limits.max_total_pixels {
-            return Err(MediaError::TooLarge(
-                "the animation is too big to process (frames × pixels)".into(),
-            ));
+            return Err(MediaError::TooLarge(format!(
+                "The animation is too big to process: width × height × frames is over {} MP.",
+                limits.max_total_pixels / 1_000_000
+            )));
         }
         let (numer, denom) = frame.delay().numer_denom_ms();
         let delay = numer.checked_div(denom).unwrap_or(0);
+        duration += u64::from(shown_ms(delay));
+        if duration > limits.max_duration_ms {
+            return Err(MediaError::TooLarge(format!(
+                "The animation runs longer than {} seconds, the most it can.",
+                limits.max_duration_ms / 1000
+            )));
+        }
         on_frame(canvas, frame.into_buffer(), delay)?;
     }
     if count == 0 {

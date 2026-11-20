@@ -558,7 +558,8 @@ pub struct EmoteFile {
     /// For example `2x.webp` or `1x_static.avif`.
     pub name: String,
     pub format: ImageFormat,
-    /// 1 to 4.
+    /// 1 to 4. A badge's larger sizes (`128`, `256`, `512`) carry their px ÷ 18, rounded: 7, 14
+    /// and 28; read `width` for the size.
     pub scale: u8,
     pub width: u16,
     pub height: u16,
