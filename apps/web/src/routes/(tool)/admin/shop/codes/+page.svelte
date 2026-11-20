@@ -4,18 +4,19 @@
   // badges and paints picked here. Making one shows the plain codes ONCE, with Copy all and
   // Download .txt: the server keeps only hashes, so they can't be shown again. Disable turns off
   // every code of a batch.
+  import { tick } from 'svelte';
   import { gql } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import State from '$lib/components/State.svelte';
-  import { copy } from '$lib/clipboard.svelte';
   import { loadCatalog, type Catalog } from '$lib/cosmetics/store.svelte';
   import { clean, count, date, iso } from '$lib/format';
   import type { CodeBatchFieldsFragment } from '$lib/gql/graphql';
   import { CODE_BATCHES, CREATE_CODE_BATCH, DISABLE_CODE_BATCH, SHOP_ITEMS } from '$lib/queries';
   import CosmeticsPick from '$lib/shop/CosmeticsPick.svelte';
+  import CodesDialog from '$lib/shop/CodesDialog.svelte';
   import Gate from '$lib/shop/Gate.svelte';
   import { loadShopCounts } from '$lib/shop/counts.svelte';
-  import { codesFilename, codesText, fromLocalInput, staffMessage } from '$lib/shop/shop';
+  import { fromLocalInput, parseCount, staffMessage } from '$lib/shop/shop';
   import Confirm from '$lib/tool/Confirm.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
@@ -74,7 +75,8 @@
   let saving = $state(false);
   let problem = $state<string | null>(null);
 
-  const num = (s: string) => (/^\d{1,9}$/.test(s.trim()) ? Number(s.trim()) : NaN);
+  // "1000" or the site's own "1.000".
+  const num = parseCount;
   const errors = $derived({
     name: tried && (!name.trim() || name.trim().length > 64) ? 'Give it a name of 1 to 64 characters. Only staff see it.' : null,
     prefix: tried && !/^[A-Za-z0-9]{1,12}$/.test(prefix.trim()) ? 'Use 1 to 12 letters or digits.' : null,
@@ -102,15 +104,15 @@
   }
 
   // The one view of the plain codes.
-  let shown = $state<{ batch: CodeBatchFieldsFragment; codes: string[] } | null>(null);
-  let shownDialog: HTMLDialogElement;
-  let copied = $state<'idle' | 'copied' | 'failed'>('idle');
+  let codesDialog: CodesDialog;
 
   async function save(e: SubmitEvent) {
     e.preventDefault();
     if (saving) return;
     tried = true;
     if (invalid) {
+      // The errors render after `tried` flips: wait for them before looking for the first one.
+      await tick();
       dialog.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
       return;
     }
@@ -132,9 +134,7 @@
         })
       ).createCodeBatch;
       dialog.close();
-      shown = { batch: r.batch, codes: r.codes };
-      copied = 'idle';
-      shownDialog.showModal();
+      codesDialog.show(r.batch.name, r.codes);
       await L.reload();
       loadShopCounts();
     } catch (err) {
@@ -142,34 +142,6 @@
     } finally {
       saving = false;
     }
-  }
-
-  let codesBox = $state<HTMLTextAreaElement>();
-  async function copyAll() {
-    if (!shown) return;
-    let ok = await copy(codesText(shown.codes));
-    if (!ok && codesBox) {
-      // The clipboard API is off (an insecure address, a denied permission): copy the visible box, which a modal can focus.
-      codesBox.focus();
-      codesBox.select();
-      try {
-        ok = document.execCommand('copy');
-      } catch {
-        ok = false;
-      }
-    }
-    copied = ok ? 'copied' : 'failed';
-  }
-  function download() {
-    if (!shown) return;
-    const url = URL.createObjectURL(new Blob([codesText(shown.codes)], { type: 'text/plain;charset=utf-8' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = codesFilename(shown.batch.name);
-    document.body.append(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   async function disable(b: CodeBatchFieldsFragment) {
@@ -259,30 +231,30 @@
         <label class="ui-field">
           <span class="ui-label">Name</span>
           <input class="ui-input" bind:value={name} maxlength="64" aria-invalid={errors.name ? 'true' : undefined} />
-          {#if errors.name}<span class="ui-error">{errors.name}</span>{:else}<span class="ui-hint">For staff, like “Launch stream giveaway”.</span>{/if}
+          {#if errors.name}<span class="ui-error" role="alert">{errors.name}</span>{:else}<span class="ui-hint">For staff, like “Launch stream giveaway”.</span>{/if}
         </label>
         <div class="two">
           <label class="ui-field">
             <span class="ui-label">Prefix</span>
             <input class="ui-input mono" bind:value={prefix} maxlength="12" autocapitalize="characters" autocomplete="off" aria-invalid={errors.prefix ? 'true' : undefined} />
-            {#if errors.prefix}<span class="ui-error">{errors.prefix}</span>{:else}<span class="ui-hint">Codes look like PREFIX-XXXX-XXXX-XXXX-XXXX.</span>{/if}
+            {#if errors.prefix}<span class="ui-error" role="alert">{errors.prefix}</span>{:else}<span class="ui-hint">Codes look like PREFIX-XXXX-XXXX-XXXX-XXXX.</span>{/if}
           </label>
           <label class="ui-field">
             <span class="ui-label">How many codes</span>
             <input class="ui-input" inputmode="numeric" bind:value={amount} aria-invalid={errors.amount ? 'true' : undefined} />
-            {#if errors.amount}<span class="ui-error">{errors.amount}</span>{:else}<span class="ui-hint">1 to 1.000.</span>{/if}
+            {#if errors.amount}<span class="ui-error" role="alert">{errors.amount}</span>{:else}<span class="ui-hint">1 to 1.000.</span>{/if}
           </label>
         </div>
         <div class="two">
           <label class="ui-field">
             <span class="ui-label">Uses per code</span>
             <input class="ui-input" inputmode="numeric" bind:value={uses} aria-invalid={errors.uses ? 'true' : undefined} />
-            {#if errors.uses}<span class="ui-error">{errors.uses}</span>{:else}<span class="ui-hint">Each account can use a code once.</span>{/if}
+            {#if errors.uses}<span class="ui-error" role="alert">{errors.uses}</span>{:else}<span class="ui-hint">Each account can use a code once.</span>{/if}
           </label>
           <label class="ui-field">
             <span class="ui-label">Expires</span>
             <input class="ui-input" type="datetime-local" bind:value={expires} aria-invalid={errors.expires ? 'true' : undefined} />
-            {#if errors.expires}<span class="ui-error">{errors.expires}</span>{:else}<span class="ui-hint">Empty: never.</span>{/if}
+            {#if errors.expires}<span class="ui-error" role="alert">{errors.expires}</span>{:else}<span class="ui-hint">Empty: never.</span>{/if}
           </label>
         </div>
         {#if itemChoices.length}
@@ -306,25 +278,7 @@
     </form>
   </dialog>
 
-  <dialog class="ui-dialog wide" bind:this={shownDialog} aria-labelledby="codes-title" onclose={() => { shown = null; }}>
-    {#if shown}
-      <div class="body">
-        <h2 id="codes-title">{count(shown.codes.length)} {shown.codes.length === 1 ? 'code' : 'codes'} for <bdi>{clean(shown.batch.name)}</bdi></h2>
-        <p class="warn" role="alert"><strong>You won’t see these again.</strong> cyex.tv keeps only a scrambled copy of each code. Copy or download them now, before you close this.</p>
-        <label class="ui-field">
-          <span class="ui-label">Codes</span>
-          <textarea class="ui-input mono codes" bind:this={codesBox} readonly rows="10" wrap="off" onfocus={(e) => e.currentTarget.select()} value={shown.codes.join('\n')}></textarea>
-        </label>
-        <div class="ui-actions">
-          <button class="ui-btn primary" type="button" onclick={copyAll}><Icon name={copied === 'copied' ? 'check' : 'copy'} size={15} />{copied === 'copied' ? 'Copied' : copied === 'failed' ? 'Couldn’t copy. Select the codes instead' : 'Copy all'}</button>
-          <button class="ui-btn secondary" type="button" onclick={download}><Icon name="download" size={15} />Download .txt</button>
-        </div>
-      </div>
-      <footer>
-        <button class="ui-btn secondary" type="button" onclick={() => shownDialog.close()}>I’ve saved them</button>
-      </footer>
-    {/if}
-  </dialog>
+    <CodesDialog bind:this={codesDialog} />
 </Gate>
 
 <style>
@@ -344,8 +298,6 @@
   h2 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
   .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
   .mono { font-family: var(--font-mono); }
-  .codes { resize: vertical; min-height: 160px; font-size: var(--t-small); white-space: pre; }
-  .warn { margin: 0; padding: 10px 12px; border: 1px solid var(--red); border-radius: var(--radius); font-size: var(--t-small); line-height: 1.5; }
   .problem { margin: 0; font-size: var(--t-small); color: var(--red); }
   @media (max-width: 520px) { .two { grid-template-columns: minmax(0, 1fr); } }
 </style>

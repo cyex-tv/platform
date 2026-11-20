@@ -71,10 +71,12 @@
                 {#if mark}<span class="vis" title={mark.label}><Icon name={mark.icon} size={14} /><span class="sr-only">{mark.label}</span></span>{/if}
                 {#if s.chat}<span class="on" title={s.chat === 'chat' ? 'Shown in chat' : `Active in ${s.chat} chat`}><Icon name="zap" size={15} /><span class="sr-only">{s.chat === 'chat' ? 'Shown in chat' : `Active in ${s.chat} chat`}</span></span>{/if}
               </span>
-              <span class="meta">{kindLabel(s.kind)} · <Capacity used={s.used} capacity={s.capacity} /></span>
-              <span class="cap" role="meter" aria-label="How full" aria-valuemin={0} aria-valuemax={100} aria-valuenow={p}>
-                <span class="fill" class:full={p >= 90} style:width="{p}%"></span>
-                <span class="pc">{p}%</span>
+              <span class="meta">{kindLabel(s.kind)}</span>
+              <span class="cap">
+                <span class="bar" role="meter" aria-label="How full" aria-valuemin={0} aria-valuemax={100} aria-valuenow={p}>
+                  <span class="fill" class:full={p >= 90} style:width="{p}%"></span>
+                </span>
+                <span class="n"><Capacity used={s.used} capacity={s.capacity} /></span>
               </span>
             </a>
           </li>
@@ -97,11 +99,11 @@
   .nm { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .vis { display: inline-grid; color: var(--dim); }
   .on { display: inline-grid; color: var(--accent-text); }
-  .meta { font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
-  .cap { position: relative; display: block; height: 18px; border-radius: var(--radius); background: var(--elevated-2); overflow: hidden; }
-  .fill { position: absolute; inset: 0 auto 0 0; background: var(--accent-wash); }
-  .fill.full { background: color-mix(in srgb, var(--yellow) 30%, transparent); }
-  .pc { position: relative; display: grid; place-items: center; height: 100%; font-size: 12px; font-weight: 600; color: var(--text);
-    font-variant-numeric: tabular-nums; }
+  .meta { font-size: var(--t-fine); color: var(--dim); }
+  .cap { display: flex; align-items: center; gap: 10px; font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .bar { flex: 1; min-width: 0; height: 4px; border-radius: 2px; background: var(--elevated-2); overflow: hidden; }
+  .fill { display: block; height: 100%; background: var(--accent); }
+  .fill.full { background: var(--yellow); }
+  .n { flex: none; }
   @media (forced-colors: active) { .fill { background: Highlight; } }
 </style>

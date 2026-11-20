@@ -188,3 +188,17 @@ describe('orderRow', () => {
     expect(orderRow({ ...base, status: 'PENDING', paidTotalCents: null }, 'me').amount).toBe('4,99 €');
   });
 });
+
+describe('parseCount (code batch sizes)', () => {
+  it('takes plain numbers and the site’s own thousands dots', async () => {
+    const { parseCount } = await import('./shop');
+    expect(parseCount('1000')).toBe(1000);
+    expect(parseCount('1.000')).toBe(1000);
+    expect(parseCount(' 10.000 ')).toBe(10000);
+    expect(parseCount('25')).toBe(25);
+  });
+  it('refuses anything else', async () => {
+    const { parseCount } = await import('./shop');
+    for (const bad of ['', '1.00', '1.0000', '.5', '1,000', '1e3', '-5', '10.5', 'abc', '1.000.0']) expect(parseCount(bad)).toBeNaN();
+  });
+});

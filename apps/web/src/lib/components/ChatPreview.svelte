@@ -1,9 +1,11 @@
 <script lang="ts" module>
   import type { Picture } from '$lib/emote';
+  import type { Look } from '$lib/cosmetics/store.svelte';
 
   export type ChatEmote = Picture & { name: string; zeroWidth?: boolean };
   export type ChatPart = { text: string } | { emote: ChatEmote };
-  export type ChatLine = { user: string; parts: ChatPart[] };
+  /** `look`: a badge and paint to draw the name with (a real account's, never a made-up viewer's). */
+  export type ChatLine = { user: string; parts: ChatPart[]; look?: Look };
 </script>
 
 <script lang="ts">
@@ -15,6 +17,7 @@
   import { fly } from 'svelte/transition';
   import { hasStill, pictureFor, ready, size } from '$lib/emote';
   import { display } from '$lib/dpr.svelte';
+  import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { clean } from '$lib/format';
   import { dur } from '$lib/motion';
 
@@ -32,7 +35,7 @@
   let { platform, lines, live = false, visible = 6, interval = 2500, play = true, label }: Props = $props();
 
   type Piece = { kind: 'text'; text: string } | { kind: 'stack'; emotes: ChatEmote[] };
-  type Shown = { key: number; user: string; pieces: Piece[] };
+  type Shown = { key: number; user: string; look?: Look; pieces: Piece[] };
 
   // Zero-width emotes join the stack of the emote before them; text keeps its spaces.
   function pieces(parts: ChatPart[]): Piece[] {
@@ -62,7 +65,7 @@
 
   function at(i: number): Shown {
     const l = lines[i % lines.length];
-    return { key: key++, user: l.user, pieces: pieces(l.parts) };
+    return { key: key++, user: l.user, look: l.look, pieces: pieces(l.parts) };
   }
 
   $effect(() => {
@@ -137,7 +140,7 @@
   <ol class="lines" aria-live="off">
     {#each shown as l (l.key)}
       <li class="line" animate:flip={{ duration: dur(250) }} in:fly={{ y: 8, duration: dur(250) }}>
-        <span class="user"><bdi>{clean(l.user)}</bdi></span><span class="colon">:</span>
+        <span class="user">{#if l.look && (l.look.paint || l.look.badge)}<PaintedName name={l.user} paint={l.look.paint} badge={l.look.badge} badgeSize={16} />{:else}<bdi>{clean(l.user)}</bdi>{/if}</span><span class="colon">:</span>
         {#each l.pieces as p}
           {#if p.kind === 'text'}{p.text}{:else}
             <span class="stack" title={p.emotes.map((e) => e.name).join(' ')}>

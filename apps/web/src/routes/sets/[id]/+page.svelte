@@ -18,6 +18,7 @@
   import { session } from '$lib/tool/session.svelte';
   import type { PublicSetQuery } from '$lib/gql/graphql';
   import CloneDialog from './CloneDialog.svelte';
+  import SetChat from './SetChat.svelte';
 
   type PageSet = NonNullable<PublicSetQuery['set']>;
   let { data } = $props();
@@ -150,6 +151,7 @@
         {#if shown.length > STEP}
           <div class="more"><LoadMore hasMore={shown.length > limit} total={shown.length} onmore={() => (limit += STEP)} /></div>
         {/if}
+        {#if members.length}<SetChat {members} {owner} {name} />{/if}
       </section>
     </ColumnLayout>
     <CloneDialog bind:this={dlg} id={s.id} name={s.name} />
