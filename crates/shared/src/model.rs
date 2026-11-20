@@ -12,6 +12,7 @@ use utoipa::{IntoParams, ToSchema};
 
 pub use crate::cosmetics::*;
 pub use crate::shop::*;
+pub use crate::site::*;
 
 /// A streaming platform.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
@@ -1088,6 +1089,9 @@ pub struct AccountProfile {
     /// The account's editors, oldest first: who they are only, never what they may do.
     #[serde(default)]
     pub editors: Vec<AccountSummary>,
+    /// The account shows the badges and paints it owns (`accountCollection`). Off by default.
+    #[serde(default)]
+    pub collection_public: bool,
 }
 
 // Reports and takedowns (Phase 7)

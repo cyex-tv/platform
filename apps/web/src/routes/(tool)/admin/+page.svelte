@@ -47,6 +47,7 @@
       { href: '/admin/users', title: 'Users', icon: 'users' as const, text: 'Find someone; their whole account on one page: restrictions, roles, billing, notes.', show: USER_PAGE_PERMISSIONS.some(can) },
       { href: '/admin/roles', title: 'Roles', icon: 'key' as const, text: 'Who may do what. You manage roles below your own.', show: can('roles.manage') || can('roles.assign') },
       { href: '/admin/entitlements', title: 'Entitlement graph', icon: 'network' as const, text: 'How each badge, paint and role was given, and by whom.', show: can('entitlements.view') || can('cosmetics.grant') },
+      { href: '/admin/announcements', title: 'Announcements', icon: 'message-square' as const, text: 'One line under the header for everyone: news, maintenance or an event.', show: can('site.announce') },
       { href: '/admin/audit', title: 'Audit log', icon: 'scroll' as const, text: 'Every audited change, newest first.', show: can('audit.view') },
       { href: counts ? `/me/sets/${counts.globalSet.id}` : '/admin', title: 'Global set', icon: 'layers' as const, text: 'Shown in every channel that uses cyex.tv.', show: can('global_set.edit') },
     ].filter((c) => c.show),
