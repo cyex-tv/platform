@@ -3,13 +3,17 @@
   // all shown, Clear. Adding sends each emote with the same mutation the set editor uses, one
   // after another, with progress and a summary; a full set takes what fits. Over the cap, the
   // page passes a calm note that shows here for a few seconds. Signed out, Add asks you to sign in.
+  import { fade, fly } from 'svelte/transition';
   import { ApiError } from '$lib/api';
   import { clean, count } from '$lib/format';
+  import { dur } from '$lib/motion';
   import { bottomBar } from '$lib/tool/bottom-bars.svelte';
   import { session } from '$lib/tool/session.svelte';
   import { addState, plan, summary } from './bulk';
   import { CAP } from './selection';
-  import { target } from './target.svelte';
+  // Imported as `addTarget`: a binding called `target` breaks Vite's SSR transform of the dev-mode
+  // `new.target` check, so the component couldn't be loaded in a test.
+  import { target as addTarget } from './target.svelte';
 
   type Props = {
     ids: readonly string[];
@@ -29,12 +33,12 @@
   // The last summary, shown until the selection changes again.
   let result = $state<{ text: string; after: string } | null>(null);
   const said = $derived(result && result.after === ids.join() ? result.text : '');
-  const set = $derived(target.current);
+  const set = $derived(addTarget.current);
   const preview = $derived(set ? plan(ids, set.held, set.capacity - set.held.size) : null);
   const addNow = $derived(addState(ids.length, preview));
 
   $effect(() => {
-    target.ensure();
+    addTarget.ensure();
   });
 
   async function add() {
@@ -48,7 +52,7 @@
     run = { done: 0, total: p.add.length };
     for (const [i, id] of p.add.entries()) {
       try {
-        await target.add(id, t);
+        await addTarget.add(id, t);
         sent.push(id);
       } catch (e) {
         const code = e instanceof ApiError ? e.code : '';
@@ -65,7 +69,7 @@
   }
 </script>
 
-<div class="bar" role="region" aria-label="Selection" use:bottomBar>
+<div class="bar" role="region" aria-label="Selection" use:bottomBar in:fly|global={{ y: 8, duration: dur(200) }} out:fade|global={{ duration: dur(120) }}>
   <p class="n" aria-live="polite">
     {#if run}Adding {count(run.done)} of {count(run.total)}…
     {:else if note}<span class="note">{note}</span>
@@ -78,7 +82,7 @@
     <button class="link" type="button" onclick={onexit} disabled={!!run}>Done</button>
     {#if !session.me && session.known}
       <a class="btn btn-s btn-primary" href={signin}>Sign in to add</a>
-    {:else if session.me && target.sets && !set}
+    {:else if session.me && addTarget.sets && !set}
       <a class="btn btn-s" href="/me/sets">Make a set to add to</a>
     {:else}
       <button class="btn btn-s btn-primary add" type="button" disabled={!ids.length || !!run || !preview || preview.add.length === 0} onclick={add}>

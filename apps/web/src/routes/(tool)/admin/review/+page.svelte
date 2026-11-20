@@ -101,7 +101,7 @@
     cur = id;
     const el = card(id);
     el?.focus();
-    el?.scrollIntoView({ block: 'nearest' });
+    el?.scrollIntoView({ block: 'nearest', behavior: 'instant' });
   }
   const columns = () => (grid ? getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length : 1);
 

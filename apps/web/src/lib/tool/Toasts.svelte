@@ -71,6 +71,7 @@
       animate:flip={{ duration: dur(200) }}
     >
       <p>{t.text}{#if t.count > 1}<span class="count">×{t.count}</span>{/if}{#if t.action}{@const act = t.action}<button class="act" type="button" onclick={() => { dismiss(t.id); act.run(); }}>{act.label}</button>{/if}</p>
+      {#if t.ms}<span class="line" style:animation-duration="{t.ms}ms" aria-hidden="true"></span>{/if}
       <button class="close" type="button" aria-label="Dismiss" onclick={() => dismiss(t.id)}>
         <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>
       </button>
@@ -91,6 +92,11 @@
   .toast { position: relative; padding: 12px 34px 13px 14px; background: var(--elevated, var(--surface-2)); color: var(--text);
     border: 1px solid var(--border-strong); border-left: 3px solid var(--border-strong); box-shadow: var(--shadow-pop);
     font-size: .85rem; line-height: 1.45; }
+  /* The Undo countdown: a hairline along the bottom that runs down over the wait. It follows the
+     clock, so it is not held by the pointer. Under reduced motion it ends at once and is gone. */
+  .line { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--accent); transform-origin: 0 50%;
+    animation: undo-line linear forwards; }
+  @keyframes undo-line { to { transform: scaleX(0); } }
   .toast.error { border-left-color: var(--red, var(--text)); }
   .toast p { margin: 0; overflow-wrap: anywhere; }
   .act { margin-left: 10px; padding: 0 2px; min-height: 24px; border: 0; background: none; color: var(--accent-text, var(--accent)); font: inherit; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }

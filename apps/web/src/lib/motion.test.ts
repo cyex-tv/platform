@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { stillBy, srcset } from './emote';
 import { dur, pop, still } from './motion';
 
 const node = {} as Element;
@@ -26,5 +27,20 @@ describe('motion', () => {
     reduce(false);
     expect(dur(200)).toBe(200);
     expect(pop(node).duration).toBe(150);
+  });
+});
+
+describe('animated emotes follow the site setting', () => {
+  const e = { host: 'h', animated: true, files: [{ name: '1x_static.webp', width: 32, height: 32, isStatic: true }] };
+
+  it('"reduce" is still, "full" moves even when the OS asks for less, "system" is left to the browser', () => {
+    expect(stillBy('reduce')).toBe('still');
+    expect(stillBy('full')).toBe('moving');
+    expect(stillBy('system')).toBe('browser');
+  });
+
+  it('the still srcset names the _static files', () => {
+    expect(srcset(e, true)).toContain('h/1x_static.webp 1x');
+    expect(srcset(e)).not.toContain('_static');
   });
 });

@@ -5,6 +5,7 @@
   import Footer from '$lib/components/Footer.svelte';
   import AppHeader from '$lib/shell/AppHeader.svelte';
   import Toasts from '$lib/tool/Toasts.svelte';
+  import { syncMotion } from '$lib/shell/motion.svelte';
   import { loadMe, session } from '$lib/tool/session.svelte';
   import UploadDialog from '$lib/upload/UploadDialog.svelte';
   import { openUpload, opensDialog } from '$lib/upload/upload.svelte';
@@ -16,6 +17,8 @@
 
   // Only the browser has the session cookie; signed out is the default. The signed-in layout
   // asks too (to send you to sign in), and loadMe() shares one request between the two.
+  // The reduced-motion setting, for the pictures that choose a still by it.
+  $effect(syncMotion);
   $effect(() => {
     loadMe().catch(() => {});
   });
@@ -81,6 +84,7 @@
   .progress.done { opacity: 0; transform: scaleX(1);
     transition: transform var(--dur-color) ease-out, opacity var(--dur-color) ease-out var(--dur-color); }
   /* Reduced motion: no crawl and no static full-width bar; the bar stays hidden. */
-  @media (prefers-reduced-motion: reduce) { .progress { display: none; } }
+  @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .progress { display: none; } }
+  :global(html[data-motion='reduce']) .progress { display: none; }
   @media (forced-colors: active) { .progress { background: Highlight; } }
 </style>

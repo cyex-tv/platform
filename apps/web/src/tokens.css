@@ -106,7 +106,7 @@
   --dur-color: .2s;
   --dur-hover: .25s;
   --dur-move: .25s;
-  --dur-theme: .25s;
+  --dur-theme: .32s; /* web: the theme cross-fade (cyex-design); the tool pages use .15s */
   --dur-reveal: .9s;
   --stagger: 70ms;
   --press: .97;
@@ -245,3 +245,6 @@ a { color: inherit; text-decoration: none; }
   scroll-behavior: auto !important;
 }
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--dur-theme); animation-timing-function: ease; }
+/* While the theme cross-fades, nothing else transitions colour underneath it (theme.svelte.ts). */
+:root.theme-switching *, :root.theme-switching *::before, :root.theme-switching *::after { transition: none !important; }
+:root:has(.ui-page) { --dur-theme: .15s; }

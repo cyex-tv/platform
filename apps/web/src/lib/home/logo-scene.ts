@@ -337,9 +337,16 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
   // Scroll: 0 with the hero in place, 1 once it has scrolled its own height away. Eased toward.
   let scroll = 0;
   let eased = 0;
-  const readScroll = () => {
+  // The scroll handler only marks it stale; the layout is read once per frame in the loop, so a
+  // burst of scroll events never forces layout between style writes.
+  let stale = false;
+  const measureScroll = () => {
+    stale = false;
     const r = host.getBoundingClientRect();
     scroll = Math.min(1, Math.max(0, -r.top / Math.max(1, r.height)));
+  };
+  const readScroll = () => {
+    stale = true;
   };
 
   let current: Pose = REST;
@@ -385,6 +392,7 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
     if (ready && dt > 0 && dt < 0.0125) return schedule();
     last = now;
     clock += dt;
+    if (stale) measureScroll();
     eased += (scroll - eased) * (1 - Math.exp(-dt * 5));
     apply(pose(clock, eased));
     draw();
@@ -424,7 +432,7 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
   canvas.addEventListener('webglcontextlost', lost);
 
   if (!still) {
-    readScroll();
+    measureScroll();
     eased = scroll;
   }
   apply(still ? REST : pose(0, eased));

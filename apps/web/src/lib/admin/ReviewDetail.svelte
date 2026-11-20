@@ -210,6 +210,8 @@
   .detail { width: min(880px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); }
   .detail[open] { display: flex; flex-direction: column; }
   .detail:focus-visible { outline: none; }
+  /* Walked through with the keys, so it opens and closes with no animation at all. */
+  .detail.detail, .detail.detail::backdrop { transition: none; opacity: 1; scale: 1; }
   .top { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
   .place { min-width: 84px; text-align: center; font-weight: 600; font-size: var(--text-sub); }
   .grow { flex: 1; }
