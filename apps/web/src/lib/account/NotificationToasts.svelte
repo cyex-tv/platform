@@ -48,7 +48,7 @@
     await Promise.all([loadInbox(), loadPrefs()]);
     const add = fresh(inbox.items ?? [], seen, since);
     for (const n of add) seen.add(n.id);
-    // Kinds whose pop-up is off (Settings â†’ Notifications) still count as seen, just quietly.
+    // Kinds whose pop-up is off (Settings → Notifications) still count as seen, just quietly.
     const quiet = quietKinds();
     for (const n of add.filter((x) => !quiet.has(x.kind)).slice(0, 3).reverse()) push(n);
   }

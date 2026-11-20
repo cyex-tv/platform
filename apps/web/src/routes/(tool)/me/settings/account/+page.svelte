@@ -155,7 +155,7 @@
     <section class="ui-panel" aria-labelledby="prof-h">
       <header><h2 id="prof-h">Profile</h2></header>
       {#if collectionPublic === null}
-        <p class="ui-hint pad">Loadingâ€¦</p>
+        <p class="ui-hint pad">Loading…</p>
       {:else}
         <CollectionToggle value={collectionPublic} onchange={(c) => (collectionPublic = c.public)} />
         <p class="ui-hint pad">See it as others do on <a href="/users/{encodeURIComponent(me.id)}?s=collection">your Collection tab</a>.</p>

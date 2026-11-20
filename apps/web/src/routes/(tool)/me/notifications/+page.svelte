@@ -2,7 +2,7 @@
   // Every notification (the API keeps the latest 100), newest first, in pages of 20 here, with the
   // same rows as the bell. Mark all read in the header; a row marks itself read when opened.
   // Chips above the list narrow it to one group of kinds (uploads, hand-overs, editors,
-  // cosmetics); Settings â†’ Notifications chooses which kinds come at all.
+  // cosmetics); Settings → Notifications chooses which kinds come at all.
   import { onMount } from 'svelte';
   import { inbox, loadInbox, markRead, type Note } from '$lib/account/inbox.svelte';
   import { filterChips, groupOf } from '$lib/account/prefs';
