@@ -1147,6 +1147,13 @@ pub async fn update_set(
         )
         .await?;
     }
+    // Renames and visibility changes make no client event; every instance's cached reads of the
+    // set (and of channels showing it) still have to go.
+    let forget = if name.is_some() || after.visibility != set.visibility {
+        Some(forget_set_reads(&mut tx, &set).await?)
+    } else {
+        None
+    };
     if name.is_some() {
         audit_if_permission(
             &mut tx,
@@ -1160,8 +1167,28 @@ pub async fn update_set(
         .await?;
     }
     tx.commit().await.map_err(sqlx_error)?;
+    if let Some(keys) = forget {
+        state.forget_cached(&keys);
+    }
     drop(conn);
     built(state, caller, id).await
+}
+
+/// Publishes `cache.forget` for the cached reads showing `set` (itself, the global set read for
+/// the global set, and the channels showing it) and returns their keys, for the caller to drop
+/// on its own instance after the commit.
+async fn forget_set_reads(conn: &mut PgConnection, set: &Set) -> ApiResult<Vec<String>> {
+    let mut keys = vec![crate::read_cache::set_key(set.id)];
+    if set.kind == SetKind::Global {
+        keys.push(crate::read_cache::GLOBAL_SET_KEY.to_owned());
+    }
+    for ch in channels::using_set(conn, set.id).await.map_err(db_error)? {
+        keys.push(outbox::channel_topic(ch.platform, &ch.platform_channel_id));
+    }
+    outbox::publish_cache_forget(conn, &keys)
+        .await
+        .map_err(db_error)?;
+    Ok(keys)
 }
 
 pub async fn delete_set(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bool> {
@@ -1184,6 +1211,7 @@ pub async fn delete_set(state: &AppState, caller: &Caller, id: &str) -> ApiResul
         ));
     }
     let deleted = sets::delete(&mut tx, id).await.map_err(db_error)?;
+    let forget = forget_set_reads(&mut tx, &set).await?;
     audit_if_permission(
         &mut tx,
         caller,
@@ -1195,6 +1223,7 @@ pub async fn delete_set(state: &AppState, caller: &Caller, id: &str) -> ApiResul
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
+    state.forget_cached(&forget);
     Ok(deleted)
 }
 

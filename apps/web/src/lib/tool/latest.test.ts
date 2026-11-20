@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { latestWins } from './latest';
+import { latestWins, latestWinsBy } from './latest';
 
 const gate = () => {
   let open!: () => void;
@@ -49,5 +49,27 @@ describe('latestWins', () => {
     expect(sent).toEqual(['b']);
     await save('a'); // already saved: nothing to send
     expect(sent).toEqual(['b']);
+  });
+});
+
+describe('latestWinsBy', () => {
+  it('saves a pick on the thing it was made for, and keeps other things’ picks apart', async () => {
+    const saved: Record<string, string> = { s1: 'a', s2: 'a' };
+    const sent: string[] = [];
+    const g = gate();
+    const save = latestWinsBy<string>(
+      async (key, v) => {
+        sent.push(`${key}:${v}`);
+        if (key === 's1') await g.p;
+        saved[key] = v;
+      },
+      (key, v) => v === saved[key],
+    );
+    const first = save('s1', 'b');
+    await save('s2', 'c'); // another set while s1 saves: its own save, not a replacement
+    g.open();
+    await first;
+    expect(sent).toEqual(['s1:b', 's2:c']);
+    expect(saved).toEqual({ s1: 'b', s2: 'c' });
   });
 });

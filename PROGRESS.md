@@ -29,6 +29,21 @@ git push -u origin feat/k1-previews-shortcuts
 gh pr create --base main --head feat/k1-previews-shortcuts --title "Link previews, keyboard shortcut sheet, changelog, tile marks" --body-file <file>
 ```
 
+## Security fixes S2 (branch `fix/security-s2`, sign-off review #2 of 2026/11/20)
+
+- [x] Search: `listed_emote!` also hides emotes of an owner blocked right now (`blocked_at` set, no end or an end ahead); an ended block lists them again. Test: `every_search_uses_the_listed_emote_rule` (blocked and expired-block owners).
+- [x] Read cache across instances: renaming a set, changing its visibility and deleting it publish the internal `cache.forget` event (topic `internal:cache`, which no client can watch) naming the set's read, the channels showing it and, for the global set, its read; every feeder's tap drops them, and the instance that made the change drops them at once. Test: `set_privacy_rename_and_delete_drop_cached_reads_everywhere` (two instances on one database).
+- [x] Announcement: create, update and end publish `cache.forget` for `announcement`, so every instance drops its cached line; the cache has a generation that `clear` bumps, so a read that started before a change can't store the old line. Tests: `announcement_changes_reach_every_instance`, `a_read_from_before_a_clear_is_not_stored`.
+- [x] Data export: `preferences` (notification kinds off, pop-ups off, collection shown). Test: `account_hub_flow` export.
+
+### GitHub write log for this PR
+
+```
+git push -u origin fix/security-s2
+gh pr create --base main --head fix/security-s2 --title "Security fixes S2: blocked owners out of search, cache forgets on every instance, export preferences" --body-file <file>
+gh pr merge <n> --merge
+```
+
 ## Security fixes S1 (branch `fix/security-s1`, ADR 0004, 0010, 0014, 0019, 0020 amendments of 2026/11/20)
 
 From the 2026/11/20 security review (findings A4). Each with a test that fails before and passes after:

@@ -25,3 +25,20 @@ export function latestWins<T>(save: (v: T) => Promise<void>, done: (v: T) => boo
     }
   };
 }
+
+/**
+ * `latestWins` per key (the id of the thing being saved): a pick belongs to the key it was made
+ * for, so it is saved there even if the page has since moved on to another one, and picks for
+ * different keys never replace each other.
+ */
+export function latestWinsBy<T>(save: (key: string, v: T) => Promise<void>, done: (key: string, v: T) => boolean): (key: string, v: T) => Promise<void> {
+  const by = new Map<string, (v: T) => Promise<void>>();
+  return (key, v) => {
+    let one = by.get(key);
+    if (!one) {
+      one = latestWins<T>((x) => save(key, x), (x) => done(key, x));
+      by.set(key, one);
+    }
+    return one(v);
+  };
+}

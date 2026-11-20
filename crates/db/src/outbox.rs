@@ -54,6 +54,44 @@ pub fn user_topic(platform: Platform, platform_user_id: &str) -> String {
     format!("user:{platform}:{platform_user_id}")
 }
 
+/// The topic of internal events: no client can watch it (it isn't a valid topic name), so they
+/// only reach the feeders' taps on every api instance.
+pub const INTERNAL_TOPIC: &str = "internal:cache";
+
+/// The internal event that tells every api instance to drop cached reads: `payload.keys` names
+/// them (read-cache keys, such as a set's topic, or `announcement`).
+pub const CACHE_FORGET: &str = "cache.forget";
+
+/// Publishes [`CACHE_FORGET`] for `keys`, in the caller's transaction, so every instance drops
+/// them once the change commits. Never sent to clients.
+pub async fn publish_cache_forget(conn: &mut PgConnection, keys: &[String]) -> DbResult<i64> {
+    Ok(sqlx::query_scalar(
+        "INSERT INTO events_outbox (type, topics, payload)
+         VALUES ($1, $2, $3)
+         RETURNING id",
+    )
+    .bind(CACHE_FORGET)
+    .bind(vec![INTERNAL_TOPIC.to_owned()])
+    .bind(serde_json::json!({ "keys": keys }))
+    .fetch_one(conn)
+    .await?)
+}
+
+/// The keys a [`CACHE_FORGET`] event names.
+pub fn forget_keys(event: &Event) -> Vec<String> {
+    event
+        .payload
+        .get("keys")
+        .and_then(Value::as_array)
+        .map(|keys| {
+            keys.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_owned)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// The dotted name an event type is stored and sent as.
 pub fn type_name(event_type: EventType) -> String {
     match serde_json::to_value(event_type) {

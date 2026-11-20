@@ -56,3 +56,8 @@ export function morePages(total: number, per: number): number[] {
   const pages = Math.ceil(total / per);
   return Array.from({ length: Math.max(0, pages - 1) }, (_, i) => i + 2);
 }
+
+/** A read that was slow: the lists as it found them, then every change made here since it began. */
+export function replayChanges(read: Members, changes: readonly MemberChange[]): Members {
+  return changes.reduce(applyChange, read);
+}

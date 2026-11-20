@@ -327,6 +327,43 @@ async fn favourites_page_filter_and_ids() {
 }
 
 #[tokio::test]
+async fn favourites_total_matches_visible_items() {
+    let Some(w) = World::new(Rates::default()).await else {
+        return;
+    };
+    let me = w.account("1", "viewer").await;
+    let maker = w.account("2", "maker").await;
+    let t = w.token(me).await;
+    let mut ids_made = Vec::new();
+    for i in 0..4 {
+        let id = w
+            .emote(maker, &format!("Fav{i}"), EmoteState::Approved)
+            .await;
+        w.gql(Some(&t), FAV, json!({ "id": id })).await;
+        ids_made.push(id);
+    }
+    // One is taken down after it was favourited: it is neither listed nor counted.
+    sqlx::query("UPDATE emotes SET state = 'taken_down' WHERE id = $1")
+        .bind(ids::from_text(&ids_made[1]).unwrap())
+        .execute(&w.db.pool)
+        .await
+        .unwrap();
+    let r = w
+        .gql(Some(&t), FAVS, json!({ "page": 1, "perPage": 2 }))
+        .await;
+    let d = ok(&r);
+    assert_eq!(d["myFavourites"]["total"], 3);
+    assert_eq!(d["myFavourites"]["items"].as_array().unwrap().len(), 2);
+    let r = w
+        .gql(Some(&t), FAVS, json!({ "page": 2, "perPage": 2 }))
+        .await;
+    let d = ok(&r);
+    assert_eq!(d["myFavourites"]["total"], 3);
+    assert_eq!(d["myFavourites"]["items"].as_array().unwrap().len(), 1);
+    w.db.close().await;
+}
+
+#[tokio::test]
 async fn lists_are_private_to_their_account() {
     let Some(w) = World::new(Rates::default()).await else {
         return;

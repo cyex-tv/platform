@@ -1529,7 +1529,7 @@ async fn quick_search_ranks_by_tier_then_use() {
 
 /// One listed-emote rule for every search: `search` (relevance and the trending sort), `quick`
 /// and `trending_rank` all find the public emote and none of the unlisted, private, NSFW (unless
-/// asked) or pending-deletion owner's ones.
+/// asked), pending-deletion owner's or blocked owner's ones; an ended block lists them again.
 #[tokio::test]
 async fn every_search_uses_the_listed_emote_rule() {
     use cyex_tv_shared::model::{EmoteSort, TrendingWindow};
@@ -1537,6 +1537,8 @@ async fn every_search_uses_the_listed_emote_rule() {
     let mut c = db.conn().await;
     let owner = account(&mut c, "1").await;
     let leaving = account(&mut c, "2").await;
+    let blocked = account(&mut c, "3").await;
+    let expired = account(&mut c, "4").await;
     let make = |name: &'static str, patch: EmotePatch<'static>, by: Uuid| (name, patch, by);
     let cases = [
         make("vispublic", EmotePatch::default(), owner),
@@ -1565,6 +1567,8 @@ async fn every_search_uses_the_listed_emote_rule() {
             owner,
         ),
         make("visleaving", EmotePatch::default(), leaving),
+        make("visblocked", EmotePatch::default(), blocked),
+        make("visunblocked", EmotePatch::default(), expired),
     ];
     let mut by_name = Vec::new();
     for (name, patch, by) in &cases {
@@ -1584,6 +1588,16 @@ async fn every_search_uses_the_listed_emote_rule() {
     cyex_tv_db::privacy::schedule_erase(&mut c, leaving, Utc::now() + Duration::days(30))
         .await
         .unwrap();
+    // A running block (for good) hides the owner's emotes; one that has ended shows them again.
+    accounts::set_blocked(&mut c, blocked, true).await.unwrap();
+    sqlx::query(
+        "UPDATE accounts SET blocked_at = now() - interval '2 days',
+                             blocked_until = now() - interval '1 day' WHERE id = $1",
+    )
+    .bind(expired)
+    .execute(&mut *c)
+    .await
+    .unwrap();
     let names = |ids: &[Uuid]| -> Vec<&'static str> {
         let mut out: Vec<&'static str> = ids
             .iter()
@@ -1595,8 +1609,8 @@ async fn every_search_uses_the_listed_emote_rule() {
 
     for sort in [EmoteSort::Relevance, EmoteSort::Trending] {
         for (nsfw, want) in [
-            (false, vec!["vispublic"]),
-            (true, vec!["visnsfw", "vispublic"]),
+            (false, vec!["vispublic", "visunblocked"]),
+            (true, vec!["visnsfw", "vispublic", "visunblocked"]),
         ] {
             let hits = search::search(
                 &mut c,
@@ -1615,10 +1629,10 @@ async fn every_search_uses_the_listed_emote_rule() {
         }
     }
     let quick = search::quick(&mut c, "vis", 50).await.unwrap();
-    assert_eq!(names(&quick), ["vispublic"], "quick");
+    assert_eq!(names(&quick), ["vispublic", "visunblocked"], "quick");
     for (name, id) in &by_name {
         let rank = search::trending_rank(&mut c, *id, 7, 100).await.unwrap();
-        let listed = matches!(*name, "vispublic" | "visnsfw");
+        let listed = matches!(*name, "vispublic" | "visnsfw" | "visunblocked");
         assert_eq!(rank.is_some(), listed, "trending_rank {name}");
     }
     drop(c);
@@ -1986,5 +2000,92 @@ async fn erasure_clears_uploader_and_closes_its_transfer_requests() {
     .unwrap();
     assert_eq!(audited, 1);
     drop(c);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn interrupted_concurrent_index_is_rebuilt() {
+    let db = db!();
+    let mut conn = db.conn().await;
+    // A unique build over duplicate rows fails and leaves an invalid index behind, as an
+    // interrupted build does.
+    sqlx::query("CREATE TABLE ix_probe (a int)")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    sqlx::query("INSERT INTO ix_probe VALUES (1), (1)")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    assert!(
+        sqlx::query("CREATE UNIQUE INDEX CONCURRENTLY ix_probe_a ON ix_probe (a)")
+            .execute(&mut *conn)
+            .await
+            .is_err()
+    );
+    let valid = |name: &'static str| {
+        sqlx::query_scalar::<_, bool>(
+            "SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass($1)",
+        )
+        .bind(name)
+    };
+    assert!(!valid("ix_probe_a").fetch_one(&mut *conn).await.unwrap());
+
+    // Still broken: the repair fails loudly instead of leaving it.
+    assert!(cyex_tv_db::repair_invalid_indexes(&mut conn).await.is_err());
+
+    // Once the rows allow it, the repair rebuilds it and it is valid.
+    sqlx::query("DELETE FROM ix_probe WHERE ctid = (SELECT max(ctid) FROM ix_probe)")
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    let rebuilt = cyex_tv_db::repair_invalid_indexes(&mut conn).await.unwrap();
+    assert_eq!(rebuilt, ["ix_probe_a"]);
+    assert!(valid("ix_probe_a").fetch_one(&mut *conn).await.unwrap());
+    // Nothing left to do.
+    assert!(
+        cyex_tv_db::repair_invalid_indexes(&mut conn)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    drop(conn);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn notification_prefs_changes_take_turns() {
+    use cyex_tv_db::prefs;
+    use sqlx::Connection;
+    let db = db!();
+    let mut conn = db.conn().await;
+    let me = account(&mut conn, "9001").await;
+    drop(conn);
+
+    // First change: holds the row (created on the spot, there was none).
+    let mut a = db.pool.acquire().await.unwrap();
+    let mut tx_a = a.begin().await.unwrap();
+    let seen = prefs::get_for_update(&mut tx_a, me).await.unwrap();
+    assert_eq!(seen, prefs::Prefs::default());
+
+    // Second change waits for the first instead of reading the old value.
+    let pool = db.pool.clone();
+    let second = tokio::spawn(async move {
+        let mut b = pool.acquire().await.unwrap();
+        let mut tx_b = b.begin().await.unwrap();
+        let seen = prefs::get_for_update(&mut tx_b, me).await.unwrap();
+        tx_b.commit().await.unwrap();
+        seen
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(!second.is_finished(), "the second change must wait");
+
+    prefs::set_notifications(&mut tx_a, me, &["review".to_owned()], &[])
+        .await
+        .unwrap();
+    tx_a.commit().await.unwrap();
+    let seen = second.await.unwrap();
+    assert_eq!(seen.notify_off, ["review"]);
+    drop(a);
     db.close().await;
 }

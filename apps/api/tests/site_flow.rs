@@ -350,6 +350,86 @@ fn pref<'a>(r: &'a Value, root: &str, kind: &str) -> &'a Value {
         .unwrap_or_else(|| panic!("{kind} in {r}"))
 }
 
+/// Another api instance on the same database with the read cache on (a minute) and its own
+/// feeder, as the api binary runs.
+fn other_instance(db: &TestDb) -> (Router, tokio::task::JoinHandle<()>) {
+    let cfg = AuthConfig::from_source(|_| None).unwrap();
+    let state = AppState::new(db.pool.clone(), Arc::new(Auth::new(cfg).unwrap()))
+        .with_read_cache(std::time::Duration::from_secs(60));
+    let feeder = tokio::spawn({
+        let (db, hub) = (state.db.clone(), state.hub.clone());
+        async move {
+            let mut feeder = cyex_tv_hub::feeder::Feeder::new(0)
+                .with_gap_wait(std::time::Duration::from_millis(50));
+            loop {
+                while let Ok((_, true)) = feeder.tick(&db, &hub).await {}
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        }
+    });
+    (cyex_tv_api::app(state), feeder)
+}
+
+async fn active_on(app: &Router) -> Value {
+    let request = Request::post("/v1/gql")
+        .header("content-type", "application/json")
+        .body(Body::from(json!({ "query": ACTIVE }).to_string()))
+        .unwrap();
+    let response = app.clone().oneshot(request).await.unwrap();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let body: Value = serde_json::from_slice(&bytes).unwrap();
+    body["data"]["activeAnnouncement"].clone()
+}
+
+/// Creating, changing and ending an announcement drops the cached one on every instance, not
+/// only the one that made the change (`cache.forget` through the outbox).
+#[tokio::test]
+async fn announcement_changes_reach_every_instance() {
+    let Some(w) = World::new().await else { return };
+    let (there, feeder) = other_instance(&w.db);
+    let staff = w.user("1311", &["site.announce"]).await;
+    // Cached there: nothing.
+    assert!(active_on(&there).await.is_null());
+
+    let r = w
+        .gql(
+            &staff,
+            CREATE,
+            json!({ "i": { "kind": "INFO", "text": "First line." } }),
+        )
+        .await;
+    let id = r["data"]["createAnnouncement"]["id"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{r}"))
+        .to_owned();
+    common::wait_until("the other instance to show the new one", || async {
+        active_on(&there).await["id"] == id.as_str()
+    })
+    .await;
+
+    let r = w
+        .gql(
+            &staff,
+            UPDATE,
+            json!({ "id": id, "i": { "kind": "INFO", "text": "Second line." } }),
+        )
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+    common::wait_until("the other instance to show the change", || async {
+        active_on(&there).await["text"] == "Second line."
+    })
+    .await;
+
+    let r = w.gql(&staff, END, json!({ "id": id })).await;
+    assert!(r["errors"].is_null(), "{r}");
+    common::wait_until("the other instance to drop the ended one", || async {
+        active_on(&there).await.is_null()
+    })
+    .await;
+    feeder.abort();
+    w.db.close().await;
+}
+
 #[tokio::test]
 async fn a_kind_turned_off_is_never_created() {
     let Some(w) = World::new().await else { return };
