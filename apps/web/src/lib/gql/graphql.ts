@@ -1086,7 +1086,8 @@ export type Mutation = {
   /**
    * Approve a pending emote. Needs `emotes.review`. Audited. With `visibility`, it is also
    * made public, unlisted or private in the same step (for example, approved for personal use
-   * only).
+   * only). `idempotencyKey` (optional UUID): a retry with it within 24 hours answers what the
+   * first approval did instead of `not_pending`.
    */
   approveEmote: Emote;
   /**
@@ -1236,6 +1237,10 @@ export type Mutation = {
    * Redeem a code (case, spaces and dashes don't matter). Wrong codes lock you out for a
    * while after a few tries (`locked_out`). Each cosmetic it gives sends a `cosmetic.granted`
    * notification (`source` `code`).
+   *
+   * `idempotencyKey` (optional UUID, one per attempt, sent again on a retry): a repeat within
+   * 24 hours answers what the first redeem gave instead of `already_redeemed`.
+   * `idempotency_key_reused` when the key went with another code.
    */
   redeemCode: RedeemResult;
   /**
@@ -1288,6 +1293,8 @@ export type Mutation = {
    * Approve (optionally as `visibility`) or reject (with `reason`) up to 100 pending emotes in
    * one step. All of it commits together, with one audit row and one notice per emote; emotes
    * that aren't pending are left alone and listed in `failed`. Needs `emotes.review`.
+   * `idempotencyKey` (optional UUID): a retry with it within 24 hours answers the first
+   * outcome instead of listing every emote as `not_pending`.
    */
   reviewEmotes: BatchOutcome;
   /**
@@ -1347,6 +1354,13 @@ export type Mutation = {
    * `checkout_unavailable` while Paddle isn't set up or the item has no Paddle price. Asking
    * again for the same item and recipient within the hour hands out the same transaction
    * (one pending order each); `checkout_busy` while another request is starting it.
+   *
+   * `idempotencyKey` (optional, a UUID the client makes once per purchase and sends again on
+   * a retry): a repeat within 24 hours answers what the first one did (as it was then; poll
+   * `order(id)` for where it stands) instead of starting another order.
+   * `idempotency_key_reused` when the key went with another item or recipient,
+   * `idempotency_in_progress` while the first is still running. A request that failed gives
+   * its key back.
    */
   startCheckout: Checkout;
   /**
@@ -1459,6 +1473,7 @@ export type MutationAddStaffNoteArgs = {
 
 export type MutationApproveEmoteArgs = {
   id: Scalars['String']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   visibility?: InputMaybe<EmoteVisibility>;
 };
 
@@ -1623,6 +1638,7 @@ export type MutationPlaceRestrictionArgs = {
 
 export type MutationRedeemCodeArgs = {
   code: Scalars['String']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
 };
 
 
@@ -1682,6 +1698,7 @@ export type MutationRestrictAccountArgs = {
 
 
 export type MutationReviewEmotesArgs = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   ids: Array<Scalars['String']['input']>;
   reason?: InputMaybe<Scalars['String']['input']>;
   verdict: ReviewVerdict;
@@ -1736,6 +1753,7 @@ export type MutationSetReviewReasonsArgs = {
 
 
 export type MutationStartCheckoutArgs = {
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
   itemId: Scalars['String']['input'];
   recipient?: InputMaybe<RecipientInput>;
 };
@@ -4072,6 +4090,7 @@ export type OrderFieldsFragment = { __typename?: 'Order', id: string, gift: bool
 export type StartCheckoutMutationVariables = Exact<{
   itemId: Scalars['String']['input'];
   recipient?: InputMaybe<RecipientInput>;
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
@@ -4094,6 +4113,7 @@ export type MyOrdersQuery = { __typename?: 'Query', myOrders: { __typename?: 'Or
 
 export type RedeemCodeMutationVariables = Exact<{
   code: Scalars['String']['input'];
+  idempotencyKey?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
@@ -7360,8 +7380,12 @@ fragment ShopItemFields on ShopItem {
   deleted
 }`) as unknown as TypedDocumentString<ShopItemQuery, ShopItemQueryVariables>;
 export const StartCheckoutDocument = new TypedDocumentString(`
-    mutation StartCheckout($itemId: String!, $recipient: RecipientInput) {
-  startCheckout(itemId: $itemId, recipient: $recipient) {
+    mutation StartCheckout($itemId: String!, $recipient: RecipientInput, $idempotencyKey: String) {
+  startCheckout(
+    itemId: $itemId
+    recipient: $recipient
+    idempotencyKey: $idempotencyKey
+  ) {
     order {
       ...OrderFields
     }
@@ -7465,8 +7489,8 @@ export const MyOrdersDocument = new TypedDocumentString(`
   failedAt
 }`) as unknown as TypedDocumentString<MyOrdersQuery, MyOrdersQueryVariables>;
 export const RedeemCodeDocument = new TypedDocumentString(`
-    mutation RedeemCode($code: String!) {
-  redeemCode(code: $code) {
+    mutation RedeemCode($code: String!, $idempotencyKey: String) {
+  redeemCode(code: $code, idempotencyKey: $idempotencyKey) {
     name
     badges {
       ...BadgeFields

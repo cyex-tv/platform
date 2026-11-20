@@ -83,6 +83,12 @@ export default {
       },
     },
     prerender: {
+      // The reference's operations are drawn when their group opens, so a link to one finds no element in the
+      // prerendered HTML; the index names every one of them (the docs tests check each link target exists).
+      handleMissingId: ({ path, id, message }) => {
+        if (path === '/developers' && /^(rest|gql|ws)-/.test(id)) return;
+        throw new Error(message);
+      },
       handleHttpError: ({ path, message }) => {
         if (PENDING.has(path)) return;
         throw new Error(message);

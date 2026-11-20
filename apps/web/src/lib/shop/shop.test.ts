@@ -64,10 +64,12 @@ describe('error messages', () => {
       expect(m.length).toBeGreaterThan(10);
     }
   });
-  it('a timeout may have gone through, and says to check before trying again', () => {
-    expect(shopMessage(e('timeout'))).toMatch(/may have started: check Billing .* before trying again/);
+  it('a timeout may have gone through: trying again is safe (the same idempotency key), never "nothing was charged"', () => {
+    expect(shopMessage(e('timeout'))).toMatch(/Try again: if the checkout started, you.ll get the same one/);
     expect(shopMessage(e('timeout'))).not.toMatch(/Nothing was charged/);
-    expect(redeemMessage(e('timeout'))).toMatch(/may have gone through: check Your cosmetics before trying again/);
+    expect(redeemMessage(e('timeout'))).toMatch(/Try again: a code that went through isn.t used twice/);
+    expect(shopMessage(e('idempotency_in_progress'))).toMatch(/still starting/);
+    expect(redeemMessage(e('idempotency_in_progress'))).toMatch(/still being checked/);
   });
   it('tunes already_owned for a gift', () => {
     expect(shopMessage(e('already_owned'), true)).toBe('They own everything in it already.');

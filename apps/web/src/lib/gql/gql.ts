@@ -133,10 +133,10 @@ type Documents = {
     "\n  query ShopItems($all: Boolean) {\n    shopItems(all: $all) {\n      ...ShopItemFields\n    }\n  }\n": typeof types.ShopItemsDocument,
     "\n  query ShopItem($id: String!) {\n    shopItem(id: $id) {\n      ...ShopItemFields\n    }\n  }\n": typeof types.ShopItemDocument,
     "\n  fragment OrderFields on Order {\n    id\n    buyer {\n      id\n      displayName\n      avatar\n    }\n    recipient {\n      id\n      displayName\n      avatar\n    }\n    gift\n    itemId\n    itemName\n    status\n    amountCents\n    currency\n    paidTotalCents\n    paidCurrency\n    refundReason\n    createdAt\n    paidAt\n    refundedAt\n    failedAt\n  }\n": typeof types.OrderFieldsFragmentDoc,
-    "\n  mutation StartCheckout($itemId: String!, $recipient: RecipientInput) {\n    startCheckout(itemId: $itemId, recipient: $recipient) {\n      order {\n        ...OrderFields\n      }\n      transactionId\n      checkoutUrl\n      clientToken\n      environment\n    }\n  }\n": typeof types.StartCheckoutDocument,
+    "\n  mutation StartCheckout($itemId: String!, $recipient: RecipientInput, $idempotencyKey: String) {\n    startCheckout(itemId: $itemId, recipient: $recipient, idempotencyKey: $idempotencyKey) {\n      order {\n        ...OrderFields\n      }\n      transactionId\n      checkoutUrl\n      clientToken\n      environment\n    }\n  }\n": typeof types.StartCheckoutDocument,
     "\n  query Order($id: String!) {\n    order(id: $id) {\n      ...OrderFields\n    }\n  }\n": typeof types.OrderDocument,
     "\n  query MyOrders($page: Int, $perPage: Int) {\n    myOrders(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...OrderFields\n      }\n    }\n  }\n": typeof types.MyOrdersDocument,
-    "\n  mutation RedeemCode($code: String!) {\n    redeemCode(code: $code) {\n      name\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n    }\n  }\n": typeof types.RedeemCodeDocument,
+    "\n  mutation RedeemCode($code: String!, $idempotencyKey: String) {\n    redeemCode(code: $code, idempotencyKey: $idempotencyKey) {\n      name\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n    }\n  }\n": typeof types.RedeemCodeDocument,
     "\n  mutation CreateShopItem($input: ShopItemInput!) {\n    createShopItem(input: $input) {\n      ...ShopItemFields\n    }\n  }\n": typeof types.CreateShopItemDocument,
     "\n  mutation UpdateShopItem($id: String!, $input: ShopItemInput!) {\n    updateShopItem(id: $id, input: $input) {\n      ...ShopItemFields\n    }\n  }\n": typeof types.UpdateShopItemDocument,
     "\n  mutation DeleteShopItem($id: String!) {\n    deleteShopItem(id: $id)\n  }\n": typeof types.DeleteShopItemDocument,
@@ -305,10 +305,10 @@ const documents: Documents = {
     "\n  query ShopItems($all: Boolean) {\n    shopItems(all: $all) {\n      ...ShopItemFields\n    }\n  }\n": types.ShopItemsDocument,
     "\n  query ShopItem($id: String!) {\n    shopItem(id: $id) {\n      ...ShopItemFields\n    }\n  }\n": types.ShopItemDocument,
     "\n  fragment OrderFields on Order {\n    id\n    buyer {\n      id\n      displayName\n      avatar\n    }\n    recipient {\n      id\n      displayName\n      avatar\n    }\n    gift\n    itemId\n    itemName\n    status\n    amountCents\n    currency\n    paidTotalCents\n    paidCurrency\n    refundReason\n    createdAt\n    paidAt\n    refundedAt\n    failedAt\n  }\n": types.OrderFieldsFragmentDoc,
-    "\n  mutation StartCheckout($itemId: String!, $recipient: RecipientInput) {\n    startCheckout(itemId: $itemId, recipient: $recipient) {\n      order {\n        ...OrderFields\n      }\n      transactionId\n      checkoutUrl\n      clientToken\n      environment\n    }\n  }\n": types.StartCheckoutDocument,
+    "\n  mutation StartCheckout($itemId: String!, $recipient: RecipientInput, $idempotencyKey: String) {\n    startCheckout(itemId: $itemId, recipient: $recipient, idempotencyKey: $idempotencyKey) {\n      order {\n        ...OrderFields\n      }\n      transactionId\n      checkoutUrl\n      clientToken\n      environment\n    }\n  }\n": types.StartCheckoutDocument,
     "\n  query Order($id: String!) {\n    order(id: $id) {\n      ...OrderFields\n    }\n  }\n": types.OrderDocument,
     "\n  query MyOrders($page: Int, $perPage: Int) {\n    myOrders(page: $page, perPage: $perPage) {\n      total\n      items {\n        ...OrderFields\n      }\n    }\n  }\n": types.MyOrdersDocument,
-    "\n  mutation RedeemCode($code: String!) {\n    redeemCode(code: $code) {\n      name\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n    }\n  }\n": types.RedeemCodeDocument,
+    "\n  mutation RedeemCode($code: String!, $idempotencyKey: String) {\n    redeemCode(code: $code, idempotencyKey: $idempotencyKey) {\n      name\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n    }\n  }\n": types.RedeemCodeDocument,
     "\n  mutation CreateShopItem($input: ShopItemInput!) {\n    createShopItem(input: $input) {\n      ...ShopItemFields\n    }\n  }\n": types.CreateShopItemDocument,
     "\n  mutation UpdateShopItem($id: String!, $input: ShopItemInput!) {\n    updateShopItem(id: $id, input: $input) {\n      ...ShopItemFields\n    }\n  }\n": types.UpdateShopItemDocument,
     "\n  mutation DeleteShopItem($id: String!) {\n    deleteShopItem(id: $id)\n  }\n": types.DeleteShopItemDocument,
@@ -834,7 +834,7 @@ export function graphql(source: "\n  fragment OrderFields on Order {\n    id\n  
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  mutation StartCheckout($itemId: String!, $recipient: RecipientInput) {\n    startCheckout(itemId: $itemId, recipient: $recipient) {\n      order {\n        ...OrderFields\n      }\n      transactionId\n      checkoutUrl\n      clientToken\n      environment\n    }\n  }\n"): typeof import('./graphql').StartCheckoutDocument;
+export function graphql(source: "\n  mutation StartCheckout($itemId: String!, $recipient: RecipientInput, $idempotencyKey: String) {\n    startCheckout(itemId: $itemId, recipient: $recipient, idempotencyKey: $idempotencyKey) {\n      order {\n        ...OrderFields\n      }\n      transactionId\n      checkoutUrl\n      clientToken\n      environment\n    }\n  }\n"): typeof import('./graphql').StartCheckoutDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -846,7 +846,7 @@ export function graphql(source: "\n  query MyOrders($page: Int, $perPage: Int) {
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  mutation RedeemCode($code: String!) {\n    redeemCode(code: $code) {\n      name\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n    }\n  }\n"): typeof import('./graphql').RedeemCodeDocument;
+export function graphql(source: "\n  mutation RedeemCode($code: String!, $idempotencyKey: String) {\n    redeemCode(code: $code, idempotencyKey: $idempotencyKey) {\n      name\n      badges {\n        ...BadgeFields\n      }\n      paints {\n        ...PaintFields\n      }\n    }\n  }\n"): typeof import('./graphql').RedeemCodeDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

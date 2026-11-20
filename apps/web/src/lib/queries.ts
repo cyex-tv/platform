@@ -1614,8 +1614,8 @@ export const ORDER_FIELDS = graphql(`
 `);
 
 export const START_CHECKOUT = graphql(`
-  mutation StartCheckout($itemId: String!, $recipient: RecipientInput) {
-    startCheckout(itemId: $itemId, recipient: $recipient) {
+  mutation StartCheckout($itemId: String!, $recipient: RecipientInput, $idempotencyKey: String) {
+    startCheckout(itemId: $itemId, recipient: $recipient, idempotencyKey: $idempotencyKey) {
       order {
         ...OrderFields
       }
@@ -1647,8 +1647,8 @@ export const MY_ORDERS = graphql(`
 `);
 
 export const REDEEM_CODE = graphql(`
-  mutation RedeemCode($code: String!) {
-    redeemCode(code: $code) {
+  mutation RedeemCode($code: String!, $idempotencyKey: String) {
+    redeemCode(code: $code, idempotencyKey: $idempotencyKey) {
       name
       badges {
         ...BadgeFields

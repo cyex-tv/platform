@@ -15,6 +15,7 @@
 import { gql } from '$lib/api';
 import { ORDER, START_CHECKOUT } from '$lib/queries';
 import type { OrderFieldsFragment, Platform } from '$lib/gql/graphql';
+import { keyKeeper } from '$lib/idempotency';
 import { notify } from '$lib/tool/notices.svelte';
 import { openPaddle, type PaddleEvent } from './paddle';
 import { safeCheckoutUrl, settled, shopMessage, type OrderStatus } from './shop';
@@ -40,6 +41,10 @@ let timer: ReturnType<typeof setTimeout> | undefined;
 let since = 0;
 let reopen: (() => void) | null = null;
 let gen = 0;
+// One idempotency key per purchase: buying the same item for the same person again after a start
+// that failed or ran out of time sends the same key, so a start that did go through answers with
+// its first order instead of making a second. A start that answered ends the purchase's key.
+const keys = keyKeeper();
 
 const keep = (id: string | null) => {
   try {
@@ -112,7 +117,9 @@ export async function buy(purchase: Purchase): Promise<string | null> {
   flow.error = null;
   flow.phase = 'starting';
   try {
-    const { startCheckout: co } = await gql(START_CHECKOUT, { itemId: purchase.itemId, recipient: purchase.gift });
+    const idempotencyKey = keys.key(JSON.stringify([purchase.itemId, purchase.gift]));
+    const { startCheckout: co } = await gql(START_CHECKOUT, { itemId: purchase.itemId, recipient: purchase.gift, idempotencyKey });
+    keys.done();
     if (mine !== gen) return null;
     flow.order = co.order;
     since = Date.now();

@@ -67,8 +67,10 @@ const SHOP: Record<string, string> = {
 export function shopMessage(err: unknown, gift = false): string {
   if (!(err instanceof ApiError)) return `${SERVER} Nothing was charged.`;
   if (err.code === 'offline') return unreachableMessage();
-  // A call that ran out of time may still have been done: never promise "nothing was charged".
-  if (err.code === 'timeout') return 'cyex.tv didn’t answer in time. The checkout may have started: check Billing in your settings before trying again.';
+  // A call that ran out of time may still have been done: never promise "nothing was charged". Trying
+  // again is safe: the retry sends the same idempotency key, so a checkout that started answers again.
+  if (err.code === 'timeout') return 'cyex.tv didn’t answer in time. Try again: if the checkout started, you’ll get the same one, not a second.';
+  if (err.code === 'idempotency_in_progress') return 'Your checkout is still starting. Try again in a moment.';
   if (err.code === 'already_owned' && gift) return 'They own everything in it already.';
   return SHOP[err.code] ?? err.message;
 }
@@ -99,7 +101,9 @@ export function redeemMessage(err: unknown): string {
       : `Too many wrong codes. You can try again in ${count(n)} ${n === 1 ? 'minute' : 'minutes'}.`;
   }
   if (err.code === 'offline') return unreachableMessage();
-  if (err.code === 'timeout') return 'cyex.tv didn’t answer in time. The code may have gone through: check Your cosmetics before trying again.';
+  // The retry sends the same idempotency key: a redeem that went through isn’t done twice.
+  if (err.code === 'timeout') return 'cyex.tv didn’t answer in time. Try again: a code that went through isn’t used twice.';
+  if (err.code === 'idempotency_in_progress') return 'That code is still being checked. Try again in a moment.';
   return REDEEM[err.code] ?? err.message;
 }
 
