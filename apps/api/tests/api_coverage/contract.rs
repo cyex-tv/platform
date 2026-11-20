@@ -890,6 +890,43 @@ async fn every_site_operation_runs_against_the_real_api() {
     .await;
     c.op(os, "Audit", json!({ "limit": 20 })).await;
 
+    // The site announcement.
+    let announcement = c
+        .id(
+            os,
+            "CreateAnnouncement",
+            json!({ "input": { "kind": "CAMPAIGN", "text": "Contract test", "linkUrl": "/shop", "linkLabel": "Shop" } }),
+            "/createAnnouncement/id",
+        )
+        .await;
+    c.op(
+        os,
+        "UpdateAnnouncement",
+        json!({ "id": announcement, "input": { "kind": "INFO", "text": "Contract test two" } }),
+    )
+    .await;
+    c.op(As::Nobody, "ActiveAnnouncement", json!({})).await;
+    c.op(os, "Announcements", json!({})).await;
+    c.op(os, "EndAnnouncement", json!({ "id": announcement }))
+        .await;
+
+    // Notification preferences and the collection.
+    c.op(fs, "NotificationPrefs", json!({})).await;
+    c.op(
+        fs,
+        "SetNotificationPrefs",
+        json!({ "prefs": [{ "kind": "emote.approved", "notify": true, "toast": false }] }),
+    )
+    .await;
+    c.op(fs, "SetCollectionPublic", json!({ "public": true }))
+        .await;
+    c.op(
+        As::Nobody,
+        "AccountCollection",
+        json!({ "accountId": f.tid() }),
+    )
+    .await;
+
     // The account hub.
     c.op(fs, "MyNotifications", json!({})).await;
     c.op(fs, "UnreadCount", json!({})).await;
@@ -908,6 +945,36 @@ async fn every_site_operation_runs_against_the_real_api() {
         .await;
     c.op(os, "Unlink", json!({ "platform": "KICK" })).await;
     c.op(os, "PendingDeletion", json!({})).await;
+
+    // Personal lists: hide for me and favourites, as the tile menu, the emote page, Settings →
+    // Hidden, the Favourites tab and the searches send them.
+    c.op(os, "FavouriteEmote", json!({ "id": e2 })).await;
+    c.op(os, "HideEmote", json!({ "id": e_report })).await;
+    c.op(os, "HideCreator", json!({ "accountId": t.tid() }))
+        .await;
+    let data = c.op(os, "PersonalLists", json!({})).await;
+    c.check(
+        data["favouriteEmoteIds"][0] == json!(e2)
+            && data["hiddenEmotes"][0]["emoteId"] == json!(e_report)
+            && data["hiddenCreators"][0]["accountId"] == json!(t.tid()),
+        format!("PersonalLists: {data}"),
+    );
+    let data = c.op(os, "HiddenLists", json!({})).await;
+    c.check(
+        data["hiddenEmotes"][0]["emote"]["name"] == "covBad",
+        format!("HiddenLists: {data}"),
+    );
+    let data = c
+        .op(os, "MyFavourites", json!({ "query": "kek", "perPage": 5 }))
+        .await;
+    c.check(
+        data["myFavourites"]["total"] == 1,
+        format!("MyFavourites: {data}"),
+    );
+    c.op(os, "UnhideCreator", json!({ "accountId": t.tid() }))
+        .await;
+    c.op(os, "UnhideEmote", json!({ "id": e_report })).await;
+    c.op(os, "UnfavouriteEmote", json!({ "id": e2 })).await;
 
     // Cleaning up, as the site does it.
     c.op(os, "DeleteEmote", json!({ "id": e_del })).await;

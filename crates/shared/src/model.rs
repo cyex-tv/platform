@@ -12,6 +12,7 @@ use utoipa::{IntoParams, ToSchema};
 
 pub use crate::cosmetics::*;
 pub use crate::shop::*;
+pub use crate::site::*;
 
 /// A streaming platform.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
@@ -1131,6 +1132,9 @@ pub struct AccountProfile {
     /// The account's editors, oldest first: who they are only, never what they may do.
     #[serde(default)]
     pub editors: Vec<AccountSummary>,
+    /// The account shows the badges and paints it owns (`accountCollection`). Off by default.
+    #[serde(default)]
+    pub collection_public: bool,
 }
 
 // Reports and takedowns (Phase 7)
@@ -1541,6 +1545,27 @@ pub struct CallbackQuery {
     pub code: Option<String>,
     pub state: Option<String>,
     pub error: Option<String>,
+}
+
+// Personal lists ("Hide for me" and favourites)
+
+/// An emote you hid from your own view. `emote` is null once the emote is gone or you may no
+/// longer see it; unhiding it by `emoteId` still works.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct HiddenEmote {
+    pub emote_id: String,
+    pub emote: Option<Emote>,
+    pub hidden_at: String,
+}
+
+/// A creator whose emotes you hid from your own view. `account` is null once the account is gone.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct HiddenCreator {
+    pub account_id: String,
+    pub account: Option<AccountSummary>,
+    pub hidden_at: String,
 }
 
 #[cfg(test)]

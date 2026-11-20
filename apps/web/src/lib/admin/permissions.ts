@@ -82,7 +82,10 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   {
     id: 'system',
     label: 'System',
-    items: [p('audit.view', 'Read the audit log', 'See every staff action: who did what, to what, and when.')],
+    items: [
+      p('audit.view', 'Read the audit log', 'See every staff action: who did what, to what, and when.'),
+      p('site.announce', 'Site announcements', 'Put a line under the header for everyone, with a link, start and end, and end it early.'),
+    ],
   },
 ];
 

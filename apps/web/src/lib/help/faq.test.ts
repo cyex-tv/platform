@@ -58,3 +58,22 @@ describe('help questions', () => {
     expect(matches(del, '   ')).toBe(true);
   });
 });
+
+describe('popular questions and status', () => {
+  it('lists six real questions, in order', async () => {
+    const { POPULAR, POPULAR_IDS } = await import('./faq');
+    expect(POPULAR.map((q) => q.id)).toEqual(POPULAR_IDS);
+    expect(POPULAR).toHaveLength(6);
+  });
+
+  it('reads the readiness check, and calls any failure down', async () => {
+    const { checkStatus, statusText } = await import('./faq');
+    const ok = (async () => new Response('{}', { status: 200 })) as typeof fetch;
+    const bad = (async () => new Response('{}', { status: 503 })) as typeof fetch;
+    const dead = (async () => { throw new TypeError('offline'); }) as typeof fetch;
+    expect(await checkStatus('https://api.test', ok)).toBe(true);
+    expect(await checkStatus('https://api.test', bad)).toBe(false);
+    expect(await checkStatus('https://api.test', dead)).toBe(false);
+    expect(statusText('down')).toMatch(/isn’t answering/);
+  });
+});

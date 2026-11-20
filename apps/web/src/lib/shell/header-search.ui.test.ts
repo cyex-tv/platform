@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/svelte';
+import { cleanup, render, screen } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import HeaderSearch from './HeaderSearch.svelte';
@@ -108,5 +108,50 @@ describe('HeaderSearch errors', () => {
     await user.type(box(), 'o');
     expect(screen.queryByText(/Search isn.t available right now/)).toBeNull();
     expect(screen.getByText('Searching…')).toBeTruthy();
+  });
+});
+
+describe('HeaderSearch recents', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('remembers what was searched and lists it when the empty field is focused', async () => {
+    const user = userEvent.setup();
+    await search(user);
+    await user.keyboard('{Enter}');
+    expect(JSON.parse(localStorage.getItem('cyex.search.recent')!)).toEqual(['pog']);
+    cleanup();
+    render(HeaderSearch);
+    await user.click(box());
+    const opts = screen.getAllByRole('option');
+    expect(opts.map((o) => o.textContent?.trim())).toEqual(['pog', 'Clear recent searches']);
+    expect(opts[0].getAttribute('href')).toBe('/search?q=pog');
+  });
+
+  it('is reachable with the arrow keys, opens a recent one and clears them all', async () => {
+    localStorage.setItem('cyex.search.recent', JSON.stringify(['kappa', 'pog']));
+    const user = userEvent.setup();
+    render(HeaderSearch);
+    await user.click(box());
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}{Enter}'); // the clear row
+    expect(screen.queryAllByRole('option')).toHaveLength(0);
+    expect(localStorage.getItem('cyex.search.recent')).toBeNull();
+    expect(goto).not.toHaveBeenCalled();
+    cleanup();
+    localStorage.setItem('cyex.search.recent', JSON.stringify(['kappa', 'pog']));
+    render(HeaderSearch);
+    await user.click(box());
+    await user.keyboard('{ArrowDown}{ArrowDown}{Enter}');
+    expect(goto).toHaveBeenCalledWith('/search?q=pog');
+    expect(JSON.parse(localStorage.getItem('cyex.search.recent')!)[0]).toBe('pog');
+  });
+
+  it('stores nothing when the browser refuses, and still searches', async () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('denied'); });
+    const user = userEvent.setup();
+    await search(user);
+    await user.keyboard('{Enter}');
+    expect(goto).toHaveBeenCalledWith('/search?q=pog');
+    vi.restoreAllMocks();
+    expect(localStorage.getItem('cyex.search.recent')).toBeNull();
   });
 });

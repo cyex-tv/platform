@@ -132,6 +132,9 @@
     return out;
   });
   const nameIssue = $derived(issues.find((i) => i.field === 'name')?.message ?? null);
+  // An empty name is not an error while the form is fresh; once a save was tried it is, and the field says so.
+  let triedSave = $state(false);
+  const nameShown = $derived(!!nameIssue && (!!paint.name || triedSave));
   const nameLength = $derived([...paint.name.trim()].length);
 
   // ---- live animated preview (in the worker, debounced) ----
@@ -174,10 +177,19 @@
 
   // ---- picture file ----
 
+  // A file that can't be used leaves no earlier picture (or its size) standing for what was chosen.
+  function clearPicked() {
+    if (!picked) return;
+    drop(picked.url);
+    drop(picked.still);
+    picked = null;
+  }
+
   async function pickFile(file: File | undefined) {
     pickError = [];
     if (!file) return;
     if (!['image/gif', 'image/png', 'image/apng', 'image/webp'].includes(file.type)) {
+      clearPicked();
       pickError = ['Choose a GIF, PNG, APNG or WebP file.'];
       return;
     }
@@ -196,6 +208,7 @@
       pickError = checkPicture({ bytes: file.size, width: bmp.width, height: bmp.height });
       bmp.close();
     } catch {
+      clearPicked();
       pickError = ['Couldn’t read that picture. Try another file.'];
     }
   }
@@ -240,6 +253,7 @@
   async function saveToCyex() {
     if (!backend || busy) return;
     if (issues.length) {
+      triedSave = true;
       status = { text: 'Fix the marked fields first.', bad: true };
       return;
     }
@@ -434,8 +448,8 @@
   <div class="ps-top">
     <div class="ps-field ps-name">
       <label for="ps-name">Paint name <span class="ps-count" class:ps-count-bad={nameLength > LIMITS.nameMax}>{nameLength} of {LIMITS.nameMax}</span></label>
-      <input id="ps-name" class="ps-text" type="text" autocomplete="off" spellcheck="false" placeholder="Sunset Strip" bind:value={paint.name} aria-invalid={nameIssue && paint.name ? 'true' : undefined} aria-describedby="ps-name-m" />
-      <p id="ps-name-m" class={nameIssue && paint.name ? 'ps-msg' : 'ps-hint'}>{nameIssue && paint.name ? nameIssue : savedId ? 'Editing a saved paint. Saving replaces it.' : 'A new paint. Names are unique on cyex.tv.'}</p>
+      <input id="ps-name" class="ps-text" type="text" autocomplete="off" spellcheck="false" placeholder="Sunset Strip" bind:value={paint.name} aria-invalid={nameShown ? 'true' : undefined} aria-describedby="ps-name-m" />
+      <p id="ps-name-m" class={nameShown ? 'ps-msg' : 'ps-hint'}>{nameShown ? nameIssue : savedId ? 'Editing a saved paint. Saving replaces it.' : 'A new paint. Names are unique on cyex.tv.'}</p>
     </div>
     <div class="ui-actions">
       <button type="button" class="ui-btn secondary" onclick={() => (importText = '', importError = null, importDialog.showModal())}><Glyph name="upload" /> Import</button>

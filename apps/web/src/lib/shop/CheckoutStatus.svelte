@@ -8,7 +8,7 @@
   import { clean } from '$lib/format';
   import { sectionHref } from '$lib/profile/rows';
   import { session } from '$lib/tool/session.svelte';
-  import { again, dismiss, flow, resume, retry } from './checkout.svelte';
+  import { again, checkAgain, dismiss, flow, resume, retry } from './checkout.svelte';
 
   onMount(() => {
     resume();
@@ -32,6 +32,14 @@
   <div class="status"><State kind="loading" title="Still confirming">
     Confirming is taking longer than usual. You can leave this page: <bdi>{item}</bdi> shows up in {gift ? 'their' : 'your'} Cosmetics and in your orders as soon as the payment is confirmed.
     {#snippet actions()}<button class="btn btn-s" type="button" onclick={dismiss}>Hide this</button>{/snippet}
+  </State></div>
+{:else if flow.phase === 'stalled'}
+  <div class="status"><State title="We stopped checking">
+    We haven’t heard back about this payment. If you paid, <bdi>{item}</bdi> shows up in {gift ? 'their' : 'your'} Cosmetics and in your orders as soon as it’s confirmed. Nothing is lost.
+    {#snippet actions()}
+      <button class="btn btn-s btn-primary" type="button" onclick={checkAgain}>Check again</button>
+      <button class="btn btn-s" type="button" onclick={dismiss}>Hide this</button>
+    {/snippet}
   </State></div>
 {:else if flow.phase === 'cancelled'}
   <div class="status"><State title="The payment window was closed">

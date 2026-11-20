@@ -13,6 +13,22 @@ Handoff `2026-11-19-03-deck-to-cyextv-app-sign-in` from the deck chat.
 - [x] Tests: `apps/api/tests/app_sign_in_flow.rs` (Postgres in CI), unit tests in `crates/auth/src/app.rs`, vitest `app-auth.test.ts`.
 - [x] Manual (CDP, `.claude/runs/2026-11-20-overnight/screens/app-sign-in/shots.mjs`, 375 and 1440, dark and light): consent, sign-in and invalid states; Allow and Deny go back to the loopback address.
 
+## Batch K1: link previews, keyboard shortcuts, changelog, tile marks (branch `feat/k1-previews-shortcuts`, 2026/11/20)
+
+From the 7TV gap study (`.claude/runs/2026-11-20-overnight/gap-7tv-2.md`), ideas only, in cyex design. Web only; no API change.
+- [x] Link previews: `lib/meta.ts` builds Open Graph and Twitter tags for emote (4x still frame, kind, creator, channel count), set (its first 4 emote stills in set order, owner, slots, first names), profile (avatar, platforms, emotes made, channels) and channel pages (avatar, platform, active set and size), in each page's load, so they are in the server's HTML; canonical URL from `PUBLIC_SITE_URL`; `noindex` for unlisted, private, pending and missing. Every other page gets the site card `static/og.png` (1200 × 630, the mark and wordmark on the page ground) and keeps its own title and description. The root layout renders them with `Meta.svelte`.
+- [x] Keyboard shortcuts: `?` (outside fields, without modifiers) or Keyboard shortcuts in the footer opens a modal sheet (`ShortcutSheet.svelte`); pages register their keys beside their handlers (`registerShortcuts`, `shell/shortcuts.svelte.ts`): Emotes and Select mode on /search, the review queue and its open upload, the emote page's tabs, /developers' filter, /help's search, plus the site-wide keys and the header search. Not shown on touch-only screens.
+- [x] Changelog: `/changelog` on the docs layout, prerendered from `lib/changelog/entries.ts` (dates as 2026/11/20, entries of this week); "What's new" in the account menu and the phone menu, with a dot (and on the avatar) until this device has opened the newest entry (`cyex.changelog.seen` in localStorage); a Changelog link in the footer.
+- [x] Tiles: "In set" (accent tick and word) on browse tiles already in the target set, following Add and Remove; your own unlisted and private emotes show an Unlisted or Private mark with the emote page's wording, wherever they appear to you.
+- [x] Tests: vitest `meta.test.ts`, `shortcuts.test.ts`, `changelog/entries.test.ts`, `changelog/seen.test.ts`, `tile-marks.test.ts`, loaders now check each page's card; `dev/e2e/link-previews.mjs` fetches the SSR HTML of each page type and checks the tags (not in CI). CDP: `.claude/runs/2026-11-20-overnight/screens/k1/k1.mjs` (sheet open, focus, Escape, focus return, fields, groups per page; dot and seen; marks; 375, 1440, 2560, dark and light; reduced motion).
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/k1-previews-shortcuts
+gh pr create --base main --head feat/k1-previews-shortcuts --title "Link previews, keyboard shortcut sheet, changelog, tile marks" --body-file <file>
+```
+
 ## Security fixes S1 (branch `fix/security-s1`, ADR 0004, 0010, 0014, 0019, 0020 amendments of 2026/11/20)
 
 From the 2026/11/20 security review (findings A4). Each with a test that fails before and passes after:
@@ -1195,3 +1211,20 @@ gh pr merge <n> --merge
 - Dev mock: `MOCK_SET_SIZE=1000` fills the Main set.
 - At 1.000 emotes (headless Edge, dev server, warm): first render about 600 ms before, 320 ms after; JS heap 95 MB before, 20 MB after; 1000 tiles before, 120 after.
 - Screens in `.claude/runs/2026-11-20-overnight/screens/f-u2b/`.
+## Announcements, notification preferences, public collection (2026/11/20, K3)
+- API (additive): `activeAnnouncement` (public, shared per instance for the read-cache time), `announcements`, `createAnnouncement`, `updateAnnouncement`, `endAnnouncement` (need the new `site.announce`, which the built-in Admin role gets; audited as `announcement.create/update/end`). One line (1 to 200 characters), kind `INFO`/`MAINTENANCE`/`CAMPAIGN`, optional link (`https://` or a path here), link words, approved emote or badge, start and end. `myNotificationPrefs` / `setNotificationPrefs`: per kind `notify` (off: `notifications::create` stores nothing) and `toast`; hand-over requests and takedowns are required. `accountCollection(accountId)` / `setCollectionPublic(public)`: owned badges and paints with `ownedSince` and `source` only, private by default; `AccountProfile.collectionPublic`. New tables `announcements`, `account_prefs` (erased with the account). Postgres tests in `apps/api/tests/site_flow.rs`; coverage sweep and contract updated.
+- Web: the announcement bar under the header on every page (closed per device and per announcement); `/admin/announcements` (System group); Settings → Notifications; filter chips on `/me/notifications`; pop-ups skip kinds whose pop-up is off; the profile's Collection tab (owner always, others when shown) with the switch there and in Settings → Account; `site.announce` in the role editor (System). Changelog entry.
+- Dev mock: all of the above; `MOCK_ANNOUNCE=0` starts without an announcement; `/mock/notify?kind=…` respects turned-off kinds.
+- Screens in `.claude/runs/2026-11-20-overnight/screens/k3/`.
+- GitHub write log (2026/11/20, account `sery-yx`): `git push -u origin feat/k3-banner-prefs-collection`; `gh pr create --base main --head feat/k3-banner-prefs-collection --title "Site announcements, notification preferences and a public collection" --body-file <file>` (#125); `gh pr merge 125 --merge` once green.
+## Hide for me and favourites (feat/k2-hide-favourites, 2026/11/20)
+- API (additive, ADR 0022): `hiddenEmotes`, `hiddenCreators`, `myFavourites(query, page, perPage)`, `favouriteEmoteIds`; `hideEmote`/`unhideEmote`, `hideCreator`/`unhideCreator`, `favouriteEmote`/`unfavouriteEmote`. Private to the caller (no account argument), caps 1000 / 200 / 1000 (`limit_reached`), only emotes the caller may see, never yourself as a creator (`own_account`), 120 changes a minute per account (`personal_lists`). In the data export, erased with the account. Migration `20261208000920_personal_lists.sql`. Postgres tests: `personal_lists_flow` (allow/deny, caps, privacy, rate, erase) and the contract run.
+- Web: tile menu Favourite / Hide for me / Hide everything by <creator> (with Undo); emote page heart beside More, More → Hide for me / Hide everything by <creator> (Show again once hidden); hidden emotes drop out of browse, search, trending, the header search and Add emotes for you only (client-side filter, see the ADR); Settings → Hidden lists both with Show again; profile tab Favourites (owner only) with a name filter, `/me/favourites` goes there; favourites come first, with a heart, in the header search and the set editor's Add emotes.
+- Extension: unchanged. It has no cyex.tv sign-in, so its device-only hidden list stays as it is.
+- Dev mock answers all of it.
+- GitHub write log:
+```
+git push -u origin feat/k2-hide-favourites
+gh pr create --repo cyex-tv/platform --base main --head feat/k2-hide-favourites --title "Hide for me and favourites (personal lists)" --body-file <file>
+gh pr merge 126 --merge
+```

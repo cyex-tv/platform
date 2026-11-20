@@ -9,7 +9,8 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { gql } from '$lib/api';
-  import { ready, size, src, srcsetW } from '$lib/emote';
+  import { pictureFor, ready, size } from '$lib/emote';
+  import { display } from '$lib/dpr.svelte';
   import { onDestroy, tick } from 'svelte';
   import { clean, count, dateTime, iso } from '$lib/format';
   import type { EmoteFieldsFragment, EmoteVisibility, ReviewSort, ReviewTab } from '$lib/gql/graphql';
@@ -19,10 +20,12 @@
   import State from '$lib/components/State.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import ReviewDetail from '$lib/admin/ReviewDetail.svelte';
-  import { after, step } from '$lib/admin/queue';
+  import { after, approveFailure, step } from '$lib/admin/queue';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
+  import { REVIEW_DETAIL_KEYS, REVIEW_KEYS } from '$lib/admin/review-keys';
+  import { registerShortcuts } from '$lib/shell/shortcuts.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { dismiss, fail, notify } from '$lib/tool/notices.svelte';
 
@@ -70,6 +73,13 @@
   const total = $derived(L.data?.total ?? 0);
   const pages = $derived(Math.max(1, Math.ceil(total / PER_PAGE)));
   const counts = $derived(L.data?.counts);
+
+  // Its keys (onkeydown below and ReviewDetail's), in the shortcut sheet.
+  $effect(() => {
+    const a = registerShortcuts(REVIEW_KEYS);
+    const b = registerShortcuts(REVIEW_DETAIL_KEYS);
+    return () => (a(), b());
+  });
 
   let busy = $state<string | null>(null);
   let rejecting = $state<EmoteFieldsFragment | null>(null);
@@ -188,29 +198,50 @@
 
   // An approval is not sent at once: the card leaves, a toast offers Undo for UNDO_MS, and only
   // then does the call go out (the API has no way to take an approval back, so waiting is the undo).
-  // Leaving the page sends what is waiting; Z undoes the latest.
+  // Leaving the page sends what is waiting (a call marked keepalive survives the page closing or
+  // reloading, and the browser asks first while one is pending); Z undoes the latest.
   const UNDO_MS = 5000;
   const VERB: Record<EmoteVisibility, string> = { PUBLIC: 'approved', UNLISTED: 'approved as unlisted', PRIVATE: 'approved for its owner only' };
-  const waiting = new Map<string, { e: EmoteFieldsFragment; visibility: EmoteVisibility | null; timer: ReturnType<typeof setTimeout>; toast: number }>();
+  const waiting = new Map<string, { e: EmoteFieldsFragment; at: number; visibility: EmoteVisibility | null; timer: ReturnType<typeof setTimeout>; toast: number }>();
 
   function approve(e: EmoteFieldsFragment, visibility?: EmoteVisibility) {
     if (waiting.has(e.id)) return;
     const v = visibility ?? null;
+    const at = Math.max(0, items.findIndex((x) => x.id === e.id));
     done(e.id);
     const toast = notify(`${iso(e.name)} ${VERB[v ?? 'PUBLIC']}.`, false, { ms: UNDO_MS, action: { label: 'Undo', run: () => undo(e.id) } });
-    waiting.set(e.id, { e, visibility: v, toast, timer: setTimeout(() => void send(e.id), UNDO_MS) });
+    waiting.set(e.id, { e, at, visibility: v, toast, timer: setTimeout(() => void send(e.id), UNDO_MS) });
   }
-  async function send(id: string) {
+  const keepalive: typeof fetch = (input, init) => fetch(input, { ...init, keepalive: true });
+  async function send(id: string, leaving = false) {
     const w = waiting.get(id);
     if (!w) return;
     clearTimeout(w.timer);
     waiting.delete(id);
     try {
-      await gql(APPROVE, { id, visibility: w.visibility });
+      await gql(APPROVE, { id, visibility: w.visibility }, leaving ? keepalive : fetch);
     } catch (err) {
-      fail(err);
-      L.reload(); // it is still in the queue: bring the card back
+      if (leaving) return; // the page is going; there is nobody to tell
+      if ((err as { code?: unknown } | null)?.code === 'signed_out') {
+        // The session ended: the signed-out notice says so once. A reload would fail the same way and
+        // blank the queue, so the card comes back from what the page already holds.
+        fail(err);
+        restore(w);
+      } else {
+        notify(approveFailure(err, iso(w.e.name)), true);
+        L.reload(); // it is still in the queue: bring the card back
+      }
     }
+  }
+  /** Puts a card back where it was, with the counts it came off. */
+  function restore(w: { e: EmoteFieldsFragment; at: number }) {
+    const q = L.data;
+    if (!q || q.items.some((x) => x.id === w.e.id)) return;
+    const list = [...q.items];
+    list.splice(Math.min(w.at, list.length), 0, w.e);
+    const c = q.counts;
+    const counts = resolved ? c : w.e.visibility === 'PUBLIC' ? { ...c, public: c.public + 1 } : { ...c, limited: c.limited + 1 };
+    L.set({ ...q, items: list, total: q.total + 1, counts });
   }
   function undo(id: string) {
     const w = waiting.get(id);
@@ -220,8 +251,14 @@
     dismiss(w.toast);
     L.reload();
   }
-  const flush = () => [...waiting.keys()].forEach((id) => void send(id));
-  onDestroy(flush);
+  const flush = (leaving = false) => [...waiting.keys()].forEach((id) => void send(id, leaving));
+  onDestroy(() => flush());
+  // Closing or reloading inside the five seconds: ask first, and send what is waiting if they leave.
+  function onbeforeunload(ev: BeforeUnloadEvent) {
+    if (!waiting.size) return;
+    ev.preventDefault();
+    ev.returnValue = '';
+  }
 
   function askReject(e: EmoteFieldsFragment) {
     rejecting = e;
@@ -260,7 +297,7 @@
 
 <svelte:head><title>Review - Admin - cyex.tv</title></svelte:head>
 
-<svelte:window {onkeydown} onpagehide={flush} />
+<svelte:window {onkeydown} {onbeforeunload} onpagehide={() => flush(true)} />
 
 <PageHead title="Review queue">
   {#snippet line()}{#if counts}<span class="ui-num">{count(counts.public + counts.limited)}</span> waiting{:else}Uploads waiting for a verdict{/if}{/snippet}
@@ -316,7 +353,9 @@
         onfocus={() => (cur = e.id)} onclick={(ev) => { if (!(ev.target as HTMLElement).closest('a, button')) openDetail(e.id); }}>
         <span class="art">
           {#if ready(e)}
-            <img src={src(e, 1)} srcset={srcsetW(e)} sizes="{Math.round((64 * d.width) / d.height)}px" width={d.width} height={d.height} alt="" loading="lazy" decoding="async" />
+            {@const shownW = Math.round((64 * d.width) / d.height)}
+            {@const pic = pictureFor(e, display.dpr, false, shownW)}
+            <img src={pic.src} srcset={pic.srcset} sizes={pic.srcset ? `${shownW}px` : undefined} width={d.width} height={d.height} alt="" loading="lazy" decoding="async" />
           {:else}
             <span class="ui-spinner" aria-hidden="true"></span>
           {/if}

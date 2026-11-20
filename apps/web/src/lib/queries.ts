@@ -1242,6 +1242,7 @@ export const ACCOUNT_PROFILE = graphql(`
         avatar
       }
       createdAt
+      collectionPublic
     }
   }
 `);
@@ -1902,5 +1903,213 @@ export const ENTITLEMENT_HOLDERS = graphql(`
     entitlementHolders(kind: $kind, id: $id) {
       ...GrantFields
     }
+  }
+`);
+
+// The site announcement under the header, and its admin page.
+export const ANNOUNCEMENT_FIELDS = graphql(`
+  fragment AnnouncementFields on Announcement {
+    id
+    kind
+    text
+    linkUrl
+    linkLabel
+    badgeId
+    startsAt
+    endsAt
+    endedAt
+    createdAt
+    updatedAt
+    live
+    emote {
+      id
+      name
+      host
+      animated
+      files {
+        name
+        width
+        height
+        isStatic
+      }
+    }
+  }
+`);
+
+export const ACTIVE_ANNOUNCEMENT = graphql(`
+  query ActiveAnnouncement {
+    activeAnnouncement {
+      ...AnnouncementFields
+    }
+  }
+`);
+
+export const ANNOUNCEMENTS = graphql(`
+  query Announcements {
+    announcements {
+      ...AnnouncementFields
+    }
+  }
+`);
+
+export const CREATE_ANNOUNCEMENT = graphql(`
+  mutation CreateAnnouncement($input: AnnouncementInput!) {
+    createAnnouncement(input: $input) {
+      ...AnnouncementFields
+    }
+  }
+`);
+
+export const UPDATE_ANNOUNCEMENT = graphql(`
+  mutation UpdateAnnouncement($id: String!, $input: AnnouncementInput!) {
+    updateAnnouncement(id: $id, input: $input) {
+      ...AnnouncementFields
+    }
+  }
+`);
+
+export const END_ANNOUNCEMENT = graphql(`
+  mutation EndAnnouncement($id: String!) {
+    endAnnouncement(id: $id) {
+      ...AnnouncementFields
+    }
+  }
+`);
+
+// Settings → Notifications.
+export const NOTIFICATION_PREFS = graphql(`
+  query NotificationPrefs {
+    myNotificationPrefs {
+      kind
+      notify
+      toast
+      required
+    }
+  }
+`);
+
+export const SET_NOTIFICATION_PREFS = graphql(`
+  mutation SetNotificationPrefs($prefs: [NotificationPrefInput!]!) {
+    setNotificationPrefs(prefs: $prefs) {
+      kind
+      notify
+      toast
+      required
+    }
+  }
+`);
+
+// The profile's Collection tab.
+export const ACCOUNT_COLLECTION = graphql(`
+  query AccountCollection($accountId: String!) {
+    accountCollection(accountId: $accountId) {
+      accountId
+      public
+      items {
+        kind
+        cosmeticId
+        name
+        ownedSince
+        source
+      }
+    }
+  }
+`);
+
+export const SET_COLLECTION_PUBLIC = graphql(`
+  mutation SetCollectionPublic($public: Boolean!) {
+    setCollectionPublic(public: $public) {
+      accountId
+      public
+      items {
+        kind
+        cosmeticId
+        name
+        ownedSince
+        source
+      }
+    }
+  }
+`);
+
+// Personal lists: "Hide for me" (by emote or creator) and favourites. Private to you; the site
+// filters the public reads with them on its side.
+export const PERSONAL_LISTS = graphql(`
+  query PersonalLists {
+    hiddenEmotes {
+      emoteId
+    }
+    hiddenCreators {
+      accountId
+    }
+    favouriteEmoteIds
+  }
+`);
+
+export const HIDDEN_LISTS = graphql(`
+  query HiddenLists {
+    hiddenEmotes {
+      emoteId
+      hiddenAt
+      emote {
+        ...EmoteFields
+      }
+    }
+    hiddenCreators {
+      accountId
+      hiddenAt
+      account {
+        id
+        displayName
+        avatar
+      }
+    }
+  }
+`);
+
+export const MY_FAVOURITES = graphql(`
+  query MyFavourites($query: String, $page: Int, $perPage: Int) {
+    myFavourites(query: $query, page: $page, perPage: $perPage) {
+      total
+      items {
+        ...EmoteFields
+      }
+    }
+  }
+`);
+
+export const HIDE_EMOTE = graphql(`
+  mutation HideEmote($id: String!) {
+    hideEmote(id: $id)
+  }
+`);
+
+export const UNHIDE_EMOTE = graphql(`
+  mutation UnhideEmote($id: String!) {
+    unhideEmote(id: $id)
+  }
+`);
+
+export const HIDE_CREATOR = graphql(`
+  mutation HideCreator($accountId: String!) {
+    hideCreator(accountId: $accountId)
+  }
+`);
+
+export const UNHIDE_CREATOR = graphql(`
+  mutation UnhideCreator($accountId: String!) {
+    unhideCreator(accountId: $accountId)
+  }
+`);
+
+export const FAVOURITE_EMOTE = graphql(`
+  mutation FavouriteEmote($id: String!) {
+    favouriteEmote(id: $id)
+  }
+`);
+
+export const UNFAVOURITE_EMOTE = graphql(`
+  mutation UnfavouriteEmote($id: String!) {
+    unfavouriteEmote(id: $id)
   }
 `);

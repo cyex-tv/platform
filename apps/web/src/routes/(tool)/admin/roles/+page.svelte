@@ -198,7 +198,7 @@
       {#if !userRole}
         <label class="ui-check">
           <input type="checkbox" bind:checked={shown} />
-          <span>Shown on profiles<span class="ui-hint"> Everyone sees this role on the profile of anyone who holds it.</span></span>
+          <span>Shown on profiles <span class="ui-hint">Everyone sees this role on the profile of anyone who holds it.</span></span>
         </label>
       {/if}
       <div class="ui-field">
@@ -229,6 +229,7 @@
   .grp { display: inline-flex; align-items: center; min-height: 24px; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
   .names { flex-basis: 100%; overflow-wrap: anywhere; }
   .grp .ui-num { color: var(--dim); font-size: 12px; }
+  @media (pointer: coarse) { .grp { min-height: 44px; } }
   .grp:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius); }
   .row .ui-actions { justify-content: flex-end; flex-wrap: nowrap; align-items: center; }
   .locked { white-space: nowrap; cursor: help; }

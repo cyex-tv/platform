@@ -56,8 +56,22 @@ describe('profile rows', () => {
     expect(sectionsFor(NOBODY, true)).toEqual(['uploads', 'sets', 'activity']);
   });
   it('gives the owner everything, activity only when the API has it', () => {
-    expect(sectionsFor(mine, false)).toEqual(['overview', 'active', 'uploads', 'sets', 'cosmetics']);
+    expect(sectionsFor(mine, false)).toEqual(['overview', 'active', 'uploads', 'sets', 'favourites', 'cosmetics', 'collection']);
     expect(sectionsFor(mine, true)).toContain('activity');
+  });
+  it('gives the owner alone Favourites (private)', () => {
+    expect(sectionsFor(NOBODY, true, true)).not.toContain('favourites');
+    expect(sectionsFor(editor, true)).not.toContain('favourites');
+    expect(sectionsFor(profiler, true)).not.toContain('favourites');
+    expect(sectionHref('a1', 'favourites')).toBe('/users/a1?s=favourites');
+    expect(railKeyForPath('/me/favourites')).toBe('favourites');
+  });
+  it('gives everyone the Collection only when the account shows it; the owner always', () => {
+    expect(sectionsFor(NOBODY, true)).not.toContain('collection');
+    expect(sectionsFor(NOBODY, true, true)).toEqual(['uploads', 'sets', 'collection', 'activity']);
+    expect(sectionsFor(editor, false, false)).not.toContain('collection');
+    const rows = profileRail('a1', NOBODY, 'collection', true, true).flatMap((g) => g.items);
+    expect(rows.find((r) => r.label === 'Collection')).toMatchObject({ href: '/users/a1?s=collection', current: true });
   });
   it('gives editors cosmetics only with PROFILE', () => {
     expect(sectionsFor(editor, false)).not.toContain('cosmetics');

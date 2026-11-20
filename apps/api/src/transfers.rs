@@ -13,21 +13,20 @@
 //!   `_expired`, and `emote.transferred` when it moves), with the owner as subject, and the other
 //!   side is notified.
 
-use axum::http::StatusCode;
 use chrono::{Duration, Utc};
 use cyex_tv_auth::Caller;
-use cyex_tv_db::transfers::{self, Request};
-use cyex_tv_db::{DbError, accounts, audit, emotes, ids, reads};
-use cyex_tv_shared::error::{ApiError, ApiResult};
+use cyex_tv_db::transfers::{self, Request, TransferState};
+use cyex_tv_db::{accounts, audit, emotes, ids, reads};
+use cyex_tv_shared::error::ApiResult;
 use cyex_tv_shared::model::{
     AccountSummary, EditorPermission, Emote, EmoteState, EmoteTransferRequest, EventType,
-    TransferRequestState,
 };
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::catalog::{db_error, forbidden, not_found, parse_id};
+use crate::errors::{bad, conflict, limited, sqlx_error};
 use crate::moderation::{
     OWNER_RESTRICTED, YOU_RESTRICTED, announce, build, editor_of_owner, not_restricted, restricted,
     row,
@@ -38,30 +37,12 @@ use crate::views;
 /// How long a request waits for the owner.
 pub const REQUEST_DAYS: i64 = 7;
 
-fn sqlx_error(err: sqlx::Error) -> ApiError {
-    db_error(DbError::Sqlx(err))
-}
-
-fn bad(code: &'static str, message: &str) -> ApiError {
-    ApiError::new(StatusCode::BAD_REQUEST, code, message)
-}
-
-fn conflict(code: &'static str, message: &str) -> ApiError {
-    ApiError::new(StatusCode::CONFLICT, code, message)
-}
-
 fn rate_limited(state: &AppState, caller: &Caller) -> ApiResult<()> {
-    state
-        .limits
-        .emote_transfers
-        .check(&ids::to_text(caller.account_id))
-        .map_err(|_| {
-            ApiError::new(
-                StatusCode::TOO_MANY_REQUESTS,
-                "rate_limited",
-                "That's a lot of transfers. Try again in a while.",
-            )
-        })
+    limited(
+        &state.limits.emote_transfers,
+        &ids::to_text(caller.account_id),
+        "That's a lot of transfers. Try again in a while.",
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -370,7 +351,7 @@ async fn views_of(
             from: summary(&names, r.from_account_id),
             to: summary(&names, r.to_account_id),
             requested_by: summary(&names, r.requested_by),
-            state: TransferRequestState::parse(&r.state).unwrap_or(TransferRequestState::Pending),
+            state: r.state.into(),
             created_at: views::time(r.created_at),
             expires_at: views::time(r.expires_at),
             resolved_at: r.resolved_at.map(views::time),
@@ -410,13 +391,13 @@ async fn open_request(conn: &mut PgConnection, caller: &Caller, id: Uuid) -> Api
         .map_err(db_error)?
         .filter(|r| caller.account_id == r.from_account_id || caller.account_id == r.requested_by)
         .ok_or_else(not_found)?;
-    if r.state == "pending" && r.expires_at <= Utc::now() {
+    if r.state == TransferState::Pending && r.expires_at <= Utc::now() {
         return Err(conflict(
             "expired",
             "That transfer request expired. The editor can ask again.",
         ));
     }
-    if r.state != "pending" {
+    if r.state != TransferState::Pending {
         return Err(conflict(
             "not_pending",
             "That transfer request isn't open any more.",
@@ -433,9 +414,14 @@ async fn cancel_moot(
     r: &Request,
     reason: &str,
 ) -> ApiResult<()> {
-    transfers::resolve(conn, r.id, "cancelled", Some(caller.account_id))
-        .await
-        .map_err(db_error)?;
+    transfers::resolve(
+        conn,
+        r.id,
+        TransferState::Cancelled,
+        Some(caller.account_id),
+    )
+    .await
+    .map_err(db_error)?;
     write(
         conn,
         Some(caller.account_id),
@@ -497,9 +483,14 @@ pub async fn accept(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Em
     }
     // As they stand now: the editor still may give it there, and nobody is held.
     receiver_checks(&mut tx, r.requested_by, r.from_account_id, r.to_account_id).await?;
-    transfers::resolve(&mut tx, r.id, "accepted", Some(caller.account_id))
-        .await
-        .map_err(db_error)?;
+    transfers::resolve(
+        &mut tx,
+        r.id,
+        TransferState::Accepted,
+        Some(caller.account_id),
+    )
+    .await
+    .map_err(db_error)?;
     write(
         &mut tx,
         Some(caller.account_id),
@@ -541,7 +532,7 @@ async fn close(
     let (allowed, to_state, action, tell, kind) = if as_owner {
         (
             r.from_account_id == caller.account_id,
-            "declined",
+            TransferState::Declined,
             "emote.transfer_declined",
             r.requested_by,
             "emote.transfer_declined",
@@ -549,7 +540,7 @@ async fn close(
     } else {
         (
             r.requested_by == caller.account_id,
-            "cancelled",
+            TransferState::Cancelled,
             "emote.transfer_cancelled",
             r.from_account_id,
             "emote.transfer_cancelled",
@@ -573,7 +564,7 @@ async fn close(
         r.emote_id,
         r.from_account_id,
         Some(request_json(&r)),
-        Some(json!({ "state": to_state })),
+        Some(json!({ "state": to_state.as_str() })),
     )
     .await?;
     let name = row(&mut tx, r.emote_id)

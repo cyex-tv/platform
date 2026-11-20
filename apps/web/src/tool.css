@@ -184,7 +184,10 @@ input.ui-input, select.ui-input { height: 40px; }
 }
 .ui-dialog form { display: grid; }
 .ui-dialog .body { display: grid; gap: 14px; padding: 16px; }
-.ui-dialog footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+/* A dialog taller than the screen (a phone on its side, a long form) scrolls inside itself, and the
+   footer with Save and Cancel stays in view at the bottom of that scroll. */
+.ui-dialog { max-height: calc(100dvh - 24px); overscroll-behavior: contain; }
+.ui-dialog footer { position: sticky; bottom: 0; z-index: 1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); background: var(--elevated); }
 
 @media (max-width: 640px) {
   .ui-row { flex-wrap: wrap; gap: 8px 24px; }

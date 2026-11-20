@@ -24,6 +24,8 @@
   import type { PagerState } from './pager';
   import { Viewer } from './viewer.svelte';
   import { bottomBar } from '$lib/tool/bottom-bars.svelte';
+  import { registerShortcuts } from '$lib/shell/shortcuts.svelte';
+  import { EMOTE_KEYS } from './keys';
 
   type Props = {
     emote: PageEmote;
@@ -35,6 +37,7 @@
     trending?: { rank: number; channels: number } | null;
   };
   let { emote: e, more, channels, channelCount, back, trending = null }: Props = $props();
+  $effect(() => registerShortcuts(EMOTE_KEYS));
 
   // svelte-ignore state_referenced_locally
   const viewer = new Viewer(e.id);
@@ -177,12 +180,12 @@
       </dl>
 
       <div class="head-actions">
-        <EmoteActions emoteId={e.id} {name} {viewer} picture={e} {editHref} addable={public_} reportable={canReport(e, session.me?.id)} />
+        <EmoteActions emoteId={e.id} {name} {viewer} picture={e} {editHref} addable={public_} reportable={canReport(e, session.me?.id)} owner={e.owner} />
       </div>
     </article>
 
     <div class="bar" use:bottomBar>
-      <EmoteActions emoteId={e.id} {name} {viewer} variant="bar" picture={e} {editHref} addable={public_} reportable={canReport(e, session.me?.id)} />
+      <EmoteActions emoteId={e.id} {name} {viewer} variant="bar" picture={e} {editHref} addable={public_} reportable={canReport(e, session.me?.id)} owner={e.owner} />
     </div>
 
     {#if tabs.length}

@@ -24,6 +24,8 @@ export function targetHref(kind: string, id: string): string | null {
       return '/admin/cosmetics/badges';
     case 'paint':
       return '/admin/cosmetics/paints';
+    case 'announcement':
+      return '/admin/announcements';
     default:
       return null;
   }
@@ -63,18 +65,35 @@ export function changes(before: string | null | undefined, after: string | null 
   return out.sort((x, y) => x.path.localeCompare(y.path));
 }
 
-/** A `YYYY-MM-DD` day as the start of that day in the viewer's time zone, as an ISO instant. */
-export function dayStart(day: string): string | null {
+/** A `YYYY-MM-DD` day as a local date, or null when it isn't a real one (02-30, month 13, year 0). Years 0 to 99 stay themselves. */
+function localDay(day: string, plus = 0): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
   if (!m) return null;
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).toISOString();
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const at = new Date(2000, 0, 1);
+  at.setFullYear(y, mo - 1, d); // not the constructor: it reads years 0 to 99 as 19xx
+  if (y < 1 || at.getFullYear() !== y || at.getMonth() !== mo - 1 || at.getDate() !== d) return null;
+  if (plus) at.setDate(at.getDate() + plus);
+  at.setHours(0, 0, 0, 0);
+  return at;
+}
+
+/** A `YYYY-MM-DD` day as the start of that day in the viewer's time zone, as an ISO instant. */
+export function dayStart(day: string): string | null {
+  return localDay(day)?.toISOString() ?? null;
 }
 
 /** The instant after the end of a `YYYY-MM-DD` day (the start of the next day), for `until`. */
 export function dayAfter(day: string): string | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
-  if (!m) return null;
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + 1).toISOString();
+  return localDay(day, 1)?.toISOString() ?? null;
+}
+
+/** What is wrong with the day filter, in a sentence, or null: a day that doesn't exist, or From after To. */
+export function rangeProblem(from: string, to: string): string | null {
+  if (from && !dayStart(from)) return 'The From date doesn’t exist.';
+  if (to && !dayStart(to)) return 'The To date doesn’t exist.';
+  if (from && to && from > to) return 'From is after To, so nothing can match.';
+  return null;
 }
 
 /** Accepts an account's ID: 26 characters of Crockford base32. */

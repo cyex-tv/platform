@@ -1,12 +1,14 @@
 <script lang="ts">
   // Find emotes to add: one plain search field, searched when you press Enter (never while you
-  // type). Results are your own matching uploads first (pending ones too, except for a personal
-  // set, which takes approved emotes only), then everyone's approved emotes, in a list of its own
+  // type). Results are your favourites whose name holds the text first (marked with a heart), then
+  // your own matching uploads (pending ones too, except for a personal set, which takes approved
+  // emotes only), then everyone's approved emotes without the ones you hid for yourself, in a list of its own
   // height with an Add button on each.
   import { tick } from 'svelte';
   import { ApiError, gql } from '$lib/api';
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
-  import { ADD_SET_EMOTE, MY_EMOTES, SEARCH } from '$lib/queries';
+  import { ADD_SET_EMOTE, MY_EMOTES, MY_FAVOURITES, SEARCH } from '$lib/queries';
+  import { favouritesFirst, personal as lists } from '$lib/personal/lists.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import { clean, count, iso } from '$lib/format';
   import State from '$lib/components/State.svelte';
@@ -70,12 +72,17 @@
     searching = true;
     problem = null;
     try {
-      const [everyone, own] = await Promise.all([
+      lists.ensure();
+      const [everyone, own, favs] = await Promise.all([
         gql(SEARCH, { query: text, page: 1, perPage: RESULT_PAGE }),
         session.me ? gql(MY_EMOTES, { page: 1, perPage: 100 }) : Promise.resolve(null),
+        // Favourites are a bonus: a failure there never fails the search.
+        session.me ? gql(MY_FAVOURITES, { query: text, perPage: 20 }).catch(() => null) : Promise.resolve(null),
       ]);
       if (mine !== token) return;
-      results = mergeResults(text, own?.myEmotes.items ?? [], everyone.searchEmotes.items, personal);
+      const fav = (favs?.myFavourites?.items ?? []).filter((e) => e.state === 'APPROVED' || (e.state === 'PENDING' && !personal));
+      const rest = mergeResults(text, own?.myEmotes.items ?? [], lists.visible(everyone.searchEmotes.items), personal);
+      results = favouritesFirst(fav, rest, Infinity);
       searched = text;
       found = everyone.searchEmotes.total;
       fetched = everyone.searchEmotes.items.length;
@@ -99,7 +106,7 @@
     try {
       const r = await gql(SEARCH, { query: searched, page: nextPage, perPage: RESULT_PAGE });
       if (mine !== token || !results) return;
-      results = appendResults(results, r.searchEmotes.items);
+      results = appendResults(results, lists.visible(r.searchEmotes.items));
       fetched += r.searchEmotes.items.length;
       found = r.searchEmotes.total;
       nextPage += 1;
@@ -160,7 +167,7 @@
         <li>
           <Thumb emote={e} name="" box={40} />
           <a class="who" href={mine ? `/me/emotes/${e.id}` : `/emotes/${e.id}`}>
-            <bdi class="name">{e.name}</bdi>
+            <span class="name"><bdi>{e.name}</bdi>{#if lists.favourites.has(e.id)}<span class="fav" title="Favourite"><Icon name="heart" size={12} /><span class="sr-only">, favourite</span></span>{/if}</span>
             <span class="ui-hint">
               {#if mine}Yours{:else if e.owner}by <bdi>{clean(e.owner.displayName)}</bdi>{/if}{#if e.state !== 'APPROVED'} · {STATE_LABEL[e.state].toLowerCase()}{/if}
             </span>
@@ -211,6 +218,8 @@
   .alias-row { display: flex; gap: 8px; }
   .alias-row input { flex: 1; min-width: 0; }
   .who { display: grid; flex: 1; min-width: 0; line-height: 1.3; color: inherit; text-decoration: none; }
+  .fav { display: inline-flex; margin-left: 6px; vertical-align: -1px; color: var(--accent-text); }
+  .fav :global(svg) { fill: currentColor; }
   .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   @media (hover: hover) and (pointer: fine) { .who:hover .name { text-decoration: underline; } }
   .add { flex: none; }

@@ -61,6 +61,10 @@ pub struct Rates {
     pub delete_account: Rate,
     /// `transferEmote`, per account, refused tries included (ADR 0014).
     pub emote_transfers: Rate,
+    /// Hiding, unhiding, favouriting and unfavouriting, per account.
+    pub personal_lists: Rate,
+    /// Your own settings (notification preferences, the public collection).
+    pub prefs: Rate,
 }
 
 impl Default for Rates {
@@ -83,6 +87,8 @@ impl Default for Rates {
             heavy_reads: Rate::per_minute(120),
             delete_account: Rate::per_hour(3),
             emote_transfers: Rate::per_hour(60),
+            personal_lists: Rate::per_minute(120),
+            prefs: Rate::per_hour(120),
         }
     }
 }
@@ -107,6 +113,8 @@ pub struct Limits {
     pub heavy_reads: Limiter,
     pub delete_account: Limiter,
     pub emote_transfers: Limiter,
+    pub personal_lists: Limiter,
+    pub prefs: Limiter,
     /// Take the client IP from `CF-Connecting-IP` (`CYEX_TV_TRUST_CLOUDFLARE=true`).
     pub trust_cloudflare: bool,
 }
@@ -132,6 +140,8 @@ impl Limits {
             heavy_reads: Limiter::new(rates.heavy_reads),
             delete_account: Limiter::new(rates.delete_account),
             emote_transfers: Limiter::new(rates.emote_transfers),
+            personal_lists: Limiter::new(rates.personal_lists),
+            prefs: Limiter::new(rates.prefs),
             trust_cloudflare,
         }
     }

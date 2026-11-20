@@ -5,6 +5,7 @@
 //! Functions that need more than one statement open a nested transaction (a savepoint) themselves.
 
 pub mod accounts;
+pub mod announcements;
 pub mod app_auth;
 pub mod audit;
 pub mod blocklist;
@@ -21,6 +22,8 @@ pub mod jobs;
 pub mod notifications;
 pub mod oauth_states;
 pub mod outbox;
+pub mod personal;
+pub mod prefs;
 pub mod privacy;
 pub mod reads;
 pub mod reports;

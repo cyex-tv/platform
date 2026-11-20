@@ -10,7 +10,10 @@
   import Prose from '$lib/docs/Prose.svelte';
   import State from '$lib/components/State.svelte';
   import RailLayout from '$lib/shell/RailLayout.svelte';
-  import { HELP, matches } from '$lib/help/faq';
+  import { registerShortcuts } from '$lib/shell/shortcuts.svelte';
+  import { HELP_KEYS } from '$lib/docs/keys';
+  import { apiUrl } from '$lib/api';
+  import { checkStatus, HELP, matches, POPULAR, statusText } from '$lib/help/faq';
 
   let root: HTMLDivElement;
   let field: HTMLInputElement;
@@ -20,7 +23,12 @@
   const total = HELP.reduce((n, g) => n + g.questions.length, 0);
   const filtering = $derived(!!query.trim());
 
+  // The service's own readiness check, asked once when the page opens.
+  let status = $state<'checking' | 'ok' | 'down'>('checking');
+  const statusUrl = `${apiUrl()}/health/ready`;
+
   onMount(() => {
+    checkStatus(apiUrl()).then((ok) => (status = ok ? 'ok' : 'down'));
     const q = new URLSearchParams(location.search).get('q');
     if (q) query = q;
     return initDocs(root, { filter: false });
@@ -35,6 +43,8 @@
     else url.searchParams.delete('q');
     history.replaceState(history.state, '', url);
   });
+
+  $effect(() => registerShortcuts(HELP_KEYS));
 
   function clear() {
     query = '';
@@ -92,6 +102,15 @@
         </div>
       </header>
 
+      {#if !filtering}
+        <section class="popular" aria-labelledby="popular-h">
+          <h2 class="op-group-title" id="popular-h">Popular</h2>
+          <ul>
+            {#each POPULAR as q (q.id)}<li><a href="#{q.id}">{q.q}</a></li>{/each}
+          </ul>
+        </section>
+      {/if}
+
       {#each HELP as g (g.id)}
         {@const visible = g.questions.filter((q) => shown.has(q.id))}
         <div class="help-group" hidden={!visible.length} aria-labelledby="g-{g.id}">
@@ -111,6 +130,11 @@
           {#snippet actions()}<button type="button" class="btn btn-s" onclick={clear}>Clear search</button>{/snippet}
         </State>
       {/if}
+
+      <p class="status" class:down={status === 'down'} role="status">
+        <span class="dot" aria-hidden="true"></span>{statusText(status)}
+        <a class="link" href={statusUrl} rel="noopener">API status</a>
+      </p>
 
       <p class="docs-end">Takedowns and legal requests: abuse@cyex.tv. Building on cyex.tv? See <a href="/developers">Developers</a>.</p>
     </div>
@@ -136,5 +160,15 @@
   .help :global(.help-group .op-group-title) { padding-bottom: 8px; margin-bottom: 18px; }
   .help :global(section.guide) { margin-bottom: 26px; }
   .help :global(section.guide h3) { margin: 0 0 6px; font-size: 1.05rem; font-weight: 600; line-height: 1.35; color: var(--text); }
+  .popular { max-width: var(--measure); margin-bottom: 26px; }
+  .popular .op-group-title { padding-bottom: 8px; margin-bottom: 8px; }
+  .popular ul { list-style: none; margin: 0; padding: 0; display: grid; }
+  .popular a { display: flex; align-items: center; min-height: 40px; color: var(--text); font-size: var(--t-small); }
+  @media (pointer: coarse) { .popular a { min-height: 44px; } }
+  @media (hover: hover) and (pointer: fine) { .popular a:hover { text-decoration: underline; text-underline-offset: 3px; } }
+  .status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; max-width: var(--measure); margin: 32px 0 0; font-size: var(--t-small); color: var(--muted); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+  .status:not(.down) .dot { background: var(--accent); }
+  .status.down .dot { background: var(--yellow); }
   .help :global(section.guide p:last-child) { margin-bottom: 0; }
 </style>

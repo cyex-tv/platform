@@ -14,9 +14,11 @@
   import { dur } from '$lib/motion';
   import { describe } from './notifications';
   import { inbox, loadInbox, markRead, type Note } from './inbox.svelte';
+  import { loadPrefs, quietKinds } from './prefs.svelte';
   import { fresh } from './toasts';
+  import { pausableTimer, type PausableTimer } from '$lib/tool/pausable-timer';
 
-  type Shown = { note: Note; timer?: ReturnType<typeof setTimeout> };
+  type Shown = { note: Note; timer?: PausableTimer };
   const LIFE = 6000;
   let since = Date.now();
   const seen = new Set<string>();
@@ -43,25 +45,31 @@
     const up = count > baseline;
     baseline = count;
     if (!up) return;
-    await loadInbox();
+    await Promise.all([loadInbox(), loadPrefs()]);
     const add = fresh(inbox.items ?? [], seen, since);
     for (const n of add) seen.add(n.id);
-    for (const n of add.slice(0, 3).reverse()) push(n);
+    // Kinds whose pop-up is off (Settings → Notifications) still count as seen, just quietly.
+    const quiet = quietKinds();
+    for (const n of add.filter((x) => !quiet.has(x.kind)).slice(0, 3).reverse()) push(n);
   }
 
   function push(note: Note) {
     const t: Shown = { note };
+    for (const old of shown.slice(2)) old.timer?.cancel();
     shown = [t, ...shown].slice(0, 3);
     arm(t);
   }
   function arm(t: Shown) {
-    clearTimeout(t.timer);
-    t.timer = setTimeout(() => close(t.note.id), LIFE);
+    t.timer = pausableTimer(() => close(t.note.id), LIFE);
   }
   function hold(t: Shown) {
-    clearTimeout(t.timer);
+    t.timer?.pause();
+  }
+  function release(t: Shown) {
+    t.timer?.resume();
   }
   function close(id: string) {
+    shown.find((t) => t.note.id === id)?.timer?.cancel();
     shown = shown.filter((t) => t.note.id !== id);
   }
   async function open(n: Note, href: string | null) {
@@ -81,9 +89,9 @@
       out:fade={{ duration: dur(140) }}
       animate:flip={{ duration: dur(200) }}
       onpointerenter={() => hold(t)}
-      onpointerleave={() => arm(t)}
+      onpointerleave={() => release(t)}
       onfocusin={() => hold(t)}
-      onfocusout={() => arm(t)}
+      onfocusout={() => release(t)}
     >
       <button class="body" type="button" onclick={() => open(t.note, line.href)}>
         <span class="icon"><Icon name={line.icon} /></span>

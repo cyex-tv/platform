@@ -8,7 +8,6 @@
   import EmoteView from '$lib/components/emote/EmoteView.svelte';
   import { channelsUsing } from '$lib/components/emote/data';
   import { backTarget, channelCount, type EmoteChannel, type PageEmote } from '$lib/components/emote/emote-page';
-  import { src, ready } from '$lib/emote';
   import { clean } from '$lib/format';
   import { EMOTE } from '$lib/queries';
 
@@ -44,29 +43,13 @@
   const back = $derived(backTarget(from, page.url.pathname));
 
   const name = $derived(e ? clean(e.name) : '');
-  const description = $derived(
-    e ? `${name}, ${e.animated ? 'an animated' : 'an'} emote for Twitch and Kick chat on cyex.tv${e.owner ? `, by ${clean(e.owner.displayName)}` : ''}.` : '',
-  );
 </script>
 
 <svelte:head>
   {#if e}
     <title>{name} - cyex.tv</title>
-    <meta name="description" content={description} />
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="cyex.tv" />
-    <meta property="og:title" content="{name} - cyex.tv" />
-    <meta property="og:description" content={description} />
-    <meta property="og:url" content={page.url.origin + page.url.pathname} />
-    {#if ready(e)}
-      <meta property="og:image" content={src(e, 4, true)} />
-      <meta property="og:image:alt" content={name} />
-      <meta name="twitter:card" content="summary" />
-    {/if}
-    {#if e.state !== 'APPROVED'}<meta name="robots" content="noindex" />{/if}
   {:else}
     <title>No emote here - cyex.tv</title>
-    <meta name="robots" content="noindex" />
   {/if}
 </svelte:head>
 

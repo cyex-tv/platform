@@ -58,7 +58,6 @@
 
 <svelte:head>
   <title>{who} - cyex.tv</title>
-  <meta name="description" content="The cyex.tv emotes in {who}'s {platform} chat." />
 </svelte:head>
 
 {#snippet meta()}

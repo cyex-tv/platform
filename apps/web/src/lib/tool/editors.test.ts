@@ -219,3 +219,14 @@ describe('what you may do with a set', () => {
     expect(setAccess({ owner: false, setEditor: false, staff: false, held: new Set<EditorPermission>(['PROFILE', 'CHANNELS']) }).emotes).toBe(false);
   });
 });
+
+describe('what a grant really allows', () => {
+  it('leaves the emote permissions out of the sentence on a set-limited grant', async () => {
+    const { effectivePhrase, effectiveLabels } = await import('./editors');
+    const limited = { permissions: ['EMOTE_UPLOAD', 'EMOTE_TRANSFER', 'EMOTES'] as EditorPermission[], allSets: false };
+    expect(effectivePhrase(limited)).toBe('edit set emotes');
+    expect(effectiveLabels(limited)).toBe('Edit set emotes');
+    expect(effectivePhrase({ ...limited, allSets: true })).toContain('upload emotes');
+    expect(effectivePhrase({ permissions: ['EMOTE_UPLOAD'], allSets: false })).toBe('do nothing');
+  });
+});

@@ -11,7 +11,7 @@
   import { ADD_ACCOUNT_EDITOR, EDITORS, REMOVE_ACCOUNT_EDITOR, SEARCH_ACCOUNTS, UPDATE_ACCOUNT_EDITOR } from '$lib/queries';
   import Confirm from '$lib/tool/Confirm.svelte';
   import EditorDialog from '$lib/tool/EditorDialog.svelte';
-  import { ALL_SETS, MAX_EDITORS, effective, emotePermissionsIdle, grantOn, ownerSetsHref, permissionLabels, permissionPhrase, scopeInput, scopeLabel, scopeOf, type Scope } from '$lib/tool/editors';
+  import { ALL_SETS, MAX_EDITORS, effective, effectiveLabels, effectivePhrase, emotePermissionsIdle, grantOn, ownerSetsHref, scopeInput, scopeLabel, scopeOf, type Scope } from '$lib/tool/editors';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
@@ -95,7 +95,7 @@
       const r = await gql(UPDATE_ACCOUNT_EDITOR, { accountId: who.id, permissions, setIds: scopeInput(scope) });
       const next = r.updateAccountEditor;
       L.set({ ...L.data, accountEditors: L.data.accountEditors.map((x) => (x.account.id === next.account.id ? next : x)) });
-      notify(`Saved. ${iso(next.account.displayName)} can now ${permissionPhrase(next.permissions)}.`);
+      notify(`Saved. ${iso(next.account.displayName)} can now ${effectivePhrase(next)}.`);
     } else {
       const r = await gql(ADD_ACCOUNT_EDITOR, { input: { accountId: who.id, permissions, setIds: scopeInput(scope) } });
       const added = r.addAccountEditor;
@@ -198,7 +198,7 @@
               <span class="who">
                 <strong><bdi>{clean(ed.account.displayName)}</bdi></strong>
                 <span class="ui-hint">
-                  {permissionLabels(ed.permissions)} · {scopeText(ed, ownSets)}{#if ed.grantedBy && ed.grantedBy.id !== session.me?.id} · added by <bdi>{clean(ed.grantedBy.displayName)}</bdi>{/if}
+                  {effectiveLabels(ed)} · {scopeText(ed, ownSets)}{#if ed.grantedBy && ed.grantedBy.id !== session.me?.id} · added by <bdi>{clean(ed.grantedBy.displayName)}</bdi>{/if}
                 </span>
               </span>
               <span class="ui-actions">
@@ -224,7 +224,7 @@
               <Avatar src={acc.account.avatar} name={acc.account.displayName} size={32} tone="tool" />
               <span class="who">
                 <strong><bdi>{clean(acc.account.displayName)}</bdi></strong>
-                <span class="ui-hint">You can {permissionPhrase(acc.permissions)}{acc.allSets ? '' : ` · ${acc.setIds.length === 1 ? '1 set' : `${acc.setIds.length} sets`}`}{emotePermissionsIdle(acc) ? '. Uploads, emote managing and transfers need all sets, so they’re off' : ''}</span>
+                <span class="ui-hint">You can {effectivePhrase(acc)}{acc.allSets ? '' : ` · ${acc.setIds.length === 1 ? '1 set' : `${acc.setIds.length} sets`}`}{emotePermissionsIdle(acc) ? '. Uploads, emote managing and transfers need all sets, so they’re off' : ''}</span>
               </span>
               <span class="ui-actions">
                 {#if acc.permissions.includes('EMOTES') || acc.permissions.includes('SETS') || acc.permissions.includes('EDITORS')}
