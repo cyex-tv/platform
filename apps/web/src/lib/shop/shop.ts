@@ -227,21 +227,7 @@ export function codesFilename(name: string): string {
   return `cyex-tv-codes${slug ? `-${slug}` : ''}.txt`;
 }
 
-/** A local `datetime-local` value (`2026-12-01T18:30`) from an RFC 3339 time, or ''. */
-export function toLocalInput(iso: string | null | undefined): string {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  const p = (v: number) => String(v).padStart(2, '0');
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
-}
-
-/** An RFC 3339 time from a `datetime-local` value (read in the reader's time zone), or null. */
-export function fromLocalInput(value: string): string | null {
-  if (!value) return null;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
+export { fromLocalInput, toLocalInput } from '$lib/format';
 
 const CHECKOUT_HOSTS = new Set(['cyex.tv', 'buy.paddle.com', 'sandbox-buy.paddle.com']);
 

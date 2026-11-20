@@ -23,6 +23,8 @@
   import { emoteCan, transferTargets } from '$lib/tool/editors';
   import { sectionHref } from '$lib/profile/rows';
   import { TAG_MAX, cleanTag, nameProblem, tagsProblem } from '$lib/rules';
+  import RetryNote from '$lib/components/RetryNote.svelte';
+  import { quiet } from '$lib/quiet';
   import TagInput from '$lib/components/TagInput.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import { loader } from '$lib/tool/loader.svelte';
@@ -85,11 +87,13 @@
   $effect(() => {
     if (!receivers.some((r) => r.id === giveTo)) giveTo = receivers[0]?.id ?? '';
   });
+  let grantsFailed = $state(false);
+  function loadGrants() {
+    grantsFailed = false;
+    void quiet(editorOf().then((g) => (grants = g)), 'editor grants', () => (grantsFailed = true));
+  }
   $effect(() => {
-    if (!session.me) return;
-    editorOf()
-      .then((g) => (grants = g))
-      .catch(() => {});
+    if (session.me) loadGrants();
   });
   const ownerHome = $derived(emote?.owner ? `/users/${encodeURIComponent(emote.owner.id)}` : '/me');
   const changed = $derived(
@@ -141,14 +145,22 @@
     return () => clearInterval(timer);
   });
 
-  $effect(() => {
+  let setsFailed = $state(false);
+  function loadSets() {
     const id = page.params.id ?? '';
-    gql(MY_SETS, {})
-      .then((r) => {
+    setsFailed = false;
+    void quiet(
+      gql(MY_SETS, {}).then((r) => {
         sets = r.mySets.filter((s) => s.kind !== 'GLOBAL' && !s.emotes.some((m) => m.emote.id === id));
         target = sets[0]?.id ?? '';
-      })
-      .catch(() => {});
+      }),
+      'your sets',
+      () => (setsFailed = true),
+    );
+  }
+  $effect(() => {
+    void page.params.id;
+    loadSets();
   });
 
   async function save(e: SubmitEvent) {
@@ -322,10 +334,16 @@
               </select>
               <button class="ui-btn secondary" type="button" disabled={adding} onclick={addTo}>Add</button>
             </div>
+          {:else if setsFailed}
+            <RetryNote onretry={loadSets}>Couldn’t load your sets.</RetryNote>
           {:else}
             <p class="ui-hint">It’s in all your sets already, or you have none yet. <a href="/me/sets">Your sets</a></p>
           {/if}
         </section>
+      {/if}
+
+      {#if grantsFailed}
+        <RetryNote onretry={loadGrants}>Couldn’t load which accounts you edit, so some actions (like giving this emote away) may be missing.</RetryNote>
       {/if}
 
       {#if (canGive && (receivers.length || !mine)) || requests.length}

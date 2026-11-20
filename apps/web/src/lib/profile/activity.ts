@@ -55,16 +55,6 @@ const KIND: Record<ApiKind, ActivityKind> = {
 
 type Entry = AccountActivityQuery['accountActivityPage']['entries'][number];
 
-/**
- * Whether a line says who did it ("by <name>"): never for the viewer's own doing (it would read
- * "by" your own name), and never for an editor leaving on their own.
- */
-export function namesActor(i: Pick<ActivityItem, 'kind' | 'actor' | 'editor'>, viewerId: string | null | undefined): boolean {
-  if (!i.actor) return false;
-  if (viewerId && i.actor.id === viewerId) return false;
-  return !(i.kind === 'editorRemoved' && i.actor.id === i.editor?.id);
-}
-
 /** One API entry as a feed item; unknown kinds are dropped. */
 export function toItem(e: Entry): ActivityItem | null {
   const kind = KIND[e.kind];
