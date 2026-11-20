@@ -22,7 +22,7 @@
   import { can, session } from '$lib/tool/session.svelte';
   import { covers, grantOn, permissionLabels, scopeOf, setAccess } from '$lib/tool/editors';
   import { fail, notify } from '$lib/tool/notices.svelte';
-  import { morePages } from '$lib/tool/set-paging';
+  import { applyChange, morePages, type MemberChange } from '$lib/tool/set-paging';
   import PageHead from '$lib/tool/PageHead.svelte';
 
   type EditableSet = NonNullable<EditSetQuery['set']>;
@@ -82,13 +82,21 @@
       channels = [...r.myChannels, ...r.editorChannels.filter((c) => !r.myChannels.some((m) => m.platform === c.platform && m.platformChannelId === c.platformChannelId))];
       name = r.set.name;
     }
-    void readMembers(r.set.id);
+    // The member lists are read once per set; what is done here after that updates them locally.
+    if (membersFor !== r.set.id) {
+      membersFor = r.set.id;
+      void readMembers(r.set.id);
+    }
     return r.set;
   });
-  const load = () => L.reload();
+  const load = (change?: MemberChange) => {
+    if (change) members = applyChange(members, change);
+    return L.reload();
+  };
   // Emotes were added: the pages in the grid are read again too.
   let rev = $state(0);
-  async function added() {
+  async function added(a: { id: string; name: string }) {
+    members = applyChange(members, { kind: 'add', ...a });
     await L.reload();
     rev++;
   }
@@ -97,6 +105,8 @@
   // name clashes; the grid itself reads pages of 120 with pictures, so nothing waits for this.
   let members = $state({ ids: new Set<string>(), names: new Set<string>() });
   let membersToken = 0;
+  /** The set the lists were asked for. */
+  let membersFor = '';
   async function readMembers(want: string) {
     const mine = ++membersToken;
     try {
@@ -106,6 +116,7 @@
       const all = [first, ...rest].flatMap((r) => r.setEmotes.items);
       members = { ids: new Set(all.map((m) => m.emote.id)), names: new Set(all.map((m) => m.name)) };
     } catch {
+      if (mine === membersToken) membersFor = ''; // the next reload asks again
       /* the Add panel then lets the API refuse a repeat */
     }
   }

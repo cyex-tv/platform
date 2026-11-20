@@ -131,7 +131,7 @@ describe('uploadEmote never hangs', () => {
     }
     expect(shares).toEqual([0.25, 0.5, 0.75, 1]);
     FakeXhr.last.upload.onload?.({});
-    await vi.advanceTimersByTimeAsync(50_000); // the API is checking the picture
+    await vi.advanceTimersByTimeAsync(20_000); // the API is checking the picture (it has 30 s)
     FakeXhr.last.status = 202;
     FakeXhr.last.responseText = JSON.stringify({ id: 'E1', name: 'a', state: 'PENDING' });
     await FakeXhr.last.onload?.({});
@@ -142,7 +142,7 @@ describe('uploadEmote never hangs', () => {
     setup();
     const p = uploadEmote(file(), 'a', []).catch((x) => x);
     FakeXhr.last.upload.onload?.({});
-    await vi.advanceTimersByTimeAsync(60_001);
+    await vi.advanceTimersByTimeAsync(30_001);
     expect(((await p) as ApiError).code).toBe('stalled');
   });
 

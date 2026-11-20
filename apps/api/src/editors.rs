@@ -32,22 +32,11 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::catalog::{db_error, forbidden, holds, not_found, parse_id, viewer};
+use crate::errors::{bad, conflict, limited, sqlx_error};
 use crate::state::AppState;
 use crate::views;
 
 pub type Flags = BTreeSet<EditorPermission>;
-
-fn bad(code: &'static str, message: &str) -> ApiError {
-    ApiError::new(StatusCode::BAD_REQUEST, code, message)
-}
-
-fn conflict(code: &'static str, message: &str) -> ApiError {
-    ApiError::new(StatusCode::CONFLICT, code, message)
-}
-
-fn sqlx_error(err: sqlx::Error) -> ApiError {
-    db_error(cyex_tv_db::DbError::Sqlx(err))
-}
 
 /// Stored names to the flags they grant. A name this version doesn't know grants nothing; `sets`
 /// brings `channels`.
@@ -396,17 +385,11 @@ fn too_many_editors() -> ApiError {
 }
 
 fn rate_limited(state: &AppState, caller: &Caller) -> ApiResult<()> {
-    state
-        .limits
-        .editors
-        .check(&ids::to_text(caller.account_id))
-        .map_err(|_| {
-            ApiError::new(
-                StatusCode::TOO_MANY_REQUESTS,
-                "rate_limited",
-                "That's a lot of editor changes. Try again in a while.",
-            )
-        })
+    limited(
+        &state.limits.editors,
+        &ids::to_text(caller.account_id),
+        "That's a lot of editor changes. Try again in a while.",
+    )
 }
 
 fn owner_of(caller: &Caller, raw: Option<&str>) -> ApiResult<Uuid> {

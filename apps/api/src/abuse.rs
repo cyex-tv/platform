@@ -40,6 +40,7 @@ use crate::admin::{actor, rule};
 use crate::catalog::{
     db_error, forbidden, holds, load_set, not_found, parse_id, publish_member_event,
 };
+use crate::errors::{bad, conflict, sqlx_error};
 use crate::state::AppState;
 use crate::views;
 
@@ -50,25 +51,13 @@ pub const DELETE_JOB: &str = "files.delete";
 const PAGE: u32 = 50;
 const PAGE_MAX: u32 = 100;
 
-fn bad(code: &'static str, message: &str) -> ApiError {
-    ApiError::new(StatusCode::BAD_REQUEST, code, message)
-}
-
-fn conflict(code: &'static str, message: &str) -> ApiError {
-    ApiError::new(StatusCode::CONFLICT, code, message)
-}
-
-fn sqlx_error(err: sqlx::Error) -> ApiError {
-    db_error(DbError::Sqlx(err))
-}
-
 fn text(raw: &str, what: &'static str) -> ApiResult<String> {
     let t = raw.trim();
     let len = t.chars().count();
     if len == 0 || len > 500 || text::has_unsafe(t, true) {
         return Err(bad(
             "bad_reason",
-            &format!("Give a {what} of 1 to 500 characters."),
+            format!("Give a {what} of 1 to 500 characters."),
         ));
     }
     Ok(t.to_owned())
@@ -918,7 +907,7 @@ pub async fn my_notifications(
             .await
             .map_err(db_error)?
             .into_iter()
-            .filter_map(|(id, s)| Some((id, TransferRequestState::parse(&s)?)))
+            .map(|(id, s)| (id, TransferRequestState::from(s)))
             .collect()
     };
     Ok(rows
