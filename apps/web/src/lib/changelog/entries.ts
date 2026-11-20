@@ -15,6 +15,18 @@ export type Entry = {
 
 export const ENTRIES: Entry[] = [
   {
+    id: '2026-11-20-small-touches',
+    date: '2026-11-20',
+    title: 'Chat preview for sets, recent searches and more',
+    items: [
+      'A set’s page shows a chat preview of its emotes, in Twitch or Kick: wide emotes, zero-width overlays and the owner’s painted name.',
+      'The emote page lists each size’s file size under it.',
+      'Set cards show how full the set is with a thin bar and “24 / 1.000”.',
+      'The search field remembers your last five searches on this device, with a row to clear them.',
+      'Help starts with the most-read answers and says whether the service is running.',
+    ],
+  },
+  {
     id: '2026-11-20-announcements-notifications-collection',
     date: '2026-11-20',
     title: 'Announcements, notification settings and your collection',

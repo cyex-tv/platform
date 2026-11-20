@@ -3,7 +3,7 @@
 import type { ChatEmote, ChatLine } from '$lib/components/ChatPreview.svelte';
 import type { IconName } from '$lib/components/Icon.svelte';
 import { isWide, type Picture } from '$lib/emote';
-import { count } from '$lib/format';
+import { bytes, count } from '$lib/format';
 import { visibilityOf } from '$lib/tool/visibility';
 import type { EmoteFieldsFragment, EmoteState } from '$lib/gql/graphql';
 
@@ -52,6 +52,11 @@ export function scaleFiles(files: PageEmote['files']): PageEmote['files'] {
     if (pick) out.push(pick);
   }
   return out;
+}
+
+/** `900 B` for a file whose size the API sent; empty when it is unknown (missing or 0). */
+export function fileSize(f: { size?: number | null }): string {
+  return typeof f.size === 'number' && f.size > 0 ? bytes(f.size) : '';
 }
 
 /** The type in words: `Animated, zero-width, wide`. */

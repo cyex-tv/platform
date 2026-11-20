@@ -2666,6 +2666,7 @@ createServer(async (req, res) => {
     return res.end();
   }
   // A route that never answers, for timeout checks.
+  if (req.method === 'GET' && (url.pathname === '/health' || url.pathname === '/health/ready')) return res.writeHead(200, { 'content-type': 'application/json' }).end('{"status":"ok"}');
   if (url.pathname === '/mock/hang') return;
   if (req.method === 'POST' && url.pathname === '/v1/emotes') {
     // UTF-8, as the API reads it: names in any script and emoji arrive whole.
