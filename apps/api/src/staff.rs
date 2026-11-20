@@ -17,7 +17,7 @@ use std::collections::HashMap;
 
 use axum::http::StatusCode;
 use cyex_tv_auth::Caller;
-use cyex_tv_db::{DbError, accounts, audit, ids, roles, sessions, staff};
+use cyex_tv_db::{accounts, audit, ids, roles, sessions, staff};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
     AccountSession, AccountSubscription, EntitlementGrant, GrantKind, GrantSource, StaffNote,
@@ -29,6 +29,7 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::catalog::{db_error, forbidden, not_found, parse_id, permissions_of};
+use crate::errors::sqlx_error;
 use crate::state::AppState;
 use crate::views;
 
@@ -36,10 +37,6 @@ use crate::views;
 pub const MAX_NOTE_LEN: usize = 2000;
 /// Notes, sessions and grants one read returns at most.
 const LIMIT: i64 = 200;
-
-fn sqlx_error(err: sqlx::Error) -> ApiError {
-    db_error(DbError::Sqlx(err))
-}
 
 async fn require_any(conn: &mut PgConnection, caller: &Caller, any: &[&str]) -> ApiResult<()> {
     if caller.owner {

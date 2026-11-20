@@ -18,7 +18,7 @@ use chrono::Utc;
 use cyex_tv_auth::Caller;
 use cyex_tv_db::emotes::{self, NewEmote};
 use cyex_tv_db::files::{self, NewFile};
-use cyex_tv_db::{DbError, accounts, audit, blocklist, ids, jobs, reads};
+use cyex_tv_db::{accounts, audit, blocklist, ids, jobs, reads};
 use cyex_tv_media::{Limits, MediaError, Probe};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{EditorPermission, Emote};
@@ -29,6 +29,7 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::catalog::{db_error, forbidden, member_name, parse_id};
+use crate::errors::sqlx_error;
 use crate::moderation::clean_tags;
 use crate::state::AppState;
 use crate::views;
@@ -37,10 +38,6 @@ use crate::views;
 pub const PER_HOUR: i64 = 20;
 /// The job the worker turns an original into emote files with.
 pub const TRANSCODE_JOB: &str = "emote.transcode";
-
-fn sqlx_error(err: sqlx::Error) -> ApiError {
-    db_error(DbError::Sqlx(err))
-}
 
 pub fn media_error(err: MediaError) -> ApiError {
     match err {
