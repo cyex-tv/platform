@@ -79,6 +79,8 @@ pub(crate) const SESSION: &str = "id_hash, account_id, kind, created_at, expires
 /// The longest user agent kept.
 pub const USER_AGENT_MAX: usize = 512;
 
+/// Makes a session. Only `SessionKind::Site` works here: an `app` session must name its client
+/// (`app_auth`, ADR 0021), and the database refuses one without (`sessions_app_has_client`).
 pub async fn create(
     conn: &mut PgConnection,
     hash: &TokenHash,

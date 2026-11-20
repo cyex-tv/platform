@@ -55,7 +55,8 @@ fn bearer(headers: &HeaderMap) -> Option<&str> {
 impl Auth {
     /// The caller, if the request carries a live session.
     ///
-    /// - A Bearer token must be an app session; when one is sent the cookie is ignored.
+    /// - A Bearer token must be an app sign-in's session (one that names its client, ADR 0021);
+    ///   when one is sent the cookie is ignored.
     /// - The cookie must be a site session. On a write (anything but GET, HEAD and OPTIONS) it
     ///   counts only with `Origin` set to the site; otherwise the request fails with `bad_origin`
     ///   rather than quietly running signed out.
@@ -85,6 +86,12 @@ impl Auth {
             return Ok(None);
         };
         if session.kind != kind {
+            return Ok(None);
+        }
+        // Unscoped app sessions are retired (ADR 0021, amendment of 2026/11/20): a Bearer token
+        // counts only for an app that signed in through `/v1/auth/app`. The database refuses
+        // new ones too; this is the second line.
+        if via == Via::Bearer && session.app_client_id.is_none() {
             return Ok(None);
         }
         if Utc::now() - session.last_seen_at > touch_after()

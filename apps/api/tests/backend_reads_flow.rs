@@ -33,7 +33,6 @@ const SITE: &str = "http://localhost:5173";
 struct User {
     id: Uuid,
     login: String,
-    token: String,
     cookie: String,
 }
 
@@ -133,7 +132,6 @@ impl World {
         User {
             id,
             login,
-            token: self.session(id, SessionKind::App).await,
             cookie: self.session(id, SessionKind::Site).await,
         }
     }
@@ -412,7 +410,7 @@ async fn account_sets_read_only_the_preview() {
     // The owner sees it, newest first.
     let r = w
         .post(
-            Some((&fox.token, false)),
+            Some((&fox.cookie, true)),
             SETS,
             json!({ "a": fox.tid(), "p": 3 }),
         )
@@ -421,7 +419,7 @@ async fn account_sets_read_only_the_preview() {
     // Someone else doesn't.
     let r = w
         .post(
-            Some((&other.token, false)),
+            Some((&other.cookie, true)),
             SETS,
             json!({ "a": fox.tid(), "p": 3 }),
         )
@@ -434,7 +432,7 @@ async fn account_sets_read_only_the_preview() {
     // The owner's count has the pending one too.
     let r = w
         .post(
-            Some((&fox.token, false)),
+            Some((&fox.cookie, true)),
             SETS,
             json!({ "a": fox.tid(), "p": 0 }),
         )
@@ -564,17 +562,17 @@ async fn heavy_reads_are_limited_per_account_or_ip() {
     let other = w.user("7502").await;
     let vars = json!({ "a": fox.tid() });
     for _ in 0..3 {
-        let r = w.post(Some((&fox.token, false)), LIST, vars.clone()).await;
+        let r = w.post(Some((&fox.cookie, true)), LIST, vars.clone()).await;
         assert!(r["errors"].is_null(), "{r}");
     }
     // Any of the heavy reads counts against the same limit.
-    let r = w.post(Some((&fox.token, false)), SETS, vars.clone()).await;
+    let r = w.post(Some((&fox.cookie, true)), SETS, vars.clone()).await;
     assert_eq!(code(&r), "rate_limited", "{r}");
-    let r = w.post(Some((&fox.token, false)), PAGE, vars.clone()).await;
+    let r = w.post(Some((&fox.cookie, true)), PAGE, vars.clone()).await;
     assert_eq!(code(&r), "rate_limited", "{r}");
     // Per account: someone else still reads, and so does a signed-out visitor, per IP.
     let r = w
-        .post(Some((&other.token, false)), LIST, vars.clone())
+        .post(Some((&other.cookie, true)), LIST, vars.clone())
         .await;
     assert!(r["errors"].is_null(), "{r}");
     for _ in 0..3 {
@@ -641,7 +639,7 @@ async fn deleting_an_account_is_limited_to_three_tries_an_hour() {
         .await;
     assert_eq!(code(&r), "rate_limited", "{r}");
     let r = w
-        .post(Some((&fox.token, false)), "{ me { id } }", json!({}))
+        .post(Some((&fox.cookie, true)), "{ me { id } }", json!({}))
         .await;
     assert!(r["errors"].is_null(), "still signed in: {r}");
     // Per account: another one can.

@@ -23,12 +23,12 @@ async fn bad_inputs_answer_their_rule() {
     };
     let o = w.user(OWNER).await;
     let f = w.user("7402").await;
-    let os = As::App(&o);
+    let os = As::Site(&o);
 
     // Real rows to aim the bad inputs at.
     let r = w
         .post_form(
-            As::App(&o),
+            As::Site(&o),
             "/v1/cosmetics/images",
             form(&[("kind", "badge")], Some(&png(72, 72, 9))),
         )

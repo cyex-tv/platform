@@ -86,7 +86,7 @@ impl World {
             &mut conn,
             &tokens::hash(&token),
             account,
-            SessionKind::App,
+            SessionKind::Site,
             chrono::Duration::days(1),
         )
         .await
@@ -125,7 +125,12 @@ impl World {
     async fn gql(&self, token: Option<&str>, query: &str, variables: Value) -> Value {
         let mut request = Request::post("/v1/gql").header("content-type", "application/json");
         if let Some(token) = token {
-            request = request.header("authorization", format!("Bearer {token}"));
+            request = request
+                .header(
+                    "cookie",
+                    format!("{}={token}", cyex_tv_auth::cookies::SESSION),
+                )
+                .header("origin", "https://cyex.tv");
         }
         let request = request
             .body(Body::from(

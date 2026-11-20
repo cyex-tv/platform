@@ -304,7 +304,7 @@ async fn every_field_refuses_the_signed_out_and_staff_fields_refuse_everyone_els
             ));
         }
         if STAFF.contains(&name) {
-            let r = w.gql(As::App(&plain), &doc, json!({})).await;
+            let r = w.gql(As::Site(&plain), &doc, json!({})).await;
             let code = error_code(&r);
             if code != "forbidden" {
                 failures.push(format!(

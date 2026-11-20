@@ -34,8 +34,6 @@ struct User {
     id: Uuid,
     /// A website cookie session.
     site: String,
-    /// An unscoped app session, for setting things up.
-    full: String,
     twitch_id: String,
 }
 
@@ -132,7 +130,7 @@ impl World {
         })
     }
 
-    /// A Twitch user `user<id>` with a channel, a website session and an unscoped app session.
+    /// A Twitch user `user<id>` with a channel, a website session.
     async fn user(&self, twitch_id: &str) -> User {
         let mut conn = self.db.conn().await;
         let login = format!("user{twitch_id}");
@@ -168,20 +166,9 @@ impl World {
         )
         .await
         .unwrap();
-        let full = tokens::random_token();
-        sessions::create(
-            &mut conn,
-            &tokens::hash(&full),
-            signed.account.id,
-            SessionKind::App,
-            Duration::days(1),
-        )
-        .await
-        .unwrap();
         User {
             id: signed.account.id,
             site,
-            full,
             twitch_id: twitch_id.to_owned(),
         }
     }
@@ -240,6 +227,21 @@ impl World {
 
     async fn gql(&self, token: &str, query: &str, variables: Value) -> Value {
         self.gql_with(Some(token), query, variables).await
+    }
+
+    /// As the website: the cookie session and the site's `Origin`, with full rights.
+    async fn site(&self, user: &User, query: &str, variables: Value) -> Value {
+        let request = Request::post("/v1/gql")
+            .header("content-type", "application/json")
+            .header("origin", SITE)
+            .header("cookie", format!("{}={}", cookies::SESSION, user.site))
+            .body(Body::from(
+                json!({ "query": query, "variables": variables }).to_string(),
+            ))
+            .unwrap();
+        let a = self.send(request).await;
+        assert_eq!(a.status, StatusCode::OK, "{}", a.body);
+        a.body
     }
 
     /// `GET /v1/auth/app/authorize` with the given pairs.
@@ -337,7 +339,7 @@ impl World {
     }
 
     async fn app_sessions(&self, user: &User) -> Vec<Value> {
-        let r = self.gql(&user.full, SESSIONS, json!({})).await;
+        let r = self.site(user, SESSIONS, json!({})).await;
         ok(&r);
         r["data"]["mySessions"]
             .as_array()
@@ -766,11 +768,7 @@ async fn signing_out_and_revoking_end_the_app_session() {
     let listed = w.app_sessions(&alice).await;
     assert_eq!(listed.len(), 1);
     let r = w
-        .gql(
-            &alice.full,
-            REVOKE_SESSION,
-            json!({ "id": listed[0]["id"] }),
-        )
+        .site(&alice, REVOKE_SESSION, json!({ "id": listed[0]["id"] }))
         .await;
     assert_eq!(r["data"]["revokeSession"], true, "{r}");
     assert!(!w.signed_in(&app.access).await);
@@ -787,15 +785,11 @@ async fn the_deck_calls_work_with_the_app_token_and_rights_are_unchanged() {
     let staff = w.user(STAFF).await;
 
     // Alice's channel shows her set.
-    let r = w.gql(&alice.full, CREATE_SET, json!({ "n": "main" })).await;
+    let r = w.site(&alice, CREATE_SET, json!({ "n": "main" })).await;
     ok(&r);
     let set = r["data"]["createSet"]["id"].as_str().unwrap().to_owned();
     ok(&w
-        .gql(
-            &alice.full,
-            ACTIVATE,
-            json!({ "c": alice.twitch_id, "s": set }),
-        )
+        .site(&alice, ACTIVATE, json!({ "c": alice.twitch_id, "s": set }))
         .await);
     let emote = w.emote(&alice, "peepoHi").await;
 
@@ -909,8 +903,8 @@ async fn the_deck_calls_work_with_the_app_token_and_rights_are_unchanged() {
 
     // Cosmetics: read, refused while not owned, picked once granted.
     let r = w
-        .gql(
-            &staff.full,
+        .site(
+            &staff,
             CREATE_PAINT,
             json!({ "p": {
                 "name": "sunset", "kind": "LINEAR_GRADIENT", "angle": 90, "repeat": false,
@@ -931,8 +925,8 @@ async fn the_deck_calls_work_with_the_app_token_and_rights_are_unchanged() {
     let r = w.gql(&deck.access, SELECT, json!({ "p": paint })).await;
     assert_eq!(code(&r), "not_owned", "{r}");
     ok(&w
-        .gql(
-            &staff.full,
+        .site(
+            &staff,
             GRANT,
             json!({ "a": ids::to_text(bob.id), "c": paint }),
         )
@@ -968,8 +962,8 @@ async fn app_tokens_run_only_their_scopes() {
         let r = w.gql(&deck.access, query, variables).await;
         assert_eq!(code(&r), "insufficient_scope", "{query}: {r}");
     }
-    // The unscoped session is untouched by that.
-    assert!(w.signed_in(&alice.full).await);
+    // The website session is untouched by that.
+    ok(&w.site(&alice, ME, json!({})).await);
     assert_eq!(w.app_sessions(&alice).await.len(), 1);
     // Only the listed queries run: public and own reads, nothing staff read, nothing else of
     // the account's (sessions, orders, notifications). Aliases and fragments change nothing.
@@ -994,7 +988,7 @@ async fn app_tokens_run_only_their_scopes() {
         assert_eq!(code(&r), "insufficient_scope", "{query}: {r}");
     }
     // The website session still runs them.
-    ok(&w.gql(&alice.full, SESSIONS, json!({})).await);
+    ok(&w.site(&alice, SESSIONS, json!({})).await);
 
     // No uploads.
     let a = w
@@ -1012,28 +1006,24 @@ async fn app_tokens_run_only_their_scopes() {
 }
 
 /// Staff grants don't count for an app token (ADR 0021): with every permission (the owner here),
-/// the deck still sees and changes only sets the account itself may edit; the website and the
-/// unscoped session keep `sets.edit_any`.
+/// the deck still sees and changes only sets the account itself may edit; the website
+/// keeps `sets.edit_any`.
 #[tokio::test]
 async fn staff_grants_do_not_count_for_app_tokens() {
     let Some(w) = World::new().await else { return };
     let alice = w.user("1701").await;
     let staff = w.user(STAFF).await;
-    let r = w.gql(&alice.full, CREATE_SET, json!({ "n": "main" })).await;
+    let r = w.site(&alice, CREATE_SET, json!({ "n": "main" })).await;
     ok(&r);
     let set = r["data"]["createSet"]["id"].as_str().unwrap().to_owned();
     ok(&w
-        .gql(
-            &alice.full,
-            ACTIVATE,
-            json!({ "c": alice.twitch_id, "s": set }),
-        )
+        .site(&alice, ACTIVATE, json!({ "c": alice.twitch_id, "s": set }))
         .await);
     let emote = w.emote(&alice, "staffHi").await;
 
-    // Unscoped, the staff account edits Alice's set through sets.edit_any.
+    // On the website, the staff account edits Alice's set through sets.edit_any.
     let r = w
-        .gql(&staff.full, EDITABLE_BY_ID, json!({ "c": alice.twitch_id }))
+        .site(&staff, EDITABLE_BY_ID, json!({ "c": alice.twitch_id }))
         .await;
     ok(&r);
     assert_eq!(
@@ -1061,9 +1051,7 @@ async fn staff_grants_do_not_count_for_app_tokens() {
     assert_eq!(code(&r), "forbidden", "{r}");
 
     // Alice adds it; the deck can't rename or remove it either.
-    ok(&w
-        .gql(&alice.full, ADD, json!({ "s": set, "e": emote }))
-        .await);
+    ok(&w.site(&alice, ADD, json!({ "s": set, "e": emote })).await);
     let r = w
         .gql(
             &deck.access,
@@ -1080,14 +1068,49 @@ async fn staff_grants_do_not_count_for_app_tokens() {
     let r = w.gql(&deck.access, "{ auditLog { id } }", json!({})).await;
     assert_eq!(code(&r), "insufficient_scope", "{r}");
 
-    // The unscoped session still can.
+    // The website session still can.
     let r = w
-        .gql(
-            &staff.full,
+        .site(
+            &staff,
             RENAME,
             json!({ "s": set, "e": emote, "n": "staffHey" }),
         )
         .await;
     assert_eq!(r["data"]["updateSetEmote"]["name"], "staffHey", "{r}");
+    w.db.close().await;
+}
+
+/// An app session with no client (made before ADR 0021 amended) is signed out: its Bearer token
+/// is ignored, while the same account's website session and a real app sign-in still work.
+#[tokio::test]
+async fn unscoped_bearer_token_is_signed_out() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("1801").await;
+    let old = tokens::random_token();
+    {
+        let mut conn = w.db.conn().await;
+        // The CHECK keeps new ones out; take it away to plant one, as the data was before.
+        sqlx::query("ALTER TABLE sessions DROP CONSTRAINT sessions_app_has_client")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+        sessions::create(
+            &mut conn,
+            &tokens::hash(&old),
+            alice.id,
+            SessionKind::App,
+            Duration::days(1),
+        )
+        .await
+        .unwrap();
+    }
+    let r = w.gql(&old, ME, json!({})).await;
+    assert_eq!(code(&r), "signed_out", "{r}");
+    assert!(!w.signed_in(&old).await);
+
+    // The website session of the same account, and a real app sign-in, still work.
+    ok(&w.site(&alice, ME, json!({})).await);
+    let deck = w.sign_in_app(&alice).await;
+    assert!(w.signed_in(&deck.access).await);
     w.db.close().await;
 }

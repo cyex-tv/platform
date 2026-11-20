@@ -15,6 +15,7 @@ use common::TestDb;
 use cyex_tv_api::state::AppState;
 use cyex_tv_auth::{Auth, AuthConfig, tokens};
 use cyex_tv_db::accounts::{self, Profile};
+use cyex_tv_db::app_auth;
 use cyex_tv_db::emotes::{self, NewEmote};
 use cyex_tv_db::sessions::{self, SessionKind};
 use cyex_tv_db::{channels, ids};
@@ -92,15 +93,33 @@ impl World {
     async fn session(&self, account: Uuid, kind: SessionKind) -> String {
         let mut conn = self.db.conn().await;
         let token = tokens::random_token();
-        sessions::create(
-            &mut conn,
-            &tokens::hash(&token),
-            account,
-            kind,
-            Duration::days(1),
-        )
-        .await
-        .unwrap();
+        match kind {
+            SessionKind::Site => {
+                sessions::create(
+                    &mut conn,
+                    &tokens::hash(&token),
+                    account,
+                    kind,
+                    Duration::days(1),
+                )
+                .await
+                .unwrap();
+            }
+            // An app session names its client, as an app sign-in makes it.
+            SessionKind::App => {
+                app_auth::create_session(
+                    &mut conn,
+                    &tokens::hash(&token),
+                    account,
+                    "cyex-deck",
+                    Duration::days(1),
+                    Duration::days(1),
+                    None,
+                )
+                .await
+                .unwrap();
+            }
+        }
         token
     }
 
@@ -190,8 +209,9 @@ impl World {
         (serde_json::from_slice(&bytes).unwrap(), cookie)
     }
 
+    /// As the website (the cookie session): full rights.
     async fn gql(&self, user: &User, query: &str, vars: Value) -> Value {
-        self.post(Some((&user.token, false)), query, vars).await.0
+        self.post(Some((&user.cookie, true)), query, vars).await.0
     }
 
     async fn public(&self, query: &str, vars: Value) -> Value {
@@ -365,8 +385,8 @@ async fn sign_out_everywhere_ends_every_session_and_clears_the_cookie() {
     let r = w.gql(&bob, ME, json!({})).await;
     assert!(r["errors"].is_null(), "{r}");
 
-    // An app token signs out only itself (security review 2026/11/20): a leaked token can't
-    // sign the person out of the website. No cookie to clear.
+    // An app token can't sign anyone out everywhere (security review 2026/11/20): a leaked token
+    // can't sign the person out of the website. Both of Bob's sessions stay.
     let (r, cookie) = w
         .post(
             Some((&bob.token, false)),
@@ -374,11 +394,11 @@ async fn sign_out_everywhere_ends_every_session_and_clears_the_cookie() {
             json!({}),
         )
         .await;
-    assert_eq!(r["data"]["signOutEverywhere"], 1, "{r}");
+    assert_eq!(code(&r), "insufficient_scope", "{r}");
     assert!(cookie.is_none());
+    let (r, _) = w.post(Some((&bob.token, false)), ME, json!({})).await;
+    assert!(r["errors"].is_null(), "{r}");
     let r = w.gql(&bob, ME, json!({})).await;
-    assert_eq!(code(&r), "signed_out", "{r}");
-    let (r, _) = w.post(Some((&bob.cookie, true)), ME, json!({})).await;
     assert!(r["errors"].is_null(), "{r}");
     w.db.close().await;
 }
