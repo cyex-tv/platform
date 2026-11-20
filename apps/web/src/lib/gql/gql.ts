@@ -78,6 +78,11 @@ type Documents = {
     "\n  mutation ResolveReport($id: String!, $action: ReportAction!, $note: String) {\n    resolveReport(id: $id, action: $action, note: $note) {\n      id\n      state\n    }\n  }\n": typeof types.ResolveReportDocument,
     "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    public\n    builtIn\n    editable\n    assignable\n  }\n": typeof types.RoleFieldsFragmentDoc,
     "\n  query Roles {\n    roles {\n      ...RoleFields\n    }\n    permissions\n  }\n": typeof types.RolesDocument,
+    "\n  fragment RoleLimitFields on RoleLimit {\n    key\n    group\n    default\n    windowSeconds\n    value\n  }\n": typeof types.RoleLimitFieldsFragmentDoc,
+    "\n  query LimitDefaults {\n    limitDefaults {\n      ...RoleLimitFields\n    }\n  }\n": typeof types.LimitDefaultsDocument,
+    "\n  query RoleLimits($id: String!) {\n    roleLimits(id: $id) {\n      ...RoleLimitFields\n    }\n  }\n": typeof types.RoleLimitsDocument,
+    "\n  mutation SetRoleLimits($id: String!, $limits: [RoleLimitInput!]!) {\n    setRoleLimits(id: $id, limits: $limits) {\n      ...RoleLimitFields\n    }\n  }\n": typeof types.SetRoleLimitsDocument,
+    "\n  query UploadQuota($ownerId: String) {\n    uploadQuota(ownerId: $ownerId) {\n      accountId\n      pending\n      pendingMax\n      uploadsThisHour\n      uploadsPerHour\n    }\n  }\n": typeof types.UploadQuotaDocument,
     "\n  mutation CreateRole($input: CreateRoleInput!) {\n    createRole(input: $input) {\n      ...RoleFields\n    }\n  }\n": typeof types.CreateRoleDocument,
     "\n  mutation UpdateRole($id: String!, $input: UpdateRoleInput!) {\n    updateRole(id: $id, input: $input) {\n      ...RoleFields\n    }\n  }\n": typeof types.UpdateRoleDocument,
     "\n  mutation DeleteRole($id: String!) {\n    deleteRole(id: $id)\n  }\n": typeof types.DeleteRoleDocument,
@@ -250,6 +255,11 @@ const documents: Documents = {
     "\n  mutation ResolveReport($id: String!, $action: ReportAction!, $note: String) {\n    resolveReport(id: $id, action: $action, note: $note) {\n      id\n      state\n    }\n  }\n": types.ResolveReportDocument,
     "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    public\n    builtIn\n    editable\n    assignable\n  }\n": types.RoleFieldsFragmentDoc,
     "\n  query Roles {\n    roles {\n      ...RoleFields\n    }\n    permissions\n  }\n": types.RolesDocument,
+    "\n  fragment RoleLimitFields on RoleLimit {\n    key\n    group\n    default\n    windowSeconds\n    value\n  }\n": types.RoleLimitFieldsFragmentDoc,
+    "\n  query LimitDefaults {\n    limitDefaults {\n      ...RoleLimitFields\n    }\n  }\n": types.LimitDefaultsDocument,
+    "\n  query RoleLimits($id: String!) {\n    roleLimits(id: $id) {\n      ...RoleLimitFields\n    }\n  }\n": types.RoleLimitsDocument,
+    "\n  mutation SetRoleLimits($id: String!, $limits: [RoleLimitInput!]!) {\n    setRoleLimits(id: $id, limits: $limits) {\n      ...RoleLimitFields\n    }\n  }\n": types.SetRoleLimitsDocument,
+    "\n  query UploadQuota($ownerId: String) {\n    uploadQuota(ownerId: $ownerId) {\n      accountId\n      pending\n      pendingMax\n      uploadsThisHour\n      uploadsPerHour\n    }\n  }\n": types.UploadQuotaDocument,
     "\n  mutation CreateRole($input: CreateRoleInput!) {\n    createRole(input: $input) {\n      ...RoleFields\n    }\n  }\n": types.CreateRoleDocument,
     "\n  mutation UpdateRole($id: String!, $input: UpdateRoleInput!) {\n    updateRole(id: $id, input: $input) {\n      ...RoleFields\n    }\n  }\n": types.UpdateRoleDocument,
     "\n  mutation DeleteRole($id: String!) {\n    deleteRole(id: $id)\n  }\n": types.DeleteRoleDocument,
@@ -611,6 +621,26 @@ export function graphql(source: "\n  fragment RoleFields on Role {\n    id\n    
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query Roles {\n    roles {\n      ...RoleFields\n    }\n    permissions\n  }\n"): typeof import('./graphql').RolesDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment RoleLimitFields on RoleLimit {\n    key\n    group\n    default\n    windowSeconds\n    value\n  }\n"): typeof import('./graphql').RoleLimitFieldsFragmentDoc;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query LimitDefaults {\n    limitDefaults {\n      ...RoleLimitFields\n    }\n  }\n"): typeof import('./graphql').LimitDefaultsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query RoleLimits($id: String!) {\n    roleLimits(id: $id) {\n      ...RoleLimitFields\n    }\n  }\n"): typeof import('./graphql').RoleLimitsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation SetRoleLimits($id: String!, $limits: [RoleLimitInput!]!) {\n    setRoleLimits(id: $id, limits: $limits) {\n      ...RoleLimitFields\n    }\n  }\n"): typeof import('./graphql').SetRoleLimitsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query UploadQuota($ownerId: String) {\n    uploadQuota(ownerId: $ownerId) {\n      accountId\n      pending\n      pendingMax\n      uploadsThisHour\n      uploadsPerHour\n    }\n  }\n"): typeof import('./graphql').UploadQuotaDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

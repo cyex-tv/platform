@@ -851,6 +851,16 @@
               }
             }
           },
+          "409": {
+            "description": "`too_many_pending`: the owner already has as many emotes waiting for review as it may (20 unless its roles say otherwise; `uploadQuota`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
           "413": {
             "description": "`too_large`: over 8 MB, 1000×1000 px or 1000 frames.",
             "content": {
@@ -882,7 +892,7 @@
             }
           },
           "429": {
-            "description": "`rate_limited`.",
+            "description": "`rate_limited`: the uploads an hour (20 unless the account's roles say otherwise) or the per-IP limit.",
             "content": {
               "application/json": {
                 "schema": {

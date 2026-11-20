@@ -353,7 +353,7 @@ pub async fn redeem(
     {
         return Err(locked_out(wait));
     }
-    limited(&state.limits.redeem, caller)?;
+    limited(state, crate::limits::AccountLimit::Redeem, caller)?;
     let failed = || {
         lock.account.fail(&account_key);
         lock.ip.fail(ip);

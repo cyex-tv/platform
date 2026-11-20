@@ -2,6 +2,16 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Adjustable limits and the pending-emote cap (branch `feat/role-limits`, owner request of 2026/11/20)
+
+- [x] Every rate in `limits::Rates` and the upload counts can be set at start: `CYEX_TV_LIMIT_<NAME>=<count>/<window>` (`600/1m`, `30/1h`, `5/30s`, `1/1d`), whole numbers for `CYEX_TV_LIMIT_UPLOADS_PER_HOUR` and `CYEX_TV_LIMIT_PENDING_EMOTES`. Unset keeps today's value; a bad value stops the api naming the variable. Listed in `.env.example`.
+- [x] Per-role limits (migration `20261211000001_role_limits`, `roles.limits` jsonb, additive): 15 per-account limits (`limits::AccountLimit`). An account counts under the most generous override among its assigned roles, else the default; signed out and plain users get the defaults. Kept per account for 30 s (`Limits::load`, run by `MaybeCaller`), dropped on assign, unassign, role delete and limit changes, so the checks never wait on the database. The limiter takes a per-key rate (`Limiter::check_with`).
+- [x] GraphQL (additive): `limitDefaults`, `roleLimits(id)`, `setRoleLimits(id, limits)` (needs `roles.manage`, same edit rules as `updateRole`, not the User or top role, audited `role.limits_changed`), `uploadQuota(ownerId)`.
+- [x] Pending cap: an upload is refused with `409 too_many_pending` when the owner (the account uploaded for, with upload-as) already has its cap (20) waiting for review, transcoding ones included; checked again under the upload lock, so parallel uploads can't both take the last place.
+- [x] Website: Limits section in the role editor (Requests, Uploads, Account actions; defaults as placeholders; tooltips); the upload form shows "n of 20 waiting for review" for the account picked and, at the cap, says why Upload is off. Dev mock answers the new operations (`MOCK_PENDING_MAX` lowers the cap).
+- [x] Tests: unit tests in `ratelimit.rs`, `limits.rs`, `admin.rs`, `upload.rs`; `apps/api/tests/role_limits_flow.rs` (Postgres in CI); vitest `role-limits.test.ts`, `role-limits.ui.test.ts`, `quota.test.ts`, `upload-quota.ui.test.ts`.
+- [x] Manual (mock, 1440 dark): Limits section on the Moderator role saves `setRoleLimits`; the upload page shows 2 of 3, and after one upload the cap message with Upload off.
+
 ## App sign-in for cyex deck (branch `feat/app-sign-in`, ADR 0021, owner decision of 2026/11/19, D19 changed)
 
 Handoff `2026-11-19-03-deck-to-cyextv-app-sign-in` from the deck chat.

@@ -2,11 +2,13 @@
   // Roles, most senior first. Built-in ones are marked: User (everyone holds it), Admin, and the
   // owners' top role (only its holders see it). The API says per role whether you may edit it
   // (below your highest, not one you hold) or give it; the page follows that and says why not.
+  // The editor also sets the role's limits (RoleLimits): overrides of the per-account limits for
+  // everyone who holds it, saved with setRoleLimits after the role itself.
   import Name from '$lib/components/Name.svelte';
   import { count, iso } from '$lib/format';
   import { gql } from '$lib/api';
-  import type { RoleFieldsFragment } from '$lib/gql/graphql';
-  import { ACCOUNT_ROLES, CREATE_ROLE, DELETE_ROLE, ROLES, UPDATE_ROLE } from '$lib/queries';
+  import type { RoleFieldsFragment, RoleLimitFieldsFragment } from '$lib/gql/graphql';
+  import { ACCOUNT_ROLES, CREATE_ROLE, DELETE_ROLE, LIMIT_DEFAULTS, ROLE_LIMITS, ROLES, SET_ROLE_LIMITS, UPDATE_ROLE } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import State from '$lib/components/State.svelte';
   import { loader } from '$lib/tool/loader.svelte';
@@ -15,6 +17,8 @@
   import { fail, notify } from '$lib/tool/notices.svelte';
   import PermissionPicker from '$lib/admin/PermissionPicker.svelte';
   import { groupsFor } from '$lib/admin/permissions';
+  import RoleLimits from '$lib/admin/RoleLimits.svelte';
+  import { changed, toInput, toValues, valueProblem } from '$lib/admin/role-limits';
 
   const L = loader(async ({ fetch }) => {
     const [r, mine] = await Promise.all([
@@ -38,11 +42,19 @@
   let listed = $state<Record<string, boolean>>({});
   let saving = $state(false);
   let tried = $state(false);
+  // The role's limits: what the API said, and the boxes as typed. null while loading or when
+  // they couldn't be read (the rest of the role still saves).
+  let limits = $state<RoleLimitFieldsFragment[] | null>(null);
+  let limitsFailed = $state(false);
+  let limitValues = $state<Record<string, string>>({});
+  let limitsBefore: Record<string, string> = {};
+  let limitsFor = 0;
   const MAX_POS = 999_999;
   const userRole = $derived(editing?.builtIn === 'USER');
   const nameError = $derived(tried && !name.trim() ? 'Give it a name.' : null);
   const posOk = $derived(userRole || (Number.isInteger(position) && position >= 1 && position <= MAX_POS));
   const posError = $derived(tried && !posOk ? `Position 1 to ${count(MAX_POS)}.` : null);
+  const limitsOk = $derived(Object.values(limitValues).every((v) => !valueProblem(v)));
 
   const mine = $derived(new Set(session.me?.permissions ?? []));
   const sorted = $derived([...(roles ?? [])].sort((a, b) => b.position - a.position));
@@ -68,28 +80,47 @@
     position = role?.position ?? 10;
     picked = [...(role?.permissions ?? [])];
     shown = role?.public ?? false;
+    limits = null;
+    limitsFailed = false;
+    limitValues = {};
+    limitsBefore = {};
+    if (manager && role?.builtIn !== 'USER') void loadLimits(role);
     dialog.showModal();
+  }
+
+  async function loadLimits(role: RoleFieldsFragment | null) {
+    const mine = ++limitsFor;
+    try {
+      const got = role ? (await gql(ROLE_LIMITS, { id: role.id })).roleLimits : (await gql(LIMIT_DEFAULTS, {})).limitDefaults;
+      if (mine !== limitsFor) return;
+      limits = got;
+      limitValues = toValues(got);
+      limitsBefore = { ...limitValues };
+    } catch {
+      if (mine === limitsFor) limitsFailed = true;
+    }
   }
 
   async function save(e: SubmitEvent) {
     e.preventDefault();
     if (saving) return;
     tried = true;
-    if (!name.trim() || !posOk) return;
+    if (!name.trim() || !posOk || !limitsOk) return;
     saving = true;
     try {
+      let id: string;
       if (editing) {
-        await gql(UPDATE_ROLE, {
+        id = (await gql(UPDATE_ROLE, {
           id: editing.id,
           input: { name: name.trim(), description: description.trim(), position: userRole ? null : position, permissions: picked, public: shown },
-        });
-        notify(`${name.trim()} saved.`);
+        })).updateRole.id;
       } else {
-        await gql(CREATE_ROLE, {
+        id = (await gql(CREATE_ROLE, {
           input: { name: name.trim(), description: description.trim() || null, position, permissions: picked, public: shown },
-        });
-        notify(`${name.trim()} created.`);
+        })).createRole.id;
       }
+      if (limits && changed(limitsBefore, limitValues)) await gql(SET_ROLE_LIMITS, { id, limits: toInput(limitValues) });
+      notify(`${name.trim()} ${editing ? 'saved' : 'created'}.`);
       dialog.close();
       await load();
     } catch (err) {
@@ -208,6 +239,23 @@
         </div>
         <span class="ui-hint">Hover or focus a permission to see what it allows. A group’s box picks or clears the whole group.</span>
       </div>
+      {#if manager}
+        <div class="ui-field">
+          <span class="ui-label" id="limits-label">Limits</span>
+          {#if userRole}
+            <span class="ui-hint">Everyone gets the default limits. Give a role its own to raise or lower them for the people who hold it.</span>
+          {:else if limitsFailed}
+            <span class="ui-hint">Couldn’t load this role’s limits. The rest of the role still saves; try again to change them.</span>
+          {:else if !limits}
+            <span class="ui-hint">Loading limits…</span>
+          {:else}
+            <div role="group" aria-labelledby="limits-label">
+              <RoleLimits {limits} bind:values={limitValues} {tried} />
+            </div>
+            <span class="ui-hint">Empty keeps the default, shown in grey. Someone with several roles gets the highest of their roles’ limits.</span>
+          {/if}
+        </div>
+      {/if}
     </div>
     <footer>
       <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>

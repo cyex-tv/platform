@@ -1522,6 +1522,63 @@ pub struct UpdateRole {
     pub public: Option<bool>,
 }
 
+/// Which part of the site a limit covers, for grouping them on the role page.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+pub enum LimitGroup {
+    /// How often an account may call the API and search.
+    Requests,
+    /// Uploads an hour, and how many may wait for review.
+    Uploads,
+    /// Writes to your account: editors, cosmetics, sets, lists, settings, the shop, your data.
+    Account,
+}
+
+/// One per-account limit and a role's override of it (`roleLimits`, `limitDefaults`). An
+/// account's limit is the most generous override among its roles, else `default`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct RoleLimit {
+    /// `gql_account`, `uploads_per_hour`, `pending_emotes`, `editors`, `cosmetics`,
+    /// `set_clones`, `account_search`, `quick_search`, `heavy_reads`, `personal_lists`,
+    /// `emote_transfers`, `prefs`, `checkout`, `redeem` or `data_export`.
+    pub key: String,
+    pub group: LimitGroup,
+    /// What everyone gets without an override (set when the API starts).
+    pub default: i32,
+    /// The window the count is per, in seconds; null for `pending_emotes`, a cap on how many
+    /// wait at once.
+    pub window_seconds: Option<i32>,
+    /// The role's own count; null when it keeps the default.
+    pub value: Option<i32>,
+}
+
+/// One override for `setRoleLimits`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::InputObject))]
+#[cfg_attr(feature = "graphql", graphql(name = "RoleLimitInput"))]
+pub struct RoleLimitInput {
+    pub key: String,
+    /// 1 to 1,000,000; null keeps the default.
+    pub value: Option<i32>,
+}
+
+/// Where an account stands with uploads (`uploadQuota`): how many of its emotes wait for review
+/// and how many may, and its uploads this hour.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct UploadQuota {
+    /// The account uploads go to.
+    pub account_id: String,
+    /// Its emotes waiting for review, ones still being processed included.
+    pub pending: i32,
+    /// How many may wait at once; an upload at this many is refused (`too_many_pending`).
+    pub pending_max: i32,
+    /// Emotes it got in the last hour.
+    pub uploads_this_hour: i32,
+    pub uploads_per_hour: i32,
+}
+
 // Live updates (ADR 0005)
 
 /// What changed. On the event WebSocket these are written `set.emote_added` and so on.

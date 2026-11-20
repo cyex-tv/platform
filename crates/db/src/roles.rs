@@ -332,6 +332,49 @@ pub async fn members(conn: &mut PgConnection, role_id: Uuid) -> DbResult<Vec<Uui
     .await?)
 }
 
+/// A role's limit overrides: an object from limit key to count, empty when it has none.
+pub async fn limits(conn: &mut PgConnection, id: Uuid) -> DbResult<serde_json::Value> {
+    sqlx::query_scalar("SELECT limits FROM roles WHERE id = $1")
+        .bind(id)
+        .fetch_optional(conn)
+        .await?
+        .ok_or(DbError::NotFound)
+}
+
+/// Replaces a role's limit overrides (an object; the api checks keys and values).
+pub async fn set_limits(
+    conn: &mut PgConnection,
+    id: Uuid,
+    limits: &serde_json::Value,
+) -> DbResult<()> {
+    let done = sqlx::query("UPDATE roles SET limits = $2 WHERE id = $1")
+        .bind(id)
+        .bind(limits)
+        .execute(conn)
+        .await?;
+    if done.rows_affected() == 0 {
+        return Err(DbError::NotFound);
+    }
+    Ok(())
+}
+
+/// The limit overrides of every role an account holds that has any (assigned roles only: the
+/// built-in User role's limits are the defaults).
+pub async fn limit_overrides_of(
+    conn: &mut PgConnection,
+    account_id: Uuid,
+) -> DbResult<Vec<serde_json::Value>> {
+    Ok(sqlx::query_scalar(
+        "SELECT r.limits
+         FROM roles r
+         JOIN account_roles ar ON ar.role_id = r.id
+         WHERE ar.account_id = $1 AND r.limits <> '{}'::jsonb",
+    )
+    .bind(account_id)
+    .fetch_all(conn)
+    .await?)
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

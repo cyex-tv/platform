@@ -30,7 +30,8 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::catalog::permissions_of;
-use crate::errors::{bad, db_error, forbidden, limited, not_found, parse_id, sqlx_error};
+use crate::errors::{bad, db_error, forbidden, limited_as, not_found, parse_id, sqlx_error};
+use crate::limits::AccountLimit;
 use crate::read_cache::ANNOUNCEMENT_KEY;
 use crate::state::AppState;
 use crate::views;
@@ -460,9 +461,11 @@ fn prefs_view(p: &prefs::Prefs) -> Vec<NotificationPref> {
 }
 
 fn rate(state: &AppState, caller: &Caller) -> ApiResult<()> {
-    limited(
-        &state.limits.prefs,
+    limited_as(
+        state,
+        AccountLimit::Prefs,
         &ids::to_text(caller.account_id),
+        caller.account_id,
         "That's a lot of changes to your settings. Try again in a while.",
     )
 }

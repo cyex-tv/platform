@@ -32,6 +32,7 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::catalog::{db_error, forbidden, holds, not_found, parse_id};
+use crate::limits::AccountLimit;
 use crate::paddle::{self, PaddleError, SignatureError};
 use crate::state::AppState;
 use crate::views::time;
@@ -79,15 +80,18 @@ pub(crate) async fn require(
 
 /// Staff shop and code writes share the cosmetics writes limit (300 an hour per account).
 pub(crate) fn staff_rate_limited(state: &AppState, caller: &Caller) -> ApiResult<()> {
-    limited(&state.limits.cosmetics, caller)
+    limited(state, AccountLimit::Cosmetics, caller)
 }
 
-pub(crate) fn limited(
-    limiter: &cyex_tv_shared::ratelimit::Limiter,
-    caller: &Caller,
-) -> ApiResult<()> {
-    limiter
-        .check(&ids::to_text(caller.account_id))
+/// One use of the per-account `limit`, at what the caller's roles allow.
+pub(crate) fn limited(state: &AppState, limit: AccountLimit, caller: &Caller) -> ApiResult<()> {
+    state
+        .limits
+        .take(
+            limit,
+            &ids::to_text(caller.account_id),
+            Some(caller.account_id),
+        )
         .map_err(|_| {
             ApiError::new(
                 StatusCode::TOO_MANY_REQUESTS,
@@ -912,7 +916,7 @@ pub async fn start_checkout(
     recipient: Option<&Recipient>,
 ) -> ApiResult<Checkout> {
     let item_id = parse_id(item_id)?;
-    limited(&state.limits.checkout, caller)?;
+    limited(state, AccountLimit::Checkout, caller)?;
     let mut conn = acquire(state).await?;
     let item = db::get_item(&mut conn, item_id)
         .await

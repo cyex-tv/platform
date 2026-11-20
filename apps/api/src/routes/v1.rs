@@ -265,10 +265,11 @@ async fn capped_text(field: &mut Field<'_>, max: usize) -> ApiResult<String> {
         (status = 400, description = "`bad_name`, `bad_tag`, `too_many_tags` or `bad_form`.", body = ErrorBody),
         (status = 401, description = "`signed_out`.", body = ErrorBody),
         (status = 403, description = "`restricted` (you or the owner you upload for), `forbidden` (no `EMOTE_UPLOAD` there), or `bad_origin` for a cookie from another site.", body = ErrorBody),
+        (status = 409, description = "`too_many_pending`: the owner already has as many emotes waiting for review as it may (20 unless its roles say otherwise; `uploadQuota`).", body = ErrorBody),
         (status = 413, description = "`too_large`: over 8 MB, 1000×1000 px or 1000 frames.", body = ErrorBody),
         (status = 415, description = "`unsupported_format`: not PNG, APNG, GIF, WebP or JPEG (AVIF isn't taken yet).", body = ErrorBody),
         (status = 422, description = "`invalid_image` (doesn't decode) or `blocked`.", body = ErrorBody),
-        (status = 429, description = "`rate_limited`.", body = ErrorBody),
+        (status = 429, description = "`rate_limited`: the uploads an hour (20 unless the account's roles say otherwise) or the per-IP limit.", body = ErrorBody),
         (status = 503, description = "`unavailable`: storage isn't reachable.", body = ErrorBody)
     )
 )]

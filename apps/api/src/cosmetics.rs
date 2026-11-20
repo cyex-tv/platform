@@ -34,7 +34,8 @@ use uuid::Uuid;
 
 use crate::catalog::{LOOKUP_LIMIT, db_error, forbidden, holds, not_found, parse_id};
 use crate::editors::has_flag;
-use crate::errors::{bad, conflict, limited, sqlx_error};
+use crate::errors::{bad, conflict, limited_as, sqlx_error};
+use crate::limits::AccountLimit;
 use crate::state::AppState;
 use crate::upload::media_error;
 use crate::views::time;
@@ -73,9 +74,11 @@ async fn require(conn: &mut PgConnection, caller: &Caller, permission: &str) -> 
 
 /// Cosmetics writes per account (ADR 0015).
 fn rate_limited(state: &AppState, caller: &Caller) -> ApiResult<()> {
-    limited(
-        &state.limits.cosmetics,
+    limited_as(
+        state,
+        AccountLimit::Cosmetics,
         &ids::to_text(caller.account_id),
+        caller.account_id,
         "That's a lot of cosmetics changes. Try again in a while.",
     )
 }

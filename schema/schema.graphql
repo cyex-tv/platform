@@ -1423,6 +1423,24 @@ enum ImageFormat {
 }
 
 """
+Which part of the site a limit covers, for grouping them on the role page.
+"""
+enum LimitGroup {
+	"""
+	How often an account may call the API and search.
+	"""
+	REQUESTS
+	"""
+	Uploads an hour, and how many may wait for review.
+	"""
+	UPLOADS
+	"""
+	Writes to your account: editors, cosmetics, sets, lists, settings, the shop, your data.
+	"""
+	ACCOUNT
+}
+
+"""
 One login from a pasted list, and the account it names (none when it names no account, or
 two different ones on Twitch and Kick).
 """
@@ -1869,6 +1887,12 @@ type Mutation {
 	changed; the User role keeps position 0. Needs `roles.manage`. Audited.
 	"""
 	updateRole(id: String!, input: UpdateRoleInput!): Role!
+	"""
+	Set a role's limits: the overrides listed (a null value or a limit left out keeps the
+	default), for everyone who holds it. Only on a role you may edit, not the User or top
+	role. Needs `roles.manage`. Audited.
+	"""
+	setRoleLimits(id: String!, limits: [RoleLimitInput!]!): [RoleLimit!]!
 	"""
 	Delete a role below your own highest one that you don't hold; built-in roles stay.
 	Needs `roles.manage`. Audited.
@@ -2701,6 +2725,21 @@ type Query {
 	`roles.manage` or `roles.assign`. The top role is listed to the owners only.
 	"""
 	roles: [Role!]!
+	"""
+	Every per-account limit a role can change, with what everyone gets without one. Needs
+	`roles.manage`.
+	"""
+	limitDefaults: [RoleLimit!]!
+	"""
+	A role's limits: each per-account limit with its default and the role's override. An
+	account counts under the most generous override among its roles. Needs `roles.manage`.
+	"""
+	roleLimits(id: String!): [RoleLimit!]!
+	"""
+	Where uploads stand: how many emotes wait for review and how many may, and the uploads
+	this hour. Yours, or with `ownerId` an account you may upload for.
+	"""
+	uploadQuota(ownerId: String): UploadQuota!
 }
 
 """
@@ -2957,6 +2996,44 @@ type Role {
 	what it grants, and not the User or top role.
 	"""
 	assignable: Boolean!
+}
+
+"""
+One per-account limit and a role's override of it (`roleLimits`, `limitDefaults`). An
+account's limit is the most generous override among its roles, else `default`.
+"""
+type RoleLimit {
+	"""
+	`gql_account`, `uploads_per_hour`, `pending_emotes`, `editors`, `cosmetics`,
+	`set_clones`, `account_search`, `quick_search`, `heavy_reads`, `personal_lists`,
+	`emote_transfers`, `prefs`, `checkout`, `redeem` or `data_export`.
+	"""
+	key: String!
+	group: LimitGroup!
+	"""
+	What everyone gets without an override (set when the API starts).
+	"""
+	default: Int!
+	"""
+	The window the count is per, in seconds; null for `pending_emotes`, a cap on how many
+	wait at once.
+	"""
+	windowSeconds: Int
+	"""
+	The role's own count; null when it keeps the default.
+	"""
+	value: Int
+}
+
+"""
+One override for `setRoleLimits`.
+"""
+input RoleLimitInput {
+	key: String!
+	"""
+	1 to 1,000,000; null keeps the default.
+	"""
+	value: Int
 }
 
 type SearchResults {
@@ -3322,6 +3399,30 @@ input UpdateSetInput {
 	Personal sets can't be `PRIVATE`; the global set is always listed.
 	"""
 	visibility: SetVisibility
+}
+
+"""
+Where an account stands with uploads (`uploadQuota`): how many of its emotes wait for review
+and how many may, and its uploads this hour.
+"""
+type UploadQuota {
+	"""
+	The account uploads go to.
+	"""
+	accountId: String!
+	"""
+	Its emotes waiting for review, ones still being processed included.
+	"""
+	pending: Int!
+	"""
+	How many may wait at once; an upload at this many is refused (`too_many_pending`).
+	"""
+	pendingMax: Int!
+	"""
+	Emotes it got in the last hour.
+	"""
+	uploadsThisHour: Int!
+	uploadsPerHour: Int!
 }
 
 """

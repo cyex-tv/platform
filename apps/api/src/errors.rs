@@ -8,6 +8,7 @@ use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::ratelimit::Limiter;
 use uuid::Uuid;
 
+use crate::limits::AccountLimit;
 use crate::state::AppState;
 
 pub fn bad(code: &'static str, message: impl Into<String>) -> ApiError {
@@ -27,6 +28,21 @@ pub fn rate_limited(message: &str) -> ApiError {
 /// feature's own `message`.
 pub fn limited(limiter: &Limiter, key: &str, message: &str) -> ApiResult<()> {
     limiter.check(key).map_err(|_| rate_limited(message))
+}
+
+/// Counts one use of the per-account `limit` for `key`, at what `account`'s roles allow
+/// (`Limits::take`); over it is `429 rate_limited` with the feature's own `message`.
+pub fn limited_as(
+    state: &AppState,
+    limit: AccountLimit,
+    key: &str,
+    account: Uuid,
+    message: &str,
+) -> ApiResult<()> {
+    state
+        .limits
+        .take(limit, key, Some(account))
+        .map_err(|_| rate_limited(message))
 }
 
 pub fn sqlx_error(err: sqlx::Error) -> ApiError {

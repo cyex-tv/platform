@@ -26,7 +26,8 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::catalog::{db_error, forbidden, not_found, parse_id};
-use crate::errors::{bad, conflict, limited, sqlx_error};
+use crate::errors::{bad, conflict, limited_as, sqlx_error};
+use crate::limits::AccountLimit;
 use crate::moderation::{
     OWNER_RESTRICTED, YOU_RESTRICTED, announce, build, editor_of_owner, not_restricted, restricted,
     row,
@@ -38,9 +39,11 @@ use crate::views;
 pub const REQUEST_DAYS: i64 = 7;
 
 fn rate_limited(state: &AppState, caller: &Caller) -> ApiResult<()> {
-    limited(
-        &state.limits.emote_transfers,
+    limited_as(
+        state,
+        AccountLimit::EmoteTransfers,
         &ids::to_text(caller.account_id),
+        caller.account_id,
         "That's a lot of transfers. Try again in a while.",
     )
 }

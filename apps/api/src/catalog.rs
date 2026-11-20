@@ -962,8 +962,11 @@ pub async fn clone_set(
     let name = name.map(set_name).transpose()?;
     state
         .limits
-        .set_clones
-        .check(&ids::to_text(caller.account_id))
+        .take(
+            crate::limits::AccountLimit::SetClones,
+            &ids::to_text(caller.account_id),
+            Some(caller.account_id),
+        )
         .map_err(|_| rate_limited("That's a lot of copied sets. Try again in a while."))?;
     let mut conn = conn(state).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
