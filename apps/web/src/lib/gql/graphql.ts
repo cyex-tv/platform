@@ -1000,8 +1000,8 @@ export type Mutation = {
   /**
    * A copy of everything about your account, as JSON text (`format`, `version`, `account`,
    * `identities`, `sessions`, `channels`, `emotes`, `sets`, `set_editors`, `account_editors`,
-   * `editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`). 5 an hour
-   * (`rate_limited`). Audited.
+   * `editor_of`, `cosmetics`, `roles`, `reports_filed`, `notifications`, `orders`). Website
+   * only (`website_only` with an app token). 5 an hour (`rate_limited`). Audited.
    */
   exportMyData: Scalars['String']['output'];
   /** Give an account a badge or paint, with a reason. Needs `cosmetics.grant`. Audited. */
@@ -1075,7 +1075,10 @@ export type Mutation = {
    * Needs `cosmetics.grant`. Audited.
    */
   revokeCosmetic: Scalars['Boolean']['output'];
-  /** Sign out everywhere but here. Returns how many sessions ended. */
+  /**
+   * Sign out everywhere but here. Returns how many sessions ended. Website only
+   * (`website_only` with an app token).
+   */
   revokeOtherSessions: Scalars['Int']['output'];
   /**
    * Sign out one of your sessions, the current one too (then the cookie is cleared). False
@@ -1096,7 +1099,7 @@ export type Mutation = {
   setDisplayPlatform: Me;
   /**
    * Sign out everywhere, here too: every site and app session ends and the cookie is cleared.
-   * Returns how many sessions ended.
+   * Returns how many sessions ended. With an app token, only that app session ends.
    */
   signOutEverywhere: Scalars['Int']['output'];
   /**

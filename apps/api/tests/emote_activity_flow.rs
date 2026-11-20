@@ -265,7 +265,7 @@ async fn unlisted_and_leaving_emotes_in_feeds() {
     let alice = w.user("5101").await;
     let bob = w.user("5102").await;
     let carol = w.user("5103").await;
-    let bobs = w.set(&bob, "Bobs", "PUBLIC").await;
+    let bobs = w.set(&bob, "Bobs", "LISTED").await;
     let make = |owner: Uuid, name: &'static str, unlisted: bool| {
         let pool = w.db.pool.clone();
         async move {
