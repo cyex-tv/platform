@@ -26,6 +26,7 @@ pub mod prefs;
 pub mod privacy;
 pub mod reads;
 pub mod reports;
+pub mod review;
 pub mod roles;
 pub mod search;
 pub mod sessions;

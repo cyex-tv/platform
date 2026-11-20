@@ -547,6 +547,27 @@ type Badge {
 }
 
 """
+One item a batch left alone.
+"""
+type BatchFailure {
+	id: String!
+	"""
+	A machine-readable reason, as an error's `code` (`not_pending`, `not_open`, `not_found`).
+	"""
+	code: String!
+	message: String!
+}
+
+"""
+What a batch did: the IDs it changed, and the ones it left alone with why. Nothing is half
+done: the changes commit together.
+"""
+type BatchOutcome {
+	done: [String!]!
+	failed: [BatchFailure!]!
+}
+
+"""
 The roles cyex.tv comes with (ADR 0010).
 """
 enum BuiltInRole {
@@ -815,6 +836,21 @@ A new batch and its codes in plain text. This is the only time they are shown.
 type CreatedCodeBatch {
 	batch: CodeBatch!
 	codes: [String!]!
+}
+
+"""
+Another emote that may be the same as one in the review queue.
+"""
+type DuplicateCandidate {
+	emote: Emote!
+	"""
+	Made from the very same file (the same sha256).
+	"""
+	sameFile: Boolean!
+	"""
+	How alike the names are, 0 to 1.
+	"""
+	similarity: Float!
 }
 
 """
@@ -1336,6 +1372,22 @@ enum ImageFormat {
 }
 
 """
+One login from a pasted list, and the account it names (none when it names no account, or
+two different ones on Twitch and Kick).
+"""
+type LoginMatch {
+	"""
+	The login as it was asked for, trimmed.
+	"""
+	login: String!
+	account: AccountSummary
+	"""
+	Why there is no account: `not_found`, `ambiguous` or `bad_login`.
+	"""
+	problem: String
+}
+
+"""
 The signed-in account.
 """
 type Me {
@@ -1598,6 +1650,23 @@ type Mutation {
 	Reject a pending emote with a reason. Needs `emotes.review`. Audited.
 	"""
 	rejectEmote(id: String!, reason: String!): Emote!
+	"""
+	Approve (optionally as `visibility`) or reject (with `reason`) up to 100 pending emotes in
+	one step. All of it commits together, with one audit row and one notice per emote; emotes
+	that aren't pending are left alone and listed in `failed`. Needs `emotes.review`.
+	"""
+	reviewEmotes(ids: [String!]!, verdict: ReviewVerdict!, visibility: EmoteVisibility, reason: String): BatchOutcome!
+	"""
+	Dismiss up to 100 open reports with one optional note, in one step, one audit row each.
+	Reports already resolved are listed in `failed`. Takedowns stay one at a time
+	(`resolveReport`). Needs `emotes.review`, `emotes.takedown` or `reports.manage`.
+	"""
+	dismissReports(ids: [String!]!, note: String): BatchOutcome!
+	"""
+	Replace the review queue's ready reject reasons (0 to 12, each 1 to 200 characters, in
+	order). Needs `review.settings`. Audited.
+	"""
+	setReviewReasons(reasons: [String!]!): [String!]!
 	"""
 	Report an emote you can see, with a reason. At most 10 an hour, one open report per emote.
 	"""
@@ -2422,6 +2491,29 @@ type Query {
 	"""
 	reviewQueue(page: Int, perPage: Int, filter: ReviewQueueFilter): ReviewQueue!
 	"""
+	Emotes that may duplicate one in the review queue: the same file (sha256) first, then
+	similar names, closest first; at most 12, any state but deleted. Needs `emotes.review`.
+	"""
+	emoteDuplicates(emoteId: String!): [DuplicateCandidate!]!
+	"""
+	Public emotes already made from the file with this sha256 (64 hex digits), oldest first,
+	at most 3: the upload form asks before sending, so it can say "looks like" (it never
+	blocks). Signed in.
+	"""
+	emotesWithSameFile(sha256: String!): [Emote!]!
+	"""
+	The ready reject reasons the review queue offers, in order. Needs `emotes.review` or
+	`review.settings`.
+	"""
+	reviewReasons: [String!]!
+	"""
+	Accounts for up to 100 pasted logins (`name`, `@name`, `twitch:name` or `kick:name`), in
+	order, each with the account or why there is none (`not_found`, `ambiguous`,
+	`bad_login`). For grants to many at once: needs `cosmetics.grant`, `roles.assign`,
+	`roles.manage` or `users.view`.
+	"""
+	accountsByLogin(logins: [String!]!): [LoginMatch!]!
+	"""
 	Reviewers' notes on an emote, newest first (the latest 200). Needs `emotes.review`.
 	"""
 	emoteNotes(emoteId: String!): [EmoteNote!]!
@@ -2740,6 +2832,14 @@ enum ReviewTab {
 	Approved or rejected by a reviewer.
 	"""
 	RESOLVED
+}
+
+"""
+What a batch review does to every emote in it.
+"""
+enum ReviewVerdict {
+	APPROVE
+	REJECT
 }
 
 type Role {

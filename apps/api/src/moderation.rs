@@ -17,8 +17,9 @@ use cyex_tv_db::emotes::{self, EmotePatch};
 use cyex_tv_db::{accounts, audit, ids, reads, sets, staff};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
-    AuditEntry, EditorPermission, Emote, EmoteNote, EmotePage, EmoteState, EmoteVisibility,
-    EventType, ReviewCounts, ReviewQueue, ReviewQueueFilter, ReviewSort, ReviewTab, UpdateEmote,
+    AuditEntry, BatchFailure, BatchOutcome, EditorPermission, Emote, EmoteNote, EmotePage,
+    EmoteState, EmoteVisibility, EventType, ReviewCounts, ReviewQueue, ReviewQueueFilter,
+    ReviewSort, ReviewTab, ReviewVerdict, UpdateEmote,
 };
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
@@ -417,8 +418,101 @@ async fn review(
     if !holds(&mut tx, caller, permissions::EMOTES_REVIEW).await? {
         return Err(forbidden("This needs emotes.review."));
     }
-    let before = row(&mut tx, id).await?.ok_or_else(not_found)?;
-    if emotes::review(&mut tx, id, to, caller.account_id, why.as_deref())
+    review_in(&mut tx, caller, id, to, why.as_deref(), visibility).await?;
+    tx.commit().await.map_err(sqlx_error)?;
+
+    let after = row(&mut conn, id).await?.ok_or_else(not_found)?;
+    build(state, &mut conn, &after).await
+}
+
+/// The most emotes one batch review takes.
+pub const BATCH_MAX: usize = 100;
+
+/// Approves (optionally as `visibility`) or rejects (with `why`) up to [`BATCH_MAX`] emotes in
+/// one transaction, each with its own audit row and notice as a single verdict has. Emotes that
+/// aren't pending (or don't exist) are left alone and listed in `failed`; anything else stops
+/// the whole batch. Needs `emotes.review`.
+pub async fn review_batch(
+    state: &AppState,
+    caller: &Caller,
+    raw_ids: &[String],
+    verdict: ReviewVerdict,
+    visibility: Option<EmoteVisibility>,
+    why: Option<&str>,
+) -> ApiResult<BatchOutcome> {
+    let wanted = batch_ids(raw_ids)?;
+    let (to, why) = match verdict {
+        ReviewVerdict::Approve => (EmoteState::Approved, None),
+        ReviewVerdict::Reject => (EmoteState::Rejected, Some(reason(why.unwrap_or_default())?)),
+    };
+    if to == EmoteState::Rejected && visibility.is_some() {
+        return Err(bad(
+            "bad_visibility",
+            "A rejection doesn't take a visibility.",
+        ));
+    }
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    if !holds(&mut tx, caller, permissions::EMOTES_REVIEW).await? {
+        return Err(forbidden("This needs emotes.review."));
+    }
+    let mut out = BatchOutcome::default();
+    for (raw, id) in wanted {
+        let Some(id) = id else {
+            out.failed.push(batch_failure(&raw, &not_found()));
+            continue;
+        };
+        match review_in(&mut tx, caller, id, to, why.as_deref(), visibility).await {
+            Ok(()) => out.done.push(ids::to_text(id)),
+            Err(err) if err.code == "not_pending" || err.code == "not_found" => {
+                out.failed.push(batch_failure(&raw, &err));
+            }
+            Err(err) => return Err(err),
+        }
+    }
+    tx.commit().await.map_err(sqlx_error)?;
+    Ok(out)
+}
+
+/// The IDs of a batch, trimmed and without repeats, each parsed (`None` when it isn't an ID).
+/// Refuses an empty batch and one over [`BATCH_MAX`].
+pub(crate) fn batch_ids(raw: &[String]) -> ApiResult<Vec<(String, Option<Uuid>)>> {
+    let mut seen = BTreeSet::new();
+    let list: Vec<(String, Option<Uuid>)> = raw
+        .iter()
+        .map(|r| r.trim().to_owned())
+        .filter(|r| seen.insert(r.clone()))
+        .map(|r| {
+            let id = ids::from_text(&r);
+            (r, id)
+        })
+        .collect();
+    if list.is_empty() || list.len() > BATCH_MAX {
+        return Err(bad("bad_batch", "Pick 1 to 100 at a time."));
+    }
+    Ok(list)
+}
+
+pub(crate) fn batch_failure(id: &str, err: &ApiError) -> BatchFailure {
+    BatchFailure {
+        id: id.to_owned(),
+        code: err.code.to_string(),
+        message: err.message.clone(),
+    }
+}
+
+/// One verdict inside the caller's transaction: the state, the visibility, its audit row, the
+/// owner's notice and the set events. `not_found` / `not_pending` before anything is written.
+async fn review_in(
+    conn: &mut PgConnection,
+    caller: &Caller,
+    id: Uuid,
+    to: EmoteState,
+    why: Option<&str>,
+    visibility: Option<EmoteVisibility>,
+) -> ApiResult<()> {
+    let before = row(&mut *conn, id).await?.ok_or_else(not_found)?;
+    if emotes::review(&mut *conn, id, to, caller.account_id, why)
         .await
         .map_err(db_error)?
         .is_none()
@@ -435,7 +529,7 @@ async fn review(
     if now != was {
         let (private, unlisted) = now.flags();
         emotes::update(
-            &mut tx,
+            &mut *conn,
             id,
             &EmotePatch {
                 private: Some(private),
@@ -453,7 +547,7 @@ async fn review(
     // An approval is on the owner's public activity feed (as "uploaded"); the reviewer and the
     // reason are not.
     audit::write_for(
-        &mut tx,
+        &mut *conn,
         &audit::NewEntry {
             actor: Some(caller.account_id),
             action,
@@ -477,16 +571,13 @@ async fn review(
                 json!({ "emote_id": ids::to_text(id), "name": before.name, "reason": why }),
             ),
         };
-        crate::account::notify(&mut tx, owner, kind, &payload).await?;
+        crate::account::notify(&mut *conn, owner, kind, &payload).await?;
     }
     // Sets that held it pending show it now; a rejected one stays hidden, so nothing to tell.
     if to == EmoteState::Approved {
-        announce(&mut tx, id, EventType::EmoteUpdated).await?;
+        announce(&mut *conn, id, EventType::EmoteUpdated).await?;
     }
-    tx.commit().await.map_err(sqlx_error)?;
-
-    let after = row(&mut conn, id).await?.ok_or_else(not_found)?;
-    build(state, &mut conn, &after).await
+    Ok(())
 }
 
 /// Approves a pending emote; with `visibility`, also makes it public, unlisted or private.

@@ -23,14 +23,15 @@ use cyex_tv_shared::model::TrendingWindow;
 use cyex_tv_shared::model::{
     AccountEditor, AccountReports, AccountResults, AccountSession, AccountStatus, AccountSummary,
     ActivityEntry, ActivityPage, AddAccountEditor, AddSetEmote, AdminAccount, AuditEntry, Badge,
-    Channel, ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge, CreateRole,
-    CreateSet, EditableChannel, EditedAccount, EditorPermission, Emote, EmoteFlag, EmoteNote,
-    EmotePage, EmoteSet, EmoteSort, EmoteTransferRequest, EmoteTrending, EmoteVisibility,
-    Entitlement, EntitlementPage, Event, GrantCosmetic, HiddenCreator, HiddenEmote, Identity, Me,
-    Notification, OwnedCosmetics, Paint, PaintInput, PendingDeletion, PersonalSetEntry, Platform,
-    QuickSearch, Report, ReportAction, ReportQueue, ReviewQueue, ReviewQueueFilter, Role,
-    SearchResults, SetEmote, SetEmotePage, SetSummary, SetVisibility, UpdateBadge,
-    UpdateChannelSettings, UpdateEmote, UpdateRole, UpdateSet, UpdateSetEmote, UserCosmetics,
+    BatchOutcome, Channel, ClonedSet, CosmeticCatalog, CosmeticImage, CosmeticKind, CreateBadge,
+    CreateRole, CreateSet, DuplicateCandidate, EditableChannel, EditedAccount, EditorPermission,
+    Emote, EmoteFlag, EmoteNote, EmotePage, EmoteSet, EmoteSort, EmoteTransferRequest,
+    EmoteTrending, EmoteVisibility, Entitlement, EntitlementPage, Event, GrantCosmetic,
+    HiddenCreator, HiddenEmote, Identity, LoginMatch, Me, Notification, OwnedCosmetics, Paint,
+    PaintInput, PendingDeletion, PersonalSetEntry, Platform, QuickSearch, Report, ReportAction,
+    ReportQueue, ReviewQueue, ReviewQueueFilter, ReviewVerdict, Role, SearchResults, SetEmote,
+    SetEmotePage, SetSummary, SetVisibility, UpdateBadge, UpdateChannelSettings, UpdateEmote,
+    UpdateRole, UpdateSet, UpdateSetEmote, UserCosmetics,
 };
 use cyex_tv_shared::model::{
     Checkout, CodeBatch, CodeBatchInput, CodeBatchPage, CreatedCodeBatch, Order, OrderPage,
@@ -45,7 +46,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use crate::state::AppState;
 use crate::{
     abuse, account, activity, admin, catalog, codes, cosmetics, editors, moderation, personal,
-    search, shop, site, staff, transfers,
+    review, search, shop, site, staff, transfers,
 };
 use cyex_tv_shared::model::{
     AccountCollection, Announcement, AnnouncementInput, NotificationPref, NotificationPrefInput,
@@ -980,6 +981,52 @@ impl Query {
             .map_err(api_error)
     }
 
+    /// Emotes that may duplicate one in the review queue: the same file (sha256) first, then
+    /// similar names, closest first; at most 12, any state but deleted. Needs `emotes.review`.
+    async fn emote_duplicates(
+        &self,
+        ctx: &Context<'_>,
+        emote_id: String,
+    ) -> Result<Vec<DuplicateCandidate>> {
+        let caller = caller(ctx)?;
+        review::duplicates(state(ctx), caller, &emote_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Public emotes already made from the file with this sha256 (64 hex digits), oldest first,
+    /// at most 3: the upload form asks before sending, so it can say "looks like" (it never
+    /// blocks). Signed in.
+    async fn emotes_with_same_file(&self, ctx: &Context<'_>, sha256: String) -> Result<Vec<Emote>> {
+        caller(ctx)?;
+        heavy_read(ctx)?;
+        review::same_file(state(ctx), &sha256)
+            .await
+            .map_err(api_error)
+    }
+
+    /// The ready reject reasons the review queue offers, in order. Needs `emotes.review` or
+    /// `review.settings`.
+    async fn review_reasons(&self, ctx: &Context<'_>) -> Result<Vec<String>> {
+        let caller = caller(ctx)?;
+        review::reasons(state(ctx), caller).await.map_err(api_error)
+    }
+
+    /// Accounts for up to 100 pasted logins (`name`, `@name`, `twitch:name` or `kick:name`), in
+    /// order, each with the account or why there is none (`not_found`, `ambiguous`,
+    /// `bad_login`). For grants to many at once: needs `cosmetics.grant`, `roles.assign`,
+    /// `roles.manage` or `users.view`.
+    async fn accounts_by_login(
+        &self,
+        ctx: &Context<'_>,
+        logins: Vec<String>,
+    ) -> Result<Vec<LoginMatch>> {
+        let caller = caller(ctx)?;
+        review::accounts_by_login(state(ctx), caller, &logins)
+            .await
+            .map_err(api_error)
+    }
+
     /// Reviewers' notes on an emote, newest first (the latest 200). Needs `emotes.review`.
     async fn emote_notes(&self, ctx: &Context<'_>, emote_id: String) -> Result<Vec<EmoteNote>> {
         let caller = caller(ctx)?;
@@ -1879,6 +1926,58 @@ impl Mutation {
     async fn reject_emote(&self, ctx: &Context<'_>, id: String, reason: String) -> Result<Emote> {
         let caller = caller(ctx)?;
         moderation::reject(state(ctx), caller, &id, &reason)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Approve (optionally as `visibility`) or reject (with `reason`) up to 100 pending emotes in
+    /// one step. All of it commits together, with one audit row and one notice per emote; emotes
+    /// that aren't pending are left alone and listed in `failed`. Needs `emotes.review`.
+    async fn review_emotes(
+        &self,
+        ctx: &Context<'_>,
+        ids: Vec<String>,
+        verdict: ReviewVerdict,
+        visibility: Option<EmoteVisibility>,
+        reason: Option<String>,
+    ) -> Result<BatchOutcome> {
+        let caller = caller(ctx)?;
+        moderation::review_batch(
+            state(ctx),
+            caller,
+            &ids,
+            verdict,
+            visibility,
+            reason.as_deref(),
+        )
+        .await
+        .map_err(api_error)
+    }
+
+    /// Dismiss up to 100 open reports with one optional note, in one step, one audit row each.
+    /// Reports already resolved are listed in `failed`. Takedowns stay one at a time
+    /// (`resolveReport`). Needs `emotes.review`, `emotes.takedown` or `reports.manage`.
+    async fn dismiss_reports(
+        &self,
+        ctx: &Context<'_>,
+        ids: Vec<String>,
+        note: Option<String>,
+    ) -> Result<BatchOutcome> {
+        let caller = caller(ctx)?;
+        abuse::dismiss_many(state(ctx), caller, &ids, note.as_deref())
+            .await
+            .map_err(api_error)
+    }
+
+    /// Replace the review queue's ready reject reasons (0 to 12, each 1 to 200 characters, in
+    /// order). Needs `review.settings`. Audited.
+    async fn set_review_reasons(
+        &self,
+        ctx: &Context<'_>,
+        reasons: Vec<String>,
+    ) -> Result<Vec<String>> {
+        let caller = caller(ctx)?;
+        review::set_reasons(state(ctx), caller, &reasons)
             .await
             .map_err(api_error)
     }

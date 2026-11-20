@@ -130,6 +130,7 @@ function stringFor(name: string): string {
   if (n === 'action') return 'emote.approved';
   if (n === 'currency') return 'USD';
   if (n === 'email') return 'mock@example.test';
+  if (n === 'sha256') return 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
   return 'mock';
 }
 function idFor(name: string): string | undefined {

@@ -123,3 +123,26 @@ export function approveFailure(err: unknown, name: string): string {
   const why = err instanceof Error && err.message ? err.message : 'That didn’t work.';
   return `${name} wasn’t approved. ${why}`;
 }
+
+type Held = { id: string; visibility: string };
+type QueueView<T extends Held> = { items: T[]; total: number; counts: { public: number; limited: number } };
+
+/**
+ * The queue as the page shows it while approvals wait out their undo time: the server still has
+ * those uploads pending (nothing was sent yet), so every load brings them back. They are left out
+ * of the cards, and taken off the tab counts (by the visibility they had) and off the total when
+ * they belong to the tab shown. `tab` is the API's (PENDING, PUBLIC, LIMITED or RESOLVED).
+ */
+export function withheld<T extends Held>(data: QueueView<T> | null | undefined, held: readonly Held[], tab: string): QueueView<T> {
+  if (!data) return { items: [], total: 0, counts: { public: 0, limited: 0 } };
+  if (!held.length || tab === 'RESOLVED') return data;
+  const ids = new Set(held.map((e) => e.id));
+  const pub = held.filter((e) => e.visibility === 'PUBLIC').length;
+  const lim = held.length - pub;
+  const inTab = tab === 'PUBLIC' ? pub : tab === 'LIMITED' ? lim : held.length;
+  return {
+    items: data.items.filter((e) => !ids.has(e.id)),
+    total: Math.max(0, data.total - inTab),
+    counts: { public: Math.max(0, data.counts.public - pub), limited: Math.max(0, data.counts.limited - lim) },
+  };
+}

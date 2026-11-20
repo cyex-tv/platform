@@ -1,5 +1,5 @@
 import { describe as group, expect, it } from 'vitest';
-import { after, approveFailure, describe, kindOf, sizes, step } from './queue';
+import { after, approveFailure, describe, kindOf, sizes, step, withheld } from './queue';
 
 const entry = (action: string, before: unknown = null, afterJson: unknown = null) => ({
   id: 'x',
@@ -69,5 +69,27 @@ group('approveFailure', () => {
   });
   it('says a timeout may have gone through', () => {
     expect(approveFailure(Object.assign(new Error('x'), { code: 'timeout' }), 'Wave')).toMatch(/Wave may have been approved: check the queue before trying again/);
+  });
+});
+
+group('approvals waiting to be sent', () => {
+  const card = (id: string, visibility = 'PUBLIC') => ({ id, visibility });
+  const data = { items: [card('x'), card('y'), card('z', 'UNLISTED')], total: 3, counts: { public: 2, limited: 1 } };
+
+  it('a reload brings nothing back that is still waiting, and the counts leave it out', () => {
+    // X and Y approved; X undone: only Y is waiting.
+    const view = withheld(data, [card('y')], 'PENDING');
+    expect(view.items.map((e) => e.id)).toEqual(['x', 'z']);
+    expect(view.total).toBe(2);
+    expect(view.counts).toEqual({ public: 1, limited: 1 });
+  });
+  it('the total drops only for what belongs to the tab shown', () => {
+    expect(withheld(data, [card('z', 'UNLISTED')], 'PUBLIC').total).toBe(3);
+    expect(withheld(data, [card('z', 'UNLISTED')], 'LIMITED').total).toBe(2);
+    expect(withheld(data, [card('y')], 'RESOLVED')).toBe(data);
+  });
+  it('nothing waiting, or nothing loaded', () => {
+    expect(withheld(data, [], 'PENDING')).toBe(data);
+    expect(withheld(null, [card('y')], 'PENDING')).toEqual({ items: [], total: 0, counts: { public: 0, limited: 0 } });
   });
 });

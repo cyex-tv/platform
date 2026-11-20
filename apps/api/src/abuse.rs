@@ -26,9 +26,9 @@ use cyex_tv_db::{
 };
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
-    AccountReports, AccountStatus, AdminAccount, Emote, EmoteState, EventType, Notification,
-    Report, ReportAction, ReportQueue, ReportState, Restriction, RestrictionInput, RestrictionKind,
-    TransferRequestState,
+    AccountReports, AccountStatus, AdminAccount, BatchOutcome, Emote, EmoteState, EventType,
+    Notification, Report, ReportAction, ReportQueue, ReportState, Restriction, RestrictionInput,
+    RestrictionKind, TransferRequestState,
 };
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
@@ -293,6 +293,61 @@ pub async fn resolve(
             report_view(state, &mut conn, &done).await
         }
     }
+}
+
+/// Dismisses up to 100 open reports with one note, in one transaction, each with its own
+/// `report.dismissed` audit row as a single dismissal has. Reports already resolved (or unknown)
+/// are left alone and listed in `failed`. Takedowns stay one at a time. Needs `emotes.review`,
+/// `emotes.takedown` or `reports.manage`.
+pub async fn dismiss_many(
+    state: &AppState,
+    caller: &Caller,
+    raw_ids: &[String],
+    note: Option<&str>,
+) -> ApiResult<BatchOutcome> {
+    let wanted = crate::moderation::batch_ids(raw_ids)?;
+    let note = note
+        .map(str::trim)
+        .filter(|n| !n.is_empty())
+        .map(|n| text(n, "note"))
+        .transpose()?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    moderator(&mut tx, caller).await?;
+    let mut out = BatchOutcome::default();
+    for (raw, id) in wanted {
+        let Some(id) = id else {
+            out.failed
+                .push(crate::moderation::batch_failure(&raw, &not_found()));
+            continue;
+        };
+        let Some(done) =
+            reports::resolve(&mut tx, id, "dismissed", caller.account_id, note.as_deref())
+                .await
+                .map_err(db_error)?
+        else {
+            let err = match reports::get(&mut tx, id).await.map_err(db_error)? {
+                Some(_) => conflict("not_open", "That report was already resolved."),
+                None => not_found(),
+            };
+            out.failed
+                .push(crate::moderation::batch_failure(&raw, &err));
+            continue;
+        };
+        write_audit(
+            &mut tx,
+            caller,
+            "report.dismissed",
+            "report",
+            &ids::to_text(id),
+            None,
+            Some(json!({ "emote_id": ids::to_text(done.emote_id), "note": note, "batch": true })),
+        )
+        .await?;
+        out.done.push(ids::to_text(id));
+    }
+    tx.commit().await.map_err(sqlx_error)?;
+    Ok(out)
 }
 
 // Takedown

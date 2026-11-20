@@ -522,3 +522,74 @@ pub async fn emote_channels(
     .fetch_all(conn)
     .await?)
 }
+
+/// How close a name has to be (pg_trgm similarity, 0 to 1) to count as a possible duplicate.
+pub const DUPLICATE_NAME_SIMILARITY: f32 = 0.5;
+
+/// Another emote that may be the same as the one under review.
+#[derive(Clone, Debug, PartialEq, FromRow)]
+pub struct DuplicateHit {
+    pub id: Uuid,
+    /// Made from the very same file (the same sha256).
+    pub same_file: bool,
+    /// How alike the names are, 0 to 1 (1 when they only differ in case).
+    pub similarity: f32,
+}
+
+/// Emotes that may duplicate `id`: the same file first, then names at least
+/// [`DUPLICATE_NAME_SIMILARITY`] alike, closest first. Any state but deleted, never `id` itself.
+/// Two index scans (`emotes_file_id`, `emotes_name_trgm`), so it costs the same on a big table.
+pub async fn duplicates(
+    conn: &mut PgConnection,
+    id: Uuid,
+    limit: i64,
+) -> DbResult<Vec<DuplicateHit>> {
+    Ok(sqlx::query_as(
+        "WITH me AS (SELECT id, name, file_id FROM emotes WHERE id = $1),
+         hits AS (
+             SELECT e.id FROM emotes e, me
+             WHERE me.file_id IS NOT NULL AND e.file_id = me.file_id
+               AND e.id <> me.id AND e.deleted_at IS NULL
+             UNION
+             SELECT e.id FROM emotes e, me
+             WHERE e.name % me.name AND e.id <> me.id AND e.deleted_at IS NULL
+         )
+         SELECT e.id,
+                (me.file_id IS NOT NULL AND e.file_id IS NOT DISTINCT FROM me.file_id) AS same_file,
+                CASE WHEN lower(e.name) = lower(me.name) THEN 1::real
+                     ELSE similarity(e.name, me.name) END AS similarity
+         FROM hits h JOIN emotes e ON e.id = h.id, me
+         WHERE (me.file_id IS NOT NULL AND e.file_id IS NOT DISTINCT FROM me.file_id)
+            OR lower(e.name) = lower(me.name)
+            OR similarity(e.name, me.name) >= $3
+         ORDER BY 2 DESC, 3 DESC, e.created_at, e.id
+         LIMIT $2",
+    )
+    .bind(id)
+    .bind(limit)
+    .bind(DUPLICATE_NAME_SIMILARITY)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// Public emotes made from the file with this sha256: listed by the rule every emote search
+/// shares ([`crate::search::LISTED_EMOTE`]), so the uploader is never told about an emote search
+/// wouldn't show. Oldest first.
+pub async fn public_by_sha256(
+    conn: &mut PgConnection,
+    sha256: &[u8],
+    limit: i64,
+) -> DbResult<Vec<Uuid>> {
+    Ok(sqlx::query_scalar(&format!(
+        "SELECT e.id FROM files f
+         JOIN emotes e ON e.file_id = f.id
+         WHERE f.sha256 = $1 AND e.owner_account_id IS NOT NULL AND {}
+         ORDER BY e.created_at, e.id
+         LIMIT $2",
+        crate::search::LISTED_EMOTE
+    ))
+    .bind(sha256)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
+}
