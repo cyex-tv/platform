@@ -292,14 +292,12 @@ async fn a_long_queue_is_worked_through_in_rounds() {
         .await
         .unwrap();
     add(c, s, &[a]).await;
-    // Another connection's add, queued behind them: counted in the second round.
-    let mut other = db.conn().await;
-    let o = emote(&mut other, creator, "Omega").await;
-    add(&mut other, s, &[o]).await;
+    // Another add, queued behind them: counted in the second round.
+    let o = emote(c, creator, "Omega").await;
+    add(c, s, &[o]).await;
     assert_eq!(channel_counts::refresh_queued(c).await.unwrap(), 2);
     assert_eq!(channel_counts::queued(c).await.unwrap(), 0);
     let got = reads::channel_counts(c, &[a, o]).await.unwrap();
     assert_eq!((n(&got, a), n(&got, o)), (1, 1));
-    drop(other);
     db.close().await;
 }
