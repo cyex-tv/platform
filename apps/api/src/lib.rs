@@ -13,6 +13,7 @@ pub mod cosmetics;
 pub mod editors;
 pub mod errors;
 pub mod gql;
+pub mod idempotency;
 pub mod limits;
 pub mod moderation;
 pub mod paddle;

@@ -1805,6 +1805,7 @@ async fn every_reference_to_an_account_is_handled_by_erase() {
         ("reports", "reporter_id", "set to NULL"),
         ("oauth_states", "link_account_id", "deleted"),
         ("app_auth_codes", "account_id", "deleted"),
+        ("idempotency_keys", "account_id", "deleted"),
         (
             "emote_transfer_requests",
             "from_account_id",
