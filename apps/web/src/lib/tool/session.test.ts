@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const gql = vi.fn();
-vi.mock('$lib/api', () => ({ gql: (...a: unknown[]) => gql(...a) }));
+vi.mock('$lib/api', () => ({ gql: (...a: unknown[]) => gql(...a), onSignedOut: () => () => {} }));
 
 const { forgetMe, isAdmin, loadMe, session } = await import('./session.svelte');
 

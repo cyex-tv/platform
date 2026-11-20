@@ -36,6 +36,16 @@ export function closedRequest(state: string | null | undefined): string | null {
   }
 }
 
+/**
+ * Whether a failed Accept or Decline means the request is closed for good (answered, withdrawn,
+ * expired, gone, or not the reader's to answer). A dropped connection, a timeout, a rate limit or a
+ * signed-out session says nothing about the request: its buttons stay so it can be tried again.
+ */
+export function requestGone(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  return code === 'not_pending' || code === 'not_found' || code === 'forbidden';
+}
+
 /** The payload as an object, or an empty one when it isn't JSON or isn't an object. */
 export function parsePayload(payload: string | null | undefined): Record<string, unknown> {
   if (typeof payload !== 'string' || !payload) return {};
