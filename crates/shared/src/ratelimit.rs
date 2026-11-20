@@ -61,7 +61,11 @@ impl Limiter {
 
     /// Takes one token for `key`. `Err` holds how long until one is free.
     pub fn check(&self, key: &str) -> Result<(), Duration> {
-        let now = Instant::now();
+        self.check_at(key, Instant::now())
+    }
+
+    /// `check` with the clock passed in, so tests can advance time without sleeping.
+    fn check_at(&self, key: &str, now: Instant) -> Result<(), Duration> {
         let burst = f64::from(self.rate.burst);
         let per_token = self.per_token();
         let mut buckets = self.buckets.lock().unwrap_or_else(PoisonError::into_inner);
@@ -133,15 +137,18 @@ mod tests {
             burst: 3,
             per: Duration::from_millis(300),
         });
+        let t0 = Instant::now();
         for _ in 0..3 {
-            assert!(l.check("a").is_ok());
+            assert!(l.check_at("a", t0).is_ok());
         }
-        let wait = l.check("a").unwrap_err();
-        assert!(wait <= Duration::from_millis(100), "{wait:?}");
+        let wait = l.check_at("a", t0).unwrap_err();
+        assert_eq!(wait, Duration::from_millis(100));
         // Keys are separate.
-        assert!(l.check("b").is_ok());
-        std::thread::sleep(Duration::from_millis(120));
-        assert!(l.check("a").is_ok());
+        assert!(l.check_at("b", t0).is_ok());
+        // Not yet refilled a whole token.
+        assert!(l.check_at("a", t0 + Duration::from_millis(90)).is_err());
+        assert!(l.check_at("a", t0 + Duration::from_millis(100)).is_ok());
+        assert!(l.check_at("a", t0 + Duration::from_millis(100)).is_err());
     }
 
     #[test]
