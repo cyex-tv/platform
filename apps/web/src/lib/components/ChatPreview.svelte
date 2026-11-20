@@ -13,7 +13,8 @@
   // through `lines`; it pauses off screen and in a hidden tab, and never runs under reduced motion.
   import { flip } from 'svelte/animate';
   import { fly } from 'svelte/transition';
-  import { hasStill, ready, size, src, srcsetW } from '$lib/emote';
+  import { hasStill, pictureFor, ready, size } from '$lib/emote';
+  import { display } from '$lib/dpr.svelte';
   import { clean } from '$lib/format';
   import { dur } from '$lib/motion';
 
@@ -143,11 +144,12 @@
               {#each p.emotes as e, i}
                 {#if ready(e)}
                   {@const st = !moving && hasStill(e)}
+                  {@const pic = pictureFor(e, display.dpr, st, width(e))}
                   <img
                     class:over={i > 0}
-                    src={src(e, 1, st)}
-                    srcset={srcsetW(e, st)}
-                    sizes="{width(e)}px"
+                    src={pic.src}
+                    srcset={pic.srcset}
+                    sizes={pic.srcset ? `${width(e)}px` : undefined}
                     width={width(e)}
                     height="28"
                     alt={e.name}

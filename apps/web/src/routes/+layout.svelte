@@ -11,6 +11,7 @@
   import { titleTruncated } from '$lib/shell/truncated';
   import Toasts from '$lib/tool/Toasts.svelte';
   import { syncMotion } from '$lib/shell/motion.svelte';
+  import { watchDpr } from '$lib/dpr.svelte';
   import { loadMe, session } from '$lib/tool/session.svelte';
   import { whatsNew } from '$lib/changelog/seen.svelte';
   import UploadDialog from '$lib/upload/UploadDialog.svelte';
@@ -25,6 +26,8 @@
   // asks too (to send you to sign in), and loadMe() shares one request between the two.
   // The reduced-motion setting, for the pictures that choose a still by it.
   $effect(syncMotion);
+  // The screen's pixel ratio, for the pictures that pick their file in script (no srcset).
+  $effect(watchDpr);
   // Whether this device has seen the newest changelog entry (the account menu's dot).
   $effect(() => whatsNew.load());
   $effect(() => {

@@ -16,8 +16,9 @@
   import { inbox, loadInbox, markRead, type Note } from './inbox.svelte';
   import { loadPrefs, quietKinds } from './prefs.svelte';
   import { fresh } from './toasts';
+  import { pausableTimer, type PausableTimer } from '$lib/tool/pausable-timer';
 
-  type Shown = { note: Note; timer?: ReturnType<typeof setTimeout> };
+  type Shown = { note: Note; timer?: PausableTimer };
   const LIFE = 6000;
   let since = Date.now();
   const seen = new Set<string>();
@@ -54,17 +55,21 @@
 
   function push(note: Note) {
     const t: Shown = { note };
+    for (const old of shown.slice(2)) old.timer?.cancel();
     shown = [t, ...shown].slice(0, 3);
     arm(t);
   }
   function arm(t: Shown) {
-    clearTimeout(t.timer);
-    t.timer = setTimeout(() => close(t.note.id), LIFE);
+    t.timer = pausableTimer(() => close(t.note.id), LIFE);
   }
   function hold(t: Shown) {
-    clearTimeout(t.timer);
+    t.timer?.pause();
+  }
+  function release(t: Shown) {
+    t.timer?.resume();
   }
   function close(id: string) {
+    shown.find((t) => t.note.id === id)?.timer?.cancel();
     shown = shown.filter((t) => t.note.id !== id);
   }
   async function open(n: Note, href: string | null) {
@@ -84,9 +89,9 @@
       out:fade={{ duration: dur(140) }}
       animate:flip={{ duration: dur(200) }}
       onpointerenter={() => hold(t)}
-      onpointerleave={() => arm(t)}
+      onpointerleave={() => release(t)}
       onfocusin={() => hold(t)}
-      onfocusout={() => arm(t)}
+      onfocusout={() => release(t)}
     >
       <button class="body" type="button" onclick={() => open(t.note, line.href)}>
         <span class="icon"><Icon name={line.icon} /></span>

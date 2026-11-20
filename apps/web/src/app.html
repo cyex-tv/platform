@@ -49,12 +49,15 @@
                 return nativeMatch(q).matches;
               } });
             } catch (e) {}
-            lists.push(list);
+            // Held weakly: a component's list goes once it is gone (a plain array kept every one).
+            lists.push(typeof WeakRef === 'function' ? new WeakRef(list) : { deref: function () { return list; } });
+            if (lists.length > 64) lists = lists.filter(function (r) { return r.deref(); });
             return list;
           };
           // The setting changed: tell everyone listening, as the OS query would.
           window.addEventListener('cyexmotion', function () {
-            lists.forEach(function (l) { try { l.dispatchEvent(new Event('change')); } catch (e) {} });
+            lists = lists.filter(function (r) { return r.deref(); });
+            lists.forEach(function (r) { var l = r.deref(); try { if (l) l.dispatchEvent(new Event('change')); } catch (e) {} });
           });
         }
         document.documentElement.classList.add('js');
