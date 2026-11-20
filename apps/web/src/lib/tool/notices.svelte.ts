@@ -1,6 +1,7 @@
 // Short notices for the signed-in pages (cyex-app web-tool toasts): notices bottom right,
 // errors bottom left. A repeat bumps a count instead of stacking; at most three of each.
-export type Toast = { id: number; text: string; error: boolean; count: number; action?: { label: string; run: () => void } };
+export type Toast = { id: number; text: string; error: boolean; count: number; action?: { label: string; run: () => void };
+  /** How long a toast with an Undo waits, for its countdown line. */ ms?: number };
 
 export const toasts = $state<Toast[]>([]);
 let next = 1;
@@ -20,7 +21,7 @@ export function notify(text: string, error = false, opts: { action?: Toast['acti
     same.count += 1;
     return same.id;
   }
-  const toast: Toast = { id: next++, text, error, count: 1, action: opts.action };
+  const toast: Toast = { id: next++, text, error, count: 1, action: opts.action, ms: opts.action ? opts.ms : undefined };
   toasts.push(toast);
   const mine = toasts.filter((t) => t.error === error);
   if (mine.length > 3) dismiss(mine[0].id);

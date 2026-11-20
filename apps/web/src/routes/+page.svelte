@@ -140,10 +140,8 @@
   }
 
   /* Reveal once on scroll (reveal.ts marks a row while it waits). Under reduced motion: none. */
-  @media (prefers-reduced-motion: no-preference) {
-    .show:global([data-reveal]) > * { transition: opacity var(--dur-reveal) var(--ease), translate var(--dur-reveal) var(--ease); }
-    .show:global([data-reveal]) > .text { transition-delay: var(--stagger); }
-    .show:global([data-reveal='wait']) > * { opacity: 0; translate: 0 28px; }
-  }
+  .show:global([data-reveal]) > * { transition: opacity var(--dur-reveal) var(--ease), translate var(--dur-reveal) var(--ease); }
+  .show:global([data-reveal]) > .text { transition-delay: var(--stagger); }
+  .show:global([data-reveal='wait']) > * { opacity: 0; translate: 0 28px; }
   :global(html[data-motion='reduce']) .show > * { transition: none; opacity: 1; translate: none; }
 </style>

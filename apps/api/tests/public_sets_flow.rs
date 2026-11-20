@@ -898,3 +898,87 @@ async fn edit_any_beats_editor_rule_for_visibility() {
     assert_eq!(r["data"]["updateSet"]["visibility"], "UNLISTED", "{r}");
     w.db.close().await;
 }
+
+const SET_EMOTES: &str = "query($id: String!, $q: String, $p: Int, $n: Int) {
+    setEmotes(id: $id, query: $q, page: $p, perPage: $n) { total items { name emote { id name } } }
+}";
+
+fn names(r: &Value) -> Vec<&str> {
+    r["data"]["setEmotes"]["items"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{r}"))
+        .iter()
+        .map(|i| i["name"].as_str().unwrap())
+        .collect()
+}
+
+#[tokio::test]
+async fn set_emotes_pages_filters_and_keeps_visibility() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("2101").await;
+    let bob = w.user("2102").await;
+    let set = w.set(&alice, "Big", None).await;
+    for i in 0..7 {
+        let e = w
+            .emote(&alice, &format!("Pog{i}"), EmoteState::Approved, false)
+            .await;
+        w.add(&alice, &set, &e).await;
+    }
+    let odd = w
+        .emote(&alice, "Kappa_x", EmoteState::Approved, false)
+        .await;
+    w.add(&alice, &set, &odd).await;
+    let pending = w.emote(&alice, "Waiting", EmoteState::Pending, false).await;
+    w.add(&alice, &set, &pending).await;
+
+    // Pages of three, oldest first; the total counts the editor's pending emote too.
+    let first = w
+        .gql(&alice, SET_EMOTES, json!({ "id": set, "p": 1, "n": 3 }))
+        .await;
+    assert_eq!(first["data"]["setEmotes"]["total"], 9, "{first}");
+    assert_eq!(names(&first), ["Pog0", "Pog1", "Pog2"]);
+    let last = w
+        .gql(&alice, SET_EMOTES, json!({ "id": set, "p": 3, "n": 3 }))
+        .await;
+    assert_eq!(names(&last), ["Pog6", "Kappa_x", "Waiting"]);
+    let beyond = w
+        .gql(&alice, SET_EMOTES, json!({ "id": set, "p": 4, "n": 3 }))
+        .await;
+    assert!(names(&beyond).is_empty());
+
+    // The filter looks through the whole set, literally and without case.
+    let hit = w
+        .gql(
+            &alice,
+            SET_EMOTES,
+            json!({ "id": set, "q": "POG", "n": 50 }),
+        )
+        .await;
+    assert_eq!(hit["data"]["setEmotes"]["total"], 7);
+    let wild = w
+        .gql(&alice, SET_EMOTES, json!({ "id": set, "q": "_x" }))
+        .await;
+    assert_eq!(names(&wild), ["Kappa_x"]);
+    let percent = w
+        .gql(&alice, SET_EMOTES, json!({ "id": set, "q": "%" }))
+        .await;
+    assert_eq!(percent["data"]["setEmotes"]["total"], 0);
+
+    // Someone else, and signed out, do not see the pending one.
+    let other = w.gql(&bob, SET_EMOTES, json!({ "id": set })).await;
+    assert_eq!(other["data"]["setEmotes"]["total"], 8, "{other}");
+    assert!(!names(&other).contains(&"Waiting"));
+    let anon = w.post(None, SET_EMOTES, json!({ "id": set })).await;
+    assert_eq!(anon["data"]["setEmotes"]["total"], 8);
+
+    // A private set answers like a missing one.
+    let hidden = w.set(&alice, "Hidden", Some("PRIVATE")).await;
+    let e = w.emote(&alice, "Secret", EmoteState::Approved, false).await;
+    w.add(&alice, &hidden, &e).await;
+    let r = w.gql(&bob, SET_EMOTES, json!({ "id": hidden })).await;
+    assert_eq!(r["data"]["setEmotes"]["total"], 0, "{r}");
+    assert!(names(&r).is_empty());
+    let mine = w.gql(&alice, SET_EMOTES, json!({ "id": hidden })).await;
+    assert_eq!(names(&mine), ["Secret"]);
+    w.db.close().await;
+}

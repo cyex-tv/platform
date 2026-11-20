@@ -12,7 +12,7 @@
   import { sectionHref } from '$lib/profile/rows';
   import Name from '$lib/components/Name.svelte';
   import type { EditSetQuery, EditorPermission, SetVisibility } from '$lib/gql/graphql';
-  import { EDIT_SET, DELETE_SET, REMOVE_SET_EDITOR, UPDATE_CHANNEL, UPDATE_SET } from '$lib/queries';
+  import { EDIT_SET, DELETE_SET, REMOVE_SET_EDITOR, SET_MEMBERS, UPDATE_CHANNEL, UPDATE_SET } from '$lib/queries';
   import Icon from '$lib/components/Icon.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import { loader } from '$lib/tool/loader.svelte';
@@ -22,6 +22,7 @@
   import { can, session } from '$lib/tool/session.svelte';
   import { covers, grantOn, permissionLabels, scopeOf, setAccess } from '$lib/tool/editors';
   import { fail, notify } from '$lib/tool/notices.svelte';
+  import { morePages } from '$lib/tool/set-paging';
   import PageHead from '$lib/tool/PageHead.svelte';
 
   type EditableSet = NonNullable<EditSetQuery['set']>;
@@ -73,6 +74,7 @@
     }
     if (!r.set) throw new ApiError('This set doesn’t exist.', 'not_found');
     if (want === page.params.id) {
+      if (set?.id !== r.set.id) members = { ids: new Set(), names: new Set() };
       set = r.set;
       editors = r.setEditors;
       grants = r.editorOf;
@@ -80,9 +82,33 @@
       channels = [...r.myChannels, ...r.editorChannels.filter((c) => !r.myChannels.some((m) => m.platform === c.platform && m.platformChannelId === c.platformChannelId))];
       name = r.set.name;
     }
+    void readMembers(r.set.id);
     return r.set;
   });
   const load = () => L.reload();
+  // Emotes were added: the pages in the grid are read again too.
+  let rev = $state(0);
+  async function added() {
+    await L.reload();
+    rev++;
+  }
+
+  // Who is in the set (ids and names only, 200 to a request) for the Add panel's "Added" and
+  // name clashes; the grid itself reads pages of 120 with pictures, so nothing waits for this.
+  let members = $state({ ids: new Set<string>(), names: new Set<string>() });
+  let membersToken = 0;
+  async function readMembers(want: string) {
+    const mine = ++membersToken;
+    try {
+      const first = await gql(SET_MEMBERS, { id: want, page: 1, perPage: 200 });
+      const rest = await Promise.all(morePages(first.setEmotes.total, 200).map((n) => gql(SET_MEMBERS, { id: want, page: n, perPage: 200 })));
+      if (mine !== membersToken) return;
+      const all = [first, ...rest].flatMap((r) => r.setEmotes.items);
+      members = { ids: new Set(all.map((m) => m.emote.id)), names: new Set(all.map((m) => m.name)) };
+    } catch {
+      /* the Add panel then lets the API refuse a repeat */
+    }
+  }
 
   async function rename(e: SubmitEvent) {
     e.preventDefault();
@@ -151,9 +177,9 @@
     }
   }
 
-  const taken = $derived(new Set(set?.emotes.map((m) => m.emote.id) ?? []));
-  const names = $derived(new Set(set?.emotes.map((m) => m.name) ?? []));
-  const full = $derived(set ? set.emotes.length >= set.capacity : false);
+  const taken = $derived(members.ids);
+  const names = $derived(members.names);
+  const full = $derived(set ? set.slotsUsed >= set.capacity : false);
 </script>
 
 <svelte:head><title>{L.cause ? problemTitle(L.cause, true, 'No set here') : `${set?.name ?? 'Set'} - cyex.tv`}</title></svelte:head>
@@ -227,7 +253,7 @@
   >
     {#snippet line()}
       {set!.kind === 'GLOBAL' ? 'The global set' : set!.kind === 'PERSONAL' ? 'Personal set' : 'Channel set'} ·
-      <Capacity used={set!.emotes.length} capacity={set!.capacity} /> emotes
+      <Capacity used={set!.slotsUsed} capacity={set!.capacity} /> emotes
       {#if !owner && set!.owner}· by <Name value={set!.owner.displayName} />{/if}
       {#if held.size}· you edit this account: {permissionLabels([...held])}{/if}
       {#if showing.length}· shown on {showing.map((c) => `${platformName(c.platform)} ${c.login}`).join(' and ')}{/if}
@@ -236,8 +262,8 @@
 
   <div class="layout">
     <div class="ui-stack main">
-      <SetEmotes {set} onchange={load} />
-      <AddEmotes setId={set.id} personal={set.kind === 'PERSONAL'} {taken} {names} {full} onadded={load} />
+      <SetEmotes setId={set.id} capacity={set.capacity} used={set.slotsUsed} {rev} onchange={load} />
+      <AddEmotes setId={set.id} personal={set.kind === 'PERSONAL'} {taken} {names} {full} onadded={added} />
     </div>
     <aside class="ui-stack">
       {#if canRename}

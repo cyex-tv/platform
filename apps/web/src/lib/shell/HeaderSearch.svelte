@@ -388,9 +388,8 @@
   /* Attached to the field: the same width (at least 380px, centred on it), straight under it. */
   .drop { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); width: max(100%, min(380px, calc(100vw - 32px)));
     z-index: var(--z-pop); border: 1px solid var(--border-strong); border-radius: var(--radius-m); background: var(--surface);
-    box-shadow: var(--shadow-pop); overflow: hidden; transform-origin: 50% 0; animation: drop-in var(--fast, 120ms) ease-out; }
+    box-shadow: var(--shadow-pop); overflow: hidden; transform-origin: 50% 0; }
   .drop[hidden] { display: none; }
-  @keyframes drop-in { from { opacity: 0; transform: translateX(-50%) translateY(-4px); } }
   .list { max-height: min(520px, calc(100dvh - var(--nav-h) - 24px)); overflow-y: auto; overscroll-behavior: contain; padding: 6px; }
   .group + .group { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border); }
   .group-name { margin: 0; padding: 8px 10px 6px; font-size: var(--t-fine); font-weight: 500; color: var(--muted); }
@@ -415,13 +414,11 @@
   .phone .field { height: 40px; }
   .phone input { font-size: 16px; } /* no zoom on focus (iOS) */
   .phone .drop { position: fixed; top: calc(var(--nav-h) + 1px + env(safe-area-inset-top, 0px)); left: 0; right: 0; width: auto; transform: none;
-    border-width: 0 0 1px; border-radius: 0; box-shadow: var(--shadow-pop); animation-name: drop-in-phone; }
-  @keyframes drop-in-phone { from { opacity: 0; } }
+    border-width: 0 0 1px; border-radius: 0; box-shadow: var(--shadow-pop); }
   .phone .list { max-height: calc(100dvh - var(--nav-h) - env(safe-area-inset-top, 0px) - 1px); padding: 6px 10px calc(10px + env(safe-area-inset-bottom, 0px)); }
   .phone .row { min-height: 48px; font-size: var(--t-ui); }
 
   @media (hover: hover) and (pointer: fine) { .field:hover { border-color: var(--border-strong); } }
-  @media (prefers-reduced-motion: reduce) { .drop { animation: none; } .spin { animation-duration: 2.4s; } }
   @media (forced-colors: active) {
     .row[aria-selected='true'] { outline: 2px solid Highlight; outline-offset: -2px; }
     .drop { border-color: CanvasText; }

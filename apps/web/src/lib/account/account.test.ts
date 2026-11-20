@@ -2,7 +2,7 @@ import { describe as suite, expect, it } from 'vitest';
 import { ApiError } from '$lib/api';
 import { deleteMessage, exportMessage, unlinkMessage } from './errors';
 import { exportFilename } from './export';
-import { badge, describe, parsePayload } from './notifications';
+import { badge, closedRequest, describe, parsePayload } from './notifications';
 
 const j = (o: unknown) => JSON.stringify(o);
 const strip = (s: string) => s.replace(/[⁨⁩]/g, '');
@@ -50,6 +50,15 @@ suite('describe', () => {
     );
     expect(strip(describe('cosmetic.revoked', j({ kind: 'badge', name: 'Early' })).text)).toBe('The Early badge was taken away.');
     expect(describe('cosmetic.granted', j({ kind: 'paint' })).href).toBe('/me/cosmetics');
+  });
+  it('a transfer request that is closed says so instead of offering buttons', () => {
+    expect(closedRequest('PENDING')).toBeNull();
+    expect(closedRequest(null)).toBeNull();
+    expect(closedRequest(undefined)).toBeNull();
+    expect(closedRequest('ACCEPTED')).toBe('Accepted: it moved.');
+    expect(closedRequest('DECLINED')).toBe('Declined: it stays yours.');
+    expect(closedRequest('CANCELLED')).toMatch(/^Withdrawn/);
+    expect(closedRequest('EXPIRED')).toMatch(/^Expired/);
   });
   it('transfer requests can be answered, and every step reads as a sentence', () => {
     const p = { emote_id: 'E1', name: 'Pog', request_id: 'R1', from_name: 'Ana', to_name: 'Bo', actor_name: 'Bo' };

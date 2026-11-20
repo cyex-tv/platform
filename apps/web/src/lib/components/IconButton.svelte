@@ -93,6 +93,6 @@
     .ib.warm:hover .tip { transition-delay: 0s; transition-duration: 0s; }
   }
   @media (prefers-reduced-motion: reduce) {
-    .tip, .ib:focus-visible .tip { transform: translateX(-50%); }
+    :global(html:not([data-motion='full'])) .tip, :global(html:not([data-motion='full'])) .ib:focus-visible .tip { transform: translateX(-50%); }
   }
 </style>

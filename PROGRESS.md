@@ -1174,3 +1174,10 @@ git push -u origin feat/hero-shadows
 gh pr create --base main --head feat/hero-shadows --title "Hero: real soft shadows, a ground shadow and light falloff" --body-file <file>
 gh pr merge <n> --merge
 ```
+
+## Set editor paging, Add emotes paging, transfer notification state (2026/11/20)
+- API (additive): `setEmotes(id, query, page, perPage)` returns a page of a set's emotes, oldest first, with `total`; the visibility rule of `set`; `query` filters by name in the set or own name; `perPage` 1 to 200, default 120. `Notification.transferState` shows where a transfer request stands now (pending, accepted, declined, cancelled, expired); null for other kinds. Postgres tests: `set_emotes_pages_filters_and_keeps_visibility`, `transfer_notifications_show_where_the_request_stands`.
+- Web: `/me/sets/[id]` reads 120 emotes at a time with Load more, Filter asks the API (whole set), ids and names for Add come as slim pages. Add emotes has Load more with "Showing 40 of N". A transfer-request notification whose request was answered, withdrawn or expired elsewhere shows that, not Accept and Decline.
+- Dev mock: `MOCK_SET_SIZE=1000` fills the Main set.
+- At 1.000 emotes (headless Edge, dev server, warm): first render about 600 ms before, 320 ms after; JS heap 95 MB before, 20 MB after; 1000 tiles before, 120 after.
+- Screens in `.claude/runs/2026-11-20-overnight/screens/f-u2b/`.

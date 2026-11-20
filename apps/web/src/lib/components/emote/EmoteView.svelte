@@ -335,8 +335,7 @@
     .facts { margin-bottom: 0; }
     .bar { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: var(--z-nav);
       padding: 10px var(--page-pad) calc(10px + env(safe-area-inset-bottom, 0px));
-      border-top: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 86%, transparent);
-      backdrop-filter: blur(14px) saturate(1.4); -webkit-backdrop-filter: blur(14px) saturate(1.4); }
+      border-top: 1px solid var(--border); background: var(--bg); }
   }
   @media (max-width: 720px) and (max-height: 500px) {
     .bar { position: static; margin-inline: calc(-1 * var(--page-pad)); border-bottom: 1px solid var(--border); }
@@ -345,5 +344,5 @@
   @media (max-width: 720px) and ((prefers-reduced-transparency: reduce) or (prefers-contrast: more)) {
     .bar { background: var(--bg); backdrop-filter: none; -webkit-backdrop-filter: none; border-top-color: var(--border-strong); }
   }
-  @media (prefers-reduced-motion: reduce) { .back :global(.icon) { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .back :global(.icon) { transition: none; } }
 </style>

@@ -897,3 +897,78 @@ async fn accept_and_owner_transfer_at_once_dont_deadlock() {
     }
     w.db.close().await;
 }
+
+const NOTES: &str = "query { myNotifications { kind transferState payload } }";
+
+/// The transfer state each `emote.transfer_requested` notification of `user` shows, newest first.
+async fn asked_states(w: &World, user: &User) -> Vec<Value> {
+    let r = w.gql(user, NOTES, json!({})).await;
+    ok(&r);
+    r["data"]["myNotifications"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|n| n["kind"] == "emote.transfer_requested")
+        .map(|n| n["transferState"].clone())
+        .collect()
+}
+
+#[tokio::test]
+async fn transfer_notifications_show_where_the_request_stands() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("7401").await;
+    let bob = w.user("7402").await;
+    let gina = w.user("7403").await;
+    w.grant(&alice, &bob, &["EMOTE_TRANSFER"], &[]).await;
+    w.grant(&gina, &bob, &["EMOTE_UPLOAD"], &[]).await;
+    let emote = w.emote(&alice, "moving", EmoteState::Approved, false).await;
+
+    // Asked: pending. Other kinds carry no state.
+    ok(&w
+        .gql(&bob, TRANSFER, json!({ "id": emote, "to": gina.tid() }))
+        .await);
+    assert_eq!(asked_states(&w, &alice).await, [json!("PENDING")]);
+    let r = w.gql(&alice, NOTES, json!({})).await;
+    assert!(r["data"]["myNotifications"][0]["payload"].is_string());
+
+    // Declined elsewhere (the edit page): the notification follows.
+    let request = w.open(&alice, &emote).await;
+    ok(&w.gql(&alice, DECLINE, json!({ "id": request })).await);
+    assert_eq!(asked_states(&w, &alice).await, [json!("DECLINED")]);
+
+    // Asked again and withdrawn by the editor: cancelled; the older one stays declined.
+    ok(&w
+        .gql(&bob, TRANSFER, json!({ "id": emote, "to": gina.tid() }))
+        .await);
+    let request = w.open(&bob, &emote).await;
+    ok(&w.gql(&bob, CANCEL, json!({ "id": request })).await);
+    assert_eq!(
+        asked_states(&w, &alice).await,
+        [json!("CANCELLED"), json!("DECLINED")]
+    );
+
+    // Asked again and left to run out, without anyone sweeping it: expired.
+    ok(&w
+        .gql(&bob, TRANSFER, json!({ "id": emote, "to": gina.tid() }))
+        .await);
+    let request = w.open(&alice, &emote).await;
+    let mut conn = w.db.conn().await;
+    sqlx::query(
+        "UPDATE emote_transfer_requests SET expires_at = now() - interval '1 minute' WHERE id = $1",
+    )
+    .bind(ids::from_text(&request).unwrap())
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    drop(conn);
+    assert_eq!(asked_states(&w, &alice).await[0], json!("EXPIRED"));
+
+    // Accepted: the last one, once the emote moves.
+    ok(&w
+        .gql(&bob, TRANSFER, json!({ "id": emote, "to": gina.tid() }))
+        .await);
+    let request = w.open(&alice, &emote).await;
+    ok(&w.gql(&alice, ACCEPT, json!({ "id": request })).await);
+    assert_eq!(asked_states(&w, &alice).await[0], json!("ACCEPTED"));
+    w.db.close().await;
+}

@@ -121,6 +121,18 @@ pub async fn close_open_for_emote(
     .await?)
 }
 
+/// Where each of these requests stands now, as `state`; a pending one past its time reads as
+/// `expired` even before the sweep marks it. Unknown IDs are missing.
+pub async fn states_of(conn: &mut PgConnection, ids: &[Uuid]) -> DbResult<Vec<(Uuid, String)>> {
+    Ok(sqlx::query_as(
+        "SELECT id, CASE WHEN state = 'pending' AND expires_at <= now() THEN 'expired' ELSE state END
+         FROM emote_transfer_requests WHERE id = ANY($1)",
+    )
+    .bind(ids)
+    .fetch_all(conn)
+    .await?)
+}
+
 /// Open requests an account takes part in: to accept (its emotes) or that it made, newest first;
 /// of one emote when given.
 pub async fn open_for(
