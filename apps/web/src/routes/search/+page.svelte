@@ -39,8 +39,18 @@
   import SearchField from '$lib/components/browse/SearchField.svelte';
   import SearchTabs from '$lib/components/browse/SearchTabs.svelte';
   import UsersSearch from '$lib/components/browse/UsersSearch.svelte';
+  import { registerShortcuts } from '$lib/shell/shortcuts.svelte';
+  import { BROWSE_KEYS, SELECT_KEYS } from '$lib/components/browse/keys';
 
   let { data } = $props();
+
+  // The keys of the emote grid and of Select mode, in the shortcut sheet while the Emotes tab shows.
+  $effect(() => {
+    if (data.view.tab === 'users') return;
+    const a = registerShortcuts(BROWSE_KEYS);
+    const b = registerShortcuts(SELECT_KEYS);
+    return () => (a(), b());
+  });
 
   const view = $derived(data.view);
   const q = $derived(clean(view.q));

@@ -18,6 +18,7 @@
   import Icon from '../Icon.svelte';
   import TileMenu from './TileMenu.svelte';
   import * as S from './selection';
+  import { target } from './target.svelte';
 
   type Props = {
     items: CardEmote[];
@@ -34,6 +35,11 @@
     onstart: (id?: string) => void;
   };
   let { items, label, loading = false, skeletons = 10, eager = 0, ranked = false, selecting, sel, onstep, onstart }: Props = $props();
+  // The set Add goes to: emotes already in it get an "In set" mark (the tile menu says Remove for them).
+  const held = $derived.by(() => {
+    const t = target.current;
+    return t ? { name: clean(t.name), has: (id: string) => t.held.has(id) } : null;
+  });
 
   let root = $state<HTMLDivElement>();
 
@@ -248,6 +254,7 @@
           onpick={selecting ? () => onstep(S.toggle(sel, e.id)) : undefined}
           selected={picked.has(e.id)}
           rank={ranked ? i + 1 : undefined}
+          inSet={held?.has(e.id) ? held.name : undefined}
         />
         {#if !selecting}
           <button class="more" type="button" aria-label="More for {clean(e.name)}" aria-haspopup="menu" onclick={(ev) => moreClick(ev, e.id)}>

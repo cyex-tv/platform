@@ -23,6 +23,8 @@
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
+  import { REVIEW_DETAIL_KEYS, REVIEW_KEYS } from '$lib/admin/review-keys';
+  import { registerShortcuts } from '$lib/shell/shortcuts.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { dismiss, fail, notify } from '$lib/tool/notices.svelte';
 
@@ -70,6 +72,13 @@
   const total = $derived(L.data?.total ?? 0);
   const pages = $derived(Math.max(1, Math.ceil(total / PER_PAGE)));
   const counts = $derived(L.data?.counts);
+
+  // Its keys (onkeydown below and ReviewDetail's), in the shortcut sheet.
+  $effect(() => {
+    const a = registerShortcuts(REVIEW_KEYS);
+    const b = registerShortcuts(REVIEW_DETAIL_KEYS);
+    return () => (a(), b());
+  });
 
   let busy = $state<string | null>(null);
   let rejecting = $state<EmoteFieldsFragment | null>(null);

@@ -10,6 +10,8 @@
   import Prose from '$lib/docs/Prose.svelte';
   import State from '$lib/components/State.svelte';
   import RailLayout from '$lib/shell/RailLayout.svelte';
+  import { registerShortcuts } from '$lib/shell/shortcuts.svelte';
+  import { HELP_KEYS } from '$lib/docs/keys';
   import { HELP, matches } from '$lib/help/faq';
 
   let root: HTMLDivElement;
@@ -35,6 +37,8 @@
     else url.searchParams.delete('q');
     history.replaceState(history.state, '', url);
   });
+
+  $effect(() => registerShortcuts(HELP_KEYS));
 
   function clear() {
     query = '';

@@ -49,11 +49,6 @@
   const used = $derived(s ? Math.max(s.slotsUsed, s.emotes.length) : 0);
   const pct = $derived(s ? fillPercent(used, s.capacity) : 0);
   const unlisted = $derived(s?.visibility === 'UNLISTED');
-  const description = $derived(
-    s
-      ? `${name}, an emote set with ${count(s.emotes.length)} ${s.emotes.length === 1 ? 'emote' : 'emotes'} on cyex.tv${owner ? `, by ${clean(owner.displayName)}` : ''}.`
-      : '',
-  );
 
   const members = $derived(s?.emotes ?? []);
   let query = $state('');
@@ -78,16 +73,8 @@
 <svelte:head>
   {#if s}
     <title>{name} - cyex.tv</title>
-    <meta name="description" content={description} />
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="cyex.tv" />
-    <meta property="og:title" content="{name} - cyex.tv" />
-    <meta property="og:description" content={description} />
-    <meta property="og:url" content={page.url.origin + page.url.pathname} />
-    {#if s.visibility !== 'LISTED'}<meta name="robots" content="noindex" />{/if}
   {:else}
     <title>No set here - cyex.tv</title>
-    <meta name="robots" content="noindex" />
   {/if}
 </svelte:head>
 
