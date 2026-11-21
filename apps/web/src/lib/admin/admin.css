@@ -42,7 +42,7 @@
 .adm-acts { display: grid; gap: 8px; }
 .adm-acts .ui-btn { justify-content: flex-start; width: 100%; }
 .adm-acts.row { display: flex; flex-wrap: wrap; }
-.adm-acts.row .ui-btn { width: auto; }
+.adm-acts.row .ui-btn, .adm-shell .adm-acts.row .ui-btn { width: auto; flex: none; }
 
 /* ---- Lists ---- */
 .adm-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 48px; margin-bottom: 0; padding: 6px 0; }
@@ -119,7 +119,7 @@
 
 .adm-sheet { --cell: 168px; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(var(--cell), 100%), 1fr));
   border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
-.adm-sheet > * { min-width: 0; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.adm-sheet > *, .adm-sheet > .adm-cell { min-width: 0; border: 0; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 0; }
 .adm-cell { position: relative; display: grid; align-content: start; gap: 2px; width: 100%; min-width: 0; height: 100%; padding: 10px; border: 0; border-radius: 0;
   background: none; color: var(--text); font: inherit; text-align: left; text-decoration: none; cursor: pointer; transition: background-color var(--fast); }
 .adm-cell:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
@@ -176,3 +176,5 @@
 .adm-shell .ui-panel + .ui-panel { border-top: 0; }
 .adm-shell .ui-panel .ui-list > li { padding-left: 0; padding-right: 0; }
 .adm-shell .ui-chip { text-transform: none; letter-spacing: 0; }
+
+.adm-shell a.adm-cell, .adm-shell a.adm-cell:visited { color: var(--text); text-decoration: none; }
