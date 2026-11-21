@@ -12,6 +12,20 @@ See them all with live data at `/dev/components` (dev server only; a 404 in prod
 | `Footer` | none | Browse, Download, Cosmetics, Help, Developers, Source, Takedowns (Terms, Privacy and Contact once their pages exist), non-affiliation line. |
 | `HeaderSearch` (`lib/shell`) | `phone?`, `onclose?()` | The header's search field is the search: typing drops a list under it with the top 5 emotes (`quickSearch`'s name matcher) and top 3 people; focusing it empty lists the channels you can manage by role. ARIA combobox (↑ ↓ Enter Escape). `/` outside a field focuses it (a page input marked `data-page-search` takes `/` instead); `focusSearch(query?)` from `lib/shell/search.svelte.ts` does it from code. No command palette. |
 
+## Page shapes (redesign, 2026/11/21)
+
+Every page is one of three shapes under the one header (`.claude/runs/2026-11-20-redesign/design-rules.md`):
+
+| Component | Props | Usage |
+|---|---|---|
+| `InspectorLayout` (`lib/shell`) | `title` (the panel's uppercase label), `label?` (its accessible name), snippets `head?`, `tabs?`, `children`, `panel`, `panelActions?`; `narrow?: 'before' \| 'after'`, `fold?`, `headPad? = true`, `width? = 360`, `testid?` | The Inspector: head, tabs and content left; a full-height sticky panel right (facts, actions, related). Under 1100px one column, the panel a card before the content (or after it, `narrow="after"` for editors), folded behind a toggle with `fold`. Used by the set page, the set and emote editors and every /me page (through `MeFrame`). |
+| `RailLayout` / `SideRail` (`lib/shell`) | as before | Rail + content: Settings and admin. |
+| `ColumnLayout` (`lib/shell`) | `width?`, `top?` | One column: reading pages, not-found and loading states. |
+| `MeFrame` (`lib/profile`) | `title`, `label?`, `panel`, `children`, `narrow?`, `fold?` | The /me pages' Inspector: you (ProfileHeader, flat), the profile's tabs plus the page you are on, the page's panel. The page's `PageHead` is its h1. |
+| `PanelBlock` | `title`, `count?`, `more?: { href, label }`, `fold?`, `bind:open?`, `level? = 3`, children | One block of a panel: uppercase label (a disclosure with `fold`), hairline between blocks. Inside: `<dl class="kv">` for facts (label left, value right), `.pb-actions` for full-width buttons (`.pair` for two side by side), `.pb-hint` for a line of help. |
+| `LinkTabs` | `label`, `items: { href, label, count?, current? }[]` | Tabs that are links (the URL holds the tab): bold current, no bar or fill, arrow keys. |
+| `SelectSwitch` (`browse/`) | `on`, `onchange(on)`, `label? = 'Select'` | The grid's Select-mode switch. |
+
 ## Emotes
 
 | Component | Props | Usage |
