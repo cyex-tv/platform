@@ -16,7 +16,7 @@ export type PaintImage = {
   ready?: boolean;
   width?: number;
   height?: number;
-  files: { name: string; width?: number; height?: number }[];
+  files: readonly { name: string; width?: number; height?: number }[];
 };
 export type PaintLike = {
   kind: 'LINEAR_GRADIENT' | 'RADIAL_GRADIENT' | 'IMAGE';
