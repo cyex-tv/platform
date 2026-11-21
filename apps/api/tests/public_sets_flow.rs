@@ -638,7 +638,11 @@ async fn clone_copies_what_may_be_copied() {
     assert_eq!(row.actor_account_id, Some(bob.id));
     let after = row.after_json.as_ref().unwrap();
     assert_eq!(after["via"], "account_editor");
-    assert_eq!(after["source_id"], bobs_copy.as_str());
+    // The audit log keeps rows by ULID.
+    assert_eq!(
+        after["source_id"],
+        ids::to_text(w.db.row(&bobs_copy).await).as_str()
+    );
     w.db.close().await;
 }
 

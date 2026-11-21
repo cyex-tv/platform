@@ -372,7 +372,7 @@ async fn an_editor_limited_to_some_sets_works_on_those_only() {
         .expect("an add row");
     let after = added.after_json.as_ref().unwrap();
     assert_eq!(after["all_sets"], false);
-    assert_eq!(after["set_ids"], json!([a]));
+    assert_eq!(after["set_ids"], json!([ids::to_text(w.db.row(&a).await)]));
     assert!(
         rows.iter()
             .filter(|e| e.action == "account.editor_updated")
