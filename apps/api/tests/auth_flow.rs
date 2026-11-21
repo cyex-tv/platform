@@ -851,7 +851,7 @@ async fn app_sessions_use_bearer_only() {
     };
     let site = h.sign_in(Platform::Twitch, "8001", None, false).await;
     let account = h.me(&site).await["data"]["me"]["id"].clone();
-    let account_id = cyex_tv_db::ids::from_text(account.as_str().unwrap()).unwrap();
+    let account_id = h.db.row(account.as_str().unwrap()).await;
 
     // Make an app session directly, as an app sign-in does: it names its client.
     let app_token = tokens::random_token();
@@ -1105,14 +1105,9 @@ async fn permissions_come_from_roles() {
     )
     .await
     .unwrap();
-    cyex_tv_db::roles::assign(
-        &mut conn,
-        cyex_tv_db::ids::from_text(&id).unwrap(),
-        role.id,
-        None,
-    )
-    .await
-    .unwrap();
+    cyex_tv_db::roles::assign(&mut conn, h.db.row(&id).await, role.id, None)
+        .await
+        .unwrap();
     drop(conn);
 
     assert_eq!(

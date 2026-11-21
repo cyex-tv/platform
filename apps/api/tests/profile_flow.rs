@@ -182,7 +182,11 @@ async fn profiles_show_only_public_things() {
     // No role is public until someone with roles.manage says so.
     let r = w.post(None, PROFILE, json!({ "a": alice.tid() })).await;
     let p = &r["data"]["accountProfile"];
-    assert_eq!(p["account"]["id"], alice.tid().as_str(), "{r}");
+    assert_eq!(
+        p["account"]["id"],
+        w.db.public(alice.id).await.as_str(),
+        "{r}"
+    );
     assert_eq!(p["roles"], json!([]));
     assert_eq!(
         p["identities"],
@@ -378,7 +382,7 @@ async fn account_cosmetics_by_account_id() {
         .iter()
         .map(|c| c["accountId"].as_str().unwrap())
         .collect();
-    assert_eq!(shown, [alice.tid().as_str()], "{r}");
+    assert_eq!(shown, [w.db.public(alice.id).await.as_str()], "{r}");
 
     let many: Vec<String> = (0..101).map(|_| alice.tid()).collect();
     let r = w.post(None, LOOKUP, json!({ "ids": many })).await;

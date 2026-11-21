@@ -15,8 +15,8 @@ use cyex_tv_api::state::AppState;
 use cyex_tv_auth::{Auth, AuthConfig, cookies, tokens};
 use cyex_tv_db::accounts::{self, Profile};
 use cyex_tv_db::emotes::{self, NewEmote};
+use cyex_tv_db::roles;
 use cyex_tv_db::sessions::{self, SessionKind};
-use cyex_tv_db::{ids, roles};
 use cyex_tv_shared::model::{EmoteState, Platform};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -132,7 +132,7 @@ impl World {
         .execute(&mut *conn)
         .await
         .unwrap();
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     async fn gql(&self, user: &User, query: &str, variables: Value) -> Value {
@@ -336,7 +336,7 @@ async fn undone_approval_goes_to_the_end_for_everyone() {
     let mut conn = w.db.conn().await;
     let cleared: Option<chrono::DateTime<chrono::Utc>> =
         sqlx::query_scalar("SELECT requeued_at FROM emotes WHERE id = $1")
-            .bind(ids::from_text(&a).unwrap())
+            .bind(w.db.row(&a).await)
             .fetch_one(&mut *conn)
             .await
             .unwrap();

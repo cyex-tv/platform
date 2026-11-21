@@ -156,7 +156,7 @@ impl World {
         if state != EmoteState::Pending {
             emotes::set_state(&mut conn, emote.id, state).await.unwrap();
         }
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     async fn gql(&self, user: &User, query: &str, variables: Value) -> Value {
@@ -253,7 +253,7 @@ async fn each_flag_gates_its_actions() {
     );
     assert_eq!(
         r["data"]["addAccountEditor"]["grantedBy"]["id"],
-        alice.tid().as_str()
+        w.db.public(alice.id).await.as_str()
     );
 
     // `emotes`: add, alias, rename, remove; the owner's pending and private emotes too.
@@ -292,7 +292,7 @@ async fn each_flag_gates_its_actions() {
     assert_eq!(r["data"]["editorSets"][0]["id"], set.as_str(), "{r}");
     assert_eq!(
         r["data"]["editorSets"][0]["owner"]["id"],
-        alice.tid().as_str()
+        w.db.public(alice.id).await.as_str()
     );
     let names: Vec<&str> = r["data"]["editorSets"][0]["emotes"]
         .as_array()
@@ -310,7 +310,7 @@ async fn each_flag_gates_its_actions() {
         .await;
     assert_eq!(
         r["data"]["editorOf"][0]["account"]["id"],
-        alice.tid().as_str(),
+        w.db.public(alice.id).await.as_str(),
         "{r}"
     );
     assert_eq!(r["data"]["editorChannels"][0]["login"], "user1001");
@@ -372,7 +372,7 @@ async fn each_flag_gates_its_actions() {
         .await;
     assert_eq!(
         r["data"]["createSet"]["owner"]["id"],
-        alice.tid().as_str(),
+        w.db.public(alice.id).await.as_str(),
         "{r}"
     );
     let made = r["data"]["createSet"]["id"].as_str().unwrap().to_owned();
@@ -596,7 +596,7 @@ async fn the_editors_flag_cant_escalate_or_touch_the_owner() {
         .await;
     assert_eq!(
         r["data"]["addAccountEditor"]["grantedBy"]["id"],
-        bob.tid().as_str(),
+        w.db.public(bob.id).await.as_str(),
         "{r}"
     );
     // ...nor raise an editor, himself included, above his own flags.
@@ -813,7 +813,7 @@ async fn blocked_accounts_cant_be_or_use_editors() {
         .await;
     assert_eq!(
         r["data"]["addAccountEditor"]["account"]["id"],
-        bob.tid().as_str(),
+        w.db.public(bob.id).await.as_str(),
         "{r}"
     );
     let r = w
@@ -868,7 +868,7 @@ async fn blocked_accounts_cant_be_or_use_editors() {
     let r = w.gql(&alice, LIST, json!({})).await;
     assert_eq!(
         r["data"]["accountEditors"][0]["account"]["id"],
-        bob.tid().as_str(),
+        w.db.public(bob.id).await.as_str(),
         "{r}"
     );
 

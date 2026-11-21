@@ -45,6 +45,26 @@ impl TestDb {
         Some(Self { pool, name, admin })
     }
 
+    /// The Snowflake the API shows for an account, emote or set (ADR 0026).
+    #[allow(dead_code)]
+    pub async fn public(&self, id: uuid::Uuid) -> String {
+        let mut conn = self.conn().await;
+        cyex_tv_db::public_ids::public_text(&mut conn, id)
+            .await
+            .unwrap()
+            .unwrap_or_else(|| panic!("{id} is no account, emote or set"))
+    }
+
+    /// The row an ID from an answer (a Snowflake) or a ULID names.
+    #[allow(dead_code)]
+    pub async fn row(&self, text: &str) -> uuid::Uuid {
+        let mut conn = self.conn().await;
+        let ulid = cyex_tv_db::public_ids::canonical(&mut conn, text)
+            .await
+            .unwrap();
+        cyex_tv_db::ids::from_text(&ulid).unwrap_or_else(|| panic!("{text} names nothing"))
+    }
+
     pub async fn conn(&self) -> sqlx::pool::PoolConnection<sqlx::Postgres> {
         self.pool.acquire().await.unwrap()
     }

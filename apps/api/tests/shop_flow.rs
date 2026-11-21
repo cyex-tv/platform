@@ -766,8 +766,11 @@ async fn the_webhook_fulfils_once_and_only_when_signed() {
         .await;
     let gift = &r["data"]["startCheckout"]["order"];
     assert_eq!(gift["gift"], true, "{r}");
-    assert_eq!(gift["recipient"]["id"], friend.tid().as_str());
-    assert_eq!(gift["buyer"]["id"], buyer.tid().as_str());
+    assert_eq!(
+        gift["recipient"]["id"],
+        w.db.public(friend.id).await.as_str()
+    );
+    assert_eq!(gift["buyer"]["id"], w.db.public(buyer.id).await.as_str());
     let gift_txn = r["data"]["startCheckout"]["transactionId"]
         .as_str()
         .unwrap()

@@ -156,7 +156,7 @@ impl World {
         )
         .await
         .unwrap();
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     async fn gql(&self, user: &User, query: &str, variables: Value) -> Value {
@@ -189,7 +189,7 @@ impl World {
 
     async fn exists(&self, emote: &str) -> bool {
         let mut conn = self.db.conn().await;
-        emotes::get(&mut conn, ids::from_text(emote).unwrap())
+        emotes::get(&mut conn, self.db.row(emote).await)
             .await
             .unwrap()
             .is_some()
@@ -293,7 +293,7 @@ async fn editors_manage_any_manages_anyones_editors_and_is_audited() {
         .await;
     assert_eq!(
         r["data"]["addAccountEditor"]["account"]["id"],
-        helper.tid().as_str(),
+        w.db.public(helper.id).await.as_str(),
         "{r}"
     );
 
@@ -351,7 +351,7 @@ async fn editors_manage_any_manages_anyones_editors_and_is_audited() {
         .await;
     assert_eq!(
         r["data"]["addAccountEditor"]["account"]["id"],
-        nobody.tid().as_str(),
+        w.db.public(nobody.id).await.as_str(),
         "{r}"
     );
     let r = w
@@ -377,7 +377,7 @@ async fn editors_manage_any_manages_anyones_editors_and_is_audited() {
         .iter()
         .map(|e| e["account"]["id"].as_str().unwrap())
         .collect();
-    assert_eq!(left, [nobody.tid().as_str()]);
+    assert_eq!(left, [w.db.public(nobody.id).await.as_str()]);
 
     // Each change is audited on the owner's account, by the staff member, marked with the permission.
     for action in [

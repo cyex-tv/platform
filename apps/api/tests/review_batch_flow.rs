@@ -168,7 +168,7 @@ impl World {
         if state != EmoteState::Pending {
             emotes::set_state(&mut conn, emote.id, state).await.unwrap();
         }
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     async fn gql(&self, user: Option<&User>, query: &str, variables: Value) -> Value {
@@ -210,7 +210,7 @@ impl World {
     async fn state_of(&self, id: &str) -> String {
         let mut conn = self.db.conn().await;
         sqlx::query_scalar("SELECT state FROM emotes WHERE id = $1")
-            .bind(ids::from_text(id).unwrap())
+            .bind(self.db.row(id).await)
             .fetch_one(&mut *conn)
             .await
             .unwrap()
@@ -264,7 +264,7 @@ async fn batch_verdicts_commit_together_with_an_audit_row_each() {
     assert_eq!(w.state_of(&a).await, "approved");
     let mut conn = w.db.conn().await;
     let unlisted: bool = sqlx::query_scalar("SELECT unlisted FROM emotes WHERE id = $1")
-        .bind(ids::from_text(&b).unwrap())
+        .bind(w.db.row(&b).await)
         .fetch_one(&mut *conn)
         .await
         .unwrap();
@@ -359,10 +359,10 @@ async fn reports_are_dismissed_in_one_step() {
         .emote(&alice, "Rep2", None, EmoteState::Approved, false)
         .await;
     let mut conn = w.db.conn().await;
-    let r1 = reports::create(&mut conn, ids::from_text(&e1).unwrap(), bob.id, "spam")
+    let r1 = reports::create(&mut conn, w.db.row(&e1).await, bob.id, "spam")
         .await
         .unwrap();
-    let r2 = reports::create(&mut conn, ids::from_text(&e2).unwrap(), bob.id, "spam")
+    let r2 = reports::create(&mut conn, w.db.row(&e2).await, bob.id, "spam")
         .await
         .unwrap();
     drop(conn);
@@ -551,10 +551,13 @@ async fn pasted_logins_match_accounts() {
     assert!(body["errors"].is_null(), "{body}");
     let list = body["data"]["accountsByLogin"].as_array().unwrap();
     assert_eq!(list.len(), 5, "{body}");
-    assert_eq!(list[0]["account"]["id"], json!(ids::to_text(alice.id)));
+    assert_eq!(list[0]["account"]["id"], json!(w.db.public(alice.id).await));
     assert_eq!(list[1]["problem"], "not_found");
     assert_eq!(list[2]["problem"], "ambiguous");
-    assert_eq!(list[3]["account"]["id"], json!(ids::to_text(twin_kick.id)));
+    assert_eq!(
+        list[3]["account"]["id"],
+        json!(w.db.public(twin_kick.id).await)
+    );
     assert_eq!(list[4]["problem"], "bad_login");
     drop(twin_twitch);
     w.db.close().await;

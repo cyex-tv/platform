@@ -116,7 +116,7 @@ impl World {
         if state != EmoteState::Pending {
             emotes::set_state(&mut conn, e.id, state).await.unwrap();
         }
-        ids::to_text(e.id)
+        self.db.public(e.id).await
     }
 
     async fn sql(&self, sql: &str, account: Uuid) {
@@ -197,7 +197,7 @@ async fn hiding_and_unhiding_emotes_and_creators() {
     );
 
     // A creator: by account, never yourself, never an unknown or deleted account.
-    let maker_id = ids::to_text(maker);
+    let maker_id = w.db.public(maker).await;
     let r = w
         .gql(Some(&t), HIDE_CREATOR, json!({ "id": maker_id }))
         .await;
@@ -349,7 +349,7 @@ async fn favourites_total_matches_visible_items() {
     }
     // One is taken down after it was favourited: it is neither listed nor counted.
     sqlx::query("UPDATE emotes SET state = 'taken_down' WHERE id = $1")
-        .bind(ids::from_text(&ids_made[1]).unwrap())
+        .bind(w.db.row(&ids_made[1]).await)
         .execute(&w.db.pool)
         .await
         .unwrap();

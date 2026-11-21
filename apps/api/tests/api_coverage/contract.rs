@@ -192,7 +192,9 @@ async fn emote(w: &World, owner: &User, name: &str, state: EmoteState) -> String
     if state != EmoteState::Pending {
         emotes::set_state(&mut conn, e.id, state).await.unwrap();
     }
-    ids::to_text(e.id)
+    drop(conn);
+    // As the API shows it (ADR 0026), so answers compare equal.
+    w.db.public(e.id).await
 }
 
 #[tokio::test]
@@ -534,7 +536,7 @@ async fn every_site_operation_runs_against_the_real_api() {
         .await;
     let data = c.op(os, "AcceptEmoteTransfer", json!({ "id": r3 })).await;
     c.check(
-        data["acceptEmoteTransfer"]["owner"]["id"] == f.tid().as_str(),
+        data["acceptEmoteTransfer"]["owner"]["id"] == c.w.db.public(f.id).await.as_str(),
         format!("AcceptEmoteTransfer: the emote moves: {data}"),
     );
     c.op(os, "DeclineEmoteTransfer", json!({ "id": r4 })).await;
@@ -1049,10 +1051,11 @@ async fn every_site_operation_runs_against_the_real_api() {
     c.op(os, "HideCreator", json!({ "accountId": t.tid() }))
         .await;
     let data = c.op(os, "PersonalLists", json!({})).await;
+    let t_public = c.w.db.public(t.id).await;
     c.check(
         data["favouriteEmoteIds"][0] == json!(e2)
             && data["hiddenEmotes"][0]["emoteId"] == json!(e_report)
-            && data["hiddenCreators"][0]["accountId"] == json!(t.tid()),
+            && data["hiddenCreators"][0]["accountId"] == json!(t_public),
         format!("PersonalLists: {data}"),
     );
     let data = c.op(os, "HiddenLists", json!({})).await;

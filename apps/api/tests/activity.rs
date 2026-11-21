@@ -135,7 +135,7 @@ impl World {
         if state != EmoteState::Pending {
             emotes::set_state(&mut conn, emote.id, state).await.unwrap();
         }
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     async fn grant(&self, user: &User, permission: &str) {
@@ -318,9 +318,10 @@ async fn kinds_appear_newest_first_with_their_details() {
         ]
     );
     // Everything is the owner's own doing; the reviewer isn't named.
+    let alice_public = w.db.public(alice.id).await;
     assert!(
         feed.iter()
-            .all(|e| e["actor"]["id"] == alice.tid().as_str())
+            .all(|e| e["actor"]["id"] == alice_public.as_str())
     );
 
     assert_eq!(feed[0]["emote"]["name"], "alicePending");
@@ -434,14 +435,9 @@ async fn private_and_moderation_things_stay_out() {
     // A per-set editor isn't an account editor: not on the feed either.
     {
         let mut conn = w.db.conn().await;
-        sets::add_editor(
-            &mut conn,
-            ids::from_text(&set).unwrap(),
-            bob.id,
-            Some(alice.id),
-        )
-        .await
-        .unwrap();
+        sets::add_editor(&mut conn, w.db.row(&set).await, bob.id, Some(alice.id))
+            .await
+            .unwrap();
     }
     let ok2 = w.emote(&alice, "ok2", EmoteState::Approved, false).await;
     assert!(w.add(&bob, &set, &ok2, None).await["errors"].is_null());
@@ -459,13 +455,9 @@ async fn private_and_moderation_things_stay_out() {
     // A takedown hides everything about the emote.
     {
         let mut conn = w.db.conn().await;
-        emotes::set_state(
-            &mut conn,
-            ids::from_text(&pending).unwrap(),
-            EmoteState::TakenDown,
-        )
-        .await
-        .unwrap();
+        emotes::set_state(&mut conn, w.db.row(&pending).await, EmoteState::TakenDown)
+            .await
+            .unwrap();
     }
     assert_eq!(w.kinds(&alice.tid()).await, ["SET_CREATED"]);
 
@@ -522,9 +514,9 @@ async fn editor_actions_are_attributed_to_the_editor() {
         kinds,
         ["COSMETICS_SELECTED", "SET_EMOTE_ADDED", "SET_CREATED"]
     );
-    assert_eq!(feed[0]["actor"]["id"], bob.tid().as_str());
-    assert_eq!(feed[1]["actor"]["id"], bob.tid().as_str());
-    assert_eq!(feed[2]["actor"]["id"], alice.tid().as_str());
+    assert_eq!(feed[0]["actor"]["id"], w.db.public(bob.id).await.as_str());
+    assert_eq!(feed[1]["actor"]["id"], w.db.public(bob.id).await.as_str());
+    assert_eq!(feed[2]["actor"]["id"], w.db.public(alice.id).await.as_str());
     // It is on Alice's feed, not on the editor's own.
     assert!(w.feed(&bob.tid(), None, None).await.is_empty());
 

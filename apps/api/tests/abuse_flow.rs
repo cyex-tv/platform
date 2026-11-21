@@ -406,9 +406,10 @@ async fn staff_look_up_an_account() {
         .await;
     let rows = r["data"]["auditLog"].as_array().unwrap();
     assert!(!rows.is_empty(), "{r}");
+    let reviewer_public = w.db.public(reviewer.id).await;
     assert!(
         rows.iter()
-            .all(|e| e["actorId"] == ids::to_text(reviewer.id))
+            .all(|e| e["actorId"] == reviewer_public.as_str())
     );
     let r = w
         .gql(&viewer, log, json!({ "action": "no.such.action" }))
@@ -515,7 +516,7 @@ async fn a_takedown_removes_the_image_everywhere_and_reaches_clients() {
         let state: String = {
             let mut conn = w.db.conn().await;
             sqlx::query_scalar("SELECT state FROM emotes WHERE id = $1")
-                .bind(ids::from_text(id).unwrap())
+                .bind(w.db.row(id).await)
                 .fetch_one(&mut *conn)
                 .await
                 .unwrap()
@@ -717,7 +718,7 @@ async fn timed_restrictions_end_on_their_own() {
     let Some(w) = World::new().await else { return };
     let mods = w.user("41", &["users.restrict"]).await;
     let erin = w.user("42", &[]).await;
-    let erin_id = ids::to_text(erin.id);
+    let erin_id = w.db.public(erin.id).await;
     let soon = (chrono::Utc::now() + chrono::Duration::hours(1)).to_rfc3339();
 
     // A reason is required, and the end has to be in the future.
@@ -796,7 +797,7 @@ async fn timed_restrictions_end_on_their_own() {
     assert_eq!(rows[0]["kind"], "UPLOADS");
     assert_eq!(rows[0]["reason"], "spam uploads");
     assert_eq!(rows[0]["active"], false);
-    assert_eq!(rows[0]["createdBy"], ids::to_text(mods.id).as_str());
+    assert_eq!(rows[0]["createdBy"], w.db.public(mods.id).await.as_str());
 
     // A timed block ends the same way: sessions end now, sign-in works again afterwards.
     let r = w
@@ -886,7 +887,10 @@ async fn a_ticket_ban_stops_reports_until_lifted() {
     let rows = &h["data"]["accountRestrictions"];
     assert_eq!(rows[0]["kind"], "TICKETS", "{h}");
     assert_eq!(rows[0]["active"], false);
-    assert_eq!(rows[0]["liftedBy"], ids::to_text(ticket_mod.id).as_str());
+    assert_eq!(
+        rows[0]["liftedBy"],
+        w.db.public(ticket_mod.id).await.as_str()
+    );
     assert_eq!(
         w.count("SELECT count(*) FROM audit_log WHERE action = 'account.restriction_lifted'")
             .await,

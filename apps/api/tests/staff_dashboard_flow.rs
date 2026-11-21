@@ -175,7 +175,7 @@ async fn staff_notes_are_for_staff_and_audited() {
     let note = r["data"]["addStaffNote"]["id"].as_str().unwrap().to_owned();
     assert_eq!(
         r["data"]["addStaffNote"]["authorId"],
-        ann.tid().as_str(),
+        w.db.public(ann.id).await.as_str(),
         "{r}"
     );
     w.gql(&ben, ADD, json!({ "a": a, "b": "Second note." }))
@@ -271,7 +271,7 @@ async fn the_graph_says_where_everything_came_from() {
     let looker = w.user("1202", &["entitlements.view"], 10).await;
     let plain = w.user("1203", &[], 0).await;
     let dan = w.user("1204", &[], 0).await;
-    let d = dan.tid();
+    let d = w.db.public(dan.id).await;
 
     // Two paints (no image needed) and a code batch that gave one of them.
     let (sunset, aurora, batch, code_id) =
@@ -337,16 +337,16 @@ async fn the_graph_says_where_everything_came_from() {
     assert_eq!(code_grant["codeBatchName"], "Launch week");
     let role = find("Mods", true);
     assert_eq!(role["source"], "STAFF");
-    assert_eq!(role["grantedBy"], granter.tid().as_str());
+    assert_eq!(role["grantedBy"], w.db.public(granter.id).await.as_str());
     let user_role = find("User", true);
     assert_eq!(user_role["source"], "DEFAULT");
     let gone = find("Sunset", false);
     assert_eq!(gone["kind"], "PAINT");
     assert_eq!(gone["source"], "STAFF");
     assert_eq!(gone["reason"], "Contest winner");
-    assert_eq!(gone["grantedBy"], granter.tid().as_str());
+    assert_eq!(gone["grantedBy"], w.db.public(granter.id).await.as_str());
     assert!(gone["grantedAt"].is_string());
-    assert_eq!(gone["revokedBy"], granter.tid().as_str());
+    assert_eq!(gone["revokedBy"], w.db.public(granter.id).await.as_str());
     assert_eq!(gone["revokeReason"], "Wrong winner");
     // Held ones come first.
     assert_eq!(grants[0]["active"], true);

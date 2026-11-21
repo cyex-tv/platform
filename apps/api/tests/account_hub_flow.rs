@@ -230,7 +230,7 @@ impl World {
         if state != EmoteState::Pending {
             emotes::set_state(&mut conn, emote.id, state).await.unwrap();
         }
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     async fn set(&self, owner: &User, name: &str) -> String {
@@ -332,7 +332,11 @@ async fn sessions_are_yours_only_and_never_tokens() {
         .await;
     assert_eq!(r["data"]["revokeSession"], false, "{r}");
     let (r, _) = w.site(&alice, "{ me { id } }", json!({})).await;
-    assert_eq!(r["data"]["me"]["id"], alice.tid().as_str(), "{r}");
+    assert_eq!(
+        r["data"]["me"]["id"],
+        w.db.public(alice.id).await.as_str(),
+        "{r}"
+    );
 
     // Alice signs her app out from the website; the app token stops working.
     let r = w
@@ -346,7 +350,11 @@ async fn sessions_are_yours_only_and_never_tokens() {
     let r = w.app(&alice, "{ me { id } }", json!({})).await;
     assert_eq!(code(&r), "signed_out", "{r}");
     let (r, _) = w.site(&alice, "{ me { id } }", json!({})).await;
-    assert_eq!(r["data"]["me"]["id"], alice.tid().as_str(), "{r}");
+    assert_eq!(
+        r["data"]["me"]["id"],
+        w.db.public(alice.id).await.as_str(),
+        "{r}"
+    );
     // Signing out the session you're using on the website also clears its cookie.
     let fresh = w.session(alice.id, SessionKind::Site, None).await;
     let (r, _) = w.post(Some((&fresh, true)), SESSIONS, json!({})).await;
@@ -638,7 +646,7 @@ async fn the_export_is_yours_complete_limited_and_audited() {
     let doc: Value = serde_json::from_str(text).unwrap();
     assert_eq!(doc["format"], "cyex.tv account export");
     assert_eq!(doc["version"], 1);
-    assert_eq!(doc["account"]["id"], alice.tid().as_str());
+    assert_eq!(doc["account"]["id"], w.db.public(alice.id).await.as_str());
     assert_eq!(doc["identities"][0]["login"], alice.login.as_str());
     assert_eq!(
         doc["identities"][0]["platform_user_id"],
@@ -740,14 +748,14 @@ async fn deleting_an_account_removes_it_and_keeps_what_others_use() {
             (&old, 3),
         ] {
             sqlx::query("UPDATE emotes SET file_id = $2 WHERE id = $1")
-                .bind(ids::from_text(emote).unwrap())
+                .bind(w.db.row(emote).await)
                 .bind(file_ids[file])
                 .execute(&mut *conn)
                 .await
                 .unwrap();
         }
         sqlx::query("UPDATE emotes SET deleted_at = now() WHERE id = $1")
-            .bind(ids::from_text(&old).unwrap())
+            .bind(w.db.row(&old).await)
             .execute(&mut *conn)
             .await
             .unwrap();
@@ -893,7 +901,7 @@ async fn deleting_an_account_removes_it_and_keeps_what_others_use() {
         let days = (erase_after - chrono::Utc::now()).num_hours();
         assert!((29 * 24..=30 * 24).contains(&days), "{days} hours");
         assert!(
-            emotes::get(&mut conn, ids::from_text(&lonely).unwrap())
+            emotes::get(&mut conn, w.db.row(&lonely).await)
                 .await
                 .unwrap()
                 .is_some()
@@ -1039,7 +1047,11 @@ async fn the_owner_cannot_delete_their_account() {
         .await;
     assert_eq!(code(&r), "owner_protected", "{r}");
     let r = w.gql(&owner, "{ me { id } }", json!({})).await;
-    assert_eq!(r["data"]["me"]["id"], owner.tid().as_str(), "{r}");
+    assert_eq!(
+        r["data"]["me"]["id"],
+        w.db.public(owner.id).await.as_str(),
+        "{r}"
+    );
     w.db.close().await;
 }
 

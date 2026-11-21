@@ -15,7 +15,6 @@ use cyex_tv_api::limits::{Limits, Rates};
 use cyex_tv_api::state::AppState;
 use cyex_tv_auth::{Auth, AuthConfig, tokens};
 use cyex_tv_db::accounts::{self, Profile};
-use cyex_tv_db::ids;
 use cyex_tv_db::sessions::{self, SessionKind};
 use cyex_tv_shared::model::Platform;
 use cyex_tv_shared::ratelimit::Rate;
@@ -153,20 +152,20 @@ async fn finds_accounts_by_login_and_name() {
     // Exact login first, then the login prefix, then a display-name match.
     let r = w.search(None, json!({ "q": "lumen_fox" })).await;
     let found = ids_of(&r);
-    assert_eq!(found[0], ids::to_text(fox), "{r}");
-    assert!(found.contains(&ids::to_text(foxy)));
+    assert_eq!(found[0], w.db.public(fox).await, "{r}");
+    assert!(found.contains(&w.db.public(foxy).await));
     let r = w.search(None, json!({ "q": "@LUMEN" })).await;
     let found = ids_of(&r);
     assert_eq!(found.len(), 3, "{r}");
     assert!(
-        found.contains(&ids::to_text(other)),
+        found.contains(&w.db.public(other).await),
         "display names match too"
     );
 
     // Public fields only: platform, login and name; no platform IDs.
     let r = w.search(None, json!({ "q": "lumenkick" })).await;
     let hit = &r["data"]["searchAccounts"]["items"][0];
-    assert_eq!(hit["account"]["id"], ids::to_text(fox).as_str(), "{r}");
+    assert_eq!(hit["account"]["id"], w.db.public(fox).await.as_str(), "{r}");
     assert_eq!(
         hit["identities"],
         json!([
@@ -223,13 +222,13 @@ async fn blocked_and_deleted_accounts_are_never_listed() {
     let token = w.token(live).await;
     for t in [None, Some(token.as_str())] {
         let r = w.search(t, json!({ "q": "hidden" })).await;
-        assert_eq!(ids_of(&r), vec![ids::to_text(live)], "{r}");
+        assert_eq!(ids_of(&r), vec![w.db.public(live).await], "{r}");
         assert_eq!(r["data"]["searchAccounts"]["total"], 1);
         // Even the exact login finds only similar live names, never the blocked account.
         let r = w.search(t, json!({ "q": "hidden_one" })).await;
         let found = ids_of(&r);
-        assert!(!found.contains(&ids::to_text(blocked)), "{r}");
-        assert!(!found.contains(&ids::to_text(deleted)), "{r}");
+        assert!(!found.contains(&w.db.public(blocked).await), "{r}");
+        assert!(!found.contains(&w.db.public(deleted).await), "{r}");
     }
     w.db.close().await;
 }

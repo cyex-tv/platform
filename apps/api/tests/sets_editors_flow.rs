@@ -154,7 +154,7 @@ impl World {
         emotes::set_state(&mut conn, emote.id, EmoteState::Approved)
             .await
             .unwrap();
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     async fn send(&self, token: Option<&str>, query: &str, variables: Value) -> Value {

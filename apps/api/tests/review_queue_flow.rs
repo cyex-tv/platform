@@ -138,7 +138,7 @@ impl World {
         .execute(&mut *conn)
         .await
         .unwrap();
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     async fn gql(&self, user: Option<&User>, query: &str, variables: Value) -> Value {
@@ -309,7 +309,7 @@ async fn approve_as_unlisted_or_private() {
         .expect("the approval is in the history");
     let after: Value = serde_json::from_str(approved["after"].as_str().unwrap()).unwrap();
     assert_eq!(after["visibility"], "unlisted");
-    assert_eq!(approved["actorId"], ids::to_text(mod_.id));
+    assert_eq!(approved["actorId"], w.db.public(mod_.id).await);
 
     // Approving twice is refused, and the uploader can't approve.
     let r = w
@@ -346,7 +346,7 @@ async fn emote_notes() {
     assert!(r["errors"].is_null(), "{r}");
     let note = r["data"]["addEmoteNote"].clone();
     assert_eq!(note["body"], "Looks like a 7TV copy.\nCheck.");
-    assert_eq!(note["authorId"], ids::to_text(one.id));
+    assert_eq!(note["authorId"], w.db.public(one.id).await);
     w.gql(Some(&two), ADD_NOTE, json!({ "id": e, "b": "Agreed." }))
         .await;
 

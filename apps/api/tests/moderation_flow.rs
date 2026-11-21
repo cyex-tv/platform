@@ -15,7 +15,7 @@ use cyex_tv_auth::{Auth, AuthConfig, tokens};
 use cyex_tv_db::accounts::{self, Profile};
 use cyex_tv_db::emotes::{self, NewEmote};
 use cyex_tv_db::sessions::{self, SessionKind};
-use cyex_tv_db::{audit, ids, roles, sets};
+use cyex_tv_db::{audit, roles, sets};
 use cyex_tv_shared::model::{Platform, SetKind};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -109,7 +109,7 @@ impl World {
         )
         .await
         .unwrap();
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     /// A channel set of `owner` holding `emote`.
@@ -122,7 +122,7 @@ impl World {
             &mut conn,
             set.id,
             sets::NewMember {
-                emote_id: ids::from_text(emote).unwrap(),
+                emote_id: self.db.row(emote).await,
                 name: None,
                 zero_width: None,
                 added_by: Some(owner.id),
@@ -130,7 +130,7 @@ impl World {
         )
         .await
         .unwrap();
-        ids::to_text(set.id)
+        self.db.public(set.id).await
     }
 
     async fn gql(&self, user: Option<&User>, query: &str, variables: Value) -> Value {
@@ -310,7 +310,7 @@ async fn the_review_queue_and_approval() {
     let mut conn = w.db.conn().await;
     let stored: Option<String> =
         sqlx::query_scalar("SELECT review_reason FROM emotes WHERE id = $1")
-            .bind(ids::from_text(&second).unwrap())
+            .bind(w.db.row(&second).await)
             .fetch_one(&mut *conn)
             .await
             .unwrap();
