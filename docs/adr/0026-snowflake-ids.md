@@ -41,7 +41,8 @@ key uses it. Changing the keys would touch every table and every query for no ga
     a task-local), so `ids::from_text`, and with it `errors::parse_id` and every resolver, takes
     either form. After it, every field named `id`, `ids`, `done` (batch outcomes), `…Id`, `…Ids` or `…By` (`addedBy`, `createdBy`) whose value is the ULID
     of an account, emote or set gets the Snowflake instead, also inside the JSON text of
-    `before`, `after` and `payload` (audit entries). One query per request each way, only when
+    `before`, `after` and `payload` (audit entries, notifications) and the account export
+    (`exportMyData`). One query per request each way, only when
     there is something to look up.
   - REST: the cacheable reads are translated when their body is built (so the cached body and its
     ETag already carry Snowflakes), uploads and the personal-set lookup when they answer

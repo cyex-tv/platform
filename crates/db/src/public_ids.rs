@@ -182,9 +182,10 @@ pub fn is_id_key(key: &str) -> bool {
         || key.ends_with("_by")
 }
 
-/// Fields whose text is JSON in its own right (audit `before` and `after`, event `payload`).
+/// Fields whose text is JSON in its own right (audit `before` and `after`, event and
+/// notification `payload`, the account export `exportMyData`).
 pub fn is_embedded_json_key(key: &str) -> bool {
-    matches!(key, "before" | "after" | "payload")
+    matches!(key, "before" | "after" | "payload" | "exportMyData")
 }
 
 fn ulid_of(text: &str) -> Option<Uuid> {
