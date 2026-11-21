@@ -79,3 +79,38 @@ describe('emote page tabs in the address', () => {
     expect(goto).toHaveBeenCalledWith('/emotes/E1', { noScroll: true, keepFocus: true, replaceState: true });
   });
 });
+
+// The Inspector layout (redesign, 2026/11/21): the preview column and the facts column.
+describe('emote page layout', () => {
+  it('shows one neutral stage, the four sizes as buttons with pixels and file size, and a chat line', async () => {
+    here.url = new URL('http://x/emotes/E1');
+    const user = userEvent.setup();
+    const { container } = view();
+    const stage = container.querySelector('[data-testid="emote-stage"]')!;
+    expect(stage.querySelector('img')?.getAttribute('src')).toBe('https://cdn.example/emotes/1/4x.webp');
+    // No ground switch (owner rule): nothing on the stage offers Dark, Light, Checker or Chat.
+    expect(stage.textContent).not.toMatch(/Dark|Light|Checker/);
+    const sizes = screen.getByRole('group', { name: 'Sizes' });
+    const buttons = [...sizes.querySelectorAll('button')];
+    expect(buttons.map((b) => b.textContent?.replace(/\s+/g, ' ').trim())).toEqual([
+      '1x 32 × 32900 B', '2x 64 × 64900 B', '3x 96 × 96900 B', '4x 128 × 128900 B',
+    ]);
+    expect(buttons[3].getAttribute('aria-pressed')).toBe('true');
+    await user.click(buttons[0]);
+    expect(stage.querySelector('img')?.getAttribute('src')).toBe('https://cdn.example/emotes/1/1x.webp');
+    expect(buttons[0].getAttribute('aria-pressed')).toBe('true');
+    expect(container.querySelector('.chatline img')?.getAttribute('alt')).toBe('fernYawn');
+  });
+
+  it('puts the name, the creator, the facts and the tabs in the right column', () => {
+    here.url = new URL('http://x/emotes/E1');
+    const { container } = view();
+    const right = container.querySelector('.right')!;
+    expect(right.querySelector('h1')?.textContent).toBe('fernYawn');
+    expect(right.querySelector('a.creator')?.getAttribute('href')).toBe('/users/A1');
+    const facts = [...right.querySelectorAll('.facts dt')].map((d) => d.textContent);
+    expect(facts).toEqual(['Channels', 'Kind', 'Format', 'File at 4x', 'Review']);
+    expect(right.querySelector('[role="tablist"]')).toBeTruthy();
+    expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).textContent).toMatch(/All emotes\s*\/\s*fernYawn/);
+  });
+});

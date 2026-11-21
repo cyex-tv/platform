@@ -8,6 +8,10 @@
   //   - Mouse or pen: press and drag draws a rectangle that picks every tile it touches (from an
   //     empty spot it also turns Select mode on), scrolling the window near its edges.
   //   - Touch: long-press turns Select mode on with that tile (in Select mode: a range).
+  //   - Signed in, a + on every tile adds it to the target set in place (Undo in the toast; a
+  //     full set is refused); a tile already in the target says so and its button removes it.
+  //   - Drag a tile (or, in Select mode, the picked tiles) onto a set in the rail to add it there.
+  //   - Right-click a picked tile in Select mode: the menu acts on every picked emote.
   // Everything goes through the pure model in ./selection, which keeps the cap.
   // Tiles load their emote's page on tap, not on hover (each page is four queries, and a drag
   // across the grid would fetch dozens), and not at all while Select mode is on.
@@ -18,7 +22,11 @@
   import Icon from '../Icon.svelte';
   import TileMenu from './TileMenu.svelte';
   import * as S from './selection';
-  import { target } from './target.svelte';
+  import { SvelteSet } from 'svelte/reactivity';
+  import { session } from '$lib/tool/session.svelte';
+  import { endDrag, startDrag } from './drag';
+  // Not imported as `target`: the test runner's module rewrite would also rename Svelte's `new.target`.
+  import { target as store, setLabel, type SetItem } from './target.svelte';
 
   type Props = {
     items: CardEmote[];
@@ -37,9 +45,24 @@
   let { items, label, loading = false, skeletons = 10, eager = 0, ranked = false, selecting, sel, onstep, onstart }: Props = $props();
   // The set Add goes to: emotes already in it get an "In set" mark (the tile menu says Remove for them).
   const held = $derived.by(() => {
-    const t = target.current;
-    return t ? { name: clean(t.name), has: (id: string) => t.held.has(id) } : null;
+    const t = store.current;
+    return t ? { set: t, name: clean(t.name), label: setLabel(t), has: (id: string) => t.held.has(id) } : null;
   });
+  // Signed in with a set to add to: every tile gets its + (outside Select mode).
+  const adding = $derived(!!session.me && !session.ended && !!held);
+  const asItem = (e: CardEmote): SetItem => ({ id: e.id, name: e.shownName ?? e.name, host: e.host, animated: e.animated, files: e.files });
+  const busy = new SvelteSet<string>();
+  async function addOrRemove(e: CardEmote) {
+    const h = held;
+    if (!h || busy.has(e.id)) return;
+    busy.add(e.id);
+    try {
+      if (h.has(e.id)) await store.take(h.set, [e.id]);
+      else await store.put(h.set, [asItem(e)]);
+    } finally {
+      busy.delete(e.id);
+    }
+  }
 
   let root = $state<HTMLDivElement>();
 
@@ -60,13 +83,17 @@
   const onMore = (t: EventTarget | null) => t instanceof Element && !!t.closest('.more');
 
   // ---- The tile menu.
-  let menu = $state<{ emote: CardEmote; x: number; y: number } | null>(null);
+  let menu = $state<{ emotes: CardEmote[]; id: string; x: number; y: number } | null>(null);
   function openMenu(id: string, x: number, y: number) {
     const emote = items.find((e) => e.id === id);
-    if (emote) menu = { emote, x, y };
+    if (!emote) return;
+    // A picked tile in Select mode: the menu is for every picked emote.
+    const many = selecting && picked.has(id) && sel.ids.length > 1;
+    const emotes = many ? (sel.ids.map((p) => items.find((e) => e.id === p)).filter(Boolean) as CardEmote[]) : [emote];
+    menu = { emotes, id, x, y };
   }
   function closeMenu(refocus: boolean) {
-    const id = menu?.emote.id;
+    const id = menu?.id;
     menu = null;
     if (refocus && id) root?.querySelector<HTMLElement>(`li[data-id="${CSS.escape(id)}"] .tile`)?.focus();
   }
@@ -115,6 +142,8 @@
     }
     // Outside Select mode a press on a tile is the link's; from an empty spot it may become a drag.
     if (!selecting && li) return;
+    // In Select mode a press on a picked tile may drag the picks onto a set (signed in).
+    if (selecting && li && picked.has(li.dataset.id!) && session.me) return;
     const client = { x: ev.clientX, y: ev.clientY };
     press = { start: pagePoint(client), client, dragging: false, base: sel, boxes: [] };
     addEventListener('pointermove', onpointermove);
@@ -228,6 +257,31 @@
     onpointerup();
     clearTimeout(longPress);
   });
+
+  // ---- Dragging onto the rail: one tile, or the picked ones. A count stands in for the picture.
+  function dragstart(ev: DragEvent) {
+    const li = liOf(ev.target);
+    const dt = ev.dataTransfer;
+    if (!li || !dt || !session.me) {
+      if (selecting) ev.preventDefault();
+      return;
+    }
+    const id = li.dataset.id!;
+    if (selecting && !picked.has(id)) {
+      ev.preventDefault();
+      return;
+    }
+    const list = selecting ? (sel.ids.map((p) => items.find((e) => e.id === p)).filter(Boolean) as CardEmote[]) : items.filter((e) => e.id === id);
+    startDrag(dt, list.map(asItem));
+    if (list.length > 1) {
+      const ghost = document.createElement('div');
+      ghost.className = 'drag-ghost';
+      ghost.textContent = `${list.length} emotes`;
+      document.body.append(ghost);
+      dt.setDragImage(ghost, 12, 12);
+      requestAnimationFrame(() => ghost.remove());
+    }
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -240,9 +294,8 @@
   onclickcapture={onclickcapture}
   onkeydowncapture={onkeydowncapture}
   {oncontextmenu}
-  ondragstart={(e) => {
-    if (selecting) e.preventDefault();
-  }}
+  ondragstart={dragstart}
+  ondragend={endDrag}
 >
   {#if long}<a class="skip" href="#{endId}" onclick={skip}>Skip results</a>{/if}
   <ul class="grid" aria-label={label} aria-busy={loading}>
@@ -256,8 +309,23 @@
           rank={ranked ? i + 1 : undefined}
           inSet={held?.has(e.id) ? held.name : undefined}
         />
+        {#if adding && !selecting && held}
+          {@const on = held.has(e.id)}
+          <button
+            class="add"
+            class:on
+            type="button"
+            aria-pressed={on}
+            aria-busy={busy.has(e.id)}
+            aria-label="{on ? 'Remove' : 'Add'} {clean(e.name)} {on ? 'from' : 'to'} {held.label}"
+            title="{on ? 'Remove from' : 'Add to'} {held.label}"
+            onclick={() => addOrRemove(e)}
+          >
+            <Icon name={on ? 'check' : 'plus'} size={16} />
+          </button>
+        {/if}
         {#if !selecting}
-          <button class="more" type="button" aria-label="More for {clean(e.name)}" aria-haspopup="menu" onclick={(ev) => moreClick(ev, e.id)}>
+          <button class="more" class:low={adding} type="button" aria-label="More for {clean(e.name)}" aria-haspopup="menu" onclick={(ev) => moreClick(ev, e.id)}>
             <Icon name="more" size={16} />
           </button>
         {/if}
@@ -285,13 +353,13 @@
 
 {#if menu}
   <TileMenu
-    emote={menu.emote}
+    emotes={menu.emotes}
     x={menu.x}
     y={menu.y}
     {selecting}
     onclose={closeMenu}
     onselect={() => {
-      const id = menu?.emote.id;
+      const id = menu?.id;
       closeMenu(true);
       onstart(id);
     }}
@@ -323,6 +391,24 @@
   @media (hover: none) { .more { opacity: 1; background: none; } }
   /* Touch: 28px to see, 44px to hit (8px of invisible reach on every side). */
   @media (pointer: coarse) { .more::after { content: ''; position: absolute; inset: -8px; } }
+
+  /* +: the tile's own add button, top-right, always there (signed in). In the target: a tick on
+     the accent hairline, and the click removes it. */
+  .add { position: absolute; top: 6px; right: 6px; z-index: 1; display: inline-grid; place-items: center; width: 30px; height: 30px; padding: 0;
+    border: 1px solid var(--border-strong); border-radius: var(--radius-btn); background: var(--bg); color: var(--text); cursor: pointer;
+    transition: color var(--fast), border-color var(--fast), background-color var(--fast), transform var(--dur-press) ease-out; touch-action: manipulation; }
+  .add:active { transform: scale(var(--press)); }
+  .add.on { border-color: var(--accent-border); color: var(--accent-text); }
+  .add[aria-busy='true'] { opacity: .6; pointer-events: none; }
+  .add:focus-visible { outline-offset: 1px; }
+  .more.low { top: 42px; }
+  @media (hover: hover) and (pointer: fine) {
+    .add:hover { border-color: var(--accent-border); color: var(--accent-text); }
+    .add.on:hover { border-color: var(--red); color: var(--red); }
+  }
+  @media (pointer: coarse) { .add::after { content: ''; position: absolute; inset: -7px; } }
+  :global(.drag-ghost) { position: fixed; top: -100px; left: 0; padding: 6px 10px; border-radius: var(--radius-btn); background: var(--accent);
+    color: var(--accent-ink); font: 600 13px/1.2 var(--font, inherit); }
 
   /* The drag rectangle: a hairline in the accent over a faint tint of it. */
   .band { position: absolute; z-index: 2; pointer-events: none; border: 1px solid var(--accent-border); border-radius: 2px;

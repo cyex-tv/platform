@@ -28,6 +28,12 @@
             document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) { m.setAttribute('content', '#ffffff'); });
           }
         } catch (e) {}
+        // Signed in last time on this device (the layout keeps it current): pages with a signed-in
+        // column (the browse page's set rail and tray) hold its place from the first paint.
+        try {
+          if (localStorage.getItem('cyexSigned') === '1') document.documentElement.dataset.signed = '';
+          if (localStorage.getItem('cyex.browse.tray') === '0') document.documentElement.dataset.tray = 'shut';
+        } catch (e) {}
         // Reduced motion, per device (Settings → Appearance): "reduce" or "full" override the OS.
         // Scripts ask matchMedia('(prefers-reduced-motion: …)'); the answer follows the setting.
         try {

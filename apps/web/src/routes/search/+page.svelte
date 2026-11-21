@@ -1,4 +1,11 @@
 <script lang="ts">
+  // The browse page, in the Workspace layout (redesign, 2026/11/21). Signed in, three columns: the
+  // set rail on the left (SetRail: every set you can add to, the target picked there), the grid in
+  // the middle (sort, search, filters, Select; a + on every tile adds to the target), and from
+  // 1280px the tray on the right (TargetTray: what the target holds, live). Under 900px the rail
+  // is a bottom sheet opened from the "Adding to" button. Signed out the grid has the full width
+  // and a short line offers sign in; sorting, filters and search work the same. Every filter
+  // lives in the address (params.ts).
   import { goto, invalidateAll, replaceState } from '$app/navigation';
   import { navigating, page } from '$app/state';
   import { tick, untrack } from 'svelte';
@@ -12,7 +19,10 @@
   import BrowseGrid from '$lib/components/browse/BrowseGrid.svelte';
   import { personal } from '$lib/personal/lists.svelte';
   import SelectBar from '$lib/components/browse/SelectBar.svelte';
-  import TargetSet from '$lib/components/browse/TargetSet.svelte';
+  import SetRail from '$lib/components/browse/SetRail.svelte';
+  import TargetTray from '$lib/components/browse/TargetTray.svelte';
+  import BottomSheet from '$lib/components/BottomSheet.svelte';
+  import { target as sets, setLabel } from '$lib/components/browse/target.svelte';
   import { all, CAP, EMPTY, toggle, type Selection, type Step } from '$lib/components/browse/selection';
   import { session } from '$lib/tool/session.svelte';
   import Problem from '$lib/components/Problem.svelte';
@@ -34,7 +44,6 @@
     type Sort,
     type Window,
   } from '$lib/components/browse/params';
-  import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
   import { clean, count, iso } from '$lib/format';
   import { SEARCH } from '$lib/queries';
   import SearchField from '$lib/components/browse/SearchField.svelte';
@@ -188,6 +197,32 @@
   }
   const signin = $derived(`/signin?back=${encodeURIComponent(page.url.pathname + page.url.search)}`);
 
+  // ---- The workspace: signed in (or, before the session is known, signed in last time).
+  const signed = $derived(!!session.me && !session.ended);
+  $effect(() => {
+    if (signed) sets.ensure();
+  });
+  let railSheet = $state(false);
+  // The tray folds to a strip; remembered on this device (app.html reads it before first paint).
+  let trayOpen = $state(true);
+  $effect(() => {
+    try {
+      trayOpen = localStorage.getItem('cyex.browse.tray') !== '0';
+    } catch {
+      trayOpen = true;
+    }
+  });
+  function toggleTray() {
+    trayOpen = !trayOpen;
+    document.documentElement.dataset.tray = trayOpen ? '' : 'shut';
+    if (trayOpen) delete document.documentElement.dataset.tray;
+    try {
+      localStorage.setItem('cyex.browse.tray', trayOpen ? '1' : '0');
+    } catch {
+      /* not remembered */
+    }
+  }
+
   // ---- Load more: button, and automatically when the end comes near. The page count goes into
   // the URL (n=) only for loads the reader asked for: the button, or scrolling down to the end.
   // Loads that only fill a tall window leave the address as it was.
@@ -253,13 +288,19 @@
 
 <svelte:window {onkeydown} />
 
-<ColumnLayout top>
+<div class="wrap ws" class:signed class:shut={!trayOpen}>
+  <aside class="rail-col" aria-label="Your sets">
+    {#if signed}<SetRail />{:else if !session.known}<div class="hold" aria-hidden="true"><span class="ui-skeleton"></span><span class="ui-skeleton"></span><span class="ui-skeleton"></span></div>{/if}
+  </aside>
   <div class="browse">
     <div class="head">
       <div class="title">
         <h1>Emotes</h1>
         {#if !data.error}<p class="total" aria-live="polite">{countText}</p>{/if}
       </div>
+      {#if session.known && !signed}
+        <p class="invite"><a href={signin}>Sign in</a> to add emotes to your channel.</p>
+      {/if}
     </div>
 
     <div class="toolbar" bind:this={gridTop}>
@@ -287,7 +328,13 @@
           <input type="checkbox" role="switch" checked={selecting} onchange={(e) => setSelecting(e.currentTarget.checked)} />
           <span class="track" aria-hidden="true"></span>
         </label>
-        {#if session.me}<TargetSet />{/if}
+        {#if signed}
+          <button class="btn btn-s tgt" type="button" aria-haspopup="dialog" aria-expanded={railSheet} onclick={() => (railSheet = true)}>
+            <Icon name="folder" size={15} /><span class="tw">Adding to</span>
+            <bdi>{sets.current ? setLabel(sets.current) : sets.sets ? 'No set' : 'Your set'}</bdi>
+            <Icon name="chevron-down" size={14} />
+          </button>
+        {/if}
       </div>
     </div>
 
@@ -363,9 +410,48 @@
       />
     {/if}
   </div>
-</ColumnLayout>
+  <aside class="tray-col" aria-label={sets.current ? `What ${setLabel(sets.current)} holds` : 'Your set'}>
+    {#if signed}<TargetTray open={trayOpen} ontoggle={toggleTray} />{/if}
+  </aside>
+</div>
+
+{#if signed}
+  <BottomSheet bind:open={railSheet} label="Add to which set">
+    {#if railSheet}<SetRail sheet onpicked={() => (railSheet = false)} />{/if}
+  </BottomSheet>
+{/if}
 
 <style>
+  /* The workspace: the rail, the grid, the tray. Signed out (no hint either) only the grid. The
+     columns are decided by CSS (and the first-paint hint), so nothing moves when the session lands. */
+  .ws { display: grid; grid-template-columns: minmax(0, 1fr); column-gap: 24px; align-items: start; }
+  .rail-col, .tray-col { display: none; }
+  .browse { min-width: 0; padding-top: var(--rail-gap); padding-bottom: 32px; }
+  @media (min-width: 900px) {
+    :global(html[data-signed]) .ws, .ws.signed { grid-template-columns: 248px minmax(0, 1fr); }
+    :global(html[data-signed]) .rail-col, .signed .rail-col { display: block; position: sticky; top: var(--nav-h); height: calc(100svh - var(--nav-h));
+      overflow-y: auto; overscroll-behavior: contain; margin-left: calc(-1 * var(--page-pad)); padding: var(--rail-gap) 12px 24px var(--page-pad);
+      border-right: 1px solid var(--border); scrollbar-width: thin; }
+    .tgt { display: none; }
+  }
+  @media (min-width: 1280px) {
+    :global(html[data-signed]) .ws, .ws.signed { grid-template-columns: 248px minmax(0, 1fr) 300px; }
+    :global(html[data-signed][data-tray='shut']) .ws, .ws.signed.shut { grid-template-columns: 248px minmax(0, 1fr) 44px; }
+    :global(html[data-signed]) .tray-col, .signed .tray-col { display: block; position: sticky; top: var(--nav-h); height: calc(100svh - var(--nav-h));
+      overflow-y: auto; overscroll-behavior: contain; margin-right: calc(-1 * var(--page-pad)); border-left: 1px solid var(--border); background: var(--surface);
+      scrollbar-width: thin; }
+  }
+  /* Signed out after all (the hint was stale): back to one column. */
+  .ws:not(.signed) .rail-col:empty, .ws:not(.signed) .tray-col:empty { display: none; }
+  .hold { display: grid; gap: 8px; }
+  .hold span { display: block; height: 40px; border-radius: var(--radius-btn); }
+  .invite { margin: 0; font-size: var(--t-small); color: var(--muted); }
+  .invite a { color: var(--accent-text); font-weight: 600; }
+  .tgt { height: 34px; max-width: 260px; min-width: 0; }
+  .tgt bdi { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+  .tgt .tw { color: var(--muted); font-weight: 500; }
+  .tgt :global(svg) { flex: none; color: var(--dim); }
+
   /* Title row: the one page title and the count. */
   .head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; min-height: 40px; }
   .title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
@@ -375,7 +461,7 @@
   /* Toolbar: sort (and Trending's window), the search field, then Filters, Select and the target set. */
   .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin-top: 16px; }
   .sorts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
-  .find { flex: 1 1 220px; min-width: 0; max-width: 420px; }
+  .find { flex: 1 1 120px; min-width: 120px; max-width: 420px; }
   .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-left: auto; min-width: 0; }
   .filt { height: 34px; }
   .filt :global(svg) { color: var(--dim); }
