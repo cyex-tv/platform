@@ -14,9 +14,9 @@ use common::TestDb;
 use cyex_tv_api::state::AppState;
 use cyex_tv_auth::{Auth, AuthConfig, tokens};
 use cyex_tv_db::accounts::{self, Profile};
+use cyex_tv_db::channels;
 use cyex_tv_db::emotes::{self, NewEmote};
 use cyex_tv_db::sessions::{self, SessionKind};
-use cyex_tv_db::{channels, ids};
 use cyex_tv_shared::model::{EmoteState, Platform};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -112,7 +112,7 @@ impl World {
         if state != EmoteState::Pending {
             emotes::set_state(&mut conn, emote.id, state).await.unwrap();
         }
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     async fn send(&self, request: Request<Body>) -> Reply {

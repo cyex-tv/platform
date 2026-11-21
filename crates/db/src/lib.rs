@@ -27,6 +27,7 @@ pub mod outbox;
 pub mod personal;
 pub mod prefs;
 pub mod privacy;
+pub mod public_ids;
 pub mod reads;
 pub mod reports;
 pub mod review;

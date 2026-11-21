@@ -283,7 +283,10 @@ async fn twenty_waiting_emotes_refuse_the_next_upload() {
     let q = w.quota(&alice, None).await;
     assert_eq!(q["data"]["uploadQuota"]["pending"], 20, "{q}");
     assert_eq!(q["data"]["uploadQuota"]["pendingMax"], 20, "{q}");
-    assert_eq!(q["data"]["uploadQuota"]["accountId"], alice.tid());
+    assert_eq!(
+        q["data"]["uploadQuota"]["accountId"],
+        w.db.public(alice.id).await
+    );
 
     let r = w.upload(&alice, "oneMore", 1, None).await;
     assert_eq!(r.status, StatusCode::CONFLICT, "{:?}", r.body);
@@ -404,7 +407,10 @@ async fn uploading_for_someone_counts_against_the_owner() {
     // The quota of the account he uploads for, as the dialog shows it.
     let q = w.quota(&bob, Some(&alice)).await;
     assert_eq!(q["data"]["uploadQuota"]["pending"], 20, "{q}");
-    assert_eq!(q["data"]["uploadQuota"]["accountId"], alice.tid());
+    assert_eq!(
+        q["data"]["uploadQuota"]["accountId"],
+        w.db.public(alice.id).await
+    );
     // Not for an account he doesn't edit.
     let q = w.quota(&carol, Some(&alice)).await;
     assert_eq!(code(&q), "forbidden", "{q}");
@@ -589,7 +595,7 @@ async fn changing_limits_follows_the_role_edit_rules() {
     let stored: Value = {
         let mut conn = w.db.conn().await;
         sqlx::query_scalar("SELECT limits FROM roles WHERE id = $1")
-            .bind(ids::from_text(&above).unwrap())
+            .bind(w.db.row(&above).await)
             .fetch_one(&mut *conn)
             .await
             .unwrap()

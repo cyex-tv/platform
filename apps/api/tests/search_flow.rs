@@ -344,7 +344,7 @@ async fn account_is_public_and_null_when_unknown_or_blocked() {
     };
     let made = seed(&db).await;
     let app = app_for(&db);
-    let id = ids::to_text(made.owner);
+    let id = db.public(made.owner).await;
     let data = gql(
         &app,
         &format!(r#"{{ account(id: "{id}") {{ id displayName avatar }} }}"#),

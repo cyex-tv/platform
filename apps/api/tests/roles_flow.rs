@@ -454,10 +454,11 @@ async fn every_role_change_is_audited() {
             "role.created"
         ]
     );
+    let owner_public = w.db.public(owner.id).await;
     assert!(
         entries
             .iter()
-            .all(|e| e["actorId"] == owner.text_id().as_str())
+            .all(|e| e["actorId"] == owner_public.as_str())
     );
     let updated = &entries[2];
     let before: Value = serde_json::from_str(updated["before"].as_str().unwrap()).unwrap();
@@ -465,7 +466,7 @@ async fn every_role_change_is_audited() {
     assert_eq!(before["description"], Value::Null);
     assert_eq!(after["description"], "Review queue");
     assert_eq!(entries[1]["targetKind"], "account");
-    assert_eq!(entries[1]["targetId"], carol.text_id().as_str());
+    assert_eq!(entries[1]["targetId"], w.db.public(carol.id).await.as_str());
 
     // Paging and filtering.
     let page = w.gql(&owner, query, json!({ "l": 2 })).await;

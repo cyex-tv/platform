@@ -175,7 +175,7 @@ async fn an_emotes_public_history() {
         )
         .await
         .unwrap();
-        ids::to_text(e.id)
+        w.db.public(e.id).await
     };
     // Pending: nothing at all, even after it went in Alice's own set.
     let alices = w.set(&alice, "Alice main", "LISTED").await;
@@ -214,11 +214,15 @@ async fn an_emotes_public_history() {
         "{lines:?}"
     );
     // Uploaded shows the owner, never the reviewer.
-    assert_eq!(lines[3]["actor"]["id"], ids::to_text(alice.id).as_str());
+    assert_eq!(
+        lines[3]["actor"]["id"],
+        w.db.public(alice.id).await.as_str()
+    );
     assert_eq!(lines[1]["fromName"], "aliceWave");
     assert_eq!(lines[1]["toName"], "wave");
     let text = serde_json::to_string(&lines).unwrap();
     assert!(!text.contains(&ids::to_text(staff.id)), "no reviewer");
+    assert!(!text.contains(&w.db.public(staff.id).await), "no reviewer");
     assert!(
         !text.contains(&bobs_secret) && !text.contains(&bobs_link),
         "{text}"

@@ -1350,7 +1350,25 @@ gh pr edit 144 --title "Hero: a realistic neon-rod mark with depth, no floor or 
 ```
 git push -u origin fix/hero-dark-bars
 gh pr create --base main --head fix/hero-dark-bars --title "Hero: lighter dark-mode bars with a soft white glow" --body-file <file>
+
+## Snowflake IDs for emotes, accounts and sets (feat/snowflake-ids, ADR 0027, owner decision of 2026/11/21)
+- [x] Format: 64-bit, 41 bits ms since the cyex epoch 2026-01-01T00:00:00Z, 10 bits instance, 12 bits sequence; decimal strings everywhere. Badges, paints, roles, orders, images and the rest keep ULIDs.
+- [x] Database (additive, `20261212000001_snowflake_public_ids`): `snowflake_id()` (sequence-held last ID behind a short advisory lock, `clock_timestamp()`, instance from `cyex_tv.snowflake_instance`, default 0), `snowflake_time(id)`, `public_id bigint NOT NULL UNIQUE` on `accounts`, `emotes`, `emote_sets`, backfilled oldest first from `created_at`. Uuid keys and joins unchanged.
+- [x] API edges (`cyex_tv_db::public_ids`, `apps/api/src/public_ids.rs`): the GraphQL `PublicIds` extension resolves Snowflakes in the request (text and variables) so `ids::from_text` takes both forms, and puts Snowflakes in the answer's `id`/`…Id`/`…Ids` fields (and audit `before`/`after` JSON); REST reads translated when built (cached body and ETag), uploads and personal-set lookup when answering, path IDs and `owner_id` take both forms. Events stored by Snowflake (`set:<snowflake>` topics, payload IDs, `payload.set_id`); `set:<ULID>` still subscribes on the event socket and the GraphQL subscription, and that client hears the set under the name it used.
+- [x] Website: Snowflake links; `/emotes|users|sets/<ULID>` answer 308 to the Snowflake URL (query kept); rail and target-set storage tolerate old IDs; mock makes Snowflakes and takes ULIDs; IDs guide and changelog entry.
+- [x] Tests: `crates/db/tests/snowflakes.rs` (monotonic, concurrent uniqueness, time and instance, backfill on a DB migrated to just before, lookups, events), `apps/api/tests/snowflake_ids_flow.rs` (reads and every mutation family by both forms, REST), `live_flow.rs` and `apps/events/tests/socket.rs` (set topics by both forms); unit tests in `ids.rs`, `public_ids.rs` (db and api), `topics.rs`; web `ids.test.ts`, `loaders.test.ts`, `mock-snowflake.test.mjs`, `rail-state.ui.test.ts`.
+- [x] Manual (mock, 1440 dark): browse, emote, profile and set pages; an old ULID emote link redirects to the Snowflake URL with query and hash kept. Screens in `.claude/runs/2026-11-20-redesign/screens/snowflake/`.
+- Follow-ups (separate): the extension (favourites and usage keys `cyextv:<emoteId>` hold ULIDs) and cyex deck (handoff with the new contract).
+
+### GitHub write log for this PR
+
 ```
+git push -u origin feat/snowflake-ids
+gh pr create --repo cyex-tv/platform --base main --head feat/snowflake-ids --title "Snowflake IDs for emotes, accounts and sets" --body-file <file>
+gh pr edit 149 --repo cyex-tv/platform --body-file <file>   # known transition limits
+git push   # merges of origin/main, test fixes, ADR renumbered to 0027 (0026 taken by #150)
+```
+  PR #149, not merged (owner reviews).
 ## Hero motion (feat/hero-motion, 2026/11/21)
 - Owner-approved: a pointer lean and a springy scroll turn for the hero logo (over cyex-web's default of nothing following the pointer; noted in `logo-scene.ts`).
 - `lib/home/logo-spring.ts`: a spring in response and damping ratio, stepped by its exact solution (frame-rate independent, interruptible: keeps its velocity when the target moves).

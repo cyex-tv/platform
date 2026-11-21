@@ -830,7 +830,7 @@ async fn permissions_are_checked() {
     );
     assert_eq!(
         granted["data"]["grantCosmetic"]["grantedBy"]["id"],
-        granter.tid().as_str()
+        w.db.public(granter.id).await.as_str()
     );
     assert_eq!(
         code(&w.grant(&granter, &nobody, "PAINT", &paint).await),
@@ -1001,7 +1001,7 @@ async fn account_editors_with_profile_pick_for_the_owner() {
         .await;
     assert_eq!(
         r["data"]["myCosmetics"]["account"]["id"],
-        streamer.tid().as_str(),
+        w.db.public(streamer.id).await.as_str(),
         "{r}"
     );
     let r = w

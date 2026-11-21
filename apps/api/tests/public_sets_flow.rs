@@ -156,7 +156,7 @@ impl World {
         if state != EmoteState::Pending {
             emotes::set_state(&mut conn, emote.id, state).await.unwrap();
         }
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     async fn post(&self, user: Option<&User>, query: &str, variables: Value) -> Value {
@@ -468,7 +468,7 @@ async fn account_sets_lists_listed_sets_of_live_accounts() {
     assert_eq!(card["active"], true);
     assert_eq!(card["slotsUsed"], 5);
     assert_eq!(card["capacity"], 1000);
-    assert_eq!(card["owner"]["id"], alice.tid().as_str());
+    assert_eq!(card["owner"]["id"], w.db.public(alice.id).await.as_str());
     // The newest first.
     assert_eq!(
         card["preview"],
@@ -539,7 +539,7 @@ async fn clone_copies_what_may_be_copied() {
     {
         let mut conn = w.db.conn().await;
         sqlx::query("UPDATE emote_set_members SET name = 'okAlias' WHERE emote_id = $1")
-            .bind(ids::from_text(&ok).unwrap())
+            .bind(w.db.row(&ok).await)
             .execute(&mut *conn)
             .await
             .unwrap();
@@ -553,7 +553,10 @@ async fn clone_copies_what_may_be_copied() {
     assert_eq!(out["set"]["name"], "Alice's");
     assert_eq!(out["set"]["kind"], "CHANNEL");
     assert_eq!(out["set"]["visibility"], "LISTED");
-    assert_eq!(out["set"]["owner"]["id"], bob.tid().as_str());
+    assert_eq!(
+        out["set"]["owner"]["id"],
+        w.db.public(bob.id).await.as_str()
+    );
     assert_eq!(
         out["set"]["emotes"],
         json!([{ "name": "okAlias", "zeroWidth": false }])
@@ -576,10 +579,8 @@ async fn clone_copies_what_may_be_copied() {
 
     // `set.created` for listed sets only, on the owner's user topics.
     let created = w.events("set.created").await;
-    let bobs: Vec<_> = created
-        .iter()
-        .filter(|e| e.set_id == ids::from_text(&bobs_copy))
-        .collect();
+    let bobs_row = Some(w.db.row(&bobs_copy).await);
+    let bobs: Vec<_> = created.iter().filter(|e| e.set_id == bobs_row).collect();
     assert_eq!(bobs.len(), 1);
     assert_eq!(
         bobs[0].topics,
@@ -621,7 +622,7 @@ async fn clone_copies_what_may_be_copied() {
         .await;
     assert_eq!(
         r["data"]["cloneSet"]["set"]["owner"]["id"],
-        alice.tid().as_str(),
+        w.db.public(alice.id).await.as_str(),
         "{r}"
     );
     let rows = w.audit_rows().await;
@@ -637,7 +638,11 @@ async fn clone_copies_what_may_be_copied() {
     assert_eq!(row.actor_account_id, Some(bob.id));
     let after = row.after_json.as_ref().unwrap();
     assert_eq!(after["via"], "account_editor");
-    assert_eq!(after["source_id"], bobs_copy.as_str());
+    // The audit log keeps rows by ULID.
+    assert_eq!(
+        after["source_id"],
+        ids::to_text(w.db.row(&bobs_copy).await).as_str()
+    );
     w.db.close().await;
 }
 
@@ -650,7 +655,7 @@ async fn clone_stops_at_capacity() {
     // 1005 approved emotes in a set raised above the default (staff could do that).
     {
         let mut conn = w.db.conn().await;
-        let set_id = ids::from_text(&source).unwrap();
+        let set_id = w.db.row(&source).await;
         sqlx::query("UPDATE emote_sets SET capacity = 2000 WHERE id = $1")
             .bind(set_id)
             .execute(&mut *conn)

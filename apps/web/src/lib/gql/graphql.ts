@@ -128,6 +128,7 @@ export type AccountStatus = {
   /** No sign-in, no sessions. */
   blocked: Scalars['Boolean']['output'];
   blockedUntil?: Maybe<Scalars['String']['output']>;
+  /** The account's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input. */
   id: Scalars['String']['output'];
   /** No reports or tickets. */
   ticketsBlocked: Scalars['Boolean']['output'];
@@ -159,6 +160,7 @@ export type AccountSummary = {
   __typename?: 'AccountSummary';
   avatar?: Maybe<Scalars['String']['output']>;
   displayName: Scalars['String']['output'];
+  /** The account's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input. */
   id: Scalars['String']['output'];
 };
 
@@ -190,6 +192,7 @@ export type ActivityEmote = {
   files: Array<EmoteFile>;
   /** For example `https://cdn.cyex.tv/emotes/<sha256>`. */
   host: Scalars['String']['output'];
+  /** The emote's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input. */
   id: Scalars['String']['output'];
   name: Scalars['String']['output'];
 };
@@ -282,6 +285,7 @@ export type ActivityPage = {
 /** A set, as a feed line names it. */
 export type ActivitySet = {
   __typename?: 'ActivitySet';
+  /** The set's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input. */
   id: Scalars['String']['output'];
   name: Scalars['String']['output'];
 };
@@ -314,6 +318,7 @@ export type AdminAccount = {
   blockedUntil?: Maybe<Scalars['String']['output']>;
   createdAt: Scalars['String']['output'];
   displayName: Scalars['String']['output'];
+  /** The account's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input. */
   id: Scalars['String']['output'];
   identities: Array<Identity>;
   /** No reports or tickets. */
@@ -702,6 +707,7 @@ export type Emote = {
   flags: EmoteFlags;
   /** For example `https://cdn.cyex.tv/emotes/<sha256>`. */
   host: Scalars['String']['output'];
+  /** The emote's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input. */
   id: Scalars['String']['output'];
   name: Scalars['String']['output'];
   owner?: Maybe<AccountSummary>;
@@ -786,6 +792,7 @@ export type EmoteSet = {
   capacity: Scalars['Int']['output'];
   createdAt: Scalars['String']['output'];
   emotes: Array<SetEmote>;
+  /** The set's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input. */
   id: Scalars['String']['output'];
   kind: SetKind;
   /** `visibility` is `LISTED`: shown on the owner's profile. */
@@ -1062,6 +1069,7 @@ export type Me = {
    * the default, Twitch first. `identities` lists that one first.
    */
   displayPlatform?: Maybe<Platform>;
+  /** The account's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input. */
   id: Scalars['String']['output'];
   identities: Array<Identity>;
   /** Permission names from the account's roles (ADR 0010). */
@@ -3172,6 +3180,7 @@ export type SetSummary = {
   active: Scalars['Boolean']['output'];
   capacity: Scalars['Int']['output'];
   createdAt: Scalars['String']['output'];
+  /** The set's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input. */
   id: Scalars['String']['output'];
   kind: SetKind;
   listed: Scalars['Boolean']['output'];

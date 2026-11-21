@@ -6,7 +6,6 @@ use std::net::SocketAddr;
 use std::time::Duration;
 
 use cyex_tv_db::emotes::{self, NewEmote};
-use cyex_tv_db::ids;
 use cyex_tv_events::{EventsState, router};
 use cyex_tv_hub::Hub;
 use cyex_tv_shared::model::EmoteState;
@@ -120,7 +119,8 @@ async fn a_set_change_reaches_both_sockets() {
         emotes::set_state(&mut conn, e.id, EmoteState::Approved)
             .await
             .unwrap();
-        ids::to_text(e.id)
+        drop(conn);
+        w.db.public(e.id).await
     };
     let topic = format!("set:{set}");
 

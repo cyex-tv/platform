@@ -15,8 +15,8 @@ use cyex_tv_api::state::AppState;
 use cyex_tv_auth::{Auth, AuthConfig, cookies, tokens};
 use cyex_tv_db::accounts::{self, Profile};
 use cyex_tv_db::emotes::{self, NewEmote};
+use cyex_tv_db::roles;
 use cyex_tv_db::sessions::{self, SessionKind};
-use cyex_tv_db::{ids, roles};
 use cyex_tv_shared::model::{EmoteState, Platform};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -132,7 +132,7 @@ impl World {
         .execute(&mut *conn)
         .await
         .unwrap();
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     async fn gql(&self, user: &User, query: &str, variables: Value) -> Value {
@@ -152,6 +152,8 @@ impl World {
 
     /// Who wrote each audit row of `action` on the emote, and its `after`.
     async fn audited(&self, action: &str, emote: &str) -> Vec<(Option<Uuid>, Option<Value>)> {
+        // The audit log keeps the row's ULID.
+        let emote = cyex_tv_db::ids::to_text(self.db.row(emote).await);
         let mut conn = self.db.conn().await;
         sqlx::query_as(
             "SELECT actor_account_id, after_json FROM audit_log
@@ -159,7 +161,7 @@ impl World {
              ORDER BY created_at, id",
         )
         .bind(action)
-        .bind(emote)
+        .bind(&emote)
         .fetch_all(&mut *conn)
         .await
         .unwrap()
@@ -336,7 +338,7 @@ async fn undone_approval_goes_to_the_end_for_everyone() {
     let mut conn = w.db.conn().await;
     let cleared: Option<chrono::DateTime<chrono::Utc>> =
         sqlx::query_scalar("SELECT requeued_at FROM emotes WHERE id = $1")
-            .bind(ids::from_text(&a).unwrap())
+            .bind(w.db.row(&a).await)
             .fetch_one(&mut *conn)
             .await
             .unwrap();

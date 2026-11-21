@@ -251,7 +251,7 @@ impl World {
         emotes::set_state(&mut conn, emote.id, EmoteState::Approved)
             .await
             .unwrap();
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 }
 
@@ -333,9 +333,10 @@ async fn the_display_name_is_the_chosen_connection_and_both_logins_find_you() {
         let items = r["data"]["searchAccounts"]["items"]
             .as_array()
             .unwrap_or_else(|| panic!("{r}"));
+        let alice_public = w.db.public(alice.id).await;
         let hit = items
             .iter()
-            .find(|i| i["account"]["id"] == alice.tid().as_str())
+            .find(|i| i["account"]["id"] == alice_public.as_str())
             .unwrap_or_else(|| panic!("{q}: {r}"));
         assert_eq!(hit["account"]["displayName"], "alicekick");
     }
@@ -448,9 +449,9 @@ async fn activity_filters_by_group_actor_and_time_with_editor_lines() {
             "SET_CREATED"
         ]
     );
-    assert_eq!(all[0]["actor"]["id"], bob.tid().as_str());
-    assert_eq!(all[0]["editor"]["id"], bob.tid().as_str());
-    assert_eq!(all[2]["actor"]["id"], alice.tid().as_str());
+    assert_eq!(all[0]["actor"]["id"], w.db.public(bob.id).await.as_str());
+    assert_eq!(all[0]["editor"]["id"], w.db.public(bob.id).await.as_str());
+    assert_eq!(all[2]["actor"]["id"], w.db.public(alice.id).await.as_str());
     assert_eq!(all[2]["editor"]["displayName"], "tw7302");
     assert!(all[1]["editor"].is_null());
     assert!(
@@ -538,7 +539,10 @@ async fn activity_filters_by_group_actor_and_time_with_editor_lines() {
     assert!(r["errors"].is_null(), "{r}");
     let lines = w.feed(&alice, json!({ "groups": ["EDITORS"] })).await;
     assert_eq!(lines[0]["kind"], "EDITOR_REMOVED");
-    assert_eq!(lines[0]["actor"]["id"], alice.tid().as_str());
+    assert_eq!(
+        lines[0]["actor"]["id"],
+        w.db.public(alice.id).await.as_str()
+    );
     // Nothing of this lands on Bob's own feed.
     assert!(
         w.kinds(&bob, json!({ "groups": ["EDITORS"] }))

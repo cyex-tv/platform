@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { afterNavigate } from '$app/navigation';
+  import { afterNavigate, goto } from '$app/navigation';
   import { page } from '$app/state';
   import { gql } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
@@ -9,6 +9,7 @@
   import { channelsUsing } from '$lib/components/emote/data';
   import { backTarget, channelCount, type EmoteChannel, type PageEmote } from '$lib/components/emote/emote-page';
   import { clean } from '$lib/format';
+  import { legacyRedirect } from '$lib/ids';
   import { EMOTE } from '$lib/queries';
 
   let { data } = $props();
@@ -28,7 +29,11 @@
         emote = null;
       }
       const channels = emote ? await channelsUsing(emote) : null;
-      if (!gone) late = { id, emote, channels };
+      if (gone) return;
+      late = { id, emote, channels };
+      // Found only now (the server could not see it): an old ULID link still ends on the snowflake address.
+      const moved = legacyRedirect('emotes', id, emote?.id, page.url.search);
+      if (moved) void goto(moved, { replaceState: true });
     })();
     return () => (gone = true);
   });

@@ -195,7 +195,7 @@ impl World {
         if state != EmoteState::Pending {
             emotes::set_state(&mut conn, emote.id, state).await.unwrap();
         }
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     async fn gql(&self, user: &User, query: &str, variables: Value) -> Value {
@@ -324,7 +324,7 @@ impl World {
     async fn owner_and_uploader(&self, emote: &str) -> (Option<Uuid>, Option<Uuid>) {
         let mut conn = self.db.conn().await;
         sqlx::query_as("SELECT owner_account_id, uploaded_by FROM emotes WHERE id = $1")
-            .bind(ids::from_text(emote).unwrap())
+            .bind(self.db.row(emote).await)
             .fetch_one(&mut *conn)
             .await
             .unwrap()
@@ -386,7 +386,8 @@ async fn upload_as_needs_the_upload_flag_on_every_set() {
     let rows = w.audits("emote.uploaded").await;
     assert_eq!(rows.len(), 1);
     assert_editor_row(&rows[0], &bob, &alice);
-    assert_eq!(rows[0].0.target_id, id);
+    // The audit log keeps the row's ULID; the answer shows the Snowflake.
+    assert_eq!(rows[0].0.target_id, ids::to_text(w.db.row(&id).await));
     // Their own uploads are unchanged: theirs, nobody named.
     let (status, body) = w.upload(&bob, None, "bobsOwn", 2).await;
     assert_eq!(status, StatusCode::ACCEPTED, "{body}");
@@ -436,7 +437,7 @@ async fn upload_as_needs_the_upload_flag_on_every_set() {
         .unwrap_or_else(|| panic!("{r}"))
         .clone();
     assert_eq!(line["kind"], "EMOTE_UPLOADED");
-    assert_eq!(line["actor"]["id"], bob.tid().as_str());
+    assert_eq!(line["actor"]["id"], w.db.public(bob.id).await.as_str());
     w.db.close().await;
 }
 
@@ -650,7 +651,7 @@ async fn editor_transfers_wait_for_the_owner_and_go_only_to_trusting_accounts() 
     ok(&r);
     assert_eq!(
         r["data"]["transferEmote"]["owner"]["id"],
-        alice.tid().as_str()
+        w.db.public(alice.id).await.as_str()
     );
     assert_eq!(w.owner_and_uploader(&first).await.0, Some(alice.id));
     let rows = w.audits("emote.transfer_requested").await;
@@ -695,7 +696,7 @@ async fn editor_transfers_wait_for_the_owner_and_go_only_to_trusting_accounts() 
     ok(&r);
     assert_eq!(
         r["data"]["acceptEmoteTransfer"]["owner"]["id"],
-        gina.tid().as_str()
+        w.db.public(gina.id).await.as_str()
     );
     assert_eq!(w.owner_and_uploader(&first).await.0, Some(gina.id));
     let rows = w.audits("emote.transfer_accepted").await;
@@ -767,7 +768,7 @@ async fn editor_transfers_wait_for_the_owner_and_go_only_to_trusting_accounts() 
     sqlx::query(
         "UPDATE emote_transfer_requests SET expires_at = now() - interval '1 minute' WHERE id = $1",
     )
-    .bind(ids::from_text(&request).unwrap())
+    .bind(w.db.row(&request).await)
     .execute(&mut *conn)
     .await
     .unwrap();
@@ -796,7 +797,7 @@ async fn editor_transfers_wait_for_the_owner_and_go_only_to_trusting_accounts() 
     ok(&r);
     assert_eq!(
         r["data"]["transferEmote"]["owner"]["id"],
-        carol.tid().as_str()
+        w.db.public(carol.id).await.as_str()
     );
     let rows = w.audits("emote.transferred").await;
     assert_eq!(rows[0].0.actor_account_id, Some(alice.id));
@@ -964,7 +965,7 @@ async fn transfer_notifications_show_where_the_request_stands() {
     sqlx::query(
         "UPDATE emote_transfer_requests SET expires_at = now() - interval '1 minute' WHERE id = $1",
     )
-    .bind(ids::from_text(&request).unwrap())
+    .bind(w.db.row(&request).await)
     .execute(&mut *conn)
     .await
     .unwrap();

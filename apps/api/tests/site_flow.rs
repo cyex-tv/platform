@@ -269,7 +269,7 @@ async fn announcements_are_for_site_announce_audited_and_follow_their_window() {
     // A window that is over hides it (set in the database: the API refuses an end in the past).
     w.sql(&format!(
         "UPDATE announcements SET starts_at = now() - interval '2 hours', ends_at = now() - interval '1 hour' WHERE id = '{}'",
-        ids::from_text(&second).unwrap()
+        w.db.row(&second).await
     ))
     .await;
     let r = w.anon(ACTIVE, json!({})).await;

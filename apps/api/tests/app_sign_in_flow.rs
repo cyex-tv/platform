@@ -188,7 +188,7 @@ impl World {
         emotes::set_state(&mut conn, emote.id, EmoteState::Approved)
             .await
             .unwrap();
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     async fn send(&self, request: Request<Body>) -> Answer {
@@ -425,7 +425,7 @@ async fn the_whole_flow_gives_an_app_session_listed_in_sessions() {
     assert!(tokens::is_well_formed(&access));
     assert!(w.signed_in(&access).await);
     let r = w.gql(&access, ME, json!({})).await;
-    assert_eq!(r["data"]["me"]["id"], ids::to_text(alice.id));
+    assert_eq!(r["data"]["me"]["id"], w.db.public(alice.id).await);
 
     // Listed once, named after the app, ending 60 days out; the access token ends in an hour.
     let listed = w.app_sessions(&alice).await;
@@ -832,14 +832,9 @@ async fn the_deck_calls_work_with_the_app_token_and_rights_are_unchanged() {
 
     // Made an editor of the set, Bob sees it and can add, rename and remove.
     let mut conn = w.db.conn().await;
-    sets::add_editor(
-        &mut conn,
-        ids::from_text(&set).unwrap(),
-        bob.id,
-        Some(alice.id),
-    )
-    .await
-    .unwrap();
+    sets::add_editor(&mut conn, w.db.row(&set).await, bob.id, Some(alice.id))
+        .await
+        .unwrap();
     drop(conn);
     let r = w
         .gql(
@@ -919,7 +914,7 @@ async fn the_deck_calls_work_with_the_app_token_and_rights_are_unchanged() {
     ok(&r);
     assert_eq!(
         r["data"]["myCosmetics"]["account"]["id"],
-        ids::to_text(bob.id)
+        w.db.public(bob.id).await
     );
     assert_eq!(r["data"]["myCosmetics"]["paints"], json!([]));
     let r = w.gql(&deck.access, SELECT, json!({ "p": paint })).await;

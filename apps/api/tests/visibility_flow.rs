@@ -121,7 +121,7 @@ impl World {
         emotes::set_state(&mut conn, e.id, EmoteState::Approved)
             .await
             .unwrap();
-        ids::to_text(e.id)
+        self.db.public(e.id).await
     }
 
     async fn set(&self, owner: &User, name: &str) -> String {

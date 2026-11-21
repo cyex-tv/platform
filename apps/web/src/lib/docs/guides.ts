@@ -74,6 +74,16 @@ export const guides: Guide[] = [
     ],
   },
   {
+    id: 'ids',
+    title: 'IDs',
+    search: 'id ids snowflake ulid string number 64-bit store',
+    blocks: [
+      p(`The IDs of emotes, accounts and sets are Snowflakes: numbers written as strings of digits, like \`${EX.emoteId}\`. They fit in 64 bits, which is more than a JavaScript number holds exactly, so always store and send them as strings. The same goes for every field that points at one (\`owner_id\`, \`set_id\`, \`emote_id\`, \`active_set_id\` and the rest), in REST, GraphQL and the event socket.`),
+      p('A Snowflake is not a secret and has no meaning you should depend on, but it does sort by age: a bigger one was made later. Every other kind of ID (badges, paints, roles, orders, images, notifications) is still a 26-character ULID.'),
+      note('Emotes, accounts and sets used to have ULIDs. Until further notice every place that takes one of those IDs also takes the old ULID, and `/emotes/<ULID>`, `/users/<ULID>` and `/sets/<ULID>` on the site send you to the new address. Answers always carry the Snowflake, so switch what you store to those, as strings. Event topics are `set:<Snowflake>`; `set:<ULID>` still subscribes.'),
+    ],
+  },
+  {
     id: 'signing-in',
     title: 'Signing in',
     search: 'auth authentication session cookie origin login',
@@ -159,7 +169,7 @@ export const guides: Guide[] = [
     title: 'Emotes and files',
     search: 'emote object cdn files webp avif static picture image host',
     blocks: [
-      p('An emote has an `id` (store this: names change), a `name`, `flags` (`zero_width`, `nsfw`, `private`), and a `host` with a list of `files`. Public reads only return approved emotes; a pending one shows to its owner alone.'),
+      p('An emote has an `id` (store this, as a string: names change; see [IDs](#ids)), a `name`, `flags` (`zero_width`, `nsfw`, `private`), and a `host` with a list of `files`. Public reads only return approved emotes; a pending one shows to its owner alone.'),
       p('Each file is at `<host>/<name>`:'),
       { t: 'pre', code: `${EX.host}/2x.webp` },
       fmt(

@@ -316,10 +316,7 @@ async fn users_come_with_the_emotes() {
     w.emote(fan, "PepeSmile").await;
     let r = w.quick("pepefan").await;
     assert_eq!(r["users"][0]["identities"][0]["login"], "pepefan");
-    assert_eq!(
-        r["users"][0]["account"]["id"],
-        cyex_tv_db::ids::to_text(fan)
-    );
+    assert_eq!(r["users"][0]["account"]["id"], w.db.public(fan).await);
     // At most 3, and a leading @ is ignored.
     let r = w.quick("@pepe").await;
     assert_eq!(r["users"].as_array().unwrap().len(), 3, "{r}");
@@ -427,7 +424,7 @@ async fn editable_channels_are_ranked_by_role_then_login() {
     );
     assert_eq!(
         r["data"]["myEditableChannels"][2]["channel"]["account"]["id"],
-        cyex_tv_db::ids::to_text(alpha)
+        w.db.public(alpha).await
     );
 
     // The editor I added sees their own channel, then mine as an account editor.

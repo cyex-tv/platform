@@ -16,7 +16,7 @@ use cyex_tv_auth::{Auth, AuthConfig, tokens};
 use cyex_tv_db::accounts::{self, Profile};
 use cyex_tv_db::emotes::{self, NewEmote};
 use cyex_tv_db::sessions::{self, SessionKind};
-use cyex_tv_db::{audit, channels, ids, roles, sets};
+use cyex_tv_db::{audit, channels, roles, sets};
 use cyex_tv_shared::model::{EmoteState, Platform, SetKind};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -126,7 +126,7 @@ impl World {
         if state != EmoteState::Pending {
             emotes::set_state(&mut conn, emote.id, state).await.unwrap();
         }
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     /// A channel set of `owner` holding `emote`, made directly (no events).
@@ -139,7 +139,7 @@ impl World {
             &mut conn,
             set.id,
             sets::NewMember {
-                emote_id: ids::from_text(emote).unwrap(),
+                emote_id: self.db.row(emote).await,
                 name: None,
                 zero_width: None,
                 added_by: Some(owner.id),
@@ -147,7 +147,7 @@ impl World {
         )
         .await
         .unwrap();
-        ids::to_text(set.id)
+        self.db.public(set.id).await
     }
 
     async fn gql(&self, user: Option<&User>, query: &str, variables: Value) -> Value {

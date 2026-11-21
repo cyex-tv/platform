@@ -1,4 +1,5 @@
-//! Topic names (ADR 0005): `channel:<platform>:<id>`, `set:<id>`, `user:<platform>:<id>`, and
+//! Topic names (ADR 0005): `channel:<platform>:<id>`, `set:<id>` (the set's Snowflake; its ULID
+//! is still taken on subscribe, ADR 0027), `user:<platform>:<id>`, and
 //! `cosmetics` for the cosmetics catalog (ADR 0015).
 
 /// The topic badge and paint changes go out on.
@@ -43,12 +44,13 @@ pub fn is_valid(topic: &str) -> bool {
     if let Some(rest) = topic.strip_prefix("user:") {
         return platform_id(rest);
     }
+    // A set's Snowflake (ADR 0027), or its ULID in capitals while clients move over.
     if let Some(id) = topic.strip_prefix("set:") {
-        return cyex_tv_db::ids::from_text(id).is_some()
-            && id.len() == 26
-            && id
-                .bytes()
-                .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit());
+        return cyex_tv_db::public_ids::parse(id).is_some()
+            || (cyex_tv_db::ids::is_ulid(id)
+                && id
+                    .bytes()
+                    .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()));
     }
     false
 }
@@ -65,6 +67,7 @@ mod tests {
             "channel:kick:9".to_owned(),
             "user:twitch:1".to_owned(),
             format!("set:{set}"),
+            "set:1314628736410763264".to_owned(),
             "cosmetics".to_owned(),
         ] {
             assert!(is_valid(&ok), "{ok}");
@@ -76,6 +79,9 @@ mod tests {
             "channel:twitch:123456789012345678901".to_owned(),
             "user:kick".to_owned(),
             "set:nope".to_owned(),
+            "set:0042".to_owned(),
+            "set:-1".to_owned(),
+            "set:99999999999999999999".to_owned(),
             format!("set:{}", set.to_lowercase()),
             "cosmetic:badge:1".to_owned(),
             "cosmetics:".to_owned(),

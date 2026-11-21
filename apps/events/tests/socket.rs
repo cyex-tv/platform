@@ -371,3 +371,82 @@ async fn limits_end_the_connection() {
     server.stop().await;
     db.close().await;
 }
+
+/// A set's topic is its Snowflake (ADR 0027); its old ULID still subscribes, and that client
+/// gets the set's events under the name it used. Payloads carry Snowflakes either way.
+#[tokio::test]
+async fn set_topics_work_by_snowflake_and_by_old_ulid() {
+    let Some(db) = TestDb::new().await else {
+        return;
+    };
+    let server = Server::start(&db).await;
+    let mut conn = db.conn().await;
+    let owner: uuid::Uuid =
+        sqlx::query_scalar("INSERT INTO accounts (id) VALUES ($1) RETURNING id")
+            .bind(cyex_tv_db::ids::new_id())
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+    let (set, set_public): (uuid::Uuid, i64) = sqlx::query_as(
+        "INSERT INTO emote_sets (id, owner_account_id, name, kind, capacity)
+         VALUES ($1, $2, 'mine', 'channel', 600) RETURNING id, public_id",
+    )
+    .bind(cyex_tv_db::ids::new_id())
+    .bind(owner)
+    .fetch_one(&mut *conn)
+    .await
+    .unwrap();
+    drop(conn);
+    let legacy = outbox::set_topic(set);
+    let new = format!("set:{set_public}");
+
+    let (mut old_ws, _) = server.connect().await;
+    send(&mut old_ws, "subscribe", json!({ "topics": [legacy] })).await;
+    let ack = next(&mut old_ws).await;
+    assert_eq!(ack["d"]["topics"], json!([legacy]), "{ack}");
+    let (mut new_ws, _) = server.connect().await;
+    send(&mut new_ws, "subscribe", json!({ "topics": [new] })).await;
+    let ack = next(&mut new_ws).await;
+    assert_eq!(ack["d"]["topics"], json!([new]), "{ack}");
+
+    let mut conn = db.conn().await;
+    outbox::publish(
+        &mut conn,
+        &NewEvent {
+            event_type: EventType::SetEmoteRenamed,
+            topics: vec![outbox::set_topic(set)],
+            set_id: Some(set),
+            payload: json!({ "name": "mine", "owner_id": cyex_tv_db::ids::to_text(owner) }),
+        },
+    )
+    .await
+    .unwrap();
+    drop(conn);
+    for (ws, topic) in [(&mut old_ws, &legacy), (&mut new_ws, &new)] {
+        let msg = next(ws).await;
+        assert_eq!(msg["op"], "dispatch", "{msg}");
+        assert_eq!(msg["d"]["data"]["topic"], json!(topic), "{msg}");
+        assert_eq!(msg["d"]["data"]["set_id"], set_public.to_string(), "{msg}");
+    }
+
+    // Unsubscribing by the old name stops it.
+    send(&mut old_ws, "unsubscribe", json!({ "topics": [legacy] })).await;
+    assert_eq!(next(&mut old_ws).await["d"]["op"], "unsubscribe");
+    let mut conn = db.conn().await;
+    outbox::publish(
+        &mut conn,
+        &NewEvent {
+            event_type: EventType::SetEmoteRenamed,
+            topics: vec![outbox::set_topic(set)],
+            set_id: Some(set),
+            payload: json!({ "name": "again" }),
+        },
+    )
+    .await
+    .unwrap();
+    drop(conn);
+    assert_eq!(next(&mut new_ws).await["op"], "dispatch");
+    quiet(&mut old_ws).await;
+    server.stop().await;
+    db.close().await;
+}

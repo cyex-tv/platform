@@ -18,7 +18,7 @@ const { PER_PAGE } = await import('$lib/components/browse/params');
 const fetch = vi.fn() as unknown as typeof globalThis.fetch;
 const at = (path: string) => new URL(`http://localhost${path}`);
 // The load functions take SvelteKit's event; the tests pass only what they read.
-const call = (load: unknown, event: Record<string, unknown>) => (load as (e: unknown) => Promise<any>)({ fetch, ...event });
+const call = (load: unknown, event: Record<string, unknown>) => (load as (e: unknown) => Promise<any>)({ fetch, url: at('/'), ...event });
 
 beforeEach(() => {
   gql.mockReset();
@@ -94,6 +94,9 @@ describe('/emotes redirects to /search with the query kept', () => {
   });
 });
 
+const SNOW = '1314628736410763264';
+const ULID = '01JD8X0000000000000000MEME';
+
 describe('/users/[id]', () => {
   const page = async () => {
     const { load } = await import('./users/[id]/+page');
@@ -132,6 +135,26 @@ describe('/users/[id]', () => {
     expect(out).toMatchObject({ profile: null, creator: null, look: { badge: null, paint: null }, meta: { noindex: true } });
   });
 
+  it('an old ULID link goes to the snowflake address, keeping the query', async () => {
+    gql.mockImplementation(async (doc: unknown) =>
+      doc === SEARCH_BY_OWNER ? { searchEmotes: { items: [], total: 0 } }
+        : doc === ACCOUNT_PROFILE ? { accountProfile: { account: { id: SNOW, displayName: 'nora' }, identities: [], activeSets: [] } }
+        : { accountCosmetics: [] },
+    );
+    await expect(call(await page(), { params: { id: ULID }, url: at(`/users/${ULID}?s=sets`) })).rejects.toMatchObject({ status: 308, location: `/users/${SNOW}?s=sets` });
+  });
+
+  it('a snowflake address stays, and the look is found by that id', async () => {
+    gql.mockImplementation(async (doc: unknown) =>
+      doc === SEARCH_BY_OWNER ? { searchEmotes: { items: [], total: 0 } }
+        : doc === ACCOUNT_PROFILE ? { accountProfile: { account: { id: SNOW, displayName: 'nora' }, identities: [], activeSets: [] } }
+        : { accountCosmetics: [{ accountId: SNOW, badge: 'B', paint: 'P' }] },
+    );
+    const out = await call(await page(), { params: { id: SNOW } });
+    expect(out).toMatchObject({ id: SNOW, look: { badge: 'B', paint: 'P' } });
+    expect(out.meta.url).toBe(`https://cyex.tv/users/${SNOW}`);
+  });
+
   it('a failure becomes the page’s error, not a throw', async () => {
     gql.mockRejectedValue(new ApiError('Down.', 'server'));
     expect(await call(await page(), { params: { id: 'U1' } })).toMatchObject({ id: 'U1', profile: null, items: [], error: 'Down.' });
@@ -151,6 +174,22 @@ describe('/emotes/[id]', () => {
     expect(gql.mock.calls[0][1]).toEqual({ id: 'E1' });
     expect(out).toMatchObject({ id: 'E1', emote, more: ['more'], channels: ['channels'], trending: ['trending'] });
     expect(out.meta).toMatchObject({ title: 'pog', url: 'https://cyex.tv/emotes/E1', noindex: false });
+  });
+
+  it('an old ULID link goes to the snowflake address, keeping the query', async () => {
+    gql.mockResolvedValue({ emote: { id: SNOW, name: 'pog', state: 'APPROVED', visibility: 'PUBLIC', animated: false, host: '', files: [], flags: { private: false, zeroWidth: false } } });
+    await expect(call(await page(), { params: { id: ULID }, url: at(`/emotes/${ULID}?tab=channels`) })).rejects.toMatchObject({ status: 308, location: `/emotes/${SNOW}?tab=channels` });
+  });
+
+  it('a snowflake address is not redirected, and its preview uses it', async () => {
+    gql.mockResolvedValue({ emote: { id: SNOW, name: 'pog', state: 'APPROVED', visibility: 'PUBLIC', animated: false, host: '', files: [], flags: { private: false, zeroWidth: false } } });
+    const out = await call(await page(), { params: { id: SNOW }, url: at(`/emotes/${SNOW}`) });
+    expect(out.meta.url).toBe(`https://cyex.tv/emotes/${SNOW}`);
+  });
+
+  it('an unknown ULID is the not-found page, not a redirect', async () => {
+    gql.mockResolvedValue({ emote: null });
+    expect(await call(await page(), { params: { id: ULID }, url: at(`/emotes/${ULID}`) })).toMatchObject({ id: ULID, emote: null, meta: { noindex: true } });
   });
 
   it('no emote for the server: the page asks again in the browser', async () => {
@@ -175,6 +214,15 @@ describe('/sets/[id]', () => {
     expect(gql.mock.calls[0][1]).toEqual({ id: 'S1' });
     gql.mockResolvedValue({ set: null });
     expect(await call(await page(), { params: { id: 'S2' } })).toMatchObject({ id: 'S2', set: null, meta: { noindex: true } });
+  });
+
+  it('an old ULID link goes to the snowflake address, keeping the query; an unknown one is not found', async () => {
+    gql.mockResolvedValue({ set: { id: SNOW, name: 'Main', visibility: 'LISTED', capacity: 600, slotsUsed: 0, emotes: [] } });
+    await expect(call(await page(), { params: { id: ULID }, url: at(`/sets/${ULID}?q=fox`) })).rejects.toMatchObject({ status: 308, location: `/sets/${SNOW}?q=fox` });
+    const out = await call(await page(), { params: { id: SNOW }, url: at(`/sets/${SNOW}`) });
+    expect(out.meta.url).toBe(`https://cyex.tv/sets/${SNOW}`);
+    gql.mockResolvedValue({ set: null });
+    expect(await call(await page(), { params: { id: ULID }, url: at(`/sets/${ULID}`) })).toMatchObject({ id: ULID, set: null, meta: { noindex: true } });
   });
 
   it('an API failure is a 503', async () => {

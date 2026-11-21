@@ -163,7 +163,7 @@ async fn restricting_respects_seniority() {
         .await;
     assert_eq!(code(&r), "not_below_you", "{r}");
     let me = w.gql(&admin, "{ me { id } }", json!({})).await;
-    assert_eq!(me["data"]["me"]["id"], admin.text_id(), "{me}");
+    assert_eq!(me["data"]["me"]["id"], w.db.public(admin.id).await, "{me}");
 
     let r = w
         .gql(

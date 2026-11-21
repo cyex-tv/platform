@@ -6,6 +6,8 @@
 //! a higher one is visible, so the Phase 5 readers must allow for that gap; this module only
 //! stores and reads.
 
+use std::collections::HashSet;
+
 use chrono::{DateTime, Utc};
 use cyex_tv_shared::model::{EventType, Platform};
 use serde_json::Value;
@@ -14,6 +16,7 @@ use uuid::Uuid;
 
 use crate::error::DbResult;
 use crate::ids::to_text;
+use crate::public_ids;
 
 /// The `LISTEN` channel the insert trigger notifies.
 pub const NOTIFY_CHANNEL: &str = "cyex_tv_events";
@@ -101,19 +104,73 @@ pub fn type_name(event_type: EventType) -> String {
     }
 }
 
-/// Adds an event and returns its ID.
+/// Adds an event and returns its ID. It is stored as clients get it (ADR 0027): `set:` topics
+/// and the payload's account, emote and set IDs by their Snowflakes, and the set's Snowflake as
+/// `payload.set_id`. The `set_id` column keeps the row's uuid for the read caches.
 pub async fn publish(conn: &mut PgConnection, event: &NewEvent) -> DbResult<i64> {
+    let (topics, payload) = public_form(&mut *conn, event).await?;
     Ok(sqlx::query_scalar(
         "INSERT INTO events_outbox (type, topics, set_id, payload)
          VALUES ($1, $2, $3, $4)
          RETURNING id",
     )
     .bind(type_name(event.event_type))
-    .bind(&event.topics)
+    .bind(&topics)
     .bind(event.set_id)
-    .bind(&event.payload)
+    .bind(&payload)
     .fetch_one(conn)
     .await?)
+}
+
+fn topic_set(topic: &str) -> Option<Uuid> {
+    topic
+        .strip_prefix("set:")
+        .filter(|id| crate::ids::is_ulid(id))
+        .and_then(crate::ids::from_text)
+}
+
+/// The topics and payload of `event` with Snowflakes in place of ULIDs.
+async fn public_form(conn: &mut PgConnection, event: &NewEvent) -> DbResult<(Vec<String>, Value)> {
+    let mut found = HashSet::new();
+    public_ids::collect_json(&event.payload, &mut found);
+    found.extend(event.topics.iter().filter_map(|t| topic_set(t)));
+    found.extend(event.set_id);
+    let found: Vec<Uuid> = found.into_iter().collect();
+    let map = public_ids::publics(conn, &found).await?;
+    let topics = event
+        .topics
+        .iter()
+        .map(|topic| match topic_set(topic).and_then(|id| map.get(&id)) {
+            Some(public) => format!("set:{public}"),
+            None => topic.clone(),
+        })
+        .collect();
+    let mut payload = event.payload.clone();
+    public_ids::replace_json(&mut payload, &map);
+    if let (Some(set), Value::Object(fields)) = (event.set_id, &mut payload) {
+        fields.entry("set_id").or_insert_with(|| {
+            Value::String(map.get(&set).map_or_else(|| to_text(set), i64::to_string))
+        });
+    }
+    Ok((topics, payload))
+}
+
+/// A `set:` topic as stored and sent (by Snowflake), from either form a client may use. `None`
+/// when the set is unknown; other topics come back as they are.
+pub async fn public_topic(conn: &mut PgConnection, topic: &str) -> DbResult<Option<String>> {
+    let Some(id) = topic.strip_prefix("set:") else {
+        return Ok(Some(topic.to_owned()));
+    };
+    if public_ids::parse(id).is_some() {
+        return Ok(Some(topic.to_owned()));
+    }
+    let Some(set) = topic_set(topic) else {
+        return Ok(None);
+    };
+    Ok(public_ids::publics(conn, &[set])
+        .await?
+        .get(&set)
+        .map(|public| format!("set:{public}")))
 }
 
 /// Events after `after_id` for any of `topics`, oldest first. Used for resume.

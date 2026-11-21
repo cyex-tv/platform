@@ -154,7 +154,7 @@ impl World {
         emotes::set_state(&mut conn, emote.id, EmoteState::Approved)
             .await
             .unwrap();
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     async fn send(&self, token: Option<&str>, query: &str, variables: Value) -> Value {
@@ -372,7 +372,7 @@ async fn an_editor_limited_to_some_sets_works_on_those_only() {
         .expect("an add row");
     let after = added.after_json.as_ref().unwrap();
     assert_eq!(after["all_sets"], false);
-    assert_eq!(after["set_ids"], json!([a]));
+    assert_eq!(after["set_ids"], json!([ids::to_text(w.db.row(&a).await)]));
     assert!(
         rows.iter()
             .filter(|e| e.action == "account.editor_updated")
@@ -567,7 +567,7 @@ async fn anyone_sees_who_edits_an_account_but_not_what_they_may_do() {
         .await;
     assert_eq!(
         r["data"]["accountProfile"]["editors"],
-        json!([{ "id": bob.tid(), "displayName": "user2602" }]),
+        json!([{ "id": w.db.public(bob.id).await, "displayName": "user2602" }]),
         "{r}"
     );
     // The flags aren't readable without the editors permission.

@@ -146,7 +146,7 @@ impl World {
         if state != EmoteState::Pending {
             emotes::set_state(&mut conn, emote.id, state).await.unwrap();
         }
-        ids::to_text(emote.id)
+        self.db.public(emote.id).await
     }
 
     async fn grant(&self, user: &User, permission: &str) {
@@ -299,7 +299,7 @@ async fn cached_reads_follow_events() {
     // A change that makes no event isn't seen while the entry lasts...
     let mut conn = w.db.conn().await;
     sqlx::query("UPDATE emote_sets SET name = 'Renamed' WHERE id = $1")
-        .bind(ids::from_text(&set).unwrap())
+        .bind(w.db.row(&set).await)
         .execute(&mut *conn)
         .await
         .unwrap();
@@ -523,13 +523,9 @@ async fn channel_sets_pending_emotes_and_public_reads() {
     assert_eq!(again.status, StatusCode::NOT_MODIFIED);
     assert_eq!(again.headers["etag"].to_str().unwrap(), etag);
     let mut conn = w.db.conn().await;
-    emotes::set_state(
-        &mut conn,
-        ids::from_text(&pending).unwrap(),
-        EmoteState::Approved,
-    )
-    .await
-    .unwrap();
+    emotes::set_state(&mut conn, w.db.row(&pending).await, EmoteState::Approved)
+        .await
+        .unwrap();
     drop(conn);
     let changed = w.get(&format!("/v1/sets/{set}"), Some(&etag)).await;
     assert_eq!(changed.status, StatusCode::OK);
@@ -1079,7 +1075,7 @@ async fn my_emotes_and_set_editors() {
         let r = w.gql(Some(user), editors, json!({ "s": set })).await;
         assert_eq!(
             r["data"]["setEditors"][0]["id"],
-            ids::to_text(bob.id),
+            w.db.public(bob.id).await,
             "{r}"
         );
         assert_eq!(r["data"]["setEditors"][0]["displayName"], "user802");

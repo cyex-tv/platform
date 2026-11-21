@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { Kind, parse } from 'graphql';
 import { quickTier, similar, personMatch } from './search.mjs';
+import { inward, outward, inwardId, registerAll } from './snowflake.mjs';
 const PORT = Number(process.env.PORT ?? 8787);
 const ORIGIN = process.env.SITE_ORIGIN ?? 'http://localhost:5173';
 const BASE = `http://localhost:${PORT}`;
@@ -538,11 +539,11 @@ const trendPool = (window, nsfw) =>
 
 const member = (e, name = e.name) => ({ name, zeroWidth: e.flags.zeroWidth, addedAt: e.createdAt, emote: e });
 const SETS = [
-  { id: '01JD8XSET00000000000000MAIN', name: 'Main', kind: 'CHANNEL', capacity: 1000, owner: ME_SUMMARY,
+  { id: '01JD8XSET0000000000000MAIN', name: 'Main', kind: 'CHANNEL', capacity: 1000, owner: ME_SUMMARY,
     emotes: [...MINE.slice(3, 7), ...ALL.slice(10, 30)].map((e) => member(e)), editors: [OTHERS[0]], visibility: 'LISTED', createdAt: '2026-11-10T12:05:00.000Z' },
-  { id: '01JD8XSET0000000000000ALTSS', name: 'Subathon', kind: 'CHANNEL', capacity: 1000, owner: ME_SUMMARY,
+  { id: '01JD8XSET000000000000ALTSS', name: 'Subathon', kind: 'CHANNEL', capacity: 1000, owner: ME_SUMMARY,
     emotes: ALL.slice(40, 46).map((e) => member(e)), editors: [], visibility: 'UNLISTED', createdAt: '2026-11-12T19:40:00.000Z' },
-  { id: '01JD8XSET000000000000000OAK', name: 'quietoak main', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[0],
+  { id: '01JD8XSET00000000000000OAK', name: 'quietoak main', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[0],
     emotes: ALL.slice(60, 70).map((e) => member(e)), editors: [ME_SUMMARY], visibility: 'LISTED', createdAt: '2026-11-08T09:00:00.000Z' },
 ];
 // MOCK_SET_SIZE=1000: the "Main" set holds that many emotes (a real set can hold 1.000), to try
@@ -555,7 +556,7 @@ if (Number(process.env.MOCK_SET_SIZE) > SETS[0].emotes.length) {
     SETS[0].emotes.push(member({ ...base, id: `${base.id}-big${i}`, name: `${base.name}${i}`, createdAt: new Date(Date.parse('2026-11-01T00:00:00Z') + i * 60_000).toISOString() }));
   }
 }
-const GLOBAL = { id: '01JD8XSET0000000000000GLOBL', name: 'Global', kind: 'GLOBAL', capacity: 200, owner: null,
+const GLOBAL = { id: '01JD8XSET000000000000GLOBL', name: 'Global', kind: 'GLOBAL', capacity: 200, owner: null,
   emotes: ALL.slice(0, 24).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-01T00:00:00.000Z' };
 SETS.push(GLOBAL);
 // The review queue: MOCK_PENDING uploads (default 60; try 3000 for a busy day), every 5th unlisted
@@ -778,7 +779,7 @@ const EDITOR_FLAGS = ['EMOTES', 'SETS', 'EDITORS', 'PROFILE', 'CHANNELS', 'EMOTE
 const MAX_EDITORS = 50;
 const withImplied = (flags) => EDITOR_FLAGS.filter((f) => flags.includes(f) || (f === 'CHANNELS' && flags.includes('SETS')));
 const ACCOUNT_EDITORS = [
-  { account: OTHERS[1], permissions: ['EMOTES'], allSets: false, setIds: ['01JD8XSET00000000000000MAIN'], grantedBy: ME_SUMMARY, grantedAt: '2026-11-12T10:00:00.000Z', updatedAt: '2026-11-12T10:00:00.000Z' },
+  { account: OTHERS[1], permissions: ['EMOTES'], allSets: false, setIds: ['01JD8XSET0000000000000MAIN'], grantedBy: ME_SUMMARY, grantedAt: '2026-11-12T10:00:00.000Z', updatedAt: '2026-11-12T10:00:00.000Z' },
   { account: OTHERS[2], permissions: ['EMOTES', 'SETS', 'EDITORS', 'CHANNELS', 'EMOTE_TRANSFER'], allSets: true, setIds: [], grantedBy: ME_SUMMARY, grantedAt: '2026-11-14T18:30:00.000Z', updatedAt: '2026-11-14T18:30:00.000Z' },
 ];
 // Emote transfer requests (ADR 0014): an editor's transfer waits for the owner. One is seeded: an
@@ -823,27 +824,27 @@ const scopeFrom = (setIds) => {
   return { allSets: false, setIds: ids };
 };
 const SHARED_SETS = [
-  { id: '01JD8XSET0000000000000OAKAL', name: 'quietoak cozy', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[0],
+  { id: '01JD8XSET000000000000OAKAL', name: 'quietoak cozy', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[0],
     emotes: ALL.slice(70, 78).map((e) => member(e)), editors: [], visibility: 'PRIVATE', createdAt: '2026-11-13T09:10:00.000Z' },
-  { id: '01JD8XSET0000000000000FERN1', name: 'fern garden', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[4],
+  { id: '01JD8XSET000000000000FERN1', name: 'fern garden', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[4],
     emotes: ALL.slice(46, 54).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-15T20:30:00.000Z' },
 ];
 // Public sets of other accounts (accountSets, cloneSet): listed, unlisted and private, so a
 // profile shows only the listed ones and a private one 404s to everyone else.
 const PUBLIC_SETS = [
-  { id: '01JD8XSET0000000000000NORA1', name: 'nora picks', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[1],
+  { id: '01JD8XSET000000000000NORA1', name: 'nora picks', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[1],
     emotes: ALL.slice(5, 23).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-09T15:00:00.000Z' },
-  { id: '01JD8XSET0000000000000NORA2', name: 'cozy nights', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[1],
+  { id: '01JD8XSET000000000000NORA2', name: 'cozy nights', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[1],
     emotes: ALL.slice(30, 38).map((e) => member(e)), editors: [], visibility: 'LISTED', createdAt: '2026-11-14T22:00:00.000Z' },
-  { id: '01JD8XSET0000000000000NORA3', name: 'drafts', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[1],
+  { id: '01JD8XSET000000000000NORA3', name: 'drafts', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[1],
     emotes: ALL.slice(80, 84).map((e) => member(e)), editors: [], visibility: 'PRIVATE', createdAt: '2026-11-16T08:00:00.000Z' },
-  { id: '01JD8XSET0000000000000NORA4', name: 'nora personal', kind: 'PERSONAL', capacity: 5, owner: OTHERS[1],
+  { id: '01JD8XSET000000000000NORA4', name: 'nora personal', kind: 'PERSONAL', capacity: 5, owner: OTHERS[1],
     emotes: ALL.slice(90, 93).map((e) => member(e)), editors: [], visibility: 'UNLISTED', createdAt: '2026-11-11T11:00:00.000Z' },
   // Edge cases for /sets/<id>: a listed set with no emotes, and an unlisted one with a very long
   // name and a very long owner name.
-  { id: '01JD8XSET0000000000000EMPTY', name: 'empty shelf', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[1],
+  { id: '01JD8XSET000000000000EMPTY', name: 'empty shelf', kind: 'CHANNEL', capacity: 1000, owner: OTHERS[1],
     emotes: [], editors: [], visibility: 'LISTED', createdAt: '2026-11-17T08:00:00.000Z' },
-  { id: '01JD8XSET0000000000000LONGN', kind: 'CHANNEL', capacity: 1000, visibility: 'UNLISTED', editors: [], createdAt: '2026-11-12T08:00:00.000Z',
+  { id: '01JD8XSET000000000000LONGN', kind: 'CHANNEL', capacity: 1000, visibility: 'UNLISTED', editors: [], createdAt: '2026-11-12T08:00:00.000Z',
     name: 'The complete and unabridged collection of every single emote I have ever collected, sorted by mood, season and how loud chat gets',
     owner: { id: '01JD8X0000000000000000LONG', displayName: 'a_streamer_with_an_extremely_long_display_name_that_never_ends', avatar: `${BASE}/avatars/3.svg` },
     emotes: ALL.slice(8, 52).map((e) => member(e)) },
@@ -927,6 +928,7 @@ const C_GRANTS = Object.entries(C_OWNED).flatMap(([account, kinds]) => Object.en
   list.map((cosmeticId) => ({ accountId: account, kind, cosmeticId, source: 'GRANT', reason: 'Sample grant (mock data)', grantedBy: ME_SUMMARY, grantedAt: C_TIME }))));
 // Chatters the batch lookup knows (platform user id -> account).
 const C_CHATTERS = { '141981764': ME_ID, '55500001': OTHERS[0].id, '55500003': OTHERS[4].id };
+let newSets = 0;
 let cosmeticSeq = 0;
 const cosmeticCatalog = () => ({ badges: BADGES, paints: PAINTS });
 // What the public reads list (GraphQL cosmetics, GET /v1/cosmetics): only cosmetics held by an
@@ -1774,7 +1776,7 @@ function signedIn(body, v, ADMIN) {
       const visibility = v.input.visibility ?? (v.input.kind === 'PERSONAL' ? 'UNLISTED' : 'LISTED');
       if (v.input.kind === 'PERSONAL' && visibility === 'PRIVATE')
         return err('Personal sets can’t be private, and the global set is always listed.', 'bad_visibility');
-      const s = { id: `01JD8XSETNEW${String(SETS.length + SHARED_SETS.length).padStart(14, '0')}`, name: v.input.name, kind: v.input.kind,
+      const s = { id: `01JD8XSETNEW${String(++newSets).padStart(14, "0")}`, name: v.input.name, kind: v.input.kind,
         capacity: v.input.kind === 'PERSONAL' ? 5 : 1000, owner, emotes: [], editors: [], visibility, createdAt: new Date().toISOString() };
       list.push(s);
       return { data: { createSet: setOut(s) } };
@@ -2910,6 +2912,9 @@ function siteOf(req) {
   return ORIGIN;
 }
 
+// Ids of emotes, accounts and sets are snowflakes on the wire (dev/snowflake.mjs); everything here is keyed by their ULIDs.
+registerAll(ALL, MINE, PENDING, SETS, SHARED_SETS, PUBLIC_SETS, OWNERS, CHANNELS, EDITOR_CHANNELS, EDITOR_OF, ACCOUNT_EDITORS);
+
 createServer(async (req, res) => {
   const SITE = siteOf(req);
   res.setHeader('access-control-allow-origin', SITE);
@@ -3115,7 +3120,7 @@ createServer(async (req, res) => {
       return json(res, 400, { error: 'bad_form', message: 'visibility and private say different things.' });
     flags.private = visibility === 'PRIVATE';
     // Upload as (ADR 0014): an account where you hold EMOTE_UPLOAD on every set owns it.
-    const ownerId = (field('owner_id') ?? '').trim();
+    const ownerId = inwardId((field('owner_id') ?? '').trim());
     const forOther = ownerId && ownerId !== ME_ID;
     if (forOther && !emoteGrant(ownerId, 'EMOTE_UPLOAD'))
       return json(res, 403, { error: 'forbidden', message: 'You can upload for another account only as its editor with the upload permission on every set.' });
@@ -3153,6 +3158,7 @@ createServer(async (req, res) => {
     try {
       const body = JSON.parse(raw || '{}');
       if (typeof body?.query !== 'string') return json(res, 400, { data: null, errors: [{ message: 'Send one query.', extensions: { code: 'bad_request' } }] });
+      if (body.variables) body.variables = inward(body.variables);
       const out = answer(body, session, admin);
       if (out?._cookie) {
         res.setHeader('set-cookie', out._cookie);
@@ -3212,5 +3218,5 @@ function pruneAnswer(query, out) {
 
 function json(res, status, body) {
   res.writeHead(status, { 'content-type': 'application/json' });
-  res.end(JSON.stringify(body));
+  res.end(JSON.stringify(outward(body)));
 }
