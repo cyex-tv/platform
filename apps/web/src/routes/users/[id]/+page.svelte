@@ -3,7 +3,8 @@
   // (ProfileHeader, flat: name, roles as flags, member since, the owner's or an editor's buttons;
   // the roles replaced the link-copy button, owner rule) heads the left column, then the
   // section tabs (the same public rows for every viewer, rows.ts) and the section. On the right a
-  // panel shows About (ProfileAbout: connections and editors, collapsed, and numbers; public, the
+  // panel (lib/shell/InspectorLayout, the frame every Inspector page shares; tabs are LinkTabs) shows
+  // About (ProfileAbout: connections and editors, collapsed, and numbers; public, the
   // same for everyone) until an emote tile is picked: then that emote (EmoteInspector, ?e=<id>),
   // and Escape, the close button or back return to About; ← → step through the grid. Under 1100px
   // About sits under the person and tiles open the emote page as anywhere else. The server renders the public
@@ -20,13 +21,15 @@
   import State from '$lib/components/State.svelte';
   import { clean } from '$lib/format';
   import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
+  import InspectorLayout from '$lib/shell/InspectorLayout.svelte';
+  import IconButton from '$lib/components/IconButton.svelte';
+  import LinkTabs from '$lib/components/LinkTabs.svelte';
   import { session } from '$lib/tool/session.svelte';
   import { ACTIVITY_READY } from '$lib/profile/activity';
   import { relationState } from '$lib/profile/data.svelte';
   import ProfileHeader from '$lib/profile/ProfileHeader.svelte';
   import ProfileAbout from '$lib/profile/ProfileAbout.svelte';
   import EmoteInspector from '$lib/profile/EmoteInspector.svelte';
-  import { arrowNav } from '$lib/shell/rail';
   import { gql } from '$lib/api';
   import { EMOTE } from '$lib/queries';
   import { count } from '$lib/format';
@@ -67,7 +70,7 @@
   const TITLE: Record<SectionKey, string> = { overview: 'Overview', uploads: 'Uploaded emotes', active: 'Active emotes', sets: 'Emote sets', favourites: 'Favourites', cosmetics: 'Cosmetics', activity: 'Activity' };
 
   // The section tabs: the profile's public rows, plus the off-row section you are on.
-  const tabs = $derived(
+  const tabList = $derived(
     stripTabs(profileRail(data.id, section, ACTIVITY_READY), stripExtra(page.url.pathname, section)).map((t) =>
       // The public count; whoever manages the account sees pending uploads too, so theirs has none.
       t.href === sectionHref(data.id, 'uploads') && !data.error && !manages(relation) ? { ...t, count: count(data.total) } : t,
@@ -107,8 +110,6 @@
       });
     return () => (gone = true);
   });
-  // Under 1100px About sits above the tabs, folded until opened (the grid stays near the top).
-  let aboutOpen = $state(false);
   let body = $state<HTMLElement>();
   const tileLinks = () => [...(body?.querySelectorAll<HTMLAnchorElement>('a.tile[href^="/emotes/"]') ?? [])];
   const idOf = (a: Element) => decodeURIComponent((a.getAttribute('href') ?? '').match(/^\/emotes\/([^/?#]+)/)?.[1] ?? '');
@@ -209,18 +210,20 @@
   </ColumnLayout>
 {:else}
   {@const account = { id: data.id, displayName: data.creator.displayName, avatar: data.creator.avatar }}
-  <div class="wrap pf" class:picking={!!pickedId}>
-    <div class="head">
+  {@const showing = !!pickedId && wide}
+  <InspectorLayout
+    title={showing ? 'Selected emote' : 'About'}
+    label={showing ? 'Selected emote' : `About ${name}`}
+    fold={!showing}
+    headPad={false}
+    testid="profile-panel"
+  >
+    {#snippet head()}
       <ProfileHeader {account} {relation} profile={data.profile} seed={data.look} {actions} facts={false} flat />
-    </div>
-
-    <nav class="ptabs" aria-label="{name}'s profile" use:arrowNav={'horizontal'}>
-      {#each tabs as t (t.href)}
-        <a href={t.href} aria-current={t.current ? 'page' : undefined}>
-          <span class="tl" data-t={t.label}>{t.label}</span>{#if t.count !== undefined}<span class="n">{t.count}</span>{/if}
-        </a>
-      {/each}
-    </nav>
+    {/snippet}
+    {#snippet tabs()}
+      <LinkTabs label="{name}'s profile" items={tabList} />
+    {/snippet}
 
     <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
     <div class="body" bind:this={body} onclickcapture={pick}>
@@ -252,67 +255,25 @@
       <AdminLink accountId={data.id} />
     </div>
 
-    <aside class="panel" aria-label={pickedId ? 'Selected emote' : `About ${name}`} data-testid="profile-panel">
-      {#if pickedId && wide}
-        <EmoteInspector emote={picked?.id === pickedId ? picked.emote : null} failed={picked?.id === pickedId && picked.failed} onclose={unpick} />
-      {:else}
-        <div class="ip-head">
-          <h2 class="label" id="about-h">About</h2>
-          <button class="about-toggle" type="button" aria-expanded={aboutOpen} aria-controls="about-body" onclick={() => (aboutOpen = !aboutOpen)}>
-            <span class="sr-only">About {name}</span><span aria-hidden="true">{aboutOpen ? 'Hide' : 'Show'}</span><Icon name="chevron-down" size={14} />
-          </button>
-        </div>
-        <div class="ip-body" id="about-body" class:shut={!aboutOpen}><ProfileAbout accountId={data.id} profile={data.profile} uploads={data.total} /></div>
+    {#snippet panelActions()}
+      {#if showing && pickedId}
+        {#if picked?.id === pickedId && picked.emote}<IconButton icon="open" label="Open full page" size="s" variant="ghost" href="/emotes/{encodeURIComponent(pickedId)}" />{/if}
+        <IconButton icon="x" label="Close" size="s" variant="ghost" onclick={unpick} />
       {/if}
-    </aside>
-  </div>
+    {/snippet}
+    {#snippet panel()}
+      {#if showing}
+        <EmoteInspector head={false} emote={picked?.id === pickedId ? picked.emote : null} failed={picked?.id === pickedId && picked.failed} onclose={unpick} />
+      {:else}
+        <ProfileAbout accountId={data.id} profile={data.profile} uploads={data.total} />
+      {/if}
+    {/snippet}
+  </InspectorLayout>
 {/if}
 
 <style>
   .pad { padding-top: var(--rail-gap); }
 
-  /* The Inspector profile: the person, the tabs and the grid on the left; on the right a panel
-     with About (connections, editors, numbers) until an emote is picked, then that emote. */
-  .pf { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-areas: 'head panel' 'tabs panel' 'body panel';
-    grid-template-rows: auto auto 1fr; column-gap: 24px; align-items: start; }
-  .head { grid-area: head; min-width: 0; }
-  .ptabs { grid-area: tabs; min-width: 0; }
-  .body { grid-area: body; min-width: 0; padding: 20px 0 48px; }
-  .panel { grid-area: panel; align-self: start; position: sticky; top: var(--nav-h); height: calc(100svh - var(--nav-h)); overflow-y: auto;
-    overscroll-behavior: contain; margin-right: calc(-1 * var(--page-pad)); border-left: 1px solid var(--border); background: var(--surface); }
-  .ip-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; height: 48px; padding: 0 16px;
-    border-bottom: 1px solid var(--border); background: var(--surface); }
-  .label { margin: 0; font-size: var(--t-label, 11px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
-  .ip-body { padding: 8px 16px 16px; }
-  .about-toggle { display: none; }
-
-  /* The tabs: words on a hairline; the current one bold (no bar or fill). */
-  .ptabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--border); margin-inline: -10px; padding-inline: 0; }
-  .ptabs a { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 10px; color: var(--muted);
-    font-size: var(--t-ui); font-weight: 500; white-space: nowrap; transition: color var(--fast); }
-  .ptabs a[aria-current='page'] { color: var(--text); font-weight: 700; }
-  .ptabs a:focus-visible { outline-offset: -2px; }
-  .tl { display: inline-grid; }
-  .tl::after { content: attr(data-t); font-weight: 700; height: 0; overflow: hidden; visibility: hidden; user-select: none; }
-  .n { font-size: var(--t-small); color: var(--dim); font-weight: 500; font-variant-numeric: tabular-nums; }
-  @media (hover: hover) and (pointer: fine) { .ptabs a:hover { color: var(--text); } }
-
   /* The picked emote's tile is ringed in the accent while it shows in the panel. */
   .body :global(a.tile[aria-current='true']) { border-color: var(--accent-border); }
-
-  /* Narrower: one column; About follows the person, and tiles open the emote page. */
-  @media (max-width: 1099.98px) {
-    .pf { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'head' 'panel' 'tabs' 'body'; grid-template-rows: none; }
-    .panel { position: static; height: auto; overflow: visible; margin: 0 0 16px; border: 1px solid var(--border); border-radius: var(--radius-card); }
-    .ip-head { position: static; height: auto; padding: 0; border-radius: var(--radius-card); border-bottom: 0; }
-    .ip-head .label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-    .about-toggle { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-height: 44px; padding: 0 16px;
-      border: 0; border-radius: var(--radius-card); background: none; color: var(--text); font: inherit; font-size: var(--t-small); font-weight: 600; cursor: pointer; }
-    .about-toggle::before { content: 'About'; margin-right: auto; font-size: var(--t-label, 11px); letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
-    .about-toggle :global(svg) { color: var(--dim); transition: transform var(--fast) var(--ease); }
-    .about-toggle[aria-expanded='true'] :global(svg) { transform: rotate(180deg); }
-    .about-toggle:focus-visible { outline-offset: -2px; }
-    .ip-body { border-top: 1px solid var(--border); }
-    .ip-body.shut { display: none; }
-  }
 </style>

@@ -37,6 +37,13 @@ describe('profile emote panel', () => {
     expect(onclose).toHaveBeenCalledOnce();
   });
 
+  it('leaves its head to the page’s Inspector panel when asked', () => {
+    render(EmoteInspector, { emote, onclose: () => {}, head: false });
+    expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
+    expect(screen.queryByText('Selected emote')).toBeNull();
+    expect(screen.getByText('beanSus')).toBeTruthy();
+  });
+
   it('holds its place while the emote loads, and says so when it can’t', () => {
     const { container, unmount } = render(EmoteInspector, { emote: null, onclose: () => {} });
     expect(container.querySelector('[aria-busy="true"]')).toBeTruthy();
