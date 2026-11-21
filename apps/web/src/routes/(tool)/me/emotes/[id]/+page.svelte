@@ -37,16 +37,19 @@
   import { STATE_HINT, STATE_LABEL } from '$lib/tool/state';
   import { fail, notify } from '$lib/tool/notices.svelte';
   import PanelBlock from '$lib/components/PanelBlock.svelte';
-  import InspectorLayout from '$lib/shell/InspectorLayout.svelte';
-  import { formats, kind } from '$lib/components/emote/emote-page';
-  import SizeRow from '$lib/components/emote/SizeRow.svelte';
-  import { transferLine } from '$lib/components/emote/emote-page';
-  import Icon from '$lib/components/Icon.svelte';
+  import MeFrame from '$lib/profile/MeFrame.svelte';
+  import Section from '$lib/components/Section.svelte';
+  import Row from '$lib/components/Row.svelte';
+  import FactRows from '$lib/components/FactRows.svelte';
+  import LinkRows from '$lib/components/LinkRows.svelte';
+  import ContactSheet from '$lib/components/ContactSheet.svelte';
+  import { reduced, watchReduced } from '$lib/cosmetics/reduced.svelte';
+  import { onMount } from 'svelte';
+  import { fileSize, formats, kind, scaleFiles, transferLine } from '$lib/components/emote/emote-page';
   import PageHead from '$lib/tool/PageHead.svelte';
   import EmoteFlags from '$lib/tool/EmoteFlags.svelte';
   import { visibilityOf } from '$lib/tool/visibility';
 
-  const scales = [1, 2, 4] as const;
   let emote = $state<EmoteFieldsFragment | null>(null);
   let slow = $state(false);
   let sets = $state<{ id: string; name: string; kind: string }[]>([]);
@@ -265,26 +268,33 @@
   }
   const kinds = $derived(emote ? formats(emote.files) : []);
   const one = $derived(emote ? size(emote) : { width: 0, height: 0 });
+  const files = $derived(emote ? scaleFiles(emote.files) : []);
+  const biggest = $derived(files.at(-1));
+  // Animated emotes play; under reduced motion they show their still frame.
+  onMount(watchReduced);
+  const frozen = $derived(!!emote && emote.animated && emote.files.some((f) => f.name === '1x_static.webp') && reduced.on);
+  const fileUrl = (f: { scale: number; name: string }) => (emote ? (frozen ? `${emote.host}/${f.scale}x_static.webp` : `${emote.host}/${f.name}`) : '');
 </script>
 
 <svelte:head><title>{L.cause ? problemTitle(L.cause, true, 'No emote here') : `${emote?.name ?? 'Emote'} - cyex.tv`}</title></svelte:head>
 
 {#snippet side()}
   {#if emote}
-    <PanelBlock title="Status">
-      <p class="state"><span class="ui-chip {emote.state.toLowerCase()}">{STATE_LABEL[emote.state]}</span></p>
-      <p class="pb-hint">{STATE_HINT[emote.state]}</p>
-    </PanelBlock>
     <PanelBlock title="Facts">
-      <dl class="kv">
-        {#if emote.channelCount > 0}<dt>Channels using it</dt><dd>{count(emote.channelCount)}</dd>{/if}
-        <dt>Type</dt><dd>{kind(emote)}</dd>
-        {#if kinds.length}<dt>{kinds.length > 1 ? 'Formats' : 'Format'}</dt><dd>{kinds.join(', ')}</dd>{/if}
-        {#if emote.files.length}<dt>Size at 1x</dt><dd>{one.width} × {one.height} px</dd>{/if}
-        <dt>Uploaded</dt><dd><time datetime={emote.createdAt}>{date(emote.createdAt)}</time></dd>
-        {#if emote.owner && !mine}<dt>Owner</dt><dd><a class="who" href={ownerHome}><bdi>{clean(emote.owner.displayName)}</bdi></a></dd>{/if}
-        <dt>ID</dt><dd class="ui-mono id">{emote.id}</dd>
-      </dl>
+      <FactRows
+        label="Facts"
+        items={[
+          { label: 'Status', value: STATE_LABEL[emote.state], tone: emote.state === 'APPROVED' ? 'ok' : emote.state === 'PENDING' ? 'warn' : 'bad' },
+          { label: 'Uploaded', value: date(emote.createdAt), mono: true },
+          { label: 'Id', value: emote.id, mono: true },
+          { label: 'Channels', value: count(emote.channelCount), mono: true },
+          { label: 'Kind', value: kind(emote) },
+          ...(kinds.length ? [{ label: kinds.length > 1 ? 'Formats' : 'Format', value: kinds.join(', ') }] : []),
+          ...(emote.files.length ? [{ label: 'Size at 1x', value: `${one.width} × ${one.height} px`, mono: true }] : []),
+          ...(emote.owner && !mine ? [{ label: 'Owner', value: clean(emote.owner.displayName), href: ownerHome }] : []),
+        ]}
+      />
+      <p class="pb-hint">{STATE_HINT[emote.state]}</p>
     </PanelBlock>
 
     {#if emote.state !== 'REJECTED' && emote.state !== 'TAKEN_DOWN'}
@@ -299,63 +309,23 @@
         {:else if setsFailed}
           <RetryNote onretry={loadSets}>Couldn’t load your sets.</RetryNote>
         {:else}
-          <p class="pb-hint">It’s in all your sets already, or you have none yet. <a href="/me/sets">Your sets</a></p>
+          <p class="pb-hint">It’s in all your sets already, or you have none yet.</p>
         {/if}
       </PanelBlock>
     {/if}
 
+    <PanelBlock title="Go to">
+      <LinkRows
+        label="Related"
+        items={[
+          ...(emote.state === 'APPROVED' ? [{ href: `/emotes/${emote.id}`, label: 'Open public page', icon: 'arrow-right' as const }] : []),
+          { href: '/me/sets', label: 'Your sets', icon: 'grid' as const },
+        ]}
+      />
+    </PanelBlock>
+
     {#if grantsFailed}
       <RetryNote onretry={loadGrants}>Couldn’t load which accounts you edit, so some actions (like giving this emote away) may be missing.</RetryNote>
-    {/if}
-
-    {#if (canGive && (receivers.length || !mine)) || requests.length}
-      <PanelBlock title="Give to another account">
-        <div id="transfer" class="give">
-          {#if requests.length}
-            <ul class="requests">
-              {#each requests as r (r.id)}
-                {@const owner = r.from.id === session.me?.id}
-                {@const line = transferLine(r, session.me?.id)}
-                <li>
-                  <p>
-                    {#if line.asker === 'you'}You asked{:else}<bdi>{clean(line.asker.name)}</bdi> asks{/if}
-                    to give it to {#if typeof line.target === 'string'}{line.target}{:else}<bdi>{clean(line.target.name)}</bdi>{/if}.
-                    <span class="ui-hint">{owner ? 'It moves only if you accept' : `Waiting for ${clean(r.from.displayName)} to accept`}; open until <span class="ui-num">{date(r.expiresAt)}</span>.</span>
-                  </p>
-                  <div class="ui-actions">
-                    {#if owner}
-                      <Confirm small label="Accept" confirm="Click again to give it away" busy={answering === r.id} onconfirm={() => answer(r, 'accept')} />
-                      <button class="ui-btn secondary small" type="button" disabled={answering === r.id} onclick={() => answer(r, 'decline')}>Decline</button>
-                    {:else if r.requestedBy.id === session.me?.id}
-                      <button class="ui-btn secondary small" type="button" disabled={answering === r.id} onclick={() => answer(r, 'cancel')}>Cancel request</button>
-                    {/if}
-                  </div>
-                </li>
-              {/each}
-            </ul>
-          {/if}
-          {#if !canGive || (!mine && requests.length)}
-            <!-- One open request per emote: the editor waits, or cancels it first. -->
-          {:else if receivers.length}
-            <p class="pb-hint">It moves with its name, tags and sets. Only you, or accounts where you can upload, can take it.{mine ? '' : ` ${clean(emote.owner?.displayName ?? 'The owner')} has to accept first.`}</p>
-            <div class="add">
-              <select class="ui-input" bind:value={giveTo} aria-label="Give to">
-                {#each receivers as r (r.id)}<option value={r.id}>{r.self ? `${clean(r.displayName)} (you)` : clean(r.displayName)}</option>{/each}
-              </select>
-              <Confirm label="Give" confirm="Click again to give it" busy={giving} onconfirm={give} />
-            </div>
-          {:else}
-            <p class="pb-hint">You can give it only to yourself or to accounts where you can upload; there are none yet.</p>
-          {/if}
-        </div>
-      </PanelBlock>
-    {/if}
-
-    {#if canDelete}
-      <PanelBlock title="Delete">
-        <p class="pb-hint">It leaves every set it’s in. This can’t be undone.</p>
-        <div class="pb-actions"><Confirm label="Delete emote" confirm="Click again to delete" busy={deleting} onconfirm={remove} /></div>
-      </PanelBlock>
     {/if}
   {/if}
 {/snippet}
@@ -369,70 +339,135 @@
 >
 {#snippet children()}
 {#if emote}
-  <InspectorLayout title="Emote" label="About this emote" panel={side} narrow="after" testid="emote-panel">
-    {#snippet head()}
+  <MeFrame title="Emote" label="About this emote" panel={side}>
+    <div class="col">
       <PageHead
         name
-        title={clean(emote!.name)}
-        back={mine ? { href: sectionHref(session.me?.id ?? '', 'uploads'), label: 'Your emotes' } : manages ? { href: ownerHome, label: `${clean(emote!.owner?.displayName ?? '')}’s emotes` } : can('emotes.review') ? { href: '/admin', label: 'Admin' } : { href: '/search', label: 'Emotes' }}
+        title={clean(emote.name)}
+        back={mine ? { href: sectionHref(session.me?.id ?? '', 'uploads'), label: 'Your emotes' } : manages ? { href: ownerHome, label: `${clean(emote.owner?.displayName ?? '')}’s emotes` } : can('emotes.review') ? { href: '/admin', label: 'Admin' } : { href: '/search', label: 'Emotes' }}
       >
         {#snippet line()}
-          Uploaded <span>{date(emote!.createdAt)}</span>{#if !mine && emote!.owner && (manages || canGive)}{' · '}<bdi>{clean(emote!.owner.displayName)}</bdi>’s emote, you edit their account{/if}
-        {/snippet}
-        {#snippet actions()}
-          {#if emote!.state === 'APPROVED'}
-            <a class="ui-btn secondary" href="/emotes/{emote!.id}"><Icon name="arrow-right" size={15} />Public page</a>
-          {/if}
+          <span class="ui-chip {emote!.state.toLowerCase()}">{STATE_LABEL[emote!.state]}</span> Uploaded <span class="ui-mono">{date(emote!.createdAt)}</span>{#if !mine && emote!.owner && (manages || canGive)}{' · '}<bdi>{clean(emote!.owner.displayName)}</bdi>’s emote, you edit their account{/if}
         {/snippet}
       </PageHead>
-    {/snippet}
-    <div class="ui-stack main">
-      <section class="ui-card sizes" aria-label="Picture">
-        {#if ready(emote)}
-          <SizeRow {emote} />
+
+      <section class="picture" aria-label="Picture">
+        {#if ready(emote) && biggest}
+          <div class="stage" data-testid="emote-stage">
+            <img src={fileUrl(biggest)} width={biggest.width} height={biggest.height} alt={emote.name} />
+          </div>
+          <ContactSheet label="Sizes" min={120}>
+            {#each files as f (f.name)}
+              <li class="cell">
+                <span class="pic"><img src={fileUrl(f)} width={f.width} height={f.height} alt="" /></span>
+                <span class="cap"><span class="x">{f.scale}x</span><span class="dm ui-mono">{f.width} × {f.height}</span>{#if fileSize(f)}<span class="dm ui-mono">{fileSize(f)}</span>{/if}</span>
+              </li>
+            {/each}
+          </ContactSheet>
         {:else}
-          <p class="ui-hint">{slow ? 'The files are taking longer than usual. Reload in a minute.' : 'The files are still being made. This takes a few seconds.'}</p>
+          <div class="stage wait"><p class="ui-hint">{slow ? 'The files are taking longer than usual. Reload in a minute.' : 'The files are still being made. This takes a few seconds.'}</p></div>
         {/if}
       </section>
+
       {#if canEdit}
-        <form class="ui-card ui-form" onsubmit={save} novalidate>
-          <h2>Details and visibility</h2>
-          <label class="ui-field">
-            <span class="ui-label">Name</span>
-            <input class="ui-input" bind:value={name} maxlength="100" spellcheck="false" aria-invalid={nameError ? 'true' : undefined} />
-            {#if nameError}<span class="ui-error">{nameError}</span>{/if}
-          </label>
-          <div class="ui-field">
-            <TagInput label="Tags" showLabel {tags} onchange={(t) => (tags = t)} max={TAG_MAX} clean={cleanTag}
-              placeholder="cat, dance" hint="Enter or a comma adds a tag. Up to {TAG_MAX}." disabled={saving} id="edit-tags" />
-            {#if tagError}<span class="ui-error">{tagError}</span>{/if}
-          </div>
-          <EmoteFlags id="edit" bind:zeroWidth bind:visibility bind:nsfw disabled={saving} />
-          <div class="ui-actions">
-            <button class="ui-btn primary" type="submit" disabled={saving || !changed || !!nameError || !!tagError}>
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-          </div>
+        <form onsubmit={save} novalidate>
+          <Section title="Name">
+            <Row label="Name" for="edit-name" hint={nameError ? undefined : 'Shown on the emote’s page and typed in chat.'}>
+              <input id="edit-name" class="ui-input name-in" bind:value={name} maxlength="100" spellcheck="false" aria-invalid={nameError ? 'true' : undefined} />
+              <button class="ui-btn secondary small" type="submit" disabled={saving || name.trim() === emote.name || !!nameError || !!tagError}>Rename</button>
+            </Row>
+            {#if nameError}<p class="ui-error err">{nameError}</p>{/if}
+          </Section>
+          <Section title="Tags">
+            <Row label="Tags" hint="Enter or a comma adds a tag. Up to {TAG_MAX}.">
+              <div class="tags">
+                <TagInput label="Tags" {tags} onchange={(t) => (tags = t)} max={TAG_MAX} clean={cleanTag} placeholder="cat, dance" disabled={saving} id="edit-tags" />
+              </div>
+            </Row>
+            {#if tagError}<p class="ui-error err">{tagError}</p>{/if}
+          </Section>
+          <Section title="Flags and who can find it">
+            <div class="flags"><EmoteFlags id="edit" bind:zeroWidth bind:visibility bind:nsfw disabled={saving} /></div>
+            <div class="ui-actions save">
+              <button class="ui-btn primary" type="submit" disabled={saving || !changed || !!nameError || !!tagError}>
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </Section>
         </form>
       {/if}
+
+      {#if requests.length || (canGive && (receivers.length || !mine))}
+        <Section title="Hand-over" lead="Give it to another account. It moves with its name, tags and sets.">
+          <div id="transfer">
+            {#each requests as r (r.id)}
+              {@const owner = r.from.id === session.me?.id}
+              {@const line = transferLine(r, session.me?.id)}
+              <Row
+                label={`${line.asker === 'you' ? 'You asked' : `${clean(line.asker.name)} asks`} to give it to ${typeof line.target === 'string' ? line.target : clean(line.target.name)}`}
+                hint={`${owner ? 'It moves only if you accept' : `Waiting for ${clean(r.from.displayName)} to accept`}; open until ${date(r.expiresAt)}.`}
+              >
+                {#if owner}
+                  <Confirm small label="Accept" confirm="Click again to give it away" busy={answering === r.id} onconfirm={() => answer(r, 'accept')} />
+                  <button class="ui-btn secondary small" type="button" disabled={answering === r.id} onclick={() => answer(r, 'decline')}>Decline</button>
+                {:else if r.requestedBy.id === session.me?.id}
+                  <button class="ui-btn secondary small" type="button" disabled={answering === r.id} onclick={() => answer(r, 'cancel')}>Cancel request</button>
+                {/if}
+              </Row>
+            {/each}
+            {#if !canGive || (!mine && requests.length)}
+              <!-- One open request per emote: the editor waits, or cancels it first. -->
+            {:else if receivers.length}
+              <Row
+                label="Give to"
+                for="give-to"
+                hint={`Only you, or accounts where you can upload, can take it.${mine ? '' : ` ${clean(emote.owner?.displayName ?? 'The owner')} has to accept first.`}`}
+              >
+                <select id="give-to" class="ui-input give-in" bind:value={giveTo}>
+                  {#each receivers as r (r.id)}<option value={r.id}>{r.self ? `${clean(r.displayName)} (you)` : clean(r.displayName)}</option>{/each}
+                </select>
+                <Confirm small label="Give" confirm="Click again to give it" busy={giving} onconfirm={give} />
+              </Row>
+            {:else}
+              <Row label="Give to" hint="You can give it only to yourself or to accounts where you can upload; there are none yet." />
+            {/if}
+          </div>
+        </Section>
+      {/if}
+
+      {#if canDelete}
+        <Section title="Danger" tone="danger">
+          <Row label="Delete this emote" hint="It leaves every set it’s in. This can’t be undone.">
+            <Confirm small label="Delete emote" confirm="Click again to delete" busy={deleting} onconfirm={remove} />
+          </Row>
+        </Section>
+      {/if}
     </div>
-  </InspectorLayout>
+  </MeFrame>
 {/if}
 {/snippet}
 </LoadGate>
 
 <style>
-  .main { max-width: 820px; }
-  .sizes { display: grid; place-items: center; padding: 32px 16px 24px; min-width: 0; }
-  .state { display: flex; }
-  .who { color: var(--text); }
-  .id { font-size: .78rem; font-weight: 500; color: var(--muted); }
+  .col { max-width: 820px; min-width: 0; }
+  .picture { display: grid; gap: 16px; margin-bottom: 24px; min-width: 0; }
+  .stage { display: grid; place-items: center; min-height: 220px; padding: 32px 16px; border: 1px solid var(--border); background: var(--surface); min-width: 0; }
+  .stage img { display: block; max-width: 100%; height: auto; max-height: 320px; object-fit: contain; }
+  .wait p { margin: 0; text-align: center; }
+  .cell { display: grid; grid-template-rows: 1fr auto; justify-items: center; align-items: end; gap: 10px; padding: 16px 8px 10px; }
+  .pic { display: grid; place-items: end center; max-width: 100%; }
+  .pic img { display: block; max-width: 100%; height: auto; }
+  .cap { display: grid; justify-items: center; gap: 1px; font-size: var(--t-fine); color: var(--muted); }
+  .x { font-size: var(--t-small); font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+  .dm { white-space: nowrap; }
+  .picture :global(.cs) { grid-template-columns: repeat(auto-fit, minmax(min(120px, 100%), 1fr)); }
+  .name-in { width: min(220px, 100%); }
+  .tags { flex: 1; min-width: min(280px, 100%); text-align: left; }
+  .give-in { width: min(240px, 100%); }
+  .err { margin: 6px 0 0; }
+  .flags { padding: 4px 0 0; }
+  .save { margin-top: 12px; }
   .add { display: flex; gap: 8px; }
   .add select { flex: 1; min-width: 0; }
-  .give { display: grid; gap: 10px; }
-  .requests { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
-  .requests li { display: grid; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
-  .requests li:last-child { border-bottom: 0; padding-bottom: 0; }
-  .requests p { margin: 0; font-size: var(--t-small); overflow-wrap: anywhere; }
-  .requests .ui-hint { display: block; }
+  @media (max-width: 559.98px) { .name-in, .give-in { width: 100%; } }
 </style>

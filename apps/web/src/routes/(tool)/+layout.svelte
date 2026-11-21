@@ -15,6 +15,8 @@
   import { settingsRail, isSettingsPath } from '$lib/account/settings';
   import Icon from '$lib/components/Icon.svelte';
   import RailLayout from '$lib/shell/RailLayout.svelte';
+  import WorkspaceLayout from '$lib/shell/WorkspaceLayout.svelte';
+  import SettingsPanel from '$lib/account/SettingsPanel.svelte';
   import SideRail from '$lib/shell/SideRail.svelte';
   import type { RailGroup } from '$lib/shell/rail';
   import AdminShell from '$lib/admin/shell/AdminShell.svelte';
@@ -99,6 +101,19 @@
   <div class="ui-page" class:pending={!problem && !session.me}>
     {#if problem || !session.me}<div class="wrap me-wait">{@render body()}</div>{:else}{@render children()}{/if}
   </div>
+{:else if settings}
+  <!-- Settings: the Workspace (redesign round 2): the flush rail, the section, and on wide
+       screens a panel with what the section does and your account's facts. -->
+  {#snippet settingsRail_()}
+    <SideRail label="Settings" groups={settingsRail(path)} fill>
+      {#snippet head()}<div class="title"><strong>Settings</strong></div>{/snippet}
+      {#snippet foot()}<a class="rail-foot" href="/users/{session.me?.id ?? ''}?s=overview"><Icon name="circle-user" /><span class="lbl">Your profile</span><Icon name="chevron-right" size={14} /></a>{/snippet}
+    </SideRail>
+  {/snippet}
+  {#snippet settingsPanel()}<SettingsPanel />{/snippet}
+  <WorkspaceLayout rail={settingsRail_} panel={session.me ? settingsPanel : undefined} title="About" label="About this section" narrow="after" fold testid="settings-panel">
+    <div class="ui-page settings-page" class:pending={!problem && !session.me}>{@render body()}</div>
+  </WorkspaceLayout>
 {:else}
 <RailLayout>
   {#snippet rail()}
@@ -134,6 +149,8 @@
   /* Its own block formatting context: the Split's pull-up margin stays inside, so the page's box
      doesn't move when the loading line gives way to the page. */
   .adm-page { display: flow-root; }
+  /* A settings section is a column of flat Sections and Rows, a form's measure wide. */
+  .settings-page { max-width: 820px; }
   .me-wait { padding-top: var(--rail-gap); padding-bottom: 48px; }
   .me { display: flex; align-items: center; gap: 12px; min-height: 40px; }
   .plain { font-size: var(--t-ui); font-weight: 600; color: var(--muted); }

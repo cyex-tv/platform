@@ -85,7 +85,7 @@
 {/if}
 
 {#if first}
-  <EmoteGrid items={[]} loading skeletons={12} />
+  <EmoteGrid sheet items={[]} loading skeletons={12} />
 {:else if problem && !items.length}
   <Problem cause="server" onretry={() => load(true)} />
 {:else if !shown.length}
@@ -101,7 +101,7 @@
     </State>
   {/if}
 {:else}
-  <EmoteGrid items={shown} eager={12} label="Your favourites" loading={busy} skeletons={6} />
+  <EmoteGrid sheet items={shown} eager={12} label="Your favourites" loading={busy} skeletons={6} />
   <div class="foot"><LoadMore hasMore={items.length < total} {busy} error={problem} total={left} onmore={() => load()} /></div>
 {/if}
 

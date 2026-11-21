@@ -13,6 +13,6 @@ describe('emote previews', () => {
   it('the edit page shows the size row instead', () => {
     const page = readFileSync(file('../../../routes/(tool)/me/emotes/[id]/+page.svelte'), 'utf8');
     expect(page).not.toMatch(/PreviewStage|Checker/);
-    expect(page).toMatch(/<SizeRow \{emote\} \/>/);
+    expect(page).toMatch(/<ContactSheet label="Sizes"/);
   });
 });

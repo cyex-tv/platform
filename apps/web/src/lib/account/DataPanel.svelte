@@ -2,6 +2,8 @@
   // Your data: one button that asks the API for a copy of everything about the account and saves
   // it as cyex-tv-export-<date>.json. The API allows five an hour; past that it says so in words.
   import { gql } from '$lib/api';
+  import Row from '$lib/components/Row.svelte';
+  import Section from '$lib/components/Section.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import { EXPORT_MY_DATA } from '$lib/queries';
   import { Gate } from '$lib/tool/gate.svelte';
@@ -30,18 +32,13 @@
     });
 </script>
 
-<section class="ui-panel" aria-labelledby="data-h">
-  <header><h2 id="data-h">Your data</h2></header>
-  <p class="ui-hint pad">A copy of everything cyex.tv holds about your account (logins, emotes, sets, channels, editors, cosmetics, notifications), as one JSON file.</p>
-  <div class="ui-actions row pad">
-    <button class="ui-btn secondary" type="button" disabled={gate.busy} onclick={run}><Icon name="download" size={16} />{preparing ? 'Preparing…' : 'Export my data'}</button>
-  </div>
-  {#if problem}<p class="problem pad" role="alert">{problem}</p>{/if}
-</section>
+<Section title="Your data" id="data-h">
+  <Row label="Export my data" hint="A copy of everything cyex.tv holds about your account (logins, emotes, sets, channels, editors, cosmetics, notifications), as one JSON file.">
+    <button class="ui-btn secondary small" type="button" disabled={gate.busy} onclick={run}><Icon name="download" size={16} />{preparing ? 'Preparing…' : 'Export my data'}</button>
+  </Row>
+  {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
+</Section>
 
 <style>
-  .pad { padding: 10px 14px 12px; }
-  .row { padding-top: 0; }
-  .ui-hint.pad { padding-bottom: 12px; }
-  .problem { padding-top: 0; font-size: var(--text-sub); color: var(--muted); }
+  .problem { margin: 8px 0 0; font-size: var(--t-small); color: var(--muted); }
 </style>

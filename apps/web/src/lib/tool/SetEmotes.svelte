@@ -4,6 +4,8 @@
   // is drawn. Rename and remove are on every tile.
   import { onDestroy, tick, untrack } from 'svelte';
   import Capacity from '$lib/components/Capacity.svelte';
+  import Icon from '$lib/components/Icon.svelte';
+  import Meter from '$lib/components/Meter.svelte';
   import { ApiError, gql } from '$lib/api';
   import type { SetEmotesQuery } from '$lib/gql/graphql';
   import { REMOVE_SET_EMOTE, SET_EMOTES, UPDATE_SET_EMOTE } from '$lib/queries';
@@ -138,7 +140,6 @@
   const tiles = $derived<CardEmote[]>(
     items.map((m) => ({ ...m.emote, shownName: m.name !== m.emote.name ? m.name : undefined, flags: { ...m.emote.flags, zeroWidth: m.zeroWidth } })),
   );
-  const slots = $derived(Math.min(100, (used / Math.max(1, capacity)) * 100));
 
   function edit(m: Member) {
     editing = m.emote.id;
@@ -195,14 +196,17 @@
   }
 </script>
 
-<section class="ui-panel">
-  <header>
-    <h2 bind:this={heading} tabindex="-1">In this set</h2>
-    <input class="ui-input filter" type="search" bind:value={filter} placeholder="Filter…" aria-label="Filter the set’s emotes" />
-  </header>
-  <div class="meter">
-    <span class="bar"><span style:width="{slots}%"></span></span>
-    <span class="ui-hint ui-num"><Capacity {used} {capacity} /></span>
+<!-- Flat (redesign round 2): a slim bar (label, filter, mono capacity and its meter) over the
+     set's emotes as a contact sheet; no panel box. -->
+<section class="set-emotes">
+  <div class="bar-row">
+    <h2 class="lbl" bind:this={heading} tabindex="-1">In this set</h2>
+    <span class="cap ui-mono"><Capacity {used} {capacity} /></span>
+    <span class="mtr"><Meter used={used} capacity={capacity} /></span>
+    <label class="find">
+      <Icon name="search" size={15} />
+      <input class="ui-input filter" type="search" bind:value={filter} placeholder="Filter this set" aria-label="Filter the set’s emotes" />
+    </label>
   </div>
   {#if loading && items.length === 0}
     <State bare kind="loading" title="Loading the emotes…" />
@@ -219,6 +223,7 @@
     <div class="grid" bind:this={gridEl}>
       <EmoteGrid
         items={tiles}
+        sheet
         label="Emotes in this set"
         eager={12}
         href={(e) => (byId.get(e.id)?.emote.owner?.id === session.me?.id ? `/me/emotes/${e.id}` : `/emotes/${e.id}`)}
@@ -267,11 +272,17 @@
 </dialog>
 
 <style>
-  .filter { width: min(240px, 50%); }
-  .meter { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
-  .bar { flex: 1; height: 4px; border-radius: 2px; background: var(--border-strong); overflow: hidden; }
-  .bar > span { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
-  .grid { padding: 16px; }
+  .bar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 52px; padding: 6px 0; margin-bottom: 16px;
+    border-bottom: 1px solid var(--border); }
+  .lbl { margin: 0; font-size: var(--t-label, 12px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  .lbl:focus { outline: none; }
+  .cap { font-size: 12px; color: var(--muted); }
+  .mtr { display: block; width: 120px; }
+  .find { position: relative; display: block; flex: 0 1 260px; min-width: 0; margin-left: auto; }
+  .find :global(svg) { position: absolute; left: 11px; top: 50%; translate: 0 -50%; color: var(--dim); pointer-events: none; }
+  .filter { width: 100%; height: 36px; min-height: 36px; padding-left: 34px; }
+  @media (max-width: 559.98px) { .find { flex-basis: 100%; margin-left: 0; } .filter { height: 44px; } }
+  .grid :global(.below) { min-height: 36px; }
   .foot { margin-top: 16px; }
   @media (hover: hover) and (pointer: fine) { .danger:hover { color: var(--red); } }
   .danger[aria-disabled='true'] { opacity: .5; cursor: progress; }
