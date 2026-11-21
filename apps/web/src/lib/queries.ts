@@ -1158,6 +1158,7 @@ export const EMOTE_CHANNELS = graphql(`
       platform
       login
       account {
+        id
         displayName
         avatar
       }

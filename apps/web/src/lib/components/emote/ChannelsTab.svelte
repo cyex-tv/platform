@@ -2,10 +2,13 @@
   // The Channels tab: the channels with the emote in their active set, newest first, 24 to a page
   // (avatar, name, platform). The first page comes with the page; the others are asked for when
   // paged to and kept. The pager itself sits in the tab bar, so this hands its state up (`pager`).
+  // Each name is drawn in its account's paint: the page's accounts are asked for together (one
+  // request per page of 24, each account once, shared with every other name on the site).
   import { SvelteMap } from 'svelte/reactivity';
   import Avatar from '$lib/components/Avatar.svelte';
   import Problem from '$lib/components/Problem.svelte';
-  import { clean } from '$lib/format';
+  import PaintedName from '$lib/cosmetics/PaintedName.svelte';
+  import { looks, wantLooks } from '$lib/cosmetics/store.svelte';
   import { channelPage } from './data';
   import { CHANNEL_PAGE, rangeLabel, type EmoteChannel } from './emote-page';
   import type { PagerState } from './pager';
@@ -21,6 +24,7 @@
   let failed = $state<number | null>(null);
 
   const rows = $derived(pages.get(at) ?? []);
+  $effect(() => wantLooks(rows.map((c) => c.accountId)));
   const last = $derived(total !== null ? Math.max(0, Math.ceil(total / CHANNEL_PAGE) - 1) : rows.length < CHANNEL_PAGE ? at : at + 1);
 
   async function go(to: number) {
@@ -63,7 +67,7 @@
       <li>
         <a href="/channels/{c.platform.toLowerCase()}/{encodeURIComponent(c.login)}">
           <Avatar src={c.avatar} name={c.displayName} size={28} />
-          <span class="name"><bdi>{clean(c.displayName)}</bdi></span>
+          <span class="name"><PaintedName name={c.displayName} paint={looks[c.accountId]?.paint} /></span>
           <span class="platform">{platformName(c.platform)}</span>
         </a>
       </li>
@@ -78,7 +82,7 @@
   ul.busy { opacity: .6; }
   a { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 10px; border: 1px solid transparent;
     border-radius: var(--radius-btn); color: var(--text); transition: background-color var(--fast), border-color var(--fast); }
-  .name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-ui); font-weight: 500; }
+  .name { flex: 0 1 auto; display: flex; min-width: 0; font-size: var(--t-ui); font-weight: 500; }
   .platform { flex: none; font-size: var(--t-label); color: var(--muted); }
   .empty { padding: 8px 0; color: var(--muted); font-size: var(--t-small); }
   @media (hover: hover) and (pointer: fine) { a:hover { background: var(--row-hover); border-color: var(--border); } }

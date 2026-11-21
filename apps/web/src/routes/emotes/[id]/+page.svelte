@@ -37,10 +37,22 @@
   const e = $derived(data.emote ?? asked?.emote ?? null);
 
   let from = $state<URL | null>(null);
+  // Switching tabs (`?tab=`) is a navigation on this same page: it keeps where the reader came
+  // from, but the back link then goes there by its address, since one step back is the last tab.
+  let tabbed = $state(false);
   afterNavigate((nav) => {
-    if (nav.type !== 'enter') from = nav.from?.url ?? null;
+    if (nav.type === 'enter') return;
+    if (nav.from && nav.to && nav.from.url.pathname === nav.to.url.pathname) {
+      tabbed = true;
+      return;
+    }
+    from = nav.from?.url ?? null;
+    tabbed = false;
   });
-  const back = $derived(backTarget(from, page.url.pathname));
+  const back = $derived.by(() => {
+    const b = backTarget(from, page.url.pathname);
+    return tabbed ? { ...b, back: false } : b;
+  });
 
   const name = $derived(e ? clean(e.name) : '');
 </script>

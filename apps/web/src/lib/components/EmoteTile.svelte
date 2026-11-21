@@ -38,7 +38,11 @@
   // the border, it never lifts. Animated emotes always play (EmotePicture: the still first frame
   // under reduced motion). The `status` slot (or a `note`, e.g. "pending") sits in the top-left
   // corner, for /me and the admin pages; `rank` (the Trending view) sits there too, as "#1".
+  // The creator's name is drawn in their paint (no badge): every tile on the page asks for its
+  // creator in the same tick, so a grid costs one request per 100 new creators (wantLooks).
   import type { Snippet } from 'svelte';
+  import PaintedName from '$lib/cosmetics/PaintedName.svelte';
+  import { looks, wantLooks } from '$lib/cosmetics/store.svelte';
   import { isWide, ready, size } from '$lib/emote';
   import { clean } from '$lib/format';
   import EmotePicture from './EmotePicture.svelte';
@@ -68,6 +72,11 @@
   const reach = $derived(reachMark(e, session.me?.id));
   const name = $derived(clean(e.shownName ?? e.name));
   const owner = $derived(e.owner ? clean(e.owner.displayName) : '');
+  const ownerId = $derived(creator ? e.owner?.id : undefined);
+  $effect(() => {
+    if (ownerId) wantLooks([ownerId]);
+  });
+  const paint = $derived(ownerId ? (looks[ownerId]?.paint ?? null) : null);
   // A lazy picture that is already cached shows at once; one that loads late fades in.
   function settle(node: HTMLImageElement) {
     if (node.complete || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
@@ -117,7 +126,7 @@
     {/if}
   </span>
   <span class="name"><bdi title={name}>{name}</bdi></span>
-  {#if creator && owner}<span class="by"><bdi>{owner}</bdi></span>{/if}
+  {#if creator && owner}<span class="by"><PaintedName name={owner} {paint} /></span>{/if}
   {#if kinds.length}<span class="sr-only">, {kinds.join(', ')}</span>{/if}
   {#if reach}<span class="sr-only">, {reach.label.toLowerCase()}</span>{/if}
   {#if inSet}<span class="sr-only">, already in {inSet}</span>{/if}
@@ -152,7 +161,9 @@
   .compact .mark { padding: 0 4px; }
   .processing { font-size: var(--t-fine); color: var(--muted); }
   /* Truncated names stay centred: the bdi is a block that ends in an ellipsis. */
-  .name bdi, .by bdi { display: block; overflow: hidden; text-overflow: ellipsis; }
+  .name bdi { display: block; overflow: hidden; text-overflow: ellipsis; }
+  /* The creator is always a PaintedName (plain until the paint arrives), so the box never changes
+     when it does: the paint only colours the text. It shrinks to the tile and ends in an ellipsis. */
   .name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     font-size: var(--t-nav); font-weight: 500; line-height: 1.35; color: var(--text); }
   .compact .name { font-size: var(--t-fine); }

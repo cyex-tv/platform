@@ -4039,7 +4039,7 @@ export type EmoteChannelsQueryVariables = Exact<{
 }>;
 
 
-export type EmoteChannelsQuery = { __typename?: 'Query', emoteChannels: Array<{ __typename?: 'Channel', platform: Platform, login: string, account: { __typename?: 'AccountSummary', displayName: string, avatar?: string | null } }> };
+export type EmoteChannelsQuery = { __typename?: 'Query', emoteChannels: Array<{ __typename?: 'Channel', platform: Platform, login: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } }> };
 
 export type CosmeticImageFieldsFragment = { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> };
 
@@ -6744,6 +6744,7 @@ export const EmoteChannelsDocument = new TypedDocumentString(`
     platform
     login
     account {
+      id
       displayName
       avatar
     }

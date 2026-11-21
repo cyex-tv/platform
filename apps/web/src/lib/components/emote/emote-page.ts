@@ -12,10 +12,33 @@ export type PageEmote = EmoteFieldsFragment;
 /** A channel that has the emote in its active set. */
 export type EmoteChannel = {
   platform: 'TWITCH' | 'KICK';
+  /** The channel's account, whose paint its name is drawn in. */
+  accountId: string;
   login: string;
   displayName: string;
   avatar?: string | null;
 };
+
+/**
+ * The emote page's tab from the address (`?tab=activity`): one of `ids`, else the first (the
+ * default, which has no `tab` in its address). An unknown or unavailable tab falls back to it.
+ */
+export function tabFrom<T extends string>(asked: string | null, ids: readonly T[]): T | undefined {
+  return ids.find((id) => id === asked) ?? ids[0];
+}
+
+/** The address of a tab: the page's own with `?tab=` set, or without it for the default tab. */
+export function tabUrl(url: URL, id: string, first: string | undefined): string {
+  const u = new URL(url);
+  if (id === first) u.searchParams.delete('tab');
+  else u.searchParams.set('tab', id);
+  return u.pathname + u.search + u.hash;
+}
+
+/** Whether the address names a tab it shouldn't (unknown, unavailable, or the default spelled out). */
+export function tabUrlStale(asked: string | null, shown: string | undefined, first: string | undefined): boolean {
+  return asked !== null && (asked !== shown || shown === first);
+}
 
 /** How many channels use the emote; null (the fact is hidden) when none do. */
 export function channelCount(e: Pick<PageEmote, 'channelCount'>): number | null {
