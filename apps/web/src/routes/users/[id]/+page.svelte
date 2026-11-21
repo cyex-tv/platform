@@ -12,7 +12,7 @@
   // the band's button for editors), and the Cosmetics tab becomes the picker for the owner and
   // editors with PROFILE. Sections are ?s= tabs; the old ?s=collection opens Cosmetics.
   import { setContext } from 'svelte';
-  import { goto, invalidateAll } from '$app/navigation';
+  import { afterNavigate, goto, invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
   import Problem from '$lib/components/Problem.svelte';
   import { problemTitle } from '$lib/components/problem';
@@ -140,14 +140,20 @@
     ev.preventDefault();
     show(id);
   }
+  // Focus goes back to the tile the emote came from once About is back (after the navigation,
+  // which would otherwise leave focus on the page).
+  let refocus: string | null = null;
+  afterNavigate(() => {
+    const id = refocus;
+    refocus = null;
+    if (id) requestAnimationFrame(() => tileLinks().find((a) => idOf(a) === id)?.focus());
+  });
   function unpick() {
-    const id = pickedId;
+    refocus = pickedId;
     if (pushed) {
       pushed = false;
       history.back();
     } else show(null);
-    // Focus goes back to the tile it came from.
-    requestAnimationFrame(() => tileLinks().find((a) => idOf(a) === id)?.focus());
   }
   function onkeydown(ev: KeyboardEvent) {
     if (!pickedId || !wide || ev.defaultPrevented || ev.ctrlKey || ev.metaKey || ev.altKey) return;
