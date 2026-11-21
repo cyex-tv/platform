@@ -1,10 +1,12 @@
 <script lang="ts">
   // The one header, identical on every route (public, signed in, admin, docs, errors, sign in):
-  // 56px, sticky, flat on the ground with a hairline, its content in the 1520 wrapper. Left the
-  // mark + cyex.tv and the main links (Emotes; signed in also Store, Subscription for
-  // subscribers and Admin for staff: nav.ts); centre the search field, which is the search
-  // itself (HeaderSearch: results drop down under it, no popup); right Upload (signed in) or
-  // Sign in, the theme toggle, the notification bell and the AccountMenu. "/" outside a field
+  // 56px, sticky, flat on the ground with a hairline, its content in the 1520 wrapper. The
+  // Inspector layout (redesign, 2026/11/21): on the left the mark + cyex.tv and the main links as
+  // plain words (Emotes; signed in also Store, Subscription for subscribers and Admin for staff:
+  // nav.ts; the current one bold, no bar or fill); everything else sits together on the right:
+  // the search field, which is the search itself (HeaderSearch: results drop down under it, no
+  // popup), Upload (signed in) or Sign in, the theme toggle, the notification bell and the
+  // AccountMenu (avatar and painted name). "/" outside a field
   // focuses the search (a page's own field marked data-page-search takes it instead); no hint.
   // 720px and narrower: the mark, a search button that turns the bar into the field (no
   // modal), the bell, and a menu button that opens a sheet with the account menu's items plus
@@ -93,9 +95,7 @@
       <a class="brand" href="/" aria-label="cyex.tv home"><Mark size={24} /><span>cyex.tv</span></a>
       <nav class="links" class:many={links.length > 1} aria-label="Main">
         {#each links as l (l.href)}
-          <a href={l.href} aria-current={l.match(path) ? 'page' : undefined} title={links.length > 1 ? l.label : undefined}>
-            <Icon name={l.icon} size={16} /><span class="lb" data-t={l.label}>{l.label}</span>
-          </a>
+          <a href={l.href} aria-current={l.match(path) ? 'page' : undefined}><span class="lb" data-t={l.label}>{l.label}</span></a>
         {/each}
       </nav>
     </div>
@@ -104,7 +104,7 @@
 
     <div class="end">
       {#if me}
-        <a class="btn btn-primary hb up" href="/me/upload" title="Upload" aria-label="Upload"><Icon name="upload" /><span class="hl">Upload</span></a>
+        <a class="btn hb up" href="/me/upload" title="Upload" aria-label="Upload"><Icon name="upload" /><span class="hl">Upload</span></a>
       {:else if session.known}
         <!-- Signed out, or the API didn't answer (session.failed): either way a way in, never an empty box. -->
         <a class="btn btn-primary hb" href={signin}>Sign in</a>
@@ -147,31 +147,33 @@
     border-bottom: 1px solid var(--border); padding-top: env(safe-area-inset-top, 0px); }
   /* The two sides take their content width (never squeezed under the search); the search is what
      gives: 420px at most, 160px at least, centred while the sides are the same width. */
-  .bar { display: grid; grid-template-columns: minmax(max-content, 1fr) minmax(160px, 420px) minmax(max-content, 1fr); align-items: center; gap: 16px;
-    height: var(--nav-h); }
-  .start { display: flex; align-items: center; gap: 16px; height: 100%; }
+  /* Brand and words on the left; the search and the tools together on the right. The search is
+     what gives: 420px at most, 180px at least. */
+  .bar { display: flex; align-items: center; gap: 16px; height: var(--nav-h); }
+  .start { display: flex; align-items: center; gap: 12px; height: 100%; flex: none; }
   .brand { flex: none; display: flex; align-items: center; gap: 9px; min-height: 40px;
     font-size: 16px; font-weight: 600; letter-spacing: -.01em; color: var(--text); }
-  .links { display: flex; height: 100%; }
+  .links { display: flex; height: 100%; gap: 2px; }
   .links a { white-space: nowrap; }
-  /* The current item is bold with an accent icon: no underline, bar or fill (owner rule). */
-  .links a { position: relative; display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: var(--t-nav); font-weight: 500;
+  /* The current link is bold in the text colour: no underline, bar or fill (owner rule). */
+  .links a { position: relative; display: flex; align-items: center; padding: 0 10px; font-size: var(--t-nav); font-weight: 500;
     color: var(--muted); transition: color var(--fast); }
-  .links a :global(svg) { color: var(--dim); transition: color var(--fast); }
   .lb { display: inline-grid; }
   .lb::after { content: attr(data-t); font-weight: 700; height: 0; overflow: hidden; visibility: hidden; user-select: none; } /* bold width reserved: no shift */
   .links a[aria-current='page'] { color: var(--text); font-weight: 700; }
-  .links a[aria-current='page'] :global(svg) { color: var(--accent-text); }
   .links a:active { opacity: .6; transition: none; }
   .links a:focus-visible { outline-offset: -2px; }
 
-  .search { display: flex; min-width: 0; }
+  .search { display: flex; flex: 1 1 420px; min-width: 180px; max-width: 420px; margin-left: auto; }
   .phone-search { display: none; }
 
-  .end { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+  .end { display: flex; flex: none; align-items: center; justify-content: flex-end; gap: 6px; }
   /* Flat in the bar, by design: the primary button's glow (app.css, cyex-web allows it on a page's
      one main action) would spill over the header's hairline and the page under it. */
   .hb { height: 40px; padding: 0 14px; gap: 8px; font-size: var(--t-nav); box-shadow: none; }
+  .up :global(svg) { color: var(--muted); }
+  /* The theme toggle and the bell sit flat in the bar (a fill on hover), like the account. */
+  .end :global(.theme), .end :global(.bell) { border-color: transparent; }
   .hb:not(:has(svg)) { padding: 0 16px; }
   .hb-hold { width: 84px; height: 40px; border: 1px solid var(--border); border-radius: var(--radius-btn); }
 
@@ -201,13 +203,8 @@
     .up { width: 40px; padding: 0; }
     .hl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   }
-  /* Tighter: the main links keep their icons (name, title and aria-current stay). */
-  @media (max-width: 1080px) {
-    .many a { padding: 0 9px; }
-    .many .lb { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  }
   @media (max-width: 720px) {
-    .bar { position: relative; grid-template-columns: minmax(0, 1fr) auto; }
+    .bar { position: relative; justify-content: space-between; }
     .links, .search, .end { display: none; }
     .phone { display: flex; }
     /* The search button turned the bar into the field: it covers the row, nothing else moves. */
