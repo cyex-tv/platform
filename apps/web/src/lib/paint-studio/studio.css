@@ -191,3 +191,40 @@ textarea.ps-text { min-height: 180px; font-family: var(--font-mono); font-size: 
 }
 .ps .ui-check { gap: 8px; align-items: center; }
 @media (max-width: 699px) { .ps-savebar { position: static; } .ps-mini { top: var(--nav-h); } }
+
+/* ======== Round 2: the admin language (flush sections between hairlines, uppercase labels, mono numbers) ======== */
+.ps-panel { background: none; border: 0; border-top: 1px solid var(--border); border-radius: 0; }
+.ps-panel > header { min-height: 40px; padding: 0; border-bottom: 0; }
+.ps-body { gap: 4px; padding: 0 0 14px; }
+.ps-group > .ui-label { margin-top: 4px; }
+.ps-count, .ps-panel > header .ps-count { font-family: var(--font-mono); font-size: var(--t-fine); }
+
+/* Fields read as label/value rows where the panel is wide enough: label left, control right. */
+.ps-field > label, .ps-field > .ps-flabel { font-weight: 500; }
+@container (min-width: 440px) {
+  .ps-body > .ps-field { grid-template-columns: 132px minmax(0, 1fr); align-items: center; column-gap: 16px; min-height: 44px; padding: 4px 0; border-bottom: 1px solid var(--border); }
+  .ps-body > .ps-field > :is(.ps-hint, .ps-msg) { grid-column: 2; }
+}
+.ps-num, .ps-hex, .ps-alpha output { font-family: var(--font-mono); font-size: var(--t-fine); }
+.ps-num, .ps-hex, .ps-text { border-radius: var(--radius-btn); }
+
+/* The save bar: one slim row, the name inline with its label. */
+.ps-savebar { align-items: center; gap: 4px 12px; margin-bottom: 4px; padding: 8px 0; }
+.ps-savebar .ps-name { display: flex; align-items: center; gap: 10px; }
+.ps-savebar .ps-name > label { flex: none; font-size: var(--t-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.ps-savebar .ps-name > label .ps-count { margin-left: 6px; text-transform: none; letter-spacing: 0; }
+.ps-savebar .ps-name > input { flex: 1; min-width: 0; }
+.ps-savebar .ps-sub { order: 5; flex: 1 1 100%; min-height: 0; }
+.ps-savebar .ps-status:empty, .ps-savebar .ps-status { min-height: 0; }
+
+/* Preview: sample grounds share hairlines, no rounded cards. */
+.ps-stages, .ps-chat, .ps-mini { border-radius: 0; }
+.ps-stages { border-left: 0; border-right: 0; }
+.ps-stage + .ps-stage { border-top: 1px solid var(--border); }
+.ps-code { border-radius: 0; background: var(--bg); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.ps-imgbox, .ps-bar { border-radius: 0; }
+@media (min-width: 1100px) { .ps-stagecol { padding-left: 20px; border-left: 1px solid var(--border); } }
+
+/* Library dialog cards share hairlines like a contact sheet. */
+.ps-cards { gap: 0; border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
+.ps-card { border: 0; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 0; background: none; }

@@ -42,7 +42,8 @@
 </div>
 
 <style>
-  .bar { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+  /* A flat strip, like the real bar: hairlines above and below, no box. */
+  .bar { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; padding: 10px 0; border-block: 1px solid var(--border); background: transparent; }
   .kind { flex: none; display: inline-flex; align-items: center; gap: 6px; min-height: 24px; color: var(--muted); font-size: var(--t-fine); font-weight: 600; }
   .kind :global(svg) { color: var(--dim); }
   .art { flex: none; display: inline-flex; align-items: center; min-height: 24px; }

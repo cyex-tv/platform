@@ -41,3 +41,24 @@ export function nextKey(keys: readonly string[], at: number): string | null {
   if (!keys.length) return null;
   return keys[Math.min(Math.max(at, 0), keys.length - 1)];
 }
+
+export type Sized = { files: { name: string; format?: string; scale: number; width: number; height: number; isStatic: boolean }[] };
+
+/** One animated-or-plain WebP file per scale, smallest first (the still files and other formats left out). */
+export function sizesOf<E extends Sized>(e: E): E['files'] {
+  const seen = new Set<number>();
+  return e.files
+    .filter((f) => !f.isStatic && f.name.endsWith('.webp') && !seen.has(f.scale) && !!seen.add(f.scale))
+    .sort((a, b) => a.scale - b.scale);
+}
+
+/** The emote's flags as words, for a flag row (animated, zero width, nsfw, private, wide). */
+export function flagWords(e: { animated: boolean; flags: { zeroWidth: boolean; nsfw: boolean; private: boolean; wide: boolean } }): string[] {
+  const out: string[] = [];
+  if (e.animated) out.push('Animated');
+  if (e.flags.zeroWidth) out.push('Zero width');
+  if (e.flags.wide) out.push('Wide');
+  if (e.flags.nsfw) out.push('NSFW');
+  if (e.flags.private) out.push('Private');
+  return out;
+}

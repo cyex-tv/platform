@@ -23,7 +23,8 @@
   import { loadShopCounts } from '$lib/shop/counts.svelte';
   import { orderStatusText, price, staffMessage, type OrderStatus } from '$lib/shop/shop';
   import LoadGate from '$lib/tool/LoadGate.svelte';
-  import PageHead from '$lib/tool/PageHead.svelte';
+  import Bar from '$lib/admin/ui/Bar.svelte';
+  import Segmented from '$lib/components/Segmented.svelte';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { notify } from '$lib/tool/notices.svelte';
@@ -79,9 +80,9 @@
     o.status === 'PAID' || o.status === 'REFUNDED' ? price(o.paidTotalCents ?? o.amountCents, o.paidCurrency ?? o.currency) : price(o.amountCents, o.currency);
   const filtered = $derived(!!status || !!itemId || !!accountId);
   const STATES: { value: Status | ''; label: string }[] = [
-    { value: '', label: 'Any state' },
+    { value: '', label: 'All' },
     { value: 'PAID', label: 'Paid' },
-    { value: 'PENDING', label: 'Waiting for payment' },
+    { value: 'PENDING', label: 'Waiting' },
     { value: 'REFUNDED', label: 'Refunded' },
     { value: 'FAILED', label: 'Not completed' },
   ];
@@ -121,30 +122,23 @@
 
 <Gate permission="shop.orders">
   <Split label="Order" open={!!picked} onclose={() => pick(null)}>
-    <PageHead title="Orders" line="Every purchase and gift, newest first.">
-      {#snippet actions()}<span class="ui-hint ui-num total" aria-live="polite">{#if L.data}{count(L.data.total)} {L.data.total === 1 ? 'order' : 'orders'}{:else}&nbsp;{/if}</span>{/snippet}
-    </PageHead>
-
-    <div class="adm-toolbar">
-      <label class="tb">
-        <span class="sr-only">State</span>
-        <select class="ui-input" value={status} onchange={(e) => go({ status: e.currentTarget.value })}>
-          {#each STATES as s (s.value)}<option value={s.value}>{s.label}</option>{/each}
-        </select>
-      </label>
-      <label class="tb">
-        <span class="sr-only">Item</span>
-        <select class="ui-input" value={itemId} onchange={(e) => go({ item: e.currentTarget.value })}>
-          <option value="">Any item</option>
-          {#each items.data ?? [] as i (i.id)}<option value={i.id}>{clean(i.name)}</option>{/each}
-        </select>
-      </label>
-      {#if accountId}
-        <button class="ui-btn secondary clear" type="button" onclick={() => go({ account: null })} aria-label="Stop filtering by {accountName ? iso(accountName) : accountId}">
-          <Icon name="user" size={14} /><bdi>{clean(accountName) || accountId.slice(-8)}</bdi><Icon name="x" size={14} />
-        </button>
-      {/if}
-    </div>
+    <Bar title="Orders" count={L.data ? `${count(L.data.total)} ${L.data.total === 1 ? 'order' : 'orders'}` : null}>
+      {#snippet tools()}
+        <Segmented label="State" size="s" options={STATES} value={status} onchange={(v) => go({ status: v })} />
+        <label class="tb">
+          <span class="sr-only">Item</span>
+          <select class="ui-input" value={itemId} onchange={(e) => go({ item: e.currentTarget.value })}>
+            <option value="">Any item</option>
+            {#each items.data ?? [] as i (i.id)}<option value={i.id}>{clean(i.name)}</option>{/each}
+          </select>
+        </label>
+        {#if accountId}
+          <button class="ui-btn secondary small clear" type="button" onclick={() => go({ account: null })} aria-label="Stop filtering by {accountName ? iso(accountName) : accountId}">
+            <Icon name="user" size={14} /><bdi>{clean(accountName) || accountId.slice(-8)}</bdi><Icon name="x" size={14} />
+          </button>
+        {/if}
+      {/snippet}
+    </Bar>
 
     <LoadGate source={L} label="Loading orders…">
       {#snippet children(r)}
@@ -164,11 +158,11 @@
               {#each r.items as o, n (o.id)}
                 <tr data-row data-item={o.id} aria-selected={o.id === pickedId} tabindex={(picked ? o.id === pickedId : n === 0) ? 0 : -1}
                   onclick={() => pick(o.id)} onkeydown={(e) => rowKey(e, o.id)}>
-                  <td class="dim" data-l="When">{date(o.createdAt)}<span class="tm"> {clock(o.createdAt)}</span></td>
+                  <td class="dim mono" data-l="When">{date(o.createdAt)}<span class="tm"> {clock(o.createdAt)}</span></td>
                   <td class="ell" data-l="Buyer"><bdi>{o.buyer ? clean(o.buyer.displayName) : gone}</bdi></td>
                   <td class="ell pk" data-l="Item"><bdi>{clean(o.itemName)}</bdi></td>
                   <td class="num" data-l="Amount">{amount(o)}</td>
-                  <td class="ell" data-l="State"><span class="st" class:live={o.status === 'PAID'}>{orderStatusText(o.status as OrderStatus)}</span></td>
+                  <td class="ell" data-l="State"><span class="adm-flags"><span class:ok={o.status === 'PAID'} class:warn={o.status === 'FAILED'}>{orderStatusText(o.status as OrderStatus)}</span></span></td>
                   <td class="ell dim sec" data-l="Gift">{#if o.gift}<bdi>{o.recipient ? clean(o.recipient.displayName) : gone}</bdi>{:else}-{/if}</td>
                 </tr>
               {/each}
@@ -201,7 +195,7 @@
         <div class="adm-ip-body">
           <section class="adm-sec">
             <h2 class="adm-name"><bdi>{clean(o.itemName)}</bdi></h2>
-            <p class="line"><span class="st" class:live={o.status === 'PAID'}>{orderStatusText(o.status as OrderStatus)}</span> · {amount(o)}</p>
+            <p class="adm-flags"><span class:ok={o.status === 'PAID'} class:warn={o.status === 'FAILED'}>{orderStatusText(o.status as OrderStatus)}</span><span class="adm-num">{amount(o)}</span></p>
             {#if o.refundRejectedAt}
               <p class="flag" role="note"><Icon name="flag" size={14} />Paddle rejected this refund on {dateTime(o.refundRejectedAt)}; the cosmetics stay revoked. Look at it in Paddle.</p>
             {/if}
@@ -210,9 +204,9 @@
             <h3 class="adm-label">People</h3>
             <dl class="adm-kv">
               <dt>Buyer</dt>
-              <dd>{#if o.buyer}<button class="link" type="button" title="Show this account's orders" onclick={() => byAccount(o.buyer!)}><bdi>{clean(o.buyer.displayName)}</bdi></button>{:else}{gone}{/if}</dd>
+              <dd class="txt">{#if o.buyer}<button class="link" type="button" title="Show this account's orders" onclick={() => byAccount(o.buyer!)}><bdi>{clean(o.buyer.displayName)}</bdi></button>{:else}{gone}{/if}</dd>
               <dt>Got it</dt>
-              <dd>{#if o.recipient}<button class="link" type="button" title="Show this account's orders" onclick={() => byAccount(o.recipient!)}><bdi>{clean(o.recipient.displayName)}</bdi></button>{:else}{gone}{/if}{#if o.gift}{" "}(gift){/if}</dd>
+              <dd class="txt">{#if o.recipient}<button class="link" type="button" title="Show this account's orders" onclick={() => byAccount(o.recipient!)}><bdi>{clean(o.recipient.displayName)}</bdi></button>{:else}{gone}{/if}{#if o.gift}{" "}(gift){/if}</dd>
             </dl>
           </section>
           <section class="adm-sec">
@@ -256,9 +250,6 @@
 </Gate>
 
 <style>
-  /* The count's place is held while the list loads, so the head doesn't wrap later. */
-  .total { display: inline-block; min-width: 10ch; }
-  @media (min-width: 640px) { .total { text-align: right; } }
   .stack { table-layout: fixed; }
   /* Names first: the buyer gets a share of the row, not a sliver. Where the list is narrow (the
      inspector open beside it, 1280px windows) the gift column and the time go; both are in the
@@ -274,13 +265,10 @@
   }
   tr[aria-selected='true'] .pk { font-weight: 700; }
   .tb { display: block; min-width: 0; }
-  .tb select { width: auto; min-width: 160px; max-width: 100%; }
+  .tb select { width: auto; min-width: 150px; max-width: 100%; }
   .clear { max-width: 100%; }
   .clear bdi { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
-  .st { color: var(--muted); }
-  .st.live { color: var(--text); font-weight: 700; }
-  .line { margin: 0; font-size: var(--t-small); color: var(--muted); }
   .flag { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: var(--t-small); font-weight: 600; }
   .flag :global(svg) { flex: none; margin-top: 2px; color: var(--red); }
   .reason { margin: 0; font-size: var(--t-small); overflow-wrap: anywhere; }

@@ -12,10 +12,12 @@
   import AccountList from '$lib/admin/AccountList.svelte';
   import AccountSearch from '$lib/admin/AccountSearch.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
-  import PageHead from '$lib/tool/PageHead.svelte';
+  import Bar from '$lib/admin/ui/Bar.svelte';
   import { loader } from '$lib/tool/loader.svelte';
 
   type Found = NonNullable<UserQuery['channelByLogin']>;
+  import { count } from '$lib/format';
+  let total = $state<number | null>(null);
 
   // "Any name" searches every account by display name or login; Twitch and Kick look up one exact login.
   const nameQuery = $derived((page.url.searchParams.get('name') ?? '').trim());
@@ -32,6 +34,8 @@
     const r = await gql(USER, { platform: p, login: name }, fetch);
     return { found: r.channelByLogin, searched: true };
   });
+
+  const shownTotal = $derived(page.url.searchParams.has('name') ? total : L.data?.found ? 1 : null);
 
   // Arrow down from the field goes into the results.
   function down(e: KeyboardEvent) {
@@ -54,20 +58,22 @@
 
 <svelte:head><title>Users - Admin - cyex.tv</title></svelte:head>
 
-<PageHead title="Users" line="Find someone by name, by the login they signed in with, or by account ID." />
-
-<form class="adm-toolbar" onsubmit={search} role="search">
-  <Segmented label="Platform" size="s" options={[{ value: 'TWITCH', label: 'Twitch', icon: 'twitch' }, { value: 'KICK', label: 'Kick', icon: 'kick' }, { value: 'NAME', label: 'Any name', icon: 'user' }]} value={platform} onchange={(v) => (platform = v)} />
-  <label class="adm-find grow">
-    <Icon name="search" size={15} />
-    <span class="sr-only">{platform === 'NAME' ? 'Name or login' : 'Login or account ID'}</span>
-    <input class="ui-input" bind:value={login} onkeydown={down} placeholder={platform === 'NAME' ? 'Name or login' : 'Login or account ID'} autocomplete="off" spellcheck="false" maxlength="100" />
-  </label>
-  <button class="ui-btn primary" type="submit" disabled={!login.trim()}>Find</button>
-</form>
+<Bar title="Users" count={shownTotal === null ? null : `${count(shownTotal)} ${shownTotal === 1 ? 'account' : 'accounts'}`}>
+  {#snippet tools()}
+    <form class="adm-toolbar bare" onsubmit={search} role="search">
+      <Segmented label="Platform" size="s" options={[{ value: 'TWITCH', label: 'Twitch', icon: 'twitch' }, { value: 'KICK', label: 'Kick', icon: 'kick' }, { value: 'NAME', label: 'Any name', icon: 'user' }]} value={platform} onchange={(v) => (platform = v)} />
+      <label class="adm-find grow">
+        <Icon name="search" size={15} />
+        <span class="sr-only">{platform === 'NAME' ? 'Name or login' : 'Login or account ID'}</span>
+        <input class="ui-input" bind:value={login} onkeydown={down} placeholder={platform === 'NAME' ? 'Name or login' : 'Login or account ID'} autocomplete="off" spellcheck="false" maxlength="100" />
+      </label>
+      <button class="ui-btn primary small" type="submit" disabled={!login.trim()}>Find</button>
+    </form>
+  {/snippet}
+</Bar>
 
 {#if page.url.searchParams.has('name')}
-  {#if nameQuery}{#key nameQuery}<AccountSearch query={nameQuery} />{/key}{/if}
+  {#if nameQuery}{#key nameQuery}<AccountSearch query={nameQuery} ontotal={(n) => (total = n)} />{/key}{/if}
 {:else if page.url.searchParams.get('login')}
 <LoadGate source={L} label="Looking them up…">
 {#snippet children(result)}
@@ -80,3 +86,7 @@
 {/snippet}
 </LoadGate>
 {/if}
+
+<style>
+  .bare { flex: 1; min-height: 0; padding: 0; margin: 0; }
+</style>

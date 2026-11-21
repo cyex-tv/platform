@@ -1,9 +1,10 @@
 <script lang="ts">
-  // The emote review queue: tabs by kind (public, unlisted and private, resolved), a search by
-  // name or uploader, sort and order, 50 dense cards a page (the server pages, so thousands
-  // waiting cost the same as fifty). Each card shows the moving picture, name, uploader, flags,
-  // tag count and upload time, with the verdicts on it: approve, approve as unlisted, approve for
-  // its owner only, reject with a reason. A card opens the detail dialog. Keyboard first: the
+  // The emote review queue, a workspace: the queue on the left as a contact sheet of small tiles
+  // (picture, name, uploader, flags; 50 a page, the server pages) under one toolbar (tabs by kind:
+  // public, unlisted and private, resolved; a search by name or uploader; sort and order), and on
+  // wide windows the picked upload in a large inspector on the right (ReviewInspector: every size,
+  // chat, uploader and their history, duplicates, activity and notes, the verdicts at its foot).
+  // Narrow windows open the same upload in the full-screen dialog (ReviewDetail). Keyboard first: the
   // arrows move between cards, Enter opens one, A approves, U and P approve unlisted and
   // private, R rejects, S skips (on to the next, no verdict), Z undoes an approval (5 s), Esc
   // closes; after a verdict the next upload is up. The header counts what is left.
@@ -18,7 +19,7 @@
   import { display } from '$lib/dpr.svelte';
   import { onDestroy, tick, untrack } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
-  import { clean, count, dateTime, iso } from '$lib/format';
+  import { clean, count, date, dateTime, iso } from '$lib/format';
   import type { EmoteFieldsFragment, EmoteVisibility, ReviewSort, ReviewTab } from '$lib/gql/graphql';
   import { APPROVE, REJECT, REQUEUE_EMOTES, REVIEW_EMOTES, REVIEW_QUEUE, REVIEW_REASONS } from '$lib/queries';
   import IconButton from '$lib/components/IconButton.svelte';
@@ -26,13 +27,15 @@
   import State from '$lib/components/State.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import ReviewDetail from '$lib/admin/ReviewDetail.svelte';
+  import ReviewInspector from '$lib/admin/ReviewInspector.svelte';
+  import Bar from '$lib/admin/ui/Bar.svelte';
+  import Split from '$lib/admin/ui/Split.svelte';
   import BulkBar from '$lib/admin/BulkBar.svelte';
   import PickBox from '$lib/admin/PickBox.svelte';
   import { batchSummary } from '$lib/admin/bulk';
   import { all as pickAll, EMPTY, range as pickRange, toggle as pickToggle, type Selection, type Step } from '$lib/components/browse/selection';
   import { after, approveFailure, step, toEnd, withheld } from '$lib/admin/queue';
   import LoadGate from '$lib/tool/LoadGate.svelte';
-  import PageHead from '$lib/tool/PageHead.svelte';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
   import { REVIEW_DETAIL_KEYS, REVIEW_KEYS } from '$lib/admin/review-keys';
   import { registerShortcuts } from '$lib/shell/shortcuts.svelte';
@@ -168,7 +171,28 @@
   }
   const columns = () => (grid ? getComputedStyle(grid).gridTemplateColumns.split(' ').filter(Boolean).length : 1);
 
+  // Wide windows (the inspector beside the queue, as Split lays it out): the focused tile is the
+  // one inspected; nothing opens. Narrow ones open the dialog.
+  let wide = $state(true);
+  $effect(() => {
+    const m = matchMedia('(min-width: 1100px)');
+    wide = m.matches;
+    const on = () => {
+      wide = m.matches;
+      if (wide) detail?.close();
+    };
+    m.addEventListener('change', on);
+    return () => m.removeEventListener('change', on);
+  });
+  const inspected = $derived(wide ? (items.find((e) => e.id === cur) ?? null) : null);
+  const inspectedAt = $derived(inspected ? items.indexOf(inspected) : -1);
+
   function openDetail(id: string) {
+    if (wide) {
+      cur = id;
+      focusCard(id);
+      return;
+    }
     shownId = cur = id;
     detail.open();
   }
@@ -196,7 +220,8 @@
     if (ev.defaultPrevented || !items.length) return;
     if (document.querySelector('dialog[open]')) return;
     const t = ev.target as HTMLElement | null;
-    const onCard = !t || t === document.body || !!t.closest('[data-card]');
+    const inPanel = !!t?.closest('[data-inspector]');
+    const onCard = !t || t === document.body || !!t.closest('[data-card]') || inPanel;
     // Ctrl/⌘+A on the grid: every card on this page (up to the cap).
     if ((ev.ctrlKey || ev.metaKey) && !ev.altKey && ev.key.toLowerCase() === 'a' && onCard && !resolved && !t?.closest('input, textarea, [contenteditable]')) {
       ev.preventDefault();
@@ -212,16 +237,18 @@
     if (t?.closest('input, textarea, select, [contenteditable], [role="radiogroup"]')) return;
     const onButton = !!t?.closest('a, button');
     const next = step(ev.key, at, items.length, columns());
-    if (next !== null && onCard && !(onButton && (ev.key === 'Home' || ev.key === 'End'))) {
+    if (next !== null && onCard && !inPanel && !(onButton && (ev.key === 'Home' || ev.key === 'End'))) {
       ev.preventDefault();
       focusCard(items[next].id);
       return;
     }
-    if (!onCard || onButton) return;
-    const e = items[at];
+    if (!onCard || (onButton && !inPanel)) return;
+    if (inPanel && onButton && (ev.key === 'Enter' || ev.key === ' ')) return;
+    const e = inPanel ? inspected : items[at];
     if (!e) return;
     const k = ev.key.toLowerCase();
     if (ev.key === 'Enter' || ev.key === ' ') {
+      if (inPanel) return;
       ev.preventDefault();
       openDetail(e.id);
     } else if (k === 's' && !ev.shiftKey) {
@@ -465,9 +492,9 @@
     return () => m.removeEventListener('change', on);
   });
   const TABS = $derived([
-    { value: 'public' as Tab, label: counts ? `Public (${count(counts.public)})` : 'Public', icon: narrow ? undefined : ('eye' as const) },
-    { value: 'limited' as Tab, label: `${narrow ? 'Unlisted' : 'Unlisted and private'}${counts ? ` (${count(counts.limited)})` : ''}`, icon: narrow ? undefined : ('eye-off' as const) },
-    { value: 'resolved' as Tab, label: 'Resolved', icon: narrow ? undefined : ('check' as const) },
+    { value: 'public' as Tab, label: counts ? `Public ${count(counts.public)}` : 'Public', icon: 'eye' as const },
+    { value: 'limited' as Tab, label: `${narrow ? 'Unlisted' : 'Unlisted and private'}${counts ? ` ${count(counts.limited)}` : ''}`, icon: 'eye-off' as const },
+    { value: 'resolved' as Tab, label: 'Resolved', icon: 'check' as const },
   ]);
   const byText = $derived(sort === 'name' || sort === 'uploader');
   const VIS_CHIP: Record<EmoteVisibility, string> = { PUBLIC: '', UNLISTED: 'Unlisted', PRIVATE: 'Private' };
@@ -477,32 +504,31 @@
 
 <svelte:window {onkeydown} {onbeforeunload} onpagehide={() => flush(true)} />
 
-<PageHead title="Review queue">
-  {#snippet line()}{#if counts}<b class="left ui-num">{count(counts.public + counts.limited)}</b> left{:else}Uploads waiting for a verdict{/if}{/snippet}
+<Split label="Upload" size="l" open={!!inspected} onclose={() => {}}>
+<Bar title="Review queue" count={counts ? `${count(counts.public + counts.limited)} left` : null}>
   {#snippet actions()}
     {#if editReasons}<a class="ui-btn secondary small" href="/admin/review/reasons"><Icon name="settings" size={15} />Reject reasons</a>{/if}
   {/snippet}
-</PageHead>
-
-<div class="adm-toolbar tools">
-  <div class="tabs"><Segmented label="Queue" size="s" options={TABS} value={tab} onchange={(v) => go({ tab: v === 'public' ? null : v, sort: null, order: null })} /></div>
-  <label class="adm-find grow find">
-    <Icon name="search" size={15} />
-    <span class="sr-only">Search by emote or uploader</span>
-    <input class="ui-input" type="search" bind:value={search} oninput={onsearch} placeholder="Emote or uploader" autocomplete="off" spellcheck="false" maxlength="100" />
-  </label>
-  <select class="ui-input pick" aria-label="Sort" value={sort} onchange={(e) => go({ sort: e.currentTarget.value })}>
-    <option value="uploaded">Upload date</option>
-    {#if resolved}<option value="reviewed">Review date</option>{/if}
-    <option value="uploader">Uploader</option>
-    <option value="name">Name</option>
-  </select>
-  <select class="ui-input pick" aria-label="Order" value={desc ? 'desc' : 'asc'} onchange={(e) => go({ order: e.currentTarget.value })}>
-    <option value="asc">{byText ? 'A to Z' : 'Oldest first'}</option>
-    <option value="desc">{byText ? 'Z to A' : 'Newest first'}</option>
-  </select>
-  <IconButton label="Refresh" icon="refresh" variant="outline" tip="bottom-end" disabled={L.loading} onclick={() => L.reload()} />
-</div>
+  {#snippet tools()}
+    <div class="tabs"><Segmented label="Queue" size="s" options={TABS} value={tab} onchange={(v) => go({ tab: v === 'public' ? null : v, sort: null, order: null })} /></div>
+    <label class="adm-find grow find">
+      <Icon name="search" size={15} />
+      <span class="sr-only">Search by emote or uploader</span>
+      <input class="ui-input" type="search" bind:value={search} oninput={onsearch} placeholder="Emote or uploader" autocomplete="off" spellcheck="false" maxlength="100" />
+    </label>
+    <select class="ui-input pick" aria-label="Sort" value={sort} onchange={(e) => go({ sort: e.currentTarget.value })}>
+      <option value="uploaded">Upload date</option>
+      {#if resolved}<option value="reviewed">Review date</option>{/if}
+      <option value="uploader">Uploader</option>
+      <option value="name">Name</option>
+    </select>
+    <select class="ui-input pick" aria-label="Order" value={desc ? 'desc' : 'asc'} onchange={(e) => go({ order: e.currentTarget.value })}>
+      <option value="asc">{byText ? 'A to Z' : 'Oldest first'}</option>
+      <option value="desc">{byText ? 'Z to A' : 'Newest first'}</option>
+    </select>
+    <IconButton label="Refresh" icon="refresh" variant="outline" tip="bottom-end" disabled={L.loading} onclick={() => L.reload()} />
+  {/snippet}
+</Bar>
 <p class="sr-only" id="queue-keys">Arrow keys move between uploads. Enter opens one. A approves, U approves as unlisted, P approves for its owner only, R rejects, S skips to the next. X selects for a verdict on many. Z undoes the last approval while its notice shows.</p>
 
 <LoadGate source={L} label="Loading the queue…">
@@ -516,48 +542,38 @@
     <State title="Nothing waiting.">New uploads show up here.</State>
   {/if}
 {:else}
-  <ul class="queue" bind:this={grid} aria-label="Uploads" aria-describedby="queue-keys" aria-busy={L.loading}>
+  <ul class="adm-sheet queue" bind:this={grid} aria-label="Uploads" aria-describedby="queue-keys" aria-busy={L.loading}>
     {#each items as e (e.id)}
       {@const d = size(e)}
-      <!-- The card is the grid's one tab stop (the arrow keys move it); its buttons stay reachable with Tab. -->
+      <!-- The tile is the sheet's one tab stop (the arrow keys move it); its tick box stays reachable with Tab. -->
       <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-      <li class="card" class:cur={e.id === cur} class:gone={busy === e.id} class:plain={resolved} data-card={e.id} tabindex={e.id === cur ? 0 : -1}
-        class:picked={picked.has(e.id)}
+      <li class="adm-cell card" class:cur={e.id === cur} class:gone={busy === e.id} class:plain={resolved} data-card={e.id} tabindex={e.id === cur ? 0 : -1}
+        class:picked={picked.has(e.id)} aria-current={wide && e.id === cur ? 'true' : undefined}
         aria-label="{clean(e.name)}, by {clean(e.owner?.displayName) || 'unknown'}{picked.has(e.id) ? ', selected' : ''}"
         onfocus={() => (cur = e.id)} onclick={(ev) => { if (!(ev.target as HTMLElement).closest('a, button, label, input')) openDetail(e.id); }}>
-        <span class="art">
+        {#if !resolved}
+          <PickBox class="tickbox" checked={picked.has(e.id)} label="Select {clean(e.name)}" onpick={(ev) => pickOne(e.id, ev.shiftKey)} />
+        {/if}
+        <span class="pic">
           {#if ready(e)}
-            {@const shownW = Math.round((72 * d.width) / d.height)}
+            {@const shownW = Math.round((48 * d.width) / d.height)}
             {@const pic = pictureFor(e, display.dpr, false, shownW)}
             <img src={pic.src} srcset={pic.srcset} sizes={pic.srcset ? `${shownW}px` : undefined} width={d.width} height={d.height} alt="" loading="lazy" decoding="async" />
           {:else}
             <span class="ui-spinner" aria-hidden="true"></span>
           {/if}
         </span>
-        <span class="head">
-          {#if !resolved}
-            <PickBox class="tickbox" checked={picked.has(e.id)} label="Select {clean(e.name)}" onpick={(ev) => pickOne(e.id, ev.shiftKey)} />
-          {/if}
-          <span class="name" title={clean(e.name)}><bdi>{clean(e.name)}</bdi></span>
+        <span class="nm" title={clean(e.name)}><bdi>{clean(e.name)}</bdi></span>
+        <span class="sub"><bdi>{clean(e.owner?.displayName) || 'Unknown'}</bdi></span>
+        <span class="adm-flags fl">
+          {#if resolved}<span class={e.state === 'APPROVED' ? 'ok' : e.state === 'PENDING' ? '' : 'warn'}>{e.state === 'APPROVED' ? 'Approved' : e.state === 'REJECTED' ? 'Rejected' : e.state === 'PENDING' ? 'Pending' : 'Taken down'}</span>{/if}
+          {#if !ready(e)}<span>No files</span>{/if}
+          {#if e.flags.nsfw}<span class="warn">NSFW</span>{/if}
+          {#if VIS_CHIP[e.visibility]}<span class="on">{VIS_CHIP[e.visibility]}</span>{/if}
+          {#if e.flags.zeroWidth}<span>Zero-width</span>{/if}
+          {#if e.flags.wide}<span>Wide</span>{/if}
+          <time class="adm-num when" datetime={e.createdAt} title={dateTime(e.createdAt)}>{date(e.createdAt)}</time>
         </span>
-        <span class="by"><bdi>{clean(e.owner?.displayName) || 'Unknown'}</bdi> <span aria-hidden="true">·</span> <time class="ui-num" datetime={e.createdAt}>{dateTime(e.createdAt)}</time></span>
-        <span class="chips">
-          {#if resolved}<span class="ui-chip {e.state.toLowerCase()}">{e.state === 'APPROVED' ? 'Approved' : e.state === 'REJECTED' ? 'Rejected' : e.state === 'PENDING' ? 'Pending' : 'Taken down'}</span>{/if}
-          {#if !ready(e)}<span class="ui-chip">Files not made</span>{/if}
-          {#if VIS_CHIP[e.visibility]}<span class="ui-chip">{VIS_CHIP[e.visibility]}</span>{/if}
-          {#if e.flags.nsfw}<span class="ui-chip warn">NSFW</span>{/if}
-          {#if e.flags.zeroWidth}<span class="ui-chip">Zero-width</span>{/if}
-          {#if e.flags.wide}<span class="ui-chip">Wide</span>{/if}
-          <span class="ui-chip" title={e.tags.join(', ') || 'No tags'}>{e.tags.length} {e.tags.length === 1 ? 'tag' : 'tags'}</span>
-        </span>
-        {#if !resolved}
-          <span class="do">
-            <IconButton class="yes" label="Approve" icon="check" size="s" tip="top" disabled={busy === e.id || !ready(e)} onclick={() => approve(e)} />
-            <IconButton label="Approve as unlisted" icon="eye-off" size="s" tip="top" disabled={busy === e.id || !ready(e)} onclick={() => approve(e, 'UNLISTED')} />
-            <IconButton label="Approve for its owner only" icon="user" size="s" tip="top" disabled={busy === e.id || !ready(e)} onclick={() => approve(e, 'PRIVATE')} />
-            <IconButton class="no" label="Reject" icon="x" size="s" tip="top" disabled={busy === e.id} onclick={() => askReject(e)} />
-          </span>
-        {/if}
       </li>
     {/each}
   </ul>
@@ -573,6 +589,27 @@
 {/if}
 {/snippet}
 </LoadGate>
+{#snippet empty()}
+  <div class="adm-ip-head"><span class="adm-label">Upload</span></div>
+  <p class="none">Pick an upload to see it at every size, its uploader and their history.</p>
+{/snippet}
+{#snippet panel()}
+  {#if inspected}
+    <ReviewInspector
+      emote={inspected}
+      place={(pageNo - 1) * PER_PAGE + inspectedAt + 1}
+      {total}
+      busy={busy === inspected.id}
+      {resolved}
+      hasNext={inspectedAt < items.length - 1 || pageNo < pages}
+      onskip={skip}
+      onapprove={(v) => inspected && approve(inspected, v)}
+      onreject={() => inspected && askReject(inspected)}
+      onflags={(next) => L.data && L.set({ ...L.data, items: L.data.items.map((x) => (x.id === next.id ? { ...x, ...next } : x)) })}
+    />
+  {/if}
+{/snippet}
+</Split>
 
 {#if sel.ids.length && !resolved}
   <BulkBar n={sel.ids.length} status={selNote} onclear={() => (sel = EMPTY)} onall={sel.ids.length < Math.min(items.length, 100) ? () => pick(pickAll(sel, ids())) : undefined}>
@@ -613,48 +650,32 @@
 />
 
 <style>
-  /* One row when the column has room; where it doesn't (a 1024px window beside the rail) the
-     search and sorting wrap under the tabs instead of running over each other. */
-  .tools { flex-wrap: wrap; }
+  /* The toolbar: tabs, search, sorting on one row; it wraps where the column is narrow. */
   .tabs { flex: none; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
   .tabs::-webkit-scrollbar { display: none; }
-  .find { flex: 1 1 200px; min-width: 0; }
-  .pick { flex: none; width: auto; font-size: var(--t-small); padding-left: 10px; }
+  .find { flex: 1 1 180px; min-width: 0; }
+  .pick { flex: none; width: auto; padding-left: 10px; }
   @media (max-width: 900px) {
-    .tools { flex-wrap: wrap; }
     .tabs { flex-basis: 100%; }
-    .find { flex-basis: 100%; }
+    .find { flex-basis: 100%; max-width: none; }
     .pick { flex: 1 1 0; }
   }
 
-  /* Browse-tile cards: the picture on a --bg well, a head row (tick and bold name), uploader and
-     time dim, flag chips on one line, the verdicts always shown. A fixed height. */
-  .queue { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); gap: 8px; }
-  .card { position: relative; display: grid; grid-template-rows: 88px 32px 18px 22px 40px; align-content: start; gap: 2px; min-width: 0; height: 236px; padding: 8px;
-    border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); cursor: pointer;
-    transition: border-color var(--fast), opacity var(--fast); content-visibility: auto; contain-intrinsic-size: auto 236px; }
-  .card.plain { grid-template-rows: 88px 32px 18px 22px; height: 194px; contain-intrinsic-size: auto 194px; }
-  @media (hover: hover) and (pointer: fine) { .card:hover { border-color: var(--border-strong); } }
-  .card.cur { border-color: var(--accent-text); }
-  .card:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  /* The queue: a contact sheet of small tiles sharing hairlines (admin.css .adm-sheet). The
+     focused / inspected tile carries the accent hairline and a bold name; picked ones a tick. */
+  .queue { --cell: 148px; }
+  .card { height: 148px; padding: 8px 10px; gap: 1px; content-visibility: auto; contain-intrinsic-size: auto 148px; }
+  .card :global(.tickbox) { position: absolute; top: 2px; left: 2px; z-index: 1; }
+  .card .pic { height: 60px; margin-bottom: 4px; }
+  .card .pic img { max-height: 48px; }
+  .fl { flex-wrap: nowrap; overflow: hidden; margin-top: 2px; font-size: 12px; }
+  .fl .when { margin-left: auto; color: var(--dim); font-size: 11px; }
+  .card.cur:not([aria-current]) { box-shadow: inset 0 0 0 1px var(--border-strong); }
+  .card:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
   .card.gone { opacity: .5; }
-  /* Picked: an accent hairline and a bold name, as a picked browse tile; never a filled box. */
-  .card.picked { border-color: var(--accent-border); }
-  .card.picked .name { font-weight: 700; }
-  .left { font-weight: 700; color: var(--text); }
-  .art { display: grid; place-items: center; border-radius: var(--radius); background: var(--bg); overflow: hidden; }
-  .art img { display: block; height: auto; max-height: 72px; width: auto; max-width: calc(100% - 16px); object-fit: contain; }
-  .head { display: flex; align-items: center; gap: 4px; min-width: 0; margin-left: -6px; }
-  .card.plain .head { margin-left: 0; }
-  .head :global(.tickbox) { flex: none; }
-  .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; line-height: 1.35; }
-  .by { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-fine); line-height: 18px; color: var(--muted); }
-  .by time { color: var(--dim); }
-  .chips { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
-  .chips .ui-chip { flex: none; height: 20px; font-size: 11px; text-transform: none; letter-spacing: 0; }
-  .chips .warn { color: var(--red); }
-  .do { display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; justify-items: center; border-top: 1px solid var(--border); margin: 4px -8px -8px; padding-top: 4px; }
-  .do :global(.yes:not(:disabled)) { color: var(--green); }
-  .do :global(.no:not(:disabled)) { color: var(--red); }
+  .card.picked .nm { font-weight: 700; }
+  .card.picked { background: none; }
+  .card.picked :global(.tickbox) { color: var(--accent-text); }
+  .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
   .total { margin-top: 16px; }
 </style>

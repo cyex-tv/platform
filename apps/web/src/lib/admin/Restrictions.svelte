@@ -127,26 +127,26 @@
 </script>
 
 <Box title="Restrictions">
-  <ul class="holds">
-    {#each HOLDS as h (h.kind)}
-      {@const active = on(h.kind)}
-      {@const end = until(h.kind)}
-      {@const mayChange = allowed(h.permission) && !self}
-      <li class="hold">
-        <div class="what">
-          <strong>{h.label}</strong>
-          <span class="ui-hint" class:hot={active}>
-            {#if !active}{h.hint}{:else if end}{h.stopped} until <span class="ui-num">{dateTime(end)}</span>{:else}{h.stopped} for good{/if}
-          </span>
-        </div>
+  {#each HOLDS as h (h.kind)}
+    {@const active = on(h.kind)}
+    {@const end = until(h.kind)}
+    {@const mayChange = allowed(h.permission) && !self}
+    <div class="adm-lv hold">
+      <span class="l">
+        <strong class:hot={active}>{h.label}</strong>
+        <small class:hot={active}>
+          {#if !active}{h.hint}{:else if end}{h.stopped} until <span class="ui-num">{dateTime(end)}</span>{:else}{h.stopped} for good{/if}
+        </small>
+      </span>
+      <div class="v end">
         {#if mayChange && active}
           <button class="ui-btn ghost small" type="button" disabled={busy} onclick={() => open(h.kind)}>Change</button>
         {/if}
         <input class="ui-switch" type="checkbox" role="switch" aria-label={h.label} checked={active} disabled={!mayChange || busy}
           onchange={(e) => { e.currentTarget.checked = active; if (active) lift(h.kind); else open(h.kind); }} />
-      </li>
-    {/each}
-  </ul>
+      </div>
+    </div>
+  {/each}
   {#if self}<p class="box-none">You canâ€™t restrict your own account.</p>{/if}
 
   <h3 class="box-sub">History</h3>
@@ -164,13 +164,13 @@
         <li>
           <span class="top">
             <strong>{label(r.kind)}</strong>
-            {#if r.active}<span class="ui-chip pending">Running</span>{/if}
+            {#if r.active}<span class="adm-flags"><span class="warn">Running</span></span>{/if}
             <span class="reason">{r.reason ?? 'No reason given.'}</span>
           </span>
           <span class="meta ui-hint">
             <span class="ui-num">{dateTime(r.createdAt)}</span> by <AccountLink id={r.createdBy} />
-            Â· {r.endsAt ? `until ${dateTime(r.endsAt)}` : 'for good'}
-            {#if !r.active}Â· {ended(r)}{#if r.liftedBy}{' '}by <AccountLink id={r.liftedBy} />{/if}{/if}
+            · {r.endsAt ? `until ${dateTime(r.endsAt)}` : 'for good'}
+            {#if !r.active}· {ended(r)}{#if r.liftedBy}{' '}by <AccountLink id={r.liftedBy} />{/if}{/if}
           </span>
         </li>
       {/each}
@@ -213,15 +213,15 @@
 
 <style>
   ul { list-style: none; margin: 0; padding: 0; }
-  .hold { display: flex; align-items: center; gap: 8px; min-height: 56px; padding: 6px 8px 6px 16px; border-bottom: 1px solid var(--border); }
-  .hold:last-child { border-bottom: 0; }
-  .what { display: grid; flex: 1; min-width: 0; }
-  .what .ui-hint.hot { color: var(--text); font-weight: 600; }
-  .rows li { display: grid; gap: 1px; min-height: 52px; padding: 6px 16px; border-top: 1px solid var(--border); align-content: center; min-width: 0; }
+  .adm-lv.hold { grid-template-columns: minmax(0, 1fr) auto; }
+  .hold .l strong { font-size: var(--t-small); font-weight: 600; color: var(--text); }
+  .hold .l small.hot { color: var(--text); font-weight: 600; }
+  .v.end { justify-content: flex-end; flex-wrap: nowrap; }
+  .rows li { display: grid; gap: 1px; min-height: 52px; padding: 6px 0; border-top: 1px solid var(--border); align-content: center; min-width: 0; }
   .rows li:first-child { border-top: 0; }
   .top { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--t-small); }
   .top strong { flex: none; }
-  .top .ui-chip { flex: none; }
+  .top .adm-flags { flex: none; }
   .reason { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
   .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .restrict { width: min(560px, calc(100vw - 24px)); }

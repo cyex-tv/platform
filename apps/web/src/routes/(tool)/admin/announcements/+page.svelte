@@ -11,13 +11,14 @@
   import { gql } from '$lib/api';
   import AnnouncementEditor from '$lib/admin/AnnouncementEditor.svelte';
   import AnnouncementPreview from '$lib/admin/AnnouncementPreview.svelte';
+  import Bar from '$lib/admin/ui/Bar.svelte';
   import Split from '$lib/admin/ui/Split.svelte';
   import { gridKeys, pickInUrl } from '$lib/admin/ui/pick';
   import Icon from '$lib/components/Icon.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import State from '$lib/components/State.svelte';
   import { loadCatalog } from '$lib/cosmetics/store.svelte';
-  import { clean, dateTime } from '$lib/format';
+  import { clean, count, date, dateTime } from '$lib/format';
   import type { AnnouncementFieldsFragment } from '$lib/gql/graphql';
   import { ACTIVE_ANNOUNCEMENT, ANNOUNCEMENTS, END_ANNOUNCEMENT } from '$lib/queries';
   import { KIND, phase, safeLink } from '$lib/shell/announcement';
@@ -26,8 +27,7 @@
   import { staffMessage } from '$lib/shop/shop';
   import Confirm from '$lib/tool/Confirm.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
-  import PageHead from '$lib/tool/PageHead.svelte';
-  import { loader } from '$lib/tool/loader.svelte';
+    import { loader } from '$lib/tool/loader.svelte';
   import { notify } from '$lib/tool/notices.svelte';
 
   type Row = AnnouncementFieldsFragment;
@@ -85,9 +85,9 @@
   // In its window but not shown: a newer one is up (only one shows at a time).
   const PHASE = { live: 'Behind a newer one', scheduled: 'Scheduled', ended: 'Ended' } as const;
   function when(a: Row): string {
-    const parts = [a.startsAt ? `from ${dateTime(a.startsAt)}` : `from ${dateTime(a.createdAt)}`];
-    if (a.endedAt) parts.push(`ended ${dateTime(a.endedAt)}`);
-    else parts.push(a.endsAt ? `until ${dateTime(a.endsAt)}` : 'until you end it');
+    const parts = [`from ${date(a.startsAt ?? a.createdAt)}`];
+    if (a.endedAt) parts.push(`ended ${date(a.endedAt)}`);
+    else parts.push(a.endsAt ? `until ${date(a.endsAt)}` : 'until you end it');
     return parts.join(' · ');
   }
   const editable = (a: Row) => phase(a, Date.now()) !== 'ended';
@@ -98,12 +98,12 @@
 <svelte:window {onkeydown} />
 
 <Gate permission="site.announce">
-  <Split label="Announcement" open={fresh || !!picked} onclose={() => pick(null)}>
-    <PageHead title="Announcements" line="One line under the header on every page. People can close it on their device; a new one shows again.">
+  <Split label="Announcement" size="l" open={fresh || !!picked} onclose={() => pick(null)}>
+    <Bar title="Announcements" count={L.data ? `${count(L.data.rows.length)} ${L.data.rows.length === 1 ? 'announcement' : 'announcements'}` : null}>
       {#snippet actions()}
-        <button id="ann-new" class="ui-btn primary" type="button" disabled={!L.data} onclick={() => pick('new')}><Icon name="plus" size={15} />New announcement</button>
+        <button id="ann-new" class="ui-btn primary small" type="button" disabled={!L.data} onclick={() => pick('new')}><Icon name="plus" size={15} />New announcement</button>
       {/snippet}
-    </PageHead>
+    </Bar>
 
     <LoadGate source={L} label="Loading announcements…">
       {#snippet children(d)}
@@ -123,7 +123,7 @@
                   <span class="kind" title={KIND[a.kind].label}><Icon name={KIND[a.kind].icon} size={16} /></span>
                   <span class="what">
                     <span class="line"><bdi>{a.text}</bdi></span>
-                    <span class="meta">{KIND[a.kind].label} · {when(a)}</span>
+                    <span class="meta adm-num">{KIND[a.kind].label} · {when(a)}</span>
                   </span>
                   <span class="st" class:on={showing} class:old={ph === 'ended'}>{#if showing}<Icon name="eye" size={14} />Showing now{:else}{PHASE[ph]}{/if}</span>
                 </button>
@@ -182,25 +182,25 @@
 </Gate>
 
 <style>
-  .item { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 12px;
+  .item { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; height: 60px; padding: 0 12px;
     border: 0; background: none; color: var(--text); font: inherit; font-size: var(--t-small); text-align: left; cursor: pointer; }
   .item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
   .item:active { opacity: .6; }
   @media (hover: hover) and (pointer: fine) { .item:hover { background: var(--row-hover); } }
-  .item[aria-current='true'] { box-shadow: inset 2px 0 0 var(--accent-border); }
+  .item[aria-current='true'] { box-shadow: inset 0 0 0 1px var(--accent-border); }
   .item[aria-current='true'] .line { font-weight: 700; }
   .kind { display: inline-flex; color: var(--dim); }
   .item[aria-current='true'] .kind { color: var(--accent-text); }
   .what { display: grid; min-width: 0; line-height: 1.35; }
   .line { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-  .meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-fine); color: var(--dim); }
   .st { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-small); color: var(--muted); white-space: nowrap; }
   .st.old { color: var(--dim); }
   .st.on { color: var(--text); font-weight: 700; }
   .st.on :global(svg) { color: var(--accent-text); }
   .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
   @media (max-width: 640px) {
-    .item { grid-template-columns: 20px minmax(0, 1fr); min-height: 64px; }
+    .item { grid-template-columns: 20px minmax(0, 1fr); height: auto; min-height: 64px; padding-block: 8px; }
     .st { grid-column: 2; }
   }
 </style>

@@ -29,7 +29,7 @@
 .adm-sec > .adm-label .n { margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--dim); font-variant-numeric: tabular-nums; }
 .adm-hero { display: grid; gap: 10px; justify-items: start; min-width: 0; }
 .adm-stage { display: grid; place-items: center; width: 100%; min-height: 120px; padding: 16px; border: 1px solid var(--border);
-  border-radius: var(--radius-card); background: var(--bg); overflow: hidden; }
+  border-radius: 0; background: var(--bg); overflow: hidden; }
 .adm-name, .adm-shell .adm-name { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -.01em; line-height: 1.3; overflow-wrap: anywhere; }
 
 .adm-kv { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); margin: 0; }
@@ -42,20 +42,26 @@
 .adm-acts { display: grid; gap: 8px; }
 .adm-acts .ui-btn { justify-content: flex-start; width: 100%; }
 .adm-acts.row { display: flex; flex-wrap: wrap; }
-.adm-acts.row .ui-btn { width: auto; }
+.adm-acts.row .ui-btn, .adm-shell .adm-acts.row .ui-btn { width: auto; flex: none; }
 
 /* ---- Lists ---- */
-.adm-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+.adm-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 48px; margin-bottom: 0; padding: 6px 0; }
+.adm-shell .adm-toolbar .ui-input, .adm-shell .adm-toolbar select.ui-input { height: 34px; min-height: 34px; font-size: var(--t-small); }
+.adm-shell .adm-toolbar .adm-find { flex: 1 1 200px; max-width: 420px; }
+@media (pointer: coarse) { .adm-shell .adm-toolbar .ui-input, .adm-shell .adm-toolbar select.ui-input { height: 44px; font-size: 16px; } }
 .adm-toolbar .grow { flex: 1 1 220px; min-width: 0; }
 .adm-find { position: relative; display: flex; align-items: center; min-width: 0; }
 .adm-find > svg { position: absolute; left: 11px; color: var(--dim); pointer-events: none; }
 .adm-find input { width: 100%; padding-left: 34px; }
 
 .adm-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--t-small); font-variant-numeric: tabular-nums;
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
-.adm-table th { height: 36px; padding: 0 12px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--border);
-  font-size: var(--t-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); background: var(--surface); }
-.adm-table td { height: 44px; padding: 6px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; min-width: 0; }
+  background: none; border: 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 0; }
+.adm-table th { height: 32px; padding: 0 12px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--border);
+  font-size: var(--t-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); background: none; }
+.adm-table th:first-child, .adm-table td:first-child { padding-left: 0; }
+.adm-table th:last-child, .adm-table td:last-child { padding-right: 0; }
+.adm-table td.num, .adm-table td.mono, .adm-table td .ui-num, .adm-table time { font-family: var(--font-mono); font-size: var(--t-fine); }
+.adm-table td { height: 40px; padding: 6px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; min-width: 0; }
 .adm-table tbody tr:last-child td { border-bottom: 0; }
 .adm-table .num { text-align: right; }
 .adm-table .shrink { width: 1%; white-space: nowrap; }
@@ -86,7 +92,7 @@
 @media (max-width: 419.98px) { .adm-table.stack tr { grid-template-columns: minmax(0, 1fr); } }
 
 /* A list of rows that are buttons (a card list), one column. */
-.adm-rows { list-style: none; margin: 0; padding: 0; display: grid; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
+.adm-rows { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .adm-rows > li + li { border-top: 1px solid var(--border); }
 
 .adm-pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 16px; font-size: var(--t-small); color: var(--dim); font-variant-numeric: tabular-nums; }
@@ -95,3 +101,81 @@
 .adm-count { margin-left: 10px; font-size: var(--t-nav); font-weight: 500; letter-spacing: 0; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 @media (pointer: coarse) { .adm-table td { height: 48px; } }
+
+/* ======== Round 2: the Workspace / Inspector language on every admin page ========
+   .adm-num      mono, tabular numbers: counts, prices, dates, ids
+   .adm-sheet    a contact sheet: cells share hairlines in one frame (no gaps, no floating cards);
+                 --cell sets the column width. Cells: .adm-cell (a button or link); picked = bold
+                 name, accent tick and an accent hairline (aria-current / aria-selected / .on), never a fill.
+   .adm-flags    small flag words in a tile or row (no chips): .warn red, .ok green, .on text colour
+   .adm-flat     a flat section: hairline above, an .adm-label head (with .n count), content. No box.
+   .adm-lv       a label/value row (forms and facts read as rows):
+                   <div class="adm-lv"><span class="l">Label<small>hint</small></span><div class="v">…</div></div>
+   .adm-facts    the emote page's facts: label over value, cells sharing hairlines
+   .adm-strip    a sideways row of small tiles sharing hairlines
+   And every old card inside admin loses its box: .ui-panel becomes a flat section between hairlines. */
+.adm-num, .adm-shell .ui-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: .93em; letter-spacing: 0; }
+.adm-count { font-family: var(--font-mono); font-size: var(--t-small); }
+
+.adm-sheet { --cell: 168px; list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(var(--cell), 100%), 1fr));
+  border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
+.adm-sheet > *, .adm-sheet > .adm-cell { min-width: 0; border: 0; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 0; }
+.adm-cell { position: relative; display: grid; align-content: start; gap: 2px; width: 100%; min-width: 0; height: 100%; padding: 10px; border: 0; border-radius: 0;
+  background: none; color: var(--text); font: inherit; text-align: left; text-decoration: none; cursor: pointer; transition: background-color var(--fast); }
+.adm-cell:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.adm-cell .pic { display: grid; place-items: center; height: 64px; margin-bottom: 6px; }
+.adm-cell .pic img { display: block; max-width: 100%; max-height: 56px; width: auto; height: auto; object-fit: contain; }
+.adm-cell .nm { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--t-small); font-weight: 600; line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-cell .nm > bdi, .adm-cell .nm > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-cell .sub { display: flex; align-items: center; gap: 6px; min-width: 0; line-height: 1.45; font-size: var(--t-fine); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-cell .tick { position: absolute; top: 8px; right: 8px; display: none; color: var(--accent-text); }
+.adm-cell[aria-current='true'] .nm, .adm-cell[aria-selected='true'] .nm, .adm-cell.on .nm { font-weight: 700; }
+.adm-cell[aria-current='true'] .tick, .adm-cell[aria-selected='true'] .tick, .adm-cell.on .tick { display: block; }
+.adm-cell[aria-current='true'], .adm-cell.on { box-shadow: inset 0 0 0 1px var(--accent-border); }
+@media (hover: hover) and (pointer: fine) { .adm-cell:hover { background: var(--row-hover); } }
+
+.adm-flags { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; min-width: 0; margin: 0; padding: 0; list-style: none;
+  font-size: var(--t-fine); font-weight: 500; color: var(--dim); }
+.adm-flags > * { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.adm-flags .warn { color: var(--red); font-weight: 600; }
+.adm-flags .ok { color: var(--green); font-weight: 600; }
+.adm-flags .on { color: var(--text); }
+
+.adm-flat { display: grid; gap: 8px; min-width: 0; padding: 14px 0; border-top: 1px solid var(--border); }
+.adm-flat:first-child { border-top: 0; padding-top: 4px; }
+.adm-flat > header, .adm-flat > .adm-label { display: flex; align-items: center; gap: 8px; min-height: 24px; }
+.adm-flat > header > .adm-label { flex: 1; min-width: 0; }
+.adm-flat .n { margin-left: auto; font-family: var(--font-mono); font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--dim); font-size: var(--t-fine); }
+
+.adm-lv { display: grid; grid-template-columns: minmax(120px, 200px) minmax(0, 1fr); align-items: center; gap: 4px 16px; min-height: 44px; padding: 6px 0;
+  border-bottom: 1px solid var(--border); font-size: var(--t-small); }
+.adm-lv:last-child { border-bottom: 0; }
+.adm-lv > .l { color: var(--muted); }
+.adm-lv > .l small { display: block; font-size: var(--t-fine); color: var(--dim); }
+.adm-lv > .v { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+@media (max-width: 599.98px) { .adm-lv { grid-template-columns: minmax(0, 1fr); } }
+
+.adm-facts { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); border: 1px solid var(--border); overflow: hidden; }
+.adm-facts > div { display: grid; align-content: start; gap: 2px; padding: 9px 12px; min-width: 0; box-shadow: 1px 0 0 var(--border), 0 1px 0 var(--border); }
+.adm-facts dt { font-size: var(--t-fine); color: var(--muted); white-space: nowrap; }
+.adm-facts dd { margin: 0; font-size: var(--t-small); font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.adm-facts dd.n { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+
+.adm-strip { list-style: none; margin: 0; padding: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(150px, 190px); overflow-x: auto;
+  border-left: 1px solid var(--border); scrollbar-width: thin; }
+.adm-strip > li { min-width: 0; border: 1px solid var(--border); border-left: 0; }
+
+/* Facts in mono, as the profile's IN NUMBERS. */
+.adm-kv dd { font-family: var(--font-mono); font-weight: 500; font-size: var(--t-fine); }
+.adm-kv dd.txt { font-family: inherit; font-weight: 600; font-size: var(--t-small); }
+
+/* Old boxes, flattened: inside admin a panel is a section between hairlines, not a card. */
+.adm-shell .ui-panel { background: none; border: 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 0; overflow: visible; }
+.adm-shell .ui-panel > header { padding-left: 0; padding-right: 0; min-height: 44px; }
+.adm-shell .ui-panel > header h2 { font-size: var(--t-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+.adm-shell .ui-panel + .ui-panel { border-top: 0; }
+.adm-shell .ui-panel .ui-list > li { padding-left: 0; padding-right: 0; }
+.adm-shell .ui-chip { text-transform: none; letter-spacing: 0; }
+
+.adm-shell a.adm-cell, .adm-shell a.adm-cell:visited { color: var(--text); text-decoration: none; }
+@media (max-width: 899.98px) { .adm-shell .adm-toolbar .adm-find { flex-basis: 100%; max-width: none; } }

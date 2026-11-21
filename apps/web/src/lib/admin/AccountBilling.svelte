@@ -65,14 +65,20 @@
     {#if subs.length === 0}
       <p class="box-none">No subscriptions. cyex.tv doesn’t sell any yet.</p>
     {:else}
-      <ul class="ui-list">
-        {#each subs as s (s.id)}
-          <li>
-            <span class="what"><strong>{s.plan}</strong><span class="ui-hint"><span class="ui-num">{date(s.startsAt)}</span>{s.endsAt ? ` to ${date(s.endsAt)}` : ', renews'} · {s.source}</span></span>
-            <span class="ui-chip {s.state === 'CURRENT' ? 'approved' : ''}">{STATE[s.state]}</span>
-          </li>
-        {/each}
-      </ul>
+      <table class="adm-table stack">
+        <thead><tr><th>Plan</th><th>From</th><th>To</th><th>Source</th><th>State</th></tr></thead>
+        <tbody>
+          {#each subs as s (s.id)}
+            <tr>
+              <td class="pk"><strong>{s.plan}</strong></td>
+              <td data-l="From" class="mono">{date(s.startsAt)}</td>
+              <td data-l="To" class="mono">{s.endsAt ? date(s.endsAt) : 'Renews'}</td>
+              <td data-l="Source">{s.source}</td>
+              <td data-l="State"><span class="adm-flags"><span class:ok={s.state === 'CURRENT'}>{STATE[s.state]}</span></span></td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
     {/if}
     <h3 class="box-sub">
       Orders
@@ -81,24 +87,27 @@
     {#if orders.items.length === 0}
       <p class="box-none">No orders.</p>
     {:else}
-      <ul class="ui-list">
-        {#each orders.items as o (o.id)}
-          {@const r = orderRow(o, accountId, iso)}
-          <li>
-            <span class="what"><strong><bdi>{iso(o.itemName)}</bdi></strong><span class="ui-hint"><span class="ui-num">{dateTime(o.createdAt)}</span>{#if r.note}{' · '}{r.note}{/if}</span></span>
-            <span class="amount"><span class="ui-num">{r.received ? 'Gift' : price(o.paidTotalCents ?? o.amountCents, o.paidCurrency ?? o.currency)}</span><span class="ui-hint">{orderStatusText(o.status)}</span></span>
-          </li>
-        {/each}
-      </ul>
+      <table class="adm-table stack">
+        <thead><tr><th>Item</th><th>When</th><th>Note</th><th class="num">Amount</th><th>Status</th></tr></thead>
+        <tbody>
+          {#each orders.items as o (o.id)}
+            {@const r = orderRow(o, accountId, iso)}
+            <tr>
+              <td class="pk"><strong><bdi>{iso(o.itemName)}</bdi></strong></td>
+              <td data-l="When" class="mono">{dateTime(o.createdAt)}</td>
+              <td data-l="Note" class="dim">{r.note ?? ''}</td>
+              <td data-l="Amount" class="num">{r.received ? 'Gift' : price(o.paidTotalCents ?? o.amountCents, o.paidCurrency ?? o.currency)}</td>
+              <td data-l="Status">{orderStatusText(o.status)}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
     {/if}
   {/if}
 </Box>
 
 <style>
   .sum { margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--dim); }
-  .what { display: grid; flex: 1; min-width: 0; }
-  .what strong { font-size: var(--t-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .what .ui-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .amount { display: grid; flex: none; text-align: right; font-size: var(--t-small); font-weight: 600; }
-  .amount .ui-hint { font-weight: 400; font-size: var(--t-fine); }
+  td strong { font-size: var(--t-small); }
+  .adm-table { border-top: 0; }
 </style>

@@ -76,31 +76,35 @@
   <form onsubmit={submit} novalidate>
     <div class="body">
       <h2 id="grant-title">Give {fixed ? iso(fixed.name) : `a ${noun}`}{account ? ` to ${iso(account.displayName)}` : ''}</h2>
-      {#if !account}
-        <div class="ui-field">
-          <span class="ui-label" id="grant-plat">Account</span>
-          <div class="who">
-            <Segmented label="Account platform" options={[{ value: 'TWITCH', label: 'Twitch', icon: 'twitch' }, { value: 'KICK', label: 'Kick', icon: 'kick' }]} value={platform} onchange={(v) => (platform = v)} />
-            <input class="ui-input" bind:value={login} placeholder="Login" aria-label="Login" autocomplete="off" spellcheck="false" />
+      <div>
+        {#if !account}
+          <div class="adm-lv">
+            <span class="l" id="grant-plat">Account</span>
+            <div class="v who">
+              <Segmented label="Account platform" size="s" options={[{ value: 'TWITCH', label: 'Twitch', icon: 'twitch' }, { value: 'KICK', label: 'Kick', icon: 'kick' }]} value={platform} onchange={(v) => (platform = v)} />
+              <input class="ui-input" bind:value={login} placeholder="Login" aria-label="Login" autocomplete="off" spellcheck="false" />
+            </div>
           </div>
-        </div>
-      {/if}
-      {#if !fixed}
-        <label class="ui-field">
-          <span class="ui-label">{kind === 'BADGE' ? 'Badge' : 'Paint'}</span>
-          {#if choices.length}
-            <select class="ui-input" bind:value={pick}>
-              {#each choices as c (c.id)}<option value={c.id}>{iso(c.name)}</option>{/each}
-            </select>
-          {:else}
-            <span class="ui-hint">They own every {noun} already.</span>
-          {/if}
+        {/if}
+        {#if !fixed}
+          <label class="adm-lv">
+            <span class="l">{kind === 'BADGE' ? 'Badge' : 'Paint'}</span>
+            <span class="v">
+              {#if choices.length}
+                <select class="ui-input" bind:value={pick}>
+                  {#each choices as c (c.id)}<option value={c.id}>{iso(c.name)}</option>{/each}
+                </select>
+              {:else}
+                <span class="ui-hint">They own every {noun} already.</span>
+              {/if}
+            </span>
+          </label>
+        {/if}
+        <label class="adm-lv top">
+          <span class="l">Reason<small>Kept in the audit log</small></span>
+          <span class="v"><textarea class="ui-input" rows="3" maxlength="500" bind:value={reason} placeholder="Why they get it"></textarea></span>
         </label>
-      {/if}
-      <label class="ui-field">
-        <span class="ui-label">Reason</span>
-        <textarea class="ui-input" rows="3" maxlength="500" bind:value={reason} placeholder="Why they get it, for the audit log"></textarea>
-      </label>
+      </div>
       {#if problem}<p class="ui-error" role="alert">{problem}</p>{/if}
     </div>
     <footer>
@@ -112,6 +116,8 @@
 
 <style>
   .who { display: flex; flex-wrap: wrap; gap: 8px; }
-  .who .ui-input { flex: 1; min-width: 160px; }
+  .who .ui-input { flex: 1; min-width: 140px; }
+  .adm-lv .v .ui-input { flex: 1 1 180px; min-width: 0; }
+  .adm-lv.top { align-items: start; }
   textarea { resize: vertical; min-height: 72px; }
 </style>

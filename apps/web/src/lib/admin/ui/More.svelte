@@ -15,5 +15,5 @@
 {/if}
 
 <style>
-  .more { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 0 8px 0 16px; border-top: 1px solid var(--border); }
+  .more { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 0; border-top: 1px solid var(--border); }
 </style>

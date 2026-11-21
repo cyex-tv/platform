@@ -85,24 +85,25 @@
 </div>
 
 <style>
-  .groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
-  .group { margin: 0; padding: 4px 0 6px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--bg); min-width: 0; }
-  .head { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 10px; cursor: pointer;
-    border-bottom: 1px solid var(--border); margin-bottom: 4px; }
-  .head .name { flex: 1; font-size: var(--text-sub); font-weight: 600; }
-  .n { font-size: 12px; color: var(--dim); }
+  /* Flat groups: an uppercase head over rows, hairlines between, no boxes. */
+  .groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 0 28px; }
+  .group { margin: 0; padding: 0 0 8px; border: 0; background: none; min-width: 0; }
+  .head { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 0; cursor: pointer;
+    border-bottom: 1px solid var(--border); margin-bottom: 2px; }
+  .head .name { flex: 1; font-size: var(--t-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  .n { font-size: var(--t-fine); color: var(--dim); font-family: var(--font-mono); }
   input { width: 16px; height: 16px; margin: 0; flex: none; accent-color: var(--accent); cursor: pointer; }
   input:disabled { cursor: not-allowed; }
   ul { list-style: none; margin: 0; padding: 0; }
   .item { position: relative; }
-  .item label { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 10px; cursor: pointer; border-radius: var(--radius);
-    font-size: var(--text-sub); }
+  .item label { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0; cursor: pointer;
+    border-bottom: 1px solid var(--border); font-size: var(--t-small); }
   .item.off label { color: var(--dim); cursor: not-allowed; }
   .lbl { min-width: 0; }
   @media (pointer: coarse) { .item label, .head { min-height: 44px; } }
 
   /* The tooltip: below the row, after the usual delay on hover; at once on keyboard focus. */
-  .tip { position: absolute; left: 10px; right: 10px; top: calc(100% + 2px); z-index: var(--z-tip); display: grid; gap: 4px;
+  .tip { position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: var(--z-tip); display: grid; gap: 4px;
     padding: 7px 9px; border-radius: var(--radius-btn); background: var(--elevated, var(--surface)); color: var(--text);
     border: 1px solid var(--border-strong); box-shadow: var(--shadow-pop); font-size: 12px; line-height: 1.45; font-weight: 400;
     opacity: 0; transform: translateY(-2px); pointer-events: none; transition: opacity var(--fast), transform var(--fast); }

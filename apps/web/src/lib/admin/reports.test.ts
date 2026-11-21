@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { age, groupReports, newestReport, nextKey } from './reports';
+import { age, flagWords, groupReports, newestReport, nextKey, sizesOf } from './reports';
 
 const r = (id: string, emote: string | null, createdAt = '2026-11-20T10:00:00Z') => ({ id, createdAt, emote: emote ? { id: emote } : null });
 
@@ -28,5 +28,17 @@ describe('report groups', () => {
     expect(nextKey(['a', 'b', 'c'], 1)).toBe('b');
     expect(nextKey(['a', 'b'], 5)).toBe('b');
     expect(nextKey([], 0)).toBeNull();
+  });
+});
+
+describe('the inspector helpers', () => {
+  const f = (name: string, scale: number, isStatic = false) => ({ name, scale, width: 32 * scale, height: 32 * scale, isStatic });
+  it('lists one picture per scale, smallest first, without stills', () => {
+    const e = { files: [f('2x.webp', 2), f('1x_static.webp', 1, true), f('1x.webp', 1), f('1x.avif', 1)] };
+    expect(sizesOf(e).map((x) => x.name)).toEqual(['1x.webp', '2x.webp']);
+  });
+  it('words the flags', () => {
+    expect(flagWords({ animated: true, flags: { zeroWidth: false, nsfw: true, private: false, wide: false } })).toEqual(['Animated', 'NSFW']);
+    expect(flagWords({ animated: false, flags: { zeroWidth: false, nsfw: false, private: false, wide: false } })).toEqual([]);
   });
 });
