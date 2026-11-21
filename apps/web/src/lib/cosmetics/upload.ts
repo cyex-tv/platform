@@ -8,10 +8,11 @@ import { ApiError } from '$lib/api';
 export type CosmeticUploadKind = 'badge' | 'paint';
 
 /**
- * What the API takes (crates/media `Limits::badge` and `Limits::default`, and
+ * What the API takes (crates/media `Limits::badge` and `Limits::paint`, and
  * cosmetics::check_dimensions). Badges follow the cyex badge upload rules: PNG, APNG, JPEG, WebP
  * or GIF, square, at least 72 px, up to 8 MB; an animation at most 120 frames, 10 seconds and
- * 64 MP (width × height × frames). Paints keep theirs: PNG, APNG, GIF or WebP up to 5 MB.
+ * 64 MP (width × height × frames). Paints take the same file types, size and animation limits,
+ * with their own shape: at least 64 px tall and at most 8:1 wide, up to 4096 px a side.
  */
 export const PICTURE_RULES = {
   badge: {
@@ -24,9 +25,14 @@ export const PICTURE_RULES = {
     maxTotalPixels: 64_000_000,
   },
   paint: {
-    types: ['image/png', 'image/apng', 'image/gif', 'image/webp'],
-    maxBytes: 5 * 1024 * 1024,
+    types: ['image/png', 'image/apng', 'image/jpeg', 'image/gif', 'image/webp'],
+    maxBytes: 8 * 1024 * 1024,
     minHeight: 64,
+    maxAspect: 8,
+    maxSide: 4096,
+    maxFrames: 120,
+    maxDurationMs: 10_000,
+    maxTotalPixels: 64_000_000,
   },
 } as const;
 
@@ -39,10 +45,10 @@ const mb = (n: number) => (n / 1024 / 1024).toFixed(1).replace('.', ',');
 export function checkFile(file: Pick<File, 'type' | 'size'>, kind: CosmeticUploadKind): string | null {
   const rules = PICTURE_RULES[kind];
   if (!(rules.types as readonly string[]).includes(file.type))
-    return kind === 'badge' ? 'Choose a PNG, JPEG, GIF or WebP file.' : 'Choose a PNG, APNG, GIF or WebP file.';
+    return 'Choose a PNG, JPEG, GIF or WebP file.';
   const most = rules.maxBytes / 1024 / 1024;
   if (file.size > rules.maxBytes)
-    return `${kind === 'badge' ? 'Badge pictures' : 'Pictures'} are at most ${most} MB (this one is ${mb(file.size)} MB).`;
+    return `${kind === 'badge' ? 'Badge pictures' : 'Paint pictures'} are at most ${most} MB (this one is ${mb(file.size)} MB).`;
   return null;
 }
 
@@ -56,7 +62,12 @@ export function checkSize(kind: CosmeticUploadKind, width: number, height: numbe
       return `Badge pictures are at most ${r.maxSide} × ${r.maxSide} px (this one is ${width} × ${height} px). The largest size made is 512 px.`;
     return null;
   }
-  if (height < PICTURE_RULES.paint.minHeight) return `Paint pictures are at least 64 px tall (this one is ${height} px).`;
+  const r = PICTURE_RULES.paint;
+  if (height < r.minHeight) return `Paint pictures are at least 64 px tall (this one is ${height} px).`;
+  if (width > height * r.maxAspect)
+    return `Paint pictures are at most 8 times as wide as they are tall, 8:1 (this one is ${width} × ${height} px).`;
+  if (width > r.maxSide || height > r.maxSide)
+    return `Paint pictures are at most ${r.maxSide} px a side (this one is ${width} × ${height} px). The largest size made is 512 px tall.`;
   return null;
 }
 
@@ -158,13 +169,14 @@ export function animationOf(bytes: Uint8Array): Animation | null {
 
 /** Why an animated `kind` picture of `width`×`height` can't be used; null when it can. */
 export function checkAnimation(kind: CosmeticUploadKind, anim: Animation | null, width: number, height: number): string | null {
-  if (kind !== 'badge' || !anim) return null;
-  const r = PICTURE_RULES.badge;
-  if (anim.frames > r.maxFrames) return `Animated badges have at most ${r.maxFrames} frames (this one has ${anim.frames}).`;
+  if (!anim) return null;
+  const r = PICTURE_RULES[kind];
+  const what = kind === 'badge' ? 'badges' : 'paints';
+  if (anim.frames > r.maxFrames) return `Animated ${what} have at most ${r.maxFrames} frames (this one has ${anim.frames}).`;
   if (anim.durationMs > r.maxDurationMs)
-    return `Animated badges run at most ${r.maxDurationMs / 1000} seconds (this one runs ${(anim.durationMs / 1000).toFixed(1).replace('.', ',')} s).`;
+    return `Animated ${what} run at most ${r.maxDurationMs / 1000} seconds (this one runs ${(anim.durationMs / 1000).toFixed(1).replace('.', ',')} s).`;
   if (width * height * anim.frames > r.maxTotalPixels)
-    return `This animation is too big to process: width × height × frames is over ${r.maxTotalPixels / 1_000_000} MP. Use fewer frames or a smaller picture (512 × 512 px is the largest size made).`;
+    return `This animation is too big to process: width × height × frames is over ${r.maxTotalPixels / 1_000_000} MP. Use fewer frames or a smaller picture (${kind === 'badge' ? '512 × 512 px' : '512 px tall'} is the largest size made).`;
   return null;
 }
 

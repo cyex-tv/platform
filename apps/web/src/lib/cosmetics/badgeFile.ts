@@ -19,6 +19,9 @@ export function pickSize(sizes: readonly number[], need: number): number | null 
   return sizes.find((px) => px >= need) ?? sizes[sizes.length - 1] ?? null;
 }
 
+/** A ladder of sizes: file name stem and px, smallest first (the badge ladder, or paints'). */
+export type Ladder = readonly { stem: string; px: number }[];
+
 export type BadgeChoice = { name: string; px: number };
 
 /**
@@ -26,10 +29,10 @@ export type BadgeChoice = { name: string; px: number };
  * each size, or with `still` the first frame of an animated picture (its `_static` file, else
  * the file itself, which is all a still picture has).
  */
-export function badgeFiles(names: Iterable<string>, still: boolean): BadgeChoice[] {
+export function badgeFiles(names: Iterable<string>, still: boolean, ladder: Ladder = BADGE_LADDER): BadgeChoice[] {
   const has = new Set(names);
   const out: BadgeChoice[] = [];
-  for (const { stem, px } of BADGE_LADDER) {
+  for (const { stem, px } of ladder) {
     const name = still && has.has(`${stem}_static.webp`) ? `${stem}_static.webp` : `${stem}.webp`;
     if (has.has(name)) out.push({ name, px });
   }
@@ -50,8 +53,8 @@ export function pickBadgeFile(names: Iterable<string>, drawn: number, dpr: numbe
  * Whether a made picture lacks a size of the ladder (made before 128, 256 and 512 px): neither
  * its file nor its still frame is there. Remaking its files fills them in.
  */
-export function lacksLadder(names: Iterable<string>): boolean {
+export function lacksLadder(names: Iterable<string>, ladder: Ladder = BADGE_LADDER): boolean {
   const has = new Set(names);
   if (!has.size) return false;
-  return BADGE_LADDER.some(({ stem }) => !has.has(`${stem}.webp`) && !has.has(`${stem}_static.webp`));
+  return ladder.some(({ stem }) => !has.has(`${stem}.webp`) && !has.has(`${stem}_static.webp`));
 }

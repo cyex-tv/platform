@@ -223,7 +223,7 @@
     const r = await output.render($state.snapshot(doc) as AnimDoc, { format, onProgress: (d, t) => (status = { text: `Rendering frame ${d} of ${t}…`, progress: d / t }) });
     if (made) drop(made.url);
     made = { blob: r.blob, url: keep(r.blob), key };
-    const problems = checkPicture({ bytes: r.blob.size, width: r.width, height: r.height, frames: r.frames });
+    const problems = checkPicture({ bytes: r.blob.size, width: r.width, height: r.height, frames: r.frames, durationMs: (doc.duration ?? 0) * 1000 });
     status = problems.length ? { text: problems.join(' '), bad: true } : { text: `Made a ${format.toUpperCase()} of ${fmtBytes(r.blob.size)}.` };
     return made;
   }
@@ -509,7 +509,7 @@
                 <input id="ps-file" type="file" accept="image/gif,image/png,image/apng,image/webp" onchange={(e) => { const f = e.currentTarget.files?.[0]; e.currentTarget.value = ''; pickFile(f); }} />
                 {#if picked}<p class="ps-hint">{picked.width} × {picked.height} px, {fmtBytes(picked.file.size)}</p>{/if}
                 {#each pickError as m (m)}<p class="ps-msg" role="alert">{m}</p>{/each}
-                <p class="ps-hint">At least 64 px tall, at most 1.000 px a side and 5 MB. Up to 8:1; wider pictures are scaled to fit.</p>
+                <p class="ps-hint">At least 64 px tall, up to 8:1 and 4.096 px a side. PNG, JPEG, GIF or WebP up to 8 MB; animated up to 120 frames and 10 seconds. Made at 64, 128, 256 and 512 px tall.</p>
               </div>
             {:else if source === 'existing'}
               {#if paint.image?.url}<div class="ps-imgbox"><img src={previewImage ?? paint.image.url} alt="Saved for this paint" /></div>{/if}

@@ -3,11 +3,21 @@
 // Everything that reaches CSS is checked first: colours against a strict #RRGGBB(AA) pattern,
 // numbers clamped to the API's ranges, image addresses limited to http(s) with no characters that
 // could close the url(). A paint that fails the checks falls back to its plain colour, or to the
-// inherited text colour.
+// inherited text colour. An image paint's file is picked for the size it is drawn at (./paintFile).
+
+import { type PaintFit, pickPaintFile } from './paintFile';
+export type { PaintFit } from './paintFile';
 
 export type PaintStop = { at: number; color: string };
 export type PaintShadow = { x: number; y: number; radius: number; color: string };
-export type PaintImage = { host: string; animated: boolean; ready?: boolean; files: { name: string }[] };
+export type PaintImage = {
+  host: string;
+  animated: boolean;
+  ready?: boolean;
+  width?: number;
+  height?: number;
+  files: { name: string; width?: number; height?: number }[];
+};
 export type PaintLike = {
   kind: 'LINEAR_GRADIENT' | 'RADIAL_GRADIENT' | 'IMAGE';
   angle: number;
@@ -58,13 +68,14 @@ function stopList(stops: readonly PaintStop[]): string | null {
   return out.length >= 2 ? out.join(', ') : null;
 }
 
-/** The image paint's picture: the first frame when `still` (reduced motion) and it has one. */
-function savedImageUrl(img: PaintImage | null | undefined, still: boolean): string | null {
+/**
+ * The image paint's picture, the file picked for what it is drawn at (`fit`; see ./paintFile):
+ * the first frame when `still` (reduced motion) and it has one.
+ */
+function savedImageUrl(img: PaintImage | null | undefined, still: boolean, fit?: PaintFit, repeat = false): string | null {
   if (!img || img.ready === false || !img.host) return null;
-  const names = new Set(img.files.map((f) => f.name));
-  const name = still && img.animated && names.has('1x_static.webp') ? '1x_static.webp' : '1x.webp';
-  if (!names.has(name)) return null;
-  return safeUrl(`${img.host.replace(/\/+$/, '')}/${name}`);
+  const name = pickPaintFile(img, still, fit, repeat);
+  return name ? safeUrl(`${img.host.replace(/\/+$/, '')}/${name}`) : null;
 }
 
 /**
@@ -81,12 +92,13 @@ export function safePreviewUrl(u: string | null | undefined): string | null {
 
 /**
  * The paint's `background-image` value (gradient or url), or null when it can't be drawn.
- * `imageUrl` replaces an image paint's own picture (the paint studio's local preview).
+ * `imageUrl` replaces an image paint's own picture (the paint studio's local preview). `fit` is
+ * what an image paint is drawn at, for picking its file.
  */
-export function paintImage(p: PaintLike, still = false, imageUrl?: string | null): string | null {
+export function paintImage(p: PaintLike, still = false, imageUrl?: string | null, fit?: PaintFit): string | null {
   const rep = p.repeat ? 'repeating-' : '';
   if (p.kind === 'IMAGE') {
-    const url = imageUrl !== undefined ? safePreviewUrl(imageUrl) : savedImageUrl(p.image, still);
+    const url = imageUrl !== undefined ? safePreviewUrl(imageUrl) : savedImageUrl(p.image, still, fit, p.repeat);
     return url ? `url("${url}")` : null;
   }
   const stops = stopList(p.stops);
@@ -127,11 +139,13 @@ export function paintColor(p: PaintLike): string | null {
  * drawable paint, only the fallback colour (or nothing). `still` uses an image paint's first frame.
  * This is the one renderer: the site, the admin lists and the paint studio's previews and CSS
  * export all draw through it (the studio passes `imageUrl` for a picture not saved yet).
+ * `fit` is what the name is drawn at (height, width, pixel ratio), so an image paint uses the
+ * smallest file that is sharp there.
  */
-export function paintStyle(p: PaintLike | null | undefined, still = false, imageUrl?: string | null): string {
+export function paintStyle(p: PaintLike | null | undefined, still = false, imageUrl?: string | null, fit?: PaintFit): string {
   if (!p) return '';
   const fallback = paintColor(p);
-  const image = paintImage(p, still, imageUrl);
+  const image = paintImage(p, still, imageUrl, fit);
   const out: string[] = [];
   if (fallback) out.push(`color: ${fallback}`);
   if (image && p.kind === 'IMAGE') {

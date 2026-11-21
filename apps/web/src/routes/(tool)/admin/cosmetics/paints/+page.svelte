@@ -1,13 +1,16 @@
 <script lang="ts">
   // Every paint: a preview on a sample name, its name and kind, how many own it, and Edit (the
-  // paint studio), Give, Owners and Delete. "New paint" opens the studio.
+  // paint studio), Give, Owners and Delete. "New paint" opens the studio. A picture paint made
+  // before the 512 px size offers Make larger sizes (its files made again from the stored original).
   import { gql } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
   import State from '$lib/components/State.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { forgetCatalog, loadCatalog, type Paint } from '$lib/cosmetics/store.svelte';
   import { clean, count, iso } from '$lib/format';
-  import { DELETE_PAINT, ENTITLEMENTS } from '$lib/queries';
+  import { COSMETIC_IMAGE, DELETE_PAINT, ENTITLEMENTS, REMAKE_COSMETIC_IMAGE } from '$lib/queries';
+  import { lacksPaintSizes } from '$lib/cosmetics/paintFile';
+  import { waitReady } from '$lib/cosmetics/upload';
   import GrantDialog from '$lib/admin/GrantDialog.svelte';
   import Owners from '$lib/admin/Owners.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
@@ -43,6 +46,30 @@
   let ownerList = $state<Owners>();
   let busy = $state(false);
   const kindLabel = (p: Paint) => (p.kind === 'IMAGE' ? 'Picture' : p.kind === 'RADIAL_GRADIENT' ? 'Radial' : 'Linear');
+
+  // Paints whose picture files are being made again.
+  let remaking = $state<Record<string, boolean>>({});
+  const lacks = (p: Paint) => p.kind === 'IMAGE' && !!p.image && lacksPaintSizes(p.image.files.map((f) => f.name));
+
+  async function remake(p: Paint) {
+    if (!p.image) return;
+    const id = p.image.id;
+    remaking[p.id] = true;
+    try {
+      await gql(REMAKE_COSMETIC_IMAGE, { id });
+      // Done when the picture has every size; its old files stay in use meanwhile.
+      await waitReady(async () => {
+        const img = (await gql(COSMETIC_IMAGE, { id })).cosmeticImage;
+        return img && { ...img, ready: img.ready && !lacksPaintSizes(img.files.map((f) => f.name)) };
+      });
+      notify(`${iso(p.name)} has every size now.`);
+      await L.reload();
+    } catch (e) {
+      fail(e);
+    } finally {
+      remaking[p.id] = false;
+    }
+  }
 
   async function remove(p: Paint) {
     busy = true;
@@ -90,6 +117,11 @@
                 <button class="ui-btn secondary small" type="button" onclick={() => { giving = p; dlg?.open({ id: p.id, name: p.name }); }}>Give</button>
               {/if}
               {#if manage}
+                {#if lacks(p)}
+                  <button class="ui-btn secondary small" type="button" disabled={remaking[p.id]} title="Made before the 512 px size: make it from the stored original" onclick={() => remake(p)}>
+                    {#if remaking[p.id]}<span class="ui-spinner" aria-hidden="true"></span>Making sizes…{:else}<Icon name="refresh" size={14} />Make larger sizes{/if}
+                  </button>
+                {/if}
                 <a class="ui-btn secondary small" href="/admin/cosmetics/paints/{encodeURIComponent(p.id)}/studio"><Icon name="pencil" size={14} />Edit</a>
                 <Confirm small label="Delete" confirm="Click again to delete it for everyone" {busy} onconfirm={() => remove(p)} />
               {/if}
