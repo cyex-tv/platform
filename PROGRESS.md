@@ -1366,3 +1366,15 @@ gh pr create --base main --head fix/hero-dark-bars --title "Hero: lighter dark-m
 git push -u origin feat/snowflake-ids
 gh pr create --repo cyex-tv/platform --base main --head feat/snowflake-ids --title "Snowflake IDs for emotes, accounts and sets" --body-file <file>
 ```
+## Hero motion (feat/hero-motion, 2026/11/21)
+- Owner-approved: a pointer lean and a springy scroll turn for the hero logo (over cyex-web's default of nothing following the pointer; noted in `logo-scene.ts`).
+- `lib/home/logo-spring.ts`: a spring in response and damping ratio, stepped by its exact solution (frame-rate independent, interruptible: keeps its velocity when the target moves).
+- Pointer lean (`lib/home/logo-tilt.ts`): mouse or pen on a device that hovers, `(hover: hover) and (pointer: fine)`, motion allowed. Up to 7° each way on each axis, from the pointer's place over the hero (clamped just outside it; rest once it's more than 1.35 half-sizes from the middle), through a critically damped spring (response 0.4 s), added to the idle turn, sway and float. Back to rest when the pointer leaves the hero's area, the window, or the window loses focus. The listeners exist only while the scene runs (on screen, tab visible) and go on dispose; none on touch, with reduced motion, or for a still scene.
+- Scroll turn: the scroll position is now the target of a spring (response 0.42 s, damping 0.9) instead of an ease; `pose()` still holds it to 0-1, so the end angles are the same as before.
+- Checked in headless Edge over CDP (`screens/hero-tube/tilt.mjs`, `tilt-verify.json`): leans 6.85° both ways at the hero's corners, reverses mid-flight with at most 1.1° between drawn frames, back to 0 when the pointer goes far or leaves the window; the scroll spring follows 300 px of scroll with a 0.0003 overshoot; a touch phone (375, mobile emulation) neither listens nor leans. Screens: `tilt-dark-bottom-right.png`, `tilt-light-top-left.png`. Frame cost unchanged (0.094 ms full frame, 1440 at dpr 2, RTX 5080; 0.099 ms before).
+- Tests: `logo-motion-input.test.ts` (spring settles without overshoot when critically damped, a hair over when damped 0.9, same result at 30/60/144 Hz, keeps velocity on a new target, no NaN for odd steps; tilt direction, clamping and rest; gating) and `logo-scene.ui.test.ts` (pointer listeners only while running, gone when hidden and on dispose, never on touch, reduced motion or still).
+- GitHub writes:
+```
+git push -u origin feat/hero-motion
+gh pr create --base main --head feat/hero-motion --title "Hero: lean toward the pointer and a springy scroll turn" --body-file <file>
+```
