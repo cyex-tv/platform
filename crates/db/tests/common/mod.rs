@@ -16,6 +16,26 @@ pub struct TestDb {
 impl TestDb {
     /// `None` when no test database is configured.
     pub async fn new() -> Option<Self> {
+        Self::migrated_before(i64::MAX).await
+    }
+
+    /// A database with only the migrations older than `version`, to test what a later one does
+    /// to existing rows; [`Self::migrate`] runs the rest.
+    #[allow(dead_code)]
+    pub async fn before(version: i64) -> Option<Self> {
+        Self::migrated_before(version).await
+    }
+
+    /// Runs every migration not run yet.
+    #[allow(dead_code)]
+    pub async fn migrate(&self) {
+        cyex_tv_db::MIGRATOR
+            .run(&self.pool)
+            .await
+            .expect("run the remaining migrations");
+    }
+
+    async fn migrated_before(version: i64) -> Option<Self> {
         let Ok(url) = std::env::var("CYEX_TV_TEST_DATABASE_URL") else {
             eprintln!("CYEX_TV_TEST_DATABASE_URL not set; skipping");
             return None;
@@ -36,10 +56,17 @@ impl TestDb {
             .connect_with(admin.clone().database(&name))
             .await
             .expect("connect to the test database");
-        cyex_tv_db::MIGRATOR
-            .run(&pool)
-            .await
-            .expect("run migrations");
+        let migrator = sqlx::migrate::Migrator {
+            migrations: cyex_tv_db::MIGRATOR
+                .migrations
+                .iter()
+                .filter(|m| m.version < version)
+                .cloned()
+                .collect::<Vec<_>>()
+                .into(),
+            ..sqlx::migrate::Migrator::DEFAULT
+        };
+        migrator.run(&pool).await.expect("run migrations");
         Some(Self { pool, name, admin })
     }
 
