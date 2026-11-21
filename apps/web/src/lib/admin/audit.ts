@@ -1,5 +1,7 @@
 // Reading the audit log: what an entry did in words, where its target lives, and what changed.
 
+import { isSnowflake } from '$lib/ids';
+
 export type Change = { path: string; before?: string; after?: string; kind: 'added' | 'removed' | 'changed' };
 
 /** `role.updated` or `emotes.approve` as "Role updated" / "Emotes approve". */
@@ -96,8 +98,8 @@ export function rangeProblem(from: string, to: string): string | null {
   return null;
 }
 
-/** Accepts an account's ID: 26 characters of Crockford base32. */
-export const looksLikeId = (s: string) => /^[0-9A-HJKMNP-TV-Z]{26}$/i.test(s.trim());
+/** Accepts an account's ID: a Snowflake (digits) or an old ULID (26 characters of Crockford base32). */
+export const looksLikeId = (s: string) => isSnowflake(s.trim()) || /^[0-9A-HJKMNP-TV-Z]{26}$/i.test(s.trim());
 
 /** A `YYYY-MM-DD` day in the cyex format, `2026/11/20`; nothing for anything else. */
 export function dayLabel(day: string): string {

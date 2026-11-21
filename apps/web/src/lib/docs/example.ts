@@ -1,14 +1,17 @@
 // Example values for the generated docs. One place, so the REST and GraphQL samples agree and
-// every sample reads like a real request: ULIDs for cyex.tv IDs, a Twitch user ID for platform IDs.
+// every sample reads like a real request: Snowflakes (digits, as strings) for the IDs of emotes, accounts
+// and sets, ULIDs for every other cyex.tv ID (roles, reports, badges, paints ...), a Twitch user ID for platform IDs.
 
 export const EX = {
   twitchId: '12345678',
   login: 'lumen_fox',
-  emoteId: '01JCYX4M8Q2N6R3T7V9W1Z5B0D',
+  emoteId: '115016040710148613',
   emoteName: 'foxwave',
-  setId: '01JCYX2A7K5P8S1V4X6Z9C3E2G',
-  accountId: '01JCYWZ9H3M6Q1T4W7Y0B2D5F8',
-  editorId: '01JCYX0N2R5T8V1X4Z7C0E3G6J',
+  setId: '99908371611660330',
+  accountId: '95430201311240201',
+  editorId: '98862136033288503',
+  /** Any other kind of ID: a ULID. */
+  otherId: '01JCYX9D5G8K1M4P7R0T3V6X9B',
   roleId: '01JCYX6B3E6H9K2M5P8S1V4X7Z',
   reportId: '01JCYX7C4F7J0K3N6Q9T2W5Y8A',
   host: 'https://cdn.cyex.tv/emotes/9f2c4e7a1b3d5f8e0a2c4e6b8d0f1a3c5e7b9d1f3a5c7e9b0d2f4a6c8e0b2d4f',
@@ -34,13 +37,14 @@ export function exampleString(name: string, ctx = ''): string {
     if (c.includes('account') || c === 'me') return EX.accountId;
     if (c.includes('role')) return EX.roleId;
     if (c.includes('report')) return EX.reportId;
-    return EX.emoteId;
+    return EX.otherId;
   }
   if (n === 'setid' || n === 'activesetid') return EX.setId;
   if (n === 'emoteid') return EX.emoteId;
-  if (n === 'accountid' || n === 'owner' || n === 'addedby' || n === 'actorid') return EX.accountId;
+  if (n === 'accountid' || n === 'owner' || n === 'ownerid' || n === 'addedby' || n === 'actorid') return EX.accountId;
+  if (n === 'editorid') return EX.editorId;
   if (n === 'roleid') return EX.roleId;
-  if (n.endsWith('id')) return EX.emoteId;
+  if (n.endsWith('id')) return EX.otherId;
   if (n === 'host') return EX.host;
   if (n === 'login') return EX.login;
   if (n === 'displayname') return EX.login;

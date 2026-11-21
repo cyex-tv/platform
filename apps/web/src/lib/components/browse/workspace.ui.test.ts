@@ -106,6 +106,13 @@ describe('set rail', () => {
     expect(localStorage.getItem('cyex.browse.target')).toBe('S2');
   });
 
+  it('forgets a target remembered by an old ULID and starts on the default', async () => {
+    localStorage.setItem('cyex.browse.target', '01JD8X0000000000000000OLD1');
+    await rail(2);
+    expect(target.current?.name).toBe('Main');
+    expect(localStorage.getItem('cyex.browse.target')).toBeNull();
+  });
+
   it('folds a group, and remembers it per account', async () => {
     const user = userEvent.setup();
     await rail(2, ['Hype', 'Subs']);

@@ -65,6 +65,10 @@ describe('audit helpers', () => {
 
   it('recognises an account id', () => {
     expect(looksLikeId('01JD8X0000000000000000MEME')).toBe(true);
+    expect(looksLikeId('1314628736410763264')).toBe(true);
+    expect(looksLikeId(' 1314628736410763264 ')).toBe(true);
+    expect(looksLikeId('9223372036854775808')).toBe(false);
+    expect(looksLikeId('12345678901234567890')).toBe(false);
     expect(looksLikeId('lumen_fox')).toBe(false);
   });
 });

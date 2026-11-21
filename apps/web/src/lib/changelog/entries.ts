@@ -15,6 +15,15 @@ export type Entry = {
 
 export const ENTRIES: Entry[] = [
   {
+    id: '2026-11-21-snowflake-ids',
+    date: '2026-11-21',
+    title: 'New IDs for emotes, accounts and sets',
+    items: [
+      'Emotes, accounts and sets now have IDs that are strings of digits (Snowflakes), so their links look like cyex.tv/emotes/115016040710148613. Old links with the long letters-and-digits ID open the new address by themselves.',
+      'For apps and bots using the API: the old IDs (ULIDs) are still accepted as input until further notice, and answers carry the new ones. Store IDs as strings, never as numbers. The Developers page has a section on IDs.',
+    ],
+  },
+  {
     id: '2026-11-20-shop-only',
     date: '2026-11-20',
     title: 'Badges and paints are in the shop',

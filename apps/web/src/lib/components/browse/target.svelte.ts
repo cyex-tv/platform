@@ -10,6 +10,7 @@
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import { ApiError, gql } from '$lib/api';
 import type { Picture } from '$lib/emote';
+import { isUlid } from '$lib/ids';
 import { clean } from '$lib/format';
 import { grantOn } from '$lib/tool/editors';
 import { notify } from '$lib/tool/notices.svelte';
@@ -43,6 +44,14 @@ function remembered(): string {
     return localStorage.getItem(KEY) ?? '';
   } catch {
     return '';
+  }
+}
+
+function forget() {
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    /* nothing to forget */
   }
 }
 
@@ -124,6 +133,8 @@ class Target {
         const ids = this.sets.map((s) => s.id);
         if (!ids.includes(this.chosenId)) {
           const saved = remembered();
+          // A set remembered by its old ULID is none of these now (sets are Snowflakes): forget it.
+          if (saved && !ids.includes(saved) && isUlid(saved)) forget();
           this.chosenId = ids.includes(saved) ? saved : (this.sets.find((s) => s.active && s.mine)?.id ?? this.sets.find((s) => s.active)?.id ?? ids[0] ?? '');
         }
       } catch (e) {

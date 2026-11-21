@@ -2,6 +2,7 @@
   // A set, for anyone with the link (ADR 0017): listed and unlisted sets open signed out, a
   // private one answers like a missing one. Name, owner, how full, search inside the set, grid or
   // list, and the actions: clone it into your own sets, copy the link, edit it when it is yours.
+  import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { gql } from '$lib/api';
   import Avatar from '$lib/components/Avatar.svelte';
@@ -11,6 +12,7 @@
   import State from '$lib/components/State.svelte';
   import CopyLink from '$lib/components/CopyLink.svelte';
   import { clean, count } from '$lib/format';
+  import { legacyRedirect } from '$lib/ids';
   import { PUBLIC_SET } from '$lib/queries';
   import Capacity from '$lib/components/Capacity.svelte';
   import { filterMembers, fillPercent } from '$lib/sets/public';
@@ -37,7 +39,11 @@
       } catch {
         set = null;
       }
-      if (!gone) late = { id, set };
+      if (gone) return;
+      late = { id, set };
+      // Found only now (the server could not see it): an old ULID link still ends on the snowflake address.
+      const moved = legacyRedirect('sets', id, set?.id, page.url.search);
+      if (moved) void goto(moved, { replaceState: true });
     })();
     return () => (gone = true);
   });
