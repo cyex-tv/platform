@@ -261,11 +261,21 @@ pub fn lacks_sizes(kind: CosmeticKind, files: &[EmoteFile]) -> bool {
     !files.is_empty() && !picture_profile(kind).is_complete(files.iter().map(|f| f.name.as_str()))
 }
 
-/// Checks a picture for its kind: badges square and at least 72×72, paints at least 64 tall.
+/// Checks a picture for its kind: badges square and at least 72×72, paints at least 64 tall
+/// and at most 8:1 (wide).
 pub fn check_dimensions(kind: CosmeticKind, width: u32, height: u32) -> ApiResult<()> {
-    let ok = match kind {
-        CosmeticKind::Badge => width == height && width >= BADGE_MIN_SIDE,
-        CosmeticKind::Paint => height >= PAINT_MIN_HEIGHT,
+    let (ok, message) = match kind {
+        CosmeticKind::Badge => (
+            width == height && width >= BADGE_MIN_SIDE,
+            "Badge pictures are square and at least 72×72 px.",
+        ),
+        CosmeticKind::Paint if height < PAINT_MIN_HEIGHT => {
+            (false, "Paint pictures are at least 64 px tall.")
+        }
+        CosmeticKind::Paint => (
+            u64::from(width) <= u64::from(height) * u64::from(PAINT_MAX_ASPECT),
+            "Paint pictures are at most 8 times as wide as they are tall (8:1).",
+        ),
     };
     if ok {
         return Ok(());
@@ -273,10 +283,7 @@ pub fn check_dimensions(kind: CosmeticKind, width: u32, height: u32) -> ApiResul
     Err(ApiError::new(
         StatusCode::UNPROCESSABLE_ENTITY,
         "bad_dimensions",
-        match kind {
-            CosmeticKind::Badge => "Badge pictures are square and at least 72×72 px.",
-            CosmeticKind::Paint => "Paint pictures are at least 64 px tall.",
-        },
+        message,
     ))
 }
 
