@@ -72,4 +72,6 @@
   .top :global(.adm-ip-head) { position: static; }
   .in-sheet { margin: 0 -4px; }
   .in-sheet :global(.adm-ip-head) { position: static; }
+  /* The sheet has its own close button; the panel head's would be a second one. */
+  .in-sheet :global(.adm-ip-head [aria-label="Close"]) { display: none; }
 </style>
