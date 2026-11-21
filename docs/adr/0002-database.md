@@ -9,7 +9,7 @@ The data is relational: accounts, identities, sets, set members, roles and audit
 ## Decision
 - **Postgres 17** in its own container `tv-db`, with its own volume, credentials and Docker network. It is not `deck-db`, even when it runs on the same host.
 - **sqlx** with checked queries. Migrations live in `crates/db/migrations`, run by the services on start, and are forward-only. A destructive change takes two steps: add and migrate, then remove in a later release.
-- Times are `timestamptz`. IDs are ULIDs stored as `uuid`, so they sort by time and don't reveal counts.
+- Times are `timestamptz`. IDs are ULIDs stored as `uuid`, so they sort by time and don't reveal counts. Accounts, emotes and sets also have a Snowflake `public_id` that the API shows (ADR 0026).
 - Each service has its own DB role with only the grants it needs:
   - `worker` gets the job table and `files`;
   - `events` gets read on the outbox;
