@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '$lib/api';
 import {
-  centsFrom, centsText, codesFilename, codesText, fromLocalInput, itemState, lockoutMinutes, normaliseCode, orderRow, orderStatusText, plausibleCode, price,
+  centsFrom, centsText, codesFilename, contentsText, isBundle, ofKind, shopKind, codesText, fromLocalInput, itemState, lockoutMinutes, normaliseCode, orderRow, orderStatusText, plausibleCode, price,
   redeemMessage, saleEndText, settled, shopMessage, staffMessage, stockText, tidyCode, toLocalInput,
 } from './shop';
 
@@ -202,5 +202,36 @@ describe('parseCount (code batch sizes)', () => {
   it('refuses anything else', async () => {
     const { parseCount } = await import('./shop');
     for (const bad of ['', '1.00', '1.0000', '.5', '1,000', '1e3', '-5', '10.5', 'abc', '1.000.0']) expect(parseCount(bad)).toBeNaN();
+  });
+});
+
+describe('item contents and kinds', () => {
+  const b = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `b${i}` }));
+  const item = (badges: number, paints: number) => ({ badges: b(badges), paints: b(paints) });
+
+  it('says what an item holds', () => {
+    expect(contentsText(item(1, 0))).toBe('1 badge');
+    expect(contentsText(item(0, 3))).toBe('3 paints');
+    expect(contentsText(item(1, 2))).toBe('1 badge and 2 paints');
+    expect(contentsText(item(0, 1200))).toBe('1.200 paints');
+    expect(contentsText(item(0, 0))).toBe('Nothing yet');
+  });
+
+  it('calls more than one cosmetic a bundle', () => {
+    expect(isBundle(item(1, 0))).toBe(false);
+    expect(isBundle(item(0, 2))).toBe(true);
+    expect(isBundle(item(1, 1))).toBe(true);
+  });
+
+  it('reads ?kind= and files items under one kind each', () => {
+    expect(shopKind('paints')).toBe('paints');
+    expect(shopKind('bogus')).toBe('all');
+    expect(shopKind(null)).toBe('all');
+    expect(ofKind(item(0, 1), 'paints')).toBe(true);
+    expect(ofKind(item(0, 1), 'badges')).toBe(false);
+    expect(ofKind(item(1, 0), 'badges')).toBe(true);
+    expect(ofKind(item(1, 1), 'paints')).toBe(false);
+    expect(ofKind(item(1, 1), 'bundles')).toBe(true);
+    expect(ofKind(item(1, 1), 'all')).toBe(true);
   });
 });

@@ -2,6 +2,25 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Redesign part B: shop, redeem, docs pages, download, sign-in, errors (branch `feat/redesign-b`, owner request of 2026/11/21)
+
+"Redesign the whole platform top to bottom with the design picked": the reading and shop pages now use the Inspector shapes from `.claude/runs/2026-11-20-redesign/design-rules.md`. Shared components (`lib/components`) untouched (part A owns them).
+- [x] Shop (`/shop`): Inspector shape. Page head (title, one line, Redeem a code), kind filter (All, Paints, Badges, Bundles with counts, `?kind=`, only when there is more than one kind), the items as cells sharing hairlines, the open one ringed in the accent. Right panel (360, full height): "About the shop" (how it works, Redeem, Your orders or Sign in, help) until an item is open (`?item=`), then the item in full (`ItemBuy`: on your own name in both themes and a chat line, badges at 18 and 36 px, stock and sale, For me or Gift to someone with platform and login, Buy or Give). Escape closes the panel and focus goes back to the item. Under 1100px the item opens in the dialog as before (`ItemDialog` now wraps `ItemBuy`) and "About" follows the grid. Checkout status, gifting, staff-only items by link, sign-in return all as before.
+- [x] Redeem: page head with Shop, the form in a panel, the result as hairline rows (badges at 18 and 36 px, paints on your own name), a skeleton while the session loads.
+- [x] Docs layout (`/developers`, `/help`, `/changelog`): the index is now the browse page's left rail (full window height under the header, page ground, hairline right). Behaviour unchanged. `/guidelines` moved onto the same layout (rule index on the left, anchors kept).
+- [x] Download: Inspector shape (cells sharing hairlines, your browser bold with an accent tick; right panel "At a glance" and Next links). Anchors `#chrome #edge #opera #brave #firefox` kept.
+- [x] Sign-in: "What cyex.tv keeps" as a labelled key/value list. Error pages: the Problem state, then the failed address and status, and "Try instead" links, the closest first (`routes/error-links.ts`).
+- [x] Tests: `lib/shop/item-buy.ui.test.ts` (sign-in return, gift needs a login, gift target, failure stays open, owned item), `shop.test.ts` (contents, bundles, kinds), `routes/error-links.test.ts`.
+- [x] Manual (mock, 375/768/1280/1920, dark and light, keyboard: panel focus and Escape): `.claude/runs/2026-11-20-redesign/screens/partB/`.
+- Not changed: API, mock, codegen; landing page; shared components. No legal pages on main yet (branch `phase-9/legal`).
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/redesign-b
+gh pr create --repo cyex-tv/platform --base main --head feat/redesign-b --title "Redesign part B: shop, redeem, docs pages, download, sign-in, errors" --body-file <file>
+```
+
 ## Redesign: Inspector header, emote page and profile, Workspace browse (branch `feat/redesign`, owner choice of 2026/11/21)
 
 The owner picked from the three layout prototypes (`.claude/runs/2026-11-20-redesign/prototypes/`): the Inspector header, emote page and profile, and the Workspace browse with the sets on the left.
