@@ -26,7 +26,7 @@
   import { fromLocalInput, parseCount, staffMessage } from '$lib/shop/shop';
   import Confirm from '$lib/tool/Confirm.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
-  import PageHead from '$lib/tool/PageHead.svelte';
+  import Bar from '$lib/admin/ui/Bar.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { appendUnique, pageToken } from '$lib/tool/paging';
   import { fail, notify } from '$lib/tool/notices.svelte';
@@ -202,11 +202,11 @@
 
 <Gate permission="codes.manage">
   <Split label="Code batch" open={!!pickedBatch} onclose={() => pick(null)}>
-    <PageHead title="Codes" line="Batches of redeem codes. The codes are shown once, when you make the batch.">
+    <Bar title="Codes" count={L.data ? `${count(L.data.total)} ${L.data.total === 1 ? 'batch' : 'batches'}` : null}>
       {#snippet actions()}
-        <button class="ui-btn primary" type="button" disabled={!L.data} onclick={() => L.data && make(L.data)}><Icon name="plus" size={15} />New batch</button>
+        <button class="ui-btn primary small" type="button" disabled={!L.data} onclick={() => L.data && make(L.data)}><Icon name="plus" size={15} />New batch</button>
       {/snippet}
-    </PageHead>
+    </Bar>
 
     <LoadGate source={L} label="Loading batches…">
       {#snippet children(d)}
@@ -230,8 +230,8 @@
                   <td class="ell pk"><span class="txt"><span class="nm"><bdi>{clean(b.name)}</bdi><span class="pre">{b.prefix}-…</span></span><span class="sub"><bdi>{gives(b)}</bdi></span></span></td>
                   <td class="num" data-l="Codes">{count(b.codeCount)}</td>
                   <td class="num" data-l="Used">{count(u.used)} of {count(u.total)}</td>
-                  <td data-l="State"><span class="st" class:live={st === 'Active'}>{st}</span></td>
-                  <td class="dim" data-l="Expires">{b.expiresAt ? date(b.expiresAt) : 'Never'}</td>
+                  <td data-l="State"><span class="adm-flags"><span class:ok={st === 'Active'}>{st}</span></span></td>
+                  <td class="dim mono" data-l="Expires">{b.expiresAt ? date(b.expiresAt) : 'Never'}</td>
                 </tr>
               {/each}
             </tbody>
@@ -263,7 +263,7 @@
         <div class="adm-ip-body">
           <section class="adm-sec">
             <h2 class="adm-name"><bdi>{clean(b.name)}</bdi></h2>
-            <p class="line"><span class="st" class:live={st === 'Active'}>{st}</span> · <span class="mono">{b.prefix}-…</span></p>
+            <p class="adm-flags"><span class:ok={st === 'Active'}>{st}</span><span class="adm-num">{b.prefix}-…</span></p>
           </section>
           <section class="adm-sec">
             <h3 class="adm-label">Uses</h3>
@@ -277,11 +277,11 @@
           <section class="adm-sec">
             <h3 class="adm-label">Facts</h3>
             <dl class="adm-kv">
-              <dt>Gives</dt><dd>{gives(b)}</dd>
+              <dt>Gives</dt><dd class="txt">{gives(b)}</dd>
               <dt>Expires</dt><dd>{b.expiresAt ? dateTime(b.expiresAt) : 'Never'}</dd>
               {#if b.disabledAt}<dt>Turned off</dt><dd>{dateTime(b.disabledAt)}</dd>{/if}
               <dt>Made</dt><dd>{dateTime(b.createdAt)}</dd>
-              {#if b.createdBy}<dt>Made by</dt><dd><bdi>{clean(b.createdBy.displayName)}</bdi></dd>{/if}
+              {#if b.createdBy}<dt>Made by</dt><dd class="txt"><bdi>{clean(b.createdBy.displayName)}</bdi></dd>{/if}
               <dt>ID</dt><dd class="mono">{b.id}</dd>
             </dl>
           </section>
@@ -302,44 +302,41 @@
       <div class="body">
         <h2 id="batch-title">New code batch</h2>
         <h3 class="adm-label">Batch</h3>
-        <label class="ui-field">
-          <span class="ui-label">Name</span>
-          <input class="ui-input" bind:value={name} maxlength="64" aria-invalid={errors.name ? 'true' : undefined} />
-          {#if errors.name}<span class="ui-error" role="alert">{errors.name}</span>{:else}<span class="ui-hint">For staff, like “Launch stream giveaway”.</span>{/if}
-        </label>
-        <div class="two">
-          <label class="ui-field">
-            <span class="ui-label">Prefix</span>
-            <input class="ui-input mono" bind:value={prefix} maxlength="12" autocapitalize="characters" autocomplete="off" aria-invalid={errors.prefix ? 'true' : undefined} />
-            {#if errors.prefix}<span class="ui-error" role="alert">{errors.prefix}</span>{:else}<span class="ui-hint">Codes look like PREFIX-XXXX-XXXX-XXXX-XXXX.</span>{/if}
+        <div>
+          <label class="adm-lv">
+            <span class="l">Name<small>For staff</small></span>
+            <span class="v"><input class="ui-input" bind:value={name} maxlength="64" aria-invalid={errors.name ? 'true' : undefined} />{#if errors.name}<span class="ui-error" role="alert">{errors.name}</span>{/if}</span>
           </label>
-          <label class="ui-field">
-            <span class="ui-label">How many codes</span>
-            <input class="ui-input" inputmode="numeric" bind:value={amount} aria-invalid={errors.amount ? 'true' : undefined} />
-            {#if errors.amount}<span class="ui-error" role="alert">{errors.amount}</span>{:else}<span class="ui-hint">1 to 1.000.</span>{/if}
+          <label class="adm-lv">
+            <span class="l">Prefix<small>PREFIX-XXXX-XXXX-XXXX-XXXX</small></span>
+            <span class="v"><input class="ui-input mono" bind:value={prefix} maxlength="12" autocapitalize="characters" autocomplete="off" aria-invalid={errors.prefix ? 'true' : undefined} />{#if errors.prefix}<span class="ui-error" role="alert">{errors.prefix}</span>{/if}</span>
+          </label>
+          <label class="adm-lv">
+            <span class="l">How many codes<small>1 to 1.000</small></span>
+            <span class="v"><input class="ui-input adm-num" inputmode="numeric" bind:value={amount} aria-invalid={errors.amount ? 'true' : undefined} />{#if errors.amount}<span class="ui-error" role="alert">{errors.amount}</span>{/if}</span>
           </label>
         </div>
         <h3 class="adm-label sect">Limits</h3>
-        <div class="two">
-          <label class="ui-field">
-            <span class="ui-label">Uses per code</span>
-            <input class="ui-input" inputmode="numeric" bind:value={uses} aria-invalid={errors.uses ? 'true' : undefined} />
-            {#if errors.uses}<span class="ui-error" role="alert">{errors.uses}</span>{:else}<span class="ui-hint">Each account can use a code once.</span>{/if}
+        <div>
+          <label class="adm-lv">
+            <span class="l">Uses per code<small>Once per account</small></span>
+            <span class="v"><input class="ui-input adm-num" inputmode="numeric" bind:value={uses} aria-invalid={errors.uses ? 'true' : undefined} />{#if errors.uses}<span class="ui-error" role="alert">{errors.uses}</span>{/if}</span>
           </label>
-          <label class="ui-field">
-            <span class="ui-label">Expires</span>
-            <input class="ui-input" type="datetime-local" bind:value={expires} aria-invalid={errors.expires ? 'true' : undefined} />
-            {#if errors.expires}<span class="ui-error" role="alert">{errors.expires}</span>{:else}<span class="ui-hint">Empty: never.</span>{/if}
+          <label class="adm-lv">
+            <span class="l">Expires<small>Empty: never</small></span>
+            <span class="v"><input class="ui-input" type="datetime-local" bind:value={expires} aria-invalid={errors.expires ? 'true' : undefined} />{#if errors.expires}<span class="ui-error" role="alert">{errors.expires}</span>{/if}</span>
           </label>
         </div>
         <h3 class="adm-label sect">Gives</h3>
         {#if itemChoices.length}
-          <label class="ui-field">
-            <span class="ui-label">Gives the cosmetics of</span>
-            <select class="ui-input" bind:value={itemId}>
-              <option value="">No shop item</option>
-              {#each itemChoices as i (i.id)}<option value={i.id}>{clean(i.name)}</option>{/each}
-            </select>
+          <label class="adm-lv">
+            <span class="l">Cosmetics of</span>
+            <span class="v">
+              <select class="ui-input" bind:value={itemId}>
+                <option value="">No shop item</option>
+                {#each itemChoices as i (i.id)}<option value={i.id}>{clean(i.name)}</option>{/each}
+              </select>
+            </span>
           </label>
         {/if}
         {#if catalog}
@@ -365,17 +362,13 @@
   .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
   .pre { margin-left: 6px; font-family: var(--font-mono); font-size: var(--t-fine); color: var(--dim); }
   .pk { font-weight: 600; }
-  .st { color: var(--muted); }
-  .st.live { color: var(--text); font-weight: 700; }
-  .line { margin: 0; font-size: var(--t-small); color: var(--muted); }
   .wide { width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); }
   form { max-height: calc(100dvh - 24px); grid-template-rows: minmax(0, 1fr) auto; }
   .body { overflow-y: auto; overscroll-behavior: contain; }
   h2 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
-  .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
   .sect { padding-top: 12px; border-top: 1px solid var(--border); }
   .mono { font-family: var(--font-mono); }
+  .adm-lv .v .ui-input { flex: 1 1 180px; min-width: 0; }
+  .adm-lv .v .ui-error { flex-basis: 100%; }
   .problem { margin: 0; font-size: var(--t-small); color: var(--red); }
-  @media (max-width: 520px) { .two { grid-template-columns: minmax(0, 1fr); } }
-  /* Phones: each row stacks, its cells labelled. */
 </style>

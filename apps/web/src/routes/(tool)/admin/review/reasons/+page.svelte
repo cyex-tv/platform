@@ -10,7 +10,7 @@
   import { count } from '$lib/format';
   import { REVIEW_REASONS, SET_REVIEW_REASONS } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
-  import PageHead from '$lib/tool/PageHead.svelte';
+  import Bar from '$lib/admin/ui/Bar.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
   import { can } from '$lib/tool/session.svelte';
@@ -81,16 +81,22 @@
 
 <svelte:head><title>Reject reasons - Admin - cyex.tv</title></svelte:head>
 
-<PageHead title="Reject reasons" back={{ href: '/admin/review', label: 'Review queue' }}
-  line="Ready reasons for the reject dialog. Uploaders see them." />
+<Bar title="Reject reasons" back={{ href: '/admin/review', label: 'Review queue' }} count={L.data ? `${count(rows.length)} of ${MAX}` : null}>
+  {#snippet actions()}
+    {#if editable}
+      {#if dirty}<button class="ui-btn secondary small" type="button" disabled={busy} onclick={reset}>Undo changes</button>{/if}
+      <button class="ui-btn primary small" type="submit" form="reasons-form" disabled={busy || !dirty || blank}>Save</button>
+    {/if}
+  {/snippet}
+</Bar>
 
 <LoadGate source={L} label="Loading the reasons…">
 {#snippet children()}
-  <form class="reasons" onsubmit={save}>
+  <form id="reasons-form" class="reasons" onsubmit={save}>
     {#if rows.length === 0}
       <State bare title="No ready reasons.">Reviewers type every reason themselves.{#if editable} Add one to offer it in the reject dialog.{/if}</State>
     {:else}
-      <ol class="adm-rows rows" bind:this={list}>
+      <ol class="adm-rows rows" aria-label="Reject reasons" bind:this={list}>
         {#each rows as r, i (r.key)}
           <li>
             <span class="no ui-num" aria-hidden="true">{i + 1}</span>
@@ -113,10 +119,7 @@
     {#if editable}
       <footer>
         <button class="ui-btn secondary small" type="button" disabled={rows.length >= MAX} onclick={add}><Icon name="plus" size={15} />Add a reason</button>
-        <span class="ui-hint ui-num count">{count(rows.length)} / {MAX}{#if blank} · fill in or remove the empty one{:else if repeats} · repeats are kept once{/if}</span>
-        <span class="grow"></span>
-        {#if dirty}<button class="ui-btn secondary small" type="button" disabled={busy} onclick={reset}>Undo changes</button>{/if}
-        <button class="ui-btn primary small" type="submit" disabled={busy || !dirty || blank}>Save</button>
+        {#if blank || repeats}<span class="ui-hint count">{#if blank}Fill in or remove the empty one{:else}Repeats are kept once{/if}</span>{/if}
       </footer>
     {:else}
       <p class="ui-hint ro">Changing these needs the Edit reject reasons permission.</p>
@@ -126,16 +129,14 @@
 </LoadGate>
 
 <style>
-  .reasons { display: grid; gap: 12px; max-width: 760px; margin: 0; }
+  .reasons { display: grid; gap: 12px; margin: 0; }
   .rows li { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; min-height: 48px; padding-right: 6px; }
-  .rows li:focus-within { box-shadow: inset 2px 0 0 var(--accent-text); }
-  .no { color: var(--dim); font-size: 12px; font-weight: 600; text-align: center; }
+  .rows li:focus-within { box-shadow: inset 0 0 0 1px var(--accent-border); }
+  .no { color: var(--dim); font-size: var(--t-fine); text-align: center; }
   .field input { width: 100%; height: 44px; border: 0; border-radius: 0; background: transparent; padding-inline: 4px; }
   .field input:focus-visible { outline-offset: -2px; }
   .tools { display: flex; gap: 2px; }
-  footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  .grow { flex: 1; }
-  .count { font-size: 12px; }
+  footer { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
   .ro { margin: 0; }
   @media (max-width: 520px) {
     .rows li { grid-template-columns: minmax(0, 1fr) auto; padding-left: 8px; }

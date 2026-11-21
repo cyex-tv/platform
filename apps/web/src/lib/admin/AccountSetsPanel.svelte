@@ -45,20 +45,24 @@
   {:else if rows.length === 0}
     <p class="box-none">No sets.</p>
   {:else}
-    <ul class="ui-list">
-      {#each all ? rows : rows.slice(0, LIMIT) as s (s.id)}
-        <li>
-          <span class="what"><a href="/sets/{encodeURIComponent(s.id)}"><bdi>{clean(s.name)}</bdi></a>
-            <span class="ui-hint">{s.kind === 'PERSONAL' ? 'Personal' : 'Channel'} · <span class="ui-num">{count(s.slotsUsed)}/{count(s.capacity)}</span></span></span>
-          {#if s.active}<span class="ui-chip approved">Active</span>{/if}
-        </li>
-      {/each}
-    </ul>
+    <table class="adm-table stack">
+      <thead><tr><th>Set</th><th>Kind</th><th class="num">Slots</th><th>State</th></tr></thead>
+      <tbody>
+        {#each all ? rows : rows.slice(0, LIMIT) as s (s.id)}
+          <tr>
+            <td class="pk ell"><a href="/sets/{encodeURIComponent(s.id)}"><bdi>{clean(s.name)}</bdi></a></td>
+            <td data-l="Kind">{s.kind === 'PERSONAL' ? 'Personal' : 'Channel'}</td>
+            <td data-l="Slots" class="num">{count(s.slotsUsed)}/{count(s.capacity)}</td>
+            <td data-l="State">{#if s.active}<span class="adm-flags"><span class="ok">Active</span></span>{/if}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
     <More total={rows.length} limit={LIMIT} bind:expanded={all} />
   {/if}
 </Box>
 
 <style>
-  .what { display: grid; flex: 1; min-width: 0; }
-  .what a { display: block; min-height: 22px; line-height: 22px; font-weight: 600; font-size: var(--t-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td a { display: block; min-height: 22px; line-height: 22px; font-weight: 600; font-size: var(--t-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .adm-table { border-top: 0; }
 </style>

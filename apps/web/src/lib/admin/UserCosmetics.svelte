@@ -126,5 +126,5 @@
   .what { display: grid; flex: 1; min-width: 0; }
   .what strong { display: flex; min-width: 0; font-weight: 600; font-size: var(--t-small); }
   .what .ui-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .kind > ul > li { min-height: 44px; padding: 6px 16px; }
+  .kind > ul > li { min-height: 44px; padding: 6px 0; }
 </style>

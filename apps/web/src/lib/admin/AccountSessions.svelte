@@ -45,25 +45,25 @@
   {:else if rows.length === 0}
     <p class="box-none">Not signed in anywhere.</p>
   {:else}
-    <ul class="ui-list">
-      {#each all ? rows : rows.slice(0, LIMIT) as s (s.id)}
-        <li>
-          <span class="what"><strong title={s.device}>{s.device}</strong><span class="ui-hint">{s.kind === 'SITE' ? 'Website' : 'App'} · signed in <span class="ui-num">{dateTime(s.createdAt)}</span></span></span>
-          <span class="when ui-hint">Last used <span class="ui-num">{dateTime(s.lastSeenAt)}</span><br />Ends <span class="ui-num">{date(s.expiresAt)}</span></span>
-        </li>
-      {/each}
-    </ul>
+    <table class="adm-table stack">
+      <thead><tr><th>Device</th><th>Kind</th><th>Signed in</th><th>Last used</th><th>Ends</th></tr></thead>
+      <tbody>
+        {#each all ? rows : rows.slice(0, LIMIT) as s (s.id)}
+          <tr>
+            <td class="pk lead" title={s.device}><strong>{s.device}</strong></td>
+            <td data-l="Kind">{s.kind === 'SITE' ? 'Website' : 'App'}</td>
+            <td data-l="Signed in" class="mono">{dateTime(s.createdAt)}</td>
+            <td data-l="Last used" class="mono">{dateTime(s.lastSeenAt)}</td>
+            <td data-l="Ends" class="mono">{date(s.expiresAt)}</td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
     <More total={rows.length} limit={LIMIT} bind:expanded={all} />
   {/if}
 </Box>
 
 <style>
-  .what { display: grid; flex: 1; min-width: 0; }
-  .what strong { font-size: var(--t-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .what .ui-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .when { flex: none; text-align: right; font-size: var(--t-fine); line-height: 1.3; }
-  @media (max-width: 640px) {
-    li { flex-wrap: wrap; row-gap: 2px; }
-    .when { flex-basis: 100%; text-align: left; }
-  }
+  td strong { font-size: var(--t-small); }
+  .adm-table { border-top: 0; }
 </style>

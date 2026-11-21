@@ -166,7 +166,7 @@
   .acts { display: flex; gap: 6px; }
   .edit { flex-basis: 100%; display: grid; gap: 6px; }
   .flags { display: flex; flex-wrap: wrap; gap: 0 16px; margin: 0; padding: 0; border: 0; }
-  .add { display: grid; gap: 6px; padding: 12px 16px 10px; border-top: 1px solid var(--border); }
+  .add { display: grid; gap: 6px; padding: 12px 0 10px; border-top: 1px solid var(--border); }
   .who { display: flex; flex-wrap: wrap; gap: 8px; }
   .who select { flex: 0 0 auto; width: auto; }
   .who input { flex: 1 1 140px; min-width: 0; }

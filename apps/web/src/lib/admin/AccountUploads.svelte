@@ -57,26 +57,29 @@
   {:else if !rows.length}
     <p class="box-none">They haven’t uploaded an emote.</p>
   {:else}
-    <ul class="ui-list">
+    <ul class="adm-sheet" style="--cell: 150px" aria-label="Uploads">
       {#each rows as e (e.id)}
         <li>
-          <Thumb emote={e} name={clean(e.name)} box={32} />
-          <span class="what">
-            <a href="/me/emotes/{encodeURIComponent(e.id)}"><bdi>{clean(e.name)}</bdi></a>
-            <span class="ui-hint ui-num">{dateTime(e.createdAt)}{#if e.channelCount}{' · '}{count(e.channelCount)} channels{/if}</span>
-          </span>
-          <span class="ui-chip {e.state.toLowerCase()}">{STATE_LABEL[e.state]}</span>
-          {#if flagsOk}
-            <button class="ui-btn ghost small" type="button" aria-expanded={open === e.id} aria-controls="up-flags-{e.id}" onclick={() => (open = open === e.id ? null : e.id)}>Flags</button>
-          {/if}
+          <div class="adm-cell up">
+            <span class="pic"><Thumb emote={e} name={clean(e.name)} box={56} /></span>
+            <a class="nm" href="/me/emotes/{encodeURIComponent(e.id)}"><bdi>{clean(e.name)}</bdi></a>
+            <span class="sub"><span class="st {e.state.toLowerCase()}">{STATE_LABEL[e.state]}</span>{#if e.channelCount}<span class="adm-num">{count(e.channelCount)}</span>{/if}</span>
+            <span class="sub adm-num">{dateTime(e.createdAt)}</span>
+            {#if flagsOk}
+              <button class="ui-btn ghost small fl" type="button" aria-expanded={open === e.id} aria-controls="up-flags-{e.id}" onclick={() => (open = open === e.id ? null : e.id)}>Flags</button>
+            {/if}
+          </div>
         </li>
-        {#if flagsOk && open === e.id}
-          <li class="flags" id="up-flags-{e.id}">
-            <EmoteFlagsPanel bare emote={e} id="up-f-{e.id}" onsaved={(next) => (rows = rows.map((r) => (r.id === next.id ? { ...r, ...next } : r)))} />
-          </li>
-        {/if}
       {/each}
     </ul>
+    {#if flagsOk && open}
+      {@const e = rows.find((r) => r.id === open)}
+      {#if e}
+        <div class="flags" id="up-flags-{e.id}">
+          <EmoteFlagsPanel bare emote={e} id="up-f-{e.id}" onsaved={(next) => (rows = rows.map((r) => (r.id === next.id ? { ...r, ...next } : r)))} />
+        </div>
+      {/if}
+    {/if}
     {#if rows.length < total}
       <div class="more"><span class="ui-hint ui-num">{count(rows.length)} of {count(total)}</span><button class="ui-btn ghost small" type="button" disabled={loading} onclick={() => load(true)}>{loading ? 'Loading…' : 'Show more'}</button></div>
     {/if}
@@ -84,11 +87,13 @@
 </Box>
 
 <style>
-  .what { display: grid; flex: 1; min-width: 0; }
-  .what a { font-weight: 600; font-size: var(--t-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .what .ui-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .flags { display: block; padding: 0; background: var(--bg); }
-  .more { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 0 8px 0 16px; border-top: 1px solid var(--border); }
-  /* a touch target of at least 24px (WCAG 2.5.8) */
-  a { display: inline-flex; align-items: center; min-height: 24px; }
+  .up { cursor: default; }
+  .up .nm { font-weight: 600; min-height: 22px; color: var(--text); text-decoration: none; }
+  .up .pic { height: 72px; }
+  .st { color: var(--dim); font-weight: 500; }
+  .st.approved { color: var(--green); }
+  .st.rejected, .st.removed { color: var(--red); }
+  .fl { justify-self: start; margin: 4px 0 -4px -8px; }
+  .flags { display: block; padding: 0; margin-top: 8px; border-top: 1px solid var(--border); background: var(--bg); }
+  .more { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 0; border-top: 1px solid var(--border); }
 </style>

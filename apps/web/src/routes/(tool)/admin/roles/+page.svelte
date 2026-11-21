@@ -13,7 +13,7 @@
   import { gql } from '$lib/api';
   import Split from '$lib/admin/ui/Split.svelte';
   import { gridKeys, pickInUrl } from '$lib/admin/ui/pick';
-  import PageHead from '$lib/tool/PageHead.svelte';
+  import Bar from '$lib/admin/ui/Bar.svelte';
   import type { RoleFieldsFragment, RoleLimitFieldsFragment } from '$lib/gql/graphql';
   import { ACCOUNT_ROLES, CREATE_ROLE, DELETE_ROLE, ENTITLEMENT_HOLDERS, LIMIT_DEFAULTS, ROLE_LIMITS, ROLES, SET_ROLE_LIMITS, UPDATE_ROLE } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
@@ -196,6 +196,22 @@
         .then((x) => n === panelFor && (holders = x.entitlementHolders.filter((g) => g.active).length))
         .catch(() => {});
   });
+  // Members per role, for the list (who may see holders).
+  let members = $state<Record<string, number>>({});
+  $effect(() => {
+    if (!roles || !mayHolders) return;
+    for (const r of roles) {
+      if (r.builtIn === 'USER') continue;
+      gql(ENTITLEMENT_HOLDERS, { kind: 'ROLE', id: r.id })
+        .then((x) => (members[r.id] = x.entitlementHolders.filter((g) => g.active).length))
+        .catch(() => {});
+    }
+  });
+  let query = $state('');
+  const visible = $derived.by(() => {
+    const q = query.trim().toLowerCase();
+    return q ? sorted.filter((r) => r.name.toLowerCase().includes(q)) : sorted;
+  });
   const pickedGroups = $derived(cur ? summary(cur) : []);
   const set = $derived(panelLimits ? overrides(panelLimits) : []);
 </script>
@@ -205,31 +221,41 @@
 <svelte:window {onkeydown} />
 
 <Split label="Role" open={!!cur} onclose={() => pick(null)}>
-  <PageHead title="Roles" line="Higher positions are more senior. You change roles below your own highest one, and give only what you hold.">
+  <Bar title="Roles" count={roles ? `${count(roles.length)} ${roles.length === 1 ? 'role' : 'roles'}` : null}>
     {#snippet actions()}
-      {#if manager}<button class="ui-btn primary" type="button" onclick={() => open(null)}><Icon name="plus" size={15} />New role</button>{/if}
+      {#if manager}<button class="ui-btn primary small" type="button" onclick={() => open(null)}><Icon name="plus" size={15} />New role</button>{/if}
     {/snippet}
-  </PageHead>
+    {#snippet tools()}
+      <label class="adm-find grow">
+        <Icon name="search" size={15} />
+        <span class="sr-only">Filter roles</span>
+        <input class="ui-input" type="search" bind:value={query} placeholder="Filter by name" autocomplete="off" spellcheck="false" maxlength="50" />
+      </label>
+      {#if roles && query.trim()}<span class="ui-hint adm-num">{count(visible.length)} of {count(roles.length)}</span>{/if}
+    {/snippet}
+  </Bar>
 
   <LoadGate source={L} label="Loading roles…">
     {#snippet children()}
       {#if !roles || roles.length === 0}
         <State title="No roles yet." />
+      {:else if !visible.length}
+        <State title="Nothing matches.">No role has that name.</State>
       {:else}
+        <div class="rhead" aria-hidden="true"><span class="p">Position</span><span>Role</span><span>Flags</span><span class="m">Members</span></div>
         <ul class="adm-rows" bind:this={grid} use:gridKeys aria-label="Roles">
-          {#each sorted as r, i (r.id)}
-            {@const groups = summary(r)}
+          {#each visible as r, i (r.id)}
             <li>
               <button class="rrow" type="button" data-item={r.id} aria-current={r.id === pickedId ? 'true' : undefined}
-                tabindex={(cur ? r.id === pickedId : i === 0) ? 0 : -1} onclick={() => pick(r.id)}>
-                <span class="pos ui-num" title="Position">{count(r.position)}</span>
-                <span class="nm"><bdi><Name value={r.name} /></bdi></span>
-                <span class="chips">
-                  {#if r.builtIn}<span class="ui-chip">{BUILT_IN[r.builtIn]}</span>{/if}
-                  {#if held.has(r.id) || r.builtIn === 'ROOT'}<span class="ui-chip">Yours</span>{/if}
-                  {#if r.public}<span class="ui-chip" title="Shown on the profiles of the people who hold it">On profiles</span>{/if}
+                tabindex={(cur && visible.some((x) => x.id === pickedId) ? r.id === pickedId : i === 0) ? 0 : -1} onclick={() => pick(r.id)}>
+                <span class="pos adm-num" title="Position">{count(r.position)}</span>
+                <span class="nm"><Icon name="check" size={14} /><bdi><Name value={r.name} /></bdi></span>
+                <span class="adm-flags">
+                  {#if r.builtIn}<span>{BUILT_IN[r.builtIn]}</span>{/if}
+                  {#if held.has(r.id) || r.builtIn === 'ROOT'}<span class="on">Yours</span>{/if}
+                  {#if r.public}<span title="Shown on the profiles of the people who hold it">On profiles</span>{/if}
                 </span>
-                <span class="sum">{r.builtIn === 'ROOT' ? 'Every permission' : groups.length ? groups.map((g) => `${g.label} ${count(g.n)}/${count(g.of)}`).join(' · ') : 'No permissions'}</span>
+                <span class="mem adm-num">{r.builtIn === 'USER' ? 'Everyone' : members[r.id] === undefined ? '' : count(members[r.id])}</span>
               </button>
             </li>
           {/each}
@@ -253,36 +279,27 @@
       <div class="adm-ip-body">
         <section class="adm-sec">
           <h2 class="adm-name"><bdi><Name value={r.name} /></bdi></h2>
-          <div class="chips">
-            {#if r.builtIn}<span class="ui-chip">{BUILT_IN[r.builtIn]}</span>{/if}
-            {#if held.has(r.id) || r.builtIn === 'ROOT'}<span class="ui-chip">Yours</span>{/if}
-            {#if r.public}<span class="ui-chip">On profiles</span>{/if}
-          </div>
+          <ul class="adm-flags">
+            {#if r.builtIn}<li>{BUILT_IN[r.builtIn]}</li>{/if}
+            {#if held.has(r.id) || r.builtIn === 'ROOT'}<li class="on">Yours</li>{/if}
+            {#if r.public}<li>On profiles</li>{/if}
+          </ul>
           {#if r.description}<p class="desc"><Name value={r.description} /></p>{/if}
-        </section>
-        <section class="adm-sec">
-          <h3 class="adm-label">Facts</h3>
           <dl class="adm-kv">
             <dt>Position</dt><dd>{count(r.position)}</dd>
-            <dt>Permissions</dt><dd>{r.builtIn === 'ROOT' ? 'All' : `${count(r.permissions.length)} of ${count(permissions.length)}`}</dd>
-            {#if r.builtIn === 'USER'}
-              <dt>Holders</dt><dd>Everyone</dd>
-            {:else if mayHolders}
-              <dt>Holders</dt><dd>{holders === null ? '…' : count(holders)}{' '}<a href="/admin/entitlements?role={encodeURIComponent(r.id)}">See</a></dd>
-            {/if}
           </dl>
         </section>
         <section class="adm-sec">
-          <h3 class="adm-label">Permissions</h3>
+          <h3 class="adm-label">Permissions<span class="n">{r.builtIn === 'ROOT' ? 'All' : `${count(r.permissions.length)} of ${count(permissions.length)}`}</span></h3>
           {#if r.builtIn === 'ROOT'}
             <p class="desc">Every permission, including ones added later.</p>
           {:else if !pickedGroups.length}
             <p class="desc">No permissions.</p>
           {:else}
-            <dl class="perms">
+            <dl class="adm-kv perms">
               {#each pickedGroups as g (g.label)}
-                <dt>{g.label} <span class="ui-num">{count(g.n)}/{count(g.of)}</span></dt>
-                <dd>{g.names}</dd>
+                <dt>{g.label} <span class="adm-num">{count(g.n)}/{count(g.of)}</span></dt>
+                <dd class="txt">{g.names}</dd>
               {/each}
             </dl>
           {/if}
@@ -294,7 +311,7 @@
           </section>
         {:else if manager}
           <section class="adm-sec">
-            <h3 class="adm-label">Limits</h3>
+            <h3 class="adm-label">Limits{#if panelLimits && set.length}<span class="n">{count(set.length)} set</span>{/if}</h3>
             {#if panelLimitsFailed}
               <p class="desc">Couldn’t load this role’s limits.</p>
             {:else if !panelLimits}
@@ -308,6 +325,18 @@
             {/if}
           </section>
         {/if}
+        <section class="adm-sec">
+          <h3 class="adm-label">Members</h3>
+          <dl class="adm-kv">
+            {#if r.builtIn === 'USER'}
+              <dt>Holders</dt><dd class="txt">Everyone</dd>
+            {:else if mayHolders}
+              <dt>Holders</dt><dd>{holders === null ? '…' : count(holders)}{' '}<a class="txt" href="/admin/entitlements?role={encodeURIComponent(r.id)}">See</a></dd>
+            {:else}
+              <dt>Holders</dt><dd class="txt">Not shown</dd>
+            {/if}
+          </dl>
+        </section>
         <section class="adm-sec">
           {#if r.editable}
             <div class="adm-acts row">
@@ -387,33 +416,36 @@
 </dialog>
 
 <style>
-  /* One dense row per role: position, name, chips, then what it allows (cut to one line). */
-  .rrow { display: grid; grid-template-columns: 72px minmax(100px, 160px) auto minmax(0, 1fr); align-items: center; gap: 12px; width: 100%; height: 52px; padding: 0 16px;
-    border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
-  .pos { color: var(--dim); font-size: var(--t-small); text-align: right; }
-  .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-ui); font-weight: 500; }
+  /* One flush row per role: position, name, flags, members (mono). Picked = bold name + accent tick. */
+  .rhead, .rrow { display: grid; grid-template-columns: 72px minmax(120px, 1.2fr) minmax(0, 1.6fr) 96px; align-items: center; gap: 12px; padding: 0 12px; }
+  .rhead { min-height: 32px; font-size: var(--t-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  .rhead .p, .rhead .m, .pos, .mem { text-align: right; }
+  .rrow { width: 100%; height: 44px; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+  .pos, .mem { color: var(--muted); }
+  .nm { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: var(--t-small); font-weight: 500; }
+  .nm :global(svg) { display: none; color: var(--accent-text); flex: none; }
+  .nm bdi { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .rrow[aria-current='true'] .nm { font-weight: 700; }
-  .rrow[aria-current='true'] { box-shadow: inset 2px 0 0 var(--accent-border); }
-  .chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
-  .sum { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .rrow[aria-current='true'] .nm :global(svg) { display: block; }
   .rrow:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
   @media (hover: hover) and (pointer: fine) { .rrow:hover { background: var(--row-hover); } }
   @media (max-width: 760px) {
-    .rrow { grid-template-columns: 40px minmax(0, 1fr) auto; height: 56px; }
-    .sum { display: none; }
+    .rhead, .rrow { grid-template-columns: 84px minmax(0, 1fr) auto; }
+    .rhead span:nth-child(3), .rrow .adm-flags { display: none; }
+    .rrow { height: 48px; }
   }
 
   .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
   .desc { margin: 0; font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }
-  .perms { display: grid; gap: 2px; margin: 0; }
-  .perms dt { margin-top: 8px; font-size: var(--t-small); font-weight: 600; }
-  .perms dt .ui-num { margin-left: 6px; font-weight: 500; color: var(--dim); }
-  .perms dd { margin: 0; font-size: var(--t-fine); line-height: 1.5; color: var(--muted); }
+  .perms { grid-template-columns: minmax(0, 1fr); }
+  .perms dt { padding-bottom: 0; border-bottom: 0; color: var(--text); font-weight: 600; }
+  .perms dt .adm-num { margin-left: 6px; font-weight: 500; color: var(--dim); }
+  .perms dd { padding-top: 2px; text-align: left; font-weight: 400; font-size: var(--t-fine); line-height: 1.5; color: var(--muted); }
   .locked { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: var(--t-small); color: var(--muted); }
   .locked :global(svg) { flex: none; margin-top: 2px; }
 
   .wide { width: min(860px, calc(100vw - 24px)); }
-  .grp { display: grid; gap: 10px; }
+  .grp { display: grid; gap: 6px; }
   .grp + .grp { padding-top: 14px; border-top: 1px solid var(--border); }
   .two { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 12px; }
   .num { text-align: right; }

@@ -454,10 +454,10 @@
       <input id="ps-name" class="ps-text" type="text" autocomplete="off" spellcheck="false" placeholder="Sunset Strip" bind:value={paint.name} aria-invalid={nameShown ? 'true' : undefined} aria-describedby="ps-name-m" />
     </div>
     <div class="ui-actions">
-      <button type="button" class="ui-btn secondary" onclick={() => (importText = '', importError = null, importDialog.showModal())}><Glyph name="upload" /> Import</button>
+      <button type="button" class="ui-btn secondary small" onclick={() => (importText = '', importError = null, importDialog.showModal())}><Glyph name="upload" /> Import</button>
       {#if backend}
-        <button type="button" class="ui-btn secondary" onclick={showOpen}><Glyph name="folder" /> Open</button>
-        <button type="button" class="ui-btn primary" disabled={busy} onclick={saveToCyex} aria-describedby="ps-status">{savedId ? 'Save changes' : 'Save to cyex.tv'}</button>
+        <button type="button" class="ui-btn secondary small" onclick={showOpen}><Glyph name="folder" /> Open</button>
+        <button type="button" class="ui-btn primary small" disabled={busy} onclick={saveToCyex} aria-describedby="ps-status">{savedId ? 'Save changes' : 'Save to cyex.tv'}</button>
       {/if}
     </div>
     <p id="ps-name-m" class="ps-sub {nameShown ? 'ps-msg' : 'ps-hint'}">{nameShown ? nameIssue : savedId ? 'Editing a saved paint. Saving replaces it.' : 'A new paint. Names are unique on cyex.tv.'}</p>

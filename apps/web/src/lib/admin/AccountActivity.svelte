@@ -43,14 +43,18 @@
     <State bare kind="loading" title="Loading the log…" />
   {:else}
     {#if rows.length}
-      <ul class="ui-list">
-        {#each rows as e (e.id)}
-          <li>
-            <span class="what"><strong>{actionText(e.action)}</strong></span>
-            <span class="ui-hint ui-num when">{dateTime(e.createdAt)}{' · by '}<AccountLink id={e.actorId} /></span>
-          </li>
-        {/each}
-      </ul>
+      <table class="adm-table stack">
+        <thead><tr><th>Change</th><th>When</th><th>By</th></tr></thead>
+        <tbody>
+          {#each rows as e (e.id)}
+            <tr>
+              <td class="pk"><strong>{actionText(e.action)}</strong></td>
+              <td data-l="When" class="mono">{dateTime(e.createdAt)}</td>
+              <td data-l="By"><AccountLink id={e.actorId} /></td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
     {:else}
       <p class="box-none">Nothing has been done to this account.</p>
     {/if}
@@ -62,9 +66,8 @@
 </Box>
 
 <style>
-  .what { display: grid; flex: 1; min-width: 0; }
-  .what strong { font-weight: 600; font-size: var(--t-small); }
-  .when { flex: none; font-size: var(--t-fine); }
+  td strong { font-weight: 600; font-size: var(--t-small); }
+  .adm-table { border-top: 0; }
   .more a { display: inline-flex; align-items: center; min-height: 28px; }
-  .more { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 0; padding: 8px 16px; border-top: 1px solid var(--border); font-size: var(--t-small); }
+  .more { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 0; padding: 8px 0; border-top: 1px solid var(--border); font-size: var(--t-small); }
 </style>

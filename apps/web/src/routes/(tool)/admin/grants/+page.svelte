@@ -4,7 +4,8 @@
   // (accountsByLogin) and says which didn't match and why; Give then sends the existing grant or
   // assign call for each matched account, one after another (each audited as a single grant is),
   // and every row ends with what happened to it. Cosmetics need cosmetics.grant and a reason;
-  // roles need roles.assign or roles.manage, and only roles you may give are offered.
+  // roles need roles.assign or roles.manage, and only roles you may give are offered. The form is
+  // flat rows on the left; the inspector on the right sums up who will get it and how it went.
   import { gql } from '$lib/api';
   import AccountLink from '$lib/admin/AccountLink.svelte';
   import { BATCH_MAX, loginProblem } from '$lib/admin/bulk';
@@ -17,7 +18,8 @@
   import type { AccountsByLoginQuery, CosmeticKind } from '$lib/gql/graphql';
   import { ACCOUNTS_BY_LOGIN, ALL_ROLES, ASSIGN_ROLE, GRANT_COSMETIC } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
-  import PageHead from '$lib/tool/PageHead.svelte';
+  import Bar from '$lib/admin/ui/Bar.svelte';
+  import Split from '$lib/admin/ui/Split.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
   import { can } from '$lib/tool/session.svelte';
@@ -66,6 +68,8 @@
   const unmatched = $derived(rows?.filter((r) => !r.account).length ?? 0);
   const needsReason = $derived(what !== 'ROLE');
   const itemName = $derived(choices.find((c) => c.id === item)?.name ?? '');
+  const doneCount = $derived(rows?.filter((r) => r.result?.ok).length ?? 0);
+  const failCount = $derived(rows?.filter((r) => r.result && !r.result.ok).length ?? 0);
 
   async function check(ev?: SubmitEvent) {
     ev?.preventDefault();
@@ -116,131 +120,143 @@
 
 <svelte:head><title>Give to many - Admin - cyex.tv</title></svelte:head>
 
-<PageHead title="Give to many" line="One badge, paint or role for a list of accounts: pick what, paste who, check, give." />
-
 {#if !mayCosmetics && !mayRoles}
+  <Bar title="Give to many" />
   <State title="Nothing to give here.">This needs Give cosmetics, or Assign roles.</State>
 {:else}
-<LoadGate source={L} label="Loading what you can give…">
-{#snippet children()}
-  <div class="grid">
-    <form class="steps" onsubmit={check}>
-      <section class="ui-panel step" aria-labelledby="step-what">
-        <h2 class="adm-label" id="step-what"><span class="no ui-num">1</span>What</h2>
+<Split label="Result" open={true} onclose={() => {}} stack="top">
+  <Bar title="Give to many" count={parsed.valid ? `${count(parsed.valid)} ${parsed.valid === 1 ? 'login' : 'logins'}` : null} />
+  <LoadGate source={L} label="Loading what you can give…">
+  {#snippet children()}
+    <form onsubmit={check} aria-label="Give to many">
+      <section class="adm-flat" aria-labelledby="step-what">
+        <h2 class="adm-label" id="step-what">What to give</h2>
         {#if options.length > 1}
-          <Segmented label="What to give" options={options} value={what} onchange={(v) => (what = v)} />
+          <div class="adm-lv">
+            <span class="l">Kind</span>
+            <div class="v"><Segmented label="What to give" size="s" options={options} value={what} onchange={(v) => (what = v)} /></div>
+          </div>
         {/if}
-        <label class="ui-field">
-          <span class="ui-label">{what === 'BADGE' ? 'Badge' : what === 'PAINT' ? 'Paint' : 'Role'}</span>
-          {#if choices.length}
-            <select class="ui-input" bind:value={item} disabled={!!running}>
-              {#each choices as c (c.id)}<option value={c.id}>{clean(c.name)}</option>{/each}
-            </select>
-          {:else}
-            <span class="ui-hint">{what === 'ROLE' ? 'No role you may give.' : `No ${what === 'BADGE' ? 'badges' : 'paints'} yet.`}</span>
-          {/if}
+        <label class="adm-lv">
+          <span class="l">{what === 'BADGE' ? 'Badge' : what === 'PAINT' ? 'Paint' : 'Role'}</span>
+          <span class="v">
+            {#if choices.length}
+              <select class="ui-input" bind:value={item} disabled={!!running}>
+                {#each choices as c (c.id)}<option value={c.id}>{clean(c.name)}</option>{/each}
+              </select>
+            {:else}
+              <span class="ui-hint">{what === 'ROLE' ? 'No role you may give.' : `No ${what === 'BADGE' ? 'badges' : 'paints'} yet.`}</span>
+            {/if}
+          </span>
         </label>
         {#if needsReason}
-          <label class="ui-field">
-            <span class="ui-label">Reason</span>
-            <input class="ui-input" type="text" bind:value={reason} maxlength="500" placeholder="Event prize, November" disabled={!!running} />
-            <span class="ui-hint">Kept with each grant in the audit log.</span>
+          <label class="adm-lv">
+            <span class="l">Reason<small>Kept in the audit log</small></span>
+            <span class="v"><input class="ui-input" type="text" bind:value={reason} maxlength="500" placeholder="Event prize, November" disabled={!!running} /></span>
           </label>
         {/if}
       </section>
 
-      <section class="ui-panel step" aria-labelledby="step-who">
-        <h2 class="adm-label" id="step-who"><span class="no ui-num">2</span>Who</h2>
-        <label class="ui-field">
-          <span class="ui-label">Logins</span>
-          <textarea class="ui-input logins" rows="7" bind:value={text} spellcheck="false" autocomplete="off" disabled={!!running}
-            placeholder={'nora\nkick:lumen_fox\ntwitch:cat_jammer'} aria-describedby="logins-hint logins-count"></textarea>
-          <span class="ui-hint" id="logins-hint">One per line, or separated by commas. Write <code>twitch:</code> or <code>kick:</code> in front when a login is on both.</span>
+      <section class="adm-flat" aria-labelledby="step-who">
+        <h2 class="adm-label" id="step-who">People <span class="n" id="logins-count" aria-live="polite">
+          {#if parsed.logins.length}{count(parsed.valid)} ready{#if parsed.odd.length}<span class="miss">{' · '}{count(parsed.odd.length)} can’t be a login</span>{/if}{#if parsed.extra}<span class="miss">{' · '}{count(parsed.extra)} over the {BATCH_MAX} a check takes</span>{/if}{:else}none yet{/if}
+        </span></h2>
+        <label class="adm-lv top">
+          <span class="l">Logins<small>One per line, or separated by commas. Write <code>twitch:</code> or <code>kick:</code> first when a login is on both.</small></span>
+          <span class="v">
+            <textarea class="ui-input logins" rows="7" bind:value={text} spellcheck="false" autocomplete="off" disabled={!!running}
+              placeholder={'nora\nkick:lumen_fox\ntwitch:cat_jammer'} aria-describedby="logins-count"></textarea>
+          </span>
         </label>
-        <p class="tally ui-num" id="logins-count" aria-live="polite">
-          {#if parsed.logins.length}
-            <b>{count(parsed.valid)}</b> {parsed.valid === 1 ? 'login' : 'logins'} ready{#if parsed.odd.length}<span class="miss">{' · '}{count(parsed.odd.length)} can’t be a login</span>{/if}{#if parsed.extra}<span class="miss">{' · '}{count(parsed.extra)} over the {BATCH_MAX} a check takes</span>{/if}
-          {:else}
-            Nothing pasted yet.
-          {/if}
-        </p>
         {#if parsed.odd.length}<p class="ui-hint odd"><bdi>{parsed.odd.slice(0, 3).join(', ')}{parsed.odd.length > 3 ? ', …' : ''}</bdi></p>{/if}
-        <div class="ui-actions">
-          <button class="ui-btn secondary" type="submit" disabled={!parsed.valid || checking || !!running}>
-            {#if checking}<span class="ui-spinner small" aria-hidden="true"></span>{/if}Check logins
-          </button>
-          {#if rows}<button class="ui-btn ghost" type="button" onclick={reset} disabled={!!running}>Start over</button>{/if}
+        <div class="adm-lv">
+          <span class="l"></span>
+          <div class="v">
+            <button class="ui-btn secondary small" type="submit" disabled={!parsed.valid || checking || !!running}>
+              {#if checking}<span class="ui-spinner small" aria-hidden="true"></span>{/if}Check logins
+            </button>
+            {#if rows}<button class="ui-btn ghost small" type="button" onclick={reset} disabled={!!running}>Start over</button>{/if}
+          </div>
         </div>
       </section>
     </form>
 
-    <section class="ui-panel results" aria-labelledby="res-title" aria-busy={checking}>
-      <div class="rhead">
-        <h2 id="res-title" class="adm-label"><span class="no ui-num">3</span>Check and give</h2>
-        {#if rows}
-          <span class="ui-hint ui-num">{count(rows.length - unmatched)} found{#if unmatched}{' · '}<span class="miss">{count(unmatched)} not found</span>{/if}</span>
-        {/if}
-      </div>
+    <section class="adm-flat" aria-labelledby="res-title" aria-busy={checking}>
+      <h2 id="res-title" class="adm-label">Check
+        {#if rows}<span class="n">{count(rows.length - unmatched)} found{#if unmatched}{' · '}<span class="miss">{count(unmatched)} not found</span>{/if}</span>{/if}
+      </h2>
       {#if !rows}
-        <State bare title="Nothing checked yet.">Check the logins: each one shows the account it names, or why there is none.</State>
+        <p class="ui-hint none">Nothing checked yet. Each login shows the account it names, or why there is none.</p>
       {:else}
         {#if stale}<p class="ui-hint stale"><Icon name="refresh" size={14} /> The list changed since the check. Check again before giving.</p>{/if}
         <ul class="adm-rows res">
           {#each rows as r (r.login)}
             <li class:bad={!r.account}>
-              <span class="login ui-mono"><bdi>{r.login}</bdi></span>
+              <span class="login adm-num"><bdi>{r.login}</bdi></span>
               <span class="who">
                 {#if r.account}<AccountLink id={r.account.id} name={r.account.displayName} />{:else}<span class="ui-error">{loginProblem(r.problem)}</span>{/if}
               </span>
               <span class="rs">
-                {#if r.result}<span class="ui-chip" class:ok={r.result.ok} class:no={!r.result.ok}>{r.result.text}</span>{/if}
+                {#if r.result}<span class="adm-flags"><span class:ok={r.result.ok} class:warn={!r.result.ok}>{r.result.text}</span></span>{/if}
               </span>
             </li>
           {/each}
         </ul>
-        <footer class="give">
-          {#if running}
-            <span class="ui-hint ui-num" aria-live="polite">Giving {count(running.done)} of {count(running.total)}…</span>
-          {:else}
-            <span class="ui-hint">{#if matched.length}{clean(itemName) || 'Nothing picked'} goes to {count(matched.length)} {matched.length === 1 ? 'account' : 'accounts'}.{:else}Nobody left to give it to.{/if}</span>
-          {/if}
-          <button class="ui-btn primary" type="button" onclick={give}
-            disabled={!!running || stale || !matched.length || !item || (needsReason && !reason.trim())}>
-            Give to {count(matched.length)}
-          </button>
-        </footer>
       {/if}
     </section>
-  </div>
-{/snippet}
-</LoadGate>
+  {/snippet}
+  </LoadGate>
+
+  {#snippet panel()}
+    <div class="adm-ip-head"><span class="adm-label">Result</span></div>
+    <div class="adm-ip-body">
+      <section class="adm-sec">
+        <h2 class="adm-name"><bdi>{itemName ? clean(itemName) : 'Nothing picked'}</bdi></h2>
+        <p class="adm-flags"><span>{what === 'BADGE' ? 'Badge' : what === 'PAINT' ? 'Paint' : 'Role'}</span></p>
+      </section>
+      <section class="adm-sec">
+        <h3 class="adm-label">Who gets it</h3>
+        <dl class="adm-kv">
+          <dt>Logins pasted</dt><dd>{count(parsed.valid)}</dd>
+          <dt>Accounts found</dt><dd>{rows ? count(rows.length - unmatched) : 'Not checked'}</dd>
+          {#if rows}<dt>Not found</dt><dd>{count(unmatched)}</dd>{/if}
+          <dt>Will get it</dt><dd>{rows ? count(matched.length) : 'n/a'}</dd>
+          {#if rows && doneCount + failCount > 0}<dt>Given</dt><dd>{count(doneCount)}</dd><dt>Didn’t take it</dt><dd>{count(failCount)}</dd>{/if}
+        </dl>
+      </section>
+      <section class="adm-sec">
+        {#if running}
+          <p class="ui-hint adm-num" aria-live="polite">Giving {count(running.done)} of {count(running.total)}…</p>
+        {:else if rows}
+          <p class="ui-hint">{#if matched.length}{clean(itemName) || 'Nothing picked'} goes to {count(matched.length)} {matched.length === 1 ? 'account' : 'accounts'}.{:else}Nobody left to give it to.{/if}</p>
+        {/if}
+        <div class="adm-acts">
+          <button class="ui-btn primary" type="button" onclick={give}
+            disabled={!rows || !!running || stale || !matched.length || !item || (needsReason && !reason.trim())}>
+            Give to {count(matched.length)}
+          </button>
+        </div>
+      </section>
+    </div>
+  {/snippet}
+</Split>
 {/if}
 
 <style>
-  .grid { display: grid; grid-template-columns: minmax(280px, 400px) minmax(0, 1fr); gap: 16px; align-items: start; }
-  @media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
-  .steps { display: grid; gap: 16px; min-width: 0; }
-  .step, .results { display: grid; gap: 12px; padding: 16px; min-width: 0; }
-  .step h2, .results h2 { display: flex; align-items: center; gap: 8px; }
-  .no { display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1px solid var(--border-strong); border-radius: var(--radius); font-size: 11px; letter-spacing: 0; color: var(--muted); }
-  .logins { resize: vertical; min-height: 140px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; }
+  form { display: grid; }
+  .logins { resize: vertical; min-height: 140px; width: 100%; font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; }
   @media (pointer: coarse) { .logins { font-size: 16px; } }
   code { font-size: 12px; }
-  .tally { margin: 0; font-size: var(--t-small); color: var(--muted); }
-  .tally b { color: var(--text); }
-  .odd { margin: -6px 0 0; overflow-wrap: anywhere; }
-  .rhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-  .rhead h2 { margin: 0; }
+  .adm-lv .v .ui-input { flex: 1 1 200px; min-width: 0; }
+  .adm-lv.top { align-items: start; }
+  .odd { margin: 0; overflow-wrap: anywhere; }
+  .none { margin: 0; }
   .miss { color: var(--red); }
   .stale { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--yellow); }
-  .res li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 44px; padding: 0 12px; }
-  .login { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+  .res li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 40px; padding: 0; }
+  .login { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .who .ui-error { margin: 0; font-size: var(--t-small); }
-  .rs .ui-chip { text-transform: none; letter-spacing: 0; }
-  .rs .ok { color: var(--green); }
-  .rs .no { color: var(--red); }
-  .give { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-top: 4px; }
   .ui-spinner.small { width: 13px; height: 13px; }
   @media (max-width: 520px) {
     .res li { grid-template-columns: minmax(0, 1fr) auto; padding-block: 6px; }

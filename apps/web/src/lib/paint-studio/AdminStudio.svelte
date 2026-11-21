@@ -4,7 +4,7 @@
   import { replaceState } from '$app/navigation';
   import State from '$lib/components/State.svelte';
   import { forgetCatalog } from '$lib/cosmetics/store.svelte';
-  import PageHead from '$lib/tool/PageHead.svelte';
+  import Bar from '$lib/admin/ui/Bar.svelte';
   import { notify } from '$lib/tool/notices.svelte';
   import { can } from '$lib/tool/session.svelte';
   import { apiBackend, type SavedPaint } from './backend';
@@ -33,11 +33,7 @@
     {#snippet actions()}<a class="ui-btn secondary" href="/admin/cosmetics/paints">Back to paints</a>{/snippet}
   </State>
 {:else}
-  <PageHead
-    title={editing ? 'Edit paint' : 'New paint'}
-    line="Gradients and animated pictures, checked against what cyex.tv accepts as you go."
-    back={{ href: '/admin/cosmetics/paints', label: 'Paints' }}
-  />
+  <Bar title={editing ? 'Edit paint' : 'New paint'} back={{ href: '/admin/cosmetics/paints', label: 'Paints' }} />
   <!-- read once on mount: after the first save the address changes, the open paint stays -->
   <PaintStudio {backend} {paintId} onsaved={saved} />
 {/if}

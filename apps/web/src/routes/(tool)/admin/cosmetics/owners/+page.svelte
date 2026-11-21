@@ -15,15 +15,18 @@
   import BadgeIcon from '$lib/cosmetics/BadgeIcon.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { loadCatalog } from '$lib/cosmetics/store.svelte';
-  import { clean, iso } from '$lib/format';
+  import { clean, count, iso } from '$lib/format';
   import type { GrantKind, Platform } from '$lib/gql/graphql';
   import { ALL_ROLES, ENTITLEMENT_HOLDERS, REVOKE_COSMETIC, USER } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
-  import PageHead from '$lib/tool/PageHead.svelte';
+  import Bar from '$lib/admin/ui/Bar.svelte';
+  import Split from '$lib/admin/ui/Split.svelte';
+  import IconButton from '$lib/components/IconButton.svelte';
+  import { gridKeys } from '$lib/admin/ui/pick';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
-  import { can } from '$lib/tool/session.svelte';
+  import { can, session } from '$lib/tool/session.svelte';
 
   type Kind = 'badge' | 'paint' | 'role';
   const allowed = can('entitlements.view') || can('cosmetics.grant');
@@ -106,6 +109,13 @@
       throw err;
     }
   }
+  const sample = $derived(session.me?.identities[0]?.displayName ?? 'cyex.tv');
+  function onkeydown(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || !itemId || e.defaultPrevented || document.querySelector('dialog[open]')) return;
+    if ((e.target as HTMLElement | null)?.closest('input, textarea, select')) return;
+    e.preventDefault();
+    go({ item: '' });
+  }
   const KINDS = $derived([
     { value: 'badge' as Kind, label: 'Badges', icon: 'badge' as const },
     { value: 'paint' as Kind, label: 'Paints', icon: 'palette' as const },
@@ -113,68 +123,120 @@
   ]);
 </script>
 
-<svelte:head><title>Owners - Admin - cyex.tv</title></svelte:head>
+<svelte:head><title>{current ? `${clean(current.name)} - Owners` : 'Owners'} - Admin - cyex.tv</title></svelte:head>
 
-<PageHead title="Owners" line="Who holds a badge, paint or role, how they got it and since when." />
+<svelte:window onkeydown={onkeydown} />
 
-{#if !allowed}
-  <State level={2} title="No access here.">This needs See where things came from (entitlements.view) or Give cosmetics.</State>
-{:else}
-  <div class="adm-toolbar" role="search">
-    <Segmented label="Kind" size="s" compact options={KINDS} value={kind} onchange={(v) => { filter = ''; go({ kind: v === 'badge' ? '' : v, item: '' }); }} />
-    <label class="adm-find find">
-      <Icon name="search" size={15} />
-      <span class="sr-only">Search {kind}s</span>
-      <input class="ui-input" type="search" bind:value={filter} placeholder="Search {kind}s" autocomplete="off" spellcheck="false" />
-    </label>
-    <label class="which">
-      <span class="sr-only">Which {kind}</span>
-      <select class="ui-input" value={current ? itemId : ''} disabled={!list.length} onchange={(e) => go({ item: e.currentTarget.value })}>
-        {#if !current}<option value="" disabled>{C.data ? (list.length ? `Pick a ${kind}` : filter ? 'Nothing matches' : `No ${kind}s yet`) : 'Loading…'}</option>{/if}
-        {#each list as x (x.id)}<option value={x.id}>{clean(x.name)}</option>{/each}
-      </select>
-    </label>
-    <form class="who" onsubmit={openAccount}>
-      <label class="adm-find">
-        <Icon name="user" size={15} />
-        <span class="sr-only">An account: everything it owns</span>
-        <input class="ui-input" bind:value={who} oninput={() => (notFound = false)} placeholder="Account login or ID" autocomplete="off" spellcheck="false" />
-      </label>
-      <button class="ui-btn secondary" type="submit" disabled={!who.trim() || finding}>{finding ? 'Looking…' : 'Open its graph'}</button>
-    </form>
-  </div>
-  {#if notFound}<p class="ui-hint miss" role="status">Nobody has signed in with that login.</p>{/if}
+<Split label="Owners" open={allowed && !!itemId} onclose={() => go({ item: '' })}>
+  <Bar title="Owners" count={allowed && C.data ? `${count(list.length)} ${kind}${list.length === 1 ? '' : 's'}` : null}>
+    {#snippet tools()}
+      {#if allowed}
+        <Segmented label="Kind" size="s" compact options={KINDS} value={kind} onchange={(v) => { filter = ''; go({ kind: v === 'badge' ? '' : v, item: '' }); }} />
+        <label class="adm-find find">
+          <Icon name="search" size={15} />
+          <span class="sr-only">Search {kind}s</span>
+          <input class="ui-input" type="search" bind:value={filter} placeholder="Search {kind}s" autocomplete="off" spellcheck="false" />
+        </label>
+        {#if itemId}<label class="which">
+          <span class="sr-only">Which {kind}</span>
+          <select class="ui-input" value={current ? itemId : ''} disabled={!list.length} onchange={(e) => go({ item: e.currentTarget.value })}>
+            {#if !current}<option value="" disabled>{C.data ? (list.length ? `Pick a ${kind}` : filter ? 'Nothing matches' : `No ${kind}s yet`) : 'Loadingâ€¦'}</option>{/if}
+            {#each list as x (x.id)}<option value={x.id}>{clean(x.name)}</option>{/each}
+          </select>
+        </label>{/if}
+        <form class="who" role="search" onsubmit={openAccount}>
+          <label class="adm-find">
+            <Icon name="user" size={15} />
+            <span class="sr-only">An account: everything it owns</span>
+            <input class="ui-input" bind:value={who} oninput={() => (notFound = false)} placeholder="Login or ID" autocomplete="off" spellcheck="false" />
+          </label>
+          <button class="ui-btn secondary small" type="submit" disabled={!who.trim() || finding}>{finding ? 'Lookingâ€¦' : 'Open its graph'}</button>
+        </form>
+      {/if}
+    {/snippet}
+  </Bar>
 
-  {#if !itemId}
-    <State title="Pick an item.">Its holders show here, with how and when they got it.</State>
+  {#if !allowed}
+    <State level={2} title="No access here.">This needs See where things came from (entitlements.view) or Give cosmetics.</State>
   {:else}
-    <div class="ihead">
-      <h2 class="adm-name">
-        {#if current?.badge}<BadgeIcon badge={current.badge} size={22} />{/if}
-        {#if current?.paint}<PaintedName name={current.name} paint={current.paint} />{:else}<bdi>{clean(current?.name ?? H.data?.find((g) => g.itemName)?.itemName ?? itemId)}</bdi>{/if}
-      </h2>
-      <a class="ui-btn ghost small" href="/admin/entitlements?{kind}={encodeURIComponent(itemId)}"><Icon name="network" size={14} />As a graph</a>
-    </div>
-    <LoadGate source={H} label="Looking up holders…">
-      {#snippet children(grants)}
-        {#if grants}
-          <HoldersTable {grants} itemName={current?.name ?? itemId} onrevoke={mayRevoke && kind !== 'role' ? (g) => { target = g; dialog?.open(); } : undefined} />
-        {/if}
-      {/snippet}
-    </LoadGate>
+    {#if notFound}<p class="ui-hint miss" role="status">Nobody has signed in with that login.</p>{/if}
+
+    {#if !itemId}
+      {#if C.data && !list.length}
+        <State title={filter ? 'Nothing matches.' : `No ${kind}s yet.`} />
+      {:else}
+        <ul class="adm-sheet" style="--cell: 168px" use:gridKeys aria-label="{kind === 'role' ? 'Roles' : kind === 'paint' ? 'Paints' : 'Badges'}">
+          {#each list as x, i (x.id)}
+            <li>
+              <button class="adm-cell tile" type="button" data-item={x.id} tabindex={i === 0 ? 0 : -1} onclick={() => go({ item: x.id })}>
+                <span class="pic">
+                  {#if x.badge}<BadgeIcon badge={x.badge} size={32} />{:else if x.paint}<PaintedName name={sample} paint={x.paint} />{:else}<Icon name="shield" size={22} />{/if}
+                </span>
+                <span class="nm"><bdi>{clean(x.name)}</bdi></span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    {:else}
+      <LoadGate source={H} label="Looking up holdersâ€¦">
+        {#snippet children(grants)}
+          {#if grants}
+            <HoldersTable {grants} itemName={current?.name ?? itemId} onrevoke={mayRevoke && kind !== 'role' ? (g) => { target = g; dialog?.open(); } : undefined} />
+          {/if}
+        {/snippet}
+      </LoadGate>
+    {/if}
   {/if}
-{/if}
+
+  {#snippet empty()}
+    <div class="adm-ip-head"><span class="adm-label">Owners</span></div>
+    <p class="none">Pick a {kind} to see who holds it, how they got it and since when.</p>
+  {/snippet}
+
+  {#snippet panel()}
+    {#if itemId}
+      <div class="adm-ip-head">
+        <span class="adm-label">{kind === 'role' ? 'Role' : kind === 'paint' ? 'Paint' : 'Badge'}</span>
+        <IconButton label="Close" icon="x" size="s" onclick={() => go({ item: '' })} />
+      </div>
+      <div class="adm-ip-body">
+        <section class="adm-sec">
+          <h2 class="adm-name">
+            {#if current?.badge}<BadgeIcon badge={current.badge} size={22} />{/if}
+            {#if current?.paint}<PaintedName name={current.name} paint={current.paint} />{:else}<bdi>{clean(current?.name ?? H.data?.find((g) => g.itemName)?.itemName ?? itemId)}</bdi>{/if}
+          </h2>
+        </section>
+        <section class="adm-sec">
+          <h3 class="adm-label">Facts</h3>
+          <dl class="adm-kv">
+            <dt>Held now</dt><dd>{H.data ? count(H.data.filter((g) => g.active).length) : 'â€¦'}</dd>
+            <dt>Ever</dt><dd>{H.data ? count(H.data.length) : 'â€¦'}</dd>
+            <dt>ID</dt><dd class="mono">{itemId}</dd>
+          </dl>
+        </section>
+        <section class="adm-sec">
+          <div class="adm-acts row">
+            <a class="ui-btn secondary small" href="/admin/entitlements?{kind}={encodeURIComponent(itemId)}"><Icon name="network" size={14} />As a graph</a>
+          </div>
+        </section>
+      </div>
+    {/if}
+  {/snippet}
+</Split>
 
 <ReasonDialog bind:this={dialog} title="Take it away?" hint="If they show it, it stops at once. The reason goes in the audit log." action="Revoke" danger optional onsubmit={revoke} />
 
 <style>
-  .find { flex: 1 1 160px; max-width: 220px; }
+  :global(.adm-shell .adm-toolbar) .find { flex: 1 1 140px; max-width: 200px; }
   .which { flex: 1 1 180px; max-width: 240px; min-width: 0; }
   .which select { width: 100%; }
-  .who { display: flex; gap: 8px; margin-left: auto; flex: 0 1 320px; min-width: 0; }
-  .who .adm-find { flex: 1; }
-  .miss { margin: -8px 0 12px; }
-  .ihead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
-  .ihead h2 { display: flex; align-items: center; gap: 10px; min-width: 0; }
-  @media (max-width: 760px) { .find, .which, .who { max-width: none; flex-basis: 100%; margin-left: 0; } }
+  .who { display: flex; gap: 8px; margin-left: auto; flex: 1 1 220px; min-width: 0; }
+  :global(.adm-shell .adm-toolbar) .who .adm-find { flex: 1; max-width: none; }
+  .miss { margin: 0 0 12px; }
+  .tile { height: 100px; justify-items: center; text-align: center; }
+  .tile .pic { height: 44px; max-width: 100%; overflow: hidden; font-size: 18px; font-weight: 700; }
+  .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
+  .adm-name { display: flex; align-items: center; gap: 10px; }
+  @media (max-width: 760px) { :global(.adm-shell .adm-toolbar) .find, .which, .who { max-width: none; flex-basis: 100%; margin-left: 0; } }
 </style>

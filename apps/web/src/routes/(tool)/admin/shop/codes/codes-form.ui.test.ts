@@ -30,7 +30,7 @@ async function open() {
   await fireEvent.click(btn);
   return document.querySelectorAll('dialog')[0] as HTMLDialogElement;
 }
-const field = (d: HTMLElement, label: string) => [...d.querySelectorAll('label.ui-field')].find((l) => l.textContent?.startsWith(label))!.querySelector('input,select') as HTMLInputElement;
+const field = (d: HTMLElement, label: string) => [...d.querySelectorAll('label.adm-lv')].find((l) => l.textContent?.startsWith(label))!.querySelector('input,select') as HTMLInputElement;
 
 describe('make-a-batch form', () => {
   it('focuses the first invalid field on the first submit, and announces the errors', async () => {

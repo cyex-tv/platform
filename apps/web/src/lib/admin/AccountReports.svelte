@@ -47,7 +47,7 @@
           <span class="what">
             <strong>
               {#if r.emote}<a href="/me/emotes/{encodeURIComponent(r.emote.id)}"><bdi>{clean(r.emote.name)}</bdi></a>{:else}Deleted emote{/if}
-              <span class="ui-chip {r.state === 'OPEN' ? 'pending' : r.state === 'ACTIONED' ? 'rejected' : ''}">{STATE[r.state]}</span>
+              <span class="adm-flags"><span class:warn={r.state === 'ACTIONED'} class:on={r.state === 'OPEN'}>{STATE[r.state]}</span></span>
             </strong>
             <span class="reason">“<bdi>{clean(r.reason)}</bdi>”</span>
             <span class="ui-hint ui-num">
@@ -86,7 +86,7 @@
   .what { display: grid; gap: 1px; flex: 1; min-width: 0; }
   .what strong { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; font-size: var(--t-small); }
   .what strong a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .what strong .ui-chip { flex: none; }
+  .what strong .adm-flags { flex: none; }
   .reason { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-small); color: var(--muted); }
   .what .ui-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* a touch target of at least 24px (WCAG 2.5.8) */

@@ -98,54 +98,64 @@
     <AnnouncementPreview {kind} {text} href={safeLink(linkUrl)} {linkLabel} emote={emotePic} emoteSet={!!emote.trim()} badge={emote.trim() ? null : badge} />
   </section>
   <section class="adm-sec">
-    <div class="ui-field">
-      <span class="ui-label">Kind</span>
-      <Segmented label="Kind" options={KINDS} value={kind} onchange={(v) => (kind = v)} size="s" />
-      <span class="ui-hint">{HINT[kind]}</span>
+    <h3 class="adm-label">Line</h3>
+    <div class="adm-lv">
+      <span class="l">Kind</span>
+      <div class="v"><Segmented label="Kind" options={KINDS} value={kind} onchange={(v) => (kind = v)} size="s" /><span class="ui-hint">{HINT[kind]}</span></div>
     </div>
-    <label class="ui-field">
-      <span class="ui-label">Line</span>
-      <input class="ui-input" bind:value={text} aria-invalid={errors.text ? 'true' : undefined} />
-      {#if errors.text}<span class="ui-error">{errors.text}</span>{:else}<span class="ui-hint"><span class="ui-num">{[...text.trim()].length}</span> of {TEXT_MAX}. Plain text, one line.</span>{/if}
+    <label class="adm-lv">
+      <span class="l">Text<small><span class="adm-num">{[...text.trim()].length}</span> of {TEXT_MAX}</small></span>
+      <div class="v">
+        <input class="ui-input" bind:value={text} aria-invalid={errors.text ? 'true' : undefined} />
+        {#if errors.text}<span class="ui-error">{errors.text}</span>{/if}
+      </div>
+    </label>
+    <label class="adm-lv">
+      <span class="l">Link<small>Optional</small></span>
+      <div class="v">
+        <input class="ui-input" bind:value={linkUrl} placeholder="/shop" autocomplete="off" aria-invalid={errors.link ? 'true' : undefined} />
+        {#if errors.link}<span class="ui-error">{errors.link}</span>{/if}
+      </div>
+    </label>
+    <label class="adm-lv">
+      <span class="l">Link words<small>Empty: Learn more</small></span>
+      <div class="v">
+        <input class="ui-input" bind:value={linkLabel} maxlength="40" placeholder="Learn more" aria-invalid={errors.label ? 'true' : undefined} />
+        {#if errors.label}<span class="ui-error">{errors.label}</span>{/if}
+      </div>
     </label>
   </section>
   <section class="adm-sec">
-    <label class="ui-field">
-      <span class="ui-label">Link</span>
-      <input class="ui-input" bind:value={linkUrl} placeholder="/shop" autocomplete="off" aria-invalid={errors.link ? 'true' : undefined} />
-      {#if errors.link}<span class="ui-error">{errors.link}</span>{:else}<span class="ui-hint">Optional. A path here, or https://.</span>{/if}
+    <h3 class="adm-label">Beside the line</h3>
+    <label class="adm-lv">
+      <span class="l">Emote<small>Link or ID, approved only</small></span>
+      <div class="v">
+        <input class="ui-input" bind:value={emote} placeholder="Emote link or ID" autocomplete="off" aria-invalid={errors.emote ? 'true' : undefined} />
+        {#if errors.emote}<span class="ui-error">{errors.emote}</span>{/if}
+      </div>
     </label>
-    <label class="ui-field">
-      <span class="ui-label">Link words</span>
-      <input class="ui-input" bind:value={linkLabel} maxlength="40" placeholder="Learn more" aria-invalid={errors.label ? 'true' : undefined} />
-      {#if errors.label}<span class="ui-error">{errors.label}</span>{:else}<span class="ui-hint">Empty: “Learn more”.</span>{/if}
-    </label>
-  </section>
-  <section class="adm-sec">
-    <label class="ui-field">
-      <span class="ui-label">Emote</span>
-      <input class="ui-input" bind:value={emote} placeholder="Emote link or ID" autocomplete="off" aria-invalid={errors.emote ? 'true' : undefined} />
-      {#if errors.emote}<span class="ui-error">{errors.emote}</span>{:else}<span class="ui-hint">Optional, shown small. Approved emotes only.</span>{/if}
-    </label>
-    <label class="ui-field">
-      <span class="ui-label">Badge</span>
-      <select class="ui-input" bind:value={badgeId} disabled={!!emote.trim()}>
-        <option value="">No badge</option>
-        {#each [...(catalog?.badges.values() ?? [])] as b (b.id)}<option value={b.id}>{clean(b.name)}</option>{/each}
-      </select>
-      <span class="ui-hint">{emote.trim() ? 'The emote shows instead.' : 'Optional, shown small.'}</span>
+    <label class="adm-lv">
+      <span class="l">Badge<small>{emote.trim() ? 'The emote shows instead' : 'Optional'}</small></span>
+      <div class="v">
+        <select class="ui-input" bind:value={badgeId} disabled={!!emote.trim()}>
+          <option value="">No badge</option>
+          {#each [...(catalog?.badges.values() ?? [])] as b (b.id)}<option value={b.id}>{clean(b.name)}</option>{/each}
+        </select>
+      </div>
     </label>
   </section>
   <section class="adm-sec">
-    <label class="ui-field">
-      <span class="ui-label">Starts</span>
-      <input class="ui-input" type="datetime-local" bind:value={starts} />
-      <span class="ui-hint">Empty: as soon as you save.</span>
+    <h3 class="adm-label">Window</h3>
+    <label class="adm-lv">
+      <span class="l">Starts<small>Empty: when saved</small></span>
+      <div class="v"><input class="ui-input" type="datetime-local" bind:value={starts} /></div>
     </label>
-    <label class="ui-field">
-      <span class="ui-label">Ends</span>
-      <input class="ui-input" type="datetime-local" bind:value={ends} aria-invalid={errors.ends ? 'true' : undefined} />
-      {#if errors.ends}<span class="ui-error">{errors.ends}</span>{:else}<span class="ui-hint">Empty: until you end it.</span>{/if}
+    <label class="adm-lv">
+      <span class="l">Ends<small>Empty: until you end it</small></span>
+      <div class="v">
+        <input class="ui-input" type="datetime-local" bind:value={ends} aria-invalid={errors.ends ? 'true' : undefined} />
+        {#if errors.ends}<span class="ui-error">{errors.ends}</span>{/if}
+      </div>
     </label>
   </section>
   <section class="adm-sec">
@@ -158,6 +168,13 @@
 
 <style>
   form { display: grid; }
-  form .adm-sec { gap: 14px; }
-  .problem { margin: 0; font-size: var(--t-small); color: var(--red); }
+  form .adm-sec { gap: 0; }
+  form .adm-sec > .adm-label { margin-bottom: 6px; }
+  .adm-lv { grid-template-columns: 112px minmax(0, 1fr); align-items: start; padding: 8px 0; }
+  .adm-lv > .l { padding-top: 7px; }
+  .adm-lv > .v { display: grid; gap: 4px; }
+  .adm-lv > .v :global(.ui-input) { width: 100%; }
+  .adm-lv > .v :global(.ui-input[type='datetime-local']) { font-family: var(--font-mono); font-size: var(--t-small); }
+  @media (max-width: 599.98px) { .adm-lv { grid-template-columns: minmax(0, 1fr); } .adm-lv > .l { padding-top: 0; } }
+  .problem { margin: 0 0 8px; font-size: var(--t-small); color: var(--red); }
 </style>

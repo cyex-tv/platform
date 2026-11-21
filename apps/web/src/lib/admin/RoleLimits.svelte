@@ -74,24 +74,25 @@
 </div>
 
 <style>
-  .groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr)); gap: 8px; align-items: start; }
-  .group { margin: 0; padding: 0 0 6px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--bg); min-width: 0; }
-  .head { display: flex; align-items: center; min-height: 36px; padding: 0 10px; margin-bottom: 4px;
-    border-bottom: 1px solid var(--border); font-size: var(--text-sub); font-weight: 600; }
+  /* Flat groups: an uppercase head, then label/value rows with hairlines (the .adm-lv shape). */
+  .groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 0 28px; align-items: start; }
+  .group { margin: 0; padding: 0 0 8px; border: 0; background: none; min-width: 0; }
+  .head { display: flex; align-items: center; min-height: 36px; padding: 0; margin-bottom: 2px;
+    border-bottom: 1px solid var(--border); font-size: var(--t-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
   ul { list-style: none; margin: 0; padding: 0; }
-  .item { position: relative; display: grid; gap: 2px; padding: 2px 10px; }
-  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 36px; font-size: var(--text-sub); }
+  .item { position: relative; display: grid; gap: 2px; padding: 2px 0; border-bottom: 1px solid var(--border); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; font-size: var(--t-small); }
   .lbl { cursor: pointer; }
   .lbl { min-width: 0; }
   .item.set .lbl { font-weight: 600; }
   .box { display: inline-flex; align-items: center; gap: 6px; flex: none; }
   .num { width: 84px; height: 30px; min-height: 30px; padding: 0 8px; text-align: right; }
-  .unit { width: 64px; font-size: 12px; color: var(--dim); }
+  .unit { width: 64px; font-size: var(--t-fine); color: var(--dim); }
   .ui-error { font-size: 12px; text-align: right; }
   @media (pointer: coarse) { .row { min-height: 44px; } .num { height: 40px; } }
 
   /* The tooltip: below the row, after the usual delay on hover; at once on keyboard focus. */
-  .tip { position: absolute; left: 10px; right: 10px; top: calc(100% + 2px); z-index: var(--z-tip); display: block;
+  .tip { position: absolute; left: 0; right: 0; top: calc(100% + 2px); z-index: var(--z-tip); display: block;
     padding: 7px 9px; border-radius: var(--radius-btn); background: var(--elevated, var(--surface)); color: var(--text);
     border: 1px solid var(--border-strong); box-shadow: var(--shadow-pop); font-size: 12px; line-height: 1.45; font-weight: 400;
     opacity: 0; transform: translateY(-2px); pointer-events: none; transition: opacity var(--fast), transform var(--fast); }

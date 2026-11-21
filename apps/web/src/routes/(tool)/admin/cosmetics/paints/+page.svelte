@@ -23,7 +23,7 @@
   import Owners from '$lib/admin/Owners.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
-  import PageHead from '$lib/tool/PageHead.svelte';
+  import Bar from '$lib/admin/ui/Bar.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
   import { can, session } from '$lib/tool/session.svelte';
@@ -124,11 +124,19 @@
 <svelte:window {onkeydown} />
 
 <Split label="Paint" open={!!picked} onclose={() => pick(null)}>
-  <PageHead title="Paints" line="Name paints people show in chat. Deleting one takes it from everyone.">
+  <Bar title="Paints" count={L.data ? `${count(L.data.length)} ${L.data.length === 1 ? 'paint' : 'paints'}` : null}>
     {#snippet actions()}
-      {#if manage}<a class="ui-btn primary" href="/admin/cosmetics/paints/studio"><Icon name="plus" size={15} />New paint</a>{/if}
+      {#if manage}<a class="ui-btn primary small" href="/admin/cosmetics/paints/studio"><Icon name="plus" size={15} />New paint</a>{/if}
     {/snippet}
-  </PageHead>
+    {#snippet tools()}
+      <label class="adm-find grow">
+        <Icon name="search" size={15} />
+        <span class="sr-only">Filter paints</span>
+        <input class="ui-input" type="search" bind:value={query} placeholder="Filter by name" autocomplete="off" spellcheck="false" maxlength="64" />
+      </label>
+      {#if L.data && query.trim()}<span class="ui-hint adm-num">{count(shown.length)} of {count(L.data.length)}</span>{/if}
+    {/snippet}
+  </Bar>
 
   <LoadGate source={L} label="Loading paints…">
     {#snippet children(paints)}
@@ -137,35 +145,26 @@
           Make the first one in the paint studio.
           {#snippet actions()}{#if manage}<a class="ui-btn primary" href="/admin/cosmetics/paints/studio">New paint</a>{/if}{/snippet}
         </State>
+      {:else if !shown.length}
+        <State title="Nothing matches.">No paint has that name.</State>
       {:else}
-        <div class="adm-toolbar">
-          <label class="adm-find grow">
-            <Icon name="search" size={15} />
-            <span class="sr-only">Filter paints</span>
-            <input class="ui-input" type="search" bind:value={query} placeholder="Filter by name" autocomplete="off" spellcheck="false" maxlength="64" />
-          </label>
-          <span class="ui-hint ui-num">{count(shown.length)} of {count(paints.length)}</span>
-        </div>
-        {#if !shown.length}
-          <State title="Nothing matches.">No paint has that name.</State>
-        {:else}
-          <ul class="tiles" bind:this={grid} use:gridKeys aria-label="Paints">
-            {#each shown as p, i (p.id)}
-              <li>
-                <button class="tile" type="button" data-item={p.id} aria-current={p.id === pickedId ? 'true' : undefined}
-                  tabindex={(pickedId && shown.some((x) => x.id === pickedId) ? p.id === pickedId : i === 0) ? 0 : -1} onclick={() => pick(p.id)}>
-                  <span class="pic"><PaintedName name={sample} paint={p} /></span>
-                  <span class="nm"><bdi>{clean(p.name)}</bdi></span>
-                  <span class="meta">
-                    <span>{kindLabel(p)}</span>
-                    {#if grant && owners[p.id] !== undefined}<span>{count(owners[p.id])} {owners[p.id] === 1 ? 'owner' : 'owners'}</span>{/if}
-                    {#if manage && lacks(p)}<span class="old" title="Made before the 512 px size">Old sizes</span>{/if}
-                  </span>
-                </button>
-              </li>
-            {/each}
-          </ul>
-        {/if}
+        <ul class="adm-sheet tiles" style="--cell: 200px" bind:this={grid} use:gridKeys aria-label="Paints">
+          {#each shown as p, i (p.id)}
+            <li>
+              <button class="adm-cell tile" type="button" data-item={p.id} aria-current={p.id === pickedId ? 'true' : undefined}
+                tabindex={(pickedId && shown.some((x) => x.id === pickedId) ? p.id === pickedId : i === 0) ? 0 : -1} onclick={() => pick(p.id)}>
+                <span class="tick"><Icon name="check" size={14} /></span>
+                <span class="pic"><PaintedName name={sample} paint={p} /></span>
+                <span class="nm"><bdi>{clean(p.name)}</bdi></span>
+                <span class="sub">
+                  <span>{kindLabel(p)}</span>
+                  {#if grant && owners[p.id] !== undefined}<span class="adm-num">{count(owners[p.id])}</span>{/if}
+                  {#if manage && lacks(p)}<span class="old" title="Made before the 512 px size">Old sizes</span>{/if}
+                </span>
+              </button>
+            </li>
+          {/each}
+        </ul>
       {/if}
     {/snippet}
   </LoadGate>
@@ -184,16 +183,20 @@
       </div>
       <div class="adm-ip-body">
         <section class="adm-sec">
-          <div class="adm-stage big"><PaintedName name={sample} paint={p} /></div>
+          <div class="strip" aria-label="Preview">
+            {#each [14, 20, 30] as px (px)}
+              <span class="step"><span class="smp" style="font-size: {px}px"><PaintedName name={sample} paint={p} /></span><span class="ui-hint adm-num">{px}</span></span>
+            {/each}
+          </div>
           <h2 class="adm-name"><bdi>{clean(p.name)}</bdi></h2>
         </section>
         <section class="adm-sec">
           <h3 class="adm-label">Facts</h3>
           <dl class="adm-kv">
-            <dt>Kind</dt><dd>{kindLabel(p)}</dd>
+            <dt>Kind</dt><dd class="txt">{kindLabel(p)}</dd>
             {#if p.kind === 'LINEAR_GRADIENT'}<dt>Angle</dt><dd>{p.angle}°</dd>{/if}
-            <dt>Repeat</dt><dd>{p.repeat ? 'Yes' : 'No'}</dd>
-            <dt>Shadows</dt><dd>{shadowsLabel(p)}</dd>
+            <dt>Repeat</dt><dd class="txt">{p.repeat ? 'Yes' : 'No'}</dd>
+            <dt>Shadows</dt><dd class="txt">{shadowsLabel(p)}</dd>
             {#if grant}<dt>Owners</dt><dd>{owners[p.id] === undefined ? '…' : count(owners[p.id])}</dd>{/if}
             <dt>ID</dt><dd class="mono">{p.id}</dd>
           </dl>
@@ -233,24 +236,19 @@
 }} />
 
 <style>
-  /* The tiles: the sample name painted on a well, the paint's name, kind and owners. The picked one has an accent hairline and a bold name. */
-  .tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(188px, 1fr)); gap: 8px; }
-  .tile { display: grid; justify-items: center; align-content: start; gap: 4px; width: 100%; height: 136px; padding: 10px;
-    border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); color: var(--text); font: inherit; cursor: pointer;
-    transition: border-color var(--fast), background-color var(--fast); }
-  .pic { display: flex; align-items: center; justify-content: center; width: 100%; height: 56px; margin-bottom: 4px; padding: 0 8px; overflow: hidden;
-    border-radius: var(--radius); background: var(--bg); font-size: 20px; font-weight: 700; }
-  .nm { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-small); font-weight: 600; }
-  .meta { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 8px; min-height: 18px; max-height: 36px; overflow: hidden; font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
+  /* The contact sheet (admin.css .adm-sheet): the sample name painted on its own ground, the name, kind and owners. */
+  .tile { height: 120px; }
+  .tile .pic { width: 100%; height: 56px; margin-bottom: 4px; overflow: hidden; font-size: 20px; font-weight: 700; }
+  .tile .sub { min-height: 18px; }
+  .tile .sub > span + span::before { content: '·'; margin-right: 6px; color: var(--dim); }
   .old { color: var(--yellow); }
-  .tile[aria-current='true'] { border-color: var(--accent-border); }
-  .tile[aria-current='true'] .nm { font-weight: 700; }
-  .tile:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   .tile:active { opacity: .6; transition: none; }
-  @media (hover: hover) and (pointer: fine) { .tile:hover { border-color: var(--border-strong); background: var(--surface-hover); } }
 
   .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
-  .adm-stage.big { min-height: 120px; background: var(--bg); font-size: 30px; font-weight: 700; overflow: hidden; }
+  .strip { display: grid; border: 1px solid var(--border); }
+  .strip .step { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 52px; padding: 8px 12px; overflow: hidden; font-weight: 700; }
+  .strip .step + .step { border-top: 1px solid var(--border); }
+  .smp { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
   .sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .owners { margin: 0 -16px -12px; border-top: 1px solid var(--border); }
 </style>

@@ -113,11 +113,11 @@
 {/if}
 
 <style>
-  .add { display: grid; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+  .add { display: grid; gap: 6px; padding: 8px 0 12px; border-bottom: 1px solid var(--border); }
   textarea { resize: vertical; min-height: 56px; background: var(--bg); }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
-  .empty { margin: 0; padding: 12px 16px; font-size: var(--t-small); color: var(--muted); }
-  .notes > li { align-items: flex-start; }
+  .empty { margin: 0; padding: 12px 0; font-size: var(--t-small); color: var(--muted); }
+  .notes > li { align-items: flex-start; padding-left: 0; padding-right: 0; }
   .note { display: grid; gap: 2px; flex: 1; min-width: 0; }
   .body { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--t-small); }
 </style>

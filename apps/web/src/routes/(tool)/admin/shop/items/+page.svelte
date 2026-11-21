@@ -1,6 +1,7 @@
 <script lang="ts">
-  // Admin: every shop item, hidden and scheduled ones too (shop.manage). A dense table: contents,
-  // state (on sale, hidden, scheduled, ended, sold out), price, stock and sale window. The picked
+  // Admin: every shop item, hidden and scheduled ones too (shop.manage), as a contact sheet: the
+  // picture, the name, the price and the state as a flag word (on sale, hidden, scheduled, ended,
+  // sold out). The picked
   // item (?item=<id>) opens in the inspector with its facts and Edit, View, Delete. New item and
   // Edit share one dialog; Delete is soft (orders stay) and asks twice. "View" opens the item as
   // the shop shows it, which also works for a hidden one. Arrows move over the rows, Enter picks,
@@ -15,7 +16,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import State from '$lib/components/State.svelte';
   import { loadCatalog, type Catalog } from '$lib/cosmetics/store.svelte';
-  import { clean, count, date, dateTime, iso } from '$lib/format';
+  import { clean, count, dateTime, iso } from '$lib/format';
   import type { ShopItemFieldsFragment } from '$lib/gql/graphql';
   import { CREATE_SHOP_ITEM, DELETE_SHOP_ITEM, SHOP_ITEMS, UPDATE_SHOP_ITEM } from '$lib/queries';
   import CosmeticsPick from '$lib/shop/CosmeticsPick.svelte';
@@ -26,7 +27,7 @@
   import Gate from '$lib/shop/Gate.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
-  import PageHead from '$lib/tool/PageHead.svelte';
+  import Bar from '$lib/admin/ui/Bar.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
 
@@ -36,6 +37,12 @@
   });
 
   let busy = $state(false);
+  const plural = (n: number, one: string, many: string) => `${count(n)} ${n === 1 ? one : many}`;
+  let query = $state('');
+  const shown = (all: ShopItemFieldsFragment[]) => {
+    const q = query.trim().toLowerCase();
+    return q ? all.filter((i) => i.name.toLowerCase().includes(q)) : all;
+  };
 
   // The form: new (editing null) or edit.
   let dialog: HTMLDialogElement;
@@ -161,20 +168,13 @@
     e.preventDefault();
     unpick();
   }
-  function rowKey(e: KeyboardEvent, id: string) {
-    if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
-      e.preventDefault();
-      pick(id);
-    }
-  }
 
-  const plural = (n: number, one: string, many: string) => `${count(n)} ${n === 1 ? one : many}`;
   const contents = (i: ShopItemFieldsFragment) =>
     [i.badges.length ? plural(i.badges.length, 'badge', 'badges') : '', i.paints.length ? plural(i.paints.length, 'paint', 'paints') : '']
       .filter(Boolean)
       .join(' and ');
   const stockOf = (i: ShopItemFieldsFragment) => (i.stockLimit != null ? `${count(i.stockLeft ?? 0)} of ${count(i.stockLimit)}` : 'No limit');
-  const sale = (i: ShopItemFieldsFragment) => (i.activeFrom || i.activeTo ? `${i.activeFrom ? date(i.activeFrom) : 'Now'} to ${i.activeTo ? date(i.activeTo) : 'no end'}` : 'Always');
+  const sold = (i: ShopItemFieldsFragment) => (i.stockLimit != null ? count(i.stockLimit - (i.stockLeft ?? 0)) : 'n/a');
 </script>
 
 <svelte:head><title>{picked ? `${clean(picked.name)} - Shop items` : 'Shop items'} - Admin - cyex.tv</title></svelte:head>
@@ -183,46 +183,52 @@
 
 <Gate permission="shop.manage">
 <Split label="Shop item" open={!!picked} onclose={() => pick(null)}>
-  <PageHead title="Shop items" line="What is for sale: a bundle of badges and paints with a price.">
+  <Bar title="Shop items" count={L.data ? plural(L.data.items.length, 'item', 'items') : null}>
     {#snippet actions()}
-      <button class="ui-btn primary" type="button" disabled={!L.data} onclick={() => L.data && edit(null, L.data.catalog)}><Icon name="plus" size={15} />New item</button>
+      <button class="ui-btn primary small" type="button" disabled={!L.data} onclick={() => L.data && edit(null, L.data.catalog)}><Icon name="plus" size={15} />New item</button>
     {/snippet}
-  </PageHead>
+    {#snippet tools()}
+      <label class="adm-find grow">
+        <Icon name="search" size={15} />
+        <span class="sr-only">Filter items</span>
+        <input class="ui-input" type="search" bind:value={query} placeholder="Filter by name" autocomplete="off" spellcheck="false" maxlength="64" />
+      </label>
+      {#if L.data && query.trim()}<span class="ui-hint adm-num">{count(shown(L.data.items).length)} of {count(L.data.items.length)}</span>{/if}
+    {/snippet}
+  </Bar>
 
   <LoadGate source={L} label="Loading items…">
     {#snippet children(d)}
+      {@const rows = shown(d.items)}
       {#if !d.items.length}
         <State title="Nothing for sale yet.">
           Make the first item: pick its badges and paints, set a price and paste the Paddle price ID.
           {#snippet actions()}<button class="ui-btn primary" type="button" onclick={() => edit(null, d.catalog)}>New item</button>{/snippet}
         </State>
+      {:else if !rows.length}
+        <State title="Nothing matches.">No item has that name.</State>
       {:else}
-        <table class="adm-table stack">
-          <thead>
-            <tr><th>Item</th><th style="width:80px">State</th><th class="num" style="width:76px">Price</th><th class="num" style="width:88px">Stock</th><th style="width:166px">Sale</th></tr>
-          </thead>
-          <tbody bind:this={body} use:gridKeys={'tr[data-item]'}>
-            {#each d.items as i, n (i.id)}
-              {@const st = itemState(i)}
-              <tr data-row data-item={i.id} aria-selected={i.id === pickedId} tabindex={(picked ? i.id === pickedId : n === 0) ? 0 : -1}
-                onclick={() => pick(i.id)} onkeydown={(e) => rowKey(e, i.id)}>
-                <td class="ell pk">
-                  <span class="lead-in">
-                    <span class="pics" aria-hidden="true">{#each i.badges.slice(0, 3) as b (b.id)}<BadgeIcon badge={b} size={20} />{/each}</span>
-                    <span class="txt">
-                      <span class="nm"><bdi>{clean(i.name)}</bdi></span>
-                      <span class="sub">{contents(i)}</span>
-                    </span>
-                  </span>
-                </td>
-                <td data-l="State"><span class:live={st === 'on_sale'} class="state">{ITEM_STATE_TEXT[st]}</span></td>
-                <td class="num" data-l="Price">{price(i.priceCents, i.currency)}</td>
-                <td class="num dim" data-l="Stock">{stockOf(i)}</td>
-                <td class="ell dim" data-l="Sale">{sale(i)}</td>
-              </tr>
-            {/each}
-          </tbody>
-        </table>
+        <ul class="adm-sheet tiles" style="--cell: 170px" bind:this={body} use:gridKeys aria-label="Shop items">
+          {#each rows as i, n (i.id)}
+            {@const st = itemState(i)}
+            <li>
+              <button class="adm-cell tile" type="button" data-item={i.id} aria-current={i.id === pickedId ? 'true' : undefined}
+                tabindex={(picked && rows.some((x) => x.id === pickedId) ? i.id === pickedId : n === 0) ? 0 : -1} onclick={() => pick(i.id)}>
+                <span class="tick"><Icon name="check" size={14} /></span>
+                <span class="pic">
+                  {#if i.badges.length}
+                    <span class="pics" aria-hidden="true">{#each i.badges.slice(0, 3) as b (b.id)}<BadgeIcon badge={b} size={32} />{/each}</span>
+                  {:else}<Icon name="palette" size={28} />{/if}
+                </span>
+                <span class="nm"><bdi>{clean(i.name)}</bdi></span>
+                <span class="sub"><span class="adm-num pr">{price(i.priceCents, i.currency)}</span></span>
+                <span class="sub">
+                  <span class="adm-flags"><span class:ok={st === 'on_sale'} class:warn={st === 'sold_out' || st === 'deleted'}>{ITEM_STATE_TEXT[st]}</span>{#if i.stockLimit != null}<span class="adm-num">{count(i.stockLeft ?? 0)} left</span>{/if}</span>
+                </span>
+              </button>
+            </li>
+          {/each}
+        </ul>
       {/if}
     {/snippet}
   </LoadGate>
@@ -248,12 +254,12 @@
         <section class="adm-sec">
           <h3 class="adm-label">Facts</h3>
           <dl class="adm-kv">
-            <dt>State</dt><dd>{ITEM_STATE_TEXT[st]}</dd>
+            <dt>State</dt><dd class="txt">{ITEM_STATE_TEXT[st]}</dd>
             <dt>Price</dt><dd>{price(i.priceCents, i.currency)}</dd>
+            <dt>Window</dt><dd>{i.activeFrom || i.activeTo ? `${i.activeFrom ? dateTime(i.activeFrom) : 'Now'} to ${i.activeTo ? dateTime(i.activeTo) : 'no end'}` : 'Always'}</dd>
             <dt>Stock</dt><dd>{stockOf(i)}{i.stockLimit != null ? ' left' : ''}</dd>
-            <dt>On sale from</dt><dd>{i.activeFrom ? dateTime(i.activeFrom) : 'Already'}</dd>
-            <dt>On sale until</dt><dd>{i.activeTo ? dateTime(i.activeTo) : 'No end'}</dd>
-            <dt>Listed</dt><dd>{i.visible ? 'Yes' : 'No'}</dd>
+            <dt>Sold</dt><dd>{sold(i)}</dd>
+            <dt>Listed</dt><dd class="txt">{i.visible ? 'Yes' : 'No'}</dd>
             <dt>Sort order</dt><dd>{i.sortOrder}</dd>
             <dt>Paddle price</dt><dd class="mono">{i.paddlePriceId}</dd>
             <dt>ID</dt><dd class="mono">{i.id}</dd>
@@ -287,62 +293,58 @@
     <div class="body">
       <h2 id="item-title">{editing ? `Edit ${iso(editing.name)}` : 'New shop item'}</h2>
       <h3 class="adm-label">Item</h3>
-      <label class="ui-field">
-        <span class="ui-label">Name</span>
-        <input class="ui-input" bind:value={name} maxlength="64" aria-invalid={errors.name ? 'true' : undefined} />
-        {#if errors.name}<span class="ui-error">{errors.name}</span>{/if}
-      </label>
-      <label class="ui-field">
-        <span class="ui-label">Description</span>
-        <textarea class="ui-input" rows="3" maxlength="500" bind:value={description}></textarea>
-      </label>
-      <h3 class="adm-label sect">Price</h3>
-      <div class="two">
-        <label class="ui-field">
-          <span class="ui-label">Price</span>
-          <input class="ui-input" inputmode="decimal" bind:value={priceText} placeholder="4,99" aria-invalid={errors.price ? 'true' : undefined} />
-          {#if errors.price}<span class="ui-error">{errors.price}</span>{/if}
+      <div>
+        <label class="adm-lv">
+          <span class="l">Name</span>
+          <span class="v"><input class="ui-input" bind:value={name} maxlength="64" aria-invalid={errors.name ? 'true' : undefined} />{#if errors.name}<span class="ui-error">{errors.name}</span>{/if}</span>
         </label>
-        <label class="ui-field">
-          <span class="ui-label">Currency</span>
-          <input class="ui-input" bind:value={currency} maxlength="3" autocapitalize="characters" aria-invalid={errors.currency ? 'true' : undefined} />
-          {#if errors.currency}<span class="ui-error">{errors.currency}</span>{/if}
+        <label class="adm-lv top">
+          <span class="l">Description</span>
+          <span class="v"><textarea class="ui-input" rows="3" maxlength="500" bind:value={description}></textarea></span>
         </label>
       </div>
-      <label class="ui-field">
-        <span class="ui-label">Paddle price ID</span>
-        <input class="ui-input mono" bind:value={priceId} placeholder="pri_01abc…" autocomplete="off" spellcheck="false" aria-invalid={errors.priceId ? 'true' : undefined} />
-        {#if errors.priceId}<span class="ui-error">{errors.priceId}</span>{/if}
-      </label>
+      <h3 class="adm-label sect">Price</h3>
+      <div>
+        <label class="adm-lv">
+          <span class="l">Price</span>
+          <span class="v"><input class="ui-input adm-num" inputmode="decimal" bind:value={priceText} placeholder="4,99" aria-invalid={errors.price ? 'true' : undefined} />{#if errors.price}<span class="ui-error">{errors.price}</span>{/if}</span>
+        </label>
+        <label class="adm-lv">
+          <span class="l">Currency</span>
+          <span class="v"><input class="ui-input" bind:value={currency} maxlength="3" autocapitalize="characters" aria-invalid={errors.currency ? 'true' : undefined} />{#if errors.currency}<span class="ui-error">{errors.currency}</span>{/if}</span>
+        </label>
+        <label class="adm-lv">
+          <span class="l">Paddle price ID</span>
+          <span class="v"><input class="ui-input mono" bind:value={priceId} placeholder="pri_01abc…" autocomplete="off" spellcheck="false" aria-invalid={errors.priceId ? 'true' : undefined} />{#if errors.priceId}<span class="ui-error">{errors.priceId}</span>{/if}</span>
+        </label>
+      </div>
       <h3 class="adm-label sect">Contents</h3>
       {#if catalog}
         <CosmeticsPick badges={[...catalog.badges.values()]} paints={[...catalog.paints.values()]} bind:badgeIds bind:paintIds error={errors.cosmetics} />
       {/if}
       <h3 class="adm-label sect">Availability</h3>
-      <div class="two">
-        <label class="ui-field">
-          <span class="ui-label">On sale from (empty: now)</span>
-          <input class="ui-input" type="datetime-local" bind:value={from} />
+      <div>
+        <label class="adm-lv">
+          <span class="l">On sale from<small>Empty: now</small></span>
+          <span class="v"><input class="ui-input" type="datetime-local" bind:value={from} /></span>
         </label>
-        <label class="ui-field">
-          <span class="ui-label">On sale until (empty: no end)</span>
-          <input class="ui-input" type="datetime-local" bind:value={to} aria-invalid={errors.window ? 'true' : undefined} />
-          {#if errors.window}<span class="ui-error">{errors.window}</span>{/if}
+        <label class="adm-lv">
+          <span class="l">On sale until<small>Empty: no end</small></span>
+          <span class="v"><input class="ui-input" type="datetime-local" bind:value={to} aria-invalid={errors.window ? 'true' : undefined} />{#if errors.window}<span class="ui-error">{errors.window}</span>{/if}</span>
+        </label>
+        <label class="adm-lv">
+          <span class="l">Copies<small>Empty: no limit</small></span>
+          <span class="v"><input class="ui-input adm-num" inputmode="numeric" bind:value={stock} placeholder="No limit" aria-invalid={errors.stock ? 'true' : undefined} />{#if errors.stock}<span class="ui-error">{errors.stock}</span>{/if}</span>
+        </label>
+        <label class="adm-lv">
+          <span class="l">Sort order<small>Lower first</small></span>
+          <span class="v"><input class="ui-input adm-num" inputmode="numeric" bind:value={sort} aria-invalid={errors.sort ? 'true' : undefined} />{#if errors.sort}<span class="ui-error">{errors.sort}</span>{/if}</span>
+        </label>
+        <label class="adm-lv">
+          <span class="l">Listed in the shop</span>
+          <span class="v"><input type="checkbox" bind:checked={visible} /></span>
         </label>
       </div>
-      <div class="two">
-        <label class="ui-field">
-          <span class="ui-label">Copies (empty: no limit)</span>
-          <input class="ui-input" inputmode="numeric" bind:value={stock} placeholder="No limit" aria-invalid={errors.stock ? 'true' : undefined} />
-          {#if errors.stock}<span class="ui-error">{errors.stock}</span>{/if}
-        </label>
-        <label class="ui-field">
-          <span class="ui-label">Sort order (lower first)</span>
-          <input class="ui-input" inputmode="numeric" bind:value={sort} aria-invalid={errors.sort ? 'true' : undefined} />
-          {#if errors.sort}<span class="ui-error">{errors.sort}</span>{/if}
-        </label>
-      </div>
-      <label class="ui-check"><input type="checkbox" bind:checked={visible} />Listed in the shop</label>
       {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
     </div>
     <footer>
@@ -354,17 +356,15 @@
 </Gate>
 
 <style>
-  .stack { table-layout: fixed; }
-  tr[aria-selected='true'] .pk { font-weight: 700; }
+  /* The contact sheet (admin.css .adm-sheet): the item's badges, the name, the price, the state. */
+  .tile { height: 150px; justify-items: center; text-align: center; }
+  .tile .nm, .tile .sub { justify-content: center; max-width: 100%; }
+  .tile .pic { color: var(--dim); }
+  .pics { display: flex; gap: 4px; align-items: center; }
+  .pr { color: var(--text); font-weight: 500; }
+  .tile .adm-flags { justify-content: center; }
+  .tile:active { opacity: .6; transition: none; }
   .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
-  .lead-in { display: flex; align-items: center; gap: 10px; min-width: 0; }
-  .pics { display: flex; flex: none; gap: 2px; min-width: 20px; }
-  tr[aria-selected='true'] .nm { font-weight: 700; }
-  .txt { display: grid; min-width: 0; line-height: 1.25; }
-  .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-  .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-fine); color: var(--dim); font-weight: 400; }
-  .state { color: var(--muted); }
-  .state.live { color: var(--text); font-weight: 700; }
   .desc { margin: 0; font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }
   .bundle { list-style: none; margin: 0; padding: 0; display: grid; }
   .bundle li { display: flex; align-items: center; gap: 10px; min-height: 36px; border-bottom: 1px solid var(--border); font-size: var(--t-small); }
@@ -376,11 +376,11 @@
   form { max-height: calc(100dvh - 24px); grid-template-rows: minmax(0, 1fr) auto; }
   .body { overflow-y: auto; overscroll-behavior: contain; }
   h2 { margin: 0; font-size: 18px; }
-  .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
   .sect { padding-top: 12px; border-top: 1px solid var(--border); }
   .mono { font-family: var(--font-mono); }
+  .adm-lv .v .ui-input { flex: 1 1 180px; min-width: 0; }
+  .adm-lv .v .ui-error { flex-basis: 100%; }
+  .adm-lv.top { align-items: start; }
   textarea { resize: vertical; min-height: 72px; }
   .problem { margin: 0; font-size: var(--t-small); color: var(--red); }
-  @media (max-width: 520px) { .two { grid-template-columns: minmax(0, 1fr); } }
-  /* Phones: each row stacks, its cells labelled. */
 </style>
