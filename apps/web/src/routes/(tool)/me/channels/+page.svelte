@@ -1,4 +1,12 @@
 <script lang="ts">
+  // Channels: your channel on each platform you signed in with, and the channels of accounts you
+  // edit, each with the set its chat shows and whether chatters' personal emotes show. In your
+  // profile's frame (MeFrame); the panel sums them up and links to what they depend on.
+  import Icon from '$lib/components/Icon.svelte';
+  import PanelBlock from '$lib/components/PanelBlock.svelte';
+  import MeFrame from '$lib/profile/MeFrame.svelte';
+  import { count } from '$lib/format';
+  import { sectionHref } from '$lib/profile/rows';
   import Name from '$lib/components/Name.svelte';
   import { clean, iso } from '$lib/format';
   import { ownerSetsHref, permissionLabels } from '$lib/tool/editors';
@@ -54,6 +62,9 @@
   }
 
   const platformName = (p: string) => (p === 'TWITCH' ? 'Twitch' : 'Kick');
+  const own = $derived(L.data?.myChannels ?? []);
+  const setName = (id: string | null | undefined) => (id ? [...sets, ...(L.data?.editorSets ?? [])].find((s) => s.id === id)?.name : undefined);
+  const showing = $derived([...own, ...managed.flatMap((g) => g.channels)]);
 </script>
 
 <svelte:head><title>Channels - cyex.tv</title></svelte:head>
@@ -88,7 +99,41 @@
     </section>
 {/snippet}
 
-<div class="narrow">
+{#snippet side()}
+  <PanelBlock title="In numbers">
+    <dl class="kv">
+      <dt>Your channels</dt><dd>{L.data ? count(own.length) : '–'}</dd>
+      <dt>Channels you edit</dt><dd>{L.data ? count(managed.reduce((n, g) => n + g.channels.length, 0)) : '–'}</dd>
+      <dt>Your channel sets</dt><dd>{L.data ? count(channelSets.length) : '–'}</dd>
+    </dl>
+  </PanelBlock>
+  {#if showing.length}
+    <PanelBlock title="Chat shows">
+      <ul class="shows">
+        {#each showing as ch (ch.platform + ch.platformChannelId)}
+          {@const set = setName(ch.activeSetId)}
+          <li>
+            <Icon name={ch.platform === 'KICK' ? 'kick' : 'twitch'} size={16} />
+            <span class="who"><bdi>{clean(ch.login)}</bdi></span>
+            <span class="what">{#if set && ch.activeSetId}<a href="/sets/{encodeURIComponent(ch.activeSetId)}"><bdi>{clean(set)}</bdi></a>{:else}No set{/if}</span>
+          </li>
+        {/each}
+      </ul>
+    </PanelBlock>
+  {/if}
+  <PanelBlock title="Related">
+    <p class="pb-hint">A change reaches chat within seconds. Connect another platform in Settings to add its channel.</p>
+    <div class="pb-actions">
+      <a class="ui-btn secondary" href="/me/settings/account#conn-h"><Icon name="link" size={15} />Connections</a>
+      <div class="pair">
+        <a class="ui-btn secondary" href={sectionHref(session.me?.id ?? '', 'sets')}><Icon name="folder" size={15} />Your sets</a>
+        <a class="ui-btn secondary" href="/me/editors"><Icon name="circle-user" size={15} />Editors</a>
+      </div>
+    </div>
+  </PanelBlock>
+{/snippet}
+
+<MeFrame title="Channels" label="About your channels" panel={side}>
   <PageHead title="Channels" line="Your channel on each platform you signed in with. Pick the set its chat shows." />
 
   <LoadGate source={L} label="Loading your channels…">
@@ -114,7 +159,7 @@
   {/if}
   {/snippet}
   </LoadGate>
-</div>
+</MeFrame>
 
 <style>
   .body { padding: 2px 14px 8px; }
@@ -128,4 +173,12 @@
   header .ui-hint { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .group { display: grid; gap: 2px; margin: 12px 0 -6px; font-size: var(--t-ui); font-weight: 600; scroll-margin-top: 80px; }
   .group .ui-hint { font-weight: 400; }
+  .shows { list-style: none; margin: 0; padding: 0; display: grid; }
+  .shows li { display: flex; align-items: center; gap: 10px; height: 40px; min-width: 0; font-size: var(--t-small); }
+  .shows li + li { border-top: 1px solid var(--border); }
+  .shows :global(svg) { flex: none; color: var(--dim); }
+  .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .what { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+  .what a { color: var(--muted); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
+  .ui-stack { max-width: 760px; }
 </style>

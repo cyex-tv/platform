@@ -1,10 +1,14 @@
 <script lang="ts">
+  // An emote's editor, in the Inspector shape: the picture at its sizes and the details form on
+  // the left; on the right its status, facts and id, adding it to a set, giving it to another
+  // account (with open hand-over requests) and deleting it. The owner, the account's editors with
+  // Manage, and staff with the matching permissions.
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { ApiError, gql, type EmoteVisibility } from '$lib/api';
   import { problemTitle } from '$lib/components/problem';
-  import { ready } from '$lib/emote';
-  import { clean, date, iso } from '$lib/format';
+  import { ready, size } from '$lib/emote';
+  import { clean, count, date, iso } from '$lib/format';
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
   import {
     ACCEPT_EMOTE_TRANSFER,
@@ -32,7 +36,9 @@
   import { can, session } from '$lib/tool/session.svelte';
   import { STATE_HINT, STATE_LABEL } from '$lib/tool/state';
   import { fail, notify } from '$lib/tool/notices.svelte';
-  import EmoteFacts from '$lib/components/emote/EmoteFacts.svelte';
+  import PanelBlock from '$lib/components/PanelBlock.svelte';
+  import InspectorLayout from '$lib/shell/InspectorLayout.svelte';
+  import { formats, kind } from '$lib/components/emote/emote-page';
   import SizeRow from '$lib/components/emote/SizeRow.svelte';
   import { transferLine } from '$lib/components/emote/emote-page';
   import Icon from '$lib/components/Icon.svelte';
@@ -257,98 +263,54 @@
       adding = false;
     }
   }
+  const kinds = $derived(emote ? formats(emote.files) : []);
+  const one = $derived(emote ? size(emote) : { width: 0, height: 0 });
 </script>
 
 <svelte:head><title>{L.cause ? problemTitle(L.cause, true, 'No emote here') : `${emote?.name ?? 'Emote'} - cyex.tv`}</title></svelte:head>
 
-<LoadGate
-  source={L}
-  label="Loading the emote…"
-  level={1}
-  home={{ href: sectionHref(session.me?.id ?? '', 'uploads'), label: 'Your emotes' }}
-  missing={{ title: 'No emote here.', body: 'It may have been deleted, or it isn’t yours to see.' }}
->
-{#snippet children()}
-{#if emote}
-  <PageHead
-    name
-    title={clean(emote.name)}
-    back={mine ? { href: '/me', label: 'Your emotes' } : manages ? { href: ownerHome, label: `${clean(emote.owner?.displayName ?? '')}’s emotes` } : can('emotes.review') ? { href: '/admin', label: 'Admin' } : { href: '/search', label: 'Emotes' }}
-  >
-    {#snippet line()}
-      <span class="ui-chip {emote!.state.toLowerCase()}">{STATE_LABEL[emote!.state]}</span>
-      Uploaded <span>{date(emote!.createdAt)}</span>{#if !mine && emote!.owner && (manages || canGive)}{' · '}<bdi>{clean(emote!.owner.displayName)}</bdi>’s emote, you edit their account{/if}
-    {/snippet}
-    {#snippet actions()}
-      {#if emote!.state === 'APPROVED'}
-        <a class="ui-btn secondary" href="/emotes/{emote!.id}"><Icon name="arrow-right" size={15} />Public page</a>
-      {/if}
-    {/snippet}
-  </PageHead>
-  <div class="layout">
-    <div class="ui-stack">
-      <section class="ui-card sizes" aria-label="Picture">
-        {#if ready(emote)}
-          <SizeRow {emote} />
+{#snippet side()}
+  {#if emote}
+    <PanelBlock title="Status">
+      <p class="state"><span class="ui-chip {emote.state.toLowerCase()}">{STATE_LABEL[emote.state]}</span></p>
+      <p class="pb-hint">{STATE_HINT[emote.state]}</p>
+    </PanelBlock>
+    <PanelBlock title="Facts">
+      <dl class="kv">
+        {#if emote.channelCount > 0}<dt>Channels using it</dt><dd>{count(emote.channelCount)}</dd>{/if}
+        <dt>Type</dt><dd>{kind(emote)}</dd>
+        {#if kinds.length}<dt>{kinds.length > 1 ? 'Formats' : 'Format'}</dt><dd>{kinds.join(', ')}</dd>{/if}
+        {#if emote.files.length}<dt>Size at 1x</dt><dd>{one.width} × {one.height} px</dd>{/if}
+        <dt>Uploaded</dt><dd><time datetime={emote.createdAt}>{date(emote.createdAt)}</time></dd>
+        {#if emote.owner && !mine}<dt>Owner</dt><dd><a class="who" href={ownerHome}><bdi>{clean(emote.owner.displayName)}</bdi></a></dd>{/if}
+        <dt>ID</dt><dd class="ui-mono id">{emote.id}</dd>
+      </dl>
+    </PanelBlock>
+
+    {#if emote.state !== 'REJECTED' && emote.state !== 'TAKEN_DOWN'}
+      <PanelBlock title="Add to a set">
+        {#if sets.length}
+          <div class="add">
+            <select class="ui-input" bind:value={target} aria-label="Set">
+              {#each sets as s}<option value={s.id}>{iso(s.name)} ({s.kind === 'PERSONAL' ? 'personal' : 'channel'})</option>{/each}
+            </select>
+            <button class="ui-btn secondary" type="button" disabled={adding} onclick={addTo}>Add</button>
+          </div>
+        {:else if setsFailed}
+          <RetryNote onretry={loadSets}>Couldn’t load your sets.</RetryNote>
         {:else}
-          <p class="ui-hint">{slow ? 'The files are taking longer than usual. Reload in a minute.' : 'The files are still being made. This takes a few seconds.'}</p>
+          <p class="pb-hint">It’s in all your sets already, or you have none yet. <a href="/me/sets">Your sets</a></p>
         {/if}
-      </section>
-      <section class="ui-card" aria-label="Status">
-        <div class="ui-row"><div><strong>State</strong><span class="ui-hint">{STATE_HINT[emote.state]}</span></div></div>
-        <div class="ui-row"><div><strong>ID</strong></div><span class="ui-mono id">{emote.id}</span></div>
-      </section>
-      <EmoteFacts {emote} channels={emote.channelCount > 0 ? emote.channelCount : null} />
-    </div>
+      </PanelBlock>
+    {/if}
 
-    <div class="ui-stack">
-      {#if canEdit}
-        <form class="ui-card ui-form" onsubmit={save} novalidate>
-          <h2>Details and visibility</h2>
-          <label class="ui-field">
-            <span class="ui-label">Name</span>
-            <input class="ui-input" bind:value={name} maxlength="100" spellcheck="false" aria-invalid={nameError ? 'true' : undefined} />
-            {#if nameError}<span class="ui-error">{nameError}</span>{/if}
-          </label>
-          <div class="ui-field">
-            <TagInput label="Tags" showLabel {tags} onchange={(t) => (tags = t)} max={TAG_MAX} clean={cleanTag}
-              placeholder="cat, dance" hint="Enter or a comma adds a tag. Up to {TAG_MAX}." disabled={saving} id="edit-tags" />
-            {#if tagError}<span class="ui-error">{tagError}</span>{/if}
-          </div>
-          <EmoteFlags id="edit" bind:zeroWidth bind:visibility bind:nsfw disabled={saving} />
-          <div class="ui-actions">
-            <button class="ui-btn primary" type="submit" disabled={saving || !changed || !!nameError || !!tagError}>
-              {saving ? 'Saving…' : 'Save'}
-            </button>
-          </div>
-        </form>
-      {/if}
+    {#if grantsFailed}
+      <RetryNote onretry={loadGrants}>Couldn’t load which accounts you edit, so some actions (like giving this emote away) may be missing.</RetryNote>
+    {/if}
 
-      {#if emote.state !== 'REJECTED' && emote.state !== 'TAKEN_DOWN'}
-        <section class="ui-card">
-          <h2>Add to a set</h2>
-          {#if sets.length}
-            <div class="add">
-              <select class="ui-input" bind:value={target} aria-label="Set">
-                {#each sets as s}<option value={s.id}>{iso(s.name)} ({s.kind === 'PERSONAL' ? 'personal' : 'channel'})</option>{/each}
-              </select>
-              <button class="ui-btn secondary" type="button" disabled={adding} onclick={addTo}>Add</button>
-            </div>
-          {:else if setsFailed}
-            <RetryNote onretry={loadSets}>Couldn’t load your sets.</RetryNote>
-          {:else}
-            <p class="ui-hint">It’s in all your sets already, or you have none yet. <a href="/me/sets">Your sets</a></p>
-          {/if}
-        </section>
-      {/if}
-
-      {#if grantsFailed}
-        <RetryNote onretry={loadGrants}>Couldn’t load which accounts you edit, so some actions (like giving this emote away) may be missing.</RetryNote>
-      {/if}
-
-      {#if (canGive && (receivers.length || !mine)) || requests.length}
-        <section class="ui-card" id="transfer">
-          <h2>Give to another account</h2>
+    {#if (canGive && (receivers.length || !mine)) || requests.length}
+      <PanelBlock title="Give to another account">
+        <div id="transfer" class="give">
           {#if requests.length}
             <ul class="requests">
               {#each requests as r (r.id)}
@@ -375,46 +337,102 @@
           {#if !canGive || (!mine && requests.length)}
             <!-- One open request per emote: the editor waits, or cancels it first. -->
           {:else if receivers.length}
-            <p class="ui-hint">It moves with its name, tags and sets. Only you, or accounts where you can upload, can take it.{mine ? '' : ` ${clean(emote.owner?.displayName ?? 'The owner')} has to accept first.`}</p>
-            <div class="add gap">
+            <p class="pb-hint">It moves with its name, tags and sets. Only you, or accounts where you can upload, can take it.{mine ? '' : ` ${clean(emote.owner?.displayName ?? 'The owner')} has to accept first.`}</p>
+            <div class="add">
               <select class="ui-input" bind:value={giveTo} aria-label="Give to">
                 {#each receivers as r (r.id)}<option value={r.id}>{r.self ? `${clean(r.displayName)} (you)` : clean(r.displayName)}</option>{/each}
               </select>
               <Confirm label="Give" confirm="Click again to give it" busy={giving} onconfirm={give} />
             </div>
           {:else}
-            <p class="ui-hint">You can give it only to yourself or to accounts where you can upload; there are none yet.</p>
+            <p class="pb-hint">You can give it only to yourself or to accounts where you can upload; there are none yet.</p>
           {/if}
-        </section>
-      {/if}
+        </div>
+      </PanelBlock>
+    {/if}
 
-      {#if canDelete}
-        <section class="ui-card">
-          <h2>Delete</h2>
-          <p class="ui-hint">It leaves every set it’s in. This can’t be undone.</p>
-          <div class="ui-actions gap">
-            <Confirm label="Delete emote" confirm="Click again to delete" busy={deleting} onconfirm={remove} />
+    {#if canDelete}
+      <PanelBlock title="Delete">
+        <p class="pb-hint">It leaves every set it’s in. This can’t be undone.</p>
+        <div class="pb-actions"><Confirm label="Delete emote" confirm="Click again to delete" busy={deleting} onconfirm={remove} /></div>
+      </PanelBlock>
+    {/if}
+  {/if}
+{/snippet}
+
+<LoadGate
+  source={L}
+  label="Loading the emote…"
+  level={1}
+  home={{ href: sectionHref(session.me?.id ?? '', 'uploads'), label: 'Your emotes' }}
+  missing={{ title: 'No emote here.', body: 'It may have been deleted, or it isn’t yours to see.' }}
+>
+{#snippet children()}
+{#if emote}
+  <InspectorLayout title="Emote" label="About this emote" panel={side} testid="emote-panel">
+    {#snippet head()}
+      <PageHead
+        name
+        title={clean(emote!.name)}
+        back={mine ? { href: sectionHref(session.me?.id ?? '', 'uploads'), label: 'Your emotes' } : manages ? { href: ownerHome, label: `${clean(emote!.owner?.displayName ?? '')}’s emotes` } : can('emotes.review') ? { href: '/admin', label: 'Admin' } : { href: '/search', label: 'Emotes' }}
+      >
+        {#snippet line()}
+          Uploaded <span>{date(emote!.createdAt)}</span>{#if !mine && emote!.owner && (manages || canGive)}{' · '}<bdi>{clean(emote!.owner.displayName)}</bdi>’s emote, you edit their account{/if}
+        {/snippet}
+        {#snippet actions()}
+          {#if emote!.state === 'APPROVED'}
+            <a class="ui-btn secondary" href="/emotes/{emote!.id}"><Icon name="arrow-right" size={15} />Public page</a>
+          {/if}
+        {/snippet}
+      </PageHead>
+    {/snippet}
+    <div class="ui-stack main">
+      <section class="ui-card sizes" aria-label="Picture">
+        {#if ready(emote)}
+          <SizeRow {emote} />
+        {:else}
+          <p class="ui-hint">{slow ? 'The files are taking longer than usual. Reload in a minute.' : 'The files are still being made. This takes a few seconds.'}</p>
+        {/if}
+      </section>
+      {#if canEdit}
+        <form class="ui-card ui-form" onsubmit={save} novalidate>
+          <h2>Details and visibility</h2>
+          <label class="ui-field">
+            <span class="ui-label">Name</span>
+            <input class="ui-input" bind:value={name} maxlength="100" spellcheck="false" aria-invalid={nameError ? 'true' : undefined} />
+            {#if nameError}<span class="ui-error">{nameError}</span>{/if}
+          </label>
+          <div class="ui-field">
+            <TagInput label="Tags" showLabel {tags} onchange={(t) => (tags = t)} max={TAG_MAX} clean={cleanTag}
+              placeholder="cat, dance" hint="Enter or a comma adds a tag. Up to {TAG_MAX}." disabled={saving} id="edit-tags" />
+            {#if tagError}<span class="ui-error">{tagError}</span>{/if}
           </div>
-        </section>
+          <EmoteFlags id="edit" bind:zeroWidth bind:visibility bind:nsfw disabled={saving} />
+          <div class="ui-actions">
+            <button class="ui-btn primary" type="submit" disabled={saving || !changed || !!nameError || !!tagError}>
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </form>
       {/if}
     </div>
-  </div>
+  </InspectorLayout>
 {/if}
 {/snippet}
 </LoadGate>
 
 <style>
-  .layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
-  .ui-row .ui-hint { display: block; }
-  .id { font-size: .78rem; color: var(--muted); overflow-wrap: anywhere; text-align: right; }
+  .main { max-width: 820px; }
+  .sizes { display: grid; place-items: center; padding: 32px 16px 24px; min-width: 0; }
+  .state { display: flex; }
+  .who { color: var(--text); }
+  .id { font-size: .78rem; font-weight: 500; color: var(--muted); }
   .add { display: flex; gap: 8px; }
-  .add select { flex: 1; }
-  .requests { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 10px; }
+  .add select { flex: 1; min-width: 0; }
+  .give { display: grid; gap: 10px; }
+  .requests { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
   .requests li { display: grid; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
   .requests li:last-child { border-bottom: 0; padding-bottom: 0; }
-  .requests p { margin: 0; overflow-wrap: anywhere; }
+  .requests p { margin: 0; font-size: var(--t-small); overflow-wrap: anywhere; }
   .requests .ui-hint { display: block; }
-  .gap { margin-top: 12px; }
-  .sizes { display: grid; place-items: center; padding: 32px 16px 24px; min-width: 0; }
-  @media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr); } }
 </style>

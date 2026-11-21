@@ -2,8 +2,14 @@
   // Every notification (the API keeps the latest 100), newest first, in pages of 20 here, with the
   // same rows as the bell. Mark all read in the header; a row marks itself read when opened.
   // Chips above the list narrow it to one group of kinds (uploads, hand-overs, editors,
-  // cosmetics); Settings → Notifications chooses which kinds come at all.
+  // cosmetics; the address keeps it, ?f=<group>); Settings → Notifications chooses which kinds come
+  // at all. In your profile's frame (MeFrame); the panel counts them and holds the actions.
   import { onMount } from 'svelte';
+  import { goto } from '$app/navigation';
+  import { page } from '$app/state';
+  import { count } from '$lib/format';
+  import PanelBlock from '$lib/components/PanelBlock.svelte';
+  import MeFrame from '$lib/profile/MeFrame.svelte';
   import { inbox, loadInbox, markRead, type Note } from '$lib/account/inbox.svelte';
   import { filterChips, groupOf } from '$lib/account/prefs';
   import Icon from '$lib/components/Icon.svelte';
@@ -16,14 +22,17 @@
   const PAGE = 20;
   let shown = $state(PAGE);
   const all = $derived(inbox.items ?? []);
-  let filter = $state('all');
+  const filter = $derived(page.url.searchParams.get('f') ?? 'all');
   const chips = $derived(filterChips(all.map((n) => n.kind)));
   // A filter whose last notification went away falls back to All.
   const active = $derived(chips.some((c) => c.id === filter) ? filter : 'all');
   const items = $derived(active === 'all' ? all : all.filter((n) => groupOf(n.kind) === active));
   function pickFilter(id: string) {
-    filter = id;
+    const url = new URL(page.url);
+    if (id === 'all') url.searchParams.delete('f');
+    else url.searchParams.set('f', id);
     shown = PAGE;
+    void goto(`${url.pathname}${url.search}`, { replaceState: true, noScroll: true, keepFocus: true });
   }
 
   onMount(() => void loadInbox());
@@ -35,12 +44,28 @@
 
 <svelte:head><title>Notifications - cyex.tv</title></svelte:head>
 
-<div class="narrow">
+{#snippet side()}
+  <PanelBlock title="In numbers">
+    <dl class="kv">
+      <dt>Unread</dt><dd>{inbox.items ? count(inbox.count) : '–'}</dd>
+      <dt>Kept</dt><dd>{inbox.items ? count(all.length) : '–'}</dd>
+    </dl>
+    <p class="pb-hint">cyex.tv keeps your latest 100 notifications.</p>
+  </PanelBlock>
+  <PanelBlock title="What comes">
+    <p class="pb-hint">Pick which kinds of notification you get, here and as toasts.</p>
+    <div class="pb-actions">
+      <a class="ui-btn secondary" href="/me/settings/notifications"><Icon name="settings" size={15} />Notification settings</a>
+    </div>
+  </PanelBlock>
+{/snippet}
+
+<MeFrame title="Notifications" label="About your notifications" panel={side}>
+<div class="list-col">
   <PageHead title="Notifications">
     {#snippet line()}{inbox.count ? `${inbox.count} unread` : 'You’re all caught up.'}{/snippet}
     {#snippet actions()}
       {#if inbox.count}<button class="ui-btn secondary" type="button" disabled={inbox.marking} onclick={() => markRead()}>Mark all read</button>{/if}
-      <a class="ui-btn secondary" href="/me/settings/notifications"><Icon name="settings" size={15} />Settings</a>
     {/snippet}
   </PageHead>
 
@@ -68,8 +93,10 @@
     <div class="foot"><LoadMore hasMore={shown < items.length} total={items.length} onmore={() => (shown += PAGE)} /></div>
   {/if}
 </div>
+</MeFrame>
 
 <style>
+  .list-col { max-width: 760px; }
   .list { list-style: none; margin: 0; padding: 6px; display: grid; gap: 2px; }
   .foot { margin-top: 16px; }
   .chips { display: flex; flex-wrap: wrap; gap: 8px 6px; margin-bottom: 12px; }

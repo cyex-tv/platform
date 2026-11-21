@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import State from '$lib/components/State.svelte';
+  import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
   import { sectionHref } from '$lib/profile/rows';
   import { session } from '$lib/tool/session.svelte';
 
@@ -13,4 +14,4 @@
   });
 </script>
 
-<State kind="loading" title="Opening your profile…" />
+<ColumnLayout top><State kind="loading" title="Opening your profile…" /></ColumnLayout>
