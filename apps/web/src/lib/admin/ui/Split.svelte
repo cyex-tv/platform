@@ -65,7 +65,8 @@
     .split { grid-template-columns: minmax(0, 1fr) 360px; column-gap: 24px; margin: calc(-1 * var(--rail-gap)) 0 -48px; }
     .list { padding: var(--rail-gap) 0 48px; }
     .panel { position: sticky; top: var(--nav-h); align-self: start; min-height: calc(100svh - var(--nav-h)); min-width: 0;
-      margin-right: calc(-1 * var(--page-pad)); border-left: 1px solid var(--border); background: var(--surface); }
+      margin-right: calc(-1 * var(--page-pad)); border-left: 1px solid var(--border); background: var(--surface);
+      box-shadow: 0 0 0 100vw var(--surface); clip-path: inset(0 -100vw 0 0); /* on to the window's edge past the wrap, like every right panel */ }
     .panel:global([data-tall]) { position: relative; top: auto; }
   }
   .top { margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); overflow: hidden; }
