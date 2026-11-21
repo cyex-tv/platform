@@ -2,6 +2,24 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Redesign: Inspector header, emote page and profile, Workspace browse (branch `feat/redesign`, owner choice of 2026/11/21)
+
+The owner picked from the three layout prototypes (`.claude/runs/2026-11-20-redesign/prototypes/`): the Inspector header, emote page and profile, and the Workspace browse with the sets on the left.
+- [x] Header (every page): brand and the main links as words on the left (current one bold, no bar); search, Upload (quiet), theme, bell and the account (avatar, painted name) together on the right. Same links, search, menus and phone sheet as before.
+- [x] Emote page: two columns. Left: one neutral stage (no ground switch), the four sizes as buttons with pixels and file size (pick which shows on the stage), a chat line. Right: name, creator in their paint and date, flags and tags, the actions (add to set, edit, more), a grid of facts, the staff flags panel, tabs Channels/Activity/More with `?tab=`. Stacks under 900px; phones keep the fixed action bar.
+- [x] Profile: the person on the left (flat head, Copy link; Dashboard and Settings for the owner, Active emotes for editors), section tabs, the section; a right-hand panel with About (connections and editors collapsed and opened on purpose, editors ten at a time, public numbers; the same for everyone) until a tile is picked, then that emote (`?e=`, Escape, the close button or back return; arrows step). Under 1100px About folds above the tabs and tiles open the emote page. Open in admin stays at the bottom for staff.
+- [x] Browse (`/search`): signed in, the set rail (groups per account that fold and are remembered per account, a filter past 8 sets, LIVE, fill meter, used/capacity; the picked set is the target), a + on every tile (adds in place with Undo, refuses a full set, removes what the target holds), the tile menu's Add to… (every other set, grouped and filterable, with fill), Remove from (each set holding it), Open, Open in new tab, Copy link, and the same menu for a selection; tiles or the picks drag onto a set in the rail; from 1280px a tray with the target's emotes (remove with Undo, folds to a strip). Phones: the rail is a bottom sheet from "Adding to". Signed out: full-width grid and a sign-in line. A first-paint hint (`cyexSigned`, `cyex.browse.tray` in app.html) holds the columns so nothing moves when the session lands.
+- [x] Tests: `workspace.ui.test.ts` (rail, +, menu, drag, tray), `routes/search/workspace-page.ui.test.ts` (signed out and in), `profile-about.ui.test.ts`, `emote-inspector.ui.test.ts`, the layout cases in `emote-tabs.ui.test.ts`; the old TargetSet test moved into the rail's.
+- [x] Manual (mock, 375/768/1280/1920, dark and light, keyboard): screenshots in `.claude/runs/2026-11-20-redesign/screens/build/`.
+- Not changed: the API and the GraphQL shapes (no mock or codegen change), the landing page's hero, the /me pages' layout.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/redesign
+gh pr create --repo cyex-tv/platform --base main --head feat/redesign --title "Redesign: Inspector header, emote page and profile; Workspace browse" --body-file <file>
+```
+
 ## Adjustable limits and the pending-emote cap (branch `feat/role-limits`, owner request of 2026/11/20)
 
 - [x] Every rate in `limits::Rates` and the upload counts can be set at start: `CYEX_TV_LIMIT_<NAME>=<count>/<window>` (`600/1m`, `30/1h`, `5/30s`, `1/1d`), whole numbers for `CYEX_TV_LIMIT_UPLOADS_PER_HOUR` and `CYEX_TV_LIMIT_PENDING_EMOTES`. Unset keeps today's value; a bad value stops the api naming the variable. Listed in `.env.example`.
