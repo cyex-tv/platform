@@ -171,7 +171,7 @@
       {:else}
         <li><a href="/signin?back={encodeURIComponent('/shop')}"><Icon name="enter" size={16} /><span>Sign in to see items on your name</span><Icon name="chevron-right" size={14} /></a></li>
       {/if}
-      <li><a href="/help#badges-and-paints"><Icon name="scroll" size={16} /><span>What badges and paints are</span><Icon name="chevron-right" size={14} /></a></li>
+      <li><a href="/help#what-are-cosmetics"><Icon name="scroll" size={16} /><span>What badges and paints are</span><Icon name="chevron-right" size={14} /></a></li>
     </ul>
   </section>
 {/snippet}
@@ -253,6 +253,7 @@
   .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
   .head > div { min-width: 0; }
   .head .btn { flex: none; }
+  @media (max-width: 560px) { .head { flex-direction: column; gap: 12px; } }
   .line { margin-top: 6px; max-width: 62ch; font-size: var(--t-ui); line-height: 1.55; color: var(--muted); }
   .head .btn :global(svg) { color: var(--muted); }
 

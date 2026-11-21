@@ -139,6 +139,7 @@
   .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
   .head > div { min-width: 0; }
   .head .btn { flex: none; }
+  @media (max-width: 560px) { .head { flex-direction: column; gap: 12px; } }
   .line { margin-top: 6px; max-width: 56ch; font-size: var(--t-ui); line-height: 1.55; color: var(--muted); }
   .head .btn :global(svg) { color: var(--muted); }
   .label { display: flex; align-items: center; gap: 6px; font-size: var(--t-label, 11px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
