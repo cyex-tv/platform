@@ -59,3 +59,28 @@ describe('3D logo strike', () => {
     expect(samples.filter((k) => k < 0.99).length / 1000).toBeLessThan(0.45);
   });
 });
+
+describe('3D logo unlit bars per theme', () => {
+  const dark = look(false);
+  const light = look(true);
+
+  it('makes them a bright satin on dark that still shades (sides darker than caps, not flat white)', () => {
+    expect(dark.inkCap).toBeGreaterThan(0.5); // lighter than the old 0.42
+    expect(dark.inkCap).toBeLessThan(1);
+    expect(dark.inkSide).toBeLessThan(dark.inkCap);
+    expect(dark.inkReflect).toBeGreaterThan(light.inkReflect);
+  });
+
+  it('gives them a white glow on dark, weaker than the lit bar’s, and none on light', () => {
+    expect(dark.inkBloom).toBeGreaterThan(0);
+    expect(dark.inkBloom).toBeLessThan(dark.level * 0.5);
+    expect(dark.inkHalo).toBeGreaterThan(0);
+    expect(dark.inkHalo).toBeLessThan(dark.glow);
+    expect(light.inkBloom).toBe(0);
+    expect(light.inkHalo).toBe(0);
+  });
+
+  it('leaves the light theme’s dark bars as they were', () => {
+    expect(light).toMatchObject({ inkCap: 1, inkSide: 1, inkGlow: 0, inkReflect: 0.8 });
+  });
+});
