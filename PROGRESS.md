@@ -1365,7 +1365,10 @@ gh pr create --base main --head fix/hero-dark-bars --title "Hero: lighter dark-m
 ```
 git push -u origin feat/snowflake-ids
 gh pr create --repo cyex-tv/platform --base main --head feat/snowflake-ids --title "Snowflake IDs for emotes, accounts and sets" --body-file <file>
+gh pr edit 149 --repo cyex-tv/platform --body-file <file>   # known transition limits
+git push   # merges of origin/main, test fixes, ADR renumbered to 0027 (0026 taken by #150)
 ```
+  PR #149, not merged (owner reviews).
 ## Hero motion (feat/hero-motion, 2026/11/21)
 - Owner-approved: a pointer lean and a springy scroll turn for the hero logo (over cyex-web's default of nothing following the pointer; noted in `logo-scene.ts`).
 - `lib/home/logo-spring.ts`: a spring in response and damping ratio, stepped by its exact solution (frame-rate independent, interruptible: keeps its velocity when the target moves).
