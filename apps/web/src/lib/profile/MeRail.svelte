@@ -8,24 +8,26 @@
   import Icon from '$lib/components/Icon.svelte';
   import { count as fmt, clean } from '$lib/format';
   import { inbox, refreshCount } from '$lib/account/inbox.svelte';
-  import { target } from '$lib/components/browse/target.svelte';
+  import { target as setStore } from '$lib/components/browse/target.svelte';
   import { personal } from '$lib/personal/lists.svelte';
   import SideRail from '$lib/shell/SideRail.svelte';
   import type { RailGroup, RailItem } from '$lib/shell/rail';
   import { session } from '$lib/tool/session.svelte';
   import { sectionHref } from './rows';
 
+  /** The set the page shows (its id may be an old address's ULID, so the page names it). */
+  let { current }: { current?: string } = $props();
   const me = $derived(session.me);
   $effect(() => {
     if (!me) return;
-    target.ensure();
+    setStore.ensure();
     personal.ensure();
     if (!inbox.known) void refreshCount().catch(() => {});
   });
 
   const path = $derived(page.url.pathname);
   const at = (base: string) => path === base || path.startsWith(`${base}/`);
-  const setShown = (id: string) => path === `/me/sets/${id}` || path === `/me/sets/${encodeURIComponent(id)}`;
+  const setShown = (id: string) => id === current || path === `/me/sets/${id}` || path === `/me/sets/${encodeURIComponent(id)}`;
 
   const places = $derived.by<RailItem[]>(() => {
     if (!me) return [];
@@ -41,7 +43,7 @@
     ];
   });
 
-  const setRow = (s: NonNullable<typeof target.sets>[number]): RailItem => ({
+  const setRow = (s: NonNullable<typeof setStore.sets>[number]): RailItem => ({
     href: `/me/sets/${encodeURIComponent(s.id)}`,
     label: clean(s.name),
     icon: 'folder',
@@ -53,7 +55,7 @@
 
   const groups = $derived.by<RailGroup[]>(() => {
     const out: RailGroup[] = [{ items: places }];
-    const sets = target.sets ?? [];
+    const sets = setStore.sets ?? [];
     const mine = sets.filter((s) => s.mine);
     if (mine.length) out.push({ caption: `Your sets · ${fmt(mine.length)}`, items: mine.map(setRow) });
     const others = new Map<string, typeof sets>();
@@ -64,12 +66,12 @@
   // The phone strip: your places, plus the set you are on.
   const tabs = $derived([...places, ...groups.slice(1).flatMap((g) => g.items).filter((i) => i.current)]);
   // Dashboard is current on none of the /me pages (it is the profile's Overview).
-  const known = $derived(!!me && target.sets !== null);
+  const known = $derived(!!me && setStore.sets !== null);
 </script>
 
 <SideRail label="Your area" {groups} {tabs} fill wait={!known}>
   {#snippet head()}
-    <div class="title"><strong>Your area</strong>{#if target.sets === null && me}<span class="ph ui-skeleton" aria-hidden="true"></span>{/if}</div>
+    <div class="title"><strong>Your area</strong>{#if setStore.sets === null && me}<span class="ph ui-skeleton" aria-hidden="true"></span>{/if}</div>
   {/snippet}
   {#snippet foot()}<a class="rail-foot" href="/me/settings"><Icon name="settings" /><span class="lbl">Settings</span><Icon name="chevron-right" size={14} /></a>{/snippet}
 </SideRail>

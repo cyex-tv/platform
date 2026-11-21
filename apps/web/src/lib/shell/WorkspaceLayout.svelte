@@ -107,7 +107,7 @@
   }
   /* Phones: the rail is its tab strip (SideRail), one column: head, panel, content (or content, panel). */
   @media (max-width: 899.98px) {
-    .ws, .ws.has-panel { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; grid-template-rows: none; padding-top: 0; }
+    .ws, .ws.has-panel, .ws.has-panel.after { grid-template-columns: minmax(0, 1fr); grid-template-areas: none; grid-template-rows: none; padding-top: 0; }
     .ws-head, .ws-main, .ws-panel { grid-area: auto; }
     .ws-head { padding-top: var(--rail-gap); }
     /* No head: the first block keeps the one page top under the strip. */

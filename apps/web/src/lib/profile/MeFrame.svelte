@@ -21,11 +21,13 @@
     narrow?: 'before' | 'after';
     fold?: boolean;
     width?: number;
+    /** The set the page shows: its row in the rail is current. */
+    currentSet?: string;
   };
-  let { title, label, panel, children, head, toolbar, panelActions, narrow = 'before', fold = true, width }: Props = $props();
+  let { title, label, panel, children, head, toolbar, panelActions, narrow = 'before', fold = true, width, currentSet }: Props = $props();
 </script>
 
-{#snippet rail()}<MeRail />{/snippet}
+{#snippet rail()}<MeRail current={currentSet} />{/snippet}
 
 <WorkspaceLayout {rail} {title} {label} {panel} {head} {toolbar} {panelActions} {narrow} {fold} {width} testid="me-panel">
   {@render children()}

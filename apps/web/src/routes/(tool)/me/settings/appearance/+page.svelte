@@ -3,6 +3,8 @@
   // reduced motion (System follows the OS; On turns motion down everywhere on cyex.tv; Off keeps
   // the site's motion even when the OS asks for less).
   import { onMount } from 'svelte';
+  import Row from '$lib/components/Row.svelte';
+  import Section from '$lib/components/Section.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import type { MotionPref } from '$lib/account/settings';
   import { motion, setMotion, syncMotion } from '$lib/shell/motion.svelte';
@@ -34,24 +36,15 @@
 
 <div class="narrow">
   <PageHead title="Appearance" line="Saved on this device only." />
-  <div class="ui-stack">
-    <section class="ui-panel" aria-labelledby="theme-h">
-      <header><h2 id="theme-h">Theme</h2></header>
-      <div class="row">
-        <Segmented label="Theme" options={[...THEMES]} value={theme.light ? 'light' : 'dark'} onchange={(v) => { if ((v === 'light') !== theme.light) toggleTheme(); }} />
-      </div>
-    </section>
-    <section class="ui-panel" aria-labelledby="motion-h">
-      <header><h2 id="motion-h">Reduced motion</h2></header>
-      <div class="row">
-        <Segmented label="Reduced motion" options={MOTION} value={motion.pref} onchange={setMotion} />
-        <p class="ui-hint" aria-live="polite">{HINT[motion.pref]}</p>
-      </div>
-    </section>
-  </div>
+  <Section title="Theme">
+    <Row label="Theme" hint="Dark or light, the same switch as the header’s.">
+      <Segmented label="Theme" options={[...THEMES]} value={theme.light ? 'light' : 'dark'} onchange={(v) => { if ((v === 'light') !== theme.light) toggleTheme(); }} />
+    </Row>
+  </Section>
+  <Section title="Motion">
+    <Row label="Reduced motion">
+      {#snippet hint()}<span aria-live="polite">{HINT[motion.pref]}</span>{/snippet}
+      <Segmented label="Reduced motion" options={MOTION} value={motion.pref} onchange={setMotion} />
+    </Row>
+  </Section>
 </div>
-
-<style>
-  .row { display: grid; gap: 8px; padding: 12px 14px 14px; justify-items: start; }
-  .row p { margin: 0; }
-</style>
