@@ -115,7 +115,7 @@
       {#if status}{@render status()}{:else if note}<span class="ui-chip {noteTone(note)}">{note}</span>{/if}
       {#if rank}<span class="rank" class:top={rank <= 3}><span class="sr-only">Trending </span>#{rank}</span>{/if}
       {#if reach}<span class="mark" title={reach.tip}><Icon name={reach.key === 'private' ? 'shield' : 'link'} size={12} /><span class="mk">{reach.label}</span></span>{/if}
-      {#if inSet}<span class="mark in" title="Already in {inSet}"><Icon name="check" size={12} /><span class="mk">In set</span></span>{/if}
+      {#if inSet}<span class="mark in" title="Already in {inSet}"><Icon name="check" size={12} /><span class="mk">In <bdi>{inSet}</bdi></span></span>{/if}
     </span>
   {/if}
   <span class="art">
@@ -140,7 +140,7 @@
   .compact { --art: 60px; padding: 10px 8px 9px; }
   .tile:active { transform: scale(var(--press)); }
   .tile:focus-visible { outline-offset: 2px; border-radius: var(--radius-card); }
-  .status { position: absolute; top: 6px; left: 6px; z-index: 1; display: flex; gap: 4px; max-width: calc(100% - 12px); }
+  .status { position: absolute; top: 6px; left: 6px; z-index: 1; display: flex; gap: 4px; max-width: calc(100% - 48px); }
   /* A fixed art box: however wide the picture, it fits inside (contain) and never widens the tile. */
   .art { position: relative; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; width: 100%; min-width: 0;
     height: var(--art); margin-bottom: 8px; overflow: hidden; }
@@ -157,6 +157,8 @@
     border-radius: var(--radius); background: var(--bg); color: var(--muted); font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
   .mark :global(svg) { flex: none; color: var(--dim); }
   .mark.in :global(svg) { color: var(--accent-text); }
+  .mark.in { color: var(--text); }
+  .mark .mk { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .compact .mk { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .compact .mark { padding: 0 4px; }
   .processing { font-size: var(--t-fine); color: var(--muted); }

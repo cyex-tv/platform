@@ -1,4 +1,4 @@
-// The target-set picker's groups and filter (TargetSet.svelte): your sets first, then one group per
+// The set rail's groups and filter (SetRail.svelte, and the tile menu's "Add to…"): your sets first, then one group per
 // account you edit for, each in the order the API gave. A filter field shows once there are more
 // than FILTER_FROM sets; every word typed must appear in the set's name, its group's name or one
 // of the channels it belongs to (case and accents ignored).

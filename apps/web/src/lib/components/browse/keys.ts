@@ -10,6 +10,7 @@ export const BROWSE_KEYS: ShortcutGroup = {
     { keys: ['Tab'], label: 'Move from emote to emote' },
     { keys: ['Shift+F10', 'Menu'], label: 'Open the focused emote’s menu: add, copy, select' },
     { keys: ['↓', '↑'], label: 'Move through an open menu' },
+    { keys: ['→', '←'], label: 'Open “Add to…” in the menu, and come back' },
   ],
 };
 

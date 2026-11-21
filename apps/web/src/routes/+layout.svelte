@@ -33,6 +33,17 @@
   $effect(() => {
     loadMe().catch(() => {});
   });
+  // Whether this device is signed in, for app.html's first-paint hint (data-signed on <html>).
+  $effect(() => {
+    if (!session.known) return;
+    const on = !!session.me && !session.ended;
+    document.documentElement.toggleAttribute('data-signed', on);
+    try {
+      localStorage.setItem('cyexSigned', on ? '1' : '0');
+    } catch {
+      /* no hint next time */
+    }
+  });
 
   // Signed in, every link to the upload page (the header's Upload, an empty "Your emotes", help
   // answers) opens the upload dialog over the current page instead. Ctrl/⌘-click and middle
