@@ -1286,17 +1286,13 @@ async fn badge_pictures_follow_the_badge_upload_rules() {
     };
     let owner = w.user(OWNER).await;
 
-    // Up to 8 MB for a badge; a paint keeps its 5 MB.
+    // Up to 8 MB for a badge and a paint alike.
     let big = noise_png(900);
     assert!(big.len() > 5 * 1024 * 1024 && big.len() < 8 * 1024 * 1024);
     let r = w.upload(&owner, "badge", &big).await;
     assert_eq!(r.status, StatusCode::ACCEPTED, "{}", r.body);
     let r = w.upload(&owner, "paint", &big).await;
-    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{}", r.body);
-    assert_eq!(
-        r.body["message"],
-        "The file is over 5 MB, the most an upload can be."
-    );
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{}", r.body);
     let over = noise_png(1060);
     assert!(over.len() > 8 * 1024 * 1024);
     let r = w.upload(&owner, "badge", &over).await;
@@ -1327,9 +1323,63 @@ async fn badge_pictures_follow_the_badge_upload_rules() {
         r.body["message"],
         "The animation runs longer than 10 seconds, the most it can."
     );
-    // Paints keep their own rules: no 120-frame or 10-second cap.
-    let r = w.upload(&owner, "paint", &gif(72, 6, 2000)).await;
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn paint_pictures_follow_the_badge_upload_rules_and_their_own_shape() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+
+    // Over 8 MB is refused, with the readable message.
+    let over = noise_png(1060);
+    assert!(over.len() > 8 * 1024 * 1024);
+    let r = w.upload(&owner, "paint", &over).await;
+    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{}", r.body);
+    assert_eq!(r.body["error"], "too_large");
+    assert_eq!(
+        r.body["message"],
+        "The file is over 8 MB, the most an upload can be."
+    );
+
+    // JPEG is a paint picture too.
+    let r = w.upload(&owner, "paint", &jpeg(96)).await;
     assert_eq!(r.status, StatusCode::ACCEPTED, "{}", r.body);
+
+    // Animated: at most 120 frames, 10 seconds, as for badges.
+    let r = w.upload(&owner, "paint", &gif(72, 120, 50)).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{}", r.body);
+    assert_eq!(r.body["animated"], true);
+    let r = w.upload(&owner, "paint", &gif(72, 121, 50)).await;
+    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{}", r.body);
+    assert_eq!(
+        r.body["message"],
+        "The animation has more than 120 frames, the most it can have."
+    );
+    let r = w.upload(&owner, "paint", &gif(72, 6, 2000)).await;
+    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{}", r.body);
+    assert_eq!(
+        r.body["message"],
+        "The animation runs longer than 10 seconds, the most it can."
+    );
+
+    // Paint's own shape: at least 64 px tall, at most 8:1.
+    let r = w.upload(&owner, "paint", &png(512, 64)).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{}", r.body);
+    let r = w.upload(&owner, "paint", &png(2048, 256)).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{}", r.body);
+    let r = w.upload(&owner, "paint", &png(200, 63)).await;
+    assert_eq!(r.body["error"], "bad_dimensions", "{}", r.body);
+    assert_eq!(r.body["message"], "Paint pictures are at least 64 px tall.");
+    let r = w.upload(&owner, "paint", &png(520, 64)).await;
+    assert_eq!(r.status, StatusCode::UNPROCESSABLE_ENTITY, "{}", r.body);
+    assert_eq!(r.body["error"], "bad_dimensions");
+    assert_eq!(
+        r.body["message"],
+        "Paint pictures are at most 8 times as wide as they are tall (8:1)."
+    );
     w.db.close().await;
 }
 
@@ -1377,6 +1427,20 @@ async fn badges_made_before_the_ladder_are_made_again() {
         ),
         "not_found"
     );
+    // A paint made before the 512 px size is made again the same way.
+    let paint = w.picture(&owner, "paint", 128).await;
+    let before = w.transcode_jobs().await;
+    let r = w.upload(&owner, "paint", &png(512, 128)).await;
+    assert_eq!(r.body["id"], paint.as_str());
+    assert_eq!(r.body["ready"], true, "its files stay in use meanwhile");
+    assert_eq!(w.transcode_jobs().await, before + 1);
+    let r = w.gql(Some(&owner), REMAKE, json!({ "id": paint })).await;
+    assert_eq!(
+        r["data"]["remakeCosmeticImage"]["id"],
+        paint.as_str(),
+        "{r}"
+    );
+    assert_eq!(w.transcode_jobs().await, before + 2);
     // The original gone: say so, queue nothing.
     for key in w.store.keys() {
         w.store.delete(&key).await.unwrap();

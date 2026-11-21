@@ -47,6 +47,8 @@ pub const TRANSCODE_JOB: &str = "cosmetic.transcode";
 pub const BADGE_MIN_SIDE: u32 = 72;
 /// Paint pictures must be at least this tall (1x).
 pub const PAINT_MIN_HEIGHT: u32 = 64;
+/// Paint pictures are at most this many times as wide as they are tall.
+pub const PAINT_MAX_ASPECT: u32 = 8;
 pub const NAME_MAX: usize = 32;
 pub const TOOLTIP_MAX: usize = 64;
 pub const REASON_MAX: usize = 500;
@@ -235,12 +237,13 @@ pub fn paint_input(input: &PaintInput) -> ApiResult<CheckedPaint> {
 }
 
 /// The limits a kind of picture is checked under, the same the worker decodes it with: badges
-/// the cyex badge rules (PNG, JPEG, WebP or GIF up to 8 MB; animated at most 120 frames, 10
-/// seconds and 64 MP of frames), paints the cosmetic defaults (5 MB).
+/// and paints the same file rules (PNG, APNG, JPEG, WebP or GIF up to 8 MB; animated at most 120
+/// frames, 10 seconds and 64 MP of frames); a paint may be wider (4096 px a side, 2048 for a
+/// badge).
 pub fn picture_limits(kind: CosmeticKind) -> Limits {
     match kind {
         CosmeticKind::Badge => Limits::badge(),
-        CosmeticKind::Paint => Limits::default(),
+        CosmeticKind::Paint => Limits::paint(),
     }
 }
 
@@ -1684,11 +1687,17 @@ mod tests {
             ),
             (120, 10_000, 64_000_000)
         );
-        // Paints keep theirs.
-        assert_eq!(picture_limits(CosmeticKind::Paint), Limits::default());
+        // Paints take the same file and animation rules, with a wider side.
+        let paint = picture_limits(CosmeticKind::Paint);
+        assert_eq!(paint, Limits::paint());
+        assert_eq!(paint.max_bytes, 8 * 1024 * 1024);
         assert_eq!(
-            picture_limits(CosmeticKind::Paint).max_bytes,
-            5 * 1024 * 1024
+            (
+                paint.max_frames,
+                paint.max_duration_ms,
+                paint.max_total_pixels
+            ),
+            (120, 10_000, 64_000_000)
         );
     }
 
@@ -1714,9 +1723,18 @@ mod tests {
         .map(file)
         .into();
         assert!(!lacks_sizes(CosmeticKind::Badge, &stills));
-        // Not made yet is not lacking (that's `ready`); paints have no new sizes.
+        // Not made yet is not lacking (that's `ready`).
         assert!(!lacks_sizes(CosmeticKind::Badge, &[]));
-        assert!(!lacks_sizes(CosmeticKind::Paint, &old));
+        // Paints from before 512 px lack it; with it, or its still, they don't.
+        assert!(lacks_sizes(CosmeticKind::Paint, &old));
+        let paint: Vec<_> = ["1x.webp", "2x.webp", "4x.webp", "512.webp"]
+            .map(file)
+            .into();
+        assert!(!lacks_sizes(CosmeticKind::Paint, &paint));
+        let still: Vec<_> = ["1x.webp", "2x.webp", "4x.webp", "512_static.webp"]
+            .map(file)
+            .into();
+        assert!(!lacks_sizes(CosmeticKind::Paint, &still));
     }
 
     #[test]
@@ -1737,6 +1755,16 @@ mod tests {
         );
         assert!(check_dimensions(CosmeticKind::Paint, 512, 64).is_ok());
         assert!(check_dimensions(CosmeticKind::Paint, 64, 63).is_err());
+        // Up to 8:1 wide, any taller.
+        assert!(check_dimensions(CosmeticKind::Paint, 4096, 512).is_ok());
+        assert!(check_dimensions(CosmeticKind::Paint, 512, 512).is_ok());
+        assert!(check_dimensions(CosmeticKind::Paint, 100, 400).is_ok());
+        assert_eq!(
+            check_dimensions(CosmeticKind::Paint, 513, 64)
+                .unwrap_err()
+                .code,
+            "bad_dimensions"
+        );
     }
 
     #[test]

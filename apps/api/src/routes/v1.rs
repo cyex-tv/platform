@@ -367,13 +367,13 @@ async fn upload_emote(
     Ok((StatusCode::ACCEPTED, Json(emote)))
 }
 
-/// Reads a multipart file field under the 8 MB limit of badge pictures.
+/// Reads a multipart file field under the 8 MB limit of badge and paint pictures.
 async fn file_field(
     field: &mut axum::extract::multipart::Field<'_>,
     bad_form: impl Fn(&str) -> ApiError,
 ) -> ApiResult<Vec<u8>> {
-    // The larger of the badge (8 MB) and paint (5 MB) caps: the kind may come after the file, and
-    // the per-kind cap is checked when the picture is decoded.
+    // Badges and paints share the 8 MB cap; the kind may come after the file, and the per-kind
+    // cap is checked when the picture is decoded.
     let limits = cyex_tv_media::Limits::badge();
     let mut bytes = Vec::new();
     while let Some(chunk) = field.chunk().await.map_err(|err| {
@@ -401,8 +401,10 @@ async fn file_field(
 /// PNG, APNG, JPEG, WebP or GIF, square, at least 72×72 px (at most 2048), up to 8 MB. Animated:
 /// at most 120 frames, 10 seconds and 64 MP (width × height × frames), and at most 512 KB per
 /// chat size once converted; 128, 256 and 512 px animate only within 1, 2 and 4 MB (their
-/// `_static` files always exist). Paints: at least 64 px tall, PNG, APNG, JPEG, GIF or WebP, at
-/// most 5 MB.
+/// `_static` files always exist). Paints: the same file types, size (8 MB) and animation limits
+/// (120 frames, 10 seconds, 64 MP); at least 64 px tall, at most 8:1 wide, up to 4096 px a side.
+/// Made at 64, 128, 256 and 512 px tall (`1x`, `2x`, `4x`, `512`), never above the original, the
+/// 512 px animated only within 4 MB.
 ///
 /// The same bytes give the same picture again; for a badge made before the larger sizes, they
 /// are made then (as `remakeCosmeticImage` does).

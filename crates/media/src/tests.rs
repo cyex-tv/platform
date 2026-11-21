@@ -482,7 +482,16 @@ mod encoding {
         let p = Profile::PAINT;
         assert_eq!(p.size_for(512, 256, 1), (128, 64));
         assert_eq!(p.size_for(1000, 100, 1), (512, 51));
-        assert_eq!(p.all_names().len(), 12);
+        // 1x, 2x, 4x and 512, each as WebP, AVIF and their still forms.
+        assert_eq!(p.all_names().len(), 16);
+        assert_eq!(p.stems(), ["1x", "2x", "4x", "512"]);
+        // The 512 px size is 512 tall (8:1 at most), never above the original.
+        assert_eq!(p.steps(4096, 512)[3].size, (4096, 512));
+        assert_eq!(p.steps(1000, 100)[3].size, (1000, 100));
+        assert_eq!(p.steps(3000, 600)[3].size, (2560, 512));
+        // A paint made before 512 px lacks it.
+        assert!(!p.is_complete(["1x.webp", "2x.webp", "4x.webp"]));
+        assert!(p.is_complete(["1x.webp", "2x.webp", "4x.webp", "512_static.webp"]));
 
         let still = transcode_with(&png(96, 96), &Limits::badge(), &b).unwrap();
         let sizes: Vec<_> = still
@@ -796,13 +805,42 @@ fn badge_limits_follow_the_badge_spec() {
         probe(&gif_with_delay(8, 8, 101, 10), &l),
         Err(MediaError::TooLarge(_))
     ));
-    // Emotes and paints have no duration cap.
+    // Emotes have no duration cap.
     assert!(probe(&gif_with_delay(8, 8, 6, 2000), &Limits::default()).is_ok());
 
     // Over 8 MB is refused, at most 8 MB decodes.
     assert!(probe(&padded_png(96, 96, BADGE_MAX_BYTES), &l).is_ok());
     assert!(matches!(
         probe(&padded_png(96, 96, BADGE_MAX_BYTES + 1), &l),
+        Err(MediaError::TooLarge(_))
+    ));
+}
+
+#[test]
+fn paint_limits_follow_the_badge_animation_rules() {
+    let l = Limits::paint();
+    assert_eq!(l.max_bytes, 8 * 1024 * 1024);
+    assert_eq!(l.max_frames, 120);
+    assert_eq!(l.max_duration_ms, 10_000);
+    assert_eq!(l.max_total_pixels, 64_000_000);
+    // Wide pictures: 4096 px a side, so 512 tall can be 8:1.
+    assert!(probe(&png(4096, 512), &l).is_ok());
+    assert!(matches!(
+        probe(&png(4097, 512), &l),
+        Err(MediaError::TooLarge(_))
+    ));
+    assert!(probe(&gif(8, 8, 120), &l).is_ok());
+    assert!(matches!(
+        probe(&gif(8, 8, 121), &l),
+        Err(MediaError::TooLarge(_))
+    ));
+    assert!(matches!(
+        probe(&gif_with_delay(8, 8, 6, 2000), &l),
+        Err(MediaError::TooLarge(_))
+    ));
+    assert!(probe(&padded_png(96, 96, PAINT_MAX_BYTES), &l).is_ok());
+    assert!(matches!(
+        probe(&padded_png(96, 96, PAINT_MAX_BYTES + 1), &l),
         Err(MediaError::TooLarge(_))
     ));
 }

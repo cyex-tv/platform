@@ -45,6 +45,8 @@ pub const DEFAULT_MAX_BYTES: usize = 5 * 1024 * 1024;
 pub const EMOTE_MAX_BYTES: usize = 8 * 1024 * 1024;
 /// The file size cap of a badge picture ([`Limits::badge`]): 8 MB.
 pub const BADGE_MAX_BYTES: usize = 8 * 1024 * 1024;
+/// The file size cap of a paint picture ([`Limits::paint`]): 8 MB.
+pub const PAINT_MAX_BYTES: usize = 8 * 1024 * 1024;
 /// Frames shorter than this show for 100 ms, as browsers do with GIFs.
 pub const MIN_DELAY_MS: u32 = 20;
 
@@ -97,6 +99,17 @@ impl Limits {
             max_frames: 120,
             max_total_pixels: 64_000_000,
             max_duration_ms: 10_000,
+        }
+    }
+
+    /// A paint picture's limits: the badge rules (8 MB; an animation at most 120 frames, 10
+    /// seconds and 64 MP of frames) with a side up to 4096 px, so a 512 px tall picture can be 8:1
+    /// (the shape rules, at least 64 px tall and at most 8:1, are the API's).
+    pub fn paint() -> Self {
+        Self {
+            max_bytes: PAINT_MAX_BYTES,
+            max_side: 4096,
+            ..Self::badge()
         }
     }
 }
