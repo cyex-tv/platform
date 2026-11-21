@@ -58,8 +58,15 @@ describe('3D logo scene', () => {
     raf = vi.fn(() => 1);
     globalThis.requestAnimationFrame = raf as unknown as typeof requestAnimationFrame;
     globalThis.cancelAnimationFrame = vi.fn();
+    // A capable device, so the full-quality path (bloom) runs whatever machine runs the tests
+    // (CI runners have few cores, which would start the light step).
+    vi.spyOn(navigator, 'hardwareConcurrency', 'get').mockReturnValue(8);
+    Object.defineProperty(navigator, 'deviceMemory', { value: 8, configurable: true });
   });
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete (navigator as Navigator & { deviceMemory?: number }).deviceMemory;
+  });
 
   const mount = (still: boolean) => {
     const host = document.createElement('div');
