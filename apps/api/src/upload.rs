@@ -310,9 +310,18 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
         mine: state.limits.load(&state.db, caller.account_id).await,
         theirs: state.limits.load(&state.db, owner).await,
     };
-    // Checked early so a refused upload isn't decoded, and again under the lock below.
-    hourly_limit(&mut conn, caller, owner, &allowed).await?;
-    pending_limit(&mut conn, caller, owner, for_someone, &allowed).await?;
+    // Checked early so a refused upload isn't decoded, and again under the lock below. One
+    // snapshot for both checks: read separately, an upload committing between them could be
+    // counted by the pending check but not the hourly one, refusing with `too_many_pending`
+    // where `rate_limited` is the answer.
+    let mut early = conn.begin().await.map_err(sqlx_error)?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        .execute(&mut *early)
+        .await
+        .map_err(sqlx_error)?;
+    hourly_limit(&mut early, caller, owner, &allowed).await?;
+    pending_limit(&mut early, caller, owner, for_someone, &allowed).await?;
+    early.rollback().await.map_err(sqlx_error)?;
     drop(conn);
 
     // Decoding is CPU work; keep it off the request threads.
