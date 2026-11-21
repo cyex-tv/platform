@@ -86,6 +86,10 @@
   <meta property="og:title" content="Emote guidelines" />
 </svelte:head>
 
+{#snippet chev()}
+  <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
+{/snippet}
+
 <div class="docs guidelines" bind:this={root}>
   <RailLayout>
     {#snippet rail()}
@@ -94,13 +98,13 @@
         <summary>Contents</summary>
         <nav class="nav-scroll" aria-label="Contents">
           <div class="nav-group">
-            <div class="nav-group-title"><span class="group-name">The rules</span></div>
+            <div class="nav-group-title"><span class="group-name">The rules</span><span class="count" aria-hidden="true">{RULES.length}</span></div>
             {#each RULES as r, i (r.id)}
               <a class="nav-item" href="#{r.id}"><span class="n" aria-hidden="true">{i + 1}</span><span class="nav-label">{r.title}</span></a>
             {/each}
           </div>
           <div class="nav-group">
-            <div class="nav-group-title"><span class="group-name">After</span></div>
+            <div class="nav-group-title"><span class="group-name">After</span><span class="count" aria-hidden="true">1</span></div>
             <a class="nav-item" href="#after"><span class="nav-label">When something breaks these</span></a>
           </div>
         </nav>
@@ -108,6 +112,7 @@
     </aside>
     {/snippet}
 
+    <div class="docs-split">
     <div class="docs-body" id="rules" tabindex="-1">
       <header class="docs-title">
         <div>
@@ -133,18 +138,38 @@
 
       <p class="docs-end">Questions about a rule? See <a href="/help">Help</a>. Something of yours uploaded without asking? Write to abuse@cyex.tv.</p>
     </div>
+
+    <aside class="dp-panel" aria-label="Guidelines panel">
+      <section class="dp-sec" aria-labelledby="gp-glance">
+        <h2 class="dp-label" id="gp-glance">At a glance</h2>
+        <dl class="dp-facts">
+          <div class="dp-fact"><dt>Rules</dt><dd class="mono">{RULES.length}</dd></div>
+          <div class="dp-fact"><dt>NSFW</dt><dd>Flagged, never explicit</dd></div>
+          <div class="dp-fact"><dt>Checked by</dt><dd>A moderator</dd></div>
+          <div class="dp-fact"><dt>Takedowns</dt><dd><a href="mailto:abuse@cyex.tv">abuse@cyex.tv</a></dd></div>
+        </dl>
+      </section>
+      <section class="dp-sec" aria-labelledby="gp-more">
+        <h2 class="dp-label" id="gp-more">More</h2>
+        <ul class="dp-rows">
+          <li><a class="dp-row" href="/upload"><span>Upload</span>{@render chev()}</a></li>
+          <li><a class="dp-row" href="/help"><span>Help</span>{@render chev()}</a></li>
+          <li><a class="dp-row" href="mailto:abuse@cyex.tv"><span>Takedowns</span>{@render chev()}</a></li>
+        </ul>
+      </section>
+    </aside>
+    </div>
   </RailLayout>
 </div>
 
 <style>
-  .guidelines :global(.nav-group-title) { display: flex; align-items: center; min-height: 32px; margin-bottom: 2px; }
+  .n { flex: none; min-width: 14px; color: var(--dim); font-family: var(--font-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
   .guidelines :global(.nav-item) { padding-block: 8px; align-items: flex-start; }
   .guidelines :global(.nav-label) { white-space: normal; }
-  .n { flex: none; min-width: 14px; color: var(--dim); font-variant-numeric: tabular-nums; }
-  .rule { max-width: var(--measure); margin-bottom: 36px; }
-  .rule + .rule { padding-top: 28px; border-top: 1px solid var(--border); }
-  .num { margin: 0 0 4px; font-size: var(--t-fine); font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; }
-  .rule h2 { margin: 0 0 10px; }
-  .rule p:not(.num) { margin: 0 0 8px; line-height: 1.65; color: var(--muted); }
-  .rule p:last-child { margin-bottom: 0; }
+  .guidelines .rule { max-width: var(--measure); margin: 0; padding: 22px 0; border-bottom: 1px solid var(--border); }
+  .guidelines .rule:first-of-type { border-top: 1px solid var(--border); }
+  .guidelines .num { margin: 0 0 4px; font-family: var(--font-mono); font-size: var(--t-fine); font-weight: 500; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .guidelines .rule h2 { margin: 0 0 10px; }
+  .guidelines .rule p:not(.num) { margin: 0 0 8px; line-height: 1.65; color: var(--muted); }
+  .guidelines .rule p:last-child { margin-bottom: 0; }
 </style>
