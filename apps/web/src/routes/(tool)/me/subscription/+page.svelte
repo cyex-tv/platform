@@ -16,7 +16,7 @@
     <p class="pb-hint">What you bought in the shop, with receipts, is under Billing in Settings.</p>
     <div class="pb-actions">
       <a class="ui-btn secondary" href="/me/settings/billing"><Icon name="shopping-bag" size={15} />Billing</a>
-      <a class="ui-btn secondary" href="/shop"><Icon name="tag" size={15} />Store</a>
+      <a class="ui-btn secondary" href="/shop"><Icon name="tag" size={15} />Shop</a>
     </div>
   </PanelBlock>
 {/snippet}
@@ -26,7 +26,7 @@
     <PageHead title="Subscription" />
     <State title="No subscriptions yet">
       Subscriptions aren’t available on cyex.tv yet. Once they are, your plan, renewals and receipts show up here.
-      {#snippet actions()}<a class="ui-btn secondary" href="/shop">Go to the store</a>{/snippet}
+      {#snippet actions()}<a class="ui-btn secondary" href="/shop">Go to the shop</a>{/snippet}
     </State>
   </div>
 </MeFrame>

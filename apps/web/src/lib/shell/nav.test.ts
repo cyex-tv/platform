@@ -9,10 +9,10 @@ describe('headerLinks', () => {
     expect(labels(null, true)).toEqual(['Emotes']); // never Admin without an account
   });
   it('signed in: Emotes and Store', () => {
-    expect(labels({ permissions: [] }, false)).toEqual(['Emotes', 'Store']);
+    expect(labels({ permissions: [] }, false)).toEqual(['Emotes', 'Shop']);
   });
   it('staff also get Admin, last', () => {
-    expect(labels({ permissions: ['emotes.review'] }, true)).toEqual(['Emotes', 'Store', 'Admin']);
+    expect(labels({ permissions: ['emotes.review'] }, true)).toEqual(['Emotes', 'Shop', 'Admin']);
   });
   it('no subscriptions exist yet: Subscription never shows', () => {
     expect(hasSubscription({ permissions: [] })).toBe(false);

@@ -24,6 +24,8 @@ Every page is one of three shapes under the one header (`.claude/runs/2026-11-20
 | `MeFrame` (`lib/profile`) | `title`, `label?`, `panel`, `children`, `narrow?`, `fold?` | The /me pages' Inspector: you (ProfileHeader, flat), the profile's tabs plus the page you are on, the page's panel. The page's `PageHead` is its h1. |
 | `PanelBlock` | `title`, `count?`, `more?: { href, label }`, `fold?`, `bind:open?`, `level? = 3`, children | One block of a panel: uppercase label (a disclosure with `fold`), hairline between blocks. Inside: `<dl class="kv">` for facts (label left, value right), `.pb-actions` for full-width buttons (`.pair` for two side by side), `.pb-hint` for a line of help. |
 | `LinkTabs` | `label`, `items: { href, label, count?, current? }[]` | Tabs that are links (the URL holds the tab): bold current, no bar or fill, arrow keys. |
+| `FactList` | `items: { label, value, href?, mono? }[]`, `label?` | A facts list (label left, value right, hairlines, tabular numbers) outside a PanelBlock: order totals, download facts. |
+| `LinkRows` | `items: { href, label, hint?, icon?, external? }[]`, `label?` | Rows that lead somewhere (related pages, downloads): icon, label, hint line, chevron (arrow out for another site); the whole 44px row is the link. |
 | `SelectSwitch` (`browse/`) | `on`, `onchange(on)`, `label? = 'Select'` | The grid's Select-mode switch. |
 
 ## Emotes
