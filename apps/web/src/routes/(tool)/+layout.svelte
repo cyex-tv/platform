@@ -154,7 +154,7 @@
         {#snippet foot()}<a class="rail-foot" href="/users/{session.me?.id}?s=overview"><Icon name="circle-user" /><span class="lbl">Your profile</span><Icon name="chevron-right" size={14} /></a>{/snippet}
       </SideRail>
     {:else}
-      <SideRail label="Your account" wait>
+      <SideRail label="Your account" wait fill>
         {#snippet head()}
           <div class="me">
             {#if problem}
@@ -180,8 +180,9 @@
   .me-wait { padding-top: var(--rail-gap); padding-bottom: 48px; }
   .me { display: flex; align-items: center; gap: 12px; min-height: 40px; }
   .plain { font-size: var(--t-ui); font-weight: 600; color: var(--muted); }
-  .title { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding-left: 8px; }
-  .title strong { font-size: var(--t-ui); font-weight: 600; }
+  .title { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; padding-left: 10px; }
+  /* The rail's name is an uppercase label, as the browse rail's SETS. */
+  .title strong { font-size: var(--text-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
   .ph-av { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--surface-hover); }
   .ph-line { display: block; width: 110px; height: 12px; border-radius: var(--radius); }
 </style>

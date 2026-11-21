@@ -1,6 +1,7 @@
 <script lang="ts">
   // The site-wide upload dialog (upload.svelte.ts): the same UploadForm as /me/upload, in a modal
-  // that opens over whatever page you're on. Wide screens: a 960px dialog that scrolls inside.
+  // that opens over whatever page you're on. Wide screens: a 1040px dialog (files left, who you upload
+  // as and the buttons in a side column) that scrolls inside.
   // Phones: the whole screen, its title bar and buttons pinned. It can't close while files are
   // being sent (Esc and the backdrop do nothing then); otherwise the queue stays for next time,
   // and only finished uploads leave it. Dropping images anywhere on the open dialog adds them.
@@ -68,11 +69,11 @@
 
 <style>
   /* clip, not hidden: focus and scrollIntoView can't shift the panel inside the dialog. */
-  .upload-dialog { width: min(960px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow: clip; }
+  .upload-dialog { width: min(1040px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow: clip; }
   .panel { display: grid; grid-template-rows: auto minmax(0, 1fr); max-height: calc(100dvh - 48px); }
   .top { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px 12px; border-bottom: 1px solid var(--border); }
   .text { flex: 1; min-width: 0; }
-  h2 { margin: 0; font-size: 1.05rem; font-weight: 700; letter-spacing: 0; }
+  h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.01em; line-height: 1.35; }
   .top p { margin: 2px 0 0; font-size: var(--t-small); color: var(--muted); }
   .close { flex: none; margin: -4px -6px 0 0; }
   /* Vertical only: a focus ring or a 2px rounding at the edge never brings up a sideways bar. */
