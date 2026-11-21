@@ -1,5 +1,6 @@
 <script lang="ts">
-  // Every error page (404, 403, 500): the one error pattern (Problem) with its way out, then a
+  // Every error page (404, 403, 500), flat and centred: the status in mono, the one error pattern
+  // (Problem, bare) with its way out, then a
   // short list of places to go instead, so a dead link never ends the visit. The address that
   // failed is shown, so a typo is easy to spot.
   import { invalidateAll } from '$app/navigation';
@@ -19,30 +20,41 @@
   <title>{problemTitle(cause)}</title>
 </svelte:head>
 
-<ColumnLayout width="measure" top>
-  <Problem {cause} level={1} onretry={() => invalidateAll()} />
-  <div class="after">
-    <p class="where"><span class="label">Address</span><code>{page.url.pathname}</code><span class="code">{page.status}</span></p>
-    <h2 class="label">Try instead</h2>
-    <ul class="links">
-      {#each links as l (l.href)}
-        <li><a href={l.href}><Icon name={ICON[l.icon]} size={16} /><span>{l.label}</span><Icon name="chevron-right" size={14} /></a></li>
-      {/each}
-    </ul>
+<ColumnLayout top>
+  <div class="center">
+    <div class="flat">
+      <p class="code-line"><span class="label">Error</span><span class="status">{page.status}</span></p>
+      <div class="problem"><Problem {cause} level={1} bare onretry={() => invalidateAll()} /></div>
+      <dl class="where">
+        <dt class="label">Address</dt><dd><code>{page.url.pathname}</code></dd>
+      </dl>
+      <h2 class="label">Try instead</h2>
+      <ul class="links">
+        {#each links as l (l.href)}
+          <li><a href={l.href}><Icon name={ICON[l.icon]} size={16} /><span>{l.label}</span><Icon name="chevron-right" size={14} /></a></li>
+        {/each}
+      </ul>
+    </div>
   </div>
 </ColumnLayout>
 
 <style>
-  p, h2 { margin: 0; }
-  .after { display: grid; gap: 4px; margin: 20px 0 48px; }
-  .label { display: flex; align-items: center; min-height: 36px; font-size: var(--t-label, 11px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
-  .where { display: flex; align-items: center; gap: 12px; min-width: 0; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
-  .where .label { flex: none; }
-  .where code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--t-small); color: var(--text); }
-  .where .code { flex: none; font-size: var(--t-small); color: var(--dim); font-variant-numeric: tabular-nums; }
+  p, h2, dl, dd { margin: 0; }
+  /* Flat and centred, like sign-in: no card; the status in mono, uppercase labels over hairline rows. */
+  .center { display: grid; justify-items: center; padding-block: clamp(16px, 5vw, 56px) 48px; }
+  .flat { width: 100%; max-width: var(--measure-form); }
+  .label { display: flex; align-items: center; min-height: 40px; font-size: var(--t-label, 11px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  .code-line { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); }
+  .status { font-family: var(--font-mono); font-size: var(--t-small); font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+  .problem :global(.state) { justify-items: start; text-align: left; min-height: 0; padding: 24px 0 28px; }
+  .problem :global(.state > svg) { display: none; }
+  .problem :global(.actions) { justify-content: flex-start; }
+  .where { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 16px; border-block: 1px solid var(--border); }
+  .where code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; font-family: var(--font-mono); font-size: var(--t-small); color: var(--text); }
+  h2.label { margin-top: 20px; border-bottom: 1px solid var(--border); }
   .links { list-style: none; margin: 0; padding: 0; display: grid; }
-  .links li + li { border-top: 1px solid var(--border); }
-  .links a { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 0 -6px; padding: 0 6px; border-radius: var(--radius);
+  .links li { border-bottom: 1px solid var(--border); }
+  .links a { display: flex; align-items: center; gap: 10px; min-height: 48px; margin: 0 -6px; padding: 0 6px; border-radius: var(--radius);
     color: var(--text); font-size: var(--t-small); font-weight: 600; transition: background-color var(--fast); }
   .links a span { flex: 1; min-width: 0; }
   .links a :global(svg) { flex: none; color: var(--dim); }
