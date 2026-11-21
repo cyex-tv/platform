@@ -78,7 +78,7 @@
       {#if !matching.length}
         <State bare title="No set matches “{find.trim()}”." />
       {/if}
-      <ul class="cards">
+      <ul class="cards contact-sheet">
         {#each visible as s (s.id)}
           {@const p = fillPercent(s.used, s.capacity)}
           {@const mark = setMark(s.visibility)}
@@ -113,25 +113,24 @@
 </LoadGate>
 
 <style>
-  .filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 12px; }
+  .filter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 52px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
   .find { position: relative; display: block; width: min(280px, 100%); }
   .find :global(svg) { position: absolute; left: 10px; top: 50%; translate: 0 -50%; color: var(--muted); pointer-events: none; }
   .find .input { width: 100%; height: 34px; padding-left: 32px; font-size: var(--t-small); }
   .more { display: grid; justify-items: center; gap: 10px; padding: 24px 0 8px; }
-  .cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); gap: 12px; }
-  .card { display: grid; gap: 8px; height: 100%; padding: 12px; color: var(--text); text-decoration: none;
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card);
-    transition: background-color var(--fast), border-color var(--fast); }
+  /* A contact sheet (redesign round 2): the sets share hairlines, no cards (app.css .contact-sheet). */
+  .cards { list-style: none; margin: 0; padding: 0; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); }
+  .card { display: grid; gap: 8px; height: 100%; padding: 14px; color: var(--text); text-decoration: none;
+    transition: background-color var(--fast); }
   .card:active { opacity: .7; transition: none; }
-  .card:focus-visible { outline-offset: 2px; }
-  @media (hover: hover) and (pointer: fine) { .card:hover { background: var(--surface-hover); border-color: var(--border-strong); } }
+  .card:focus-visible { outline-offset: -2px; }
   .row { display: flex; align-items: center; gap: 8px; min-width: 0; margin-top: 2px; }
   .nm { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .vis { display: inline-grid; color: var(--dim); }
   .on { display: inline-grid; color: var(--accent-text); }
   .meta { font-size: var(--t-fine); color: var(--dim); }
-  .cap { display: flex; align-items: center; gap: 10px; font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
-  .bar { flex: 1; min-width: 0; height: 4px; border-radius: 2px; background: var(--elevated-2); overflow: hidden; }
+  .cap { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .bar { flex: 1; min-width: 0; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; }
   .fill { display: block; height: 100%; background: var(--accent); }
   .fill.full { background: var(--yellow); }
   .n { flex: none; }

@@ -143,8 +143,9 @@
   }
 </script>
 
-<section class="ui-panel">
-  <header><h2><label for="add-find">Add emotes</label></h2></header>
+<!-- Flat (redesign round 2): an uppercase label, the search, the results as rows with hairlines. -->
+<section class="add-emotes">
+  <h2 class="lbl"><label for="add-find">Add emotes</label></h2>
   <form class="find" role="search" onsubmit={search}>
     <div class="field">
       <input id="add-find" class="ui-input" type="search" bind:this={findEl} bind:value={query} placeholder="Search emotes by name or tag"
@@ -210,12 +211,14 @@
 </section>
 
 <style>
-  .find { display: grid; gap: 8px; padding: 12px 16px; }
+  .add-emotes { margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border); }
+  .lbl { margin: 0 0 10px; font-size: var(--t-label, 12px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  .find { display: grid; gap: 8px; padding: 0 0 12px; }
   .field { display: flex; gap: 8px; }
   .field input { flex: 1; }
   .field .ui-btn { flex: none; }
   .results { max-height: 360px; overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--border); }
-  .results > li { padding: 6px 16px; flex-wrap: wrap; }
+  .results > li { padding: 6px 0; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
   .alias { flex-basis: 100%; display: grid; gap: 6px; padding: 4px 0 8px 52px; }
   .alias .ui-hint { margin: 0; }
   .alias-row { display: flex; gap: 8px; }
@@ -226,6 +229,6 @@
   .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   @media (hover: hover) and (pointer: fine) { .who:hover .name { text-decoration: underline; } }
   .add { flex: none; }
-  .more { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--border); }
+  .more { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }
   .more p { margin: 0; }
 </style>

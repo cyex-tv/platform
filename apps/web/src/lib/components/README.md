@@ -28,6 +28,22 @@ Every page is one of three shapes under the one header (`.claude/runs/2026-11-20
 | `LinkRows` | `items: { href, label, hint?, icon?, external? }[]`, `label?` | Rows that lead somewhere (related pages, downloads): icon, label, hint line, chevron (arrow out for another site); the whole 44px row is the link. |
 | `SelectSwitch` (`browse/`) | `on`, `onchange(on)`, `label? = 'Select'` | The grid's Select-mode switch. |
 
+## Round 2: the flat language (2026/11/21)
+
+Every page outside landing, browse, emote and profile is built from these (rules: `.claude/runs/2026-11-20-redesign/design-rules.md`, "Round 2"). No bordered card boxes for sections; items share hairlines; numbers in mono.
+
+| Component | Props | Usage |
+|---|---|---|
+| `WorkspaceLayout` (`lib/shell`) | `rail` (snippet: a `SideRail` with `fill`), `head?`, `toolbar?`, `children`, `panel?`, `title?` (the panel's uppercase label), `label?`, `panelActions?`, `narrow?: 'before' \| 'after'`, `fold?`, `width? = 360`, `testid?` | The Workspace: a rail flush with the window's left edge and the header, the content, and an optional inspector panel flush right (sticky, own ground, uppercase label; the same panel as `InspectorLayout`). 900-1099px: the panel lies flat (hairlines, no card) before or after the content; under 900px the rail is its tab strip and one column. Used by Settings, every /me page (`MeFrame`), the set and emote editors. |
+| `SideRail` rows (`lib/shell/rail.ts`) | `RailItem` gains `meter?: { used, capacity }` and `live?` | A row with a meter is two lines (name + mono count, a 3px meter under them) like the browse rail's sets; `live` adds the green LIVE. Backward compatible. |
+| `Section` | `title`, `count?`, `lead?`, `level? = 2`, `id?`, `tone?: 'danger'`, snippets `actions?`, `children` | A flat section: small uppercase label (mono count, actions at its right), an optional line, the content; a hairline above every section after the first. Replaces `.ui-card` / `.ui-panel` boxes. |
+| `Row` | `label`, `hint?: string \| Snippet`, `for?`, `icon?`, `media?` (snippet), `inline?`, `dim?`, `children?` (the value/control) | One label/value row with a hairline under it: settings fields, connections, sessions, channels. The control drops under the label below 560px unless `inline` (switches). |
+| `FactRows` | `items: { label, value?, mono?, href?, avatar?, meter?, tone?: 'ok' \| 'warn' \| 'bad' \| 'muted', key? }[]`, `label?`, snippet `value(key)` | The inspector's facts: label left, value right, hairlines, mono numbers (on by default for numbers), a capacity meter under a value, or your own markup for rows with a `key`. |
+| `Meter` | `used`, `capacity`, `label?`, `width?` | The 3px fill bar (accent, yellow from 90 %, red when full). Decorative unless `label` (then `role="meter"`). |
+| `ContactSheet` | `label?`, `min? = 180` (smallest cell px), `tag? = 'ul'`, `busy?`, children (the cells) | Cells sharing hairlines in one sheet: sets, channels, upload files. Emote grids: `EmoteGrid sheet` / `BrowseGrid sheet` (same tiles, menu and Select; the tile loses its card, the picked or inspected one gets an inset accent hairline). The rules are the global `.contact-sheet` class in `app.css`. |
+| `Toolbar` | `label?`, `children?` (filters at the left), `end?` (search, count, sort, Select at the right), `sticky?` | The slim one-line bar above a list with a hairline under it; `.tb-count` is its mono count. Filter chips inside are bold text with an accent icon when on (`Segmented`). |
+| `PanelBlock` | as before | The inspector's blocks; put `FactRows` inside for facts. |
+
 ## Emotes
 
 | Component | Props | Usage |

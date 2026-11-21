@@ -2,7 +2,17 @@
 // optional icon and count; `current` marks the page you are on (aria-current="page").
 import type { IconName } from '$lib/components/Icon.svelte';
 
-export type RailItem = { href: string; label: string; icon?: IconName; count?: number | string; current?: boolean };
+export type RailItem = {
+  href: string;
+  label: string;
+  icon?: IconName;
+  count?: number | string;
+  current?: boolean;
+  /** How full it is (a set): a 3px meter under the row, as the browse rail's sets (redesign round 2). */
+  meter?: { used: number; capacity: number };
+  /** A channel shows it: a small green LIVE after the label. */
+  live?: boolean;
+};
 /**
  * A group of rows. `toggle` makes it collapsible under a row of its own (7TV's admin "Tickets"
  * and "Cosmetics"): open by default, or while one of its rows is current.

@@ -30,15 +30,15 @@ describe('channel controls while a save is on its way', () => {
 });
 
 describe('channels page frame', () => {
-  it('sits in your profile’s frame: the profile tabs with Channels current, and its own panel', async () => {
+  it('sits in your area’s Workspace: the rail with Channels current, and its own panel', async () => {
     const { session } = await import('$lib/tool/session.svelte');
     session.me = { id: 'ME', identities: [{ displayName: 'ana', platform: 'TWITCH' }], permissions: [] } as unknown as typeof session.me;
     gql.mockImplementation(async () => ({ myChannels: [channel], mySets: [], editorOf: [], editorChannels: [], editorSets: [], profile: null }));
     render(Page);
-    const tabs = await screen.findByRole('navigation', { name: 'Your profile' });
-    const current = tabs.querySelector('[aria-current="page"]');
+    const rail = (await screen.findAllByRole('navigation', { name: 'Your area' }))[0];
+    const current = rail.querySelector('[aria-current="page"]');
     expect(current?.textContent).toContain('Channels');
-    expect(tabs.querySelector('a[href="/users/ME?s=sets"]')).toBeTruthy();
+    expect(rail.querySelector('a[href="/users/ME?s=overview"]')).toBeTruthy();
     const panel = screen.getByRole('complementary', { name: 'About your channels' });
     expect(panel.textContent).toContain('Chat shows');
     session.me = null;

@@ -11,8 +11,9 @@
   import SessionsPanel from '$lib/account/SessionsPanel.svelte';
   import { canChooseName, canDisconnect } from '$lib/account/settings';
   import Avatar from '$lib/components/Avatar.svelte';
-  import Icon from '$lib/components/Icon.svelte';
-  import Name from '$lib/components/Name.svelte';
+  import Row from '$lib/components/Row.svelte';
+  import Section from '$lib/components/Section.svelte';
+  import Segmented from '$lib/components/Segmented.svelte';
   import { date } from '$lib/format';
   import type { Platform } from '$lib/gql/graphql';
   import { forgetProfile } from '$lib/profile/data.svelte';
@@ -34,14 +35,14 @@
   // The API lists the identity you go by first.
   const current = $derived(me.identities[0]?.platform ?? null);
   let busy = $state<string | null>(null);
-  // The radio shows this; a save that fails puts it back on `current`.
-  let picked = $derived<Platform | null>(current);
 
   async function refresh() {
     forgetProfile();
     forgetLooks();
     await loadMe({ fresh: true });
   }
+
+  const currentIdentity = $derived(me.identities[0] ?? null);
 
   async function choose(p: Platform) {
     if (p === current || busy) return;
@@ -52,7 +53,6 @@
       const id = me.identities.find((i) => i.platform === p);
       notify(`You go by your ${nameOf(p)} name${id ? `, ${id.displayName}` : ''}, now.`);
     } catch (err) {
-      picked = current;
       fail(err);
     } finally {
       busy = null;
@@ -92,88 +92,50 @@
     {#snippet line()}Member since <span class="ui-num">{date(me.createdAt)}</span>{/snippet}
   </PageHead>
 
-  <div class="ui-stack">
-    <section class="ui-panel" aria-labelledby="name-h">
-      <header><h2 id="name-h">Display name</h2></header>
-      {#if canChooseName(me.identities)}
-        <fieldset class="choose" disabled={busy !== null}>
-          <legend class="ui-hint pad">Pick which connection is your name and picture on cyex.tv. People still find you by every login.</legend>
-          <ul class="ui-list">
-            {#each me.identities as id (id.platform)}
-              <li>
-                <label class="pick">
-                  <input type="radio" name="display" value={id.platform} bind:group={picked} onchange={() => choose(id.platform)} />
-                  <Avatar src={id.avatar} name={id.displayName} size={28} tone="tool" />
-                  <span class="what"><strong><Name value={id.displayName} /></strong><span class="ui-hint">{nameOf(id.platform)} · {id.login}</span></span>
-                  {#if id.platform === current}<span class="now"><Icon name="check" size={14} />Your name</span>{/if}
-                </label>
-              </li>
-            {/each}
-          </ul>
-        </fieldset>
-      {:else if me.identities[0]}
-        <p class="ui-hint pad">You go by your {nameOf(me.identities[0].platform)} name, <Name value={me.identities[0].displayName} />. Connect another platform below to choose between them.</p>
+  <Section title="Display name" lead={canChooseName(me.identities) ? 'Pick which connection is your name and picture on cyex.tv. People still find you by every login.' : undefined}>
+    {#if currentIdentity}
+      <Row label={currentIdentity.displayName} hint={canChooseName(me.identities) ? `${nameOf(currentIdentity.platform)} · ${currentIdentity.login}` : `Your ${nameOf(currentIdentity.platform)} name. Connect another platform below to choose between them.`}>
+        {#snippet media()}<Avatar src={currentIdentity.avatar} name={currentIdentity.displayName} size={24} tone="tool" />{/snippet}
+        {#if canChooseName(me.identities)}
+          <Segmented label="Display name" options={me.identities.map((i) => ({ value: i.platform, label: nameOf(i.platform), disabled: busy !== null }))} value={current ?? ''} onchange={(v) => choose(v as Platform)} />
+        {/if}
+      </Row>
+    {/if}
+  </Section>
+
+  <Section title="Connections" count={me.identities.length} lead="Connect both to sign in with either. You always keep at least one: the last connection can’t be disconnected. cyex.tv keeps the user ID, login, display name and picture.">
+    {#each PLATFORMS as p (p.id)}
+      {@const id = me.identities.find((i) => i.platform === p.id)}
+      {#if id}
+        <Row label={id.login} icon={p.slug}>
+          {#snippet hint()}{p.name} · <span class="ui-mono">{id.platformUserId}</span>{/snippet}
+          {#if canDisconnect(me.identities)}
+            <Confirm small label="Disconnect" confirm="Click again to disconnect" busy={busy !== null} onconfirm={() => disconnect(p.id)} />
+          {:else}
+            <span class="keep" title="You always keep at least one connection.">Your only connection</span>
+          {/if}
+        </Row>
+      {:else}
+        <Row label={p.name} hint="Not connected" icon={p.slug} dim>
+          <a class="ui-btn secondary small" href={linkUrl(p.slug)}>Connect {p.name}</a>
+        </Row>
       {/if}
-    </section>
+    {/each}
+  </Section>
 
-    <section class="ui-panel" aria-labelledby="conn-h">
-      <header><h2 id="conn-h">Connections</h2></header>
-      <ul class="ui-list">
-        {#each PLATFORMS as p (p.id)}
-          {@const id = me.identities.find((i) => i.platform === p.id)}
-          <li>
-            {#if id}
-              <Icon name={p.slug} />
-              <span class="what"><strong><Name value={id.login} /></strong><span class="ui-hint">{p.name} · <span class="ui-mono">{id.platformUserId}</span></span></span>
-              {#if canDisconnect(me.identities)}
-                <Confirm small label="Disconnect" confirm="Click again to disconnect" busy={busy !== null} onconfirm={() => disconnect(p.id)} />
-              {:else}
-                <span class="ui-hint keep" title="You always keep at least one connection.">Your only connection</span>
-              {/if}
-            {:else}
-              <Icon name={p.slug} />
-              <span class="what"><strong>{p.name}</strong><span class="ui-hint">Not connected</span></span>
-              <a class="ui-btn secondary small" href={linkUrl(p.slug)}>Connect {p.name}</a>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-      <p class="ui-hint pad">Connect both to sign in with either. You always keep at least one: the last connection can’t be disconnected. cyex.tv keeps the user ID, login, display name and picture.</p>
-    </section>
+  <Section title="Security">
+    <Row label="Sign out everywhere" hint="Ends every session: this browser, other browsers and the cyex.tv apps. You sign in again after.">
+      <Confirm small label="Sign out everywhere" confirm="Click again to sign out" busy={busy !== null} onconfirm={everywhere} />
+    </Row>
+  </Section>
 
-    <section class="ui-panel" aria-labelledby="sec-h">
-      <header><h2 id="sec-h">Security</h2></header>
-      <div class="row pad">
-        <p class="what"><strong title="Sign out everywhere">Sign out everywhere</strong><span class="ui-hint">Ends every session: this browser, other browsers and the cyex.tv apps. You sign in again after.</span></p>
-        <Confirm small label="Sign out everywhere" confirm="Click again to sign out" busy={busy !== null} onconfirm={everywhere} />
-      </div>
-    </section>
+  <SessionsPanel />
 
-    <SessionsPanel />
+  <DataPanel />
 
-    <DataPanel />
-
-    <DeleteAccount />
-  </div>
+  <DeleteAccount />
 </div>
 
 <style>
-  /* The words get 10rem at least; a button that doesn't fit beside them wraps under instead of squeezing them. */
-  .what { display: grid; flex: 1 1 10rem; min-width: 0; margin: 0; }
-  .what strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pad { padding: 10px 14px 12px; margin: 0; }
-  .choose { margin: 0; padding: 0; border: 0; min-width: 0; }
-  .choose legend { display: block; width: 100%; }
-  .pick { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; cursor: pointer; }
-  .pick input { flex: none; width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
-  .choose:disabled .pick { cursor: default; opacity: .7; }
-  .now { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-fine); font-weight: 600; color: var(--text); white-space: nowrap; }
-  .now :global(svg) { color: var(--accent-text); }
-  li > :global(svg) { color: var(--muted); flex: none; }
-  .keep { white-space: normal; }
-  .row { display: flex; align-items: center; gap: 12px; }
-  @media (max-width: 560px) {
-    .row { flex-wrap: wrap; }
-    .ui-list > li { flex-wrap: wrap; }
-  }
+  .keep { font-size: var(--t-fine); color: var(--muted); }
 </style>

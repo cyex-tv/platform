@@ -32,6 +32,8 @@
     onpick?: (e: CardEmote) => void;
     /** Number the tiles from 1 in this order (a ranking, e.g. Trending). */
     ranked?: boolean;
+    /** A contact sheet (redesign round 2): the tiles share hairlines, no gaps and no cards. */
+    sheet?: boolean;
   };
   let {
     items,
@@ -50,6 +52,7 @@
     picked,
     onpick,
     ranked = false,
+    sheet = false,
   }: Props = $props();
 
   // A long grid is a long Tab walk: with enough tiles, a "Skip results" link ahead of them (shown
@@ -68,7 +71,7 @@
   <p class="none">{empty}</p>
 {:else}
   {#if long}<a class="skip" href="#{endId}" onclick={skip}>Skip results</a>{/if}
-  <ul class="grid {density}" aria-label={label} aria-busy={loading}>
+  <ul class="grid {density}" class:contact-sheet={sheet} class:sheet aria-label={label} aria-busy={loading}>
     {#each items as e, i (e.id + (e.shownName ?? ''))}
       <li class:wide={isWide(e)}>
         {#if corner}
@@ -99,10 +102,14 @@
   .compact { grid-template-columns: repeat(auto-fill, minmax(var(--emote-tile-compact), 1fr)); gap: 8px; }
   .wide { grid-column: span 2; }
   li { min-width: 0; }
+  .sheet, .sheet.compact { gap: 0; }
+  .sheet li:has(.below) { gap: 0; padding-bottom: 6px; }
   li:has(.below) { display: grid; grid-template-rows: 1fr auto; gap: 6px; }
   .below { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 40px; min-width: 0; }
   @media (max-width: 520px) {
-    .grid { gap: 8px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+    .sheet, .sheet.compact { gap: 0; }
+    .grid:not(.sheet) { gap: 8px; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
     .compact { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
   }
 </style>

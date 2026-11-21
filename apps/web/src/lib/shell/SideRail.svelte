@@ -20,6 +20,7 @@
   import BottomSheet from '$lib/components/BottomSheet.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import { count as fmt } from '$lib/format';
+  import Meter from '$lib/components/Meter.svelte';
   import { arrowNav, type RailGroup, type RailItem } from './rail';
 
   type Props = {
@@ -179,10 +180,11 @@
       <ul class:nested={!!g.toggle}>
         {#each g.items as i (i.href)}
           <li>
-            <a class="row" href={i.href} aria-current={i.current ? 'page' : undefined} tabindex={i.href === stop ? 0 : -1} onclick={() => onpick?.()}>
+            <a class="row" class:metered={!!i.meter} href={i.href} aria-current={i.current ? 'page' : undefined} tabindex={i.href === stop ? 0 : -1} onclick={() => onpick?.()}>
               {#if i.icon}<Icon name={i.icon} />{/if}
-              <span class="lbl">{i.label}</span>
+              <span class="lbl">{i.label}{#if i.live}<span class="live" title="A channel shows this set">Live</span>{/if}</span>
               {#if has(i.count)}<span class="count" aria-hidden="true">{shown(i.count)}</span><span class="sr-only">, {shown(i.count)}</span>{/if}
+              {#if i.meter}<span class="mtr"><Meter used={i.meter.used} capacity={i.meter.capacity} /></span>{/if}
             </a>
           </li>
         {/each}
@@ -270,6 +272,13 @@
   .row :global(svg) { color: var(--dim); transition: color var(--fast); }
   .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .count { flex: none; font-size: 12px; font-weight: 500; color: var(--dim); font-variant-numeric: tabular-nums; }
+  /* A row with a meter (a set): the name and count on one line, the meter under them (the browse rail's set row). */
+  .row.metered { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; grid-template-rows: 20px 3px; column-gap: 10px; row-gap: 6px;
+    min-height: 50px; padding-block: 8px 9px; }
+  .row.metered:not(:has(svg)) { grid-template-columns: minmax(0, 1fr) auto; }
+  .metered .count { font-family: var(--font-mono); }
+  .mtr { grid-column: -3 / -1; grid-row: 2; display: block; }
+  .live { margin-left: 6px; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--green); }
   .row[aria-current='page'] { color: var(--text); font-weight: 600; }
   .row[aria-current='page'] :global(svg) { color: var(--accent-text); }
   .row:focus-visible, .tab:focus-visible { outline-offset: -2px; }

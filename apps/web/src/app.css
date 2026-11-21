@@ -108,3 +108,19 @@ kbd { font: inherit; }
   input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color']), select, textarea { min-height: 44px; font-size: 16px !important; }
   summary { min-height: 44px; }
 }
+
+/* ---- Round 2 of the redesign (2026/11/21): the shared flat language (lib/components/README.md).
+   A contact sheet: items share hairlines in one sheet, no gaps between floating cards. Put
+   `.contact-sheet` on the list (EmoteGrid / BrowseGrid `sheet`, ContactSheet); every child is a
+   cell with a hairline on its right and bottom, the sheet draws the top and left ones. */
+.contact-sheet { display: grid; gap: 0; border-top: 1px solid var(--border); border-left: 1px solid var(--border); background: var(--surface); }
+.contact-sheet > * { min-width: 0; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+/* A tile in a sheet is the cell: no card of its own. Picked or shown in the panel: an inset accent hairline. */
+.contact-sheet > li .tile { height: 100%; border: 0; border-radius: 0; background: none; }
+.contact-sheet > li .tile:focus-visible { outline-offset: -2px; border-radius: 0; }
+.contact-sheet > li .tile.picked, .contact-sheet > li .tile[aria-current='true'] { box-shadow: inset 0 0 0 1px var(--accent-border); }
+@media (hover: hover) and (pointer: fine) {
+  .contact-sheet > li:hover { background: var(--surface-hover); }
+  .contact-sheet > li .tile:hover { background: none; }
+}
+@media (prefers-contrast: more) { .contact-sheet, .contact-sheet > * { border-color: var(--border-strong); } }

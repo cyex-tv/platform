@@ -1,13 +1,12 @@
 <script lang="ts">
   // The site-wide upload dialog (upload.svelte.ts): the same UploadForm as /me/upload, in a modal
-  // that opens over whatever page you're on. Wide screens: a 1040px dialog (files left, who you upload
-  // as and the buttons in a side column) that scrolls inside.
+  // that opens over whatever page you're on. Wide screens: a 1040px dialog: the files scroll on the left, the right column (who you upload
+  // as, the rules, the guidelines) keeps the Upload button in view.
   // Phones: the whole screen, its title bar and buttons pinned. It can't close while files are
   // being sent (Esc and the backdrop do nothing then); otherwise the queue stays for next time,
   // and only finished uploads leave it. Dropping images anywhere on the open dialog adds them.
   import { tick } from 'svelte';
   import Icon from '$lib/components/Icon.svelte';
-  import { UPLOAD_FORMATS } from '$lib/rules';
   import UploadForm from './UploadForm.svelte';
   import { closeUpload, upload } from './upload.svelte';
 
@@ -57,7 +56,7 @@
     <header class="top">
       <div class="text">
         <h2 id="upload-title">Upload</h2>
-        <p id="upload-line">{UPLOAD_FORMATS}, at most 8 MB and 1000 × 1000 px. Up to 20 at once.</p>
+        <p id="upload-line">Drop your images, name and tag each one, then upload them together.</p>
       </div>
       <button class="ui-icon close" type="button" aria-label="Close" onclick={close} disabled={busy}><Icon name="x" size={18} /></button>
     </header>
@@ -69,22 +68,20 @@
 
 <style>
   /* clip, not hidden: focus and scrollIntoView can't shift the panel inside the dialog. */
-  .upload-dialog { width: min(1040px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow: clip; }
-  .panel { display: grid; grid-template-rows: auto minmax(0, 1fr); max-height: calc(100dvh - 48px); }
+  .upload-dialog { width: min(1040px, calc(100vw - 32px)); height: min(720px, calc(100dvh - 48px)); max-height: calc(100dvh - 48px); overflow: clip; padding: 0; }
+  .panel { display: grid; grid-template-rows: auto minmax(0, 1fr); height: 100%; }
   .top { display: flex; align-items: flex-start; gap: 12px; padding: 14px 16px 12px; border-bottom: 1px solid var(--border); }
   .text { flex: 1; min-width: 0; }
   h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.01em; line-height: 1.35; }
   .top p { margin: 2px 0 0; font-size: var(--t-small); color: var(--muted); }
   .close { flex: none; margin: -4px -6px 0 0; }
-  /* Vertical only: a focus ring or a 2px rounding at the edge never brings up a sideways bar. */
-  .scroll { overflow: hidden auto; overscroll-behavior: contain; padding: 16px; }
+  /* The form scrolls its own columns (the files; the side column keeps Upload in view). */
+  .scroll { min-height: 0; overflow: hidden; }
   /* Phones: the whole screen; the title bar stays put while the form scrolls. */
   @media (max-width: 640px) {
     .upload-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0;
       /* Full screen: it fades in place, with no scale (it would show the page edge behind it). */
       transition-property: opacity, overlay, display; scale: 1; }
-    .panel { height: 100dvh; max-height: 100dvh; }
     .top { padding-top: calc(12px + env(safe-area-inset-top, 0px)); }
-    .scroll { padding: 16px 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
   }
 </style>

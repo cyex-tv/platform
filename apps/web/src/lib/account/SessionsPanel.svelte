@@ -3,7 +3,8 @@
   // Revoke. "Sign out everywhere else" ends all but this one and says how many. Revoking this
   // device signs you out here too, so that row says "Sign out" and arms first.
   import { gql } from '$lib/api';
-  import Icon from '$lib/components/Icon.svelte';
+  import Row from '$lib/components/Row.svelte';
+  import Section from '$lib/components/Section.svelte';
   import { dateTime } from '$lib/format';
   import { relative } from '$lib/profile/activity';
   import { REVOKE_OTHER_SESSIONS, REVOKE_SESSION, MY_SESSIONS } from '$lib/queries';
@@ -48,58 +49,42 @@
     });
 </script>
 
-<section class="ui-panel" aria-labelledby="sessions-h">
-  <header>
-    <h2 id="sessions-h">Sessions</h2>
+<Section title="Sessions" count={L.data?.length} id="sessions-h">
+  {#snippet actions()}
     {#if L.data && L.data.some((s) => !s.current && !gone[s.id])}
       <button class="ui-btn secondary small" type="button" disabled={busy} onclick={others}>Sign out everywhere else</button>
     {/if}
-  </header>
+  {/snippet}
   <LoadGate source={L} label="Loading sessions…">
     {#snippet children(list)}
       {#if list.length === 0}
-        <p class="ui-hint pad">No sessions to show.</p>
+        <p class="empty">No sessions to show.</p>
       {:else}
-        <ul class="ui-list">
-          {#each list as s (s.id)}
-            <li class:current={s.current} class:gone={gone[s.id]}>
-              <Icon name={s.kind === 'APP' ? 'tv' : 'user'} />
-              <span class="what">
-                <strong title={s.device}><bdi>{s.device}</bdi></strong>
-                <span class="ui-hint meta">
-                  {#if s.current}<span class="here">This device</span>{' · '}{/if}{s.kind === 'APP' ? 'App' : 'Website'} · Last seen <time datetime={s.lastSeenAt} title={relative(s.lastSeenAt)}>{dateTime(s.lastSeenAt)}</time>
-                </span>
-              </span>
+        {#each list as s (s.id)}
+          <div class="s" class:current={s.current} class:gone={gone[s.id]}>
+            <Row label={s.device} icon={s.kind === 'APP' ? 'tv' : 'user'}>
+              {#snippet hint()}
+                {#if s.current}<span class="tag">This device</span>{' · '}{/if}{s.kind === 'APP' ? 'App' : 'Website'} · Last seen <time class="ui-mono" datetime={s.lastSeenAt} title={relative(s.lastSeenAt)}>{dateTime(s.lastSeenAt)}</time>
+              {/snippet}
               {#if s.current}
                 <Confirm small label="Sign out" confirm="Click again to sign out" busy={busy} onconfirm={() => revoke(s.id, true)} />
               {:else if gone[s.id]}
-                <span class="ui-hint done">Signed out</span>
+                <span class="done">Signed out</span>
               {:else}
                 <button class="ui-btn secondary small" type="button" disabled={busy} onclick={() => revoke(s.id, false)}>Revoke</button>
               {/if}
-            </li>
-          {/each}
-        </ul>
+            </Row>
+          </div>
+        {/each}
       {/if}
     {/snippet}
   </LoadGate>
-</section>
+</Section>
 
 <style>
-  .what { display: grid; flex: 1 1 10rem; min-width: 0; }
-  .what strong { display: block; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .meta { overflow-wrap: anywhere; }
-  .here { font-weight: 600; color: var(--text); }
-  li > :global(svg) { color: var(--muted); }
-  .current > :global(svg) { color: var(--accent-text); }
-  .current .what strong { font-weight: 600; }
-  .done { flex: none; padding-inline: 8px; white-space: nowrap; }
-  .gone .what { opacity: .6; }
-  .pad { padding: 10px 14px 12px; }
-  @media (max-width: 560px) {
-    .ui-list > li { flex-wrap: wrap; }
-  }
-  @media (max-width: 480px) {
-    .ui-panel > header { flex-wrap: wrap; }
-  }
+  .tag { font-weight: 600; color: var(--text); }
+  .done { font-size: var(--t-small); color: var(--muted); white-space: nowrap; }
+  .gone { opacity: .6; }
+  .current :global(.ico) { color: var(--accent-text); }
+  .empty { margin: 8px 0; font-size: var(--t-small); color: var(--muted); }
 </style>
