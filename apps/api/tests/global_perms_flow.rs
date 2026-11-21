@@ -256,7 +256,7 @@ async fn edit_any_and_delete_any_work_on_anyones_emotes_and_are_audited() {
     let deleted = w.audit_rows("emote.deleted").await;
     assert_eq!(deleted.len(), 1);
     assert_eq!(deleted[0].actor_account_id, Some(deleter.id));
-    assert_eq!(deleted[0].target_id, emote);
+    assert_eq!(deleted[0].target_id, ids::to_text(w.db.row(&emote).await));
     let before = deleted[0].before_json.as_ref().unwrap();
     assert_eq!(before["name"], "staffRenamed");
     assert_eq!(before["owner_id"], owner.tid().as_str());

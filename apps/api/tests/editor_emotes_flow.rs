@@ -386,7 +386,8 @@ async fn upload_as_needs_the_upload_flag_on_every_set() {
     let rows = w.audits("emote.uploaded").await;
     assert_eq!(rows.len(), 1);
     assert_editor_row(&rows[0], &bob, &alice);
-    assert_eq!(rows[0].0.target_id, id);
+    // The audit log keeps the row's ULID; the answer shows the Snowflake.
+    assert_eq!(rows[0].0.target_id, ids::to_text(w.db.row(&id).await));
     // Their own uploads are unchanged: theirs, nobody named.
     let (status, body) = w.upload(&bob, None, "bobsOwn", 2).await;
     assert_eq!(status, StatusCode::ACCEPTED, "{body}");

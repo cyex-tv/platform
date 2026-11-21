@@ -152,6 +152,8 @@ impl World {
 
     /// Who wrote each audit row of `action` on the emote, and its `after`.
     async fn audited(&self, action: &str, emote: &str) -> Vec<(Option<Uuid>, Option<Value>)> {
+        // The audit log keeps the row's ULID.
+        let emote = cyex_tv_db::ids::to_text(self.db.row(emote).await);
         let mut conn = self.db.conn().await;
         sqlx::query_as(
             "SELECT actor_account_id, after_json FROM audit_log
@@ -159,7 +161,7 @@ impl World {
              ORDER BY created_at, id",
         )
         .bind(action)
-        .bind(emote)
+        .bind(&emote)
         .fetch_all(&mut *conn)
         .await
         .unwrap()
