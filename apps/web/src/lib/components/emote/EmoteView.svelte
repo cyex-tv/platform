@@ -5,7 +5,8 @@
   // card with tabs (Channels using it, Activity, More by the creator) and a pager in the tab bar.
   // Phones get the actions in a bar fixed to the bottom of the screen.
   import { onMount } from 'svelte';
-  import { invalidateAll } from '$app/navigation';
+  import { goto, invalidateAll } from '$app/navigation';
+  import { page } from '$app/state';
   import EmoteFlagsPanel from '$lib/admin/EmoteFlagsPanel.svelte';
   import EmoteActions from '$lib/components/EmoteActions.svelte';
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
@@ -22,7 +23,7 @@
   import ChannelsTab from './ChannelsTab.svelte';
   import Pager from './Pager.svelte';
   import SizeRow from './SizeRow.svelte';
-  import { canReport, flagsOf, formats, scaleFiles, trust, type EmoteChannel, type PageEmote } from './emote-page';
+  import { canReport, flagsOf, formats, scaleFiles, tabFrom, tabUrl, tabUrlStale, trust, type EmoteChannel, type PageEmote } from './emote-page';
   import type { PagerState } from './pager';
   import { Viewer } from './viewer.svelte';
   import { bottomBar } from '$lib/tool/bottom-bars.svelte';
@@ -90,8 +91,18 @@
     ...(listed ? [{ id: 'activity' as const, label: 'Activity', icon: 'activity' as const }] : []),
     ...(more.length && e.owner ? [{ id: 'more' as const, label: `More by ${ownerName}`, short: 'More', icon: 'grid' as const }] : []),
   ]);
-  let picked = $state<TabId | null>(null);
-  const tab = $derived(tabs.find((x) => x.id === picked)?.id ?? tabs[0]?.id);
+  // The tab lives in the address (`?tab=activity`; the first tab has none), so a link or a reload
+  // opens it and back and forward step between tabs. Switching keeps the scroll and the focus.
+  const asked = $derived(page.url.searchParams.get('tab'));
+  const tab = $derived(tabFrom(asked, tabs.map((x) => x.id)));
+  function show(id: TabId, replace = false) {
+    if (id === tab) return;
+    void goto(tabUrl(page.url, id, tabs[0]?.id), { noScroll: true, keepFocus: true, replaceState: replace });
+  }
+  // An unknown tab (or the default one spelled out) is tidied to the clean address.
+  $effect(() => {
+    if (tabs.length && tabUrlStale(asked, tab, tabs[0]?.id)) void goto(tabUrl(page.url, tab ?? '', tabs[0]?.id), { noScroll: true, keepFocus: true, replaceState: true });
+  });
   // The Activity tab loads when it is first opened, then keeps its pages while you switch tabs.
   let seen = $state(false);
   $effect(() => {
@@ -108,7 +119,8 @@
     if (to === null) return;
     ev.preventDefault();
     const next = tabs[(to + tabs.length) % tabs.length].id;
-    picked = next;
+    // Arrows walk the tabs without a history entry for each step.
+    show(next, true);
     queueMicrotask(() => document.getElementById(`tab-${next}`)?.focus());
   }
 
@@ -206,7 +218,7 @@
                 aria-selected={tab === x.id}
                 aria-controls="panel-{x.id}"
                 tabindex={tab === x.id ? 0 : -1}
-                onclick={() => (picked = x.id)}
+                onclick={() => show(x.id)}
                 onkeydown={tabKey}
               ><Icon name={x.icon} size={16} />{#if x.short}<span class="long"><bdi>{x.label}</bdi></span><span class="short">{x.short}</span>{:else}{x.label}{/if}{#if x.n}<span class="n">{x.n}</span>{/if}</button>
             {/each}

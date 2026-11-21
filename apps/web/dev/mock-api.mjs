@@ -906,13 +906,19 @@ const PAINTS = [
     stops: [{ at: 0, color: '#FFB020' }, { at: 0.25, color: '#FF5A1F' }, { at: 0.5, color: '#FFB020' }],
     shadows: [{ x: 0, y: 1, radius: 2, color: '#00000099' }] }),
 ];
-// Who owns what (entitlements) and what each account shows.
+// Who owns what (entitlements) and what each account shows. Two of the made-up channel accounts
+// (emoteChannels, k = 4 and 6) wear paints too, so an emote's channel list shows several.
+const CHANNEL_ACC = (k) => `01JD8XACC${String(k).padStart(17, '0')}`;
 const C_OWNED = {
+  [CHANNEL_ACC(4)]: { BADGE: [], PAINT: [PAINTS[0].id] },
+  [CHANNEL_ACC(6)]: { BADGE: [], PAINT: [PAINTS[1].id] },
   [ME_ID]: { BADGE: [BADGES[0].id, BADGES[1].id], PAINT: [PAINTS[0].id, PAINTS[1].id] },
   [OTHERS[0].id]: { BADGE: [BADGES[1].id], PAINT: [PAINTS[2].id] },
   [OTHERS[4].id]: { BADGE: [], PAINT: [PAINTS[1].id] },
 };
 const C_SELECTED = {
+  [CHANNEL_ACC(4)]: { badgeId: null, paintId: PAINTS[0].id },
+  [CHANNEL_ACC(6)]: { badgeId: null, paintId: PAINTS[1].id },
   [ME_ID]: { badgeId: BADGES[0].id, paintId: PAINTS[0].id },
   [OTHERS[0].id]: { badgeId: BADGES[1].id, paintId: PAINTS[2].id },
   [OTHERS[4].id]: { badgeId: null, paintId: PAINTS[1].id },

@@ -8,7 +8,19 @@ import { grantOn } from '$lib/tool/editors';
 import { session } from '$lib/tool/session.svelte';
 import { ADD_SET_EMOTE, MY_CHANNELS, MY_SETS, REMOVE_SET_EMOTE } from '$lib/queries';
 
-export type TargetSet = { id: string; name: string; capacity: number; held: SvelteSet<string>; active: boolean };
+export type TargetSet = {
+  id: string;
+  name: string;
+  capacity: number;
+  held: SvelteSet<string>;
+  active: boolean;
+  /** Whose set it is: yours (`mine`) or an account you edit for; the picker groups by it. */
+  ownerId: string;
+  ownerName: string;
+  mine: boolean;
+  /** The channels of its owner (yours: your channels), so the picker's filter finds a set by channel. */
+  channels: string[];
+};
 
 const KEY = 'cyex.browse.target';
 
@@ -55,12 +67,25 @@ class Target {
           (s) => s.kind !== 'GLOBAL',
         );
         const byId = new Map(writable.map((s) => [s.id, s]));
+        const own = new Set(r.mySets.map((s) => s.id));
+        const myLogins = [...new Set(ch.myChannels.map((c) => c.login))];
         const old = new Map((this.sets ?? []).map((s) => [s.id, s]));
         this.sets = [...byId.values()].map((s) => {
           const held = old.get(s.id)?.held ?? new SvelteSet<string>();
           held.clear();
           for (const m of s.emotes) held.add(m.emote.id);
-          return { id: s.id, name: s.name, capacity: s.capacity, held, active: active.has(s.id) };
+          const mine = own.has(s.id);
+          return {
+            id: s.id,
+            name: s.name,
+            capacity: s.capacity,
+            held,
+            active: active.has(s.id),
+            ownerId: s.owner?.id ?? '',
+            ownerName: s.owner?.displayName ?? '',
+            mine,
+            channels: mine ? myLogins : [],
+          };
         });
         const ids = this.sets.map((s) => s.id);
         if (!ids.includes(this.chosenId)) {
