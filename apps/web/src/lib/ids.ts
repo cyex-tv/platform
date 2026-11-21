@@ -11,8 +11,14 @@ export const isSnowflake = (s: string): boolean => /^[1-9]\d{0,18}$/.test(s) && 
 /** A ULID: 26 characters of Crockford base32 (read leniently: any letter or digit, as the API does). */
 export const isUlid = (s: string): boolean => /^[0-9A-Za-z]{26}$/.test(s);
 
-/** Either kind of id. */
-export const looksLikeId = (s: string): boolean => isSnowflake(s) || isUlid(s);
+/**
+ * A Snowflake typed by a person: 15 to 19 digits, no leading zero. Today's are 18 or 19 digits;
+ * Twitch and Kick user ids (up to about 11 digits) are not cyex ids, so a search by one stays a search.
+ */
+export const isTypedSnowflake = (s: string): boolean => /^[1-9]\d{14,18}$/.test(s) && isSnowflake(s);
+
+/** Either kind of id, as typed into a search or lookup field. */
+export const looksLikeId = (s: string): boolean => isTypedSnowflake(s) || isUlid(s);
 
 export type IdRoute = 'emotes' | 'users' | 'sets';
 

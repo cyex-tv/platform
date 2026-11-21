@@ -39,7 +39,7 @@ key uses it. Changing the keys would touch every table and every query for no ga
     runs, it reads every Snowflake-shaped string in the query text and the variables and looks
     them up at once (`public_ids::resolve`). The request runs with those (`public_ids::resolving`,
     a task-local), so `ids::from_text`, and with it `errors::parse_id` and every resolver, takes
-    either form. After it, every field named `id`, `ids`, `…Id`, `…Ids` or `…By` (`addedBy`, `createdBy`) whose value is the ULID
+    either form. After it, every field named `id`, `ids`, `done` (batch outcomes), `…Id`, `…Ids` or `…By` (`addedBy`, `createdBy`) whose value is the ULID
     of an account, emote or set gets the Snowflake instead, also inside the JSON text of
     `before`, `after` and `payload` (audit entries). One query per request each way, only when
     there is something to look up.

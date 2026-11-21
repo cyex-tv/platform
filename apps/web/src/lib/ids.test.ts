@@ -24,6 +24,7 @@ describe('ids', () => {
     expect(looksLikeId(SNOW)).toBe(true);
     expect(looksLikeId(ULID)).toBe(true);
     expect(looksLikeId('lumen_fox')).toBe(false);
+    expect(looksLikeId('123456789')).toBe(false); // a Twitch user id
   });
 });
 

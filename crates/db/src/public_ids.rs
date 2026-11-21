@@ -171,6 +171,8 @@ pub fn strings_in(value: &Value, out: &mut Vec<i64>) {
 pub fn is_id_key(key: &str) -> bool {
     key == "id"
         || key == "ids"
+        // A batch's changed items (`BatchOutcome.done`).
+        || key == "done"
         || key.ends_with("Id")
         || key.ends_with("Ids")
         || key.ends_with("_id")
@@ -351,7 +353,16 @@ mod tests {
     #[test]
     fn id_keys() {
         for yes in [
-            "id", "ids", "ownerId", "setIds", "emote_id", "set_ids", "targetId",
+            "id",
+            "ids",
+            "done",
+            "ownerId",
+            "setIds",
+            "emote_id",
+            "set_ids",
+            "targetId",
+            "addedBy",
+            "requested_by",
         ] {
             assert!(is_id_key(yes), "{yes}");
         }
