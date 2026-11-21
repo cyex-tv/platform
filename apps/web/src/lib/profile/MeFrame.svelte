@@ -4,6 +4,7 @@
   // them never moves the person, the tabs or the panel. The head is you (ProfileHeader, flat, with
   // the Dashboard and Settings buttons), the tabs are the profile's public rows plus the page you are
   // on, and the panel is the page's own (facts, actions, related). The page's PageHead is the h1.
+  // Under 1100px the panel folds under its label (`fold`, on by default) so the page comes first.
   import type { Snippet } from 'svelte';
   import { page } from '$app/state';
   import Icon from '$lib/components/Icon.svelte';
@@ -25,7 +26,7 @@
     narrow?: 'before' | 'after';
     fold?: boolean;
   };
-  let { title, label, panel, children, narrow = 'before', fold = false }: Props = $props();
+  let { title, label, panel, children, narrow = 'before', fold = true }: Props = $props();
 
   const me = $derived(session.me);
   const who = $derived(me?.identities[0]);

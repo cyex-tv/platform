@@ -369,7 +369,7 @@
 >
 {#snippet children()}
 {#if emote}
-  <InspectorLayout title="Emote" label="About this emote" panel={side} testid="emote-panel">
+  <InspectorLayout title="Emote" label="About this emote" panel={side} narrow="after" testid="emote-panel">
     {#snippet head()}
       <PageHead
         name
