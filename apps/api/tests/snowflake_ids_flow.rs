@@ -478,7 +478,8 @@ async fn every_mutation_family_takes_the_old_ulid() {
         .await;
     ok(&r);
 
-    // Emotes: update, favourite (listed back by Snowflake), hide its creator.
+    // Emotes: update (a rename goes back to review), favourite another (listed back by
+    // Snowflake), hide their creator.
     let r = w
         .gql(
             Some(&alice),
@@ -492,13 +493,13 @@ async fn every_mutation_family_takes_the_old_ulid() {
         .gql(
             Some(&bob),
             "mutation($id: String!) { favouriteEmote(id: $id) }",
-            json!({ "id": emote.ulid }),
+            json!({ "id": other.ulid }),
         )
         .await;
     ok(&r);
     let r = w.gql(Some(&bob), "{ favouriteEmoteIds }", json!({})).await;
     ok(&r);
-    assert_eq!(r["data"]["favouriteEmoteIds"], json!([emote.public]), "{r}");
+    assert_eq!(r["data"]["favouriteEmoteIds"], json!([other.public]), "{r}");
     let r = w
         .gql(
             Some(&bob),
