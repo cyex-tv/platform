@@ -277,7 +277,7 @@ async fn upload_emote(
     State(state): State<AppState>,
     MaybeCaller(caller): MaybeCaller,
     mut form: Multipart,
-) -> ApiResult<(StatusCode, Json<Emote>)> {
+) -> ApiResult<(StatusCode, Json<serde_json::Value>)> {
     let caller = caller.ok_or_else(|| ApiError::from(AuthError::SignedOut))?;
     no_app_scope(&caller)?;
     let bad_form = |message: &str| ApiError::new(StatusCode::BAD_REQUEST, "bad_form", message);
@@ -331,7 +331,8 @@ async fn upload_emote(
                 }
             }
             Some("owner_id") => {
-                owner_id = Some(capped_text(&mut field, 64).await?);
+                let text = capped_text(&mut field, 64).await?;
+                owner_id = Some(crate::public_ids::canonical(&state, &text).await?);
             }
             Some("visibility") => {
                 let text = capped_text(&mut field, 16).await?;
@@ -364,7 +365,10 @@ async fn upload_emote(
         },
     )
     .await?;
-    Ok((StatusCode::ACCEPTED, Json(emote)))
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(crate::public_ids::publish(&state, &emote).await?),
+    ))
 }
 
 /// Reads a multipart file field under the 8 MB limit of badge pictures.
@@ -536,7 +540,8 @@ where
 {
     let build = || async move {
         match load().await? {
-            Some(value) => built(&value).map(Some),
+            // Account, emote and set IDs by Snowflake (ADR 0026), built into the cached body.
+            Some(value) => built(&crate::public_ids::publish(state, &value).await?).map(Some),
             None => Ok(None),
         }
     };
@@ -581,7 +586,7 @@ async fn get_channel(
     get,
     path = "/v1/sets/{id}",
     tag = "reads",
-    params(("id" = String, Path, description = "Set ID.")),
+    params(("id" = String, Path, description = "The set's ID: its Snowflake (digits), or its old ULID while clients move over.")),
     responses(
         (status = 200, body = EmoteSet),
         (status = 304, description = "Not modified."),
@@ -593,6 +598,8 @@ async fn get_set(
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> ApiResult<Response> {
+    // By Snowflake, or by the set's old ULID (ADR 0026).
+    let id = crate::public_ids::canonical(&state, &id).await?;
     let key = cyex_tv_db::ids::from_text(id.trim()).map(read_cache::set_key);
     shared_read(&state, &headers, key, || catalog::set(&state, None, &id)).await
 }
@@ -619,7 +626,7 @@ async fn get_global_set(State(state): State<AppState>, headers: HeaderMap) -> Ap
     get,
     path = "/v1/emotes/{id}",
     tag = "reads",
-    params(("id" = String, Path, description = "Emote ID.")),
+    params(("id" = String, Path, description = "The emote's ID: its Snowflake (digits), or its old ULID while clients move over.")),
     responses(
         (status = 200, body = Emote),
         (status = 304, description = "Not modified."),
@@ -631,6 +638,7 @@ async fn get_emote(
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> ApiResult<Response> {
+    let id = crate::public_ids::canonical(&state, &id).await?;
     let key = cyex_tv_db::ids::from_text(id.trim()).map(read_cache::emote_key);
     shared_read(&state, &headers, key, || {
         moderation::emote(&state, None, &id)
@@ -652,9 +660,11 @@ async fn get_emote(
 async fn lookup_personal_sets(
     State(state): State<AppState>,
     Json(lookup): Json<PersonalLookup>,
-) -> ApiResult<Json<PersonalLookupResult>> {
+) -> ApiResult<Json<serde_json::Value>> {
     let sets = catalog::personal_sets(&state, lookup.platform, &lookup.user_ids).await?;
-    Ok(Json(PersonalLookupResult { sets }))
+    Ok(Json(
+        crate::public_ids::publish(&state, &PersonalLookupResult { sets }).await?,
+    ))
 }
 
 /// The cyex.tv chat badges and name paints that are for sale in the shop or held by at least one

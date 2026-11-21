@@ -41,6 +41,7 @@ use cyex_tv_shared::model::{RoleLimit, RoleLimitInput, UploadQuota};
 use cyex_tv_shared::permissions;
 use futures_util::Stream;
 use sqlx::Connection;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -62,6 +63,7 @@ pub fn builder() -> SchemaBuilder<Query, Mutation, Subscription> {
         .limit_complexity(1_000)
         .extension(SocketRunsSubscriptionsOnly)
         .extension(AppScopes)
+        .extension(crate::public_ids::PublicIds)
 }
 
 /// App sign-in sessions (ADR 0021) run only the mutations their scopes name and the queries
@@ -2537,18 +2539,48 @@ impl Subscription {
             })?),
             None => None,
         };
+        // A set named by its old ULID is heard by its Snowflake, as events are stored, and its
+        // events come under the name it was asked for (ADR 0026).
+        let mut aliases: HashMap<String, String> = HashMap::new();
+        let mut stored = Vec::with_capacity(topics.len());
+        let legacy = |t: &String| {
+            t.strip_prefix("set:")
+                .is_some_and(|id| cyex_tv_db::public_ids::parse(id).is_none())
+        };
+        if topics.iter().any(legacy) {
+            let mut conn = crate::errors::conn(state(ctx)).await.map_err(api_error)?;
+            for topic in &topics {
+                let inner = if legacy(topic) {
+                    cyex_tv_db::outbox::public_topic(&mut conn, topic)
+                        .await
+                        .map_err(|e| api_error(crate::errors::db_error(e)))?
+                        .unwrap_or_else(|| topic.clone())
+                } else {
+                    topic.clone()
+                };
+                if &inner != topic {
+                    aliases.insert(inner.clone(), topic.clone());
+                }
+                stored.push(inner);
+            }
+        } else {
+            stored.clone_from(&topics);
+        }
         // One socket holds at most `MAX_SOCKET_SUBSCRIPTIONS` streams (ADR 0005).
         let sub = state(ctx).hub.subscriber();
-        sub.subscribe(topics.iter().map(String::as_str));
+        sub.subscribe(stored.iter().map(String::as_str));
         // The slot lives as long as the stream, so ending it frees the connection's place.
         Ok(futures_util::stream::unfold(
-            (sub, slot),
-            |(mut sub, slot)| async move {
+            (sub, slot, aliases),
+            |(mut sub, slot, aliases)| async move {
                 let event = match sub.recv().await? {
-                    HubMessage::Event(d) => cyex_tv_hub::model_event(&d.event, &d.topic),
+                    HubMessage::Event(d) => {
+                        let topic = aliases.get(&d.topic).unwrap_or(&d.topic);
+                        cyex_tv_hub::model_event(&d.event, topic)
+                    }
                     HubMessage::Lagged => cyex_tv_hub::resync(""),
                 };
-                Some((event, (sub, slot)))
+                Some((event, (sub, slot, aliases)))
             },
         ))
     }

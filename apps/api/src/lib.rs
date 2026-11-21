@@ -18,6 +18,7 @@ pub mod limits;
 pub mod moderation;
 pub mod paddle;
 pub mod personal;
+pub mod public_ids;
 pub mod read_cache;
 pub mod review;
 pub mod routes;

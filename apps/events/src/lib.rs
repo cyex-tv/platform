@@ -14,7 +14,7 @@
 //!   with `error`.
 //! - On shutdown the server sends `reconnect` and closes.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -190,6 +190,25 @@ enum End {
     Reconnect,
 }
 
+/// The topic as stored (a set by its Snowflake) for one a client sent. A set's old ULID is
+/// looked up; an unknown one, or a failed lookup, stays as it is and hears nothing.
+async fn stored_topic(db: &PgPool, topic: &str) -> String {
+    let legacy = topic
+        .strip_prefix("set:")
+        .is_some_and(|id| cyex_tv_db::public_ids::parse(id).is_none());
+    if !legacy {
+        return topic.to_owned();
+    }
+    match db.acquire().await {
+        Ok(mut conn) => outbox::public_topic(&mut conn, topic)
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| topic.to_owned()),
+        Err(_) => topic.to_owned(),
+    }
+}
+
 struct Connection {
     state: EventsState,
     socket: WebSocket,
@@ -199,6 +218,9 @@ struct Connection {
     replayed: HashSet<i64>,
     /// A session was taken over already; a connection resumes once.
     resumed: bool,
+    /// Set topics subscribed by the set's old ULID (ADR 0026): the topic as stored, by
+    /// Snowflake, to the name the client used, which its events are sent under.
+    aliases: HashMap<String, String>,
     last_heard: Instant,
     last_touch: Instant,
     bucket: Bucket,
@@ -214,6 +236,7 @@ impl Connection {
             socket,
             replayed: HashSet::new(),
             resumed: false,
+            aliases: HashMap::new(),
             last_heard: Instant::now(),
             last_touch: Instant::now(),
             bucket: Bucket::new(),
@@ -287,7 +310,8 @@ impl Connection {
                             if self.replayed.remove(&d.event.id) {
                                 continue;
                             }
-                            let msg = dispatch(&d.event.id.to_string(), &d.event.event_type, wire(&d.event, &d.topic));
+                            let topic = self.aliases.get(&d.topic).unwrap_or(&d.topic);
+                            let msg = dispatch(&d.event.id.to_string(), &d.event.event_type, wire(&d.event, topic));
                             self.send(msg).await?;
                         }
                         Some(Message::Lagged) => self.send(resync()).await?,
@@ -365,26 +389,40 @@ impl Connection {
 
     async fn change(&mut self, op: &str, requested: Vec<String>) -> Result<(), End> {
         let mut errors: BTreeMap<String, &'static str> = BTreeMap::new();
+        // As the client named them (for the ack), and as stored (for the hub).
         let mut taken: Vec<String> = Vec::new();
+        let mut stored: Vec<String> = Vec::new();
         if op == "subscribe" {
             let current: HashSet<String> = self.sub.topics().into_iter().collect();
             let mut room = MAX_TOPICS.saturating_sub(current.len());
             for topic in requested {
                 if !topics::is_valid(&topic) {
                     errors.insert(topic, TopicError::Invalid.code());
-                } else if current.contains(&topic) || taken.contains(&topic) {
+                    continue;
+                }
+                let inner = stored_topic(&self.state.db, &topic).await;
+                if current.contains(&inner) || stored.contains(&inner) {
                     taken.push(topic);
                 } else if room == 0 {
                     errors.insert(topic, TopicError::TooMany.code());
                 } else {
                     room -= 1;
+                    if inner != topic {
+                        self.aliases.insert(inner.clone(), topic.clone());
+                    }
+                    stored.push(inner);
                     taken.push(topic);
                 }
             }
             taken.dedup();
-            self.sub.subscribe(taken.iter().map(String::as_str));
+            self.sub.subscribe(stored.iter().map(String::as_str));
         } else {
-            self.sub.unsubscribe(requested.iter().map(String::as_str));
+            for topic in &requested {
+                let inner = stored_topic(&self.state.db, topic).await;
+                self.aliases.remove(&inner);
+                stored.push(inner);
+            }
+            self.sub.unsubscribe(stored.iter().map(String::as_str));
             taken = requested;
         }
         self.save().await;
@@ -466,10 +504,11 @@ impl Connection {
                 .cloned()
                 .unwrap_or_default();
             self.replayed.insert(event.id);
+            let topic = self.aliases.get(&topic).unwrap_or(&topic);
             let msg = dispatch(
                 &event.id.to_string(),
                 &event.event_type,
-                wire(&event, &topic),
+                wire(&event, topic),
             );
             self.send(msg).await?;
         }

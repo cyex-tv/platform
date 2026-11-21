@@ -925,7 +925,7 @@
           {
             "name": "id",
             "in": "path",
-            "description": "Emote ID.",
+            "description": "The emote's ID: its Snowflake (digits), or its old ULID while clients move over.",
             "required": true,
             "schema": {
               "type": "string"
@@ -1035,7 +1035,7 @@
           {
             "name": "id",
             "in": "path",
-            "description": "Set ID.",
+            "description": "The set's ID: its Snowflake (digits), or its old ULID while clients move over.",
             "required": true,
             "schema": {
               "type": "string"
@@ -1157,7 +1157,8 @@
             "type": "string"
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "The account's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input."
           }
         }
       },
@@ -1448,7 +1449,8 @@
             "description": "For example `https://cdn.cyex.tv/emotes/<sha256>`."
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "The emote's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input."
           },
           "name": {
             "type": "string"
@@ -1576,7 +1578,8 @@
             }
           },
           "id": {
-            "type": "string"
+            "type": "string",
+            "description": "The set's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input."
           },
           "kind": {
             "$ref": "#/components/schemas/SetKind"

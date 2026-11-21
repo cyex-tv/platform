@@ -17,7 +17,7 @@ use cyex_tv_auth::{Auth, AuthConfig, tokens};
 use cyex_tv_db::accounts::{self, Profile};
 use cyex_tv_db::emotes::{self, NewEmote};
 use cyex_tv_db::sessions::{self, SessionKind};
-use cyex_tv_db::{ids, sets};
+use cyex_tv_db::{ids, public_ids, sets};
 use cyex_tv_shared::model::{EmoteState, Platform, SetKind};
 use futures_util::{SinkExt, StreamExt};
 use http_body_util::BodyExt;
@@ -212,9 +212,21 @@ async fn a_mutation_reaches_a_graphql_subscriber() {
     emotes::set_state(&mut conn, emote.id, EmoteState::Approved)
         .await
         .unwrap();
+    let set_public = public_ids::public_text(&mut conn, set.id)
+        .await
+        .unwrap()
+        .unwrap();
+    let emote_public = public_ids::public_text(&mut conn, emote.id)
+        .await
+        .unwrap()
+        .unwrap();
     drop(conn);
+    // By the set's old ULID (ADR 0026) and by its Snowflake: both hear the event, each under
+    // the name it asked for.
     let set_topic = format!("set:{}", ids::to_text(set.id));
     let mut ws = live.subscribe(&[&set_topic]).await;
+    let new_topic = format!("set:{set_public}");
+    let mut ws_new = live.subscribe(&[&new_topic]).await;
 
     let start = Instant::now();
     let r = live
@@ -231,10 +243,15 @@ async fn a_mutation_reaches_a_graphql_subscriber() {
     let event = &msg["payload"]["data"]["events"];
     assert_eq!(event["eventType"], "SET_EMOTE_ADDED");
     assert_eq!(event["topic"], set_topic.as_str());
-    assert_eq!(event["setId"], ids::to_text(set.id).as_str());
-    assert_eq!(event["emoteId"], ids::to_text(emote.id).as_str());
+    assert_eq!(event["setId"], set_public.as_str());
+    assert_eq!(event["emoteId"], emote_public.as_str());
     assert_eq!(event["name"], "livePog");
     assert!(took < Duration::from_secs(1), "took {took:?}");
+    let msg = next(&mut ws_new).await;
+    let event = &msg["payload"]["data"]["events"];
+    assert_eq!(event["topic"], new_topic.as_str(), "{msg}");
+    assert_eq!(event["setId"], set_public.as_str());
+    assert_eq!(event["emoteId"], emote_public.as_str());
     eprintln!("mutation to GraphQL subscriber: {took:?}");
     live.stop().await;
 }

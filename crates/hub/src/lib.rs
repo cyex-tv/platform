@@ -238,6 +238,12 @@ fn text(payload: &Value, key: &str) -> Option<String> {
     payload.get(key).and_then(Value::as_str).map(str::to_owned)
 }
 
+/// The set's ID as clients know it: its Snowflake, which the outbox stores in the payload (ADR
+/// 0026); events from before that carry only the row's ULID.
+fn set_id(event: &Event) -> Option<String> {
+    text(&event.payload, "set_id").or_else(|| event.set_id.map(cyex_tv_db::ids::to_text))
+}
+
 fn is_cosmetic(event_type: &str) -> bool {
     event_type.starts_with("cosmetic.")
 }
@@ -248,7 +254,7 @@ fn is_cosmetic(event_type: &str) -> bool {
 pub fn wire(event: &Event, topic: &str) -> Value {
     let mut out = json!({
         "topic": topic,
-        "set_id": event.set_id.map(cyex_tv_db::ids::to_text),
+        "set_id": set_id(event),
         "emote_id": text(&event.payload, "emote_id"),
         "name": text(&event.payload, "name"),
         "created_at": event.created_at.to_rfc3339_opts(SecondsFormat::Millis, true),
@@ -272,7 +278,7 @@ pub fn model_event(event: &Event, topic: &str) -> model::Event {
         id: event.id.to_string(),
         event_type: event_type(&event.event_type).unwrap_or(EventType::Resync),
         topic: topic.to_owned(),
-        set_id: event.set_id.map(cyex_tv_db::ids::to_text),
+        set_id: set_id(event),
         emote_id: text(&event.payload, "emote_id"),
         name: text(&event.payload, "name"),
         created_at: event
