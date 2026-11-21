@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DISMISS_MAX, emoteIdFrom, external, phase, readClosed, running, safeLink, withClosed } from './announcement';
+import { DISMISS_MAX, closedCookie, emoteIdFrom, mergeClosed, readClosedCookie, external, phase, readClosed, running, safeLink, withClosed } from './announcement';
 
 describe('closing the announcement', () => {
   it('reads only a list of strings', () => {
@@ -16,6 +16,21 @@ describe('closing the announcement', () => {
     expect(next).toHaveLength(DISMISS_MAX);
     expect(next.at(-1)).toBe('new');
     expect(next).not.toContain('x0');
+  });
+});
+
+describe('the closed-list cookie (the server reads it, so the bar never moves)', () => {
+  it('keeps only IDs, capped, and reads back what it wrote', () => {
+    expect(readClosedCookie(undefined)).toEqual([]);
+    expect(readClosedCookie('A1.B2')).toEqual(['A1', 'B2']);
+    expect(readClosedCookie('A1.<script>.B2')).toEqual(['A1', 'B2']);
+    expect(closedCookie(['A1', 'x y', 'B2'])).toBe('A1.B2');
+    const many = Array.from({ length: DISMISS_MAX + 5 }, (_, i) => `X${i}`);
+    expect(readClosedCookie(closedCookie(many))).toEqual(many.slice(-DISMISS_MAX));
+  });
+
+  it('merges the cookie with an older localStorage list, each ID once', () => {
+    expect(mergeClosed(['A', 'B'], ['B', 'C'])).toEqual(['A', 'B', 'C']);
   });
 });
 
