@@ -2,7 +2,8 @@
   // The one vertical rail (7TV's side bar, cyex styling): context for the page's subject, never a
   // second top bar. 240px on a surface card, sticky under the header while it fits the window;
   // a taller rail scrolls with the page instead, never inside itself (owner: no scroll bar in the
-  // category selector). `fill` makes it run the full height of the left side. Groups
+  // category selector). `fill` makes it run the full height of the left side, flush with the
+  // window's edge and the header (no card), like the browse rail. Groups
   // have a hairline between them (a group is a collapsible row with a count, or a plain caption); rows are icon + label + optional count;
   // the current row is full-contrast and bold with an accent icon (aria-current="page"), no fill or bar. The rows
   // are one Tab stop (the current row); arrow keys move between them. Fewer than two rows: no
@@ -249,6 +250,12 @@
   .nested { margin-top: 1px; }
   .nested .row { padding-left: 36px; }
   .footed, .fill { display: flex; flex-direction: column; min-height: calc(100dvh - var(--nav-h) - env(safe-area-inset-top, 0px) - 2 * var(--rail-gap)); }
+  /* `fill`: flush with the window's left edge and the header, on the ground with a hairline at its
+     right, like the browse page's set rail and the Inspector's panel (redesign, 2026/11/21). */
+  .rail.fill { top: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); width: auto; margin: calc(-1 * var(--rail-gap)) 0 0 calc(-1 * var(--page-pad));
+    padding: 16px 12px 24px var(--page-pad); background: none; border: 0; border-right: 1px solid var(--border); border-radius: 0;
+    min-height: calc(100dvh - var(--nav-h) - env(safe-area-inset-top, 0px)); }
+  .rail.fill.tall { top: auto; }
   .foot { margin-top: auto; padding-top: 12px; }
   .foot :global(.rail-foot) { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; margin-top: 10px;
     border-top: 1px solid var(--border); padding-top: 10px; border-radius: 0; font-size: var(--t-nav); font-weight: 500; color: var(--muted); }

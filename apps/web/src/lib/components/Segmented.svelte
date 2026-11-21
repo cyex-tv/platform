@@ -62,7 +62,7 @@
       title={compact && o.icon ? o.label : undefined}
       onclick={() => pick(o.value)}
     >
-      {#if o.icon}<Icon name={o.icon} size={size === 's' ? 15 : 16} />{/if}
+      {#if o.icon}<Icon name={o.icon} size={size === 's' ? 15 : 16} />{:else}<span class="tick" class:on={o.value === value} aria-hidden="true"><Icon name="check" size={13} stroke={2.4} /></span>{/if}
       <span class="lb" class:icon-only={compact && !!o.icon} data-t={o.label}>{o.label}</span>
     </button>
   {/each}
@@ -83,6 +83,9 @@
   button :global(svg) { color: var(--dim); transition: color var(--dur-color); }
   button[aria-checked='true'] { color: var(--text); font-weight: 700; }
   button[aria-checked='true'] :global(svg) { color: var(--accent-text); }
+  /* An option without an icon gets the accent tick when picked; its room is kept, so nothing moves. */
+  .tick { display: inline-flex; margin-right: -2px; visibility: hidden; }
+  .tick.on { visibility: visible; }
   button:disabled { opacity: .45; cursor: not-allowed; }
   button:active:not(:disabled) { transform: scale(var(--press)); }
   button:focus-visible { outline-offset: -2px; }

@@ -34,5 +34,5 @@
   .danger { display: inline-grid; place-items: center; }
   .l { grid-area: 1 / 1; }
   .l.off { visibility: hidden; }
-  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .sr { position: absolute; top: 0; left: 0; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 </style>

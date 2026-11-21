@@ -1412,3 +1412,24 @@ git push -u origin feat/redesign-c
 gh pr create --repo cyex-tv/platform --base main --head feat/redesign-c --title "Redesign part C: admin" --body-file <file>
 ```
   PR #153, not merged (owner reviews).
+
+## Redesign part A: set page, /me pages, settings, upload dialog, shared page shapes (branch `feat/redesign-a`, owner request of 2026/11/21)
+
+Owner: "redesign the whole platform top to bottom with the design picked so everything fits together well". Part A of three (B public pages, C admin); rules in `.claude/runs/2026-11-20-redesign/design-rules.md`.
+- [x] Shared (additive, no prop changed): `InspectorLayout` (lib/shell: head, tabs and content left, a full-height sticky panel right; one column under 1100px, panel before or after the content, foldable), `MeFrame` (lib/profile: the /me pages in your profile's head and tabs), `PanelBlock` (uppercase-labelled panel blocks, `dl.kv` facts, `.pb-actions`), `LinkTabs`, `SelectSwitch`, `FactList`, `LinkRows`; icons `gift`, `arrow-up-right`. SideRail's `fill` rail (Settings, admin) is flush with the window edge like the browse rail; Segmented marks an icon-less pick with the accent tick; TagInput's visible label is the tools' uppercase label on tool pages; the header says Shop.
+- [x] `/sets/[id]`: Inspector. Name and owner, search in the set, the browse grid (tile menu, Select mode and its bar, + to the set you add to); panel with actions (clone, copy link, edit), facts (owner, kind, who can open it, how full, made), the set's editors for whoever the API answers (new `SetEditors` query on the existing `setEditors` field; mock too), chat preview. Under 1100px the actions sit in the head and the panel folds.
+- [x] `/me/sets/[id]`, `/me/emotes/[id]`: Inspector editors (content left; name, visibility, channels, facts, editors, delete or leave / status, facts and id, add to a set, hand-over, delete in the panel; panel after the content on narrow screens). EmoteFacts removed (only the editor used it).
+- [x] `/me/channels`, `/me/notifications` (filter in `?f=`), `/me/subscription`, `/me/upload`: in MeFrame with their own panels. The old band + profile rail of the /me pages is gone (ProfileRail removed); redirect pages keep working.
+- [x] Settings (Account, Appearance, Notifications, Hidden, Editors, Billing): rail + content, the rail flush and labelled like the browse rail.
+- [x] Upload dialog and page: files left, who you upload as, the guidelines and the buttons in a side column when there is room (container query), one column otherwise.
+- [x] Tests: `inspector-layout.ui.test.ts`, `shared-lists.ui.test.ts`, `routes/sets/[id]/set-page.ui.test.ts`, `me/notifications/notifications.ui.test.ts`, frame case in `channels.ui.test.ts`, `nav.test.ts`, mock conformance for SetEditors. `dev/e2e/cosmetics.mjs` 25/25 against the mock.
+- [x] Manual (mock, 375/768/1280/1920, dark and light, keyboard Tab walk): `.claude/runs/2026-11-20-redesign/screens/partA/`.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/redesign-a
+gh pr create --repo cyex-tv/platform --base main --head feat/redesign-a --title "Redesign part A: set page, /me pages, settings, upload dialog, shared page shapes" --body-file <file>
+git push   (merge of origin/main after #151, #152, #153; SetEditors in the API contract test)
+```
+  PR #154, not merged (owner reviews).

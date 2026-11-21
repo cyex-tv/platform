@@ -340,7 +340,9 @@
      site-wide dialog, whose queue survives navigation) leaving for another page asks too. -->
 <LeaveGuard dirty={busy || waiting.length > 0} inApp={!inDialog} what={busy ? 'the upload in progress and the files waiting' : 'the files waiting to upload'} />
 
-<form class="ui-form up-form" class:in-dialog={inDialog} onsubmit={submit} novalidate>
+<form class="up-form" class:in-dialog={inDialog} onsubmit={submit} novalidate>
+<div class="cols">
+<div class="ui-form side top">
   {#if grantsFailed}
     <RetryNote onretry={loadGrants}>Couldn’t load the accounts you can upload for. You can still upload as yourself.</RetryNote>
   {/if}
@@ -359,6 +361,8 @@
       {:else}<span class="ui-num">{room.line}</span>{#if waiting.length > room.room} <span class="ui-hint">Only {count(room.room)} more {room.room === 1 ? 'fits' : 'fit'} until some are reviewed.</span>{/if}{/if}
     </p>
   {/if}
+</div>
+<div class="ui-form main">
   <button
     type="button"
     class="drop"
@@ -466,6 +470,8 @@
     </ol>
   {/if}
 
+</div>
+<div class="ui-form side bottom">
   <div class="accept">
     <label class="ui-check">
       <input type="checkbox" bind:this={acceptBox} bind:checked={accepted} disabled={busy}
@@ -494,9 +500,34 @@
       <a class="ui-btn ghost" href="/me">{doneCount && !waiting.length ? 'Done' : 'Cancel'}</a>
     {/if}
   </div>
+</div>
+</div>
 </form>
 
 <style>
+  /* Wide enough (the dialog, or the page on a big screen): the files on the left; who you upload
+     as, how many wait, the guidelines and the buttons in a side column at the right, like an
+     Inspector panel. Narrower: one column, in that order (who, files, guidelines, buttons). */
+  .up-form { container-type: inline-size; }
+  .cols { display: grid; gap: 16px; }
+  .side:empty { display: none; }
+  @container (min-width: 760px) {
+    .cols { grid-template-columns: minmax(0, 1fr) 260px; grid-template-areas: 'main top' 'main bottom'; grid-template-rows: auto 1fr;
+      column-gap: 24px; row-gap: 16px; align-items: start; }
+    .main { grid-area: main; }
+    .top { grid-area: top; }
+    .bottom { grid-area: bottom; position: sticky; top: 0; }
+    .side { padding-left: 20px; border-left: 1px solid var(--border); }
+    .as { max-width: none; }
+    .foot { flex-direction: column; align-items: stretch; }
+    .foot > :global(*) { width: 100%; }
+    /* The side column holds the buttons in view itself: no sticky bar at the dialog's foot. */
+    .in-dialog .cols .foot { position: static; margin: 0; padding: 4px 0 0; background: none; border-top: 0; }
+    .cols { row-gap: 0; }
+    .bottom { padding-top: 16px; }
+    .side .accept .ui-check { font-size: var(--t-ui); align-items: flex-start; }
+    .side .accept .ui-check input { margin-top: 3px; }
+  }
   .drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 168px; padding: 20px;
     border-radius: var(--radius-card); border: 1px dashed var(--border-strong); background: var(--surface); color: var(--muted); font: inherit; cursor: pointer;
     transition: border-color var(--fast), background-color var(--fast); }

@@ -158,6 +158,17 @@ export const PUBLIC_SET = graphql(`
   }
 `);
 
+// A set's editors: answered for its owner, its editors and staff (`sets.edit_any`); others get an error.
+export const SET_EDITORS = graphql(`
+  query SetEditors($id: String!) {
+    setEditors(setId: $id) {
+      id
+      displayName
+      avatar
+    }
+  }
+`);
+
 export const CLONE_SET = graphql(`
   mutation CloneSet($id: String!, $name: String, $visibility: SetVisibility) {
     cloneSet(id: $id, name: $name, visibility: $visibility) {

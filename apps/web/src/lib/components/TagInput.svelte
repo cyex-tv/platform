@@ -4,6 +4,7 @@
   // takes the last one off. The field and its chips are one box, like a text field. Used by the
   // browse filters and (later) the upload form. `onchange` gets the whole new list.
   import Icon from './Icon.svelte';
+  import { btnFamily } from './btn';
   import { addTags, defaultClean, keyAction, removeAt } from './tag-input';
 
   type Props = {
@@ -36,6 +37,8 @@
     disabled = false,
   }: Props = $props();
 
+  // On the tool pages a visible label is the tools' uppercase field label, like the fields around it.
+  const tool = btnFamily() === 'tool';
   let text = $state('');
   let input = $state<HTMLInputElement>();
   /** What the last change did, for screen readers (and the note under the field). */
@@ -86,7 +89,7 @@
 </script>
 
 <div class="taginput" class:disabled>
-  <label class:sr-only={!showLabel} class="lbl" for={id}>{label}</label>
+  <label class:sr-only={!showLabel} class:upper={tool} class="lbl" for={id}>{label}</label>
   <!-- A click on the box's empty space goes to the text field, as in a plain input. -->
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="box" onclick={(e) => e.target === e.currentTarget && input?.focus()}>
@@ -125,6 +128,7 @@
 <style>
   .taginput { display: grid; gap: 6px; min-width: 0; }
   .lbl { font-size: var(--t-small); font-weight: 500; color: var(--text); }
+  .lbl.upper { font-size: var(--text-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
   /* One box like a text field: the chips wrap, the input takes the rest of the last line. */
   .box { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 40px; padding: 4px 6px; min-width: 0;
     border: 1px solid var(--field-border); border-radius: var(--radius-btn); background: var(--bg); cursor: text;

@@ -1,7 +1,7 @@
 <script lang="ts">
   // The account menu's content, shared by the AccountMenu popover (desktop) and the phone menu
   // sheet, so both list the same places in the same order: who you are (the row is the link to
-  // your profile dashboard), your library, account, sign out (this session only). Admin, Store
+  // your profile dashboard), your library, account, sign out (this session only). Admin, Shop
   // and Subscription are in the header's links (nav.ts), so the sheet lists them with the site's
   // links and the desktop menu doesn't repeat them. The header already has Upload and the theme toggle on
   // desktop, so those two rows only appear in the phone sheet (`touch`), whose header has neither. `emotes` adds the site's own links first (the

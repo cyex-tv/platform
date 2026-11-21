@@ -5,7 +5,7 @@ import { ADMIN, EMOTES, type ShellLink } from './account';
 
 const under = (base: string) => (p: string) => p === base || p.startsWith(`${base}/`);
 
-export const STORE: ShellLink = { href: '/shop', label: 'Store', icon: 'shopping-bag', match: under('/shop') };
+export const STORE: ShellLink = { href: '/shop', label: 'Shop', icon: 'shopping-bag', match: under('/shop') };
 export const SUBSCRIPTION: ShellLink = {
   href: '/me/subscription',
   label: 'Subscription',

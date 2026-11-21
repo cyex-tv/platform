@@ -3483,6 +3483,13 @@ export type PublicSetQueryVariables = Exact<{
 
 export type PublicSetQuery = { __typename?: 'Query', set?: { __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, slotsUsed: number, createdAt: string, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, nsfw: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> } | null };
 
+export type SetEditorsQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type SetEditorsQuery = { __typename?: 'Query', setEditors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }> };
+
 export type CloneSetMutationVariables = Exact<{
   id: Scalars['String']['input'];
   name?: InputMaybe<Scalars['String']['input']>;
@@ -5419,6 +5426,15 @@ export const PublicSetDocument = new TypedDocumentString(`
     isStatic
   }
 }`) as unknown as TypedDocumentString<PublicSetQuery, PublicSetQueryVariables>;
+export const SetEditorsDocument = new TypedDocumentString(`
+    query SetEditors($id: String!) {
+  setEditors(setId: $id) {
+    id
+    displayName
+    avatar
+  }
+}
+    `) as unknown as TypedDocumentString<SetEditorsQuery, SetEditorsQueryVariables>;
 export const CloneSetDocument = new TypedDocumentString(`
     mutation CloneSet($id: String!, $name: String, $visibility: SetVisibility) {
   cloneSet(id: $id, name: $name, visibility: $visibility) {

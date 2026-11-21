@@ -1,5 +1,13 @@
 <script lang="ts">
-  import { MediaQuery } from 'svelte/reactivity';
+  // A set's editor, in the Inspector shape: the set's emotes (SetEmotes) and the Add panel on the
+  // left; on the right its name, who can open it, the channels it can be shown on, its facts and
+  // editors, and deleting it (or leaving it, for a set editor). Under 1100px the panel follows the
+  // emotes. Owners, set editors, account editors whose grant covers the set (ADR 0014) and staff.
+  import Avatar from '$lib/components/Avatar.svelte';
+  import PanelBlock from '$lib/components/PanelBlock.svelte';
+  import PaintedName from '$lib/cosmetics/PaintedName.svelte';
+  import { looks, wantLooks } from '$lib/cosmetics/store.svelte';
+  import InspectorLayout from '$lib/shell/InspectorLayout.svelte';
   import Capacity from '$lib/components/Capacity.svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
@@ -36,7 +44,6 @@
   let saving = $state(false);
   let deleting = $state(false);
 
-  const narrow = new MediaQuery('max-width: 1000px');
   const id = $derived(page.params.id ?? '');
   const owner = $derived(set?.owner?.id === session.me?.id);
   // What you may do here: as the owner, a per-set editor, or the owner's account editor (ADR 0014)
@@ -200,58 +207,98 @@
   const taken = $derived(members.ids);
   const names = $derived(members.names);
   const full = $derived(set ? set.slotsUsed >= set.capacity : false);
+  const kindName = $derived(set?.kind === 'GLOBAL' ? 'Global' : set?.kind === 'PERSONAL' ? 'Personal' : 'Channel');
+  // Back to the sets of whoever owns it (yours, or the account you edit); staff on the global set go to Admin.
+  const setsHome = $derived(
+    set?.kind === 'GLOBAL'
+      ? { href: '/admin', label: 'Admin' }
+      : { href: sectionHref(set?.owner?.id ?? session.me?.id ?? '', 'sets'), label: owner || !set?.owner ? 'Your sets' : `${clean(set.owner.displayName)}’s sets` },
+  );
+  $effect(() => {
+    if (editors.length) wantLooks(editors.slice(0, 10).map((e) => e.id));
+  });
 </script>
 
 <svelte:head><title>{L.cause ? problemTitle(L.cause, true, 'No set here') : `${set?.name ?? 'Set'} - cyex.tv`}</title></svelte:head>
 
-{#snippet channelBlock()}
-  <section class="ui-card">
-    <h2>Use on {usable.length === 1 ? 'my channel' : 'a channel'}</h2>
-    <ul class="ui-list chans">
-      {#each usable as c (channelKey(c))}
-        {@const on = c.activeSetId === set?.id}
-        <li>
-          <Icon name={c.platform === 'TWITCH' ? 'twitch' : 'kick'} size={16} />
-          <span class="chan"><span class="ui-hint">{platformName(c.platform)}</span><bdi>{c.login}</bdi></span>
-          {#if on}
-            <span class="live"><Icon name="check" size={15} />Shows this set</span>
-          {:else}
-            <button class="ui-btn secondary small" type="button" disabled={switching !== null} onclick={() => useOn(c)}
-              aria-label="Use this set on {platformName(c.platform)} {c.login}">{switching === channelKey(c) ? 'Switching…' : 'Use here'}</button>
-          {/if}
-        </li>
-      {/each}
-    </ul>
-    <p class="ui-hint gap">Chat shows a channel’s active set. Picking this one replaces what the channel shows now.</p>
-  </section>
-{/snippet}
-
-{#snippet editorsLink()}
-  <section class="ui-card">
-    <h2>Editors</h2>
-    <p class="ui-hint">Your editors work on your sets for you. Choose who, what they can do and which sets on the Editors page.</p>
-    <div class="ui-actions gap"><a class="ui-btn secondary small" href="/me/editors">Manage editors<Icon name="arrow-right" size={15} /></a></div>
-  </section>
-{/snippet}
-
-{#snippet dangerBlock()}
+{#snippet side()}
   {#if set}
-    <section class="ui-card">
-      {#if canDelete}
-        <h2>Delete set</h2>
-        {#if shownOn.length}
-          <p class="ui-hint">{shownOn.map((c) => `${platformName(c.platform)} ${c.login}`).join(' and ')} shows this set. Pick another active set in <a href="/me/channels">Channels</a> first.</p>
-          <div class="ui-actions gap"><button class="ui-btn danger" type="button" disabled>Delete set</button></div>
+    {#if canRename}
+      <PanelBlock title="Name">
+        <form class="row" onsubmit={rename}>
+          <label class="sr-only" for="set-name">Name</label>
+          <input id="set-name" class="ui-input" bind:value={name} maxlength="100" />
+          <button class="ui-btn secondary" type="submit" disabled={saving || !name.trim() || name.trim() === set.name}>Rename</button>
+        </form>
+      </PanelBlock>
+    {/if}
+    {#if canSee}
+      <PanelBlock title="Who can open it">
+        <div class="vis">
+          <Segmented label="Who can open it" size="s" options={visibilityOptions(set.kind)} value={set.visibility} onchange={setVisibility} />
+        </div>
+        <p class="pb-hint" aria-live="polite">{visibilityHint(set.visibility)}{#if set.kind === 'PERSONAL'} A personal set can’t be private.{/if}</p>
+      </PanelBlock>
+    {/if}
+    {#if usable.length}
+      <PanelBlock title={usable.length === 1 ? 'Use on my channel' : 'Use on a channel'}>
+        <ul class="chans">
+          {#each usable as c (channelKey(c))}
+            {@const on = c.activeSetId === set?.id}
+            <li>
+              <Icon name={c.platform === 'TWITCH' ? 'twitch' : 'kick'} size={16} />
+              <span class="chan"><bdi>{c.login}</bdi><span class="ui-hint">{platformName(c.platform)}</span></span>
+              {#if on}
+                <span class="live"><Icon name="check" size={15} />Shows this set</span>
+              {:else}
+                <button class="ui-btn secondary small" type="button" disabled={switching !== null} onclick={() => useOn(c)}
+                  aria-label="Use this set on {platformName(c.platform)} {c.login}">{switching === channelKey(c) ? 'Switching…' : 'Use here'}</button>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+        <p class="pb-hint">Chat shows a channel’s active set. Picking this one replaces what the channel shows now.</p>
+      </PanelBlock>
+    {/if}
+    <PanelBlock title="Facts">
+      <dl class="kv">
+        <dt>Kind</dt><dd>{kindName}</dd>
+        <dt>Emotes</dt><dd><Capacity used={set.slotsUsed} capacity={set.capacity} /></dd>
+        {#if set.owner}<dt>Owner</dt><dd><a class="who" href="/users/{encodeURIComponent(set.owner.id)}"><Name value={set.owner.displayName} /></a></dd>{/if}
+        {#if showing.length}<dt>Shown on</dt><dd>{showing.map((c) => `${platformName(c.platform)} ${c.login}`).join(', ')}</dd>{/if}
+        {#if held.size}<dt>You may</dt><dd class="perm">{permissionLabels([...held])}</dd>{/if}
+      </dl>
+    </PanelBlock>
+    {#if owner && set.kind !== 'GLOBAL'}
+      <PanelBlock title="Editors" count={editors.length || undefined} more={{ href: '/me/editors', label: 'Manage' }}>
+        {#if editors.length}
+          <ul class="eds">
+            {#each editors.slice(0, 10) as e (e.id)}
+              <li><Avatar src={e.avatar} name={clean(e.displayName)} size={24} /><a href="/users/{encodeURIComponent(e.id)}"><PaintedName name={e.displayName} paint={looks[e.id]?.paint} /></a></li>
+            {/each}
+          </ul>
+          {#if editors.length > 10}<p class="pb-hint">And {count(editors.length - 10)} more on the Editors page.</p>{/if}
         {:else}
-          <p class="ui-hint">The emotes stay; only this set goes.</p>
-          <div class="ui-actions gap"><Confirm label="Delete set" confirm="Click again to delete" busy={deleting} onconfirm={remove} /></div>
+          <p class="pb-hint">Your editors work on your sets for you. Choose who, what they can do and which sets on the Editors page.</p>
         {/if}
-      {:else if setEditor}
-        <h2>Stop editing</h2>
-        <p class="ui-hint">You lose access to this set until the owner adds you again.</p>
-        <div class="ui-actions gap"><Confirm label="Leave" confirm="Click again to leave" onconfirm={leave} /></div>
-      {/if}
-    </section>
+      </PanelBlock>
+    {/if}
+    {#if set.kind !== 'GLOBAL' && (canDelete || setEditor)}
+      <PanelBlock title={canDelete ? 'Delete set' : 'Stop editing'}>
+        {#if canDelete}
+          {#if shownOn.length}
+            <p class="pb-hint">{shownOn.map((c) => `${platformName(c.platform)} ${c.login}`).join(' and ')} shows this set. Pick another active set in <a href="/me/channels">Channels</a> first.</p>
+            <div class="pb-actions"><button class="ui-btn danger" type="button" disabled>Delete set</button></div>
+          {:else}
+            <p class="pb-hint">The emotes stay; only this set goes.</p>
+            <div class="pb-actions"><Confirm label="Delete set" confirm="Click again to delete" busy={deleting} onconfirm={remove} /></div>
+          {/if}
+        {:else}
+          <p class="pb-hint">You lose access to this set until the owner adds you again.</p>
+          <div class="pb-actions"><Confirm label="Leave" confirm="Click again to leave" onconfirm={leave} /></div>
+        {/if}
+      </PanelBlock>
+    {/if}
   {/if}
 {/snippet}
 
@@ -264,84 +311,46 @@
 >
 {#snippet children()}
 {#if set && !access.emotes}
-  <State kind="loading" title="Opening the set…" />
+  <div class="wrap wait"><State kind="loading" title="Opening the set…" /></div>
 {:else if set}
-  <PageHead
-    name
-    title={clean(set.name)}
-    back={set.kind === 'GLOBAL' ? { href: '/admin', label: 'Admin' } : { href: '/me/sets', label: 'Sets' }}
-  >
-    {#snippet line()}
-      {set!.kind === 'GLOBAL' ? 'The global set' : set!.kind === 'PERSONAL' ? 'Personal set' : 'Channel set'} ·
-      <Capacity used={set!.slotsUsed} capacity={set!.capacity} /> emotes
-      {#if !owner && set!.owner}· by <Name value={set!.owner.displayName} />{/if}
-      {#if held.size}· you edit this account: {permissionLabels([...held])}{/if}
-      {#if showing.length}· shown on {showing.map((c) => `${platformName(c.platform)} ${c.login}`).join(' and ')}{/if}
+  <InspectorLayout title="Set" label="About this set" panel={side} narrow="after" testid="set-panel">
+    {#snippet head()}
+      <PageHead name title={clean(set!.name)} back={setsHome}>
+        {#snippet line()}
+          {kindName} set · <Capacity used={set!.slotsUsed} capacity={set!.capacity} /> emotes
+          {#if !owner && set!.owner}· by <Name value={set!.owner.displayName} />{/if}
+        {/snippet}
+        {#snippet actions()}
+          <a class="ui-btn secondary" href="/sets/{encodeURIComponent(set!.id)}"><Icon name="arrow-right" size={15} />Set page</a>
+        {/snippet}
+      </PageHead>
     {/snippet}
-  </PageHead>
-
-  <div class="layout">
-    <div class="ui-stack main">
+    <div class="ui-stack">
       <SetEmotes setId={set.id} capacity={set.capacity} used={set.slotsUsed} {rev} onchange={load} />
       <AddEmotes setId={set.id} personal={set.kind === 'PERSONAL'} {taken} {names} {full} onadded={added} />
     </div>
-    <aside class="ui-stack">
-      {#if canRename}
-      <section class="ui-card ui-form">
-        <form onsubmit={rename}>
-          <h2><label for="set-name">Name</label></h2>
-          <div class="row">
-            <input id="set-name" class="ui-input" bind:value={name} maxlength="100" />
-            <button class="ui-btn secondary" type="submit" disabled={saving || !name.trim() || name.trim() === set.name}>Rename</button>
-          </div>
-        </form>
-        {#if canSee}
-          <div class="vis">
-            <h3 id="vis-label">Who can open it</h3>
-            <Segmented label="Who can open it" size="s" options={visibilityOptions(set.kind)} value={set.visibility} onchange={setVisibility} />
-            <p class="ui-hint" aria-live="polite">{visibilityHint(set.visibility)}{#if set.kind === 'PERSONAL'} A personal set can’t be private.{/if}</p>
-          </div>
-        {/if}
-      </section>
-      {/if}
-
-      {#if usable.length}{@render channelBlock()}{/if}
-
-      {#if owner && set.kind !== 'GLOBAL'}{@render editorsLink()}{/if}
-
-      {#if set.kind !== 'GLOBAL' && (canDelete || setEditor)}
-        {#if narrow.current}
-          <details class="fold"><summary>{canDelete ? 'Delete set' : 'Stop editing'}</summary>{@render dangerBlock()}</details>
-        {:else}
-          {@render dangerBlock()}
-        {/if}
-      {/if}
-    </aside>
-  </div>
+  </InspectorLayout>
 {/if}
 {/snippet}
 </LoadGate>
 
 <style>
-  .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+  .wait { padding-top: var(--rail-gap); }
   .row { display: flex; gap: 8px; }
   .row input { min-width: 0; }
-  .gap { margin-top: 12px; }
-  .vis { display: grid; gap: 8px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border); }
-  .vis h3 { margin: 0; font-size: var(--t-ui); font-weight: 600; }
-  .vis .ui-hint { margin: 0; }
-  /* Three options in a 276px card: tighter than the default 12px padding. */
-  .vis :global(.seg button) { padding: 0 8px; gap: 5px; }
-  .vis :global(.seg) { margin-left: -8px; }
-  .chans { margin: 0 -22px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-  .chans > li { padding: 8px 22px; min-height: 52px; }
-  .chans :global(svg) { flex: none; }
+  .vis { margin-left: -12px; }
+  .chans { list-style: none; margin: 0; padding: 0; display: grid; }
+  .chans > li { display: flex; align-items: center; gap: 10px; min-height: 48px; }
+  .chans > li + li { border-top: 1px solid var(--border); }
+  .chans :global(svg) { flex: none; color: var(--dim); }
   .chan { display: grid; flex: 1; min-width: 0; line-height: 1.3; }
   .chan bdi { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-  .live { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; white-space: nowrap; }
-  .live :global(svg) { color: var(--accent); }
-  .fold > summary { cursor: pointer; padding: 10px 14px; font-weight: 600; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
-  .fold[open] > summary { margin-bottom: 8px; }
-  /* Narrow: the emotes come first, the settings under them. */
-  @media (max-width: 1000px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+  .live { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-small); font-weight: 600; white-space: nowrap; }
+  .live :global(svg) { color: var(--accent-text); }
+  .who { color: var(--text); }
+  .perm { font-weight: 500; text-align: right; }
+  .eds { list-style: none; margin: 0; padding: 0; display: grid; }
+  .eds li { display: flex; align-items: center; gap: 10px; height: 40px; min-width: 0; font-size: var(--t-small); font-weight: 600; }
+  .eds li + li { border-top: 1px solid var(--border); }
+  .eds a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 </style>

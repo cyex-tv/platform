@@ -4,8 +4,9 @@
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import State from '$lib/components/State.svelte';
+  import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
 
   onMount(() => goto(`/me/settings/account${page.url.hash}`, { replaceState: true }));
 </script>
 
-<State kind="loading" title="Opening your settings…" />
+<ColumnLayout top><State kind="loading" title="Opening your settings…" /></ColumnLayout>

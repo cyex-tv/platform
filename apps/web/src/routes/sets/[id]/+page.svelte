@@ -1,24 +1,36 @@
 <script lang="ts">
   // A set, for anyone with the link (ADR 0017): listed and unlisted sets open signed out, a
-  // private one answers like a missing one. Name, owner, how full, search inside the set, grid or
-  // list, and the actions: clone it into your own sets, copy the link, edit it when it is yours.
+  // private one answers like a missing one. The Inspector shape (redesign, 2026/11/21): the name,
+  // owner and size head the left column, then search inside the set and the emotes in the browse
+  // grid (BrowseGrid: the same tiles, tile menu, Select mode with its bar, + to add to the set
+  // you are adding to, drag to a set). On the right a panel: the actions (clone it into your own
+  // sets, copy the link, edit it when it is yours), its facts, its editors (for whoever may see
+  // them: the owner, its editors, staff) and a chat preview. Under 1100px the actions sit in the
+  // head and the rest of the panel folds above the grid.
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { gql } from '$lib/api';
   import Avatar from '$lib/components/Avatar.svelte';
-  import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import LoadMore from '$lib/components/LoadMore.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import PanelBlock from '$lib/components/PanelBlock.svelte';
   import State from '$lib/components/State.svelte';
   import CopyLink from '$lib/components/CopyLink.svelte';
-  import { clean, count } from '$lib/format';
+  import BrowseGrid from '$lib/components/browse/BrowseGrid.svelte';
+  import SelectBar from '$lib/components/browse/SelectBar.svelte';
+  import SelectSwitch from '$lib/components/browse/SelectSwitch.svelte';
+  import { all, CAP, EMPTY, toggle, type Selection, type Step } from '$lib/components/browse/selection';
+  import PaintedName from '$lib/cosmetics/PaintedName.svelte';
+  import { looks, wantLooks } from '$lib/cosmetics/store.svelte';
+  import { clean, count, date } from '$lib/format';
   import { legacyRedirect } from '$lib/ids';
-  import { PUBLIC_SET } from '$lib/queries';
+  import { PUBLIC_SET, SET_EDITORS } from '$lib/queries';
   import Capacity from '$lib/components/Capacity.svelte';
   import { filterMembers, fillPercent } from '$lib/sets/public';
   import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
-  import { session } from '$lib/tool/session.svelte';
-  import type { PublicSetQuery } from '$lib/gql/graphql';
+  import InspectorLayout from '$lib/shell/InspectorLayout.svelte';
+  import { can, session } from '$lib/tool/session.svelte';
+  import type { PublicSetQuery, SetEditorsQuery } from '$lib/gql/graphql';
   import CloneDialog from './CloneDialog.svelte';
   import SetChat from './SetChat.svelte';
 
@@ -56,6 +68,8 @@
   const used = $derived(s ? Math.max(s.slotsUsed, s.emotes.length) : 0);
   const pct = $derived(s ? fillPercent(used, s.capacity) : 0);
   const unlisted = $derived(s?.visibility === 'UNLISTED');
+  const VIS: Record<string, string> = { LISTED: 'Listed', UNLISTED: 'Unlisted', PRIVATE: 'Private' };
+  const KIND: Record<string, string> = { CHANNEL: 'Channel set', PERSONAL: 'Personal set', GLOBAL: 'Global set' };
 
   const members = $derived(s?.emotes ?? []);
   let query = $state('');
@@ -73,9 +87,72 @@
   const drawn = $derived(shown.slice(0, limit));
   const cards = $derived(drawn.map((m) => ({ ...m.emote, shownName: m.name !== m.emote.name ? m.name : undefined })));
 
+  // ---- Its editors: the API answers the owner, the set's editors and staff; anyone else sees no block.
+  let editors = $state<{ id: string; list: SetEditorsQuery['setEditors'] } | null>(null);
+  $effect(() => {
+    const id = s?.id;
+    if (!id || !session.me) return;
+    if (!mine && !can('sets.edit_any')) return;
+    let gone = false;
+    gql(SET_EDITORS, { id })
+      .then((r) => {
+        if (!gone) editors = { id, list: r.setEditors };
+      })
+      .catch(() => {});
+    return () => (gone = true);
+  });
+  const editorList = $derived(editors && editors.id === s?.id ? editors.list : null);
+  $effect(() => {
+    if (editorList?.length) wantLooks(editorList.slice(0, 10).map((e) => e.id));
+  });
+
+  // ---- Select mode (the browse grid's): picked ids in the order picked, up to CAP.
+  let selecting = $state(false);
+  let sel = $state.raw<Selection>(EMPTY);
+  const order = $derived(cards.map((e) => e.id));
+  let note = $state('');
+  let noteTimer: ReturnType<typeof setTimeout> | undefined;
+  function step(x: Step) {
+    if (x.sel !== sel && !x.refused) note = '';
+    sel = x.sel;
+    if (x.refused) {
+      note = `That’s ${CAP}, the most at once. Add these first, then pick more.`;
+      clearTimeout(noteTimer);
+      noteTimer = setTimeout(() => (note = ''), 4000);
+    }
+  }
+  function setSelecting(on: boolean, id?: string) {
+    selecting = on;
+    if (!on) sel = EMPTY;
+    else if (id && !sel.ids.includes(id)) step(toggle(sel, id));
+  }
+  function unpick(done: string[]) {
+    note = '';
+    sel = { ...sel, ids: sel.ids.filter((id) => !done.includes(id)) };
+    return sel.ids;
+  }
+  // Escape clears the picks (then leaves Select mode); Ctrl/⌘+A picks what is shown.
+  function onkeydown(e: KeyboardEvent) {
+    if (!selecting || e.defaultPrevented) return;
+    const t = e.target as HTMLElement;
+    if (t.closest('input, textarea, select, [contenteditable="true"], [role="menu"], [role="dialog"]')) return;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      note = '';
+      if (sel.ids.length) sel = EMPTY;
+      else setSelecting(false);
+    } else if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'a') {
+      e.preventDefault();
+      step(all(sel, order));
+    }
+  }
+
   let dlg = $state<CloneDialog>();
   const back = $derived(`/signin?back=${encodeURIComponent(page.url.pathname)}`);
+  const signin = $derived(`/signin?back=${encodeURIComponent(page.url.pathname + page.url.search)}`);
 </script>
+
+<svelte:window {onkeydown} />
 
 <svelte:head>
   {#if s}
@@ -85,81 +162,143 @@
   {/if}
 </svelte:head>
 
+{#snippet clone()}
+  {#if session.me}
+    <button class="btn btn-s btn-primary" type="button" onclick={() => dlg?.open()}><Icon name="layers" size={16} />Clone to my sets</button>
+  {:else if session.known}
+    <a class="btn btn-s btn-primary" href={back}><Icon name="layers" size={16} />Sign in to clone</a>
+  {:else}
+    <button class="btn btn-s btn-primary" type="button" disabled><Icon name="layers" size={16} />Clone to my sets</button>
+  {/if}
+{/snippet}
+
+{#snippet edit()}
+  {#if mine && s}<a class="btn btn-s" href="/me/sets/{s.id}"><Icon name="pencil" size={16} />Edit set</a>{/if}
+{/snippet}
+
+{#snippet side()}
+  {#if s}
+    <div class="wide-only">
+      <PanelBlock title="Actions">
+        <div class="pb-actions">
+          {@render clone()}
+          <div class:pair={mine}><CopyLink url={() => page.url.origin + page.url.pathname} />{@render edit()}</div>
+        </div>
+      </PanelBlock>
+    </div>
+    <PanelBlock title="Facts">
+      <dl class="kv">
+        {#if owner}
+          <dt>Owner</dt>
+          <dd><a class="owner" href="/users/{owner.id}"><Avatar src={owner.avatar} name={owner.displayName} size={20} /><bdi>{clean(owner.displayName)}</bdi></a></dd>
+        {/if}
+        <dt>Kind</dt><dd>{KIND[s.kind] ?? 'Set'}</dd>
+        <dt>Who can open it</dt><dd>{VIS[s.visibility] ?? s.visibility}</dd>
+        <dt>Emotes</dt>
+        <dd class="cap">
+          <Capacity {used} capacity={s.capacity} />
+          <span class="bar" role="meter" aria-label="How full" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+            <span class="fill" class:full={pct >= 90} style:width="{pct}%"></span>
+          </span>
+        </dd>
+        {#if s.createdAt}<dt>Made</dt><dd><time datetime={s.createdAt}>{date(s.createdAt)}</time></dd>{/if}
+      </dl>
+    </PanelBlock>
+    {#if editorList && (editorList.length || mine)}
+      <PanelBlock title="Editors" count={editorList.length ? count(editorList.length) : undefined} more={mine ? { href: '/me/editors', label: 'Manage' } : undefined}>
+        {#if editorList.length}
+          <ul class="eds">
+            {#each editorList.slice(0, 10) as e (e.id)}
+              <li><Avatar src={e.avatar} name={clean(e.displayName)} size={24} /><a href="/users/{encodeURIComponent(e.id)}"><PaintedName name={e.displayName} paint={looks[e.id]?.paint} /></a></li>
+            {/each}
+          </ul>
+          {#if editorList.length > 10}<p class="pb-hint">And {count(editorList.length - 10)} more.</p>{/if}
+        {:else}
+          <p class="pb-hint">Nobody else edits this set. Only you see this.</p>
+        {/if}
+      </PanelBlock>
+    {/if}
+    {#if members.length}
+      <PanelBlock title="Chat preview">
+        <SetChat {members} {owner} {name} inPanel />
+      </PanelBlock>
+    {/if}
+  {/if}
+{/snippet}
+
 {#if s}
   {#key s.id}
-    <ColumnLayout top>
-      <section class="set" aria-labelledby="set-h">
-        <header class="head">
-          <div class="text">
-            <h1 class="page-title" id="set-h"><bdi>{name}</bdi></h1>
-            <div class="meta">
-              {#if owner}
-                <a class="owner" href="/users/{owner.id}">
-                  <Avatar src={owner.avatar} name={owner.displayName} size={24} />
-                  <span><bdi>{clean(owner.displayName)}</bdi></span>
-                </a>
-              {/if}
-              {#if unlisted}
-                <span class="mark" title="Only people with the link can find it"><Icon name="link" size={15} />Unlisted</span>
-              {/if}
-              <span class="cap">
-                <span class="n"><Capacity {used} capacity={s.capacity} /></span>
-                <span class="bar" role="meter" aria-label="How full" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
-                  <span class="fill" class:full={pct >= 90} style:width="{pct}%"></span>
-                </span>
-              </span>
-            </div>
-          </div>
-          <div class="actions">
-            {#if session.me}
-              <button class="btn btn-s btn-primary btn-glow" type="button" onclick={() => dlg?.open()}><Icon name="layers" size={16} />Clone to my sets</button>
-            {:else if session.known}
-              <a class="btn btn-s btn-primary btn-glow" href={back}><Icon name="layers" size={16} />Sign in to clone</a>
-            {:else}
-              <button class="btn btn-s btn-primary btn-glow" type="button" disabled><Icon name="layers" size={16} />Clone to my sets</button>
+    <InspectorLayout title="Set" label="About {name}" panel={side} fold testid="set-panel">
+      {#snippet head()}
+        <header class="head" aria-labelledby="set-h">
+          <h1 class="page-title" id="set-h"><bdi>{name}</bdi></h1>
+          <p class="meta">
+            {#if owner}
+              <a class="owner" href="/users/{owner.id}">
+                <Avatar src={owner.avatar} name={owner.displayName} size={24} />
+                <span><span class="sr-only">By </span><bdi>{clean(owner.displayName)}</bdi></span>
+              </a>
             {/if}
+            {#if unlisted}
+              <span class="mark" title="Only people with the link can find it"><Icon name="link" size={15} />Unlisted</span>
+            {/if}
+          </p>
+          <div class="actions narrow-only">
+            {@render clone()}
             <CopyLink url={() => page.url.origin + page.url.pathname} />
-            {#if mine}<a class="btn btn-s" href="/me/sets/{s.id}"><Icon name="pencil" size={16} />Edit set</a>{/if}
+            {@render edit()}
           </div>
         </header>
+      {/snippet}
 
-        {#if members.length}
+      {#if members.length}
         <div class="tools">
           <label class="find">
             <span class="sr-only">Search this set</span>
             <Icon name="search" size={16} />
-            <input class="input" type="search" placeholder="Search this set" bind:value={query} autocomplete="off" />
+            <input class="input" type="search" placeholder="Search this set" bind:value={query} autocomplete="off" data-page-search />
           </label>
           <p class="total" aria-live="polite">
             {needle ? `${count(shown.length)} of ${count(members.length)}` : count(members.length)}
             {members.length === 1 ? 'emote' : 'emotes'}
           </p>
+          <span class="sw"><SelectSwitch on={selecting} onchange={(v) => setSelecting(v)} /></span>
         </div>
-        {/if}
+      {/if}
 
-        {#if members.length === 0}
-          <State title="No emotes in this set yet.">
-            {#if mine}Add some from the set’s editor.{:else}Nothing has been added to it yet.{/if}
-            {#snippet actions()}
-              {#if mine}<a class="btn btn-s btn-primary" href="/me/sets/{s.id}">Add emotes</a>{:else}<a class="btn btn-s" href="/search">Browse emotes</a>{/if}
-            {/snippet}
-          </State>
-        {:else if shown.length === 0}
-          <State title="Nothing matches “{needle}”.">
-            No emote in this set has that in its name.
-            {#snippet actions()}
-              <button class="btn btn-s" type="button" onclick={() => (query = '')}>Clear search</button>
-            {/snippet}
-          </State>
-        {:else}
-          <EmoteGrid items={cards} eager={12} label="Emotes in {name}" />
-        {/if}
-        {#if shown.length > STEP}
-          <div class="more"><LoadMore hasMore={shown.length > limit} total={shown.length} onmore={() => (limit += STEP)} /></div>
-        {/if}
-        {#if members.length}<SetChat {members} {owner} {name} />{/if}
-      </section>
-    </ColumnLayout>
+      {#if members.length === 0}
+        <State title="No emotes in this set yet.">
+          {#if mine}Add some from the set’s editor.{:else}Nothing has been added to it yet.{/if}
+          {#snippet actions()}
+            {#if mine}<a class="btn btn-s btn-primary" href="/me/sets/{s.id}">Add emotes</a>{:else}<a class="btn btn-s" href="/search">Browse emotes</a>{/if}
+          {/snippet}
+        </State>
+      {:else if shown.length === 0}
+        <State title="Nothing matches “{needle}”.">
+          No emote in this set has that in its name.
+          {#snippet actions()}
+            <button class="btn btn-s" type="button" onclick={() => (query = '')}>Clear search</button>
+          {/snippet}
+        </State>
+      {:else}
+        <BrowseGrid items={cards} eager={12} label="Emotes in {name}" {selecting} {sel} onstep={step} onstart={(id) => setSelecting(true, id)} />
+      {/if}
+      {#if shown.length > STEP}
+        <div class="more"><LoadMore hasMore={shown.length > limit} total={shown.length} onmore={() => (limit += STEP)} /></div>
+      {/if}
+      {#if selecting && shown.length}
+        <SelectBar
+          ids={sel.ids}
+          shown={cards.length}
+          {signin}
+          {note}
+          onall={() => step(all(sel, order))}
+          onclear={() => ((sel = EMPTY), (note = ''))}
+          onexit={() => setSelecting(false)}
+          onadded={unpick}
+        />
+      {/if}
+    </InspectorLayout>
     <CloneDialog bind:this={dlg} id={s.id} name={s.name} />
   {/key}
 {:else if asked === undefined}
@@ -182,31 +321,45 @@
 {/if}
 
 <style>
-  .set { padding-bottom: 40px; }
-  .more { margin-top: 24px; }
-  .head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px 24px; margin-bottom: 20px; }
-  .text { flex: 1 1 320px; min-width: 0; }
-  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin-top: 10px; font-size: var(--t-small); color: var(--muted); }
+  .head { display: grid; gap: 10px; margin-bottom: 20px; }
+  .head h1 { margin: 0; }
+  .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin: 0; font-size: var(--t-small); color: var(--muted); }
   .owner { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; min-height: 32px; color: var(--text); font-weight: 500; }
-  .owner span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .owner span, .owner bdi { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .owner :global(.av) { flex: none; }
   @media (pointer: coarse) { .owner { min-height: 44px; } }
-  @media (hover: hover) and (pointer: fine) { .owner:hover span { text-decoration: underline; text-underline-offset: 3px; } }
+  @media (hover: hover) and (pointer: fine) { .owner:hover bdi { text-decoration: underline; text-underline-offset: 3px; } }
   .mark { display: inline-flex; align-items: center; gap: 6px; }
   .mark :global(svg) { color: var(--accent-text); }
-  .cap { display: inline-flex; align-items: center; gap: 10px; }
-  .n { font-variant-numeric: tabular-nums; }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 4px; }
+
+  /* The actions: in the panel on wide screens, in the head under 1100px (one place at a time). */
+  .narrow-only { display: none; }
+  @media (max-width: 1099.98px) {
+    .narrow-only { display: flex; }
+    .wide-only { display: none; }
+  }
+
+  .wide-only :global(.pb-actions .btn) { width: 100%; }
+  .kv .owner { justify-content: flex-end; min-height: 0; font-weight: 600; }
+  .cap { display: grid; justify-items: end; gap: 6px; }
   .bar { display: block; width: 96px; height: 4px; border-radius: 2px; background: var(--elevated-2); overflow: hidden; }
   .fill { display: block; height: 100%; background: var(--accent); }
   .fill.full { background: var(--yellow); }
   @media (forced-colors: active) { .fill { background: Highlight; } }
-  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .eds { list-style: none; margin: 0; padding: 0; display: grid; }
+  .eds li { display: flex; align-items: center; gap: 10px; height: 40px; min-width: 0; font-size: var(--t-small); font-weight: 600; }
+  .eds li + li { border-top: 1px solid var(--border); }
+  .eds a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+
   .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-bottom: 20px; }
   .total { margin: 0; font-size: var(--t-small); color: var(--muted); font-variant-numeric: tabular-nums; }
+  .sw { margin-left: auto; }
   .find { position: relative; display: block; flex: 0 1 280px; min-width: 0; }
   .find :global(svg) { position: absolute; left: 12px; top: 50%; translate: 0 -50%; color: var(--muted); pointer-events: none; }
   .find .input { width: 100%; height: 40px; padding-left: 36px; }
   @media (max-width: 520px) { .find { flex-basis: 100%; } }
+  .more { margin-top: 24px; }
   .missing { display: grid; gap: 16px; min-height: 50svh; align-content: start; padding-bottom: 40px; }
   .back { justify-self: start; display: inline-flex; align-items: center; gap: 8px; min-height: 40px; color: var(--muted); font-size: var(--t-small); }
   @media (hover: hover) and (pointer: fine) { .back:hover { color: var(--text); } }
