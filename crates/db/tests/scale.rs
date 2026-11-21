@@ -228,6 +228,29 @@ fn browse(sort: EmoteSort, text: &str) -> search::Query<'_> {
     }
 }
 
+/// Postgres' plan for the set previews over `sets`, as text.
+async fn newest_members_plan(c: &mut PgConnection, sets: &[Uuid]) -> String {
+    let list = sets
+        .iter()
+        .map(|id| id.to_string())
+        .collect::<Vec<_>>()
+        .join(",");
+    let sql = reads::newest_members_sql()
+        .replace("$1", &format!("'{{{list}}}'::uuid[]"))
+        .replace("$2", "false")
+        .replace("$3", "'{}'::uuid[]")
+        .replace("$4", "NULL::uuid")
+        .replace("$5", "12");
+    sqlx::query_scalar::<_, String>(&format!("EXPLAIN (COSTS OFF) {sql}"))
+        .fetch_all(&mut *c)
+        .await
+        .unwrap()
+        .join(
+            "
+",
+        )
+}
+
 async fn set_ids(c: &mut PgConnection, n: i64) -> Vec<Uuid> {
     sqlx::query_scalar("SELECT id FROM emote_sets ORDER BY id LIMIT $1")
         .bind(n)
@@ -244,6 +267,17 @@ async fn hot_reads_use_their_indexes() {
     let mut c = db.conn().await;
     let c = &mut *c;
     let top = seed(c, &SMALL).await;
+    // Plan as production does: its disks are SSDs, where a random read costs about a sequential
+    // one (Postgres' default of 4 suits spinning disks and tips small, freshly seeded tables
+    // toward a table read), and a plan with parallel workers counts one table scan per worker.
+    sqlx::query("SET random_page_cost = 1.1")
+        .execute(&mut *c)
+        .await
+        .unwrap();
+    sqlx::query("SET max_parallel_workers_per_gather = 0")
+        .execute(&mut *c)
+        .await
+        .unwrap();
     // Several runs each: Postgres may switch a prepared statement to a generic plan after five.
     for _ in 0..7 {
         // The page comes from the browse indexes in order. (The total is a count apart; with
@@ -266,6 +300,13 @@ async fn hot_reads_use_their_indexes() {
             .unwrap();
         assert!(!hits.ids.is_empty());
         let sets = set_ids(c, 50).await;
+        // Say what the planner chose, so a failure below shows the plan and not only a count.
+        let plan = newest_members_plan(c, &sets).await;
+        assert!(
+            !plan.contains("Seq Scan on emote_set_members"),
+            "set previews plan:
+{plan}"
+        );
         let rows = no_seq_scan!(c, "set previews", ["emote_set_members"], {
             reads::newest_members(c, &sets, &MemberAccess::default(), 12)
                 .await
