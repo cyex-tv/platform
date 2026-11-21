@@ -1458,3 +1458,14 @@ git push -u origin fix/redesign-polish
 gh pr create --repo cyex-tv/platform --base main --head fix/redesign-polish --title "Redesign final pass: no layout shift, shared frames, polish" --body-file <file>
 ```
   Not merged (owner reviews).
+
+## Redesign round 2: public pages (branch `feat/redesign-public-2`, 2026/11/21)
+
+The owner's round-2 rule: the first pass (#152) only reorganised these pages, so they had to be visibly redesigned. Shop, item, gift, checkout status, redeem, download, help, developers, guidelines, changelog, sign-in and error pages now use the Workspace/Inspector language. That means contact sheets, a one-line toolbar, right inspector panels, flat sections with uppercase labels and mono numbers, and no boxed cards. The shop gains a sort (`?sort=featured|price|new`, `shopSort`/`sortItems` in `lib/shop/shop.ts`, tested). Download picks a target with `?target=` or a `#chrome/#edge/#firefox` hash. Shared components in `lib/components` were not touched.
+Manual check: before/after pairs at 1440 dark/light and 375 dark are in `.claude/runs/2026-11-20-redesign/screens/round2-public/` (`CHANGES.md` has one line per page). Gates: svelte-check 0/0, vitest 146 files / 1002 tests, build OK.
+
+### GitHub write log for this PR
+```
+git push -u origin feat/redesign-public-2
+gh pr create --repo cyex-tv/platform --base main --head feat/redesign-public-2 --title "Redesign round 2: public pages in the Workspace/Inspector language" --body-file <file>
+```
