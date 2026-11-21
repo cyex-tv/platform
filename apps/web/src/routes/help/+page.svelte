@@ -65,6 +65,10 @@
   <meta property="og:title" content="Help" />
 </svelte:head>
 
+{#snippet chev()}
+  <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" /></svg>
+{/snippet}
+
 <div class="docs help" bind:this={root}>
   <RailLayout>
     {#snippet rail()}
@@ -81,7 +85,7 @@
           {#each HELP as g (g.id)}
             {@const n = g.questions.filter((q) => shown.has(q.id)).length}
             <div class="nav-group" hidden={!n}>
-              <div class="nav-group-title"><span class="group-name" title={g.title}>{g.title}</span>{#if filtering}<span class="group-count" aria-hidden="true">{n}</span>{/if}</div>
+              <div class="nav-group-title"><span class="group-name" title={g.title}>{g.title}</span><span class="group-count" aria-hidden="true">{n}</span></div>
               {#each g.questions as q (q.id)}
                 <a class="nav-item" href="#{q.id}" hidden={!shown.has(q.id)}><span class="nav-label">{q.q}</span></a>
               {/each}
@@ -94,6 +98,7 @@
     </aside>
     {/snippet}
 
+    <div class="docs-split">
     <div class="docs-body" id="help-answers" tabindex="-1">
       <header class="docs-title">
         <div>
@@ -102,19 +107,10 @@
         </div>
       </header>
 
-      {#if !filtering}
-        <section class="popular" aria-labelledby="popular-h">
-          <h2 class="op-group-title" id="popular-h">Popular</h2>
-          <ul>
-            {#each POPULAR as q (q.id)}<li><a href="#{q.id}">{q.q}</a></li>{/each}
-          </ul>
-        </section>
-      {/if}
-
       {#each HELP as g (g.id)}
         {@const visible = g.questions.filter((q) => shown.has(q.id))}
         <div class="help-group" hidden={!visible.length} aria-labelledby="g-{g.id}">
-          <h2 class="op-group-title" id="g-{g.id}">{g.title}</h2>
+          <h2 class="op-group-title" id="g-{g.id}"><span>{g.title}</span><span class="count" aria-hidden="true">{visible.length}</span></h2>
           {#each g.questions as q (q.id)}
             <section class="guide" id={q.id} hidden={!shown.has(q.id)}>
               <h3>{q.q}</h3>
@@ -131,12 +127,32 @@
         </State>
       {/if}
 
-      <p class="status" class:down={status === 'down'} role="status">
-        <span class="dot" aria-hidden="true"></span>{statusText(status)}
-        <a class="link" href={statusUrl} rel="noopener">API status</a>
-      </p>
-
       <p class="docs-end">Takedowns and legal requests: abuse@cyex.tv. Building on cyex.tv? See <a href="/developers">Developers</a>.</p>
+    </div>
+
+    <aside class="dp-panel" aria-label="Help panel">
+      <section class="dp-sec" aria-labelledby="hp-status">
+        <h2 class="dp-label" id="hp-status">Status</h2>
+        <div class="dp-fact" class:ok={status === 'ok'} class:down={status === 'down'} role="status">
+          <span class="dp-state"><span class="dp-dot" aria-hidden="true"></span>{statusText(status)}</span>
+          <a href={statusUrl} rel="noopener">API status</a>
+        </div>
+      </section>
+      <section class="dp-sec" aria-labelledby="hp-popular">
+        <h2 class="dp-label" id="hp-popular">Popular</h2>
+        <ul class="dp-rows">
+          {#each POPULAR as q (q.id)}<li><a class="dp-row" href="#{q.id}"><span>{q.q}</span>{@render chev()}</a></li>{/each}
+        </ul>
+      </section>
+      <section class="dp-sec" aria-labelledby="hp-contact">
+        <h2 class="dp-label" id="hp-contact">Contact</h2>
+        <ul class="dp-rows">
+          <li><a class="dp-row" href="https://github.com/cyex-tv/platform/issues"><span>Issue tracker</span>{@render chev()}</a></li>
+          <li><a class="dp-row" href="mailto:abuse@cyex.tv"><span>abuse@cyex.tv</span>{@render chev()}</a></li>
+          <li><a class="dp-row" href="/developers"><span>Developers</span>{@render chev()}</a></li>
+        </ul>
+      </section>
+    </aside>
     </div>
   </RailLayout>
 </div>
@@ -156,19 +172,12 @@
   .help :global(.nav-label) { white-space: normal; }
   .help :global(.help-group[hidden]), .help :global(section.guide[hidden]) { display: none; }
   .help :global(.help-group) { max-width: var(--measure); }
-  .help :global(.help-group + .help-group) { margin-top: 18px; }
-  .help :global(.help-group .op-group-title) { padding-bottom: 8px; margin-bottom: 18px; }
-  .help :global(section.guide) { margin-bottom: 26px; }
+  .help :global(.help-group + .help-group) { margin-top: 28px; }
+  /* A group's title: uppercase label, mono count at the right, hairline below. */
+  .help :global(.help-group .op-group-title) { display: flex; align-items: center; justify-content: space-between; min-height: 40px; margin: 0; padding: 0; border-bottom: 1px solid var(--border); }
+  .help :global(.help-group .count) { font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+  /* Each question is a block between hairlines. */
+  .help :global(section.guide) { margin: 0; padding: 20px 0; border-bottom: 1px solid var(--border); }
   .help :global(section.guide h3) { margin: 0 0 6px; font-size: 1.05rem; font-weight: 600; line-height: 1.35; color: var(--text); }
-  .popular { max-width: var(--measure); margin-bottom: 26px; }
-  .popular .op-group-title { padding-bottom: 8px; margin-bottom: 8px; }
-  .popular ul { list-style: none; margin: 0; padding: 0; display: grid; }
-  .popular a { display: flex; align-items: center; min-height: 40px; color: var(--text); font-size: var(--t-small); }
-  @media (pointer: coarse) { .popular a { min-height: 44px; } }
-  @media (hover: hover) and (pointer: fine) { .popular a:hover { text-decoration: underline; text-underline-offset: 3px; } }
-  .status { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; max-width: var(--measure); margin: 32px 0 0; font-size: var(--t-small); color: var(--muted); }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
-  .status:not(.down) .dot { background: var(--accent); }
-  .status.down .dot { background: var(--yellow); }
   .help :global(section.guide p:last-child) { margin-bottom: 0; }
 </style>

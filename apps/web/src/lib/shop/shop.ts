@@ -251,6 +251,36 @@ export function ofKind(i: { badges: readonly unknown[]; paints: readonly unknown
   return kind === 'paints' ? i.paints.length > 0 : i.badges.length > 0;
 }
 
+/** The shop's orders, for the toolbar (`?sort=` in the address): the shop's own order, cheapest first, newest first. */
+export type ShopSort = 'featured' | 'price' | 'new';
+export const SHOP_SORTS: readonly ShopSort[] = ['featured', 'price', 'new'];
+
+/** Reads `?sort=`; anything else is the shop's own order. */
+export function shopSort(v: string | null): ShopSort {
+  return (SHOP_SORTS as readonly string[]).includes(v ?? '') ? (v as ShopSort) : 'featured';
+}
+
+type Sortable = { id: string; priceCents: number; sortOrder: number; activeFrom?: string | null };
+
+/** The items in a sort, as a new list. Ties keep the shop's own order (sortOrder, then the list's). "New" is the
+ *  latest sale start first; items without one count by their id (ids grow with time), after dated ones. */
+export function sortItems<T extends Sortable>(items: readonly T[], sort: ShopSort): T[] {
+  const at = new Map(items.map((x, i) => [x.id, i]));
+  const own = (a: T, b: T) => a.sortOrder - b.sortOrder || at.get(a.id)! - at.get(b.id)!;
+  const byId = (a: T, b: T) => (a.id.length - b.id.length) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const list = [...items];
+  if (sort === 'price') return list.sort((a, b) => a.priceCents - b.priceCents || own(a, b));
+  if (sort === 'new')
+    return list.sort((a, b) => {
+      const ta = a.activeFrom ? Date.parse(a.activeFrom) : NaN;
+      const tb = b.activeFrom ? Date.parse(b.activeFrom) : NaN;
+      if (!Number.isNaN(ta) && !Number.isNaN(tb) && ta !== tb) return tb - ta;
+      if (Number.isNaN(ta) !== Number.isNaN(tb)) return Number.isNaN(ta) ? 1 : -1;
+      return byId(b, a) || own(a, b);
+    });
+  return list.sort(own);
+}
+
 /** The text file of a new batch's codes: one per line. */
 export function codesText(codes: readonly string[]): string {
   return `${codes.join('\n')}\n`;

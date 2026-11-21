@@ -11,12 +11,13 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs a { color: var(--accent-text); }
 
 .docs code {
-  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--neutral-chip); border: 0; border-radius: var(--radius);
   padding: 1px 6px; font-size: .86em; font-family: var(--font-mono);
 }
+/* Flat: a hairline above and below on the page ground, no box. */
 .docs pre {
-  margin: 0; background: var(--elevated-2); border: 1px solid var(--border); border-radius: var(--radius-card);
-  padding: 14px 16px; overflow-x: auto; font-size: .82rem; line-height: 1.6; font-family: var(--font-mono);
+  margin: 0; background: none; border: 0; border-block: 1px solid var(--border); border-radius: 0;
+  padding: 14px 0; overflow-x: auto; font-size: .82rem; line-height: 1.6; font-family: var(--font-mono);
 }
 .docs pre code { background: none; border: none; padding: 0; font-size: inherit; }
 /* Addition: the site resets link underlines; prose links get theirs back. */
@@ -70,17 +71,21 @@ html:has(.docs) { scroll-behavior: smooth; }
 
 /* min-height: 0 lets the list shrink inside the column so it scrolls instead of overflowing. */
 .docs .nav-scroll { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; padding-right: 12px; flex: 1; min-height: 0; }
-.docs .nav-group + .nav-group { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); }
+.docs .nav-group + .nav-group { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
 .docs .nav-group[hidden], .docs .nav-item[hidden], .docs .nav-empty[hidden] { display: none; }
-.docs .nav-group-title { font-size: var(--text-label); text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; padding: 0 10px; }
+.docs .nav-group-title { display: flex; align-items: center; gap: 8px; min-height: 40px; font-size: var(--text-label); text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; padding: 0 10px 0 0; }
+.docs .nav-group-title .group-count, .docs .nav-group-title > .count { font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: 0; font-variant-numeric: tabular-nums; color: var(--dim); margin-left: auto; }
 /* The rail's row: 3px radius; the lit row is full-contrast and bold, like the site rails (no fill, no bar). */
 .docs .nav-item {
-  display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; border-radius: var(--radius);
+  display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px 0 22px; border-radius: var(--radius);
   color: var(--muted); text-decoration: none; font-size: var(--t-nav); font-weight: 500; line-height: 1.35;
   transition: background-color var(--fast), color var(--fast); position: relative;
 }
 @media (hover: hover) and (pointer: fine) { .docs .nav-item:hover { background: var(--row-hover); color: var(--text); } }
 .docs .nav-item.active, .docs .nav-item.active:hover { color: var(--text); font-weight: 600; }
+/* The lit row: bold text and a small accent chevron at its left, never a fill or a bar. */
+.docs .nav-item::before { content: ''; position: absolute; left: 6px; top: 50%; width: 6px; height: 6px; margin-top: -4px; border: solid var(--accent-text); border-width: 2px 2px 0 0; transform: rotate(45deg); opacity: 0; }
+.docs .nav-item.active::before { opacity: 1; }
 /* Inside the clipped collapse (and the index's scroller) a ring drawn outside would be cut off. */
 .docs .nav-item:focus-visible, .docs .collapse-inner :focus-visible { outline-offset: -2px; }
 @media (forced-colors: active) {
@@ -96,7 +101,7 @@ html:has(.docs) { scroll-behavior: smooth; }
    takes its links out of the tab order. overflow: clip (not hidden) keeps position: sticky working inside. */
 .docs .collapse { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows var(--collapse-dur, 200ms) ease-out, visibility 0s linear var(--collapse-dur, 200ms); }
 .docs [data-open='true'] > .collapse, .docs .docs-nav.filtering .nav-group > .collapse { grid-template-rows: 1fr; visibility: visible; transition: grid-template-rows var(--collapse-dur, 200ms) ease-out, visibility 0s; }
-.docs .collapse-inner { min-width: 0; min-height: 0; overflow: clip; }
+.docs .collapse-inner { min-width: 0; min-height: 0; overflow-x: visible; overflow-y: clip; } /* x visible: the sample panels run on to the window edge */
 /* A closed group's text isn't laid out or painted at all (the page is long: its closed groups are most of it).
    It stays hidden for the closing animation, then drops out; opening shows it at once. */
 .docs .collapse > .collapse-inner { content-visibility: hidden; transition: content-visibility 0s linear var(--collapse-dur, 200ms) allow-discrete; }
@@ -114,7 +119,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs [aria-expanded='true'] > .chev, .docs .docs-nav.filtering .group-toggle .chev { transform: rotate(90deg); }
 .docs .group-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .docs .group-count { font-family: var(--font-mono); font-size: 12px; font-weight: 500; letter-spacing: 0; font-variant-numeric: tabular-nums; color: var(--dim); margin-left: auto; padding-left: 8px; }
-.docs .nav-group-title.group-toggle { padding: 0 10px; margin-bottom: 2px; font-size: var(--text-label); letter-spacing: .06em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
+.docs .nav-group-title.group-toggle { padding: 0 10px 0 0; margin-bottom: 0; font-size: var(--text-label); letter-spacing: .06em; text-transform: uppercase; color: var(--dim); font-weight: 600; }
 .docs .docs-nav.filtering .group-toggle { cursor: default; }
 
 .docs .nav-tools { flex: none; display: flex; justify-content: flex-end; margin: -4px 12px 6px 0; }
@@ -142,7 +147,8 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .docs-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; max-width: var(--measure); margin-bottom: 30px; }
 .docs .docs-title h1 { font-size: var(--t-page); margin: 0 0 6px; font-weight: 600; line-height: 1.25; letter-spacing: -.02em; }
 .docs .docs-title p { color: var(--muted); font-size: .97rem; margin: 0; }
-.docs .docs-stat { display: flex; align-items: center; gap: 9px; flex: none; margin-top: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 6px 11px; }
+.docs .docs-stat { display: flex; align-items: baseline; gap: 6px 8px; flex: none; margin-top: 10px; }
+.docs .docs-stat-count + .docs-stat-label { margin-left: 14px; }
 .docs .docs-stat-label { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; }
 .docs .docs-stat-count { font-family: var(--font-mono); font-size: .86rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 
@@ -155,20 +161,26 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs section.guide .guide-lede { font-size: 1rem; color: var(--text); }
 .docs section.guide pre { margin: 0 0 14px; }
 
-.docs .base-url { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 16px 0 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 12px 14px; }
+.docs .base-url { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 16px 0 18px; padding: 10px 0; border-block: 1px solid var(--border); }
 .docs :is(.base-url-label, .param-group-title) { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); font-weight: 600; }
 .docs .base-url code { font-size: .86rem; }
-/* Addition: several base URLs in one strip, label column aligned. */
-.docs .base-url.rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 14px; }
-.docs .base-url.rows code { justify-self: start; max-width: 100%; overflow-wrap: anywhere; }
-.docs .fmt-grid { display: grid; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; margin: 14px 0; }
-.docs .fmt { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 14px; background: var(--surface); padding: 10px 14px; align-items: baseline; }
+/* Several base URLs: label / value rows on hairlines. */
+.docs .base-url.rows { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 0 14px; padding: 0; align-items: center; }
+.docs .base-url.rows > * { padding: 11px 0; border-bottom: 1px solid var(--border); }
+.docs .base-url.rows > :nth-last-child(-n+2) { border-bottom: 0; }
+.docs .base-url.rows code { max-width: 100%; overflow-wrap: anywhere; background: none; padding: 11px 0; }
+.docs .fmt-grid { display: grid; margin: 14px 0; border-block: 1px solid var(--border); }
+.docs .fmt { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 14px; padding: 11px 0; align-items: baseline; }
+.docs .fmt + .fmt { border-top: 1px solid var(--border); }
 .docs .fmt > code { justify-self: start; max-width: 100%; overflow-wrap: anywhere; }
 .docs .fmt > span { color: var(--muted); font-size: .86rem; line-height: 1.55; }
 .docs .fmt > b { font-size: .86rem; font-weight: 600; color: var(--text); }
 .docs .fmt-grid.wide .fmt { grid-template-columns: 220px minmax(0, 1fr); }
-.docs .note { border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); padding: 12px 14px; font-size: .85rem; color: var(--muted); line-height: 1.6; margin: 14px 0; }
+/* A note is a labelled line of text between hairlines: NOTE, then the words. */
+.docs .note { position: relative; border-block: 1px solid var(--border); padding: 36px 0 14px; font-size: .85rem; color: var(--muted); line-height: 1.6; margin: 16px 0; }
+.docs .note::before { content: 'Note'; position: absolute; top: 12px; left: 0; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
 .docs .note p, .docs section.guide .note p { margin: 0; font-size: inherit; line-height: inherit; }
+.docs .note p + p { margin-top: 8px; }
 .docs .note strong { color: var(--text); }
 
 /* ---------- Endpoints ---------- */
@@ -176,28 +188,34 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .op-group-title .group-toggle { min-height: 44px; padding: 0 2px; }
 .docs .op-group-title .group-count { margin-left: 0; padding-left: 4px; }
 .docs .op-group.guides .guide:first-child { padding-top: 22px; }
-.docs section.op { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 30px; align-items: start; padding: 26px 0; border-bottom: 1px solid var(--border); }
+/* Each endpoint is a row: text on the page ground, and its samples in a panel on the surface ground that
+   stretches the row's full height; consecutive panels touch, so they read as one right-hand panel. */
+.docs section.op { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0; align-items: stretch; padding: 0; border-bottom: 1px solid var(--border); }
 .docs section.op:last-child { border-bottom: none; }
+.docs section.op > .op-main { padding: 26px 30px 26px 0; }
 /* Addition: a GraphQL type is its fields, no samples: full width, the fields in two columns when there is room. */
 .docs section.op.type { grid-template-columns: minmax(0, 1fr); }
+.docs section.op.type > .op-main { padding-right: 0; }
 @media (min-width: 1180px) {
   .docs .fields { columns: 2; column-gap: 30px; }
   .docs .fields .param { break-inside: avoid; }
 }
 .docs .op-main { min-width: 0; }
 /* The sample panel is sticky per endpoint: it follows while you read that one, then hands off. */
-.docs .op-aside { min-width: 0; position: sticky; top: calc(var(--docs-top) + 16px); }
+.docs .op-aside { min-width: 0; align-self: stretch; background: var(--surface); border-left: 1px solid var(--border); margin-right: calc(-1 * var(--page-pad));
+  box-shadow: 0 0 0 100vw var(--surface); clip-path: inset(0 -100vw 0 0); }
+.docs .op-aside > .code-panel { position: sticky; top: var(--docs-top); padding-right: var(--page-pad); }
 .docs .op-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .docs .op-title { font-size: 1.08rem; font-weight: 600; margin: 0; line-height: 1.35; }
 .docs .auth-chip { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; color: var(--yellow); border: 1px solid color-mix(in srgb, var(--yellow) 40%, transparent); background: color-mix(in srgb, var(--yellow) 10%, transparent); border-radius: var(--radius); padding: 3px 8px; }
 .docs .auth-chip.neutral { color: var(--muted); border-color: var(--border-strong); background: none; }
-.docs .op-path { font-family: var(--font-mono); font-size: .82rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 11px; margin-bottom: 14px; overflow-x: auto; white-space: nowrap; }
+.docs .op-path { font-family: var(--font-mono); font-size: .82rem; border-block: 1px solid var(--border); padding: 9px 0; margin-bottom: 14px; overflow-x: auto; white-space: nowrap; }
 .docs .op-host { color: var(--dim); }
 .docs .op-desc { color: var(--muted); line-height: 1.7; font-size: .9rem; margin: 0 0 18px; }
 .docs .op-desc p { margin: 0 0 10px; }
 .docs .op-desc p:last-child { margin-bottom: 0; }
 .docs .param-group { margin-bottom: 18px; }
-.docs .param-group-title { padding-bottom: 8px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+.docs .param-group-title { display: flex; align-items: center; min-height: 36px; border-bottom: 1px solid var(--border); margin-bottom: 0; }
 .docs .param-group > .op-desc { margin: 10px 0 6px; }
 .docs .param { padding: 11px 0; border-bottom: 1px solid var(--border); }
 .docs .param:last-child { border-bottom: none; }
@@ -217,19 +235,20 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .resp-desc { color: var(--muted); font-size: .84rem; line-height: 1.6; }
 .docs .resp-desc p { margin: 0; }
 .docs .status-pip { width: 7px; height: 7px; border-radius: 50%; flex: none; position: relative; top: -1px; }
-.docs .status-pip.ok { background: var(--green); box-shadow: 0 0 7px var(--green); }
+.docs .status-pip.ok { background: var(--green); }
 .docs .status-pip.err { background: var(--dim); }
 
 /* ---------- Sample panel ---------- */
-.docs .code-panel { display: flex; flex-direction: column; gap: 12px; }
-.docs .code-block { background: var(--elevated-2); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
-.docs .code-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--border); background: var(--surface); }
-.docs .lang-tabs { display: flex; gap: 2px; min-width: 0; overflow-x: auto; }
-.docs .lang-tab { background: none; border: none; color: var(--dim); font: inherit; font-size: 12px; font-weight: 600; padding: 5px 10px; min-height: 40px; border-radius: var(--radius); cursor: pointer; transition: background var(--fast), color var(--fast); white-space: nowrap; }
+.docs .code-panel { display: flex; flex-direction: column; gap: 0; }
+.docs .code-block { background: none; border: 0; border-radius: 0; border-bottom: 1px solid var(--border); overflow: hidden; }
+.docs .code-block:last-child { border-bottom: 0; }
+.docs .code-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 48px; padding: 0 0 0 16px; border-bottom: 1px solid var(--border); background: none; }
+.docs .lang-tabs { display: flex; gap: 4px; min-width: 0; overflow-x: auto; margin-left: -10px; }
+.docs .lang-tab { background: none; border: none; color: var(--dim); font: inherit; font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 5px 10px; min-height: 40px; border-radius: var(--radius); cursor: pointer; transition: color var(--fast); white-space: nowrap; }
 .docs .lang-tab:focus-visible { outline-offset: -2px; }
 @media (hover: hover) and (pointer: fine) { .docs .lang-tab:hover { color: var(--text); } }
-.docs .lang-tab[aria-selected="true"] { color: var(--text); font-weight: 600; }
-.docs .resp-head { display: flex; align-items: center; gap: 8px; font-size: 12px; padding-left: 2px; min-width: 0; }
+.docs .lang-tab[aria-selected="true"] { color: var(--accent-text); font-weight: 700; }
+.docs .resp-head { display: flex; align-items: center; gap: 8px; font-size: 12px; min-width: 0; text-transform: uppercase; letter-spacing: .06em; }
 .docs .resp-status { font-family: var(--font-mono); font-weight: 600; }
 .docs .resp-type { color: var(--dim); }
 .docs .code-copy { background: none; border: 1px solid transparent; color: var(--dim); padding: 5px; min-width: 40px; min-height: 40px; align-items: center; justify-content: center; border-radius: var(--radius); cursor: pointer; display: flex; flex: none; transition: background var(--fast), color var(--fast); }
@@ -238,7 +257,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .code-copy.copied .icon-done { display: block; }
 @media (hover: hover) and (pointer: fine) { .docs .code-copy:hover { background: var(--surface-hover); color: var(--text); } }
 .docs .code-copy.copied { color: var(--green); }
-.docs .code-block pre { border: none; background: none; margin: 0; padding: 13px 15px; font-size: .775rem; line-height: 1.65; }
+.docs .code-block pre { border: none; background: none; margin: 0; padding: 13px 16px; font-size: .775rem; line-height: 1.65; }
 .docs .code-block pre[hidden] { display: none; }
 
 /* Addition (cyex-app rule 7): press feedback is instant. */
@@ -260,19 +279,25 @@ html:has(.docs) { scroll-behavior: smooth; }
 
 /* ---------- Narrower screens ---------- */
 @media (max-width: 1180px) {
-  .docs section.op { grid-template-columns: minmax(0, 1fr); gap: 18px; }
-  .docs .op-aside { position: static; }
+  .docs section.op { grid-template-columns: minmax(0, 1fr); }
+  .docs section.op > .op-main { padding: 22px 0 18px; }
+  /* Stacked: the samples are flat below the text, a hairline above. */
+  .docs .op-aside { margin: 0; background: none; border-left: 0; border-top: 1px solid var(--border); box-shadow: none; clip-path: none; }
+  .docs .op-aside > .code-panel { position: static; padding-right: 0; }
+  .docs .code-head { padding-left: 0; }
+  .docs .code-block pre { padding-inline: 0; }
+  .docs .lang-tabs { margin-left: -10px; }
 }
 @media (max-width: 899.98px) {
   /* The rail's sheet variant: not a card but a bar above the text with the Contents button. */
-  .docs .docs-nav { position: static; height: auto; max-height: none; margin: 0; padding: 8px 0; background: none; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; }
+  .docs .docs-nav { position: static; height: auto; max-height: none; margin: 0; padding: 8px 0 0; background: none; border: 0; border-radius: 0; }
   .docs .nav-search, .docs .nav-tools { margin-right: 0; }
   .docs .nav-toc { display: block; }
   .docs .nav-toc::details-content { display: block; }
   .docs .nav-toc > summary {
-    display: flex; align-items: center; justify-content: space-between; height: 40px; padding: 0 14px; cursor: pointer; list-style: none;
-    border: 1px solid var(--border-strong); border-radius: var(--radius-btn); background: var(--surface);
-    font-size: var(--t-nav); font-weight: 600; color: var(--text);
+    display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding: 0; cursor: pointer; list-style: none;
+    border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: none;
+    font-size: var(--text-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim);
   }
   .docs .nav-toc > summary::-webkit-details-marker { display: none; }
   .docs .nav-toc > summary::after { content: ''; width: 7px; height: 7px; border: solid currentColor; border-width: 0 2px 2px 0; transform: rotate(45deg) translate(-2px, -2px); transition: transform var(--base) var(--ease); }
@@ -300,3 +325,46 @@ html:has(.docs) { scroll-behavior: smooth; }
 }
 @media (prefers-reduced-motion: reduce) { .docs .nav-toc > summary::after, .docs .chev { transition: none; } }
 .docs-body:focus { outline: none; }
+
+/* ---------- The right panel (help, changelog, guidelines) ---------- */
+/* The Inspector's panel, built in the content slot: the page and a 320px panel on its own ground, flush
+   under the header, full height, sticky, running on to the window's edge. Below 1100px it drops under the
+   text as flat hairline-separated blocks. */
+.docs .docs-split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
+.docs .docs-split > .docs-body { padding-right: 32px; }
+.docs .dp-panel {
+  position: sticky; top: var(--docs-top); height: calc(100svh - var(--docs-top)); overflow-y: auto; overscroll-behavior: contain;
+  margin: calc(-1 * var(--rail-gap)) calc(-1 * var(--page-pad)) 0 0; border-left: 1px solid var(--border); background: var(--surface);
+  box-shadow: 0 0 0 100vw var(--surface); clip-path: inset(0 -100vw 0 0);
+}
+.docs .dp-sec + .dp-sec { margin-top: 0; }
+.docs .dp-label { display: flex; align-items: center; justify-content: space-between; margin: 0; min-height: 48px; padding: 0 var(--page-pad) 0 16px; border-bottom: 1px solid var(--border);
+  font-size: var(--text-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); line-height: 1; }
+.docs .dp-sec + .dp-sec > .dp-label { border-top: 1px solid var(--border); }
+.docs .dp-rows { margin: 0; padding: 0; list-style: none; }
+.docs .dp-row, .docs .dp-fact {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; padding: 0 var(--page-pad) 0 16px; margin: 0;
+  border-bottom: 1px solid var(--border); font-size: var(--t-small, .875rem); color: var(--text); text-decoration: none; min-width: 0;
+}
+.docs a.dp-row { transition: background-color var(--fast); }
+@media (hover: hover) and (pointer: fine) { .docs a.dp-row:hover { background: var(--row-hover); } }
+.docs a.dp-row:focus-visible { outline-offset: -2px; }
+.docs .dp-row > span:first-child { min-width: 0; line-height: 1.35; padding-block: 8px; }
+.docs .dp-row svg { width: 10px; height: 10px; flex: none; color: var(--dim); }
+.docs .dp-fact dt { color: var(--muted); flex: none; }
+.docs .dp-fact dd { margin: 0; font-weight: 700; text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.docs .dp-fact .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.docs .dp-facts { margin: 0; }
+.docs .dp-fact a { color: var(--accent-text); text-decoration: none; font-weight: 600; }
+.docs .dp-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--dim); margin-right: 8px; flex: none; }
+.docs .dp-fact.ok .dp-dot { background: var(--accent); }
+.docs .dp-fact.down .dp-dot { background: var(--yellow); }
+.docs .dp-fact .dp-state { display: flex; align-items: center; color: var(--text); font-weight: 600; }
+@media (max-width: 1099.98px) {
+  .docs .docs-split { grid-template-columns: minmax(0, 1fr); }
+  .docs .docs-split > .docs-body { padding-right: 0; }
+  .docs .dp-panel { position: static; height: auto; overflow: visible; margin: 0 0 40px; border-left: 0; border-top: 1px solid var(--border); background: none; box-shadow: none; clip-path: none; }
+  .docs .dp-label, .docs .dp-row, .docs .dp-fact { padding-inline: 0; }
+}
+@media (pointer: coarse) { .docs .dp-row, .docs .dp-fact { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) { .docs a.dp-row { transition: none; } }
