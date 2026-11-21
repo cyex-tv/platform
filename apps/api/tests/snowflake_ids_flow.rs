@@ -1,4 +1,4 @@
-//! Snowflake public IDs (ADR 0026) through the real router against a real Postgres: answers show
+//! Snowflake public IDs (ADR 0027) through the real router against a real Postgres: answers show
 //! accounts, emotes and sets by Snowflake everywhere, and every input takes the Snowflake or the
 //! old ULID. Runs when `CYEX_TV_TEST_DATABASE_URL` is set (CI sets it) and skips otherwise.
 

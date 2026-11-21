@@ -1,4 +1,4 @@
-//! Snowflake public IDs (ADR 0026): the generator in Postgres, the backfill of existing rows, and
+//! Snowflake public IDs (ADR 0027): the generator in Postgres, the backfill of existing rows, and
 //! the lookups the API's edges use. Runs when `CYEX_TV_TEST_DATABASE_URL` is set (CI sets it) and
 //! skips otherwise.
 

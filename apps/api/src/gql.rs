@@ -2540,7 +2540,7 @@ impl Subscription {
             None => None,
         };
         // A set named by its old ULID is heard by its Snowflake, as events are stored, and its
-        // events come under the name it was asked for (ADR 0026).
+        // events come under the name it was asked for (ADR 0027).
         let mut aliases: HashMap<String, String> = HashMap::new();
         let mut stored = Vec::with_capacity(topics.len());
         let legacy = |t: &String| {

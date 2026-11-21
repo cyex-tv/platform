@@ -1,7 +1,7 @@
 //! IDs are ULIDs (ADR 0002): sortable by time, stored as `uuid`, written as 26-character text in
 //! the API.
 //!
-//! Accounts, emotes and emote sets also have a Snowflake `public_id` (ADR 0026), which the API
+//! Accounts, emotes and emote sets also have a Snowflake `public_id` (ADR 0027), which the API
 //! shows instead of their ULID and takes as well as it. [`from_text`] reads both forms: a ULID
 //! directly, a Snowflake through the IDs [`crate::public_ids::resolving`] looked up for the
 //! request it runs in.

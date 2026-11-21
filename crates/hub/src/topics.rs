@@ -1,5 +1,5 @@
 //! Topic names (ADR 0005): `channel:<platform>:<id>`, `set:<id>` (the set's Snowflake; its ULID
-//! is still taken on subscribe, ADR 0026), `user:<platform>:<id>`, and
+//! is still taken on subscribe, ADR 0027), `user:<platform>:<id>`, and
 //! `cosmetics` for the cosmetics catalog (ADR 0015).
 
 /// The topic badge and paint changes go out on.
@@ -44,7 +44,7 @@ pub fn is_valid(topic: &str) -> bool {
     if let Some(rest) = topic.strip_prefix("user:") {
         return platform_id(rest);
     }
-    // A set's Snowflake (ADR 0026), or its ULID in capitals while clients move over.
+    // A set's Snowflake (ADR 0027), or its ULID in capitals while clients move over.
     if let Some(id) = topic.strip_prefix("set:") {
         return cyex_tv_db::public_ids::parse(id).is_some()
             || (cyex_tv_db::ids::is_ulid(id)

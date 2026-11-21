@@ -372,7 +372,7 @@ async fn limits_end_the_connection() {
     db.close().await;
 }
 
-/// A set's topic is its Snowflake (ADR 0026); its old ULID still subscribes, and that client
+/// A set's topic is its Snowflake (ADR 0027); its old ULID still subscribes, and that client
 /// gets the set's events under the name it used. Payloads carry Snowflakes either way.
 #[tokio::test]
 async fn set_topics_work_by_snowflake_and_by_old_ulid() {

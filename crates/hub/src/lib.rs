@@ -239,7 +239,7 @@ fn text(payload: &Value, key: &str) -> Option<String> {
 }
 
 /// The set's ID as clients know it: its Snowflake, which the outbox stores in the payload (ADR
-/// 0026); events from before that carry only the row's ULID.
+/// 0027); events from before that carry only the row's ULID.
 fn set_id(event: &Event) -> Option<String> {
     text(&event.payload, "set_id").or_else(|| event.set_id.map(cyex_tv_db::ids::to_text))
 }

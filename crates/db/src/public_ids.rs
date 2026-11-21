@@ -1,4 +1,4 @@
-//! Snowflake public IDs of accounts, emotes and emote sets (ADR 0026).
+//! Snowflake public IDs of accounts, emotes and emote sets (ADR 0027).
 //!
 //! Inside, rows keep their uuid (ULID) primary keys and every join uses them. The API shows the
 //! Snowflake, as a decimal string, and takes either form while clients move over. The edges

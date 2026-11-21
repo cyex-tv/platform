@@ -193,7 +193,7 @@ async fn emote(w: &World, owner: &User, name: &str, state: EmoteState) -> String
         emotes::set_state(&mut conn, e.id, state).await.unwrap();
     }
     drop(conn);
-    // As the API shows it (ADR 0026), so answers compare equal.
+    // As the API shows it (ADR 0027), so answers compare equal.
     w.db.public(e.id).await
 }
 

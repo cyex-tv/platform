@@ -45,7 +45,7 @@ impl TestDb {
         Some(Self { pool, name, admin })
     }
 
-    /// The Snowflake the API shows for an account, emote or set (ADR 0026).
+    /// The Snowflake the API shows for an account, emote or set (ADR 0027).
     #[allow(dead_code)]
     pub async fn public(&self, id: uuid::Uuid) -> String {
         let mut conn = self.conn().await;

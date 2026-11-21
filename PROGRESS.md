@@ -1351,7 +1351,7 @@ gh pr edit 144 --title "Hero: a realistic neon-rod mark with depth, no floor or 
 git push -u origin fix/hero-dark-bars
 gh pr create --base main --head fix/hero-dark-bars --title "Hero: lighter dark-mode bars with a soft white glow" --body-file <file>
 
-## Snowflake IDs for emotes, accounts and sets (feat/snowflake-ids, ADR 0026, owner decision of 2026/11/21)
+## Snowflake IDs for emotes, accounts and sets (feat/snowflake-ids, ADR 0027, owner decision of 2026/11/21)
 - [x] Format: 64-bit, 41 bits ms since the cyex epoch 2026-01-01T00:00:00Z, 10 bits instance, 12 bits sequence; decimal strings everywhere. Badges, paints, roles, orders, images and the rest keep ULIDs.
 - [x] Database (additive, `20261212000001_snowflake_public_ids`): `snowflake_id()` (sequence-held last ID behind a short advisory lock, `clock_timestamp()`, instance from `cyex_tv.snowflake_instance`, default 0), `snowflake_time(id)`, `public_id bigint NOT NULL UNIQUE` on `accounts`, `emotes`, `emote_sets`, backfilled oldest first from `created_at`. Uuid keys and joins unchanged.
 - [x] API edges (`cyex_tv_db::public_ids`, `apps/api/src/public_ids.rs`): the GraphQL `PublicIds` extension resolves Snowflakes in the request (text and variables) so `ids::from_text` takes both forms, and puts Snowflakes in the answer's `id`/`…Id`/`…Ids` fields (and audit `before`/`after` JSON); REST reads translated when built (cached body and ETag), uploads and personal-set lookup when answering, path IDs and `owner_id` take both forms. Events stored by Snowflake (`set:<snowflake>` topics, payload IDs, `payload.set_id`); `set:<ULID>` still subscribes on the event socket and the GraphQL subscription, and that client hears the set under the name it used.

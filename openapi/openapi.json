@@ -1158,7 +1158,7 @@
           },
           "id": {
             "type": "string",
-            "description": "The account's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input."
+            "description": "The account's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input."
           }
         }
       },
@@ -1450,7 +1450,7 @@
           },
           "id": {
             "type": "string",
-            "description": "The emote's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input."
+            "description": "The emote's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input."
           },
           "name": {
             "type": "string"
@@ -1579,7 +1579,7 @@
           },
           "id": {
             "type": "string",
-            "description": "The set's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input."
+            "description": "The set's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input."
           },
           "kind": {
             "$ref": "#/components/schemas/SetKind"

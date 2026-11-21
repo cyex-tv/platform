@@ -104,7 +104,7 @@ pub fn type_name(event_type: EventType) -> String {
     }
 }
 
-/// Adds an event and returns its ID. It is stored as clients get it (ADR 0026): `set:` topics
+/// Adds an event and returns its ID. It is stored as clients get it (ADR 0027): `set:` topics
 /// and the payload's account, emote and set IDs by their Snowflakes, and the set's Snowflake as
 /// `payload.set_id`. The `set_id` column keeps the row's uuid for the read caches.
 pub async fn publish(conn: &mut PgConnection, event: &NewEvent) -> DbResult<i64> {

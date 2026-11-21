@@ -1,4 +1,4 @@
-//! Snowflake public IDs at the API's edges (ADR 0026). Accounts, emotes and sets are shown by
+//! Snowflake public IDs at the API's edges (ADR 0027). Accounts, emotes and sets are shown by
 //! their Snowflake and taken by it or by their old ULID; everything inside works on uuids.
 //!
 //! GraphQL: [`PublicIds`] reads the Snowflake-shaped strings of a request (its text and

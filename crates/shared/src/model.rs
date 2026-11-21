@@ -78,7 +78,7 @@ pub struct Identity {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct Me {
-    /// The account's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+    /// The account's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
     pub id: String,
     pub identities: Vec<Identity>,
     /// Permission names from the account's roles (ADR 0010).
@@ -157,7 +157,7 @@ pub struct AccountSession {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct AccountSummary {
-    /// The account's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+    /// The account's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
     pub id: String,
     pub display_name: String,
     pub avatar: Option<String>,
@@ -574,7 +574,7 @@ pub struct EmoteFile {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct Emote {
-    /// The emote's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+    /// The emote's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
     pub id: String,
     pub name: String,
     pub owner: Option<AccountSummary>,
@@ -740,7 +740,7 @@ pub struct SetEmote {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct EmoteSet {
-    /// The set's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+    /// The set's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
     pub id: String,
     pub name: String,
     pub kind: SetKind,
@@ -775,7 +775,7 @@ pub struct SetEmotePage {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct SetSummary {
-    /// The set's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+    /// The set's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
     pub id: String,
     pub name: String,
     pub kind: SetKind,
@@ -1260,7 +1260,7 @@ pub struct AccountReports {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct AdminAccount {
-    /// The account's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+    /// The account's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
     pub id: String,
     pub display_name: String,
     pub avatar: Option<String>,
@@ -1301,7 +1301,7 @@ pub struct Notification {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct AccountStatus {
-    /// The account's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+    /// The account's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
     pub id: String,
     /// No uploads.
     pub uploads_blocked: bool,
@@ -1428,7 +1428,7 @@ pub struct ActivityFilter {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct ActivitySet {
-    /// The set's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+    /// The set's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
     pub id: String,
     pub name: String,
 }
@@ -1437,7 +1437,7 @@ pub struct ActivitySet {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct ActivityEmote {
-    /// The emote's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+    /// The emote's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
     pub id: String,
     pub name: String,
     /// For example `https://cdn.cyex.tv/emotes/<sha256>`.

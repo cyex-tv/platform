@@ -1,4 +1,4 @@
-# 0026: Snowflake IDs for emotes, accounts and sets
+# 0027: Snowflake IDs for emotes, accounts and sets
 
 Status: accepted (owner, 2026/11/21)
 

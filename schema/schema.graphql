@@ -143,7 +143,7 @@ What an account may do (`users.restrict`).
 """
 type AccountStatus {
 	"""
-	The account's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+	The account's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
 	"""
 	id: String!
 	"""
@@ -190,7 +190,7 @@ A short reference to an account, for owners and editors.
 """
 type AccountSummary {
 	"""
-	The account's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+	The account's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
 	"""
 	id: String!
 	displayName: String!
@@ -226,7 +226,7 @@ An emote, as a feed line names it. `name` is what it was called in the set at th
 """
 type ActivityEmote {
 	"""
-	The emote's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+	The emote's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
 	"""
 	id: String!
 	name: String!
@@ -365,7 +365,7 @@ A set, as a feed line names it.
 """
 type ActivitySet {
 	"""
-	The set's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+	The set's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
 	"""
 	id: String!
 	name: String!
@@ -408,7 +408,7 @@ An account as staff see it (`users.view` or `users.restrict`).
 """
 type AdminAccount {
 	"""
-	The account's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+	The account's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
 	"""
 	id: String!
 	displayName: String!
@@ -977,7 +977,7 @@ enum EditorPermission {
 
 type Emote {
 	"""
-	The emote's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+	The emote's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
 	"""
 	id: String!
 	name: String!
@@ -1097,7 +1097,7 @@ type EmotePage {
 
 type EmoteSet {
 	"""
-	The set's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+	The set's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
 	"""
 	id: String!
 	name: String!
@@ -1483,7 +1483,7 @@ The signed-in account.
 """
 type Me {
 	"""
-	The account's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+	The account's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
 	"""
 	id: String!
 	identities: [Identity!]!
@@ -3147,7 +3147,7 @@ A set as a card on a profile: its facts and the first few emotes (`accountSets`)
 """
 type SetSummary {
 	"""
-	The set's Snowflake ID, as decimal digits (ADR 0026). Its old ULID is still taken as input.
+	The set's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
 	"""
 	id: String!
 	name: String!

@@ -1,4 +1,4 @@
--- Snowflake public IDs for accounts, emotes and emote sets (ADR 0026). The uuid primary keys and
+-- Snowflake public IDs for accounts, emotes and emote sets (ADR 0027). The uuid primary keys and
 -- every join stay as they are; `public_id` is what the API shows and takes.
 --
 -- An ID is 64 bits, positive: 41 bits of milliseconds since the cyex epoch 2026-01-01T00:00:00Z,

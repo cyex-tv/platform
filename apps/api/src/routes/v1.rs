@@ -540,7 +540,7 @@ where
 {
     let build = || async move {
         match load().await? {
-            // Account, emote and set IDs by Snowflake (ADR 0026), built into the cached body.
+            // Account, emote and set IDs by Snowflake (ADR 0027), built into the cached body.
             Some(value) => built(&crate::public_ids::publish(state, &value).await?).map(Some),
             None => Ok(None),
         }
@@ -598,7 +598,7 @@ async fn get_set(
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> ApiResult<Response> {
-    // By Snowflake, or by the set's old ULID (ADR 0026).
+    // By Snowflake, or by the set's old ULID (ADR 0027).
     let id = crate::public_ids::canonical(&state, &id).await?;
     let key = cyex_tv_db::ids::from_text(id.trim()).map(read_cache::set_key);
     shared_read(&state, &headers, key, || catalog::set(&state, None, &id)).await

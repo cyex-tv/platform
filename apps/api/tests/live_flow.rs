@@ -221,7 +221,7 @@ async fn a_mutation_reaches_a_graphql_subscriber() {
         .unwrap()
         .unwrap();
     drop(conn);
-    // By the set's old ULID (ADR 0026) and by its Snowflake: both hear the event, each under
+    // By the set's old ULID (ADR 0027) and by its Snowflake: both hear the event, each under
     // the name it asked for.
     let set_topic = format!("set:{}", ids::to_text(set.id));
     let mut ws = live.subscribe(&[&set_topic]).await;

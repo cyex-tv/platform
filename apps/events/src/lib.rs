@@ -218,7 +218,7 @@ struct Connection {
     replayed: HashSet<i64>,
     /// A session was taken over already; a connection resumes once.
     resumed: bool,
-    /// Set topics subscribed by the set's old ULID (ADR 0026): the topic as stored, by
+    /// Set topics subscribed by the set's old ULID (ADR 0027): the topic as stored, by
     /// Snowflake, to the name the client used, which its events are sent under.
     aliases: HashMap<String, String>,
     last_heard: Instant,
