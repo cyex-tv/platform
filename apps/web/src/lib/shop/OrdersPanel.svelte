@@ -4,6 +4,7 @@
   // give for a refund is theirs: it is never shown here.
   import { gql } from '$lib/api';
   import Icon from '$lib/components/Icon.svelte';
+  import Section from '$lib/components/Section.svelte';
   import State from '$lib/components/State.svelte';
   import { clean, count, dateTime, iso } from '$lib/format';
   import type { OrderFieldsFragment } from '$lib/gql/graphql';
@@ -47,51 +48,54 @@
 
   const mine = $derived(session.me?.id);
   const row = (o: OrderFieldsFragment) => orderRow(o, mine, iso);
-  const sub = (o: OrderFieldsFragment) => [dateTime(o.createdAt), row(o).note].filter(Boolean).join(' · ');
 </script>
 
-<section class="ui-panel" aria-labelledby="orders-h">
-  <header>
-    <h2 id="orders-h">Orders</h2>
+<Section title="Orders" id="orders-h">
+  {#snippet actions()}
     <a class="ui-btn ghost small" href="/shop">Shop<Icon name="arrow-right" size={14} /></a>
-  </header>
+  {/snippet}
   <LoadGate source={L} label="Loading your orders…">
     {#snippet children(r)}
       {@const rows = appendUnique(r.items, more)}
       {#if !rows.length}
         <State bare title="No orders yet.">What you buy or are given in the shop is listed here.</State>
       {:else}
-        <ul class="ui-list" aria-label="Orders">
+        <ul class="orders" aria-label="Orders">
           {#each rows as o (o.id)}
             <li>
               <span class="what">
                 <strong><bdi>{clean(o.itemName)}</bdi></strong>
-                <span class="ui-hint">{sub(o)}</span>
+                <span class="meta"><time class="ui-mono" datetime={o.createdAt}>{dateTime(o.createdAt)}</time>{#if row(o).note}{' · '}{row(o).note}{/if}</span>
               </span>
-              <span class="right">
-                <span class="amt" class:ui-num={!row(o).received}>{row(o).amount}</span>
-                <span class="st" class:dim={o.status !== 'PAID'}>{orderStatusText(o.status as OrderStatus)}</span>
-              </span>
+              <span class="amt ui-mono">{row(o).amount}</span>
+              <span class="st" class:dim={o.status !== 'PAID'}>{orderStatusText(o.status as OrderStatus)}</span>
             </li>
           {/each}
         </ul>
         {#if rows.length < r.total}
           <div class="foot">
             <button class="ui-btn secondary small" type="button" disabled={busy} onclick={next}>{busy ? 'Loading…' : 'Show more'}</button>
-            <span class="ui-hint">{count(rows.length)} of {count(r.total)}</span>
+            <span class="ui-hint ui-mono">{count(rows.length)} of {count(r.total)}</span>
           </div>
         {/if}
       {/if}
     {/snippet}
   </LoadGate>
-</section>
+</Section>
 
 <style>
-  .what { display: grid; flex: 1; min-width: 0; }
-  .what strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .right { display: grid; justify-items: end; text-align: right; flex: none; }
-  .amt { font-weight: 600; }
-  .st { font-size: var(--t-fine); color: var(--muted); }
+  .orders { margin: 0; padding: 0; list-style: none; }
+  .orders > li { display: flex; align-items: center; gap: 16px; min-height: 52px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .what { display: grid; gap: 2px; flex: 1; min-width: 0; }
+  .what strong { font-size: var(--t-ui); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta { font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }
+  .amt { flex: none; font-size: var(--t-small); font-weight: 600; text-align: right; }
+  .st { flex: none; min-width: 64px; text-align: right; font-size: var(--t-fine); color: var(--muted); }
   .dim { color: var(--dim); }
-  .foot { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--border); }
+  .foot { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+  @media (max-width: 559.98px) {
+    .orders > li { flex-wrap: wrap; row-gap: 4px; }
+    .what { flex-basis: 100%; }
+    .amt { margin-right: auto; text-align: left; }
+  }
 </style>

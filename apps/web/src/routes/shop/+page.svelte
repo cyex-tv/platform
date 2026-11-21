@@ -2,7 +2,8 @@
   // /shop, in the Inspector shape (like a profile): the page head, a kind filter and the grid of
   // items on the left; on the right a panel that shows how buying works until an item is open,
   // then that item in full (ItemBuy: on your own name, what it holds, buy it or give it). Each item
-  // is drawn on your own name (or a made-up one signed out). Public, signed out too.
+  // is drawn on your own name (or a made-up one signed out) in a contact sheet, under a one-line
+  // toolbar (kinds, order). Public, signed out too.
   // The address holds the state: ?item=<id> is the open item (to share, and to come back to after
   // signing in), ?kind= the filter. Under 1100px there is no panel: the item opens in a dialog and
   // the "how it works" panel follows the grid. Paying happens in Paddle's window; CheckoutStatus
@@ -13,10 +14,12 @@
   import { gql } from '$lib/api';
   import FactList from '$lib/components/FactList.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import IconButton from '$lib/components/IconButton.svelte';
   import LinkRows from '$lib/components/LinkRows.svelte';
   import PanelBlock from '$lib/components/PanelBlock.svelte';
   import Problem from '$lib/components/Problem.svelte';
   import RetryNote from '$lib/components/RetryNote.svelte';
+  import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
   import { quiet } from '$lib/quiet';
   import { loadOwned } from '$lib/cosmetics/store.svelte';
@@ -28,7 +31,7 @@
   import ItemBuy from '$lib/shop/ItemBuy.svelte';
   import ItemCard from '$lib/shop/ItemCard.svelte';
   import ItemDialog from '$lib/shop/ItemDialog.svelte';
-  import { ofKind, SHOP_KINDS, shopKind, type ShopKind } from '$lib/shop/shop';
+  import { ofKind, SHOP_KINDS, shopKind, shopSort, sortItems, type ShopKind, type ShopSort } from '$lib/shop/shop';
   import { session } from '$lib/tool/session.svelte';
   import type { PageProps } from './$types';
 
@@ -65,7 +68,15 @@
   const kind = $derived(shopKind(page.url.searchParams.get('kind')));
   const kinds = $derived(SHOP_KINDS.map((k) => ({ k, n: items.filter((i) => ofKind(i, k)).length })));
   const filterable = $derived(kinds.filter((x) => x.k !== 'all' && x.n > 0).length > 1);
-  const shown = $derived(filterable ? items.filter((i) => ofKind(i, kind)) : items);
+  // The order (toolbar): the shop's own, cheapest first or newest first; ?sort= holds it.
+  const sort = $derived(shopSort(page.url.searchParams.get('sort')));
+  const shown = $derived(sortItems(filterable ? items.filter((i) => ofKind(i, kind)) : items, sort));
+  function sortTo(v: ShopSort) {
+    const u = new URL(page.url);
+    if (v === 'featured') u.searchParams.delete('sort');
+    else u.searchParams.set('sort', v);
+    goto(u.pathname + u.search, { noScroll: true, keepFocus: true, replaceState: true });
+  }
   function kindHref(k: ShopKind) {
     const u = new URL(page.url);
     if (k === 'all') u.searchParams.delete('kind');
@@ -203,19 +214,28 @@
         {#snippet actions()}<a class="btn btn-s" href="/redeem">Redeem a code</a>{/snippet}
       </State>
     {:else}
-      {#if filterable}
-        <nav class="kinds" aria-label="Kinds">
-          {#each kinds as x (x.k)}
-            {#if x.k === 'all' || x.n}
-              <a href={kindHref(x.k)} aria-current={kind === x.k ? 'page' : undefined} data-sveltekit-noscroll data-sveltekit-keepfocus>
-                <span class="tl" data-t={KIND_LABEL[x.k]}>{KIND_LABEL[x.k]}</span><span class="n">{count(x.n)}</span>
-              </a>
-            {/if}
-          {/each}
-        </nav>
-      {/if}
+      <!-- The slim toolbar: kinds (links, the URL holds them) on the left, the order on the right. -->
+      <div class="bar">
+        {#if filterable}
+          <nav class="kinds" aria-label="Kinds">
+            {#each kinds as x (x.k)}
+              {#if x.k === 'all' || x.n}
+                <a href={kindHref(x.k)} aria-current={kind === x.k ? 'page' : undefined} data-sveltekit-noscroll data-sveltekit-keepfocus>
+                  <span class="tick" aria-hidden="true">{#if kind === x.k}<Icon name="check" size={13} stroke={2.6} />{/if}</span><span class="tl" data-t={KIND_LABEL[x.k]}>{KIND_LABEL[x.k]}</span><span class="n">{count(x.n)}</span>
+                </a>
+              {/if}
+            {/each}
+          </nav>
+        {:else}
+          <p class="total"><span class="n">{count(items.length)}</span> {items.length === 1 ? 'item' : 'items'}</p>
+        {/if}
+        <div class="sort">
+          <Segmented label="Order" size="s" compact value={sort} onchange={sortTo}
+            options={[{ value: 'featured', label: 'Featured', icon: 'star' }, { value: 'price', label: 'Price', icon: 'tag' }, { value: 'new', label: 'New', icon: 'sparkles' }]} />
+        </div>
+      </div>
       {#if shown.length}
-        <ul class="grid" aria-label="Items on sale">
+        <ul class="sheet" aria-label="Items on sale">
           {#each shown as item (item.id)}
             <ItemCard {item} {name} current={!!panelItem && panelItem.id === item.id} onopen={show} />
           {/each}
@@ -232,6 +252,10 @@
 
   <aside class="panel" bind:this={panel} aria-label={panelItem ? clean(panelItem.name) : 'About the shop'} data-testid="shop-panel">
     {#if panelItem}
+      <div class="ip-head">
+        <h2 class="label">Item</h2>
+        <IconButton icon="x" label="Close the item" size="s" tip="bottom-end" onclick={closePanel} />
+      </div>
       {#key `${panelItem.id}:${giftFirst}`}
         <ItemBuy bind:this={buyPanel} item={panelItem} gift={giftFirst} {name} signedIn={!!me} variant="panel" headingId="shop-panel-title"
           onclose={closePanel} onstarted={closed} showing={() => !!wide && page.url.searchParams.get('item') === panelItem?.id} />
@@ -240,7 +264,7 @@
       <div class="ip-head"><h2 class="label">About the shop</h2></div>
       <div class="ip-body">
         {@render about()}
-        <p class="pick">Pick an item to see it on your name at every size.</p>
+        <p class="pick">Pick an item to try it on your name, in both themes and in a chat line.</p>
       </div>
     {/if}
   </aside>
@@ -250,7 +274,8 @@
 
 <style>
   p { margin: 0; }
-  /* The Inspector shape: the shop on the left, the panel on the right (360, full height, sticky). */
+  /* Workspace / Inspector: the sheet on the left, the inspector on the right (360, full height,
+     flush, its own ground, sticky). */
   .shop { display: grid; grid-template-columns: minmax(0, 1fr) 360px; column-gap: 24px; align-items: start; }
   .main { min-width: 0; padding-bottom: 48px; }
   .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
@@ -260,25 +285,29 @@
   .line { margin-top: 6px; max-width: 62ch; font-size: var(--t-ui); line-height: 1.55; color: var(--muted); }
   .head .btn :global(svg) { color: var(--muted); }
 
-  /* The kinds: words on a hairline; the current one bold (no bar or fill), like the profile's tabs. */
-  .kinds { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; margin: 0 0 16px; border-bottom: 1px solid var(--border); }
+  /* The toolbar: one line, a hairline under it, flush with the sheet. */
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 0 12px; min-height: 48px; border-top: 1px solid var(--border); }
+  .kinds { display: flex; align-items: center; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+  .kinds a { flex: none; display: inline-flex; align-items: center; gap: 4px; height: 44px; padding: 0 10px 0 4px; color: var(--muted);
+    font-size: var(--t-small); font-weight: 500; white-space: nowrap; transition: color var(--fast); }
   .kinds a:first-child { padding-left: 0; }
-  .kinds a { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 10px; color: var(--muted);
-    font-size: var(--t-ui); font-weight: 500; white-space: nowrap; transition: color var(--fast); }
   .kinds a[aria-current='page'] { color: var(--text); font-weight: 700; }
   .kinds a:focus-visible { outline-offset: -2px; }
+  .tick { display: inline-flex; width: 14px; color: var(--accent-text); }
   .tl { display: inline-grid; }
   .tl::after { content: attr(data-t); font-weight: 700; height: 0; overflow: hidden; visibility: hidden; user-select: none; }
-  .n { font-size: var(--t-small); color: var(--dim); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .n { font-family: var(--font-mono); font-size: var(--t-fine); color: var(--dim); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .total { font-size: var(--t-small); color: var(--muted); }
+  .sort { margin-left: auto; flex: none; }
 
-  /* The grid: cells sharing hairlines in one frame. */
-  .grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
-    border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
+  /* The contact sheet: cells share hairlines, no gaps, no rounded frame. */
+  .sheet { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
+    border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
 
   .panel { position: sticky; top: var(--nav-h); height: calc(100svh - var(--nav-h)); overflow-y: auto; overscroll-behavior: contain;
     margin-right: calc(-1 * var(--page-pad)); border-left: 1px solid var(--border); background: var(--surface);
     box-shadow: 0 0 0 100vw var(--surface); clip-path: inset(0 -100vw 0 0); /* on to the window's edge past the wrap, like every right panel */ }
-  .ip-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; height: 48px; padding: 0 16px;
+  .ip-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 48px; padding: 0 8px 0 16px;
     border-bottom: 1px solid var(--border); background: var(--surface); }
   .ip-body { display: grid; gap: 4px; padding: 8px 16px 16px; }
   .label { margin: 0; font-size: var(--t-label, 11px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
@@ -289,10 +318,10 @@
     .kinds a:hover { color: var(--text); }
   }
 
-  /* Narrower: one column; no panel (items open in a dialog), "how it works" follows the grid. */
+  /* Narrower: one column; no panel (items open in a dialog), "how it works" follows the sheet, flat. */
   @media (max-width: 1099.98px) {
     .shop { grid-template-columns: minmax(0, 1fr); }
     .panel { display: none; }
-    .about-narrow { display: grid; gap: 4px; margin-top: 24px; padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); }
+    .about-narrow { display: grid; gap: 4px; margin-top: 32px; padding-top: 8px; border-top: 1px solid var(--border); }
   }
 </style>

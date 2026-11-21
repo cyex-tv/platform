@@ -8,7 +8,9 @@
   // its own and fails on its own (one tile's error never empties the page).
   import { onMount } from 'svelte';
   import { gql } from '$lib/api';
+  import FactRows from '$lib/components/FactRows.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import Section from '$lib/components/Section.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { loadOwned, looks, NO_LOOK } from '$lib/cosmetics/store.svelte';
   import { inbox, loadInbox } from '$lib/account/inbox.svelte';
@@ -61,6 +63,8 @@
   {:else}<div class="pad" aria-busy="true"><span class="line ui-skeleton"></span><span class="line short ui-skeleton"></span></div>{/if}
 {/snippet}
 
+{#snippet more(href: string, label: string)}<a class="more" {href}>{label}<Icon name="chevron-right" size={14} /></a>{/snippet}
+
 <PageHead title="Overview" line="Your channels, uploads, editors and what happened lately, at a glance. Only you see this page.">
   {#snippet actions()}
     <a class="btn btn-s" href={sectionHref(accountId, 'active')}><Icon name="zap" size={15} />Active emotes</a>
@@ -68,157 +72,128 @@
   {/snippet}
 </PageHead>
 
-<div class="grid">
-  <section class="ui-panel span6" aria-labelledby="ov-ch">
-    <header>
-      <Icon name="tv" />
-      <h2 id="ov-ch">Channels</h2>
-      <a class="more" href="/me/channels">Manage<Icon name="chevron-right" size={14} /></a>
-    </header>
-    {#if library.data}
-      {#if library.data.channels.length}
-        <ul class="ui-list">
-          {#each library.data.channels as c (c.platform + c.platformChannelId)}
-            {@const set = setName(c.activeSetId)}
-            <li>
-              <Icon name={c.platform === 'KICK' ? 'kick' : 'twitch'} />
-              <span class="what"><strong><bdi>{clean(c.login)}</bdi></strong>
-                <span class="ui-hint">{#if set}Shows <a href="/sets/{encodeURIComponent(c.activeSetId ?? '')}"><bdi>{clean(set)}</bdi></a>{:else}No active set{/if}</span></span>
-            </li>
-          {/each}
-        </ul>
-      {:else}<p class="ui-hint pad">No channels yet. Link Twitch or Kick in Settings to add yours.</p>{/if}
-    {:else}{@render waiting(library)}{/if}
-  </section>
+<div class="cols">
+  <div class="col">
+    <Section title="Channels" count={library.data ? count(library.data.channels.length) : undefined} id="ov-ch">
+      {#snippet actions()}{@render more('/me/channels', 'Manage')}{/snippet}
+      {#if library.data}
+        {#if library.data.channels.length}
+          <ul class="rows">
+            {#each library.data.channels as c (c.platform + c.platformChannelId)}
+              {@const set = setName(c.activeSetId)}
+              <li>
+                <Icon name={c.platform === 'KICK' ? 'kick' : 'twitch'} size={16} />
+                <strong class="nm"><bdi>{clean(c.login)}</bdi></strong>
+                <span class="sub">{#if set}<a href="/sets/{encodeURIComponent(c.activeSetId ?? '')}"><bdi>{clean(set)}</bdi></a>{:else}No active set{/if}</span>
+              </li>
+            {/each}
+          </ul>
+        {:else}<p class="ui-hint pad">No channels yet. Link Twitch or Kick in Settings to add yours.</p>{/if}
+      {:else}{@render waiting(library)}{/if}
+    </Section>
 
-  <section class="ui-panel span6" aria-labelledby="ov-no">
-    <header>
-      <Icon name="bell" />
-      <h2 id="ov-no">Notifications{#if inbox.count}<span class="n ui-num">{count(inbox.count)} unread</span>{/if}</h2>
-      <a class="more" href="/me/notifications">All<Icon name="chevron-right" size={14} /></a>
-    </header>
-    {#if inbox.items}
-      {#if latestNotes.length}
-        <ul class="notes">{#each latestNotes as n (n.id)}<li><NotificationRow note={n} /></li>{/each}</ul>
-      {:else}<p class="ui-hint pad">Nothing new. Reviews, editor changes and cosmetics you get show up here.</p>{/if}
-    {:else}{@render waiting({ failed: !!inbox.error })}{/if}
-  </section>
+    <Section title="Recent uploads" count={uploads.data ? count(uploads.data.total) : undefined} id="ov-up">
+      {#snippet actions()}{@render more(sectionHref(accountId, 'uploads'), 'All emotes')}{/snippet}
+      {#if uploads.data}
+        {#if uploads.data.items.length}
+          <ul class="rows">
+            {#each uploads.data.items as e (e.id)}
+              {@const pic = { host: e.host, animated: e.animated, files: e.files }}
+              <li>
+                <span class="thumb">{#if ready(pic)}<img src={src(pic, 1)} alt="" loading="lazy" />{/if}</span>
+                <a class="nm" href="/me/emotes/{encodeURIComponent(e.id)}"><bdi>{clean(e.name)}</bdi></a>
+                <span class="sub ui-mono">{dateTime(e.createdAt)}</span>
+                <span class="ui-chip {e.state.toLowerCase()}">{STATE_LABEL[e.state]}</span>
+              </li>
+            {/each}
+          </ul>
+        {:else}<p class="ui-hint pad">No uploads yet. <a href="/me/upload">Upload your first emote</a>.</p>{/if}
+      {:else}{@render waiting(uploads)}{/if}
+    </Section>
 
-  <section class="ui-panel span6" aria-labelledby="ov-up">
-    <header>
-      <Icon name="upload" />
-      <h2 id="ov-up">Recent uploads{#if uploads.data}<span class="n ui-num">{count(uploads.data.total)}</span>{/if}</h2>
-      <a class="more" href={sectionHref(accountId, 'uploads')}>All emotes<Icon name="chevron-right" size={14} /></a>
-    </header>
-    {#if uploads.data}
-      {#if uploads.data.items.length}
-        <ul class="ui-list">
-          {#each uploads.data.items as e (e.id)}
-            {@const pic = { host: e.host, animated: e.animated, files: e.files }}
-            <li>
-              <span class="thumb">{#if ready(pic)}<img src={src(pic, 1)} alt="" loading="lazy" />{/if}</span>
-              <a class="what" href="/me/emotes/{encodeURIComponent(e.id)}"><strong><bdi>{clean(e.name)}</bdi></strong>
-                <span class="ui-hint ui-num">{dateTime(e.createdAt)}</span></a>
-              <span class="ui-chip {e.state.toLowerCase()}">{STATE_LABEL[e.state]}</span>
-            </li>
-          {/each}
-        </ul>
-      {:else}<p class="ui-hint pad">No uploads yet. <a href="/me/upload">Upload your first emote</a>.</p>{/if}
-    {:else}{@render waiting(uploads)}{/if}
-  </section>
+    <Section title="Editors" count={editors.data ? count(editors.data.length) : undefined} id="ov-ed">
+      {#snippet actions()}{@render more('/me/editors', 'Manage')}{/snippet}
+      {#if editors.data}
+        {#if editors.data.length}
+          <ul class="rows">
+            {#each editors.data.slice(0, 5) as ed (ed.account.id)}
+              <li><a class="nm" href="/users/{encodeURIComponent(ed.account.id)}"><PaintedName name={ed.account.displayName} paint={looks[ed.account.id]?.paint} badge={looks[ed.account.id]?.badge} /></a></li>
+            {/each}
+          </ul>
+        {:else}<p class="ui-hint pad">Nobody yet. Editors can manage your sets and emotes for you.</p>{/if}
+      {:else}{@render waiting(editors)}{/if}
+    </Section>
+  </div>
 
-  <section class="ui-panel span6" aria-labelledby="ov-ac">
-    <header>
-      <Icon name="activity" />
-      <h2 id="ov-ac">Recent activity</h2>
-      <a class="more" href={sectionHref(accountId, 'activity')}>See all<Icon name="chevron-right" size={14} /></a>
-    </header>
-    {#if activity.data}
-      {#if activity.data.length}<div class="feed"><ActivityRows items={activity.data} subject={accountId} /></div>
-      {:else}<p class="ui-hint pad">Nothing yet. Changes to your sets, emotes, cosmetics and editors show up here.</p>{/if}
-    {:else}{@render waiting(activity)}{/if}
-  </section>
+  <div class="col">
+    <Section title="Notifications" count={inbox.count ? `${count(inbox.count)} unread` : undefined} id="ov-no">
+      {#snippet actions()}{@render more('/me/notifications', 'All')}{/snippet}
+      {#if inbox.items}
+        {#if latestNotes.length}
+          <ul class="notes">{#each latestNotes as n (n.id)}<li><NotificationRow note={n} variant="dense" /></li>{/each}</ul>
+        {:else}<p class="ui-hint pad">Nothing new. Reviews, editor changes and cosmetics you get show up here.</p>{/if}
+      {:else}{@render waiting({ failed: !!inbox.error })}{/if}
+    </Section>
 
-  <section class="ui-panel span4" aria-labelledby="ov-ed">
-    <header>
-      <Icon name="circle-user" />
-      <h2 id="ov-ed">Editors{#if editors.data}<span class="n ui-num">{count(editors.data.length)}</span>{/if}</h2>
-      <a class="more" href="/me/editors">Manage<Icon name="chevron-right" size={14} /></a>
-    </header>
-    {#if editors.data}
-      {#if editors.data.length}
-        <ul class="ui-list">
-          {#each editors.data.slice(0, 5) as ed (ed.account.id)}
-            <li><a class="what" href="/users/{encodeURIComponent(ed.account.id)}"><PaintedName name={ed.account.displayName} paint={looks[ed.account.id]?.paint} badge={looks[ed.account.id]?.badge} /></a></li>
-          {/each}
-        </ul>
-      {:else}<p class="ui-hint pad">Nobody yet. Editors can manage your sets and emotes for you.</p>{/if}
-    {:else}{@render waiting(editors)}{/if}
-  </section>
+    <Section title="Recent activity" id="ov-ac">
+      {#snippet actions()}{@render more(sectionHref(accountId, 'activity'), 'See all')}{/snippet}
+      {#if activity.data}
+        {#if activity.data.length}<div class="feed"><ActivityRows items={activity.data} subject={accountId} /></div>
+        {:else}<p class="ui-hint pad">Nothing yet. Changes to your sets, emotes, cosmetics and editors show up here.</p>{/if}
+      {:else}{@render waiting(activity)}{/if}
+    </Section>
 
-  <section class="ui-panel span4" aria-labelledby="ov-co">
-    <header>
-      <Icon name="brush" />
-      <h2 id="ov-co">Cosmetics</h2>
-      <a class="more" href={sectionHref(accountId, 'cosmetics')}>Change<Icon name="chevron-right" size={14} /></a>
-    </header>
-    {#if owned.data}
-      <dl class="facts">
-        <div><dt>Paint</dt><dd>{#if look.paint}<PaintedName name={look.paint.name} paint={look.paint} />{:else}None{/if}</dd></div>
-        <div><dt>Badge</dt><dd>{look.badge ? clean(look.badge.name) : 'None'}</dd></div>
-        <div><dt>Owned</dt><dd class="ui-num">{count(owned.data.paints)} paints, {count(owned.data.badges)} badges</dd></div>
-      </dl>
-    {:else}{@render waiting(owned)}{/if}
-  </section>
+    <Section title="Cosmetics" id="ov-co">
+      {#snippet actions()}{@render more(sectionHref(accountId, 'cosmetics'), 'Change')}{/snippet}
+      {#if owned.data}
+        <FactRows items={[
+          { label: 'Paint', key: 'paint' },
+          { label: 'Badge', value: look.badge ? clean(look.badge.name) : 'None' },
+          { label: 'Owned', value: `${count(owned.data.paints)} paints, ${count(owned.data.badges)} badges`, mono: true },
+        ]}>
+          {#snippet value(k)}{#if k === 'paint'}{#if look.paint}<PaintedName name={look.paint.name} paint={look.paint} />{:else}None{/if}{/if}{/snippet}
+        </FactRows>
+      {:else}{@render waiting(owned)}{/if}
+    </Section>
 
-  <section class="ui-panel span4" aria-labelledby="ov-se">
-    <header>
-      <Icon name="folder" />
-      <h2 id="ov-se">Emote sets{#if library.data}<span class="n ui-num">{count(library.data.sets.length)}</span>{/if}</h2>
-      <a class="more" href={sectionHref(accountId, 'sets')}>Sets<Icon name="chevron-right" size={14} /></a>
-    </header>
-    {#if library.data}
-      {#if library.data.sets.length}
-        <ul class="ui-list">
-          {#each library.data.sets.slice(0, 5) as s (s.id)}
-            <li><a class="what" href="/sets/{encodeURIComponent(s.id)}"><strong><bdi>{clean(s.name)}</bdi></strong></a></li>
-          {/each}
-        </ul>
-      {:else}<p class="ui-hint pad">No sets yet.</p>{/if}
-    {:else}{@render waiting(library)}{/if}
-  </section>
+    <Section title="Emote sets" count={library.data ? count(library.data.sets.length) : undefined} id="ov-se">
+      {#snippet actions()}{@render more(sectionHref(accountId, 'sets'), 'Sets')}{/snippet}
+      {#if library.data}
+        {#if library.data.sets.length}
+          <ul class="rows">
+            {#each library.data.sets.slice(0, 5) as s (s.id)}
+              <li><a class="nm" href="/sets/{encodeURIComponent(s.id)}"><bdi>{clean(s.name)}</bdi></a></li>
+            {/each}
+          </ul>
+        {:else}<p class="ui-hint pad">No sets yet.</p>{/if}
+      {:else}{@render waiting(library)}{/if}
+    </Section>
+  </div>
 </div>
 
 <style>
-  .grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; align-items: start; }
-  .span6 { grid-column: span 6; }
-  .span4 { grid-column: span 4; }
-  @media (max-width: 1199.98px) { .span4 { grid-column: span 6; } .span4:last-child { grid-column: span 12; } }
-  @media (max-width: 760px) { .span6, .span4, .span4:last-child { grid-column: span 12; } }
-  /* A tile's head: icon, title with its number, and where it leads. */
-  .ui-panel > header > :global(svg) { color: var(--dim); flex: none; }
-  .ui-panel > header h2 { display: flex; align-items: baseline; gap: 8px; margin: 0; font-weight: 600; }
-  .n { font-size: 12px; font-weight: 500; color: var(--dim); }
-  .more { display: inline-flex; align-items: center; gap: 2px; min-height: 32px; padding: 0 4px 0 8px; border-radius: var(--radius);
+  /* Two flat columns on wide with a hairline between; each Section is separated by its own hairline. */
+  .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 40px; align-items: start; }
+  .col { min-width: 0; }
+  @media (min-width: 900px) { .col + .col { padding-left: 40px; margin-left: -40px; border-left: 1px solid var(--border); } }
+  @media (max-width: 899.98px) { .cols { grid-template-columns: minmax(0, 1fr); } .col + .col > :global(.sec:first-child) { border-top: 1px solid var(--border); } }
+  .more { display: inline-flex; align-items: center; gap: 2px; min-height: 32px; padding: 0 2px 0 8px; border-radius: var(--radius);
     font-size: var(--t-fine); font-weight: 500; color: var(--muted); white-space: nowrap; }
-  @media (hover: hover) and (pointer: fine) { .more:hover { color: var(--text); background: var(--row-hover); } }
-  .what { display: grid; flex: 1; min-width: 0; color: var(--text); }
-  .what strong { font-size: var(--t-ui); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .what .ui-hint a, .pad a { color: var(--text); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
-  .ui-list > li { font-size: var(--t-ui); }
-  .ui-list > li > :global(svg) { color: var(--muted); flex: none; }
+  @media (hover: hover) and (pointer: fine) { .more:hover { color: var(--text); } }
+  .rows, .notes { list-style: none; margin: 0; padding: 0; }
+  .rows li { display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 4px 0; border-bottom: 1px solid var(--border); font-size: var(--t-small); }
+  .rows li > :global(svg) { color: var(--dim); flex: none; }
+  .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: var(--text); }
+  .sub { flex: none; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
+  .sub a { color: var(--muted); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
   .thumb { flex: none; display: grid; place-items: center; width: 32px; height: 32px; }
   .thumb img { max-width: 32px; max-height: 32px; width: auto; height: auto; }
-  .pad { margin: 0; padding: 12px 16px 14px; }
+  .pad { margin: 0; padding: 12px 0 14px; }
+  .pad a { color: var(--text); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
   .line { display: block; height: 12px; width: 70%; border-radius: var(--radius); }
   .line + .line { margin-top: 8px; }
   .line.short { width: 40%; }
-  .notes { list-style: none; margin: 0; padding: 4px 0; }
-  .feed { padding: 0 12px; }
+  .notes { border-top: 1px solid var(--border); }
   .feed :global(.feed) { border-top: 0; }
   .feed :global(.item:last-child) { border-bottom: 0; }
-  .facts { margin: 0; padding: 8px 16px 12px; display: grid; gap: 8px; }
-  .facts div { display: flex; gap: 12px; align-items: baseline; }
-  .facts dt { width: 64px; flex: none; font-size: var(--t-fine); color: var(--muted); }
-  .facts dd { margin: 0; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

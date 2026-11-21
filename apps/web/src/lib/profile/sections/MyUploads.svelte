@@ -70,7 +70,7 @@
 </PageHead>
 
 {#if first}
-  <EmoteGrid items={[]} loading skeletons={12} creator={false} />
+  <EmoteGrid sheet items={[]} loading skeletons={12} creator={false} />
 {:else if problem && !items.length}
   <Problem cause="server" onretry={more} />
 {:else if !items.length}
@@ -79,7 +79,7 @@
     {#snippet actions()}{#if canUpload}<a class="btn btn-s btn-primary" href={uploadHref}><Icon name="upload" size={15} />Upload an emote</a>{/if}{/snippet}
   </State>
 {:else}
-  <EmoteGrid {items} creator={false} eager={12} label={accountId ? `${clean(name)}’s emotes` : 'Your emotes'} href={(e) => `/me/emotes/${e.id}`} {note} loading={busy} skeletons={6} />
+  <EmoteGrid sheet {items} creator={false} eager={12} label={accountId ? `${clean(name)}’s emotes` : 'Your emotes'} href={(e) => `/me/emotes/${e.id}`} {note} loading={busy} skeletons={6} />
   <div class="foot"><LoadMore hasMore={items.length < total} {busy} error={problem} {total} onmore={more} /></div>
 {/if}
 

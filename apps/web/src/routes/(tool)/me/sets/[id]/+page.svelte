@@ -1,13 +1,17 @@
 <script lang="ts">
-  // A set's editor, in the Inspector shape: the set's emotes (SetEmotes) and the Add panel on the
-  // left; on the right its name, who can open it, the channels it can be shown on, its facts and
-  // editors, and deleting it (or leaving it, for a set editor). Under 1100px the panel follows the
-  // emotes. Owners, set editors, account editors whose grant covers the set (ADR 0014) and staff.
+  // A set's editor, in the Workspace (redesign round 2): your area's rail on the left with this set
+  // current (its meter as on the browse rail); in the middle the set's emotes as a contact sheet
+  // under a slim bar (SetEmotes) and Add emotes; on the right the inspector: its name, who can open
+  // it, the channels it can be shown on, its facts (capacity meter, owner, editors), a chat preview
+  // and deleting it (or leaving it, for a set editor). Under 1100px the panel follows the emotes.
+  // Owners, set editors, account editors whose grant covers the set (ADR 0014) and staff.
   import Avatar from '$lib/components/Avatar.svelte';
   import PanelBlock from '$lib/components/PanelBlock.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { looks, wantLooks } from '$lib/cosmetics/store.svelte';
-  import InspectorLayout from '$lib/shell/InspectorLayout.svelte';
+  import FactRows from '$lib/components/FactRows.svelte';
+  import MeFrame from '$lib/profile/MeFrame.svelte';
+  import SetChat from '../../../../sets/[id]/SetChat.svelte';
   import Capacity from '$lib/components/Capacity.svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
@@ -21,7 +25,8 @@
   import { sectionHref } from '$lib/profile/rows';
   import Name from '$lib/components/Name.svelte';
   import type { EditSetQuery, EditorPermission, SetVisibility } from '$lib/gql/graphql';
-  import { EDIT_SET, DELETE_SET, REMOVE_SET_EDITOR, SET_MEMBERS, UPDATE_CHANNEL, UPDATE_SET } from '$lib/queries';
+  import { EDIT_SET, DELETE_SET, REMOVE_SET_EDITOR, SET_EMOTES, SET_MEMBERS, UPDATE_CHANNEL, UPDATE_SET } from '$lib/queries';
+  import type { SetEmotesQuery } from '$lib/gql/graphql';
   import Icon from '$lib/components/Icon.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import { loader } from '$lib/tool/loader.svelte';
@@ -217,6 +222,36 @@
   $effect(() => {
     if (editors.length) wantLooks(editors.slice(0, 10).map((e) => e.id));
   });
+
+  // The chat preview in the panel: the set's first emotes with pictures (read again after adds).
+  let sample = $state<{ id: string; items: SetEmotesQuery['setEmotes']['items'] } | null>(null);
+  $effect(() => {
+    const sid = set?.id;
+    void rev;
+    void set?.slotsUsed;
+    if (!sid) return;
+    let gone = false;
+    gql(SET_EMOTES, { id: sid, page: 1, perPage: 24 })
+      .then((r) => {
+        if (!gone) sample = { id: sid, items: r.setEmotes.items };
+      })
+      .catch(() => {});
+    return () => (gone = true);
+  });
+  const chat = $derived(sample && sample.id === set?.id ? sample.items : []);
+  const facts = $derived(
+    set
+      ? [
+          { label: 'Kind', value: `${kindName} set` },
+          { label: 'Emotes', key: 'cap', meter: { used: set.slotsUsed, capacity: set.capacity } },
+          ...(set.owner ? [{ label: 'Owner', key: 'owner' }] : []),
+          ...(showing.length ? [{ label: 'Shown on', value: showing.map((c) => `${platformName(c.platform)} ${c.login}`).join(', ') }] : []),
+          ...(set.kind !== 'GLOBAL' && owner ? [{ label: 'Editors', value: editors.length, mono: true }] : []),
+          ...(held.size ? [{ label: 'You may', value: permissionLabels([...held]), tone: 'muted' as const }] : []),
+          { label: 'Id', value: set.id, mono: true },
+        ]
+      : [],
+  );
 </script>
 
 <svelte:head><title>{L.cause ? problemTitle(L.cause, true, 'No set here') : `${set?.name ?? 'Set'} - cyex.tv`}</title></svelte:head>
@@ -261,14 +296,18 @@
       </PanelBlock>
     {/if}
     <PanelBlock title="Facts">
-      <dl class="kv">
-        <dt>Kind</dt><dd>{kindName}</dd>
-        <dt>Emotes</dt><dd><Capacity used={set.slotsUsed} capacity={set.capacity} /></dd>
-        {#if set.owner}<dt>Owner</dt><dd><a class="who" href="/users/{encodeURIComponent(set.owner.id)}"><Name value={set.owner.displayName} /></a></dd>{/if}
-        {#if showing.length}<dt>Shown on</dt><dd>{showing.map((c) => `${platformName(c.platform)} ${c.login}`).join(', ')}</dd>{/if}
-        {#if held.size}<dt>You may</dt><dd class="perm">{permissionLabels([...held])}</dd>{/if}
-      </dl>
+      <FactRows label="Facts" items={facts}>
+        {#snippet value(k)}
+          {#if k === 'cap'}<span class="ui-mono"><Capacity used={set!.slotsUsed} capacity={set!.capacity} /></span>
+          {:else if k === 'owner' && set!.owner}<a class="who" href="/users/{encodeURIComponent(set!.owner.id)}"><Avatar src={set!.owner.avatar} name={clean(set!.owner.displayName)} size={20} /><Name value={set!.owner.displayName} /></a>{/if}
+        {/snippet}
+      </FactRows>
     </PanelBlock>
+    {#if chat.length}
+      <PanelBlock title="Chat preview">
+        <SetChat members={chat} owner={set.owner ?? null} name={clean(set.name)} inPanel />
+      </PanelBlock>
+    {/if}
     {#if owner && set.kind !== 'GLOBAL'}
       <PanelBlock title="Editors" count={editors.length || undefined} more={{ href: '/me/editors', label: 'Manage' }}>
         {#if editors.length}
@@ -313,7 +352,7 @@
 {#if set && !access.emotes}
   <div class="wrap wait"><State kind="loading" title="Opening the set…" /></div>
 {:else if set}
-  <InspectorLayout title="Set" label="About this set" panel={side} narrow="after" testid="set-panel">
+  <MeFrame title="Set" label="About this set" panel={side} narrow="after" fold={false} currentSet={set.id}>
     {#snippet head()}
       <PageHead name title={clean(set!.name)} back={setsHome}>
         {#snippet line()}
@@ -325,11 +364,9 @@
         {/snippet}
       </PageHead>
     {/snippet}
-    <div class="ui-stack">
-      <SetEmotes setId={set.id} capacity={set.capacity} used={set.slotsUsed} {rev} onchange={load} />
-      <AddEmotes setId={set.id} personal={set.kind === 'PERSONAL'} {taken} {names} {full} onadded={added} />
-    </div>
-  </InspectorLayout>
+    <SetEmotes setId={set.id} capacity={set.capacity} used={set.slotsUsed} {rev} onchange={load} />
+    <AddEmotes setId={set.id} personal={set.kind === 'PERSONAL'} {taken} {names} {full} onadded={added} />
+  </MeFrame>
 {/if}
 {/snippet}
 </LoadGate>
@@ -347,8 +384,7 @@
   .chan bdi { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .live { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-small); font-weight: 600; white-space: nowrap; }
   .live :global(svg) { color: var(--accent-text); }
-  .who { color: var(--text); }
-  .perm { font-weight: 500; text-align: right; }
+  .who { display: inline-flex; align-items: center; gap: 8px; min-width: 0; color: var(--text); }
   .eds { list-style: none; margin: 0; padding: 0; display: grid; }
   .eds li { display: flex; align-items: center; gap: 10px; height: 40px; min-width: 0; font-size: var(--t-small); font-weight: 600; }
   .eds li + li { border-top: 1px solid var(--border); }

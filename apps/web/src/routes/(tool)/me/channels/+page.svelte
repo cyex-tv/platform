@@ -3,7 +3,11 @@
   // edit, each with the set its chat shows and whether chatters' personal emotes show. In your
   // profile's frame (MeFrame); the panel sums them up and links to what they depend on.
   import Icon from '$lib/components/Icon.svelte';
+  import FactRows from '$lib/components/FactRows.svelte';
+  import LinkRows from '$lib/components/LinkRows.svelte';
   import PanelBlock from '$lib/components/PanelBlock.svelte';
+  import Row from '$lib/components/Row.svelte';
+  import Section from '$lib/components/Section.svelte';
   import MeFrame from '$lib/profile/MeFrame.svelte';
   import { count } from '$lib/format';
   import { sectionHref } from '$lib/profile/rows';
@@ -69,116 +73,105 @@
 
 <svelte:head><title>Channels - cyex.tv</title></svelte:head>
 
-{#snippet panel(ch: Channel, options: { id: string; name: string }[], owner?: string)}
+{#snippet block(ch: Channel, options: { id: string; name: string }[], owner?: string)}
   {@const busy = saving.has(`${ch.platform}:${ch.platformChannelId}`)}
-    <section class="ui-panel" data-platform={ch.platform.toLowerCase()}>
-      <header>
-        <span class="dot" aria-hidden="true"></span>
-        <h2><Name value={ch.login} /></h2>
-        <span class="ui-hint" title={owner ? `${platformName(ch.platform)} · ${clean(owner)}’s channel` : undefined}>{platformName(ch.platform)}{#if owner}{' '}· <bdi>{clean(owner)}</bdi>’s channel{/if}</span>
-        <a class="ui-btn ghost small" href="/channels/{ch.platform.toLowerCase()}/{encodeURIComponent(ch.login)}">Public page</a>
-      </header>
-      <div class="body">
-        <label class="ui-row">
-          <div><strong>Active set</strong><span class="ui-hint">What everyone in {owner ? 'its' : 'your'} chat sees.</span></div>
-          <select class="ui-input pick" aria-disabled={busy} value={ch.activeSetId ?? ''}
-            onchange={(e) => { const el = e.currentTarget; update(ch, { activeSetId: el.value }, () => (el.value = ch.activeSetId ?? '')); }}>
-            <option value="">None</option>
-            {#each options as s}<option value={s.id}>{iso(s.name)}</option>{/each}
-          </select>
-        </label>
-        {#if options.length === 0}
-          <p class="ui-hint">{owner ? `${iso(owner)} has` : 'You have'} no channel sets yet. <a href={owner ? ownerSetsHref(ch.account.id) : '/me/sets'}>Make one</a>.</p>
-        {/if}
-        <label class="ui-row">
-          <div><strong>Personal emotes</strong><span class="ui-hint">Show chatters’ personal sets in {owner ? 'its' : 'your'} chat.</span></div>
-          <input class="ui-switch" type="checkbox" aria-disabled={busy} checked={ch.allowPersonalEmotes}
-            onchange={(e) => { const el = e.currentTarget; update(ch, { allowPersonalEmotes: el.checked }, () => (el.checked = ch.allowPersonalEmotes)); }} />
-        </label>
-      </div>
-    </section>
+  {@const key = `${ch.platform}-${ch.platformChannelId}`.toLowerCase()}
+  <div class="ch" data-platform={ch.platform.toLowerCase()}>
+    <div class="ch-head">
+      <span class="dot" aria-hidden="true"></span>
+      <h3><Name value={ch.login} /></h3>
+      <span class="plat" title={owner ? `${platformName(ch.platform)} · ${clean(owner)}’s channel` : undefined}>{platformName(ch.platform)}{#if owner}{' '}· <bdi>{clean(owner)}</bdi>’s channel{/if}</span>
+      <a class="ch-link" href="/channels/{ch.platform.toLowerCase()}/{encodeURIComponent(ch.login)}">Public page<Icon name="chevron-right" size={14} /></a>
+    </div>
+    <Row label="Active set" for="set-{key}" hint="What everyone in {owner ? 'its' : 'your'} chat sees.">
+      <select id="set-{key}" class="ui-input pick" aria-disabled={busy} value={ch.activeSetId ?? ''}
+        onchange={(e) => { const el = e.currentTarget; update(ch, { activeSetId: el.value }, () => (el.value = ch.activeSetId ?? '')); }}>
+        <option value="">None</option>
+        {#each options as s}<option value={s.id}>{iso(s.name)}</option>{/each}
+      </select>
+    </Row>
+    {#if options.length === 0}
+      <p class="ui-hint none">{owner ? `${iso(owner)} has` : 'You have'} no channel sets yet. <a href={owner ? ownerSetsHref(ch.account.id) : '/me/sets'}>Make one</a>.</p>
+    {/if}
+    <Row label="Personal emotes" for="pe-{key}" inline hint="Show chatters’ personal sets in {owner ? 'its' : 'your'} chat.">
+      <input id="pe-{key}" class="ui-switch" type="checkbox" aria-disabled={busy} checked={ch.allowPersonalEmotes}
+        onchange={(e) => { const el = e.currentTarget; update(ch, { allowPersonalEmotes: el.checked }, () => (el.checked = ch.allowPersonalEmotes)); }} />
+    </Row>
+  </div>
 {/snippet}
 
 {#snippet side()}
   <PanelBlock title="In numbers">
-    <dl class="kv">
-      <dt>Your channels</dt><dd>{L.data ? count(own.length) : '–'}</dd>
-      <dt>Channels you edit</dt><dd>{L.data ? count(managed.reduce((n, g) => n + g.channels.length, 0)) : '–'}</dd>
-      <dt>Your channel sets</dt><dd>{L.data ? count(channelSets.length) : '–'}</dd>
-    </dl>
+    <FactRows items={[
+      { label: 'Your channels', value: L.data ? count(own.length) : '–', mono: true },
+      { label: 'Channels you edit', value: L.data ? count(managed.reduce((n, g) => n + g.channels.length, 0)) : '–', mono: true },
+      { label: 'Your channel sets', value: L.data ? count(channelSets.length) : '–', mono: true },
+    ]} />
   </PanelBlock>
   {#if showing.length}
     <PanelBlock title="Chat shows">
-      <ul class="shows">
-        {#each showing as ch (ch.platform + ch.platformChannelId)}
-          {@const set = setName(ch.activeSetId)}
-          <li>
-            <Icon name={ch.platform === 'KICK' ? 'kick' : 'twitch'} size={16} />
-            <span class="who"><bdi>{clean(ch.login)}</bdi></span>
-            <span class="what">{#if set && ch.activeSetId}<a href="/sets/{encodeURIComponent(ch.activeSetId)}"><bdi>{clean(set)}</bdi></a>{:else}No set{/if}</span>
-          </li>
-        {/each}
-      </ul>
+      <FactRows items={showing.map((ch) => ({ label: clean(ch.login), key: ch.platform + ch.platformChannelId }))}>
+        {#snippet value(k)}
+          {@const ch = showing.find((c) => c.platform + c.platformChannelId === k)}
+          {@const set = ch ? setName(ch.activeSetId) : undefined}
+          {#if ch && set && ch.activeSetId}<a href="/sets/{encodeURIComponent(ch.activeSetId)}"><bdi>{clean(set)}</bdi></a>{:else}<span class="none-set">No set</span>{/if}
+        {/snippet}
+      </FactRows>
     </PanelBlock>
   {/if}
   <PanelBlock title="Related">
-    <p class="pb-hint">A change reaches chat within seconds. Connect another platform in Settings to add its channel.</p>
-    <div class="pb-actions">
-      <a class="ui-btn secondary" href="/me/settings/account#conn-h"><Icon name="link" size={15} />Connections</a>
-      <div class="pair">
-        <a class="ui-btn secondary" href={sectionHref(session.me?.id ?? '', 'sets')}><Icon name="folder" size={15} />Your sets</a>
-        <a class="ui-btn secondary" href="/me/editors"><Icon name="circle-user" size={15} />Editors</a>
-      </div>
-    </div>
+    <LinkRows items={[
+      { href: '/me/settings/account#conn-h', label: 'Connections', hint: 'Connect another platform to add its channel', icon: 'link' },
+      { href: sectionHref(session.me?.id ?? '', 'sets'), label: 'Your sets', icon: 'folder' },
+      { href: '/me/editors', label: 'Editors', icon: 'circle-user' },
+    ]} />
+    <p class="pb-hint">A change reaches chat within seconds.</p>
   </PanelBlock>
 {/snippet}
 
-<MeFrame title="Channels" label="About your channels" panel={side}>
+{#snippet head()}
   <PageHead title="Channels" line="Your channel on each platform you signed in with. Pick the set its chat shows." />
+{/snippet}
 
+<MeFrame title="Channels" label="About your channels" panel={side} {head}>
   <LoadGate source={L} label="Loading your channels…">
   {#snippet children(data)}
   {@const channels = data.myChannels}
   {#if channels.length === 0 && managed.length === 0}
     <State title="No channels yet">Sign in with Twitch or Kick and yours appears here.</State>
   {:else}
-    <div class="ui-stack">
-      {#each channels as ch (ch.platform + ch.platformChannelId)}
-        {@render panel(ch, channelSets)}
-      {/each}
-      {#each managed as g (g.ownerId)}
-        <h2 class="group" id="of-{g.ownerId}">
-          <bdi>{clean(g.channels[0].account.displayName)}</bdi>
-          <span class="ui-hint">You edit this account: {permissionLabels(g.permissions)}</span>
-        </h2>
-        {#each g.channels as ch (ch.platform + ch.platformChannelId)}
-          {@render panel(ch, g.sets, g.channels[0].account.displayName)}
+    {#if channels.length}
+      <Section title="Your channels" count={count(channels.length)}>
+        {#each channels as ch (ch.platform + ch.platformChannelId)}
+          {@render block(ch, channelSets)}
         {/each}
-      {/each}
-    </div>
+      </Section>
+    {/if}
+    {#each managed as g (g.ownerId)}
+      <Section title="{clean(g.channels[0].account.displayName)} · Editor" id="of-{g.ownerId}" lead="You edit this account: {permissionLabels(g.permissions)}">
+        {#each g.channels as ch (ch.platform + ch.platformChannelId)}
+          {@render block(ch, g.sets, g.channels[0].account.displayName)}
+        {/each}
+      </Section>
+    {/each}
   {/if}
   {/snippet}
   </LoadGate>
 </MeFrame>
 
 <style>
-  .body { padding: 2px 14px 8px; }
   /* Busy keeps focus (a disabled control would drop it): dim it instead. */
   [aria-disabled='true'] { opacity: .55; cursor: progress; }
-  .ui-row .ui-hint { display: block; }
-  .pick { width: auto; min-width: 0; max-width: min(100%, 260px); text-overflow: ellipsis; }
+  .ch + .ch { margin-top: 20px; }
+  .ch-head { display: flex; align-items: center; gap: 10px; min-height: 40px; margin-top: 8px; border-bottom: 1px solid var(--border); }
+  .ch-head h3 { flex: 0 1 auto; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-ui); font-weight: 600; }
+  .plat { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-fine); color: var(--muted); }
+  .ch-link { display: inline-flex; align-items: center; gap: 2px; flex: none; min-height: 32px; font-size: var(--t-fine); font-weight: 500; color: var(--muted); white-space: nowrap; }
+  @media (hover: hover) and (pointer: fine) { .ch-link:hover { color: var(--text); } }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--twitch-logo); flex: none; }
   [data-platform='kick'] .dot { background: var(--kick); }
-  header h2 { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  header .ui-hint { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .group { display: grid; gap: 2px; margin: 12px 0 -6px; font-size: var(--t-ui); font-weight: 600; scroll-margin-top: 80px; }
-  .group .ui-hint { font-weight: 400; }
-  .shows { list-style: none; margin: 0; padding: 0; display: grid; }
-  .shows li { display: flex; align-items: center; gap: 10px; height: 40px; min-width: 0; font-size: var(--t-small); }
-  .shows li + li { border-top: 1px solid var(--border); }
-  .shows :global(svg) { flex: none; color: var(--dim); }
-  .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-  .what { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
-  .what a { color: var(--muted); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
-  .ui-stack { max-width: 760px; }
+  .pick { width: auto; min-width: 0; max-width: min(100%, 260px); text-overflow: ellipsis; }
+  .none { margin: 0; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .none a { color: var(--text); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
+  .none-set { color: var(--muted); }
 </style>

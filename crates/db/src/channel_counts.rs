@@ -35,18 +35,27 @@ pub async fn live(conn: &mut PgConnection, emote_ids: &[Uuid]) -> DbResult<HashM
         .collect())
 }
 
+/// The statement [`recount`] runs, with the emote IDs as `$1`. Public so the scale test can ask
+/// Postgres for its plan.
+#[doc(hidden)]
+pub fn recount_sql() -> String {
+    format!(
+        "UPDATE emotes e SET channel_count = coalesce(n.n, 0)
+         FROM unnest($1::uuid[]) AS b(id)
+         LEFT JOIN ({LIVE}) n ON n.emote_id = b.id
+         WHERE e.id = b.id AND e.channel_count <> coalesce(n.n, 0)"
+    )
+}
+
 /// Recounts `emote_ids` and stores the counts that changed. Returns how many changed.
 pub async fn recount(conn: &mut PgConnection, emote_ids: &[Uuid]) -> DbResult<u64> {
     if emote_ids.is_empty() {
         return Ok(0);
     }
-    let sql = format!(
-        "UPDATE emotes e SET channel_count = coalesce(n.n, 0)
-         FROM unnest($1::uuid[]) AS b(id)
-         LEFT JOIN ({LIVE}) n ON n.emote_id = b.id
-         WHERE e.id = b.id AND e.channel_count <> coalesce(n.n, 0)"
-    );
-    let done = sqlx::query(&sql).bind(emote_ids).execute(conn).await?;
+    let done = sqlx::query(&recount_sql())
+        .bind(emote_ids)
+        .execute(conn)
+        .await?;
     Ok(done.rows_affected())
 }
 

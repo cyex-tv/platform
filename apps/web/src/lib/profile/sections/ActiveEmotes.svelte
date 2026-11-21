@@ -58,7 +58,7 @@
       </State>
     {:else}
       {@const visible = set.emotes.slice(0, shown(set.emotes.length, steps, EMOTES_STEP))}
-      <EmoteGrid items={visible.map((m) => ({ ...m.emote, shownName: m.name !== m.emote.name ? m.name : undefined }))} eager={12} label="Active emotes" />
+      <EmoteGrid sheet items={visible.map((m) => ({ ...m.emote, shownName: m.name !== m.emote.name ? m.name : undefined }))} eager={12} label="Active emotes" />
       {#if visible.length < set.emotes.length}
         <div class="more">
           <span class="ui-hint ui-num">{showing(visible.length, set.emotes.length)}</span>

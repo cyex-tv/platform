@@ -160,22 +160,32 @@ pub const SEARCH_WHERE: &str = concat!(
                                  SELECT t.emote_id FROM emote_tags t WHERE t.tag LIKE $5 || '%')))"
 );
 
-pub async fn search(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<Hits> {
-    let Some(tags) = clean_tags(q.tags) else {
-        return Ok(Hits {
-            ids: Vec::new(),
-            total: 0,
-            capped: false,
-        });
+/// Binds `$1` to `$12` of [`SEARCH_WHERE`] and the page statements, in order.
+macro_rules! bind_search {
+    ($query:expr, $text:expr, $pattern:expr, $tags:expr, $q:expr) => {
+        $query
+            .bind($text)
+            .bind($q.animated)
+            .bind($q.owner)
+            .bind($q.nsfw)
+            .bind($pattern)
+            .bind($q.limit)
+            .bind($q.offset)
+            .bind($q.flags.contains(&EmoteFlag::ZeroWidth))
+            .bind($q.flags.contains(&EmoteFlag::Wide))
+            .bind($q.flags.contains(&EmoteFlag::Nsfw))
+            .bind($tags)
+            .bind($q.exact)
     };
-    let wants = |f: EmoteFlag| q.flags.contains(&f);
-    let text: String = q.text.trim().chars().take(100).collect();
-    let pattern = like_escape(&text.to_lowercase());
+}
+
+/// The statement that reads one page of ids (and, for trending, the total).
+fn page_sql(q: &Query<'_>, text_is_empty: bool) -> String {
     // The order and the join are fixed strings, never user text. Without text, the relevance
     // order is popularity then ID (the text terms are the same for every row), which an index
     // reads in order.
     let order = match q.sort {
-        EmoteSort::Relevance if text.is_empty() => "e.popularity DESC, e.id",
+        EmoteSort::Relevance if text_is_empty => "e.popularity DESC, e.id",
         EmoteSort::Relevance => {
             "($1 <> '' AND lower(e.name) = lower($1)) DESC,
                   ($1 <> '' AND lower(e.name) LIKE $5 || '%') DESC,
@@ -189,8 +199,7 @@ pub async fn search(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<Hits> {
     };
     // Trending ranks every emote with adds anyway, so it counts in the same pass. The other
     // orders read just the page (in index order where there is no text) and count apart.
-    let trending = matches!(q.sort, EmoteSort::Trending);
-    let (join, total_col) = if trending {
+    let (join, total_col) = if matches!(q.sort, EmoteSort::Trending) {
         (
             format!(
                 "JOIN ({}) tr ON tr.emote_id = e.id",
@@ -201,31 +210,54 @@ pub async fn search(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<Hits> {
     } else {
         (String::new(), "0::bigint")
     };
-    macro_rules! bind_all {
-        ($query:expr) => {
-            $query
-                .bind(&text)
-                .bind(q.animated)
-                .bind(q.owner)
-                .bind(q.nsfw)
-                .bind(&pattern)
-                .bind(q.limit)
-                .bind(q.offset)
-                .bind(wants(EmoteFlag::ZeroWidth))
-                .bind(wants(EmoteFlag::Wide))
-                .bind(wants(EmoteFlag::Nsfw))
-                .bind(&tags)
-                .bind(q.exact)
-        };
-    }
-    let rows: Vec<(Uuid, i64)> = bind_all!(sqlx::query_as(&format!(
+    format!(
         "SELECT e.id, {total_col} AS total
          FROM emotes e
          {join}
          WHERE {SEARCH_WHERE}
          ORDER BY {order}
          LIMIT $6 OFFSET $7"
-    )))
+    )
+}
+
+/// Postgres' plan (`EXPLAIN (COSTS OFF)`, as text) for the page statement [`search`] runs for
+/// `q`, with `q`'s own values bound. Public so the scale test can check, from the plan, that a
+/// page isn't a whole-table read.
+#[doc(hidden)]
+pub async fn explain_page(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<String> {
+    let Some(tags) = clean_tags(q.tags) else {
+        return Ok(String::new());
+    };
+    let text: String = q.text.trim().chars().take(100).collect();
+    let pattern = like_escape(&text.to_lowercase());
+    let sql = format!("EXPLAIN (COSTS OFF) {}", page_sql(q, text.is_empty()));
+    let lines: Vec<String> = bind_search!(sqlx::query_scalar(&sql), &text, &pattern, &tags, q)
+        .fetch_all(conn)
+        .await?;
+    Ok(lines.join(
+        "
+",
+    ))
+}
+
+pub async fn search(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<Hits> {
+    let Some(tags) = clean_tags(q.tags) else {
+        return Ok(Hits {
+            ids: Vec::new(),
+            total: 0,
+            capped: false,
+        });
+    };
+    let text: String = q.text.trim().chars().take(100).collect();
+    let pattern = like_escape(&text.to_lowercase());
+    let trending = matches!(q.sort, EmoteSort::Trending);
+    let rows: Vec<(Uuid, i64)> = bind_search!(
+        sqlx::query_as(&page_sql(q, text.is_empty())),
+        &text,
+        &pattern,
+        &tags,
+        q
+    )
     .fetch_all(&mut *conn)
     .await?;
     let ids: Vec<Uuid> = rows.iter().map(|(id, _)| *id).collect();
@@ -236,11 +268,17 @@ pub async fn search(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<Hits> {
     } else if (ids.len() as i64) < q.limit {
         q.offset + ids.len() as i64
     } else {
-        bind_all!(sqlx::query_scalar(&format!(
-            "SELECT count(*) FROM emotes e
-             WHERE {SEARCH_WHERE}
-               AND $6::bigint IS NOT NULL AND $7::bigint IS NOT NULL"
-        )))
+        bind_search!(
+            sqlx::query_scalar(&format!(
+                "SELECT count(*) FROM emotes e
+                 WHERE {SEARCH_WHERE}
+                   AND $6::bigint IS NOT NULL AND $7::bigint IS NOT NULL"
+            )),
+            &text,
+            &pattern,
+            &tags,
+            q
+        )
         .fetch_one(&mut *conn)
         .await?
     };

@@ -102,7 +102,7 @@
     </State>
     {#if more}<div class="foot"><LoadMore hasMore={more} busy={loading} error={failed} {total} onmore={loadMore} /></div>{/if}
   {:else}
-    <EmoteGrid items={shown} creator={false} eager={12} {loading} skeletons={6} label="Emotes by {name}" />
+    <EmoteGrid sheet items={shown} creator={false} eager={12} {loading} skeletons={6} label="Emotes by {name}" />
     <div class="foot"><LoadMore hasMore={more} busy={loading} error={failed} {total} onmore={loadMore} /></div>
   {/if}
 </section>

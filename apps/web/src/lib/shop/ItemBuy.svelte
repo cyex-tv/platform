@@ -51,6 +51,7 @@
   const holds = $derived(contentsText(item));
   const stock = $derived(stockText(item));
   const ends = $derived(saleEndText(item));
+  const kind = $derived(isBundle(item) ? 'Bundle' : item.paints.length ? 'Paint' : item.badges.length ? 'Badge' : 'Item');
 
   /** Puts focus where the item starts: a gift on the login, a purchase for yourself on who gets it, signed out on the heading. */
   export function focusStart() {
@@ -97,7 +98,7 @@
     <header class="head">
       <div class="title">
         <h2 id={headingId} tabindex="-1"><bdi>{clean(item.name)}</bdi></h2>
-        <p class="kind"><span>{isBundle(item) ? 'Bundle' : item.paints.length ? 'Paint' : 'Badge'}</span><span class="sep" aria-hidden="true">·</span><span>{holds}</span></p>
+        <p class="kind"><span>{kind}</span><span class="sep" aria-hidden="true">·</span><span>{holds}</span></p>
       </div>
       <p class="price">{price(item.priceCents, item.currency)}</p>
     </header>
@@ -111,36 +112,41 @@
 
     <section class="block" aria-labelledby="{uid}-look">
       <h3 class="label" id="{uid}-look">On {signedIn ? 'your name' : 'a name'}</h3>
-      <ItemPreview badges={item.badges} paints={item.paints} {name} full />
+      <ItemPreview badges={item.badges} paints={item.paints} {name} full uid="{uid}-pv" />
     </section>
 
-    {#if stock || ends || item.owned}
+    <section class="block" aria-labelledby="{uid}-facts">
+      <h3 class="label" id="{uid}-facts">Facts</h3>
       <dl class="kv">
-        {#if stock}<dt>Stock</dt><dd>{stock}</dd>{/if}
-        {#if ends}<dt>Sale</dt><dd>{ends}</dd>{/if}
+        <dt>Kind</dt><dd>{kind}</dd>
+        <dt>Holds</dt><dd>{holds}</dd>
+        <dt>Price</dt><dd class="mono">{price(item.priceCents, item.currency)}</dd>
+        {#if stock}<dt>Stock</dt><dd class="mono">{stock}</dd>{/if}
+        {#if ends}<dt>Sale</dt><dd class="mono">{ends}</dd>{/if}
+        <dt>Shown in</dt><dd>Twitch and Kick chat</dd>
         {#if item.owned}<dt>You</dt><dd class="own"><Icon name="check" size={13} stroke={2.4} />Own everything in it</dd>{/if}
       </dl>
-    {/if}
+    </section>
 
     {#if signedIn && item.available}
       <section class="block who" aria-labelledby="{uid}-who">
         <h3 class="label" id="{uid}-who">Who gets it</h3>
-        <Segmented label="Who gets it" size="s" options={[{ value: 'me', label: 'For me' }, { value: 'gift', label: 'Gift to someone' }]} value={mode} onchange={pick} />
+        <Segmented label="Who gets it" options={[{ value: 'me', label: 'For me' }, { value: 'gift', label: 'Gift to someone' }]} value={mode} onchange={pick} />
         {#if mode === 'me' && item.owned}
           <p class="ui-hint">You own all of it already. You can still give it to someone.</p>
         {/if}
         {#if mode === 'gift'}
           <div class="gift">
-            <div class="ui-field">
-              <span class="ui-label">Platform</span>
+            <div class="row">
+              <span class="rl">Platform</span>
               <Segmented label="Their platform" size="s" options={[{ value: 'TWITCH', label: 'Twitch', icon: 'twitch' }, { value: 'KICK', label: 'Kick', icon: 'kick' }]} value={platform} onchange={(v) => (platform = v)} />
             </div>
-            <label class="ui-field">
-              <span class="ui-label">Their login</span>
+            <label class="row field">
+              <span class="rl">Their login</span>
               <input class="ui-input" bind:this={loginInput} bind:value={login} maxlength="64" autocomplete="off" autocapitalize="off" spellcheck="false"
                 placeholder="For example quietoak" aria-invalid={loginError ? 'true' : undefined} aria-describedby={loginError ? `${uid}-err` : `${uid}-hint`} />
-              {#if loginError}<span class="ui-error" id="{uid}-err">{loginError}</span>{:else}<span class="ui-hint" id="{uid}-hint">They need to have signed in to cyex.tv once.</span>{/if}
             </label>
+            {#if loginError}<span class="ui-error" id="{uid}-err">{loginError}</span>{:else}<span class="ui-hint" id="{uid}-hint">They need to have signed in to cyex.tv once.</span>{/if}
           </div>
         {/if}
       </section>
@@ -149,45 +155,56 @@
     {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
   </div>
   <footer>
-    <button class="btn btn-s" type="button" onclick={onclose}>Close</button>
+    {#if variant === 'dialog'}<button class="btn btn-s" type="button" onclick={onclose}>Close</button>{/if}
     {#if !signedIn}
-      <a class="btn btn-s btn-primary" href={back}>Sign in to buy</a>
+      <a class="btn btn-primary go" href={back}>Sign in to buy</a>
     {:else}
-      <button class="btn btn-s btn-primary" type="submit" disabled={busy || !item.available || (mode === 'me' && item.owned)}>{busy ? 'Starting…' : label}</button>
+      <button class="btn btn-primary go" type="submit" disabled={busy || !item.available || (mode === 'me' && item.owned)}>{busy ? 'Starting…' : label}</button>
     {/if}
   </footer>
 </form>
 
 <style>
   p, h2, h3 { margin: 0; }
-  .body { display: grid; gap: 16px; min-width: 0; }
+  /* The inspector's language: flat blocks under uppercase labels, facts as hairline rows with mono
+     numbers, no boxes. */
+  .body { display: grid; gap: 20px; min-width: 0; }
   .dialog .body { overflow-y: auto; overscroll-behavior: contain; }
   .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; min-width: 0; }
-  .title { display: grid; gap: 2px; min-width: 0; }
-  h2 { font-size: 18px; font-weight: 600; line-height: 1.3; letter-spacing: -.01em; overflow-wrap: anywhere; }
+  .title { display: grid; gap: 4px; min-width: 0; }
+  h2 { font-size: 20px; font-weight: 700; line-height: 1.25; letter-spacing: -.015em; overflow-wrap: anywhere; }
   h2:focus { outline: none; }
   h2:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: var(--radius); }
   .kind { display: flex; flex-wrap: wrap; gap: 0 6px; font-size: var(--t-small); color: var(--muted); }
   .sep { color: var(--dim); }
-  .price { flex: none; font-size: 18px; font-weight: 600; line-height: 1.3; font-variant-numeric: tabular-nums; }
-  .desc { margin-top: -6px; font-size: var(--t-small); line-height: 1.55; color: var(--muted); white-space: pre-line; overflow-wrap: anywhere; }
-  .note { padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: var(--radius); font-size: var(--t-small); color: var(--text); }
-  .block { display: grid; gap: 8px; min-width: 0; }
+  .price { flex: none; font-family: var(--font-mono); font-size: 18px; font-weight: 600; line-height: 1.4; font-variant-numeric: tabular-nums; }
+  .desc { margin-top: -10px; font-size: var(--t-small); line-height: 1.55; color: var(--muted); white-space: pre-line; overflow-wrap: anywhere; }
+  .note { padding: 10px 0; border-block: 1px solid var(--border); font-size: var(--t-small); font-weight: 600; color: var(--text); }
+  .block { display: grid; gap: 10px; min-width: 0; }
   .label { font-size: var(--t-label, 11px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
 
-  .kv { display: grid; grid-template-columns: minmax(0, 1fr) auto; margin: 0; border-top: 1px solid var(--border); }
+  .kv { display: grid; grid-template-columns: auto minmax(0, 1fr); margin: 0; border-top: 1px solid var(--border); }
   .kv dt, .kv dd { margin: 0; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: var(--t-small); }
-  .kv dt { color: var(--muted); padding-right: 16px; }
-  .kv dd { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .kv dt { color: var(--muted); padding-right: 16px; white-space: nowrap; }
+  .kv dd { text-align: right; font-weight: 600; overflow-wrap: anywhere; }
+  .kv .mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
   .own { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; }
   .own :global(svg) { color: var(--accent-text); }
 
   .who { justify-items: start; }
-  .gift { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; width: 100%; align-items: start; }
+  .gift { display: grid; width: 100%; border-top: 1px solid var(--border); }
+  .row { display: grid; grid-template-columns: 96px minmax(0, 1fr); align-items: center; gap: 12px; min-height: 52px; border-bottom: 1px solid var(--border); }
+  .row.field { padding: 6px 0; }
+  .rl { font-size: var(--t-small); color: var(--muted); }
+  .gift > :global(.ui-hint), .gift > :global(.ui-error) { padding-top: 8px; }
   .problem { font-size: var(--t-small); color: var(--red); }
 
+  footer { display: flex; gap: 8px; }
+  .go { flex: 1; justify-content: center; }
   /* The panel: the buttons follow the form (not pinned to the panel's bottom, which can sit below
      the window while the announcement bar is open). */
   .panel .body { padding: 16px 16px 0; align-content: start; }
-  .panel footer { display: flex; justify-content: flex-end; gap: 8px; margin: 16px 16px 0; padding: 12px 0 16px; border-top: 1px solid var(--border); }
+  .panel footer { margin: 20px 16px 0; padding: 0 0 24px; }
+  .dialog footer { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
+  @media (max-width: 420px) { .row { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 8px 0; } }
 </style>

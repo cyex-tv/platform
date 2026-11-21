@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '$lib/api';
 import {
-  centsFrom, centsText, codesFilename, contentsText, isBundle, ofKind, shopKind, codesText, fromLocalInput, itemState, lockoutMinutes, normaliseCode, orderRow, orderStatusText, plausibleCode, price,
+  centsFrom, centsText, shopSort, sortItems, codesFilename, contentsText, isBundle, ofKind, shopKind, codesText, fromLocalInput, itemState, lockoutMinutes, normaliseCode, orderRow, orderStatusText, plausibleCode, price,
   redeemMessage, saleEndText, settled, shopMessage, staffMessage, stockText, tidyCode, toLocalInput,
 } from './shop';
 
@@ -233,5 +233,30 @@ describe('item contents and kinds', () => {
     expect(ofKind(item(1, 1), 'paints')).toBe(false);
     expect(ofKind(item(1, 1), 'bundles')).toBe(true);
     expect(ofKind(item(1, 1), 'all')).toBe(true);
+  });
+});
+
+describe('item order (the toolbar sort)', () => {
+  const it3 = [
+    { id: '3', priceCents: 299, sortOrder: 1, activeFrom: null },
+    { id: '1', priceCents: 799, sortOrder: 0, activeFrom: '2026-11-01T00:00:00Z' },
+    { id: '2', priceCents: 299, sortOrder: 2, activeFrom: '2026-11-10T00:00:00Z' },
+  ];
+  const ids = (l: { id: string }[]) => l.map((x) => x.id).join(',');
+  it('reads ?sort= and falls back to the shop order', () => {
+    expect(shopSort('price')).toBe('price');
+    expect(shopSort('new')).toBe('new');
+    expect(shopSort('cheap')).toBe('featured');
+    expect(shopSort(null)).toBe('featured');
+  });
+  it('sorts by the shop order, cheapest first (ties in shop order) and newest first', () => {
+    expect(ids(sortItems(it3, 'featured'))).toBe('1,3,2');
+    expect(ids(sortItems(it3, 'price'))).toBe('3,2,1');
+    expect(ids(sortItems(it3, 'new'))).toBe('2,1,3');
+  });
+  it('leaves the list it was given alone', () => {
+    const copy = [...it3];
+    sortItems(it3, 'price');
+    expect(it3).toEqual(copy);
   });
 });

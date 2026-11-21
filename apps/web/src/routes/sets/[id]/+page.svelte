@@ -26,6 +26,7 @@
   import { legacyRedirect } from '$lib/ids';
   import { PUBLIC_SET, SET_EDITORS } from '$lib/queries';
   import Capacity from '$lib/components/Capacity.svelte';
+  import FactRows from '$lib/components/FactRows.svelte';
   import { filterMembers, fillPercent } from '$lib/sets/public';
   import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
   import InspectorLayout from '$lib/shell/InspectorLayout.svelte';
@@ -187,22 +188,25 @@
       </PanelBlock>
     </div>
     <PanelBlock title="Facts">
-      <dl class="kv">
-        {#if owner}
-          <dt>Owner</dt>
-          <dd><a class="owner" href="/users/{owner.id}"><Avatar src={owner.avatar} name={owner.displayName} size={20} /><bdi>{clean(owner.displayName)}</bdi></a></dd>
-        {/if}
-        <dt>Kind</dt><dd>{KIND[s.kind] ?? 'Set'}</dd>
-        <dt>Who can open it</dt><dd>{VIS[s.visibility] ?? s.visibility}</dd>
-        <dt>Emotes</dt>
-        <dd class="cap">
-          <Capacity {used} capacity={s.capacity} />
-          <span class="bar" role="meter" aria-label="How full" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
-            <span class="fill" class:full={pct >= 90} style:width="{pct}%"></span>
-          </span>
-        </dd>
-        {#if s.createdAt}<dt>Made</dt><dd><time datetime={s.createdAt}>{date(s.createdAt)}</time></dd>{/if}
-      </dl>
+      <FactRows label="Facts" items={[
+        ...(owner ? [{ label: 'Owner', key: 'owner' }] : []),
+        { label: 'Kind', value: KIND[s.kind] ?? 'Set' },
+        { label: 'Who can open it', value: VIS[s.visibility] ?? s.visibility },
+        { label: 'Emotes', key: 'cap' },
+        ...(s.createdAt ? [{ label: 'Made', key: 'made' }] : []),
+      ]}>
+        {#snippet value(k)}
+          {#if k === 'owner' && owner}<a class="owner" href="/users/{owner.id}"><Avatar src={owner.avatar} name={owner.displayName} size={20} /><bdi>{clean(owner.displayName)}</bdi></a>
+          {:else if k === 'cap'}
+            <span class="cap">
+              <span class="ui-mono"><Capacity {used} capacity={s.capacity} /></span>
+              <span class="bar" role="meter" aria-label="How full" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+                <span class="fill" class:full={pct >= 90} style:width="{pct}%"></span>
+              </span>
+            </span>
+          {:else if k === 'made' && s.createdAt}<time class="ui-mono" datetime={s.createdAt}>{date(s.createdAt)}</time>{/if}
+        {/snippet}
+      </FactRows>
     </PanelBlock>
     {#if members.length}
       <PanelBlock title="Chat preview">
@@ -282,7 +286,7 @@
           {/snippet}
         </State>
       {:else}
-        <BrowseGrid items={cards} eager={12} label="Emotes in {name}" {selecting} {sel} onstep={step} onstart={(id) => setSelecting(true, id)} />
+        <BrowseGrid sheet items={cards} eager={12} label="Emotes in {name}" {selecting} {sel} onstep={step} onstart={(id) => setSelecting(true, id)} />
       {/if}
       {#if shown.length > STEP}
         <div class="more"><LoadMore hasMore={shown.length > limit} total={shown.length} onmore={() => (limit += STEP)} /></div>
@@ -342,9 +346,9 @@
   }
 
   .wide-only :global(.pb-actions .btn) { width: 100%; }
-  .kv .owner { justify-content: flex-end; min-height: 0; font-weight: 600; }
+  .cap .owner, :global(.facts) .owner { justify-content: flex-end; min-height: 0; font-weight: 600; }
   .cap { display: grid; justify-items: end; gap: 6px; }
-  .bar { display: block; width: 96px; height: 4px; border-radius: 2px; background: var(--elevated-2); overflow: hidden; }
+  .bar { display: block; width: 120px; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; }
   .fill { display: block; height: 100%; background: var(--accent); }
   .fill.full { background: var(--yellow); }
   @media (forced-colors: active) { .fill { background: Highlight; } }
@@ -353,12 +357,15 @@
   .eds li + li { border-top: 1px solid var(--border); }
   .eds a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
 
-  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-bottom: 20px; }
-  .total { margin: 0; font-size: var(--t-small); color: var(--muted); font-variant-numeric: tabular-nums; }
+  /* The slim bar over the sheet (redesign round 2): search, mono count, Select; a hairline under it. */
+  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 52px; padding: 6px 0; margin-bottom: 16px;
+    border-bottom: 1px solid var(--border); }
+  .total { margin: 0; font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .sw { margin-left: auto; }
   .find { position: relative; display: block; flex: 0 1 280px; min-width: 0; }
   .find :global(svg) { position: absolute; left: 12px; top: 50%; translate: 0 -50%; color: var(--muted); pointer-events: none; }
-  .find .input { width: 100%; height: 40px; padding-left: 36px; }
+  .find .input { width: 100%; height: 36px; padding-left: 36px; }
+  @media (pointer: coarse) { .find .input { height: 44px; } }
   @media (max-width: 520px) { .find { flex-basis: 100%; } }
   .more { margin-top: 24px; }
   .missing { display: grid; gap: 16px; min-height: 50svh; align-content: start; padding-bottom: 40px; }

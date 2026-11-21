@@ -5,6 +5,8 @@
   // the API has already cleared the cookie, so the site forgets you and goes to the front page.
   // Signing in again within 30 days lands on /restore (ADR 0019).
   import { gql } from '$lib/api';
+  import Row from '$lib/components/Row.svelte';
+  import Section from '$lib/components/Section.svelte';
   import { DELETE_ACCOUNT } from '$lib/queries';
   import { leftSession } from '$lib/shell/signout';
   import { notify } from '$lib/tool/notices.svelte';
@@ -42,13 +44,11 @@
   }
 </script>
 
-<section class="ui-panel" aria-labelledby="delete-h">
-  <header><h2 id="delete-h">Delete account</h2></header>
-  <p class="ui-hint pad">
-    Your account is hidden at once and deleted for good after 30 days. Sign in before then to undo it. After that, your emotes, sets, channels, cosmetics and notifications are gone; approved emotes that other people have in their sets stay, shown as made by “Deleted user”.
-  </p>
-  <div class="ui-actions row pad"><button class="ui-btn danger" type="button" onclick={open}>Delete account…</button></div>
-</section>
+<Section title="Delete account" tone="danger" id="delete-h">
+  <Row label="Delete account" hint="Your account is hidden at once and deleted for good after 30 days. Sign in before then to undo it. After that, your emotes, sets, channels, cosmetics and notifications are gone; approved emotes that other people have in their sets stay, shown as made by “Deleted user”.">
+    <button class="ui-btn danger small" type="button" onclick={open}>Delete account…</button>
+  </Row>
+</Section>
 
 <dialog class="ui-dialog" bind:this={dialog} aria-labelledby="delete-title" aria-describedby="delete-desc">
   <form onsubmit={submit} novalidate>
@@ -76,9 +76,3 @@
     </footer>
   </form>
 </dialog>
-
-<style>
-  .pad { padding: 10px 14px 12px; }
-  .ui-hint.pad { padding-bottom: 12px; }
-  .row { padding-top: 0; }
-</style>

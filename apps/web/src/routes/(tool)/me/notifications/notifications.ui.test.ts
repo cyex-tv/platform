@@ -1,4 +1,4 @@
-// /me/notifications in your profile's frame: the filter chip is in the address (?f=), and the
+// /me/notifications in your profile's frame: the filter is in the address (?f=), and the
 // panel counts what is kept and unread.
 import { cleanup, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
@@ -23,11 +23,11 @@ describe('notifications page', () => {
     render(Page);
     const list = await screen.findByRole('region', { name: 'Notifications' });
     await waitFor(() => expect(within(list).getAllByRole('listitem').length).toBe(2));
-    const editors = screen.getByRole('button', { name: /Editors/ });
-    expect(editors.getAttribute('aria-pressed')).toBe('true');
-    await user.click(screen.getByRole('button', { name: /Cosmetics/ }));
+    const editors = screen.getByRole('radio', { name: /Editors/ });
+    expect(editors.getAttribute('aria-checked')).toBe('true');
+    await user.click(screen.getByRole('radio', { name: /Cosmetics/ }));
     expect(goto).toHaveBeenCalledWith('/me/notifications?f=cosmetics', expect.objectContaining({ replaceState: true }));
-    await user.click(screen.getByRole('button', { name: /^All/ }));
+    await user.click(screen.getByRole('radio', { name: /^All/ }));
     expect(goto).toHaveBeenLastCalledWith('/me/notifications', expect.anything());
   });
 
@@ -35,7 +35,7 @@ describe('notifications page', () => {
     gql.mockImplementation(async (doc: string) => (doc.includes('myNotifications') ? { myNotifications: NOTES } : { unreadNotificationCount: 2 }));
     render(Page);
     const panel = screen.getByRole('complementary', { name: 'About your notifications' });
-    await waitFor(() => expect(within(panel).getByText('Kept').nextElementSibling?.textContent).toBe('4'));
+    await waitFor(() => expect(within(panel).getByText('Kept').nextElementSibling?.textContent?.trim()).toBe('4'));
     expect(within(panel).getByRole('link', { name: /Notification settings/ }).getAttribute('href')).toBe('/me/settings/notifications');
   });
 });

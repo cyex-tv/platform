@@ -1,21 +1,91 @@
 <script lang="ts">
-  // /download: where cyex.tv runs today, said plainly. The extension isn't in the stores yet, so
-  // the page says so and shows how to load the test build; cyex deck and chat clients get one
-  // honest line each. Your browser's cell comes first (bold, accent tick). Nothing here loads from
-  // elsewhere. Inspector shape (InspectorLayout): the page on the left, a panel on the right with
-  // the facts at a glance and where to go next; under 1100px the panel follows the page.
+  // /download: where cyex.tv runs today, said plainly. Inspector shape (InspectorLayout): the
+  // targets (Chromium browsers, Firefox, cyex deck) as a contact sheet on the left, cells sharing
+  // hairlines; the picked one's install steps and facts in the right panel (under 1100px the panel
+  // follows the sheet). Your browser is picked first; ?target= (or a #chrome / #edge / #firefox
+  // link from the front page) picks another, so a target can be linked. The extension isn't in the
+  // stores yet, so the panel says so and shows how to load the test build. Nothing loads from elsewhere.
   import { onMount } from 'svelte';
+  import { replaceState } from '$app/navigation';
   import { copy } from '$lib/clipboard.svelte';
-  import FactList from '$lib/components/FactList.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import LinkRows from '$lib/components/LinkRows.svelte';
   import PanelBlock from '$lib/components/PanelBlock.svelte';
   import InspectorLayout from '$lib/shell/InspectorLayout.svelte';
   import { browserOf, type Browser } from '$lib/components/home/pick';
 
+  type Target = 'chrome' | 'firefox' | 'deck';
+  type Info = {
+    id: Target;
+    name: string;
+    also: string;
+    status: 'testing' | 'coming';
+    store: string;
+    steps: { text: string; code?: string; after?: string }[];
+    facts: [string, string][];
+  };
+  const TARGETS: Info[] = [
+    {
+      id: 'chrome',
+      name: 'Chrome',
+      also: 'Edge, Brave, Opera and other Chromium browsers on the desktop.',
+      status: 'testing',
+      store: 'Coming to the Chrome Web Store.',
+      steps: [
+        { text: 'Open', code: 'chrome://extensions', after: '(Edge: edge://extensions).' },
+        { text: 'Switch on Developer mode.' },
+        { text: 'Choose Load unpacked and pick the', code: 'dist/chrome', after: 'folder.' },
+      ],
+      facts: [['Status', 'Early testing'], ['Browsers', 'Chrome, Edge, Brave, Opera'], ['Store', 'Not yet'], ['Price', 'Free'], ['Needs', 'git, Node 22.12+']],
+    },
+    {
+      id: 'firefox',
+      name: 'Firefox',
+      also: 'The same extension, for Firefox on the desktop.',
+      status: 'testing',
+      store: 'Coming to Firefox Add-ons.',
+      steps: [
+        { text: 'Open', code: 'about:debugging#/runtime/this-firefox', after: '.' },
+        { text: 'Choose Load Temporary Add-on.' },
+        { text: 'Pick', code: 'dist/firefox/manifest.json', after: '.' },
+      ],
+      facts: [['Status', 'Early testing'], ['Browsers', 'Firefox, desktop'], ['Store', 'Not yet'], ['Price', 'Free'], ['Needs', 'git, Node 22.12+']],
+    },
+    {
+      id: 'deck',
+      name: 'cyex deck',
+      also: 'The light Twitch app for Windows. cyex.tv emotes are on their way to it.',
+      status: 'coming',
+      store: 'Already out for Twitch; the emotes come in an update.',
+      steps: [],
+      facts: [['Status', 'Coming'], ['Platform', 'Windows'], ['Chat', 'Twitch'], ['cyex.tv emotes', 'In an update']],
+    },
+  ];
+  const HASH: Record<string, Target> = { chrome: 'chrome', edge: 'chrome', opera: 'chrome', brave: 'chrome', firefox: 'firefox', deck: 'deck' };
+
   let browser = $state<Browser>('other');
-  onMount(() => (browser = browserOf(navigator.userAgent)));
-  const rank = (b: Browser, i: number) => (browser === b ? -1 : i);
+  let hash = $state<Target | null>(null);
+  // The page is prerendered: the address is read in the browser.
+  let asked = $state<string | null>(null);
+  onMount(() => {
+    browser = browserOf(navigator.userAgent);
+    hash = HASH[location.hash.slice(1)] ?? null;
+    asked = new URLSearchParams(location.search).get('target');
+  });
+  const yours = $derived<Target | null>(browser === 'chrome' || browser === 'firefox' ? browser : null);
+  const picked = $derived<Target>((asked && HASH[asked]) || hash || yours || 'chrome');
+  const info = $derived(TARGETS.find((t) => t.id === picked)!);
+  // Your browser's cell comes first.
+  const order = $derived([...TARGETS].sort((a, b) => (a.id === yours ? -1 : b.id === yours ? 1 : 0)));
+
+  const href = (t: Target) => `/download?target=${t}`;
+  function pick(e: MouseEvent, t: Target) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
+    e.preventDefault();
+    hash = null;
+    asked = t;
+    replaceState(href(t), {});
+  }
 
   const BUILD = 'git clone https://github.com/cyex-tv/extension\ncd extension\nnpm ci\nnpm run build';
   let copied = $state<'idle' | 'copied' | 'failed'>('idle');
@@ -33,17 +103,37 @@
   <meta property="og:title" content="Download" />
 </svelte:head>
 
-{#snippet glance()}
+{#snippet panel()}
+  <div class="who">
+    <p class="pname">{#if picked === yours}<Icon name="check" size={14} stroke={2.6} />{/if}{info.name}</p>
+    <p class="pstat"><span class="dot" class:off={info.status === 'coming'} aria-hidden="true"></span>{info.status === 'testing' ? 'Early testing' : 'Coming'}{#if picked === yours}<span class="mine">Your browser</span>{/if}</p>
+  </div>
+  {#if info.steps.length}
+    <PanelBlock title="Build it">
+      <p class="pb-hint">From the source: you need git and Node 22.12 or newer. It takes a minute.</p>
+      <div class="code">
+        <pre><code>{BUILD}</code></pre>
+        <button type="button" class="btn btn-s copy" onclick={copyBuild} aria-describedby="copy-state"><Icon name={copied === 'copied' ? 'check' : 'copy'} size={14} />{copied === 'copied' ? 'Copied' : 'Copy'}</button>
+        <span class="sr-only" id="copy-state" role="status">{copied === 'copied' ? 'Copied' : copied === 'failed' ? 'Couldn’t copy' : ''}</span>
+      </div>
+    </PanelBlock>
+    <PanelBlock title="Load it" count={info.steps.length}>
+      <ol class="steps">
+        {#each info.steps as s, i (i)}
+          <li><span class="i">{i + 1}</span><span>{s.text}{#if s.code}{' '}<code>{s.code}</code>{/if}{#if s.after}{s.after.startsWith('.') ? '' : ' '}{s.after}{/if}</span></li>
+        {/each}
+      </ol>
+      <p class="pb-hint">Test builds don’t update themselves: pull and build again for a new one.{#if picked === 'firefox'} Firefox removes a temporary add-on when it closes.{/if}</p>
+    </PanelBlock>
+  {:else}
+    <PanelBlock title="When">
+      <p class="pb-hint">{info.store}</p>
+    </PanelBlock>
+  {/if}
   <PanelBlock title="Facts">
-    <FactList
-      items={[
-        { label: 'Status', value: 'Early testing' },
-        { label: 'Browsers', value: 'Chromium and Firefox, desktop' },
-        { label: 'Phones', value: 'Not yet' },
-        { label: 'Price', value: 'Free' },
-        { label: 'Test build needs', value: 'git, Node 22.12+' },
-      ]}
-    />
+    <dl class="kv">
+      {#each info.facts as [k, v] (k)}<dt>{k}</dt><dd>{v}</dd>{/each}
+    </dl>
   </PanelBlock>
   <PanelBlock title="Next">
     <LinkRows
@@ -56,7 +146,7 @@
   </PanelBlock>
 {/snippet}
 
-<InspectorLayout title="At a glance" label="Download at a glance" panel={glance} narrow="after" headPad={false}>
+<InspectorLayout title="Install" label="{info.name}: how to install" {panel} narrow="after">
   {#snippet head()}
     <header class="page-head">
       <h1 class="page-title">Download</h1>
@@ -64,112 +154,91 @@
     </header>
   {/snippet}
 
-    <section class="block" aria-labelledby="ext-title">
-      <h2 class="label" id="ext-title">The extension</h2>
-      <div class="cells">
-        <article class="cell" id="chrome" class:yours={browser === 'chrome'} style:order={rank('chrome', 0)}>
-          <!-- The front page's extension menu links each Chromium browser here by name. -->
-          <span class="anchor" id="edge"></span><span class="anchor" id="opera"></span><span class="anchor" id="brave"></span>
-          <p class="status"><span class="dot" aria-hidden="true"></span>Early testing{#if browser === 'chrome'}<span class="mine">Your browser</span>{/if}</p>
-          <h3>{#if browser === 'chrome'}<Icon name="check" size={14} stroke={2.4} />{/if}Chrome</h3>
-          <p>Also Edge, Brave, Opera and other Chromium browsers on the desktop.</p>
-          <p class="foot">Coming to the Chrome Web Store.</p>
-        </article>
-        <article class="cell" id="firefox" class:yours={browser === 'firefox'} style:order={rank('firefox', 1)}>
-          <p class="status"><span class="dot" aria-hidden="true"></span>Early testing{#if browser === 'firefox'}<span class="mine">Your browser</span>{/if}</p>
-          <h3>{#if browser === 'firefox'}<Icon name="check" size={14} stroke={2.4} />{/if}Firefox</h3>
-          <p>The same extension, for Firefox on the desktop.</p>
-          <p class="foot">Coming to Firefox Add-ons.</p>
-        </article>
-        <article class="cell" style:order={2}>
-          <p class="status"><span class="dot off" aria-hidden="true"></span>Coming</p>
-          <h3>cyex deck</h3>
-          <p>The light Twitch app for Windows. cyex.tv emotes are on their way to it.</p>
-          <p class="foot">Already out for Twitch; the emotes come in an update.</p>
-        </article>
-      </div>
-      <ul class="what">
-        <li>cyex.tv emotes, and 7TV, BTTV and FFZ too, each with its own switch.</li>
-        <li>Badges and name paints, live as people change them.</li>
-        <li>Hide the parts of Twitch and Kick you never use. A short setup you can skip.</li>
-      </ul>
-    </section>
+  <section class="sec" aria-labelledby="where-h">
+    <h2 class="label" id="where-h">Where it runs<span class="n">{TARGETS.length}</span></h2>
+    <ul class="sheet">
+      {#each order as t (t.id)}
+        <li class="cell" class:on={picked === t.id}>
+          <a id={t.id} href={href(t.id)} aria-current={picked === t.id ? 'true' : undefined} onclick={(e) => pick(e, t.id)}>
+            {#if t.id === 'chrome'}<!-- The front page's extension menu links each Chromium browser here by name. --><span class="anchor" id="edge"></span><span class="anchor" id="opera"></span><span class="anchor" id="brave"></span>{/if}
+            <span class="stage" aria-hidden="true"><span class="word">{t.id === 'deck' ? 'deck' : t.name}</span></span>
+            <span class="nm">{#if picked === t.id}<Icon name="check" size={13} stroke={2.6} />{/if}{t.name}{#if t.id === yours}<span class="mine">Your browser</span>{/if}</span>
+            <span class="also">{t.also}</span>
+            <span class="st"><span class="dot" class:off={t.status === 'coming'} aria-hidden="true"></span>{t.status === 'testing' ? 'Early testing' : 'Coming'}</span>
+          </a>
+        </li>
+      {/each}
+    </ul>
+  </section>
 
-    <section class="block" aria-labelledby="test-title">
-      <h2 class="label" id="test-title">Try the test build</h2>
-      <p class="sub">Build it from the source: you need git and Node 22.12 or newer. It takes a minute.</p>
-      <div class="code">
-        <pre><code>{BUILD}</code></pre>
-        <button type="button" class="btn btn-s copy" onclick={copyBuild} aria-describedby="copy-state"><Icon name={copied === 'copied' ? 'check' : 'copy'} size={14} />{copied === 'copied' ? 'Copied' : 'Copy'}</button>
-        <span class="sr-only" id="copy-state" role="status">{copied === 'copied' ? 'Copied' : copied === 'failed' ? 'Couldn’t copy' : ''}</span>
-      </div>
-      <div class="cells steps">
-        <div class="cell step" style:order={rank('chrome', 0)}>
-          <h3>Chrome, Edge, Brave, Opera</h3>
-          <ol>
-            <li>Open <code>chrome://extensions</code> (Edge: <code>edge://extensions</code>).</li>
-            <li>Switch on Developer mode.</li>
-            <li>Choose Load unpacked and pick the <code>dist/chrome</code> folder.</li>
-          </ol>
-        </div>
-        <div class="cell step" style:order={rank('firefox', 1)}>
-          <h3>Firefox</h3>
-          <ol>
-            <li>Open <code>about:debugging#/runtime/this-firefox</code>.</li>
-            <li>Choose Load Temporary Add-on.</li>
-            <li>Pick <code>dist/firefox/manifest.json</code>.</li>
-          </ol>
-        </div>
-      </div>
-      <p class="note">Test builds don’t update themselves: pull and build again for a new one. Firefox removes a temporary add-on when it closes.</p>
-    </section>
+  <section class="sec" aria-labelledby="what-h">
+    <h2 class="label" id="what-h">What it does</h2>
+    <dl class="rows">
+      <dt>Emotes</dt><dd>cyex.tv emotes, and 7TV, BTTV and FFZ too, each with its own switch.</dd>
+      <dt>Cosmetics</dt><dd>Badges and name paints, live as people change them.</dd>
+      <dt>Tidy chat</dt><dd>Hide the parts of Twitch and Kick you never use. A short setup you can skip.</dd>
+    </dl>
+  </section>
 
-    <section class="block" aria-labelledby="clients-title">
-      <h2 class="label" id="clients-title">Chat clients and bots</h2>
-      <p class="sub">No chat client ships cyex.tv emotes yet. The API is public and needs no key, so any client, bot or overlay can read a channel’s set. <a class="link inline" href="/developers">Developers</a></p>
-    </section>
+  <section class="sec" aria-labelledby="clients-title">
+    <h2 class="label" id="clients-title">Chat clients and bots</h2>
+    <p class="sub">No chat client ships cyex.tv emotes yet. The API is public and needs no key, so any client, bot or overlay can read a channel’s set. <a class="link inline" href="/developers">Developers</a></p>
+  </section>
 </InspectorLayout>
 
 <style>
-  p, h2, h3 { margin: 0; }
+  p, h2 { margin: 0; }
+  .page-head { padding-bottom: 20px; }
   .line { margin-top: 6px; max-width: 62ch; font-size: var(--t-ui); line-height: 1.55; color: var(--muted); }
-  .label { font-size: var(--t-label, 11px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
-  .block { display: grid; gap: 12px; }
-  .block + .block { margin-top: 32px; padding-top: 20px; border-top: 1px solid var(--border); }
-  .sub { max-width: 70ch; font-size: var(--t-small); line-height: 1.6; color: var(--muted); }
+  /* Flat sections: an uppercase label on a hairline, no boxes. */
+  .sec { display: grid; gap: 0; }
+  .sec + .sec { margin-top: 32px; }
+  .label { display: flex; align-items: center; gap: 8px; min-height: 40px; font-size: var(--t-label, 11px); font-weight: 600; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--dim); }
+  .n { font-family: var(--font-mono); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+  .sub { padding-top: 10px; border-top: 1px solid var(--border); max-width: 70ch; font-size: var(--t-small); line-height: 1.6; color: var(--muted); }
   .link.inline { display: inline; }
 
-  /* Cells sharing hairlines in one frame, like the shop's grid. */
-  .cells { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
-  .cell { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; padding: 16px;
-    box-shadow: 1px 0 0 var(--border), 0 1px 0 var(--border); scroll-margin-top: calc(var(--nav-h) + 20px); }
+  /* The contact sheet: cells sharing hairlines, the picked one bold with an accent tick. */
+  .sheet { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+    border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
+  .cell { min-width: 0; box-shadow: 1px 0 0 var(--border), 0 1px 0 var(--border); }
+  .cell a { position: relative; display: grid; grid-template-rows: auto auto 1fr auto; gap: 6px; height: 100%; padding: 0 0 14px; color: var(--text);
+    text-decoration: none; scroll-margin-top: calc(var(--nav-h) + 20px); transition: background-color var(--fast); }
+  .cell a:focus-visible { outline-offset: -2px; }
   .anchor { position: absolute; top: 0; scroll-margin-top: calc(var(--nav-h) + 20px); }
-  .cell h3 { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 17px; font-weight: 600; line-height: 1.35; letter-spacing: -.01em; }
-  .cell h3 :global(svg) { color: var(--accent-text); }
-  .yours h3 { font-weight: 700; }
-  /* On the status line (known only in the browser): it never changes the cell's height. */
-  .mine { margin-left: auto; font-size: var(--t-fine); font-weight: 500; color: var(--muted); letter-spacing: 0; }
-  .cell p { font-size: var(--t-small); line-height: 1.55; color: var(--muted); }
-  .cell .foot { margin-top: auto; padding-top: 8px; font-size: var(--t-fine); color: var(--dim); }
-  .status { display: flex; align-items: center; gap: 8px; align-self: stretch; font-weight: 500; }
-  .cell .status { color: var(--text); font-size: var(--t-fine); }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+  .stage { display: grid; place-items: center; height: 120px; margin-bottom: 6px; border-bottom: 1px solid var(--border); }
+  .word { font-size: 26px; font-weight: 700; letter-spacing: -.03em; color: var(--muted); }
+  .on .word { color: var(--text); }
+  .nm { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding: 0 14px; font-size: var(--t-ui); font-weight: 600; }
+  .nm :global(svg) { color: var(--accent-text); }
+  .on .nm { font-weight: 700; }
+  .mine { margin-left: auto; font-size: var(--t-fine); font-weight: 500; color: var(--muted); }
+  .also { padding: 0 14px; font-size: var(--t-small); line-height: 1.5; color: var(--muted); }
+  .st { display: flex; align-items: center; gap: 8px; padding: 4px 14px 0; font-family: var(--font-mono); font-size: var(--t-fine); color: var(--dim); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
   .dot.off { background: transparent; border: 1.5px solid var(--muted); }
-  .what { margin: 0; padding-left: 20px; font-size: var(--t-small); line-height: 1.8; color: var(--muted); }
 
-  .code { position: relative; max-width: 720px; }
-  pre { margin: 0; padding: 14px 16px; padding-right: 108px; overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius-card);
-    background: var(--elevated-2, var(--surface)); font-family: var(--font-mono); font-size: 13px; line-height: 1.7; }
-  .copy { position: absolute; top: 10px; right: 10px; min-width: 84px; }
+  .rows { display: grid; grid-template-columns: 120px minmax(0, 1fr); margin: 0; border-top: 1px solid var(--border); }
+  .rows dt, .rows dd { margin: 0; padding: 11px 0; border-bottom: 1px solid var(--border); font-size: var(--t-small); line-height: 1.5; }
+  .rows dt { color: var(--muted); padding-right: 16px; }
+  .rows dd { color: var(--text); }
+
+  /* The panel. */
+  .who { display: grid; gap: 4px; padding: 8px 0 12px; }
+  .pname { display: flex; align-items: center; gap: 6px; font-size: 20px; font-weight: 700; letter-spacing: -.015em; }
+  .pname :global(svg) { color: var(--accent-text); }
+  .pstat { display: flex; align-items: center; gap: 8px; font-size: var(--t-small); color: var(--muted); }
+  .code { position: relative; min-width: 0; max-width: 100%; margin-top: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--bg); }
+  pre { margin: 0; padding: 12px; padding-right: 92px; overflow-x: auto; font-family: var(--font-mono); font-size: 12.5px; line-height: 1.7; }
+  .copy { position: absolute; top: 6px; right: 6px; min-width: 76px; }
   .copy :global(svg) { color: var(--muted); }
-  code { font-family: var(--font-mono); font-size: .9em; overflow-wrap: anywhere; }
-  .cells.steps { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .steps code { padding: 1px 5px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
-  .step h3 { font-size: var(--t-ui); }
-  .step ol { margin: 0; padding-left: 20px; font-size: var(--t-small); line-height: 1.8; color: var(--muted); }
-  .note { font-size: var(--t-fine); color: var(--dim); max-width: 70ch; }
-
-  @media (max-width: 899.98px) {
-    .cells, .cells.steps { grid-template-columns: minmax(0, 1fr); }
-  }
+  code { font-family: var(--font-mono); font-size: .92em; overflow-wrap: anywhere; }
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; }
+  .steps li { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--border);
+    font-size: var(--t-small); line-height: 1.55; }
+  .steps code { padding: 1px 4px; border-radius: var(--radius); background: var(--neutral-chip, var(--surface-2)); }
+  .i { font-family: var(--font-mono); font-weight: 600; color: var(--accent-text); font-variant-numeric: tabular-nums; }
+  @media (hover: hover) and (pointer: fine) { .cell a:hover { background: var(--row-hover); } }
+  @media (max-width: 560px) { .rows { grid-template-columns: minmax(0, 1fr); } .rows dt { padding-bottom: 0; border-bottom: 0; } .rows dd { padding-top: 2px; } }
 </style>

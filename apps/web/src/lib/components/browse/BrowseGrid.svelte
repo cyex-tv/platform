@@ -41,8 +41,10 @@
     onstep: (step: S.Step) => void;
     /** Turn Select mode on, picking `id` when given. */
     onstart: (id?: string) => void;
+    /** A contact sheet (redesign round 2): the tiles share hairlines, no gaps and no cards. */
+    sheet?: boolean;
   };
-  let { items, label, loading = false, skeletons = 10, eager = 0, ranked = false, selecting, sel, onstep, onstart }: Props = $props();
+  let { items, label, loading = false, skeletons = 10, eager = 0, ranked = false, selecting, sel, onstep, onstart, sheet = false }: Props = $props();
   // The set Add goes to: emotes already in it get an "In set" mark (the tile menu says Remove for them).
   const held = $derived.by(() => {
     const t = store.current;
@@ -298,7 +300,7 @@
   ondragend={endDrag}
 >
   {#if long}<a class="skip" href="#{endId}" onclick={skip}>Skip results</a>{/if}
-  <ul class="grid" aria-label={label} aria-busy={loading}>
+  <ul class="grid" class:contact-sheet={sheet} class:sheet aria-label={label} aria-busy={loading}>
     {#each items as e, i (e.id)}
       <li class:wide={isWide(e)} data-id={e.id}>
         <EmoteTile
@@ -414,6 +416,7 @@
   .band { position: absolute; z-index: 2; pointer-events: none; border: 1px solid var(--accent-border); border-radius: 2px;
     background: color-mix(in srgb, var(--accent) 8%, transparent); }
 
-  @media (max-width: 520px) { .grid { gap: 8px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } }
+  .grid.sheet { gap: 0; }
+  @media (max-width: 520px) { .grid { gap: 8px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } .grid.sheet { gap: 0; } }
   @media (forced-colors: active) { .band { border-color: Highlight; } }
 </style>
