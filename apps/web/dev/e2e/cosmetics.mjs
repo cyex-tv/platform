@@ -144,11 +144,11 @@ await until(`/Uploading|Making/.test(document.querySelector('dialog[open] [role=
 // "Make badge" straight away, while the picture is still being made: it waits, then saves.
 await click(`document.querySelector('dialog[open] button[type=submit]')`);
 check('the picture upload request goes out', reqs.slice(before).some((r) => r.method === 'POST' && r.url === `${API}/v1/cosmetics/images`));
-const made = await until(`!document.querySelector('dialog[open]') && [...document.querySelectorAll('.item strong')].some((e) => e.textContent.includes(${JSON.stringify(badgeName)}))`, 20000);
+const made = await until(`!document.querySelector('dialog[open]') && [...document.querySelectorAll('.tile .nm')].some((e) => e.textContent.includes(${JSON.stringify(badgeName)}))`, 20000);
 check('Make badge while processing waits and makes the badge', made);
 check('createBadge was sent with the uploaded picture', reqs.slice(before).some((r) => r.url.endsWith('/v1/gql') && r.body.includes('createBadge')));
 await shot('badge-list');
-const badgeImg = await ev(`(() => { const li = [...document.querySelectorAll('.item')].find((l) => l.textContent.includes(${JSON.stringify(badgeName)})); const i = li?.querySelector('img'); return i ? { src: i.src, w: i.naturalWidth } : null; })()`);
+const badgeImg = await ev(`(() => { const li = [...document.querySelectorAll('.tile')].find((l) => l.querySelector('.nm')?.textContent.includes(${JSON.stringify(badgeName)})); const i = li?.querySelector('img'); return i ? { src: i.src, w: i.naturalWidth } : null; })()`);
 check('the badge shows the uploaded picture (not a sample)', badgeImg?.src.includes('/cosmetics/uploads/') && badgeImg.w > 0, badgeImg?.src);
 if (badgeImg) {
   const served = Buffer.from(await (await fetch(badgeImg.src)).arrayBuffer());
@@ -195,7 +195,7 @@ const surfaces = [
   ['band', `/users/${ME}`, `document.querySelector('h1 .painted')`],
   ['menu', `/users/${ME}`, `(document.querySelector('header .who')?.click(), null)`],
   ['picker', `/users/${ME}?s=cosmetics`, `[...document.querySelectorAll('section[aria-labelledby="paint-h"] .painted')].find((e) => e.textContent.includes(${JSON.stringify(paintName)}))`],
-  ['admin-paints', '/admin/cosmetics/paints', `[...document.querySelectorAll('.painted')].find((e) => e.textContent.includes(${JSON.stringify(paintName)}))`],
+  ['admin-paints', '/admin/cosmetics/paints', `[...document.querySelectorAll('.tile')].find((t) => t.querySelector('.nm')?.textContent.includes(${JSON.stringify(paintName)}))?.querySelector('.painted')`],
 ];
 for (const t of ['dark', 'light']) {
   for (const [name, path, sel] of surfaces) {
