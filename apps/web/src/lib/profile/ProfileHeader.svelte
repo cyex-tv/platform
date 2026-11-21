@@ -34,8 +34,12 @@
     heading?: boolean;
     /** Who this is isn't known yet: the band's shape with blank parts, so nothing moves when it arrives. */
     loading?: boolean;
+    /** The Connections and Editors chips (off on the profile page, whose About panel lists them). */
+    facts?: boolean;
+    /** Flat on the ground (the profile page's Inspector head), not a surface band. */
+    flat?: boolean;
   };
-  let { account, relation, profile, seed = null, actions, heading = true, loading = false }: Props = $props();
+  let { account, relation, profile, seed = null, actions, heading = true, loading = false, facts = true, flat = false }: Props = $props();
 
   type Role = { id: string; name: string; public: boolean };
   const name = $derived(clean(account.displayName));
@@ -87,7 +91,7 @@
 {/snippet}
 
 {#if loading}
-  <header class="band" aria-hidden="true">
+  <header class="band" class:flat aria-hidden="true">
     <span class="ring"><span class="gap"><span class="ph-av ui-skeleton"></span></span></span>
     <div class="id">
       <div class="top"><span class="ph-name ui-skeleton"></span></div>
@@ -96,7 +100,7 @@
     <div class="acts"><span class="ph-btn ui-skeleton"></span></div>
   </header>
 {:else}
-<header class="band">
+<header class="band" class:flat>
   <span class="ring" style={paintRing(look.paint)}><span class="gap"><Avatar src={account.avatar} {name} size={64} /></span></span>
   <div class="id">
     <div class="top">
@@ -115,7 +119,7 @@
       {/if}
     </div>
     <ul class="facts">
-      {#if connections.length || orphans.length}
+      {#if facts && (connections.length || orphans.length)}
         <li>
           <FactPopover label="Connections" word="Connections" icon="link" count={connections.length + orphans.length}>
             <ul class="plist" aria-label="Connections">
@@ -147,7 +151,7 @@
           </FactPopover>
         </li>
       {/if}
-      {#if editors.length}
+      {#if facts && editors.length}
         <li>
           <FactPopover label="Editors" word="Editors" icon="circle-user" count={editors.length}>
             <ul class="plist" aria-label="Editors">
@@ -177,6 +181,8 @@
 <style>
   .band { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 18px;
     padding: 18px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
+  .band.flat { padding: 24px 0 18px; background: none; border: 0; border-radius: 0; }
+  .band.flat .gap { background: var(--bg); }
   .ring { display: inline-grid; padding: 2px; border-radius: 50%; background: var(--border); }
   .gap { display: inline-grid; padding: 2px; border-radius: 50%; background: var(--surface); }
   .id { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
@@ -200,6 +206,7 @@
   .facts > li { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
   .facts > li > :global(svg) { flex: none; color: var(--dim); }
   .since { margin-left: 4px; }
+  .flat .since:first-child { margin-left: 0; }
   .dim { color: var(--muted); font-weight: 400; }
   .acts { display: flex; flex-wrap: wrap; gap: 8px; align-self: start; }
 
@@ -217,6 +224,7 @@
   @media (hover: hover) and (pointer: fine) { .pmain a:hover { text-decoration-color: currentColor; } }
   @media (max-width: 899.98px) {
     .band { grid-template-columns: auto minmax(0, 1fr); gap: 12px 14px; padding: 14px; }
+    .band.flat { padding: 16px 0 12px; }
     .name { font-size: 20px; }
     .acts { grid-column: 1 / -1; }
   }

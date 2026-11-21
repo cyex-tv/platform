@@ -8,6 +8,7 @@
     menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
     'chevron-down': '<path d="m6 9 6 6 6-6"/>',
     'arrow-right': '<path d="M5 12h14M12 5l7 7-7 7"/>',
+    open: '<path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
     sliders: '<path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/>',
     tv: '<rect x="2" y="7" width="20" height="15" rx="2"/><path d="m17 2-5 5-5-5"/>',

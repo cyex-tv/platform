@@ -39,8 +39,10 @@
     reportable?: boolean;
     /** The creator, for "Hide everything by …". */
     owner?: { id: string; displayName: string } | null;
+    /** The emote page's path, when the actions sit elsewhere (the profile's emote panel): Copy link copies it. */
+    path?: string;
   };
-  let { emoteId, name, viewer: given, variant = 'head', picture, editHref = null, addable = true, reportable = true, owner = null }: Props = $props();
+  let { emoteId, name, viewer: given, variant = 'head', picture, editHref = null, addable = true, reportable = true, owner = null, path }: Props = $props();
 
   // svelte-ignore state_referenced_locally
   const viewer = given ?? new Viewer(emoteId);
@@ -55,7 +57,7 @@
   const canDownload = $derived(!!picture && picture.files.length > 0);
 
   const signIn = $derived(`/signin?back=${encodeURIComponent(page.url.pathname)}`);
-  const link = () => page.url.origin + page.url.pathname;
+  const link = () => page.url.origin + (path ?? page.url.pathname);
   const said = $derived(
     linkCopy.copied ? 'Link copied' : linkCopy.failed ? 'Couldn’t copy' : nameCopy.copied ? 'Name copied' : nameCopy.failed ? 'Couldn’t copy' : '',
   );
