@@ -378,14 +378,4 @@
   .problem { margin: 0; font-size: var(--t-small); color: var(--red); }
   @media (max-width: 520px) { .two { grid-template-columns: minmax(0, 1fr); } }
   /* Phones: each row stacks, its cells labelled. */
-  @media (max-width: 719.98px) {
-    .stack thead { display: none; }
-    .stack, .stack tbody { display: block; }
-    .stack tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 16px; padding: 10px 12px; min-height: 44px; border-bottom: 1px solid var(--border); }
-    .stack tbody tr:last-child { border-bottom: 0; }
-    .stack td { display: flex; justify-content: space-between; gap: 8px; height: auto; max-width: none; padding: 2px 0; border: 0; text-align: left; }
-    .stack td.pk { grid-column: 1 / -1; }
-    .stack td[data-l]::before { content: attr(data-l); flex: none; color: var(--dim); font-size: var(--t-fine); }
-    .stack td.ell { overflow: visible; white-space: normal; text-overflow: clip; }
-  }
 </style>

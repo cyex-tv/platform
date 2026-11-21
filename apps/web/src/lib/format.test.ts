@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clean, date, dateTime, dateTimeSeconds, fromLocalInput, iso, isoParts, pad, toLocalInput } from './format';
+import { clean, clock, date, dateTime, dateTimeSeconds, fromLocalInput, iso, isoParts, pad, toLocalInput } from './format';
 
 describe('clean', () => {
   it('removes bidi embeddings, overrides and isolates', () => {
@@ -59,11 +59,13 @@ describe('time helpers', () => {
   it('formats date, minutes and seconds in the cyex way', () => {
     expect(date(at.toISOString())).toBe('2026/11/16');
     expect(dateTime(at.toISOString())).toBe('2026/11/16 20:01');
+    expect(clock(at.toISOString())).toBe('20:01');
     expect(dateTimeSeconds(at.toISOString())).toBe('2026/11/16 20:01:02');
   });
 
   it('prints nothing, not NaN, for an invalid time', () => {
     expect(dateTimeSeconds('not a date')).toBe('');
+    expect(clock('not a date')).toBe('');
     expect(dateTimeSeconds('')).toBe('');
     expect(dateTime('nope')).toBe('');
   });
