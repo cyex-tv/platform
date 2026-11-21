@@ -5,7 +5,7 @@
 //! translate, and only they do:
 //! - answers: [`publish_json`] (and the GraphQL layer, with [`is_id_key`]) turn the ULID of an
 //!   account, emote or set into its Snowflake in fields named `id`, `ids`, `…Id`, `…Ids`,
-//!   `…_id` or `…_ids`, and in the JSON text of `before`, `after` and `payload`;
+//!   `…By` (and snake_case `…_id`, `…_ids`, `…_by`), and in the JSON text of `before`, `after` and `payload`;
 //! - requests: [`resolve`] looks the request's Snowflakes up once, and [`resolving`] runs the
 //!   request with them, so [`crate::ids::from_text`] reads both forms everywhere.
 //!
@@ -166,7 +166,8 @@ pub fn strings_in(value: &Value, out: &mut Vec<i64>) {
     }
 }
 
-/// Whether a field holds IDs that are translated in answers.
+/// Whether a field holds IDs that are translated in answers: `id`, `ids`, `…Id`, `…Ids`, `…By`
+/// and their snake_case forms.
 pub fn is_id_key(key: &str) -> bool {
     key == "id"
         || key == "ids"
@@ -174,6 +175,9 @@ pub fn is_id_key(key: &str) -> bool {
         || key.ends_with("Ids")
         || key.ends_with("_id")
         || key.ends_with("_ids")
+        // Who did something: `addedBy`, `createdBy`, `grantedBy`, `requested_by`.
+        || key.ends_with("By")
+        || key.ends_with("_by")
 }
 
 /// Fields whose text is JSON in its own right (audit `before` and `after`, event `payload`).
@@ -351,7 +355,7 @@ mod tests {
         ] {
             assert!(is_id_key(yes), "{yes}");
         }
-        for no in ["name", "identity", "idle", "valid", "paid"] {
+        for no in ["name", "identity", "idle", "valid", "paid", "nearby"] {
             assert!(!is_id_key(no), "{no}");
         }
     }

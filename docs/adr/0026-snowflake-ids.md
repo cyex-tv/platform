@@ -39,7 +39,7 @@ key uses it. Changing the keys would touch every table and every query for no ga
     runs, it reads every Snowflake-shaped string in the query text and the variables and looks
     them up at once (`public_ids::resolve`). The request runs with those (`public_ids::resolving`,
     a task-local), so `ids::from_text`, and with it `errors::parse_id` and every resolver, takes
-    either form. After it, every field named `id`, `ids`, `…Id` or `…Ids` whose value is the ULID
+    either form. After it, every field named `id`, `ids`, `…Id`, `…Ids` or `…By` (`addedBy`, `createdBy`) whose value is the ULID
     of an account, emote or set gets the Snowflake instead, also inside the JSON text of
     `before`, `after` and `payload` (audit entries). One query per request each way, only when
     there is something to look up.
@@ -67,7 +67,7 @@ key uses it. Changing the keys would touch every table and every query for no ga
   working as input meanwhile.
 - A Snowflake reveals when the row was made, as the ULID already did.
 - Field names matter now: a new field holding an account, emote or set ID must be named `id`,
-  `…Id`, `…Ids` (REST `…_id`), or it is shown as the ULID. An alias that drops the suffix (`x: id`)
+  `…Id`, `…Ids` or `…By` (REST `…_id`, `…_by`), or it is shown as the ULID. An alias that drops the suffix (`x: id`)
   shows the ULID too. Rows that are gone (an erased account named in the audit log) have no
   Snowflake and stay ULIDs.
 - Tests that compare answers with a row's uuid read its Snowflake (`public_ids::public_text`).
