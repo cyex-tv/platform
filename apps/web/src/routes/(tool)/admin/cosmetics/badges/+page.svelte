@@ -24,7 +24,7 @@
   import Owners from '$lib/admin/Owners.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
-  import PageHead from '$lib/tool/PageHead.svelte';
+  import Bar from '$lib/admin/ui/Bar.svelte';
   import { loader } from '$lib/tool/loader.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
   import { can } from '$lib/tool/session.svelte';
@@ -178,11 +178,19 @@
 <svelte:window {onkeydown} />
 
 <Split label="Badge" open={!!picked} onclose={() => pick(null)}>
-  <PageHead title="Badges" line="Chat badges shown before a name. Deleting one takes it from everyone.">
+  <Bar title="Badges" count={L.data ? `${count(L.data.length)} ${L.data.length === 1 ? 'badge' : 'badges'}` : null}>
     {#snippet actions()}
-      {#if manage}<button class="ui-btn primary" type="button" onclick={() => edit(null)}><Icon name="plus" size={15} />New badge</button>{/if}
+      {#if manage}<button class="ui-btn primary small" type="button" onclick={() => edit(null)}><Icon name="plus" size={15} />New badge</button>{/if}
     {/snippet}
-  </PageHead>
+    {#snippet tools()}
+      <label class="adm-find grow">
+        <Icon name="search" size={15} />
+        <span class="sr-only">Filter badges</span>
+        <input class="ui-input" type="search" bind:value={query} placeholder="Filter by name or tooltip" autocomplete="off" spellcheck="false" maxlength="64" />
+      </label>
+      {#if L.data && query.trim()}<span class="ui-hint adm-num">{count(shown.length)} of {count(L.data.length)}</span>{/if}
+    {/snippet}
+  </Bar>
 
   <LoadGate source={L} label="Loading badges…">
     {#snippet children(badges)}
@@ -192,26 +200,19 @@
           {#snippet actions()}{#if manage}<button class="ui-btn primary" type="button" onclick={() => edit(null)}>New badge</button>{/if}{/snippet}
         </State>
       {:else}
-        <div class="adm-toolbar">
-          <label class="adm-find grow">
-            <Icon name="search" size={15} />
-            <span class="sr-only">Filter badges</span>
-            <input class="ui-input" type="search" bind:value={query} placeholder="Filter by name or tooltip" autocomplete="off" spellcheck="false" maxlength="64" />
-          </label>
-          <span class="ui-hint ui-num">{count(shown.length)} of {count(badges.length)}</span>
-        </div>
         {#if !shown.length}
           <State title="Nothing matches.">No badge has that name or tooltip.</State>
         {:else}
-          <ul class="tiles" bind:this={grid} use:gridKeys aria-label="Badges">
+          <ul class="adm-sheet tiles" style="--cell: 150px" bind:this={grid} use:gridKeys aria-label="Badges">
             {#each shown as b, i (b.id)}
               <li>
-                <button class="tile" type="button" data-item={b.id} aria-current={b.id === pickedId ? 'true' : undefined}
+                <button class="adm-cell tile" type="button" data-item={b.id} aria-current={b.id === pickedId ? 'true' : undefined}
                   tabindex={(pickedId && shown.some((x) => x.id === pickedId) ? b.id === pickedId : i === 0) ? 0 : -1} onclick={() => pick(b.id)}>
+                  <span class="tick"><Icon name="check" size={14} /></span>
                   <span class="pic"><BadgeIcon badge={b} size={36} /></span>
                   <span class="nm"><bdi>{clean(b.name)}</bdi></span>
-                  <span class="meta">
-                    {#if grant && owners[b.id] !== undefined}<span>{count(owners[b.id])} {owners[b.id] === 1 ? 'owner' : 'owners'}</span>{/if}
+                  <span class="sub">
+                    {#if grant && owners[b.id] !== undefined}<span class="adm-num">{count(owners[b.id])}</span>{owners[b.id] === 1 ? 'owner' : 'owners'}{/if}
                     {#if manage && lacks(b)}<span class="old" title="Made before the larger sizes">Old sizes</span>{/if}
                   </span>
                 </button>
@@ -247,7 +248,7 @@
           <h3 class="adm-label">Facts</h3>
           <dl class="adm-kv">
             {#if grant}<dt>Owners</dt><dd>{owners[b.id] === undefined ? '…' : count(owners[b.id])}</dd>{/if}
-            <dt>Sizes</dt><dd>{lacks(b) ? 'Up to 72 px' : 'Up to 512 px'}</dd>
+            <dt>Sizes</dt><dd class="txt">{lacks(b) ? 'Up to 72 px' : 'Up to 512 px'}</dd>
             <dt>ID</dt><dd class="mono">{b.id}</dd>
           </dl>
         </section>
@@ -313,23 +314,15 @@
 </dialog>
 
 <style>
-  /* The tiles: the badge, its name, how many own it. The picked one has an accent hairline and a bold name. */
-  .tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 8px; }
-  .tile { display: grid; justify-items: center; align-content: start; gap: 4px; width: 100%; height: 128px; padding: 14px 10px 10px;
-    border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); color: var(--text); font: inherit; cursor: pointer;
-    transition: border-color var(--fast), background-color var(--fast); }
-  .pic { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: 6px; border-radius: var(--radius); background: var(--bg); }
-  .nm { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-small); font-weight: 600; }
-  .meta { display: flex; gap: 6px; min-height: 18px; font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
+  /* The contact sheet (admin.css .adm-sheet): the badge on its own ground, the name, how many own it. */
+  .tile { height: 132px; justify-items: center; text-align: center; }
+  .tile .sub { justify-content: center; min-height: 18px; }
   .old { color: var(--yellow); }
-  .tile[aria-current='true'] { border-color: var(--accent-border); }
-  .tile[aria-current='true'] .nm { font-weight: 700; }
-  .tile:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   .tile:active { opacity: .6; transition: none; }
-  @media (hover: hover) and (pointer: fine) { .tile:hover { border-color: var(--border-strong); background: var(--surface-hover); } }
 
   .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
-  .ladder { display: flex; align-items: flex-end; gap: 16px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--bg); }
+  .ladder { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; border: 1px solid var(--border); }
+  .ladder .step { min-height: 112px; padding: 14px 8px 8px; align-content: end; box-shadow: -1px 0 0 var(--border); }
   .step { display: grid; justify-items: center; gap: 6px; }
   .tip { margin: 0; font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }
   .sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
