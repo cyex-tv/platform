@@ -1,8 +1,12 @@
 <script lang="ts">
   // /guidelines: what may be uploaded to cyex.tv, in our own words. The upload form links here
   // (in a new tab) and asks you to accept it. Each rule has an anchor, so a moderator's note or a
-  // help answer can point at one (/guidelines#nsfw). A short reading page: one column, no rail.
-  import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
+  // help answer can point at one (/guidelines#nsfw). A reading page on the cyex docs layout, like
+  // /help and /changelog: the rules listed in the index on the left, which follows the reader.
+  import '$lib/docs/docs.css';
+  import { onMount } from 'svelte';
+  import { initDocs } from '$lib/docs/behaviour';
+  import RailLayout from '$lib/shell/RailLayout.svelte';
 
   type Rule = { id: string; title: string; body: string[] };
   const RULES: Rule[] = [
@@ -71,6 +75,9 @@
       ],
     },
   ];
+
+  let root: HTMLDivElement;
+  onMount(() => initDocs(root, { filter: false }));
 </script>
 
 <svelte:head>
@@ -79,54 +86,65 @@
   <meta property="og:title" content="Emote guidelines" />
 </svelte:head>
 
-<ColumnLayout>
-  <header class="page-head">
-    <h1 class="page-title">Emote guidelines</h1>
-    <p class="lead">What you can upload to cyex.tv. Every new emote is checked by a moderator before anyone else sees it; these are the things they look for.</p>
-  </header>
+<div class="docs guidelines" bind:this={root}>
+  <RailLayout>
+    {#snippet rail()}
+    <aside class="docs-nav" aria-label="Guidelines index">
+      <details class="nav-toc">
+        <summary>Contents</summary>
+        <nav class="nav-scroll" aria-label="Contents">
+          <div class="nav-group">
+            <div class="nav-group-title"><span class="group-name">The rules</span></div>
+            {#each RULES as r, i (r.id)}
+              <a class="nav-item" href="#{r.id}"><span class="n" aria-hidden="true">{i + 1}</span><span class="nav-label">{r.title}</span></a>
+            {/each}
+          </div>
+          <div class="nav-group">
+            <div class="nav-group-title"><span class="group-name">After</span></div>
+            <a class="nav-item" href="#after"><span class="nav-label">When something breaks these</span></a>
+          </div>
+        </nav>
+      </details>
+    </aside>
+    {/snippet}
 
-  <nav class="toc" aria-label="On this page">
-    <ol>
-      {#each RULES as r, i (r.id)}<li><a href="#{r.id}"><span class="n ui-num">{i + 1}</span>{r.title}</a></li>{/each}
-    </ol>
-  </nav>
+    <div class="docs-body" id="rules" tabindex="-1">
+      <header class="docs-title">
+        <div>
+          <h1>Emote guidelines</h1>
+          <p>What you can upload to cyex.tv. Every new emote is checked by a moderator before anyone else sees it; these are the things they look for.</p>
+        </div>
+      </header>
 
-  <div class="rules">
-    {#each RULES as r, i (r.id)}
-      <section class="rule" id={r.id} aria-labelledby="{r.id}-title">
-        <h2 id="{r.id}-title"><span class="n ui-num" aria-hidden="true">{i + 1}</span>{r.title}</h2>
-        {#each r.body as p, j (j)}<p>{p}</p>{/each}
+      {#each RULES as r, i (r.id)}
+        <section class="guide rule" id={r.id} aria-labelledby="{r.id}-title">
+          <p class="num" aria-hidden="true">Rule {i + 1}</p>
+          <h2 id="{r.id}-title">{r.title}</h2>
+          {#each r.body as p, j (j)}<p>{p}</p>{/each}
+        </section>
+      {/each}
+
+      <section class="guide rule after" id="after" aria-labelledby="after-title">
+        <h2 id="after-title">When something breaks these</h2>
+        <p>A moderator rejects the upload or takes the emote down, and you get a notification saying why. Emotes already in channels stop showing there.</p>
+        <p>Uploading again what was taken down, or breaking the rules again and again, can stop your account from uploading. You can report an emote from its page.</p>
+        <p>These guidelines may change as cyex.tv grows; the version here is the one that counts.</p>
       </section>
-    {/each}
 
-    <section class="rule after" aria-labelledby="after-title">
-      <h2 id="after-title">When something breaks these</h2>
-      <p>A moderator rejects the upload or takes the emote down, and you get a notification saying why. Emotes already in channels stop showing there.</p>
-      <p>Uploading again what was taken down, or breaking the rules again and again, can stop your account from uploading. You can report an emote from its page.</p>
-      <p>These guidelines may change as cyex.tv grows; the version here is the one that counts.</p>
-    </section>
-  </div>
-</ColumnLayout>
+      <p class="docs-end">Questions about a rule? See <a href="/help">Help</a>. Something of yours uploaded without asking? Write to abuse@cyex.tv.</p>
+    </div>
+  </RailLayout>
+</div>
 
 <style>
-  .lead { margin: 12px 0 0; max-width: 62ch; font-size: var(--t-body, 16px); line-height: 1.6; color: var(--muted); }
-  .toc { max-width: 720px; margin-bottom: 32px; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); }
-  .toc ol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 24px; margin: 0; padding: 0; list-style: none; }
-  .toc a { display: flex; align-items: center; gap: 10px; min-height: 36px; color: var(--muted); font-size: var(--t-small); transition: color var(--fast); }
-  .toc a:active { opacity: .6; transition: none; }
-  @media (hover: hover) and (pointer: fine) { .toc a:hover { color: var(--text); } }
-  .n { flex: none; display: inline-grid; place-items: center; min-width: 22px; height: 22px; border-radius: var(--radius); border: 1px solid var(--border-strong);
-    font-size: 12px; font-weight: 600; color: var(--muted); }
-  .rules { display: grid; gap: 28px; max-width: 720px; }
-  .rule { scroll-margin-top: calc(var(--nav-h) + 20px); }
-  .rule h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; font-size: 18px; line-height: 1.35; letter-spacing: -.01em; }
-  .rule p { margin: 0 0 8px; max-width: 68ch; line-height: 1.65; color: var(--muted); }
+  .guidelines :global(.nav-group-title) { display: flex; align-items: center; min-height: 32px; margin-bottom: 2px; }
+  .guidelines :global(.nav-item) { padding-block: 8px; align-items: flex-start; }
+  .guidelines :global(.nav-label) { white-space: normal; }
+  .n { flex: none; min-width: 14px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .rule { max-width: var(--measure); margin-bottom: 36px; }
+  .rule + .rule { padding-top: 28px; border-top: 1px solid var(--border); }
+  .num { margin: 0 0 4px; font-size: var(--t-fine); font-weight: 600; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .rule h2 { margin: 0 0 10px; }
+  .rule p:not(.num) { margin: 0 0 8px; line-height: 1.65; color: var(--muted); }
   .rule p:last-child { margin-bottom: 0; }
-  .after { padding-top: 24px; border-top: 1px solid var(--border); }
-  @media (max-width: 640px) {
-    .toc ol { grid-template-columns: minmax(0, 1fr); }
-    .rule h2 { font-size: 17px; align-items: flex-start; }
-    .rule h2 .n { margin-top: 1px; }
-  }
-  @media (pointer: coarse) { .toc a { min-height: 44px; } }
 </style>

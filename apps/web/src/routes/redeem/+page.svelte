@@ -4,6 +4,7 @@
   // to wear it. A few wrong codes lock the field for a while; the sentence says for how long.
   import { onDestroy } from 'svelte';
   import { ApiError, gql } from '$lib/api';
+  import Icon from '$lib/components/Icon.svelte';
   import State from '$lib/components/State.svelte';
   import BadgeIcon from '$lib/cosmetics/BadgeIcon.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
@@ -83,47 +84,49 @@
 
 <ColumnLayout width="form">
   <header class="page-head head">
-    <h1 class="page-title">Redeem a code</h1>
-    <p class="lead">Got a code from a stream, a giveaway or a friend? Enter it here. Capital letters, spaces and dashes don’t matter.</p>
+    <div>
+      <h1 class="page-title">Redeem a code</h1>
+      <p class="line">A code from a stream, a giveaway or a friend. Capital letters, spaces and dashes don’t matter.</p>
+    </div>
+    <a class="btn btn-s" href="/shop"><Icon name="shopping-bag" size={15} />Shop</a>
   </header>
 
   {#if !known}
-    <State kind="loading" title="Loading…" />
+    <div class="panel skeleton" aria-busy="true" aria-label="Loading…"><span class="bar s"></span><span class="bar"></span><span class="bar b"></span></div>
   {:else if !me}
     <State title="Sign in to redeem a code.">
       Codes are added to your account.
       {#snippet actions()}<a class="btn btn-s btn-primary" href="/signin?back={encodeURIComponent('/redeem')}">Sign in</a>{/snippet}
     </State>
   {:else}
-    <form class="form" onsubmit={submit} novalidate>
+    <form class="panel form" onsubmit={submit} novalidate>
       <label class="ui-field">
-        <span class="ui-label">Code</span>
+        <span class="label">Code</span>
         <input class="ui-input mono" bind:this={input} value={code} oninput={(e) => (code = tidyCode(e.currentTarget.value))} autocomplete="off" autocapitalize="characters"
-          spellcheck="false" maxlength="80" placeholder="ABCD-1234-EFGH" disabled={locked} aria-invalid={problem ? 'true' : undefined} aria-describedby={problem ? 'redeem-problem' : undefined} />
+          spellcheck="false" maxlength="80" placeholder="ABCD-1234-EFGH" disabled={locked} aria-invalid={problem ? 'true' : undefined} aria-describedby={problem ? 'redeem-problem' : 'redeem-hint'} />
       </label>
-      {#if problem}<p class="problem" id="redeem-problem" role="alert">{problem}</p>{/if}
+      {#if problem}<p class="problem" id="redeem-problem" role="alert">{problem}</p>{:else}<p class="hint" id="redeem-hint">What it holds is added to {clean(me.identities[0]?.displayName) || 'your account'} at once.</p>{/if}
       <div class="actions">
         <button class="btn btn-s btn-primary" type="submit" disabled={busy || locked}>{busy ? 'Checking…' : 'Redeem'}</button>
-        <a class="btn btn-s btn-ghost" href="/shop">Back to the shop</a>
       </div>
     </form>
 
     {#if result}
-      <section class="result" aria-labelledby="gave-h" role="status">
+      <section class="panel result" aria-labelledby="gave-h" role="status">
         {#if gave}
-          <h2 id="gave-h">Added to your account</h2>
+          <h2 class="label" id="gave-h"><Icon name="check" size={13} stroke={2.4} />Added to your account</h2>
           <p class="sub"><bdi>{clean(result.name)}</bdi> gave you {gave === 1 ? 'this' : 'these'}:</p>
-          <ul>
+          <ul class="rows">
             {#each result.badges as b (b.id)}
-              <li><BadgeIcon badge={b} size={28} label /><span class="nm"><bdi>{clean(b.name)}</bdi><span class="kind">Badge</span></span></li>
+              <li><span class="px"><BadgeIcon badge={b} size={18} /></span><span class="px"><BadgeIcon badge={b} size={36} label /></span><span class="nm"><bdi>{clean(b.name)}</bdi></span><span class="kind">Badge</span></li>
             {/each}
             {#each result.paints as p (p.id)}
-              <li><span class="pt"><PaintedName name={p.name} paint={p} /></span><span class="kind">Paint</span></li>
+              <li><span class="pt"><PaintedName name={clean(me.identities[0]?.displayName) || p.name} paint={p} /></span><span class="nm sub-nm"><bdi>{clean(p.name)}</bdi></span><span class="kind">Paint</span></li>
             {/each}
           </ul>
           <div class="actions"><a class="btn btn-s btn-primary" href={sectionHref(me.id, 'cosmetics')}>Equip {gave === 1 ? 'it' : 'them'} in Cosmetics</a></div>
         {:else}
-          <h2 id="gave-h">You have all of it already</h2>
+          <h2 class="label" id="gave-h">You have all of it already</h2>
           <p class="sub">That code worked, but <bdi>{clean(result.name)}</bdi> only holds things you already own.</p>
         {/if}
       </section>
@@ -132,18 +135,31 @@
 </ColumnLayout>
 
 <style>
-  .head { padding-bottom: 24px; }
-  .lead { margin: 12px 0 0; max-width: 56ch; font-size: var(--t-body, 16px); line-height: 1.6; color: var(--muted); }
-  .form { display: grid; gap: 14px; }
+  p, h2 { margin: 0; }
+  .head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .head > div { min-width: 0; }
+  .head .btn { flex: none; }
+  .line { margin-top: 6px; max-width: 56ch; font-size: var(--t-ui); line-height: 1.55; color: var(--muted); }
+  .head .btn :global(svg) { color: var(--muted); }
+  .label { display: flex; align-items: center; gap: 6px; font-size: var(--t-label, 11px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  .label :global(svg) { color: var(--accent-text); }
+  .panel { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); }
   .mono { font-family: var(--font-mono); letter-spacing: .04em; }
-  .problem { margin: 0; font-size: var(--t-small); color: var(--red); }
-  .result { display: grid; gap: 10px; margin-top: 28px; padding: 18px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
-  h2 { margin: 0; font-size: var(--t-ui); font-weight: 600; }
-  .sub { margin: 0; font-size: var(--t-small); color: var(--muted); }
-  ul { list-style: none; margin: 4px 0 6px; padding: 0; display: grid; gap: 8px; }
-  li { display: flex; align-items: center; gap: 12px; min-height: 40px; min-width: 0; }
-  .nm { display: grid; min-width: 0; font-weight: 600; }
-  .kind { font-size: var(--t-fine); font-weight: 400; color: var(--dim); }
-  .pt { font-size: var(--t-ui); font-weight: 700; min-width: 0; }
-  li > .kind { margin-left: auto; }
+  .hint { font-size: var(--t-small); color: var(--muted); }
+  .problem { font-size: var(--t-small); color: var(--red); }
+  .actions { display: flex; gap: 8px; }
+  .result { margin-top: 16px; }
+  .sub { font-size: var(--t-small); color: var(--muted); }
+  .rows { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid var(--border); }
+  .rows li { display: flex; align-items: center; gap: 12px; min-height: 52px; min-width: 0; border-bottom: 1px solid var(--border); }
+  .px { display: grid; place-items: center; flex: none; min-width: 36px; height: 40px; }
+  .nm { flex: 1; min-width: 0; font-size: var(--t-small); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sub-nm { font-weight: 500; color: var(--muted); }
+  .pt { flex: none; max-width: 55%; min-width: 0; font-size: var(--t-ui); font-weight: 700; overflow: hidden; }
+  .kind { flex: none; font-size: var(--t-fine); color: var(--dim); }
+  /* Loading: the form's shape, so nothing moves when it arrives. */
+  .skeleton { min-height: 154px; align-content: start; }
+  .bar { display: block; height: 40px; border-radius: var(--radius); background: var(--surface-2); }
+  .bar.s { width: 48px; height: 12px; }
+  .bar.b { width: 96px; }
 </style>
