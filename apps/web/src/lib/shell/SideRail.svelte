@@ -253,7 +253,7 @@
   /* `fill`: flush with the window's left edge and the header, on the ground with a hairline at its
      right, like the browse page's set rail and the Inspector's panel (redesign, 2026/11/21). */
   .rail.fill { top: calc(var(--nav-h) + env(safe-area-inset-top, 0px)); width: auto; margin: calc(-1 * var(--rail-gap)) 0 0 calc(-1 * var(--page-pad));
-    padding: var(--rail-gap) 12px 24px var(--page-pad); background: none; border: 0; border-right: 1px solid var(--border); border-radius: 0;
+    padding: 16px 12px 24px var(--page-pad); background: none; border: 0; border-right: 1px solid var(--border); border-radius: 0;
     min-height: calc(100dvh - var(--nav-h) - env(safe-area-inset-top, 0px)); }
   .rail.fill.tall { top: auto; }
   .foot { margin-top: auto; padding-top: 12px; }

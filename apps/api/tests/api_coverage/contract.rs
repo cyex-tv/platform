@@ -448,6 +448,7 @@ async fn every_site_operation_runs_against_the_real_api() {
     .await;
     c.op(As::Nobody, "PublicSet", json!({ "id": set1 })).await;
     c.op(os, "EditSet", json!({ "id": set1 })).await;
+    c.op(os, "SetEditors", json!({ "id": set1 })).await;
     c.op(
         os,
         "SetEmotes",
