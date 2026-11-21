@@ -19,8 +19,9 @@
   import { session } from '$lib/tool/session.svelte';
   import { onMount } from 'svelte';
 
-  type Props = { emote: PageEmote | null; failed?: boolean; onclose: () => void };
-  let { emote: e, failed = false, onclose }: Props = $props();
+  // `head={false}`: inside InspectorLayout, whose own panel head carries the label and the buttons.
+  type Props = { emote: PageEmote | null; failed?: boolean; onclose: () => void; head?: boolean };
+  let { emote: e, failed = false, onclose, head = true }: Props = $props();
   onMount(watchReduced);
 
   // One sign-in check per emote shown (the actions share it).
@@ -41,18 +42,20 @@
   const flags = $derived(e ? flagsOf(e) : []);
 </script>
 
-<div class="ip-head">
-  <h2 class="label">Selected emote</h2>
-  {#if e}<IconButton icon="open" label="Open full page" size="s" variant="ghost" href={path} />{/if}
-  <IconButton icon="x" label="Close" size="s" variant="ghost" onclick={onclose} />
-</div>
+{#if head}
+  <div class="ip-head">
+    <h2 class="label">Selected emote</h2>
+    {#if e}<IconButton icon="open" label="Open full page" size="s" variant="ghost" href={path} />{/if}
+    <IconButton icon="x" label="Close" size="s" variant="ghost" onclick={onclose} />
+  </div>
+{/if}
 
 {#if failed}
-  <div class="ip-body"><State bare title="Couldn’t load this emote.">It may have been taken down. <a class="link" href={path}>Open its page</a></State></div>
+  <div class="ip-body" class:bare={!head}><State bare title="Couldn’t load this emote.">It may have been taken down. <a class="link" href={path}>Open its page</a></State></div>
 {:else if !e}
-  <div class="ip-body" aria-busy="true"><div class="ip-stage ui-skeleton"></div><span class="ph ui-skeleton"></span></div>
+  <div class="ip-body" class:bare={!head} aria-busy="true"><div class="ip-stage ui-skeleton"></div><span class="ph ui-skeleton"></span></div>
 {:else}
-  <div class="ip-body">
+  <div class="ip-body" class:bare={!head}>
     <div class="ip-stage">
       {#if ready(e) && big}
         <img src={url(big)} width={big.width} height={big.height} alt={name} />
@@ -104,6 +107,7 @@
     border-bottom: 1px solid var(--border); background: var(--surface); }
   .label { margin: 0 auto 0 0; font-size: var(--t-label, 11px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
   .ip-body { display: grid; gap: 16px; padding: 16px; }
+  .ip-body.bare { padding: 8px 0 0; }
   .ip-stage { display: grid; place-items: center; height: 180px; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--bg); }
   .ip-stage img { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; }
   .ph { display: block; height: 20px; width: 60%; border-radius: var(--radius); }

@@ -1433,3 +1433,28 @@ gh pr create --repo cyex-tv/platform --base main --head feat/redesign-a --title 
 git push   (merge of origin/main after #151, #152, #153; SetEditors in the API contract test)
 ```
   PR #154, not merged (owner reviews).
+
+## Redesign final pass: no layout shift, shared frames, polish (branch `fix/redesign-polish`, 2026/11/21)
+
+Owner: "everything fits together, easy to use, beautiful, no layout shift". Findings and the before/after
+contact sheets (320-2560, both themes) are in `.claude/runs/2026-11-20-redesign/final-pass.md` and `screens/final/`.
+- [x] CLS under 0.01 on every main page at 375/768/1440/2560 (production build; was 0.02-0.44). The announcement
+  bar is read by the root layout's server load (`routes/+layout.server.ts`, closed list in the `cyexAnnounceClosed`
+  cookie); prerendered pages hold its place with app.html's `data-announce` hint. Session-only pieces are held by
+  first-paint hints (`data-signed`, `data-own`, `data-own-flags`) or come last in their column (emote flags panel,
+  the set's Editors). Geist fallback metrics retuned.
+- [x] Profile on `InspectorLayout` + `LinkTabs`; shop and download panels from `PanelBlock`/`FactList`/`LinkRows`
+  (FactList no longer squeezes its label); `.adm-table.stack` shared phone variant for the shop tables; orders
+  give names priority at 1280; right panels' surface runs to the window's edge past the wrap; review toolbar wraps
+  at 1024 (was horizontal scroll); `IconButton tip="bottom-end"`.
+- [x] Tests: `announcement-bar.ui.test.ts`, cookie helpers, `format.clock`, EmoteInspector without its head.
+  `dev/e2e/cosmetics.mjs` selectors follow the redesigned admin tiles (it failed 4/24 on main).
+- [x] Gates: check 0/0, vitest 999/999, build; production e2e leak 12/12, motion 78/78, cosmetics 25/25.
+
+### GitHub write log for this PR
+
+```
+git push -u origin fix/redesign-polish
+gh pr create --repo cyex-tv/platform --base main --head fix/redesign-polish --title "Redesign final pass: no layout shift, shared frames, polish" --body-file <file>
+```
+  Not merged (owner reviews).

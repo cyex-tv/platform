@@ -204,6 +204,12 @@
         {#if s.createdAt}<dt>Made</dt><dd><time datetime={s.createdAt}>{date(s.createdAt)}</time></dd>{/if}
       </dl>
     </PanelBlock>
+    {#if members.length}
+      <PanelBlock title="Chat preview">
+        <SetChat {members} {owner} {name} inPanel />
+      </PanelBlock>
+    {/if}
+    <!-- Editors come last: the block arrives after the session (owner and staff only), so nothing under it can move. -->
     {#if editorList && (editorList.length || mine)}
       <PanelBlock title="Editors" count={editorList.length ? count(editorList.length) : undefined} more={mine ? { href: '/me/editors', label: 'Manage' } : undefined}>
         {#if editorList.length}
@@ -216,11 +222,6 @@
         {:else}
           <p class="pb-hint">Nobody else edits this set. Only you see this.</p>
         {/if}
-      </PanelBlock>
-    {/if}
-    {#if members.length}
-      <PanelBlock title="Chat preview">
-        <SetChat {members} {owner} {name} inPanel />
       </PanelBlock>
     {/if}
   {/if}

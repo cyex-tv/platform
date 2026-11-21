@@ -501,7 +501,7 @@
     <option value="asc">{byText ? 'A to Z' : 'Oldest first'}</option>
     <option value="desc">{byText ? 'Z to A' : 'Newest first'}</option>
   </select>
-  <IconButton label="Refresh" icon="refresh" variant="outline" disabled={L.loading} onclick={() => L.reload()} />
+  <IconButton label="Refresh" icon="refresh" variant="outline" tip="bottom-end" disabled={L.loading} onclick={() => L.reload()} />
 </div>
 <p class="sr-only" id="queue-keys">Arrow keys move between uploads. Enter opens one. A approves, U approves as unlisted, P approves for its owner only, R rejects, S skips to the next. X selects for a verdict on many. Z undoes the last approval while its notice shows.</p>
 
@@ -613,10 +613,12 @@
 />
 
 <style>
-  .tools { flex-wrap: nowrap; }
+  /* One row when the column has room; where it doesn't (a 1024px window beside the rail) the
+     search and sorting wrap under the tabs instead of running over each other. */
+  .tools { flex-wrap: wrap; }
   .tabs { flex: none; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
   .tabs::-webkit-scrollbar { display: none; }
-  .find { flex: 1 1 140px; }
+  .find { flex: 1 1 200px; min-width: 0; }
   .pick { flex: none; width: auto; font-size: var(--t-small); padding-left: 10px; }
   @media (max-width: 900px) {
     .tools { flex-wrap: wrap; }

@@ -201,9 +201,10 @@
   [data-theme="light"] { --border: rgb(13 15 20 / .28); --border-strong: rgb(13 15 20 / .5); --field-border: #555b66; }
 }
 
-/* Arial sized to Geist per weight, so the font swap moves nothing (CLS 0). */
-@font-face { font-family: 'Geist Fallback'; font-weight: 400; src: local('Arial'), local('ArialMT'); size-adjust: 102.37%; ascent-override: 98.66%; descent-override: 29.31%; line-gap-override: 0%; }
-@font-face { font-family: 'Geist Fallback'; font-weight: 500; src: local('Arial'), local('ArialMT'); size-adjust: 104.72%; ascent-override: 96.45%; descent-override: 28.65%; line-gap-override: 0%; }
+/* Arial sized to Geist per weight, so the font swap moves nothing (CLS 0): widths measured to
+   within 0.1% (2026/11/21; 400 and 500 were 0.4% narrow, enough to rewrap a line on a phone). */
+@font-face { font-family: 'Geist Fallback'; font-weight: 400; src: local('Arial'), local('ArialMT'); size-adjust: 102.8%; ascent-override: 98.25%; descent-override: 29.19%; line-gap-override: 0%; }
+@font-face { font-family: 'Geist Fallback'; font-weight: 500; src: local('Arial'), local('ArialMT'); size-adjust: 105.16%; ascent-override: 96.05%; descent-override: 28.53%; line-gap-override: 0%; }
 @font-face { font-family: 'Geist Fallback'; font-weight: 600; src: local('Arial Bold'), local('Arial-BoldMT'); size-adjust: 99.7%; ascent-override: 100.71%; descent-override: 29.91%; line-gap-override: 0%; }
 
 *, *::before, *::after { box-sizing: border-box; }

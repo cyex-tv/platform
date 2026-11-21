@@ -3,9 +3,12 @@
   // /admin/announcements. Flat on the page's surface with a hairline: the kind's icon and word
   // (News, Maintenance, Event), an optional small emote or badge, the line, and its link (the
   // only accent). × closes it on this device; a new announcement shows again. It scrolls away
-  // with the page (the header alone stays) and never moves anything once shown: it only appears
-  // on load, before the reader has started.
+  // with the page (the header alone stays) and never moves anything: the root layout's server
+  // load reads it (and this device's closed list), so it is in the first paint or not at all. A
+  // prerendered page can't know it: there the browser asks, and the place is held from the first
+  // paint when this device saw a live one last time (app.html's `data-announce` hint).
   import { onMount } from 'svelte';
+  import { page } from '$app/state';
   import { fade } from 'svelte/transition';
   import EmotePicture from '$lib/components/EmotePicture.svelte';
   import Icon from '$lib/components/Icon.svelte';
@@ -14,11 +17,20 @@
   import { ready } from '$lib/emote';
   import { dur } from '$lib/motion';
   import { KIND, external, running, safeLink } from './announcement';
-  import { banner } from './announcement.svelte';
+  import { banner, type Announcement } from './announcement.svelte';
 
-  onMount(() => banner.load());
+  type Server = { announcement?: Announcement | null; announceClosed?: string[] };
+  const server = $derived(page.data as Server);
+  // Prerendered pages send no answer (undefined): the browser asks for itself.
+  const unknown = $derived(server.announcement === undefined && banner.current === undefined);
+  onMount(() => banner.load(server.announcement === undefined));
+  // The hint for the next prerendered page: which one is live, if any (once an answer is in).
+  $effect(() => {
+    if (!unknown) banner.remember(banner.current !== undefined ? banner.current : (server.announcement ?? null));
+  });
 
-  const a = $derived(banner.shown && running(banner.shown, Date.now()) ? banner.shown : null);
+  const shown = $derived(banner.shown(server));
+  const a = $derived(shown && running(shown, Date.now()) ? shown : null);
   const href = $derived(safeLink(a?.linkUrl));
   let badge = $state<Badge | null>(null);
   $effect(() => {
@@ -33,6 +45,9 @@
   });
 </script>
 
+{#if !a && unknown}
+  <div class="hold" aria-hidden="true"></div>
+{/if}
 {#if a}
   {@const kind = KIND[a.kind]}
   <aside class="announce" aria-label="Announcement" out:fade={{ duration: dur(140) }}>
@@ -40,8 +55,9 @@
       <span class="kind"><Icon name={kind.icon} size={15} /><span class="word">{kind.label}</span></span>
       {#if a.emote && ready(a.emote)}
         <span class="art"><EmotePicture emote={a.emote} alt="" class="pic" eager /></span>
-      {:else if badge}
-        <span class="art"><BadgeIcon {badge} size={18} /></span>
+      {:else if a.badgeId}
+        <!-- The badge's place is kept while the catalogue loads, so the line never moves. -->
+        <span class="art badge">{#if badge}<BadgeIcon {badge} size={18} />{/if}</span>
       {/if}
       <p class="text">
         <bdi>{a.text}</bdi>
@@ -58,10 +74,14 @@
 
 <style>
   .announce { background: var(--surface); border-bottom: 1px solid var(--border); }
+  /* The bar's place while a prerendered page asks, when this device saw one live last time. */
+  .hold { display: none; }
+  :global(html[data-announce]) .hold { display: block; height: 45px; background: var(--surface); border-bottom: 1px solid var(--border); }
   .row { display: flex; align-items: center; gap: 12px; min-height: 44px; padding-block: 6px; }
   .kind { flex: none; display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: var(--t-fine); font-weight: 600; }
   .kind :global(svg) { color: var(--dim); }
   .art { flex: none; display: inline-flex; align-items: center; }
+  .art.badge { width: 18px; height: 18px; }
   .art :global(.pic) { height: 22px; width: auto; max-width: 66px; object-fit: contain; }
   .text { flex: 1; min-width: 0; margin: 0; font-size: var(--t-nav); font-weight: 500; color: var(--text); line-height: 1.4; overflow-wrap: anywhere; }
   .go { display: inline-flex; align-items: center; gap: 2px; margin-left: 8px; color: var(--accent-text); font-weight: 600; white-space: nowrap; }
@@ -82,6 +102,7 @@
     .row { gap: 10px; align-items: flex-start; }
     .kind, .art { min-height: 32px; }
     .text { padding-top: 6px; }
+    :global(html[data-announce]) .hold { height: 58px; }
   }
   @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .go :global(svg) { transition: none; } }
   :global(html[data-motion='reduce']) .go :global(svg) { transition: none; }

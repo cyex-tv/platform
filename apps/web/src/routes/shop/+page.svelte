@@ -11,7 +11,10 @@
   import { goto, invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
   import { gql } from '$lib/api';
+  import FactList from '$lib/components/FactList.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import LinkRows from '$lib/components/LinkRows.svelte';
+  import PanelBlock from '$lib/components/PanelBlock.svelte';
   import Problem from '$lib/components/Problem.svelte';
   import RetryNote from '$lib/components/RetryNote.svelte';
   import State from '$lib/components/State.svelte';
@@ -153,27 +156,27 @@
 </svelte:head>
 
 {#snippet about()}
-  <section class="block">
-    <h3 class="label">How it works</h3>
-    <dl class="kv">
-      <dt>Shown</dt><dd>In Twitch and Kick chat, to everyone with the extension</dd>
-      <dt>Paid with</dt><dd>Paddle</dd>
-      <dt>Arrives</dt><dd>As soon as the payment is confirmed</dd>
-      <dt>Gifts</dt><dd>To any Twitch or Kick login that has signed in once</dd>
-    </dl>
-  </section>
-  <section class="block">
-    <h3 class="label">More</h3>
-    <ul class="links">
-      <li><a href="/redeem"><Icon name="ticket" size={16} /><span>Redeem a code</span><Icon name="chevron-right" size={14} /></a></li>
-      {#if me}
-        <li><a href="/me/settings/billing"><Icon name="list" size={16} /><span>Your orders</span><Icon name="chevron-right" size={14} /></a></li>
-      {:else}
-        <li><a href="/signin?back={encodeURIComponent('/shop')}"><Icon name="enter" size={16} /><span>Sign in to see items on your name</span><Icon name="chevron-right" size={14} /></a></li>
-      {/if}
-      <li><a href="/help#what-are-cosmetics"><Icon name="scroll" size={16} /><span>What badges and paints are</span><Icon name="chevron-right" size={14} /></a></li>
-    </ul>
-  </section>
+  <PanelBlock title="How it works">
+    <FactList
+      items={[
+        { label: 'Shown', value: 'In Twitch and Kick chat, to everyone with the extension' },
+        { label: 'Paid with', value: 'Paddle' },
+        { label: 'Arrives', value: 'As soon as the payment is confirmed' },
+        { label: 'Gifts', value: 'To any Twitch or Kick login that has signed in once' },
+      ]}
+    />
+  </PanelBlock>
+  <PanelBlock title="More">
+    <LinkRows
+      items={[
+        { href: '/redeem', label: 'Redeem a code', icon: 'ticket' },
+        me
+          ? { href: '/me/settings/billing', label: 'Your orders', icon: 'list' }
+          : { href: `/signin?back=${encodeURIComponent('/shop')}`, label: 'Sign in to see items on your name', icon: 'enter' },
+        { href: '/help#what-are-cosmetics', label: 'What badges and paints are', icon: 'scroll' },
+      ]}
+    />
+  </PanelBlock>
 {/snippet}
 
 <div class="wrap shop">
@@ -246,7 +249,7 @@
 <ItemDialog item={wide ? null : open} gift={giftFirst} {name} signedIn={!!me} onclose={closed} />
 
 <style>
-  p, h3 { margin: 0; }
+  p { margin: 0; }
   /* The Inspector shape: the shop on the left, the panel on the right (360, full height, sticky). */
   .shop { display: grid; grid-template-columns: minmax(0, 1fr) 360px; column-gap: 24px; align-items: start; }
   .main { min-width: 0; padding-bottom: 48px; }
@@ -273,32 +276,17 @@
     border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
 
   .panel { position: sticky; top: var(--nav-h); height: calc(100svh - var(--nav-h)); overflow-y: auto; overscroll-behavior: contain;
-    margin-right: calc(-1 * var(--page-pad)); border-left: 1px solid var(--border); background: var(--surface); }
+    margin-right: calc(-1 * var(--page-pad)); border-left: 1px solid var(--border); background: var(--surface);
+    box-shadow: 0 0 0 100vw var(--surface); clip-path: inset(0 -100vw 0 0); /* on to the window's edge past the wrap, like every right panel */ }
   .ip-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; height: 48px; padding: 0 16px;
     border-bottom: 1px solid var(--border); background: var(--surface); }
   .ip-body { display: grid; gap: 4px; padding: 8px 16px 16px; }
   .label { margin: 0; font-size: var(--t-label, 11px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
-  .block { display: grid; min-width: 0; }
-  .block + .block { padding-top: 8px; border-top: 1px solid var(--border); }
-  .block > .label { display: flex; align-items: center; min-height: 36px; }
-  .kv { display: grid; grid-template-columns: auto minmax(0, 1fr); margin: 0 0 8px; }
-  .kv dt, .kv dd { margin: 0; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: var(--t-small); }
-  .kv dt { color: var(--muted); padding-right: 16px; white-space: nowrap; }
-  .kv dd { text-align: right; font-weight: 600; }
-  .kv dt:last-of-type, .kv dd:last-of-type { border-bottom: 0; }
-  .links { list-style: none; margin: 0 0 8px; padding: 0; display: grid; }
-  .links li + li { border-top: 1px solid var(--border); }
-  .links a { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 0 -6px; padding: 0 6px; border-radius: var(--radius);
-    color: var(--text); font-size: var(--t-small); font-weight: 600; transition: background-color var(--fast); }
-  .links a span { flex: 1; min-width: 0; }
-  .links a :global(svg) { flex: none; color: var(--dim); }
-  .links a:focus-visible { outline-offset: -2px; }
   .pick { padding-top: 12px; border-top: 1px solid var(--border); font-size: var(--t-small); color: var(--muted); }
   .about-narrow { display: none; }
 
   @media (hover: hover) and (pointer: fine) {
     .kinds a:hover { color: var(--text); }
-    .links a:hover { background: var(--row-hover); }
   }
 
   /* Narrower: one column; no panel (items open in a dialog), "how it works" follows the grid. */
@@ -306,10 +294,5 @@
     .shop { grid-template-columns: minmax(0, 1fr); }
     .panel { display: none; }
     .about-narrow { display: grid; gap: 4px; margin-top: 24px; padding: 8px 16px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); }
-  }
-  @media (max-width: 560px) {
-    .kv { grid-template-columns: minmax(0, 1fr); }
-    .kv dt { padding-bottom: 0; border-bottom: 0; }
-    .kv dd { text-align: left; padding-top: 2px; }
   }
 </style>

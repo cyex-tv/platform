@@ -5,6 +5,8 @@ import type { IconName } from '$lib/components/Icon.svelte';
 import type { AnnouncementKind } from '$lib/gql/graphql';
 
 export const DISMISS_KEY = 'cyex.announcement.closed';
+/** The live announcement's ID, for app.html's first-paint hint on prerendered pages. */
+export const SEEN_KEY = 'cyexAnnounce';
 /** Closed IDs kept at most; the oldest go first. */
 export const DISMISS_MAX = 20;
 
@@ -17,6 +19,35 @@ export function readClosed(raw: string | null | undefined): string[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * The closed IDs also go in a cookie, so the server renders the page with or without the bar and
+ * nothing moves once it is in the browser. IDs joined by dots: only letters and digits are kept.
+ */
+export const CLOSED_COOKIE = 'cyexAnnounceClosed';
+const ID = /^[0-9A-Za-z_-]{1,64}$/;
+
+/** The closed IDs from the cookie's value; anything that isn't an ID is dropped. */
+export function readClosedCookie(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  return raw
+    .split('.')
+    .filter((x) => ID.test(x))
+    .slice(-DISMISS_MAX);
+}
+
+/** The cookie's value for a closed list (the IDs that can't go in a cookie are left out). */
+export function closedCookie(list: readonly string[]): string {
+  return list
+    .filter((x) => ID.test(x))
+    .slice(-DISMISS_MAX)
+    .join('.');
+}
+
+/** Both lists in one, each ID once, oldest first, capped. */
+export function mergeClosed(a: readonly string[], b: readonly string[]): string[] {
+  return [...new Set([...a, ...b])].slice(-DISMISS_MAX);
 }
 
 /** The list after closing `id`: at the end, once, capped. */

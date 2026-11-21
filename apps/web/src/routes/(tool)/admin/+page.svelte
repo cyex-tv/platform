@@ -121,10 +121,11 @@
   .wait { display: grid; gap: 4px; padding: 14px 16px; color: var(--text); text-decoration: none; box-shadow: -1px 0 0 var(--border);
     transition: background-color var(--fast); }
   .wait .adm-label { display: flex; align-items: center; gap: 6px; }
-  .fig { font-size: 28px; font-weight: 600; line-height: 1.15; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--muted); }
+  /* One fixed height for the figure and its skeleton, so the number lands without moving the row. */
+  .fig { display: block; height: 32px; font-size: 28px; font-weight: 600; line-height: 32px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--muted); }
   .wait.some .fig { color: var(--text); }
   .wait.some .adm-label :global(svg) { color: var(--accent-text); }
-  .ph { display: block; width: 48px; height: 28px; border-radius: var(--radius); }
+  .ph { display: block; width: 48px; height: 28px; margin-top: 2px; border-radius: var(--radius); }
   .sub { font-size: var(--t-fine); color: var(--dim); }
   .wait:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 

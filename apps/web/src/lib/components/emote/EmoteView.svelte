@@ -5,9 +5,9 @@
   //         sizes under it as buttons (scale, pixels, file size; the one on the stage is bold with
   //         an accent tick), and a line of chat with the emote in it at chat size;
   //   right the name, the creator in their paint and the upload date, flags and tags, the
-  //         actions (add to set, edit, more), a grid of facts, the staff flags panel, then the
+  //         actions (add to set, edit, more), a grid of facts, then the
   //         tabs (Channels using it, Activity, More by the creator; `?tab=` in the address) with
-  //         a pager in the tab bar.
+  //         a pager in the tab bar, and last the staff flags panel.
   // Under 900px the columns stack; phones get the actions in a bar fixed to the bottom.
   import { onMount } from 'svelte';
   import { goto, invalidateAll } from '$app/navigation';
@@ -254,9 +254,6 @@
         {#if public_}<div><dt>Review</dt><dd class="ok"><Icon name="check" size={12} stroke={2.4} />Approved</dd></div>{/if}
       </dl>
 
-      <!-- Staff with emotes.flags change its flags after review (ADR 0024); nothing for anyone else. -->
-      <EmoteFlagsPanel emote={e} id="emote-flags" onsaved={() => invalidateAll()} />
-
       {#if tabs.length}
         <section class="tabbed" aria-label="Channels, activity and more by the creator">
           <div class="tabbar">
@@ -301,6 +298,10 @@
           {/if}
         </section>
       {/if}
+
+      <!-- Staff with emotes.flags change its flags after review (ADR 0024); nothing for anyone else.
+           Last in the column: it shows once the session is known, so nothing below it can move. -->
+      <EmoteFlagsPanel emote={e} id="emote-flags" onsaved={() => invalidateAll()} />
     </section>
   </div>
 

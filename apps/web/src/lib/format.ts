@@ -36,11 +36,18 @@ export function date(iso: string): string {
   return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())}`;
 }
 
+/** An RFC 3339 time as `22:40` (the time of day alone), in the reader's time zone, 24-hour. */
+export function clock(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 /** An RFC 3339 time as `2026/11/17 22:40`, in the reader's time zone, 24-hour. */
 export function dateTime(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return `${date(iso)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${date(iso)} ${clock(iso)}`;
 }
 
 /** An RFC 3339 time as `2026/11/16 20:01:02`, in the reader's time zone, 24-hour; '' if invalid. */

@@ -2,11 +2,15 @@
   // /download: where cyex.tv runs today, said plainly. The extension isn't in the stores yet, so
   // the page says so and shows how to load the test build; cyex deck and chat clients get one
   // honest line each. Your browser's cell comes first (bold, accent tick). Nothing here loads from
-  // elsewhere. Inspector shape: the page on the left, a panel on the right with the facts at a
-  // glance and where to go next; under 1100px the panel follows the page.
+  // elsewhere. Inspector shape (InspectorLayout): the page on the left, a panel on the right with
+  // the facts at a glance and where to go next; under 1100px the panel follows the page.
   import { onMount } from 'svelte';
   import { copy } from '$lib/clipboard.svelte';
+  import FactList from '$lib/components/FactList.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import LinkRows from '$lib/components/LinkRows.svelte';
+  import PanelBlock from '$lib/components/PanelBlock.svelte';
+  import InspectorLayout from '$lib/shell/InspectorLayout.svelte';
   import { browserOf, type Browser } from '$lib/components/home/pick';
 
   let browser = $state<Browser>('other');
@@ -29,12 +33,36 @@
   <meta property="og:title" content="Download" />
 </svelte:head>
 
-<div class="wrap dl">
-  <div class="main">
+{#snippet glance()}
+  <PanelBlock title="Facts">
+    <FactList
+      items={[
+        { label: 'Status', value: 'Early testing' },
+        { label: 'Browsers', value: 'Chromium and Firefox, desktop' },
+        { label: 'Phones', value: 'Not yet' },
+        { label: 'Price', value: 'Free' },
+        { label: 'Test build needs', value: 'git, Node 22.12+' },
+      ]}
+    />
+  </PanelBlock>
+  <PanelBlock title="Next">
+    <LinkRows
+      items={[
+        { href: '/help#emotes-not-showing', label: 'Emotes don’t show in chat', icon: 'scroll' },
+        { href: '/developers', label: 'The API for clients and bots', icon: 'file' },
+        { href: 'https://github.com/cyex-tv/extension', label: 'The extension’s source', icon: 'open', external: true },
+      ]}
+    />
+  </PanelBlock>
+{/snippet}
+
+<InspectorLayout title="At a glance" label="Download at a glance" panel={glance} narrow="after" headPad={false}>
+  {#snippet head()}
     <header class="page-head">
       <h1 class="page-title">Download</h1>
       <p class="line">cyex.tv emotes, badges and paints in Twitch and Kick chat. The extension is in early testing: not in the stores yet, but you can try it today.</p>
     </header>
+  {/snippet}
 
     <section class="block" aria-labelledby="ext-title">
       <h2 class="label" id="ext-title">The extension</h2>
@@ -42,14 +70,14 @@
         <article class="cell" id="chrome" class:yours={browser === 'chrome'} style:order={rank('chrome', 0)}>
           <!-- The front page's extension menu links each Chromium browser here by name. -->
           <span class="anchor" id="edge"></span><span class="anchor" id="opera"></span><span class="anchor" id="brave"></span>
-          <p class="status"><span class="dot" aria-hidden="true"></span>Early testing</p>
-          <h3>{#if browser === 'chrome'}<Icon name="check" size={14} stroke={2.4} />{/if}Chrome{#if browser === 'chrome'}<span class="mine">Your browser</span>{/if}</h3>
+          <p class="status"><span class="dot" aria-hidden="true"></span>Early testing{#if browser === 'chrome'}<span class="mine">Your browser</span>{/if}</p>
+          <h3>{#if browser === 'chrome'}<Icon name="check" size={14} stroke={2.4} />{/if}Chrome</h3>
           <p>Also Edge, Brave, Opera and other Chromium browsers on the desktop.</p>
           <p class="foot">Coming to the Chrome Web Store.</p>
         </article>
         <article class="cell" id="firefox" class:yours={browser === 'firefox'} style:order={rank('firefox', 1)}>
-          <p class="status"><span class="dot" aria-hidden="true"></span>Early testing</p>
-          <h3>{#if browser === 'firefox'}<Icon name="check" size={14} stroke={2.4} />{/if}Firefox{#if browser === 'firefox'}<span class="mine">Your browser</span>{/if}</h3>
+          <p class="status"><span class="dot" aria-hidden="true"></span>Early testing{#if browser === 'firefox'}<span class="mine">Your browser</span>{/if}</p>
+          <h3>{#if browser === 'firefox'}<Icon name="check" size={14} stroke={2.4} />{/if}Firefox</h3>
           <p>The same extension, for Firefox on the desktop.</p>
           <p class="foot">Coming to Firefox Add-ons.</p>
         </article>
@@ -100,32 +128,10 @@
       <h2 class="label" id="clients-title">Chat clients and bots</h2>
       <p class="sub">No chat client ships cyex.tv emotes yet. The API is public and needs no key, so any client, bot or overlay can read a channel’s set. <a class="link inline" href="/developers">Developers</a></p>
     </section>
-  </div>
-
-  <aside class="panel" aria-labelledby="glance-h">
-    <div class="ip-head"><h2 class="label" id="glance-h">At a glance</h2></div>
-    <div class="ip-body">
-      <dl class="kv">
-        <dt>Status</dt><dd>Early testing</dd>
-        <dt>Browsers</dt><dd>Chromium and Firefox, desktop</dd>
-        <dt>Phones</dt><dd>Not yet</dd>
-        <dt>Price</dt><dd>Free</dd>
-        <dt>Test build needs</dt><dd>git, Node 22.12+</dd>
-      </dl>
-      <h3 class="label sub-label">Next</h3>
-      <ul class="links">
-        <li><a href="/help#emotes-not-showing"><Icon name="scroll" size={16} /><span>Emotes don’t show in chat</span><Icon name="chevron-right" size={14} /></a></li>
-        <li><a href="/developers"><Icon name="file" size={16} /><span>The API for clients and bots</span><Icon name="chevron-right" size={14} /></a></li>
-        <li><a href="https://github.com/cyex-tv/extension" rel="noopener"><Icon name="open" size={16} /><span>The extension’s source</span><Icon name="chevron-right" size={14} /></a></li>
-      </ul>
-    </div>
-  </aside>
-</div>
+</InspectorLayout>
 
 <style>
   p, h2, h3 { margin: 0; }
-  .dl { display: grid; grid-template-columns: minmax(0, 1fr) 360px; column-gap: 24px; align-items: start; }
-  .main { min-width: 0; padding-bottom: 48px; }
   .line { margin-top: 6px; max-width: 62ch; font-size: var(--t-ui); line-height: 1.55; color: var(--muted); }
   .label { font-size: var(--t-label, 11px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
   .block { display: grid; gap: 12px; }
@@ -141,10 +147,11 @@
   .cell h3 { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 17px; font-weight: 600; line-height: 1.35; letter-spacing: -.01em; }
   .cell h3 :global(svg) { color: var(--accent-text); }
   .yours h3 { font-weight: 700; }
-  .mine { font-size: var(--t-fine); font-weight: 500; color: var(--muted); letter-spacing: 0; }
+  /* On the status line (known only in the browser): it never changes the cell's height. */
+  .mine { margin-left: auto; font-size: var(--t-fine); font-weight: 500; color: var(--muted); letter-spacing: 0; }
   .cell p { font-size: var(--t-small); line-height: 1.55; color: var(--muted); }
   .cell .foot { margin-top: auto; padding-top: 8px; font-size: var(--t-fine); color: var(--dim); }
-  .status { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+  .status { display: flex; align-items: center; gap: 8px; align-self: stretch; font-weight: 500; }
   .cell .status { color: var(--text); font-size: var(--t-fine); }
   .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
   .dot.off { background: transparent; border: 1.5px solid var(--muted); }
@@ -162,29 +169,6 @@
   .step ol { margin: 0; padding-left: 20px; font-size: var(--t-small); line-height: 1.8; color: var(--muted); }
   .note { font-size: var(--t-fine); color: var(--dim); max-width: 70ch; }
 
-  .panel { position: sticky; top: var(--nav-h); height: calc(100svh - var(--nav-h)); overflow-y: auto; overscroll-behavior: contain;
-    margin-right: calc(-1 * var(--page-pad)); border-left: 1px solid var(--border); background: var(--surface); }
-  .ip-head { display: flex; align-items: center; height: 48px; padding: 0 16px; border-bottom: 1px solid var(--border); }
-  .ip-body { display: grid; padding: 8px 16px 16px; }
-  .kv { display: grid; grid-template-columns: auto minmax(0, 1fr); margin: 0 0 8px; }
-  .kv dt, .kv dd { margin: 0; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: var(--t-small); }
-  .kv dt { color: var(--muted); padding-right: 16px; white-space: nowrap; }
-  .kv dd { text-align: right; font-weight: 600; }
-  .sub-label { display: flex; align-items: center; min-height: 36px; padding-top: 8px; }
-  .links { list-style: none; margin: 0; padding: 0; display: grid; }
-  .links li + li { border-top: 1px solid var(--border); }
-  .links a { display: flex; align-items: center; gap: 10px; min-height: 44px; margin: 0 -6px; padding: 0 6px; border-radius: var(--radius);
-    color: var(--text); font-size: var(--t-small); font-weight: 600; transition: background-color var(--fast); }
-  .links a span { flex: 1; min-width: 0; }
-  .links a :global(svg) { flex: none; color: var(--dim); }
-  .links a:focus-visible { outline-offset: -2px; }
-  @media (hover: hover) and (pointer: fine) { .links a:hover { background: var(--row-hover); } }
-
-  @media (max-width: 1099.98px) {
-    .dl { grid-template-columns: minmax(0, 1fr); }
-    .panel { position: static; height: auto; overflow: visible; margin: 0 0 48px; border: 1px solid var(--border); border-radius: var(--radius-card); }
-    .main { padding-bottom: 24px; }
-  }
   @media (max-width: 899.98px) {
     .cells, .cells.steps { grid-template-columns: minmax(0, 1fr); }
   }

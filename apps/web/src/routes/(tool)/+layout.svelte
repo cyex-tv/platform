@@ -93,7 +93,7 @@
 {#if adminPath && (admin || (!session.me && !problem))}
   <!-- Staff under /admin: the admin frame (full-height rail, no band). Before the account is known
        the path decides, so the frame is there from the first paint and its rows fill in. -->
-  <AdminShell groups={adminRail} me={session.me?.id}><div class="ui-page" class:pending={!problem && !session.me}>{@render body()}</div></AdminShell>
+  <AdminShell groups={adminRail} me={session.me?.id}><div class="ui-page adm-page" class:pending={!problem && !session.me}>{@render body()}</div></AdminShell>
 {:else if framed}
   <!-- A /me page draws its own frame (with the page wrapper); the sign-in states get a plain one. -->
   <div class="ui-page" class:pending={!problem && !session.me}>
@@ -131,6 +131,9 @@
   /* While the account is unknown the page is a loading line: the footer waits (hidden, not
      removed) so the page growing doesn't shove a visible footer down. */
   :global(main:has(.ui-page.pending) + .footer) { visibility: hidden; }
+  /* Its own block formatting context: the Split's pull-up margin stays inside, so the page's box
+     doesn't move when the loading line gives way to the page. */
+  .adm-page { display: flow-root; }
   .me-wait { padding-top: var(--rail-gap); padding-bottom: 48px; }
   .me { display: flex; align-items: center; gap: 12px; min-height: 40px; }
   .plain { font-size: var(--t-ui); font-weight: 600; color: var(--muted); }

@@ -16,7 +16,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import State from '$lib/components/State.svelte';
-  import { clean, count, dateTime, iso } from '$lib/format';
+  import { clean, clock, count, date, dateTime, iso } from '$lib/format';
   import type { OrderStatus as Status } from '$lib/gql/graphql';
   import { ADMIN_ORDERS, REFUND_ORDER, SHOP_ITEMS } from '$lib/queries';
   import Gate from '$lib/shop/Gate.svelte';
@@ -122,7 +122,7 @@
 <Gate permission="shop.orders">
   <Split label="Order" open={!!picked} onclose={() => pick(null)}>
     <PageHead title="Orders" line="Every purchase and gift, newest first.">
-      {#snippet actions()}{#if L.data}<span class="ui-hint ui-num" aria-live="polite">{count(L.data.total)} {L.data.total === 1 ? 'order' : 'orders'}</span>{/if}{/snippet}
+      {#snippet actions()}<span class="ui-hint ui-num total" aria-live="polite">{#if L.data}{count(L.data.total)} {L.data.total === 1 ? 'order' : 'orders'}{:else}&nbsp;{/if}</span>{/snippet}
     </PageHead>
 
     <div class="adm-toolbar">
@@ -155,24 +155,26 @@
           </State>
         {:else}
           {@const rg = pageRange(pageNo, PER, r.total, r.items.length)}
+          <div class="tablebox">
           <table class="adm-table stack">
             <thead>
-              <tr><th style="width:136px">When</th><th style="width:84px">Buyer</th><th>Item</th><th class="num" style="width:76px">Amount</th><th style="width:88px">State</th><th style="width:84px">Gift</th></tr>
+              <tr><th class="when">When</th><th class="buyer">Buyer</th><th>Item</th><th class="num" style="width:76px">Amount</th><th style="width:88px">State</th><th class="sec" style="width:96px">Gift</th></tr>
             </thead>
             <tbody bind:this={body} use:gridKeys={'tr[data-item]'}>
               {#each r.items as o, n (o.id)}
                 <tr data-row data-item={o.id} aria-selected={o.id === pickedId} tabindex={(picked ? o.id === pickedId : n === 0) ? 0 : -1}
                   onclick={() => pick(o.id)} onkeydown={(e) => rowKey(e, o.id)}>
-                  <td class="shrink dim" data-l="When">{dateTime(o.createdAt)}</td>
+                  <td class="dim" data-l="When">{date(o.createdAt)}<span class="tm"> {clock(o.createdAt)}</span></td>
                   <td class="ell" data-l="Buyer"><bdi>{o.buyer ? clean(o.buyer.displayName) : gone}</bdi></td>
                   <td class="ell pk" data-l="Item"><bdi>{clean(o.itemName)}</bdi></td>
                   <td class="num" data-l="Amount">{amount(o)}</td>
                   <td class="ell" data-l="State"><span class="st" class:live={o.status === 'PAID'}>{orderStatusText(o.status as OrderStatus)}</span></td>
-                  <td class="ell dim" data-l="Gift">{#if o.gift}<bdi>{o.recipient ? clean(o.recipient.displayName) : gone}</bdi>{:else}-{/if}</td>
+                  <td class="ell dim sec" data-l="Gift">{#if o.gift}<bdi>{o.recipient ? clean(o.recipient.displayName) : gone}</bdi>{:else}-{/if}</td>
                 </tr>
               {/each}
             </tbody>
           </table>
+          </div>
           {#if rg.pages > 1}
             <nav class="adm-pager" aria-label="Pages">
               <button class="ui-btn secondary small" type="button" disabled={pageNo <= 1} onclick={() => go({ page: pageNo - 1 })}><Icon name="chevron-left" size={14} />Previous</button>
@@ -254,7 +256,22 @@
 </Gate>
 
 <style>
+  /* The count's place is held while the list loads, so the head doesn't wrap later. */
+  .total { display: inline-block; min-width: 10ch; }
+  @media (min-width: 640px) { .total { text-align: right; } }
   .stack { table-layout: fixed; }
+  /* Names first: the buyer gets a share of the row, not a sliver. Where the list is narrow (the
+     inspector open beside it, 1280px windows) the gift column and the time go; both are in the
+     inspector (Got it … (gift), Dates). */
+  .tablebox { container-type: inline-size; }
+  .when { width: 136px; }
+  .buyer { width: 24%; }
+  @media (min-width: 720px) {
+    @container (max-width: 759.98px) {
+      .sec, .tm { display: none; }
+      .when { width: 100px; }
+    }
+  }
   tr[aria-selected='true'] .pk { font-weight: 700; }
   .tb { display: block; min-width: 0; }
   .tb select { width: auto; min-width: 160px; max-width: 100%; }
@@ -272,13 +289,5 @@
   /* Phones: each row stacks, its cells labelled. */
   @media (max-width: 719.98px) {
     .tb, .tb select { width: 100%; }
-    .stack thead { display: none; }
-    .stack, .stack tbody { display: block; }
-    .stack tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 16px; padding: 10px 12px; min-height: 44px; border-bottom: 1px solid var(--border); }
-    .stack tbody tr:last-child { border-bottom: 0; }
-    .stack td { display: flex; justify-content: space-between; gap: 8px; height: auto; max-width: none; padding: 2px 0; border: 0; text-align: left; }
-    .stack td.pk { grid-column: 1 / -1; }
-    .stack td[data-l]::before { content: attr(data-l); flex: none; color: var(--dim); font-size: var(--t-fine); }
-    .stack td.ell { overflow: visible; white-space: normal; text-overflow: clip; }
   }
 </style>

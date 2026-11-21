@@ -16,4 +16,6 @@
 
 <style>
   .admin-foot { display: flex; justify-content: flex-end; margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--border); }
+  /* Like the footer: hidden but in place while the tab above it still loads, so it never jumps. */
+  :global(main:has([aria-busy='true'])) .admin-foot { visibility: hidden; }
 </style>

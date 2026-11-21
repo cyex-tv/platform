@@ -18,7 +18,8 @@
     href?: string;
     size?: 's' | 'm';
     variant?: 'ghost' | 'outline';
-    tip?: 'bottom' | 'top' | 'none';
+    /** Where the tooltip shows; `bottom-end` lines it up with the button's right edge (a button at the window's edge). */
+    tip?: 'bottom' | 'bottom-end' | 'top' | 'none';
     pressed?: boolean;
   };
   let { label, icon, href, size = 'm', variant = 'ghost', tip = 'bottom', pressed, class: cls = '', ...rest }: Props = $props();
@@ -82,17 +83,22 @@
     transition: opacity var(--dur-pop) ease-out, transform var(--dur-pop) ease-out; }
   .tip.bottom { top: calc(100% + 6px); transform-origin: 50% 0; }
   .tip.top { bottom: calc(100% + 6px); transform-origin: 50% 100%; }
+  /* At the right edge of a row: lined up with the button's right edge, so it never runs past the window. */
+  .tip.bottom-end { top: calc(100% + 6px); left: auto; right: 0; transform: scale(.97); transform-origin: 100% 0; }
   .ib:focus-visible .tip { opacity: 1; transform: translateX(-50%); }
+  .ib:focus-visible .tip.bottom-end { transform: none; }
 
   @media (hover: hover) and (pointer: fine) {
     .ib:hover { color: var(--text); }
     .ib[aria-pressed='true']:hover { color: var(--accent-text); }
     .outline:hover { border-color: var(--border-strong); }
     .ib:hover .tip { opacity: 1; transform: translateX(-50%); transition-delay: var(--delay-tip); }
+    .ib:hover .tip.bottom-end { transform: none; }
     /* Warm: another tooltip just hid, so this one shows at once and without the scale. */
     .ib.warm:hover .tip { transition-delay: 0s; transition-duration: 0s; }
   }
   @media (prefers-reduced-motion: reduce) {
     :global(html:not([data-motion='full'])) .tip, :global(html:not([data-motion='full'])) .ib:focus-visible .tip { transform: translateX(-50%); }
+    :global(html:not([data-motion='full'])) .tip.bottom-end { transform: none; }
   }
 </style>

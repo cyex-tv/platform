@@ -18,6 +18,7 @@
   import { looks, NO_LOOK, seedLook, wantLooks, type Look } from '$lib/cosmetics/store.svelte';
   import { clean, date } from '$lib/format';
   import { platformName } from '$lib/shell/account';
+  import { session } from '$lib/tool/session.svelte';
   import { myRoles, type PublicProfile } from './data.svelte';
   import FactPopover from './FactPopover.svelte';
   import { connectionUrl } from './public';
@@ -42,6 +43,8 @@
   let { account, relation, profile, seed = null, actions, heading = true, loading = false, facts = true, flat = false }: Props = $props();
 
   type Role = { id: string; name: string; public: boolean };
+  /** localStorage: '1' when your roles show only to you (app.html holds their line on a phone). */
+  const OWN_FLAGS_KEY = 'cyexOwnFlags';
   const name = $derived(clean(account.displayName));
   const look = $derived(looks[account.id] ?? seed ?? NO_LOOK);
   const connections = $derived(profile?.identities ?? []);
@@ -78,9 +81,22 @@
     if (loading || !relation.mine) return;
     myRoles()
       .then((list) => {
-        if (id === account.id) own = { id, roles: list };
+        if (id !== account.id) return;
+        own = { id, roles: list };
+        // app.html's hint for the next visit: your roles (hidden ones too) show only to you, so
+        // a phone keeps their line from the first paint.
+        try {
+          localStorage.setItem(OWN_FLAGS_KEY, list.length && !(profile?.roles ?? []).length ? '1' : '0');
+        } catch {
+          /* no hint */
+        }
       })
       .catch(() => {});
+  });
+  // The hint is for the first paint of your own profile only.
+  $effect(() => {
+    if (loading || !session.known) return;
+    if (!relation.mine || own?.id === account.id) document.documentElement.removeAttribute('data-own-flags');
   });
 </script>
 
@@ -227,5 +243,13 @@
     .band.flat { padding: 16px 0 12px; }
     .name { font-size: 20px; }
     .acts { grid-column: 1 / -1; }
+    /* Your own profile before the session is known (app.html's hint): the buttons' row is kept. */
+    :global(html[data-own]) .acts:empty { min-height: 40px; }
+  }
+  /* Phones: the roles get their own line under the name, so its height never depends on the name;
+     on your own profile (app.html's hint) that line is kept until your roles arrive. */
+  @media (max-width: 599.98px) {
+    .top { flex-direction: column; align-items: flex-start; }
+    :global(html[data-own-flags]) .top:not(:has(.flags)) { min-height: 52px; }
   }
 </style>

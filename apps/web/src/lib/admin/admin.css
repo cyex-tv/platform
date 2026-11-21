@@ -11,6 +11,7 @@
    Lists:
      .adm-toolbar   the row of filters and tools under the page head
      .adm-table     a dense table: uppercase head, 44px rows, hairlines, hover wash, picked row bold
+                    (.stack: cards of label/value pairs on a phone, each td's data-l the label)
      .adm-pager     paging under a list: Previous, "1-50 of 1.234", Next
 */
 
@@ -67,6 +68,22 @@
 .adm-table tr[aria-selected='true'] .lead svg { color: var(--accent-text); }
 .adm-table tr:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
 @media (hover: hover) and (pointer: fine) { .adm-table tbody tr:hover td { background: var(--row-hover); } }
+
+/* .adm-table.stack, the phone variant (the shop's items, codes and orders): under 720px each row is
+   a small card of label/value pairs (each td's data-l is its label), the primary cell (.pk) across
+   the top, nothing cut off. */
+@media (max-width: 719.98px) {
+  .adm-table.stack thead { display: none; }
+  .adm-table.stack, .adm-table.stack tbody { display: block; }
+  .adm-table.stack tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 16px; padding: 10px 12px; min-height: 44px; border-bottom: 1px solid var(--border); }
+  .adm-table.stack tbody tr:last-child { border-bottom: 0; }
+  .adm-table.stack td { display: flex; justify-content: space-between; gap: 8px; height: auto; max-width: none; padding: 2px 0; border: 0; text-align: left; }
+  .adm-table.stack td.pk { grid-column: 1 / -1; }
+  .adm-table.stack td[data-l]::before { content: attr(data-l); flex: none; color: var(--dim); font-size: var(--t-fine); }
+  .adm-table.stack td.ell { overflow: visible; white-space: normal; text-overflow: clip; }
+}
+/* The narrowest phones: one pair per line, so a long value never runs into the next label. */
+@media (max-width: 419.98px) { .adm-table.stack tr { grid-template-columns: minmax(0, 1fr); } }
 
 /* A list of rows that are buttons (a card list), one column. */
 .adm-rows { list-style: none; margin: 0; padding: 0; display: grid; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }

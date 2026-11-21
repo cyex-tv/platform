@@ -18,13 +18,13 @@ Every page is one of three shapes under the one header (`.claude/runs/2026-11-20
 
 | Component | Props | Usage |
 |---|---|---|
-| `InspectorLayout` (`lib/shell`) | `title` (the panel's uppercase label), `label?` (its accessible name), snippets `head?`, `tabs?`, `children`, `panel`, `panelActions?`; `narrow?: 'before' \| 'after'`, `fold?`, `headPad? = true`, `width? = 360`, `testid?` | The Inspector: head, tabs and content left; a full-height sticky panel right (facts, actions, related). Under 1100px one column, the panel a card before the content (or after it, `narrow="after"` for editors), folded behind a toggle with `fold`. Used by the set page, the set and emote editors and every /me page (through `MeFrame`). |
+| `InspectorLayout` (`lib/shell`) | `title` (the panel's uppercase label), `label?` (its accessible name), snippets `head?`, `tabs?`, `children`, `panel`, `panelActions?`; `narrow?: 'before' \| 'after'`, `fold?`, `headPad? = true`, `width? = 360`, `testid?` | The Inspector: head, tabs and content left; a full-height sticky panel right (facts, actions, related). Under 1100px one column, the panel a card before the content (or after it, `narrow="after"` for editors), folded behind a toggle with `fold`. Used by the profile, the set page, the download page, the set and emote editors and every /me page (through `MeFrame`). Past the 1520px wrap the panel's surface runs on to the window's edge (its content stays in the wrap), as on every right panel (the shop, the admin `Split`, the browse tray). |
 | `RailLayout` / `SideRail` (`lib/shell`) | as before | Rail + content: Settings and admin. |
 | `ColumnLayout` (`lib/shell`) | `width?`, `top?` | One column: reading pages, not-found and loading states. |
 | `MeFrame` (`lib/profile`) | `title`, `label?`, `panel`, `children`, `narrow?`, `fold?` | The /me pages' Inspector: you (ProfileHeader, flat), the profile's tabs plus the page you are on, the page's panel. The page's `PageHead` is its h1. |
 | `PanelBlock` | `title`, `count?`, `more?: { href, label }`, `fold?`, `bind:open?`, `level? = 3`, children | One block of a panel: uppercase label (a disclosure with `fold`), hairline between blocks. Inside: `<dl class="kv">` for facts (label left, value right), `.pb-actions` for full-width buttons (`.pair` for two side by side), `.pb-hint` for a line of help. |
 | `LinkTabs` | `label`, `items: { href, label, count?, current? }[]` | Tabs that are links (the URL holds the tab): bold current, no bar or fill, arrow keys. |
-| `FactList` | `items: { label, value, href?, mono? }[]`, `label?` | A facts list (label left, value right, hairlines, tabular numbers) outside a PanelBlock: order totals, download facts. |
+| `FactList` | `items: { label, value, href?, mono? }[]`, `label?` | A facts list (label left on one line, value right, hairlines, tabular numbers; a long value wraps in the room left): the shop's How it works, the download facts, order totals. |
 | `LinkRows` | `items: { href, label, hint?, icon?, external? }[]`, `label?` | Rows that lead somewhere (related pages, downloads): icon, label, hint line, chevron (arrow out for another site); the whole 44px row is the link. |
 | `SelectSwitch` (`browse/`) | `on`, `onchange(on)`, `label? = 'Select'` | The grid's Select-mode switch. |
 
@@ -58,7 +58,7 @@ Every page is one of three shapes under the one header (`.claude/runs/2026-11-20
 | `BottomSheet` | `bind:open`, `label`, `title? = true`, `onclose?`, snippets `children`, `footer?` | `<BottomSheet bind:open={filters} label="Filters">…{#snippet footer()}<button class="btn btn-primary">Show 120 emotes</button>{/snippet}</BottomSheet>` Modal dialog; drag the handle down, tap outside or Escape to close. |
 | `CopyLink` | `url: () => string`, `kind?: 'site' (.btn.btn-s) \| 'tool' (.ui-btn.secondary)` | `<CopyLink url={() => location.origin + page.url.pathname} />` The one Copy link button: "Copy link", then "Copied" or "Couldn’t copy", sized to the longest so it never jumps, with a status line for screen readers. |
 | `Chip` | `label`, `onremove?()`, `href?` | `<Chip label="Animated" onremove={() => drop('animated')} />` or `<Chip label="Animated" href={urlWithout('animated')} />` |
-| `IconButton` | `label`, `icon: IconName`, `href?`, `size?: 's' (32) \| 'm' (40)`, `variant?: 'ghost' \| 'outline'`, `tip?: 'bottom' \| 'top' \| 'none'`, `pressed?`, button attributes | `<IconButton icon="copy" label="Copy link" onclick={copy} />` `label` is the aria-label and the tooltip. |
+| `IconButton` | `label`, `icon: IconName`, `href?`, `size?: 's' (32) \| 'm' (40)`, `variant?: 'ghost' \| 'outline'`, `tip?: 'bottom' \| 'bottom-end' \| 'top' \| 'none'` (bottom-end: lined up with its right edge, for a button at the window's edge), `pressed?`, button attributes | `<IconButton icon="copy" label="Copy link" onclick={copy} />` `label` is the aria-label and the tooltip. |
 | `Icon` | `name: IconName`, `size? = 16`, `stroke? = 1.7` | `<Icon name="search" />` Names: search, x, menu, chevron-down, arrow-right, check, sliders, tv, file, log-out, enter, grid, grid-dense, copy, plus, more, pause, play, user, arrow-left, flag. Add Lucide paths to the map as needed. |
 | `Eyebrow` | `lit?: 'top' \| 'middle' \| 'bottom'`, children | `<Eyebrow lit="top">For channels</Eyebrow>` |
 | `SectionHead` | `title`, `eyebrow?`, `lit?`, `lead?`, `level?: 1 \| 2`, `size?: 'section' \| 'page'`, `center?`, `id?`, snippet `actions?` | `<SectionHead eyebrow="For channels" lit="top" title="One set per channel." lead="…" />` Page titles: `level={1} size="page"`. |
@@ -69,6 +69,8 @@ Every page is one of three shapes under the one header (`.claude/runs/2026-11-20
 `.page` (content column), `.wrap`, `.section`, `.btn`, `.btn-primary`, `.btn-s`, `.actions`, `.link`, `.input`, `.field`, `.mount`, `.steps`, `.band`, `.page-head`, `.muted`, `.fine`, `.sr-only`. The nav already shows one accent button (Get the extension); pages add at most one primary action per view.
 
 ## Things to know
+
+- No layout shift: the announcement bar comes from the root layout's server load (`routes/+layout.server.ts`; closing it is remembered in the `cyexAnnounceClosed` cookie). Anything that only the session can know (owner buttons, staff panels, editors) either has its place held from the first paint by an `app.html` hint (`data-signed`, `data-own`, `data-own-flags`, `data-announce`) or comes last in its column, so nothing under it can move.
 
 - Tokens added: `--ease-drawer`, `--dur-pop`, `--dur-sheet`, `--delay-tip`, `--z-nav`, `--z-pop`, `--z-tip`, `--scrim`, `--shadow-pop`, `--t-label`, `--emote-art`, `--emote-art-compact`, `--emote-chat`.
 - Inputs are 16px (no iOS zoom). Controls have `touch-action: manipulation` and no text selection.
