@@ -567,7 +567,7 @@ async fn anyone_sees_who_edits_an_account_but_not_what_they_may_do() {
         .await;
     assert_eq!(
         r["data"]["accountProfile"]["editors"],
-        json!([{ "id": bob.tid(), "displayName": "user2602" }]),
+        json!([{ "id": w.db.public(bob.id).await, "displayName": "user2602" }]),
         "{r}"
     );
     // The flags aren't readable without the editors permission.
