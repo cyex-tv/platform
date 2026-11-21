@@ -39,7 +39,6 @@ import {
   Group,
   HalfFloatType,
   Mesh,
-  MeshBasicMaterial,
   MeshPhysicalMaterial,
   NormalBlending,
   OneFactor,
@@ -331,7 +330,25 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
   const inkCap = makeInk();
   const inkSide = makeInk();
   // In the bloom's own render the unlit bars are black: they hide the rod's light where they're in front.
-  const occluder = own(new MeshBasicMaterial({ color: 0x000000 }));
+  // On dark they are dimly white there instead, so they get a soft white glow of their own (still
+  // opaque, so they still hide the rod's light where they're in front).
+  // The white comes from their outline (where the surface turns away), so the glow spreads round
+  // them and doesn't wash over their faces.
+  const occluder = own(
+    new ShaderMaterial({
+      vertexShader: shellVertex,
+      fragmentShader: /* glsl */ `
+        uniform float uWhite;
+        varying vec3 vN;
+        varying vec3 vV;
+        void main() {
+          float edge = 1.0 - clamp(abs(dot(normalize(vN), normalize(vV))), 0.0, 1.0);
+          gl_FragColor = vec4(vec3(uWhite * (0.15 + 0.85 * edge * edge)), 1.0);
+        }
+      `,
+      uniforms: { uWhite: { value: 0 } },
+    }),
+  );
 
   // The rod's clear sleeve: thin, nearly clear face on; its edges grow opaque and catch light.
   const edge = { uEdge: { value: new Color() }, uEdgeAlpha: { value: 0 } };
@@ -375,6 +392,11 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
   const glassMeshes: Mesh[] = [];
   let litBar: Group | null = null;
   let haloMesh: Mesh | null = null;
+  // The light step's white glow for the unlit bars (dark only): a soft dot behind each one, which
+  // the bar itself hides where it's in front, so only a glow round its outline shows.
+  const dot = tex(softDot());
+  const inkHalo = own(new SpriteMaterial({ map: dot, color: 0xffffff, transparent: true, depthWrite: false, opacity: 0 }));
+  const inkHalos: Sprite[] = [];
   let hazeSprite: Sprite | null = null;
   const lamps: PointLight[] = [];
   for (const b of BARS) {
@@ -384,6 +406,12 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
       const body = new Mesh(geo(frame(b)), [inkCap, inkSide]);
       inkMeshes.push(body);
       bar.add(body);
+      const h = new Sprite(inkHalo);
+      h.scale.set(b.w * 1.5, b.h * 2.4, 1);
+      // Well behind the bar, so the camera-facing quad never cuts through its inner walls.
+      h.position.z = -DEPTH * 1.2;
+      inkHalos.push(h);
+      bar.add(h);
     } else {
       const { hw, hh } = halfSize(b);
       rod.uniforms.uHalf.value.set(hw, hh);
@@ -401,7 +429,7 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
       haloMesh.renderOrder = 4;
       bar.add(haloMesh);
       // A faint haze in the air around it, always toward the camera.
-      haze.map = tex(softDot());
+      haze.map = dot;
       hazeSprite = new Sprite(haze);
       hazeSprite.scale.set(b.w * 1.8, b.h * 3.4, 1);
       hazeSprite.position.z = -DEPTH / 2;
@@ -461,6 +489,7 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
 
   function applyQuality() {
     if (haloMesh) haloMesh.visible = quality === 'low';
+    for (const h of inkHalos) h.visible = quality === 'low' && inkHalo.opacity > 0;
   }
 
   function paint() {
@@ -469,12 +498,15 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
     const accent = new Color(css('--accent') || (light ? '#14e6ff' : '#145aff'));
     const markInk = new Color(css('--mark-ink') || (light ? '#1b1c20' : '#e8e8ea'));
     // Dark: pale grey polymer; light: near-black, its shape in its clear coat's reflections.
-    inkCap.color.copy(markInk).multiplyScalar(light ? 1 : 0.42);
-    inkSide.color.copy(markInk).multiplyScalar(light ? 1 : 0.34);
+    inkCap.color.copy(markInk).multiplyScalar(L.inkCap);
+    inkSide.color.copy(markInk).multiplyScalar(L.inkSide);
     for (const m of [inkCap, inkSide]) {
-      m.roughness = light ? 0.42 : 0.5;
+      m.roughness = light ? 0.42 : 0.4;
       m.clearcoat = light ? 0.85 : 0.55;
-      m.emissive.copy(markInk).multiplyScalar(L.inkGlow * 0.5);
+      m.emissive.copy(markInk).multiplyScalar(L.inkGlow);
+      // Their own reflection strength (with an env map of its own, three uses the material's).
+      m.envMap = env;
+      m.envMapIntensity = L.inkReflect;
     }
     // The room's reflections (three applies the scene's strength to every lit material).
     scene.environmentIntensity = light ? 0.8 : 0.45;
@@ -496,7 +528,9 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
     halo.uniforms.uColor.value.copy(accent);
     haze.color.copy(accent);
     // On dark the glow adds light; on white it has to lay colour down instead.
-    for (const m of [halo, haze]) addLight(m, L.additive);
+    for (const m of [halo, haze, inkHalo]) addLight(m, L.additive);
+    occluder.uniforms.uWhite.value = L.inkBloom;
+    inkHalo.opacity = L.inkHalo;
     composite.uniforms.uAdd.value = L.additive ? 1 : 0;
     composite.uniforms.uGain.value = light ? 0.8 : 1;
     for (const lamp of lamps) lamp.color.copy(accent);
@@ -681,7 +715,7 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
     // writes it into the alpha too, so the still image keeps its glow.
     w.__logoSnap = () => {
       composite.uniforms.uKeep.value = 1;
-      for (const m of [halo, haze]) addLight(m, false);
+      for (const m of [halo, haze, inkHalo]) addLight(m, false);
       apply(REST);
       setLevel(1);
       draw();
