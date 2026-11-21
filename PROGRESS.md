@@ -1387,3 +1387,9 @@ gh pr create --base main --head feat/hero-motion --title "Hero: lean toward the 
 - Pages: overview (what waits as figures, then every section grouped), review (browse-style cards, all keys, undo and bulk kept; detail dialog two columns), reports (list + inspector, X/Shift+X, Enter, Esc), audit (dense table, URL filters, real paging), announcements (list + editor with a live preview), users and the user dashboard (Inspector two-column with tabs `?s=`, restrictions as settings rows), roles (list + inspector, limits shown; edit dialog grouped), give to many (three steps), entitlement graph, owners, badges and paints (tiles + inspector with owners, Give, Make larger sizes), paint studio (save bar, library / preview / settings columns), shop items, orders, codes (tables + inspector, URL-held filters).
 - Every permission check, call, shortcut and undo kept. Tests: `sections.test.ts`, `reports.test.ts`, `grant-logins.test.ts`, `shop-orders.test.ts`, `shop-codes.test.ts`, `restrictions-holds.ui.test.ts`, `account-list.ui.test.ts`, `announcement-preview.ui.test.ts`, more in `audit.test.ts` and `role-limits.test.ts`.
 - Manual (mock, owner): every page at 1280, 1920 and 375, dark and light; screens in `.claude/runs/2026-11-20-redesign/screens/partC/`.
+- GitHub writes:
+```
+git push -u origin feat/redesign-c
+gh pr create --repo cyex-tv/platform --base main --head feat/redesign-c --title "Redesign part C: admin" --body-file <file>
+```
+  PR #153, not merged (owner reviews).
