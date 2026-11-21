@@ -145,10 +145,10 @@
   /* Wide windows: no scroll bar inside the index (owner: none in side lists). It runs the full
      height of the left column and the page scrolls; the search stays pinned at its top. */
   @media (min-width: 900px) {
-    .help :global(.docs-nav) { position: relative; top: auto; align-self: stretch; max-height: none; }
+    .help :global(.docs-nav) { position: relative; top: auto; align-self: stretch; height: auto; max-height: none; }
     .help :global(.nav-scroll) { overflow: visible; }
-    .help :global(.nav-search) { position: sticky; top: calc(var(--docs-top) + var(--rail-gap)); z-index: 1; margin-right: 0;
-      padding-right: 12px; background: var(--surface); box-shadow: 0 -12px 0 var(--surface); }
+    .help :global(.nav-search) { position: sticky; top: calc(var(--docs-top) + 12px); z-index: 1; margin-right: 0;
+      padding-right: 12px; background: var(--bg); box-shadow: 0 -12px 0 var(--bg); }
   }
   .help :global(.nav-group-title) { display: flex; align-items: center; min-height: 32px; margin-bottom: 2px; }
   /* Questions are sentences: they wrap in the index instead of being cut. */

@@ -223,6 +223,34 @@ export function saleEndText(i: Pick<Timed, 'activeTo'>, now = Date.now()): strin
   return Date.parse(i.activeTo) <= now ? `Ended ${date(i.activeTo)}` : `On sale until ${date(i.activeTo)}`;
 }
 
+/** What an item holds, for its card and panel: `1 badge and 2 paints`, `3 paints`, `Nothing yet`. */
+export function contentsText(i: { badges: readonly unknown[]; paints: readonly unknown[] }): string {
+  const part = (n: number, one: string, many: string) => (n ? `${count(n)} ${n === 1 ? one : many}` : '');
+  return [part(i.badges.length, 'badge', 'badges'), part(i.paints.length, 'paint', 'paints')].filter(Boolean).join(' and ') || 'Nothing yet';
+}
+
+/** An item that holds more than one badge or paint: the shop calls it a bundle. */
+export function isBundle(i: { badges: readonly unknown[]; paints: readonly unknown[] }): boolean {
+  return i.badges.length + i.paints.length > 1;
+}
+
+/** The shop's kinds, for the filter above the grid (`?kind=` in the address). */
+export type ShopKind = 'all' | 'paints' | 'badges' | 'bundles';
+export const SHOP_KINDS: readonly ShopKind[] = ['all', 'paints', 'badges', 'bundles'];
+
+/** Reads `?kind=`; anything else is all. */
+export function shopKind(v: string | null): ShopKind {
+  return (SHOP_KINDS as readonly string[]).includes(v ?? '') ? (v as ShopKind) : 'all';
+}
+
+/** Whether an item belongs under a kind: a bundle is its own kind; a single paint or badge is its kind. */
+export function ofKind(i: { badges: readonly unknown[]; paints: readonly unknown[] }, kind: ShopKind): boolean {
+  if (kind === 'all') return true;
+  if (kind === 'bundles') return isBundle(i);
+  if (isBundle(i)) return false;
+  return kind === 'paints' ? i.paints.length > 0 : i.badges.length > 0;
+}
+
 /** The text file of a new batch's codes: one per line. */
 export function codesText(codes: readonly string[]): string {
   return `${codes.join('\n')}\n`;

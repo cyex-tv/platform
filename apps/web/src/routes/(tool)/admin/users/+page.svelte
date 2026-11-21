@@ -7,11 +7,10 @@
   import type { Platform, UserQuery } from '$lib/gql/graphql';
   import { USER } from '$lib/queries';
   import { looksLikeId } from '$lib/admin/audit';
-  import Avatar from '$lib/components/Avatar.svelte';
+  import Icon from '$lib/components/Icon.svelte';
   import State from '$lib/components/State.svelte';
+  import AccountList from '$lib/admin/AccountList.svelte';
   import AccountSearch from '$lib/admin/AccountSearch.svelte';
-  import PaintedName from '$lib/cosmetics/PaintedName.svelte';
-  import { lookFor, NO_LOOK, type Look } from '$lib/cosmetics/store.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
   import { loader } from '$lib/tool/loader.svelte';
@@ -24,19 +23,24 @@
     page.url.searchParams.has('name') ? 'NAME' : (page.url.searchParams.get('platform')?.toUpperCase() as Platform) || 'TWITCH',
   );
   let login = $state(page.url.searchParams.get('name') ?? page.url.searchParams.get('login') ?? '');
-  let look = $state<Look>(NO_LOOK);
 
   const L = loader(async ({ fetch }) => {
     if (page.url.searchParams.has('name')) return { found: null as Found | null, searched: false };
     const p = (page.url.searchParams.get('platform')?.toUpperCase() as Platform) || 'TWITCH';
     const name = (page.url.searchParams.get('login') ?? '').trim().toLowerCase();
-    look = NO_LOOK;
     if (!name) return { found: null as Found | null, searched: false };
     const r = await gql(USER, { platform: p, login: name }, fetch);
-    const f = r.channelByLogin;
-    if (f) lookFor(f.platform, f.platformChannelId).then((l) => (look = l));
-    return { found: f, searched: true };
+    return { found: r.channelByLogin, searched: true };
   });
+
+  // Arrow down from the field goes into the results.
+  function down(e: KeyboardEvent) {
+    if (e.key !== 'ArrowDown') return;
+    const first = document.querySelector<HTMLElement>('ul.adm-rows [data-item]');
+    if (!first) return;
+    e.preventDefault();
+    first.focus();
+  }
 
   function search(e: SubmitEvent) {
     e.preventDefault();
@@ -52,9 +56,13 @@
 
 <PageHead title="Users" line="Find someone by name, by the login they signed in with, or by account ID." />
 
-<form class="find ui-panel" onsubmit={search}>
-  <Segmented label="Platform" options={[{ value: 'TWITCH', label: 'Twitch', icon: 'twitch' }, { value: 'KICK', label: 'Kick', icon: 'kick' }, { value: 'NAME', label: 'Any name', icon: 'user' }]} value={platform} onchange={(v) => (platform = v)} />
-  <input class="ui-input" bind:value={login} placeholder={platform === 'NAME' ? 'Name or login' : 'Login or account ID'} aria-label={platform === 'NAME' ? 'Name or login' : 'Login or account ID'} autocomplete="off" spellcheck="false" maxlength="100" />
+<form class="adm-toolbar" onsubmit={search} role="search">
+  <Segmented label="Platform" size="s" options={[{ value: 'TWITCH', label: 'Twitch', icon: 'twitch' }, { value: 'KICK', label: 'Kick', icon: 'kick' }, { value: 'NAME', label: 'Any name', icon: 'user' }]} value={platform} onchange={(v) => (platform = v)} />
+  <label class="adm-find grow">
+    <Icon name="search" size={15} />
+    <span class="sr-only">{platform === 'NAME' ? 'Name or login' : 'Login or account ID'}</span>
+    <input class="ui-input" bind:value={login} onkeydown={down} placeholder={platform === 'NAME' ? 'Name or login' : 'Login or account ID'} autocomplete="off" spellcheck="false" maxlength="100" />
+  </label>
   <button class="ui-btn primary" type="submit" disabled={!login.trim()}>Find</button>
 </form>
 
@@ -64,28 +72,11 @@
 <LoadGate source={L} label="Looking them up…">
 {#snippet children(result)}
 {#if !result.found}
-  <div class="empty"><State title="Nobody found.">No one with that login has signed in to cyex.tv.</State></div>
+  <State title="Nobody found.">No one with that login has signed in to cyex.tv.</State>
 {:else}
   {@const f = result.found}
-  <ul class="ui-panel ui-list result">
-    <li>
-      <Avatar src={f.account.avatar} name={f.account.displayName} size={40} tone="tool" />
-      <span class="what">
-        <a class="open" href="/admin/users/{encodeURIComponent(f.account.id)}"><PaintedName name={f.account.displayName} paint={look.paint} badge={look.badge} /></a>
-        <span class="ui-hint"><bdi>{f.login}</bdi> on {f.platform === 'TWITCH' ? 'Twitch' : 'Kick'}</span>
-      </span>
-      <a class="ui-btn secondary small" href="/admin/users/{encodeURIComponent(f.account.id)}">Open account</a>
-    </li>
-  </ul>
+  <AccountList items={[{ account: f.account, identities: [{ platform: f.platform, login: f.login }] }]} />
 {/if}
 {/snippet}
 </LoadGate>
 {/if}
-
-<style>
-  .find { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; max-width: var(--measure-form); padding: 10px; margin-bottom: 16px; }
-  .find .ui-input { flex: 1; min-width: 160px; }
-  .result, .empty { max-width: var(--measure-form); }
-  .what { display: grid; flex: 1; min-width: 0; }
-  .open { font-weight: 600; color: var(--text); }
-</style>

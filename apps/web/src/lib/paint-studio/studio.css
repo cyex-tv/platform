@@ -4,31 +4,43 @@
 .ps { --ps-gap: 16px; --ps-ink-dark: #efeff1; --ps-ink-light: #0e0e10; /* chat text on the fixed stage grounds */
    font-size: var(--t-tool); line-height: 1.5; color: var(--text); }
 .ps :where(h2, h3) { margin: 0; font-weight: 600; }
-.ps-layout { display: grid; gap: var(--ps-gap); grid-template-columns: minmax(0, 1fr); align-items: start; }
+/* Narrow: the preview first, then a slim strip that sticks, then the library, then the settings. */
+.ps-layout { display: flex; flex-direction: column; gap: var(--ps-gap); min-width: 0; }
+.ps-stagecol { order: -2; }
+.ps-mini { order: -1; }
+.ps-lib, .ps-par, .ps-stagecol { display: grid; gap: var(--ps-gap); min-width: 0; align-content: start; }
+/* Wide: library and settings on the left, the preview on the right, held in view while you edit. */
 @media (min-width: 1100px) {
-  .ps-layout { grid-template-columns: minmax(0, 1fr) minmax(360px, 440px); }
-  .ps-side { position: sticky; top: calc(var(--nav-h) + 12px); max-height: calc(100vh - var(--nav-h) - 24px); overflow: auto; scrollbar-width: thin; }
+  .ps-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 420px); grid-template-areas: 'lib stage' 'par stage'; align-items: start; }
+  .ps-lib { grid-area: lib; } .ps-par { grid-area: par; }
+  .ps-stagecol { grid-area: stage; order: 0; position: sticky; top: calc(var(--nav-h) + var(--ps-bar-h, 84px) + 12px); }
 }
-.ps-col { display: grid; gap: var(--ps-gap); min-width: 0; }
-.ps-side { display: grid; gap: var(--ps-gap); min-width: 0; }
+/* Wider still: library, the preview in the middle, settings on the right. */
+@media (min-width: 1560px) {
+  .ps-layout { grid-template-columns: 300px minmax(0, 1fr) 380px; grid-template-areas: 'lib stage par'; }
+}
 
-/* Top bar: name, mode, actions. */
-.ps-top { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; margin-bottom: var(--ps-gap); }
-.ps-top .ps-name { flex: 1 1 280px; min-width: 0; }
-.ps-top .ui-actions { margin-left: auto; }
+/* The save bar: name, actions, status. It sticks under the header. */
+.ps-savebar { position: sticky; top: var(--nav-h); z-index: var(--z-panel); display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 12px;
+  margin: 0 0 var(--ps-gap); padding: 8px 0; background: var(--bg); border-bottom: 1px solid var(--border); }
+.ps-savebar .ps-name { flex: 1 1 260px; min-width: 0; }
+.ps-savebar .ui-actions { margin-left: auto; }
+.ps-savebar .ps-sub { flex: 1 1 auto; margin: 0; min-height: 20px; }
+.ps-savebar .ps-status { flex: 1 1 auto; justify-content: flex-end; min-height: 20px; }
+.ps-playrow { justify-content: space-between; }
 
-/* Panels. */
+/* Panels: an uppercase caption in the head. */
 .ps-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); min-width: 0; }
-.ps-panel > header { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 6px 8px 6px 16px; border-bottom: 1px solid var(--border); }
-.ps-panel > header h2 { flex: 1; min-width: 0; font-size: var(--t-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-panel > header { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 4px 8px 4px 12px; border-bottom: 1px solid var(--border); }
+.ps-panel > header h2 { flex: 1; min-width: 0; font-size: var(--t-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ps-panel > header .ps-count { color: var(--dim); font-size: var(--text-hint); font-variant-numeric: tabular-nums; }
-.ps-body { display: grid; gap: 14px; padding: 14px 16px 16px; min-width: 0; }
-.ps-group { display: grid; gap: 10px; }
+.ps-body { display: grid; gap: 12px; padding: 12px; min-width: 0; }
+.ps-group { display: grid; gap: 8px; }
 .ps-group > .ui-label { margin-top: 4px; }
 
 /* Fields. */
 .ps-field { display: grid; gap: 6px; min-width: 0; }
-.ps-field > label, .ps-field > .ps-flabel { font-size: var(--text-sub); font-weight: 600; color: var(--text); }
+.ps-field > label, .ps-field > .ps-flabel { font-size: var(--t-fine); font-weight: 600; color: var(--muted); }
 .ps-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; }
 .ps-msg { font-size: var(--text-hint); color: var(--red); }
 .ps-hint { font-size: var(--text-hint); color: var(--dim); }
@@ -36,32 +48,32 @@
 
 /* Slider + number. */
 .ps-slider { display: grid; grid-template-columns: minmax(0, 1fr) 84px; align-items: center; gap: 10px; }
-.ps-slider input[type='range'] { width: 100%; height: 40px; margin: 0; accent-color: var(--accent); background: none; cursor: pointer; }
-.ps-num { width: 84px; min-height: 40px; padding: 6px 8px; font: inherit; font-size: 16px; text-align: right; font-variant-numeric: tabular-nums;
+.ps-slider input[type='range'] { width: 100%; height: 28px; margin: 0; accent-color: var(--accent); background: none; cursor: pointer; }
+.ps-num { width: 84px; min-height: 32px; padding: 4px 8px; font: inherit; font-size: var(--t-small); text-align: right; font-variant-numeric: tabular-nums;
   color: var(--text); background: var(--surface); border: 1px solid var(--field-border); border-radius: var(--radius-btn); }
 .ps-num:focus-visible, .ps-hex:focus-visible, .ps-text:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 .ps-num[aria-invalid='true'], .ps-hex[aria-invalid='true'], .ps-text[aria-invalid='true'] { border-color: var(--red); }
 
 /* Colour. */
 .ps-colour { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.ps-swatch { position: relative; width: 40px; height: 40px; flex: none; border: 1px solid var(--field-border); border-radius: var(--radius-btn); overflow: hidden;
+.ps-swatch { position: relative; width: 32px; height: 32px; flex: none; border: 1px solid var(--field-border); border-radius: var(--radius-btn); overflow: hidden;
   background: repeating-conic-gradient(var(--checker-a) 0 25%, var(--checker-b) 0 50%) 0 0 / 10px 10px; }
 .ps-swatch > span { position: absolute; inset: 0; }
 .ps-swatch input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
 .ps-swatch:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-.ps-hex { width: 118px; min-height: 40px; padding: 6px 10px; font-family: var(--font-mono); font-size: 15px; text-transform: uppercase;
+.ps-hex { width: 108px; min-height: 32px; padding: 4px 8px; font-family: var(--font-mono); font-size: var(--t-small); text-transform: uppercase;
   color: var(--text); background: var(--surface); border: 1px solid var(--field-border); border-radius: var(--radius-btn); }
 .ps-alpha { display: flex; align-items: center; gap: 6px; flex: 1 1 160px; min-width: 140px; }
-.ps-alpha input[type='range'] { flex: 1; min-width: 0; height: 40px; margin: 0; accent-color: var(--accent); }
+.ps-alpha input[type='range'] { flex: 1; min-width: 0; height: 28px; margin: 0; accent-color: var(--accent); }
 .ps-alpha output { min-width: 44px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: var(--text-sub); }
-.ps-text { width: 100%; min-height: 40px; padding: 8px 12px; font: inherit; font-size: 16px; color: var(--text);
+.ps-text { width: 100%; min-height: 32px; padding: 4px 10px; font: inherit; font-size: var(--t-small); color: var(--text);
   background: var(--surface); border: 1px solid var(--field-border); border-radius: var(--radius-btn); }
 
 /* Lists of layers, effects, stops and shadows. */
 .ps-list { list-style: none; margin: 0; padding: 0; display: grid; }
-.ps-item { display: flex; align-items: center; gap: 4px; min-height: 44px; padding: 2px 4px 2px 8px; border-bottom: 1px solid var(--border); }
+.ps-item { display: flex; align-items: center; gap: 4px; min-height: 36px; padding: 0 4px 0 6px; border-bottom: 1px solid var(--border); }
 .ps-item:last-child { border-bottom: 0; }
-.ps-item .ps-pick { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 8px; border: 0; background: none;
+.ps-item .ps-pick { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px; border: 0; background: none;
   font: inherit; text-align: left; color: var(--muted); cursor: pointer; border-radius: var(--radius); }
 .ps-item .ps-pick > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ps-item .ps-pick small { color: var(--dim); font-size: var(--text-hint); }
@@ -91,7 +103,7 @@
 .ps-names { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; min-width: 0; }
 .ps-painted { display: inline-block; max-width: 100%; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: clip;
   -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
-.ps-big { font-size: 30px; line-height: 1.25; letter-spacing: -.01em; }
+.ps-big { font-size: 28px; line-height: 1.25; letter-spacing: -.01em; }
 /* The readability floor (a halo on the finished name, as the site draws it): a wrapper so it filters the paint's own shadows too. */
 .ps-floor { display: block; min-width: 0; max-width: 100%; }
 .ps-chat .ps-floor { display: inline; }
@@ -126,7 +138,7 @@
 .ps-card:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 
 .ps-presets { display: flex; flex-wrap: wrap; gap: 8px; }
-.ps-preset { display: inline-flex; align-items: center; min-height: 40px; padding: 0 12px; font: inherit; font-weight: 600; font-size: 15px; cursor: pointer;
+.ps-preset { display: inline-flex; align-items: center; min-height: 32px; padding: 0 10px; font: inherit; font-weight: 600; font-size: var(--t-small); cursor: pointer;
   background: var(--stage-dark); border: 1px solid var(--border-strong); border-radius: var(--radius-btn); }
 .ps-preset.light { background: var(--stage-light); }
 .ps-preset:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
@@ -147,8 +159,15 @@ textarea.ps-text { min-height: 180px; font-family: var(--font-mono); font-size: 
   .ps-painted { -webkit-text-fill-color: currentColor; background: none; }
 }
 .ps-stage.ps-chip { padding: 8px 10px; border-radius: var(--radius); }
-.ps .ui-check .ui-switch { width: 40px; height: 40px; margin: 0 -4px 0 -6px; } /* .ui-check sizes plain checkboxes to 16px */
-@media (pointer: coarse) { .ps .ui-check .ui-switch { width: 44px; height: 44px; } }
+.ps .ui-check .ui-switch { width: 32px; height: 32px; margin: 0 -2px 0 -4px; } /* .ui-check sizes plain checkboxes to 16px */
+@media (pointer: coarse) {
+  .ps .ui-check .ui-switch { width: 44px; height: 44px; }
+  .ps-text, .ps-num, .ps-hex { min-height: 44px; font-size: 16px; }
+  .ps-swatch { width: 44px; height: 44px; }
+  .ps-item { min-height: 44px; }
+  .ps-slider input[type='range'], .ps-alpha input[type='range'] { height: 44px; }
+  .ps-preset { min-height: 44px; }
+}
 .ps-chat .ps-painted { display: inline; overflow: visible; }
 .ps-chat .colon { margin-right: 4px; }
 /* Stops and shadows sit in two columns where the panel is wide enough. */
@@ -157,15 +176,18 @@ textarea.ps-text { min-height: 180px; font-family: var(--font-mono); font-size: 
   .ps-rowcard { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 20px; align-items: end; }
   .ps-rowcard > .ps-rowhead, .ps-rowcard > .ps-msg { grid-column: 1 / -1; }
 }
-/* Narrow screens: the preview panel sits below the editor, so a slim strip keeps the paint in view. */
-.ps-mini { position: sticky; top: var(--nav-h); z-index: var(--z-panel); display: grid; grid-template-columns: 1fr 1fr; margin: 0 0 12px;
+/* A slim strip that keeps the paint in view while you scroll the settings on a phone. */
+.ps-mini { position: sticky; top: calc(var(--nav-h) + var(--ps-bar-h, 84px)); z-index: var(--z-panel); display: grid; grid-template-columns: 1fr 1fr;
   border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
-.ps-mini > span { display: flex; align-items: center; min-width: 0; padding: 8px 12px; }
+.ps-mini > span { display: flex; align-items: center; min-width: 0; padding: 6px 12px; }
 .ps-mini > span:first-child { background: var(--stage-dark); }
 .ps-mini > span:last-child { background: var(--stage-light); }
 @media (min-width: 1100px) { .ps-mini { display: none; } }
+.ps-previewpanel > header { padding-right: 8px; }
 /* Narrow panels: a layer's name gets its own line, its tools sit under it on the right. */
 @container (max-width: 460px) {
   .ps-item { flex-wrap: wrap; justify-content: flex-end; padding-block: 4px; }
   .ps-item .ps-pick { flex: 1 1 100%; }
 }
+.ps .ui-check { gap: 8px; align-items: center; }
+@media (max-width: 699px) { .ps-savebar { position: static; } .ps-mini { top: var(--nav-h); } }

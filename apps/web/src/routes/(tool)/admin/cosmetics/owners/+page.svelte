@@ -115,93 +115,66 @@
 
 <svelte:head><title>Owners - Admin - cyex.tv</title></svelte:head>
 
-<PageHead title="Owners" line="Look up who holds a badge, paint or role, how they got it and since when." />
+<PageHead title="Owners" line="Who holds a badge, paint or role, how they got it and since when." />
 
 {#if !allowed}
   <State level={2} title="No access here.">This needs See where things came from (entitlements.view) or Give cosmetics.</State>
 {:else}
-  <form class="ui-panel reverse" onsubmit={openAccount}>
-    <label class="ui-field grow">
-      <span class="ui-label">Or an account: everything it owns</span>
-      <input class="ui-input" bind:value={who} oninput={() => (notFound = false)} placeholder="Login, account ID or its admin page link" autocomplete="off" spellcheck="false" />
+  <div class="adm-toolbar" role="search">
+    <Segmented label="Kind" size="s" compact options={KINDS} value={kind} onchange={(v) => { filter = ''; go({ kind: v === 'badge' ? '' : v, item: '' }); }} />
+    <label class="adm-find find">
+      <Icon name="search" size={15} />
+      <span class="sr-only">Search {kind}s</span>
+      <input class="ui-input" type="search" bind:value={filter} placeholder="Search {kind}s" autocomplete="off" spellcheck="false" />
     </label>
-    <button class="ui-btn secondary" type="submit" disabled={!who.trim() || finding}>{finding ? 'Lookingâ€¦' : 'Open its graph'}</button>
-    {#if notFound}<p class="ui-hint miss" role="status">Nobody has signed in with that login.</p>{/if}
-  </form>
-
-  <div class="split">
-    <section class="ui-panel items" aria-labelledby="items-h">
-      <header><h2 id="items-h">Items</h2></header>
-      <div class="pick">
-        <Segmented label="Kind" size="s" compact options={KINDS} value={kind} onchange={(v) => { filter = ''; go({ kind: v === 'badge' ? '' : v, item: '' }); }} />
-        <label class="find">
-          <Icon name="search" size={15} />
-          <span class="sr-only">Search {kind}s</span>
-          <input class="ui-input" type="search" bind:value={filter} placeholder="Search {kind}s" autocomplete="off" spellcheck="false" />
-        </label>
-      </div>
-      <LoadGate source={C} label="Loading itemsâ€¦">
-        {#snippet children()}
-          {#if !list.length}
-            <p class="ui-hint empty">{filter ? 'Nothing matches.' : `No ${kind}s yet.`}</p>
-          {:else}
-            <ul class="choices" aria-label="{kind}s">
-              {#each list as x (x.id)}
-                <li>
-                  <a href="?{new URLSearchParams({ ...(kind === 'badge' ? {} : { kind }), item: x.id })}" class:on={x.id === itemId} aria-current={x.id === itemId ? 'true' : undefined} data-sveltekit-keepfocus data-sveltekit-noscroll>
-                    {#if x.badge}<BadgeIcon badge={x.badge} size={20} />{:else if !x.paint}<Icon name="shield" size={16} />{/if}
-                    <span class="nm">{#if x.paint}<PaintedName name={x.name} paint={x.paint} />{:else}<bdi>{clean(x.name)}</bdi>{/if}</span>
-                    {#if x.id === itemId}<span class="tick"><Icon name="check" size={15} /></span>{/if}
-                  </a>
-                </li>
-              {/each}
-            </ul>
-          {/if}
-        {/snippet}
-      </LoadGate>
-    </section>
-
-    <section class="ui-panel holders" aria-labelledby="holders-h">
-      <header>
-        <h2 id="holders-h">{#if current || itemId}<bdi>{clean(current?.name ?? H.data?.find((g) => g.itemName)?.itemName ?? itemId)}</bdi>{:else}Holders{/if}</h2>
-        {#if itemId}<a class="ui-btn ghost small" href="/admin/entitlements?{kind}={encodeURIComponent(itemId)}">As a graph</a>{/if}
-      </header>
-      {#if !itemId}
-        <State bare title="Pick an item.">Its holders show here, with how and when they got it.</State>
-      {:else}
-        <LoadGate source={H} label="Looking up holdersâ€¦">
-          {#snippet children(grants)}
-            {#if grants}
-              <HoldersTable {grants} itemName={current?.name ?? itemId} onrevoke={mayRevoke && kind !== 'role' ? (g) => { target = g; dialog?.open(); } : undefined} />
-            {/if}
-          {/snippet}
-        </LoadGate>
-      {/if}
-    </section>
+    <label class="which">
+      <span class="sr-only">Which {kind}</span>
+      <select class="ui-input" value={current ? itemId : ''} disabled={!list.length} onchange={(e) => go({ item: e.currentTarget.value })}>
+        {#if !current}<option value="" disabled>{C.data ? (list.length ? `Pick a ${kind}` : filter ? 'Nothing matches' : `No ${kind}s yet`) : 'Loading…'}</option>{/if}
+        {#each list as x (x.id)}<option value={x.id}>{clean(x.name)}</option>{/each}
+      </select>
+    </label>
+    <form class="who" onsubmit={openAccount}>
+      <label class="adm-find">
+        <Icon name="user" size={15} />
+        <span class="sr-only">An account: everything it owns</span>
+        <input class="ui-input" bind:value={who} oninput={() => (notFound = false)} placeholder="Account login or ID" autocomplete="off" spellcheck="false" />
+      </label>
+      <button class="ui-btn secondary" type="submit" disabled={!who.trim() || finding}>{finding ? 'Looking…' : 'Open its graph'}</button>
+    </form>
   </div>
+  {#if notFound}<p class="ui-hint miss" role="status">Nobody has signed in with that login.</p>{/if}
+
+  {#if !itemId}
+    <State title="Pick an item.">Its holders show here, with how and when they got it.</State>
+  {:else}
+    <div class="ihead">
+      <h2 class="adm-name">
+        {#if current?.badge}<BadgeIcon badge={current.badge} size={22} />{/if}
+        {#if current?.paint}<PaintedName name={current.name} paint={current.paint} />{:else}<bdi>{clean(current?.name ?? H.data?.find((g) => g.itemName)?.itemName ?? itemId)}</bdi>{/if}
+      </h2>
+      <a class="ui-btn ghost small" href="/admin/entitlements?{kind}={encodeURIComponent(itemId)}"><Icon name="network" size={14} />As a graph</a>
+    </div>
+    <LoadGate source={H} label="Looking up holders…">
+      {#snippet children(grants)}
+        {#if grants}
+          <HoldersTable {grants} itemName={current?.name ?? itemId} onrevoke={mayRevoke && kind !== 'role' ? (g) => { target = g; dialog?.open(); } : undefined} />
+        {/if}
+      {/snippet}
+    </LoadGate>
+  {/if}
 {/if}
 
 <ReasonDialog bind:this={dialog} title="Take it away?" hint="If they show it, it stops at once. The reason goes in the audit log." action="Revoke" danger optional onsubmit={revoke} />
 
 <style>
-  .reverse { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 12px; margin-bottom: 12px; }
-  .grow { flex: 1; min-width: min(240px, 100%); }
-  .miss { flex-basis: 100%; margin: 0; }
-  .split { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: 12px; align-items: start; }
-  @media (min-width: 1000px) { .split { grid-template-columns: minmax(240px, 300px) minmax(0, 1fr); } }
-  .items header, .holders header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .holders h2 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pick { display: grid; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
-  .find { position: relative; display: flex; align-items: center; }
-  .find :global(svg) { position: absolute; left: 10px; color: var(--dim); pointer-events: none; }
-  .find input { width: 100%; padding-left: 32px; }
-  .empty { margin: 0; padding: 10px 14px; }
-  .choices { list-style: none; margin: 0; padding: 4px 0; max-height: min(60vh, 640px); overflow-y: auto; }
-  @media (max-width: 999px) { .choices { max-height: 240px; } }
-  .choices a { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 4px 14px; color: var(--muted); text-decoration: none; }
-  @media (hover: hover) and (pointer: fine) { .choices a:hover { color: var(--text); background: var(--surface-hover); } }
-  .choices a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
-  .choices a.on { font-weight: 700; color: var(--text); }
-  .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .tick { display: inline-flex; color: var(--accent-text, var(--accent)); }
+  .find { flex: 1 1 160px; max-width: 220px; }
+  .which { flex: 1 1 180px; max-width: 240px; min-width: 0; }
+  .which select { width: 100%; }
+  .who { display: flex; gap: 8px; margin-left: auto; flex: 0 1 320px; min-width: 0; }
+  .who .adm-find { flex: 1; }
+  .miss { margin: -8px 0 12px; }
+  .ihead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+  .ihead h2 { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  @media (max-width: 760px) { .find, .which, .who { max-width: none; flex-basis: 100%; margin-left: 0; } }
 </style>

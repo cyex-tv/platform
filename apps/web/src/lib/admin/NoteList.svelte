@@ -8,6 +8,7 @@
   import { fail, notify } from '$lib/tool/notices.svelte';
   import { session } from '$lib/tool/session.svelte';
   import AccountLink from './AccountLink.svelte';
+  import More from './ui/More.svelte';
 
   type Note = { id: string; authorId?: string | null; body: string; createdAt: string };
   type Props = {
@@ -16,10 +17,12 @@
     add: (body: string) => Promise<Note>;
     remove: (id: string) => Promise<unknown>;
     placeholder: string;
+    /** How many notes show before Show all (default 5). */
+    limit?: number;
     /** Reports the count, for a tab label. */
     oncount?: (n: number) => void;
   };
-  let { key, load, add, remove, placeholder, oncount }: Props = $props();
+  let { key, load, add, remove, placeholder, limit = 5, oncount }: Props = $props();
   const MAX = 2000;
   const uid = $props.id();
 
@@ -27,6 +30,7 @@
   let problem = $state(false);
   let body = $state('');
   let busy = $state(false);
+  let all = $state(false);
   let seq = 0;
 
   async function fetchNotes() {
@@ -42,6 +46,7 @@
   $effect(() => {
     void key;
     notes = null;
+    all = false;
     fetchNotes();
   });
   $effect(() => {
@@ -91,10 +96,10 @@
 {:else if !notes}
   <State bare kind="loading" title="Loading notes…" />
 {:else if notes.length === 0}
-  <p class="ui-hint empty">No notes yet.</p>
+  <p class="empty">No notes yet.</p>
 {:else}
   <ul class="ui-list notes">
-    {#each notes as n (n.id)}
+    {#each all ? notes : notes.slice(0, limit) as n (n.id)}
       <li>
         <div class="note">
           <p class="body">{n.body}</p>
@@ -104,14 +109,15 @@
       </li>
     {/each}
   </ul>
+  <More total={notes.length} {limit} bind:expanded={all} />
 {/if}
 
 <style>
-  .add { display: grid; gap: 6px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .add { display: grid; gap: 6px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
   textarea { resize: vertical; min-height: 56px; background: var(--bg); }
-  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .empty { margin: 0; padding: 10px 14px 12px; }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 28px; }
+  .empty { margin: 0; padding: 12px 16px; font-size: var(--t-small); color: var(--muted); }
   .notes > li { align-items: flex-start; }
-  .note { display: grid; gap: 4px; flex: 1; min-width: 0; }
-  .body { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-sub); }
+  .note { display: grid; gap: 2px; flex: 1; min-width: 0; }
+  .body { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--t-small); }
 </style>

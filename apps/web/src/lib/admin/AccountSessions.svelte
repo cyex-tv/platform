@@ -5,12 +5,16 @@
   import type { AccountSessionsQuery } from '$lib/gql/graphql';
   import { ACCOUNT_SESSIONS } from '$lib/queries';
   import State from '$lib/components/State.svelte';
-  import { date, dateTime } from '$lib/format';
+  import { count, date, dateTime } from '$lib/format';
+  import Box from './ui/Box.svelte';
+  import More from './ui/More.svelte';
 
   type Row = AccountSessionsQuery['accountSessions'][number];
   let { accountId, refresh = '' }: { accountId: string; refresh?: string } = $props();
   let rows = $state<Row[] | null>(null);
   let problem = $state(false);
+  const LIMIT = 6;
+  let all = $state(false);
   let seq = 0;
 
   async function load() {
@@ -26,12 +30,12 @@
   $effect(() => {
     void accountId;
     void refresh;
+    all = false;
     load();
   });
 </script>
 
-<section class="ui-panel" aria-labelledby="ss-h">
-  <header><h2 id="ss-h">Sessions</h2>{#if rows}<span class="ui-hint ui-num">{rows.length}</span>{/if}</header>
+<Box title="Sessions" count={rows ? count(rows.length) : null}>
   {#if problem}
     <State bare kind="error" title="That didn’t load">
       {#snippet actions()}<button class="ui-btn secondary small" type="button" onclick={load}>Try again</button>{/snippet}
@@ -39,22 +43,27 @@
   {:else if !rows}
     <State bare kind="loading" title="Loading sessions…" />
   {:else if rows.length === 0}
-    <p class="ui-hint empty">Not signed in anywhere.</p>
+    <p class="box-none">Not signed in anywhere.</p>
   {:else}
     <ul class="ui-list">
-      {#each rows as s (s.id)}
+      {#each all ? rows : rows.slice(0, LIMIT) as s (s.id)}
         <li>
           <span class="what"><strong title={s.device}>{s.device}</strong><span class="ui-hint">{s.kind === 'SITE' ? 'Website' : 'App'} · signed in <span class="ui-num">{dateTime(s.createdAt)}</span></span></span>
           <span class="when ui-hint">Last used <span class="ui-num">{dateTime(s.lastSeenAt)}</span><br />Ends <span class="ui-num">{date(s.expiresAt)}</span></span>
         </li>
       {/each}
     </ul>
+    <More total={rows.length} limit={LIMIT} bind:expanded={all} />
   {/if}
-</section>
+</Box>
 
 <style>
   .what { display: grid; flex: 1; min-width: 0; }
-  .what strong { font-size: var(--text-sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .when { text-align: right; }
-  .empty { margin: 0; padding: 10px 14px 12px; }
+  .what strong { font-size: var(--t-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .what .ui-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .when { flex: none; text-align: right; font-size: var(--t-fine); line-height: 1.3; }
+  @media (max-width: 640px) {
+    li { flex-wrap: wrap; row-gap: 2px; }
+    .when { flex-basis: 100%; text-align: left; }
+  }
 </style>

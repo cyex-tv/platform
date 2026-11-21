@@ -2,6 +2,25 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Redesign part B: shop, redeem, docs pages, download, sign-in, errors (branch `feat/redesign-b`, owner request of 2026/11/21)
+
+"Redesign the whole platform top to bottom with the design picked": the reading and shop pages now use the Inspector shapes from `.claude/runs/2026-11-20-redesign/design-rules.md`. Shared components (`lib/components`) untouched (part A owns them).
+- [x] Shop (`/shop`): Inspector shape. Page head (title, one line, Redeem a code), kind filter (All, Paints, Badges, Bundles with counts, `?kind=`, only when there is more than one kind), the items as cells sharing hairlines, the open one ringed in the accent. Right panel (360, full height): "About the shop" (how it works, Redeem, Your orders or Sign in, help) until an item is open (`?item=`), then the item in full (`ItemBuy`: on your own name in both themes and a chat line, badges at 18 and 36 px, stock and sale, For me or Gift to someone with platform and login, Buy or Give). Escape closes the panel and focus goes back to the item. Under 1100px the item opens in the dialog as before (`ItemDialog` now wraps `ItemBuy`) and "About" follows the grid. Checkout status, gifting, staff-only items by link, sign-in return all as before.
+- [x] Redeem: page head with Shop, the form in a panel, the result as hairline rows (badges at 18 and 36 px, paints on your own name), a skeleton while the session loads.
+- [x] Docs layout (`/developers`, `/help`, `/changelog`): the index is now the browse page's left rail (full window height under the header, page ground, hairline right). Behaviour unchanged. `/guidelines` moved onto the same layout (rule index on the left, anchors kept).
+- [x] Download: Inspector shape (cells sharing hairlines, your browser bold with an accent tick; right panel "At a glance" and Next links). Anchors `#chrome #edge #opera #brave #firefox` kept.
+- [x] Sign-in: "What cyex.tv keeps" as a labelled key/value list. Error pages: the Problem state, then the failed address and status, and "Try instead" links, the closest first (`routes/error-links.ts`).
+- [x] Tests: `lib/shop/item-buy.ui.test.ts` (sign-in return, gift needs a login, gift target, failure stays open, owned item), `shop.test.ts` (contents, bundles, kinds), `routes/error-links.test.ts`.
+- [x] Manual (mock, 375/768/1280/1920, dark and light, keyboard: panel focus and Escape): `.claude/runs/2026-11-20-redesign/screens/partB/`.
+- Not changed: API, mock, codegen; landing page; shared components. No legal pages on main yet (branch `phase-9/legal`).
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/redesign-b
+gh pr create --repo cyex-tv/platform --base main --head feat/redesign-b --title "Redesign part B: shop, redeem, docs pages, download, sign-in, errors" --body-file <file>
+```
+
 ## Redesign: Inspector header, emote page and profile, Workspace browse (branch `feat/redesign`, owner choice of 2026/11/21)
 
 The owner picked from the three layout prototypes (`.claude/runs/2026-11-20-redesign/prototypes/`): the Inspector header, emote page and profile, and the Workspace browse with the sets on the left.
@@ -1381,6 +1400,18 @@ git push   # merges of origin/main, test fixes, ADR renumbered to 0027 (0026 tak
 git push -u origin feat/hero-motion
 gh pr create --base main --head feat/hero-motion --title "Hero: lean toward the pointer and a springy scroll turn" --body-file <file>
 ```
+## Redesign part C: admin (feat/redesign-c, 2026/11/21)
+- Frame: `lib/admin/shell/AdminShell.svelte` replaces the admin SideRail: a full-height rail flush left (the browse set rail's shape), sticky while it fits and scrolling with the page when not (`fit.ts`, no inner scroll bar, owner rule); under 900px a sticky "Admin · <section>" bar opens the rows in a bottom sheet. Sections live once in `lib/admin/shell/sections.ts` (rail and overview both read it).
+- Shared admin pieces: `lib/admin/admin.css` (`adm-*`: inspector head and sections, facts, toolbar, dense table, pager), `lib/admin/ui/Split.svelte` (list + 360px inspector flush right; bottom sheet or inline above under 1100px), `ui/pick.ts` (picked item in the URL, arrow keys over tiles and rows), `ui/Box.svelte`, `ui/More.svelte`.
+- Pages: overview (what waits as figures, then every section grouped), review (browse-style cards, all keys, undo and bulk kept; detail dialog two columns), reports (list + inspector, X/Shift+X, Enter, Esc), audit (dense table, URL filters, real paging), announcements (list + editor with a live preview), users and the user dashboard (Inspector two-column with tabs `?s=`, restrictions as settings rows), roles (list + inspector, limits shown; edit dialog grouped), give to many (three steps), entitlement graph, owners, badges and paints (tiles + inspector with owners, Give, Make larger sizes), paint studio (save bar, library / preview / settings columns), shop items, orders, codes (tables + inspector, URL-held filters).
+- Every permission check, call, shortcut and undo kept. Tests: `sections.test.ts`, `reports.test.ts`, `grant-logins.test.ts`, `shop-orders.test.ts`, `shop-codes.test.ts`, `restrictions-holds.ui.test.ts`, `account-list.ui.test.ts`, `announcement-preview.ui.test.ts`, more in `audit.test.ts` and `role-limits.test.ts`.
+- Manual (mock, owner): every page at 1280, 1920 and 375, dark and light; screens in `.claude/runs/2026-11-20-redesign/screens/partC/`.
+- GitHub writes:
+```
+git push -u origin feat/redesign-c
+gh pr create --repo cyex-tv/platform --base main --head feat/redesign-c --title "Redesign part C: admin" --body-file <file>
+```
+  PR #153, not merged (owner reviews).
 
 ## Redesign part A: set page, /me pages, settings, upload dialog, shared page shapes (branch `feat/redesign-a`, owner request of 2026/11/21)
 
@@ -1399,4 +1430,6 @@ Owner: "redesign the whole platform top to bottom with the design picked so ever
 ```
 git push -u origin feat/redesign-a
 gh pr create --repo cyex-tv/platform --base main --head feat/redesign-a --title "Redesign part A: set page, /me pages, settings, upload dialog, shared page shapes" --body-file <file>
+git push   (merge of origin/main after #151, #152, #153; SetEditors in the API contract test)
 ```
+  PR #154, not merged (owner reviews).

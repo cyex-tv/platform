@@ -7,7 +7,8 @@
   import type { AccountEditorsQuery, EditorPermission, Platform } from '$lib/gql/graphql';
   import { ACCOUNT_EDITORS, ADD_ACCOUNT_EDITOR, REMOVE_ACCOUNT_EDITOR, UPDATE_ACCOUNT_EDITOR } from '$lib/queries';
   import State from '$lib/components/State.svelte';
-  import { clean, iso } from '$lib/format';
+  import { clean, count, iso } from '$lib/format';
+  import Box from './ui/Box.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
   import { PERMISSIONS, permissionLabels, toggle, locked, MAX_EDITORS } from '$lib/tool/editors';
@@ -105,8 +106,7 @@
   </fieldset>
 {/snippet}
 
-<section class="ui-panel" aria-labelledby="ed-h">
-  <header><h2 id="ed-h">Editors</h2>{#if rows}<span class="ui-hint ui-num">{rows.length}</span>{/if}</header>
+<Box title="Editors" count={rows ? count(rows.length) : null}>
   {#if problem}
     <State bare kind="error" title="That didn’t load">
       {#snippet actions()}<button class="ui-btn secondary small" type="button" onclick={load}>Try again</button>{/snippet}
@@ -140,7 +140,7 @@
         {/each}
       </ul>
     {:else}
-      <p class="ui-hint pad">Nobody edits this account.</p>
+      <p class="box-none">Nobody edits this account.</p>
     {/if}
     {#if rows.length < MAX_EDITORS}
       <form class="add" onsubmit={add} novalidate>
@@ -156,19 +156,18 @@
       </form>
     {/if}
   {/if}
-</section>
+</Box>
 
 <style>
   .row { flex-wrap: wrap; }
   .what { display: grid; flex: 1; min-width: 0; }
-  .what a { display: block; min-height: 24px; line-height: 24px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .what a { display: block; min-height: 22px; line-height: 22px; font-weight: 600; font-size: var(--t-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .what .ui-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .acts { display: flex; gap: 6px; }
   .edit { flex-basis: 100%; display: grid; gap: 6px; }
   .flags { display: flex; flex-wrap: wrap; gap: 0 16px; margin: 0; padding: 0; border: 0; }
-  .add { display: grid; gap: 6px; padding: 12px 14px 10px; border-top: 1px solid var(--border); }
+  .add { display: grid; gap: 6px; padding: 12px 16px 10px; border-top: 1px solid var(--border); }
   .who { display: flex; flex-wrap: wrap; gap: 8px; }
   .who select { flex: 0 0 auto; width: auto; }
   .who input { flex: 1 1 140px; min-width: 0; }
-  .pad { margin: 0; padding: 10px 14px 12px; }
 </style>

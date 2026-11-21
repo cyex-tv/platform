@@ -1,0 +1,80 @@
+/* The admin pages' own pieces, on the shared tokens (loaded by AdminShell, so only admin pages get
+   them; every class is prefixed `adm-`). Dense web-tool density from cyex-app, the Inspector look
+   from the profile and emote pages: uppercase labels, hairlines, bold + accent icon for picked.
+
+   Inspector panel (inside lib/admin/ui/Split's panel):
+     .adm-ip-head   48px head: a label (or name) on the left, icon buttons on the right
+     .adm-ip-body   the panel's padding; sections inside are .adm-sec
+     .adm-sec       one block: an .adm-label head, content; hairline between blocks
+     .adm-kv        <dl> of facts: name left, value right (tabular), hairlines between
+     .adm-acts      a column of full-width actions
+   Lists:
+     .adm-toolbar   the row of filters and tools under the page head
+     .adm-table     a dense table: uppercase head, 44px rows, hairlines, hover wash, picked row bold
+     .adm-pager     paging under a list: Previous, "1-50 of 1.234", Next
+*/
+
+.adm-label, .adm-shell h2.adm-label, .adm-shell h3.adm-label { margin: 0; font-size: var(--t-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+
+/* ---- Inspector panel ---- */
+.adm-ip-head { position: sticky; top: var(--nav-h); z-index: 1; display: flex; align-items: center; gap: 4px; min-height: 48px; padding: 0 8px 0 16px;
+  border-bottom: 1px solid var(--border); background: var(--surface); }
+.adm-ip-head > .adm-label, .adm-ip-head > h2 { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-ip-head > h2 { margin: 0; font-size: var(--t-ui); font-weight: 600; }
+.adm-ip-body { display: grid; gap: 0; padding: 4px 16px 16px; }
+.adm-sec { display: grid; gap: 8px; min-width: 0; padding: 12px 0; }
+.adm-sec + .adm-sec { border-top: 1px solid var(--border); }
+.adm-sec > .adm-label { display: flex; align-items: center; gap: 8px; min-height: 20px; }
+.adm-sec > .adm-label .n { margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--dim); font-variant-numeric: tabular-nums; }
+.adm-hero { display: grid; gap: 10px; justify-items: start; min-width: 0; }
+.adm-stage { display: grid; place-items: center; width: 100%; min-height: 120px; padding: 16px; border: 1px solid var(--border);
+  border-radius: var(--radius-card); background: var(--bg); overflow: hidden; }
+.adm-name, .adm-shell .adm-name { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -.01em; line-height: 1.3; overflow-wrap: anywhere; }
+
+.adm-kv { display: grid; grid-template-columns: minmax(0, auto) minmax(0, 1fr); margin: 0; }
+.adm-kv dt, .adm-kv dd { margin: 0; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: var(--t-small); line-height: 1.4; }
+.adm-kv dt { padding-right: 16px; color: var(--muted); white-space: nowrap; }
+.adm-kv dd { min-width: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.adm-kv dd.mono { font-family: var(--font-mono); font-weight: 500; font-size: var(--t-fine); word-break: break-all; }
+.adm-kv dt:last-of-type, .adm-kv dd:last-of-type { border-bottom: 0; }
+
+.adm-acts { display: grid; gap: 8px; }
+.adm-acts .ui-btn { justify-content: flex-start; width: 100%; }
+.adm-acts.row { display: flex; flex-wrap: wrap; }
+.adm-acts.row .ui-btn { width: auto; }
+
+/* ---- Lists ---- */
+.adm-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 16px; }
+.adm-toolbar .grow { flex: 1 1 220px; min-width: 0; }
+.adm-find { position: relative; display: flex; align-items: center; min-width: 0; }
+.adm-find > svg { position: absolute; left: 11px; color: var(--dim); pointer-events: none; }
+.adm-find input { width: 100%; padding-left: 34px; }
+
+.adm-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--t-small); font-variant-numeric: tabular-nums;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
+.adm-table th { height: 36px; padding: 0 12px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--border);
+  font-size: var(--t-label); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); background: var(--surface); }
+.adm-table td { height: 44px; padding: 6px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; min-width: 0; }
+.adm-table tbody tr:last-child td { border-bottom: 0; }
+.adm-table .num { text-align: right; }
+.adm-table .shrink { width: 1%; white-space: nowrap; }
+.adm-table .ell { max-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-table .mono { font-family: var(--font-mono); font-size: var(--t-fine); }
+.adm-table .dim { color: var(--muted); }
+.adm-table tr[data-row] { cursor: pointer; }
+.adm-table tr[aria-selected='true'] td { color: var(--text); }
+.adm-table tr[aria-selected='true'] .lead { font-weight: 700; }
+.adm-table tr[aria-selected='true'] .lead svg { color: var(--accent-text); }
+.adm-table tr:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+@media (hover: hover) and (pointer: fine) { .adm-table tbody tr:hover td { background: var(--row-hover); } }
+
+/* A list of rows that are buttons (a card list), one column. */
+.adm-rows { list-style: none; margin: 0; padding: 0; display: grid; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
+.adm-rows > li + li { border-top: 1px solid var(--border); }
+
+.adm-pager { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 16px; font-size: var(--t-small); color: var(--dim); font-variant-numeric: tabular-nums; }
+
+/* A count after a page title ("Badges  12"), as the browse page's "Emotes 285 emotes". */
+.adm-count { margin-left: 10px; font-size: var(--t-nav); font-weight: 500; letter-spacing: 0; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+@media (pointer: coarse) { .adm-table td { height: 48px; } }

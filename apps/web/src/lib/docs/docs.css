@@ -26,19 +26,21 @@ html:has(.docs) { scroll-behavior: smooth; }
 }
 
 /* ---------- Shell ---------- */
-/* The page frame is RailLayout (the 1520 wrapper, rail column + content). The index is the shared
-   SideRail's look: 240px surface card, 6px radius, sticky under the header, its own scroll. */
+/* The page frame is RailLayout (the 1520 wrapper, rail column + content). The index is the browse
+   page's left rail (redesign, 2026/11/21): the full height of the window under the header, on the
+   page ground, a hairline on its right, from the window's left edge; sticky, with its own scroll. */
 .docs .docs-nav {
-  position: sticky; top: calc(var(--docs-top) + var(--rail-gap)); align-self: start;
-  max-height: calc(100dvh - var(--docs-top) - 2 * var(--rail-gap)); display: flex; flex-direction: column; min-width: 0;
-  padding: 12px 0 12px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card);
+  position: sticky; top: var(--docs-top); align-self: start;
+  height: calc(100svh - var(--docs-top)); max-height: none; display: flex; flex-direction: column; min-width: 0;
+  margin: calc(-1 * var(--rail-gap)) 0 0 calc(-1 * var(--page-pad)); padding: var(--rail-gap) 0 16px var(--page-pad);
+  border-right: 1px solid var(--border);
 }
 .docs .nav-search { position: relative; display: flex; align-items: center; margin: 0 12px 10px 0; flex: none; }
 /* The ring sits on the whole field, so it holds with the icon and clear button inside it. */
 .docs .nav-search:focus-within { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: var(--radius); }
 .docs .nav-search-icon { position: absolute; left: 10px; width: 14px; height: 14px; color: var(--dim); pointer-events: none; }
 .docs .nav-search input {
-  width: 100%; height: 40px; padding: 0 52px 0 32px; -webkit-appearance: none; appearance: none; border-radius: var(--radius); border: 1px solid var(--border);
+  width: 100%; height: 40px; padding: 0 52px 0 32px; -webkit-appearance: none; appearance: none; border-radius: var(--radius); border: 1px solid var(--border-strong);
   background: var(--bg); color: var(--text); font: inherit; font-size: var(--t-nav); outline: none;
   transition: border-color var(--fast), background var(--fast);
 }
@@ -263,7 +265,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 }
 @media (max-width: 899.98px) {
   /* The rail's sheet variant: not a card but a bar above the text with the Contents button. */
-  .docs .docs-nav { position: static; max-height: none; padding: 8px 0; background: none; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; }
+  .docs .docs-nav { position: static; height: auto; max-height: none; margin: 0; padding: 8px 0; background: none; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; }
   .docs .nav-search, .docs .nav-tools { margin-right: 0; }
   .docs .nav-toc { display: block; }
   .docs .nav-toc::details-content { display: block; }

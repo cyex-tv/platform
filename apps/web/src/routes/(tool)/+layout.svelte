@@ -1,9 +1,9 @@
 <script lang="ts">
   // The signed-in pages (your emotes, sets, channels, account, admin). The root layout already
   // draws the one AppHeader and Footer; this layout only signs you in (or sends you to /signin)
-  // and frames the page: Settings and, under /admin, the admin pages sit in a RailLayout with their
-  // rail; every other /me page draws its own Inspector frame (MeFrame, InspectorLayout), the same
-  // shape as your profile.
+  // and frames the page: under /admin the admin frame (AdminShell); Settings in a RailLayout with
+  // its rail; every other /me page draws its own Inspector frame (MeFrame, InspectorLayout), the
+  // same shape as your profile.
   import { onMount } from 'svelte';
   import { quiet } from '$lib/quiet';
   import { useToolButtons } from '$lib/components/btn';
@@ -14,17 +14,17 @@
   import { ADMIN_COUNTS } from '$lib/queries';
   import { settingsRail, isSettingsPath } from '$lib/account/settings';
   import Icon from '$lib/components/Icon.svelte';
-  import type { IconName } from '$lib/components/Icon.svelte';
   import RailLayout from '$lib/shell/RailLayout.svelte';
   import SideRail from '$lib/shell/SideRail.svelte';
-  import { markCurrent, type RailGroup } from '$lib/shell/rail';
+  import type { RailGroup } from '$lib/shell/rail';
+  import AdminShell from '$lib/admin/shell/AdminShell.svelte';
+  import { adminRail as adminRailFor } from '$lib/admin/shell/sections';
   import PageTitle from '$lib/components/PageTitle.svelte';
   import Problem from '$lib/components/Problem.svelte';
   import { problemTitle } from '$lib/components/problem';
   import State from '$lib/components/State.svelte';
   import { loadShopCounts, shopCounts } from '$lib/shop/counts.svelte';
   import { can, isAdmin, loadMe, session } from '$lib/tool/session.svelte';
-  import { USER_PAGE_PERMISSIONS } from '$lib/admin/permissions';
 
   let { children } = $props();
   useToolButtons(); // the tool pages' buttons are .ui-btn; shared components follow
@@ -34,8 +34,6 @@
   // Under /admin with staff permissions: the admin rail.
   const adminPath = $derived(path === '/admin' || path.startsWith('/admin/'));
   const admin = $derived(adminPath && isAdmin(session.me));
-
-  const row = (href: string, label: string, icon: IconName, show = true, count?: number) => (show ? [{ href, label, icon, count }] : []);
 
   // Settings (and the Editors page it lists) have their own rail; the other /me pages frame themselves.
   const settings = $derived(isSettingsPath(path));
@@ -57,50 +55,11 @@
     if (admin) loadShopCounts();
   });
 
+  // The admin rail: the sections your permissions open (lib/admin/shell/sections), with the open tickets and shop counts.
   const adminRail = $derived.by<RailGroup[]>(() => {
     void session.me; // permissions come from the account
-    const tickets = can('emotes.review') || can('emotes.takedown') || can('reports.manage');
-    const cosmetics = can('cosmetics.manage') || can('cosmetics.grant');
-    const groups: RailGroup[] = [
-      { items: row('/admin', 'Overview', 'gauge') },
-      {
-        toggle: { label: 'Tickets', icon: 'ticket' },
-        items: [
-          ...row('/admin/review', 'Review', 'inbox', can('emotes.review'), counts?.reviewQueue?.total),
-          ...row('/admin/reports', 'Reports', 'flag', tickets, counts?.reportQueue?.total),
-        ],
-      },
-      {
-        toggle: { label: 'Cosmetics', icon: 'palette' },
-        items: [
-          ...row('/admin/cosmetics/paints', 'Paints', 'brush', cosmetics),
-          ...row('/admin/cosmetics/badges', 'Badges', 'badge', cosmetics),
-          ...row('/admin/cosmetics/owners', 'Owners', 'users', can('cosmetics.grant')),
-        ],
-      },
-      {
-        toggle: { label: 'Shop', icon: 'shopping-bag' },
-        items: [
-          ...row('/admin/shop/items', 'Items', 'tag', can('shop.manage'), shopCounts.items),
-          ...row('/admin/shop/orders', 'Orders', 'list', can('shop.orders'), shopCounts.orders),
-          ...row('/admin/shop/codes', 'Codes', 'key', can('codes.manage'), shopCounts.codes),
-        ],
-      },
-      {
-        toggle: { label: 'People', icon: 'users' },
-        items: [
-          ...row('/admin/users', 'Users', 'users', USER_PAGE_PERMISSIONS.some(can)),
-          ...row('/admin/roles', 'Roles', 'key', can('roles.manage') || can('roles.assign')),
-          ...row('/admin/grants', 'Give to many', 'user-plus', can('cosmetics.grant') || can('roles.assign') || can('roles.manage')),
-          ...row('/admin/entitlements', 'Entitlement graph', 'network', can('entitlements.view') || can('cosmetics.grant')),
-        ],
-      },
-      {
-        toggle: { label: 'System', icon: 'settings' },
-        items: [...row('/admin/announcements', 'Announcements', 'message-square', can('site.announce')), ...row('/admin/audit', 'Audit log', 'scroll', can('audit.view'))],
-      },
-    ];
-    return markCurrent(groups.filter((g) => g.items.length), path, ['/admin']);
+    const c = { review: counts?.reviewQueue?.total, reports: counts?.reportQueue?.total, items: shopCounts.items, orders: shopCounts.orders, codes: shopCounts.codes };
+    return adminRailFor(can, c, path);
   });
 
   // A retry keeps the problem on screen until the answer is in, so the page's Try again button can tell it worked.
@@ -131,7 +90,11 @@
   {/if}
 {/snippet}
 
-{#if framed}
+{#if adminPath && (admin || (!session.me && !problem))}
+  <!-- Staff under /admin: the admin frame (full-height rail, no band). Before the account is known
+       the path decides, so the frame is there from the first paint and its rows fill in. -->
+  <AdminShell groups={adminRail} me={session.me?.id}><div class="ui-page" class:pending={!problem && !session.me}>{@render body()}</div></AdminShell>
+{:else if framed}
   <!-- A /me page draws its own frame (with the page wrapper); the sign-in states get a plain one. -->
   <div class="ui-page" class:pending={!problem && !session.me}>
     {#if problem || !session.me}<div class="wrap me-wait">{@render body()}</div>{:else}{@render children()}{/if}
@@ -139,16 +102,7 @@
 {:else}
 <RailLayout>
   {#snippet rail()}
-    {#if admin}
-      <SideRail label="Admin" groups={adminRail} fill>
-        {#snippet head()}
-          <div class="title"><strong>Admin</strong><span class="ui-chip">Staff</span></div>
-        {/snippet}
-        {#snippet foot()}
-          {#if session.me}<a class="rail-foot" href="/users/{session.me.id}"><Icon name="circle-user" /><span class="lbl">Your profile</span><Icon name="chevron-right" size={14} /></a>{/if}
-        {/snippet}
-      </SideRail>
-    {:else if session.me && settings}
+    {#if session.me && settings}
       <SideRail label="Settings" groups={settingsRail(path)} fill>
         {#snippet head()}<div class="title"><strong>Settings</strong></div>{/snippet}
         {#snippet foot()}<a class="rail-foot" href="/users/{session.me?.id}?s=overview"><Icon name="circle-user" /><span class="lbl">Your profile</span><Icon name="chevron-right" size={14} /></a>{/snippet}

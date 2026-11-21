@@ -1,15 +1,22 @@
 <script lang="ts">
-  // Admin: redeem code batches (codes.manage). A batch is a name, a prefix, how many codes, how many
+  // Admin: redeem code batches (codes.manage), a dense table; the picked batch (?batch=<id>) opens
+  // in the inspector with its facts, uses (used, left) and Turn off. A batch is a name, a prefix, how many codes, how many
   // times each can be used (once per account) and what they give: a shop item's cosmetics and/or
   // badges and paints picked here. Making one shows the plain codes ONCE, with Copy all and
   // Download .txt: the server keeps only hashes, so they can't be shown again. Disable turns off
   // every code of a batch.
+  // Arrows move over the rows, Enter picks, Escape closes the inspector.
   import { tick } from 'svelte';
+  import { page as route } from '$app/state';
   import { gql } from '$lib/api';
+  import { batchState, batchUsage } from '$lib/admin/shop-codes';
+  import Split from '$lib/admin/ui/Split.svelte';
+  import { gridKeys, pickInUrl } from '$lib/admin/ui/pick';
+  import IconButton from '$lib/components/IconButton.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import State from '$lib/components/State.svelte';
   import { loadCatalog, type Catalog } from '$lib/cosmetics/store.svelte';
-  import { clean, count, date, iso } from '$lib/format';
+  import { clean, count, date, dateTime, iso } from '$lib/format';
   import type { CodeBatchFieldsFragment } from '$lib/gql/graphql';
   import { CODE_BATCHES, CREATE_CODE_BATCH, DISABLE_CODE_BATCH, SHOP_ITEMS } from '$lib/queries';
   import CosmeticsPick from '$lib/shop/CosmeticsPick.svelte';
@@ -42,6 +49,8 @@
   });
   // Item choices need shop.manage; without it the batch just gives picked cosmetics.
   const canItems = () => can('shop.manage');
+
+  const pickedBatch = $derived(L.data ? appendUnique(L.data.items, more).find((b) => b.id === pickedId) ?? null : null);
 
   async function next() {
     if (loadingMore) return;
@@ -158,76 +167,141 @@
     }
   }
 
-  const status = (b: CodeBatchFieldsFragment) => (b.disabledAt ? 'Turned off' : b.expiresAt && Date.parse(b.expiresAt) <= Date.now() ? 'Expired' : 'Active');
-  const meta = (b: CodeBatchFieldsFragment) =>
-    [
-      `${b.prefix}-…`,
-      gives(b),
-      `${count(b.codeCount)} ${b.codeCount === 1 ? 'code' : 'codes'}, ${count(b.usesPerCode)} ${b.usesPerCode === 1 ? 'use' : 'uses'} each`,
-      b.expiresAt ? `expires ${date(b.expiresAt)}` : '',
-    ]
-      .filter(Boolean)
-      .join(' · ');
+  const pickedId = $derived(route.url.searchParams.get('batch'));
+  let body = $state<HTMLElement>();
+  function pick(id: string | null) {
+    void pickInUrl('batch', id);
+  }
+  // Closing the inspector puts focus back on the batch's row.
+  function unpick() {
+    const id = pickedId;
+    pick(null);
+    void tick().then(() => body?.querySelector<HTMLElement>(`[data-item="${CSS.escape(id ?? '')}"]`)?.focus());
+  }
+  function onkeydown(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || !pickedId || e.defaultPrevented || document.querySelector('dialog[open]')) return;
+    if ((e.target as HTMLElement | null)?.closest('input, textarea, select')) return;
+    e.preventDefault();
+    unpick();
+  }
+  function rowKey(e: KeyboardEvent, id: string) {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+      e.preventDefault();
+      pick(id);
+    }
+  }
   const gives = (b: CodeBatchFieldsFragment) =>
     [b.itemName ? clean(b.itemName) : '', b.badgeIds.length ? `${count(b.badgeIds.length)} ${b.badgeIds.length === 1 ? 'badge' : 'badges'}` : '', b.paintIds.length ? `${count(b.paintIds.length)} ${b.paintIds.length === 1 ? 'paint' : 'paints'}` : '']
       .filter(Boolean)
       .join(' + ') || 'Nothing';
 </script>
 
-<svelte:head><title>Codes - Admin - cyex.tv</title></svelte:head>
+<svelte:head><title>{pickedBatch ? `${clean(pickedBatch.name)} - Codes` : 'Codes'} - Admin - cyex.tv</title></svelte:head>
+
+<svelte:window {onkeydown} />
 
 <Gate permission="codes.manage">
-  <PageHead title="Codes" line="Batches of redeem codes for giveaways and events. The codes are shown once, when you make the batch.">
-    {#snippet actions()}
-      <button class="ui-btn primary" type="button" disabled={!L.data} onclick={() => L.data && make(L.data)}><Icon name="plus" size={15} />New batch</button>
-    {/snippet}
-  </PageHead>
+  <Split label="Code batch" open={!!pickedBatch} onclose={() => pick(null)}>
+    <PageHead title="Codes" line="Batches of redeem codes. The codes are shown once, when you make the batch.">
+      {#snippet actions()}
+        <button class="ui-btn primary" type="button" disabled={!L.data} onclick={() => L.data && make(L.data)}><Icon name="plus" size={15} />New batch</button>
+      {/snippet}
+    </PageHead>
 
-  <LoadGate source={L} label="Loading batches…">
-    {#snippet children(d)}
-      {@const rows = appendUnique(d.items, more)}
-      {#if !rows.length}
-        <State title="No batches yet.">
-          Make one for a giveaway: pick what it gives and how many codes you need.
-          {#snippet actions()}<button class="ui-btn primary" type="button" onclick={() => make(d)}>New batch</button>{/snippet}
-        </State>
-      {:else}
-        <ul class="list">
-          {#each rows as b (b.id)}
-            {@const st = status(b)}
-            <li class="item">
-              <div class="row">
-                <span class="what">
-                  <strong><bdi>{clean(b.name)}</bdi></strong>
-                  <span class="ui-hint">
-                    {meta(b)}
-                  </span>
-                </span>
-                <span class="used ui-num">{count(b.redemptions)} redeemed</span>
-                <span class="st" class:live={st === 'Active'}>{st}</span>
-                {#if st === 'Active'}
-                  <Confirm small label="Turn off" confirm="Click again to turn off every code" {busy} onconfirm={() => disable(b)} />
-                {:else}
-                  <span class="gap" aria-hidden="true"></span>
-                {/if}
-              </div>
-            </li>
-          {/each}
-        </ul>
-        {#if rows.length < d.total}
-          <div class="foot">
-            <button class="ui-btn secondary" type="button" disabled={loadingMore} onclick={next}>{loadingMore ? 'Loading…' : 'Show more'}</button>
-            <span class="ui-hint">{count(rows.length)} of {count(d.total)}</span>
-          </div>
+    <LoadGate source={L} label="Loading batches…">
+      {#snippet children(d)}
+        {@const rows = appendUnique(d.items, more)}
+        {#if !rows.length}
+          <State title="No batches yet.">
+            Make one for a giveaway: pick what it gives and how many codes you need.
+            {#snippet actions()}<button class="ui-btn primary" type="button" onclick={() => make(d)}>New batch</button>{/snippet}
+          </State>
+        {:else}
+          <table class="adm-table stack">
+            <thead>
+              <tr><th>Batch</th><th class="num" style="width:64px">Codes</th><th class="num" style="width:100px">Used</th><th style="width:92px">State</th><th style="width:100px">Expires</th></tr>
+            </thead>
+            <tbody bind:this={body} use:gridKeys={'tr[data-item]'}>
+              {#each rows as b, n (b.id)}
+                {@const st = batchState(b)}
+                {@const u = batchUsage(b)}
+                <tr data-row data-item={b.id} aria-selected={b.id === pickedId} tabindex={(pickedBatch ? b.id === pickedId : n === 0) ? 0 : -1}
+                  onclick={() => pick(b.id)} onkeydown={(e) => rowKey(e, b.id)}>
+                  <td class="ell pk"><span class="txt"><span class="nm"><bdi>{clean(b.name)}</bdi><span class="pre">{b.prefix}-…</span></span><span class="sub"><bdi>{gives(b)}</bdi></span></span></td>
+                  <td class="num" data-l="Codes">{count(b.codeCount)}</td>
+                  <td class="num" data-l="Used">{count(u.used)} of {count(u.total)}</td>
+                  <td data-l="State"><span class="st" class:live={st === 'Active'}>{st}</span></td>
+                  <td class="dim" data-l="Expires">{b.expiresAt ? date(b.expiresAt) : 'Never'}</td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+          {#if rows.length < d.total}
+            <div class="adm-pager">
+              <button class="ui-btn secondary small" type="button" disabled={loadingMore} onclick={next}>{loadingMore ? 'Loading…' : 'Show more'}</button>
+              <span>{count(rows.length)} of {count(d.total)}</span>
+            </div>
+          {/if}
         {/if}
+      {/snippet}
+    </LoadGate>
+
+    {#snippet empty()}
+      <div class="adm-ip-head"><span class="adm-label">Batch</span></div>
+      <p class="none">Pick a batch to see how much of it was used, or turn it off.</p>
+    {/snippet}
+
+    {#snippet panel()}
+      {#if pickedBatch}
+        {@const b = pickedBatch}
+        {@const st = batchState(b)}
+        {@const u = batchUsage(b)}
+        <div class="adm-ip-head">
+          <span class="adm-label">Batch</span>
+          <IconButton label="Close" icon="x" size="s" onclick={unpick} />
+        </div>
+        <div class="adm-ip-body">
+          <section class="adm-sec">
+            <h2 class="adm-name"><bdi>{clean(b.name)}</bdi></h2>
+            <p class="line"><span class="st" class:live={st === 'Active'}>{st}</span> · <span class="mono">{b.prefix}-…</span></p>
+          </section>
+          <section class="adm-sec">
+            <h3 class="adm-label">Uses</h3>
+            <dl class="adm-kv">
+              <dt>Codes</dt><dd>{count(b.codeCount)}</dd>
+              <dt>Uses per code</dt><dd>{count(b.usesPerCode)}</dd>
+              <dt>Used</dt><dd>{count(u.used)} of {count(u.total)}</dd>
+              <dt>Unused</dt><dd>{count(u.left)}</dd>
+            </dl>
+          </section>
+          <section class="adm-sec">
+            <h3 class="adm-label">Facts</h3>
+            <dl class="adm-kv">
+              <dt>Gives</dt><dd>{gives(b)}</dd>
+              <dt>Expires</dt><dd>{b.expiresAt ? dateTime(b.expiresAt) : 'Never'}</dd>
+              {#if b.disabledAt}<dt>Turned off</dt><dd>{dateTime(b.disabledAt)}</dd>{/if}
+              <dt>Made</dt><dd>{dateTime(b.createdAt)}</dd>
+              {#if b.createdBy}<dt>Made by</dt><dd><bdi>{clean(b.createdBy.displayName)}</bdi></dd>{/if}
+              <dt>ID</dt><dd class="mono">{b.id}</dd>
+            </dl>
+          </section>
+          {#if st === 'Active'}
+            <section class="adm-sec">
+              <div class="adm-acts row">
+                <Confirm small label="Turn off" confirm="Click again to turn off every code" {busy} onconfirm={() => disable(b)} />
+              </div>
+            </section>
+          {/if}
+        </div>
       {/if}
     {/snippet}
-  </LoadGate>
+  </Split>
 
   <dialog class="ui-dialog wide" bind:this={dialog} aria-labelledby="batch-title">
     <form onsubmit={save} novalidate>
       <div class="body">
         <h2 id="batch-title">New code batch</h2>
+        <h3 class="adm-label">Batch</h3>
         <label class="ui-field">
           <span class="ui-label">Name</span>
           <input class="ui-input" bind:value={name} maxlength="64" aria-invalid={errors.name ? 'true' : undefined} />
@@ -245,6 +319,7 @@
             {#if errors.amount}<span class="ui-error" role="alert">{errors.amount}</span>{:else}<span class="ui-hint">1 to 1.000.</span>{/if}
           </label>
         </div>
+        <h3 class="adm-label sect">Limits</h3>
         <div class="two">
           <label class="ui-field">
             <span class="ui-label">Uses per code</span>
@@ -257,6 +332,7 @@
             {#if errors.expires}<span class="ui-error" role="alert">{errors.expires}</span>{:else}<span class="ui-hint">Empty: never.</span>{/if}
           </label>
         </div>
+        <h3 class="adm-label sect">Gives</h3>
         {#if itemChoices.length}
           <label class="ui-field">
             <span class="ui-label">Gives the cosmetics of</span>
@@ -278,26 +354,38 @@
     </form>
   </dialog>
 
-    <CodesDialog bind:this={codesDialog} />
+  <CodesDialog bind:this={codesDialog} />
 </Gate>
 
 <style>
-  .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-  .item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
-  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 14px; }
-  .what { display: grid; flex: 1 1 260px; min-width: 0; }
-  .what strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .used { flex: none; font-size: var(--t-small); color: var(--muted); }
-  .st { flex: none; min-width: 72px; font-size: var(--t-small); color: var(--muted); }
+  .stack { table-layout: fixed; }
+  tr[aria-selected='true'] .pk { font-weight: 700; }
+  .txt { display: grid; line-height: 1.25; }
+  .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-fine); font-weight: 400; color: var(--dim); }
+  .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
+  .pre { margin-left: 6px; font-family: var(--font-mono); font-size: var(--t-fine); color: var(--dim); }
+  .pk { font-weight: 600; }
+  .st { color: var(--muted); }
   .st.live { color: var(--text); font-weight: 700; }
-  .gap { flex: none; width: 84px; }
-  .foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+  .line { margin: 0; font-size: var(--t-small); color: var(--muted); }
   .wide { width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); }
   form { max-height: calc(100dvh - 24px); grid-template-rows: minmax(0, 1fr) auto; }
   .body { overflow-y: auto; overscroll-behavior: contain; }
   h2 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
   .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+  .sect { padding-top: 12px; border-top: 1px solid var(--border); }
   .mono { font-family: var(--font-mono); }
   .problem { margin: 0; font-size: var(--t-small); color: var(--red); }
   @media (max-width: 520px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  /* Phones: each row stacks, its cells labelled. */
+  @media (max-width: 719.98px) {
+    .stack thead { display: none; }
+    .stack, .stack tbody { display: block; }
+    .stack tr { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 16px; padding: 10px 12px; min-height: 44px; border-bottom: 1px solid var(--border); }
+    .stack tbody tr:last-child { border-bottom: 0; }
+    .stack td { display: flex; justify-content: space-between; gap: 8px; height: auto; max-width: none; padding: 2px 0; border: 0; text-align: left; }
+    .stack td.pk { grid-column: 1 / -1; }
+    .stack td[data-l]::before { content: attr(data-l); flex: none; color: var(--dim); font-size: var(--t-fine); }
+    .stack td.ell { overflow: visible; white-space: normal; text-overflow: clip; }
+  }
 </style>

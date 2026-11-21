@@ -4,11 +4,18 @@
   // (below your highest, not one you hold) or give it; the page follows that and says why not.
   // The editor also sets the role's limits (RoleLimits): overrides of the per-account limits for
   // everyone who holds it, saved with setRoleLimits after the role itself.
+  import { page } from '$app/state';
+  import { tick } from 'svelte';
   import Name from '$lib/components/Name.svelte';
+  import Icon from '$lib/components/Icon.svelte';
+  import IconButton from '$lib/components/IconButton.svelte';
   import { count, iso } from '$lib/format';
   import { gql } from '$lib/api';
+  import Split from '$lib/admin/ui/Split.svelte';
+  import { gridKeys, pickInUrl } from '$lib/admin/ui/pick';
+  import PageHead from '$lib/tool/PageHead.svelte';
   import type { RoleFieldsFragment, RoleLimitFieldsFragment } from '$lib/gql/graphql';
-  import { ACCOUNT_ROLES, CREATE_ROLE, DELETE_ROLE, LIMIT_DEFAULTS, ROLE_LIMITS, ROLES, SET_ROLE_LIMITS, UPDATE_ROLE } from '$lib/queries';
+  import { ACCOUNT_ROLES, CREATE_ROLE, DELETE_ROLE, ENTITLEMENT_HOLDERS, LIMIT_DEFAULTS, ROLE_LIMITS, ROLES, SET_ROLE_LIMITS, UPDATE_ROLE } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import State from '$lib/components/State.svelte';
   import { loader } from '$lib/tool/loader.svelte';
@@ -18,7 +25,7 @@
   import PermissionPicker from '$lib/admin/PermissionPicker.svelte';
   import { groupsFor } from '$lib/admin/permissions';
   import RoleLimits from '$lib/admin/RoleLimits.svelte';
-  import { changed, toInput, toValues, valueProblem } from '$lib/admin/role-limits';
+  import { amount, changed, info, overrides, toInput, toValues, valueProblem } from '$lib/admin/role-limits';
 
   const L = loader(async ({ fetch }) => {
     const [r, mine] = await Promise.all([
@@ -38,8 +45,6 @@
   let position = $state(10);
   let picked = $state<string[]>([]);
   let shown = $state(false);
-  // Permission groups whose names are listed in the row (the chip's tooltip, for touch and keyboard).
-  let listed = $state<Record<string, boolean>>({});
   let saving = $state(false);
   let tried = $state(false);
   // The role's limits: what the API said, and the boxes as typed. null while loading or when
@@ -150,98 +155,215 @@
   }
 
   const BUILT_IN: Record<string, string> = { ROOT: 'Top role', ADMIN: 'Built in', USER: 'Everyone' };
+
+  // The picked role lives in the address (?role=<id>). Its limits and holders load for the panel.
+  const pickedId = $derived(page.url.searchParams.get('role'));
+  const cur = $derived(sorted.find((r) => r.id === pickedId) ?? null);
+  let grid = $state<HTMLElement>();
+  const pick = (id: string | null) => void pickInUrl('role', id);
+  // Closing the inspector puts focus back on the role's row.
+  function unpick() {
+    const id = pickedId;
+    pick(null);
+    void tick().then(() => grid?.querySelector<HTMLElement>(`[data-item="${CSS.escape(id ?? '')}"]`)?.focus());
+  }
+  function onkeydown(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || !pickedId || e.defaultPrevented || document.querySelector('dialog[open]')) return;
+    if ((e.target as HTMLElement | null)?.closest('input, textarea, select')) return;
+    e.preventDefault();
+    unpick();
+  }
+
+  let panelLimits = $state<RoleLimitFieldsFragment[] | null>(null);
+  let panelLimitsFailed = $state(false);
+  let holders = $state<number | null>(null);
+  const mayHolders = can('entitlements.view') || can('cosmetics.grant');
+  let panelFor = 0;
+  $effect(() => {
+    const r = cur?.id;
+    const kind = cur?.builtIn;
+    const n = ++panelFor;
+    panelLimits = null;
+    panelLimitsFailed = false;
+    holders = null;
+    if (!r || kind === 'USER') return;
+    if (manager)
+      gql(ROLE_LIMITS, { id: r })
+        .then((x) => n === panelFor && (panelLimits = x.roleLimits))
+        .catch(() => n === panelFor && (panelLimitsFailed = true));
+    if (mayHolders)
+      gql(ENTITLEMENT_HOLDERS, { kind: 'ROLE', id: r })
+        .then((x) => n === panelFor && (holders = x.entitlementHolders.filter((g) => g.active).length))
+        .catch(() => {});
+  });
+  const pickedGroups = $derived(cur ? summary(cur) : []);
+  const set = $derived(panelLimits ? overrides(panelLimits) : []);
 </script>
 
-<svelte:head><title>Roles - Admin - cyex.tv</title></svelte:head>
+<svelte:head><title>{cur ? `${iso(cur.name)} - Roles` : 'Roles'} - Admin - cyex.tv</title></svelte:head>
 
-<div class="ui-head">
-  <div><h1>Roles</h1><p>Higher positions are more senior. You can change roles below your own highest one that you don’t hold, and only grant what you hold.</p></div>
-  {#if manager}<div class="ui-actions"><button class="ui-btn primary" type="button" onclick={() => open(null)}>New role</button></div>{/if}
-</div>
+<svelte:window {onkeydown} />
 
-<LoadGate source={L} label="Loading roles…">
-{#snippet children()}
-{#if !roles || roles.length === 0}
-  <State title="No roles yet." />
-{:else}
-  <section class="ui-panel">
-    <div class="row head" aria-hidden="true">
-      <span class="ui-label">Pos</span><span class="ui-label">Role</span><span class="ui-label">Permissions</span><span class="ui-label actions-h">Action</span>
-    </div>
-    <ul class="ui-list">
-      {#each sorted as r (r.id)}
-        {@const groups = summary(r)}
-        <li class="row">
-          <span class="pos ui-num" title="Position">{count(r.position)}</span>
-          <span class="what">
-            <strong class="title"><Name value={r.name} />
-              {#if r.builtIn}<span class="ui-chip">{BUILT_IN[r.builtIn]}</span>{/if}
-              {#if held.has(r.id) || r.builtIn === 'ROOT'}<span class="ui-chip">Yours</span>{/if}
-              {#if r.public}<span class="ui-chip" title="Shown on the profiles of the people who hold it">On profiles</span>{/if}
-            </strong>
-            {#if r.description}<span class="ui-hint"><Name value={r.description} /></span>{/if}
-          </span>
-          <span class="perms">
-            {#if r.builtIn === 'ROOT'}
-              <span class="ui-hint">Every permission, including ones added later.</span>
-            {:else}
-              {#each groups as g (g.label)}{@const key = r.id + g.label}<button class="grp" type="button" aria-expanded={!!listed[key]} title={g.names} onclick={() => (listed[key] = !listed[key])}><span>{g.label}</span> <span class="ui-num">{g.n}/{g.of}</span></button>{#if listed[key]}<span class="ui-hint names">{g.names}</span>{/if}{:else}<span class="ui-hint">No permissions</span>{/each}
-            {/if}
-          </span>
-          <div class="ui-actions">
-            {#if r.editable}
-              <button class="ui-btn secondary small" type="button" onclick={() => open(r)}>Edit</button>
-              {#if !r.builtIn}<Confirm small label="Delete" confirm="Click again" onconfirm={() => remove(r)} />{/if}
-            {:else}
-              <span class="ui-hint locked" title={why(r)}>{r.builtIn === 'ROOT' ? 'Fixed' : held.has(r.id) ? 'You hold it' : 'Above you'}<span class="sr-only">: {why(r)}</span></span>
-            {/if}
+<Split label="Role" open={!!cur} onclose={() => pick(null)}>
+  <PageHead title="Roles" line="Higher positions are more senior. You change roles below your own highest one, and give only what you hold.">
+    {#snippet actions()}
+      {#if manager}<button class="ui-btn primary" type="button" onclick={() => open(null)}><Icon name="plus" size={15} />New role</button>{/if}
+    {/snippet}
+  </PageHead>
+
+  <LoadGate source={L} label="Loading roles…">
+    {#snippet children()}
+      {#if !roles || roles.length === 0}
+        <State title="No roles yet." />
+      {:else}
+        <ul class="adm-rows" bind:this={grid} use:gridKeys aria-label="Roles">
+          {#each sorted as r, i (r.id)}
+            {@const groups = summary(r)}
+            <li>
+              <button class="rrow" type="button" data-item={r.id} aria-current={r.id === pickedId ? 'true' : undefined}
+                tabindex={(cur ? r.id === pickedId : i === 0) ? 0 : -1} onclick={() => pick(r.id)}>
+                <span class="pos ui-num" title="Position">{count(r.position)}</span>
+                <span class="nm"><bdi><Name value={r.name} /></bdi></span>
+                <span class="chips">
+                  {#if r.builtIn}<span class="ui-chip">{BUILT_IN[r.builtIn]}</span>{/if}
+                  {#if held.has(r.id) || r.builtIn === 'ROOT'}<span class="ui-chip">Yours</span>{/if}
+                  {#if r.public}<span class="ui-chip" title="Shown on the profiles of the people who hold it">On profiles</span>{/if}
+                </span>
+                <span class="sum">{r.builtIn === 'ROOT' ? 'Every permission' : groups.length ? groups.map((g) => `${g.label} ${count(g.n)}/${count(g.of)}`).join(' · ') : 'No permissions'}</span>
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    {/snippet}
+  </LoadGate>
+
+  {#snippet empty()}
+    <div class="adm-ip-head"><span class="adm-label">Role</span></div>
+    <p class="none">Pick a role to see what it allows, its limits and who holds it.</p>
+  {/snippet}
+
+  {#snippet panel()}
+    {#if cur}
+      {@const r = cur}
+      <div class="adm-ip-head">
+        <span class="adm-label">Role</span>
+        <IconButton label="Close" icon="x" size="s" onclick={unpick} />
+      </div>
+      <div class="adm-ip-body">
+        <section class="adm-sec">
+          <h2 class="adm-name"><bdi><Name value={r.name} /></bdi></h2>
+          <div class="chips">
+            {#if r.builtIn}<span class="ui-chip">{BUILT_IN[r.builtIn]}</span>{/if}
+            {#if held.has(r.id) || r.builtIn === 'ROOT'}<span class="ui-chip">Yours</span>{/if}
+            {#if r.public}<span class="ui-chip">On profiles</span>{/if}
           </div>
-        </li>
-      {/each}
-    </ul>
-  </section>
-{/if}
-{/snippet}
-</LoadGate>
+          {#if r.description}<p class="desc"><Name value={r.description} /></p>{/if}
+        </section>
+        <section class="adm-sec">
+          <h3 class="adm-label">Facts</h3>
+          <dl class="adm-kv">
+            <dt>Position</dt><dd>{count(r.position)}</dd>
+            <dt>Permissions</dt><dd>{r.builtIn === 'ROOT' ? 'All' : `${count(r.permissions.length)} of ${count(permissions.length)}`}</dd>
+            {#if r.builtIn === 'USER'}
+              <dt>Holders</dt><dd>Everyone</dd>
+            {:else if mayHolders}
+              <dt>Holders</dt><dd>{holders === null ? '…' : count(holders)}{' '}<a href="/admin/entitlements?role={encodeURIComponent(r.id)}">See</a></dd>
+            {/if}
+          </dl>
+        </section>
+        <section class="adm-sec">
+          <h3 class="adm-label">Permissions</h3>
+          {#if r.builtIn === 'ROOT'}
+            <p class="desc">Every permission, including ones added later.</p>
+          {:else if !pickedGroups.length}
+            <p class="desc">No permissions.</p>
+          {:else}
+            <dl class="perms">
+              {#each pickedGroups as g (g.label)}
+                <dt>{g.label} <span class="ui-num">{count(g.n)}/{count(g.of)}</span></dt>
+                <dd>{g.names}</dd>
+              {/each}
+            </dl>
+          {/if}
+        </section>
+        {#if r.builtIn === 'USER'}
+          <section class="adm-sec">
+            <h3 class="adm-label">Limits</h3>
+            <p class="desc">Everyone gets the default limits.</p>
+          </section>
+        {:else if manager}
+          <section class="adm-sec">
+            <h3 class="adm-label">Limits</h3>
+            {#if panelLimitsFailed}
+              <p class="desc">Couldn’t load this role’s limits.</p>
+            {:else if !panelLimits}
+              <p class="desc">Loading…</p>
+            {:else if !set.length}
+              <p class="desc">None set: the defaults apply.</p>
+            {:else}
+              <dl class="adm-kv">
+                {#each set as l (l.key)}<dt>{info(l.key).label}</dt><dd>{amount(l.value ?? 0, l.windowSeconds)}</dd>{/each}
+              </dl>
+            {/if}
+          </section>
+        {/if}
+        <section class="adm-sec">
+          {#if r.editable}
+            <div class="adm-acts row">
+              <button class="ui-btn secondary small" type="button" onclick={() => open(r)}><Icon name="pencil" size={14} />Edit</button>
+              {#if !r.builtIn}<Confirm small label="Delete" confirm="Click again to delete" onconfirm={() => remove(r)} />{/if}
+            </div>
+          {:else}
+            <p class="locked"><Icon name="lock" size={14} />{why(r)}</p>
+          {/if}
+        </section>
+      </div>
+    {/if}
+  {/snippet}
+</Split>
 
 <dialog class="ui-dialog wide" bind:this={dialog} aria-labelledby="role-title">
   <form onsubmit={save} novalidate>
     <div class="body">
       <h2 id="role-title">{editing ? `Edit ${iso(editing.name)}` : 'New role'}</h2>
       {#if userRole}<p class="ui-hint">Every account has this role, so what you give it, everyone gets. It always sits at position 0.</p>{/if}
-      <div class="two">
+      <section class="grp">
+        <h3 class="adm-label">Basics</h3>
+        <div class="two">
+          <label class="ui-field">
+            <span class="ui-label">Name</span>
+            <input class="ui-input" bind:value={name} maxlength="50" aria-invalid={nameError ? 'true' : undefined} aria-describedby={nameError ? 'role-name-err' : undefined} />
+            {#if nameError}<span class="ui-error" id="role-name-err">{nameError}</span>{/if}
+          </label>
+          <label class="ui-field">
+            <span class="ui-label">Position</span>
+            <input class="ui-input ui-mono num" type="number" bind:value={position} min="1" max={MAX_POS} disabled={userRole}
+              aria-invalid={posError ? 'true' : undefined} aria-describedby={posError ? 'role-pos-err' : undefined} />
+            {#if posError}<span class="ui-error" id="role-pos-err">{posError}</span>{/if}
+          </label>
+        </div>
         <label class="ui-field">
-          <span class="ui-label">Name</span>
-          <input class="ui-input" bind:value={name} maxlength="50" aria-invalid={nameError ? 'true' : undefined} aria-describedby={nameError ? 'role-name-err' : undefined} />
-          {#if nameError}<span class="ui-error" id="role-name-err">{nameError}</span>{/if}
+          <span class="ui-label">Description</span>
+          <input class="ui-input" bind:value={description} maxlength="200" />
         </label>
-        <label class="ui-field">
-          <span class="ui-label">Position</span>
-          <input class="ui-input ui-mono num" type="number" bind:value={position} min="1" max={MAX_POS} disabled={userRole}
-            aria-invalid={posError ? 'true' : undefined} aria-describedby={posError ? 'role-pos-err' : undefined} />
-          {#if posError}<span class="ui-error" id="role-pos-err">{posError}</span>{/if}
-        </label>
-      </div>
-      <label class="ui-field">
-        <span class="ui-label">Description</span>
-        <input class="ui-input" bind:value={description} maxlength="200" />
-      </label>
-      {#if !userRole}
-        <label class="ui-check">
-          <input type="checkbox" bind:checked={shown} />
-          <span>Shown on profiles <span class="ui-hint">Everyone sees this role on the profile of anyone who holds it.</span></span>
-        </label>
-      {/if}
-      <div class="ui-field">
-        <span class="ui-label" id="perm-label">Permissions <span class="ui-num count">{picked.length} of {permissions.length}</span></span>
+        {#if !userRole}
+          <label class="ui-check">
+            <input type="checkbox" bind:checked={shown} />
+            <span>Shown on profiles <span class="ui-hint">Everyone sees this role on the profile of anyone who holds it.</span></span>
+          </label>
+        {/if}
+      </section>
+      <section class="grp">
+        <h3 class="adm-label" id="perm-label">Permissions <span class="ui-num count">{count(picked.length)} of {count(permissions.length)}</span></h3>
         <div role="group" aria-labelledby="perm-label">
           <PermissionPicker available={permissions} bind:picked canChange={canChange} />
         </div>
         <span class="ui-hint">Hover or focus a permission to see what it allows. A group’s box picks or clears the whole group.</span>
-      </div>
+      </section>
       {#if manager}
-        <div class="ui-field">
-          <span class="ui-label" id="limits-label">Limits</span>
+        <section class="grp">
+          <h3 class="adm-label" id="limits-label">Limits</h3>
           {#if userRole}
             <span class="ui-hint">Everyone gets the default limits. Give a role its own to raise or lower them for the people who hold it.</span>
           {:else if limitsFailed}
@@ -254,7 +376,7 @@
             </div>
             <span class="ui-hint">Empty keeps the default, shown in grey. Someone with several roles gets the highest of their roles’ limits.</span>
           {/if}
-        </div>
+        </section>
       {/if}
     </div>
     <footer>
@@ -265,29 +387,34 @@
 </dialog>
 
 <style>
-  /* One grid for the header and every row, so the columns line up. */
-  .row { display: grid; grid-template-columns: 76px minmax(160px, 1fr) minmax(0, 2fr) 170px; gap: 14px; align-items: start; }
-  .ui-list > li.row { padding-block: 12px; }
-  .head { align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--row-alt); }
-  .actions-h { text-align: right; }
-  .title { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-  .pos { color: var(--dim); padding-top: 1px; font-size: var(--text-sub); }
-  .what { display: grid; gap: 2px; min-width: 0; overflow-wrap: anywhere; }
-  .perms { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--text-sub); color: var(--muted); padding-top: 1px; }
-  .grp { display: inline-flex; align-items: center; min-height: 24px; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; text-align: left; }
-  .names { flex-basis: 100%; overflow-wrap: anywhere; }
-  .grp .ui-num { color: var(--dim); font-size: 12px; }
-  @media (pointer: coarse) { .grp { min-height: 44px; } }
-  .grp:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius); }
-  .row .ui-actions { justify-content: flex-end; flex-wrap: nowrap; align-items: center; }
-  .locked { white-space: nowrap; cursor: help; }
-  @media (max-width: 860px) {
-    .head { display: none; }
-    .row { grid-template-columns: 56px minmax(0, 1fr); gap: 8px 12px; }
-    .perms, .row .ui-actions { grid-column: 2; }
-    .row .ui-actions { justify-content: flex-start; }
+  /* One dense row per role: position, name, chips, then what it allows (cut to one line). */
+  .rrow { display: grid; grid-template-columns: 72px minmax(100px, 160px) auto minmax(0, 1fr); align-items: center; gap: 12px; width: 100%; height: 52px; padding: 0 16px;
+    border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+  .pos { color: var(--dim); font-size: var(--t-small); text-align: right; }
+  .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-ui); font-weight: 500; }
+  .rrow[aria-current='true'] .nm { font-weight: 700; }
+  .rrow[aria-current='true'] { box-shadow: inset 2px 0 0 var(--accent-border); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+  .sum { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .rrow:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  @media (hover: hover) and (pointer: fine) { .rrow:hover { background: var(--row-hover); } }
+  @media (max-width: 760px) {
+    .rrow { grid-template-columns: 40px minmax(0, 1fr) auto; height: 56px; }
+    .sum { display: none; }
   }
-  .wide { width: min(820px, calc(100vw - 24px)); }
+
+  .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
+  .desc { margin: 0; font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }
+  .perms { display: grid; gap: 2px; margin: 0; }
+  .perms dt { margin-top: 8px; font-size: var(--t-small); font-weight: 600; }
+  .perms dt .ui-num { margin-left: 6px; font-weight: 500; color: var(--dim); }
+  .perms dd { margin: 0; font-size: var(--t-fine); line-height: 1.5; color: var(--muted); }
+  .locked { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: var(--t-small); color: var(--muted); }
+  .locked :global(svg) { flex: none; margin-top: 2px; }
+
+  .wide { width: min(860px, calc(100vw - 24px)); }
+  .grp { display: grid; gap: 10px; }
+  .grp + .grp { padding-top: 14px; border-top: 1px solid var(--border); }
   .two { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 12px; }
   .num { text-align: right; }
   .count { margin-left: 6px; font-weight: 500; letter-spacing: 0; text-transform: none; }

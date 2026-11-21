@@ -3,14 +3,15 @@
   // see them; the account never does. You can delete your own notes.
   import { gql } from '$lib/api';
   import { ADD_STAFF_NOTE, DELETE_STAFF_NOTE, STAFF_NOTES } from '$lib/queries';
+  import { count } from '$lib/format';
   import NoteList from './NoteList.svelte';
+  import Box from './ui/Box.svelte';
 
   let { accountId }: { accountId: string } = $props();
   let shown = $state(0);
 </script>
 
-<section class="ui-panel" aria-labelledby="sn-h">
-  <header><h2 id="sn-h">Staff notes</h2>{#if shown}<span class="ui-hint ui-num">{shown}</span>{/if}</header>
+<Box title="Staff notes" count={shown ? count(shown) : null}>
   <NoteList
     key={accountId}
     load={async () => (await gql(STAFF_NOTES, { accountId })).staffNotes}
@@ -19,4 +20,4 @@
     placeholder="A note only staff see: context, warnings, what was agreed."
     oncount={(n) => (shown = n)}
   />
-</section>
+</Box>

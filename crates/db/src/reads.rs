@@ -275,17 +275,13 @@ pub struct MemberAccess<'a> {
     pub edit_sets: &'a [Uuid],
 }
 
-/// The newest `per_set` members each of the given sets shows `access`, newest first within each
-/// set (by when they were added). Only that many rows are read, whatever the sets hold.
-pub async fn newest_members(
-    conn: &mut PgConnection,
-    set_ids: &[Uuid],
-    access: &MemberAccess<'_>,
-    per_set: i64,
-) -> DbResult<Vec<MemberRow>> {
+/// The statement `newest_members` runs, with its binds `$1` to `$5` in that order. Public so the
+/// scale test can ask Postgres for its plan.
+#[doc(hidden)]
+pub fn newest_members_sql() -> String {
     // Per set, the members in index order (`emote_set_members_set_newest`) until `per_set` pass
     // the access rule, instead of numbering every member of every set.
-    Ok(sqlx::query_as(&format!(
+    format!(
         "SELECT t.* FROM (SELECT DISTINCT u.id FROM unnest($1::uuid[]) AS u(id)) s
          CROSS JOIN LATERAL (
              SELECT {}
@@ -301,14 +297,25 @@ pub async fn newest_members(
          ) t
          ORDER BY t.set_id, t.added_at DESC, t.emote_id DESC",
         member_columns!()
-    ))
-    .bind(set_ids)
-    .bind(access.reviewer)
-    .bind(access.edit_sets)
-    .bind(access.account)
-    .bind(per_set)
-    .fetch_all(conn)
-    .await?)
+    )
+}
+
+/// The newest `per_set` members each of the given sets shows `access`, newest first within each
+/// set (by when they were added). Only that many rows are read, whatever the sets hold.
+pub async fn newest_members(
+    conn: &mut PgConnection,
+    set_ids: &[Uuid],
+    access: &MemberAccess<'_>,
+    per_set: i64,
+) -> DbResult<Vec<MemberRow>> {
+    Ok(sqlx::query_as(&newest_members_sql())
+        .bind(set_ids)
+        .bind(access.reviewer)
+        .bind(access.edit_sets)
+        .bind(access.account)
+        .bind(per_set)
+        .fetch_all(conn)
+        .await?)
 }
 
 /// A page of one set's members that `access` shows, oldest first (the order `members` reads),

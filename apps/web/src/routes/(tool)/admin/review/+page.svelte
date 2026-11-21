@@ -484,32 +484,24 @@
   {/snippet}
 </PageHead>
 
-<div class="bar">
-  <Segmented label="Queue" options={TABS} value={tab} onchange={(v) => go({ tab: v === 'public' ? null : v, sort: null, order: null })} />
-  <div class="tools">
-    <label class="find">
-      <Icon name="search" size={15} />
-      <span class="sr-only">Search by emote or uploader</span>
-      <input class="ui-input" type="search" bind:value={search} oninput={onsearch} placeholder="Emote or uploader" autocomplete="off" spellcheck="false" maxlength="100" />
-    </label>
-    <label class="pick">
-      <span class="ui-label">Sort</span>
-      <select class="ui-input" value={sort} onchange={(e) => go({ sort: e.currentTarget.value })}>
-        <option value="uploaded">Upload date</option>
-        {#if resolved}<option value="reviewed">Review date</option>{/if}
-        <option value="uploader">Uploader</option>
-        <option value="name">Name</option>
-      </select>
-    </label>
-    <label class="pick">
-      <span class="ui-label">Order</span>
-      <select class="ui-input" value={desc ? 'desc' : 'asc'} onchange={(e) => go({ order: e.currentTarget.value })}>
-        <option value="asc">{byText ? 'A to Z' : 'Oldest first'}</option>
-        <option value="desc">{byText ? 'Z to A' : 'Newest first'}</option>
-      </select>
-    </label>
-    <IconButton label="Refresh" icon="refresh" variant="outline" disabled={L.loading} onclick={() => L.reload()} />
-  </div>
+<div class="adm-toolbar tools">
+  <div class="tabs"><Segmented label="Queue" size="s" options={TABS} value={tab} onchange={(v) => go({ tab: v === 'public' ? null : v, sort: null, order: null })} /></div>
+  <label class="adm-find grow find">
+    <Icon name="search" size={15} />
+    <span class="sr-only">Search by emote or uploader</span>
+    <input class="ui-input" type="search" bind:value={search} oninput={onsearch} placeholder="Emote or uploader" autocomplete="off" spellcheck="false" maxlength="100" />
+  </label>
+  <select class="ui-input pick" aria-label="Sort" value={sort} onchange={(e) => go({ sort: e.currentTarget.value })}>
+    <option value="uploaded">Upload date</option>
+    {#if resolved}<option value="reviewed">Review date</option>{/if}
+    <option value="uploader">Uploader</option>
+    <option value="name">Name</option>
+  </select>
+  <select class="ui-input pick" aria-label="Order" value={desc ? 'desc' : 'asc'} onchange={(e) => go({ order: e.currentTarget.value })}>
+    <option value="asc">{byText ? 'A to Z' : 'Oldest first'}</option>
+    <option value="desc">{byText ? 'Z to A' : 'Newest first'}</option>
+  </select>
+  <IconButton label="Refresh" icon="refresh" variant="outline" disabled={L.loading} onclick={() => L.reload()} />
 </div>
 <p class="sr-only" id="queue-keys">Arrow keys move between uploads. Enter opens one. A approves, U approves as unlisted, P approves for its owner only, R rejects, S skips to the next. X selects for a verdict on many. Z undoes the last approval while its notice shows.</p>
 
@@ -529,35 +521,34 @@
       {@const d = size(e)}
       <!-- The card is the grid's one tab stop (the arrow keys move it); its buttons stay reachable with Tab. -->
       <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
-      <li class="card" class:cur={e.id === cur} class:gone={busy === e.id} data-card={e.id} tabindex={e.id === cur ? 0 : -1}
+      <li class="card" class:cur={e.id === cur} class:gone={busy === e.id} class:plain={resolved} data-card={e.id} tabindex={e.id === cur ? 0 : -1}
         class:picked={picked.has(e.id)}
         aria-label="{clean(e.name)}, by {clean(e.owner?.displayName) || 'unknown'}{picked.has(e.id) ? ', selected' : ''}"
         onfocus={() => (cur = e.id)} onclick={(ev) => { if (!(ev.target as HTMLElement).closest('a, button, label, input')) openDetail(e.id); }}>
-        {#if !resolved}
-          <PickBox class="tickbox" checked={picked.has(e.id)} label="Select {clean(e.name)}" onpick={(ev) => pickOne(e.id, ev.shiftKey)} />
-        {/if}
         <span class="art">
           {#if ready(e)}
-            {@const shownW = Math.round((64 * d.width) / d.height)}
+            {@const shownW = Math.round((72 * d.width) / d.height)}
             {@const pic = pictureFor(e, display.dpr, false, shownW)}
             <img src={pic.src} srcset={pic.srcset} sizes={pic.srcset ? `${shownW}px` : undefined} width={d.width} height={d.height} alt="" loading="lazy" decoding="async" />
           {:else}
             <span class="ui-spinner" aria-hidden="true"></span>
           {/if}
         </span>
-        <span class="text">
+        <span class="head">
+          {#if !resolved}
+            <PickBox class="tickbox" checked={picked.has(e.id)} label="Select {clean(e.name)}" onpick={(ev) => pickOne(e.id, ev.shiftKey)} />
+          {/if}
           <span class="name" title={clean(e.name)}><bdi>{clean(e.name)}</bdi></span>
-          <span class="by"><bdi>{clean(e.owner?.displayName) || 'Unknown'}</bdi></span>
-          <span class="chips">
-            {#if resolved}<span class="ui-chip {e.state.toLowerCase()}">{e.state === 'APPROVED' ? 'Approved' : e.state === 'REJECTED' ? 'Rejected' : e.state === 'PENDING' ? 'Pending' : 'Taken down'}</span>{/if}
-            {#if VIS_CHIP[e.visibility]}<span class="ui-chip">{VIS_CHIP[e.visibility]}</span>{/if}
-            {#if e.flags.nsfw}<span class="ui-chip warn">NSFW</span>{/if}
-            {#if e.flags.zeroWidth}<span class="ui-chip">Zero-width</span>{/if}
-            {#if e.flags.wide}<span class="ui-chip">Wide</span>{/if}
-            <span class="ui-chip" title={e.tags.join(', ') || 'No tags'}>{e.tags.length} {e.tags.length === 1 ? 'tag' : 'tags'}</span>
-          </span>
-          <time class="when ui-mono" datetime={e.createdAt}>{dateTime(e.createdAt)}</time>
-          {#if !ready(e)}<span class="ui-hint">Files not made yet</span>{/if}
+        </span>
+        <span class="by"><bdi>{clean(e.owner?.displayName) || 'Unknown'}</bdi> <span aria-hidden="true">·</span> <time class="ui-num" datetime={e.createdAt}>{dateTime(e.createdAt)}</time></span>
+        <span class="chips">
+          {#if resolved}<span class="ui-chip {e.state.toLowerCase()}">{e.state === 'APPROVED' ? 'Approved' : e.state === 'REJECTED' ? 'Rejected' : e.state === 'PENDING' ? 'Pending' : 'Taken down'}</span>{/if}
+          {#if !ready(e)}<span class="ui-chip">Files not made</span>{/if}
+          {#if VIS_CHIP[e.visibility]}<span class="ui-chip">{VIS_CHIP[e.visibility]}</span>{/if}
+          {#if e.flags.nsfw}<span class="ui-chip warn">NSFW</span>{/if}
+          {#if e.flags.zeroWidth}<span class="ui-chip">Zero-width</span>{/if}
+          {#if e.flags.wide}<span class="ui-chip">Wide</span>{/if}
+          <span class="ui-chip" title={e.tags.join(', ') || 'No tags'}>{e.tags.length} {e.tags.length === 1 ? 'tag' : 'tags'}</span>
         </span>
         {#if !resolved}
           <span class="do">
@@ -571,13 +562,13 @@
     {/each}
   </ul>
   {#if pages > 1}
-    <nav class="paging" aria-label="Queue pages">
+    <nav class="adm-pager" aria-label="Queue pages">
       <button class="ui-btn secondary small" type="button" disabled={pageNo <= 1 || L.loading} onclick={() => go({ page: pageNo > 2 ? String(pageNo - 1) : null })}>Previous</button>
       <span class="ui-hint ui-num">{count((pageNo - 1) * PER_PAGE + 1)}-{count(Math.min(total, pageNo * PER_PAGE))} of {count(total)}</span>
       <button class="ui-btn secondary small" type="button" disabled={pageNo >= pages || L.loading} onclick={() => go({ page: String(pageNo + 1) })}>Next</button>
     </nav>
   {:else}
-    <p class="ui-hint ui-num total">{count(total)} {total === 1 ? 'upload' : 'uploads'}</p>
+    <p class="adm-pager total">{count(total)} {total === 1 ? 'upload' : 'uploads'}</p>
   {/if}
 {/if}
 {/snippet}
@@ -622,45 +613,46 @@
 />
 
 <style>
-  .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-bottom: 16px; }
-  .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  .find { position: relative; display: flex; align-items: center; min-width: min(240px, 100%); flex: 1; }
-  .find :global(svg) { position: absolute; left: 10px; color: var(--dim); pointer-events: none; }
-  .find input { width: 100%; padding-left: 32px; }
-  .pick { display: flex; align-items: center; gap: 6px; }
-  .pick select { width: auto; }
-  @media (max-width: 640px) {
-    .tools { width: 100%; }
+  .tools { flex-wrap: nowrap; }
+  .tabs { flex: none; max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .find { flex: 1 1 140px; }
+  .pick { flex: none; width: auto; font-size: var(--t-small); padding-left: 10px; }
+  @media (max-width: 900px) {
+    .tools { flex-wrap: wrap; }
+    .tabs { flex-basis: 100%; }
     .find { flex-basis: 100%; }
+    .pick { flex: 1 1 0; }
   }
 
-  /* Dense cards: picture, the words, the verdicts in a column on the right. */
-  .queue { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 8px; }
-  .card { position: relative; display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-width: 0; padding: 10px 6px 10px 10px;
+  /* Browse-tile cards: the picture on a --bg well, a head row (tick and bold name), uploader and
+     time dim, flag chips on one line, the verdicts always shown. A fixed height. */
+  .queue { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); gap: 8px; }
+  .card { position: relative; display: grid; grid-template-rows: 88px 32px 18px 22px 40px; align-content: start; gap: 2px; min-width: 0; height: 236px; padding: 8px;
     border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); cursor: pointer;
-    transition: border-color var(--fast), opacity var(--fast); content-visibility: auto; contain-intrinsic-size: auto 108px; }
+    transition: border-color var(--fast), opacity var(--fast); content-visibility: auto; contain-intrinsic-size: auto 236px; }
+  .card.plain { grid-template-rows: 88px 32px 18px 22px; height: 194px; contain-intrinsic-size: auto 194px; }
   @media (hover: hover) and (pointer: fine) { .card:hover { border-color: var(--border-strong); } }
-  .card.cur { border-color: var(--border-strong); }
+  .card.cur { border-color: var(--accent-text); }
   .card:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   .card.gone { opacity: .5; }
   /* Picked: an accent hairline and a bold name, as a picked browse tile; never a filled box. */
   .card.picked { border-color: var(--accent-border); }
   .card.picked .name { font-weight: 700; }
-  .card :global(.tickbox) { position: absolute; top: 2px; left: 2px; z-index: 1; }
   .left { font-weight: 700; color: var(--text); }
-  .art { display: grid; place-items: center; width: 72px; height: 72px; border-radius: var(--radius); background: var(--bg); overflow: hidden; }
-  .art img { display: block; height: 64px; width: auto; max-width: 68px; object-fit: contain; }
-  .text { display: grid; gap: 2px; min-width: 0; }
-  .name, .by { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .name { font-weight: 600; line-height: 1.35; }
-  .by { font-size: 12px; color: var(--muted); }
-  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; min-width: 0; }
-  .chips .ui-chip { height: 20px; font-size: 11px; text-transform: none; letter-spacing: 0; }
+  .art { display: grid; place-items: center; border-radius: var(--radius); background: var(--bg); overflow: hidden; }
+  .art img { display: block; height: auto; max-height: 72px; width: auto; max-width: calc(100% - 16px); object-fit: contain; }
+  .head { display: flex; align-items: center; gap: 4px; min-width: 0; margin-left: -6px; }
+  .card.plain .head { margin-left: 0; }
+  .head :global(.tickbox) { flex: none; }
+  .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; line-height: 1.35; }
+  .by { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-fine); line-height: 18px; color: var(--muted); }
+  .by time { color: var(--dim); }
+  .chips { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
+  .chips .ui-chip { flex: none; height: 20px; font-size: 11px; text-transform: none; letter-spacing: 0; }
   .chips .warn { color: var(--red); }
-  .when { margin-top: 2px; font-size: 12px; font-weight: 600; color: var(--dim); user-select: none; }
-  .do { display: grid; grid-template-columns: repeat(2, auto); gap: 2px; }
+  .do { display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; justify-items: center; border-top: 1px solid var(--border); margin: 4px -8px -8px; padding-top: 4px; }
   .do :global(.yes:not(:disabled)) { color: var(--green); }
   .do :global(.no:not(:disabled)) { color: var(--red); }
-  .paging { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 16px; }
-  .total { margin: 16px 0 0; text-align: center; }
+  .total { margin-top: 16px; }
 </style>
