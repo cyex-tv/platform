@@ -1,6 +1,7 @@
 <script lang="ts">
   // The one profile page, for everyone, in the Inspector layout (redesign, 2026/11/21): the person
-  // (ProfileHeader, flat: name, roles, member since, the buttons) heads the left column, then the
+  // (ProfileHeader, flat: name, roles as flags, member since, the owner's or an editor's buttons;
+  // the roles replaced the link-copy button, owner rule) heads the left column, then the
   // section tabs (the same public rows for every viewer, rows.ts) and the section. On the right a
   // panel shows About (ProfileAbout: connections and editors, collapsed, and numbers; public, the
   // same for everyone) until an emote tile is picked: then that emote (EmoteInspector, ?e=<id>),
@@ -25,7 +26,6 @@
   import ProfileHeader from '$lib/profile/ProfileHeader.svelte';
   import ProfileAbout from '$lib/profile/ProfileAbout.svelte';
   import EmoteInspector from '$lib/profile/EmoteInspector.svelte';
-  import CopyLink from '$lib/components/CopyLink.svelte';
   import { arrowNav } from '$lib/shell/rail';
   import { gql } from '$lib/api';
   import { EMOTE } from '$lib/queries';
@@ -177,7 +177,6 @@
 <svelte:window {onkeydown} />
 
 {#snippet actions()}
-  <CopyLink url={() => `${page.url.origin}/users/${encodeURIComponent(data.id)}`} />
   {#if relation.mine}
     <a class="btn btn-s" href={sectionHref(data.id, 'overview')} aria-current={section === 'overview' ? 'page' : undefined}><Icon name="gauge" size={15} />Dashboard</a>
     <a class="btn btn-s" href="/me/settings"><Icon name="settings" size={15} />Settings</a>

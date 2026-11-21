@@ -1,5 +1,6 @@
 import { render, screen, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import ProfileHeader from './ProfileHeader.svelte';
 import { NOBODY } from './rows';
@@ -50,3 +51,31 @@ describe('profile band disclosures', () => {
     expect(within(rows[1]).getByRole('link', { name: /lumenfox_kick/ }).getAttribute('target')).toBe('_blank');
   });
 });
+
+// The profile page's head (Inspector layout): the person's roles as flags beside the name, the
+// first three shown and the rest behind a count chip; no Copy link (owner, feedback round I:
+// "remove the copy link button from a users profile and replace it with their roles as flags").
+describe('profile head', () => {
+  const roles = ['Moderator', 'Artist', 'Partner', 'Helper', 'Supporter'].map((name, i) => ({ id: `R${i}`, name }));
+  const head = () =>
+    render(ProfileHeader, {
+      props: { account: { id: 'OTHER', displayName: 'quietoak' }, relation: NOBODY, profile: { ...profile, roles } as never, facts: false, flat: true },
+    });
+
+  it('shows the roles as flags next to the name, the rest behind a count', () => {
+    head();
+    const flags = screen.getByRole('list', { name: 'Roles' });
+    expect([...flags.querySelectorAll(':scope > li.flag')].map((li) => li.textContent?.trim())).toEqual(['Moderator', 'Artist', 'Partner']);
+    expect(within(flags).getByRole('button', { name: 'All roles, 2' })).toBeTruthy();
+  });
+
+  it('has no Copy link, on the head or anywhere on the profile page', () => {
+    head();
+    expect(screen.queryByRole('button', { name: /Copy link/ })).toBeNull();
+    const page = readFileSync(`${process.cwd()}/src/routes/users/[id]/+page.svelte`, 'utf8');
+    expect(page).not.toMatch(/CopyLink|Copy link/);
+    // The flat head still gets its roles (the facts chips are what moved to the About panel).
+    expect(page).toMatch(/<ProfileHeader [^>]*facts=\{false\} flat \/>/);
+  });
+});
+
