@@ -483,6 +483,11 @@ pub async fn summaries(
     Ok(rows.into_iter().map(|s| (s.account_id, s)).collect())
 }
 
+/// The statement [`channel_counts`] runs (`$1`: the emote IDs). Public for the scale test's plan.
+#[doc(hidden)]
+pub const CHANNEL_COUNTS_SQL: &str =
+    "SELECT id, channel_count FROM emotes WHERE id = ANY($1) AND channel_count > 0";
+
 /// How many channels have each emote in their active set. Channels of deleted or blocked
 /// accounts don't count. Emotes in no channel are missing from the map. The stored count
 /// (`emotes.channel_count`, see [`crate::channel_counts`]): at most about a minute old, one
@@ -491,17 +496,28 @@ pub async fn channel_counts(
     conn: &mut PgConnection,
     emote_ids: &[Uuid],
 ) -> DbResult<HashMap<Uuid, u32>> {
-    let rows: Vec<(Uuid, i32)> = sqlx::query_as(
-        "SELECT id, channel_count FROM emotes WHERE id = ANY($1) AND channel_count > 0",
-    )
-    .bind(emote_ids)
-    .fetch_all(conn)
-    .await?;
+    let rows: Vec<(Uuid, i32)> = sqlx::query_as(CHANNEL_COUNTS_SQL)
+        .bind(emote_ids)
+        .fetch_all(conn)
+        .await?;
     Ok(rows
         .into_iter()
         .map(|(id, n)| (id, u32::try_from(n).unwrap_or(0)))
         .collect())
 }
+
+/// The statement [`emote_channels`] runs (`$1` emote, `$2` limit, `$3` offset). Public for the
+/// scale test's plan.
+#[doc(hidden)]
+pub const EMOTE_CHANNELS_SQL: &str =
+    "SELECT c.id, c.account_id, c.platform, c.platform_channel_id, c.login, c.active_set_id,
+                c.allow_personal_emotes, c.created_at, c.updated_at
+         FROM emote_set_members m
+         JOIN channels c ON c.active_set_id = m.set_id
+         JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL AND (a.blocked_at IS NULL OR a.blocked_until <= now())
+         WHERE m.emote_id = $1
+         ORDER BY m.added_at DESC, c.id
+         LIMIT $2 OFFSET $3";
 
 /// Channels whose active set holds the emote, the most recently added first, `offset` rows in.
 /// Channels of deleted or blocked accounts are left out.
@@ -511,21 +527,12 @@ pub async fn emote_channels(
     limit: i64,
     offset: i64,
 ) -> DbResult<Vec<crate::channels::Channel>> {
-    Ok(sqlx::query_as(
-        "SELECT c.id, c.account_id, c.platform, c.platform_channel_id, c.login, c.active_set_id,
-                c.allow_personal_emotes, c.created_at, c.updated_at
-         FROM emote_set_members m
-         JOIN channels c ON c.active_set_id = m.set_id
-         JOIN accounts a ON a.id = c.account_id AND a.deleted_at IS NULL AND (a.blocked_at IS NULL OR a.blocked_until <= now())
-         WHERE m.emote_id = $1
-         ORDER BY m.added_at DESC, c.id
-         LIMIT $2 OFFSET $3",
-    )
-    .bind(emote_id)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(conn)
-    .await?)
+    Ok(sqlx::query_as(EMOTE_CHANNELS_SQL)
+        .bind(emote_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(conn)
+        .await?)
 }
 
 /// How close a name has to be (pg_trgm similarity, 0 to 1) to count as a possible duplicate.

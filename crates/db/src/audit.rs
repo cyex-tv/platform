@@ -158,16 +158,10 @@ const LISTED_SET_ONLY: &str = "(a.action NOT IN ('set.created', 'set.renamed', '
                             AND st.owner_account_id = a.subject_account_id
                             AND st.visibility = 'listed'))";
 
-/// Public activity rows about one emote, newest first: its approval (once) and the set changes
-/// naming it, written by the owner of the set or their account editors. Rows about accounts that
-/// are blocked or deleted, rows by blocked or deleted actors and rows about sets that aren't
-/// listed are left out. The api drops what is still private in ways SQL can't tell (deleted sets).
-pub async fn emote_activity_rows(
-    conn: &mut PgConnection,
-    emote_id: &str,
-    before_id: Option<Uuid>,
-    limit: i64,
-) -> DbResult<Vec<SubjectEntry>> {
+/// The statement [`emote_activity_rows`] runs (`$1` emote ID text, `$2` rows before this ID,
+/// `$3` limit). Public so the scale test can ask Postgres for its plan.
+#[doc(hidden)]
+pub fn emote_activity_sql() -> String {
     // Two branches, each read newest first from its own index (the approval by target, the set
     // changes by `audit_log_emote_activity`) and cut at `limit`, so an emote in thousands of
     // channels reads a page, not every row naming it. No row is in both (the actions differ).
@@ -179,7 +173,7 @@ pub async fn emote_activity_rows(
          LEFT JOIN accounts act ON act.id = a.actor_account_id
          WHERE a.subject_account_id IS NOT NULL
            AND ($2::uuid IS NULL OR a.id < $2)";
-    Ok(sqlx::query_as(&format!(
+    format!(
         "SELECT * FROM (
              ({ROW}
                AND a.action = 'emote.approved' AND a.target_kind = 'emote' AND a.target_id = $1
@@ -202,12 +196,25 @@ pub async fn emote_activity_rows(
          ) r
          ORDER BY id DESC
          LIMIT $3"
-    ))
-    .bind(emote_id)
-    .bind(before_id)
-    .bind(limit)
-    .fetch_all(conn)
-    .await?)
+    )
+}
+
+/// Public activity rows about one emote, newest first: its approval (once) and the set changes
+/// naming it, written by the owner of the set or their account editors. Rows about accounts that
+/// are blocked or deleted, rows by blocked or deleted actors and rows about sets that aren't
+/// listed are left out. The api drops what is still private in ways SQL can't tell (deleted sets).
+pub async fn emote_activity_rows(
+    conn: &mut PgConnection,
+    emote_id: &str,
+    before_id: Option<Uuid>,
+    limit: i64,
+) -> DbResult<Vec<SubjectEntry>> {
+    Ok(sqlx::query_as(&emote_activity_sql())
+        .bind(emote_id)
+        .bind(before_id)
+        .bind(limit)
+        .fetch_all(conn)
+        .await?)
 }
 
 /// Candidate rows for `subject`'s public activity feed, newest first. The rows pass the checks

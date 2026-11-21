@@ -1,7 +1,8 @@
 //! The hot reads at volume (a larger deployment: up to 100k emotes, 50k accounts, 20k channels).
 //!
 //! `hot_reads_use_their_indexes` seeds a few thousand rows of each kind, runs the real query
-//! functions and checks, from Postgres' own counters, that none of them read a whole table.
+//! functions and checks, from Postgres' plan for each statement (`EXPLAIN`, not the scan counters, which other
+//! activity inflates), that none of them read a whole table.
 //! `timings_at_full_scale` (ignored; CI's `load` job runs it with `--nocapture`) seeds the full
 //! size and prints each read's time before (the old query, without the new indexes) and after.
 
@@ -153,68 +154,46 @@ async fn seed(c: &mut PgConnection, s: &Scale) -> Uuid {
     top
 }
 
-/// Sequential scans of `table` so far, flushed from this session first.
-async fn seq_scans(c: &mut PgConnection, table: &str) -> i64 {
-    sqlx::query("SELECT pg_stat_force_next_flush()")
-        .execute(&mut *c)
-        .await
-        .unwrap();
-    sqlx::query_scalar("SELECT seq_scan FROM pg_stat_user_tables WHERE relname = $1")
-        .bind(table)
-        .fetch_one(&mut *c)
-        .await
-        .unwrap()
+/// Postgres' plan (`EXPLAIN (COSTS OFF)`) for `$sql` with the same values bound as the real read
+/// binds, as text. The plan is a property of the statement, the data and the planner settings
+/// alone, so unlike the scan counters in `pg_stat_user_tables` (which count every scan start,
+/// including each rescan of a nested loop's inner side, and are updated asynchronously) it gives
+/// the same answer every run.
+macro_rules! plan {
+    ($c:expr, $sql:expr $(, $bind:expr)*) => {{
+        let sql = format!("EXPLAIN (COSTS OFF) {}", $sql);
+        sqlx::query_scalar::<_, String>(&sql)
+            $(.bind($bind))*
+            .fetch_all(&mut *$c)
+            .await
+            .unwrap_or_else(|e| panic!("{sql}: {e}"))
+            .join("
+")
+    }};
 }
 
-/// Index scans on `table` so far (all of its indexes together), flushed from this session first.
-async fn idx_scans(c: &mut PgConnection, table: &str) -> i64 {
-    sqlx::query("SELECT pg_stat_force_next_flush()")
-        .execute(&mut *c)
-        .await
-        .unwrap();
-    sqlx::query_scalar(
-        "SELECT coalesce(sum(idx_scan), 0)::bigint FROM pg_stat_user_indexes WHERE relname = $1",
-    )
-    .bind(table)
-    .fetch_one(&mut *c)
-    .await
-    .unwrap()
-}
-
-/// Asserts `run` reads `table` through some index. Which index (the browse index for the sort, or
-/// a filter's) is the planner's choice and may change with the data; that it isn't a whole-table
-/// read is what the page's speed rests on. `expected` names the index meant, for the message.
-macro_rules! uses_index {
-    ($c:expr, $what:expr, $table:expr, $expected:expr, $run:expr) => {{
-        let before = idx_scans($c, $table).await;
-        let out = $run;
-        let after = idx_scans($c, $table).await;
+/// Asserts the plan reads none of `tables` whole.
+fn assert_no_seq_scan(what: &str, plan: &str, tables: &[&str]) {
+    for table in tables {
+        let whole = format!("Seq Scan on {table}");
         assert!(
-            after > before,
-            "{}: read {} through no index (expected something like {:?})",
-            $what,
-            $table,
-            $expected
+            !plan.contains(&whole),
+            "{what}: the plan reads the whole {table} table:
+{plan}"
         );
-        out
-    }};
+    }
 }
 
-/// Asserts `run` reads none of `tables` whole.
-macro_rules! no_seq_scan {
-    ($c:expr, $what:expr, [$($table:expr),+], $run:expr) => {{
-        let tables = [$($table),+];
-        let mut before = Vec::new();
-        for t in tables {
-            before.push(seq_scans($c, t).await);
-        }
-        let out = $run;
-        for (t, b) in tables.iter().zip(before) {
-            let after = seq_scans($c, t).await;
-            assert_eq!(after, b, "{}: read the whole {t} table", $what);
-        }
-        out
-    }};
+/// Asserts the plan reads `table` through some index. Which index (the browse index for the sort,
+/// or a filter's) is the planner's choice and may change with the data; that it isn't a
+/// whole-table read is what the page's speed rests on. `expected` names the index meant.
+fn assert_index_scan(what: &str, plan: &str, table: &str, expected: &[&str]) {
+    assert_no_seq_scan(what, plan, &[table]);
+    assert!(
+        plan.contains("Index Scan") || plan.contains("Index Only Scan") || plan.contains("Bitmap"),
+        "{what}: {table} is read through no index (expected something like {expected:?}):
+{plan}"
+    );
 }
 
 fn browse(sort: EmoteSort, text: &str) -> search::Query<'_> {
@@ -226,29 +205,6 @@ fn browse(sort: EmoteSort, text: &str) -> search::Query<'_> {
         offset: 0,
         ..Default::default()
     }
-}
-
-/// Postgres' plan for the set previews over `sets`, as text.
-async fn newest_members_plan(c: &mut PgConnection, sets: &[Uuid]) -> String {
-    let list = sets
-        .iter()
-        .map(|id| id.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
-    let sql = reads::newest_members_sql()
-        .replace("$1", &format!("'{{{list}}}'::uuid[]"))
-        .replace("$2", "false")
-        .replace("$3", "'{}'::uuid[]")
-        .replace("$4", "NULL::uuid")
-        .replace("$5", "12");
-    sqlx::query_scalar::<_, String>(&format!("EXPLAIN (COSTS OFF) {sql}"))
-        .fetch_all(&mut *c)
-        .await
-        .unwrap()
-        .join(
-            "
-",
-        )
 }
 
 async fn set_ids(c: &mut PgConnection, n: i64) -> Vec<Uuid> {
@@ -269,7 +225,7 @@ async fn hot_reads_use_their_indexes() {
     let top = seed(c, &SMALL).await;
     // Plan as production does: its disks are SSDs, where a random read costs about a sequential
     // one (Postgres' default of 4 suits spinning disks and tips small, freshly seeded tables
-    // toward a table read), and a plan with parallel workers counts one table scan per worker.
+    // toward a table read), and parallel workers would only add noise to the plans.
     sqlx::query("SET random_page_cost = 1.1")
         .execute(&mut *c)
         .await
@@ -278,74 +234,83 @@ async fn hot_reads_use_their_indexes() {
         .execute(&mut *c)
         .await
         .unwrap();
-    // Several runs each: Postgres may switch a prepared statement to a generic plan after five.
-    for _ in 0..7 {
-        // The page comes from the browse indexes in order. (The total is a count apart; with
-        // most emotes matching, Postgres reads the table for it, and that is the cheap way.)
-        for (sort, index) in [
-            (EmoteSort::Top, &["emotes_browse_top"][..]),
-            (EmoteSort::New, &["emotes_browse_new", "emotes_state"][..]),
-            (EmoteSort::Relevance, &["emotes_searchable_popularity"][..]),
-        ] {
-            let hits = uses_index!(c, format!("browse {sort:?}"), "emotes", index, {
-                search::search(c, &browse(sort, "")).await.unwrap()
-            });
-            assert_eq!(hits.ids.len(), 48);
-            assert!(hits.total > 15_000, "{sort:?} total {}", hits.total);
-        }
-        // Text search: at this size a table read can be the cheaper plan; the full-scale run
-        // prints the plan.
-        let hits = search::search(c, &browse(EmoteSort::Relevance, "PepeJam"))
-            .await
-            .unwrap();
-        assert!(!hits.ids.is_empty());
-        let sets = set_ids(c, 50).await;
-        // Say what the planner chose, so a failure below shows the plan and not only a count.
-        let plan = newest_members_plan(c, &sets).await;
-        assert!(
-            !plan.contains("Seq Scan on emote_set_members"),
-            "set previews plan:
-{plan}"
-        );
-        let rows = no_seq_scan!(c, "set previews", ["emote_set_members"], {
-            reads::newest_members(c, &sets, &MemberAccess::default(), 12)
-                .await
-                .unwrap()
-        });
-        assert_eq!(rows.len(), 50 * 12);
-        let popular: Vec<Uuid> =
-            sqlx::query_scalar("SELECT id FROM seed_emotes ORDER BY n LIMIT 48")
-                .fetch_all(&mut *c)
-                .await
-                .unwrap();
-        let counts = no_seq_scan!(c, "stored channel counts", ["emote_set_members"], {
-            uses_index!(c, "stored channel counts", "emotes", ["emotes_pkey"], {
-                reads::channel_counts(c, &popular).await.unwrap()
-            })
-        });
-        assert_eq!(counts, channel_counts::live(c, &popular).await.unwrap());
-        // The minutely round over a few queued emotes reads only their members.
-        sqlx::query("INSERT INTO emote_channel_count_queue (emote_id) SELECT unnest($1::uuid[])")
-            .bind(&popular)
-            .execute(&mut *c)
-            .await
-            .unwrap();
-        no_seq_scan!(
-            c,
-            "channel count refresh",
-            ["emote_set_members", "emotes"],
-            { channel_counts::refresh_queued(c).await.unwrap() }
-        );
-        no_seq_scan!(c, "emote channels", ["emote_set_members"], {
-            reads::emote_channels(c, top, 24, 0).await.unwrap()
-        });
-        let page = no_seq_scan!(c, "emote activity", ["audit_log"], {
-            audit::emote_activity_rows(c, &ids::to_text(top), None, 30)
-                .await
-                .unwrap()
-        });
-        assert_eq!(page.len(), 30);
+    // The page comes from the browse indexes in order. (The total is a count apart; with most
+    // emotes matching, Postgres reads the table for it, and that is the cheap way.)
+    for (sort, index) in [
+        (EmoteSort::Top, &["emotes_browse_top"][..]),
+        (EmoteSort::New, &["emotes_browse_new", "emotes_state"][..]),
+        (EmoteSort::Relevance, &["emotes_searchable_popularity"][..]),
+    ] {
+        let q = browse(sort, "");
+        let plan = search::explain_page(c, &q).await.unwrap();
+        assert_index_scan(&format!("browse {sort:?}"), &plan, "emotes", index);
+        let hits = search::search(c, &q).await.unwrap();
+        assert_eq!(hits.ids.len(), 48);
+        assert!(hits.total > 15_000, "{sort:?} total {}", hits.total);
     }
+    // Text search: at this size a table read can be the cheaper plan; the full-scale run prints
+    // the plan.
+    let hits = search::search(c, &browse(EmoteSort::Relevance, "PepeJam"))
+        .await
+        .unwrap();
+    assert!(!hits.ids.is_empty());
+
+    let sets = set_ids(c, 50).await;
+    let access = MemberAccess::default();
+    let plan = plan!(
+        c,
+        reads::newest_members_sql(),
+        &sets,
+        access.reviewer,
+        access.edit_sets,
+        access.account,
+        12i64
+    );
+    assert_no_seq_scan("set previews", &plan, &["emote_set_members"]);
+    let rows = reads::newest_members(c, &sets, &access, 12).await.unwrap();
+    assert_eq!(rows.len(), 50 * 12);
+
+    let popular: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM seed_emotes ORDER BY n LIMIT 48")
+        .fetch_all(&mut *c)
+        .await
+        .unwrap();
+    let plan = plan!(c, reads::CHANNEL_COUNTS_SQL, &popular);
+    assert_index_scan("stored channel counts", &plan, "emotes", &["emotes_pkey"]);
+    assert_no_seq_scan("stored channel counts", &plan, &["emote_set_members"]);
+    let counts = reads::channel_counts(c, &popular).await.unwrap();
+    assert_eq!(counts, channel_counts::live(c, &popular).await.unwrap());
+
+    // The minutely round over a few queued emotes reads only their members.
+    let plan = plan!(c, channel_counts::recount_sql(), &popular);
+    assert_no_seq_scan(
+        "channel count refresh",
+        &plan,
+        &["emote_set_members", "emotes"],
+    );
+    sqlx::query("INSERT INTO emote_channel_count_queue (emote_id) SELECT unnest($1::uuid[])")
+        .bind(&popular)
+        .execute(&mut *c)
+        .await
+        .unwrap();
+    channel_counts::refresh_queued(c).await.unwrap();
+
+    let plan = plan!(c, reads::EMOTE_CHANNELS_SQL, top, 24i64, 0i64);
+    assert_no_seq_scan("emote channels", &plan, &["emote_set_members"]);
+    reads::emote_channels(c, top, 24, 0).await.unwrap();
+
+    let top_text = ids::to_text(top);
+    let plan = plan!(
+        c,
+        audit::emote_activity_sql(),
+        &top_text,
+        None::<Uuid>,
+        30i64
+    );
+    assert_no_seq_scan("emote activity", &plan, &["audit_log"]);
+    let page = audit::emote_activity_rows(c, &top_text, None, 30)
+        .await
+        .unwrap();
+    assert_eq!(page.len(), 30);
     db.close().await;
 }
 
