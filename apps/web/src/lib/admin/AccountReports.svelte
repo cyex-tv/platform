@@ -7,12 +7,16 @@
   import State from '$lib/components/State.svelte';
   import Thumb from '$lib/tool/Thumb.svelte';
   import AccountLink from './AccountLink.svelte';
+  import Box from './ui/Box.svelte';
+  import More from './ui/More.svelte';
 
   type Row = AccountReportsQuery['accountReports']['about'][number];
   let { accountId }: { accountId: string } = $props();
 
   let data = $state<AccountReportsQuery['accountReports'] | null>(null);
   let problem = $state('');
+  const LIMIT = 5;
+  const open = $state({ about: false, by: false });
   let seq = 0;
 
   async function load() {
@@ -34,10 +38,10 @@
   const STATE = { OPEN: 'Open', DISMISSED: 'Dismissed', ACTIONED: 'Taken down' } as const;
 </script>
 
-{#snippet list(rows: Row[], who: 'owner' | 'reporter', empty: string)}
+{#snippet list(rows: Row[], who: 'owner' | 'reporter', empty: string, which: 'about' | 'by')}
   {#if rows.length}
     <ul class="ui-list">
-      {#each rows as r (r.id)}
+      {#each open[which] ? rows : rows.slice(0, LIMIT) as r (r.id)}
         <li>
           {#if r.emote}<Thumb emote={r.emote} name={clean(r.emote.name)} box={36} />{/if}
           <span class="what">
@@ -56,13 +60,13 @@
         </li>
       {/each}
     </ul>
+    <More total={rows.length} limit={LIMIT} bind:expanded={open[which]} />
   {:else}
-    <p class="ui-hint pad">{empty}</p>
+    <p class="box-none">{empty}</p>
   {/if}
 {/snippet}
 
-<section class="ui-panel" aria-labelledby="ar-h">
-  <header><h2 id="ar-h">Reports</h2></header>
+<Box title="Reports">
   {#if problem}
     <State bare kind="error" title="That didn’t load">
       {problem}
@@ -71,22 +75,20 @@
   {:else if !data}
     <State bare kind="loading" title="Loading reports…" />
   {:else}
-    <h3 class="sub">About their emotes</h3>
-    {@render list(data.about, 'reporter', 'No one has reported their emotes.')}
-    <h3 class="sub second">Filed by them</h3>
-    {@render list(data.by, 'owner', 'They haven’t reported anything.')}
+    <h3 class="box-sub">About their emotes</h3>
+    {@render list(data.about, 'reporter', 'No one has reported their emotes.', 'about')}
+    <h3 class="box-sub">Filed by them</h3>
+    {@render list(data.by, 'owner', 'They haven’t reported anything.', 'by')}
   {/if}
-</section>
+</Box>
 
 <style>
-  .sub { margin: 0; padding: 10px 14px 4px; font-size: var(--t-small); font-weight: 600; color: var(--muted); }
-  .second { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 12px; }
   .what { display: grid; gap: 1px; flex: 1; min-width: 0; }
-  .what strong { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; }
+  .what strong { display: flex; align-items: center; gap: 8px; min-width: 0; font-weight: 600; font-size: var(--t-small); }
   .what strong a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .what strong .ui-chip { flex: none; }
-  .reason { overflow-wrap: anywhere; }
-  .pad { margin: 0; padding: 6px 14px 12px; }
+  .reason { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-small); color: var(--muted); }
+  .what .ui-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* a touch target of at least 24px (WCAG 2.5.8) */
   a { display: inline-flex; align-items: center; min-height: 24px; }
 </style>

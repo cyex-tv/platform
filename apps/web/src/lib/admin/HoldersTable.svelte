@@ -67,10 +67,10 @@
   }
 </script>
 
-<div class="bar">
+<div class="adm-toolbar">
   <Segmented label="Show" size="s" value={show} onchange={(v) => (show = v)}
     options={[{ value: 'held', label: `Held now (${count(held)})` }, { value: 'ever', label: `Ever (${count(grants.length)})` }]} />
-  <label class="find">
+  <label class="adm-find grow">
     <Icon name="search" size={15} />
     <span class="sr-only">Search holders by name or ID</span>
     <input class="ui-input" type="search" bind:value={search} placeholder="Name or account ID" autocomplete="off" spellcheck="false" />
@@ -84,7 +84,7 @@
   </State>
 {:else}
   <div class="scroll">
-    <table class="t">
+    <table class="adm-table">
       <thead>
         <tr>
           <th aria-sort={aria('account')}><button type="button" class:on={sort === 'account'} onclick={() => by('account')}>Account{#if sort === 'account'}<Icon name={desc ? 'arrow-down' : 'arrow-up'} size={12} />{/if}</button></th>
@@ -92,7 +92,7 @@
           <th>Given by</th>
           <th aria-sort={aria('given')}><button type="button" class:on={sort === 'given'} onclick={() => by('given')}>Given{#if sort === 'given'}<Icon name={desc ? 'arrow-down' : 'arrow-up'} size={12} />{/if}</button></th>
           <th aria-sort={aria('ended')}><button type="button" class:on={sort === 'ended'} onclick={() => by('ended')}>Ended{#if sort === 'ended'}<Icon name={desc ? 'arrow-down' : 'arrow-up'} size={12} />{/if}</button></th>
-          {#if onrevoke}<th><span class="sr-only">Actions</span></th>{/if}
+          {#if onrevoke}<th class="shrink"><span class="sr-only">Actions</span></th>{/if}
         </tr>
       </thead>
       <tbody>
@@ -101,42 +101,34 @@
             <td><span class="acc"><AccountLink id={g.accountId} /><a class="graph" href="/admin/entitlements?account={encodeURIComponent(g.accountId)}" title="Everything this account owns">Owns</a></span></td>
             <td>{how(g)}{#if g.reason}<span class="sub" title={g.reason}><bdi>{clean(g.reason)}</bdi></span>{/if}</td>
             <td>{#if g.grantedBy}<AccountLink id={g.grantedBy} />{:else}<span class="ui-hint">-</span>{/if}</td>
-            <td class="ui-mono when">{g.grantedAt ? dateTime(g.grantedAt) : '-'}</td>
-            <td>{#if g.revokedAt}<span class="ui-mono when">{dateTime(g.revokedAt)}</span>{#if g.revokedBy}<span class="sub">by <AccountLink id={g.revokedBy} /></span>{/if}{:else}<span class="ui-hint">Held</span>{/if}</td>
-            {#if onrevoke}<td class="act">{#if g.active && g.source !== 'DEFAULT' && g.source !== 'OWNER'}<button class="ui-btn ghost small" type="button" onclick={() => onrevoke(g)}>Revoke</button>{/if}</td>{/if}
+            <td class="when">{g.grantedAt ? dateTime(g.grantedAt) : '-'}</td>
+            <td>{#if g.revokedAt}<span class="when">{dateTime(g.revokedAt)}</span>{#if g.revokedBy}<span class="sub">by <AccountLink id={g.revokedBy} /></span>{/if}{:else}<span class="ui-hint">Held</span>{/if}</td>
+            {#if onrevoke}<td class="shrink act">{#if g.active && g.source !== 'DEFAULT' && g.source !== 'OWNER'}<button class="ui-btn ghost small" type="button" onclick={() => onrevoke(g)}>Revoke</button>{/if}</td>{/if}
           </tr>
         {/each}
       </tbody>
     </table>
   </div>
-  <nav class="paging" aria-label="Holder pages">
+  <nav class="adm-pager" aria-label="Holder pages">
     {#if pages > 1}<button class="ui-btn secondary small" type="button" disabled={pageNo <= 1} onclick={() => (pageNo -= 1)}>Previous</button>{/if}
-    <span class="ui-hint ui-num">{pages > 1 ? `${count((pageNo - 1) * PER + 1)}-${count(Math.min(rows.length, pageNo * PER))} of ` : ''}{count(rows.length)} {rows.length === 1 ? 'holder' : 'holders'}</span>
+    <span>{pages > 1 ? `${count((pageNo - 1) * PER + 1)}-${count(Math.min(rows.length, pageNo * PER))} of ` : ''}{count(rows.length)} {rows.length === 1 ? 'holder' : 'holders'}</span>
     {#if pages > 1}<button class="ui-btn secondary small" type="button" disabled={pageNo >= pages} onclick={() => (pageNo += 1)}>Next</button>{/if}
   </nav>
 {/if}
 
 <style>
-  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
-  .find { position: relative; display: flex; align-items: center; flex: 1; min-width: min(200px, 100%); }
-  .find :global(svg) { position: absolute; left: 10px; color: var(--dim); pointer-events: none; }
-  .find input { width: 100%; padding-left: 32px; }
-  .scroll { overflow-x: auto; contain: inline-size; }
-  .t { width: 100%; border-collapse: collapse; font-size: var(--text-sub); }
-  th { padding: 8px 14px; text-align: left; font-size: var(--text-label); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); white-space: nowrap; border-bottom: 1px solid var(--border); }
-  th button { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: none; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; cursor: pointer; }
+  .scroll { overflow-x: auto; }
+  .adm-table { min-width: 720px; }
+  th button { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 0; border: 0; background: none; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; cursor: pointer; }
   th button.on { color: var(--text); }
   th button.on :global(svg) { color: var(--accent-text, var(--accent)); }
-  td { padding: 7px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-  tbody tr:last-child td { border-bottom: 0; }
-  @media (hover: hover) and (pointer: fine) { tbody tr:hover td { background: var(--surface-hover); } }
+  th button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: var(--radius); }
   tr.past td { color: var(--muted); }
   .acc { display: flex; align-items: baseline; gap: 8px; min-width: 150px; }
   .acc :global(a:first-child) { font-weight: 600; color: var(--text); }
-  .graph { font-size: 12px; color: var(--dim); }
-  .sub { display: block; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--dim); }
-  .when { white-space: nowrap; font-size: 12px; }
+  .graph { font-size: var(--t-fine); color: var(--dim); }
+  .sub { display: block; max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-fine); color: var(--dim); }
+  .when { white-space: nowrap; font-size: var(--t-fine); }
   td:nth-child(2) { min-width: 180px; }
-  .act { padding-block: 3px; text-align: right; }
-  .paging { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 10px; border-top: 1px solid var(--border); }
+  .act { text-align: right; }
 </style>

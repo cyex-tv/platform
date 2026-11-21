@@ -105,3 +105,20 @@ export const looksLikeId = (s: string) => isTypedSnowflake(s.trim()) || /^[0-9A-
 export function dayLabel(day: string): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(day) ? day.replaceAll('-', '/') : '';
 }
+
+/** One line for a row's Details: the first change ("state: pending → approved") and how many more. */
+export function summarize(list: readonly Change[]): string {
+  if (!list.length) return '';
+  const c = list[0];
+  const text =
+    c.kind === 'changed' ? `${c.path}: ${c.before} → ${c.after}` : c.kind === 'added' ? `${c.path}: ${c.after}` : `${c.path}: removed`;
+  return list.length > 1 ? `${text} (+${list.length - 1})` : text;
+}
+
+/** The entries a page of the log covers: `51-100` for the second page of 50 with 50 rows on it, `0` when empty. */
+export function pageRange(index: number, size: number, shown: number): string {
+  if (shown <= 0) return '0';
+  const from = index * size + 1;
+  const to = index * size + shown;
+  return from === to ? String(from) : `${from}-${to}`;
+}

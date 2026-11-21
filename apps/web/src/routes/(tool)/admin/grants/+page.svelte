@@ -7,7 +7,8 @@
   // roles need roles.assign or roles.manage, and only roles you may give are offered.
   import { gql } from '$lib/api';
   import AccountLink from '$lib/admin/AccountLink.svelte';
-  import { BATCH_MAX, loginProblem, parseLogins } from '$lib/admin/bulk';
+  import { BATCH_MAX, loginProblem } from '$lib/admin/bulk';
+  import { countLogins } from '$lib/admin/grant-logins';
   import Icon from '$lib/components/Icon.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
@@ -54,7 +55,7 @@
   ]);
 
   // The pasted list, read as you type; checked against accounts on Check.
-  const parsed = $derived(parseLogins(text));
+  const parsed = $derived(countLogins(text));
   type Row = AccountsByLoginQuery['accountsByLogin'][number] & { result?: { ok: boolean; text: string } };
   let rows = $state<Row[] | null>(null);
   let checkedText = $state('');
@@ -68,7 +69,7 @@
 
   async function check(ev?: SubmitEvent) {
     ev?.preventDefault();
-    if (!parsed.logins.length || checking) return;
+    if (!parsed.valid || checking) return;
     checking = true;
     try {
       rows = (await gql(ACCOUNTS_BY_LOGIN, { logins: parsed.logins })).accountsByLogin;
@@ -115,7 +116,7 @@
 
 <svelte:head><title>Give to many - Admin - cyex.tv</title></svelte:head>
 
-<PageHead title="Give to many" line="One badge, paint or role for a list of accounts. Paste their logins, check them, then give." />
+<PageHead title="Give to many" line="One badge, paint or role for a list of accounts: pick what, paste who, check, give." />
 
 {#if !mayCosmetics && !mayRoles}
   <State title="Nothing to give here.">This needs Give cosmetics, or Assign roles.</State>
@@ -123,63 +124,75 @@
 <LoadGate source={L} label="Loading what you can give…">
 {#snippet children()}
   <div class="grid">
-    <form class="ui-panel ui-form side" onsubmit={check}>
-      {#if options.length > 1}
-        <Segmented label="What to give" options={options} value={what} onchange={(v) => (what = v)} />
-      {/if}
-      <label class="ui-field">
-        <span class="ui-label">{what === 'BADGE' ? 'Badge' : what === 'PAINT' ? 'Paint' : 'Role'}</span>
-        {#if choices.length}
-          <select class="ui-input" bind:value={item} disabled={!!running}>
-            {#each choices as c (c.id)}<option value={c.id}>{clean(c.name)}</option>{/each}
-          </select>
-        {:else}
-          <span class="ui-hint">{what === 'ROLE' ? 'No role you may give.' : `No ${what === 'BADGE' ? 'badges' : 'paints'} yet.`}</span>
+    <form class="steps" onsubmit={check}>
+      <section class="ui-panel step" aria-labelledby="step-what">
+        <h2 class="adm-label" id="step-what"><span class="no ui-num">1</span>What</h2>
+        {#if options.length > 1}
+          <Segmented label="What to give" options={options} value={what} onchange={(v) => (what = v)} />
         {/if}
-      </label>
-      {#if needsReason}
         <label class="ui-field">
-          <span class="ui-label">Reason</span>
-          <input class="ui-input" type="text" bind:value={reason} maxlength="500" placeholder="Event prize, November" disabled={!!running} />
-          <span class="ui-hint">Kept with each grant in the audit log.</span>
+          <span class="ui-label">{what === 'BADGE' ? 'Badge' : what === 'PAINT' ? 'Paint' : 'Role'}</span>
+          {#if choices.length}
+            <select class="ui-input" bind:value={item} disabled={!!running}>
+              {#each choices as c (c.id)}<option value={c.id}>{clean(c.name)}</option>{/each}
+            </select>
+          {:else}
+            <span class="ui-hint">{what === 'ROLE' ? 'No role you may give.' : `No ${what === 'BADGE' ? 'badges' : 'paints'} yet.`}</span>
+          {/if}
         </label>
-      {/if}
-      <label class="ui-field">
-        <span class="ui-label">Logins</span>
-        <textarea class="ui-input logins" rows="8" bind:value={text} spellcheck="false" autocomplete="off" disabled={!!running}
-          placeholder={'nora\nkick:lumen_fox\ntwitch:cat_jammer'} aria-describedby="logins-hint"></textarea>
-        <span class="ui-hint" id="logins-hint">
-          One per line, or separated by commas. Write <code>twitch:</code> or <code>kick:</code> in front when a login is on both.
-          {#if parsed.logins.length}<b class="ui-num">{count(parsed.logins.length)}</b> {parsed.logins.length === 1 ? 'login' : 'logins'}{#if parsed.extra}, {count(parsed.extra)} over the {BATCH_MAX} a check takes{/if}.{/if}
-        </span>
-      </label>
-      <div class="ui-actions">
-        <button class="ui-btn secondary" type="submit" disabled={!parsed.logins.length || checking || !!running}>
-          {#if checking}<span class="ui-spinner small" aria-hidden="true"></span>{/if}Check logins
-        </button>
-        {#if rows}<button class="ui-btn ghost" type="button" onclick={reset} disabled={!!running}>Start over</button>{/if}
-      </div>
+        {#if needsReason}
+          <label class="ui-field">
+            <span class="ui-label">Reason</span>
+            <input class="ui-input" type="text" bind:value={reason} maxlength="500" placeholder="Event prize, November" disabled={!!running} />
+            <span class="ui-hint">Kept with each grant in the audit log.</span>
+          </label>
+        {/if}
+      </section>
+
+      <section class="ui-panel step" aria-labelledby="step-who">
+        <h2 class="adm-label" id="step-who"><span class="no ui-num">2</span>Who</h2>
+        <label class="ui-field">
+          <span class="ui-label">Logins</span>
+          <textarea class="ui-input logins" rows="7" bind:value={text} spellcheck="false" autocomplete="off" disabled={!!running}
+            placeholder={'nora\nkick:lumen_fox\ntwitch:cat_jammer'} aria-describedby="logins-hint logins-count"></textarea>
+          <span class="ui-hint" id="logins-hint">One per line, or separated by commas. Write <code>twitch:</code> or <code>kick:</code> in front when a login is on both.</span>
+        </label>
+        <p class="tally ui-num" id="logins-count" aria-live="polite">
+          {#if parsed.logins.length}
+            <b>{count(parsed.valid)}</b> {parsed.valid === 1 ? 'login' : 'logins'} ready{#if parsed.odd.length}<span class="miss">{' · '}{count(parsed.odd.length)} can’t be a login</span>{/if}{#if parsed.extra}<span class="miss">{' · '}{count(parsed.extra)} over the {BATCH_MAX} a check takes</span>{/if}
+          {:else}
+            Nothing pasted yet.
+          {/if}
+        </p>
+        {#if parsed.odd.length}<p class="ui-hint odd"><bdi>{parsed.odd.slice(0, 3).join(', ')}{parsed.odd.length > 3 ? ', …' : ''}</bdi></p>{/if}
+        <div class="ui-actions">
+          <button class="ui-btn secondary" type="submit" disabled={!parsed.valid || checking || !!running}>
+            {#if checking}<span class="ui-spinner small" aria-hidden="true"></span>{/if}Check logins
+          </button>
+          {#if rows}<button class="ui-btn ghost" type="button" onclick={reset} disabled={!!running}>Start over</button>{/if}
+        </div>
+      </section>
     </form>
 
     <section class="ui-panel results" aria-labelledby="res-title" aria-busy={checking}>
-      <header class="rhead">
-        <h2 id="res-title" class="ui-label">Accounts</h2>
+      <div class="rhead">
+        <h2 id="res-title" class="adm-label"><span class="no ui-num">3</span>Check and give</h2>
         {#if rows}
           <span class="ui-hint ui-num">{count(rows.length - unmatched)} found{#if unmatched}{' · '}<span class="miss">{count(unmatched)} not found</span>{/if}</span>
         {/if}
-      </header>
+      </div>
       {#if !rows}
-        <State bare title="Nothing checked yet.">Paste logins and press Check logins: each one shows the account it names, or why there is none.</State>
+        <State bare title="Nothing checked yet.">Check the logins: each one shows the account it names, or why there is none.</State>
       {:else}
         {#if stale}<p class="ui-hint stale"><Icon name="refresh" size={14} /> The list changed since the check. Check again before giving.</p>{/if}
-        <ul class="ui-list rows">
+        <ul class="adm-rows res">
           {#each rows as r (r.login)}
             <li class:bad={!r.account}>
               <span class="login ui-mono"><bdi>{r.login}</bdi></span>
               <span class="who">
                 {#if r.account}<AccountLink id={r.account.id} name={r.account.displayName} />{:else}<span class="ui-error">{loginProblem(r.problem)}</span>{/if}
               </span>
-              <span class="res">
+              <span class="rs">
                 {#if r.result}<span class="ui-chip" class:ok={r.result.ok} class:no={!r.result.ok}>{r.result.text}</span>{/if}
               </span>
             </li>
@@ -204,27 +217,33 @@
 {/if}
 
 <style>
-  .grid { display: grid; grid-template-columns: minmax(280px, 380px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .grid { display: grid; grid-template-columns: minmax(280px, 400px) minmax(0, 1fr); gap: 16px; align-items: start; }
   @media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
-  .side { display: grid; gap: 14px; padding: 14px; }
+  .steps { display: grid; gap: 16px; min-width: 0; }
+  .step, .results { display: grid; gap: 12px; padding: 16px; min-width: 0; }
+  .step h2, .results h2 { display: flex; align-items: center; gap: 8px; }
+  .no { display: inline-grid; place-items: center; width: 18px; height: 18px; border: 1px solid var(--border-strong); border-radius: var(--radius); font-size: 11px; letter-spacing: 0; color: var(--muted); }
   .logins { resize: vertical; min-height: 140px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 13px; }
+  @media (pointer: coarse) { .logins { font-size: 16px; } }
   code { font-size: 12px; }
-  .results { display: grid; gap: 8px; padding: 14px; min-width: 0; }
-  .rhead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; }
+  .tally { margin: 0; font-size: var(--t-small); color: var(--muted); }
+  .tally b { color: var(--text); }
+  .odd { margin: -6px 0 0; overflow-wrap: anywhere; }
+  .rhead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
   .rhead h2 { margin: 0; }
   .miss { color: var(--red); }
   .stale { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--yellow); }
-  .rows li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 44px; }
+  .res li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; align-items: center; min-height: 44px; padding: 0 12px; }
   .login { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
   .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .who .ui-error { margin: 0; font-size: var(--text-sub); }
-  .res .ui-chip { text-transform: none; letter-spacing: 0; }
-  .res .ok { color: var(--green); }
-  .res .no { color: var(--red); }
-  .give { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .who .ui-error { margin: 0; font-size: var(--t-small); }
+  .rs .ui-chip { text-transform: none; letter-spacing: 0; }
+  .rs .ok { color: var(--green); }
+  .rs .no { color: var(--red); }
+  .give { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding-top: 4px; }
   .ui-spinner.small { width: 13px; height: 13px; }
   @media (max-width: 520px) {
-    .rows li { grid-template-columns: minmax(0, 1fr) auto; }
+    .res li { grid-template-columns: minmax(0, 1fr) auto; padding-block: 6px; }
     .who { grid-column: 1 / -1; grid-row: 2; }
   }
 </style>

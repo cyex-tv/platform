@@ -8,8 +8,8 @@
   import Slider from './Slider.svelte';
   import Stops from './Stops.svelte';
 
-  type Props = { paint: StudioPaint; issues: Issue[]; onchange: (p: Partial<StudioPaint>) => void; onsurprise?: () => void };
-  let { paint, issues, onchange, onsurprise }: Props = $props();
+  type Props = { paint: StudioPaint; issues: Issue[]; onchange: (p: Partial<StudioPaint>) => void; onsurprise?: () => void; part?: 'lib' | 'params' | 'both' };
+  let { paint, issues, onchange, onsurprise, part = 'both' }: Props = $props();
   const angleIssue = $derived(issues.find((i) => i.field === 'angle')?.message ?? null);
 
   function usePreset(p: StudioPaint) {
@@ -18,6 +18,7 @@
   }
 </script>
 
+{#if part !== 'params'}
 <section class="ps-panel" aria-labelledby="ps-presets-h">
   <header>
     <h2 id="ps-presets-h">Presets</h2>
@@ -32,7 +33,9 @@
     <p class="ps-hint">A preset replaces the gradient and shadows, and keeps the name.</p>
   </div>
 </section>
+{/if}
 
+{#if part !== 'lib'}
 <section class="ps-panel" aria-labelledby="ps-gradient-h">
   <header><h2 id="ps-gradient-h">Gradient</h2></header>
   <div class="ps-body">
@@ -60,3 +63,4 @@
     <Stops stops={paint.stops} issues={issues.filter((i) => i.field === 'stops')} onchange={(s) => onchange({ stops: s })} />
   </div>
 </section>
+{/if}

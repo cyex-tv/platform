@@ -20,11 +20,15 @@
     panel: Snippet;
     /** What the panel says with nothing picked (wide windows only). */
     empty?: Snippet;
+    /** Under 1100px: a bottom sheet that opens when something is picked (lists), or the panel
+     *  inline above the content (a page about one thing, always open: the user dashboard). */
+    stack?: 'sheet' | 'top';
     children: Snippet;
   };
-  let { label, open, onclose, panel, empty, children }: Props = $props();
+  let { label, open, onclose, panel, empty, stack = 'sheet', children }: Props = $props();
 
-  let narrow = $state(false);
+  // Unknown until the first check, so neither layout flashes before the other.
+  let narrow = $state<boolean | null>(null);
   $effect(() => {
     const mq = matchMedia('(max-width: 1099.98px)');
     narrow = mq.matches;
@@ -34,20 +38,21 @@
   });
   let sheet = $state(false);
   $effect(() => {
-    sheet = narrow && open;
+    sheet = !!narrow && stack === 'sheet' && open;
   });
 </script>
 
 <div class="split">
+  {#if narrow && stack === 'top' && open}<aside class="top" aria-label={label}>{@render panel()}</aside>{/if}
   <div class="list">{@render children()}</div>
-  {#if !narrow}
+  {#if narrow === false}
     <aside class="panel" aria-label={label} use:fitSticky>
-      {#if open}{@render panel()}{:else if empty}<div class="none">{@render empty()}</div>{/if}
+      {#if open}{@render panel()}{:else if empty}{@render empty()}{/if}
     </aside>
   {/if}
 </div>
-{#if narrow}
-  <BottomSheet bind:open={sheet} {label} onclose={() => open && onclose()}>
+{#if narrow && stack === 'sheet'}
+  <BottomSheet bind:open={sheet} {label} title={false} onclose={() => open && onclose()}>
     {#if open}<div class="in-sheet">{@render panel()}</div>{/if}
   </BottomSheet>
 {/if}
@@ -63,7 +68,8 @@
       margin-right: calc(-1 * var(--page-pad)); border-left: 1px solid var(--border); background: var(--surface); }
     .panel:global([data-tall]) { position: relative; top: auto; }
   }
-  .none { padding: 16px; font-size: var(--t-small); color: var(--dim); }
+  .top { margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); overflow: hidden; }
+  .top :global(.adm-ip-head) { position: static; }
   .in-sheet { margin: 0 -4px; }
   .in-sheet :global(.adm-ip-head) { position: static; }
 </style>

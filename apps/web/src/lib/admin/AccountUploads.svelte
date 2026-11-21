@@ -7,6 +7,7 @@
   import State from '$lib/components/State.svelte';
   import Thumb from '$lib/tool/Thumb.svelte';
   import { STATE_LABEL } from '$lib/tool/state';
+  import Box from './ui/Box.svelte';
   import EmoteFlagsPanel, { canEditFlags } from './EmoteFlagsPanel.svelte';
 
   type Row = AccountEmotesQuery['accountEmotes']['items'][number];
@@ -45,8 +46,7 @@
   });
 </script>
 
-<section class="ui-panel" aria-labelledby="up-h">
-  <header><h2 id="up-h">Uploads</h2>{#if !problem && !(loading && !rows.length)}<span class="ui-hint ui-num">{count(total)}</span>{/if}</header>
+<Box title="Uploads" count={!problem && !(loading && !rows.length) ? count(total) : null}>
   {#if problem}
     <State bare kind="error" title="That didn’t load">
       {problem}
@@ -55,12 +55,12 @@
   {:else if loading && !rows.length}
     <State bare kind="loading" title="Loading uploads…" />
   {:else if !rows.length}
-    <State bare title="No uploads.">They haven’t uploaded an emote.</State>
+    <p class="box-none">They haven’t uploaded an emote.</p>
   {:else}
     <ul class="ui-list">
       {#each rows as e (e.id)}
         <li>
-          <Thumb emote={e} name={clean(e.name)} box={40} />
+          <Thumb emote={e} name={clean(e.name)} box={32} />
           <span class="what">
             <a href="/me/emotes/{encodeURIComponent(e.id)}"><bdi>{clean(e.name)}</bdi></a>
             <span class="ui-hint ui-num">{dateTime(e.createdAt)}{#if e.channelCount}{' · '}{count(e.channelCount)} channels{/if}</span>
@@ -78,17 +78,17 @@
       {/each}
     </ul>
     {#if rows.length < total}
-      <div class="more"><button class="ui-btn secondary small" type="button" disabled={loading} onclick={() => load(true)}>{loading ? 'Loading…' : 'Show more'}</button></div>
+      <div class="more"><span class="ui-hint ui-num">{count(rows.length)} of {count(total)}</span><button class="ui-btn ghost small" type="button" disabled={loading} onclick={() => load(true)}>{loading ? 'Loading…' : 'Show more'}</button></div>
     {/if}
   {/if}
-</section>
+</Box>
 
 <style>
   .what { display: grid; flex: 1; min-width: 0; }
-  .what a { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .what a { font-weight: 600; font-size: var(--t-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .what .ui-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .flags { display: block; padding: 0; background: var(--surface-2, var(--surface)); }
-  .more { display: flex; justify-content: center; padding: 10px; border-top: 1px solid var(--border); }
+  .flags { display: block; padding: 0; background: var(--bg); }
+  .more { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 0 8px 0 16px; border-top: 1px solid var(--border); }
   /* a touch target of at least 24px (WCAG 2.5.8) */
   a { display: inline-flex; align-items: center; min-height: 24px; }
 </style>

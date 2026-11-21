@@ -8,11 +8,13 @@
   import Param from './Param.svelte';
   import Slider from './Slider.svelte';
 
-  type Props = { PL: Engine; doc: AnimDoc; onreplace: (d: AnimDoc) => void };
-  let { PL, doc = $bindable(), onreplace }: Props = $props();
+  type Sel = { kind: 'layer' | 'effect'; id: string } | null;
+  // `part`: the layout shows the editor in two places, so the picked layer or effect (`sel`) is the
+  // studio's: 'lib' is the start, layers and effects, 'params' the picked one's settings.
+  type Props = { PL: Engine; doc: AnimDoc; onreplace: (d: AnimDoc) => void; sel?: Sel; part?: 'lib' | 'params' | 'both' };
+  let { PL, doc = $bindable(), onreplace, sel = $bindable(null), part = 'both' }: Props = $props();
 
   const KINDS = ['layer', 'effect'] as const;
-  let sel = $state<{ kind: 'layer' | 'effect'; id: string } | null>(null);
   let adding = $state<'layer' | 'effect' | null>(null);
   const presetNames = $derived(PL.ANIM_PRESETS.map((f, i) => ({ i, name: f().name, scene: i < PL.SCENE_COUNT })));
 
@@ -108,6 +110,7 @@
   }
 </script>
 
+{#if part !== 'params'}
 <section class="ps-panel" aria-labelledby="ps-apresets-h">
   <header>
     <h2 id="ps-apresets-h">Start from</h2>
@@ -177,7 +180,9 @@
   </section>
 {/each}
 
-{#if item && def}
+{/if}
+
+{#if part !== 'lib' && item && def}
   <section class="ps-panel" aria-labelledby="ps-item-h">
     <header>
       <h2 id="ps-item-h">{item.name}</h2>
@@ -231,4 +236,4 @@
   </section>
 {/if}
 
-<Library {PL} kind={adding} onpick={add} onclose={() => (adding = null)} />
+{#if part !== 'params'}<Library {PL} kind={adding} onpick={add} onclose={() => (adding = null)} />{/if}

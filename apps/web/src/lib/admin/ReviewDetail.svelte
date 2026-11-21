@@ -170,160 +170,163 @@
         {/if}
       </section>
 
-      <section class="facts">
-        <span class="ui-label">{kindOf(e)}</span>
-        <h2 id="rd-name"><bdi>{clean(e.name)}</bdi></h2>
-        <p class="who"><Icon name="user" size={14} /> <AccountLink id={e.owner?.id} name={e.owner?.displayName} /></p>
-        <dl>
-          <dt>Uploaded</dt><dd class="ui-num">{dateTime(e.createdAt)}</dd>
-          <dt>Visibility</dt><dd>{VIS[e.visibility]}</dd>
-          <dt>State</dt><dd><span class="ui-chip {e.state.toLowerCase()}">{e.state === 'TAKEN_DOWN' ? 'Taken down' : e.state.charAt(0) + e.state.slice(1).toLowerCase()}</span></dd>
-          {#if e.flags.nsfw || e.flags.zeroWidth || e.flags.wide}
-            <dt>Flags</dt>
-            <dd class="chips">{#if e.flags.nsfw}<span class="ui-chip">NSFW</span>{/if}{#if e.flags.zeroWidth}<span class="ui-chip">Zero-width</span>{/if}{#if e.flags.wide}<span class="ui-chip">Wide</span>{/if}</dd>
-          {/if}
-          <dt>Tags</dt>
-          <dd class="chips">{#each e.tags as t (t)}<span class="ui-chip" title={t}><bdi>{t}</bdi></span>{:else}<span class="ui-hint">None</span>{/each}</dd>
-          <dt>ID</dt><dd class="id"><span class="ui-mono">{e.id}</span> <IconButton label={idCopy.copied ? 'Copied' : 'Copy ID'} icon={idCopy.copied ? 'check' : 'copy'} size="s" onclick={() => idCopy.copy(e.id)} /></dd>
-        </dl>
-      </section>
-    </div>
+      <div class="side">
+        <div class="scroll">
+          <section class="facts adm-sec">
+            <span class="adm-label">{kindOf(e)}</span>
+            <h2 id="rd-name" class="adm-name"><bdi>{clean(e.name)}</bdi></h2>
+            <p class="who"><Icon name="user" size={14} /> <AccountLink id={e.owner?.id} name={e.owner?.displayName} /></p>
+            <dl class="adm-kv">
+              <dt>Uploaded</dt><dd>{dateTime(e.createdAt)}</dd>
+              <dt>Visibility</dt><dd>{VIS[e.visibility]}</dd>
+              <dt>State</dt><dd><span class="ui-chip {e.state.toLowerCase()}">{e.state === 'TAKEN_DOWN' ? 'Taken down' : e.state.charAt(0) + e.state.slice(1).toLowerCase()}</span></dd>
+              {#if e.flags.nsfw || e.flags.zeroWidth || e.flags.wide}
+                <dt>Flags</dt>
+                <dd class="chips">{#if e.flags.nsfw}<span class="ui-chip warn">NSFW</span>{/if}{#if e.flags.zeroWidth}<span class="ui-chip">Zero-width</span>{/if}{#if e.flags.wide}<span class="ui-chip">Wide</span>{/if}</dd>
+              {/if}
+              <dt>Tags</dt>
+              <dd class="chips">{#each e.tags as t (t)}<span class="ui-chip" title={t}><bdi>{t}</bdi></span>{:else}<span class="ui-hint">None</span>{/each}</dd>
+              <dt>ID</dt><dd class="id"><span class="ui-mono">{e.id}</span> <IconButton label={idCopy.copied ? 'Copied' : 'Copy ID'} icon={idCopy.copied ? 'check' : 'copy'} size="s" onclick={() => idCopy.copy(e.id)} /></dd>
+            </dl>
+          </section>
 
-    <section class="dupes" aria-labelledby="rd-dupes">
-      <h3 id="rd-dupes" class="ui-label">
-        Possible duplicates
-        {#if dupes?.length}<span class="ui-num">({count(dupes.length)})</span>{/if}
-        {#if sameFile}<span class="ui-chip warn">{sameFile === 1 ? 'Same file as 1 other' : `Same file as ${count(sameFile)} others`}</span>{/if}
-      </h3>
-      {#if dupesProblem}
-        <p class="ui-hint">Couldn’t check for duplicates. <button class="retry" type="button" onclick={() => loadDupes(e.id)}>Try again</button></p>
-      {:else if dupes === null}
-        <p class="ui-hint" aria-busy="true">Checking…</p>
-      {:else if dupes.length === 0}
-        <p class="ui-hint">None: no other emote has this file or a close name.</p>
-      {:else}
-        <ul class="strip">
-          {#each dupes as d (d.emote.id)}
-            <li>
-              <a href="/emotes/{encodeURIComponent(d.emote.id)}" target="_blank" rel="noopener" title="{clean(d.emote.name)} by {clean(d.emote.owner?.displayName) || 'unknown'}">
-                <span class="dthumb"><Thumb emote={d.emote} name="" box={40} /></span>
-                <span class="dtext">
-                  <span class="dname"><bdi>{clean(d.emote.name)}</bdi></span>
-                  <span class="dby"><bdi>{clean(d.emote.owner?.displayName) || 'Unknown'}</bdi></span>
-                  <span class="dwhy">
-                    {#if d.sameFile}<span class="ui-chip warn">Same file</span>{:else}<span class="ui-chip">Name {Math.round(d.similarity * 100)}%</span>{/if}
-                    {#if d.emote.state !== 'APPROVED'}<span class="ui-chip {d.emote.state.toLowerCase()}">{STATE_LABEL[d.emote.state]}</span>{/if}
-                  </span>
-                </span>
-              </a>
-            </li>
-          {/each}
-        </ul>
-      {/if}
-    </section>
+          <section class="dupes adm-sec" aria-labelledby="rd-dupes">
+            <h3 id="rd-dupes" class="adm-label">
+              Possible duplicates
+              {#if dupes?.length}<span class="n">{count(dupes.length)}</span>{/if}
+              {#if sameFile}<span class="ui-chip warn">{sameFile === 1 ? 'Same file as 1 other' : `Same file as ${count(sameFile)} others`}</span>{/if}
+            </h3>
+            {#if dupesProblem}
+              <p class="ui-hint">Couldn’t check for duplicates. <button class="retry" type="button" onclick={() => loadDupes(e.id)}>Try again</button></p>
+            {:else if dupes === null}
+              <p class="ui-hint" aria-busy="true">Checking…</p>
+            {:else if dupes.length === 0}
+              <p class="ui-hint">None: no other emote has this file or a close name.</p>
+            {:else}
+              <ul class="strip">
+                {#each dupes as d (d.emote.id)}
+                  <li>
+                    <a href="/emotes/{encodeURIComponent(d.emote.id)}" target="_blank" rel="noopener" title="{clean(d.emote.name)} by {clean(d.emote.owner?.displayName) || 'unknown'}">
+                      <span class="dthumb"><Thumb emote={d.emote} name="" box={40} /></span>
+                      <span class="dtext">
+                        <span class="dname"><bdi>{clean(d.emote.name)}</bdi></span>
+                        <span class="dby"><bdi>{clean(d.emote.owner?.displayName) || 'Unknown'}</bdi></span>
+                        <span class="dwhy">
+                          {#if d.sameFile}<span class="ui-chip warn">Same file</span>{:else}<span class="ui-chip">Name {Math.round(d.similarity * 100)}%</span>{/if}
+                          {#if d.emote.state !== 'APPROVED'}<span class="ui-chip {d.emote.state.toLowerCase()}">{STATE_LABEL[d.emote.state]}</span>{/if}
+                        </span>
+                      </span>
+                    </a>
+                  </li>
+                {/each}
+              </ul>
+            {/if}
+          </section>
 
-    <div class="tabs">
-      <Segmented label="Show" size="s" value={tab} onchange={(v) => (tab = v)}
-        options={[
-          { value: 'activity', label: history ? `Activity (${history.length + 1})` : 'Activity' },
-          { value: 'notes', label: noteCount === null ? 'Notes' : `Notes (${noteCount})` },
-          ...(flagTab ? [{ value: 'flags' as const, label: 'Emote flags' }] : []),
-        ]} />
-    </div>
-    <div class="pane">
-      <div hidden={tab !== 'activity'}>
-        {#if historyProblem}
-          <State bare kind="error" title="That didn’t load">
-            {#snippet actions()}<button class="ui-btn secondary small" type="button" onclick={() => loadHistory(e.id)}>Try again</button>{/snippet}
-          </State>
-        {:else if !history}
-          <State bare kind="loading" title="Loading activity…" />
-        {:else}
-          <ol class="ui-list log">
-            {#each history as h (h.id)}
-              {@const d = describe(h)}
-              <li>
-                <span class="line">
-                  <span>{d.text} · <AccountLink id={h.actorId} /></span>
-                  {#if d.detail}<span class="more">{d.detail}</span>{/if}
-                </span>
-                <time class="ui-mono" datetime={h.createdAt}>{dateTime(h.createdAt)}</time>
-              </li>
-            {/each}
-            <li>
-              <span class="line"><span>Uploaded · <AccountLink id={e.owner?.id} name={e.owner?.displayName} /></span></span>
-              <time class="ui-mono" datetime={e.createdAt}>{dateTime(e.createdAt)}</time>
-            </li>
-          </ol>
+          <section class="adm-sec lower">
+            <div class="tabs">
+              <Segmented label="Show" size="s" value={tab} onchange={(v) => (tab = v)}
+                options={[
+                  { value: 'activity', label: history ? `Activity (${history.length + 1})` : 'Activity' },
+                  { value: 'notes', label: noteCount === null ? 'Notes' : `Notes (${noteCount})` },
+                  ...(flagTab ? [{ value: 'flags' as const, label: 'Emote flags' }] : []),
+                ]} />
+            </div>
+            <div class="pane">
+              <div hidden={tab !== 'activity'}>
+                {#if historyProblem}
+                  <State bare kind="error" title="That didn’t load">
+                    {#snippet actions()}<button class="ui-btn secondary small" type="button" onclick={() => loadHistory(e.id)}>Try again</button>{/snippet}
+                  </State>
+                {:else if !history}
+                  <State bare kind="loading" title="Loading activity…" />
+                {:else}
+                  <ol class="ui-list log">
+                    {#each history as h (h.id)}
+                      {@const d = describe(h)}
+                      <li>
+                        <span class="line">
+                          <span>{d.text} · <AccountLink id={h.actorId} /></span>
+                          {#if d.detail}<span class="more">{d.detail}</span>{/if}
+                        </span>
+                        <time class="ui-mono" datetime={h.createdAt}>{dateTime(h.createdAt)}</time>
+                      </li>
+                    {/each}
+                    <li>
+                      <span class="line"><span>Uploaded · <AccountLink id={e.owner?.id} name={e.owner?.displayName} /></span></span>
+                      <time class="ui-mono" datetime={e.createdAt}>{dateTime(e.createdAt)}</time>
+                    </li>
+                  </ol>
+                {/if}
+              </div>
+              <div hidden={tab !== 'notes'}>
+                <NoteList
+                  key={e.id}
+                  load={async () => (await gql(EMOTE_NOTES, { emoteId: e.id })).emoteNotes}
+                  add={async (body) => (await gql(ADD_EMOTE_NOTE, { emoteId: e.id, body })).addEmoteNote}
+                  remove={(id) => gql(DELETE_EMOTE_NOTE, { id })}
+                  placeholder="A note for other reviewers: why you held it, what to compare it with."
+                  oncount={(n) => (noteCount = n)}
+                />
+              </div>
+              {#if flagTab}
+                <div hidden={tab !== 'flags'}>
+                  <EmoteFlagsPanel bare emote={e} id="rd-flags" onsaved={(next) => (onflags?.(next), loadHistory(e.id))} />
+                </div>
+              {/if}
+            </div>
+          </section>
+        </div>
+
+        {#if !resolved}
+          <footer>
+            <button class="ui-btn danger" type="button" disabled={busy} onclick={onreject}><Icon name="x" size={15} />Reject</button>
+            <span class="small">
+              <IconButton label="Skip to the next, no verdict" icon="arrow-right" variant="outline" tip="top" disabled={!hasNext} onclick={onskip} />
+              <IconButton label="Approve as unlisted" icon="eye-off" variant="outline" tip="top" disabled={busy || !ready(e)} onclick={() => onapprove('UNLISTED')} />
+              <IconButton label="Approve for its owner only" icon="user" variant="outline" tip="top" disabled={busy || !ready(e)} onclick={() => onapprove('PRIVATE')} />
+              <IconButton label="Open the uploader’s account" icon="circle-user" variant="outline" tip="top" href={e.owner ? `/admin/users/${encodeURIComponent(e.owner.id)}` : undefined} disabled={!e.owner} />
+            </span>
+            <button class="ui-btn primary" type="button" disabled={busy || !ready(e)} onclick={() => onapprove()}><Icon name="check" size={15} />Approve</button>
+          </footer>
         {/if}
       </div>
-      <div hidden={tab !== 'notes'}>
-        <NoteList
-          key={e.id}
-          load={async () => (await gql(EMOTE_NOTES, { emoteId: e.id })).emoteNotes}
-          add={async (body) => (await gql(ADD_EMOTE_NOTE, { emoteId: e.id, body })).addEmoteNote}
-          remove={(id) => gql(DELETE_EMOTE_NOTE, { id })}
-          placeholder="A note for other reviewers: why you held it, what to compare it with."
-          oncount={(n) => (noteCount = n)}
-        />
-      </div>
-      {#if flagTab}
-        <div hidden={tab !== 'flags'}>
-          <EmoteFlagsPanel bare emote={e} id="rd-flags" onsaved={(next) => (onflags?.(next), loadHistory(e.id))} />
-        </div>
-      {/if}
     </div>
-
-    {#if !resolved}
-      <footer>
-        <button class="ui-btn danger" type="button" disabled={busy} onclick={onreject}><Icon name="x" size={15} />Reject</button>
-        <span class="small">
-          <IconButton label="Skip to the next, no verdict" icon="arrow-right" variant="outline" tip="top" disabled={!hasNext} onclick={onskip} />
-          <IconButton label="Approve as unlisted" icon="eye-off" variant="outline" tip="top" disabled={busy || !ready(e)} onclick={() => onapprove('UNLISTED')} />
-          <IconButton label="Approve for its owner only" icon="user" variant="outline" tip="top" disabled={busy || !ready(e)} onclick={() => onapprove('PRIVATE')} />
-          <IconButton label="Open the uploader’s account" icon="circle-user" variant="outline" tip="top" href={e.owner ? `/admin/users/${encodeURIComponent(e.owner.id)}` : undefined} disabled={!e.owner} />
-        </span>
-        <button class="ui-btn primary" type="button" disabled={busy || !ready(e)} onclick={() => onapprove()}><Icon name="check" size={15} />Approve</button>
-      </footer>
-    {/if}
   {/if}
 </dialog>
 
 <style>
-  .detail { width: min(880px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); }
+  .detail { width: min(1080px, calc(100vw - 32px)); height: min(720px, calc(100dvh - 32px)); max-height: none; }
   .detail[open] { display: flex; flex-direction: column; }
   .detail:focus-visible { outline: none; }
   /* Walked through with the keys, so it opens and closes with no animation at all. */
   .detail.detail, .detail.detail::backdrop { transition: none; opacity: 1; scale: 1; }
-  .top { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--border); }
-  .place { min-width: 84px; text-align: center; font-weight: 600; font-size: var(--text-sub); }
+  .top { display: flex; align-items: center; gap: 6px; min-height: 48px; padding: 0 8px; border-bottom: 1px solid var(--border); }
+  .place { min-width: 84px; text-align: center; font-weight: 600; font-size: var(--t-small); }
   .grow { flex: 1; }
-  .main { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; padding: 16px; overflow: auto; }
-  @media (max-width: 720px) { .main { grid-template-columns: minmax(0, 1fr); } }
-  .pics { display: grid; place-items: center; min-height: 160px; padding: 16px 12px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--bg); overflow-x: auto; }
-  .sizes { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end; gap: 16px 20px; max-width: 100%; }
+  /* The stage on --bg to the left, the facts and the verdicts to the right. */
+  .main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(400px, 460px); }
+  .pics { display: grid; place-items: center; min-height: 0; padding: 24px; background: var(--bg); overflow: auto; }
+  .sizes { display: flex; flex-wrap: wrap; justify-content: center; align-items: flex-end; gap: 24px; max-width: 100%; }
   .sizes figure { display: grid; justify-items: center; gap: 6px; margin: 0; }
   .frame { display: block; max-width: 100%; }
   .frame img { display: block; width: 100%; height: 100%; object-fit: contain; }
   .sizes figcaption { display: grid; justify-items: center; font-size: 11px; line-height: 1.4; color: var(--dim); white-space: nowrap; }
   .sizes figcaption b { font-weight: 600; color: var(--muted); }
-  .facts { display: grid; align-content: start; gap: 4px; min-width: 0; }
-  .facts h2 { margin: 0; font-size: 1.3rem; line-height: 1.25; overflow-wrap: anywhere; }
-  .who { display: flex; align-items: center; gap: 6px; margin: 0 0 8px; color: var(--muted); }
-  dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 12px; margin: 0; font-size: var(--text-sub); }
-  dt { color: var(--dim); }
-  dd { margin: 0; min-width: 0; }
-  .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .side { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-left: 1px solid var(--border); }
+  .scroll { flex: 1; min-height: 0; overflow: auto; padding: 4px 16px 8px; overscroll-behavior: contain; }
+  .facts { min-width: 0; }
+  .who { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); font-size: var(--t-small); }
+  .chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
   .chips .ui-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-transform: none; letter-spacing: 0; }
-  .id { display: flex; align-items: center; gap: 6px; }
+  .chips .warn, .dupes .warn { color: var(--red); }
+  .id { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
   .id .ui-mono { overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
-  .dupes { display: grid; gap: 6px; padding: 10px 16px 12px; border-top: 1px solid var(--border); min-width: 0; }
-  .dupes h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; }
+  .dupes h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .dupes .ui-chip, .dwhy .ui-chip { height: 20px; font-size: 11px; text-transform: none; letter-spacing: 0; }
-  .dupes .warn { color: var(--yellow); }
   .dupes p { margin: 0; min-height: 20px; }
   .retry { padding: 0; border: 0; background: none; font: inherit; color: var(--accent-text); cursor: pointer; }
-  /* One row that scrolls sideways on a phone; wraps into rows when there is room. */
+  /* One row that scrolls sideways; the strip is the only horizontal scroller. */
   .strip { list-style: none; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(180px, 220px); gap: 8px; margin: 0; padding: 0 0 4px;
     overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: thin; }
   .strip a { display: grid; grid-template-columns: 44px minmax(0, 1fr); align-items: center; gap: 8px; padding: 6px 8px 6px 6px; min-height: 56px;
@@ -333,21 +336,26 @@
   .dthumb { display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--radius); background: var(--bg); }
   .dtext { display: grid; gap: 1px; min-width: 0; }
   .dname, .dby { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dname { font-size: var(--text-sub); font-weight: 600; }
+  .dname { font-size: var(--t-small); font-weight: 600; }
   .dby { font-size: 12px; color: var(--muted); }
   .dwhy { display: flex; gap: 4px; margin-top: 2px; }
-  .tabs { display: flex; justify-content: center; padding: 4px 16px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-  .pane { min-height: 140px; max-height: 280px; overflow: auto; }
+  .tabs { display: flex; }
+  .pane { min-height: 120px; }
   .log > li { align-items: flex-start; justify-content: space-between; gap: 12px; }
-  .line { display: grid; gap: 2px; min-width: 0; font-size: var(--text-sub); }
+  .line { display: grid; gap: 2px; min-width: 0; font-size: var(--t-small); }
   .more { color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
   .log time { flex: none; font-size: 12px; font-weight: 600; color: var(--dim); user-select: none; }
-  .detail footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); }
+  .detail footer { position: static; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 12px; border-top: 1px solid var(--border); background: var(--elevated); }
   .small { display: flex; gap: 6px; }
-  @media (max-width: 480px) {
-    .detail footer { flex-wrap: wrap; }
+  /* Phones: full screen, one scrolling column, the verdicts pinned at the bottom. */
+  @media (max-width: 860px) {
+    .detail { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; }
+    .main { display: flex; flex-direction: column; overflow: auto; overscroll-behavior: contain; }
+    .pics { flex: none; min-height: 180px; padding: 16px; overflow: visible; }
+    .side { display: contents; }
+    .scroll { overflow: visible; flex: none; }
+    .detail footer { position: sticky; bottom: 0; flex-wrap: wrap; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
     .detail footer > .ui-btn { flex: 1; }
     .small { order: 3; width: 100%; justify-content: center; }
-    .main { padding: 12px; }
   }
 </style>

@@ -1,7 +1,8 @@
 <script lang="ts">
-  // The audit log with filters (actor, target kind and ID, action, date range) kept in the
-  // address, readable rows that link to the target, and a per-row diff: what changed, or the raw
-  // JSON. Pages back with "Older entries".
+  // The audit log: a dense table (when, actor, action, target, details) with filters (actor, target
+  // kind and ID, action, date range) kept in the address. A row's details open in place: what
+  // changed, or the raw JSON (capped, with Show all). Pages of 50 with Newer and Older and the
+  // range shown; on a phone each row is a small card.
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { gql } from '$lib/api';
@@ -9,20 +10,22 @@
   import ActorField from '$lib/admin/ActorField.svelte';
   import DateField from '$lib/components/DateField.svelte';
   import { lookUp } from '$lib/admin/names.svelte';
-  import { actionText, changes, dayAfter, dayStart, rangeProblem, targetHref } from '$lib/admin/audit';
+  import { actionText, changes, dayAfter, dayStart, pageRange, rangeProblem, summarize, targetHref } from '$lib/admin/audit';
   import Icon from '$lib/components/Icon.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
   import type { AuditQuery } from '$lib/gql/graphql';
-  import { dateTimeSeconds } from '$lib/format';
+  import { count, dateTimeSeconds } from '$lib/format';
   import { AUDIT } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import PageHead from '$lib/tool/PageHead.svelte';
   import { loader } from '$lib/tool/loader.svelte';
-  import { fail } from '$lib/tool/notices.svelte';
 
   type Entry = AuditQuery['auditLog'][number];
   const LIMIT = 50;
+  /** Changes and JSON lines a row shows before "Show all". */
+  const CAP = 12;
+  const JSON_LINES = 40;
   /// Actions that exist today, for the action field's suggestions (any exact name still works).
   const ACTIONS = [
     'emote.approved', 'emote.rejected', 'emote.taken_down', 'report.dismissed', 'role.created', 'role.updated', 'role.deleted',
@@ -38,12 +41,16 @@
   let from = $state(q('from'));
   let to = $state(q('to'));
 
-  let older = $state<Entry[]>([]);
-  let loadingOlder = $state(false);
-  let olderSeq = 0;
-  let olderMore = $state<boolean | null>(null);
   let open = $state<string | null>(null);
   let raw = $state(false);
+  let full = $state(false);
+
+  // Paging: the cursor ("before") of each page seen, so Newer goes back without asking again.
+  // A new filter starts over on the first page.
+  let pg = $state<{ search: string; ix: number; cursors: (string | null)[] }>({ search: '', ix: 0, cursors: [null] });
+  const same = $derived(pg.search === page.url.search);
+  const ix = $derived(same ? pg.ix : 0);
+  const cursors = $derived(same ? pg.cursors : [null]);
 
   function vars(before: string | null) {
     return {
@@ -54,59 +61,64 @@
       since: dayStart(q('from')),
       until: dayAfter(q('to')),
       before,
-      limit: LIMIT,
+      // One more than a page, to know whether an older page exists.
+      limit: LIMIT + 1,
     };
   }
 
   const L = loader(async ({ fetch }) => {
-    void page.url.search;
-    olderSeq++;
-    older = [];
-    olderMore = null;
-    loadingOlder = false;
-    open = null;
-    const rows = (await gql(AUDIT, vars(null), fetch)).auditLog;
+    const rows = (await gql(AUDIT, vars(cursors[ix] ?? null), fetch)).auditLog;
     lookUp(rows.map((r) => r.actorId));
+    open = null;
     return rows;
   });
-  const first = $derived(L.data);
-  const entries = $derived(first ? [...first, ...older] : null);
-  const more = $derived(olderMore ?? first?.length === LIMIT);
+  const entries = $derived(L.data ? L.data.slice(0, LIMIT) : null);
+  const hasOlder = $derived((L.data?.length ?? 0) > LIMIT);
 
-  async function fetchOlder() {
-    const before = entries?.at(-1)?.id ?? null;
-    if (!before || loadingOlder) return;
-    const mine = ++olderSeq;
-    loadingOlder = true;
-    try {
-      const r = (await gql(AUDIT, vars(before))).auditLog;
-      if (mine !== olderSeq) return;
-      lookUp(r.map((x) => x.actorId));
-      older = [...older, ...r];
-      olderMore = r.length === LIMIT;
-    } catch (e) {
-      if (mine === olderSeq) fail(e);
-    } finally {
-      if (mine === olderSeq) loadingOlder = false;
+  function turn(by: 1 | -1) {
+    if (by === 1) {
+      const last = entries?.at(-1)?.id;
+      if (!last) return;
+      pg = { search: page.url.search, ix: ix + 1, cursors: [...cursors.slice(0, ix + 1), last] };
+    } else if (ix > 0) {
+      pg = { search: page.url.search, ix: ix - 1, cursors };
     }
+    window.scrollTo({ top: 0 });
   }
 
-  function filter(e: SubmitEvent) {
-    e.preventDefault();
-    const p = new URLSearchParams();
-    for (const [k, v] of Object.entries({ kind, id: target, actor, action, from, to })) if (v.trim()) p.set(k, v.trim());
-    goto(`?${p}`, { keepFocus: true });
+  function toggle(id: string) {
+    open = open === id ? null : id;
+    full = false;
   }
 
   const problem = $derived(rangeProblem(from, to));
 
-  function pretty(json: string | null | undefined): string {
-    if (!json) return '';
+  function apply(next: Partial<{ kind: string; actor: string; from: string; to: string }> = {}) {
+    kind = next.kind ?? kind;
+    actor = next.actor ?? actor;
+    from = next.from ?? from;
+    to = next.to ?? to;
+    if (rangeProblem(from, to)) return;
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries({ kind, id: target, actor, action, from, to })) if (v.trim()) p.set(k, v.trim());
+    void goto(p.size ? `?${p}` : '/admin/audit', { keepFocus: true });
+  }
+  function filter(e: SubmitEvent) {
+    e.preventDefault();
+    apply();
+  }
+
+  /** A JSON side, pretty-printed and cut to JSON_LINES unless `full`. */
+  function pretty(json: string | null | undefined): { text: string; cut: boolean } {
+    if (!json) return { text: '', cut: false };
+    let text = json;
     try {
-      return JSON.stringify(JSON.parse(json), null, 2);
+      text = JSON.stringify(JSON.parse(json), null, 2);
     } catch {
-      return json;
+      /* not JSON: shown as it is */
     }
+    const lines = text.split('\n');
+    return full || lines.length <= JSON_LINES ? { text, cut: false } : { text: lines.slice(0, JSON_LINES).join('\n') + '\n…', cut: true };
   }
 </script>
 
@@ -114,21 +126,30 @@
 
 <PageHead title="Audit log" line="Every audited change, newest first." />
 
-<form class="filters" onsubmit={filter}>
-  <ActorField value={actor} onchange={(id) => (actor = id)} />
-  <select class="ui-input kind" bind:value={kind} aria-label="Target kind">
-    <option value="">Any kind</option>
-    <option value="account">Account</option>
-    <option value="emote">Emote</option>
-    <option value="set">Set</option>
-    <option value="role">Role</option>
-  </select>
-  <input class="ui-input" bind:value={target} placeholder="Target ID" aria-label="Target ID" spellcheck="false" autocomplete="off" />
-  <input class="ui-input" bind:value={action} placeholder="Action, such as role.updated" aria-label="Action" list="audit-actions" spellcheck="false" autocomplete="off" />
+<form class="adm-toolbar filters" onsubmit={filter}>
+  <div class="f actor"><ActorField value={actor} onchange={(id) => apply({ actor: id })} /></div>
+  <label class="f kind">
+    <span class="ui-label">Kind</span>
+    <select class="ui-input" value={kind} onchange={(e) => apply({ kind: e.currentTarget.value })} aria-label="Target kind">
+      <option value="">Any kind</option>
+      <option value="account">Account</option>
+      <option value="emote">Emote</option>
+      <option value="set">Set</option>
+      <option value="role">Role</option>
+    </select>
+  </label>
+  <label class="f tid">
+    <span class="ui-label">Target</span>
+    <input class="ui-input" bind:value={target} placeholder="Target ID" aria-label="Target ID" spellcheck="false" autocomplete="off" />
+  </label>
+  <label class="f act">
+    <span class="ui-label">Action</span>
+    <input class="ui-input" bind:value={action} placeholder="role.updated" aria-label="Action" list="audit-actions" spellcheck="false" autocomplete="off" />
+  </label>
   <datalist id="audit-actions">{#each ACTIONS as a}<option value={a}></option>{/each}</datalist>
-  <DateField label="From" value={from} onchange={(d) => (from = d)} />
-  <DateField label="To" value={to} onchange={(d) => (to = d)} />
-  <div class="ui-actions">
+  <div class="f date"><DateField label="From" value={from} onchange={(d) => apply({ from: d })} /></div>
+  <div class="f date"><DateField label="To" value={to} onchange={(d) => apply({ to: d })} /></div>
+  <div class="f btns">
     <button class="ui-btn secondary" type="submit">Filter</button>
     {#if page.url.search}<a class="ui-btn ghost" href="/admin/audit">Clear</a>{/if}
   </div>
@@ -140,42 +161,47 @@
 {#if !entries || entries.length === 0}
   <State title="No entries{page.url.search ? ' for this filter' : ''}." />
 {:else}
-  <section class="ui-panel log">
-    <div class="row head" aria-hidden="true">
-      <span class="ui-label">When</span><span class="ui-label">What</span><span class="ui-label">Target</span><span class="ui-label">By</span><span></span>
-    </div>
-    <ul class="rows">
-      {#each entries as e, i (e.id)}
+  <table class="adm-table log">
+    <thead>
+      <tr><th class="when">When</th><th>Actor</th><th>Action</th><th>Target</th><th>Details</th><th class="chev"><span class="sr-only">Open</span></th></tr>
+    </thead>
+    <tbody>
+      {#each entries as e (e.id)}
         {@const href = targetHref(e.targetKind, e.targetId)}
-        <li class:alt={i % 2 === 1}>
-          <div class="row">
-            <span class="ui-mono t">{dateTimeSeconds(e.createdAt)}</span>
-            <span class="action">{actionText(e.action)}</span>
-            <span class="target">
-              <span class="ui-chip">{e.targetKind}</span>
-              {#if href}<a class="ui-mono id" {href} title={e.targetId}>{e.targetId}</a>{:else}<span class="ui-mono id">{e.targetId}</span>{/if}
-            </span>
-            <span class="by"><AccountLink id={e.actorId} /></span>
-            <button class="chev" type="button" aria-expanded={open === e.id} aria-label="Show what changed" onclick={() => (open = open === e.id ? null : e.id)}>
-              <Icon name="chevron-down" size={14} />
-            </button>
-          </div>
-          {#if open === e.id}
-            <div class="diff">
-              <Segmented label="Show" size="s" options={[{ value: 'changes', label: 'Changes' }, { value: 'json', label: 'JSON' }]} value={raw ? 'json' : 'changes'} onchange={(v) => (raw = v === 'json')} />
-              {#if raw}
-                <div class="json">
-                  <div><span class="ui-label">Before</span><pre>{pretty(e.before) || '—'}</pre></div>
-                  <div><span class="ui-label">After</span><pre>{pretty(e.after) || '—'}</pre></div>
-                </div>
-              {:else}
-                {@const list = changes(e.before, e.after)}
-                {#if list.length}
+        {@const list = changes(e.before, e.after)}
+        {@const text = summarize(list)}
+        <tr class="entry" class:on={open === e.id}>
+          <td class="when mono dim">{dateTimeSeconds(e.createdAt)}</td>
+          <td class="by"><AccountLink id={e.actorId} /></td>
+          <td class="act">{actionText(e.action)}</td>
+          <td class="tgt">
+            <span class="ui-chip">{e.targetKind}</span>
+            {#if href}<a class="mono id" {href} title={e.targetId}>{e.targetId}</a>{:else}<span class="mono id">{e.targetId}</span>{/if}
+          </td>
+          <td class="det ell dim" title={text}>{text}</td>
+          <td class="chev">
+            <button type="button" aria-expanded={open === e.id} aria-label="Show what changed" onclick={() => toggle(e.id)}><Icon name="chevron-down" size={14} /></button>
+          </td>
+        </tr>
+        {#if open === e.id}
+          <tr class="more">
+            <td colspan="6">
+              <div class="diff">
+                <Segmented label="Show" size="s" options={[{ value: 'changes', label: 'Changes' }, { value: 'json', label: 'JSON' }]} value={raw ? 'json' : 'changes'} onchange={(v) => (raw = v === 'json')} />
+                {#if raw}
+                  {@const b = pretty(e.before)}
+                  {@const a = pretty(e.after)}
+                  <div class="json">
+                    <div><span class="ui-label">Before</span><pre>{b.text || '—'}</pre></div>
+                    <div><span class="ui-label">After</span><pre>{a.text || '—'}</pre></div>
+                  </div>
+                  {#if b.cut || a.cut}<button class="link" type="button" onclick={() => (full = true)}>Show all</button>{/if}
+                {:else if list.length}
                   <ul class="changes">
-                    {#each list as c (c.path)}
+                    {#each full ? list : list.slice(0, CAP) as c (c.path)}
                       <li>
-                        <span class="ui-mono path">{c.path}</span>
-                        <span class="vals ui-mono">
+                        <span class="mono path">{c.path}</span>
+                        <span class="vals mono">
                           {#if c.kind !== 'added'}<span class="was">{c.before}</span>{/if}
                           {#if c.kind === 'changed'}<span class="arrow" aria-label="became">→</span>{/if}
                           {#if c.kind !== 'removed'}<span class="now">{c.after}</span>{/if}
@@ -184,50 +210,59 @@
                       </li>
                     {/each}
                   </ul>
+                  {#if !full && list.length > CAP}<button class="link" type="button" onclick={() => (full = true)}>Show all {count(list.length)}</button>{/if}
                 {:else}
                   <p class="ui-hint">No field changes recorded for this entry.</p>
                 {/if}
-              {/if}
-            </div>
-          {/if}
-        </li>
+              </div>
+            </td>
+          </tr>
+        {/if}
       {/each}
-    </ul>
-  </section>
-  {#if more}
-    <div class="ui-actions next">
-      <button class="ui-btn secondary" type="button" disabled={loadingOlder} onclick={fetchOlder}>
-        {loadingOlder ? 'Loading…' : 'Older entries'}
-      </button>
-    </div>
-  {/if}
+    </tbody>
+  </table>
+  <div class="adm-pager">
+    <button class="ui-btn secondary small" type="button" disabled={ix === 0 || L.loading} onclick={() => turn(-1)}>Newer</button>
+    <span>{pageRange(ix, LIMIT, entries.length)}</span>
+    <button class="ui-btn secondary small" type="button" disabled={!hasOlder || L.loading} onclick={() => turn(1)}>Older</button>
+  </div>
 {/if}
 {/snippet}
 </LoadGate>
 
 <style>
   .range { margin: -8px 0 12px; }
-  .filters { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr)); gap: 8px; align-items: end; margin-bottom: 16px; max-width: 1000px; }
-  .rows { list-style: none; margin: 0; padding: 0; }
-  .rows li.alt { background: var(--row-alt); }
-  .row { display: grid; grid-template-columns: 150px minmax(140px, 1fr) minmax(0, 2fr) minmax(0, 1.2fr) 40px; gap: 12px; align-items: center; min-height: 40px;
-    padding: 4px 4px 4px 14px; border-bottom: 1px solid var(--border); }
-  .head { background: var(--row-alt); }
-  .chev { display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--radius); background: none; color: var(--dim); cursor: pointer;
+  .filters { align-items: flex-end; }
+  .f { display: grid; gap: 4px; min-width: 0; }
+  .actor { width: 164px; }
+  .kind { width: 118px; }
+  .tid { width: 150px; }
+  .act { flex: 1 1 140px; }
+  .date { width: 124px; }
+  @media (pointer: fine) { .filters :is(input, select) { font-size: var(--t-small); } }
+  .btns { display: flex; align-items: flex-end; gap: 8px; }
+
+  .log { table-layout: auto; }
+  .log td { overflow-wrap: anywhere; }
+  .when { width: 1%; white-space: nowrap; }
+  .by { max-width: 180px; }
+  .act { font-weight: 600; white-space: nowrap; }
+  .tgt { display: flex; align-items: center; gap: 8px; max-width: 280px; }
+  .tgt .ui-chip { flex: none; }
+  .id { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+  a.id { color: var(--accent-text); display: inline-flex; align-items: center; min-height: 24px; }
+  .det { width: 30%; }
+  .chev { width: 1%; padding: 0 4px; text-align: center; }
+  .chev button { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: var(--radius); background: none; color: var(--dim); cursor: pointer;
     transition: rotate var(--fast), background-color var(--fast); }
-  @media (hover: hover) and (pointer: fine) { .chev:hover { background: var(--surface-hover); color: var(--text); } }
-  .chev[aria-expanded='true'] { rotate: 180deg; }
-  .target { display: flex; align-items: center; gap: 8px; min-width: 0; }
-  .target .ui-chip { flex: none; }
-  .id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .t { font-size: 12px; font-weight: 600; color: var(--dim); }
-  .action { font-weight: 600; }
-  .id { font-size: .78rem; color: var(--muted); }
-  a.id { display: inline-block; max-width: 100%; line-height: 24px; color: var(--accent-text); }
-  .by { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sub); }
-  .diff { display: grid; gap: 10px; justify-items: start; padding: 10px 14px 14px; border-bottom: 1px solid var(--border); background: var(--bg); }
+  .chev button:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+  @media (hover: hover) and (pointer: fine) { .chev button:hover { background: var(--surface-hover); color: var(--text); } }
+  .chev button[aria-expanded='true'] { rotate: 180deg; color: var(--accent-text); }
+  .entry.on td { background: var(--bg); }
+  .more td { height: auto; padding: 0; background: var(--bg); }
+  .diff { display: grid; gap: 10px; justify-items: start; padding: 12px 16px 16px; }
   .json { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; width: 100%; }
-  pre { margin: 6px 0 0; padding: 10px 12px; background: var(--elevated-2); border: 1px solid var(--border); font: .78rem/1.65 var(--font-mono);
+  pre { margin: 6px 0 0; padding: 10px 12px; background: var(--elevated-2); border: 1px solid var(--border); border-radius: var(--radius); font: .78rem/1.65 var(--font-mono);
     white-space: pre-wrap; overflow-wrap: anywhere; }
   .changes { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; width: 100%; }
   .changes li { display: grid; grid-template-columns: minmax(80px, 200px) minmax(0, 1fr); gap: 12px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
@@ -236,15 +271,32 @@
   .was { color: var(--red); text-decoration: line-through; text-decoration-thickness: 1px; }
   .now { color: var(--green); }
   .arrow { color: var(--dim); }
-  .next { justify-content: center; margin-top: 16px; }
+  .link { min-height: 32px; padding: 0; border: 0; background: none; font: inherit; font-size: var(--t-small); color: var(--accent-text); cursor: pointer; }
+  .link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+  /* Phones: each entry is a small card, the action and target on top, then who and when, then the details. */
   @media (max-width: 760px) {
-    .head { display: none; }
-    .row { grid-template-columns: minmax(0, 1fr) 40px; gap: 2px 8px; }
-    .row > :not(.chev) { grid-column: 1; }
-    .chev { grid-column: 2; grid-row: 1 / span 4; align-self: start; }
+    .filters .f { width: calc(50% - 4px); flex: 1 1 calc(50% - 4px); }
+    .filters .tid, .filters .act, .filters .actor { width: 100%; flex-basis: 100%; }
+    .filters .btns { flex-basis: 100%; }
+    .log, .log tbody { display: block; }
+    .log thead { display: none; }
+    .log tr.entry { display: grid; grid-template-columns: minmax(0, 1fr) auto 44px; grid-template-areas: 'act act chev' 'tgt tgt chev' 'by when chev' 'det det chev';
+      gap: 2px 12px; align-items: center; padding: 8px 4px 8px 12px; border-bottom: 1px solid var(--border); }
+    .log tr.entry td { display: block; height: auto; padding: 0; border: 0; min-width: 0; background: none; }
+    .log td.act { grid-area: act; }
+    .log td.tgt { grid-area: tgt; max-width: none; }
+    .log td.by { grid-area: by; max-width: none; }
+    .log td.when { grid-area: when; width: auto; justify-self: end; }
+    .log td.act { font-size: var(--t-ui); }
+    .log td.det { grid-area: det; width: auto; max-width: none; }
+    .log td.det:empty { display: none; }
+    .log td.chev { grid-area: chev; align-self: start; padding: 0; width: auto; }
+    .log td.chev button { width: 44px; height: 44px; }
+    .log tr.more { display: block; border-bottom: 1px solid var(--border); }
+    .log tr.more td { display: block; }
+    .log tbody > :last-child { border-bottom: 0; }
     .json { grid-template-columns: minmax(0, 1fr); }
     .changes li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   }
-  /* a touch target of at least 24px (WCAG 2.5.8) */
-  .rows a { display: inline-block; vertical-align: middle; min-height: 24px; line-height: 24px; max-width: 100%; }
 </style>

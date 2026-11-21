@@ -44,7 +44,10 @@
   let playing = $state(true);
   let status = $state<{ text: string; bad?: boolean; progress?: number } | null>(null);
   let busy = $state(false);
+  let barH = $state(84);
   let warnings = $state<string[]>([]);
+  // the layer or effect picked in the animated builder (the list and its settings sit apart)
+  let sel = $state<{ kind: 'layer' | 'effect'; id: string } | null>(null);
 
   // animated previews: the latest render (APNG) and its first frame
   let stillUrl = $state<string | null>(null);
@@ -444,12 +447,11 @@
 <svelte:window onkeydown={onkey} />
 <LeaveGuard {dirty} what="the changes to this paint" />
 
-<div class="ps">
-  <div class="ps-top">
+<div class="ps" style:--ps-bar-h="{barH}px">
+  <div class="ps-savebar" bind:offsetHeight={barH}>
     <div class="ps-field ps-name">
       <label for="ps-name">Paint name <span class="ps-count" class:ps-count-bad={nameLength > LIMITS.nameMax}>{nameLength} of {LIMITS.nameMax}</span></label>
       <input id="ps-name" class="ps-text" type="text" autocomplete="off" spellcheck="false" placeholder="Sunset Strip" bind:value={paint.name} aria-invalid={nameShown ? 'true' : undefined} aria-describedby="ps-name-m" />
-      <p id="ps-name-m" class={nameShown ? 'ps-msg' : 'ps-hint'}>{nameShown ? nameIssue : savedId ? 'Editing a saved paint. Saving replaces it.' : 'A new paint. Names are unique on cyex.tv.'}</p>
     </div>
     <div class="ui-actions">
       <button type="button" class="ui-btn secondary" onclick={() => (importText = '', importError = null, importDialog.showModal())}><Glyph name="upload" /> Import</button>
@@ -458,16 +460,16 @@
         <button type="button" class="ui-btn primary" disabled={busy} onclick={saveToCyex} aria-describedby="ps-status">{savedId ? 'Save changes' : 'Save to cyex.tv'}</button>
       {/if}
     </div>
-  </div>
-
-  <div class="ps-status" class:bad={status?.bad} id="ps-status" role="status" aria-live="polite">
-    {#if status}
-      <span>{status.text}</span>
-      {#if status.progress != null}<span class="ps-progress" aria-hidden="true"><span style:transform="scaleX({Math.round(status.progress * 100) / 100})"></span></span>{/if}
-    {/if}
+    <p id="ps-name-m" class="ps-sub {nameShown ? 'ps-msg' : 'ps-hint'}">{nameShown ? nameIssue : savedId ? 'Editing a saved paint. Saving replaces it.' : 'A new paint. Names are unique on cyex.tv.'}</p>
+    <div class="ps-status" class:bad={status?.bad} id="ps-status" role="status" aria-live="polite">
+      {#if status}
+        <span>{status.text}</span>
+        {#if status.progress != null}<span class="ps-progress" aria-hidden="true"><span style:transform="scaleX({Math.round(status.progress * 100) / 100})"></span></span>{/if}
+      {/if}
+    </div>
   </div>
   {#if warnings.length}
-    <div class="ps-panel" role="note" style:margin-bottom="16px">
+    <div class="ps-panel" role="note">
       <div class="ps-body">
         <strong>The import changed a few things</strong>
         <ul class="ps-issues" style:color="var(--muted)">{#each warnings as w (w)}<li>{w}</li>{/each}</ul>
@@ -476,19 +478,12 @@
     </div>
   {/if}
 
-  <div style:margin-bottom="16px">
-    <Seg big label="Paint type" value={mode} onchange={setMode} options={[{ value: 'static', label: 'Gradient', icon: 'palette' }, { value: 'animated', label: 'Animated or picture', icon: 'image' }]} />
-  </div>
-
-  <div class="ps-mini" aria-hidden="true">
-    <span><span class="ps-painted ps-mid" style={paintStyleText(paint, previewImage)}>{previewName.trim() || 'lumen_fox'}</span></span>
-    <span><span class="ps-painted ps-mid" style={paintStyleText(paint, previewImage)}>{previewName.trim() || 'lumen_fox'}</span></span>
-  </div>
 
   <div class="ps-layout">
-    <div class="ps-col">
+    <div class="ps-lib">
+      <Seg label="Paint type" value={mode} onchange={setMode} options={[{ value: 'static', label: 'Gradient', icon: 'palette' }, { value: 'animated', label: 'Animated or picture', icon: 'image' }]} />
       {#if mode === 'static'}
-        <StaticEditor {paint} {issues} onchange={(patch) => Object.assign(paint, patch)} onsurprise={surpriseStatic} />
+        <StaticEditor part="lib" {paint} {issues} onchange={(patch) => Object.assign(paint, patch)} onsurprise={surpriseStatic} />
       {:else}
         <section class="ps-panel" aria-labelledby="ps-src-h">
           <header><h2 id="ps-src-h">Picture</h2></header>
@@ -520,10 +515,35 @@
           </div>
         </section>
         {#if source === 'build' && PL && doc}
-          <AnimEditor {PL} bind:doc onreplace={(d) => (doc = d)} />
+          <AnimEditor part="lib" {PL} bind:doc bind:sel onreplace={(d) => (doc = d)} />
         {/if}
       {/if}
+    </div>
 
+    <div class="ps-stagecol">
+      {#if mode === 'animated'}
+        <div class="ps-row ps-playrow">
+          <span class="ps-status" role="status">
+            {#if renderError && source === 'build'}<span class="ps-msg">{renderError}</span>
+            {:else if renderProgress != null && source === 'build'}Rendering preview {Math.round(renderProgress * 100)}%{:else if reduced && !playing}Paused for reduced motion{/if}
+          </span>
+          <button type="button" class="ui-btn secondary small" aria-pressed={playing} onclick={() => (playing = !playing)}><Glyph name={playing ? 'pause' : 'play'} /> {playing ? 'Pause' : 'Play'}</button>
+        </div>
+      {/if}
+      <Preview {paint} imageUrl={previewImage} name={previewName} onname={(n) => (previewName = n)} />
+    </div>
+
+    <div class="ps-mini" aria-hidden="true">
+      <span><span class="ps-painted ps-mid" style={paintStyleText(paint, previewImage)}>{previewName.trim() || 'lumen_fox'}</span></span>
+      <span><span class="ps-painted ps-mid" style={paintStyleText(paint, previewImage)}>{previewName.trim() || 'lumen_fox'}</span></span>
+    </div>
+
+    <div class="ps-par">
+      {#if mode === 'static'}
+        <StaticEditor part="params" {paint} {issues} onchange={(patch) => Object.assign(paint, patch)} />
+      {:else if source === 'build' && PL && doc}
+        <AnimEditor part="params" {PL} bind:doc bind:sel onreplace={(d) => (doc = d)} />
+      {/if}
       <section class="ps-panel" aria-labelledby="ps-look-h">
         <header><h2 id="ps-look-h">Shadows and fallback</h2></header>
         <div class="ps-body">
@@ -538,20 +558,6 @@
           {/if}
         </div>
       </section>
-    </div>
-
-    <div class="ps-side">
-      {#if mode === 'animated'}
-        <div class="ps-row" style:justify-content="space-between">
-          <span class="ps-status" role="status">
-            {#if renderError && source === 'build'}<span class="ps-msg">{renderError}</span>
-            {:else if renderProgress != null && source === 'build'}Rendering preview {Math.round(renderProgress * 100)}%{:else if reduced && !playing}Paused for reduced motion{/if}
-          </span>
-          <button type="button" class="ui-btn secondary small" aria-pressed={playing} onclick={() => (playing = !playing)}><Glyph name={playing ? 'pause' : 'play'} /> {playing ? 'Pause' : 'Play'}</button>
-        </div>
-      {/if}
-      <Preview {paint} imageUrl={previewImage} name={previewName} onname={(n) => (previewName = n)} />
-
       {#if issues.length}
         <section class="ps-panel" aria-labelledby="ps-issues-h">
           <header><h2 id="ps-issues-h">Before it can be saved</h2><span class="ps-count">{issues.length}</span></header>

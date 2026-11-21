@@ -1,6 +1,7 @@
 <script lang="ts">
-  // One account as staff see it, a dashboard in groups: moderation (restrictions, staff notes,
-  // sessions), roles and cosmetics (with the entitlement graph), billing (orders, subscriptions),
+  // One account as staff see it, the Inspector shape of the public profile: the person in the
+  // panel on the right (above the content under 1100px), the groups as tabs (?s=): moderation (restrictions, staff notes,
+  // sessions), roles and cosmetics, billing (orders, subscriptions),
   // content (uploads, sets, reports about and by them) and activity (the audit log). Each part
   // shows only what your permissions allow, and a failure in one part never takes the others down.
   import { page } from '$app/state';
@@ -14,11 +15,15 @@
   import AccountSetsPanel from '$lib/admin/AccountSetsPanel.svelte';
   import AccountEditorsPanel from '$lib/admin/AccountEditorsPanel.svelte';
   import Icon from '$lib/components/Icon.svelte';
+  import Split from '$lib/admin/ui/Split.svelte';
+  import Box from '$lib/admin/ui/Box.svelte';
+  import { withParam } from '$lib/admin/ui/pick';
+  import { arrowNav } from '$lib/shell/rail';
   import { permissionLabel } from '$lib/admin/permissions';
   import Avatar from '$lib/components/Avatar.svelte';
   import Name from '$lib/components/Name.svelte';
   import State from '$lib/components/State.svelte';
-  import { date, iso } from '$lib/format';
+  import { count, date, iso } from '$lib/format';
   import AccountActivity from '$lib/admin/AccountActivity.svelte';
   import AccountReports from '$lib/admin/AccountReports.svelte';
   import AccountUploads from '$lib/admin/AccountUploads.svelte';
@@ -117,16 +122,18 @@
   // Sessions end when the account is blocked: ask again after a change.
   const sessionKey = $derived(status ? `${status.blocked}` : '');
 
-  // The groups this viewer has something in, for the jump links.
+  // The groups this viewer has something in: the tabs (?s=), the first one when none is asked for.
   const groups = $derived(
     [
-      { id: 'g-moderation', label: 'Moderation', show: !!status || canNotes || canSessions },
-      { id: 'g-roles', label: 'Roles and cosmetics', show: canRoles || can('cosmetics.grant') },
-      { id: 'g-billing', label: 'Billing', show: canBilling },
-      { id: 'g-content', label: 'Content', show: canUploads || canReports || canEditors },
-      { id: 'g-activity', label: 'Activity', show: can('audit.view') },
+      { id: 'moderation', label: 'Moderation', show: !!status || canNotes || canSessions },
+      { id: 'roles', label: 'Roles and cosmetics', show: canRoles || can('cosmetics.grant') },
+      { id: 'billing', label: 'Billing', show: canBilling },
+      { id: 'content', label: 'Content', show: canUploads || canReports || canEditors },
+      { id: 'activity', label: 'Activity', show: can('audit.view') },
     ].filter((g) => g.show),
   );
+  const section = $derived(groups.find((g) => g.id === page.url.searchParams.get('s'))?.id ?? groups[0]?.id);
+  const tabHref = (id: string) => withParam(page.url, 's', id === groups[0]?.id ? null : id);
 </script>
 
 <svelte:head><title>{L.data?.account?.displayName ?? 'Account'} - Admin - cyex.tv</title></svelte:head>
@@ -140,154 +147,134 @@
   </State>
 {:else}
   {@const self = account.id === me}
-  <PageHead title={account.displayName} name back={{ href: '/admin/users', label: 'Users' }} line="Everything staff know about this account, in one place." />
-
-  <div class="layout">
-    <section class="ui-card who" aria-label="Profile">
-      <Avatar src={account.avatar} name={account.displayName} size={72} tone="tool" />
-      <h2><PaintedName name={account.displayName} paint={look.paint} badge={look.badge} badgeSize={20} /></h2>
-      <p class="chips">
-        {#if status?.blocked}<span class="ui-chip rejected">Blocked</span>{:else}
-          {#if status?.uploadsBlocked}<span class="ui-chip pending">Uploads stopped</span>{/if}
-          {#if status?.ticketsBlocked}<span class="ui-chip pending">Reports stopped</span>{/if}
-          {#if status && !status.uploadsBlocked && !status.ticketsBlocked}<span class="ui-chip approved">Active</span>{/if}
-        {/if}
-        {#each roles as r (r.id)}<span class="ui-chip"><Name value={r.name} /></span>{/each}
-      </p>
-      <dl class="ids">
-        {#if account.createdAt}<div><dt class="ui-label">Joined</dt><dd class="ui-num">{date(account.createdAt)}</dd></div>{/if}
-        {#each account.identities as i (i.platform + i.platformUserId)}
-          <div>
-            <dt class="ui-label">{i.platform === 'TWITCH' ? 'Twitch' : 'Kick'}</dt>
-            <dd>
-              <a href="/channels/{i.platform.toLowerCase()}/{encodeURIComponent(i.login)}"><bdi>{i.displayName}</bdi></a>
-              <span class="ui-hint ui-mono">{i.platformUserId}</span>
-            </dd>
+  <Split label="Account" open={true} stack="top" onclose={() => {}}>
+    {#snippet panel()}
+      <div class="adm-ip-head"><span class="adm-label">Account</span></div>
+      <div class="adm-ip-body">
+        <section class="adm-sec who">
+          <Avatar src={account.avatar} name={account.displayName} size={64} tone="tool" />
+          <h2 class="adm-name"><PaintedName name={account.displayName} paint={look.paint} badge={look.badge} badgeSize={20} /></h2>
+          <p class="chips">
+            {#if status?.blocked}<span class="ui-chip rejected">Blocked</span>{:else}
+              {#if status?.uploadsBlocked}<span class="ui-chip pending">Uploads stopped</span>{/if}
+              {#if status?.ticketsBlocked}<span class="ui-chip pending">Reports stopped</span>{/if}
+              {#if status && !status.uploadsBlocked && !status.ticketsBlocked}<span class="ui-chip approved">Active</span>{/if}
+            {/if}
+            {#each roles as r (r.id)}<span class="ui-chip"><Name value={r.name} /></span>{/each}
+          </p>
+        </section>
+        <section class="adm-sec">
+          <h3 class="adm-label">Facts</h3>
+          <dl class="adm-kv">
+            {#if account.createdAt}<dt>Joined</dt><dd>{date(account.createdAt)}</dd>{/if}
+            {#each account.identities as i (i.platform + i.platformUserId)}
+              <dt>{i.platform === 'TWITCH' ? 'Twitch' : 'Kick'}</dt>
+              <dd class="ident">
+                <a href="/channels/{i.platform.toLowerCase()}/{encodeURIComponent(i.login)}"><bdi>{i.displayName}</bdi></a>
+                <span class="mid">{i.platformUserId}</span>
+              </dd>
+            {/each}
+            <dt>Account ID</dt><dd class="mono">{account.id}</dd>
+          </dl>
+        </section>
+        <section class="adm-sec">
+          <h3 class="adm-label">Links</h3>
+          <div class="adm-acts">
+            <a class="ui-btn secondary small" href="/users/{encodeURIComponent(account.id)}"><Icon name="circle-user" size={14} />Public profile</a>
+            {#if canGraph}<a class="ui-btn secondary small" href="/admin/entitlements?account={encodeURIComponent(account.id)}"><Icon name="network" size={14} />Entitlement graph</a>{/if}
+            {#if can('audit.view')}<a class="ui-btn secondary small" href="/admin/audit?kind=account&id={encodeURIComponent(account.id)}"><Icon name="scroll" size={14} />Audit log</a>{/if}
           </div>
+        </section>
+      </div>
+    {/snippet}
+
+    <PageHead title={account.displayName} name back={{ href: '/admin/users', label: 'Users' }} />
+
+    {#if groups.length > 1}
+      <nav class="tabs" aria-label="Sections" use:arrowNav={'horizontal'}>
+        {#each groups as g (g.id)}
+          <a href={tabHref(g.id)} aria-current={g.id === section ? 'page' : undefined} data-sveltekit-noscroll data-sveltekit-keepfocus><span class="tl" data-t={g.label}>{g.label}</span></a>
         {/each}
-        <div><dt class="ui-label">Account ID</dt><dd class="ui-mono">{account.id}</dd></div>
-      </dl>
-      <p class="links">
-        <a href="/users/{encodeURIComponent(account.id)}">Public profile</a>
-        {#if canGraph}<a href="/admin/entitlements?account={encodeURIComponent(account.id)}">Entitlement graph</a>{/if}
-        {#if can('audit.view')}<a href="/admin/audit?kind=account&id={encodeURIComponent(account.id)}">Audit log</a>{/if}
-      </p>
-    </section>
+      </nav>
+    {/if}
 
     <div class="stack">
-      {#if groups.length > 1}
-        <nav class="jump" aria-label="Sections">
-          {#each groups as g (g.id)}<a href="#{g.id}">{g.label}</a>{/each}
-        </nav>
-      {/if}
-
-      {#if groups.some((g) => g.id === 'g-moderation')}
-      <div class="group" id="g-moderation">
-        <h2 class="cap ui-label">Moderation</h2>
+      {#if section === 'moderation'}
         {#if status}<Restrictions accountId={account.id} bind:status {self} />{/if}
         <div class="cols">
           {#if canNotes}<StaffNotes accountId={account.id} />{/if}
           {#if canSessions}<AccountSessions accountId={account.id} refresh={sessionKey} />{/if}
         </div>
-      </div>
-      {/if}
-
-      {#if groups.some((g) => g.id === 'g-roles')}
-      <div class="group" id="g-roles">
-        <h2 class="cap ui-label">Roles and cosmetics</h2>
-      {#if canRoles}
-        <section class="ui-panel" aria-labelledby="ro-h">
-          <header><h2 id="ro-h">Roles</h2></header>
-          {#if roles.length}
-            <ul class="ui-list">
-              {#each roles as r (r.id)}
-                <li>
-                  <span class="what"><strong><Name value={r.name} /></strong><span class="ui-hint">{r.builtIn === 'ROOT' ? 'Every permission' : r.permissions.map(permissionLabel).join(', ') || 'No permissions'}</span></span>
-                  {#if manageRoles && r.assignable}<button class="ui-btn ghost small" type="button" onclick={() => unassign(r)}>Take away</button>{/if}
-                </li>
-              {/each}
-            </ul>
-          {:else}
-            <p class="ui-hint pad">No roles.</p>
-          {/if}
-          {#if manageRoles && assignable.length}
-            <div class="give">
-              <select class="ui-input" bind:value={pick} aria-label="Role to give">
-                {#each assignable as r}<option value={r.id}>{iso(r.name)}</option>{/each}
-              </select>
-              <button class="ui-btn secondary" type="button" onclick={assign}>Give role</button>
-            </div>
-          {/if}
-        </section>
-      {/if}
-
-      {#if can('cosmetics.grant')}<UserCosmetics account={account} />{/if}
-      {#if canGraph}
-        <a class="graph-link ui-panel" href="/admin/entitlements?account={encodeURIComponent(account.id)}">
-          <Icon name="network" /><span><strong>Entitlement graph</strong><span class="ui-hint">How each role, badge and paint was given, by whom and when.</span></span><Icon name="chevron-right" size={14} />
-        </a>
-      {/if}
-      </div>
-      {/if}
-
-      {#if canBilling}
-      <div class="group" id="g-billing">
-        <h2 class="cap ui-label">Billing</h2>
+      {:else if section === 'roles'}
+        {#if canRoles}
+          <Box title="Roles" count={count(roles.length)}>
+            {#if roles.length}
+              <ul class="ui-list">
+                {#each roles as r (r.id)}
+                  <li>
+                    <span class="what"><strong><Name value={r.name} /></strong><span class="ui-hint">{r.builtIn === 'ROOT' ? 'Every permission' : r.permissions.map(permissionLabel).join(', ') || 'No permissions'}</span></span>
+                    {#if manageRoles && r.assignable}<button class="ui-btn ghost small" type="button" onclick={() => unassign(r)}>Take away</button>{/if}
+                  </li>
+                {/each}
+              </ul>
+            {:else}
+              <p class="box-none">No roles.</p>
+            {/if}
+            {#if manageRoles && assignable.length}
+              <div class="give">
+                <select class="ui-input" bind:value={pick} aria-label="Role to give">
+                  {#each assignable as r}<option value={r.id}>{iso(r.name)}</option>{/each}
+                </select>
+                <button class="ui-btn secondary" type="button" onclick={assign}>Give role</button>
+              </div>
+            {/if}
+          </Box>
+        {/if}
+        {#if can('cosmetics.grant')}<UserCosmetics account={account} />{/if}
+      {:else if section === 'billing'}
         <AccountBilling accountId={account.id} />
-      </div>
-      {/if}
-
-      {#if canUploads || canReports || canEditors}
-      <div class="group" id="g-content">
-        <h2 class="cap ui-label">Content</h2>
+      {:else if section === 'content'}
         <div class="cols">
           {#if canUploads}<AccountUploads accountId={account.id} />{/if}
           <AccountSetsPanel accountId={account.id} />
         </div>
         {#if canEditors}<AccountEditorsPanel accountId={account.id} name={account.displayName} />{/if}
         {#if canReports}<AccountReports accountId={account.id} />{/if}
-      </div>
-      {/if}
-
-      {#if can('audit.view')}
-      <div class="group" id="g-activity">
-        <h2 class="cap ui-label">Activity</h2>
+      {:else if section === 'activity'}
         <AccountActivity accountId={account.id} />
-      </div>
       {/if}
     </div>
-  </div>
+  </Split>
 {/if}
 {/snippet}
 </LoadGate>
 
 <style>
-  .layout { display: grid; gap: 16px; align-items: start; }
   .stack { display: grid; gap: 16px; min-width: 0; }
-  @media (min-width: 1100px) { .layout { grid-template-columns: 300px minmax(0, 1fr); } .who { position: sticky; top: calc(var(--nav-h) + 20px); } }
-  .who { display: grid; justify-items: center; gap: 10px; min-width: 0; text-align: center; }
-  .who h2 { display: flex; justify-content: center; font-size: 18px; max-width: 100%; min-width: 0; }
-  .chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
-  .ids { display: grid; gap: 10px; width: 100%; margin: 4px 0 0; padding-top: 12px; border-top: 1px solid var(--border); text-align: left; }
-  .ids dd { display: grid; margin: 2px 0 0; font-size: var(--text-sub); overflow-wrap: anywhere; }
-  .ids dd.ui-mono { word-break: break-all; }
-  .links { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 16px; font-size: var(--text-sub); }
-  .jump { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 2px 2px 0; font-size: var(--text-sub); }
-  .jump a { color: var(--muted); font-weight: 500; }
-  @media (hover: hover) and (pointer: fine) { .jump a:hover { color: var(--text); } }
-  .group { display: grid; gap: 12px; min-width: 0; scroll-margin-top: calc(var(--nav-h) + 16px); }
-  .cap { margin: 8px 0 -2px; font-size: var(--text-label); line-height: 1.6; }
-  .cols { display: grid; gap: 12px; align-items: start; min-width: 0; }
-  @media (min-width: 1380px) { .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+  .cols { display: grid; gap: 16px; align-items: start; min-width: 0; }
+  @media (min-width: 2200px) { .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
   .cols:empty { display: none; }
-  .graph-link { display: flex; align-items: center; gap: 12px; padding: 12px 14px; color: var(--text); }
-  .graph-link > span { display: grid; flex: 1; min-width: 0; font-size: var(--text-sub); }
-  .graph-link :global(svg) { color: var(--dim); flex: none; }
-  @media (hover: hover) and (pointer: fine) { .graph-link:hover { background: var(--row-hover); } }
-  .pad { padding: 2px 14px 10px; margin: 0; }
+
+  /* The person, in the panel. */
+  .who { justify-items: start; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; }
+  .ident { display: grid; justify-items: end; }
+  .ident a { display: inline-flex; align-items: center; min-height: 22px; }
+  .mid { font-family: var(--font-mono); font-size: var(--t-fine); font-weight: 500; color: var(--muted); word-break: break-all; }
+
+  /* The tabs: words on a hairline; the current one bold (no bar or fill), as the profile's. */
+  .tabs { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; margin: 0 -10px 16px; border-bottom: 1px solid var(--border); }
+  .tabs a { flex: none; display: inline-flex; align-items: center; height: 44px; padding: 0 10px; color: var(--muted);
+    font-size: var(--t-ui); font-weight: 500; white-space: nowrap; transition: color var(--fast); }
+  .tabs a[aria-current='page'] { color: var(--text); font-weight: 700; }
+  .tabs a:focus-visible { outline-offset: -2px; }
+  .tl { display: inline-grid; }
+  .tl::after { content: attr(data-t); font-weight: 700; height: 0; overflow: hidden; visibility: hidden; user-select: none; }
+  @media (hover: hover) and (pointer: fine) { .tabs a:hover { color: var(--text); } }
+
   .what { display: grid; flex: 1; min-width: 0; }
-  .give { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--border); }
+  .what strong { font-size: var(--t-small); }
+  .what .ui-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .give { display: flex; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); }
   .give select { flex: 1; background: var(--bg); }
-  /* a touch target of at least 24px (WCAG 2.5.8) */
-  dd a, .links a, .jump a, .what a { display: inline-flex; align-items: center; min-height: 24px; }
 </style>
