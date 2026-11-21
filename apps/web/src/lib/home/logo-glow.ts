@@ -52,11 +52,21 @@ export type Look = {
   spill: number;
   /** The unlit bars: their own faint light in the mark's ink colour. */
   inkGlow: number;
+  /** The unlit bars' finish: how much of the mark's ink colour their caps and sides show (1 = all). */
+  inkCap: number;
+  inkSide: number;
+  /** How strongly they reflect the studio room (their own, apart from the rest of the scene). */
+  inkReflect: number;
+  /** Their own white glow: how bright they are in the bloom's render (0 = black, no glow), and the light step's halo. */
+  inkBloom: number;
+  inkHalo: number;
 };
 
 /** The look for each theme: dark lets the light carry it; on white the rod's colour has to. */
 export function look(light: boolean): Look {
   return light
-    ? { level: 1, hot: 0.5, coreWidth: 0.45, glow: 0.4, air: 0.14, additive: false, spill: 30, inkGlow: 0 }
-    : { level: 1.15, hot: 0.6, coreWidth: 0.35, glow: 0.7, air: 0.24, additive: true, spill: 90, inkGlow: 0.04 };
+    ? { level: 1, hot: 0.5, coreWidth: 0.45, glow: 0.4, air: 0.14, additive: false, spill: 30, inkGlow: 0, inkCap: 1, inkSide: 1, inkReflect: 0.8, inkBloom: 0, inkHalo: 0 }
+    : // Dark: the unlit bars are a bright, near-white satin with a soft white glow of their own,
+      // weaker than the lit bar's, which stays the one that's lit.
+      { level: 1.15, hot: 0.6, coreWidth: 0.35, glow: 0.7, air: 0.24, additive: true, spill: 90, inkGlow: 0.03, inkCap: 0.6, inkSide: 0.45, inkReflect: 1.2, inkBloom: 0.25, inkHalo: 0.3 };
 }
