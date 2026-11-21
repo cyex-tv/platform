@@ -412,7 +412,7 @@ async fn every_mutation_family_takes_the_old_ulid() {
     ok(&r);
     let r = w
         .gql(
-            None,
+            Some(&alice),
             "query($s: String!) { setEditors(setId: $s) { id } }",
             json!({ "s": set.public }),
         )
