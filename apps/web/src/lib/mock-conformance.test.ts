@@ -191,6 +191,7 @@ const OVERRIDES: Record<string, (c: Ctx) => Record<string, unknown>> = {
   Set: (c) => ({ id: c.setId }),
   PublicSet: (c) => ({ id: c.setId }),
   EditSet: (c) => ({ id: c.setId }),
+  SetEditors: (c) => ({ id: c.setId }),
   CloneSet: (c) => ({ id: c.setId, name: 'Cloned mock set', visibility: 'LISTED' }),
   UpdateEmote: (c) => ({ id: c.myEmoteId, input: { name: 'MockRenamed', tags: ['cat'], zeroWidth: false, nsfw: false } }),
   SetEmoteFlags: (c) => ({ id: c.emoteId, input: { visibility: 'PUBLIC', nsfw: false, zeroWidth: false } }),

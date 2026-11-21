@@ -1763,6 +1763,13 @@ function signedIn(body, v, ADMIN) {
     case 'ReportEmote':
       if (!v.reason?.trim()) return err('Give a reason of 1 to 500 characters; the uploader sees it.', 'bad_reason');
       return { data: { reportEmote: { id: 'R' + Date.now() } } };
+    // setEditors: the owner, its editors and staff; anyone else is refused (as the API).
+    case 'SetEditors': {
+      const s = findSet(v.id);
+      if (!s || !mayView(s, true)) return err('That set doesn’t exist.', 'not_found');
+      if (!setRights(s, ADMIN).emotes) return forbidden();
+      return { data: { setEditors: s.editors } };
+    }
     case 'EditSet': {
       const s = findSet(v.id);
       const channels = { myChannels: CHANNELS, editorChannels: editorChannels() };
