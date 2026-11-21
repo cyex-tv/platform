@@ -19,7 +19,11 @@
 //
 // Motion: it first shows the still pose (the same one as the static image under it) while the rod
 // strikes once, makes one slow full turn, then sways and floats on its own, and turns further and
-// lets the rod come forward as the hero scrolls away. It never follows the pointer (cyex-web).
+// lets the rod come forward as the hero scrolls away, through a spring, so it follows the scroll
+// with a little momentum and settles when it stops. With a mouse or pen (a device that hovers, and
+// motion allowed) it also leans a few degrees toward the pointer while it is over or near the hero,
+// through a critically damped spring, and back to rest when it leaves (the owner's call, over
+// cyex-web's no-pointer-following default: logo-tilt.ts). Nothing on touch.
 //
 // Loaded on its own (dynamic import, after first paint, capable devices only: see LogoHero),
 // so three.js never sits in the page's first bundle. It draws only while the hero is on screen and
@@ -70,6 +74,8 @@ import { BARS, CENTER, GRID, STROKE, type Bar } from './logo';
 import { cavityGlsl } from './logo-ao';
 import { look, loopPath, halfSize, segmentsFor, shellLimit } from './logo-glow';
 import { REST, pose, strike, type Pose } from './logo-motion';
+import { spring, step } from './logo-spring';
+import { tiltAllowed, tiltFor, type Rect } from './logo-tilt';
 import { frameBudget, startQuality, type Quality } from './logo-quality';
 import { grain, normalBytes, roughnessBytes } from './logo-surface';
 
@@ -552,6 +558,8 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
   }
 
   function fit() {
+    // The hero's box moved or changed: read it again on the next frame (for the lean).
+    stale = true;
     const w = Math.max(1, host.clientWidth);
     const h = Math.max(1, host.clientHeight);
     renderer.setSize(w, h, false);
@@ -593,24 +601,31 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
     }
   }
 
-  // Scroll: 0 with the hero in place, 1 once it has scrolled its own height away. Eased toward.
+  // Scroll: 0 with the hero in place, 1 once it has scrolled its own height away. A spring follows
+  // it: light damping, so it carries a little momentum and settles when scrolling stops.
   let scroll = 0;
-  let eased = 0;
+  const scrollSpring = spring(0, 0.42, 0.9);
+  // The lean toward the pointer, one spring per axis (they move independently), critically damped.
+  const tiltPitch = spring(0, 0.4, 1);
+  const tiltYaw = spring(0, 0.4, 1);
+  let rect: Rect = { left: 0, top: 0, width: 0, height: 0 };
+  let pointer: { x: number; y: number } | null = null;
   // The scroll handler only marks it stale; the layout is read once per frame in the loop, so a
   // burst of scroll events never forces layout between style writes.
   let stale = false;
   const measureScroll = () => {
     stale = false;
     const r = host.getBoundingClientRect();
+    rect = { left: r.left, top: r.top, width: r.width, height: r.height };
     scroll = Math.min(1, Math.max(0, -r.top / Math.max(1, r.height)));
   };
   const readScroll = () => {
     stale = true;
   };
 
-  function apply(p: Pose) {
-    stage.rotation.x = p.pitch;
-    logo.rotation.y = p.yaw;
+  function apply(p: Pose, lean = { pitch: 0, yaw: 0 }) {
+    stage.rotation.x = p.pitch + lean.pitch;
+    logo.rotation.y = p.yaw + lean.yaw;
     logo.position.y = p.float;
     if (litBar) litBar.position.z = p.lift;
   }
@@ -644,8 +659,13 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
       applyQuality();
     }
     if (stale) measureScroll();
-    eased += (scroll - eased) * (1 - Math.exp(-dt * 5));
-    apply(pose(clock, eased));
+    scrollSpring.target = scroll;
+    // pose() holds the scroll to 0-1, so the spring's last hair of overshoot never shows past the range.
+    const eased = step(scrollSpring, dt);
+    const want = tiltFor(pointer, rect);
+    tiltPitch.target = want.pitch;
+    tiltYaw.target = want.yaw;
+    apply(pose(clock, eased), { pitch: step(tiltPitch, dt), yaw: step(tiltYaw, dt) });
     setLevel(strike(clock));
     draw();
     if (!ready) {
@@ -655,12 +675,37 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
     schedule();
   };
   function schedule() {
-    if (!still && !raf && onScreen && !document.hidden) raf = requestAnimationFrame(loop);
+    if (!still && !raf && onScreen && !document.hidden) {
+      raf = requestAnimationFrame(loop);
+      listen(true);
+    }
   }
   function halt() {
     if (raf) cancelAnimationFrame(raf);
     raf = 0;
     last = 0;
+    listen(false);
+  }
+
+  // The pointer, only while the scene runs (on screen, tab visible) and only where it may lean.
+  const mq = (q: string) => matchMedia(q).matches;
+  const leans = !still && tiltAllowed({ hover: mq('(hover: hover)'), fine: mq('(pointer: fine)'), reducedMotion: mq('(prefers-reduced-motion: reduce)') });
+  const onPointer = (e: PointerEvent) => {
+    pointer = e.pointerType === 'touch' ? null : { x: e.clientX, y: e.clientY };
+  };
+  const onLeave = () => {
+    pointer = null;
+  };
+  let listening = false;
+  function listen(on: boolean) {
+    on = on && leans;
+    if (on === listening) return;
+    listening = on;
+    const method = on ? 'addEventListener' : 'removeEventListener';
+    window[method]('pointermove', onPointer as EventListener, { passive: true } as AddEventListenerOptions);
+    document.documentElement[method]('pointerleave', onLeave);
+    window[method]('blur', onLeave);
+    if (!on) pointer = null;
   }
 
   const io = new IntersectionObserver(([e]) => {
@@ -685,9 +730,9 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
 
   if (!still) {
     measureScroll();
-    eased = scroll;
+    scrollSpring.value = scrollSpring.target = scroll;
   }
-  apply(still ? REST : pose(0, eased));
+  apply(still ? REST : pose(0, scroll));
   fit();
   paint();
   if (still) {
@@ -725,6 +770,8 @@ export function mountLogo(canvas: HTMLCanvasElement, host: HTMLElement, { onRead
       return png;
     };
     w.__logoQuality = () => quality;
+    // The lean and the scroll spring right now, and whether the pointer is being listened to.
+    (window as unknown as { __logoLean?: () => object }).__logoLean = () => ({ pitch: tiltPitch.value, yaw: tiltYaw.value, scroll: scrollSpring.value, scrollTarget: scroll, listening, leans });
   }
 
   return {
