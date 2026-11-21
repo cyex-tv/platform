@@ -40,9 +40,17 @@
     document.documentElement.toggleAttribute('data-signed', on);
     try {
       localStorage.setItem('cyexSigned', on ? '1' : '0');
+      if (on) localStorage.setItem('cyexMe', session.me!.id);
+      else localStorage.removeItem('cyexMe');
     } catch {
       /* no hint next time */
     }
+  });
+
+  // The own-profile hint (app.html) only holds for the first paint: once the session is known,
+  // the profile renders its own buttons, so the hint goes.
+  $effect(() => {
+    if (session.known) document.documentElement.removeAttribute('data-own');
   });
 
   // Signed in, every link to the upload page (the header's Upload, an empty "Your emotes", help

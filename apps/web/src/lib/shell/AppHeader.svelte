@@ -119,7 +119,7 @@
 
     <div class="phone">
       <IconButton icon="search" label="Search" tip="none" onclick={openPhoneSearch} />
-      {#if me}<NotificationBell phone />{/if}
+      {#if me}<NotificationBell phone />{:else if !session.known}<span class="bell-hold" aria-hidden="true"></span>{/if}
       <button class="menu-btn" type="button" aria-label="Menu" aria-expanded={menu} aria-haspopup="dialog" onclick={() => (menu = true)}>
         {#if me}<Avatar src={who?.avatar} name={clean(who?.displayName)} size={28} />{#if whatsNew.unseen}<span class="dot" aria-hidden="true"></span><span class="sr-only">, something new in What’s new</span>{/if}{:else}<Icon name="menu" size={18} />{/if}
       </button>
@@ -176,6 +176,11 @@
   .end :global(.theme), .end :global(.bell) { border-color: transparent; }
   .hb:not(:has(svg)) { padding: 0 16px; }
   .hb-hold { width: 84px; height: 40px; border: 1px solid var(--border); border-radius: var(--radius-btn); }
+  /* Signed in last time on this device (app.html's hint): the hold is Upload's size and keeps the
+     bell's place too, so the bar doesn't move when the session arrives. */
+  :global(html[data-signed]) .hb-hold { width: 100px; margin-right: 46px; }
+  .bell-hold { display: none; width: 40px; height: 40px; }
+  :global(html[data-signed]) .bell-hold { display: block; }
 
   .phone { display: none; align-items: center; justify-content: flex-end; gap: 4px; }
   .menu-btn { display: inline-grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--radius-btn);
@@ -185,7 +190,7 @@
   @media (forced-colors: active) { .menu-btn .dot { background: Highlight; } }
   .menu-btn:active { transform: scale(var(--press)); }
   @media (pointer: coarse) {
-    .menu-btn { width: 44px; height: 44px; }
+    .menu-btn, .bell-hold { width: 44px; height: 44px; }
     .brand { min-height: 44px; }
     .hb { min-height: 0; } /* 40px to see, 44px to hit (the ::after below) */
     .hb { position: relative; }
@@ -201,6 +206,7 @@
   /* Not enough room for the label: Upload becomes its icon (name and tooltip stay), before the search or anything else gives up. */
   @media (max-width: 800px) {
     .up { width: 40px; padding: 0; }
+    :global(html[data-signed]) .hb-hold { width: 40px; }
     .hl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   }
   @media (max-width: 720px) {

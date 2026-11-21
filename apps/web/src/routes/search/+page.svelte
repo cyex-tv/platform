@@ -334,6 +334,9 @@
             <bdi>{sets.current ? setLabel(sets.current) : sets.sets ? 'No set' : 'Your set'}</bdi>
             <Icon name="chevron-down" size={14} />
           </button>
+        {:else if !session.known}
+          <!-- Signed in last time (the first-paint hint): the button's place, so the toolbar doesn't wrap later. -->
+          <span class="btn btn-s tgt tgt-hold" aria-hidden="true"><Icon name="folder" size={15} /><span class="tw">Adding to</span><bdi>Your set</bdi><Icon name="chevron-down" size={14} /></span>
         {/if}
       </div>
     </div>
@@ -439,7 +442,7 @@
     :global(html[data-signed][data-tray='shut']) .ws, .ws.signed.shut { grid-template-columns: 248px minmax(0, 1fr) 44px; }
     :global(html[data-signed]) .tray-col, .signed .tray-col { display: block; position: sticky; top: var(--nav-h); height: calc(100svh - var(--nav-h));
       overflow-y: auto; overscroll-behavior: contain; margin-right: calc(-1 * var(--page-pad)); border-left: 1px solid var(--border); background: var(--surface);
-      scrollbar-width: thin; }
+      scrollbar-width: thin; box-shadow: 0 0 0 100vw var(--surface); clip-path: inset(0 -100vw 0 0); /* on to the window's edge past the wrap, like every right panel */ }
   }
   /* Signed out after all (the hint was stale): back to one column. */
   .ws:not(.signed) .rail-col:empty, .ws:not(.signed) .tray-col:empty { display: none; }
@@ -451,6 +454,8 @@
   .tgt bdi { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
   .tgt .tw { color: var(--muted); font-weight: 500; }
   .tgt :global(svg) { flex: none; color: var(--dim); }
+  .tgt-hold { visibility: hidden; pointer-events: none; }
+  :global(html:not([data-signed])) .tgt-hold { display: none; }
 
   /* Title row: the one page title and the count. */
   .head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; min-height: 40px; }

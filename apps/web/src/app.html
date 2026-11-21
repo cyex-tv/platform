@@ -32,6 +32,15 @@
         // column (the browse page's set rail and tray) hold its place from the first paint.
         try {
           if (localStorage.getItem('cyexSigned') === '1') document.documentElement.dataset.signed = '';
+          // Your own profile (by the account last signed in here): its owner buttons keep their row.
+          var mine = localStorage.getItem('cyexMe');
+          if (mine && location.pathname === '/users/' + mine) document.documentElement.dataset.own = '';
+          // Your roles show only to you: on your profile and the /me pages under it, their line is held.
+          if (mine && (location.pathname === '/users/' + mine || location.pathname.indexOf('/me/') === 0) && localStorage.getItem('cyexOwnFlags') === '1')
+            document.documentElement.dataset.ownFlags = '';
+          // A live announcement seen last time and not closed: prerendered pages hold the bar's place.
+          var ann = localStorage.getItem('cyexAnnounce');
+          if (ann && (localStorage.getItem('cyex.announcement.closed') || '').indexOf('"' + ann + '"') < 0) document.documentElement.dataset.announce = '';
           if (localStorage.getItem('cyex.browse.tray') === '0') document.documentElement.dataset.tray = 'shut';
         } catch (e) {}
         // Reduced motion, per device (Settings → Appearance): "reduce" or "full" override the OS.
