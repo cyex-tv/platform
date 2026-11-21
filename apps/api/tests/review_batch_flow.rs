@@ -274,7 +274,12 @@ async fn batch_verdicts_commit_together_with_an_audit_row_each() {
     assert_eq!(
         w.count(
             "SELECT count(*) FROM audit_log WHERE action = 'emote.approved' AND target_id = ANY(string_to_array($1, ','))",
-            &format!("{a},{b}"),
+            // The audit log keeps rows by ULID.
+            &format!(
+                "{},{}",
+                ids::to_text(w.db.row(&a).await),
+                ids::to_text(w.db.row(&b).await)
+            ),
         )
         .await,
         2
