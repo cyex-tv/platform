@@ -55,7 +55,7 @@
         {#each groups as b (b.key)}
           <li role="treeitem" aria-selected="false" aria-expanded="true">
             <span class="node src">
-              <span class="ui-label">{by === 'account' ? 'Holder' : SOURCE[b.source]}</span>
+              <span class="adm-label">{by === 'account' ? 'Holder' : SOURCE[b.source]}</span>
               {#if b.staffId}<AccountLink id={b.staffId} />{:else if b.href}<a href={b.href}>{b.label}</a>{:else}<span>{b.label}</span>{/if}
             </span>
             <ul role="group">
@@ -83,14 +83,14 @@
   </div>
 {:else}
   <div class="table-wrap">
-    <table class="ui-table">
+    <table class="adm-table">
       <thead><tr><th>What</th><th>{by === 'account' ? 'Holder' : 'Source'}</th><th>Given</th><th>By</th><th>Taken away</th></tr></thead>
       <tbody>
         {#each shown as g, i (g.kind + g.itemId + g.accountId + i)}
           <tr class:gone={!g.active}>
             <td><span class="ui-chip">{KIND_LABEL[g.kind]}</span> <bdi>{g.itemName || 'Deleted'}</bdi></td>
             <td>{#if by === 'account'}<AccountLink id={g.accountId} />{:else}{SOURCE[g.source]}{#if g.orderName} · {g.orderName}{/if}{#if g.codeBatchName} · {g.codeBatchName}{/if}{/if}</td>
-            <td class="ui-num">{g.grantedAt ? dateTime(g.grantedAt) : '–'}</td>
+            <td class="dim">{g.grantedAt ? dateTime(g.grantedAt) : '–'}</td>
             <td>{#if g.grantedBy}<AccountLink id={g.grantedBy} />{:else}–{/if}</td>
             <td>{#if g.revokedAt}<span class="ui-num">{dateTime(g.revokedAt)}</span>{#if g.revokedBy}{' · '}<AccountLink id={g.revokedBy} />{/if}{#if g.revokeReason}<span class="ui-hint">{` ${g.revokeReason}`}</span>{/if}{:else}–{/if}</td>
           </tr>
@@ -101,23 +101,23 @@
 {/if}
 
 <style>
-  .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 12px; }
-  .sum { margin: 0; }
-  .controls { display: flex; flex-wrap: wrap; gap: 12px; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 8px; }
+  .sum { margin: 0; font-variant-numeric: tabular-nums; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; }
   ul { list-style: none; margin: 0; padding: 0; }
-  /* The tree: hairline connectors from each node to its parent. */
-  .tree { overflow-x: auto; }
-  .tree ul { margin-left: 14px; padding-left: 18px; border-left: 1px solid var(--border-strong); }
-  .tree li { position: relative; padding-top: 8px; }
-  .tree li::before { content: ''; position: absolute; left: -18px; top: 26px; width: 16px; border-top: 1px solid var(--border-strong); }
-  .tree li:last-child::after { content: ''; position: absolute; left: -19px; top: 27px; bottom: 0; width: 2px; background: var(--bg); }
-  .node { display: inline-grid; gap: 2px; min-width: 0; max-width: 100%; padding: 8px 12px; border: 1px solid var(--border);
-    border-radius: var(--radius-card); background: var(--surface); }
-  .root-node { padding: 10px 14px; }
-  .src { grid-auto-flow: row; }
-  .src .ui-label { line-height: 1.4; }
-  .leaf .what { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--text-sub); }
-  .when, .reason { overflow-wrap: anywhere; }
+  /* The tree: hairline connectors from each node to its parent, one dense line per node. */
+  .tree { overflow-x: auto; padding-bottom: 4px; }
+  .tree ul { margin-left: 12px; padding-left: 16px; border-left: 1px solid var(--border-strong); }
+  .tree li { position: relative; padding-top: 4px; }
+  .tree li::before { content: ''; position: absolute; left: -16px; top: 20px; width: 14px; border-top: 1px solid var(--border-strong); }
+  .tree li:last-child::after { content: ''; position: absolute; left: -17px; top: 21px; bottom: 0; width: 2px; background: var(--surface); }
+  .node { display: inline-grid; gap: 1px; min-width: 0; max-width: 100%; padding: 6px 10px; border: 1px solid var(--border);
+    border-radius: var(--radius); background: var(--bg); }
+  .root-node { padding: 8px 12px; border-color: var(--border-strong); }
+  .src { grid-auto-flow: column; align-items: baseline; gap: 8px; }
+  .src .adm-label { line-height: 1.4; }
+  .leaf .what { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--t-small); }
+  .when, .reason { overflow-wrap: anywhere; font-size: var(--t-fine); }
   .gone .node { background: transparent; border-style: dashed; }
   .gone .what a, .gone .what .src-line { color: var(--muted); }
   .table-wrap { overflow-x: auto; }

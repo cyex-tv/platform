@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionText, changes, dayAfter, dayLabel, dayStart, looksLikeId, rangeProblem, targetHref } from './audit';
+import { actionText, changes, dayAfter, dayLabel, dayStart, looksLikeId, pageRange, rangeProblem, summarize, targetHref } from './audit';
 
 describe('audit helpers', () => {
   it('shows a day in the cyex format', () => {
@@ -74,5 +74,19 @@ describe('audit helpers', () => {
     expect(looksLikeId('123456789')).toBe(false);
     expect(looksLikeId('12345678901')).toBe(false);
     expect(looksLikeId('012345678901234567')).toBe(false);
+  });
+
+  it('sums a list of changes up in one line', () => {
+    expect(summarize([])).toBe('');
+    expect(summarize([{ path: 'state', before: 'a', after: 'b', kind: 'changed' }])).toBe('state: a → b');
+    expect(summarize([{ path: 'n', after: '2', kind: 'added' }, { path: 'x', before: '1', kind: 'removed' }])).toBe('n: 2 (+1)');
+    expect(summarize([{ path: 'x', before: '1', kind: 'removed' }])).toBe('x: removed');
+  });
+
+  it('says which entries a page covers', () => {
+    expect(pageRange(0, 50, 50)).toBe('1-50');
+    expect(pageRange(2, 50, 7)).toBe('101-107');
+    expect(pageRange(1, 50, 1)).toBe('51');
+    expect(pageRange(0, 50, 0)).toBe('0');
   });
 });

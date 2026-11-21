@@ -7,6 +7,7 @@
   import { AUDIT } from '$lib/queries';
   import State from '$lib/components/State.svelte';
   import AccountLink from './AccountLink.svelte';
+  import Box from './ui/Box.svelte';
   import { actionText } from './audit';
 
   let { accountId }: { accountId: string } = $props();
@@ -32,8 +33,7 @@
   const q = $derived(encodeURIComponent(accountId));
 </script>
 
-<section class="ui-panel" aria-labelledby="aa-h">
-  <header><h2 id="aa-h">Audit log</h2></header>
+<Box title="Audit log">
   {#if problem}
     <State bare kind="error" title="That didn’t load">
       {problem}
@@ -46,27 +46,25 @@
       <ul class="ui-list">
         {#each rows as e (e.id)}
           <li>
-            <span class="what">
-              <strong>{actionText(e.action)}</strong>
-              <span class="ui-hint ui-num">{dateTime(e.createdAt)}{' · by '}<AccountLink id={e.actorId} /></span>
-            </span>
+            <span class="what"><strong>{actionText(e.action)}</strong></span>
+            <span class="ui-hint ui-num when">{dateTime(e.createdAt)}{' · by '}<AccountLink id={e.actorId} /></span>
           </li>
         {/each}
       </ul>
     {:else}
-      <p class="ui-hint pad">Nothing has been done to this account.</p>
+      <p class="box-none">Nothing has been done to this account.</p>
     {/if}
     <p class="more">
       <a href="/admin/audit?kind=account&id={q}">Everything done to them</a>
       <a href="/admin/audit?actor={q}">Everything they did</a>
     </p>
   {/if}
-</section>
+</Box>
 
 <style>
   .what { display: grid; flex: 1; min-width: 0; }
-  .what strong { font-weight: 600; }
-  .more a { display: inline-flex; align-items: center; min-height: 24px; }
-  .pad { margin: 0; padding: 10px 14px; }
-  .more { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 0; padding: 10px 14px; border-top: 1px solid var(--border); font-size: var(--t-small); }
+  .what strong { font-weight: 600; font-size: var(--t-small); }
+  .when { flex: none; font-size: var(--t-fine); }
+  .more a { display: inline-flex; align-items: center; min-height: 28px; }
+  .more { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 0; padding: 8px 16px; border-top: 1px solid var(--border); font-size: var(--t-small); }
 </style>

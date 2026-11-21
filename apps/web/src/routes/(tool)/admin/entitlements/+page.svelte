@@ -7,6 +7,7 @@
   import { gql } from '$lib/api';
   import type { GrantKind } from '$lib/gql/graphql';
   import { ACCOUNT, ALL_ROLES, COSMETICS, ENTITLEMENT_GRAPH, ENTITLEMENT_HOLDERS } from '$lib/queries';
+  import Icon from '$lib/components/Icon.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
   import { looksLikeId } from '$lib/admin/audit';
@@ -82,22 +83,20 @@
 {#if !allowed}
   <State level={2} title="No access here.">This needs See where things came from (entitlements.view) or Give cosmetics.</State>
 {:else}
-  <div class="pickers">
-    <form class="ui-panel pick" onsubmit={openAccount}>
-      <label class="ui-field grow">
-        <span class="ui-label">An account</span>
-        <input class="ui-input ui-mono" bind:value={accountInput} placeholder="Account ID or its admin page link" autocomplete="off" spellcheck="false" />
+  <div class="adm-toolbar" role="search">
+    <form class="grp" onsubmit={openAccount}>
+      <label class="adm-find acc">
+        <Icon name="user" size={15} />
+        <span class="sr-only">An account, by ID or its admin page link</span>
+        <input class="ui-input ui-mono" bind:value={accountInput} placeholder="Account ID or admin link" autocomplete="off" spellcheck="false" />
       </label>
       <button class="ui-btn secondary" type="submit" disabled={!looksLikeId(accountInput.trim().split('/').filter(Boolean).pop() ?? '')}>Open</button>
-      <a class="ui-hint find" href="/admin/users">Find someone by name</a>
+      <a class="ui-btn ghost" href="/admin/users">Find by name</a>
     </form>
-    <form class="ui-panel pick" onsubmit={openItem}>
-      <div class="ui-field">
-        <span class="ui-label" aria-hidden="true">Or what</span>
-        <Segmented label="Kind" size="s" options={[{ value: 'BADGE', label: 'Badge' }, { value: 'PAINT', label: 'Paint' }, ...(options.ROLE.length ? [{ value: 'ROLE' as const, label: 'Role' }] : [])]} value={kind} onchange={(v) => (kind = v)} />
-      </div>
-      <label class="ui-field grow">
-        <span class="ui-label">Which</span>
+    <form class="grp" onsubmit={openItem}>
+      <Segmented label="Kind" size="s" compact options={[{ value: 'BADGE', label: 'Badge' }, { value: 'PAINT', label: 'Paint' }, ...(options.ROLE.length ? [{ value: 'ROLE' as const, label: 'Role' }] : [])]} value={kind} onchange={(v) => (kind = v)} />
+      <label class="which">
+        <span class="sr-only">Which {kind.toLowerCase()}</span>
         <select class="ui-input" bind:value={item} disabled={!list.length}>
           {#each list as o (o.id)}<option value={o.id}>{o.name}</option>{:else}<option value="">None yet</option>{/each}
         </select>
@@ -107,12 +106,12 @@
   </div>
 
   {#if target}
-    <LoadGate source={L} label="Drawing the graphâ€¦">
+    <LoadGate source={L} label="Drawing the graph…">
       {#snippet children(d)}
         {#if d}
           <section class="ui-panel graph" aria-label="Entitlement graph">
-            <header>
-              <h2>{d.root}</h2>
+            <header class="adm-ip-head">
+              <h2><bdi>{d.root}</bdi></h2>
               {#if d.accountId}<a class="ui-btn ghost small" href="/admin/users/{encodeURIComponent(d.accountId)}">Account page</a>{/if}
             </header>
             <div class="pad"><EntitlementTree grants={d.grants} root={d.root} by={d.by} /></div>
@@ -126,11 +125,13 @@
 {/if}
 
 <style>
-  .pickers { display: grid; gap: 12px; margin-bottom: 16px; }
-  @media (min-width: 1100px) { .pickers { grid-template-columns: 1fr 1fr; } }
-  .pick { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; padding: 12px; }
-  .grow { flex: 1; min-width: 180px; }
-  .find { flex-basis: 100%; display: flex; align-items: center; min-height: 24px; }
-  .graph header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .pad { padding: 12px 14px 14px; }
+  .grp { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+  .grp + .grp { margin-left: auto; }
+  .acc { width: 200px; max-width: 100%; }
+  .which { min-width: 0; }
+  .which select { min-width: 140px; max-width: 100%; }
+  .graph { overflow: hidden; }
+  .graph .adm-ip-head { position: static; }
+  .pad { padding: 12px 16px 16px; }
+  @media (max-width: 760px) { .grp, .acc { width: 100%; } .grp + .grp { margin-left: 0; } .which { flex: 1; } }
 </style>

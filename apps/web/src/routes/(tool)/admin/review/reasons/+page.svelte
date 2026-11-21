@@ -82,15 +82,15 @@
 <svelte:head><title>Reject reasons - Admin - cyex.tv</title></svelte:head>
 
 <PageHead title="Reject reasons" back={{ href: '/admin/review', label: 'Review queue' }}
-  line="The ready reasons a reviewer can pick when rejecting. Uploaders see the reason, so keep each one short and concrete." />
+  line="Ready reasons for the reject dialog. Uploaders see them." />
 
 <LoadGate source={L} label="Loading the reasons…">
 {#snippet children()}
-  <form class="ui-panel wrap" onsubmit={save}>
+  <form class="reasons" onsubmit={save}>
     {#if rows.length === 0}
       <State bare title="No ready reasons.">Reviewers type every reason themselves.{#if editable} Add one to offer it in the reject dialog.{/if}</State>
     {:else}
-      <ol class="rows" bind:this={list}>
+      <ol class="adm-rows rows" bind:this={list}>
         {#each rows as r, i (r.key)}
           <li>
             <span class="no ui-num" aria-hidden="true">{i + 1}</span>
@@ -126,18 +126,19 @@
 </LoadGate>
 
 <style>
-  .wrap { display: grid; gap: 12px; max-width: 760px; margin: 0; padding: 12px; }
-  .rows { list-style: none; display: grid; gap: 6px; margin: 0; padding: 0; }
-  .rows li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
-  .no { color: var(--dim); font-size: 12px; font-weight: 600; text-align: right; }
-  .field input { width: 100%; }
+  .reasons { display: grid; gap: 12px; max-width: 760px; margin: 0; }
+  .rows li { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; min-height: 48px; padding-right: 6px; }
+  .rows li:focus-within { box-shadow: inset 2px 0 0 var(--accent-text); }
+  .no { color: var(--dim); font-size: 12px; font-weight: 600; text-align: center; }
+  .field input { width: 100%; height: 44px; border: 0; border-radius: 0; background: transparent; padding-inline: 4px; }
+  .field input:focus-visible { outline-offset: -2px; }
   .tools { display: flex; gap: 2px; }
-  footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 4px; border-top: 1px solid var(--border); padding-block-start: 12px; }
+  footer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .grow { flex: 1; }
   .count { font-size: 12px; }
   .ro { margin: 0; }
   @media (max-width: 520px) {
-    .rows li { grid-template-columns: minmax(0, 1fr) auto; }
+    .rows li { grid-template-columns: minmax(0, 1fr) auto; padding-left: 8px; }
     .no { display: none; }
   }
 </style>

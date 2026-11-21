@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RoleLimitFieldsFragment } from '$lib/gql/graphql';
-import { amount, changed, grouped, info, per, toInput, toValues, valueProblem } from './role-limits';
+import { amount, changed, grouped, info, overrides, per, toInput, toValues, valueProblem } from './role-limits';
 
 const l = (key: string, group: RoleLimitFieldsFragment['group'], value: number | null = null, windowSeconds: number | null = 60): RoleLimitFieldsFragment => ({
   key, group, default: 20, windowSeconds, value,
@@ -45,5 +45,10 @@ describe('role limits', () => {
     expect(amount(20, null)).toBe('20 at once');
     expect(info('pending_emotes').label).toBe('Waiting for review');
     expect(info('some_new_limit').label).toBe('some new limit');
+  });
+
+  it('lists only the limits a role overrides', () => {
+    const got = overrides([l('pending_emotes', 'UPLOADS', 100, null), l('prefs', 'ACCOUNT')]);
+    expect(got.map((x) => x.key)).toEqual(['pending_emotes']);
   });
 });

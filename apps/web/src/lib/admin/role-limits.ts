@@ -89,3 +89,8 @@ export function changed(before: Record<string, string>, after: Record<string, st
   const b = JSON.stringify(toInput(after));
   return a !== b;
 }
+
+/** The limits a role overrides (the ones with a number), for the inspector's read-only list. */
+export function overrides(limits: readonly RoleLimitFieldsFragment[]): RoleLimitFieldsFragment[] {
+  return limits.filter((l) => l.value != null);
+}

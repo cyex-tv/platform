@@ -1,7 +1,10 @@
 <script lang="ts">
+  // The admin overview: what waits (open tickets and the shop's numbers, a figure each), then every
+  // section your roles open, grouped as in the rail, one line each. Both lists come from
+  // lib/admin/shell/sections, so the overview and the rail always agree.
   import { gql } from '$lib/api';
   import { count } from '$lib/format';
-  import Icon, { type IconName } from '$lib/components/Icon.svelte';
+  import Icon from '$lib/components/Icon.svelte';
   import type { AdminCountsQuery } from '$lib/gql/graphql';
   import { ADMIN_COUNTS } from '$lib/queries';
   import { can, session } from '$lib/tool/session.svelte';
@@ -9,7 +12,7 @@
   import { loadCatalog, loadOwned, looks, NO_LOOK } from '$lib/cosmetics/store.svelte';
   import { fail } from '$lib/tool/notices.svelte';
   import { loadShopCounts, shopCounts } from '$lib/shop/counts.svelte';
-  import { USER_PAGE_PERMISSIONS } from '$lib/admin/permissions';
+  import { visibleSections, type Section } from '$lib/admin/shell/sections';
 
   let counts = $state<AdminCountsQuery | null>(null);
   const review = can('emotes.review');
@@ -21,7 +24,7 @@
       .catch(fail);
   });
 
-  // The catalog's size for the cosmetics cards, and your own look for the welcome line.
+  // The catalog's size for the cosmetics rows, and your own look for the welcome line.
   const cosmetics = can('cosmetics.manage') || can('cosmetics.grant');
   let catalog = $state<{ paints: number; badges: number } | null>(null);
   $effect(() => {
@@ -34,64 +37,114 @@
   const me = $derived(session.me);
   const look = $derived((me && looks[me.id]) || NO_LOOK);
 
-  type Card = { href: string; title: string; text: string; icon: IconName; figure?: number; show: boolean };
-  const cards = $derived(
-    [
-      { href: '/admin/review', title: 'Review queue', icon: 'inbox' as const, text: 'Pending uploads, oldest first.', figure: counts?.reviewQueue?.total, show: review },
-      { href: '/admin/reports', title: 'Reports', icon: 'flag' as const, text: 'Open reports. Dismiss them or take the emote down.', figure: counts?.reportQueue?.total, show: reports },
-      { href: '/admin/cosmetics/paints', title: 'Paints', icon: 'brush' as const, text: 'Name paints: who owns them, give and take away.', figure: catalog?.paints, show: cosmetics },
-      { href: '/admin/cosmetics/badges', title: 'Badges', icon: 'badge' as const, text: 'Chat badges: make, edit, give and take away.', figure: catalog?.badges, show: cosmetics },
-      { href: '/admin/shop/items', title: 'Shop items', icon: 'tag' as const, text: 'What is on sale: bundles of badges and paints, prices, sale windows, stock.', figure: shopCounts.items, show: can('shop.manage') },
-      { href: '/admin/shop/orders', title: 'Orders', icon: 'list' as const, text: 'Every purchase and gift. Refund a paid order.', figure: shopCounts.orders, show: can('shop.orders') },
-      { href: '/admin/shop/codes', title: 'Codes', icon: 'key' as const, text: 'Batches of redeem codes: make, hand out, turn off.', figure: shopCounts.codes, show: can('codes.manage') },
-      { href: '/admin/users', title: 'Users', icon: 'users' as const, text: 'Find someone; their whole account on one page: restrictions, roles, billing, notes.', show: USER_PAGE_PERMISSIONS.some(can) },
-      { href: '/admin/roles', title: 'Roles', icon: 'key' as const, text: 'Who may do what. You manage roles below your own.', show: can('roles.manage') || can('roles.assign') },
-      { href: '/admin/entitlements', title: 'Entitlement graph', icon: 'network' as const, text: 'How each badge, paint and role was given, and by whom.', show: can('entitlements.view') || can('cosmetics.grant') },
-      { href: '/admin/announcements', title: 'Announcements', icon: 'message-square' as const, text: 'One line under the header for everyone: news, maintenance or an event.', show: can('site.announce') },
-      { href: '/admin/audit', title: 'Audit log', icon: 'scroll' as const, text: 'Every audited change, newest first.', show: can('audit.view') },
-      { href: counts ? `/me/sets/${counts.globalSet.id}` : '/admin', title: 'Global set', icon: 'layers' as const, text: 'Shown in every channel that uses cyex.tv.', show: can('global_set.edit') },
-    ].filter((c) => c.show),
-  );
+  const groups = $derived.by(() => {
+    void session.me;
+    return visibleSections(can);
+  });
+  /** The number a section shows: open tickets, the shop's counts, the catalog's size. */
+  function figure(s: Section): number | undefined {
+    switch (s.href) {
+      case '/admin/review': return counts?.reviewQueue?.total;
+      case '/admin/reports': return counts?.reportQueue?.total;
+      case '/admin/shop/items': return shopCounts.items;
+      case '/admin/shop/orders': return shopCounts.orders;
+      case '/admin/shop/codes': return shopCounts.codes;
+      case '/admin/cosmetics/paints': return catalog?.paints;
+      case '/admin/cosmetics/badges': return catalog?.badges;
+    }
+    return undefined;
+  }
+  // What waits: the ticket queues you work, in big figures at the top.
+  const waiting = $derived(groups.flatMap((g) => g.items).filter((s) => s.urgent));
+  const loaded = $derived(counts !== null);
+  const globalSet = can('global_set.edit');
 </script>
 
 <svelte:head><title>Admin - cyex.tv</title></svelte:head>
 
-<header class="welcome">
+<header class="head">
   <h1>Welcome back{#if me}, <PaintedName name={me.identities[0]?.displayName ?? ''} paint={look.paint} />{/if}</h1>
-  <p>What your roles let you do, and what waits for you.</p>
+  <p>What waits for you, and every section your roles open.</p>
 </header>
 
-<ul class="cards">
-  {#each cards as c (c.href)}
-    <li>
-      <a class="card" href={c.href}>
-        <span class="icon" aria-hidden="true"><Icon name={c.icon} size={18} /></span>
-        <span class="text">
-          <strong>{c.title}</strong>
-          <span class="ui-hint">{c.text}</span>
-        </span>
-        {#if c.figure !== undefined}<span class="ui-mono figure" aria-hidden="true" class:some={c.figure > 0 && (c.href === '/admin/review' || c.href === '/admin/reports')}>{count(c.figure)}</span><span class="sr-only">, {count(c.figure)}</span>{/if}
+{#if waiting.length}
+  <section class="waits" aria-label="Waiting">
+    {#each waiting as s (s.href)}
+      {@const n = figure(s)}
+      <a class="wait" href={s.href} class:some={(n ?? 0) > 0}>
+        <span class="adm-label"><Icon name={s.icon} size={14} />{s.label}</span>
+        <span class="fig" aria-hidden={!loaded}>{#if loaded}{count(n ?? 0)}{:else}<span class="ph ui-skeleton"></span>{/if}</span>
+        <span class="sub">{#if !loaded}&nbsp;{:else if (n ?? 0) > 0}{s.href === '/admin/review' ? 'waiting for a verdict' : 'open, oldest first'}{:else}Nothing waiting{/if}</span>
       </a>
-    </li>
+    {/each}
+  </section>
+{/if}
+
+<div class="index">
+  {#each groups as g (g.label)}
+    <section class="grp" aria-labelledby="g-{g.label}">
+      <h2 class="adm-label" id="g-{g.label}"><Icon name={g.icon} size={14} />{g.label}</h2>
+      <ul class="adm-rows">
+        {#each g.items as s (s.href)}
+          {@const n = figure(s)}
+          <li>
+            <a class="row" href={s.href}>
+              <Icon name={s.icon} />
+              <span class="what"><strong>{s.label}</strong><span class="text">{s.text}</span></span>
+              {#if n !== undefined}<span class="n" aria-hidden="true">{count(n)}</span><span class="sr-only">, {count(n)}</span>{/if}
+              <Icon name="chevron-right" size={14} />
+            </a>
+          </li>
+        {/each}
+        {#if g.label === 'System' && globalSet}
+          <li>
+            <a class="row" href={counts ? `/me/sets/${counts.globalSet.id}` : '/admin'} aria-disabled={!counts}>
+              <Icon name="layers" />
+              <span class="what"><strong>Global set</strong><span class="text">Shown in every channel that uses cyex.tv.</span></span>
+              <Icon name="chevron-right" size={14} />
+            </a>
+          </li>
+        {/if}
+      </ul>
+    </section>
   {/each}
-</ul>
+</div>
 
 <style>
-  .welcome { margin-bottom: 24px; }
-  .welcome h1 { margin: 0; font-size: var(--t-page); font-weight: 600; line-height: 1.25; letter-spacing: -.02em; overflow-wrap: anywhere; }
-  .welcome p { margin: 8px 0 0; color: var(--muted); font-size: var(--t-ui); }
-  .cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 12px; }
-  .card { display: flex; align-items: flex-start; gap: 12px; height: 100%; padding: 14px; color: var(--text); text-decoration: none;
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card);
-    transition: background-color var(--fast), border-color var(--fast); }
-  @media (hover: hover) and (pointer: fine) { .card:hover { background: var(--surface-hover); border-color: var(--border-strong); } }
-  .card:active { opacity: .6; transition: none; }
-  .card:focus-visible { outline-offset: 2px; }
-  .icon { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: var(--radius);
-    background: var(--elevated-2); color: var(--muted); }
-  .text { display: grid; gap: 2px; flex: 1; min-width: 0; }
-  .text strong { font-weight: 600; }
-  .figure { flex: none; align-self: center; min-width: 28px; padding: 2px 8px; border-radius: var(--radius); text-align: center;
-    font-size: var(--t-small); font-weight: 600; background: var(--neutral-chip); color: var(--muted); }
-  .figure.some { background: var(--accent-dim); color: var(--accent-text); }
+  .head { margin-bottom: 20px; }
+  .head h1 { margin: 0; font-size: var(--t-page); font-weight: 600; line-height: 1.25; letter-spacing: -.02em; overflow-wrap: anywhere; }
+  .head p { margin: 8px 0 0; color: var(--muted); font-size: var(--t-ui); }
+
+  /* What waits: a status line of figures (cyex-app), one cell per queue, hairlines between. */
+  .waits { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); margin-bottom: 24px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
+  .wait { display: grid; gap: 4px; padding: 14px 16px; color: var(--text); text-decoration: none; box-shadow: -1px 0 0 var(--border);
+    transition: background-color var(--fast); }
+  .wait .adm-label { display: flex; align-items: center; gap: 6px; }
+  .fig { font-size: 28px; font-weight: 600; line-height: 1.15; letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .wait.some .fig { color: var(--text); }
+  .wait.some .adm-label :global(svg) { color: var(--accent-text); }
+  .ph { display: block; width: 48px; height: 28px; border-radius: var(--radius); }
+  .sub { font-size: var(--t-fine); color: var(--dim); }
+  .wait:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+
+  /* Every section, grouped: a caption and a panel of one-line rows. */
+  .index { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr)); gap: 20px 16px; align-items: start; }
+  .grp { display: grid; gap: 8px; min-width: 0; }
+  .grp h2 { display: flex; align-items: center; gap: 6px; padding: 0 2px; }
+  .row { display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 12px; color: var(--text); text-decoration: none;
+    transition: background-color var(--fast); }
+  .row > :global(svg:first-child) { flex: none; color: var(--dim); }
+  .row > :global(svg:last-child) { flex: none; color: var(--dim); }
+  .what { display: grid; flex: 1; min-width: 0; }
+  .what strong { font-weight: 600; font-size: var(--t-small); }
+  .text { font-size: var(--t-fine); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .n { flex: none; font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .row:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .row:active, .wait:active { opacity: .6; transition: none; }
+  @media (hover: hover) and (pointer: fine) {
+    .row:hover, .wait:hover { background: var(--row-hover); }
+    .row:hover > :global(svg:first-child) { color: var(--muted); }
+  }
+  @media (max-width: 520px) { .text { white-space: normal; } }
 </style>

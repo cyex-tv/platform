@@ -1,18 +1,26 @@
 <script lang="ts">
   // Admin: the site announcement (site.announce). One line under the header for everyone, as
   // News, Maintenance or Event, with an optional link, a small emote or badge, and a start and an
-  // end. The newest one in its window is the one shown; the list says which. Edit changes one that
-  // hasn't ended; End takes it down now. Every change is audited.
+  // end. The newest one in its window is the one shown; the list says which. The list is on the
+  // left, the inspector on the right holds the form with a live preview of the bar (?a=<id>, or
+  // ?a=new): Save changes edits one that hasn't ended, End takes it down now, one that has ended
+  // is shown as it was. Every change is audited. Keyboard: arrows over the rows, Enter opens one,
+  // Escape closes it.
+  import { page } from '$app/state';
+  import { tick } from 'svelte';
   import { gql } from '$lib/api';
+  import AnnouncementEditor from '$lib/admin/AnnouncementEditor.svelte';
+  import AnnouncementPreview from '$lib/admin/AnnouncementPreview.svelte';
+  import Split from '$lib/admin/ui/Split.svelte';
+  import { gridKeys, pickInUrl } from '$lib/admin/ui/pick';
   import Icon from '$lib/components/Icon.svelte';
-  import Segmented from '$lib/components/Segmented.svelte';
+  import IconButton from '$lib/components/IconButton.svelte';
   import State from '$lib/components/State.svelte';
-  import BadgeIcon from '$lib/cosmetics/BadgeIcon.svelte';
-  import { loadCatalog, type Catalog } from '$lib/cosmetics/store.svelte';
-  import { clean, dateTime, fromLocalInput, toLocalInput } from '$lib/format';
-  import type { AnnouncementFieldsFragment, AnnouncementKind } from '$lib/gql/graphql';
-  import { ACTIVE_ANNOUNCEMENT, ANNOUNCEMENTS, CREATE_ANNOUNCEMENT, END_ANNOUNCEMENT, UPDATE_ANNOUNCEMENT } from '$lib/queries';
-  import { KIND, emoteIdFrom, phase, safeLink } from '$lib/shell/announcement';
+  import { loadCatalog } from '$lib/cosmetics/store.svelte';
+  import { clean, dateTime } from '$lib/format';
+  import type { AnnouncementFieldsFragment } from '$lib/gql/graphql';
+  import { ACTIVE_ANNOUNCEMENT, ANNOUNCEMENTS, END_ANNOUNCEMENT } from '$lib/queries';
+  import { KIND, phase, safeLink } from '$lib/shell/announcement';
   import { banner } from '$lib/shell/announcement.svelte';
   import Gate from '$lib/shop/Gate.svelte';
   import { staffMessage } from '$lib/shop/shop';
@@ -23,103 +31,40 @@
   import { notify } from '$lib/tool/notices.svelte';
 
   type Row = AnnouncementFieldsFragment;
-  const TEXT_MAX = 200;
 
   const L = loader(async ({ fetch }) => {
     const [list, active, catalog] = await Promise.all([gql(ANNOUNCEMENTS, {}, fetch), gql(ACTIVE_ANNOUNCEMENT, {}, fetch), loadCatalog().catch(() => null)]);
     return { rows: list.announcements, showing: active.activeAnnouncement?.id ?? null, catalog };
   });
 
-  const KINDS: { value: AnnouncementKind; label: string; icon: (typeof KIND)[AnnouncementKind]['icon'] }[] = (['INFO', 'MAINTENANCE', 'CAMPAIGN'] as const).map((k) => ({
-    value: k,
-    label: KIND[k].label,
-    icon: KIND[k].icon,
-  }));
-  const HINT: Record<AnnouncementKind, string> = {
-    INFO: 'News or a tip: something new on cyex.tv.',
-    MAINTENANCE: 'Downtime, or something that doesn’t work right now.',
-    CAMPAIGN: 'An event or a sale. Add an emote or a badge to show beside the line.',
-  };
-
-  // The form, for a new one (editing = null) or a change.
-  let dialog: HTMLDialogElement;
-  let editing = $state<Row | null>(null);
-  let catalog = $state<Catalog | null>(null);
-  let kind = $state<AnnouncementKind>('INFO');
-  let text = $state('');
-  let linkUrl = $state('');
-  let linkLabel = $state('');
-  let emote = $state('');
-  let badgeId = $state('');
-  let starts = $state('');
-  let ends = $state('');
-  let tried = $state(false);
-  let saving = $state(false);
-  let problem = $state<string | null>(null);
+  // The picked one lives in the address: an ID, or "new".
+  const key = $derived(page.url.searchParams.get('a'));
+  const fresh = $derived(key === 'new');
+  const picked = $derived(L.data?.rows.find((r) => r.id === key) ?? null);
+  let list = $state<HTMLElement>();
   let busy = $state(false);
 
-  const errors = $derived({
-    text: tried && (!text.trim() || [...text.trim()].length > TEXT_MAX) ? `Write one line of 1 to ${TEXT_MAX} characters.` : null,
-    link: tried && linkUrl.trim() && !safeLink(linkUrl) ? 'Use https:// or a path on cyex.tv, like /shop.' : null,
-    label: tried && linkLabel.trim() && !linkUrl.trim() ? 'Add a link for these words, or leave them empty.' : null,
-    emote: tried && emote.trim() && !emoteIdFrom(emote) ? 'Paste an emote’s link or ID.' : null,
-    ends:
-      tried && ends && Date.parse(ends) <= Date.now()
-        ? 'Pick a time in the future, or leave it empty.'
-        : tried && ends && starts && Date.parse(ends) <= Date.parse(starts)
-          ? 'The end comes after the start.'
-          : null,
-  });
-  const invalid = $derived(Object.values(errors).some(Boolean));
-
-  function open(d: { catalog: Catalog | null }, row: Row | null) {
-    catalog = d.catalog;
-    editing = row;
-    kind = row?.kind ?? 'INFO';
-    text = row?.text ?? '';
-    linkUrl = row?.linkUrl ?? '';
-    linkLabel = row?.linkLabel ?? '';
-    emote = row?.emote?.id ?? '';
-    badgeId = row?.badgeId ?? '';
-    starts = row?.startsAt ? toLocalInput(row.startsAt) : '';
-    ends = row?.endsAt ? toLocalInput(row.endsAt) : '';
-    tried = false;
-    problem = null;
-    dialog.showModal();
+  function pick(id: string | null) {
+    void pickInUrl('a', id);
+  }
+  // Closing the inspector puts focus back on the row (or on New announcement).
+  function close() {
+    const id = key;
+    pick(null);
+    void tick().then(() => (list?.querySelector<HTMLElement>(`[data-item="${CSS.escape(id ?? '')}"]`) ?? document.getElementById('ann-new'))?.focus());
+  }
+  function onkeydown(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || !key || e.defaultPrevented || document.querySelector('dialog[open]')) return;
+    if ((e.target as HTMLElement | null)?.closest('input, textarea, select')) return;
+    e.preventDefault();
+    close();
   }
 
-  async function save(e: SubmitEvent) {
-    e.preventDefault();
-    if (saving) return;
-    tried = true;
-    if (invalid) {
-      dialog.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
-      return;
-    }
-    saving = true;
-    problem = null;
-    const input = {
-      kind,
-      text: text.trim(),
-      linkUrl: linkUrl.trim() || null,
-      linkLabel: linkLabel.trim() || null,
-      emoteId: emoteIdFrom(emote),
-      badgeId: badgeId || null,
-      startsAt: fromLocalInput(starts),
-      endsAt: fromLocalInput(ends),
-    };
-    try {
-      if (editing) await gql(UPDATE_ANNOUNCEMENT, { id: editing.id, input });
-      else await gql(CREATE_ANNOUNCEMENT, { input });
-      dialog.close();
-      notify(editing ? 'Announcement changed.' : 'Announcement saved.');
-      await L.reload();
-      banner.load(true);
-    } catch (err) {
-      problem = staffMessage(err);
-    } finally {
-      saving = false;
-    }
+  async function saved(changed: boolean) {
+    notify(changed ? 'Announcement changed.' : 'Announcement saved.');
+    pick(null);
+    await L.reload();
+    banner.load(true);
   }
 
   async function end(row: Row) {
@@ -127,6 +72,7 @@
     try {
       await gql(END_ANNOUNCEMENT, { id: row.id });
       notify('Announcement ended.');
+      pick(null);
       await L.reload();
       banner.load(true);
     } catch (err) {
@@ -144,150 +90,117 @@
     else parts.push(a.endsAt ? `until ${dateTime(a.endsAt)}` : 'until you end it');
     return parts.join(' · ');
   }
-  const previewHref = $derived(safeLink(linkUrl));
-  const previewBadge = $derived(badgeId && catalog ? (catalog.badges.get(badgeId) ?? null) : null);
+  const editable = (a: Row) => phase(a, Date.now()) !== 'ended';
 </script>
 
-<svelte:head><title>Announcements - Admin - cyex.tv</title></svelte:head>
+<svelte:head><title>{fresh ? 'New announcement' : picked ? 'Announcement' : 'Announcements'} - Admin - cyex.tv</title></svelte:head>
+
+<svelte:window {onkeydown} />
 
 <Gate permission="site.announce">
-  <PageHead title="Announcements" line="One line under the header on every page. People can close it on their device; a new one shows again.">
-    {#snippet actions()}
-      <button class="ui-btn primary" type="button" disabled={!L.data} onclick={() => L.data && open(L.data, null)}><Icon name="plus" size={15} />New announcement</button>
-    {/snippet}
-  </PageHead>
+  <Split label="Announcement" open={fresh || !!picked} onclose={() => pick(null)}>
+    <PageHead title="Announcements" line="One line under the header on every page. People can close it on their device; a new one shows again.">
+      {#snippet actions()}
+        <button id="ann-new" class="ui-btn primary" type="button" disabled={!L.data} onclick={() => pick('new')}><Icon name="plus" size={15} />New announcement</button>
+      {/snippet}
+    </PageHead>
 
-  <LoadGate source={L} label="Loading announcements…">
-    {#snippet children(d)}
-      {#if !d.rows.length}
-        <State title="No announcements yet.">
-          Tell everyone about maintenance, news or an event. It shows under the header until it ends.
-          {#snippet actions()}<button class="ui-btn primary" type="button" onclick={() => open(d, null)}>New announcement</button>{/snippet}
-        </State>
-      {:else}
-        <ul class="list">
-          {#each d.rows as a (a.id)}
-            {@const ph = phase(a, Date.now())}
-            {@const showing = a.id === d.showing}
-            {@const b = a.badgeId ? d.catalog?.badges.get(a.badgeId) : null}
-            <li class="item">
-              <div class="row">
-                <span class="kind" title={KIND[a.kind].label}><Icon name={KIND[a.kind].icon} size={16} /></span>
-                <span class="what">
-                  <strong><bdi>{a.text}</bdi></strong>
-                  <span class="ui-hint">
-                    {KIND[a.kind].label} · {when(a)}{#if a.linkUrl} · <span class="ui-mono">{a.linkUrl}</span>{/if}{#if a.emote} · {clean(a.emote.name)}{/if}{#if b} · {clean(b.name)}{/if}
+    <LoadGate source={L} label="Loading announcements…">
+      {#snippet children(d)}
+        {#if !d.rows.length}
+          <State title="No announcements yet.">
+            Tell everyone about maintenance, news or an event. It shows under the header until it ends.
+            {#snippet actions()}<button class="ui-btn primary" type="button" onclick={() => pick('new')}>New announcement</button>{/snippet}
+          </State>
+        {:else}
+          <ul class="adm-rows" bind:this={list} use:gridKeys aria-label="Announcements">
+            {#each d.rows as a, i (a.id)}
+              {@const ph = phase(a, Date.now())}
+              {@const showing = a.id === d.showing}
+              <li>
+                <button class="item" type="button" data-item={a.id} aria-current={a.id === key ? 'true' : undefined}
+                  tabindex={(picked ? a.id === key : i === 0) ? 0 : -1} onclick={() => pick(a.id)}>
+                  <span class="kind" title={KIND[a.kind].label}><Icon name={KIND[a.kind].icon} size={16} /></span>
+                  <span class="what">
+                    <span class="line"><bdi>{a.text}</bdi></span>
+                    <span class="meta">{KIND[a.kind].label} · {when(a)}</span>
                   </span>
-                </span>
-                <span class="st" class:on={showing}>{#if showing}<Icon name="eye" size={14} />Showing now{:else}{PHASE[ph]}{/if}</span>
-                {#if ph !== 'ended'}
-                  <span class="acts">
-                    <button class="ui-btn secondary small" type="button" onclick={() => open(d, a)}>Edit</button>
-                    <Confirm small label="End" confirm="Click again to end it now" {busy} onconfirm={() => end(a)} />
-                  </span>
-                {/if}
+                  <span class="st" class:on={showing} class:old={ph === 'ended'}>{#if showing}<Icon name="eye" size={14} />Showing now{:else}{PHASE[ph]}{/if}</span>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      {/snippet}
+    </LoadGate>
+
+    {#snippet empty()}
+      <div class="adm-ip-head"><span class="adm-label">Announcement</span></div>
+      <p class="none">Pick an announcement to change or end it, or start a new one.</p>
+    {/snippet}
+
+    {#snippet panel()}
+      {#if fresh || picked}
+        <div class="adm-ip-head">
+          <span class="adm-label">{fresh ? 'New announcement' : editable(picked!) ? 'Announcement' : 'Ended announcement'}</span>
+          <IconButton label="Close" icon="x" size="s" onclick={close} />
+        </div>
+        <div class="adm-ip-body">
+          {#if fresh}
+            {#key 'new'}<AnnouncementEditor row={null} catalog={L.data?.catalog ?? null} onsaved={saved} />{/key}
+          {:else if picked && editable(picked)}
+            {#key picked.id}
+              <AnnouncementEditor row={picked} catalog={L.data?.catalog ?? null} onsaved={saved} />
+            {/key}
+            <section class="adm-sec">
+              <div class="adm-acts row">
+                <Confirm small label="End now" confirm="Click again to end it now" {busy} onconfirm={() => end(picked!)} />
               </div>
-            </li>
-          {/each}
-        </ul>
+            </section>
+          {:else if picked}
+            {@const b = picked.badgeId ? L.data?.catalog?.badges.get(picked.badgeId) : null}
+            <section class="adm-sec">
+              <h3 class="adm-label">Preview</h3>
+              <AnnouncementPreview kind={picked.kind} text={picked.text} href={safeLink(picked.linkUrl)} linkLabel={picked.linkLabel ?? ''} emote={picked.emote} emoteSet={!!picked.emote} badge={picked.emote ? null : (b ?? null)} />
+            </section>
+            <section class="adm-sec">
+              <h3 class="adm-label">Facts</h3>
+              <dl class="adm-kv">
+                <dt>Kind</dt><dd>{KIND[picked.kind].label}</dd>
+                <dt>From</dt><dd>{dateTime(picked.startsAt ?? picked.createdAt)}</dd>
+                <dt>Ended</dt><dd>{dateTime(picked.endedAt ?? picked.endsAt ?? '')}</dd>
+                {#if picked.linkUrl}<dt>Link</dt><dd class="mono">{picked.linkUrl}</dd>{/if}
+                {#if picked.emote}<dt>Emote</dt><dd><bdi>{clean(picked.emote.name)}</bdi></dd>{/if}
+                {#if b}<dt>Badge</dt><dd><bdi>{clean(b.name)}</bdi></dd>{/if}
+              </dl>
+            </section>
+          {/if}
+        </div>
       {/if}
     {/snippet}
-  </LoadGate>
-
-  <dialog class="ui-dialog wide" bind:this={dialog} aria-labelledby="ann-title">
-    <form onsubmit={save} novalidate>
-      <div class="body">
-        <h2 id="ann-title">{editing ? 'Change the announcement' : 'New announcement'}</h2>
-        <div class="ui-field">
-          <span class="ui-label" id="ann-kind">Kind</span>
-          <Segmented label="Kind" options={KINDS} value={kind} onchange={(v) => (kind = v)} size="s" />
-          <span class="ui-hint">{HINT[kind]}</span>
-        </div>
-        <label class="ui-field">
-          <span class="ui-label">Line</span>
-          <input class="ui-input" bind:value={text} aria-invalid={errors.text ? 'true' : undefined} />
-          {#if errors.text}<span class="ui-error">{errors.text}</span>{:else}<span class="ui-hint"><span class="ui-num">{[...text.trim()].length}</span> of {TEXT_MAX}. Plain text, one line.</span>{/if}
-        </label>
-        <div class="two">
-          <label class="ui-field">
-            <span class="ui-label">Link</span>
-            <input class="ui-input" bind:value={linkUrl} placeholder="/shop" autocomplete="off" aria-invalid={errors.link ? 'true' : undefined} />
-            {#if errors.link}<span class="ui-error">{errors.link}</span>{:else}<span class="ui-hint">Optional. A path here, or https://.</span>{/if}
-          </label>
-          <label class="ui-field">
-            <span class="ui-label">Link words</span>
-            <input class="ui-input" bind:value={linkLabel} maxlength="40" placeholder="Learn more" aria-invalid={errors.label ? 'true' : undefined} />
-            {#if errors.label}<span class="ui-error">{errors.label}</span>{:else}<span class="ui-hint">Empty: “Learn more”.</span>{/if}
-          </label>
-        </div>
-        <div class="two">
-          <label class="ui-field">
-            <span class="ui-label">Emote</span>
-            <input class="ui-input" bind:value={emote} placeholder="Emote link or ID" autocomplete="off" aria-invalid={errors.emote ? 'true' : undefined} />
-            {#if errors.emote}<span class="ui-error">{errors.emote}</span>{:else}<span class="ui-hint">Optional, shown small. Approved emotes only.</span>{/if}
-          </label>
-          <label class="ui-field">
-            <span class="ui-label">Badge</span>
-            <select class="ui-input" bind:value={badgeId} disabled={!!emote.trim()}>
-              <option value="">No badge</option>
-              {#each [...(catalog?.badges.values() ?? [])] as b (b.id)}<option value={b.id}>{clean(b.name)}</option>{/each}
-            </select>
-            <span class="ui-hint">{emote.trim() ? 'The emote shows instead.' : 'Optional, shown small.'}</span>
-          </label>
-        </div>
-        <div class="two">
-          <label class="ui-field">
-            <span class="ui-label">Starts</span>
-            <input class="ui-input" type="datetime-local" bind:value={starts} />
-            <span class="ui-hint">Empty: as soon as you save.</span>
-          </label>
-          <label class="ui-field">
-            <span class="ui-label">Ends</span>
-            <input class="ui-input" type="datetime-local" bind:value={ends} aria-invalid={errors.ends ? 'true' : undefined} />
-            {#if errors.ends}<span class="ui-error">{errors.ends}</span>{:else}<span class="ui-hint">Empty: until you end it.</span>{/if}
-          </label>
-        </div>
-        <div class="ui-field">
-          <span class="ui-label">Preview</span>
-          <div class="preview" aria-hidden="true">
-            <span class="pk"><Icon name={KIND[kind].icon} size={15} />{KIND[kind].label}</span>
-            {#if !emote.trim() && previewBadge}<BadgeIcon badge={previewBadge} size={18} />{/if}
-            <span class="pt"><bdi>{text.trim() || 'Your line shows here.'}</bdi>{#if previewHref}<span class="pl">{linkLabel.trim() || 'Learn more'}<Icon name="chevron-right" size={14} /></span>{/if}</span>
-            <Icon name="x" size={14} />
-          </div>
-        </div>
-        {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
-      </div>
-      <footer>
-        <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-        <button class="ui-btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : editing ? 'Save changes' : 'Put it up'}</button>
-      </footer>
-    </form>
-  </dialog>
+  </Split>
 </Gate>
 
 <style>
-  .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-  .item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
-  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 14px; }
-  .kind { flex: none; display: inline-flex; color: var(--dim); }
-  .what { display: grid; flex: 1 1 260px; min-width: 0; }
-  .what strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .what .ui-hint { overflow-wrap: anywhere; }
-  .st { flex: none; display: inline-flex; align-items: center; gap: 6px; min-width: 96px; font-size: var(--t-small); color: var(--muted); }
+  .item { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 12px;
+    border: 0; background: none; color: var(--text); font: inherit; font-size: var(--t-small); text-align: left; cursor: pointer; }
+  .item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+  .item:active { opacity: .6; }
+  @media (hover: hover) and (pointer: fine) { .item:hover { background: var(--row-hover); } }
+  .item[aria-current='true'] { box-shadow: inset 2px 0 0 var(--accent-border); }
+  .item[aria-current='true'] .line { font-weight: 700; }
+  .kind { display: inline-flex; color: var(--dim); }
+  .item[aria-current='true'] .kind { color: var(--accent-text); }
+  .what { display: grid; min-width: 0; line-height: 1.35; }
+  .line { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .st { display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-small); color: var(--muted); white-space: nowrap; }
+  .st.old { color: var(--dim); }
   .st.on { color: var(--text); font-weight: 700; }
   .st.on :global(svg) { color: var(--accent-text); }
-  .acts { flex: none; display: flex; gap: 8px; }
-  .wide { width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); }
-  form { max-height: calc(100dvh - 24px); grid-template-rows: minmax(0, 1fr) auto; }
-  .body { overflow-y: auto; overscroll-behavior: contain; }
-  h2 { margin: 0; font-size: 18px; }
-  .two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
-  .preview { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 12px; border: 1px solid var(--border);
-    border-radius: var(--radius); background: var(--surface); color: var(--dim); }
-  .pk { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-fine); font-weight: 600; color: var(--muted); }
-  .pt { flex: 1; min-width: 0; font-size: var(--t-nav); font-weight: 500; color: var(--text); overflow-wrap: anywhere; }
-  .pl { display: inline-flex; align-items: center; gap: 2px; margin-left: 8px; color: var(--accent-text); font-weight: 600; white-space: nowrap; }
-  .problem { margin: 0; font-size: var(--t-small); color: var(--red); }
-  @media (max-width: 520px) { .two { grid-template-columns: minmax(0, 1fr); } }
+  .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
+  @media (max-width: 640px) {
+    .item { grid-template-columns: 20px minmax(0, 1fr); min-height: 64px; }
+    .st { grid-column: 2; }
+  }
 </style>

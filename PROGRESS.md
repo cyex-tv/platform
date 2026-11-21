@@ -1400,3 +1400,15 @@ git push   # merges of origin/main, test fixes, ADR renumbered to 0027 (0026 tak
 git push -u origin feat/hero-motion
 gh pr create --base main --head feat/hero-motion --title "Hero: lean toward the pointer and a springy scroll turn" --body-file <file>
 ```
+## Redesign part C: admin (feat/redesign-c, 2026/11/21)
+- Frame: `lib/admin/shell/AdminShell.svelte` replaces the admin SideRail: a full-height rail flush left (the browse set rail's shape), sticky while it fits and scrolling with the page when not (`fit.ts`, no inner scroll bar, owner rule); under 900px a sticky "Admin · <section>" bar opens the rows in a bottom sheet. Sections live once in `lib/admin/shell/sections.ts` (rail and overview both read it).
+- Shared admin pieces: `lib/admin/admin.css` (`adm-*`: inspector head and sections, facts, toolbar, dense table, pager), `lib/admin/ui/Split.svelte` (list + 360px inspector flush right; bottom sheet or inline above under 1100px), `ui/pick.ts` (picked item in the URL, arrow keys over tiles and rows), `ui/Box.svelte`, `ui/More.svelte`.
+- Pages: overview (what waits as figures, then every section grouped), review (browse-style cards, all keys, undo and bulk kept; detail dialog two columns), reports (list + inspector, X/Shift+X, Enter, Esc), audit (dense table, URL filters, real paging), announcements (list + editor with a live preview), users and the user dashboard (Inspector two-column with tabs `?s=`, restrictions as settings rows), roles (list + inspector, limits shown; edit dialog grouped), give to many (three steps), entitlement graph, owners, badges and paints (tiles + inspector with owners, Give, Make larger sizes), paint studio (save bar, library / preview / settings columns), shop items, orders, codes (tables + inspector, URL-held filters).
+- Every permission check, call, shortcut and undo kept. Tests: `sections.test.ts`, `reports.test.ts`, `grant-logins.test.ts`, `shop-orders.test.ts`, `shop-codes.test.ts`, `restrictions-holds.ui.test.ts`, `account-list.ui.test.ts`, `announcement-preview.ui.test.ts`, more in `audit.test.ts` and `role-limits.test.ts`.
+- Manual (mock, owner): every page at 1280, 1920 and 375, dark and light; screens in `.claude/runs/2026-11-20-redesign/screens/partC/`.
+- GitHub writes:
+```
+git push -u origin feat/redesign-c
+gh pr create --repo cyex-tv/platform --base main --head feat/redesign-c --title "Redesign part C: admin" --body-file <file>
+```
+  PR #153, not merged (owner reviews).

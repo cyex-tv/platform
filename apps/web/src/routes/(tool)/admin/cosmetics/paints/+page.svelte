@@ -1,8 +1,16 @@
 <script lang="ts">
-  // Every paint: a preview on a sample name, its name and kind, how many own it, and Edit (the
-  // paint studio), Give, Owners and Delete. "New paint" opens the studio. A picture paint made
-  // before the 512 px size offers Make larger sizes (its files made again from the stored original).
+  // Every paint as a tile (a sample name painted on a well, its name, kind, how many own it) with
+  // an inspector on the right for the picked one (?paint=<id>): a big preview, facts, Edit (the
+  // paint studio), Make larger sizes, Delete and its owners (Give). "New paint" opens the studio.
+  // A picture paint made before the 512 px size offers Make larger sizes (its files made again
+  // from the stored original). Keyboard: arrows move over the tiles, Enter opens one in the
+  // inspector, Escape closes it.
+  import { page } from '$app/state';
+  import { tick } from 'svelte';
   import { gql } from '$lib/api';
+  import IconButton from '$lib/components/IconButton.svelte';
+  import Split from '$lib/admin/ui/Split.svelte';
+  import { gridKeys, pickInUrl } from '$lib/admin/ui/pick';
   import Icon from '$lib/components/Icon.svelte';
   import State from '$lib/components/State.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
@@ -40,12 +48,37 @@
         .catch(() => {});
   });
 
-  let open = $state<string | null>(null);
+  // The picked paint lives in the address; the filter narrows the tiles by name.
+  const pickedId = $derived(page.url.searchParams.get('paint'));
+  const picked = $derived(L.data?.find((p) => p.id === pickedId) ?? null);
+  let query = $state('');
+  const shown = $derived.by(() => {
+    const q = query.trim().toLowerCase();
+    const all = L.data ?? [];
+    return q ? all.filter((p) => p.name.toLowerCase().includes(q)) : all;
+  });
+  let grid = $state<HTMLElement>();
+  function pick(id: string | null) {
+    void pickInUrl('paint', id);
+  }
+  // Closing the inspector puts focus back on the paint's tile.
+  function unpick() {
+    const id = pickedId;
+    pick(null);
+    void tick().then(() => grid?.querySelector<HTMLElement>(`[data-item="${CSS.escape(id ?? '')}"]`)?.focus());
+  }
+  function onkeydown(e: KeyboardEvent) {
+    if (e.key !== 'Escape' || !pickedId || e.defaultPrevented || document.querySelector('dialog[open]')) return;
+    if ((e.target as HTMLElement | null)?.closest('input, textarea, select')) return;
+    e.preventDefault();
+    unpick();
+  }
   let giving = $state<Paint | null>(null);
   let dlg = $state<GrantDialog>();
   let ownerList = $state<Owners>();
   let busy = $state(false);
-  const kindLabel = (p: Paint) => (p.kind === 'IMAGE' ? 'Picture' : p.kind === 'RADIAL_GRADIENT' ? 'Radial' : 'Linear');
+  const kindLabel = (p: Paint) => (p.kind === 'IMAGE' ? 'Picture' : p.kind === 'RADIAL_GRADIENT' ? 'Radial gradient' : 'Linear gradient');
+  const shadowsLabel = (p: Paint) => (p.shadows.length ? `${p.shadows.length} shadow${p.shadows.length > 1 ? 's' : ''}` : 'None');
 
   // Paints whose picture files are being made again.
   let remaking = $state<Record<string, boolean>>({});
@@ -76,6 +109,7 @@
     try {
       await gql(DELETE_PAINT, { id: p.id });
       notify(`${iso(p.name)} deleted.`);
+      if (pickedId === p.id) pick(null);
       await L.reload();
     } catch (e) {
       fail(e);
@@ -85,71 +119,138 @@
   }
 </script>
 
-<svelte:head><title>Paints - Admin - cyex.tv</title></svelte:head>
+<svelte:head><title>{picked ? `${clean(picked.name)} - Paints` : 'Paints'} - Admin - cyex.tv</title></svelte:head>
 
-<PageHead title="Paints" line="Name paints people show in chat. Deleting one takes it from everyone.">
-  {#snippet actions()}
-    {#if manage}<a class="ui-btn primary" href="/admin/cosmetics/paints/studio"><Icon name="plus" size={15} />New paint</a>{/if}
-  {/snippet}
-</PageHead>
+<svelte:window {onkeydown} />
 
-<LoadGate source={L} label="Loading paints…">
-  {#snippet children(paints)}
-    {#if !paints.length}
-      <State title="No paints yet.">
-        Make the first one in the paint studio.
-        {#snippet actions()}{#if manage}<a class="ui-btn primary" href="/admin/cosmetics/paints/studio">New paint</a>{/if}{/snippet}
-      </State>
-    {:else}
-      <ul class="list">
-        {#each paints as p (p.id)}
-          <li class="item">
-            <div class="row">
-              <span class="prev"><PaintedName name={sample} paint={p} /></span>
-              <span class="what">
-                <strong><PaintedName name={p.name} paint={p} /></strong>
-                <span class="ui-hint">{kindLabel(p)}{p.kind === 'LINEAR_GRADIENT' ? ` · ${p.angle}°` : ''}{p.repeat ? ' · repeats' : ''}{p.shadows.length ? ` · ${p.shadows.length} shadow${p.shadows.length > 1 ? 's' : ''}` : ''}</span>
-              </span>
-              {#if grant}
-                <button class="ui-btn ghost small own" type="button" aria-expanded={open === p.id} onclick={() => (open = open === p.id ? null : p.id)}>
-                  <Icon name="users" size={14} />{owners[p.id] === undefined ? 'Owners' : `${count(owners[p.id])} ${owners[p.id] === 1 ? 'owner' : 'owners'}`}
+<Split label="Paint" open={!!picked} onclose={() => pick(null)}>
+  <PageHead title="Paints" line="Name paints people show in chat. Deleting one takes it from everyone.">
+    {#snippet actions()}
+      {#if manage}<a class="ui-btn primary" href="/admin/cosmetics/paints/studio"><Icon name="plus" size={15} />New paint</a>{/if}
+    {/snippet}
+  </PageHead>
+
+  <LoadGate source={L} label="Loading paints…">
+    {#snippet children(paints)}
+      {#if !paints.length}
+        <State title="No paints yet.">
+          Make the first one in the paint studio.
+          {#snippet actions()}{#if manage}<a class="ui-btn primary" href="/admin/cosmetics/paints/studio">New paint</a>{/if}{/snippet}
+        </State>
+      {:else}
+        <div class="adm-toolbar">
+          <label class="adm-find grow">
+            <Icon name="search" size={15} />
+            <span class="sr-only">Filter paints</span>
+            <input class="ui-input" type="search" bind:value={query} placeholder="Filter by name" autocomplete="off" spellcheck="false" maxlength="64" />
+          </label>
+          <span class="ui-hint ui-num">{count(shown.length)} of {count(paints.length)}</span>
+        </div>
+        {#if !shown.length}
+          <State title="Nothing matches.">No paint has that name.</State>
+        {:else}
+          <ul class="tiles" bind:this={grid} use:gridKeys aria-label="Paints">
+            {#each shown as p, i (p.id)}
+              <li>
+                <button class="tile" type="button" data-item={p.id} aria-current={p.id === pickedId ? 'true' : undefined}
+                  tabindex={(pickedId && shown.some((x) => x.id === pickedId) ? p.id === pickedId : i === 0) ? 0 : -1} onclick={() => pick(p.id)}>
+                  <span class="pic"><PaintedName name={sample} paint={p} /></span>
+                  <span class="nm"><bdi>{clean(p.name)}</bdi></span>
+                  <span class="meta">
+                    <span>{kindLabel(p)}</span>
+                    {#if grant && owners[p.id] !== undefined}<span>{count(owners[p.id])} {owners[p.id] === 1 ? 'owner' : 'owners'}</span>{/if}
+                    {#if manage && lacks(p)}<span class="old" title="Made before the 512 px size">Old sizes</span>{/if}
+                  </span>
                 </button>
-                <button class="ui-btn secondary small" type="button" onclick={() => { giving = p; dlg?.open({ id: p.id, name: p.name }); }}>Give</button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      {/if}
+    {/snippet}
+  </LoadGate>
+
+  {#snippet empty()}
+    <div class="adm-ip-head"><span class="adm-label">Paint</span></div>
+    <p class="none">Pick a paint to see it large, give it, or change it.</p>
+  {/snippet}
+
+  {#snippet panel()}
+    {#if picked}
+      {@const p = picked}
+      <div class="adm-ip-head">
+        <span class="adm-label">Paint</span>
+        <IconButton label="Close" icon="x" size="s" onclick={unpick} />
+      </div>
+      <div class="adm-ip-body">
+        <section class="adm-sec">
+          <div class="adm-stage big"><PaintedName name={sample} paint={p} /></div>
+          <h2 class="adm-name"><bdi>{clean(p.name)}</bdi></h2>
+        </section>
+        <section class="adm-sec">
+          <h3 class="adm-label">Facts</h3>
+          <dl class="adm-kv">
+            <dt>Kind</dt><dd>{kindLabel(p)}</dd>
+            {#if p.kind === 'LINEAR_GRADIENT'}<dt>Angle</dt><dd>{p.angle}°</dd>{/if}
+            <dt>Repeat</dt><dd>{p.repeat ? 'Yes' : 'No'}</dd>
+            <dt>Shadows</dt><dd>{shadowsLabel(p)}</dd>
+            {#if grant}<dt>Owners</dt><dd>{owners[p.id] === undefined ? '…' : count(owners[p.id])}</dd>{/if}
+            <dt>ID</dt><dd class="mono">{p.id}</dd>
+          </dl>
+        </section>
+        {#if manage}
+          <section class="adm-sec">
+            <div class="adm-acts row">
+              <a class="ui-btn secondary small" href="/admin/cosmetics/paints/{encodeURIComponent(p.id)}/studio"><Icon name="pencil" size={14} />Edit</a>
+              {#if lacks(p)}
+                <button class="ui-btn secondary small" type="button" disabled={remaking[p.id]} title="Made before the 512 px size: make it from the stored original" onclick={() => remake(p)}>
+                  {#if remaking[p.id]}<span class="ui-spinner" aria-hidden="true"></span>Making sizes…{:else}<Icon name="refresh" size={14} />Make larger sizes{/if}
+                </button>
               {/if}
-              {#if manage}
-                {#if lacks(p)}
-                  <button class="ui-btn secondary small" type="button" disabled={remaking[p.id]} title="Made before the 512 px size: make it from the stored original" onclick={() => remake(p)}>
-                    {#if remaking[p.id]}<span class="ui-spinner" aria-hidden="true"></span>Making sizes…{:else}<Icon name="refresh" size={14} />Make larger sizes{/if}
-                  </button>
-                {/if}
-                <a class="ui-btn secondary small" href="/admin/cosmetics/paints/{encodeURIComponent(p.id)}/studio"><Icon name="pencil" size={14} />Edit</a>
-                <Confirm small label="Delete" confirm="Click again to delete it for everyone" {busy} onconfirm={() => remove(p)} />
-              {/if}
+              <Confirm small label="Delete" confirm={owners[p.id] ? `Click again: ${count(owners[p.id])} ${owners[p.id] === 1 ? 'owner' : 'owners'}` : 'Click again to delete it for everyone'} {busy} onconfirm={() => remove(p)} />
             </div>
-            {#if open === p.id}
+          </section>
+        {/if}
+        {#if grant}
+          <section class="adm-sec">
+            <div class="sec-head">
+              <h3 class="adm-label">Owners</h3>
+              <button class="ui-btn secondary small" type="button" onclick={() => { giving = p; dlg?.open({ id: p.id, name: p.name }); }}><Icon name="user-plus" size={14} />Give</button>
+            </div>
+            {#key p.id}
               <div class="owners"><Owners bind:this={ownerList} kind="PAINT" cosmeticId={p.id} name={clean(p.name)} onchange={(n) => (owners[p.id] = n)} /></div>
-            {/if}
-          </li>
-        {/each}
-      </ul>
+            {/key}
+          </section>
+        {/if}
+      </div>
     {/if}
   {/snippet}
-</LoadGate>
+</Split>
 
 <GrantDialog bind:this={dlg} kind="PAINT" ongranted={() => {
   if (giving) owners[giving.id] = (owners[giving.id] ?? 0) + 1;
-  if (open === giving?.id) ownerList?.load(1);
+  if (pickedId === giving?.id) ownerList?.load(1);
 }} />
 
 <style>
-  .list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-  .item { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
-  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 10px 14px; }
-  .prev { display: flex; align-items: center; justify-content: center; flex: none; width: 168px; height: 44px; padding: 0 10px;
-    border-radius: var(--radius); background: var(--bg); font-size: 17px; font-weight: 700; overflow: hidden; }
-  .what { display: grid; flex: 1 1 180px; min-width: 0; }
-  .what strong { font-weight: 600; display: flex; min-width: 0; }
-  .owners { border-top: 1px solid var(--border); }
-  .own { font-variant-numeric: tabular-nums; }
-  @media (max-width: 520px) { .prev { width: 100%; } }
+  /* The tiles: the sample name painted on a well, the paint's name, kind and owners. The picked one has an accent hairline and a bold name. */
+  .tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(188px, 1fr)); gap: 8px; }
+  .tile { display: grid; justify-items: center; align-content: start; gap: 4px; width: 100%; height: 136px; padding: 10px;
+    border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); color: var(--text); font: inherit; cursor: pointer;
+    transition: border-color var(--fast), background-color var(--fast); }
+  .pic { display: flex; align-items: center; justify-content: center; width: 100%; height: 56px; margin-bottom: 4px; padding: 0 8px; overflow: hidden;
+    border-radius: var(--radius); background: var(--bg); font-size: 20px; font-weight: 700; }
+  .nm { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-small); font-weight: 600; }
+  .meta { display: flex; flex-wrap: wrap; justify-content: center; gap: 0 8px; min-height: 18px; max-height: 36px; overflow: hidden; font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
+  .old { color: var(--yellow); }
+  .tile[aria-current='true'] { border-color: var(--accent-border); }
+  .tile[aria-current='true'] .nm { font-weight: 700; }
+  .tile:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .tile:active { opacity: .6; transition: none; }
+  @media (hover: hover) and (pointer: fine) { .tile:hover { border-color: var(--border-strong); background: var(--surface-hover); } }
+
+  .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
+  .adm-stage.big { min-height: 120px; background: var(--bg); font-size: 30px; font-weight: 700; overflow: hidden; }
+  .sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .owners { margin: 0 -16px -12px; border-top: 1px solid var(--border); }
 </style>

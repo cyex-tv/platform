@@ -7,15 +7,19 @@
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { loadCatalog, type Catalog } from '$lib/cosmetics/store.svelte';
   import type { CosmeticKind, EntitlementsQuery } from '$lib/gql/graphql';
-  import { clean, dateTime, iso } from '$lib/format';
+  import { clean, count, dateTime, iso } from '$lib/format';
   import { ENTITLEMENTS, REVOKE_COSMETIC } from '$lib/queries';
   import ReasonDialog from '$lib/tool/ReasonDialog.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
   import GrantDialog from './GrantDialog.svelte';
+  import Box from './ui/Box.svelte';
+  import More from './ui/More.svelte';
 
   type Row = EntitlementsQuery['cosmeticEntitlements']['items'][number];
   let { account }: { account: { id: string; displayName: string } } = $props();
 
+  const LIMIT = 6;
+  const open = $state<Record<CosmeticKind, boolean>>({ BADGE: false, PAINT: false });
   let catalog = $state<Catalog | null>(null);
   let owned = $state<Record<CosmeticKind, Row[]>>({ BADGE: [], PAINT: [] });
   let problem = $state('');
@@ -74,22 +78,21 @@
   }
 </script>
 
-<section class="ui-panel" aria-labelledby="uc-h">
-  <header><h2 id="uc-h">Cosmetics</h2></header>
+<Box title="Cosmetics">
   {#if problem}
-    <p class="ui-hint pad" role="alert">{problem} <button class="ui-btn ghost small" type="button" onclick={load}>Try again</button></p>
+    <p class="box-none" role="alert">{problem} <button class="ui-btn ghost small" type="button" onclick={load}>Try again</button></p>
   {:else if loading && !catalog}
-    <p class="ui-hint pad">Loading…</p>
+    <p class="box-none">Loading…</p>
   {:else}
     {#each ['BADGE', 'PAINT'] as const as kind (kind)}
       <div class="kind">
         <div class="kh">
-          <h3>{kind === 'BADGE' ? 'Badges' : 'Paints'}</h3>
+          <h3 class="box-sub">{kind === 'BADGE' ? 'Badges' : 'Paints'}<span class="n">{count(owned[kind].length)}</span></h3>
           <button class="ui-btn secondary small" type="button" onclick={() => give(kind)}>Give a {kind === 'BADGE' ? 'badge' : 'paint'}</button>
         </div>
         {#if owned[kind].length}
           <ul class="ui-list">
-            {#each owned[kind] as r (r.cosmeticId)}
+            {#each open[kind] ? owned[kind] : owned[kind].slice(0, LIMIT) as r (r.cosmeticId)}
               {@const badge = kind === 'BADGE' ? catalog?.badges.get(r.cosmeticId) : undefined}
               {@const paint = kind === 'PAINT' ? catalog?.paints.get(r.cosmeticId) : undefined}
               <li>
@@ -102,23 +105,26 @@
               </li>
             {/each}
           </ul>
+          <More total={owned[kind].length} limit={LIMIT} bind:expanded={open[kind]} />
         {:else}
-          <p class="ui-hint pad">None.</p>
+          <p class="box-none">None.</p>
         {/if}
       </div>
     {/each}
   {/if}
-</section>
+</Box>
 
 <GrantDialog bind:this={grantDlg} kind={grantKind} {account} choices={choices(grantKind)} ongranted={load} />
 <ReasonDialog bind:this={revokeDlg} title="Take it away?" hint="If they show it, it stops at once. The reason goes in the audit log." action="Revoke" danger optional onsubmit={revoke} />
 
 <style>
-  .kind + .kind { border-top: 1px solid var(--border); }
-  .kh { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px 4px; }
-  .kh h3 { margin: 0; font-size: var(--t-small); font-weight: 600; color: var(--muted); }
+  .kind { border-top: 1px solid var(--border); }
+  .kind:first-of-type { border-top: 0; }
+  .kh { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; padding: 0 8px 0 0; }
+  .kh h3 { flex: 1; border-top: 0 !important; }
+  .kh .n { margin-left: auto; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--dim); }
   .what { display: grid; flex: 1; min-width: 0; }
-  .what strong { display: flex; min-width: 0; font-weight: 600; }
+  .what strong { display: flex; min-width: 0; font-weight: 600; font-size: var(--t-small); }
   .what .ui-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pad { margin: 0; padding: 6px 14px 12px; }
+  .kind > ul > li { min-height: 44px; padding: 6px 16px; }
 </style>
