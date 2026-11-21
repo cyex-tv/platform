@@ -11,11 +11,14 @@ describe('picture checks before an upload', () => {
     expect(checkFile({ type: 'image/png', size: 8 * 1024 * 1024 + 1 }, 'badge')).toMatch(/Badge pictures are at most 8 MB \(this one is 8,0 MB\)/);
     expect(pictureAccept('badge')).toBe('image/png,image/apng,image/jpeg,image/gif,image/webp');
   });
-  it('keeps paints at PNG, APNG, GIF and WebP up to 5 MB', () => {
-    for (const type of ['image/png', 'image/apng', 'image/gif', 'image/webp']) expect(checkFile({ type, size: 1000 }, 'paint')).toBeNull();
-    expect(checkFile({ type: 'image/jpeg', size: 1000 }, 'paint')).toMatch(/PNG, APNG, GIF or WebP/);
-    expect(checkFile({ type: 'image/png', size: 5 * 1024 * 1024 + 1 }, 'paint')).toMatch(/at most 5 MB \(this one is 5,0 MB\)/);
-    expect(PICTURE_RULES.paint.maxBytes).toBe(5 * 1024 * 1024);
+  it('takes the same types and 8 MB for paints', () => {
+    for (const type of ['image/png', 'image/apng', 'image/jpeg', 'image/gif', 'image/webp']) expect(checkFile({ type, size: 1000 }, 'paint')).toBeNull();
+    expect(checkFile({ type: 'image/svg+xml', size: 1000 }, 'paint')).toMatch(/PNG, JPEG, GIF or WebP/);
+    expect(checkFile({ type: 'image/png', size: 8 * 1024 * 1024 }, 'paint')).toBeNull();
+    expect(checkFile({ type: 'image/png', size: 5 * 1024 * 1024 + 1 }, 'paint')).toBeNull();
+    expect(checkFile({ type: 'image/png', size: 8 * 1024 * 1024 + 1 }, 'paint')).toMatch(/Paint pictures are at most 8 MB \(this one is 8,0 MB\)/);
+    expect(PICTURE_RULES.paint.maxBytes).toBe(PICTURE_RULES.badge.maxBytes);
+    expect(pictureAccept('paint')).toBe(pictureAccept('badge'));
   });
   it('says what the API would say about the size', () => {
     expect(checkSize('badge', 72, 72)).toBeNull();
@@ -25,6 +28,12 @@ describe('picture checks before an upload', () => {
     expect(checkSize('badge', 2049, 2049)).toMatch(/at most 2048 × 2048 px/);
     expect(checkSize('paint', 512, 64)).toBeNull();
     expect(checkSize('paint', 256, 32)).toMatch(/64 px tall \(this one is 32 px\)/);
+    // Paint shape: at least 64 tall, at most 8:1, up to 4096 px a side.
+    expect(checkSize('paint', 4096, 512)).toBeNull();
+    expect(checkSize('paint', 512, 512)).toBeNull();
+    expect(checkSize('paint', 520, 64)).toMatch(/8:1 \(this one is 520 × 64 px\)/);
+    expect(checkSize('paint', 4200, 600)).toMatch(/at most 4096 px a side/);
+    expect(checkSize('paint', 600, 4200)).toMatch(/at most 4096 px a side/);
   });
 });
 
@@ -90,8 +99,10 @@ describe('animated badge checks before an upload', () => {
     expect(checkAnimation('badge', animationOf(webp(6, 2000)), 72, 72)).toMatch(/at most 10 seconds \(this one runs 12,0 s\)/);
     expect(checkAnimation('badge', { frames: 120, durationMs: 1000 }, 512, 512)).toBeNull();
     expect(checkAnimation('badge', { frames: 100, durationMs: 1000 }, 1000, 1000)).toMatch(/over 64 MP/);
-    // Paints keep their own rules; a still picture has nothing to check.
-    expect(checkAnimation('paint', animationOf(gif(121, 5)), 256, 64)).toBeNull();
+    // Paints hold to the same limits; a still picture has nothing to check.
+    expect(checkAnimation('paint', animationOf(gif(121, 5)), 256, 64)).toMatch(/Animated paints have at most 120 frames/);
+    expect(checkAnimation('paint', animationOf(gif(120, 5)), 256, 64)).toBeNull();
+    expect(checkAnimation('paint', animationOf(webp(6, 2000)), 256, 64)).toMatch(/at most 10 seconds/);
     expect(checkAnimation('badge', null, 72, 72)).toBeNull();
   });
 });

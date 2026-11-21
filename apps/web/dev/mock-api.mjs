@@ -9,6 +9,7 @@
 // visitor counts as signed in as the staff account with every permission, no cookie needed.
 // Development only; nothing here ships.
 import { createHash } from 'node:crypto';
+import { deflateSync } from 'node:zlib';
 import { createServer } from 'node:http';
 import { Kind, parse } from 'graphql';
 import { quickTier, similar, personMatch } from './search.mjs';
@@ -891,8 +892,18 @@ const cImage = (key, kind = 'BADGE', full = true) => ({
   width: 512, height: 512, ready: true, createdAt: C_TIME,
   files: ladderFiles(false, 300, full ? BADGE_LADDER : BADGE_LADDER.slice(0, 3)),
 });
+// The paint size ladder (crates/media Profile::PAINT): 64, 128, 256 and 512 px tall, 4:1 here.
+const PAINT_LADDER = [['1x', 1, 64], ['2x', 2, 128], ['4x', 4, 256], ['512', 8, 512]];
+const paintFiles = (animated = false, size = 3000, sizes = PAINT_LADDER) =>
+  sizes.flatMap(([stem, scale, px]) =>
+    (animated ? [false, true] : [false]).map((still) => ({ name: `${stem}${still ? '_static' : ''}.webp`, format: 'WEBP', scale, width: px * 4, height: px, size, isStatic: still })));
+const pImage = (key, full = true) => ({
+  id: `01JD8XIMG${key.replace(/[^a-z]/g, '').toUpperCase().padEnd(17, '0').slice(0, 17)}`,
+  kind: 'PAINT', host: `${BASE}/cosmetics/paints/${key}`, animated: false, width: 2048, height: 512, ready: true, createdAt: C_TIME,
+  files: paintFiles(false, 3000, full ? PAINT_LADDER : PAINT_LADDER.slice(0, 3)),
+});
 const UPLOADED = new Map(); // SHA-256 of an uploaded file -> its picture
-const C_IMAGES = [cImage('sample-star', 'BADGE', false), cImage('sample-shield')];
+const C_IMAGES = [cImage('sample-star', 'BADGE', false), cImage('sample-shield'), pImage('sample-mosaic'), pImage('sample-mosaic-old', false)];
 const BADGES = [
   { id: '01JD8XBDG000000000000000001', name: 'Sample: Early', tooltip: 'Sample badge (mock data)', image: C_IMAGES[0], createdAt: C_TIME, updatedAt: C_TIME },
   { id: '01JD8XBDG000000000000000002', name: 'Sample: Helper', tooltip: 'Sample badge (mock data)', image: C_IMAGES[1], createdAt: C_TIME, updatedAt: C_TIME },
@@ -906,6 +917,11 @@ const PAINTS = [
   paintOf('01JD8XPNT000000000000000003', 'Sample Ember', 'LINEAR_GRADIENT', { angle: 45, repeat: true, color: '#FFB020',
     stops: [{ at: 0, color: '#FFB020' }, { at: 0.25, color: '#FF5A1F' }, { at: 0.5, color: '#FFB020' }],
     shadows: [{ x: 0, y: 1, radius: 2, color: '#00000099' }] }),
+  // Picture paints: the mock draws their pictures as PNGs of the file's own height with detail that
+  // scales with it, so a file too small for where it is drawn looks soft. The second is made
+  // before the 512 px size (Make larger sizes).
+  paintOf('01JD8XPNT000000000000000004', 'Sample Mosaic', 'IMAGE', { color: '#FF7A45', image: C_IMAGES[2] }),
+  paintOf('01JD8XPNT000000000000000005', 'Sample Mosaic (old)', 'IMAGE', { color: '#3BA7FF', image: C_IMAGES[3] }),
 ];
 // Who owns what (entitlements) and what each account shows. Two of the made-up channel accounts
 // (emoteChannels, k = 4 and 6) wear paints too, so an emote's channel list shows several.
@@ -913,14 +929,14 @@ const CHANNEL_ACC = (k) => `01JD8XACC${String(k).padStart(17, '0')}`;
 const C_OWNED = {
   [CHANNEL_ACC(4)]: { BADGE: [], PAINT: [PAINTS[0].id] },
   [CHANNEL_ACC(6)]: { BADGE: [], PAINT: [PAINTS[1].id] },
-  [ME_ID]: { BADGE: [BADGES[0].id, BADGES[1].id], PAINT: [PAINTS[0].id, PAINTS[1].id] },
+  [ME_ID]: { BADGE: [BADGES[0].id, BADGES[1].id], PAINT: [PAINTS[0].id, PAINTS[1].id, PAINTS[3].id] },
   [OTHERS[0].id]: { BADGE: [BADGES[1].id], PAINT: [PAINTS[2].id] },
   [OTHERS[4].id]: { BADGE: [], PAINT: [PAINTS[1].id] },
 };
 const C_SELECTED = {
   [CHANNEL_ACC(4)]: { badgeId: null, paintId: PAINTS[0].id },
   [CHANNEL_ACC(6)]: { badgeId: null, paintId: PAINTS[1].id },
-  [ME_ID]: { badgeId: BADGES[0].id, paintId: PAINTS[0].id },
+  [ME_ID]: { badgeId: BADGES[0].id, paintId: PAINTS[3].id },
   [OTHERS[0].id]: { badgeId: BADGES[1].id, paintId: PAINTS[2].id },
   [OTHERS[4].id]: { badgeId: null, paintId: PAINTS[1].id },
 };
@@ -1056,6 +1072,9 @@ function cosmeticsAnswer(q, v, session, admin) {
     // The job runs again: a badge gets every size of the ladder a moment later.
     if (img.kind === 'BADGE')
       setTimeout(() => Object.assign(img, { files: ladderFiles(img.animated, img.files[0]?.size ?? 300) }), Number(process.env.MOCK_IMAGE_DELAY ?? 2000));
+    // A paint gets the 512 px tall file (4:1 pictures here, as the originals the mock keeps).
+    if (img.kind === 'PAINT' && !img.files.some((f) => f.name === '512.webp'))
+      setTimeout(() => Object.assign(img, { files: paintFiles(img.animated, img.files[0]?.size ?? 3000) }), Number(process.env.MOCK_IMAGE_DELAY ?? 2000));
     return { data: { remakeCosmeticImage: img } };
   }
   for (const [field, perm] of [['createBadge', 'manage'], ['updateBadge', 'manage'], ['deleteBadge', 'manage'], ['createPaint', 'manage'],
@@ -2891,6 +2910,42 @@ function probeImage(b) {
   return null;
 }
 
+/** A 4:1 PNG `h` px tall: coloured diagonal bands with fine lines, so detail scales with h. */
+const MOSAIC = new Map();
+function mosaicPng(h) {
+  if (MOSAIC.has(h)) return MOSAIC.get(h);
+  const w = h * 4;
+  const raw = Buffer.alloc((w * 4 + 1) * h);
+  const cell = h / 4;
+  const rule = Math.max(1, h / 128);
+  for (let y = 0; y < h; y++) {
+    raw[y * (w * 4 + 1)] = 0;
+    for (let x = 0; x < w; x++) {
+      const t = x / w;
+      const band = ((x + y * 2) / cell) % 1;
+      const k = x % cell < rule || y % cell < rule ? 0.55 : 1;
+      const o = y * (w * 4 + 1) + 1 + x * 4;
+      const c = (v) => Math.max(0, Math.min(255, v * k));
+      raw[o] = c(255 * (0.55 + 0.45 * Math.sin(6.28 * (t + band * 0.2))));
+      raw[o + 1] = c(255 * (0.45 + 0.4 * Math.sin(6.28 * (t * 1.3 + 0.33))));
+      raw[o + 2] = c(255 * (0.6 + 0.4 * Math.sin(6.28 * (t * 0.7 + 0.66 + band * 0.1))));
+      raw[o + 3] = 255;
+    }
+  }
+  const table = Array.from({ length: 256 }, (_, n) => { let c = n; for (let i = 0; i < 8; i++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
+  const crc = (buf) => { let c = 0xffffffff; for (const v of buf) c = table[(c ^ v) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const sum = Buffer.alloc(4); sum.writeUInt32BE(crc(body));
+    return Buffer.concat([len, body, sum]);
+  };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 6;
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+  MOSAIC.set(h, png);
+  return png;
+}
+
 function read(req) {
   return new Promise((resolve) => {
     const chunks = [];
@@ -2953,6 +3008,12 @@ createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' });
     return res.end(picture(Number(img[1]), Number(img[2]), Boolean(img[3])));
   }
+  const paintArt = url.pathname.match(/^\/cosmetics\/paints\/(sample-mosaic(?:-old)?)\/(?:[124]x|512)\.webp$/);
+  if (paintArt) {
+    const px = PAINT_LADDER.find(([stem]) => url.pathname.endsWith(`/${stem}.webp`))[2];
+    res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store' });
+    return res.end(mosaicPng(px));
+  }
   const badgeArt = url.pathname.match(/^\/cosmetics\/badges\/([a-z-]+)\/([124]x|128|256|512)\.webp$/);
   if (badgeArt && BADGE_ART[badgeArt[1]]) {
     res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' });
@@ -2980,26 +3041,25 @@ createServer(async (req, res) => {
     if (kind !== 'badge' && kind !== 'paint') return json(res, 400, { error: 'bad_kind', message: 'kind is badge or paint.' });
     const file = parts.file?.data;
     if (!file?.length) return json(res, 400, { error: 'bad_form', message: 'Attach the image as `file`.' });
-    const most = kind === 'badge' ? 8 : 5;
-    if (file.length > most * 1024 * 1024) return json(res, 413, { error: 'too_large', message: `The file is over ${most} MB, the most an upload can be.` });
+    if (file.length > 8 * 1024 * 1024) return json(res, 413, { error: 'too_large', message: 'The file is over 8 MB, the most an upload can be.' });
     // The uploaded picture itself is kept and served back (as the worker's files would be), so what
     // was uploaded is what the site shows. The checks are the API's (cosmetics::check_dimensions).
     const probe = probeImage(file);
-    if (!probe) return json(res, 415, { error: 'unsupported_format', message: 'Use a PNG, APNG, GIF or WebP.' });
+    if (!probe) return json(res, 415, { error: 'unsupported_format', message: 'Use a PNG, APNG, JPEG, GIF or WebP.' });
     if (kind === 'badge' && !(probe.width === probe.height && probe.width >= 72))
       return json(res, 422, { error: 'bad_dimensions', message: 'Badge pictures are square and at least 72×72 px.' });
     if (kind === 'paint' && probe.height < 64) return json(res, 422, { error: 'bad_dimensions', message: 'Paint pictures are at least 64 px tall.' });
+    if (kind === 'paint' && probe.width > probe.height * 8) return json(res, 422, { error: 'bad_dimensions', message: 'Paint pictures are at most 8 times as wide as they are tall (8:1).' });
     // The real POST answers in the REST shape, and the same bytes give the same picture again
     // (the API keys pictures by their SHA-256), already ready.
     const sha = createHash('sha256').update(file).digest('hex');
     const again = UPLOADED.get(sha);
     if (again) return json(res, 202, restOf(again));
     const id = `01JD8XIMG${String(100 + cosmeticSeq++).padStart(17, '0')}`;
-    const base = kind === 'badge' ? 18 : 64;
-    const files = kind === 'badge' ? ladderFiles(probe.animated, file.length) : [1, 2, 4].flatMap((k) => {
-      const h = base * k;
+    const files = kind === 'badge' ? ladderFiles(probe.animated, file.length) : PAINT_LADDER.flatMap(([stem, scale, px]) => {
+      const h = Math.min(px, probe.height); // never above the original
       const w = Math.round((probe.width / probe.height) * h);
-      return (probe.animated ? [false, true] : [false]).map((still) => ({ name: `${k}x${still ? '_static' : ''}.webp`, format: 'WEBP', scale: k, width: w, height: h, size: file.length, isStatic: still }));
+      return (probe.animated ? [false, true] : [false]).map((still) => ({ name: `${stem}${still ? '_static' : ''}.webp`, format: 'WEBP', scale, width: w, height: h, size: file.length, isStatic: still }));
     });
     UPLOAD_FILES.set(id, { bytes: file, mime: probe.mime });
     const img = { id, kind: kind.toUpperCase(), host: `${BASE}/cosmetics/uploads/${id}`, animated: probe.animated, width: probe.width, height: probe.height,

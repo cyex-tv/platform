@@ -38,7 +38,7 @@ pub fn profile(kind: CosmeticKind) -> &'static Profile {
 pub fn limits(kind: CosmeticKind) -> Limits {
     match kind {
         CosmeticKind::Badge => Limits::badge(),
-        CosmeticKind::Paint => Limits::default(),
+        CosmeticKind::Paint => Limits::paint(),
     }
 }
 
@@ -243,19 +243,20 @@ mod tests {
     }
 
     #[test]
-    fn badges_take_the_badge_limits_and_paints_keep_theirs() {
+    fn paints_take_the_badge_animation_limits_and_their_own_side() {
         assert_eq!(limits(CosmeticKind::Badge), Limits::badge());
-        assert_eq!(limits(CosmeticKind::Paint), Limits::default());
-        // A 1024 px badge is scaled down to the 512 px master; a paint that wide is over its limit.
+        assert_eq!(limits(CosmeticKind::Paint), Limits::paint());
+        // A 1024 px badge is scaled down to the 512 px master; a paint 1024 px wide is fine now.
         assert!(make(CosmeticKind::Badge, &png(1024, 1024)).is_ok());
-        assert!(make(CosmeticKind::Paint, &png(1024, 128)).is_err());
-        // 121 frames is over a badge's 120, not a paint's.
+        assert!(make(CosmeticKind::Paint, &png(1024, 128)).is_ok());
+        // 121 frames is over the 120 of badges and paints alike.
         let long = gif(8, 8, 121);
-        assert!(matches!(
-            cyex_tv_media::probe(&long, &limits(CosmeticKind::Badge)),
-            Err(MediaError::TooLarge(_))
-        ));
-        assert!(cyex_tv_media::probe(&long, &limits(CosmeticKind::Paint)).is_ok());
+        for kind in [CosmeticKind::Badge, CosmeticKind::Paint] {
+            assert!(matches!(
+                cyex_tv_media::probe(&long, &limits(kind)),
+                Err(MediaError::TooLarge(_))
+            ));
+        }
     }
 
     #[tokio::test]
@@ -279,7 +280,14 @@ mod tests {
     fn paint_pictures_use_the_paint_sizes() {
         let encoded = make(CosmeticKind::Paint, &png(400, 100)).unwrap();
         let sizes: Vec<_> = encoded.webp.iter().map(|v| (v.width, v.height)).collect();
-        assert_eq!(sizes, [(256, 64), (400, 100), (400, 100)]);
+        // 1x, 2x and 4x, then 512: none above the original (400×100).
+        assert_eq!(sizes, [(256, 64), (400, 100), (400, 100), (400, 100)]);
+        let names: Vec<_> = encoded.webp.iter().map(|v| v.name.as_str()).collect();
+        assert_eq!(names, ["1x.webp", "2x.webp", "4x.webp", "512.webp"]);
+        // A tall original gets the 512 px tall file, scaled from the original.
+        let tall = make(CosmeticKind::Paint, &png(1024, 640)).unwrap();
+        let sizes: Vec<_> = tall.webp.iter().map(|v| (v.width, v.height)).collect();
+        assert_eq!(sizes, [(102, 64), (205, 128), (410, 256), (819, 512)]);
         assert!(make(CosmeticKind::Badge, b"not an image").is_err());
     }
 }

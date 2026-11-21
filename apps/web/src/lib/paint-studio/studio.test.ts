@@ -81,8 +81,14 @@ describe('limits', () => {
   it('checks pictures before upload', () => {
     expect(checkPicture({ bytes: 1000, width: 256, height: 64 })).toEqual([]);
     expect(checkPicture({ bytes: 1000, width: 256, height: 32 })[0]).toMatch(/64 px tall/);
-    expect(checkPicture({ bytes: 1000, width: 1200, height: 300 })[0]).toMatch(/1\.000 px/);
-    expect(checkPicture({ bytes: 6 * 1024 * 1024, width: 256, height: 64 })[0]).toMatch(/6,0 MB/);
+    // Taller and wider than before: up to 4096 px a side, 8:1, 8 MB, 120 frames, 10 seconds.
+    expect(checkPicture({ bytes: 1000, width: 4096, height: 512 })).toEqual([]);
+    expect(checkPicture({ bytes: 1000, width: 4200, height: 600 })[0]).toMatch(/4096 px a side/);
+    expect(checkPicture({ bytes: 1000, width: 520, height: 64 })[0]).toMatch(/8:1/);
+    expect(checkPicture({ bytes: 6 * 1024 * 1024, width: 256, height: 64 })).toEqual([]);
+    expect(checkPicture({ bytes: 9 * 1024 * 1024, width: 256, height: 64 })[0]).toMatch(/9,0 MB/);
+    expect(checkPicture({ bytes: 1000, width: 256, height: 64, frames: 121 })[0]).toMatch(/at most 120 frames/);
+    expect(checkPicture({ bytes: 1000, width: 256, height: 64, frames: 50, durationMs: 11_000 })[0]).toMatch(/at most 10 seconds/);
   });
   it('keeps every preset and output size within the limits', () => {
     for (const p of STATIC_PRESETS) expect(validatePaint(p), p.name).toEqual([]);

@@ -1,6 +1,7 @@
 // The cyex.tv paint as the studio edits it, the API's limits (ADR 0015) and the checks that
 // enforce them live, with messages people can act on. Colours are `#RRGGBB` or `#RRGGBBAA`,
 // stored upper case, the way the API keeps them.
+import { PICTURE_RULES, checkAnimation, checkSize } from '$lib/cosmetics/upload';
 
 export type PaintKind = 'LINEAR_GRADIENT' | 'RADIAL_GRADIENT' | 'IMAGE';
 export type PaintShape = 'CIRCLE' | 'ELLIPSE';
@@ -29,12 +30,16 @@ export const LIMITS = {
   offsetMax: 16,
   radiusMax: 16,
   angleMax: 360,
-  /** Paint pictures: at least 64 px tall, at most 1.000 px a side, 8:1 at most (wider is scaled), 5 MB, 1.000 frames. */
-  imageMinHeight: 64,
-  imageMaxSide: 1000,
-  imageMaxAspect: 8,
-  imageMaxBytes: 5 * 1024 * 1024,
-  imageMaxFrames: 1000,
+  /**
+   * Paint pictures (the same rules as `PICTURE_RULES.paint` in $lib/cosmetics/upload): at least 64
+   * px tall, at most 4.096 px a side, 8:1 at most, 8 MB, 120 frames, 10 seconds.
+   */
+  imageMinHeight: PICTURE_RULES.paint.minHeight,
+  imageMaxSide: PICTURE_RULES.paint.maxSide,
+  imageMaxAspect: PICTURE_RULES.paint.maxAspect,
+  imageMaxBytes: PICTURE_RULES.paint.maxBytes,
+  imageMaxFrames: PICTURE_RULES.paint.maxFrames,
+  imageMaxDurationMs: PICTURE_RULES.paint.maxDurationMs,
 } as const;
 
 // ---- colours ----
@@ -150,13 +155,20 @@ export function validatePaint(p: StudioPaint): Issue[] {
   return out;
 }
 
-/** Problems with a paint picture before it is uploaded (size, sides, height, frames). */
-export function checkPicture(info: { bytes: number; width: number; height: number; frames?: number }): string[] {
+/**
+ * Problems with a paint picture before it is uploaded (size, sides, shape, frames, run time):
+ * what the API refuses, said here first.
+ */
+export function checkPicture(info: { bytes: number; width: number; height: number; frames?: number; durationMs?: number }): string[] {
   const out: string[] = [];
-  if (info.height < LIMITS.imageMinHeight) out.push(`Paint pictures are at least ${LIMITS.imageMinHeight} px tall (this one is ${info.height} px).`);
-  if (info.width > LIMITS.imageMaxSide || info.height > LIMITS.imageMaxSide) out.push(`Paint pictures are at most ${fmtInt(LIMITS.imageMaxSide)} px a side (this one is ${info.width} × ${info.height} px).`);
-  if (info.bytes > LIMITS.imageMaxBytes) out.push(`Paint pictures are at most 5 MB (this one is ${fmtBytes(info.bytes)}). Try WebP, fewer frames or a smaller size.`);
-  if ((info.frames ?? 1) > LIMITS.imageMaxFrames) out.push(`Paint pictures have at most ${fmtInt(LIMITS.imageMaxFrames)} frames.`);
+  const size = checkSize('paint', info.width, info.height);
+  if (size) out.push(size);
+  if (info.bytes > LIMITS.imageMaxBytes) out.push(`Paint pictures are at most 8 MB (this one is ${fmtBytes(info.bytes)}). Try WebP, fewer frames or a smaller size.`);
+  const frames = info.frames ?? 1;
+  if (frames > 1 && !size) {
+    const why = checkAnimation('paint', { frames, durationMs: info.durationMs ?? 0 }, info.width, info.height);
+    if (why) out.push(why);
+  }
   return out;
 }
 

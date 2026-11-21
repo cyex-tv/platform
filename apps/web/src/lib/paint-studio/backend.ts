@@ -2,6 +2,7 @@
 // (POST /v1/cosmetics/images kind=paint, then cosmeticImage until its files are made).
 // The studio talks to an interface, so the demo page and tests can run it without the API.
 import { ApiError, gql, uploadCosmeticImage } from '$lib/api';
+import { pickPaintFile } from '$lib/cosmetics/paintFile';
 import { waitReady } from '$lib/cosmetics/upload';
 import type { PaintInput, StudioPaintFieldsFragment } from '$lib/gql/graphql';
 import type { StudioPaint } from './format';
@@ -22,14 +23,26 @@ export interface StudioBackend {
 
 type ImageFields = NonNullable<StudioPaintFieldsFragment['image']>;
 
-/** The address of the picture to preview: the largest WebP (animated, or its still first frame), else any file. */
-export function pictureUrl(img: Pick<ImageFields, 'host' | 'files'> | null | undefined, still = false): string | null {
+/**
+ * What the studio draws a saved picture at: its biggest previews (a 30 px name, up to 25 characters)
+ * and the chat frames. Read once when the picture is loaded, so a screen's pixel ratio is the one
+ * of that moment.
+ */
+const PREVIEW_FIT = { height: 38, width: 450 } as const;
+
+/**
+ * The address of the picture to preview: the file the site would pick for the studio's previews
+ * (see `pickPaintFile`), WebP, animated or (`still`) its first frame, else any file.
+ */
+export function pictureUrl(img: Pick<ImageFields, 'host' | 'files'> & { width?: number; height?: number } | null | undefined, still = false): string | null {
   if (!img?.files?.length) return null;
-  const want = img.files.filter((f) => f.isStatic === still);
-  const pool = want.length ? want : img.files;
-  const webp = pool.filter((f) => f.format === 'WEBP');
-  const pick = [...(webp.length ? webp : pool)].sort((a, b) => b.scale - a.scale)[0];
-  return `${img.host.replace(/\/+$/, '')}/${pick.name}`;
+  const files = img.files.filter((f) => f.format === 'WEBP');
+  const animated = img.files.some((f) => f.isStatic);
+  const dpr = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
+  const name = pickPaintFile({ width: img.width, height: img.height, animated, files: files.length ? files : img.files }, still, { ...PREVIEW_FIT, dpr });
+  // A picture of other names only (not made by this site's worker): its largest file.
+  const pick = name ?? [...img.files].sort((a, b) => b.scale - a.scale)[0]!.name;
+  return `${img.host.replace(/\/+$/, '')}/${pick}`;
 }
 
 /** An API paint as the studio's model. */

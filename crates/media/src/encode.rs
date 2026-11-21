@@ -62,6 +62,12 @@ const BADGE_LARGE: [Large; 3] = [
     },
 ];
 
+/// The paint size past 4x: 512 px tall, animated only within 4 MB (else its still frame stands in).
+const PAINT_LARGE: [Large; 1] = [Large {
+    px: 512,
+    max_animated_bytes: 4 * 1024 * 1024,
+}];
+
 /// The badge master, and the largest badge size: 512 px.
 pub const BADGE_MASTER: u32 = 512;
 /// An animated chat-size badge file (18, 36 or 72 px) is at most 512 KB.
@@ -89,12 +95,13 @@ impl Profile {
         master: Some(BADGE_MASTER),
         max_animated_scale_bytes: Some(BADGE_MAX_ANIMATED_CHAT_BYTES),
     };
-    /// Paint images (ADR 0015): 64 px tall at 1x, then 2x and 4x, up to 8:1.
+    /// Paint images (ADR 0015, 0026): 64 px tall at 1x, then 2x and 4x (128 and 256 px), then
+    /// `512` (512 px tall), up to 8:1. Each size is scaled from the original, never above it.
     pub const PAINT: Self = Self {
         base_height: 64,
         scales: &[1, 2, 4],
         max_aspect: 8,
-        large: &[],
+        large: &PAINT_LARGE,
         master: None,
         max_animated_scale_bytes: None,
     };

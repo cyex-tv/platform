@@ -11,10 +11,13 @@
   import { safeUrl } from '$lib/cosmetics/paint';
   import { animationOf, checkAnimation, checkFile, checkSize, pictureAccept, waitReady } from '$lib/cosmetics/upload';
   import { pickBadgeFile } from '$lib/cosmetics/badgeFile';
+  import { pickPaintFile } from '$lib/cosmetics/paintFile';
   import { display } from '$lib/dpr.svelte';
 
-  // A badge's preview shows it at 72 px, the file picked from its size ladder for the screen.
+  // A badge's preview shows it at 72 px, a paint's in a 120 × 48 px box (cover), the file picked
+  // from its size ladder for the screen.
   const BADGE_PREVIEW = 72;
+  const PAINT_PREVIEW = { height: 48, width: 120 } as const;
 
   type Props = {
     kind: 'badge' | 'paint';
@@ -49,7 +52,7 @@
       ? null
       : kind === 'badge'
         ? (pickBadgeFile(shown.files.map((f) => f.name), BADGE_PREVIEW, display.dpr)?.name ?? '4x.webp')
-        : '1x.webp',
+        : (pickPaintFile(shown, false, { ...PAINT_PREVIEW, dpr: display.dpr }) ?? '1x.webp'),
   );
   const remote = $derived(shown && madeName ? safeUrl(`${shown.host.replace(/\/+$/, '')}/${madeName}`) : null);
   // The picked file shows at once; the made file replaces it when it's ready (unless it won't load).
@@ -102,7 +105,7 @@
     phase = 'checking';
     const bad = checkFile(file, kind);
     const dims = bad ? null : await size(file);
-    const anim = !bad && dims && kind === 'badge' ? await animation(file) : null;
+    const anim = !bad && dims ? await animation(file) : null;
     if (signal.aborted) return;
     const why =
       bad ??
@@ -173,7 +176,7 @@
       <input class="file" type="file" accept={pictureAccept(kind)} onchange={picked} />
     </label>
     <span class="ui-hint" role="status">
-      {#if phase === 'checking'}Checking the file…{:else if phase === 'uploading'}Uploading…{:else if phase === 'making'}Making the files…{:else if phase === 'ready'}Ready.{:else if kind === 'badge'}Square, at least 72 × 72 px. PNG, JPEG, GIF or WebP, up to 8 MB; animated up to 120 frames and 10 seconds. Or drop it here.{:else}At least 64 px tall, up to 8:1. PNG, GIF or WebP, up to 5 MB.{/if}
+      {#if phase === 'checking'}Checking the file…{:else if phase === 'uploading'}Uploading…{:else if phase === 'making'}Making the files…{:else if phase === 'ready'}Ready.{:else if kind === 'badge'}Square, at least 72 × 72 px. PNG, JPEG, GIF or WebP, up to 8 MB; animated up to 120 frames and 10 seconds. Or drop it here.{:else}At least 64 px tall, up to 8:1. PNG, JPEG, GIF or WebP, up to 8 MB; animated up to 120 frames and 10 seconds. Or drop it here.{/if}
     </span>
   </div>
   {#if problem}<span class="ui-error" role="alert">{problem}</span>

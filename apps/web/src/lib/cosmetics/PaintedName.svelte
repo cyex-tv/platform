@@ -2,13 +2,17 @@
   // A user's name drawn in their paint, with their badge before it, wherever a name appears
   // (profile, account menu, editors, admin, channel pages). The name stays real text: copyable,
   // read by screen readers as the name, isolated in <bdi>. Without a paint it is plain text in the
-  // surrounding colour. Image paints show their still frame under reduced motion.
+  // surrounding colour. Image paints show their still frame under reduced motion, and draw the
+  // smallest picture file that is sharp at the size the name is drawn (its font size, its length and
+  // the screen's pixel ratio; measured once after mount and again when the window settles).
   //   <PaintedName name={who.displayName} paint={look.paint} badge={look.badge} />
   import { onMount } from 'svelte';
   import { clean } from '$lib/format';
   import BadgeIcon from './BadgeIcon.svelte';
   import { paintFloor, paintStyle, type PaintLike } from './paint';
   import { reduced, watchReduced } from './reduced.svelte';
+  import { fitOfText } from './paintFile';
+  import { display } from '$lib/dpr.svelte';
   import type { Badge } from './store.svelte';
 
   type Props = {
@@ -17,18 +21,31 @@
     badge?: Pick<Badge, 'name' | 'tooltip' | 'image'> | null;
     /** The badge's size in px (18 in rows, bigger in a profile head). */
     badgeSize?: number;
+    /** The name's font size in px, when the caller knows it (else it is read from the page). */
+    size?: number;
     class?: string;
   };
-  let { name, paint = null, badge = null, badgeSize = 18, class: cls = '' }: Props = $props();
+  let { name, paint = null, badge = null, badgeSize = 18, size, class: cls = '' }: Props = $props();
   onMount(watchReduced);
 
-  const style = $derived(paintStyle(paint, reduced.on));
+  // The font size the name is drawn at: read from the element (one style read, no layout), only
+  // for image paints, which are the ones with files to pick from. 0 until mounted.
+  let root = $state<HTMLElement>();
+  let fontPx = $state(0);
+  const picture = $derived(paint?.kind === 'IMAGE');
+  $effect(() => {
+    void display.epoch;
+    void display.dpr;
+    fontPx = picture && root ? Number.parseFloat(getComputedStyle(root).fontSize) || 0 : 0;
+  });
+  const fit = $derived(picture ? fitOfText(size ?? fontPx, [...name].length, display.dpr) : undefined);
+  const style = $derived(paintStyle(paint, reduced.on, undefined, fit));
   // Where the paint is too close to the ground to read (pale on light, dark on dark): a hairline
   // outline in that theme only (see the styles). The paint itself is untouched.
   const floor = $derived(style ? paintFloor(paint) : null);
 </script>
 
-<span class="pn {cls}">
+<span class="pn {cls}" bind:this={root}>
   {#if badge}<BadgeIcon {badge} size={badgeSize} />{/if}
   {#if floor}
     <span class="fl" class:l={floor !== 'dark'} class:d={floor !== 'light'}><bdi class="txt painted" {style} title={clean(name)}>{clean(name)}</bdi></span>
