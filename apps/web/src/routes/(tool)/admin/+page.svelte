@@ -122,7 +122,7 @@
 
 <svelte:head><title>Admin - cyex.tv</title></svelte:head>
 
-<Split label="Today" open={true} stack="top" onclose={() => {}}>
+<Split label="Today" open={true} stack="bottom" onclose={() => {}}>
   <header class="head">
     <h1>Overview</h1>
     <p class="hi">Signed in as {#if me}<PaintedName name={me.identities[0]?.displayName ?? ''} paint={look.paint} />{/if}</p>

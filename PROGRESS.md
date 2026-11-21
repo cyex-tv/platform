@@ -1458,3 +1458,28 @@ git push -u origin fix/redesign-polish
 gh pr create --repo cyex-tv/platform --base main --head fix/redesign-polish --title "Redesign final pass: no layout shift, shared frames, polish" --body-file <file>
 ```
   Not merged (owner reviews).
+
+## Redesign round 2: the admin area in the Workspace / Inspector language (branch `feat/redesign-admin-2`, 2026/11/21)
+
+The owner's round-2 rule: every admin page must visibly use the chosen design, not only be reorganised.
+Before/after pairs (1440 dark and light, 375 dark) for every admin page are in
+`.claude/runs/2026-11-20-redesign/screens/round2-admin/` (`before-*` = main at 39fc096, `after-*` = this branch).
+
+- [x] Shared admin pieces (lib/admin): `ui/Bar` (title + mono count on one baseline, actions, one slim toolbar row),
+  `Split size="l"` (large inspector), admin.css `.adm-sheet`/`.adm-cell` contact sheets, `.adm-flat`, `.adm-lv`
+  label/value rows, `.adm-facts`, `.adm-flags`, `.adm-strip`, `.adm-num`; tables and `.ui-panel`/`Box` flattened (no boxes).
+- [x] Review queue: contact sheet of small tiles + `ReviewInspector` (sizes on a baseline, chat line, uploader with
+  painted name and history, flags/tags, facts, duplicates, activity/notes, verdicts at its foot); keys, undo, bulk kept;
+  the dialog stays for windows under 1100px.
+- [x] Overview: what waits with the next uploads/reports as tiles, recent staff activity, shop today, quick actions.
+- [x] Every other admin page (reports, users, roles, badges, paints, owners, shop items/orders/codes, give to many,
+  entitlement graph, announcements, audit, reject reasons, paint studio) on the same pieces.
+- [x] Tests: `review-inspector.ui.test.ts`; existing admin tests updated. Gates: check 0/0, vitest, build.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/redesign-admin-2
+gh pr create --repo cyex-tv/platform --base main --head feat/redesign-admin-2 --title "Redesign round 2: the admin area in the Workspace / Inspector language" --body-file <file>
+```
+  Not merged (owner reviews).

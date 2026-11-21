@@ -178,3 +178,4 @@
 .adm-shell .ui-chip { text-transform: none; letter-spacing: 0; }
 
 .adm-shell a.adm-cell, .adm-shell a.adm-cell:visited { color: var(--text); text-decoration: none; }
+@media (max-width: 899.98px) { .adm-shell .adm-toolbar .adm-find { flex-basis: 100%; max-width: none; } }

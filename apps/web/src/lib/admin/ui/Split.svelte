@@ -21,8 +21,9 @@
     /** What the panel says with nothing picked (wide windows only). */
     empty?: Snippet;
     /** Under 1100px: a bottom sheet that opens when something is picked (lists), or the panel
-     *  inline above the content (a page about one thing, always open: the user dashboard). */
-    stack?: 'sheet' | 'top';
+     *  inline above the content (a page about one thing, always open: the user dashboard), or
+     *  'bottom', inline after it (the overview: what waits comes first on a phone). */
+    stack?: 'sheet' | 'top' | 'bottom';
     /** The panel's width: 'm' 380px (facts and actions), 'l' a large inspector (about 46%, the
      *  emote page's right column: the review queue, reports). */
     size?: 'm' | 'l';
@@ -48,6 +49,7 @@
 <div class="split" class:l={size === 'l'}>
   {#if narrow && stack === 'top' && open}<aside class="top" aria-label={label}>{@render panel()}</aside>{/if}
   <div class="list">{@render children()}</div>
+  {#if narrow && stack === 'bottom' && open}<aside class="top bottom" aria-label={label}>{@render panel()}</aside>{/if}
   {#if narrow === false}
     <aside class="panel" aria-label={label} use:fitSticky>
       {#if open}{@render panel()}{:else if empty}{@render empty()}{/if}
@@ -75,6 +77,7 @@
   }
   .top { margin-bottom: 16px; border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); overflow: hidden; }
   .top :global(.adm-ip-head) { position: static; }
+  .bottom { margin: 24px 0 0; }
   .in-sheet { margin: 0 -4px; }
   .in-sheet :global(.adm-ip-head) { position: static; }
   /* The sheet has its own close button; the panel head's would be a second one. */
