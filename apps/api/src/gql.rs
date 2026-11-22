@@ -37,7 +37,7 @@ use cyex_tv_shared::model::{
     Checkout, CodeBatch, CodeBatchInput, CodeBatchPage, CreatedCodeBatch, Order, OrderPage,
     OrderStatus, Recipient, RedeemResult, ShopItem, ShopItemInput,
 };
-use cyex_tv_shared::model::{RoleLimit, RoleLimitInput, UploadQuota};
+use cyex_tv_shared::model::{PermissionDecision, RoleLimit, RoleLimitInput, UploadQuota};
 use cyex_tv_shared::permissions;
 use futures_util::Stream;
 use sqlx::Connection;
@@ -289,6 +289,7 @@ async fn me_of(ctx: &Context<'_>, caller: &Caller) -> Result<Me> {
             id: ids::to_text(r.id),
             name: r.name,
             public: false,
+            invisible: true,
         })
         .chain(
             cyex_tv_db::roles::roles_of(&mut conn, account.id)
@@ -299,6 +300,7 @@ async fn me_of(ctx: &Context<'_>, caller: &Caller) -> Result<Me> {
                     id: ids::to_text(r.id),
                     name: r.name,
                     public: r.public,
+                    invisible: r.invisible,
                 }),
         )
         .collect();
@@ -1111,6 +1113,20 @@ impl Query {
     async fn emote_history(&self, ctx: &Context<'_>, emote_id: String) -> Result<Vec<AuditEntry>> {
         let caller = caller(ctx)?;
         moderation::history(state(ctx), caller, &emote_id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Every permission an account holds or doesn't, and the role that decided each: its most
+    /// senior role that allows or denies it (Deny wins at equal positions), the User role last.
+    /// Yours, or anyone's with `roles.manage`, `roles.assign` or `users.view`.
+    async fn account_permissions(
+        &self,
+        ctx: &Context<'_>,
+        account_id: String,
+    ) -> Result<Vec<PermissionDecision>> {
+        let caller = caller(ctx)?;
+        admin::account_permissions(state(ctx), caller, &account_id)
             .await
             .map_err(api_error)
     }

@@ -10,6 +10,7 @@
   import { ACCOUNT, ADMIN_ACCOUNT, ALL_ROLES, ASSIGN_ROLE, UNASSIGN_ROLE, USER_DETAILS } from '$lib/queries';
   import Restrictions, { type Status } from '$lib/admin/Restrictions.svelte';
   import StaffNotes from '$lib/admin/StaffNotes.svelte';
+  import AccountPermissions from '$lib/admin/AccountPermissions.svelte';
   import AccountSessions from '$lib/admin/AccountSessions.svelte';
   import AccountBilling from '$lib/admin/AccountBilling.svelte';
   import AccountSetsPanel from '$lib/admin/AccountSetsPanel.svelte';
@@ -213,7 +214,7 @@
           <Box title="Roles" count={count(roles.length)}>
             {#each roles as r (r.id)}
               <div class="adm-lv rl">
-                <span class="l"><strong class="rn"><Name value={r.name} /></strong><small>{r.builtIn === 'ROOT' ? 'Every permission' : r.permissions.map(permissionLabel).join(', ') || 'No permissions'}</small></span>
+                <span class="l"><strong class="rn"><Name value={r.name} /></strong><small>{#if r.invisible}<Icon name="eye-off" size={12} />{'Invisible · '}{/if}{r.builtIn === 'ROOT' ? 'Every permission' : r.permissions.map(permissionLabel).join(', ') || 'No permissions'}{#if r.denies.length}{' · '}<span class="dn">Denies {r.denies.map(permissionLabel).join(', ')}</span>{/if}</small></span>
                 <div class="v">{#if manageRoles && r.assignable}<button class="ui-btn ghost small" type="button" onclick={() => unassign(r)}>Take away</button>{/if}</div>
               </div>
             {:else}
@@ -231,6 +232,7 @@
               </div>
             {/if}
           </Box>
+          <AccountPermissions accountId={account.id} refresh={roles.map((r) => r.id).join()} />
         {/if}
         {#if can('cosmetics.grant')}<UserCosmetics account={account} />{/if}
       {:else if section === 'billing'}
@@ -284,6 +286,8 @@
 
   .rl { grid-template-columns: minmax(0, 1fr) auto; }
   .rl .v { justify-content: flex-end; }
+  .dn { color: var(--red); }
+  .rl small :global(svg) { display: inline-block; vertical-align: -2px; margin-right: 3px; }
   .rn { font-size: var(--t-small); color: var(--text); }
   .give { flex-wrap: nowrap; }
   .give select { flex: 1; min-width: 0; max-width: 260px; background: var(--bg); }

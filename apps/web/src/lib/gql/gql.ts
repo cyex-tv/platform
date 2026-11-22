@@ -65,7 +65,7 @@ type Documents = {
     "\n  mutation DeleteAccount($confirm: String!) {\n    deleteAccount(confirm: $confirm)\n  }\n": typeof types.DeleteAccountDocument,
     "\n  query PendingDeletion {\n    pendingDeletion {\n      requestedAt\n      eraseAfter\n      displayName\n      avatar\n    }\n  }\n": typeof types.PendingDeletionDocument,
     "\n  mutation RestoreAccount {\n    restoreAccount\n  }\n": typeof types.RestoreAccountDocument,
-    "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n      }\n    }\n  }\n": typeof types.MyRolesDocument,
+    "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n        invisible\n      }\n    }\n  }\n": typeof types.MyRolesDocument,
     "\n  query AdminCounts($review: Boolean!, $reports: Boolean!) {\n    reviewQueue(page: 1, perPage: 1) @include(if: $review) {\n      total\n    }\n    reportQueue(page: 1, perPage: 1) @include(if: $reports) {\n      total\n    }\n    globalSet {\n      id\n    }\n  }\n": typeof types.AdminCountsDocument,
     "\n  query ReviewQueue($page: Int, $perPage: Int, $filter: ReviewQueueFilter) {\n    reviewQueue(page: $page, perPage: $perPage, filter: $filter) {\n      total\n      counts {\n        public\n        limited\n      }\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": typeof types.ReviewQueueDocument,
     "\n  mutation Approve($id: String!, $visibility: EmoteVisibility) {\n    approveEmote(id: $id, visibility: $visibility) {\n      id\n      state\n      visibility\n    }\n  }\n": typeof types.ApproveDocument,
@@ -77,7 +77,7 @@ type Documents = {
     "\n  fragment ReportFields on Report {\n    id\n    reason\n    reporterId\n    state\n    resolution\n    createdAt\n    resolvedAt\n    emote {\n      ...EmoteFields\n    }\n  }\n": typeof types.ReportFieldsFragmentDoc,
     "\n  query ReportQueue($page: Int, $perPage: Int) {\n    reportQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        id\n        reason\n        reporterId\n        state\n        createdAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": typeof types.ReportQueueDocument,
     "\n  mutation ResolveReport($id: String!, $action: ReportAction!, $note: String) {\n    resolveReport(id: $id, action: $action, note: $note) {\n      id\n      state\n    }\n  }\n": typeof types.ResolveReportDocument,
-    "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    public\n    builtIn\n    editable\n    assignable\n  }\n": typeof types.RoleFieldsFragmentDoc,
+    "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    denies\n    public\n    invisible\n    builtIn\n    editable\n    assignable\n  }\n": typeof types.RoleFieldsFragmentDoc,
     "\n  query Roles {\n    roles {\n      ...RoleFields\n    }\n    permissions\n  }\n": typeof types.RolesDocument,
     "\n  fragment RoleLimitFields on RoleLimit {\n    key\n    group\n    default\n    windowSeconds\n    value\n  }\n": typeof types.RoleLimitFieldsFragmentDoc,
     "\n  query LimitDefaults {\n    limitDefaults {\n      ...RoleLimitFields\n    }\n  }\n": typeof types.LimitDefaultsDocument,
@@ -89,6 +89,7 @@ type Documents = {
     "\n  mutation DeleteRole($id: String!) {\n    deleteRole(id: $id)\n  }\n": typeof types.DeleteRoleDocument,
     "\n  query User($platform: Platform!, $login: String!) {\n    channelByLogin(platform: $platform, login: $login) {\n      platform\n      platformChannelId\n      login\n      account {\n        id\n        displayName\n        avatar\n      }\n    }\n  }\n": typeof types.UserDocument,
     "\n  query UserDetails($accountId: String!, $status: Boolean!, $roles: Boolean!) {\n    accountStatus(accountId: $accountId) @include(if: $status) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n    accountRoles(accountId: $accountId) @include(if: $roles) {\n      ...RoleFields\n    }\n  }\n": typeof types.UserDetailsDocument,
+    "\n  query AccountPermissions($accountId: String!) {\n    accountPermissions(accountId: $accountId) {\n      permission\n      granted\n      effect\n      roleId\n      roleName\n      owner\n    }\n  }\n": typeof types.AccountPermissionsDocument,
     "\n  query AllRoles {\n    roles {\n      ...RoleFields\n    }\n  }\n": typeof types.AllRolesDocument,
     "\n  mutation PlaceRestriction($accountId: String!, $input: RestrictionInput!) {\n    placeRestriction(accountId: $accountId, input: $input) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n  }\n": typeof types.PlaceRestrictionDocument,
     "\n  mutation LiftRestriction($accountId: String!, $kind: RestrictionKind!, $reason: String) {\n    liftRestriction(accountId: $accountId, kind: $kind, reason: $reason) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n  }\n": typeof types.LiftRestrictionDocument,
@@ -242,7 +243,7 @@ const documents: Documents = {
     "\n  mutation DeleteAccount($confirm: String!) {\n    deleteAccount(confirm: $confirm)\n  }\n": types.DeleteAccountDocument,
     "\n  query PendingDeletion {\n    pendingDeletion {\n      requestedAt\n      eraseAfter\n      displayName\n      avatar\n    }\n  }\n": types.PendingDeletionDocument,
     "\n  mutation RestoreAccount {\n    restoreAccount\n  }\n": types.RestoreAccountDocument,
-    "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n      }\n    }\n  }\n": types.MyRolesDocument,
+    "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n        invisible\n      }\n    }\n  }\n": types.MyRolesDocument,
     "\n  query AdminCounts($review: Boolean!, $reports: Boolean!) {\n    reviewQueue(page: 1, perPage: 1) @include(if: $review) {\n      total\n    }\n    reportQueue(page: 1, perPage: 1) @include(if: $reports) {\n      total\n    }\n    globalSet {\n      id\n    }\n  }\n": types.AdminCountsDocument,
     "\n  query ReviewQueue($page: Int, $perPage: Int, $filter: ReviewQueueFilter) {\n    reviewQueue(page: $page, perPage: $perPage, filter: $filter) {\n      total\n      counts {\n        public\n        limited\n      }\n      items {\n        ...EmoteFields\n      }\n    }\n  }\n": types.ReviewQueueDocument,
     "\n  mutation Approve($id: String!, $visibility: EmoteVisibility) {\n    approveEmote(id: $id, visibility: $visibility) {\n      id\n      state\n      visibility\n    }\n  }\n": types.ApproveDocument,
@@ -254,7 +255,7 @@ const documents: Documents = {
     "\n  fragment ReportFields on Report {\n    id\n    reason\n    reporterId\n    state\n    resolution\n    createdAt\n    resolvedAt\n    emote {\n      ...EmoteFields\n    }\n  }\n": types.ReportFieldsFragmentDoc,
     "\n  query ReportQueue($page: Int, $perPage: Int) {\n    reportQueue(page: $page, perPage: $perPage) {\n      total\n      items {\n        id\n        reason\n        reporterId\n        state\n        createdAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": types.ReportQueueDocument,
     "\n  mutation ResolveReport($id: String!, $action: ReportAction!, $note: String) {\n    resolveReport(id: $id, action: $action, note: $note) {\n      id\n      state\n    }\n  }\n": types.ResolveReportDocument,
-    "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    public\n    builtIn\n    editable\n    assignable\n  }\n": types.RoleFieldsFragmentDoc,
+    "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    denies\n    public\n    invisible\n    builtIn\n    editable\n    assignable\n  }\n": types.RoleFieldsFragmentDoc,
     "\n  query Roles {\n    roles {\n      ...RoleFields\n    }\n    permissions\n  }\n": types.RolesDocument,
     "\n  fragment RoleLimitFields on RoleLimit {\n    key\n    group\n    default\n    windowSeconds\n    value\n  }\n": types.RoleLimitFieldsFragmentDoc,
     "\n  query LimitDefaults {\n    limitDefaults {\n      ...RoleLimitFields\n    }\n  }\n": types.LimitDefaultsDocument,
@@ -266,6 +267,7 @@ const documents: Documents = {
     "\n  mutation DeleteRole($id: String!) {\n    deleteRole(id: $id)\n  }\n": types.DeleteRoleDocument,
     "\n  query User($platform: Platform!, $login: String!) {\n    channelByLogin(platform: $platform, login: $login) {\n      platform\n      platformChannelId\n      login\n      account {\n        id\n        displayName\n        avatar\n      }\n    }\n  }\n": types.UserDocument,
     "\n  query UserDetails($accountId: String!, $status: Boolean!, $roles: Boolean!) {\n    accountStatus(accountId: $accountId) @include(if: $status) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n    accountRoles(accountId: $accountId) @include(if: $roles) {\n      ...RoleFields\n    }\n  }\n": types.UserDetailsDocument,
+    "\n  query AccountPermissions($accountId: String!) {\n    accountPermissions(accountId: $accountId) {\n      permission\n      granted\n      effect\n      roleId\n      roleName\n      owner\n    }\n  }\n": types.AccountPermissionsDocument,
     "\n  query AllRoles {\n    roles {\n      ...RoleFields\n    }\n  }\n": types.AllRolesDocument,
     "\n  mutation PlaceRestriction($accountId: String!, $input: RestrictionInput!) {\n    placeRestriction(accountId: $accountId, input: $input) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n  }\n": types.PlaceRestrictionDocument,
     "\n  mutation LiftRestriction($accountId: String!, $kind: RestrictionKind!, $reason: String) {\n    liftRestriction(accountId: $accountId, kind: $kind, reason: $reason) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n  }\n": types.LiftRestrictionDocument,
@@ -572,7 +574,7 @@ export function graphql(source: "\n  mutation RestoreAccount {\n    restoreAccou
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n      }\n    }\n  }\n"): typeof import('./graphql').MyRolesDocument;
+export function graphql(source: "\n  query MyRoles {\n    me {\n      id\n      roles {\n        id\n        name\n        public\n        invisible\n      }\n    }\n  }\n"): typeof import('./graphql').MyRolesDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -620,7 +622,7 @@ export function graphql(source: "\n  mutation ResolveReport($id: String!, $actio
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    public\n    builtIn\n    editable\n    assignable\n  }\n"): typeof import('./graphql').RoleFieldsFragmentDoc;
+export function graphql(source: "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    denies\n    public\n    invisible\n    builtIn\n    editable\n    assignable\n  }\n"): typeof import('./graphql').RoleFieldsFragmentDoc;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
@@ -665,6 +667,10 @@ export function graphql(source: "\n  query User($platform: Platform!, $login: St
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  query UserDetails($accountId: String!, $status: Boolean!, $roles: Boolean!) {\n    accountStatus(accountId: $accountId) @include(if: $status) {\n      uploadsBlocked\n      ticketsBlocked\n      blocked\n      uploadsBlockedUntil\n      ticketsBlockedUntil\n      blockedUntil\n    }\n    accountRoles(accountId: $accountId) @include(if: $roles) {\n      ...RoleFields\n    }\n  }\n"): typeof import('./graphql').UserDetailsDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query AccountPermissions($accountId: String!) {\n    accountPermissions(accountId: $accountId) {\n      permission\n      granted\n      effect\n      roleId\n      roleName\n      owner\n    }\n  }\n"): typeof import('./graphql').AccountPermissionsDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

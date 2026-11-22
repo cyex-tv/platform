@@ -645,6 +645,7 @@ export const MY_ROLES = graphql(`
         id
         name
         public
+        invisible
       }
     }
   }
@@ -790,7 +791,9 @@ export const ROLE_FIELDS = graphql(`
     description
     position
     permissions
+    denies
     public
+    invisible
     builtIn
     editable
     assignable
@@ -903,6 +906,20 @@ export const USER_DETAILS = graphql(`
     }
     accountRoles(accountId: $accountId) @include(if: $roles) {
       ...RoleFields
+    }
+  }
+`);
+
+// Which role decided each permission for an account (the admin user page).
+export const ACCOUNT_PERMISSIONS = graphql(`
+  query AccountPermissions($accountId: String!) {
+    accountPermissions(accountId: $accountId) {
+      permission
+      granted
+      effect
+      roleId
+      roleName
+      owner
     }
   }
 `);

@@ -117,6 +117,10 @@ pub struct OwnRole {
     pub name: String,
     /// Shown on your public profile. When false, only you see it.
     pub public: bool,
+    /// Never shown publicly, whatever `public` says (only you and staff see it).
+    #[serde(default)]
+    #[schema(required = false)]
+    pub invisible: bool,
 }
 
 /// How a session signed in.
@@ -1154,10 +1158,19 @@ pub struct Role {
     pub description: Option<String>,
     /// Higher means more senior. You can only manage roles below your own highest one.
     pub position: i32,
+    /// What it allows, sorted.
     pub permissions: Vec<String>,
+    /// What it denies, sorted: a Deny here beats an Allow on any lower role (the User role
+    /// included). Never also in `permissions`; a permission in neither is left to the roles below.
+    #[serde(default)]
+    pub denies: Vec<String>,
     /// Shown on its holders' public profiles (`accountProfile`). Off by default.
     #[serde(default)]
     pub public: bool,
+    /// Never shown publicly (profiles, user cards), even when `public`, and ignored wherever roles
+    /// rank people. Staff and its holders still see it.
+    #[serde(default)]
+    pub invisible: bool,
     /// Set on the built-in roles: `USER` (every account holds it), `ADMIN` and `ROOT` (the
     /// owners' top role, shown only to its holders).
     #[serde(default)]
@@ -1182,6 +1195,30 @@ pub enum BuiltInRole {
     Admin,
     /// The top role: every permission, held by the owners only, never granted or edited.
     Root,
+}
+
+/// What a role says about a permission (`PermissionDecision.effect`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+pub enum PermissionEffect {
+    Allow,
+    Deny,
+}
+
+/// Whether an account holds one permission, and which role decided it (`accountPermissions`).
+/// Its most senior role that allows or denies the permission decides; the User role comes last.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct PermissionDecision {
+    pub permission: String,
+    pub granted: bool,
+    /// What the deciding role says; null when no role names it (not granted).
+    pub effect: Option<PermissionEffect>,
+    /// The deciding role; null when none decided, and for an owner unless you are one.
+    pub role_id: Option<String>,
+    pub role_name: Option<String>,
+    /// Granted because the account is an owner, who holds every permission and can't be denied.
+    pub owner: bool,
 }
 
 /// A role as anyone may see it on a profile.
@@ -1533,9 +1570,15 @@ pub struct CreateRole {
     pub description: Option<String>,
     pub position: i32,
     pub permissions: Vec<String>,
+    /// What it denies. Never also in `permissions` (`bad_permissions`).
+    #[serde(default)]
+    pub denies: Option<Vec<String>>,
     /// Show it on its holders' public profiles. Default false.
     #[serde(default)]
     pub public: Option<bool>,
+    /// Never show it publicly, and leave it out wherever roles rank people. Default false.
+    #[serde(default)]
+    pub invisible: Option<bool>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -1546,10 +1589,18 @@ pub struct UpdateRole {
     /// An empty string clears it.
     pub description: Option<String>,
     pub position: Option<i32>,
+    /// Replaces what it allows.
     pub permissions: Option<Vec<String>>,
+    /// Replaces what it denies. A name in both lists is `bad_permissions`; one given in only one
+    /// of them leaves the other list (moving a name there from the other is fine).
+    #[serde(default)]
+    pub denies: Option<Vec<String>>,
     /// Show it on its holders' public profiles.
     #[serde(default)]
     pub public: Option<bool>,
+    /// Never show it publicly, and leave it out wherever roles rank people.
+    #[serde(default)]
+    pub invisible: Option<bool>,
 }
 
 /// Which part of the site a limit covers, for grouping them on the role page.

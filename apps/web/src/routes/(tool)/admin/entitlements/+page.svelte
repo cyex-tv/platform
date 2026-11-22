@@ -171,7 +171,7 @@
       {@const g = pickedGrant}
       <div class="adm-ip-head">
         <span class="adm-label">{KIND_LABEL[g.kind]}</span>
-        <IconButton label="Close" icon="x" size="s" onclick={() => pickNode(null)} />
+        <IconButton label="Close" icon="x" size="s" tip="bottom-end" onclick={() => pickNode(null)} />
       </div>
       <div class="adm-ip-body">
         <section class="adm-sec">

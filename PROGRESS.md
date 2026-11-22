@@ -1546,3 +1546,32 @@ Before/after screenshots (browse, profile overview/account/editors, settings, ad
 git push -u origin feat/full-width-profile-account
 gh pr create --repo cyex-tv/platform --base main --head feat/full-width-profile-account --title "Full-width layout, Account and Editors on the profile, session sign-out" --body-file <file>
 ```
+
+## Roles: Deny per permission, invisible roles (branch `feat/role-deny-invisible`, owner request of 2026/11/22)
+
+ADR 0010, amendment 2026/11/22. Migration `20261213004101_role_deny_invisible.sql` (additive).
+
+- [x] Allow / Deny / Inherit per role (`role_permissions.effect`, existing rows backfilled as Allow). One resolver
+  (`permissions::resolve` → `roles::permissions_of` → `catalog::permissions_of`): most senior role naming a
+  permission decides, Deny wins at equal positions, the User role last, owners can't be denied. `holders_of`
+  (lock-out) follows it.
+- [x] Everyday permissions `emotes.upload` (upload) and `reports.file` (report), allowed by the User role, so a
+  "Muted" role above User can deny them.
+- [x] Invisible roles (`roles.invisible`): never on public profiles, still seen by holders and staff; the top role
+  is invisible. `roles::display_rank` for any public ordering by role (none exists today: emote channels are
+  newest-added first).
+- [x] GraphQL: `Role.denies`/`invisible`, inputs, `OwnRole.invisible`, `accountPermissions`. Audit snapshots carry
+  denies and invisible. Mock, codegen, schema, openapi, contract and authz coverage updated.
+- [x] Admin UI: Allow / Inherit / Deny per permission row, group set-all, Allows and Denies in the inspector, the
+  Invisible switch, effective permissions with the deciding role on the user dashboard. Screens in
+  `.claude/runs/2026-11-20-redesign/screens/roles/` (`before-*`, `after-*`).
+- [x] Tests: resolver unit tests (shared, db, admin), DB tests `role_deny_flow.rs`, upload and report denies,
+  emote channels ordering with an invisible role; web `role-effects`, `permission-picker.ui`, `roles-page.ui`.
+
+### GitHub write log for this PR
+```
+git push -u origin feat/role-deny-invisible
+gh pr create --repo cyex-tv/platform --base main --head feat/role-deny-invisible --title "Roles: allow, deny or inherit each permission; invisible roles" --body-file <file>
+git push
+```
+  Not merged (owner reviews).

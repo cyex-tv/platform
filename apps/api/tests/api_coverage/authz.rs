@@ -55,6 +55,7 @@ const STAFF: &[&str] = &[
     "emoteNotes",
     "emoteHistory",
     "accountRoles",
+    "accountPermissions",
     "auditLog",
     "reportQueue",
     "accountReports",

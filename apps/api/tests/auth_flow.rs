@@ -461,7 +461,10 @@ async fn twitch_sign_in_end_to_end() {
             .unwrap()
             .starts_with("https://")
     );
-    assert_eq!(me["data"]["me"]["permissions"], json!([]));
+    assert_eq!(
+        me["data"]["me"]["permissions"],
+        json!(["emotes.upload", "reports.file"])
+    );
 
     // Only the hash of the session token is stored.
     let mut conn = h.db.conn().await;
@@ -1112,7 +1115,7 @@ async fn permissions_come_from_roles() {
 
     assert_eq!(
         h.me(&s).await["data"]["me"]["permissions"],
-        json!(["emotes.review"])
+        json!(["emotes.review", "emotes.upload", "reports.file"])
     );
     // The permission passes, and the (empty) queue comes back.
     let reply = h.gql("{ reviewQueue { total } }", Some(&s)).await;

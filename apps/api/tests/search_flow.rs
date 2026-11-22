@@ -403,6 +403,42 @@ async fn emote_channels_lists_public_channels_and_clamps_the_limit() {
     let data = gql(&app, &q(&format!(r#"id: "{pogu}""#))).await;
     assert_eq!(logins(&data), ["user2", "user1"]);
 
+    // Roles never reorder it: user1 holding a senior invisible (and public) role stays where
+    // the time it added the emote puts it (ADR 0010, amendment 2026/11/22).
+    let mut c = db.conn().await;
+    let (user1,): (Uuid,) = sqlx::query_as(
+        "SELECT a.id FROM accounts a JOIN channels ch ON ch.account_id = a.id WHERE ch.login = 'user1'",
+    )
+    .fetch_one(&mut *c)
+    .await
+    .unwrap();
+    let staff = cyex_tv_db::roles::create(
+        &mut c,
+        &cyex_tv_db::roles::NewRole {
+            name: "Quiet staff",
+            description: None,
+            position: 900,
+            permissions: &[],
+            created_by: None,
+        },
+    )
+    .await
+    .unwrap();
+    cyex_tv_db::roles::set_public(&mut c, staff.id, true)
+        .await
+        .unwrap();
+    cyex_tv_db::roles::set_invisible(&mut c, staff.id, true)
+        .await
+        .unwrap();
+    cyex_tv_db::roles::assign(&mut c, user1, staff.id, None)
+        .await
+        .unwrap();
+    let held = cyex_tv_db::roles::roles_of(&mut c, user1).await.unwrap();
+    assert_eq!(cyex_tv_db::roles::display_rank(&held), None);
+    drop(c);
+    let data = gql(&app, &q(&format!(r#"id: "{pogu}""#))).await;
+    assert_eq!(logins(&data), ["user2", "user1"]);
+
     // The limit is clamped to 1..=50.
     let data = gql(&app, &q(&format!(r#"id: "{pogu}", limit: 1"#))).await;
     assert_eq!(logins(&data), ["user2"]);

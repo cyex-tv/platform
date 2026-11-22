@@ -873,9 +873,17 @@ input CreateRoleInput {
 	position: Int!
 	permissions: [String!]!
 	"""
+	What it denies. Never also in `permissions` (`bad_permissions`).
+	"""
+	denies: [String!]
+	"""
 	Show it on its holders' public profiles. Default false.
 	"""
 	public: Boolean
+	"""
+	Never show it publicly, and leave it out wherever roles rank people. Default false.
+	"""
+	invisible: Boolean
 }
 
 input CreateSetInput {
@@ -2114,6 +2122,10 @@ type OwnRole {
 	Shown on your public profile. When false, only you see it.
 	"""
 	public: Boolean!
+	"""
+	Never shown publicly, whatever `public` says (only you and staff see it).
+	"""
+	invisible: Boolean!
 }
 
 """
@@ -2326,6 +2338,36 @@ type PendingDeletion {
 	"""
 	displayName: String
 	avatar: String
+}
+
+"""
+Whether an account holds one permission, and which role decided it (`accountPermissions`).
+Its most senior role that allows or denies the permission decides; the User role comes last.
+"""
+type PermissionDecision {
+	permission: String!
+	granted: Boolean!
+	"""
+	What the deciding role says; null when no role names it (not granted).
+	"""
+	effect: PermissionEffect
+	"""
+	The deciding role; null when none decided, and for an owner unless you are one.
+	"""
+	roleId: String
+	roleName: String
+	"""
+	Granted because the account is an owner, who holds every permission and can't be denied.
+	"""
+	owner: Boolean!
+}
+
+"""
+What a role says about a permission (`PermissionDecision.effect`).
+"""
+enum PermissionEffect {
+	ALLOW
+	DENY
 }
 
 type PersonalSetEntry {
@@ -2701,6 +2743,12 @@ type Query {
 	"""
 	emoteHistory(emoteId: String!): [AuditEntry!]!
 	"""
+	Every permission an account holds or doesn't, and the role that decided each: its most
+	senior role that allows or denies it (Deny wins at equal positions), the User role last.
+	Yours, or anyone's with `roles.manage`, `roles.assign` or `users.view`.
+	"""
+	accountPermissions(accountId: String!): [PermissionDecision!]!
+	"""
 	An account's roles. Yours, or anyone's with `roles.manage` or `users.view`.
 	"""
 	accountRoles(accountId: String!): [Role!]!
@@ -3044,11 +3092,24 @@ type Role {
 	Higher means more senior. You can only manage roles below your own highest one.
 	"""
 	position: Int!
+	"""
+	What it allows, sorted.
+	"""
 	permissions: [String!]!
+	"""
+	What it denies, sorted: a Deny here beats an Allow on any lower role (the User role
+	included). Never also in `permissions`; a permission in neither is left to the roles below.
+	"""
+	denies: [String!]!
 	"""
 	Shown on its holders' public profiles (`accountProfile`). Off by default.
 	"""
 	public: Boolean!
+	"""
+	Never shown publicly (profiles, user cards), even when `public`, and ignored wherever roles
+	rank people. Staff and its holders still see it.
+	"""
+	invisible: Boolean!
 	"""
 	Set on the built-in roles: `USER` (every account holds it), `ADMIN` and `ROOT` (the
 	owners' top role, shown only to its holders).
@@ -3451,11 +3512,23 @@ input UpdateRoleInput {
 	"""
 	description: String
 	position: Int
+	"""
+	Replaces what it allows.
+	"""
 	permissions: [String!]
+	"""
+	Replaces what it denies. A name in both lists is `bad_permissions`; one given in only one
+	of them leaves the other list (moving a name there from the other is fine).
+	"""
+	denies: [String!]
 	"""
 	Show it on its holders' public profiles.
 	"""
 	public: Boolean
+	"""
+	Never show it publicly, and leave it out wherever roles rank people.
+	"""
+	invisible: Boolean
 }
 
 input UpdateSetEmoteInput {

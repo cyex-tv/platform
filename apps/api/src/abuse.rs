@@ -187,6 +187,14 @@ pub async fn report(
             &message,
         ));
     }
+    // Everyone may report through the User role, unless a more senior role denies it.
+    if !crate::catalog::holds(&mut conn, caller, permissions::REPORTS_FILE).await? {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "Your roles don't allow filing reports.",
+        ));
+    }
     let recent = reports::count_by_since(
         &mut conn,
         caller.account_id,

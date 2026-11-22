@@ -24,6 +24,7 @@
   import { fail, notify } from '$lib/tool/notices.svelte';
   import PermissionPicker from '$lib/admin/PermissionPicker.svelte';
   import { groupsFor } from '$lib/admin/permissions';
+  import { summarize } from '$lib/admin/role-effects';
   import RoleLimits from '$lib/admin/RoleLimits.svelte';
   import { amount, changed, info, overrides, toInput, toValues, valueProblem } from '$lib/admin/role-limits';
 
@@ -43,7 +44,9 @@
   let name = $state('');
   let description = $state('');
   let position = $state(10);
-  let picked = $state<string[]>([]);
+  let allows = $state<string[]>([]);
+  let denies = $state<string[]>([]);
+  let invisible = $state(false);
   let shown = $state(false);
   let saving = $state(false);
   let tried = $state(false);
@@ -63,9 +66,9 @@
 
   const mine = $derived(new Set(session.me?.permissions ?? []));
   const sorted = $derived([...(roles ?? [])].sort((a, b) => b.position - a.position));
-  // What you may turn on: only what you hold (the owner holds everything). What the role already
-  // has may always be turned off (and back on before saving).
-  const before = $derived(new Set(editing?.permissions ?? []));
+  // What you may change: only what you hold (the owner holds everything). What the role already
+  // allows or denies may always be moved off (and back before saving).
+  const before = $derived(new Set([...(editing?.permissions ?? []), ...(editing?.denies ?? [])]));
   const canChange = (k: string) => mine.has(k) || before.has(k);
 
   const load = () => L.reload();
@@ -83,7 +86,9 @@
     name = role?.name ?? '';
     description = role?.description ?? '';
     position = role?.position ?? 10;
-    picked = [...(role?.permissions ?? [])];
+    allows = [...(role?.permissions ?? [])];
+    denies = [...(role?.denies ?? [])];
+    invisible = role?.invisible ?? false;
     shown = role?.public ?? false;
     limits = null;
     limitsFailed = false;
@@ -117,11 +122,11 @@
       if (editing) {
         id = (await gql(UPDATE_ROLE, {
           id: editing.id,
-          input: { name: name.trim(), description: description.trim(), position: userRole ? null : position, permissions: picked, public: shown },
+          input: { name: name.trim(), description: description.trim(), position: userRole ? null : position, permissions: allows, denies, public: invisible ? false : shown, invisible },
         })).updateRole.id;
       } else {
         id = (await gql(CREATE_ROLE, {
-          input: { name: name.trim(), description: description.trim() || null, position, permissions: picked, public: shown },
+          input: { name: name.trim(), description: description.trim() || null, position, permissions: allows, denies, public: invisible ? false : shown, invisible },
         })).createRole.id;
       }
       if (limits && changed(limitsBefore, limitValues)) await gql(SET_ROLE_LIMITS, { id, limits: toInput(limitValues) });
@@ -146,13 +151,7 @@
   }
 
   // "Emotes 3/3 · Users 1/3": the groups a role touches, instead of a wall of names.
-  function summary(r: RoleFieldsFragment) {
-    const have = new Set(r.permissions);
-    return groupsFor(permissions)
-      .map((g) => ({ label: g.label, n: g.items.filter((i) => have.has(i.key)).length, of: g.items.length,
-        names: g.items.filter((i) => have.has(i.key)).map((i) => i.label).join(', ') }))
-      .filter((g) => g.n > 0);
-  }
+  const summary = (keys: string[]) => summarize(keys, groupsFor(permissions));
 
   const BUILT_IN: Record<string, string> = { ROOT: 'Top role', ADMIN: 'Built in', USER: 'Everyone' };
 
@@ -212,7 +211,8 @@
     const q = query.trim().toLowerCase();
     return q ? sorted.filter((r) => r.name.toLowerCase().includes(q)) : sorted;
   });
-  const pickedGroups = $derived(cur ? summary(cur) : []);
+  const allowGroups = $derived(cur ? summary(cur.permissions) : []);
+  const denyGroups = $derived(cur ? summary(cur.denies) : []);
   const set = $derived(panelLimits ? overrides(panelLimits) : []);
 </script>
 
@@ -253,7 +253,8 @@
                 <span class="adm-flags">
                   {#if r.builtIn}<span>{BUILT_IN[r.builtIn]}</span>{/if}
                   {#if held.has(r.id) || r.builtIn === 'ROOT'}<span class="on">Yours</span>{/if}
-                  {#if r.public}<span title="Shown on the profiles of the people who hold it">On profiles</span>{/if}
+                  {#if r.invisible}<span class="inv" title="Never shown publicly, and ignored where roles rank people"><Icon name="eye-off" size={13} />Invisible</span>
+                  {:else if r.public}<span title="Shown on the profiles of the people who hold it">On profiles</span>{/if}
                 </span>
                 <span class="mem adm-num">{r.builtIn === 'USER' ? 'Everyone' : members[r.id] === undefined ? '' : count(members[r.id])}</span>
               </button>
@@ -274,7 +275,7 @@
       {@const r = cur}
       <div class="adm-ip-head">
         <span class="adm-label">Role</span>
-        <IconButton label="Close" icon="x" size="s" onclick={unpick} />
+        <IconButton label="Close" icon="x" size="s" tip="bottom-end" onclick={unpick} />
       </div>
       <div class="adm-ip-body">
         <section class="adm-sec">
@@ -282,7 +283,8 @@
           <ul class="adm-flags">
             {#if r.builtIn}<li>{BUILT_IN[r.builtIn]}</li>{/if}
             {#if held.has(r.id) || r.builtIn === 'ROOT'}<li class="on">Yours</li>{/if}
-            {#if r.public}<li>On profiles</li>{/if}
+            {#if r.invisible}<li class="inv"><Icon name="eye-off" size={13} />Invisible</li>
+            {:else if r.public}<li>On profiles</li>{/if}
           </ul>
           {#if r.description}<p class="desc"><Name value={r.description} /></p>{/if}
           <dl class="adm-kv">
@@ -290,20 +292,36 @@
           </dl>
         </section>
         <section class="adm-sec">
-          <h3 class="adm-label">Permissions<span class="n">{r.builtIn === 'ROOT' ? 'All' : `${count(r.permissions.length)} of ${count(permissions.length)}`}</span></h3>
+          <h3 class="adm-label">Allows<span class="n">{r.builtIn === 'ROOT' ? 'All' : `${count(r.permissions.length)} of ${count(permissions.length)}`}</span></h3>
           {#if r.builtIn === 'ROOT'}
             <p class="desc">Every permission, including ones added later.</p>
-          {:else if !pickedGroups.length}
-            <p class="desc">No permissions.</p>
+          {:else if !allowGroups.length}
+            <p class="desc">Nothing allowed.</p>
           {:else}
             <dl class="adm-kv perms">
-              {#each pickedGroups as g (g.label)}
+              {#each allowGroups as g (g.label)}
                 <dt>{g.label} <span class="adm-num">{count(g.n)}/{count(g.of)}</span></dt>
                 <dd class="txt">{g.names}</dd>
               {/each}
             </dl>
           {/if}
         </section>
+        {#if r.builtIn !== 'ROOT'}
+          <section class="adm-sec">
+            <h3 class="adm-label deny">Denies<span class="n">{count(r.denies.length)}</span></h3>
+            {#if !denyGroups.length}
+              <p class="desc">Nothing denied.</p>
+            {:else}
+              <dl class="adm-kv perms deny">
+                {#each denyGroups as g (g.label)}
+                  <dt>{g.label} <span class="adm-num">{count(g.n)}/{count(g.of)}</span></dt>
+                  <dd class="txt">{g.names}</dd>
+                {/each}
+              </dl>
+              <p class="desc">A deny beats an allow from any role under this one.</p>
+            {/if}
+          </section>
+        {/if}
         {#if r.builtIn === 'USER'}
           <section class="adm-sec">
             <h3 class="adm-label">Limits</h3>
@@ -377,18 +395,24 @@
           <input class="ui-input" bind:value={description} maxlength="200" />
         </label>
         {#if !userRole}
-          <label class="ui-check">
-            <input type="checkbox" bind:checked={shown} />
-            <span>Shown on profiles <span class="ui-hint">Everyone sees this role on the profile of anyone who holds it.</span></span>
+          <label class="ui-check" class:dim={invisible}>
+            <input type="checkbox" bind:checked={shown} disabled={invisible} />
+            <span>Shown on profiles <span class="ui-hint">{invisible ? 'Invisible wins: an invisible role is never shown.' : 'Everyone sees this role on the profile of anyone who holds it.'}</span></span>
+          </label>
+          <label class="sw">
+            <input class="ui-switch" type="checkbox" role="switch" bind:checked={invisible} aria-describedby="role-inv-hint" />
+            <span class="swt"><strong>Invisible</strong>
+              <span class="ui-hint" id="role-inv-hint">Never shown on profiles or user cards, and ignored wherever roles rank people (like the channels on an emote page). Staff and holders still see it.</span></span>
           </label>
         {/if}
       </section>
       <section class="grp">
-        <h3 class="adm-label" id="perm-label">Permissions <span class="ui-num count">{count(picked.length)} of {count(permissions.length)}</span></h3>
+        <h3 class="adm-label" id="perm-label">Permissions <span class="ui-num count">{count(allows.length)} allowed · {count(denies.length)} denied</span></h3>
         <div role="group" aria-labelledby="perm-label">
-          <PermissionPicker available={permissions} bind:picked canChange={canChange} />
+          <PermissionPicker available={permissions} bind:allows bind:denies canChange={canChange} noDeny={userRole} />
         </div>
-        <span class="ui-hint">Hover or focus a permission to see what it allows. A group’s box picks or clears the whole group.</span>
+        <span class="ui-hint">Allow or Deny decides it for everyone who holds this role; Inherit leaves it to the roles below. A person’s highest role with an Allow or Deny wins, so a Deny here beats an Allow from a lower role. Hover or focus a permission to see what it does.</span>
+        {#if userRole}<span class="ui-hint">Deny isn’t offered here: the User role is last, so a Deny on it would never win.</span>{/if}
       </section>
       {#if manager}
         <section class="grp">
@@ -449,5 +473,12 @@
   .grp + .grp { padding-top: 14px; border-top: 1px solid var(--border); }
   .two { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 12px; }
   .num { text-align: right; }
+  .inv { display: inline-flex; align-items: center; gap: 4px; }
+  .inv :global(svg) { color: var(--dim); }
+  .deny, .perms.deny dt { color: var(--red); }
+  .perms.deny dd { color: var(--muted); }
+  .sw { display: flex; align-items: flex-start; gap: 6px; cursor: pointer; }
+  .swt { display: grid; gap: 2px; padding-top: 10px; font-size: var(--t-small); }
+  .dim { opacity: .6; }
   .count { margin-left: 6px; font-weight: 500; letter-spacing: 0; text-transform: none; }
 </style>
