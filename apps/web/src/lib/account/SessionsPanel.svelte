@@ -62,9 +62,9 @@
       {:else}
         {#each list as s (s.id)}
           <div class="s" class:current={s.current} class:gone={gone[s.id]}>
-            <Row label={s.device} icon={s.kind === 'APP' ? 'tv' : 'user'}>
+            <Row label={s.device} icon={s.kind === 'APP' ? 'tv' : s.kind === 'CONSOLE' ? 'key' : 'user'}>
               {#snippet hint()}
-                {#if s.current}<span class="tag">This device</span>{' · '}{/if}{s.kind === 'APP' ? 'App' : 'Website'} · Last seen <time class="ui-mono" datetime={s.lastSeenAt} title={relative(s.lastSeenAt)}>{dateTime(s.lastSeenAt)}</time>
+                {#if s.current}<span class="tag">This device</span>{' · '}{/if}{s.kind === 'APP' ? 'App' : s.kind === 'CONSOLE' ? 'API token' : 'Website'} · Last seen <time class="ui-mono" datetime={s.lastSeenAt} title={relative(s.lastSeenAt)}>{dateTime(s.lastSeenAt)}</time>
               {/snippet}
               {#if s.current}
                 <Confirm small label="Sign out" confirm="Click again to sign out" busy={busy} onconfirm={() => revoke(s.id, true)} />

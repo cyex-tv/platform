@@ -8,7 +8,7 @@
 // every permission (/mock/admin?off clears it). MOCK_OPEN=1 is for a shared preview: every
 // visitor counts as signed in as the staff account with every permission, no cookie needed.
 // Development only; nothing here ships.
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
 import { createServer } from 'node:http';
 import { Kind, parse } from 'graphql';
@@ -2445,6 +2445,20 @@ const SESSIONS = [
   { id: '01JD8XSESS0000000000000004', kind: 'SITE', device: 'Chrome on Android', createdAt: '2026-11-02T10:00:00.000Z', lastSeenAt: '2026-11-03T10:00:00.000Z', expiresAt: '2026-12-03T10:00:00.000Z', current: false, appClientId: null },
 ];
 let exports = 0;
+// Console tokens (ADR 0028), as the API makes them: one per account, 90 days, listed in mySessions.
+// The token is a fake; nothing here accepts it as a Bearer token.
+let consoleSeq = 0;
+function mintConsoleToken() {
+  const i = SESSIONS.findIndex((x) => x.kind === 'CONSOLE');
+  if (i >= 0) SESSIONS.splice(i, 1);
+  consoleSeq += 1;
+  const now = new Date();
+  const id = `01JD8XSESSC${String(consoleSeq).padStart(15, '0')}`;
+  const expiresAt = new Date(now.getTime() + 90 * 86400_000).toISOString();
+  SESSIONS.push({ id, kind: 'CONSOLE', device: 'Console token', createdAt: now.toISOString(), lastSeenAt: now.toISOString(), expiresAt, current: false, appClientId: null });
+  const token = `mockconsole${randomBytes(24).toString('base64url')}`.slice(0, 43);
+  return { token, tokenType: 'Bearer', expiresAt, sessionId: id };
+}
 if (process.env.MOCK_LONG === '1') SESSIONS[1].device = 'Mozilla Firefox Developer Edition on Windows 11 Enterprise N with a rather long device name that keeps going and going';
 
 // exportMyData: the API's document shape, filled from the mock's data.
@@ -2465,6 +2479,7 @@ const exportDoc = () => JSON.stringify({
 function accountHub(q, v) {
   const data = {};
   if (/\bmySessions\b/.test(q)) data.mySessions = SESSIONS;
+  if (/\bcreateConsoleToken\b/.test(q)) data.createConsoleToken = mintConsoleToken();
   if (/\brevokeSession\s*\(/.test(q)) {
     const i = SESSIONS.findIndex((x) => x.id === v.id);
     if (i >= 0) SESSIONS.splice(i, 1);
@@ -2561,7 +2576,7 @@ function personalLists(q, v) {
 
 // Fields added after the site's first queries, answered by field name so any operation name works.
 function newFields(q, v, session, admin = false) {
-  if (/\b(mySessions|unreadNotificationCount|revokeSession|revokeOtherSessions|signOutEverywhere|exportMyData|deleteAccount|markNotificationsRead)\b/.test(q))
+  if (/\b(mySessions|createConsoleToken|unreadNotificationCount|revokeSession|revokeOtherSessions|signOutEverywhere|exportMyData|deleteAccount|markNotificationsRead)\b/.test(q))
     if (!session) return err('Sign in to use this.', 'signed_out');
   // Each handler answers one new field; an operation may ask for several, and for older ones too.
   const id = v.accountId ?? v.id ?? '';
@@ -3146,6 +3161,12 @@ createServer(async (req, res) => {
     }
     res.writeHead(302, { location: SITE + (back.startsWith('/') ? back : '/'), 'set-cookie': 'mock_session=1; Path=/; HttpOnly; SameSite=Lax' });
     return res.end();
+  }
+  if (req.method === 'POST' && url.pathname === '/v1/auth/token/export') {
+    if (!session) return json(res, 401, { error: 'signed_out', message: 'Sign in to use this.' });
+    const t = mintConsoleToken();
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    return res.end(JSON.stringify({ token: t.token, token_type: t.tokenType, expires_at: t.expiresAt, session_id: t.sessionId }));
   }
   if (req.method === 'POST' && url.pathname === '/v1/auth/logout') {
     res.writeHead(204, { 'set-cookie': ['mock_session=; Path=/; Max-Age=0', 'mock_restore=; Path=/; Max-Age=0'] });

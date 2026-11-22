@@ -111,7 +111,7 @@ export type AccountSession = {
   current: Scalars['Boolean']['output'];
   /**
    * For example `Firefox on Windows`, `cyex.tv app` or `Unknown device`, from the user agent
-   * that signed in.
+   * that signed in; `Console token` for a console token.
    */
   device: Scalars['String']['output'];
   expiresAt: Scalars['String']['output'];
@@ -563,6 +563,25 @@ export type CollectionItem = {
   ownedSince: Scalars['String']['output'];
   /** `STAFF`, `PURCHASE` (the shop), `CODE` or `EVENT`. */
   source: GrantSource;
+};
+
+/**
+ * A personal API token (ADR 0028): a Bearer token that acts as you, with your own account's
+ * rights, for a GraphQL playground, a script or moving things between your accounts. Only one
+ * at a time: making a new one signs the last one out. It lasts 90 days, shows in `mySessions` as
+ * `Console token`, and ends when you sign it out there or sign out everywhere. The token is in
+ * this answer only; it is never shown again.
+ */
+export type ConsoleToken = {
+  __typename?: 'ConsoleToken';
+  /** When it stops working: 90 days after it was made, however much it is used. */
+  expiresAt: Scalars['String']['output'];
+  /** Its session's ID, as `mySessions` lists it; pass to `revokeSession` to sign it out. */
+  sessionId: Scalars['String']['output'];
+  /** Send as `Authorization: Bearer <token>`. Anyone holding it can act as you. */
+  token: Scalars['String']['output'];
+  /** `Bearer`. */
+  tokenType: Scalars['String']['output'];
 };
 
 /** Every badge and paint, for clients to cache (`GET /v1/cosmetics`). */
@@ -1140,6 +1159,15 @@ export type Mutation = {
    * the only time they are shown. Needs `codes.manage`. Audited.
    */
   createCodeBatch: CreatedCodeBatch;
+  /**
+   * Make a personal API token (a console token, ADR 0028): a Bearer token that acts as you,
+   * for a GraphQL playground or a script. It has your account's own rights (your roles count;
+   * owner-only and website-only actions don't work with it), lasts 90 days and shows in
+   * `mySessions` as `Console token`. Only one at a time: making one signs the last one out.
+   * The token is in this answer only. Website only (`website_only` with a Bearer token). 5 an
+   * hour (`rate_limited`). Audited. Same as `POST /v1/auth/token/export`.
+   */
+  createConsoleToken: ConsoleToken;
   /** Make a paint. Needs `cosmetics.manage`. Audited; publishes `cosmetic.created`. */
   createPaint: Paint;
   /** Create a role. You can only grant permissions you hold. Needs `roles.manage`. Audited. */
@@ -3135,6 +3163,8 @@ export type SearchResults = {
 export type SessionKind =
   /** A Bearer token for an app (cyex deck, the extension). */
   | 'APP'
+  /** A personal API token you made on cyex.tv (`createConsoleToken`, ADR 0028). */
+  | 'CONSOLE'
   /** The cyex.tv website's cookie. */
   | 'SITE';
 
