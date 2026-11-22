@@ -105,7 +105,7 @@ export const HELP: HelpGroup[] = [
     ['sign-out-everywhere', 'How do I sign out?',
       'Account menu → Sign out signs this browser out. [Your profile → Account](/me/account) → Sign out everywhere ends every session, the apps too. There you can also disconnect a platform you no longer use (you always keep at least one) and pick which connection’s name you go by.'],
     ['delete-account', 'Can I delete my account?',
-      'Yes, yourself: Settings → Account, then Delete account, and type one of your logins to confirm. Your account is hidden at once and deleted for good after 30 days. Sign in before then to undo it. After that, your emotes, sets, channels, cosmetics and notifications are gone. Approved emotes that other people have in their sets stay there, shown as made by “Deleted user”.'],
+      'Yes, yourself: your profile’s Account tab, then Delete account, and type one of your logins to confirm. Your account is hidden at once and deleted for good after 30 days. Sign in before then to undo it. After that, your emotes, sets, channels, cosmetics and notifications are gone. Approved emotes that other people have in their sets stay there, shown as made by “Deleted user”.'],
   ]),
   group('moderation', 'Moderation and takedowns', [
     ['report-emote', 'How do I report an emote?',

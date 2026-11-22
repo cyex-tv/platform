@@ -141,6 +141,8 @@ pub enum QueueSort {
 pub struct QueueQuery<'a> {
     pub tab: QueueTab,
     pub search: Option<&'a str>,
+    /// Only this uploader's emotes.
+    pub uploader: Option<Uuid>,
     pub sort: QueueSort,
     pub descending: bool,
 }
@@ -165,12 +167,7 @@ pub async fn review_queue(
     limit: i64,
     offset: i64,
 ) -> DbResult<(Vec<EmoteRow>, i64)> {
-    let tab = match q.tab {
-        QueueTab::Pending => "e.state = 'pending'",
-        QueueTab::Public => "e.state = 'pending' AND NOT e.private AND NOT e.unlisted",
-        QueueTab::Limited => "e.state = 'pending' AND (e.private OR e.unlisted)",
-        QueueTab::Resolved => "e.state IN ('approved', 'rejected') AND e.reviewed_at IS NOT NULL",
-    };
+    let tab = queue_tab(q.tab);
     let dir = if q.descending { "DESC" } else { "ASC" };
     let order = match q.sort {
         QueueSort::Uploaded => {
@@ -189,25 +186,71 @@ pub async fn review_queue(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| format!("%{}%", crate::search::like_escape(s)));
-    let matches = "($1::text IS NULL OR e.name ILIKE $1 OR EXISTS (
-            SELECT 1 FROM identities i WHERE i.account_id = e.owner_account_id
-              AND (i.login ILIKE $1 OR i.display_name ILIKE $1)))";
     let items = sqlx::query_as(&format!(
-        "{EMOTE_ROW} WHERE {tab} AND e.deleted_at IS NULL AND {matches}
+        "{EMOTE_ROW} WHERE {tab} AND e.deleted_at IS NULL AND {QUEUE_MATCHES}
          ORDER BY {order} LIMIT $2 OFFSET $3"
     ))
     .bind(pattern.as_deref())
     .bind(limit)
     .bind(offset)
+    .bind(q.uploader)
     .fetch_all(&mut *conn)
     .await?;
     let total = sqlx::query_scalar(&format!(
-        "SELECT count(*) FROM emotes e WHERE {tab} AND e.deleted_at IS NULL AND {matches}"
+        "SELECT count(*) FROM emotes e WHERE {tab} AND e.deleted_at IS NULL AND {QUEUE_MATCHES}"
     ))
     .bind(pattern.as_deref())
+    .bind(None::<i64>)
+    .bind(None::<i64>)
+    .bind(q.uploader)
     .fetch_one(conn)
     .await?;
     Ok((items, total))
+}
+
+/// The review queue's search (`$1`, a LIKE pattern) and uploader (`$4`).
+const QUEUE_MATCHES: &str = "($1::text IS NULL OR e.name ILIKE $1 OR EXISTS (
+            SELECT 1 FROM identities i WHERE i.account_id = e.owner_account_id
+              AND (i.login ILIKE $1 OR i.display_name ILIKE $1)))
+         AND ($4::uuid IS NULL OR e.owner_account_id = $4)";
+
+fn queue_tab(tab: QueueTab) -> &'static str {
+    match tab {
+        QueueTab::Pending => "e.state = 'pending'",
+        QueueTab::Public => "e.state = 'pending' AND NOT e.private AND NOT e.unlisted",
+        QueueTab::Limited => "e.state = 'pending' AND (e.private OR e.unlisted)",
+        QueueTab::Resolved => "e.state IN ('approved', 'rejected') AND e.reviewed_at IS NOT NULL",
+    }
+}
+
+/// The uploaders with the most emotes in one tab of the review queue (its search applies, the
+/// uploader filter doesn't), most first, then the newest upload.
+pub async fn queue_top_uploaders(
+    conn: &mut PgConnection,
+    tab: QueueTab,
+    search: Option<&str>,
+    limit: i64,
+) -> DbResult<Vec<crate::audit::PersonCount>> {
+    let tab = queue_tab(tab);
+    let pattern = search
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| format!("%{}%", crate::search::like_escape(s)));
+    Ok(sqlx::query_as(&format!(
+        "SELECT e.owner_account_id AS account_id, count(*) AS count
+         FROM emotes e
+         JOIN accounts x ON x.id = e.owner_account_id AND x.deleted_at IS NULL
+         WHERE {tab} AND e.deleted_at IS NULL AND {QUEUE_MATCHES}
+         GROUP BY e.owner_account_id
+         ORDER BY count(*) DESC, max(e.created_at) DESC
+         LIMIT $2"
+    ))
+    .bind(pattern.as_deref())
+    .bind(limit)
+    .bind(None::<i64>)
+    .bind(None::<Uuid>)
+    .fetch_all(conn)
+    .await?)
 }
 
 /// How many pending emotes are public, and how many unlisted or private.

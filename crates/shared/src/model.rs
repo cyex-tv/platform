@@ -917,6 +917,31 @@ pub struct AccountHit {
     pub identities: Vec<PublicIdentity>,
 }
 
+/// One person in a "most important" list (`activityTopActors`, `auditTopPeople`,
+/// `orderTopBuyers`, `reviewTopUploaders`, `entitlementTopHolders`): their public summary and
+/// logins, and how many entries they have in that list.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct PersonCount {
+    pub account: AccountSummary,
+    /// Twitch first.
+    pub identities: Vec<PublicIdentity>,
+    /// Their entries in the list (the newest 2000 rows of a log or feed are counted).
+    pub count: u64,
+}
+
+/// Which side of the audit log `auditTopPeople` counts.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum AuditPersonRole {
+    /// Who made the changes.
+    #[default]
+    Actor,
+    /// The accounts the changes were about (target kind `account`).
+    Target,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct AccountResults {
@@ -1128,6 +1153,9 @@ pub struct ReviewQueueFilter {
     pub sort: Option<ReviewSort>,
     /// Newest (or Z) first. Default: oldest first, except `RESOLVED`, latest review first.
     pub descending: Option<bool>,
+    /// Only this uploader's emotes (an account ID).
+    #[serde(default)]
+    pub uploader_id: Option<String>,
 }
 
 /// A note reviewers keep on one emote (`emotes.review`). The uploader never sees it.

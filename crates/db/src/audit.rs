@@ -159,7 +159,8 @@ const LISTED_SET_ONLY: &str = "(a.action NOT IN ('set.created', 'set.renamed', '
                             AND st.visibility = 'listed'))";
 
 /// The statement [`emote_activity_rows`] runs (`$1` emote ID text, `$2` rows before this ID,
-/// `$3` limit). Public so the scale test can ask Postgres for its plan.
+/// `$3` limit, `$4` only lines shown as by this account). Public so the scale test can ask
+/// Postgres for its plan.
 #[doc(hidden)]
 pub fn emote_activity_sql() -> String {
     // Two branches, each read newest first from its own index (the approval by target, the set
@@ -181,6 +182,7 @@ pub fn emote_activity_sql() -> String {
                                WHERE p.action = 'emote.approved' AND p.target_kind = 'emote'
                                  AND p.target_id = a.target_id AND p.id < a.id)
                AND {LISTED_SET_ONLY}
+               AND ($4::uuid IS NULL OR a.subject_account_id = $4)
              ORDER BY a.id DESC
              LIMIT $3)
              UNION ALL
@@ -191,6 +193,7 @@ pub fn emote_activity_sql() -> String {
                AND (a.actor_account_id = a.subject_account_id
                     OR a.after_json ->> 'via' = 'account_editor')
                AND {LISTED_SET_ONLY}
+               AND ($4::uuid IS NULL OR a.actor_account_id = $4)
              ORDER BY a.id DESC
              LIMIT $3)
          ) r
@@ -203,16 +206,19 @@ pub fn emote_activity_sql() -> String {
 /// naming it, written by the owner of the set or their account editors. Rows about accounts that
 /// are blocked or deleted, rows by blocked or deleted actors and rows about sets that aren't
 /// listed are left out. The api drops what is still private in ways SQL can't tell (deleted sets).
+/// With `actor`, only the lines shown as by that account (an approval is the emote owner's).
 pub async fn emote_activity_rows(
     conn: &mut PgConnection,
     emote_id: &str,
     before_id: Option<Uuid>,
     limit: i64,
+    actor: Option<Uuid>,
 ) -> DbResult<Vec<SubjectEntry>> {
     Ok(sqlx::query_as(&emote_activity_sql())
         .bind(emote_id)
         .bind(before_id)
         .bind(limit)
+        .bind(actor)
         .fetch_all(conn)
         .await?)
 }
@@ -232,25 +238,24 @@ pub async fn activity_rows(
     activity_rows_where(conn, subject, before_id, limit, &ActivityFilter::default()).await
 }
 
-/// `activity_rows`, narrowed by `filter` (kind, who, when).
-pub async fn activity_rows_where(
-    conn: &mut PgConnection,
-    subject: Uuid,
-    before_id: Option<Uuid>,
-    limit: i64,
-    filter: &ActivityFilter,
-) -> DbResult<Vec<Entry>> {
-    let actions: Vec<&str> = match &filter.actions {
+/// The actions `filter` keeps, in `ACTIVITY_ACTIONS` order.
+fn activity_actions(filter: &ActivityFilter) -> Vec<&'static str> {
+    match &filter.actions {
         Some(only) => ACTIVITY_ACTIONS
             .iter()
             .copied()
             .filter(|a| only.contains(a))
             .collect(),
         None => ACTIVITY_ACTIONS.to_vec(),
-    };
-    Ok(sqlx::query_as(&format!(
-        "SELECT a.id, a.actor_account_id, a.action, a.target_kind, a.target_id, a.before_json,
-                a.after_json, a.created_at
+    }
+}
+
+/// The statement behind [`activity_rows_where`] (`$1` subject, `$2` rows before this ID, `$3`
+/// actions, `$4` limit, `$5` actor, `$6` since, `$7` until), selecting `columns` from `audit_log
+/// a`. The account a line is shown as by is `ACTIVITY_SHOWN_ACTOR`.
+fn activity_sql(columns: &str) -> String {
+    format!(
+        "SELECT {columns}
          FROM audit_log a
          LEFT JOIN accounts act ON act.id = a.actor_account_id
          WHERE a.subject_account_id = $1
@@ -267,13 +272,31 @@ pub async fn activity_rows_where(
                         OR a.after_json ->> 'via' = 'account_editor'))
            )
            AND {LISTED_SET_ONLY}
-           AND ($5::uuid IS NULL
-                OR (a.action = 'emote.approved' AND a.subject_account_id = $5)
-                OR (a.action <> 'emote.approved' AND a.actor_account_id = $5))
+           AND ($5::uuid IS NULL OR {ACTIVITY_SHOWN_ACTOR} = $5)
            AND ($6::timestamptz IS NULL OR a.created_at >= $6)
            AND ($7::timestamptz IS NULL OR a.created_at < $7)
          ORDER BY a.id DESC
          LIMIT $4"
+    )
+}
+
+/// Who a feed line is shown as by: an approved upload is the subject's own (the feed's owner),
+/// every other line is by whoever made the change.
+const ACTIVITY_SHOWN_ACTOR: &str =
+    "(CASE WHEN a.action = 'emote.approved' THEN a.subject_account_id ELSE a.actor_account_id END)";
+
+/// `activity_rows`, narrowed by `filter` (kind, who, when).
+pub async fn activity_rows_where(
+    conn: &mut PgConnection,
+    subject: Uuid,
+    before_id: Option<Uuid>,
+    limit: i64,
+    filter: &ActivityFilter,
+) -> DbResult<Vec<Entry>> {
+    let actions = activity_actions(filter);
+    Ok(sqlx::query_as(&activity_sql(
+        "a.id, a.actor_account_id, a.action, a.target_kind, a.target_id, a.before_json,
+                a.after_json, a.created_at",
     ))
     .bind(subject)
     .bind(before_id)
@@ -282,6 +305,119 @@ pub async fn activity_rows_where(
     .bind(filter.actor)
     .bind(filter.since)
     .bind(filter.until)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// How many of the newest rows a "top people" count looks at: enough to say who is busy there
+/// lately, few enough that a long history reads a bounded page from its index.
+pub const TOP_WINDOW: i64 = 2000;
+
+/// One person and how many rows they have in a list.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromRow)]
+pub struct PersonCount {
+    pub account_id: Uuid,
+    pub count: i64,
+}
+
+/// The people `subject`'s public feed shows most often as by, among its newest `TOP_WINDOW`
+/// candidate rows that pass `filter` (its `actor` is ignored: this is what picks one), most
+/// lines first, then the newest. The same SQL checks as [`activity_rows_where`].
+pub async fn activity_top_actors(
+    conn: &mut PgConnection,
+    subject: Uuid,
+    filter: &ActivityFilter,
+    limit: i64,
+) -> DbResult<Vec<PersonCount>> {
+    let actions = activity_actions(filter);
+    let rows = activity_sql(&format!(
+        "{ACTIVITY_SHOWN_ACTOR} AS who, a.id, a.created_at"
+    ));
+    Ok(sqlx::query_as(&format!(
+        "SELECT r.who AS account_id, count(*) AS count FROM ({rows}) r
+         JOIN accounts x ON x.id = r.who AND x.deleted_at IS NULL
+         GROUP BY r.who ORDER BY count(*) DESC, max(r.created_at) DESC, r.who LIMIT $8"
+    ))
+    .bind(subject)
+    .bind(None::<Uuid>)
+    .bind(&actions)
+    .bind(TOP_WINDOW)
+    .bind(None::<Uuid>)
+    .bind(filter.since)
+    .bind(filter.until)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// The people one emote's public feed shows most often as by (an approval is its owner's), among
+/// its newest `TOP_WINDOW` rows, most lines first. The same checks as [`emote_activity_rows`].
+pub async fn emote_top_actors(
+    conn: &mut PgConnection,
+    emote_id: &str,
+    limit: i64,
+) -> DbResult<Vec<PersonCount>> {
+    let rows = emote_activity_sql();
+    Ok(sqlx::query_as(&format!(
+        "SELECT r.who AS account_id, count(*) AS count FROM (
+             SELECT CASE WHEN f.action = 'emote.approved' THEN f.subject_account_id
+                         ELSE f.actor_account_id END AS who, f.id, f.created_at
+             FROM ({rows}) f) r
+         JOIN accounts x ON x.id = r.who AND x.deleted_at IS NULL
+         GROUP BY r.who ORDER BY count(*) DESC, max(r.created_at) DESC, r.who LIMIT $5"
+    ))
+    .bind(emote_id)
+    .bind(None::<Uuid>)
+    .bind(TOP_WINDOW)
+    .bind(None::<Uuid>)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// Which side of an audit entry [`top_people`] counts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AuditSide {
+    /// Who made the changes.
+    Actor,
+    /// The accounts the changes were about (`target_kind = 'account'`).
+    Target,
+}
+
+/// The accounts with the most entries among the newest `TOP_WINDOW` that pass `filter` (its
+/// `before_id` is ignored), as actors or as account targets, most entries first, then the newest.
+pub async fn top_people(
+    conn: &mut PgConnection,
+    filter: &Filter<'_>,
+    side: AuditSide,
+    limit: i64,
+) -> DbResult<Vec<PersonCount>> {
+    let (who, kind) = match side {
+        AuditSide::Actor => ("actor_account_id", filter.target_kind),
+        AuditSide::Target => ("ulid_to_uuid(target_id)", Some("account")),
+    };
+    Ok(sqlx::query_as(&format!(
+        "SELECT r.who AS account_id, count(*) AS count FROM (
+             SELECT {who} AS who, id, created_at FROM audit_log
+             WHERE ($1::uuid IS NULL OR actor_account_id = $1)
+               AND ($2::text IS NULL OR target_kind = $2)
+               AND ($3::text IS NULL OR target_id = $3)
+               AND ($4::text IS NULL OR action = $4)
+               AND ($5::timestamptz IS NULL OR created_at >= $5)
+               AND ($6::timestamptz IS NULL OR created_at < $6)
+             ORDER BY id DESC
+             LIMIT $7) r
+         JOIN accounts x ON x.id = r.who AND x.deleted_at IS NULL
+         GROUP BY r.who ORDER BY count(*) DESC, max(r.created_at) DESC, r.who LIMIT $8"
+    ))
+    .bind(filter.actor)
+    .bind(kind)
+    .bind(filter.target_id)
+    .bind(filter.action)
+    .bind(filter.since)
+    .bind(filter.until)
+    .bind(TOP_WINDOW)
+    .bind(limit)
     .fetch_all(conn)
     .await?)
 }

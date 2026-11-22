@@ -121,7 +121,7 @@ export const guides: Guide[] = [
         ['Code', 'Works once, within 2 minutes. A wrong verifier uses it up; using it twice signs out what it gave.'],
         ['Access token', '1 hour. Then the API answers `signed_out` until you refresh.'],
         ['Refresh token', '60 days, starting again at every refresh. Each works once: presenting a used one signs the whole session out, so never retry a refresh with an old token.'],
-        ['Sessions', 'The app shows once under Settings → Account → Sessions, named after it, and can be signed out there.'],
+        ['Signing out', 'Sign out everywhere, on your profile’s Account tab, signs the app out too, with every other session.'],
         ['Limits', 'The sign-in limit (30 a minute per IP) for `/v1/auth/app/*`; GraphQL counts like any account.'],
       ),
       p('Scopes say which mutations the token may run. Queries are limited to public reads, your own account, sets, emotes, channels and cosmetics, and `channelEditableSets`; any other query or mutation answers `insufficient_scope`, and uploads are refused. The usual rights checks still apply: set owner, account editors with `EMOTES`, set editors and set capacity. Staff permissions never count for an app token.'),

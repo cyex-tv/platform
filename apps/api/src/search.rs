@@ -92,7 +92,10 @@ pub async fn accounts(
 }
 
 /// The public view of the accounts `ids`, in that order. Accounts that vanished are skipped.
-async fn account_hits(conn: &mut PgConnection, ids: &[Uuid]) -> ApiResult<Vec<AccountHit>> {
+pub(crate) async fn account_hits(
+    conn: &mut PgConnection,
+    ids: &[Uuid],
+) -> ApiResult<Vec<AccountHit>> {
     let summaries = reads::summaries(conn, ids).await.map_err(db_error)?;
     let mut identities = cyex_tv_db::accounts::identities_many(conn, ids)
         .await

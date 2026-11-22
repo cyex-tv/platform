@@ -28,6 +28,7 @@ pub mod shop;
 pub mod site;
 pub mod staff;
 pub mod state;
+pub mod top_people;
 pub mod transfers;
 pub mod upload;
 pub mod views;

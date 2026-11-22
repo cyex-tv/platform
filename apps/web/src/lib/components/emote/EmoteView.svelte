@@ -288,7 +288,7 @@
           {/if}
           {#if listed && seen}
             <div role="tabpanel" id="panel-activity" aria-labelledby="tab-activity" hidden={tab !== 'activity'}>
-              <ActivityTab emoteId={e.id} name={e.name} bind:pager={activityPager} />
+              <ActivityTab emoteId={e.id} name={e.name} owner={e.owner ?? null} bind:pager={activityPager} />
             </div>
           {/if}
           {#if more.length && e.owner}

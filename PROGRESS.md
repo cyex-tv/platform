@@ -2,6 +2,23 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Person filters: one UserFilter with top suggestions (branch `feat/user-filter`, owner request of 2026/11/22)
+
+"For any filtering by user give me a search input box with top suggestions and also show the 5 most important users when nothing is typed (only when the search box is selected)".
+- [x] Component: `lib/components/UserFilter.svelte` (+ `user-filter.ts`), documented in the components README. Typing: the top 6 people (`searchAccounts`), 150 ms debounce, stale requests aborted; focused and empty: the 5 most important people for that list with counts; unfocused: nothing. Combobox keys, top-layer list, removable chip, the page keeps the ID in its address.
+- [x] Wired (with their "most important" rule): profile Activity `?by=` (owner first, then most lines under the other filters; editors as fallback; Owner/Editor flags), emote Activity `?by=` (new; most lines about the emote; Uploader flag), admin audit actor `?actor=` and account target `?id=` when the kind is Account (most entries under the other filters), admin orders account `?account=` (buyers with most orders for the state and item), review queue uploader `?uploader=` (new; most uploads in the tab and search), entitlement graph and owners lookup account pickers and Give to many "Add someone" (accounts holding the most badges, paints and roles). `ActorField` removed.
+- [x] API (additive): `activityTopActors(accountId | emoteId, filter, limit)` (public, heavy read), `auditTopPeople(by: ACTOR | TARGET, …auditLog filters, limit)` (`audit.view`), `orderTopBuyers(status, itemId, limit)` (`shop.orders`), `reviewTopUploaders(filter, limit)` (`emotes.review`), `entitlementTopHolders(limit)` (`entitlements.view` or `cosmetics.grant`), all returning `PersonCount { account identities count }`, newest 2000 rows counted, `limit` 1 to 10. `emoteActivityPage(actorId:)`, `ReviewQueueFilter.uploaderId`; `auditLog(targetId:)` takes an account/emote/set Snowflake.
+- [x] Tests: `apps/api/tests/top_people_flow.rs` (counts and order, groups, blocked accounts, scope, every permission, emote By filter, uploader filter, Snowflake target), `user-filter.test.ts`, `user-filter.ui.test.ts` (empty-focus top 5, hidden unfocused, typing, stale request, keys, chip), `emote/activity-by.ui.test.ts` (URL state), mock conformance. Schema, OpenAPI, mock and codegen updated.
+- [x] Manual (mock, 1440 and 375, dark): `.claude/runs/2026-11-20-redesign/screens/userfilter/`.
+- [x] Docs: the developers guide's app sign-in "Sessions" row (Settings → Account → Sessions no longer exists) and the FAQ's delete-account path now point at the profile's Account tab.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/user-filter
+gh pr create --repo cyex-tv/platform --base main --head feat/user-filter --title "One person filter with top suggestions (UserFilter)" --body-file <file>
+```
+
 ## Console tokens: your API token from the browser console (branch `feat/console-token`, owner request of 2026/11/22)
 
 "Let users export their authorization keys via console": ADR 0028. The website session stays an `HttpOnly` cookie; the console gets a separate, revocable personal token instead.

@@ -630,6 +630,7 @@ impl Query {
 
     /// `emoteActivity` with a cursor: `next` is the `before` for the following page, null when
     /// there is none. A page can hold fewer than `limit` entries and still have a `next`.
+    /// `actorId` keeps only the lines shown as by that account (an upload is its owner's).
     #[graphql(complexity = "100 + child_complexity")]
     async fn emote_activity_page(
         &self,
@@ -637,11 +638,44 @@ impl Query {
         emote_id: String,
         before: Option<String>,
         limit: Option<u32>,
+        actor_id: Option<String>,
     ) -> Result<ActivityPage> {
         heavy_read(ctx)?;
-        activity::emote_activity_page(state(ctx), &emote_id, before.as_deref(), limit)
-            .await
-            .map_err(api_error)
+        activity::emote_activity_where(
+            state(ctx),
+            &emote_id,
+            before.as_deref(),
+            limit,
+            actor_id.as_deref(),
+        )
+        .await
+        .map_err(api_error)
+    }
+
+    /// Who an account's (`accountId`) or an emote's (`emoteId`; exactly one, `bad_scope`
+    /// otherwise) public activity shows most often as by, most lines first (the newest 2000
+    /// lines are counted): the people a "By" filter offers before anything is typed. For an
+    /// account, `filter`'s groups and time range apply (its `actorId` doesn't). Empty when the
+    /// feed is. `limit` 1 to 10, default 5. A heavy read, as the feed.
+    #[graphql(complexity = "100 + child_complexity")]
+    async fn activity_top_actors(
+        &self,
+        ctx: &Context<'_>,
+        account_id: Option<String>,
+        emote_id: Option<String>,
+        filter: Option<cyex_tv_shared::model::ActivityFilter>,
+        limit: Option<u32>,
+    ) -> Result<Vec<cyex_tv_shared::model::PersonCount>> {
+        heavy_read(ctx)?;
+        crate::top_people::activity_top_actors(
+            state(ctx),
+            account_id.as_deref(),
+            emote_id.as_deref(),
+            filter.as_ref(),
+            limit,
+        )
+        .await
+        .map_err(api_error)
     }
 
     /// Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
@@ -1172,6 +1206,85 @@ impl Query {
         )
         .await
         .map_err(api_error)
+    }
+
+    /// The audit log's busiest people for the filters `auditLog` takes: its actors (`by: ACTOR`,
+    /// the default) or the accounts its entries are about (`by: TARGET`), most entries first
+    /// among the newest 2000. Needs `audit.view`. `limit` 1 to 10, default 5.
+    #[allow(clippy::too_many_arguments)]
+    #[graphql(complexity = "50 + child_complexity")]
+    async fn audit_top_people(
+        &self,
+        ctx: &Context<'_>,
+        by: Option<cyex_tv_shared::model::AuditPersonRole>,
+        target_kind: Option<String>,
+        target_id: Option<String>,
+        actor_id: Option<String>,
+        action: Option<String>,
+        since: Option<String>,
+        until: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<Vec<cyex_tv_shared::model::PersonCount>> {
+        let caller = caller(ctx)?;
+        crate::top_people::audit_top_people(
+            state(ctx),
+            caller,
+            &admin::AuditQuery {
+                target_kind: target_kind.as_deref(),
+                target_id: target_id.as_deref(),
+                actor_id: actor_id.as_deref(),
+                action: action.as_deref(),
+                since: since.as_deref(),
+                until: until.as_deref(),
+            },
+            by.unwrap_or_default(),
+            limit,
+        )
+        .await
+        .map_err(api_error)
+    }
+
+    /// The buyers with the most orders in a state and of an item. Needs `shop.orders`.
+    /// `limit` 1 to 10, default 5.
+    async fn order_top_buyers(
+        &self,
+        ctx: &Context<'_>,
+        status: Option<OrderStatus>,
+        item_id: Option<String>,
+        limit: Option<u32>,
+    ) -> Result<Vec<cyex_tv_shared::model::PersonCount>> {
+        let caller = caller(ctx)?;
+        crate::top_people::order_top_buyers(state(ctx), caller, status, item_id.as_deref(), limit)
+            .await
+            .map_err(api_error)
+    }
+
+    /// The uploaders with the most emotes in one tab of the review queue (`filter`'s tab and
+    /// search; its uploader and order don't matter). Needs `emotes.review`. `limit` 1 to 10,
+    /// default 5.
+    async fn review_top_uploaders(
+        &self,
+        ctx: &Context<'_>,
+        filter: Option<ReviewQueueFilter>,
+        limit: Option<u32>,
+    ) -> Result<Vec<cyex_tv_shared::model::PersonCount>> {
+        let caller = caller(ctx)?;
+        crate::top_people::review_top_uploaders(state(ctx), caller, filter.as_ref(), limit)
+            .await
+            .map_err(api_error)
+    }
+
+    /// The accounts holding the most badges, paints and roles. Needs `entitlements.view` or
+    /// `cosmetics.grant`. `limit` 1 to 10, default 5.
+    async fn entitlement_top_holders(
+        &self,
+        ctx: &Context<'_>,
+        limit: Option<u32>,
+    ) -> Result<Vec<cyex_tv_shared::model::PersonCount>> {
+        let caller = caller(ctx)?;
+        crate::top_people::entitlement_top_holders(state(ctx), caller, limit)
+            .await
+            .map_err(api_error)
     }
 
     /// Open reports, oldest first. Needs `emotes.review` or `emotes.takedown`.
