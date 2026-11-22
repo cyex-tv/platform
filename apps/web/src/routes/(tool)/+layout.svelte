@@ -112,7 +112,7 @@
   {/snippet}
   {#snippet settingsPanel()}<SettingsPanel />{/snippet}
   <WorkspaceLayout rail={settingsRail_} panel={session.me ? settingsPanel : undefined} title="About" label="About this section" narrow="after" fold testid="settings-panel">
-    <div class="ui-page settings-page" class:pending={!problem && !session.me}>{@render body()}</div>
+    <div class="ui-page" class:pending={!problem && !session.me}>{@render body()}</div>
   </WorkspaceLayout>
 {:else}
 <RailLayout>
@@ -149,8 +149,6 @@
   /* Its own block formatting context: the Split's pull-up margin stays inside, so the page's box
      doesn't move when the loading line gives way to the page. */
   .adm-page { display: flow-root; }
-  /* A settings section is a column of flat Sections and Rows, a form's measure wide. */
-  .settings-page { max-width: 820px; }
   .me-wait { padding-top: var(--rail-gap); padding-bottom: 48px; }
   .me { display: flex; align-items: center; gap: 12px; min-height: 40px; }
   .plain { font-size: var(--t-ui); font-weight: 600; color: var(--muted); }

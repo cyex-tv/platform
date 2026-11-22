@@ -12,6 +12,6 @@ describe('no Collection', () => {
     expect(q).not.toMatch(/accountCollection|setCollectionPublic|collectionPublic/);
   });
   it('Settings → Account has no switch for it', () => {
-    expect(src('routes/(tool)/me/settings/account/+page.svelte')).not.toMatch(/Collection|collection/);
+    expect(src('lib/profile/sections/AccountSection.svelte')).not.toMatch(/Collection|collection/);
   });
 });

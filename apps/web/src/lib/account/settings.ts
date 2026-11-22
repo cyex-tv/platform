@@ -1,29 +1,45 @@
-// Settings (opened from the account menu, like 7TV's): one rail, Account / Appearance /
-// Notifications / Hidden / Editors / Billing. Editors is the existing /me/editors page, listed in this rail. The old /me/account
-// address goes to Settings → Account. Pure, so it is tested.
+// Settings (opened from the account menu, like 7TV's): one rail, Appearance / Notifications /
+// Hidden / Billing. Account and Editors moved to your profile (owner rule, 2026/11/22: owner-only
+// tabs ?s=account and ?s=editors); their old addresses (/me/settings/account, /me/account,
+// /me/editors) open those tabs (movedToProfile). Pure, so it is tested.
 import { markCurrent, type RailGroup } from '$lib/shell/rail';
+import { sectionHref } from '$lib/profile/rows';
 
 export const SETTINGS = '/me/settings';
 
+/** Where /me/settings itself opens. */
+export const SETTINGS_HOME = `${SETTINGS}/appearance`;
+
 const ROWS = [
-  { href: `${SETTINGS}/account`, label: 'Account', icon: 'user' },
   { href: `${SETTINGS}/appearance`, label: 'Appearance', icon: 'sun' },
   { href: `${SETTINGS}/notifications`, label: 'Notifications', icon: 'bell' },
   { href: `${SETTINGS}/hidden`, label: 'Hidden', icon: 'eye-off' },
-  { href: '/me/editors', label: 'Editors', icon: 'circle-user' },
   { href: `${SETTINGS}/billing`, label: 'Billing', icon: 'shopping-bag' },
 ] as const;
 
 const under = (path: string, base: string) => path === base || path.startsWith(`${base}/`);
 
-/** Whether a path is one of the Settings pages (their rail, not the profile's). */
-export function isSettingsPath(path: string): boolean {
-  return under(path, SETTINGS) || under(path, '/me/editors') || under(path, '/me/account');
+/** The old addresses of what is now on your profile, and the tab each opens. */
+const MOVED: { base: string; tab: 'account' | 'editors' }[] = [
+  { base: `${SETTINGS}/account`, tab: 'account' },
+  { base: '/me/account', tab: 'account' },
+  { base: '/me/editors', tab: 'editors' },
+];
+
+/** The profile tab an old Settings address opens (`/users/<you>?s=account`, the hash kept), or null. */
+export function movedToProfile(path: string, me: string, hash = ''): string | null {
+  const hit = MOVED.find((m) => under(path, m.base));
+  return hit ? `${sectionHref(me, hit.tab)}${hash}` : null;
 }
 
-/** The Settings rail, the current page marked (/me/settings itself is Account). */
+/** Whether a path is one of the Settings pages (their rail, not the profile's). */
+export function isSettingsPath(path: string): boolean {
+  return under(path, SETTINGS) && !MOVED.some((m) => under(path, m.base));
+}
+
+/** The Settings rail, the current page marked (/me/settings itself is Appearance). */
 export function settingsRail(path: string): RailGroup[] {
-  const at = path === SETTINGS || under(path, '/me/account') ? `${SETTINGS}/account` : path;
+  const at = path === SETTINGS ? SETTINGS_HOME : path;
   return markCurrent([{ items: ROWS.map((r) => ({ ...r })) }], at);
 }
 
