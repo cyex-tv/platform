@@ -9,7 +9,7 @@
   import { clean, count, date } from '$lib/format';
   import { platformName } from '$lib/shell/account';
   import { session } from '$lib/tool/session.svelte';
-  import { sectionHref } from '$lib/profile/rows';
+  import { notificationsHref, sectionHref } from '$lib/profile/rows';
 
   type About = { title: string; text: string; links?: { href: string; label: string; hint?: string }[] };
   const ABOUT: Record<string, About> = {
@@ -37,7 +37,7 @@
     const m = page.url.pathname.match(/^\/me\/settings\/([a-z]+)/);
     return m && ABOUT[m[1]] ? m[1] : 'appearance';
   });
-  const about = $derived(ABOUT[key]);
+  const about = $derived(key === 'notifications' ? { ...ABOUT[key], links: [{ href: notificationsHref(session.me?.id), label: 'Your notifications', hint: 'Everything that reached you' }] } : ABOUT[key]);
   const me = $derived(session.me);
   const who = $derived(me?.identities[0]);
   const facts = $derived(

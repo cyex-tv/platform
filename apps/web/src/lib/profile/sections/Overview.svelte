@@ -27,7 +27,7 @@
   import { loadActivity, type ActivityItem } from '../activity';
   import ActivityRows from '../ActivityRows.svelte';
   import { editorsOf, libraryOf, type Channel, type Editor, type ProfileSet } from '../data.svelte';
-  import { sectionHref } from '../rows';
+  import { notificationsHref, sectionHref } from '../rows';
 
   let { accountId }: { accountId: string } = $props();
 
@@ -84,7 +84,7 @@
   {@render stat('Channels', library.data?.channels.length, '/me/channels', library.failed)}
   {@render stat('Emote sets', library.data?.sets.length, sectionHref(accountId, 'sets'), library.failed)}
   {@render stat('Editors', editors.data?.length, sectionHref(accountId, 'editors'), editors.failed)}
-  {@render stat('Unread', inbox.items ? inbox.count : null, '/me/notifications', !!inbox.error)}
+  {@render stat('Unread', inbox.items ? inbox.count : null, notificationsHref(accountId), !!inbox.error)}
   {@render stat('Paints owned', owned.data?.paints, sectionHref(accountId, 'cosmetics'), owned.failed)}
 </ul>
 
@@ -139,7 +139,7 @@
       {:else}{@render waiting(editors)}{/if}
     </Section>
     <Section title="Notifications" count={inbox.count ? `${count(inbox.count)} unread` : undefined} id="ov-no">
-      {#snippet actions()}{@render more('/me/notifications', 'All')}{/snippet}
+      {#snippet actions()}{@render more(notificationsHref(accountId), 'All')}{/snippet}
       {#if inbox.items}
         {#if latestNotes.length}
           <ul class="notes">{#each latestNotes as n (n.id)}<li><NotificationRow note={n} variant="dense" /></li>{/each}</ul>

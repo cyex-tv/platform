@@ -564,6 +564,7 @@ impl Query {
     /// Page back with `before` (an entry ID); `limit` is 1 to 100, default 30. Empty when the
     /// account is unknown, deleted or blocked. Nothing private or from moderation shows. A page
     /// can be shorter than `limit` and still not the last: use `accountActivityPage` to know.
+    /// Anyone but the owner and staff pages back through the newest 100 lines only.
     /// A heavy read: 120 a minute per account, or per IP signed out (`rate_limited`).
     #[graphql(complexity = "100 + child_complexity")]
     async fn account_activity(
@@ -574,9 +575,15 @@ impl Query {
         limit: Option<u32>,
     ) -> Result<Vec<ActivityEntry>> {
         heavy_read(ctx)?;
-        activity::account_activity(state(ctx), &account_id, before.as_deref(), limit)
-            .await
-            .map_err(api_error)
+        activity::account_activity(
+            state(ctx),
+            caller_opt(ctx),
+            &account_id,
+            before.as_deref(),
+            limit,
+        )
+        .await
+        .map_err(api_error)
     }
 
     /// `accountActivity` with a cursor: `next` is the `before` for the following page, null when
@@ -586,6 +593,10 @@ impl Query {
     /// `filter` narrows it: `groups` (emotes, sets, cosmetics, editors; editor lines only show
     /// when asked for), `actorId` (only lines by the owner or that editor), and `since` /
     /// `until` (RFC 3339; `bad_time` otherwise).
+    ///
+    /// Only the owner and staff (`users.view`) see the whole feed and may narrow it by time. For
+    /// everyone else it is the newest 100 lines, all time: `since` and `until` are ignored and
+    /// paging ends at the 100th line (`next` is null there; a cursor past it gets no entries).
     #[graphql(complexity = "100 + child_complexity")]
     async fn account_activity_page(
         &self,
@@ -598,6 +609,7 @@ impl Query {
         heavy_read(ctx)?;
         activity::account_activity_where(
             state(ctx),
+            caller_opt(ctx),
             &account_id,
             before.as_deref(),
             limit,

@@ -60,7 +60,7 @@ describe('profile rows', () => {
     expect(profileRail('a1', 'uploads', true).flatMap((g) => g.items).some((r) => r.label === 'Collection')).toBe(false);
   });
   it('lets the owner open every section, activity only when the API has it', () => {
-    expect(sectionsFor(mine, false)).toEqual(['overview', 'active', 'uploads', 'sets', 'favourites', 'cosmetics', 'account', 'editors']);
+    expect(sectionsFor(mine, false)).toEqual(['overview', 'active', 'uploads', 'sets', 'favourites', 'cosmetics', 'notifications', 'account', 'editors']);
     expect(sectionsFor(mine, true)).toContain('activity');
   });
   it('gives the owner alone Favourites and Overview (private, never in the rail)', () => {
@@ -108,7 +108,8 @@ describe('profile rows', () => {
 describe('the phone strip on pages without a rail row', () => {
   it('names Upload, Notifications, Channels, Favourites, and the owner-only sections', () => {
     expect(stripExtra('/me/upload')?.label).toBe('Upload');
-    expect(stripExtra('/me/notifications')?.label).toBe('Notifications');
+    // Notifications is a profile tab now (/me/notifications redirects there).
+    expect(stripExtra('/me/notifications')).toBeNull();
     // Account and Editors are profile tabs now (their old /me addresses redirect there).
     expect(stripExtra('/me/account')).toBeNull();
     expect(stripExtra('/me/editors')).toBeNull();
@@ -128,11 +129,14 @@ describe('the phone strip on pages without a rail row', () => {
   });
 });
 
-describe('the owner-only Account and Editors tabs', () => {
+describe('the owner-only Notifications, Account and Editors tabs', () => {
   const visitors: Relation[] = [NOBODY, editor, profiler, { mine: false, perms: new Set(['EDITORS', 'EMOTES', 'SETS', 'PROFILE', 'CHANNELS']) }];
-  it('opens Account and Editors for the owner only', () => {
-    expect(sectionsFor(mine, true)).toEqual(expect.arrayContaining(['account', 'editors']));
+  it('opens Notifications, Account and Editors for the owner only', () => {
+    expect(sectionsFor(mine, true)).toEqual(expect.arrayContaining(['notifications', 'account', 'editors']));
+    expect(sectionFrom(new URLSearchParams('s=notifications'), sectionsFor(mine, true))).toBe('notifications');
     for (const r of visitors) {
+      expect(sectionsFor(r, true)).not.toContain('notifications');
+      expect(sectionFrom(new URLSearchParams('s=notifications'), sectionsFor(r, true))).toBe('uploads');
       expect(sectionsFor(r, true)).not.toContain('account');
       expect(sectionsFor(r, true)).not.toContain('editors');
       // Asked for by address, someone else gets the public default.
@@ -144,7 +148,8 @@ describe('the owner-only Account and Editors tabs', () => {
   });
   it('adds the tabs after the public ones for the owner, and nothing for anyone else', () => {
     const own = profileTabs('a1', mine, 'uploads', '/users/a1', true);
-    expect(own.map((t) => t.label)).toEqual(['Uploaded emotes', 'Emote sets', 'Cosmetics', 'Activity', 'Account', 'Editors']);
+    expect(own.map((t) => t.label)).toEqual(['Uploaded emotes', 'Emote sets', 'Cosmetics', 'Activity', 'Notifications', 'Account', 'Editors']);
+    expect(own.find((t) => t.label === 'Notifications')?.href).toBe('/users/a1?s=notifications');
     expect(own.find((t) => t.label === 'Account')?.href).toBe('/users/a1?s=account');
     expect(own.find((t) => t.label === 'Editors')?.href).toBe('/users/a1?s=editors');
     const pub = profileTabs('a1', NOBODY, 'uploads', '/users/a1', true);
@@ -157,9 +162,10 @@ describe('the owner-only Account and Editors tabs', () => {
     const cur = (s: Parameters<typeof profileTabs>[2]) => profileTabs('a1', mine, s, '/users/a1', true).filter((t) => t.current).map((t) => t.label);
     expect(cur('account')).toEqual(['Account']);
     expect(cur('editors')).toEqual(['Editors']);
+    expect(cur('notifications')).toEqual(['Notifications']);
     expect(cur('overview')).toEqual(['Overview']);
     expect(cur('sets')).toEqual(['Emote sets']);
     // Overview sits between the public tabs and the owner's.
-    expect(profileTabs('a1', mine, 'overview', '/users/a1', true).map((t) => t.label)).toEqual(['Uploaded emotes', 'Emote sets', 'Cosmetics', 'Activity', 'Overview', 'Account', 'Editors']);
+    expect(profileTabs('a1', mine, 'overview', '/users/a1', true).map((t) => t.label)).toEqual(['Uploaded emotes', 'Emote sets', 'Cosmetics', 'Activity', 'Overview', 'Notifications', 'Account', 'Editors']);
   });
 });
