@@ -85,11 +85,11 @@ export const HELP: HelpGroup[] = [
   ]),
   group('editors', 'Editors', [
     ['what-are-editors', 'What are editors?',
-      'People you trust to work on your account, usually your mods. You add them by their Twitch or Kick login under [Editors](/me/editors); they need to have signed in to cyex.tv once.'],
+      'People you trust to work on your account, usually your mods. You add them by their Twitch or Kick login under [Your profile → Editors](/me/editors); they need to have signed in to cyex.tv once.'],
     ['editor-permissions', 'What can an editor do?',
       'Only what you allow: emotes in your sets, the sets themselves and your channel’s active set, other editors (never more than they hold), and the badge and paint you show. Change or remove it any time.'],
     ['editor-of-someone', 'How do I work on a channel I edit?',
-      'Accounts you edit are listed under [Editors](/me/editors). Open one to manage its sets and channels as you would your own.'],
+      'Accounts you edit are listed under [Your profile → Editors](/me/editors), Editing for. Open one to manage its sets and channels as you would your own.'],
   ]),
   group('cosmetics', 'Cosmetics', [
     ['what-are-cosmetics', 'What are badges and paints?',
@@ -103,7 +103,7 @@ export const HELP: HelpGroup[] = [
     ['what-we-keep', 'What does cyex.tv keep about me?',
       'Your Twitch or Kick ID, login, display name and picture, what you upload, your sets and channels, and what you change (some changes show in your activity). No passwords, no email unless you send us one.'],
     ['sign-out-everywhere', 'How do I sign out?',
-      'Account menu → Sign out signs this browser out. [Settings → Account](/me/settings/account) → Security → Sign out everywhere ends every session, the apps too. There you can also disconnect a platform you no longer use (you always keep at least one) and pick which connection’s name you go by.'],
+      'Account menu → Sign out signs this browser out. [Your profile → Account](/me/account) → Sign out everywhere ends every session, the apps too. There you can also disconnect a platform you no longer use (you always keep at least one) and pick which connection’s name you go by.'],
     ['delete-account', 'Can I delete my account?',
       'Yes, yourself: Settings → Account, then Delete account, and type one of your logins to confirm. Your account is hidden at once and deleted for good after 30 days. Sign in before then to undo it. After that, your emotes, sets, channels, cosmetics and notifications are gone. Approved emotes that other people have in their sets stay there, shown as made by “Deleted user”.'],
   ]),

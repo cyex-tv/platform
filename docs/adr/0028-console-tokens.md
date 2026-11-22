@@ -29,6 +29,6 @@ A **console token**: a new personal Bearer token, made on request, never the web
 - **No expiry:** convenient, but a forgotten token would work for ever. 90 days, and making a new one is one line in the console.
 
 ## Consequences
-- A token that leaks can act as the person for up to 90 days, short of the website-only actions. The hint says so, and the sessions list shows and ends it.
+- A token that leaks can act as the person for up to 90 days, short of the website-only actions. The hint says so; "Sign out everywhere" on the website ends it, and `mySessions` / `revokeSession` show and end it through the API (the website has no sessions list since #160).
 - Bearer tokens are now app sign-ins (ADR 0021) or console tokens. `Auth::caller` takes a Bearer token only for those two kinds; the cookie only for `site`.
 - A future account merge can ask for both accounts' proof with a console token from each.

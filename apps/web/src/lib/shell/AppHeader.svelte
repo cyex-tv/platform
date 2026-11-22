@@ -1,6 +1,6 @@
 <script lang="ts">
   // The one header, identical on every route (public, signed in, admin, docs, errors, sign in):
-  // 56px, sticky, flat on the ground with a hairline, its content in the 1520 wrapper. The
+  // 56px, sticky, flat on the ground with a hairline, its content in the full-width wrapper. The
   // Inspector layout (redesign, 2026/11/21): on the left the mark + cyex.tv and the main links as
   // plain words (Emotes; signed in also Shop, Subscription for subscribers and Admin for staff:
   // nav.ts; the current one bold, no bar or fill); everything else sits together on the right:

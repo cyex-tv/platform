@@ -71,7 +71,7 @@
     .list { padding: var(--rail-gap) 0 48px; }
     .panel { position: sticky; top: var(--nav-h); align-self: start; min-height: calc(100svh - var(--nav-h)); min-width: 0;
       margin-right: calc(-1 * var(--page-pad)); border-left: 1px solid var(--border); background: var(--surface);
-      box-shadow: 0 0 0 100vw var(--surface); clip-path: inset(0 -100vw 0 0); /* on to the window's edge past the wrap, like every right panel */ }
+      }
     .split.l { grid-template-columns: minmax(0, 1fr) clamp(460px, 46%, 720px); }
     .panel:global([data-tall]) { position: relative; top: auto; }
   }

@@ -11,7 +11,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import { clean } from '$lib/format';
   import { isAdmin, session } from '$lib/tool/session.svelte';
-  import { ACCOUNT, UPLOAD, menuLinks, platformName, profileLink, type ShellLink } from './account';
+  import { SETTINGS, UPLOAD, menuLinks, platformName, profileLink, type ShellLink } from './account';
   import { headerLinks } from './nav';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { loadOwned, looks, NO_LOOK } from '$lib/cosmetics/store.svelte';
@@ -93,7 +93,7 @@
         </a>
       {/if}
       <hr />
-      {@render row(ACCOUNT)}
+      {@render row(SETTINGS)}
     {/if}
     {#if me || touch}
       <!-- What's new: the changelog, with a dot until this device has seen its newest entry. -->

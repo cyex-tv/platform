@@ -1,5 +1,5 @@
 <script lang="ts">
-  // The one footer, on every route: slim, in the 1520 wrapper. Desktop: the mark and the product,
+  // The one footer, on every route: slim, in the full-width wrapper. Desktop: the mark and the product,
   // developer and legal links in one row, then the non-affiliation note and the year. Phones: the
   // links wrap, the note stays under them. It never changes with the session or the route.
   // `slim` (the docs at /developers, from the page's load) also drops the gap above it, so a long

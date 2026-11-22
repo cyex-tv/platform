@@ -153,7 +153,7 @@ export const guides: Guide[] = [
         ['Rights', 'Your account’s own: what you can do on the site, with your roles. Owner-only work and the website-only actions (deleting the account, downloading your data, signing other sessions out, making another token) don’t work with it.'],
         ['Lifetime', '90 days from when you made it, however much it is used.'],
         ['One at a time', 'Making a new token signs the last one out. Five an hour.'],
-        ['Revoking', 'It shows as Console token under Settings → Account → Sessions: sign it out there. Sign out everywhere ends it too, and so does [Sign out](#rest-logout) with the token.'],
+        ['Revoking', 'Sign out everywhere (your account’s Account tab) ends it. So do [Sign out](#rest-logout) with the token, [revokeSession](#gql-mutation-revokeSession) with its `session_id`, and making a new one. [mySessions](#gql-query-mySessions) lists it as `Console token`.'],
       ),
       p('Behind `cyextv.token()` is [Make a personal API token](#rest-export_token) (or the [createConsoleToken](#gql-mutation-createConsoleToken) mutation), which only the website’s own session can call.'),
       note('Anyone with the token can act as you until it is signed out or runs out. Don’t paste it into sites or chats, and sign it out when you are done. The website’s own session stays in an `HttpOnly` cookie that scripts can’t read; this is the only way to hold a token.'),
