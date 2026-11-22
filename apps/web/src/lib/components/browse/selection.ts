@@ -1,4 +1,4 @@
-// Multi-select on the browse grid: which emotes are picked (in the order picked), the anchor a
+// Multi-select on the browse grid (and the admin review queue and reports): which emotes are picked (in the order picked), the anchor a
 // Shift+click range starts from, and the cap. Clicks, ranges, Select all and the drag rectangle
 // all go through here, so each stays under the cap and says how many it had to leave out.
 // Pure, so it is unit tested; the page only feeds it ids and boxes.
@@ -34,8 +34,10 @@ export function toggle(sel: Selection, id: string, cap = CAP): Step {
 }
 
 /**
- * Shift+click: picks every tile from the anchor to `to` in grid order (`order`), keeping what was
- * picked before. No anchor yet (or it is no longer shown): a plain toggle.
+ * Shift+click: every tile from the anchor to `to` in grid order (`order`) takes the state `to`
+ * ends up with: `to` unpicked, the range is picked (keeping what was picked before); `to` already
+ * picked, the whole range is unpicked. The anchor stays put. No anchor yet (or it is no longer
+ * shown): a plain toggle.
  */
 export function range(sel: Selection, order: readonly string[], to: string, cap = CAP): Step {
   const a = sel.anchor === null ? -1 : order.indexOf(sel.anchor);
@@ -43,8 +45,15 @@ export function range(sel: Selection, order: readonly string[], to: string, cap 
   if (b < 0) return { sel, refused: 0 };
   if (a < 0) return toggle(sel, to, cap);
   const span = a <= b ? order.slice(a, b + 1) : order.slice(b, a + 1).reverse();
+  if (sel.ids.includes(to)) return { sel: { ids: without(sel.ids, span), anchor: sel.anchor }, refused: 0 };
   const step = addMany(sel, span, cap);
   return { sel: { ...step.sel, anchor: sel.anchor }, refused: step.refused };
+}
+
+/** `ids` less every one in `drop`, order kept. */
+function without(ids: readonly string[], drop: readonly string[]): string[] {
+  const out = new Set(drop);
+  return ids.filter((id) => !out.has(id));
 }
 
 /** Ctrl+A: everything shown, in grid order, up to the cap. */
@@ -53,12 +62,39 @@ export function all(sel: Selection, order: readonly string[], cap = CAP): Step {
 }
 
 /**
- * The drag rectangle: what was picked when the drag started (`base`) plus every tile it touches,
- * in grid order. Recomputed from `base` on every move, so tiles the rectangle leaves again drop out.
+ * What the drag rectangle does to the tiles it covers, file-manager style:
+ *   - `add`: picks them (a drag that starts on an empty spot or an unpicked tile);
+ *   - `remove`: unpicks them (a drag that starts on a picked tile, or a long-press on one);
+ *   - `toggle`: flips each one (Ctrl/⌘ held when the drag starts).
  */
-export function drag(base: Selection, hits: readonly string[], cap = CAP): Step {
+export type DragMode = 'add' | 'remove' | 'toggle';
+
+/** The mode for a drag that starts on `from` (a tile id, or null for an empty spot). */
+export function dragMode(base: Selection, from: string | null, ctrl = false): DragMode {
+  if (ctrl) return 'toggle';
+  return from !== null && base.ids.includes(from) ? 'remove' : 'add';
+}
+
+/**
+ * The drag rectangle: what was picked when the drag started (`base`) with every tile it touches
+ * (in grid order) picked, unpicked or flipped as `mode` says. Recomputed from `base` on every
+ * move, so tiles the rectangle leaves again go back to how they were. The anchor stays put.
+ */
+export function drag(base: Selection, hits: readonly string[], mode: DragMode = 'add', cap = CAP): Step {
+  if (mode === 'remove') return { sel: { ids: without(base.ids, hits), anchor: base.anchor }, refused: 0 };
+  if (mode === 'toggle') {
+    const had = new Set(base.ids);
+    const kept = without(base.ids, hits.filter((id) => had.has(id)));
+    const step = addMany({ ids: kept, anchor: base.anchor }, hits.filter((id) => !had.has(id)), cap);
+    return { sel: { ...step.sel, anchor: base.anchor }, refused: step.refused };
+  }
   const step = addMany(base, hits, cap);
   return { sel: { ...step.sel, anchor: base.anchor }, refused: step.refused };
+}
+
+/** Esc mid-drag: back to exactly what was picked before the drag. */
+export function cancelDrag(base: Selection): Step {
+  return { sel: base, refused: 0 };
 }
 
 export type Point = { x: number; y: number };

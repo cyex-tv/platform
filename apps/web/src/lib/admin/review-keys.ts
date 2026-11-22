@@ -14,7 +14,7 @@ export const REVIEW_KEYS: ShortcutGroup = {
     { keys: ['R'], label: 'Reject, with a reason' },
     { keys: ['S'], label: 'Skip: on to the next, no verdict' },
     { keys: ['X'], label: 'Select or unselect, for a verdict on many' },
-    { keys: ['Shift+X', 'Shift+Click'], label: 'Select everything from the last pick to here' },
+    { keys: ['Shift+X', 'Shift+Click'], label: 'Select everything from the last pick to here, or unselect it all if this one is selected' },
     { keys: ['Mod+A'], label: 'Select every upload on this page (up to 100)' },
     { keys: ['Z'], label: 'Undo the last approval while its notice shows' },
     { keys: ['Esc'], label: 'Clear the selection' },

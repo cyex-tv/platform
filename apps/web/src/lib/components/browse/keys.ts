@@ -19,7 +19,7 @@ export const SELECT_KEYS: ShortcutGroup = {
   title: 'Select mode',
   items: [
     { keys: ['Space'], label: 'Pick or unpick the focused emote' },
-    { keys: ['Shift+Space'], label: 'Pick everything from the last pick to here' },
+    { keys: ['Shift+Space'], label: 'Pick everything from the last pick to here, or unpick it all if this one is picked' },
     { keys: ['Mod+A'], label: `Pick every emote shown, up to ${CAP}` },
     { keys: ['Esc'], label: 'Clear the picks, then leave Select mode' },
   ],
