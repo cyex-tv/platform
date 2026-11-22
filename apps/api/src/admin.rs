@@ -11,6 +11,12 @@
 //! deleted. Nobody edits a role they hold. Giving and taking roles needs `roles.manage` or the
 //! narrower `roles.assign`; making and editing them needs `roles.manage`.
 //!
+//! Each role allows some permissions, denies some and leaves the rest to the roles below
+//! (`cyex_tv_shared::permissions::resolve`): a "Muted" role above User that denies
+//! `emotes.upload` stops uploads that User allows. Changing what a role says about a permission,
+//! either way, needs you to hold it. `account_permissions` shows which role decided each one.
+//! A role can be invisible: never shown publicly and never used to rank people.
+//!
 //! A role can also raise or lower the per-account limits of whoever holds it (`set_limits`,
 //! `limits::AccountLimit`), under the same rules as any other edit; the User role's limits are
 //! the defaults the api was started with, so they aren't set here.
@@ -24,7 +30,8 @@ use cyex_tv_db::roles::{self, NewRole, RolePatch};
 use cyex_tv_db::{accounts, audit, ids};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
-    AuditEntry, BuiltInRole, CreateRole, Role, RoleLimit, RoleLimitInput, UpdateRole,
+    AuditEntry, BuiltInRole, CreateRole, PermissionDecision, PermissionEffect, Role, RoleLimit,
+    RoleLimitInput, UpdateRole,
 };
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
@@ -199,13 +206,77 @@ fn permission_list(raw: &[String]) -> ApiResult<Vec<String>> {
     Ok(set.into_iter().collect())
 }
 
+/// Allows and denies with no name in both, or `bad_permissions`.
+fn disjoint(allows: &[String], denies: &[String]) -> ApiResult<()> {
+    match allows.iter().find(|p| denies.contains(p)) {
+        Some(both) => Err(bad(
+            "bad_permissions",
+            format!("{both:?} can't be allowed and denied by the same role."),
+        )),
+        None => Ok(()),
+    }
+}
+
+/// What a role allows and denies after an update: a list given replaces its own and takes its
+/// names out of the other one.
+fn next_effects(
+    before: (&[String], &[String]),
+    allows: Option<&[String]>,
+    denies: Option<&[String]>,
+) -> ApiResult<(Vec<String>, Vec<String>)> {
+    let (old_allows, old_denies) = before;
+    let without = |list: &[String], out: &[String]| -> Vec<String> {
+        list.iter().filter(|p| !out.contains(p)).cloned().collect()
+    };
+    Ok(match (allows, denies) {
+        (Some(a), Some(d)) => {
+            disjoint(a, d)?;
+            (a.to_vec(), d.to_vec())
+        }
+        (Some(a), None) => (a.to_vec(), without(old_denies, a)),
+        (None, Some(d)) => (without(old_allows, d), d.to_vec()),
+        (None, None) => (old_allows.to_vec(), old_denies.to_vec()),
+    })
+}
+
+/// Allow, deny or neither.
+fn effect_in(allows: &[String], denies: &[String], p: &str) -> Option<PermissionEffect> {
+    if allows.iter().any(|x| x == p) {
+        Some(PermissionEffect::Allow)
+    } else if denies.iter().any(|x| x == p) {
+        Some(PermissionEffect::Deny)
+    } else {
+        None
+    }
+}
+
+/// The names whose effect differs between two (allows, denies) pairs: each is a change the actor
+/// must hold the permission for.
+fn changed(before: (&[String], &[String]), after: (&[String], &[String])) -> Vec<String> {
+    let names: BTreeSet<&String> = before
+        .0
+        .iter()
+        .chain(before.1)
+        .chain(after.0)
+        .chain(after.1)
+        .collect();
+    names
+        .into_iter()
+        .filter(|p| effect_in(before.0, before.1, p) != effect_in(after.0, after.1, p))
+        .cloned()
+        .collect()
+}
+
 /// A role as `actor` sees it: with what they may do with it.
 async fn view(conn: &mut PgConnection, role: &roles::Role, actor: &Actor) -> ApiResult<Role> {
-    // The top role holds every permission in code (see the migration).
-    let perms = if role.is(roles::SYSTEM_ROOT) {
-        cyex_tv_auth::rbac::all_permissions()
+    // The top role holds every permission in code (see the migration) and denies nothing.
+    let (perms, denies) = if role.is(roles::SYSTEM_ROOT) {
+        (cyex_tv_auth::rbac::all_permissions(), Vec::new())
     } else {
-        roles::permissions(conn, role.id).await.map_err(db_error)?
+        (
+            roles::permissions(conn, role.id).await.map_err(db_error)?,
+            roles::denies(conn, role.id).await.map_err(db_error)?,
+        )
     };
     let editable = !role.is(roles::SYSTEM_ROOT)
         && actor.holds(permissions::ROLES_MANAGE)
@@ -220,7 +291,9 @@ async fn view(conn: &mut PgConnection, role: &roles::Role, actor: &Actor) -> Api
         description: role.description.clone(),
         position: role.position,
         permissions: perms,
+        denies,
         public: role.public,
+        invisible: role.invisible,
         built_in: built_in(role),
         editable,
         assignable,
@@ -233,7 +306,9 @@ fn snapshot(role: &Role) -> Value {
         "description": role.description,
         "position": role.position,
         "permissions": role.permissions,
+        "denies": role.denies,
         "public": role.public,
+        "invisible": role.invisible,
     })
 }
 
@@ -339,6 +414,80 @@ pub async fn account_roles(
     Ok(out)
 }
 
+/// Every permission an account holds or doesn't, with the role that decided it: its most senior
+/// role that allows or denies it, the User role last. Yours, or anyone's with `roles.manage`,
+/// `roles.assign` or `users.view`. An owner holds every permission (`owner`); the top role is
+/// named only to the owners.
+pub async fn account_permissions(
+    state: &AppState,
+    caller: &Caller,
+    account_id: &str,
+) -> ApiResult<Vec<PermissionDecision>> {
+    let account_id = parse_id(account_id)?;
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let actor = actor(&mut conn, caller).await?;
+    if account_id != caller.account_id
+        && !actor.holds(permissions::ROLES_MANAGE)
+        && !actor.holds(permissions::ROLES_ASSIGN)
+        && !actor.holds(permissions::USERS_VIEW)
+    {
+        return Err(forbidden(
+            "This needs roles.manage, roles.assign or users.view.",
+        ));
+    }
+    accounts::get(&mut conn, account_id)
+        .await
+        .map_err(db_error)?
+        .filter(|a| a.deleted_at.is_none())
+        .ok_or_else(not_found)?;
+    if state
+        .auth
+        .is_owner(&mut conn, account_id)
+        .await
+        .map_err(auth_error)?
+    {
+        let root = match caller.owner {
+            true => roles::system(&mut conn, roles::SYSTEM_ROOT)
+                .await
+                .map_err(db_error)?,
+            false => None,
+        };
+        return Ok(permissions::ALL
+            .iter()
+            .map(|p| PermissionDecision {
+                permission: (*p).to_owned(),
+                granted: true,
+                effect: Some(PermissionEffect::Allow),
+                role_id: root.as_ref().map(|r| ids::to_text(r.id)),
+                role_name: root.as_ref().map(|r| r.name.clone()),
+                owner: true,
+            })
+            .collect());
+    }
+    let grants = roles::grants_of(&mut conn, account_id)
+        .await
+        .map_err(db_error)?;
+    let decided = roles::resolve_grants(&grants);
+    Ok(permissions::ALL
+        .iter()
+        .map(|p| {
+            let d = decided.get(*p);
+            let by = d.map(|d| &grants[d.role]);
+            PermissionDecision {
+                permission: (*p).to_owned(),
+                granted: d.is_some_and(|d| d.effect == permissions::Effect::Allow),
+                effect: d.map(|d| match d.effect {
+                    permissions::Effect::Allow => PermissionEffect::Allow,
+                    permissions::Effect::Deny => PermissionEffect::Deny,
+                }),
+                role_id: by.map(|g| ids::to_text(g.role_id)),
+                role_name: by.map(|g| g.role_name.clone()),
+                owner: false,
+            }
+        })
+        .collect())
+}
+
 /// What `audit_log` narrows by, besides paging.
 #[derive(Default)]
 pub struct AuditQuery<'a> {
@@ -434,6 +583,8 @@ pub async fn create(state: &AppState, caller: &Caller, input: &CreateRole) -> Ap
         .transpose()?
         .flatten();
     let perms = permission_list(&input.permissions)?;
+    let denies = permission_list(input.denies.as_deref().unwrap_or_default())?;
+    disjoint(&perms, &denies)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     lock(&mut tx).await?;
@@ -441,7 +592,7 @@ pub async fn create(state: &AppState, caller: &Caller, input: &CreateRole) -> Ap
     actor.may_manage(input.position).map_err(rule)?;
     position(input.position)?;
     actor
-        .may_grant(perms.iter().map(String::as_str))
+        .may_grant(perms.iter().chain(&denies).map(String::as_str))
         .map_err(rule)?;
 
     let perm_refs: Vec<&str> = perms.iter().map(String::as_str).collect();
@@ -457,8 +608,21 @@ pub async fn create(state: &AppState, caller: &Caller, input: &CreateRole) -> Ap
     )
     .await
     .map_err(db_error)?;
+    if !denies.is_empty() {
+        let deny_refs: Vec<&str> = denies.iter().map(String::as_str).collect();
+        roles::set_effects(&mut tx, role.id, &perm_refs, &deny_refs)
+            .await
+            .map_err(db_error)?;
+    }
     let role = if input.public == Some(true) {
         roles::set_public(&mut tx, role.id, true)
+            .await
+            .map_err(db_error)?
+    } else {
+        role
+    };
+    let role = if input.invisible == Some(true) {
+        roles::set_invisible(&mut tx, role.id, true)
             .await
             .map_err(db_error)?
     } else {
@@ -493,6 +657,7 @@ pub async fn update(
         .as_deref()
         .map(permission_list)
         .transpose()?;
+    let denies = input.denies.as_deref().map(permission_list).transpose()?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     lock(&mut tx).await?;
@@ -510,11 +675,22 @@ pub async fn update(
         }
     }
     let before = view(&mut tx, &role, &actor).await?;
-    if let Some(perms) = &perms {
-        let added = perms.iter().filter(|p| !before.permissions.contains(p));
+    let effects = next_effects(
+        (&before.permissions, &before.denies),
+        perms.as_deref(),
+        denies.as_deref(),
+    )?;
+    let effects_changed = perms.is_some() || denies.is_some();
+    if effects_changed {
+        // Changing what a role says about a permission, either way, needs you to hold it.
+        let moved = changed(
+            (&before.permissions, &before.denies),
+            (&effects.0, &effects.1),
+        );
         actor
-            .may_grant(added.clone().map(String::as_str))
+            .may_grant(moved.iter().map(String::as_str))
             .map_err(rule)?;
+        let added = effects.0.iter().filter(|p| !before.permissions.contains(p));
         // Every account holds the User role: a staff permission there is everyone's, so only
         // the owners add one (ADR 0010, amendment 2026/11/20). Taking one away is fine.
         if role.is(roles::SYSTEM_USER)
@@ -543,9 +719,10 @@ pub async fn update(
     )
     .await
     .map_err(db_error)?;
-    if let Some(perms) = &perms {
-        let refs: Vec<&str> = perms.iter().map(String::as_str).collect();
-        roles::set_permissions(&mut tx, id, &refs)
+    if effects_changed {
+        let allows: Vec<&str> = effects.0.iter().map(String::as_str).collect();
+        let denies: Vec<&str> = effects.1.iter().map(String::as_str).collect();
+        roles::set_effects(&mut tx, id, &allows, &denies)
             .await
             .map_err(db_error)?;
     }
@@ -553,6 +730,14 @@ pub async fn update(
         Some(public) if public != updated.public => roles::set_public(&mut tx, id, public)
             .await
             .map_err(db_error)?,
+        _ => updated,
+    };
+    let updated = match input.invisible {
+        Some(invisible) if invisible != updated.invisible => {
+            roles::set_invisible(&mut tx, id, invisible)
+                .await
+                .map_err(db_error)?
+        }
         _ => updated,
     };
     let managers_after = managers(state, &mut tx).await?;
@@ -572,6 +757,9 @@ pub async fn update(
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
+    // Permissions are read on every request; what an account may count is cached, so it is read
+    // again too.
+    state.limits.forget_all();
     Ok(after)
 }
 
@@ -927,6 +1115,54 @@ mod tests {
         assert_eq!(rule(RuleError::OwnerProtected).code, "owner_protected");
         assert_eq!(rule(RuleError::OwnRole).status, StatusCode::FORBIDDEN);
         assert_eq!(rule(RuleError::BuiltIn).code, "built_in_role");
+    }
+
+    fn names(list: &[&str]) -> Vec<String> {
+        list.iter().map(|p| (*p).to_owned()).collect()
+    }
+
+    #[test]
+    fn a_role_never_allows_and_denies_the_same_name() {
+        let a = names(&["emotes.review", "emotes.upload"]);
+        let d = names(&["emotes.upload"]);
+        assert_eq!(disjoint(&a, &d).unwrap_err().code, "bad_permissions");
+        assert!(disjoint(&a, &names(&["audit.view"])).is_ok());
+        assert_eq!(
+            next_effects((&a, &[]), Some(&a), Some(&d))
+                .unwrap_err()
+                .code,
+            "bad_permissions"
+        );
+    }
+
+    #[test]
+    fn one_list_given_moves_names_out_of_the_other() {
+        let allows = names(&["emotes.review", "emotes.upload"]);
+        let denies = names(&["audit.view"]);
+        // Denying uploads takes it out of the allows, and keeps the rest.
+        let (a, d) =
+            next_effects((&allows, &denies), None, Some(&names(&["emotes.upload"]))).unwrap();
+        assert_eq!(a, names(&["emotes.review"]));
+        assert_eq!(d, names(&["emotes.upload"]));
+        // Allowing audit.view takes it out of the denies.
+        let (a, d) = next_effects((&allows, &denies), Some(&names(&["audit.view"])), None).unwrap();
+        assert_eq!(a, names(&["audit.view"]));
+        assert!(d.is_empty());
+        assert_eq!(
+            next_effects((&allows, &denies), None, None).unwrap(),
+            (allows.clone(), denies.clone())
+        );
+    }
+
+    #[test]
+    fn every_effect_change_needs_the_permission() {
+        let before = (names(&["emotes.review"]), names(&["audit.view"]));
+        let after = (names(&["audit.view"]), names(&["emotes.upload"]));
+        assert_eq!(
+            changed((&before.0, &before.1), (&after.0, &after.1)),
+            names(&["audit.view", "emotes.review", "emotes.upload"])
+        );
+        assert!(changed((&before.0, &before.1), (&before.0, &before.1)).is_empty());
     }
 
     #[test]

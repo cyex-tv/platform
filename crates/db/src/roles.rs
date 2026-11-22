@@ -5,7 +5,9 @@
 //! need from here.
 
 use chrono::{DateTime, Utc};
-use cyex_tv_shared::permissions;
+use std::collections::BTreeMap;
+
+use cyex_tv_shared::permissions::{self, Decision, Effect};
 use sqlx::{Connection, FromRow, PgConnection};
 use uuid::Uuid;
 
@@ -24,6 +26,9 @@ pub struct Role {
     pub public: bool,
     /// A built-in role: `user`, `admin` or `root` (see the migration `default_roles`).
     pub system: Option<String>,
+    /// Never shown publicly, even when `public`, and left out wherever roles rank people
+    /// (migration `role_deny_invisible`).
+    pub invisible: bool,
 }
 
 impl Role {
@@ -46,6 +51,7 @@ pub struct NewRole<'a> {
     pub name: &'a str,
     pub description: Option<&'a str>,
     pub position: i32,
+    /// What it allows (`set_effects` adds denies).
     pub permissions: &'a [&'a str],
     pub created_by: Option<Uuid>,
 }
@@ -58,7 +64,8 @@ pub struct RolePatch<'a> {
     pub position: Option<i32>,
 }
 
-const ROLE: &str = "id, name, description, position, created_by, created_at, public, system";
+const ROLE: &str =
+    "id, name, description, position, created_by, created_at, public, system, invisible";
 
 fn check_known(perms: &[&str]) -> DbResult<()> {
     match perms.iter().find(|p| !permissions::is_known(p)) {
@@ -91,7 +98,7 @@ pub async fn create(conn: &mut PgConnection, new: &NewRole<'_>) -> DbResult<Role
     .fetch_one(&mut *tx)
     .await
     .map_err(role_conflict)?;
-    insert_permissions(&mut tx, role.id, new.permissions).await?;
+    insert_permissions(&mut tx, role.id, new.permissions, Effect::Allow).await?;
     tx.commit().await?;
     Ok(role)
 }
@@ -100,14 +107,16 @@ async fn insert_permissions(
     conn: &mut PgConnection,
     role_id: Uuid,
     perms: &[&str],
+    effect: Effect,
 ) -> DbResult<()> {
     sqlx::query(
-        "INSERT INTO role_permissions (role_id, permission)
-         SELECT $1, p FROM unnest($2::text[]) AS t (p)
+        "INSERT INTO role_permissions (role_id, permission, effect)
+         SELECT $1, p, $3 FROM unnest($2::text[]) AS t (p)
          ON CONFLICT DO NOTHING",
     )
     .bind(role_id)
     .bind(perms)
+    .bind(effect.as_str())
     .execute(conn)
     .await?;
     Ok(())
@@ -133,9 +142,21 @@ pub async fn update(conn: &mut PgConnection, id: Uuid, patch: &RolePatch<'_>) ->
     .ok_or(DbError::NotFound)
 }
 
-/// Replaces a role's permissions.
+/// Replaces a role's permissions: it allows `perms` and leaves the rest to the roles below.
 pub async fn set_permissions(conn: &mut PgConnection, id: Uuid, perms: &[&str]) -> DbResult<()> {
-    check_known(perms)?;
+    set_effects(conn, id, perms, &[]).await
+}
+
+/// Replaces what a role allows and denies; it leaves everything else to the roles below. The api
+/// refuses a name in both lists before it gets here.
+pub async fn set_effects(
+    conn: &mut PgConnection,
+    id: Uuid,
+    allows: &[&str],
+    denies: &[&str],
+) -> DbResult<()> {
+    check_known(allows)?;
+    check_known(denies)?;
     let mut tx = conn.begin().await?;
     let locked: Option<Uuid> = sqlx::query_scalar("SELECT id FROM roles WHERE id = $1 FOR UPDATE")
         .bind(id)
@@ -148,7 +169,8 @@ pub async fn set_permissions(conn: &mut PgConnection, id: Uuid, perms: &[&str]) 
         .bind(id)
         .execute(&mut *tx)
         .await?;
-    insert_permissions(&mut tx, id, perms).await?;
+    insert_permissions(&mut tx, id, allows, Effect::Allow).await?;
+    insert_permissions(&mut tx, id, denies, Effect::Deny).await?;
     tx.commit().await?;
     Ok(())
 }
@@ -180,12 +202,27 @@ pub async fn list(conn: &mut PgConnection) -> DbResult<Vec<Role>> {
     .await?)
 }
 
-/// A role's permissions, sorted.
+/// What a role allows, sorted.
 pub async fn permissions(conn: &mut PgConnection, role_id: Uuid) -> DbResult<Vec<String>> {
+    with_effect(conn, role_id, Effect::Allow).await
+}
+
+/// What a role denies, sorted.
+pub async fn denies(conn: &mut PgConnection, role_id: Uuid) -> DbResult<Vec<String>> {
+    with_effect(conn, role_id, Effect::Deny).await
+}
+
+async fn with_effect(
+    conn: &mut PgConnection,
+    role_id: Uuid,
+    effect: Effect,
+) -> DbResult<Vec<String>> {
     Ok(sqlx::query_scalar(
-        "SELECT permission FROM role_permissions WHERE role_id = $1 ORDER BY permission",
+        "SELECT permission FROM role_permissions WHERE role_id = $1 AND effect = $2
+         ORDER BY permission",
     )
     .bind(role_id)
+    .bind(effect.as_str())
     .fetch_all(conn)
     .await?)
 }
@@ -222,7 +259,7 @@ pub async fn unassign(conn: &mut PgConnection, account_id: Uuid, role_id: Uuid) 
 pub async fn roles_of(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<Role>> {
     Ok(sqlx::query_as(
         "SELECT r.id, r.name, r.description, r.position, r.created_by, r.created_at, r.public,
-                r.system
+                r.system, r.invisible
          FROM roles r
          JOIN account_roles ar ON ar.role_id = r.id
          WHERE ar.account_id = $1
@@ -245,13 +282,41 @@ pub async fn set_public(conn: &mut PgConnection, id: Uuid, public: bool) -> DbRe
     .ok_or(DbError::NotFound)
 }
 
-/// An account's public roles, most senior first.
+/// Hides a role from everyone but staff and its holders, or stops.
+pub async fn set_invisible(conn: &mut PgConnection, id: Uuid, invisible: bool) -> DbResult<Role> {
+    sqlx::query_as(&format!(
+        "UPDATE roles SET invisible = $2 WHERE id = $1 RETURNING {ROLE}"
+    ))
+    .bind(id)
+    .bind(invisible)
+    .fetch_optional(conn)
+    .await?
+    .ok_or(DbError::NotFound)
+}
+
+/// An account's public roles, most senior first: marked public and not invisible.
 pub async fn public_roles_of(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<Role>> {
     Ok(roles_of(conn, account_id)
         .await?
         .into_iter()
-        .filter(|r| r.public)
+        .filter(shown_publicly)
         .collect())
+}
+
+/// Whether a role may be shown to anyone, or rank its holders where anyone sees the order.
+/// Invisible roles never are, whatever `public` says.
+pub fn shown_publicly(role: &Role) -> bool {
+    role.public && !role.invisible
+}
+
+/// The most senior role an account shows publicly: what any public ordering by role must use, so
+/// invisible (and non-public) roles never move anyone up.
+pub fn display_rank(roles: &[Role]) -> Option<i32> {
+    roles
+        .iter()
+        .filter(|r| shown_publicly(r))
+        .map(|r| r.position)
+        .max()
 }
 
 /// The built-in role `system` (`user`, `admin` or `root`).
@@ -264,31 +329,62 @@ pub async fn system(conn: &mut PgConnection, system: &str) -> DbResult<Option<Ro
     )
 }
 
-/// The union of an account's roles' permissions, sorted, the built-in User role's included
-/// (every account holds it).
-pub async fn permissions_of(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<String>> {
-    Ok(sqlx::query_scalar(
-        "SELECT rp.permission
+/// One explicit Allow or Deny held by one of an account's roles.
+#[derive(Clone, Debug, PartialEq, Eq, FromRow)]
+pub struct Grant {
+    pub role_id: Uuid,
+    pub role_name: String,
+    pub position: i32,
+    pub permission: String,
+    /// `allow` or `deny`.
+    pub effect: String,
+}
+
+/// Every Allow and Deny of the account's roles, the built-in User role's included (every account
+/// holds it), most senior first.
+pub async fn grants_of(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<Grant>> {
+    Ok(sqlx::query_as(
+        "SELECT r.id AS role_id, r.name AS role_name, r.position, rp.permission, rp.effect
          FROM role_permissions rp
-         JOIN account_roles ar ON ar.role_id = rp.role_id
-         WHERE ar.account_id = $1
-         UNION
-         SELECT rp.permission
-         FROM role_permissions rp
-         JOIN roles r ON r.id = rp.role_id AND r.system = 'user'
-         ORDER BY 1",
+         JOIN roles r ON r.id = rp.role_id
+         WHERE r.system = 'user'
+            OR r.id IN (SELECT role_id FROM account_roles WHERE account_id = $1)
+         ORDER BY r.position DESC, rp.permission",
     )
     .bind(account_id)
     .fetch_all(conn)
     .await?)
 }
 
-/// The permissions every account holds: the built-in User role's.
+/// `permissions::resolve` over stored rows. Each decision names the grant that made it, as an
+/// index into `grants`.
+pub fn resolve_grants(grants: &[Grant]) -> BTreeMap<String, Decision<usize>> {
+    permissions::resolve(grants.iter().enumerate().filter_map(|(i, g)| {
+        Some((
+            i,
+            g.position,
+            g.permission.clone(),
+            Effect::parse(&g.effect)?,
+        ))
+    }))
+}
+
+/// What an account may do, sorted: for each permission, its most senior role that allows or
+/// denies it decides (Deny wins at equal positions), the built-in User role last; a permission
+/// no role names is not granted (ADR 0010, amendment 2026/11/22). Every permission check in the
+/// api goes through this (`catalog::permissions_of`). The owners don't: they hold everything.
+pub async fn permissions_of(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<String>> {
+    let grants = grants_of(conn, account_id).await?;
+    Ok(permissions::granted(&resolve_grants(&grants)))
+}
+
+/// The permissions every account holds: what the built-in User role allows.
 pub async fn everyones_permissions(conn: &mut PgConnection) -> DbResult<Vec<String>> {
     Ok(sqlx::query_scalar(
         "SELECT rp.permission
          FROM role_permissions rp
          JOIN roles r ON r.id = rp.role_id AND r.system = 'user'
+         WHERE rp.effect = 'allow'
          ORDER BY 1",
     )
     .fetch_all(conn)
@@ -308,14 +404,30 @@ pub async fn highest_position(conn: &mut PgConnection, account_id: Uuid) -> DbRe
     .await?)
 }
 
-/// The accounts that hold a permission through any role, sorted.
+/// The accounts with an assigned role that hold a permission, sorted, decided as
+/// `permissions_of` decides it: the most senior role naming it (assigned, else the User role)
+/// allows it. A Deny on a more senior role takes an account out. Accounts with no assigned role
+/// are left out even when the User role allows it (the lock-out rule counts staff, not everyone).
 pub async fn holders_of(conn: &mut PgConnection, permission: &str) -> DbResult<Vec<Uuid>> {
     Ok(sqlx::query_scalar(
-        "SELECT DISTINCT ar.account_id
-         FROM account_roles ar
-         JOIN role_permissions rp ON rp.role_id = ar.role_id
-         WHERE rp.permission = $1
-         ORDER BY ar.account_id",
+        "WITH named AS (
+             SELECT ar.account_id, r.position, rp.effect
+             FROM account_roles ar
+             JOIN roles r ON r.id = ar.role_id
+             JOIN role_permissions rp ON rp.role_id = r.id AND rp.permission = $1
+             UNION ALL
+             SELECT held.account_id, r.position, rp.effect
+             FROM (SELECT DISTINCT account_id FROM account_roles) held,
+                  roles r
+             JOIN role_permissions rp ON rp.role_id = r.id AND rp.permission = $1
+             WHERE r.system = 'user'
+         ),
+         decided AS (
+             SELECT DISTINCT ON (account_id) account_id, effect
+             FROM named
+             ORDER BY account_id, position DESC, (effect = 'deny') DESC
+         )
+         SELECT account_id FROM decided WHERE effect = 'allow' ORDER BY account_id",
     )
     .bind(permission)
     .fetch_all(conn)
@@ -377,6 +489,71 @@ pub async fn limit_overrides_of(
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
+    fn role(position: i32, public: bool, invisible: bool) -> Role {
+        Role {
+            id: Uuid::from_u128(u128::try_from(position).unwrap()),
+            name: format!("r{position}"),
+            description: None,
+            position,
+            created_by: None,
+            created_at: Utc::now(),
+            public,
+            system: None,
+            invisible,
+        }
+    }
+
+    #[test]
+    fn invisible_roles_are_never_shown_or_ranked() {
+        assert!(shown_publicly(&role(5, true, false)));
+        assert!(!shown_publicly(&role(5, true, true)));
+        assert!(!shown_publicly(&role(5, false, false)));
+        // A senior invisible role doesn't move its holder up; the public one below it ranks.
+        let held = [
+            role(900, true, true),
+            role(40, true, false),
+            role(70, false, false),
+        ];
+        assert_eq!(display_rank(&held), Some(40));
+        assert_eq!(display_rank(&[role(900, true, true)]), None);
+    }
+
+    fn grant(role: u128, position: i32, permission: &str, effect: &str) -> Grant {
+        Grant {
+            role_id: Uuid::from_u128(role),
+            role_name: format!("r{role}"),
+            position,
+            permission: permission.to_owned(),
+            effect: effect.to_owned(),
+        }
+    }
+
+    #[test]
+    fn stored_rows_resolve_by_the_one_rule() {
+        let rows = [
+            grant(5, 5, permissions::EMOTES_UPLOAD, "deny"),
+            grant(0, 0, permissions::EMOTES_UPLOAD, "allow"),
+            grant(0, 0, permissions::REPORTS_FILE, "allow"),
+            grant(7, 7, permissions::AUDIT_VIEW, "nonsense"),
+        ];
+        let d = resolve_grants(&rows);
+        assert_eq!(d[permissions::EMOTES_UPLOAD].effect, Effect::Deny);
+        assert_eq!(rows[d[permissions::EMOTES_UPLOAD].role].role_name, "r5");
+        assert_eq!(permissions::granted(&d), [permissions::REPORTS_FILE]);
+        // An unknown effect is ignored, never read as an Allow.
+        assert!(!d.contains_key(permissions::AUDIT_VIEW));
+    }
+
+    #[test]
+    fn the_migration_gives_the_user_role_the_everyday_permissions() {
+        let sql = include_str!("../migrations/20261213004101_role_deny_invisible.sql");
+        for p in permissions::USER_ROLE_ALLOWED {
+            assert!(sql.contains(&format!("'{p}'")), "{p}");
+        }
+    }
+
     #[test]
     fn the_admin_seed_names_only_known_permissions() {
         let sql = include_str!("../migrations/20261207000020_default_roles.sql");

@@ -29,6 +29,7 @@ use cyex_tv_db::{accounts, audit, blocklist, ids, jobs, reads};
 use cyex_tv_media::{Limits, MediaError, Probe};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{EditorPermission, Emote, UploadQuota};
+use cyex_tv_shared::permissions;
 use cyex_tv_storage::{Put, original_key, sigv4};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -292,6 +293,15 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
             StatusCode::FORBIDDEN,
             "restricted",
             "Your account can't upload right now.",
+        ));
+    }
+    // Everyone may upload through the User role, unless a more senior role denies it (a "Muted"
+    // role, ADR 0010 amendment 2026/11/22).
+    if !crate::catalog::holds(&mut conn, caller, permissions::EMOTES_UPLOAD).await? {
+        return Err(ApiError::new(
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            "Your roles don't allow uploading emotes.",
         ));
     }
     if for_someone
