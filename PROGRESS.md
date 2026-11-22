@@ -1592,3 +1592,22 @@ gh pr create --repo cyex-tv/platform --base main --head feat/role-deny-invisible
 git push
 ```
   Not merged (owner reviews).
+
+## Multi-select picks and unpicks; the hero stops following the pointer (branch `fix/select-toggle-hero-tilt`, owner request of 2026/11/22)
+- [x] Multi-select, file-manager style, in the pure model `apps/web/src/lib/components/browse/selection.ts`
+  (`dragMode`, `drag(base, hits, mode)`, `cancelDrag`, `range`), used by BrowseGrid (/search and /sets/[id]),
+  /admin/review and /admin/reports:
+  - Drag: started on a picked tile it unpicks every tile it covers, otherwise it picks them; Ctrl/Cmd+drag flips
+    each one. Recomputed from the picks at the start, so tiles the rectangle leaves go back; release keeps it;
+    Esc mid-drag puts the picks back (and leaves Select mode if the drag turned it on).
+  - Shift+click (and Shift+Space, Shift+X on the admin pages): the range from the anchor to the clicked tile takes
+    the state the clicked tile ends up with. The anchor stays the last plain- or Ctrl-clicked tile.
+  - Touch: a long-press picks (or, on a picked tile, unpicks) it and the drag that follows goes on the same way;
+    the page doesn't scroll during it.
+  - In Select mode a press and drag on a picked tile is the rectangle, no longer a drag of the picks onto the
+    rail (the bar's Add and the tile menu's Add to… still take the picks to a set).
+  - The cap (100, with its note), the count, Ctrl+A, Esc and the bar are unchanged.
+- [x] Tests: `selection.test.ts` (unpicking drag, Ctrl-drag toggles, Shift range takes the clicked tile's state,
+  Esc restores, cap) and `grid-select.ui.test.ts` (the browse grid with mouse, keys and touch): 8 and 7 of them
+  fail on main. Checked in the running app (vite and mock on own ports): drag picks a row, a drag from a picked
+  tile unpicks, Shift+click picks and unpicks ranges.

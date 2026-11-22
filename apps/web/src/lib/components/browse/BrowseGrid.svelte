@@ -3,14 +3,20 @@
   // pick and act on emotes:
   //   - right-click, the context-menu key, the ⋯ button (keyboard focus, hover, always on touch):
   //     the cyex tile menu; the browser's own menu never shows on a tile.
-  //   - Select mode: click or Ctrl/⌘+click toggles, Shift+click picks a range from the last
-  //     toggled tile, Space toggles the focused tile (Shift+Space a range).
-  //   - Mouse or pen: press and drag draws a rectangle that picks every tile it touches (from an
-  //     empty spot it also turns Select mode on), scrolling the window near its edges.
-  //   - Touch: long-press turns Select mode on with that tile (in Select mode: a range).
+  //   - Select mode: click or Ctrl/⌘+click toggles one tile and makes it the anchor; Shift+click
+  //     gives the range from the anchor to the clicked tile the state the clicked tile ends up
+  //     with (on an unpicked tile it picks the range, on a picked one it unpicks it). Space
+  //     toggles the focused tile (Shift+Space a range, the same way).
+  //   - Mouse or pen: press and drag draws a rectangle, file-manager style: started on a picked
+  //     tile it unpicks every tile it touches, otherwise it picks them; with Ctrl/⌘ it flips
+  //     each one. From an empty spot it also turns Select mode on. It scrolls the window near
+  //     its edges; Esc mid-drag puts the picks back as they were before it.
+  //   - Touch: long-press turns Select mode on with that tile; in Select mode it picks or (on a
+  //     picked tile) unpicks it. Dragging on without lifting goes on the same way.
   //   - Signed in, a + on every tile adds it to the target set in place (Undo in the toast; a
   //     full set is refused); a tile already in the target says so and its button removes it.
-  //   - Drag a tile (or, in Select mode, the picked tiles) onto a set in the rail to add it there.
+  //   - Drag a tile onto a set in the rail to add it there (outside Select mode; in Select mode a
+  //     press and drag is the rectangle, and the picks go to a set from the bar or the menu).
   //   - Right-click a picked tile in Select mode: the menu acts on every picked emote.
   // Everything goes through the pure model in ./selection, which keeps the cap.
   // Tiles load their emote's page on tap, not on hover (each page is four queries, and a drag
@@ -41,10 +47,12 @@
     onstep: (step: S.Step) => void;
     /** Turn Select mode on, picking `id` when given. */
     onstart: (id?: string) => void;
+    /** Turn Select mode off again: Esc on a drag that turned it on. */
+    onstop?: () => void;
     /** A contact sheet (redesign round 2): the tiles share hairlines, no gaps and no cards. */
     sheet?: boolean;
   };
-  let { items, label, loading = false, skeletons = 10, eager = 0, ranked = false, selecting, sel, onstep, onstart, sheet = false }: Props = $props();
+  let { items, label, loading = false, skeletons = 10, eager = 0, ranked = false, selecting, sel, onstep, onstart, onstop, sheet = false }: Props = $props();
   // The set Add goes to: emotes already in it get an "In set" mark (the tile menu says Remove for them).
   const held = $derived.by(() => {
     const t = store.current;
@@ -104,7 +112,18 @@
   let lastPointer = '';
   let swallow = false;
   let band = $state<S.Box | null>(null);
-  let press: { start: S.Point; client: S.Point; dragging: boolean; base: S.Selection; boxes: (S.Box & { id: string })[] } | null = null;
+  type Press = {
+    start: S.Point;
+    client: S.Point;
+    dragging: boolean;
+    /** The picks when the press began: every move recomputes from them, and Esc puts them back. */
+    base: S.Selection;
+    mode: S.DragMode;
+    /** This drag turned Select mode on (so Esc turns it off again). */
+    started: boolean;
+    boxes: (S.Box & { id: string })[];
+  };
+  let press: Press | null = null;
   let frame = 0;
   let longPress: ReturnType<typeof setTimeout> | undefined;
 
@@ -122,7 +141,7 @@
     if (press.boxes.length !== order.length) press.boxes = measure(); // more pages came in
     const r = S.rect(press.start, pagePoint(press.client));
     band = r;
-    onstep(S.drag(press.base, S.hitTest(r, press.boxes)));
+    onstep(S.drag(press.base, S.hitTest(r, press.boxes), press.mode));
   }
 
   function loop() {
@@ -131,6 +150,24 @@
     if (v) scrollBy({ top: v, behavior: 'instant' });
     update();
     frame = requestAnimationFrame(loop);
+  }
+
+  const touchOpts: AddEventListenerOptions = { passive: false };
+  function listen(on: boolean) {
+    if (on) {
+      addEventListener('pointermove', onpointermove);
+      addEventListener('pointerup', onpointerup);
+      addEventListener('pointercancel', onpointerup);
+      addEventListener('keydown', onescape, true);
+      // A touch drag (after a long-press) must not scroll the page: only a non-passive touchmove can say so.
+      addEventListener('touchmove', notouchscroll, touchOpts);
+    } else {
+      removeEventListener('pointermove', onpointermove);
+      removeEventListener('pointerup', onpointerup);
+      removeEventListener('pointercancel', onpointerup);
+      removeEventListener('keydown', onescape, true);
+      removeEventListener('touchmove', notouchscroll, touchOpts);
+    }
   }
 
   function onpointerdown(ev: PointerEvent) {
@@ -144,13 +181,11 @@
     }
     // Outside Select mode a press on a tile is the link's; from an empty spot it may become a drag.
     if (!selecting && li) return;
-    // In Select mode a press on a picked tile may drag the picks onto a set (signed in).
-    if (selecting && li && picked.has(li.dataset.id!) && session.me) return;
     const client = { x: ev.clientX, y: ev.clientY };
-    press = { start: pagePoint(client), client, dragging: false, base: sel, boxes: [] };
-    addEventListener('pointermove', onpointermove);
-    addEventListener('pointerup', onpointerup);
-    addEventListener('pointercancel', onpointerup);
+    const base = selecting ? sel : S.EMPTY;
+    const mode = S.dragMode(base, li?.dataset.id ?? null, ev.ctrlKey || ev.metaKey);
+    press = { start: pagePoint(client), client, dragging: false, base, mode, started: false, boxes: [] };
+    listen(true);
   }
 
   function onpointermove(ev: PointerEvent) {
@@ -162,7 +197,7 @@
       press.boxes = measure();
       if (!selecting) {
         onstart();
-        press.base = S.EMPTY;
+        press.started = true;
       }
       getSelection()?.removeAllRanges();
       frame = requestAnimationFrame(loop);
@@ -171,16 +206,35 @@
   }
 
   function onpointerup() {
-    removeEventListener('pointermove', onpointermove);
-    removeEventListener('pointerup', onpointerup);
-    removeEventListener('pointercancel', onpointerup);
+    listen(false);
     cancelAnimationFrame(frame);
+    // A finger's click comes a little after it lifts; a mouse's straight after.
     if (press?.dragging) {
       swallow = true;
-      setTimeout(() => (swallow = false), 0);
+      setTimeout(() => (swallow = false), lastPointer === 'touch' ? 400 : 0);
     }
     press = null;
     band = null;
+  }
+
+  // Esc mid-drag: the picks go back to what they were before it (and Select mode off, if the drag
+  // turned it on). Caught first, so the page's own Esc (clear, then leave) doesn't run as well.
+  function onescape(ev: KeyboardEvent) {
+    if (ev.key !== 'Escape' || !press?.dragging) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const { base, started } = press;
+    onpointerup();
+    // The button is still down: the click its release makes must not toggle a tile either
+    // (the next press clears this).
+    clearTimeout(longPress);
+    swallow = true;
+    onstep(S.cancelDrag(base));
+    if (started) onstop?.();
+  }
+
+  function notouchscroll(ev: TouchEvent) {
+    if (press?.dragging && ev.cancelable) ev.preventDefault();
   }
 
   function startLongPress(li: HTMLElement, ev: PointerEvent) {
@@ -204,8 +258,17 @@
       swallow = true;
       setTimeout(() => (swallow = false), 600);
       navigator.vibrate?.(8);
-      if (!selecting) onstart(id);
-      else onstep(S.range(sel, order, id));
+      // Outside Select mode it starts it with this tile picked. In it, a long-press on a picked
+      // tile unpicks it and starts an unpicking drag, on an unpicked one a picking drag.
+      const base = selecting ? sel : S.EMPTY;
+      const mode = S.dragMode(base, id);
+      const started = !selecting;
+      if (started) onstart(id);
+      const start = pagePoint(from);
+      press = { start, client: from, dragging: true, base, mode, started, boxes: measure() };
+      listen(true);
+      onstep(S.drag(base, [id], mode));
+      frame = requestAnimationFrame(loop);
     }, 480);
   }
 
@@ -268,12 +331,13 @@
       if (selecting) ev.preventDefault();
       return;
     }
-    const id = li.dataset.id!;
-    if (selecting && !picked.has(id)) {
+    // In Select mode a press and drag is the rectangle (above), never a drag onto the rail.
+    if (selecting) {
       ev.preventDefault();
       return;
     }
-    const list = selecting ? (sel.ids.map((p) => items.find((e) => e.id === p)).filter(Boolean) as CardEmote[]) : items.filter((e) => e.id === id);
+    const id = li.dataset.id!;
+    const list = items.filter((e) => e.id === id);
     startDrag(dt, list.map(asItem));
     if (list.length > 1) {
       const ghost = document.createElement('div');

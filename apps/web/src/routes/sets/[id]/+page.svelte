@@ -286,7 +286,7 @@
           {/snippet}
         </State>
       {:else}
-        <BrowseGrid sheet items={cards} eager={12} label="Emotes in {name}" {selecting} {sel} onstep={step} onstart={(id) => setSelecting(true, id)} />
+        <BrowseGrid sheet items={cards} eager={12} label="Emotes in {name}" {selecting} {sel} onstep={step} onstart={(id) => setSelecting(true, id)} onstop={() => setSelecting(false)} />
       {/if}
       {#if shown.length > STEP}
         <div class="more"><LoadMore hasMore={shown.length > limit} total={shown.length} onmore={() => (limit += STEP)} /></div>

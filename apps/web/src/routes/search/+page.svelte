@@ -394,6 +394,7 @@
           {sel}
           onstep={step}
           onstart={(id) => setSelecting(true, id)}
+          onstop={() => setSelecting(false)}
         />
       </div>
       <div class="more" bind:this={end}>

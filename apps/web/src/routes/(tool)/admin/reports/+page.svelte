@@ -162,7 +162,8 @@
         sel = EMPTY;
       }
     } else if ((ev.key === 'x' || ev.key === 'X') && !ev.ctrlKey && !ev.metaKey && !ev.altKey && t?.matches('[data-item]')) {
-      // X ticks the row the focus is on; with Shift it ticks the range from the last tick.
+      // X ticks the row the focus is on; with Shift the range from the last tick takes the state
+      // this row ends up with (untick a ticked row and the whole range is unticked).
       ev.preventDefault();
       tickRow(t.dataset.item!, ev.shiftKey);
     }
