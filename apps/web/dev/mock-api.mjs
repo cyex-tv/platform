@@ -657,7 +657,7 @@ const ROLES = [
   { id: 'ROLE1', name: 'Admin', description: 'Runs cyex.tv day to day.', position: 1000, permissions: ['roles.manage', 'users.view', 'users.restrict', 'audit.view', 'users.notes'], public: false, denies: [], invisible: false, builtIn: 'ADMIN' },
   { id: 'ROLE2', name: 'Moderator', description: 'Reviews uploads and reports.', position: 50, permissions: ['emotes.review', 'emotes.takedown', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets'], public: true, denies: [], invisible: false, builtIn: null },
   { id: 'ROLE3', name: 'Artist', description: 'Makes emotes people love.', position: 10, permissions: [], public: true, denies: [], invisible: false, builtIn: null },
-  { id: 'ROLE5', name: 'Muted', description: 'Can’t upload emotes. Sits above User, so it beats what everyone is allowed.', position: 5, permissions: [], denies: ['emotes.upload'], public: false, invisible: true, builtIn: null },
+  { id: 'ROLE5', name: 'Muted', description: 'Can’t upload emotes or file reports. Sits above User, so its denies beat what everyone is allowed.', position: 5, permissions: [], denies: ['emotes.upload', 'reports.file'], public: false, invisible: true, builtIn: null },
   { id: 'ROLEUSER', name: 'User', description: 'Every account has this role. Its permissions are everyone’s.', position: 0, permissions: ['emotes.upload', 'reports.file'], public: false, denies: [], invisible: false, builtIn: 'USER' },
 ];
 const ACCOUNT_ROLES = { [OTHERS[0].id]: ['ROLE2', 'ROLE3'], [OTHERS[1].id]: ['ROLE3', 'ROLE5'], [ME_ID]: [] };
