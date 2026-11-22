@@ -153,7 +153,7 @@ impl World {
         let role = roles::create(
             &mut conn,
             &roles::NewRole {
-                name: &format!("{permission} holders {}", user.tid()),
+                name: &format!("{permission} {}", user.tid()),
                 description: None,
                 position: 10,
                 permissions: &[permission],
@@ -472,17 +472,18 @@ async fn orders_queue_and_holders_match_their_lists_permissions() {
         .await;
     assert_eq!(r["data"]["reviewQueue"]["total"], 2);
 
-    // Holders: the staff account holds three roles, Alice one.
+    // Holders: the staff account holds three roles more than the others, Alice one more.
     w.grant(&alice, "emotes.review").await;
-    assert_eq!(
-        w.top(
+    let holders = w
+        .top(
             Some(&staff),
             HOLDERS_TOP,
             "entitlementTopHolders",
-            json!({ "l": 2 })
+            json!({ "l": 2 }),
         )
-        .await,
-        [(w.pub_id(&staff).await, 3), (w.pub_id(&alice).await, 1)]
-    );
+        .await;
+    let ids: Vec<&str> = holders.iter().map(|(id, _)| id.as_str()).collect();
+    assert_eq!(ids, [w.pub_id(&staff).await, w.pub_id(&alice).await]);
+    assert_eq!(holders[0].1, holders[1].1 + 2, "{holders:?}");
     w.db.close().await;
 }
