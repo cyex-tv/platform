@@ -81,6 +81,9 @@ pub struct Rates {
     pub uploads_per_hour: u32,
     /// Emotes of one account that may wait for review at once (`upload`).
     pub pending_emotes: u32,
+    /// The most slots an account may give one of its channel sets (`updateSet`). Not a rate: a
+    /// cap, like `pending_emotes`. Staff with `sets.edit_any` go up to `catalog::STAFF_CAPACITY_MAX`.
+    pub set_capacity_max: u32,
 }
 
 impl Default for Rates {
@@ -108,6 +111,7 @@ impl Default for Rates {
             prefs: Rate::per_hour(120),
             uploads_per_hour: 20,
             pending_emotes: 20,
+            set_capacity_max: 1000,
         }
     }
 }
@@ -144,7 +148,8 @@ impl Rates {
 
     /// The defaults, with what the environment sets instead: `CYEX_TV_LIMIT_GQL_ACCOUNT=600/1m`
     /// for a rate (`Rate::parse`: a count per `s`, `m`, `h` or `d`), and a whole number for
-    /// `CYEX_TV_LIMIT_UPLOADS_PER_HOUR` and `CYEX_TV_LIMIT_PENDING_EMOTES`. An unset or empty
+    /// `CYEX_TV_LIMIT_UPLOADS_PER_HOUR`, `CYEX_TV_LIMIT_PENDING_EMOTES` and
+    /// `CYEX_TV_LIMIT_SET_CAPACITY_MAX`. An unset or empty
     /// variable keeps the default; one that doesn't read is an error naming it.
     pub fn from_env(get: impl Fn(&str) -> Option<String>) -> Result<Self, String> {
         let mut rates = Self::default();
@@ -161,6 +166,7 @@ impl Rates {
         for (field, count) in [
             ("uploads_per_hour", &mut rates.uploads_per_hour),
             ("pending_emotes", &mut rates.pending_emotes),
+            ("set_capacity_max", &mut rates.set_capacity_max),
         ] {
             if let (name, Some(raw)) = var(field) {
                 *count = raw
@@ -185,6 +191,7 @@ impl Rates {
                 (self.uploads_per_hour, Some(Duration::from_secs(3600)))
             }
             AccountLimit::PendingEmotes => (self.pending_emotes, None),
+            AccountLimit::SetCapacityMax => (self.set_capacity_max, None),
             AccountLimit::Editors => rate(self.editors),
             AccountLimit::Cosmetics => rate(self.cosmetics),
             AccountLimit::SetClones => rate(self.set_clones),
@@ -222,10 +229,11 @@ pub enum AccountLimit {
     Checkout,
     Redeem,
     DataExport,
+    SetCapacityMax,
 }
 
 impl AccountLimit {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 16] = [
         Self::GqlAccount,
         Self::AccountSearch,
         Self::QuickSearch,
@@ -241,6 +249,7 @@ impl AccountLimit {
         Self::Checkout,
         Self::Redeem,
         Self::DataExport,
+        Self::SetCapacityMax,
     ];
 
     pub const fn key(self) -> &'static str {
@@ -260,6 +269,7 @@ impl AccountLimit {
             Self::Checkout => "checkout",
             Self::Redeem => "redeem",
             Self::DataExport => "data_export",
+            Self::SetCapacityMax => "set_capacity_max",
         }
     }
 
@@ -455,7 +465,9 @@ impl Limits {
             AccountLimit::Checkout => &self.checkout,
             AccountLimit::Redeem => &self.redeem,
             AccountLimit::DataExport => &self.data_export,
-            AccountLimit::UploadsPerHour | AccountLimit::PendingEmotes => return None,
+            AccountLimit::UploadsPerHour
+            | AccountLimit::PendingEmotes
+            | AccountLimit::SetCapacityMax => return None,
         })
     }
 
@@ -757,6 +769,7 @@ mod tests {
         assert_eq!(none.gql_account, d.gql_account);
         assert_eq!(none.uploads_per_hour, 20);
         assert_eq!(none.pending_emotes, 20);
+        assert_eq!(none.set_capacity_max, 1000);
 
         let r = Rates::from_env(env(&[
             ("CYEX_TV_LIMIT_GQL_ACCOUNT", "900/1m"),
@@ -764,6 +777,7 @@ mod tests {
             ("CYEX_TV_LIMIT_AUTH", " 10/30s "),
             ("CYEX_TV_LIMIT_UPLOADS_PER_HOUR", "40"),
             ("CYEX_TV_LIMIT_PENDING_EMOTES", "5"),
+            ("CYEX_TV_LIMIT_SET_CAPACITY_MAX", "2500"),
             ("CYEX_TV_LIMIT_READS", ""),
         ]))
         .unwrap();
@@ -773,6 +787,7 @@ mod tests {
         assert_eq!(r.auth.per, Duration::from_secs(30));
         assert_eq!(r.uploads_per_hour, 40);
         assert_eq!(r.pending_emotes, 5);
+        assert_eq!(r.set_capacity_max, 2500);
         // Empty keeps the default; the others are untouched.
         assert_eq!(r.reads, d.reads);
         assert_eq!(r.prefs, d.prefs);

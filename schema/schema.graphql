@@ -911,8 +911,8 @@ input CreateSetInput {
 	"""
 	ownerId: String
 	"""
-	Empty: `LISTED` for channel sets, `UNLISTED` for the personal set. Personal sets can't be
-	`PRIVATE`.
+	Empty or `LISTED`: every set is public. `UNLISTED` and `PRIVATE` need `sets.edit_any`
+	(staff); personal sets can't be `PRIVATE`.
 	"""
 	visibility: SetVisibility
 }
@@ -986,7 +986,7 @@ enum EditorPermission {
 	"""
 	EMOTES
 	"""
-	Create, rename and delete sets and change their capacity. Always comes with `Channels`.
+	Create, rename and delete sets, change their capacity, and pick a channel's active set.
 	"""
 	SETS
 	"""
@@ -998,7 +998,7 @@ enum EditorPermission {
 	"""
 	PROFILE
 	"""
-	Change the owner's channels' active set and settings. Granting `Sets` grants this too.
+	Change the owner's channels' settings (and pick their active set, as `Sets` does).
 	"""
 	CHANNELS
 	"""
@@ -1601,15 +1601,18 @@ type Mutation {
 	createSet(input: CreateSetInput!): EmoteSet!
 	"""
 	Copy a set you can open into a new channel set: yours, or with `ownerId` one for an account
-	you edit with `SETS`. Name defaults to the source's; visibility to `LISTED`. Emotes go in
+	you edit with `SETS`. Name defaults to the source's; the copy is public (`UNLISTED` and `PRIVATE` need `sets.edit_any`). Emotes go in
 	as `addSetEmote` would put them, in order, keeping their names: up to the capacity,
 	approved ones only (your own pending ones too), never other people's private emotes.
 	30 copies an hour. `rate_limited`, `not_found`, `forbidden`, `bad_name`.
 	"""
 	cloneSet(id: String!, name: String, ownerId: String, visibility: SetVisibility): ClonedSet!
 	"""
-	Rename a set, change who sees it (`visibility`: owner or account editors with `SETS`), or
-	change its capacity. Owner or editor; capacity needs `sets.edit_any`.
+	Rename a set or change its capacity (owner, editors, account editors with `SETS`). Capacity
+	is 1 to the owner's `set_capacity_max` role limit (1.000 by default; `capacity_over_limit`
+	above it), up to 1.000.000 with `sets.edit_any`, and never below the emotes the set holds
+	(`capacity_too_low`); see `setCapacityRange`. Every set is public: `visibility` other than
+	what it is needs `sets.edit_any` (`bad_visibility`).
 	"""
 	updateSet(id: String!, input: UpdateSetInput!): EmoteSet!
 	"""
@@ -2457,6 +2460,12 @@ type Query {
 	"""
 	set(id: String!): EmoteSet
 	"""
+	What you may set a set's capacity to (`updateSet`): from the emotes it holds (at least 1)
+	to the owner's `set_capacity_max` role limit (1.000 by default), or 1.000.000 with
+	`sets.edit_any`. Null when you can't change its capacity. Signed in.
+	"""
+	setCapacityRange(id: String!): SetCapacityRange
+	"""
 	A page of a set's emotes, oldest first, for sets too big to read whole. Who may see what is
 	the rule of `set`; an unknown or hidden set is an empty page. `query` keeps the emotes whose
 	name in the set or own name contains it (case-insensitive). `perPage` is 1 to 200, default
@@ -3279,6 +3288,34 @@ enum SetAccess {
 }
 
 """
+What you may set a set's capacity to (`setCapacityRange`; ADR 0017, amendment 2026/11/22).
+"""
+type SetCapacityRange {
+	"""
+	The fewest slots: 1, or the emotes the set holds now if that is more.
+	"""
+	min: Int!
+	"""
+	The most slots you may pick.
+	"""
+	max: Int!
+	"""
+	The most without a staff permission: the owner's `set_capacity_max` role limit (1.000 by
+	default) for a channel set, 5 for a personal set, or the set's capacity if it is higher.
+	"""
+	ownerMax: Int!
+	"""
+	Emotes in the set now, pending ones included.
+	"""
+	used: Int!
+	"""
+	`max` comes from a staff permission (`sets.edit_any`, or `global_set.edit` for the global
+	set): up to 1.000.000.
+	"""
+	staff: Boolean!
+}
+
+"""
 An emote as it sits in a set: the name it is typed as there, and who added it.
 """
 type SetEmote {
@@ -3606,11 +3643,14 @@ input UpdateSetEmoteInput {
 input UpdateSetInput {
 	name: String
 	"""
-	Needs `sets.edit_any` to raise above the default.
+	1 to the owner's `set_capacity_max` role limit (1.000 by default; 5 for a personal set),
+	never below the emotes the set holds; up to 1.000.000 with `sets.edit_any`.
+	`setCapacityRange` says what you may pick.
 	"""
 	capacity: Int
 	"""
-	Personal sets can't be `PRIVATE`; the global set is always listed.
+	Every set is public: changing it needs `sets.edit_any` (staff hiding a set). Personal sets
+	can't be `PRIVATE`; the global set is always listed.
 	"""
 	visibility: SetVisibility
 }

@@ -95,6 +95,7 @@ pub fn open_rates() -> Rates {
         prefs: r,
         uploads_per_hour: 1_000_000,
         pending_emotes: 1_000_000,
+        set_capacity_max: 1000,
     }
 }
 

@@ -8,6 +8,9 @@
 //! - deleting a set and managing its editors: its owner, account editors with `sets` (delete) or
 //!   `editors` and `emotes` (set editors), or `sets.edit_any`.
 //!
+//! Every set is public (ADR 0017, amendment 2026/11/22): only staff with `sets.edit_any` can make
+//! one `UNLISTED` or `PRIVATE` (moderation), so the rules below are for those.
+//!
 //! Who may open a set (`set`, `GET /v1/sets/{id}`): anyone, unless it is `PRIVATE`; then its
 //! owner, its editors, the owner's account editors and `sets.edit_any`, or anyone while a channel
 //! shows it (chat shows it to everyone then).
@@ -20,7 +23,7 @@ use std::collections::HashSet;
 use cyex_tv_auth::{Caller, rbac};
 use cyex_tv_db::sets::{self, NewMember, Set};
 use cyex_tv_db::{DbError, accounts, audit, channels, emotes, ids, outbox, reads, roles};
-use cyex_tv_shared::error::ApiResult;
+use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
     AccountSummary, AddSetEmote, Channel, ClonedSet, CreateSet, EditorPermission, EmotePage,
     EmoteSet, EmoteState, EventType, PersonalSetEntry, Platform, SetEmote, SetEmotePage, SetKind,
@@ -34,6 +37,7 @@ use uuid::Uuid;
 
 use crate::editors::{has_flag, has_flag_on_all_sets, has_flag_on_set};
 use crate::errors::{bad, conflict, rate_limited, sqlx_error};
+use crate::limits::AccountLimit;
 use crate::moderation::{QUEUE_PAGE, QUEUE_PAGE_MAX};
 use crate::state::AppState;
 use crate::views::{self, Viewer};
@@ -381,7 +385,73 @@ fn default_capacity(kind: SetKind) -> i32 {
     }
 }
 
-const MAX_CAPACITY: u32 = 100_000;
+/// The most slots staff with `sets.edit_any` may give any set (ADR 0017, amendment 2026/11/22).
+pub const STAFF_CAPACITY_MAX: u32 = 1_000_000;
+
+/// The most slots the owner's side (the owner, their account editors and per-set editors) may give
+/// `set` without a staff permission: a channel set the owner's `set_capacity_max` role limit (1.000
+/// unless a role raises it), the personal set its default, and never less than it has now (staff
+/// may have raised it: lowering it again stays allowed). The global set is staff-only anyway.
+pub(crate) async fn user_capacity_max(state: &AppState, set: &Set) -> u32 {
+    let current = u32::try_from(set.capacity).unwrap_or(0);
+    let limit = match (set.kind, set.owner_account_id) {
+        (SetKind::Channel, Some(owner)) => state
+            .limits
+            .load(&state.db, owner)
+            .await
+            .get(AccountLimit::SetCapacityMax),
+        (kind, _) => u32::try_from(default_capacity(kind)).unwrap_or(1),
+    };
+    limit.max(current)
+}
+
+/// What the caller may set `id`'s capacity to; `None` when they can't change it (or can't see
+/// the set: the same answer, so it says nothing about private sets).
+pub async fn set_capacity_range(
+    state: &AppState,
+    caller: &Caller,
+    id: &str,
+) -> ApiResult<Option<cyex_tv_shared::model::SetCapacityRange>> {
+    use axum::http::StatusCode;
+    let id = parse_id(id)?;
+    let mut conn = conn(state).await?;
+    let Some(set) = sets::get(&mut conn, id).await.map_err(db_error)? else {
+        return Ok(None);
+    };
+    match edit_grant(&mut conn, caller, &set, EditorPermission::Sets).await {
+        Ok(_) => {}
+        Err(e) if matches!(e.status, StatusCode::FORBIDDEN | StatusCode::NOT_FOUND) => {
+            return Ok(None);
+        }
+        Err(e) => return Err(e),
+    }
+    let used = sets::count(&mut conn, id).await.map_err(db_error)?;
+    let used = u32::try_from(used).unwrap_or(u32::MAX);
+    let owner_max = user_capacity_max(state, &set).await;
+    let staff =
+        set.kind == SetKind::Global || holds(&mut conn, caller, permissions::SETS_EDIT_ANY).await?;
+    let max = if staff { STAFF_CAPACITY_MAX } else { owner_max };
+    Ok(Some(cyex_tv_shared::model::SetCapacityRange {
+        min: used.max(1),
+        max,
+        owner_max,
+        used,
+        staff,
+    }))
+}
+
+/// 1000000 as "1.000.000" (cyex number format).
+fn dotted(n: u32) -> String {
+    let digits = n.to_string();
+    let mut out = String::new();
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push('.');
+        }
+        out.push(c);
+    }
+    out
+}
 
 // Reads
 
@@ -898,6 +968,7 @@ pub async fn create_set(
     if by_editor {
         may_make_sets(&mut tx, owner, caller.account_id).await?;
     }
+    staff_only_visibility(&mut tx, caller, input.visibility).await?;
     let set = sets::create_with(&mut tx, owner, &name, input.kind, input.visibility)
         .await
         .map_err(db_error)?;
@@ -925,6 +996,32 @@ pub async fn create_set(
     tx.commit().await.map_err(sqlx_error)?;
     drop(conn);
     built(state, caller, set.id).await
+}
+
+/// Every set is public: asking for `UNLISTED` or `PRIVATE` needs `sets.edit_any` (staff hiding a
+/// set, moderation). `LISTED`, or nothing, is fine for anyone.
+async fn staff_only_visibility(
+    conn: &mut PgConnection,
+    caller: &Caller,
+    visibility: Option<SetVisibility>,
+) -> ApiResult<()> {
+    match visibility {
+        Some(v) if v != SetVisibility::Listed => {
+            if holds(conn, caller, permissions::SETS_EDIT_ANY).await? {
+                Ok(())
+            } else {
+                Err(public_only())
+            }
+        }
+        _ => Ok(()),
+    }
+}
+
+fn public_only() -> ApiError {
+    bad(
+        "bad_visibility",
+        "Every set is public. Only staff can take a set off the listings.",
+    )
 }
 
 /// An account editor making a set for the owner needs `sets` on every set: one limited to some
@@ -978,6 +1075,7 @@ pub async fn clone_set(
     if by_editor {
         may_make_sets(&mut tx, owner, caller.account_id).await?;
     }
+    staff_only_visibility(&mut tx, caller, visibility).await?;
     let name = match name {
         Some(name) => name,
         None => set_name(&source.name)?,
@@ -1089,20 +1187,30 @@ pub async fn update_set(
         after = sets::rename(&mut tx, id, name).await.map_err(db_error)?;
     }
     if let Some(capacity) = input.capacity {
-        if capacity == 0 || capacity > MAX_CAPACITY {
-            return Err(bad("bad_capacity", "Capacity is 1 to 100000."));
+        if capacity == 0 || capacity > STAFF_CAPACITY_MAX {
+            return Err(bad(
+                "bad_capacity",
+                "Capacity is a whole number from 1 to 1.000.000.",
+            ));
         }
-        let capacity =
-            i32::try_from(capacity).map_err(|_| bad("bad_capacity", "Capacity is 1 to 100000."))?;
+        let staff = holds(&mut tx, caller, permissions::SETS_EDIT_ANY).await?;
+        let mine = user_capacity_max(state, &set).await;
         let mut grant_used = grant;
-        if capacity > default_capacity(set.kind) && set.kind != SetKind::Global {
-            if !holds(&mut tx, caller, permissions::SETS_EDIT_ANY).await? {
-                return Err(forbidden(
-                    "Raising a set above its default capacity needs sets.edit_any.",
+        if capacity > mine && set.kind != SetKind::Global {
+            if !staff {
+                return Err(bad(
+                    "capacity_over_limit",
+                    format!("This set can have up to {} slots.", dotted(mine)),
                 ));
             }
             grant_used = Grant::Permission(permissions::SETS_EDIT_ANY);
         }
+        let capacity = i32::try_from(capacity).map_err(|_| {
+            bad(
+                "bad_capacity",
+                "Capacity is a whole number from 1 to 1.000.000.",
+            )
+        })?;
         after = sets::set_capacity(&mut tx, id, capacity)
             .await
             .map_err(db_error)?;
@@ -1123,19 +1231,12 @@ pub async fn update_set(
         if set.kind == SetKind::Global {
             return Err(db_error(DbError::InvalidVisibility));
         }
-        // Staff with `sets.edit_any` may change it even when they are also a per-set editor.
-        let grant = if grant == Grant::Editor
-            && holds(&mut tx, caller, permissions::SETS_EDIT_ANY).await?
-        {
-            Grant::Permission(permissions::SETS_EDIT_ANY)
-        } else {
-            grant
-        };
-        if grant == Grant::Editor {
-            return Err(forbidden(
-                "Only the set's owner and their editors with the sets permission can change who sees it.",
-            ));
+        // Every set is public: only staff with `sets.edit_any` change it (hiding a set, or
+        // listing one they hid), audited as staff.
+        if !holds(&mut tx, caller, permissions::SETS_EDIT_ANY).await? {
+            return Err(public_only());
         }
+        let grant = Grant::Permission(permissions::SETS_EDIT_ANY);
         after = sets::set_visibility(&mut tx, id, visibility)
             .await
             .map_err(db_error)?;
@@ -1474,9 +1575,10 @@ pub async fn remove_set_editor(
     Ok(removed)
 }
 
-/// The channel's owner, or the owner's account editors with `channels` (which `sets` brings;
-/// audited). The active set must be one of the owner's channel sets, and one an editor's grant
-/// covers; an empty `activeSetId` clears it.
+/// The channel's owner, or the owner's account editors (audited): picking the active set needs
+/// `sets` or `channels`, the other settings need `channels` (ADR 0014, amendment 2026/11/22). The
+/// active set must be one of the owner's channel sets, and one an editor's grant covers; an empty
+/// `activeSetId` clears it.
 pub async fn update_channel_settings(
     state: &AppState,
     caller: &Caller,
@@ -1491,18 +1593,37 @@ pub async fn update_channel_settings(
         .map_err(db_error)?
         .ok_or_else(not_found)?;
     let by_editor = ch.account_id != caller.account_id;
-    if by_editor
-        && !has_flag(
+    if by_editor {
+        let channels = has_flag(
             &mut tx,
             ch.account_id,
             caller.account_id,
             EditorPermission::Channels,
         )
-        .await?
-    {
-        return Err(forbidden(
-            "Only the channel's owner and its account editors with the channels permission can change it.",
-        ));
+        .await?;
+        let sets = has_flag(
+            &mut tx,
+            ch.account_id,
+            caller.account_id,
+            EditorPermission::Sets,
+        )
+        .await?;
+        // Picking the active set is managing sets; `channels` keeps it too, as it always had it.
+        if input.active_set_id.is_some() && !(sets || channels) {
+            return Err(forbidden(
+                "Only the channel's owner and its account editors with the sets permission can pick its active set.",
+            ));
+        }
+        if input.allow_personal_emotes.is_some() && !channels {
+            return Err(forbidden(
+                "Only the channel's owner and its account editors with the channel settings permission can change its settings.",
+            ));
+        }
+        if !(sets || channels) {
+            return Err(forbidden(
+                "Only the channel's owner and its account editors can change it.",
+            ));
+        }
     }
     let mut updated = ch.clone();
     if let Some(raw) = input.active_set_id.as_deref() {

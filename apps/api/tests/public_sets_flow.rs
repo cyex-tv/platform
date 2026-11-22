@@ -198,12 +198,17 @@ impl World {
         .await
     }
 
+    /// A channel set; `UNLISTED` or `PRIVATE` hides it as staff would (users can't any more).
     async fn set(&self, owner: &User, name: &str, vis: Option<&str>) -> String {
-        let r = self.create(owner, name, "CHANNEL", vis).await;
-        r["data"]["createSet"]["id"]
+        let r = self.create(owner, name, "CHANNEL", None).await;
+        let id = r["data"]["createSet"]["id"]
             .as_str()
             .unwrap_or_else(|| panic!("{r}"))
-            .to_owned()
+            .to_owned();
+        if let Some(vis) = vis.filter(|v| *v != "LISTED") {
+            self.db.hide_set(&id, vis).await;
+        }
+        id
     }
 
     async fn add(&self, by: &User, set: &str, emote: &str) {
@@ -267,18 +272,32 @@ async fn visibility_defaults_and_rules() {
     assert_eq!(set["slotsUsed"], 0);
     assert!(set["createdAt"].as_str().is_some_and(|t| t.ends_with('Z')));
 
+    // Every set is public, the personal set too (ADR 0017, amendment 2026/11/22).
     let r = w.create(&alice, "Mine", "PERSONAL", None).await;
-    assert_eq!(r["data"]["createSet"]["visibility"], "UNLISTED", "{r}");
+    assert_eq!(r["data"]["createSet"]["visibility"], "LISTED", "{r}");
     let personal = r["data"]["createSet"]["id"].as_str().unwrap().to_owned();
 
-    // Personal sets are shown in chat to everyone: never private.
+    // Users can't hide a set: not when making it, not later, not on a copy.
     let r = w
         .gql(&alice, UPDATE, json!({ "id": personal, "v": "PRIVATE" }))
         .await;
     assert_eq!(code(&r), "bad_visibility", "{r}");
-    let r = w.create(&alice, "Hidden", "CHANNEL", Some("PRIVATE")).await;
-    assert_eq!(r["data"]["createSet"]["visibility"], "PRIVATE", "{r}");
-    assert_eq!(r["data"]["createSet"]["listed"], false);
+    for vis in ["PRIVATE", "UNLISTED"] {
+        let r = w.create(&alice, "Hidden", "CHANNEL", Some(vis)).await;
+        assert_eq!(code(&r), "bad_visibility", "{vis}: {r}");
+        let main = set["id"].as_str().unwrap();
+        let r = w.gql(&alice, UPDATE, json!({ "id": main, "v": vis })).await;
+        assert_eq!(code(&r), "bad_visibility", "{vis}: {r}");
+        let r = w.gql(&alice, CLONE, json!({ "id": main, "v": vis })).await;
+        assert_eq!(code(&r), "bad_visibility", "{vis}: {r}");
+    }
+    // Asking for what every set is anyway is fine.
+    let r = w.create(&alice, "Open", "CHANNEL", Some("LISTED")).await;
+    assert_eq!(r["data"]["createSet"]["visibility"], "LISTED", "{r}");
+    let r = w
+        .gql(&alice, UPDATE, json!({ "id": personal, "v": "LISTED" }))
+        .await;
+    assert_eq!(r["data"]["updateSet"]["visibility"], "LISTED", "{r}");
 
     // The global set stays listed.
     let r = w
@@ -389,11 +408,11 @@ async fn private_sets_are_never_readable_by_others() {
     }
     let r = w.gql(&dave, READ, json!({ "id": hidden })).await;
     assert_eq!(r["data"]["set"]["name"], "Secret", "{r}");
-    // A per-set editor can't change who sees it.
+    // A per-set editor can't change who sees it (only staff can).
     let r = w
         .gql(&carol, UPDATE, json!({ "id": hidden, "v": "LISTED" }))
         .await;
-    assert_eq!(code(&r), "forbidden", "{r}");
+    assert_eq!(code(&r), "bad_visibility", "{r}");
 
     // Never in someone's public list, and not cloneable by others.
     let r = w
@@ -433,8 +452,6 @@ async fn private_sets_are_never_readable_by_others() {
     let r = w.gql(&bob, READ, json!({ "id": hidden })).await;
     assert!(r["data"]["set"].is_null(), "{r}");
 
-    // No event for a private or unlisted set.
-    assert!(w.events("set.created").await.is_empty());
     w.db.close().await;
 }
 
@@ -563,7 +580,7 @@ async fn clone_copies_what_may_be_copied() {
     );
     let bobs_copy = out["set"]["id"].as_str().unwrap().to_owned();
 
-    // Alice copies her own: her private and pending emotes come along.
+    // Alice copies her own: her private and pending emotes come along. Copies are public.
     let r = w
         .gql(
             &alice,
@@ -571,13 +588,17 @@ async fn clone_copies_what_may_be_copied() {
             json!({ "id": source, "n": "Mine again", "v": "UNLISTED" }),
         )
         .await;
+    assert_eq!(code(&r), "bad_visibility", "{r}");
+    let r = w
+        .gql(&alice, CLONE, json!({ "id": source, "n": "Mine again" }))
+        .await;
     let out = &r["data"]["cloneSet"];
     assert_eq!(out["copied"], 3, "{r}");
     assert_eq!(out["skipped"], 0);
     assert_eq!(out["set"]["name"], "Mine again");
-    assert_eq!(out["set"]["visibility"], "UNLISTED");
+    assert_eq!(out["set"]["visibility"], "LISTED");
 
-    // `set.created` for listed sets only, on the owner's user topics.
+    // `set.created` for listed sets, on the owner's user topics.
     let created = w.events("set.created").await;
     let bobs_row = Some(w.db.row(&bobs_copy).await);
     let bobs: Vec<_> = created.iter().filter(|e| e.set_id == bobs_row).collect();
@@ -585,11 +606,6 @@ async fn clone_copies_what_may_be_copied() {
     assert_eq!(
         bobs[0].topics,
         vec![outbox::user_topic(Platform::Twitch, &bob.twitch_id)]
-    );
-    assert!(
-        created
-            .iter()
-            .all(|e| e.payload["set_id"] != r["data"]["cloneSet"]["set"]["id"])
     );
 
     // Bad input and IDOR: a set for an account you don't edit.
@@ -743,9 +759,11 @@ async fn activity_shows_listed_sets_only() {
     assert!(!sets.contains(&hidden.as_str()), "{r}");
     assert!(!r.to_string().contains(&hidden), "{r}");
 
-    // Hiding a set later hides its past lines too.
+    // Staff hiding a set later hides its past lines too.
+    let staff = w.user("2602").await;
+    w.grant(&staff, "sets.edit_any").await;
     let r = w
-        .gql(&alice, UPDATE, json!({ "id": listed, "v": "PRIVATE" }))
+        .gql(&staff, UPDATE, json!({ "id": listed, "v": "PRIVATE" }))
         .await;
     assert_eq!(r["data"]["updateSet"]["visibility"], "PRIVATE", "{r}");
     let r = w.post(None, FEED, json!({ "a": alice.tid() })).await;
@@ -774,7 +792,8 @@ async fn private_sets_publish_no_set_topic() {
         async {
             let mut conn = w.db.conn().await;
             let rows: Vec<Vec<String>> = sqlx::query_scalar(
-                "SELECT topics FROM events_outbox WHERE payload->>'set_id' = $1 ORDER BY id",
+                "SELECT topics FROM events_outbox WHERE payload->>'set_id' = $1
+                 AND type <> 'set.created' ORDER BY id",
             )
             .bind(set)
             .fetch_all(&mut *conn)
@@ -895,11 +914,16 @@ async fn edit_any_beats_editor_rule_for_visibility() {
         )
         .await;
     assert_eq!(r["data"]["addSetEditor"], true, "{r}");
-    // A plain per-set editor can't change who sees the set.
+    // A plain per-set editor can't change who sees the set; nor can its owner (every set is
+    // public).
     let r = w
         .gql(&staff, UPDATE, json!({ "id": set, "v": "UNLISTED" }))
         .await;
-    assert_eq!(code(&r), "forbidden", "{r}");
+    assert_eq!(code(&r), "bad_visibility", "{r}");
+    let r = w
+        .gql(&alice, UPDATE, json!({ "id": set, "v": "UNLISTED" }))
+        .await;
+    assert_eq!(code(&r), "bad_visibility", "{r}");
     // With sets.edit_any the same call goes through.
     w.grant(&staff, "sets.edit_any").await;
     let r = w

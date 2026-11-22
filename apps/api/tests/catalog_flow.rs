@@ -406,6 +406,8 @@ async fn set_privacy_rename_and_delete_drop_cached_reads_everywhere() {
     }
 
     let update = "mutation($id: String!, $input: UpdateSetInput!) { updateSet(id: $id, input: $input) { id } }";
+    // Only staff hide a set now (every set is public, ADR 0017 amendment 2026/11/22).
+    w.grant(&alice, "sets.edit_any").await;
     let r = w
         .gql(
             Some(&alice),

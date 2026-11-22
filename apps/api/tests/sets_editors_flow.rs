@@ -279,7 +279,12 @@ async fn an_editor_limited_to_some_sets_works_on_those_only() {
     // editorSets lists only the covered set; a private set outside the list is invisible.
     let r = w.gql(&bob, "{ editorSets { id } }", json!({})).await;
     assert_eq!(r["data"]["editorSets"], json!([{ "id": a }]), "{r}");
-    ok(&w.gql(&alice, PRIVATE_SET, json!({ "id": b })).await);
+    // Only staff hide sets now; one staff hid is still invisible outside the list.
+    assert_eq!(
+        code(&w.gql(&alice, PRIVATE_SET, json!({ "id": b })).await),
+        "bad_visibility"
+    );
+    w.db.hide_set(&b, "PRIVATE").await;
     let r = w.gql(&bob, SET, json!({ "id": b })).await;
     assert_eq!(r["data"]["set"], Value::Null, "{r}");
     let r = w
@@ -489,7 +494,7 @@ async fn the_new_flags_are_stored_and_channels_gates_channel_settings() {
         "forbidden"
     );
 
-    // `sets` keeps allowing channel settings, and is listed as stored.
+    // `sets` picks the active set too, and is listed as stored (no `channels` added).
     let r = w.add(&alice, None, &carol, &["SETS"], &[]).await;
     assert_eq!(
         r["data"]["addAccountEditor"]["permissions"],
@@ -497,12 +502,17 @@ async fn the_new_flags_are_stored_and_channels_gates_channel_settings() {
         "{r}"
     );
     let r = w
-        .gql(&carol, CHANNEL, json!({ "c": alice.twitch_id, "s": null }))
+        .gql(&carol, CHANNEL, json!({ "c": alice.twitch_id, "s": a }))
         .await;
-    ok(&r);
+    assert_eq!(
+        r["data"]["updateChannelSettings"]["activeSetId"],
+        a.as_str(),
+        "{r}"
+    );
 
-    // An editor with `sets` and `editors` may hand out `channels` (sets brings it), but one with
-    // `channels` and `editors` can't hand out `sets`.
+    // `sets` and `channels` are separate (amendment 2026/11/22): an editor with `sets` and
+    // `editors` hands out `sets` but not `channels`, and one with `channels` and `editors` can't
+    // hand out `sets`.
     let dave = w.user("2204").await;
     ok(&w
         .gql(
@@ -511,7 +521,9 @@ async fn the_new_flags_are_stored_and_channels_gates_channel_settings() {
             json!({ "a": carol.tid(), "f": ["SETS", "EDITORS"] }),
         )
         .await);
-    ok(&w.add(&carol, Some(&alice), &dave, &["CHANNELS"], &[]).await);
+    let r = w.add(&carol, Some(&alice), &dave, &["CHANNELS"], &[]).await;
+    assert_eq!(code(&r), "forbidden", "{r}");
+    ok(&w.add(&carol, Some(&alice), &dave, &["SETS"], &[]).await);
     ok(&w
         .gql(
             &alice,

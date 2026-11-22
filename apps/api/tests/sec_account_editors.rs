@@ -384,7 +384,7 @@ async fn each_flag_gates_its_actions() {
         .gql(
             &bob,
             CHANNEL,
-            json!({ "c": alice.twitch_id, "s": set, "p": false }),
+            json!({ "c": alice.twitch_id, "s": set, "p": null }),
         )
         .await;
     assert_eq!(
@@ -392,9 +392,17 @@ async fn each_flag_gates_its_actions() {
         set.as_str(),
         "{r}"
     );
+    // Channel settings are `channels`, not `sets` (ADR 0014, amendment 2026/11/22).
     assert_eq!(
-        r["data"]["updateChannelSettings"]["allowPersonalEmotes"],
-        false
+        code(
+            &w.gql(
+                &bob,
+                CHANNEL,
+                json!({ "c": alice.twitch_id, "s": null, "p": false })
+            )
+            .await
+        ),
+        "forbidden"
     );
     // Only the owner's own channel sets can be made active.
     let bobs_set = w.set(&bob, "Bob's").await;

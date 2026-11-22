@@ -91,3 +91,17 @@ The owner: "users shouldnt be able to request another user to transfer ownership
 - **Retired mutations:** `acceptEmoteTransfer` always answers `forbidden` (the same for every ID, so nothing can be probed). `declineEmoteTransfer` and `cancelEmoteTransfer` keep their checks and now answer `not_pending` for old requests; `emoteTransferRequests` is empty. All four stay in the schema, deprecated (ADR 0008: no breaking changes). The table `emote_transfer_requests` stays for the history.
 - **Website:** no Transfer box in the permissions picker, no Hand-over section for anyone but the owner on the emote's edit page, no Accept, Decline or Cancel request anywhere. Old `emote.transfer_requested` notifications read as what happened ("… asked to give … Transfer requests are gone: only you can give your emotes away."), with no buttons; Settings → Notifications no longer lists the request and declined kinds (nothing sends them).
 - Tests: `apps/api/tests/editor_emotes_flow.rs` (editors refused, retired flag, owner transfer, withdrawal), `editors.rs` unit tests, `lib/tool/no-editor-transfer.ui.test.ts`, `lib/tool/editors.test.ts`, `lib/account/account.test.ts`, `lib/account/prefs.test.ts`.
+
+## Amendment (owner decision, 2026/11/22): managing sets is not bound to channel settings
+The owner: "creating and managing emote sets shouldnt be bound to channel settings for editor perms". This replaces "`sets` keeps allowing this too, so existing grants mean what they meant, and granting `sets` needs `channels` as well" in the 2026/11/19 amendment.
+
+| Flag | Allows, on the owner's account |
+|---|---|
+| `sets` | create, rename and delete sets, change their capacity (up to the owner's `set_capacity_max` role limit, ADR 0017), and pick a channel's active set (`updateChannelSettings` with `activeSetId`) |
+| `channels` | the channels' other settings (`allowPersonalEmotes`), and still picking the active set, as it always could |
+
+- `sets` no longer brings `channels`: holding `sets` doesn't count as holding `channels` in any check, and granting `sets` needs only `sets` (an editor with `sets` and `editors` hands out `sets`, not `channels`). The no-escalation and scope rules are unchanged.
+- `updateChannelSettings` by an account editor: `activeSetId` needs `sets` or `channels` (and a grant covering the set, as before); `allowPersonalEmotes` needs `channels`; either alone is enough for a change that names only its own part.
+- **Migration** `20261215004101_editor_sets_without_channels.sql` (data only, additive): every grant holding `sets` without `channels` gets `channels` written down, so nobody loses what they could do. Grants of `channels` alone keep picking the active set. Running it twice changes nothing.
+- **Website:** the permissions dialog ticks the two independently (no "comes with managing sets" lock), in two columns of one-line rows with the explanation as a tooltip, and a "Sets they can edit" dropdown that floats over the dialog, stays open while ticking several sets, and closes on Confirm, Esc or a click outside.
+- Tests: `apps/api/tests/sets_capacity_flow.rs` (`managing_sets_and_channel_settings_are_separate_permissions`, the migration), `sets_editors_flow.rs`, `sec_account_editors.rs`, `editors.rs` unit tests, `lib/tool/editors.test.ts`, `lib/tool/editor-dialog.ui.test.ts`.
