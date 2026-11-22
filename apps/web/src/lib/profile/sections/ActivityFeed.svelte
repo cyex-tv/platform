@@ -3,8 +3,9 @@
   // removed, renamed, paint or badge changed, an editor added or removed, …), a sentence with the
   // emote's picture and the names, who did it, and the date and time. Public. Pages back 30 at a
   // time. A filter bar narrows it: what (Everything, Emotes, Sets, Cosmetics, Editors), by whom
-  // (anyone, the owner, or one of the account's editors) and when (the cyex logs timeframe and
-  // date picker). The filters live in the address (?k=, ?by=, ?d= or ?m=), so a view can be shared.
+  // (UserFilter: focused empty, the people with the most lines here, the owner first; typing, the
+  // people search) and when (the cyex logs timeframe and date picker). The filters live in the
+  // address (?k=, ?by=, ?d= or ?m=), so a view can be shared.
   import RetryNote from '$lib/components/RetryNote.svelte';
   import { quiet } from '$lib/quiet';
   import { onMount, untrack } from 'svelte';
@@ -15,10 +16,13 @@
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
   import { loadCatalog, type Catalog } from '$lib/cosmetics/store.svelte';
-  import { clean } from '$lib/format';
+  import { fetchWith, gql } from '$lib/api';
+  import UserFilter from '$lib/components/UserFilter.svelte';
+  import type { Person } from '$lib/components/user-filter';
+  import { ACTIVITY_TOP_ACTORS } from '$lib/queries';
   import PageHead from '$lib/tool/PageHead.svelte';
   import { appendUnique } from '$lib/tool/paging';
-  import { loadActivity, type ActivityItem, type ActivityQuery } from '../activity';
+  import { filterOf, loadActivity, type ActivityItem, type ActivityQuery } from '../activity';
   import ActivityRows from '../ActivityRows.svelte';
   import { profileOf } from '../data.svelte';
   import TimeframePicker from '../TimeframePicker.svelte';
@@ -55,7 +59,19 @@
     loadEditors();
     void quiet(loadCatalog().then((c) => (catalog = c)), 'cosmetics catalog');
   });
-  const people = $derived([{ id: accountId, displayName: name }, ...editors.filter((e) => e.id !== accountId)]);
+  // The "By" filter: the owner first, then whoever has the most lines under the other filters;
+  // the editors when nobody has any.
+  const asPerson = (a: { id: string; displayName: string; avatar?: string | null }): Person => ({ account: a, identities: [] });
+  const owner = $derived<Person[]>(name ? [asPerson({ id: accountId, displayName: name })] : []);
+  const editorPeople = $derived(editors.filter((e) => e.id !== accountId).map(asPerson));
+  const editorIds = $derived(new Set(editors.map((e) => e.id)));
+  const topKey = $derived(`${accountId}|${group}|${query.since ?? ''}|${query.until ?? ''}`);
+  async function topActors(signal: AbortSignal): Promise<Person[]> {
+    const { groups, since, until } = filterOf({ ...query, actor: null });
+    const r = await gql(ACTIVITY_TOP_ACTORS, { accountId, filter: { groups, since, until }, limit: 5 }, fetchWith(signal));
+    return r.activityTopActors;
+  }
+  const flagOf = (p: Person) => (p.account.id === accountId ? 'Owner' : editorIds.has(p.account.id) ? 'Editor' : null);
 
   function set(next: Record<string, string | null>) {
     const url = new URL(page.url);
@@ -139,14 +155,8 @@
 
 <div class="bar" role="group" aria-label="Filter activity">
   <div class="groups" class:fade-start={fadeStart} class:fade-end={fadeEnd} bind:this={strip}><Segmented label="Show" size="s" options={GROUPS} value={group} onchange={(v) => set({ k: v === 'all' ? null : v })} /></div>
-  <div class="by">
-    <label class="lbl" for="activity-by">By</label>
-    <select id="activity-by" class="ui-input small" value={actor} onchange={(e) => set({ by: e.currentTarget.value || null })}>
-      <option value="">Anyone</option>
-      {#each people as p (p.id)}<option value={p.id}>{clean(p.displayName)}{p.id === accountId ? '' : ' (editor)'}</option>{/each}
-      {#if actor && !people.some((p) => p.id === actor)}<option value={actor}>Someone else</option>{/if}
-    </select>
-  </div>
+  <UserFilter id="activity-by" label="By" value={actor} onchange={(id) => set({ by: id || null })} top={topActors} {topKey}
+    pinned={owner} fallback={editorPeople} flag={flagOf} name={actor === accountId ? name : null} />
   <TimeframePicker value={frame} onchange={setFrame} />
 </div>
 {#if editorsFailed}
@@ -173,9 +183,6 @@
 
 <style>
   .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 0 0 16px; }
-  .by { display: flex; align-items: center; gap: 8px; }
-  .lbl { font-size: var(--t-fine); color: var(--muted); }
-  .by select { min-height: 34px; height: 34px; padding-block: 0; font-size: var(--t-fine); width: auto; max-width: 220px; }
   .foot { padding: 20px 0 0; }
   @media (max-width: 640px) {
     .bar { gap: 10px; }

@@ -286,6 +286,7 @@ pub async fn review_queue(
         &reads::QueueQuery {
             tab: query.tab,
             search: query.search.as_deref(),
+            uploader: query.uploader,
             sort: query.sort,
             descending: query.descending,
         },
@@ -309,16 +310,24 @@ pub async fn review_queue(
 
 /// A review queue read with the defaults filled in.
 #[derive(Debug, PartialEq, Eq)]
-struct QueueRead {
-    tab: reads::QueueTab,
-    search: Option<String>,
+pub(crate) struct QueueRead {
+    pub(crate) tab: reads::QueueTab,
+    pub(crate) search: Option<String>,
+    uploader: Option<Uuid>,
     sort: reads::QueueSort,
     descending: bool,
 }
 
 impl QueueRead {
-    fn from_filter(f: ReviewQueueFilter) -> ApiResult<Self> {
+    pub(crate) fn from_filter(f: ReviewQueueFilter) -> ApiResult<Self> {
         let tab = f.tab.unwrap_or_default();
+        let uploader = f
+            .uploader_id
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(parse_id)
+            .transpose()?;
         let search = f
             .search
             .map(|s| s.trim().to_owned())
@@ -343,6 +352,7 @@ impl QueueRead {
                 ReviewTab::Resolved => reads::QueueTab::Resolved,
             },
             search,
+            uploader,
             sort: match sort {
                 ReviewSort::Uploaded => reads::QueueSort::Uploaded,
                 ReviewSort::Reviewed => reads::QueueSort::Reviewed,
@@ -1082,6 +1092,7 @@ mod tests {
             sort: Some(ReviewSort::Name),
             descending: Some(false),
             search: Some("   ".into()),
+            ..ReviewQueueFilter::default()
         })
         .unwrap();
         assert_eq!(named.sort, reads::QueueSort::Name);

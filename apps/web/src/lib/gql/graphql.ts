@@ -400,6 +400,13 @@ export type AuditEntry = {
   targetKind: Scalars['String']['output'];
 };
 
+/** Which side of the audit log `auditTopPeople` counts. */
+export type AuditPersonRole =
+  /** Who made the changes. */
+  | 'ACTOR'
+  /** The accounts the changes were about (target kind `account`). */
+  | 'TARGET';
+
 /** A chat badge, shown before a chatter's name. */
 export type Badge = {
   __typename?: 'Badge';
@@ -2190,6 +2197,20 @@ export type PermissionEffect =
   | 'ALLOW'
   | 'DENY';
 
+/**
+ * One person in a "most important" list (`activityTopActors`, `auditTopPeople`,
+ * `orderTopBuyers`, `reviewTopUploaders`, `entitlementTopHolders`): their public summary and
+ * logins, and how many entries they have in that list.
+ */
+export type PersonCount = {
+  __typename?: 'PersonCount';
+  account: AccountSummary;
+  /** Their entries in the list (the newest 2000 rows of a log or feed are counted). */
+  count: Scalars['Int']['output'];
+  /** Twitch first. */
+  identities: Array<PublicIdentity>;
+};
+
 export type PersonalSetEntry = {
   __typename?: 'PersonalSetEntry';
   platformUserId: Scalars['String']['output'];
@@ -2324,6 +2345,14 @@ export type Query = {
    */
   activeAnnouncement?: Maybe<Announcement>;
   /**
+   * Who an account's (`accountId`) or an emote's (`emoteId`; exactly one, `bad_scope`
+   * otherwise) public activity shows most often as by, most lines first (the newest 2000
+   * lines are counted): the people a "By" filter offers before anything is typed. For an
+   * account, `filter`'s groups and time range apply (its `actorId` doesn't). Empty when the
+   * feed is. `limit` 1 to 10, default 5. A heavy read, as the feed.
+   */
+  activityTopActors: Array<PersonCount>;
+  /**
    * An account as staff see it: identities, created time and restrictions. Needs
    * `users.view` or `users.restrict`.
    */
@@ -2339,6 +2368,12 @@ export type Query = {
    * `before` (an entry ID); `limit` is 1 to 100, default 50.
    */
   auditLog: Array<AuditEntry>;
+  /**
+   * The audit log's busiest people for the filters `auditLog` takes: its actors (`by: ACTOR`,
+   * the default) or the accounts its entries are about (`by: TARGET`), most entries first
+   * among the newest 2000. Needs `audit.view`. `limit` 1 to 10, default 5.
+   */
+  auditTopPeople: Array<PersonCount>;
   /** A channel by its platform ID. */
   channel?: Maybe<Channel>;
   /** A channel by its login or slug. Logins change; store the ID, not the login. */
@@ -2394,6 +2429,7 @@ export type Query = {
   /**
    * `emoteActivity` with a cursor: `next` is the `before` for the following page, null when
    * there is none. A page can hold fewer than `limit` entries and still have a `next`.
+   * `actorId` keeps only the lines shown as by that account (an upload is its owner's).
    */
   emoteActivityPage: ActivityPage;
   /**
@@ -2444,6 +2480,11 @@ export type Query = {
    * `entitlements.view` or `cosmetics.grant`.
    */
   entitlementHolders: Array<EntitlementGrant>;
+  /**
+   * The accounts holding the most badges, paints and roles. Needs `entitlements.view` or
+   * `cosmetics.grant`. `limit` 1 to 10, default 5.
+   */
+  entitlementTopHolders: Array<PersonCount>;
   /** The IDs of all your favourite emotes (up to 1000), the latest first: for marking them. */
   favouriteEmoteIds: Array<Scalars['String']['output']>;
   /** The cyex.tv global set, shown in every channel. */
@@ -2519,6 +2560,11 @@ export type Query = {
    */
   order?: Maybe<Order>;
   /**
+   * The buyers with the most orders in a state and of an item. Needs `shop.orders`.
+   * `limit` 1 to 10, default 5.
+   */
+  orderTopBuyers: Array<PersonCount>;
+  /**
    * Every order, newest first; narrow by status, account (bought or received) and item.
    * Needs `shop.orders`, or `billing.view` narrowed to one account.
    */
@@ -2557,6 +2603,12 @@ export type Query = {
    * `review.settings`.
    */
   reviewReasons: Array<Scalars['String']['output']>;
+  /**
+   * The uploaders with the most emotes in one tab of the review queue (`filter`'s tab and
+   * search; its uploader and order don't matter). Needs `emotes.review`. `limit` 1 to 10,
+   * default 5.
+   */
+  reviewTopUploaders: Array<PersonCount>;
   /**
    * A role's limits: each per-account limit with its default and the role's override. An
    * account counts under the most generous override among its roles. Needs `roles.manage`.
@@ -2722,6 +2774,14 @@ export type QueryAccountsByLoginArgs = {
 };
 
 
+export type QueryActivityTopActorsArgs = {
+  accountId?: InputMaybe<Scalars['String']['input']>;
+  emoteId?: InputMaybe<Scalars['String']['input']>;
+  filter?: InputMaybe<ActivityFilter>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
 export type QueryAdminAccountArgs = {
   accountId: Scalars['String']['input'];
 };
@@ -2731,6 +2791,18 @@ export type QueryAuditLogArgs = {
   action?: InputMaybe<Scalars['String']['input']>;
   actorId?: InputMaybe<Scalars['String']['input']>;
   before?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  since?: InputMaybe<Scalars['String']['input']>;
+  targetId?: InputMaybe<Scalars['String']['input']>;
+  targetKind?: InputMaybe<Scalars['String']['input']>;
+  until?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QueryAuditTopPeopleArgs = {
+  action?: InputMaybe<Scalars['String']['input']>;
+  actorId?: InputMaybe<Scalars['String']['input']>;
+  by?: InputMaybe<AuditPersonRole>;
   limit?: InputMaybe<Scalars['Int']['input']>;
   since?: InputMaybe<Scalars['String']['input']>;
   targetId?: InputMaybe<Scalars['String']['input']>;
@@ -2791,6 +2863,7 @@ export type QueryEmoteActivityArgs = {
 
 
 export type QueryEmoteActivityPageArgs = {
+  actorId?: InputMaybe<Scalars['String']['input']>;
   before?: InputMaybe<Scalars['String']['input']>;
   emoteId: Scalars['String']['input'];
   limit?: InputMaybe<Scalars['Int']['input']>;
@@ -2846,6 +2919,11 @@ export type QueryEntitlementHoldersArgs = {
 };
 
 
+export type QueryEntitlementTopHoldersArgs = {
+  limit?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
 export type QueryMyCosmeticsArgs = {
   accountId?: InputMaybe<Scalars['String']['input']>;
 };
@@ -2877,6 +2955,13 @@ export type QueryMyOrdersArgs = {
 
 export type QueryOrderArgs = {
   id: Scalars['String']['input'];
+};
+
+
+export type QueryOrderTopBuyersArgs = {
+  itemId?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<OrderStatus>;
 };
 
 
@@ -2916,6 +3001,12 @@ export type QueryReviewQueueArgs = {
   filter?: InputMaybe<ReviewQueueFilter>;
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
+};
+
+
+export type QueryReviewTopUploadersArgs = {
+  filter?: InputMaybe<ReviewQueueFilter>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
 };
 
 
@@ -3106,6 +3197,8 @@ export type ReviewQueueFilter = {
   search?: InputMaybe<Scalars['String']['input']>;
   sort?: InputMaybe<ReviewSort>;
   tab?: InputMaybe<ReviewTab>;
+  /** Only this uploader's emotes (an account ID). */
+  uploaderId?: InputMaybe<Scalars['String']['input']>;
 };
 
 /** How the review queue is ordered. Ties go by upload time. */
@@ -4322,6 +4415,7 @@ export type EmoteActivityQueryVariables = Exact<{
   emoteId: Scalars['String']['input'];
   before?: InputMaybe<Scalars['String']['input']>;
   limit?: InputMaybe<Scalars['Int']['input']>;
+  actorId?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
@@ -4688,6 +4782,56 @@ export type UnfavouriteEmoteMutationVariables = Exact<{
 
 
 export type UnfavouriteEmoteMutation = { __typename?: 'Mutation', unfavouriteEmote: boolean };
+
+export type PersonCountFieldsFragment = { __typename?: 'PersonCount', count: number, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }> };
+
+export type ActivityTopActorsQueryVariables = Exact<{
+  accountId?: InputMaybe<Scalars['String']['input']>;
+  emoteId?: InputMaybe<Scalars['String']['input']>;
+  filter?: InputMaybe<ActivityFilter>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type ActivityTopActorsQuery = { __typename?: 'Query', activityTopActors: Array<{ __typename?: 'PersonCount', count: number, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }> }> };
+
+export type AuditTopPeopleQueryVariables = Exact<{
+  by?: InputMaybe<AuditPersonRole>;
+  targetKind?: InputMaybe<Scalars['String']['input']>;
+  targetId?: InputMaybe<Scalars['String']['input']>;
+  actorId?: InputMaybe<Scalars['String']['input']>;
+  action?: InputMaybe<Scalars['String']['input']>;
+  since?: InputMaybe<Scalars['String']['input']>;
+  until?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type AuditTopPeopleQuery = { __typename?: 'Query', auditTopPeople: Array<{ __typename?: 'PersonCount', count: number, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }> }> };
+
+export type OrderTopBuyersQueryVariables = Exact<{
+  status?: InputMaybe<OrderStatus>;
+  itemId?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type OrderTopBuyersQuery = { __typename?: 'Query', orderTopBuyers: Array<{ __typename?: 'PersonCount', count: number, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }> }> };
+
+export type ReviewTopUploadersQueryVariables = Exact<{
+  filter?: InputMaybe<ReviewQueueFilter>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type ReviewTopUploadersQuery = { __typename?: 'Query', reviewTopUploaders: Array<{ __typename?: 'PersonCount', count: number, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }> }> };
+
+export type EntitlementTopHoldersQueryVariables = Exact<{
+  limit?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type EntitlementTopHoldersQuery = { __typename?: 'Query', entitlementTopHolders: Array<{ __typename?: 'PersonCount', count: number, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }> }> };
 
 export class TypedDocumentString<TResult, TVariables>
   extends String
@@ -5183,6 +5327,21 @@ export const AnnouncementFieldsFragmentDoc = new TypedDocumentString(`
   }
 }
     `, {"fragmentName":"AnnouncementFields"}) as unknown as TypedDocumentString<AnnouncementFieldsFragment, unknown>;
+export const PersonCountFieldsFragmentDoc = new TypedDocumentString(`
+    fragment PersonCountFields on PersonCount {
+  account {
+    id
+    displayName
+    avatar
+  }
+  identities {
+    platform
+    login
+    displayName
+  }
+  count
+}
+    `, {"fragmentName":"PersonCountFields"}) as unknown as TypedDocumentString<PersonCountFieldsFragment, unknown>;
 export const StudioPaintsDocument = new TypedDocumentString(`
     query StudioPaints {
   cosmetics {
@@ -7544,8 +7703,13 @@ export const AccountActivityDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<AccountActivityQuery, AccountActivityQueryVariables>;
 export const EmoteActivityDocument = new TypedDocumentString(`
-    query EmoteActivity($emoteId: String!, $before: String, $limit: Int) {
-  emoteActivityPage(emoteId: $emoteId, before: $before, limit: $limit) {
+    query EmoteActivity($emoteId: String!, $before: String, $limit: Int, $actorId: String) {
+  emoteActivityPage(
+    emoteId: $emoteId
+    before: $before
+    limit: $limit
+    actorId: $actorId
+  ) {
     entries {
       id
       kind
@@ -8858,3 +9022,112 @@ export const UnfavouriteEmoteDocument = new TypedDocumentString(`
   unfavouriteEmote(id: $id)
 }
     `) as unknown as TypedDocumentString<UnfavouriteEmoteMutation, UnfavouriteEmoteMutationVariables>;
+export const ActivityTopActorsDocument = new TypedDocumentString(`
+    query ActivityTopActors($accountId: String, $emoteId: String, $filter: ActivityFilter, $limit: Int) {
+  activityTopActors(
+    accountId: $accountId
+    emoteId: $emoteId
+    filter: $filter
+    limit: $limit
+  ) {
+    ...PersonCountFields
+  }
+}
+    fragment PersonCountFields on PersonCount {
+  account {
+    id
+    displayName
+    avatar
+  }
+  identities {
+    platform
+    login
+    displayName
+  }
+  count
+}`) as unknown as TypedDocumentString<ActivityTopActorsQuery, ActivityTopActorsQueryVariables>;
+export const AuditTopPeopleDocument = new TypedDocumentString(`
+    query AuditTopPeople($by: AuditPersonRole, $targetKind: String, $targetId: String, $actorId: String, $action: String, $since: String, $until: String, $limit: Int) {
+  auditTopPeople(
+    by: $by
+    targetKind: $targetKind
+    targetId: $targetId
+    actorId: $actorId
+    action: $action
+    since: $since
+    until: $until
+    limit: $limit
+  ) {
+    ...PersonCountFields
+  }
+}
+    fragment PersonCountFields on PersonCount {
+  account {
+    id
+    displayName
+    avatar
+  }
+  identities {
+    platform
+    login
+    displayName
+  }
+  count
+}`) as unknown as TypedDocumentString<AuditTopPeopleQuery, AuditTopPeopleQueryVariables>;
+export const OrderTopBuyersDocument = new TypedDocumentString(`
+    query OrderTopBuyers($status: OrderStatus, $itemId: String, $limit: Int) {
+  orderTopBuyers(status: $status, itemId: $itemId, limit: $limit) {
+    ...PersonCountFields
+  }
+}
+    fragment PersonCountFields on PersonCount {
+  account {
+    id
+    displayName
+    avatar
+  }
+  identities {
+    platform
+    login
+    displayName
+  }
+  count
+}`) as unknown as TypedDocumentString<OrderTopBuyersQuery, OrderTopBuyersQueryVariables>;
+export const ReviewTopUploadersDocument = new TypedDocumentString(`
+    query ReviewTopUploaders($filter: ReviewQueueFilter, $limit: Int) {
+  reviewTopUploaders(filter: $filter, limit: $limit) {
+    ...PersonCountFields
+  }
+}
+    fragment PersonCountFields on PersonCount {
+  account {
+    id
+    displayName
+    avatar
+  }
+  identities {
+    platform
+    login
+    displayName
+  }
+  count
+}`) as unknown as TypedDocumentString<ReviewTopUploadersQuery, ReviewTopUploadersQueryVariables>;
+export const EntitlementTopHoldersDocument = new TypedDocumentString(`
+    query EntitlementTopHolders($limit: Int) {
+  entitlementTopHolders(limit: $limit) {
+    ...PersonCountFields
+  }
+}
+    fragment PersonCountFields on PersonCount {
+  account {
+    id
+    displayName
+    avatar
+  }
+  identities {
+    platform
+    login
+    displayName
+  }
+  count
+}`) as unknown as TypedDocumentString<EntitlementTopHoldersQuery, EntitlementTopHoldersQueryVariables>;

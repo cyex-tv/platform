@@ -969,6 +969,31 @@ pub async fn orders(
     Ok((rows, total))
 }
 
+/// The buyers with the most orders that pass `status` and `item` (as [`orders`] reads them),
+/// most first, then the newest order. Gifts count for the buyer.
+pub async fn top_buyers(
+    conn: &mut PgConnection,
+    status: Option<&str>,
+    item: Option<Uuid>,
+    limit: i64,
+) -> DbResult<Vec<crate::audit::PersonCount>> {
+    Ok(sqlx::query_as(
+        "SELECT o.account_id, count(*) AS count FROM shop_orders o
+         JOIN accounts x ON x.id = o.account_id AND x.deleted_at IS NULL
+         WHERE ($1::text IS NULL OR o.status = $1
+                OR ($1 = 'paid' AND o.status = 'refund_requested'))
+           AND ($2::uuid IS NULL OR o.item_id = $2)
+         GROUP BY o.account_id
+         ORDER BY count(*) DESC, max(o.id) DESC
+         LIMIT $3",
+    )
+    .bind(status)
+    .bind(item)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
+}
+
 // Paddle events
 
 /// Records a webhook event as handled. False when it was handled before.

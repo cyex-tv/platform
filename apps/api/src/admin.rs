@@ -518,6 +518,65 @@ fn instant(raw: Option<&str>, what: &str) -> ApiResult<Instant> {
         .transpose()
 }
 
+/// An `AuditQuery` read and checked: IDs parsed, times parsed, empty text dropped.
+pub(crate) struct AuditParts<'a> {
+    actor: Option<Uuid>,
+    target_kind: Option<&'a str>,
+    target_id: Option<String>,
+    action: Option<&'a str>,
+    since: Instant,
+    until: Instant,
+}
+
+impl AuditParts<'_> {
+    pub(crate) fn filter(&self) -> audit::Filter<'_> {
+        audit::Filter {
+            actor: self.actor,
+            target_kind: self.target_kind,
+            target_id: self.target_id.as_deref(),
+            action: self.action,
+            since: self.since,
+            until: self.until,
+            before_id: None,
+        }
+    }
+}
+
+/// The ID text an audit row names a target by: accounts, emotes and sets by their ULID (a
+/// Snowflake given for one is read back to it), anything else as given.
+fn target_key(kind: Option<&str>, raw: &str) -> String {
+    let raw = raw.trim();
+    match kind {
+        Some("account" | "emote" | "set") | None => ids::from_text(raw)
+            .map(ids::to_text)
+            .unwrap_or_else(|| raw.to_owned()),
+        _ => raw.to_owned(),
+    }
+}
+
+pub(crate) fn audit_filter_parts<'a>(q: &AuditQuery<'a>) -> ApiResult<AuditParts<'a>> {
+    let actor = q
+        .actor_id
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(parse_id)
+        .transpose()?;
+    let target_kind = q.target_kind.map(str::trim).filter(|s| !s.is_empty());
+    let target_id = q
+        .target_id
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|t| target_key(target_kind, t));
+    Ok(AuditParts {
+        actor,
+        target_kind,
+        target_id,
+        action: q.action.map(str::trim).filter(|s| !s.is_empty()),
+        since: instant(q.since, "since")?,
+        until: instant(q.until, "until")?,
+    })
+}
+
 /// The audit log, newest first. Needs `audit.view`. `before` is an entry ID to page back from.
 pub async fn audit_log(
     state: &AppState,
@@ -526,16 +585,7 @@ pub async fn audit_log(
     before: Option<&str>,
     limit: Option<u32>,
 ) -> ApiResult<Vec<AuditEntry>> {
-    let actor_id = q
-        .actor_id
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(parse_id)
-        .transpose()?;
-    let since = instant(q.since, "since")?;
-    let until = instant(q.until, "until")?;
-    let (target_kind, target_id) = (q.target_kind, q.target_id);
-    let action = q.action.map(str::trim).filter(|s| !s.is_empty());
+    let parts = audit_filter_parts(q)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     require(&mut conn, caller, permissions::AUDIT_VIEW).await?;
     let before_id = before.map(parse_id).transpose()?;
@@ -543,13 +593,8 @@ pub async fn audit_log(
     let entries = audit::list(
         &mut conn,
         &audit::Filter {
-            actor: actor_id,
-            target_kind,
-            target_id,
-            action,
-            since,
-            until,
             before_id,
+            ..parts.filter()
         },
         limit,
     )

@@ -318,3 +318,25 @@ pub async fn grant_events(
     .fetch_all(conn)
     .await?)
 }
+
+/// The accounts holding the most badges, paints and roles (the User role every account holds
+/// isn't stored, so it doesn't count), most first, then the latest grant.
+pub async fn top_holders(
+    conn: &mut PgConnection,
+    limit: i64,
+) -> DbResult<Vec<crate::audit::PersonCount>> {
+    Ok(sqlx::query_as(
+        "SELECT h.account_id, count(*) AS count FROM (
+             SELECT account_id, granted_at FROM badge_entitlements
+             UNION ALL SELECT account_id, granted_at FROM paint_entitlements
+             UNION ALL SELECT account_id, granted_at FROM account_roles
+         ) h
+         JOIN accounts x ON x.id = h.account_id AND x.deleted_at IS NULL
+         GROUP BY h.account_id
+         ORDER BY count(*) DESC, max(h.granted_at) DESC, h.account_id
+         LIMIT $1",
+    )
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
+}

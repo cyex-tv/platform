@@ -5,8 +5,9 @@
   // field here opens it. Rows come from entitlementHolders, as the graph's do.
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { gql } from '$lib/api';
-  import { looksLikeId } from '$lib/admin/audit';
+  import { fetchWith, gql } from '$lib/api';
+  import UserFilter from '$lib/components/UserFilter.svelte';
+  import { pastedAccount, topHolders } from '$lib/admin/people';
   import HoldersTable from '$lib/admin/HoldersTable.svelte';
   import type { Grant } from '$lib/admin/graph';
   import Icon from '$lib/components/Icon.svelte';
@@ -16,8 +17,8 @@
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { loadCatalog } from '$lib/cosmetics/store.svelte';
   import { clean, count, iso } from '$lib/format';
-  import type { GrantKind, Platform } from '$lib/gql/graphql';
-  import { ALL_ROLES, ENTITLEMENT_HOLDERS, REVOKE_COSMETIC, USER } from '$lib/queries';
+  import type { GrantKind } from '$lib/gql/graphql';
+  import { ALL_ROLES, ENTITLEMENT_HOLDERS, REVOKE_COSMETIC } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import Bar from '$lib/admin/ui/Bar.svelte';
   import Split from '$lib/admin/ui/Split.svelte';
@@ -71,29 +72,9 @@
     return r.entitlementHolders as Grant[];
   });
 
-  // The other way round: an account (its ID or a login) to everything it owns.
-  let who = $state('');
-  let finding = $state(false);
-  let notFound = $state(false);
-  async function openAccount(e: SubmitEvent) {
-    e.preventDefault();
-    const t = who.trim().replace(/^@/, '').split('/').filter(Boolean).pop() ?? '';
-    if (!t) return;
-    notFound = false;
-    if (looksLikeId(t)) return goto(`/admin/entitlements?account=${t.toUpperCase()}`);
-    finding = true;
-    try {
-      for (const p of ['TWITCH', 'KICK'] as Platform[]) {
-        const r = await gql(USER, { platform: p, login: t.toLowerCase() });
-        if (r.channelByLogin) return goto(`/admin/entitlements?account=${r.channelByLogin.account.id}`);
-      }
-      notFound = true;
-    } catch (err) {
-      fail(err);
-    } finally {
-      finding = false;
-    }
-  }
+  // The other way round: an account to everything it owns (UserFilter: focused empty, the 5
+  // accounts holding the most; typing, the people search; an ID or admin link pasted works).
+  const openAccount = (id: string) => id && goto(`/admin/entitlements?account=${encodeURIComponent(id)}`);
 
   let target = $state<Grant | null>(null);
   let dialog = $state<ReasonDialog>();
@@ -144,14 +125,10 @@
             {#each list as x (x.id)}<option value={x.id}>{clean(x.name)}</option>{/each}
           </select>
         </label>{/if}
-        <form class="who" role="search" onsubmit={openAccount}>
-          <label class="adm-find">
-            <Icon name="user" size={15} />
-            <span class="sr-only">An account: everything it owns</span>
-            <input class="ui-input" bind:value={who} oninput={() => (notFound = false)} placeholder="Login or ID" autocomplete="off" spellcheck="false" />
-          </label>
-          <button class="ui-btn secondary small" type="submit" disabled={!who.trim() || finding}>{finding ? 'Looking…' : 'Open its graph'}</button>
-        </form>
+        <div class="who">
+          <UserFilter label="An account: everything it owns" hideLabel placeholder="Account: everything it owns" width="240px" value=""
+            onchange={openAccount} top={(signal) => topHolders(signal, fetchWith)} topLabel="Hold the most" ids={pastedAccount} />
+        </div>
       {/if}
     {/snippet}
   </Bar>
@@ -159,7 +136,6 @@
   {#if !allowed}
     <State level={2} title="No access here.">This needs See where things came from (entitlements.view) or Give cosmetics.</State>
   {:else}
-    {#if notFound}<p class="ui-hint miss" role="status">Nobody has signed in with that login.</p>{/if}
 
     {#if !itemId}
       {#if C.data && !list.length}
@@ -233,7 +209,6 @@
   .which select { width: 100%; }
   .who { display: flex; gap: 8px; margin-left: auto; flex: 1 1 220px; min-width: 0; }
   :global(.adm-shell .adm-toolbar) .who .adm-find { flex: 1; max-width: none; }
-  .miss { margin: 0 0 12px; }
   .tile { height: 100px; justify-items: center; text-align: center; }
   .tile .pic { height: 44px; max-width: 100%; overflow: hidden; font-size: 18px; font-weight: 700; }
   .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }

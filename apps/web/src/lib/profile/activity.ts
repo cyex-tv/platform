@@ -135,9 +135,15 @@ export function loadActivity(
   return fill((b) => gql(ACCOUNT_ACTIVITY, { accountId, before: b, limit: PAGE, filter }, fetcher).then((r) => r.accountActivityPage), before);
 }
 
-/** A page of the lines about one emote (the emote page's Activity tab); empty unless it is public. */
-export function loadEmoteActivity(emoteId: string, before: string | null = null, fetcher: typeof fetch = fetch): Promise<ActivityPage> {
-  return fill((b) => gql(EMOTE_ACTIVITY, { emoteId, before: b, limit: PAGE }, fetcher).then((r) => r.emoteActivityPage), before);
+/** A page of the lines about one emote (the emote page's Activity tab); empty unless it is public.
+ * With `actor`, only the lines by that account (an upload is its owner's). */
+export function loadEmoteActivity(
+  emoteId: string,
+  before: string | null = null,
+  fetcher: typeof fetch = fetch,
+  actor: string | null = null,
+): Promise<ActivityPage> {
+  return fill((b) => gql(EMOTE_ACTIVITY, { emoteId, before: b, limit: PAGE, actorId: actor || null }, fetcher).then((r) => r.emoteActivityPage), before);
 }
 
 const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [

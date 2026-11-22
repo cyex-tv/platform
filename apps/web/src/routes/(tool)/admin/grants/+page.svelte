@@ -6,7 +6,10 @@
   // and every row ends with what happened to it. Cosmetics need cosmetics.grant and a reason;
   // roles need roles.assign or roles.manage, and only roles you may give are offered. The form is
   // flat rows on the left; the inspector on the right sums up who will get it and how it went.
-  import { gql } from '$lib/api';
+  import { fetchWith, gql } from '$lib/api';
+  import UserFilter from '$lib/components/UserFilter.svelte';
+  import type { Person } from '$lib/components/user-filter';
+  import { topHolders } from '$lib/admin/people';
   import AccountLink from '$lib/admin/AccountLink.svelte';
   import { BATCH_MAX, loginProblem } from '$lib/admin/bulk';
   import { countLogins } from '$lib/admin/grant-logins';
@@ -111,6 +114,15 @@
     notify(`${clean(itemName)} given to ${count(ok)} ${ok === 1 ? 'account' : 'accounts'}${left ? `; ${count(left)} didn’t take it` : ''}.`, left > 0 && ok === 0);
   }
 
+  // Add someone by name: the picked person's first login joins the list (`platform:login`).
+  function addPerson(person: Person | null) {
+    const id = person?.identities[0];
+    if (!id) return;
+    const line = `${id.platform.toLowerCase()}:${id.login}`;
+    if (text.split(/[\n,]/).some((l) => l.trim().toLowerCase() === line.toLowerCase())) return;
+    text = text.trim() ? `${text.replace(/\s+$/, '')}\n${line}` : line;
+  }
+
   function reset() {
     rows = null;
     text = '';
@@ -168,6 +180,11 @@
               placeholder={'nora\nkick:lumen_fox\ntwitch:cat_jammer'} aria-describedby="logins-count"></textarea>
           </span>
         </label>
+        <div class="adm-lv">
+          <span class="l">Add someone<small>By name or login; their login joins the list.</small></span>
+          <span class="v"><UserFilter label="Add someone" hideLabel placeholder="Name or login" width="260px" value="" onchange={(_, p) => addPerson(p)}
+            top={mayCosmetics ? (signal) => topHolders(signal, fetchWith) : undefined} topLabel="Hold the most" /></span>
+        </div>
         {#if parsed.odd.length}<p class="ui-hint odd"><bdi>{parsed.odd.slice(0, 3).join(', ')}{parsed.odd.length > 3 ? ', …' : ''}</bdi></p>{/if}
         <div class="adm-lv">
           <span class="l"></span>

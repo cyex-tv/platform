@@ -552,6 +552,20 @@ type AuditEntry {
 }
 
 """
+Which side of the audit log `auditTopPeople` counts.
+"""
+enum AuditPersonRole {
+	"""
+	Who made the changes.
+	"""
+	ACTOR
+	"""
+	The accounts the changes were about (target kind `account`).
+	"""
+	TARGET
+}
+
+"""
 A chat badge, shown before a chatter's name.
 """
 type Badge {
@@ -2370,6 +2384,23 @@ enum PermissionEffect {
 	DENY
 }
 
+"""
+One person in a "most important" list (`activityTopActors`, `auditTopPeople`,
+`orderTopBuyers`, `reviewTopUploaders`, `entitlementTopHolders`): their public summary and
+logins, and how many entries they have in that list.
+"""
+type PersonCount {
+	account: AccountSummary!
+	"""
+	Twitch first.
+	"""
+	identities: [PublicIdentity!]!
+	"""
+	Their entries in the list (the newest 2000 rows of a log or feed are counted).
+	"""
+	count: Int!
+}
+
 type PersonalSetEntry {
 	platformUserId: String!
 	set: EmoteSet!
@@ -2532,8 +2563,17 @@ type Query {
 	"""
 	`emoteActivity` with a cursor: `next` is the `before` for the following page, null when
 	there is none. A page can hold fewer than `limit` entries and still have a `next`.
+	`actorId` keeps only the lines shown as by that account (an upload is its owner's).
 	"""
-	emoteActivityPage(emoteId: String!, before: String, limit: Int): ActivityPage!
+	emoteActivityPage(emoteId: String!, before: String, limit: Int, actorId: String): ActivityPage!
+	"""
+	Who an account's (`accountId`) or an emote's (`emoteId`; exactly one, `bad_scope`
+	otherwise) public activity shows most often as by, most lines first (the newest 2000
+	lines are counted): the people a "By" filter offers before anything is typed. For an
+	account, `filter`'s groups and time range apply (its `actorId` doesn't). Empty when the
+	feed is. `limit` 1 to 10, default 5. A heavy read, as the feed.
+	"""
+	activityTopActors(accountId: String, emoteId: String, filter: ActivityFilter, limit: Int): [PersonCount!]!
 	"""
 	Channels whose active set holds the emote, most recently added first. `limit` is 1 to 50,
 	default 8; `offset` skips that many (0 to 10000, default 0) for paging. Empty when the
@@ -2758,6 +2798,28 @@ type Query {
 	`before` (an entry ID); `limit` is 1 to 100, default 50.
 	"""
 	auditLog(targetKind: String, targetId: String, actorId: String, action: String, since: String, until: String, before: String, limit: Int): [AuditEntry!]!
+	"""
+	The audit log's busiest people for the filters `auditLog` takes: its actors (`by: ACTOR`,
+	the default) or the accounts its entries are about (`by: TARGET`), most entries first
+	among the newest 2000. Needs `audit.view`. `limit` 1 to 10, default 5.
+	"""
+	auditTopPeople(by: AuditPersonRole, targetKind: String, targetId: String, actorId: String, action: String, since: String, until: String, limit: Int): [PersonCount!]!
+	"""
+	The buyers with the most orders in a state and of an item. Needs `shop.orders`.
+	`limit` 1 to 10, default 5.
+	"""
+	orderTopBuyers(status: OrderStatus, itemId: String, limit: Int): [PersonCount!]!
+	"""
+	The uploaders with the most emotes in one tab of the review queue (`filter`'s tab and
+	search; its uploader and order don't matter). Needs `emotes.review`. `limit` 1 to 10,
+	default 5.
+	"""
+	reviewTopUploaders(filter: ReviewQueueFilter, limit: Int): [PersonCount!]!
+	"""
+	The accounts holding the most badges, paints and roles. Needs `entitlements.view` or
+	`cosmetics.grant`. `limit` 1 to 10, default 5.
+	"""
+	entitlementTopHolders(limit: Int): [PersonCount!]!
 	"""
 	Open reports, oldest first. Needs `emotes.review` or `emotes.takedown`.
 	"""
@@ -3030,6 +3092,10 @@ input ReviewQueueFilter {
 	Newest (or Z) first. Default: oldest first, except `RESOLVED`, latest review first.
 	"""
 	descending: Boolean
+	"""
+	Only this uploader's emotes (an account ID).
+	"""
+	uploaderId: String
 }
 
 """

@@ -433,7 +433,7 @@ fn default_actions() -> Vec<&'static str> {
 }
 
 /// What a filter asks the SQL for.
-fn sql_filter(filter: Option<&ActivityFilter>) -> ApiResult<audit::ActivityFilter> {
+pub(crate) fn sql_filter(filter: Option<&ActivityFilter>) -> ApiResult<audit::ActivityFilter> {
     let Some(f) = filter else {
         return Ok(audit::ActivityFilter {
             actions: Some(default_actions()),
@@ -520,6 +520,22 @@ pub async fn emote_activity_page(
     before: Option<&str>,
     limit: Option<u32>,
 ) -> ApiResult<ActivityPage> {
+    emote_activity_where(state, emote_id, before, limit, None).await
+}
+
+/// `emote_activity_page`, only the lines shown as by `actor_id` (an approval is the owner's).
+pub async fn emote_activity_where(
+    state: &AppState,
+    emote_id: &str,
+    before: Option<&str>,
+    limit: Option<u32>,
+    actor_id: Option<&str>,
+) -> ApiResult<ActivityPage> {
+    let actor = actor_id
+        .map(str::trim)
+        .filter(|t| !t.is_empty())
+        .map(parse_id)
+        .transpose()?;
     let before_id = before.map(parse_id).transpose()?;
     let limit = limit.unwrap_or(ACTIVITY_PAGE).clamp(1, ACTIVITY_PAGE_MAX) as usize;
     let Some(emote) = ids::from_text(emote_id.trim()) else {
@@ -533,7 +549,7 @@ pub async fn emote_activity_page(
     let key = ids::to_text(emote);
     let mut page = Page::new(limit, before_id);
     while page.wants_more() {
-        let rows = audit::emote_activity_rows(&mut conn, &key, page.cursor, BATCH)
+        let rows = audit::emote_activity_rows(&mut conn, &key, page.cursor, BATCH, actor)
             .await
             .map_err(db_error)?;
         let entries: Vec<audit::Entry> = rows.iter().map(|r| r.entry.clone()).collect();

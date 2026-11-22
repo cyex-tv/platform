@@ -4,12 +4,16 @@
   // (?status= ?item= ?account= ?page= ?order=) live in the address. The picked order opens in the
   // inspector: who paid, who got it, the amounts, Paddle's transaction, the dates and the refund
   // reason staff gave. A paid order can be refunded with a reason: Paddle is asked for a full
-  // refund and the cosmetics are taken back at once. Buyers never see that reason.
+  // refund and the cosmetics are taken back at once. Buyers never see that reason. The account
+  // filter is a people filter (UserFilter): focused empty, the buyers with the most orders in this
+  // state and item; typing, the people search.
   import { goto } from '$app/navigation';
   import { page as route } from '$app/state';
   import { tick } from 'svelte';
-  import { ApiError, gql } from '$lib/api';
-  import { lookUp, who } from '$lib/admin/names.svelte';
+  import { ApiError, fetchWith, gql } from '$lib/api';
+  import UserFilter from '$lib/components/UserFilter.svelte';
+  import type { Person } from '$lib/components/user-filter';
+  import { looksLikeId } from '$lib/admin/audit';
   import { orderFilters, ordersHref, pageRange } from '$lib/admin/shop-orders';
   import Split from '$lib/admin/ui/Split.svelte';
   import { gridKeys } from '$lib/admin/ui/pick';
@@ -18,7 +22,7 @@
   import State from '$lib/components/State.svelte';
   import { clean, clock, count, date, dateTime, iso } from '$lib/format';
   import type { OrderStatus as Status } from '$lib/gql/graphql';
-  import { ADMIN_ORDERS, REFUND_ORDER, SHOP_ITEMS } from '$lib/queries';
+  import { ADMIN_ORDERS, ORDER_TOP_BUYERS, REFUND_ORDER, SHOP_ITEMS } from '$lib/queries';
   import Gate from '$lib/shop/Gate.svelte';
   import { loadShopCounts } from '$lib/shop/counts.svelte';
   import { orderStatusText, price, staffMessage, type OrderStatus } from '$lib/shop/shop';
@@ -45,13 +49,10 @@
     void goto(ordersHref(route.url, patch), { replaceState: true, keepFocus: true, noScroll: true });
   }
 
-  // The account filter's name: from a row the staff member clicked, or looked up (a staff account page links here).
+  // The account filter's name: from a row the staff member clicked (else the filter looks it up).
   let known = $state<Record<string, string>>({});
-  $effect(() => {
-    if (!accountId || known[accountId]) return;
-    lookUp([accountId]);
-  });
-  const accountName = $derived(accountId ? known[accountId] ?? who(accountId)?.name ?? '' : '');
+  const topBuyers = async (signal: AbortSignal): Promise<Person[]> =>
+    (await gql(ORDER_TOP_BUYERS, { status: status || null, itemId: itemId || null, limit: 5 }, fetchWith(signal))).orderTopBuyers;
 
   let target = $state<Row | null>(null);
   let refund: ReasonDialog;
@@ -132,11 +133,9 @@
             {#each items.data ?? [] as i (i.id)}<option value={i.id}>{clean(i.name)}</option>{/each}
           </select>
         </label>
-        {#if accountId}
-          <button class="ui-btn secondary small clear" type="button" onclick={() => go({ account: null })} aria-label="Stop filtering by {accountName ? iso(accountName) : accountId}">
-            <Icon name="user" size={14} /><bdi>{clean(accountName) || accountId.slice(-8)}</bdi><Icon name="x" size={14} />
-          </button>
-        {/if}
+        <UserFilter label="Account" hideLabel placeholder="Any account" value={accountId} onchange={(id) => go({ account: id || null })}
+          top={topBuyers} topKey="{status}|{itemId}" topLabel="Most orders" name={known[accountId] ?? null}
+          ids={(t) => (looksLikeId(t) ? t.toUpperCase() : null)} />
       {/snippet}
     </Bar>
 
@@ -266,8 +265,6 @@
   tr[aria-selected='true'] .pk { font-weight: 700; }
   .tb { display: block; min-width: 0; }
   .tb select { width: auto; min-width: 150px; max-width: 100%; }
-  .clear { max-width: 100%; }
-  .clear bdi { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
   .flag { display: flex; align-items: flex-start; gap: 8px; margin: 0; font-size: var(--t-small); font-weight: 600; }
   .flag :global(svg) { flex: none; margin-top: 2px; color: var(--red); }

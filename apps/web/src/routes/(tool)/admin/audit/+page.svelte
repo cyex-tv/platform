@@ -1,6 +1,8 @@
 <script lang="ts">
   // The audit log: a flush table (when, actor, action, target, details) under one toolbar of
-  // filters (actor, target kind and ID, action, date range) kept in the address. Picking a row
+  // filters (actor, target kind and ID, action, date range) kept in the address. The actor, and the
+  // target when the kind is Account, are people filters (UserFilter): focused empty, the 5 with
+  // the most entries under the other filters; typing, the people search; a pasted ID works. Picking a row
   // opens an inspector with the entry's facts and what changed (or the raw JSON before and after,
   // capped, with Show all). Arrows move over the rows, Escape closes the inspector. Pages of 50
   // with Newer and Older and the range shown; on a phone the rows stack.
@@ -9,10 +11,12 @@
   import { tick } from 'svelte';
   import { gql } from '$lib/api';
   import AccountLink from '$lib/admin/AccountLink.svelte';
-  import ActorField from '$lib/admin/ActorField.svelte';
+  import UserFilter from '$lib/components/UserFilter.svelte';
+  import type { Person } from '$lib/components/user-filter';
+  import { fetchWith } from '$lib/api';
   import DateField from '$lib/components/DateField.svelte';
   import { lookUp } from '$lib/admin/names.svelte';
-  import { actionText, changes, dayAfter, dayStart, pageRange, rangeProblem, summarize, targetHref } from '$lib/admin/audit';
+  import { actionText, changes, dayAfter, dayStart, looksLikeId, pageRange, rangeProblem, summarize, targetHref } from '$lib/admin/audit';
   import Bar from '$lib/admin/ui/Bar.svelte';
   import Split from '$lib/admin/ui/Split.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
@@ -20,7 +24,7 @@
   import State from '$lib/components/State.svelte';
   import type { AuditQuery } from '$lib/gql/graphql';
   import { count, dateTimeSeconds } from '$lib/format';
-  import { AUDIT } from '$lib/queries';
+  import { AUDIT, AUDIT_TOP_PEOPLE } from '$lib/queries';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import { loader } from '$lib/tool/loader.svelte';
 
@@ -123,9 +127,26 @@
 
   const problem = $derived(rangeProblem(from, to));
 
-  function apply(next: Partial<{ kind: string; actor: string; from: string; to: string }> = {}) {
+  // The people filters' most important people: the most entries under the other filters (the
+  // address's, so they match the table).
+  const others = (skip: 'actor' | 'target') => ({
+    targetKind: q('kind') || null,
+    targetId: skip === 'target' ? null : q('id') || null,
+    actorId: skip === 'actor' ? null : q('actor') || null,
+    action: q('action') || null,
+    since: dayStart(q('from')),
+    until: dayAfter(q('to')),
+  });
+  const topOf = (by: 'ACTOR' | 'TARGET') => async (signal: AbortSignal): Promise<Person[]> =>
+    (await gql(AUDIT_TOP_PEOPLE, { by, ...others(by === 'ACTOR' ? 'actor' : 'target'), limit: 5 }, fetchWith(signal))).auditTopPeople;
+  const actorKey = $derived(JSON.stringify(others('actor')));
+  const targetKey = $derived(JSON.stringify(others('target')));
+  const asId = (t: string) => (looksLikeId(t) ? t.toUpperCase() : null);
+
+  function apply(next: Partial<{ kind: string; actor: string; target: string; from: string; to: string }> = {}) {
     kind = next.kind ?? kind;
     actor = next.actor ?? actor;
+    target = next.target ?? target;
     from = next.from ?? from;
     to = next.to ?? to;
     if (rangeProblem(from, to)) return;
@@ -160,15 +181,21 @@
   <Bar title="Audit log" count={entries ? `${pageRange(ix, LIMIT, entries.length)} shown` : null}>
     {#snippet tools()}
       <form class="filters" onsubmit={filter}>
-        <div class="f actor"><ActorField value={actor} onchange={(id) => apply({ actor: id })} /></div>
-        <select class="ui-input f kind" value={kind} onchange={(e) => apply({ kind: e.currentTarget.value })} aria-label="Target kind">
+        <div class="f actor"><UserFilter label="Actor" hideLabel placeholder="Any actor" width="100%" value={actor} onchange={(id) => apply({ actor: id })}
+          top={topOf('ACTOR')} topKey={actorKey} topLabel="Most entries" ids={asId} /></div>
+        <select class="ui-input f kind" value={kind} onchange={(e) => apply({ kind: e.currentTarget.value, target: kind === 'account' || e.currentTarget.value === 'account' ? '' : target })} aria-label="Target kind">
           <option value="">Any kind</option>
           <option value="account">Account</option>
           <option value="emote">Emote</option>
           <option value="set">Set</option>
           <option value="role">Role</option>
         </select>
-        <input class="ui-input f tid" bind:value={target} placeholder="Target ID" aria-label="Target ID" spellcheck="false" autocomplete="off" />
+        {#if kind === 'account'}
+          <div class="f tid"><UserFilter label="Target account" hideLabel placeholder="Any account" width="100%" value={target} onchange={(id) => apply({ target: id })}
+            top={topOf('TARGET')} topKey={targetKey} topLabel="Most entries about" ids={asId} /></div>
+        {:else}
+          <input class="ui-input f tid" bind:value={target} placeholder="Target ID" aria-label="Target ID" spellcheck="false" autocomplete="off" />
+        {/if}
         <input class="ui-input f act" bind:value={action} placeholder="Action, e.g. role.updated" aria-label="Action" list="audit-actions" spellcheck="false" autocomplete="off" />
         <datalist id="audit-actions">{#each ACTIONS as a}<option value={a}></option>{/each}</datalist>
         <div class="f date"><DateField label="From" value={from} onchange={(d) => apply({ from: d })} /></div>
@@ -283,12 +310,12 @@
   .filters { display: contents; }
   .filters :global(.ui-label) { display: none; }
   .f { min-width: 0; }
-  .actor { width: 150px; }
+  .actor { width: 180px; }
   .kind { width: 118px; }
-  .tid { width: 140px; }
+  .tid { width: 180px; }
   .act { flex: 1 1 160px; width: auto; max-width: 240px; }
   .date { width: 128px; }
-  .f :global(.date), .f :global(.who) { width: 100%; }
+  .f :global(.date), .f :global(.uf) { width: 100%; }
   .filters :is(a.ui-btn, button.ui-btn) { height: 34px; }
   .filters select.ui-input { padding-block: 0; }
   .log td { vertical-align: middle; }

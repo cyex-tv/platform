@@ -1,7 +1,8 @@
 <script lang="ts">
   // The emote review queue, a workspace: the queue on the left as a contact sheet of small tiles
   // (picture, name, uploader, flags; 50 a page, the server pages) under one toolbar (tabs by kind:
-  // public, unlisted and private, resolved; a search by name or uploader; sort and order), and on
+  // public, unlisted and private, resolved; a search by name or uploader; one uploader (UserFilter:
+  // focused empty, the 5 with the most uploads in this tab); sort and order), and on
   // wide windows the picked upload in a large inspector on the right (ReviewInspector: every size,
   // chat, uploader and their history, duplicates, activity and notes, the verdicts at its foot).
   // Narrow windows open the same upload in the full-screen dialog (ReviewDetail). Keyboard first: the
@@ -14,14 +15,16 @@
   // review.settings change them on /admin/review/reasons.
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { gql } from '$lib/api';
+  import { fetchWith, gql } from '$lib/api';
+  import UserFilter from '$lib/components/UserFilter.svelte';
+  import type { Person } from '$lib/components/user-filter';
   import { pictureFor, ready, size } from '$lib/emote';
   import { display } from '$lib/dpr.svelte';
   import { onDestroy, tick, untrack } from 'svelte';
   import { SvelteMap } from 'svelte/reactivity';
   import { clean, count, date, dateTime, iso } from '$lib/format';
   import type { EmoteFieldsFragment, EmoteVisibility, ReviewSort, ReviewTab } from '$lib/gql/graphql';
-  import { APPROVE, REJECT, REQUEUE_EMOTES, REVIEW_EMOTES, REVIEW_QUEUE, REVIEW_REASONS } from '$lib/queries';
+  import { APPROVE, REJECT, REQUEUE_EMOTES, REVIEW_EMOTES, REVIEW_QUEUE, REVIEW_TOP_UPLOADERS, REVIEW_REASONS } from '$lib/queries';
   import IconButton from '$lib/components/IconButton.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
@@ -54,7 +57,7 @@
   type Tab = 'public' | 'limited' | 'resolved';
   type Sort = 'uploaded' | 'reviewed' | 'uploader' | 'name';
 
-  // The address holds the view: tab, search, sort, order, page.
+  // The address holds the view: tab, search, uploader, sort, order, page.
   const p = $derived(page.url.searchParams);
   const tab = $derived<Tab>(p.get('tab') === 'limited' ? 'limited' : p.get('tab') === 'resolved' ? 'resolved' : 'public');
   const resolved = $derived(tab === 'resolved');
@@ -87,11 +90,16 @@
     const filter = {
       tab: tab.toUpperCase() as ReviewTab,
       search: p.get('q') || null,
+      uploaderId: p.get('uploader') || null,
       sort: sort.toUpperCase() as ReviewSort,
       descending: desc,
     };
     return (await gql(REVIEW_QUEUE, { page: pageNo, perPage: PER_PAGE, filter }, fetch)).reviewQueue;
   });
+  const uploader = $derived(p.get('uploader') ?? '');
+  const topUploaders = async (signal: AbortSignal): Promise<Person[]> =>
+    (await gql(REVIEW_TOP_UPLOADERS, { filter: { tab: tab.toUpperCase() as ReviewTab, search: p.get('q') || null }, limit: 5 }, fetchWith(signal))).reviewTopUploaders;
+
   // Approvals waiting out their undo time (see approve below), and the uploads in them.
   const waiting = new SvelteMap<string, Waiting>();
   const held = $derived([...waiting.values()].flatMap((w) => w.es));
@@ -516,6 +524,8 @@
       <span class="sr-only">Search by emote or uploader</span>
       <input class="ui-input" type="search" bind:value={search} oninput={onsearch} placeholder="Emote or uploader" autocomplete="off" spellcheck="false" maxlength="100" />
     </label>
+    <UserFilter label="Uploader" hideLabel placeholder="Any uploader" width="180px" value={uploader} onchange={(id) => go({ uploader: id || null })}
+      top={topUploaders} topKey="{tab}|{p.get('q') ?? ''}" topLabel="Most uploads here" />
     <select class="ui-input pick" aria-label="Sort" value={sort} onchange={(e) => go({ sort: e.currentTarget.value })}>
       <option value="uploaded">Upload date</option>
       {#if resolved}<option value="reviewed">Review date</option>{/if}
@@ -534,7 +544,7 @@
 <LoadGate source={L} label="Loading the queue…">
 {#snippet children(queue)}
 {#if items.length === 0}
-  {#if p.get('q')}
+  {#if p.get('q') || uploader}
     <State title="Nothing matches.">No upload in this tab has that name or uploader.</State>
   {:else if resolved}
     <State title="Nothing resolved yet.">Approved and rejected uploads show up here.</State>

@@ -304,10 +304,11 @@ async fn hot_reads_use_their_indexes() {
         audit::emote_activity_sql(),
         &top_text,
         None::<Uuid>,
-        30i64
+        30i64,
+        None::<Uuid>
     );
     assert_no_seq_scan("emote activity", &plan, &["audit_log"]);
-    let page = audit::emote_activity_rows(c, &top_text, None, 30)
+    let page = audit::emote_activity_rows(c, &top_text, None, 30, None)
         .await
         .unwrap();
     assert_eq!(page.len(), 30);
@@ -369,7 +370,7 @@ async fn rewritten_reads_match_the_old_ones() {
     let text = ids::to_text(top);
     let mut before = None;
     loop {
-        let new = audit::emote_activity_rows(c, &text, before, 50)
+        let new = audit::emote_activity_rows(c, &text, before, 50, None)
             .await
             .unwrap();
         let old: Vec<audit::SubjectEntry> = sqlx::query_as(&old_activity())
@@ -541,7 +542,7 @@ async fn timings_at_full_scale() {
             );
             measure!(
                 format!("{phase}: emote activity page"),
-                audit::emote_activity_rows(c, &top_text, None, 30)
+                audit::emote_activity_rows(c, &top_text, None, 30, None)
                     .await
                     .unwrap()
             );

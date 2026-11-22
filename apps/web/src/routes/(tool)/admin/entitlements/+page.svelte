@@ -1,16 +1,18 @@
 <script lang="ts">
   // The entitlement graph (7TV's, in cyex design): for an account, how each badge, paint and
   // role it holds or held was given, by whom and when; for a badge, paint or role, who holds it
-  // and how. Open it from an account page, or pick an item here.
+  // and how. Open it from an account page, or pick an account (UserFilter: focused empty, the 5
+  // accounts holding the most; typing, the people search; an ID or admin link pasted works) or an
+  // item here.
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
-  import { gql } from '$lib/api';
+  import { fetchWith, gql } from '$lib/api';
+  import UserFilter from '$lib/components/UserFilter.svelte';
+  import { topHolders, pastedAccount } from '$lib/admin/people';
   import type { GrantKind } from '$lib/gql/graphql';
   import { ACCOUNT, ALL_ROLES, COSMETICS, ENTITLEMENT_GRAPH, ENTITLEMENT_HOLDERS } from '$lib/queries';
-  import Icon from '$lib/components/Icon.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
-  import { looksLikeId } from '$lib/admin/audit';
   import EntitlementTree from '$lib/admin/EntitlementTree.svelte';
   import type { Grant } from '$lib/admin/graph';
   import { clean } from '$lib/format';
@@ -38,8 +40,7 @@
     return null;
   });
 
-  // The pickers: an account by ID, or an item from the catalog.
-  let accountInput = $state('');
+  // The pickers: an account, or an item from the catalog.
   let kind = $state<Pick>('BADGE');
   let item = $state('');
   let options = $state<{ BADGE: { id: string; name: string }[]; PAINT: { id: string; name: string }[]; ROLE: { id: string; name: string }[] }>({ BADGE: [], PAINT: [], ROLE: [] });
@@ -58,11 +59,7 @@
     if (!list.some((o) => o.id === item)) item = list[0]?.id ?? '';
   });
 
-  function openAccount(e: SubmitEvent) {
-    e.preventDefault();
-    const id = accountInput.trim().split('/').filter(Boolean).pop() ?? '';
-    if (looksLikeId(id)) goto(`?account=${id.toUpperCase()}`);
-  }
+  const openAccount = (id: string) => goto(id ? `?account=${encodeURIComponent(id)}` : '?');
   function openItem(e: SubmitEvent) {
     e.preventDefault();
     if (item) goto(`?${kind.toLowerCase()}=${encodeURIComponent(item)}`);
@@ -101,15 +98,10 @@
 <Split label="Grant" open={!!pickedGrant} onclose={() => pickNode(null)}>
   <Bar title="Entitlement graph" count={L.data ? `${L.data.grants.length} ${L.data.grants.length === 1 ? 'grant' : 'grants'}` : null}>
     {#snippet tools()}
-      <form class="grp" role="search" onsubmit={openAccount}>
-        <label class="adm-find acc">
-          <Icon name="user" size={15} />
-          <span class="sr-only">An account, by ID or its admin page link</span>
-          <input class="ui-input ui-mono" bind:value={accountInput} placeholder="Account ID or admin link" autocomplete="off" spellcheck="false" />
-        </label>
-        <button class="ui-btn secondary small" type="submit" disabled={!looksLikeId(accountInput.trim().split('/').filter(Boolean).pop() ?? '')}>Open</button>
-        <a class="ui-btn ghost small" href="/admin/users">Find by name</a>
-      </form>
+      <div class="grp acc">
+        <UserFilter label="Account" hideLabel placeholder="Account: name, login or ID" width="240px" value={target?.kind === 'ACCOUNT' ? target.id : ''}
+          onchange={openAccount} top={(signal) => topHolders(signal, fetchWith)} topLabel="Hold the most" ids={pastedAccount} />
+      </div>
       <form class="grp" onsubmit={openItem}>
         <Segmented label="Kind" size="s" compact options={[{ value: 'BADGE', label: 'Badge' }, { value: 'PAINT', label: 'Paint' }, ...(options.ROLE.length ? [{ value: 'ROLE' as const, label: 'Role' }] : [])]} value={kind} onchange={(v) => (kind = v)} />
         <label class="which">
@@ -213,7 +205,7 @@
 <style>
   .grp { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
   .grp.end { margin-left: auto; }
-  .acc { width: 200px; max-width: 100%; }
+  .acc { max-width: 100%; }
   .which { min-width: 0; }
   .which select { min-width: 140px; max-width: 100%; }
   .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
