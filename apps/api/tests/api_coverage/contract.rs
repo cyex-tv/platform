@@ -1113,11 +1113,33 @@ async fn every_site_operation_runs_against_the_real_api() {
         r.status.is_success(),
         format!("POST /v1/auth/logout: {} {}", r.status, r.body),
     );
+    // The console's API token (`cyextv.token()`, ADR 0028): a Bearer token that reads `me`.
+    let r = w.post_empty(ts, "/v1/auth/token/export").await;
+    c.check(
+        r.status == StatusCode::OK && r.body["token"].is_string(),
+        format!("POST /v1/auth/token/export: {} {}", r.status, r.body),
+    );
+    let console = r.body["token"].as_str().unwrap_or_default().to_owned();
+    let me = w
+        .gql(As::Bearer(&console), "{ me { id } }", json!({}))
+        .await;
+    c.check(
+        me["errors"].is_null(),
+        format!("the console token doesn't read me: {me}"),
+    );
+
     c.op(ts, "SignOutEverywhere", json!({})).await;
     let r = w.gql(ts, "{ me { id } }", json!({})).await;
     c.check(
         error_code(&r) == "signed_out",
         format!("SignOutEverywhere left the session working: {r}"),
+    );
+    let r = w
+        .gql(As::Bearer(&console), "{ me { id } }", json!({}))
+        .await;
+    c.check(
+        error_code(&r) == "signed_out",
+        format!("SignOutEverywhere left the console token working: {r}"),
     );
 
     // Every operation of the site ran.

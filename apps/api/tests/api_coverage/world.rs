@@ -53,6 +53,8 @@ pub enum As<'a> {
     Site(&'a User),
     /// A raw cookie value with the site's `Origin`.
     Cookie(&'a str),
+    /// `Authorization: Bearer`, for a console token (ADR 0028).
+    Bearer(&'a str),
 }
 
 pub struct Reply {
@@ -87,6 +89,7 @@ pub fn open_rates() -> Rates {
         quick_search: r,
         heavy_reads: r,
         delete_account: r,
+        console_tokens: r,
         emote_transfers: r,
         personal_lists: r,
         prefs: r,
@@ -238,6 +241,9 @@ impl World {
                 request = request
                     .header("cookie", format!("cyex_tv_session={cookie}"))
                     .header("origin", SITE);
+            }
+            As::Bearer(token) => {
+                request = request.header("authorization", format!("Bearer {token}"));
             }
         }
         request

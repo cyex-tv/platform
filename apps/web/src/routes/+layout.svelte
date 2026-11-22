@@ -13,6 +13,7 @@
   import { syncMotion } from '$lib/shell/motion.svelte';
   import { watchDpr } from '$lib/dpr.svelte';
   import { loadMe, session } from '$lib/tool/session.svelte';
+  import { offerConsoleToken } from '$lib/account/console-token';
   import { whatsNew } from '$lib/changelog/seen.svelte';
   import UploadDialog from '$lib/upload/UploadDialog.svelte';
   import { openUpload, opensDialog } from '$lib/upload/upload.svelte';
@@ -45,6 +46,12 @@
     } catch {
       /* no hint next time */
     }
+  });
+
+  // Signed in, `copy(await cyextv.token())` in the console gives a personal API token (ADR 0028);
+  // the session cookie itself stays out of reach of scripts.
+  $effect(() => {
+    if (session.known) offerConsoleToken(!!session.me && !session.ended);
   });
 
   // The own-profile hint (app.html) only holds for the first paint: once the session is known,

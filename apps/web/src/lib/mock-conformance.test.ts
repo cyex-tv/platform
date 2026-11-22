@@ -637,6 +637,14 @@ describe('mock-api conformance with the real schema', () => {
       if (r.status !== 302 || !known) out.push(`GET /v1/auth/${platform}/login: status ${r.status}, the API answers 302`);
       if (!r.headers.get('location')) out.push(`GET /v1/auth/${platform}/login: no Location header`);
     }
+    // The console's API token (cyextv.token(), ADR 0028), signed in and out.
+    const tok = await fetch(`${base}/v1/auth/token/export`, { method: 'POST', headers: { cookie: COOKIE } });
+    stats.rest += 1;
+    checkResponse('post', '/v1/auth/token/export', tok.status, await tok.json(), 'POST /v1/auth/token/export', out);
+    const tokOut = await fetch(`${base}/v1/auth/token/export`, { method: 'POST' });
+    stats.rest += 1;
+    if (tokOut.status !== 401) out.push(`POST /v1/auth/token/export (signed out): status ${tokOut.status}, the API answers 401`);
+    else checkResponse('post', '/v1/auth/token/export', tokOut.status, await tokOut.json(), 'POST /v1/auth/token/export (signed out)', out);
     const lo = await fetch(`${base}/v1/auth/logout`, { method: 'POST', headers: { cookie: COOKIE } });
     stats.rest += 1;
     checkResponse('post', '/v1/auth/logout', lo.status, (await lo.text()) || undefined, 'POST /v1/auth/logout', out);

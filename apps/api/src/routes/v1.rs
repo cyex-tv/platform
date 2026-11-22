@@ -17,8 +17,8 @@ use cyex_tv_auth::cookies;
 use cyex_tv_auth::flow::Callback;
 use cyex_tv_shared::error::{ApiError, ApiResult, ErrorBody};
 use cyex_tv_shared::model::{
-    CallbackQuery, Channel, CosmeticCatalog, CosmeticImage, CosmeticKind, Emote, EmoteSet,
-    EmoteVisibility, LoginQuery, PersonalLookup, PersonalLookupResult, Platform,
+    CallbackQuery, Channel, ConsoleToken, CosmeticCatalog, CosmeticImage, CosmeticKind, Emote,
+    EmoteSet, EmoteVisibility, LoginQuery, PersonalLookup, PersonalLookupResult, Platform,
     UploadCosmeticImage, UploadEmote, UserCosmeticsQuery, UserCosmeticsResult,
 };
 use serde::Serialize;
@@ -54,6 +54,7 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(login))
         .routes(routes!(callback))
         .routes(routes!(logout))
+        .routes(routes!(export_token))
         .routes(routes!(get_channel))
         .routes(routes!(get_set))
         .routes(routes!(get_global_set))
@@ -210,6 +211,48 @@ async fn logout(
     response.headers_mut().insert(
         SET_COOKIE,
         HeaderValue::from_str(&clear).map_err(|_| ApiError::internal())?,
+    );
+    Ok(response)
+}
+
+/// Make a personal API token (a console token).
+///
+/// A Bearer token that acts as you, for a GraphQL playground, a script or moving things between
+/// your accounts (ADR 0028). Send it as `Authorization: Bearer <token>` to `/v1/gql` and the REST
+/// calls. It has your account's own rights (your roles count; owner-only and website-only actions
+/// such as deleting the account don't work with it) and lasts 90 days. Only one at a time: making
+/// a new one signs the last one out. It shows as `Console token` under your sessions, where you
+/// can sign it out; signing out everywhere ends it too. The token is in this answer only.
+///
+/// The website's cookie only, from `https://cyex.tv` (`Origin`); a Bearer token can't make one.
+/// 5 an hour. On cyex.tv, run `copy(await cyextv.token())` in the browser console.
+#[utoipa::path(
+    post,
+    path = "/v1/auth/token/export",
+    tag = "auth",
+    responses(
+        (status = 200, description = "The new token. Never cached.", body = ConsoleToken),
+        (status = 401, description = "`signed_out`: no website session.", body = ErrorBody),
+        (status = 403, description = "`bad_origin`: the cookie was sent from another site, or `website_only`: sent with a Bearer token.", body = ErrorBody),
+        (status = 429, description = "`rate_limited`.", body = ErrorBody)
+    )
+)]
+async fn export_token(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    MaybeCaller(caller): MaybeCaller,
+) -> ApiResult<Response> {
+    let caller = caller.ok_or_else(|| ApiError::from(AuthError::SignedOut))?;
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok());
+    let token = crate::console_token::mint(&state, &caller, user_agent).await?;
+    let mut response = Json(token).into_response();
+    let h = response.headers_mut();
+    h.insert(CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    h.insert(
+        axum::http::header::PRAGMA,
+        HeaderValue::from_static("no-cache"),
     );
     Ok(response)
 }

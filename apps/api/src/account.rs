@@ -34,12 +34,16 @@ use crate::state::AppState;
 use crate::views;
 
 /// A short, human name for the device a session signed in from, from its user agent. Only the
-/// browser family and the system are named; versions and everything else are dropped.
+/// browser family and the system are named; versions and everything else are dropped. A console
+/// token (ADR 0028) is always `Console token`: it is used from anywhere, not the browser that made it.
 pub fn device_name(kind: SessionKind, user_agent: Option<&str>) -> String {
+    if kind == SessionKind::Console {
+        return CONSOLE_DEVICE.to_owned();
+    }
     let Some(ua) = user_agent.map(str::trim).filter(|ua| !ua.is_empty()) else {
         return match kind {
             SessionKind::App => "cyex.tv app".to_owned(),
-            SessionKind::Site => "Unknown device".to_owned(),
+            SessionKind::Site | SessionKind::Console => "Unknown device".to_owned(),
         };
     };
     let browser = if ua.contains("Edg/") || ua.contains("EdgA/") || ua.contains("EdgiOS/") {
@@ -76,11 +80,14 @@ pub fn device_name(kind: SessionKind, user_agent: Option<&str>) -> String {
         (Some(b), Some(s), _) => format!("{b} on {s}"),
         (Some(b), None, _) => b.to_owned(),
         (None, Some(s), SessionKind::App) => format!("App on {s}"),
-        (None, Some(s), SessionKind::Site) => format!("Browser on {s}"),
+        (None, Some(s), SessionKind::Site | SessionKind::Console) => format!("Browser on {s}"),
         (None, None, SessionKind::App) => "cyex.tv app".to_owned(),
-        (None, None, SessionKind::Site) => "Unknown device".to_owned(),
+        (None, None, SessionKind::Site | SessionKind::Console) => "Unknown device".to_owned(),
     }
 }
+
+/// How `mySessions` names a console token (ADR 0028).
+pub const CONSOLE_DEVICE: &str = "Console token";
 
 pub(crate) fn session_view(s: &sessions::Session, caller: &Caller) -> AccountSession {
     AccountSession {
@@ -88,6 +95,7 @@ pub(crate) fn session_view(s: &sessions::Session, caller: &Caller) -> AccountSes
         kind: match s.kind {
             SessionKind::Site => SessionKindView::Site,
             SessionKind::App => SessionKindView::App,
+            SessionKind::Console => SessionKindView::Console,
         },
         // An app signed in through `/v1/auth/app` (ADR 0021) is named after itself.
         device: s
@@ -751,6 +759,15 @@ mod tests {
             device_name(SessionKind::App, Some("cyex-deck/1.2 (Windows)")),
             "App on Windows"
         );
+        // A console token is named for what it is, whichever browser made it.
+        assert_eq!(
+            device_name(
+                SessionKind::Console,
+                Some("Mozilla/5.0 (Windows NT 10.0) Firefox/140.0")
+            ),
+            "Console token"
+        );
+        assert_eq!(device_name(SessionKind::Console, None), "Console token");
     }
 
     #[test]
