@@ -136,7 +136,9 @@ describe('3D logo scene', () => {
     for (const o of observers) expect(o.disconnect).toHaveBeenCalled();
     expect(off).toHaveBeenCalledWith('scroll', expect.any(Function));
   });
-  describe('leaning toward the pointer', () => {
+  describe('the pointer', () => {
+    const POINTER = /^(pointer|mouse|touch)/;
+    const pointerCalls = (spy: ReturnType<typeof vi.spyOn>) => spy.mock.calls.filter(([type]) => POINTER.test(String(type))).length;
     const media = (m: { hover: boolean; fine: boolean; reduced: boolean }) => {
       const real = window.matchMedia;
       window.matchMedia = ((q: string) => ({
@@ -145,55 +147,25 @@ describe('3D logo scene', () => {
       })) as typeof window.matchMedia;
       return () => (window.matchMedia = real);
     };
-    const pointerAdds = (spy: ReturnType<typeof vi.spyOn>) => spy.mock.calls.filter(([type]) => type === 'pointermove').length;
 
-    it('listens for the pointer while it runs, and lets go on dispose', () => {
-      const restore = media({ hover: true, fine: true, reduced: false });
-      const on = vi.spyOn(window, 'addEventListener');
-      const off = vi.spyOn(window, 'removeEventListener');
-      const { scene } = mount(false);
-      expect(pointerAdds(on)).toBe(1);
-      scene.dispose();
-      expect(pointerAdds(off)).toBe(1);
-      expect(off).toHaveBeenCalledWith('blur', expect.any(Function));
-      restore();
-    });
-
-    it('stops listening while the tab is hidden, and starts again when it shows', () => {
-      const restore = media({ hover: true, fine: true, reduced: false });
-      const on = vi.spyOn(window, 'addEventListener');
-      const off = vi.spyOn(window, 'removeEventListener');
-      const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
-      const { scene } = mount(false);
-      expect(pointerAdds(on)).toBe(0); // hidden from the start: no frame, no listener
-      hidden.mockReturnValue(false);
-      document.dispatchEvent(new Event('visibilitychange'));
-      expect(pointerAdds(on)).toBe(1);
-      hidden.mockReturnValue(true);
-      document.dispatchEvent(new Event('visibilitychange'));
-      expect(pointerAdds(off)).toBe(1);
-      scene.dispose();
-      restore();
-    });
-
-    it('never listens on touch, with reduced motion, or when still', () => {
+    it('never listens for it, with a mouse or on touch, running, hidden or still', () => {
       for (const m of [
+        { hover: true, fine: true, reduced: false },
         { hover: false, fine: false, reduced: false },
         { hover: true, fine: true, reduced: true },
       ]) {
         const restore = media(m);
-        const on = vi.spyOn(window, 'addEventListener');
+        const spies = [window, document, document.documentElement].map((t) => vi.spyOn(t, 'addEventListener'));
         const { scene } = mount(false);
-        expect(pointerAdds(on)).toBe(0);
+        document.dispatchEvent(new Event('visibilitychange'));
+        mount(true).scene.dispose();
         scene.dispose();
-        on.mockRestore();
+        for (const s of spies) {
+          expect(pointerCalls(s)).toBe(0);
+          s.mockRestore();
+        }
         restore();
       }
-      const restore = media({ hover: true, fine: true, reduced: false });
-      const on = vi.spyOn(window, 'addEventListener');
-      mount(true).scene.dispose();
-      expect(pointerAdds(on)).toBe(0);
-      restore();
     });
   });
 });

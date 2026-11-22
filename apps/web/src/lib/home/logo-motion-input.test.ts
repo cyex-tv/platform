@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { spring, step } from './logo-spring';
-import { TILT_MAX, TILT_REACH, tiltAllowed, tiltFor } from './logo-tilt';
 
 const run = (s: ReturnType<typeof spring>, seconds: number, hz: number) => {
   // Whole frames, then whatever is left, so every rate covers exactly the same time.
@@ -62,40 +61,5 @@ describe('3D logo spring', () => {
     odd.target = 1;
     step(odd, 1 / 60);
     expect(Number.isFinite(odd.value)).toBe(true);
-  });
-});
-
-describe('3D logo tilt', () => {
-  const r = { left: 100, top: 100, width: 400, height: 400 };
-
-  it('rests with no pointer, at the middle, or far from the hero', () => {
-    expect(tiltFor(null, r)).toEqual({ pitch: 0, yaw: 0 });
-    expect(tiltFor({ x: 300, y: 300 }, r)).toEqual({ pitch: 0, yaw: 0 });
-    expect(tiltFor({ x: 300 + 200 * (TILT_REACH + 0.1), y: 300 }, r)).toEqual({ pitch: 0, yaw: 0 });
-    expect(tiltFor({ x: 300, y: 300 }, { ...r, width: 0 })).toEqual({ pitch: 0, yaw: 0 });
-  });
-
-  it('turns toward the pointer’s side and height, up to the most it leans', () => {
-    const right = tiltFor({ x: 400, y: 300 }, r);
-    expect(right.yaw).toBeCloseTo(TILT_MAX / 2);
-    expect(right.pitch).toBe(0);
-    const below = tiltFor({ x: 300, y: 500 }, r);
-    expect(below.pitch).toBeCloseTo(TILT_MAX);
-    const left = tiltFor({ x: 100, y: 300 }, r);
-    expect(left.yaw).toBeCloseTo(-TILT_MAX);
-  });
-
-  it('holds at the most it leans just outside the hero', () => {
-    const t = tiltFor({ x: 300 + 200 * 1.2, y: 300 - 200 * 1.2 }, r);
-    expect(t.yaw).toBeCloseTo(TILT_MAX);
-    expect(t.pitch).toBeCloseTo(-TILT_MAX);
-    expect(TILT_MAX).toBeLessThanOrEqual((8 * Math.PI) / 180);
-  });
-
-  it('only leans for a hovering, fine pointer with motion allowed', () => {
-    expect(tiltAllowed({ hover: true, fine: true, reducedMotion: false })).toBe(true);
-    expect(tiltAllowed({ hover: false, fine: false, reducedMotion: false })).toBe(false); // touch
-    expect(tiltAllowed({ hover: true, fine: false, reducedMotion: false })).toBe(false);
-    expect(tiltAllowed({ hover: true, fine: true, reducedMotion: true })).toBe(false);
   });
 });

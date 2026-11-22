@@ -1611,3 +1611,15 @@ git push
   Esc restores, cap) and `grid-select.ui.test.ts` (the browse grid with mouse, keys and touch): 8 and 7 of them
   fail on main. Checked in the running app (vite and mock on own ports): drag picks a row, a drag from a picked
   tile unpicks, Shift+click picks and unpicks ranges.
+- [x] Hero: the 3D logo no longer leans toward the pointer. `logo-tilt.ts` and its tests are gone, and the scene
+  adds no pointer listeners at all (`logo-scene.ui.test.ts` checks window, document and the root for any
+  pointer, mouse or touch listener). The scroll spring, the idle turn, sway and float, the load flicker, the
+  still pose for reduced motion, the quality step-down and disposal are unchanged. `dev/e2e/motion.mjs` does
+  not cover the hero.
+
+### GitHub write log for this PR
+```
+git push -u origin fix/select-toggle-hero-tilt
+gh pr create --repo cyex-tv/platform --base main --head fix/select-toggle-hero-tilt --title "Multi-select unselects too; the hero logo stops following the pointer" --body-file <file>
+```
+  Not merged (owner reviews).
