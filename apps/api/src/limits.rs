@@ -867,7 +867,24 @@ mod tests {
         for l in AccountLimit::ALL {
             assert_eq!(AccountLimit::from_key(l.key()), Some(l));
         }
-        assert_eq!(AccountLimit::ALL.len(), 15);
+        assert_eq!(AccountLimit::ALL.len(), 16);
+        // A role can raise the most slots a set may have (a subscriber role: 2.500).
+        let rates = Rates::default();
+        assert_eq!(
+            AccountLimits::resolve(&rates, &[]).get(AccountLimit::SetCapacityMax),
+            1000
+        );
+        let sub = overrides(&[(AccountLimit::SetCapacityMax, 2500)]);
+        assert_eq!(
+            AccountLimits::resolve(&rates, &[sub]).get(AccountLimit::SetCapacityMax),
+            2500
+        );
+        assert_eq!(AccountLimit::SetCapacityMax.key(), "set_capacity_max");
+        assert!(
+            Limits::new(rates, false)
+                .take(AccountLimit::SetCapacityMax, "a", None)
+                .is_ok()
+        );
     }
 
     #[test]
