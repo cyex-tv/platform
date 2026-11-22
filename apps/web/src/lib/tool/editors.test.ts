@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { EditorPermission } from '$lib/gql/graphql';
 import {
   ALL_SETS,
+  EMOTE_PERMISSIONS,
   GROUPS,
   PERMISSIONS,
   allOn,
@@ -36,7 +37,7 @@ describe('account editor permissions', () => {
     expect(GROUPS.map((g) => g.label)).toEqual(['Emote sets', 'Emotes', 'Profile', 'Channels', 'Billing and subscription', 'Editors']);
     const keys = PERMISSIONS.map((p) => p.key);
     expect(new Set(keys).size).toBe(keys.length);
-    expect(keys).toHaveLength(10);
+    expect(keys).toHaveLength(9); // EMOTE_TRANSFER is retired
     for (const p of PERMISSIONS) expect(p.line.length).toBeLessThan(80);
     // The ones nothing checks yet say so in their group.
     for (const g of GROUPS) if (g.items.some((p) => p.reserved)) expect(g.note).toBeTruthy();
@@ -46,7 +47,7 @@ describe('account editor permissions', () => {
     const emotes = GROUPS.find((g) => g.label === 'Emotes')!;
     expect(emotes.note).toBeUndefined();
     expect(emotes.needsAllSets).toBe(true);
-    expect(emotes.items.map((p) => p.key)).toEqual(['EMOTE_UPLOAD', 'EMOTE_MANAGE', 'EMOTE_TRANSFER']);
+    expect(emotes.items.map((p) => p.key)).toEqual(['EMOTE_UPLOAD', 'EMOTE_MANAGE']);
     expect(emotes.items.some((p) => p.reserved)).toBe(false);
     // Billing still waits for its feature.
     const billing = GROUPS.find((g) => g.label === 'Billing and subscription')!;
@@ -79,12 +80,12 @@ describe('account editor permissions', () => {
     expect(allOn(['EMOTES'], offer)).toBe(false);
     expect(allOn([], [])).toBe(false);
     const owner = grantable(grantOn([], 'ME', 'ME'));
-    expect(setAll(true, owner)).toHaveLength(10);
+    expect(setAll(true, owner)).toHaveLength(9);
   });
 
   it('gives the owner everything and an editor their grant', () => {
     const grants = [{ account: { id: 'A' }, permissions: perms('EMOTES', 'SETS') }];
-    expect(grantOn(grants, 'ME', 'ME').size).toBe(10);
+    expect(grantOn(grants, 'ME', 'ME').size).toBe(9);
     expect([...grantOn(grants, 'A', 'ME')]).toEqual(['EMOTES', 'SETS', 'CHANNELS']);
     expect(grantOn(grants, 'B', 'ME').size).toBe(0);
     expect(grantOn(grants, null, 'ME').size).toBe(0);
@@ -96,6 +97,17 @@ describe('account editor permissions', () => {
     expect(canManage(held, ['EMOTES'])).toBe(true);
     expect(canManage(held, ['EMOTES', 'SETS'])).toBe(false);
     expect(canManage(new Set(perms('EMOTES')), ['EMOTES'])).toBe(false);
+  });
+});
+
+describe('the retired transfer permission (owner decision 2026/11/22)', () => {
+  it('is not in the picker, nor phrased, nor grantable, nor counted as an emote permission', () => {
+    expect(PERMISSIONS.map((p) => p.key)).not.toContain('EMOTE_TRANSFER');
+    expect(PERMISSIONS.some((p) => /transfer/i.test(`${p.label} ${p.line}`))).toBe(false);
+    expect(grantable(new Set(['EMOTE_TRANSFER', 'EMOTE_MANAGE'] as EditorPermission[])).map((p) => p.key)).toEqual(['EMOTE_MANAGE']);
+    expect(permissionPhrase(['EMOTE_TRANSFER'])).toBe('do nothing');
+    expect(permissionPhrase(['EMOTE_MANAGE', 'EMOTE_TRANSFER'])).toBe('manage emotes');
+    expect(EMOTE_PERMISSIONS).not.toContain('EMOTE_TRANSFER');
   });
 });
 
@@ -122,7 +134,8 @@ describe('emote permissions on another account', () => {
     expect(emoteCan(grants, 'A', 'ME', 'EMOTE_MANAGE')).toBe(true);
     expect(emoteCan(grants, 'B', 'ME', 'EMOTE_MANAGE')).toBe(false);
     expect(emoteCan(grants, 'B', 'ME', 'EMOTE_TRANSFER')).toBe(false);
-    expect(emoteCan(grants, 'C', 'ME', 'EMOTE_TRANSFER')).toBe(true);
+    // Retired (ADR 0014, amendment 2026/11/22): a grant that still lists it lets nobody transfer.
+    expect(emoteCan(grants, 'C', 'ME', 'EMOTE_TRANSFER')).toBe(false);
     expect(emoteCan(grants, 'Z', 'ME', 'EMOTE_MANAGE')).toBe(false);
     expect(emoteCan(grants, 'A', null, 'EMOTE_MANAGE')).toBe(false);
     expect(emoteCan(null, 'A', 'ME', 'EMOTE_MANAGE')).toBe(false);

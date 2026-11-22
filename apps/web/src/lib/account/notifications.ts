@@ -12,39 +12,7 @@ export type Line = {
   text: string;
   /** A page it makes sense to open, or null. */
   href: string | null;
-  /** A transfer request the reader can accept or decline right there (ADR 0014). */
-  request?: string | null;
 };
-
-/**
- * What a transfer request's notification says once the request is no longer open, from the state
- * the API reports now (`ACCEPTED`, `DECLINED`, `CANCELLED`, `EXPIRED`); null while it is pending
- * or when the state isn't known (then the buttons stay, and the API answers if it is closed).
- */
-export function closedRequest(state: string | null | undefined): string | null {
-  switch (state) {
-    case 'ACCEPTED':
-      return 'Accepted: it moved.';
-    case 'DECLINED':
-      return 'Declined: it stays yours.';
-    case 'CANCELLED':
-      return 'Withdrawn: it stays yours.';
-    case 'EXPIRED':
-      return 'Expired: nobody answered in time.';
-    default:
-      return null;
-  }
-}
-
-/**
- * Whether a failed Accept or Decline means the request is closed for good (answered, withdrawn,
- * expired, gone, or not the reader's to answer). A dropped connection, a timeout, a rate limit or a
- * signed-out session says nothing about the request: its buttons stay so it can be tried again.
- */
-export function requestGone(err: unknown): boolean {
-  const code = (err as { code?: unknown } | null)?.code;
-  return code === 'not_pending' || code === 'not_found' || code === 'forbidden';
-}
 
 /** The payload as an object, or an empty one when it isn't JSON or isn't an object. */
 export function parsePayload(payload: string | null | undefined): Record<string, unknown> {
@@ -117,13 +85,14 @@ export function describe(kind: string, payload: string | null | undefined): Line
       return asEditor
         ? { icon: 'users', text: `You’re no longer an editor of ${owner}’s account.`, href: null }
         : { icon: 'users', text: `${editor} is no longer an editor of your account.`, href: '/me/editors' };
+    // Editors can't ask for a transfer any more (ADR 0014, amendment 2026/11/22): an old request
+    // reads as what happened, with nothing to answer; the emote stayed with its owner.
     case 'emote.transfer_requested': {
       const what = name ? iso(name) : 'your emote';
       return {
         icon: 'arrow-right',
-        text: `${who('actor_name')} asks to give ${what} to ${id(d, 'to_id') && id(d, 'to_id') === id(d, 'actor_id') ? 'themselves' : who('to_name')}. It moves only if you accept.`,
-        href: emote ? `/me/emotes/${emote}#transfer` : null,
-        request: id(d, 'request_id'),
+        text: `${who('actor_name')} asked to give ${what} to ${id(d, 'to_id') && id(d, 'to_id') === id(d, 'actor_id') ? 'themselves' : who('to_name')}. Transfer requests are gone: only you can give your emotes away.`,
+        href: emote ? `/emotes/${emote}` : null,
       };
     }
     case 'emote.transferred': {
@@ -144,6 +113,12 @@ export function describe(kind: string, payload: string | null | undefined): Line
         href: emote ? `/emotes/${emote}` : null,
       };
     case 'emote.transfer_cancelled':
+      if (str(d, 'reason', 20) === 'retired') {
+        const what = name ? iso(name) : 'an emote';
+        return str(d, 'role', 10) === 'editor'
+          ? { icon: 'x', text: `Your request to give ${what} to ${who('to_name')} was withdrawn: only an emote’s owner can give it away now.`, href: null }
+          : { icon: 'x', text: `The request to give ${what} to ${who('to_name')} was withdrawn. It stays yours: only you can give your emotes away.`, href: emote ? `/emotes/${emote}` : null };
+      }
       return {
         icon: 'x',
         text: `${who('actor_name')} withdrew the request to give ${name ? iso(name) : 'your emote'} away.`,

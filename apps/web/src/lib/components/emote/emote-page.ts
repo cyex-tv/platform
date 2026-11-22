@@ -192,17 +192,3 @@ export function trust(state: EmoteState): { status: string; line: string; tone: 
 export function canReport(e: Pick<PageEmote, 'state' | 'owner'>, meId: string | null | undefined): boolean {
   return e.state === 'APPROVED' && !(meId && e.owner?.id === meId);
 }
-
-/**
- * The line over a transfer request's buttons, "pixelmoth asks to give it to you.": who asked, and
- * who gets it. Someone asking to give it to themselves (an owner moving it into their own other
- * account is a different row) reads "to themselves", never their name twice.
- */
-export function transferLine(
-  r: { requestedBy: { id: string; displayName: string }; to: { id: string; displayName: string } },
-  meId: string | null | undefined,
-): { asker: 'you' | { name: string }; target: 'you' | 'yourself' | 'themselves' | { name: string } } {
-  const asker = r.requestedBy.id === meId ? 'you' : { name: r.requestedBy.displayName };
-  const target = r.to.id === r.requestedBy.id ? (r.to.id === meId ? 'yourself' : 'themselves') : r.to.id === meId ? 'you' : { name: r.to.displayName };
-  return { asker, target };
-}

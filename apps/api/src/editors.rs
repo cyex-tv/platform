@@ -10,8 +10,9 @@
 //! - `sets` also allows what `channels` does (it did before that flag existed), so holding `sets`
 //!   counts as holding `channels` in every check. Grants are listed as stored.
 //! - Grants of blocked or deleted accounts, and grants on them, count for nothing.
-//! - The emote flags (`emote_upload`, `emote_manage`, `emote_transfer`) need a grant on every set
-//!   (`has_emote_flag`): an account's emotes aren't in any one set.
+//! - The emote flags (`emote_upload`, `emote_manage`) need a grant on every set
+//!   (`has_emote_flag`): an account's emotes aren't in any one set. `emote_transfer` is retired
+//!   (amendment 2026/11/22): never granted, and a stored one grants nothing.
 //!
 //! Every change writes `audit_log` with before and after, in the change's transaction.
 
@@ -177,7 +178,7 @@ pub async fn has_flag_on_all_sets(
     Ok(scope_of(conn, owner, editor).await?.is_all())
 }
 
-/// True if `editor` may use an emote flag (`emote_upload`, `emote_manage`, `emote_transfer`) on
+/// True if `editor` may use an emote flag (`emote_upload`, `emote_manage`) on
 /// `owner`'s emotes: an account editor holding it on a grant that covers every set. Emotes belong
 /// to the account, not to a set, so a grant limited to some sets is too narrow for them. False for
 /// the owner, as `has_flag`.
@@ -189,9 +190,7 @@ pub async fn has_emote_flag(
 ) -> ApiResult<bool> {
     debug_assert!(matches!(
         flag,
-        EditorPermission::EmoteUpload
-            | EditorPermission::EmoteManage
-            | EditorPermission::EmoteTransfer
+        EditorPermission::EmoteUpload | EditorPermission::EmoteManage
     ));
     has_flag_on_all_sets(conn, owner, editor, flag).await
 }
@@ -296,8 +295,20 @@ async fn manager_access(
     ))
 }
 
+/// What a grant asks for. The retired `EMOTE_TRANSFER` is dropped (a client may still send it
+/// with others); asked for alone, it's refused with a sentence saying why.
 fn requested(permissions: &[EditorPermission]) -> ApiResult<Flags> {
-    let flags: Flags = permissions.iter().copied().collect();
+    let flags: Flags = permissions
+        .iter()
+        .copied()
+        .filter(|p| *p != EditorPermission::EmoteTransfer)
+        .collect();
+    if flags.is_empty() && permissions.contains(&EditorPermission::EmoteTransfer) {
+        return Err(bad(
+            "retired_permission",
+            "Editors can't be given the transfer permission any more: only an emote's owner can give it away.",
+        ));
+    }
     if flags.is_empty() {
         return Err(bad(
             "no_permissions",
@@ -970,11 +981,31 @@ mod tests {
                 "channels",
                 "emote_upload",
                 "emote_manage",
-                "emote_transfer",
                 "billing_payment",
                 "billing_subscription"
             ]
         );
+    }
+
+    /// `EMOTE_TRANSFER` is retired (amendment 2026/11/22): never granted, a stored one grants
+    /// nothing and isn't listed, alone it's refused, with others it's dropped.
+    #[test]
+    fn transfer_flag_is_retired() {
+        use EditorPermission::*;
+        assert!(!EditorPermission::ALL.contains(&EmoteTransfer));
+        assert_eq!(EditorPermission::parse("emote_transfer"), None);
+        assert_eq!(
+            requested(&[EmoteTransfer]).unwrap_err().code,
+            "retired_permission"
+        );
+        assert_eq!(
+            requested(&[EmoteManage, EmoteTransfer]).unwrap(),
+            set(&[EmoteManage])
+        );
+        let stored = ["emote_manage".to_owned(), "emote_transfer".to_owned()];
+        assert_eq!(flags_of(&stored), set(&[EmoteManage]));
+        assert_eq!(listed(&stored), [EmoteManage]);
+        assert!(!all_flags().contains(&EmoteTransfer));
     }
 
     #[test]

@@ -1,8 +1,8 @@
 <script lang="ts">
   // An emote's editor, in the Inspector shape: the picture at its sizes and the details form on
   // the left; on the right its status, facts and id, adding it to a set, giving it to another
-  // account (with open hand-over requests) and deleting it. The owner, the account's editors with
-  // Manage, and staff with the matching permissions.
+  // account (its owner only) and deleting it. The owner, the account's editors with Manage, and
+  // staff with the matching permissions.
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { ApiError, gql, type EmoteVisibility } from '$lib/api';
@@ -10,19 +10,7 @@
   import { ready, size } from '$lib/emote';
   import { clean, count, date, iso } from '$lib/format';
   import type { EmoteFieldsFragment } from '$lib/gql/graphql';
-  import {
-    ACCEPT_EMOTE_TRANSFER,
-    ADD_SET_EMOTE,
-    CANCEL_EMOTE_TRANSFER,
-    DECLINE_EMOTE_TRANSFER,
-    DELETE_EMOTE,
-    EMOTE,
-    EMOTE_TRANSFER_REQUESTS,
-    MY_SETS,
-    TRANSFER_EMOTE,
-    UPDATE_EMOTE,
-  } from '$lib/queries';
-  import type { TransferRequestFieldsFragment } from '$lib/gql/graphql';
+  import { ADD_SET_EMOTE, DELETE_EMOTE, EMOTE, MY_SETS, TRANSFER_EMOTE, UPDATE_EMOTE } from '$lib/queries';
   import { editorOf, forgetProfile, type Grant } from '$lib/profile/data.svelte';
   import { emoteCan, transferTargets } from '$lib/tool/editors';
   import { sectionHref } from '$lib/profile/rows';
@@ -45,7 +33,7 @@
   import ContactSheet from '$lib/components/ContactSheet.svelte';
   import { reduced, watchReduced } from '$lib/cosmetics/reduced.svelte';
   import { onMount } from 'svelte';
-  import { fileSize, formats, kind, scaleFiles, transferLine } from '$lib/components/emote/emote-page';
+  import { fileSize, formats, kind, scaleFiles } from '$lib/components/emote/emote-page';
   import PageHead from '$lib/tool/PageHead.svelte';
   import EmoteFlags from '$lib/tool/EmoteFlags.svelte';
   import { visibilityOf } from '$lib/tool/visibility';
@@ -66,31 +54,17 @@
   let grants = $state<readonly Grant[] | null>(null);
   let giveTo = $state('');
   let giving = $state(false);
-  // Transfer requests on this emote (ADR 0014): an editor's waits for the owner to accept.
-  let requests = $state<TransferRequestFieldsFragment[]>([]);
-  let answering = $state<string | null>(null);
-  async function loadRequests(id: string) {
-    try {
-      requests = (await gql(EMOTE_TRANSFER_REQUESTS, { emoteId: id })).emoteTransferRequests;
-    } catch {
-      requests = [];
-    }
-  }
-  $effect(() => {
-    const id = page.params.id ?? '';
-    if (session.me && id) loadRequests(id);
-  });
-
   const nameError = $derived(nameProblem(name));
   const tagError = $derived(tagsProblem(tags));
   const mine = $derived(emote?.owner?.id === session.me?.id);
-  // Editors of the owner's account with Manage on every set edit and delete as the owner does, and
-  // with Transfer give it away (ADR 0014). Staff edit and delete anyone's emote with
-  // emotes.edit_any / emotes.delete_any. The API checks and audits.
+  // Editors of the owner's account with Manage on every set edit and delete as the owner does
+  // (ADR 0014). Only the owner gives it away: nobody can ask for someone else's emote (amendment
+  // 2026/11/22). Staff edit and delete anyone's emote with emotes.edit_any / emotes.delete_any.
+  // The API checks and audits.
   const manages = $derived(!mine && emoteCan(grants, emote?.owner?.id, session.me?.id, 'EMOTE_MANAGE'));
   const canEdit = $derived(mine || manages || can('emotes.edit_any'));
   const canDelete = $derived(mine || manages || can('emotes.delete_any'));
-  const canGive = $derived(emoteCan(grants, emote?.owner?.id, session.me?.id, 'EMOTE_TRANSFER'));
+  const canGive = $derived(mine);
   const me = $derived(session.me ? { id: session.me.id, displayName: session.me.identities[0]?.displayName ?? 'You' } : null);
   const receivers = $derived(transferTargets(me, grants, emote?.owner?.id));
   $effect(() => {
@@ -209,12 +183,6 @@
     giving = true;
     try {
       const r = await gql(TRANSFER_EMOTE, { id: emote.id, toAccountId: giveTo });
-      if (!mine) {
-        // An editor's transfer waits for the owner.
-        notify(`Asked ${iso(clean(emote.owner?.displayName ?? 'the owner'))} to accept. ${iso(emote.name)} moves once they do.`);
-        await loadRequests(emote.id);
-        return;
-      }
       forgetProfile('library');
       notify(`${iso(emote.name)} now belongs to ${to ? (to.self ? 'you' : iso(clean(to.displayName))) : 'that account'}.`);
       if (emoteCan(grants, r.transferEmote.owner?.id, session.me?.id, 'EMOTE_MANAGE')) fill(r.transferEmote);
@@ -223,31 +191,6 @@
       fail(err);
     } finally {
       giving = false;
-    }
-  }
-
-  async function answer(r: TransferRequestFieldsFragment, how: 'accept' | 'decline' | 'cancel') {
-    answering = r.id;
-    try {
-      if (how === 'accept') {
-        const done = await gql(ACCEPT_EMOTE_TRANSFER, { id: r.id });
-        forgetProfile('library');
-        notify(`${iso(r.emoteName)} now belongs to ${iso(clean(r.to.displayName))}.`);
-        if (emoteCan(grants, done.acceptEmoteTransfer.owner?.id, session.me?.id, 'EMOTE_MANAGE')) fill(done.acceptEmoteTransfer);
-        else return void (await goto('/me'));
-      } else if (how === 'decline') {
-        await gql(DECLINE_EMOTE_TRANSFER, { id: r.id });
-        notify('Declined. It stays yours.');
-      } else {
-        await gql(CANCEL_EMOTE_TRANSFER, { id: r.id });
-        notify('Request withdrawn.');
-      }
-      await loadRequests(r.emoteId);
-    } catch (err) {
-      fail(err);
-      await loadRequests(r.emoteId);
-    } finally {
-      answering = null;
     }
   }
 
@@ -347,7 +290,7 @@
         back={mine ? { href: sectionHref(session.me?.id ?? '', 'uploads'), label: 'Your emotes' } : manages ? { href: ownerHome, label: `${clean(emote.owner?.displayName ?? '')}’s emotes` } : can('emotes.review') ? { href: '/admin', label: 'Admin' } : { href: '/search', label: 'Emotes' }}
       >
         {#snippet line()}
-          <span class="ui-chip {emote!.state.toLowerCase()}">{STATE_LABEL[emote!.state]}</span> Uploaded <span class="ui-mono">{date(emote!.createdAt)}</span>{#if !mine && emote!.owner && (manages || canGive)}{' · '}<bdi>{clean(emote!.owner.displayName)}</bdi>’s emote, you edit their account{/if}
+          <span class="ui-chip {emote!.state.toLowerCase()}">{STATE_LABEL[emote!.state]}</span> Uploaded <span class="ui-mono">{date(emote!.createdAt)}</span>{#if !mine && emote!.owner && manages}{' · '}<bdi>{clean(emote!.owner.displayName)}</bdi>’s emote, you edit their account{/if}
         {/snippet}
       </PageHead>
 
@@ -397,39 +340,18 @@
         </form>
       {/if}
 
-      {#if requests.length || (canGive && (receivers.length || !mine))}
+      {#if canGive}
         <Section title="Hand-over" lead="Give it to another account. It moves with its name, tags and sets.">
           <div id="transfer">
-            {#each requests as r (r.id)}
-              {@const owner = r.from.id === session.me?.id}
-              {@const line = transferLine(r, session.me?.id)}
-              <Row
-                label={`${line.asker === 'you' ? 'You asked' : `${clean(line.asker.name)} asks`} to give it to ${typeof line.target === 'string' ? line.target : clean(line.target.name)}`}
-                hint={`${owner ? 'It moves only if you accept' : `Waiting for ${clean(r.from.displayName)} to accept`}; open until ${date(r.expiresAt)}.`}
-              >
-                {#if owner}
-                  <Confirm small label="Accept" confirm="Click again to give it away" busy={answering === r.id} onconfirm={() => answer(r, 'accept')} />
-                  <button class="ui-btn secondary small" type="button" disabled={answering === r.id} onclick={() => answer(r, 'decline')}>Decline</button>
-                {:else if r.requestedBy.id === session.me?.id}
-                  <button class="ui-btn secondary small" type="button" disabled={answering === r.id} onclick={() => answer(r, 'cancel')}>Cancel request</button>
-                {/if}
-              </Row>
-            {/each}
-            {#if !canGive || (!mine && requests.length)}
-              <!-- One open request per emote: the editor waits, or cancels it first. -->
-            {:else if receivers.length}
-              <Row
-                label="Give to"
-                for="give-to"
-                hint={`Only you, or accounts where you can upload, can take it.${mine ? '' : ` ${clean(emote.owner?.displayName ?? 'The owner')} has to accept first.`}`}
-              >
+            {#if receivers.length}
+              <Row label="Give to" for="give-to" hint="Only accounts where you can upload can take it.">
                 <select id="give-to" class="ui-input give-in" bind:value={giveTo}>
-                  {#each receivers as r (r.id)}<option value={r.id}>{r.self ? `${clean(r.displayName)} (you)` : clean(r.displayName)}</option>{/each}
+                  {#each receivers as r (r.id)}<option value={r.id}>{clean(r.displayName)}</option>{/each}
                 </select>
                 <Confirm small label="Give" confirm="Click again to give it" busy={giving} onconfirm={give} />
               </Row>
             {:else}
-              <Row label="Give to" hint="You can give it only to yourself or to accounts where you can upload; there are none yet." />
+              <Row label="Give to" hint="You can give it only to accounts where you can upload; there are none yet." />
             {/if}
           </div>
         </Section>

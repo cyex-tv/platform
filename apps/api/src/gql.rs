@@ -844,8 +844,11 @@ impl Query {
             .map_err(api_error)
     }
 
-    /// Open emote transfer requests you take part in (ADR 0014): those waiting for you to accept
-    /// or decline (your emotes), and those you made as an editor; of one emote when given.
+    /// Open emote transfer requests you take part in (ADR 0014). Editors can't ask for a transfer
+    /// any more (amendment 2026/11/22) and the open ones were withdrawn, so this is empty.
+    #[graphql(
+        deprecation = "Retired: editors can't ask for a transfer any more; only an emote's owner gives it away."
+    )]
     async fn emote_transfer_requests(
         &self,
         ctx: &Context<'_>,
@@ -2121,12 +2124,10 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Give an emote to another account (ADR 0014). Its owner, or an account editor of the owner
-    /// with `EMOTE_TRANSFER` on every set. The receiver is you, or an account you edit with
-    /// `EMOTE_UPLOAD` on every set. The owner's transfer is immediate (`emote.transferred`); an
-    /// editor's makes a request the owner accepts or declines within 7 days, and the emote comes
-    /// back unchanged (`emoteTransferRequests`; one open request per emote, `transfer_pending`).
-    /// 60 an hour, with accepting, declining and cancelling.
+    /// Give your emote to another account (ADR 0014), at once (`emote.transferred`). Only the
+    /// emote's owner may: anyone else, account editors included, gets `forbidden` (amendment
+    /// 2026/11/22; nobody can ask for someone else's emote). The receiver is you, or an account
+    /// you edit with `EMOTE_UPLOAD` on every set. 60 an hour.
     async fn transfer_emote(
         &self,
         ctx: &Context<'_>,
@@ -2139,7 +2140,10 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Accept an editor's transfer request of your emote: it moves if the rules still allow it.
+    /// Retired with editor transfer requests (amendment 2026/11/22): always `forbidden`.
+    #[graphql(
+        deprecation = "Retired: editors can't ask for a transfer any more; only an emote's owner gives it away."
+    )]
     async fn accept_emote_transfer(&self, ctx: &Context<'_>, id: String) -> Result<Emote> {
         let caller = caller(ctx)?;
         transfers::accept(state(ctx), caller, &id)
@@ -2147,7 +2151,11 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Decline an editor's transfer request of your emote.
+    /// Decline an editor's transfer request of your emote. None are open any more
+    /// (`not_pending`).
+    #[graphql(
+        deprecation = "Retired: editors can't ask for a transfer any more; only an emote's owner gives it away."
+    )]
     async fn decline_emote_transfer(
         &self,
         ctx: &Context<'_>,
@@ -2159,7 +2167,10 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Withdraw a transfer request you made.
+    /// Withdraw a transfer request you made. None are open any more (`not_pending`).
+    #[graphql(
+        deprecation = "Retired: editors can't ask for a transfer any more; only an emote's owner gives it away."
+    )]
     async fn cancel_emote_transfer(
         &self,
         ctx: &Context<'_>,

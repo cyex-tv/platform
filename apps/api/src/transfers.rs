@@ -1,19 +1,19 @@
-//! Giving an emote to another account (ADR 0014; owner decisions of 2026/11/19).
+//! Giving an emote to another account (ADR 0014; owner decisions of 2026/11/19 and 2026/11/22).
 //!
-//! - **Who may give it:** its owner, and an account editor of the owner with `emote_transfer` on
-//!   every set.
-//! - **Who may receive it:** the caller, or an account where the caller holds `emote_upload` on
+//! - **Who may give it:** its owner, nobody else. Account editors could once ask for a transfer
+//!   the owner then accepted; the owner retired that (2026/11/22): nobody can ask to have someone
+//!   else's emote given away. `transferEmote` by anyone but the owner is `forbidden`, and
+//!   `acceptEmoteTransfer` is too. The `emote_transfer` editor flag grants nothing.
+//! - **Who may receive it:** the owner, or an account where the owner holds `emote_upload` on
 //!   every set (it already trusts them with uploads). Blocked, deleted and restricted accounts
-//!   (either side, and the caller) are refused.
-//! - **Owner must accept:** the owner's own transfer is immediate. An editor's makes a pending
-//!   request instead; the owner accepts (the emote moves) or declines, the editor may cancel, and
-//!   one left alone expires after 7 days. One open request per emote. Accepting checks the rules
-//!   again, as they stand then.
-//! - Every step is audited (`emote.transfer_requested`, `_accepted`, `_declined`, `_cancelled`,
-//!   `_expired`, and `emote.transferred` when it moves), with the owner as subject, and the other
-//!   side is notified.
+//!   (either side) are refused.
+//! - **Requests made before:** `withdraw_open` (run at start-up) cancels every open one, audited as
+//!   `emote.transfer_cancelled` with `"reason": "retired"`, and tells both sides. Declining and
+//!   cancelling still answer, for a client that shows an old request.
+//! - Every move is audited (`emote.transferred`), with the owner as subject, and the receiver is
+//!   notified.
 
-use chrono::{Duration, Utc};
+use chrono::Utc;
 use cyex_tv_auth::Caller;
 use cyex_tv_db::transfers::{self, Request, TransferState};
 use cyex_tv_db::{accounts, audit, emotes, ids, reads};
@@ -29,14 +29,13 @@ use crate::catalog::{db_error, forbidden, not_found, parse_id};
 use crate::errors::{bad, conflict, limited_as, sqlx_error};
 use crate::limits::AccountLimit;
 use crate::moderation::{
-    OWNER_RESTRICTED, YOU_RESTRICTED, announce, build, editor_of_owner, not_restricted, restricted,
-    row,
+    OWNER_RESTRICTED, YOU_RESTRICTED, announce, build, not_restricted, restricted, row,
 };
 use crate::state::AppState;
 use crate::views;
 
-/// How long a request waits for the owner.
-pub const REQUEST_DAYS: i64 = 7;
+/// What anyone but an emote's owner hears from `transferEmote` and `acceptEmoteTransfer`.
+pub const OWNER_ONLY: &str = "Only an emote's owner can give it away. Nobody can ask for someone else's emote to be transferred.";
 
 fn rate_limited(state: &AppState, caller: &Caller) -> ApiResult<()> {
     limited_as(
@@ -168,16 +167,13 @@ async fn receiver_checks(
     Ok(())
 }
 
-/// Moves the emote, audits `emote.transferred` and tells both sides (unless they did it).
-#[allow(clippy::too_many_arguments)]
+/// Moves the emote, audits `emote.transferred` and tells the receiver (unless it's the owner).
 async fn move_emote(
     conn: &mut PgConnection,
     caller: &Caller,
     emote: &reads::EmoteRow,
     from: Uuid,
     to: Uuid,
-    via_editor: bool,
-    request: Option<&Request>,
 ) -> ApiResult<()> {
     if !emotes::transfer(conn, emote.id, to)
         .await
@@ -185,7 +181,7 @@ async fn move_emote(
     {
         return Err(not_found());
     }
-    // Whatever else was waiting for this emote is moot now.
+    // Whatever was still waiting for this emote is moot now.
     for r in transfers::close_open_for_emote(conn, emote.id, Some(caller.account_id))
         .await
         .map_err(db_error)?
@@ -201,14 +197,6 @@ async fn move_emote(
         )
         .await?;
     }
-    let mut after = json!({ "owner_id": ids::to_text(to) });
-    if via_editor {
-        after["via"] = json!("account_editor");
-    }
-    if let Some(r) = request {
-        after["request_id"] = json!(ids::to_text(r.id));
-        after["requested_by"] = json!(ids::to_text(r.requested_by));
-    }
     write(
         conn,
         Some(caller.account_id),
@@ -216,26 +204,20 @@ async fn move_emote(
         emote.id,
         from,
         Some(json!({ "owner_id": ids::to_text(from), "name": emote.name })),
-        Some(after),
+        Some(json!({ "owner_id": ids::to_text(to) })),
     )
     .await?;
-    let mut tell = vec![(from, "from"), (to, "to")];
-    if let Some(r) = request {
-        tell.push((r.requested_by, "editor"));
-    }
-    let mut told = Vec::new();
-    for (who, role) in tell {
-        if who == caller.account_id || told.contains(&who) {
+    for (who, role) in [(from, "from"), (to, "to")] {
+        if who == caller.account_id {
             continue;
         }
-        told.push(who);
         let p = payload(
             conn,
             role,
             emote.id,
             &emote.name,
             (from, to, caller.account_id),
-            request.map(|r| r.id),
+            None,
         )
         .await?;
         crate::account::notify(conn, who, "emote.transferred", &p).await?;
@@ -246,8 +228,7 @@ async fn move_emote(
     Ok(())
 }
 
-/// `transferEmote`: the owner's moves the emote at once; an editor's makes a request the owner
-/// accepts or declines (the emote comes back unchanged).
+/// `transferEmote`: the owner gives the emote away, at once. Nobody else may, editors included.
 pub async fn transfer(
     state: &AppState,
     caller: &Caller,
@@ -264,59 +245,70 @@ pub async fn transfer(
     let (Some(_), Some(from)) = (lock, before.owner) else {
         return Err(not_found());
     };
-    let owner = from == caller.account_id;
-    let editor = !owner
-        && editor_of_owner(&mut tx, caller, Some(from), EditorPermission::EmoteTransfer).await?;
-    if !owner && !editor {
+    if from != caller.account_id {
         // An emote others can't see yet answers as if it weren't there.
-        if before.state != EmoteState::Approved {
+        if before.state != EmoteState::Approved
+            && !crate::editors::has_emote_flag(
+                &mut tx,
+                from,
+                caller.account_id,
+                EditorPermission::EmoteManage,
+            )
+            .await?
+        {
             return Err(not_found());
         }
-        return Err(forbidden(
-            "Only the emote's owner and its editors with the transfer permission can give it away.",
-        ));
+        return Err(forbidden(OWNER_ONLY));
     }
     receiver_checks(&mut tx, caller.account_id, from, to).await?;
-    if owner {
-        move_emote(&mut tx, caller, &before, from, to, false, None).await?;
-    } else {
-        expire_due(&mut tx, Some(id)).await?;
-        let expires = Utc::now() + Duration::days(REQUEST_DAYS);
-        let Some(r) = transfers::create(&mut tx, id, from, to, caller.account_id, expires)
-            .await
-            .map_err(db_error)?
-        else {
-            return Err(conflict(
-                "transfer_pending",
-                "A transfer of this emote is already waiting for its owner. Cancel that one first.",
-            ));
-        };
-        let mut after = request_json(&r);
-        after["via"] = json!("account_editor");
-        write(
-            &mut tx,
-            Some(caller.account_id),
-            "emote.transfer_requested",
-            id,
-            from,
-            None,
-            Some(after),
-        )
-        .await?;
-        let p = payload(
-            &mut tx,
-            "owner",
-            id,
-            &before.name,
-            (from, to, caller.account_id),
-            Some(r.id),
-        )
-        .await?;
-        crate::account::notify(&mut tx, from, "emote.transfer_requested", &p).await?;
-    }
+    move_emote(&mut tx, caller, &before, from, to).await?;
     tx.commit().await.map_err(sqlx_error)?;
     let after = row(&mut conn, id).await?.ok_or_else(not_found)?;
     build(state, &mut conn, &after).await
+}
+
+/// Cancels every open transfer request (editors can't ask any more; ADR 0014, amendment
+/// 2026/11/22). Each is audited as `emote.transfer_cancelled` (no actor, `"reason": "retired"`)
+/// and both the owner and the editor who asked get `emote.transfer_cancelled`. Run at start-up;
+/// running it again finds nothing. Returns how many it closed.
+pub async fn withdraw_open(state: &AppState) -> ApiResult<usize> {
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    let closed = transfers::withdraw_all(&mut tx).await.map_err(db_error)?;
+    let emote_ids: Vec<Uuid> = closed.iter().map(|r| r.emote_id).collect();
+    let rows = reads::emotes(&mut tx, &emote_ids).await.map_err(db_error)?;
+    for r in &closed {
+        write(
+            &mut tx,
+            None,
+            "emote.transfer_cancelled",
+            r.emote_id,
+            r.from_account_id,
+            Some(request_json(r)),
+            Some(json!({ "state": "cancelled", "reason": "retired" })),
+        )
+        .await?;
+        let name = rows
+            .iter()
+            .find(|e| e.id == r.emote_id)
+            .map(|e| e.name.clone())
+            .unwrap_or_default();
+        for (who, role) in [(r.from_account_id, "owner"), (r.requested_by, "editor")] {
+            let mut p = payload(
+                &mut tx,
+                role,
+                r.emote_id,
+                &name,
+                (r.from_account_id, r.to_account_id, r.requested_by),
+                Some(r.id),
+            )
+            .await?;
+            p["reason"] = json!("retired");
+            crate::account::notify(&mut tx, who, "emote.transfer_cancelled", &p).await?;
+        }
+    }
+    tx.commit().await.map_err(sqlx_error)?;
+    Ok(closed.len())
 }
 
 fn summary(names: &std::collections::HashMap<Uuid, reads::Summary>, id: Uuid) -> AccountSummary {
@@ -409,114 +401,13 @@ async fn open_request(conn: &mut PgConnection, caller: &Caller, id: Uuid) -> Api
     Ok(r)
 }
 
-/// Closes a request that can't go ahead any more (`reason`: `moved`, `editor_permission`),
-/// audited as cancelled.
-async fn cancel_moot(
-    conn: &mut PgConnection,
-    caller: &Caller,
-    r: &Request,
-    reason: &str,
-) -> ApiResult<()> {
-    transfers::resolve(
-        conn,
-        r.id,
-        TransferState::Cancelled,
-        Some(caller.account_id),
-    )
-    .await
-    .map_err(db_error)?;
-    write(
-        conn,
-        Some(caller.account_id),
-        "emote.transfer_cancelled",
-        r.emote_id,
-        r.from_account_id,
-        Some(request_json(r)),
-        Some(json!({ "reason": reason })),
-    )
-    .await
-}
-
-/// `acceptEmoteTransfer`: the owner agrees and the emote moves, if the rules still allow it.
+/// `acceptEmoteTransfer`: retired with editor transfer requests (ADR 0014, amendment 2026/11/22).
+/// Every request was withdrawn and no new one can be made, so there is nothing to accept: the same
+/// `forbidden` for every ID, which tells nobody whether a request exists.
 pub async fn accept(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Emote> {
-    let id = parse_id(id)?;
+    parse_id(id)?;
     rate_limited(state, caller)?;
-    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    expire_now(&mut conn).await?;
-    let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    // Locks in the order `transferEmote` takes them, the emote and then its requests, so the two
-    // can't wait on each other (a deadlock would be a 500).
-    let emote_id = transfers::get(&mut tx, id)
-        .await
-        .map_err(db_error)?
-        .filter(|r| caller.account_id == r.from_account_id || caller.account_id == r.requested_by)
-        .ok_or_else(not_found)?
-        .emote_id;
-    emotes::lock(&mut tx, emote_id).await.map_err(db_error)?;
-    let r = open_request(&mut tx, caller, id).await?;
-    if r.from_account_id != caller.account_id {
-        return Err(forbidden("Only the emote's owner can accept its transfer."));
-    }
-    let emote = row(&mut tx, r.emote_id).await?;
-    let Some(emote) = emote.filter(|e| e.owner == Some(r.from_account_id)) else {
-        // It moved or went away since: the request is moot.
-        cancel_moot(&mut tx, caller, &r, "moved").await?;
-        tx.commit().await.map_err(sqlx_error)?;
-        return Err(conflict(
-            "not_pending",
-            "That emote isn't yours any more, so the request is closed.",
-        ));
-    };
-    // The editor who asked must still hold `emote_transfer` on every set: a request outlives
-    // neither their grant nor that flag.
-    if !crate::editors::has_emote_flag(
-        &mut tx,
-        r.from_account_id,
-        r.requested_by,
-        EditorPermission::EmoteTransfer,
-    )
-    .await?
-    {
-        cancel_moot(&mut tx, caller, &r, "editor_permission").await?;
-        tx.commit().await.map_err(sqlx_error)?;
-        return Err(conflict(
-            "not_pending",
-            "The editor who asked can't transfer your emotes any more, so the request is closed.",
-        ));
-    }
-    // As they stand now: the editor still may give it there, and nobody is held.
-    receiver_checks(&mut tx, r.requested_by, r.from_account_id, r.to_account_id).await?;
-    transfers::resolve(
-        &mut tx,
-        r.id,
-        TransferState::Accepted,
-        Some(caller.account_id),
-    )
-    .await
-    .map_err(db_error)?;
-    write(
-        &mut tx,
-        Some(caller.account_id),
-        "emote.transfer_accepted",
-        r.emote_id,
-        r.from_account_id,
-        Some(request_json(&r)),
-        Some(json!({ "state": "accepted" })),
-    )
-    .await?;
-    move_emote(
-        &mut tx,
-        caller,
-        &emote,
-        r.from_account_id,
-        r.to_account_id,
-        false,
-        Some(&r),
-    )
-    .await?;
-    tx.commit().await.map_err(sqlx_error)?;
-    let after = row(&mut conn, r.emote_id).await?.ok_or_else(not_found)?;
-    build(state, &mut conn, &after).await
+    Err(forbidden(OWNER_ONLY))
 }
 
 /// `declineEmoteTransfer` (the owner) and `cancelEmoteTransfer` (the editor who asked).

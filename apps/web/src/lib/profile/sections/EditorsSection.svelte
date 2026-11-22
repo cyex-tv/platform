@@ -242,8 +242,10 @@
   .col { min-width: 0; }
   .col + .col > :global(.sec:first-child) { border-top: 1px solid var(--border); }
   @container (min-width: 1240px) {
-    .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 40px; }
-    .col + .col { padding-left: 40px; margin-left: -40px; border-left: 1px solid var(--border); }
+    /* The hairline sits in the middle of the gutter: 24px of air on each side of it. */
+    .cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 0; }
+    .col:first-child { padding-right: 24px; }
+    .col + .col { padding-left: 24px; border-left: 1px solid var(--border); }
     .col + .col > :global(.sec:first-child) { border-top: 0; }
   }
   .find { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 0 4px; }

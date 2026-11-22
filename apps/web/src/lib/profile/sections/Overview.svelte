@@ -195,7 +195,8 @@
   .st-sk { display: block; width: 48px; height: 18px; border-radius: var(--radius); }
   @media (max-width: 479.98px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   /* The tiles: balanced columns of flat Sections, each opened by a hairline (the tops line up). */
-  .tiles { columns: 4 360px; column-gap: 40px; column-rule: 1px solid var(--border); }
+  /* 24px of air each side of the rule, as the two columns of Account and Editors. */
+  .tiles { columns: 4 360px; column-gap: 48px; column-rule: 1px solid var(--border); }
   .tiles > :global(.sec) { break-inside: avoid; border-top: 1px solid var(--border); }
   .more { display: inline-flex; align-items: center; gap: 2px; min-height: 32px; padding: 0 2px 0 8px; border-radius: var(--radius);
     font-size: var(--t-fine); font-weight: 500; color: var(--muted); white-space: nowrap; }

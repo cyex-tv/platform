@@ -187,6 +187,19 @@ pub async fn close_open_for_emote(
     .await?)
 }
 
+/// Closes every pending request as `cancelled`, with nobody as the one who closed it, and returns
+/// them: editors can't ask for a transfer any more (ADR 0014, amendment 2026/11/22). Two callers
+/// at once each get their own rows (the second waits on the first's locks and then skips them).
+pub async fn withdraw_all(conn: &mut PgConnection) -> DbResult<Vec<Request>> {
+    Ok(sqlx::query_as(&format!(
+        "UPDATE emote_transfer_requests SET state = 'cancelled', resolved_at = now(), resolved_by = NULL
+         WHERE state = 'pending'
+         RETURNING {REQUEST}"
+    ))
+    .fetch_all(conn)
+    .await?)
+}
+
 /// Where each of these requests stands now, as `state`; a pending one past its time reads as
 /// `expired` even before the sweep marks it. Unknown IDs are missing.
 pub async fn states_of(

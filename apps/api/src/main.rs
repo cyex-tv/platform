@@ -62,6 +62,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     tracing::info!(env = paddle.env.as_str(), "paddle");
     state = state.with_paddle(cyex_tv_api::paddle::Paddle::new(paddle)?);
+    // Editors can't ask for a transfer any more (ADR 0014, amendment 2026/11/22): requests still
+    // open from before are withdrawn and both sides told. Finds nothing once done; a failure is
+    // logged and retried at the next start.
+    match cyex_tv_api::transfers::withdraw_open(&state).await {
+        Ok(0) => {}
+        Ok(n) => tracing::info!(withdrawn = n, "open emote transfer requests withdrawn"),
+        Err(err) => tracing::warn!(error = ?err, "couldn't withdraw open emote transfer requests"),
+    }
     // The GraphQL `events` subscription reads the outbox through its own feeder.
     let (stop_tx, mut stop_rx) = tokio::sync::watch::channel(false);
     let feeder = tokio::spawn(cyex_tv_hub::feeder::run(

@@ -5,8 +5,8 @@
 //! emotes; both are audited, and so is any edit made through `emotes.edit_any`.
 //!
 //! Account editors (ADR 0014) with `emote_manage` on every set see, change and delete the owner's
-//! emotes as the owner does; with `emote_transfer` they give them to another account
-//! (`transfer`). Each such change is audited with the editor as actor, `"via": "account_editor"`
+//! emotes as the owner does. Giving an emote away is the owner's alone (`transfers`; the
+//! `emote_transfer` flag is retired, amendment 2026/11/22). Each such change is audited with the editor as actor, `"via": "account_editor"`
 //! and the owner as subject. A hold on uploads of the editor or the owner refuses them.
 
 use std::collections::BTreeSet;
