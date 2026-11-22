@@ -2,7 +2,7 @@ import { describe as suite, expect, it } from 'vitest';
 import { ApiError } from '$lib/api';
 import { deleteMessage, exportMessage, unlinkMessage } from './errors';
 import { exportFilename } from './export';
-import { badge, closedRequest, describe, parsePayload, requestGone } from './notifications';
+import { badge, describe, parsePayload } from './notifications';
 
 const j = (o: unknown) => JSON.stringify(o);
 const strip = (s: string) => s.replace(/[⁨⁩]/g, '');
@@ -51,29 +51,26 @@ suite('describe', () => {
     expect(strip(describe('cosmetic.revoked', j({ kind: 'badge', name: 'Early' })).text)).toBe('The Early badge was taken away.');
     expect(describe('cosmetic.granted', j({ kind: 'paint' })).href).toBe('/me/cosmetics');
   });
-  it('a transfer request that is closed says so instead of offering buttons', () => {
-    expect(closedRequest('PENDING')).toBeNull();
-    expect(closedRequest(null)).toBeNull();
-    expect(closedRequest(undefined)).toBeNull();
-    expect(closedRequest('ACCEPTED')).toBe('Accepted: it moved.');
-    expect(closedRequest('DECLINED')).toBe('Declined: it stays yours.');
-    expect(closedRequest('CANCELLED')).toMatch(/^Withdrawn/);
-    expect(closedRequest('EXPIRED')).toMatch(/^Expired/);
-  });
-  it('transfer requests can be answered, and every step reads as a sentence', () => {
+  it('old transfer requests read as what happened, with nothing to answer (requests are retired)', () => {
     const p = { emote_id: 'E1', name: 'Pog', request_id: 'R1', from_name: 'Ana', to_name: 'Bo', actor_name: 'Bo' };
     const asked = describe('emote.transfer_requested', j({ ...p, role: 'owner' }));
-    expect(strip(asked.text)).toBe('Bo asks to give Pog to Bo. It moves only if you accept.');
-    expect(asked.href).toBe('/me/emotes/E1#transfer');
-    expect(asked.request).toBe('R1');
-    expect(strip(describe('emote.transfer_requested', j({ ...p, to_id: 'B1', actor_id: 'B1' })).text)).toBe('Bo asks to give Pog to themselves. It moves only if you accept.');
-    expect(describe('emote.transfer_requested', j({ ...p, request_id: '../x' })).request).toBeNull();
+    expect(strip(asked.text)).toBe('Bo asked to give Pog to Bo. Transfer requests are gone: only you can give your emotes away.');
+    expect(asked.href).toBe('/emotes/E1');
+    expect('request' in asked).toBe(false);
+    expect(strip(describe('emote.transfer_requested', j({ ...p, to_id: 'B1', actor_id: 'B1' })).text)).toMatch(/^Bo asked to give Pog to themselves\./);
+    // Withdrawn when requests were retired: both sides are told, in their own words.
+    const retired = { ...p, reason: 'retired' };
+    expect(strip(describe('emote.transfer_cancelled', j({ ...retired, role: 'owner' })).text)).toBe(
+      'The request to give Pog to Bo was withdrawn. It stays yours: only you can give your emotes away.',
+    );
+    expect(strip(describe('emote.transfer_cancelled', j({ ...retired, role: 'editor' })).text)).toBe(
+      'Your request to give Pog to Bo was withdrawn: only an emote’s owner can give it away now.',
+    );
     expect(strip(describe('emote.transferred', j({ ...p, role: 'to' })).text)).toBe('Pog is yours now, from Ana.');
     expect(strip(describe('emote.transferred', j({ ...p, role: 'editor' })).text)).toBe('Ana accepted: Pog went to Bo.');
     expect(describe('emote.transferred', j({ ...p, role: 'from' })).href).toBeNull();
     expect(strip(describe('emote.transfer_declined', j(p)).text)).toBe('Ana declined giving Pog to Bo.');
     expect(strip(describe('emote.transfer_cancelled', j(p)).text)).toBe('Bo withdrew the request to give Pog away.');
-    expect(describe('emote.approved', j(p)).request).toBeUndefined();
   });
   it('missing fields still give a sentence', () => {
     expect(describe('emote.approved', '{}').text).toBe('Your emote was approved.');
@@ -140,12 +137,5 @@ suite('unlinkMessage', () => {
     expect(unlinkMessage(new ApiError('raw', 'last_identity'))).toMatch(/only connection/);
     expect(unlinkMessage(new ApiError('As the API says.', 'other'))).toBe('As the API says.');
     expect(unlinkMessage(new Error('x'))).toContain('Nothing was disconnected');
-  });
-
-  it('only an answer that closes the request closes it', () => {
-    for (const code of ['not_pending', 'not_found', 'forbidden']) expect(requestGone({ code })).toBe(true);
-    for (const code of ['offline', 'timeout', 'rate_limited', 'signed_out', 'bad_answer']) expect(requestGone({ code })).toBe(false);
-    expect(requestGone(new Error('x'))).toBe(false);
-    expect(requestGone(null)).toBe(false);
   });
 });

@@ -22,10 +22,10 @@ export const KIND_GROUPS: KindGroup[] = [
     id: 'transfers',
     label: 'Hand-overs',
     kinds: [
-      k('emote.transfer_requested', 'Requests', 'Someone asks to give your emote to another account. It waits for your answer. Always on.'),
+      k('emote.transfer_requested', 'Requests', 'Someone asked to give your emote away. Retired: only an emote’s owner gives it away now.'),
       k('emote.transferred', 'Done', 'An emote moved to you or away from you.'),
-      k('emote.transfer_declined', 'Declined', 'A hand-over you asked for was declined.'),
-      k('emote.transfer_cancelled', 'Withdrawn', 'A hand-over request to you was withdrawn.'),
+      k('emote.transfer_declined', 'Declined', 'A hand-over you asked for was declined. Retired with requests.'),
+      k('emote.transfer_cancelled', 'Withdrawn', 'A hand-over request you made or got was withdrawn.'),
     ],
   },
   {
@@ -47,6 +47,13 @@ export const KIND_GROUPS: KindGroup[] = [
   },
 ];
 
+/**
+ * Kinds nothing sends any more: editors can't ask for a transfer (ADR 0014, amendment
+ * 2026/11/22). Old ones still read as words and filter under Hand-overs; Settings has no switch
+ * for them.
+ */
+export const RETIRED_KINDS: ReadonlySet<string> = new Set(['emote.transfer_requested', 'emote.transfer_declined']);
+
 const GROUP_OF = new Map(KIND_GROUPS.flatMap((g) => g.kinds.map((i) => [i.kind, g.id] as const)));
 const INFO = new Map(KIND_GROUPS.flatMap((g) => g.kinds.map((i) => [i.kind, i] as const)));
 
@@ -62,8 +69,9 @@ export function groupOf(kind: string): string {
 
 export type Pref = { kind: string; notify: boolean; toast: boolean; required: boolean };
 
-/** The API's preferences in the site's groups and order; kinds it doesn't know go in Other. */
+/** The API's preferences in the site's groups and order; kinds it doesn't know go in Other, retired ones nowhere. */
 export function groupPrefs(prefs: readonly Pref[]): { id: string; label: string; items: (Pref & KindInfo)[] }[] {
+  prefs = prefs.filter((p) => !RETIRED_KINDS.has(p.kind));
   const by = new Map(prefs.map((p) => [p.kind, p]));
   const out = KIND_GROUPS.map((g) => ({
     id: g.id,

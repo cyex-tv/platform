@@ -26,7 +26,6 @@ export const GROUPS: PermissionGroup[] = [
     items: [
       { key: 'EMOTE_UPLOAD', label: 'Upload', line: 'Upload emotes the account owns.' },
       { key: 'EMOTE_MANAGE', label: 'Manage', line: 'Rename, retag, hide and delete its emotes.' },
-      { key: 'EMOTE_TRANSFER', label: 'Transfer', line: 'Give its emotes to an account that trusts them.' },
     ],
   },
   {
@@ -51,19 +50,21 @@ export const GROUPS: PermissionGroup[] = [
   },
 ];
 
-/** Every permission, in the dialog's order. */
+/**
+ * Every permission, in the dialog's order. `EMOTE_TRANSFER` is retired (ADR 0014, amendment
+ * 2026/11/22): only an emote's owner gives it away, so it is never offered, listed or phrased.
+ */
 export const PERMISSIONS: PermissionInfo[] = GROUPS.flatMap((g) => g.items);
 
 const ORDER = PERMISSIONS.map((p) => p.key);
 
 /** What each permission lets someone do, as a verb phrase ("edit set emotes, manage sets and manage editors"). */
-const SHORT: Record<EditorPermission, string> = {
+const SHORT: Record<Exclude<EditorPermission, 'EMOTE_TRANSFER'>, string> = {
   EMOTES: 'edit set emotes',
   SETS: 'manage sets',
   CHANNELS: 'change channel settings',
   EMOTE_UPLOAD: 'upload emotes',
   EMOTE_MANAGE: 'manage emotes',
-  EMOTE_TRANSFER: 'transfer emotes',
   PROFILE: 'change the profile',
   BILLING_PAYMENT: 'manage payment',
   BILLING_SUBSCRIPTION: 'manage the subscription',
@@ -79,7 +80,7 @@ export function ordered(perms: readonly EditorPermission[]): EditorPermission[] 
 export function permissionPhrase(perms: readonly EditorPermission[]): string {
   const list = ordered(perms).filter((k) => !(k === 'CHANNELS' && perms.includes('SETS')));
   if (list.length === ORDER.length - 1 && perms.includes('SETS')) return 'do everything';
-  const names = list.map((k) => SHORT[k]);
+  const names = list.map((k) => SHORT[k as keyof typeof SHORT]);
   if (names.length < 2) return names[0] ?? 'do nothing';
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
@@ -187,7 +188,7 @@ export function canManage(
 // Emotes belong to the account, not to a set: the emote permissions count only on a grant that
 // covers every set (the API refuses them otherwise).
 
-export const EMOTE_PERMISSIONS: readonly EditorPermission[] = ['EMOTE_UPLOAD', 'EMOTE_MANAGE', 'EMOTE_TRANSFER'];
+export const EMOTE_PERMISSIONS: readonly EditorPermission[] = ['EMOTE_UPLOAD', 'EMOTE_MANAGE'];
 
 type EmoteGrant = { account: { id: string }; permissions: readonly EditorPermission[]; allSets?: boolean };
 
@@ -241,8 +242,8 @@ export function uploadTargets(
 }
 
 /**
- * Where an emote can go: yourself (unless it's yours already), and the accounts where you hold
- * Upload, so nobody gets an emote from someone they never trusted.
+ * Where the owner can give their emote: the accounts where they hold Upload, so nobody gets an
+ * emote from someone they never trusted (themselves left out: it's theirs already).
  */
 export function transferTargets(
   me: { id: string; displayName: string } | null | undefined,

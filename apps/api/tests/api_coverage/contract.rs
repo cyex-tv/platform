@@ -254,8 +254,6 @@ async fn every_site_operation_runs_against_the_real_api() {
     let e1 = emote(&w, &o, "covPog", EmoteState::Approved).await;
     let e2 = emote(&w, &o, "covKek", EmoteState::Approved).await;
     let e3 = emote(&w, &o, "covGive", EmoteState::Approved).await;
-    let e4 = emote(&w, &o, "covKeep", EmoteState::Approved).await;
-    let e5 = emote(&w, &o, "covCancel", EmoteState::Approved).await;
     let e_del = emote(&w, &o, "covGone", EmoteState::Approved).await;
     let e_reject = emote(&w, &o, "covNope", EmoteState::Pending).await;
     let e_report = emote(&w, &t, "covBad", EmoteState::Approved).await;
@@ -498,17 +496,18 @@ async fn every_site_operation_runs_against_the_real_api() {
     )
     .await;
 
-    // Account editors, and transfers by an editor that the owner answers.
+    // Account editors, and the owner giving an emote to an account that trusts them with uploads
+    // (editors can't ask for a transfer: ADR 0014, amendment 2026/11/22).
     c.op(
         os,
         "AddAccountEditor",
-        json!({ "input": { "accountId": f.tid(), "permissions": ["EMOTES", "SETS", "PROFILE", "EMOTE_TRANSFER"] } }),
+        json!({ "input": { "accountId": f.tid(), "permissions": ["EMOTES", "SETS", "PROFILE"] } }),
     )
     .await;
     c.op(
         os,
         "UpdateAccountEditor",
-        json!({ "accountId": f.tid(), "permissions": ["EMOTES", "SETS", "CHANNELS", "PROFILE", "EMOTE_TRANSFER", "EMOTE_UPLOAD"] }),
+        json!({ "accountId": f.tid(), "permissions": ["EMOTES", "SETS", "CHANNELS", "PROFILE", "EMOTE_UPLOAD"] }),
     )
     .await;
     c.op(os, "Editors", json!({})).await;
@@ -523,37 +522,23 @@ async fn every_site_operation_runs_against_the_real_api() {
         json!({ "id": e1, "input": { "tags": ["cov", "pog"], "zeroWidth": false } }),
     )
     .await;
-    for e in [&e3, &e4, &e5] {
-        c.op(
-            fs,
+    c.op(
+        fs,
+        "AddAccountEditor",
+        json!({ "input": { "accountId": o.tid(), "permissions": ["EMOTE_UPLOAD"] } }),
+    )
+    .await;
+    let data = c
+        .op(
+            os,
             "TransferEmote",
-            json!({ "id": e, "toAccountId": f.tid() }),
+            json!({ "id": e3, "toAccountId": f.tid() }),
         )
         .await;
-    }
-    let data = c.op(os, "EmoteTransferRequests", json!({})).await;
-    let request_of = |emote: &str| {
-        data["emoteTransferRequests"]
-            .as_array()
-            .and_then(|rs| rs.iter().find(|r| r["emoteId"] == emote))
-            .and_then(|r| r["id"].as_str())
-            .unwrap_or_default()
-            .to_owned()
-    };
-    let (r3, r4, r5) = (request_of(&e3), request_of(&e4), request_of(&e5));
     c.check(
-        !r3.is_empty() && !r4.is_empty() && !r5.is_empty(),
-        format!("EmoteTransferRequests: three open requests expected: {data}"),
+        data["transferEmote"]["owner"]["id"] == c.w.db.public(f.id).await.as_str(),
+        format!("TransferEmote: the owner's emote moves at once: {data}"),
     );
-    c.op(fs, "EmoteTransferRequests", json!({ "emoteId": e3 }))
-        .await;
-    let data = c.op(os, "AcceptEmoteTransfer", json!({ "id": r3 })).await;
-    c.check(
-        data["acceptEmoteTransfer"]["owner"]["id"] == c.w.db.public(f.id).await.as_str(),
-        format!("AcceptEmoteTransfer: the emote moves: {data}"),
-    );
-    c.op(os, "DeclineEmoteTransfer", json!({ "id": r4 })).await;
-    c.op(fs, "CancelEmoteTransfer", json!({ "id": r5 })).await;
 
     // Cosmetics (staff), and picking them.
     c.op(os, "CosmeticImage", json!({ "id": badge_image }))

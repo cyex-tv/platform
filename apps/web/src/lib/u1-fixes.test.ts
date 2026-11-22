@@ -2,7 +2,7 @@ import { render } from 'svelte/server';
 import { describe, expect, it } from 'vitest';
 import { addState, plan } from './components/browse/bulk';
 import BrowseGrid from './components/browse/BrowseGrid.svelte';
-import { canReport, transferLine } from './components/emote/emote-page';
+import { canReport } from './components/emote/emote-page';
 import LocalPreview from './tool/LocalPreview.svelte';
 
 describe('Add button state in the select bar', () => {
@@ -30,22 +30,6 @@ describe('Report', () => {
   it('is not offered on your own emote, or one that is not approved', () => {
     expect(canReport({ state: 'APPROVED', owner: { id: 'U1' } } as never, 'U1')).toBe(false);
     expect(canReport({ state: 'PENDING', owner: { id: 'U2' } } as never, 'U1')).toBe(false);
-  });
-});
-
-describe('transfer request wording', () => {
-  const acct = (id: string, displayName: string) => ({ id, displayName });
-  it('says themselves when they ask to give it to their own account', () => {
-    const r = { requestedBy: acct('P', 'pixelmoth'), to: acct('P', 'pixelmoth') };
-    expect(transferLine(r, 'ME')).toEqual({ asker: { name: 'pixelmoth' }, target: 'themselves' });
-  });
-  it('says yourself when you ask to give it to yourself', () => {
-    const r = { requestedBy: acct('ME', 'me'), to: acct('ME', 'me') };
-    expect(transferLine(r, 'ME')).toEqual({ asker: 'you', target: 'yourself' });
-  });
-  it('names the other account, or you', () => {
-    expect(transferLine({ requestedBy: acct('P', 'pixelmoth'), to: acct('ME', 'me') }, 'ME').target).toBe('you');
-    expect(transferLine({ requestedBy: acct('ME', 'me'), to: acct('Q', 'quill') }, 'ME').target).toEqual({ name: 'quill' });
   });
 });
 

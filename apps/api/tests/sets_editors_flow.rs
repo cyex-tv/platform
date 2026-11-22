@@ -445,7 +445,6 @@ async fn the_new_flags_are_stored_and_channels_gates_channel_settings() {
     let reserved = [
         "EMOTE_UPLOAD",
         "EMOTE_MANAGE",
-        "EMOTE_TRANSFER",
         "BILLING_PAYMENT",
         "BILLING_SUBSCRIPTION",
     ];

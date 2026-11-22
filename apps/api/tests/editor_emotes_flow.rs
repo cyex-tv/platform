@@ -1,6 +1,7 @@
 //! The account editors' emote permissions (ADR 0014, amended 2026/11/19): `EMOTE_UPLOAD` uploads
-//! for the account, `EMOTE_MANAGE` reads, changes and deletes its emotes, `EMOTE_TRANSFER` gives
-//! them away. Each is checked for the allowed case and refused without the flag, on another
+//! for the account, `EMOTE_MANAGE` reads, changes and deletes its emotes. `EMOTE_TRANSFER` is
+//! retired (amendment 2026/11/22): only an emote's owner gives it away, nobody can ask for someone
+//! else's emote, and open requests from before are withdrawn. Each is checked for the allowed case and refused without the flag, on another
 //! account, on a grant limited to some sets, and while the editor or the owner is restricted; the
 //! audit rows name the editor with `"via": "account_editor"` and the owner as subject. Through the
 //! real router against a real Postgres; runs when `CYEX_TV_TEST_DATABASE_URL` is set (CI sets it)
@@ -45,6 +46,7 @@ impl User {
 struct World {
     db: TestDb,
     app: Router,
+    state: AppState,
 }
 
 fn code(response: &Value) -> &str {
@@ -122,7 +124,8 @@ impl World {
             .with_store(Store::memory())
             .with_limits(Limits::new(Rates::default(), false));
         Some(Self {
-            app: cyex_tv_api::app(state),
+            app: cyex_tv_api::app(state.clone()),
+            state,
             db,
         })
     }
@@ -308,17 +311,6 @@ impl World {
             .into_iter()
             .map(|n| n.kind)
             .collect()
-    }
-
-    /// The one open transfer request of `emote`, as `user` sees it.
-    async fn open(&self, user: &User, emote: &str) -> String {
-        let r = self.gql(user, REQUESTS, json!({ "e": emote })).await;
-        let list = r["data"]["emoteTransferRequests"]
-            .as_array()
-            .unwrap_or_else(|| panic!("{r}"));
-        assert_eq!(list.len(), 1, "{r}");
-        assert_eq!(list[0]["state"], "PENDING", "{r}");
-        list[0]["id"].as_str().unwrap().to_owned()
     }
 
     async fn owner_and_uploader(&self, emote: &str) -> (Option<Uuid>, Option<Uuid>) {
@@ -596,388 +588,257 @@ async fn manage_reads_changes_and_deletes_the_accounts_emotes() {
     w.db.close().await;
 }
 
+/// Nobody can ask for someone else's emote to be transferred (owner decision 2026/11/22): an
+/// account editor, whatever they hold, is refused, no request is made, the owner hears nothing,
+/// and accepting answers `forbidden` for any ID.
 #[tokio::test]
-async fn editor_transfers_wait_for_the_owner_and_go_only_to_trusting_accounts() {
+async fn editors_cant_transfer_or_ask_for_a_transfer() {
     let Some(w) = World::new().await else { return };
     let alice = w.user("7301").await; // the owner
-    let bob = w.user("7302").await; // EMOTE_TRANSFER on Alice, EMOTE_UPLOAD on Gina
-    let carol = w.user("7303").await; // trusts nobody
-    let dave = w.user("7304").await; // EMOTE_MANAGE on Alice only
-    let erin = w.user("7305").await; // EMOTE_TRANSFER on one set of Alice
+    let bob = w.user("7302").await; // every emote flag on Alice, EMOTE_UPLOAD on Gina
     let gina = w.user("7306").await;
-    let set = w.set(&alice).await;
-    w.grant(&alice, &bob, &["EMOTE_TRANSFER"], &[]).await;
+    let carol = w.user("7303").await; // nobody's editor
+    // The retired flag alone is refused; with others it's dropped and never listed.
+    let r = w
+        .gql(
+            &alice,
+            ADD,
+            json!({ "a": bob.tid(), "f": ["EMOTE_TRANSFER"], "s": [] }),
+        )
+        .await;
+    assert_eq!(code(&r), "retired_permission", "{r}");
+    let r = w
+        .gql(
+            &alice,
+            ADD,
+            json!({ "a": bob.tid(), "f": ["EMOTE_MANAGE", "EMOTE_UPLOAD", "EMOTE_TRANSFER"], "s": [] }),
+        )
+        .await;
+    ok(&r);
+    assert_eq!(
+        r["data"]["addAccountEditor"]["permissions"],
+        json!(["EMOTE_UPLOAD", "EMOTE_MANAGE"]),
+        "{r}"
+    );
     w.grant(&gina, &bob, &["EMOTE_UPLOAD"], &[]).await;
-    w.grant(&alice, &dave, &["EMOTE_MANAGE"], &[]).await;
-    w.grant(&alice, &erin, &["EMOTE_TRANSFER"], &[set.as_str()])
-        .await;
-    w.grant(&gina, &erin, &["EMOTE_UPLOAD"], &[]).await;
-    w.grant(&gina, &dave, &["EMOTE_UPLOAD"], &[]).await;
-    let first = w.emote(&alice, "first", EmoteState::Approved, false).await;
-    let second = w.emote(&alice, "second", EmoteState::Approved, false).await;
-
-    // To an account that never made Bob an uploader: refused.
-    let r = w
-        .gql(&bob, TRANSFER, json!({ "id": first, "to": carol.tid() }))
-        .await;
-    assert_eq!(code(&r), "forbidden", "{r}");
-    // Without the flag, or with it on one set only: refused.
-    for who in [&dave, &erin, &carol] {
-        let r = w
-            .gql(who, TRANSFER, json!({ "id": first, "to": gina.tid() }))
-            .await;
-        assert_eq!(code(&r), "forbidden", "{r}");
-    }
-    // To the account that owns it already.
-    let r = w
-        .gql(&bob, TRANSFER, json!({ "id": first, "to": alice.tid() }))
-        .await;
-    assert_eq!(code(&r), "same_owner", "{r}");
-
-    // Restricted: the editor, the owner, or the receiver.
-    for held in [&bob, &alice, &gina] {
-        w.restrict(held, true).await;
-        let r = w
-            .gql(&bob, TRANSFER, json!({ "id": first, "to": gina.tid() }))
-            .await;
-        assert_eq!(code(&r), "restricted", "{r}");
-        w.restrict(held, false).await;
-    }
-
-    // Allowed: a request waits for Alice; nothing moves yet.
-    let r = w
-        .gql(&bob, TRANSFER, json!({ "id": first, "to": gina.tid() }))
-        .await;
-    ok(&r);
-    assert_eq!(
-        r["data"]["transferEmote"]["owner"]["id"],
-        w.db.public(alice.id).await.as_str()
-    );
-    assert_eq!(w.owner_and_uploader(&first).await.0, Some(alice.id));
-    let rows = w.audits("emote.transfer_requested").await;
-    assert_eq!(rows.len(), 1);
-    assert_editor_row(&rows[0], &bob, &alice);
-    assert!(w.audits("emote.transferred").await.is_empty());
-    assert!(
-        w.notes(&alice)
-            .await
-            .contains(&"emote.transfer_requested".to_owned())
-    );
-    // One open request per emote.
-    let r = w
-        .gql(&bob, TRANSFER, json!({ "id": first, "to": bob.tid() }))
-        .await;
-    assert_eq!(code(&r), "transfer_pending", "{r}");
-    // Both sides see it; nobody else does.
-    let request = w.open(&alice, &first).await;
-    assert_eq!(w.open(&bob, &first).await, request);
-    let r = w.gql(&carol, REQUESTS, json!({ "e": first })).await;
-    assert_eq!(r["data"]["emoteTransferRequests"], json!([]), "{r}");
-
-    // Only the owner accepts: not the editor who asked. To anyone else (the receiver too) the
-    // request doesn't exist, whatever they try.
-    let r = w.gql(&bob, ACCEPT, json!({ "id": request })).await;
-    assert_eq!(code(&r), "forbidden", "{r}");
-    for who in [&gina, &carol] {
-        for q in [ACCEPT, DECLINE, CANCEL] {
-            let r = w.gql(who, q, json!({ "id": request })).await;
-            assert_eq!(code(&r), "not_found", "{r}");
-        }
-    }
-    // Holds still refuse at accept time: the receiver, or the editor who asked.
-    for held in [&gina, &bob] {
-        w.restrict(held, true).await;
-        let r = w.gql(&alice, ACCEPT, json!({ "id": request })).await;
-        assert_eq!(code(&r), "restricted", "{r}");
-        w.restrict(held, false).await;
-    }
-    // Accepted: Gina owns it, both steps are audited, the editor and the receiver hear.
-    let r = w.gql(&alice, ACCEPT, json!({ "id": request })).await;
-    ok(&r);
-    assert_eq!(
-        r["data"]["acceptEmoteTransfer"]["owner"]["id"],
-        w.db.public(gina.id).await.as_str()
-    );
-    assert_eq!(w.owner_and_uploader(&first).await.0, Some(gina.id));
-    let rows = w.audits("emote.transfer_accepted").await;
-    assert_eq!(
-        (rows.len(), rows[0].0.actor_account_id),
-        (1, Some(alice.id))
-    );
-    assert_eq!(rows[0].1, Some(alice.id));
-    let rows = w.audits("emote.transferred").await;
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].0.actor_account_id, Some(alice.id));
-    let after = rows[0].0.after_json.as_ref().unwrap();
-    assert_eq!(after["owner_id"], gina.tid().as_str());
-    assert_eq!(after["requested_by"], bob.tid().as_str());
-    for who in [&bob, &gina] {
-        assert!(w.notes(who).await.contains(&"emote.transferred".to_owned()));
-    }
-    let r = w.gql(&alice, ACCEPT, json!({ "id": request })).await;
-    assert_eq!(code(&r), "not_pending", "{r}");
-    // Alice's editor has no say over it any more.
-    let r = w
-        .gql(&bob, TRANSFER, json!({ "id": first, "to": bob.tid() }))
-        .await;
-    assert_eq!(code(&r), "forbidden", "{r}");
-
-    // Declined: it stays, the editor hears.
-    ok(&w
-        .gql(&bob, TRANSFER, json!({ "id": second, "to": bob.tid() }))
-        .await);
-    let request = w.open(&alice, &second).await;
-    let r = w.gql(&bob, DECLINE, json!({ "id": request })).await;
-    assert_eq!(code(&r), "forbidden", "{r}");
-    let r = w.gql(&alice, DECLINE, json!({ "id": request })).await;
-    assert_eq!(
-        r["data"]["declineEmoteTransfer"]["state"], "DECLINED",
-        "{r}"
-    );
-    assert_eq!(w.owner_and_uploader(&second).await.0, Some(alice.id));
-    assert!(
-        w.notes(&bob)
-            .await
-            .contains(&"emote.transfer_declined".to_owned())
-    );
-    assert_eq!(w.audits("emote.transfer_declined").await.len(), 1);
-
-    // Cancelled by the editor: it stays, and can't be accepted afterwards.
-    ok(&w
-        .gql(&bob, TRANSFER, json!({ "id": second, "to": bob.tid() }))
-        .await);
-    let request = w.open(&bob, &second).await;
-    let r = w.gql(&alice, CANCEL, json!({ "id": request })).await;
-    assert_eq!(code(&r), "forbidden", "{r}");
-    let r = w.gql(&bob, CANCEL, json!({ "id": request })).await;
-    assert_eq!(
-        r["data"]["cancelEmoteTransfer"]["state"], "CANCELLED",
-        "{r}"
-    );
-    let r = w.gql(&alice, ACCEPT, json!({ "id": request })).await;
-    assert_eq!(code(&r), "not_pending", "{r}");
-    assert_eq!(w.owner_and_uploader(&second).await.0, Some(alice.id));
-    assert_eq!(w.audits("emote.transfer_cancelled").await.len(), 1);
-
-    // Expired after 7 days: it stays, the expiry is audited, and the editor can ask again.
-    ok(&w
-        .gql(&bob, TRANSFER, json!({ "id": second, "to": gina.tid() }))
-        .await);
-    let request = w.open(&alice, &second).await;
+    // A grant stored with the old flag (from before) grants nothing more.
     let mut conn = w.db.conn().await;
     sqlx::query(
-        "UPDATE emote_transfer_requests SET expires_at = now() - interval '1 minute' WHERE id = $1",
+        "UPDATE account_editors SET permissions = array_append(permissions, 'emote_transfer')
+         WHERE account_id = $1 AND editor_id = $2",
     )
-    .bind(w.db.row(&request).await)
+    .bind(alice.id)
+    .bind(bob.id)
     .execute(&mut *conn)
     .await
     .unwrap();
     drop(conn);
-    let r = w.gql(&alice, ACCEPT, json!({ "id": request })).await;
-    assert_eq!(code(&r), "not_pending", "{r}");
-    assert_eq!(w.owner_and_uploader(&second).await.0, Some(alice.id));
-    let rows = w.audits("emote.transfer_expired").await;
-    assert_eq!((rows.len(), rows[0].0.actor_account_id), (1, None));
-    let r = w.gql(&alice, REQUESTS, json!({ "e": second })).await;
-    assert_eq!(r["data"]["emoteTransferRequests"], json!([]), "{r}");
-    ok(&w
-        .gql(&bob, TRANSFER, json!({ "id": second, "to": gina.tid() }))
-        .await);
+    let first = w.emote(&alice, "first", EmoteState::Approved, false).await;
+    let hidden = w.emote(&alice, "hidden", EmoteState::Pending, false).await;
 
-    // The owner's own transfer is immediate, under the same receiver rule, and closes the
-    // request that was waiting.
+    for (who, emote, to, want) in [
+        (&bob, &first, &gina, "forbidden"),
+        (&bob, &first, &bob, "forbidden"),
+        (&bob, &hidden, &gina, "forbidden"),
+        (&carol, &first, &carol, "forbidden"),
+        // An emote Carol can't see answers as if it weren't there.
+        (&carol, &hidden, &carol, "not_found"),
+    ] {
+        let r = w
+            .gql(who, TRANSFER, json!({ "id": emote, "to": to.tid() }))
+            .await;
+        assert_eq!(code(&r), want, "{r}");
+    }
     let r = w
-        .gql(&alice, TRANSFER, json!({ "id": second, "to": carol.tid() }))
+        .gql(&bob, TRANSFER, json!({ "id": first, "to": gina.tid() }))
+        .await;
+    assert!(
+        r["errors"][0]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("Only an emote's owner"),
+        "{r}"
+    );
+    assert_eq!(w.owner_and_uploader(&first).await.0, Some(alice.id));
+    let mut conn = w.db.conn().await;
+    let requests: i64 = sqlx::query_scalar("SELECT count(*) FROM emote_transfer_requests")
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap();
+    drop(conn);
+    assert_eq!(requests, 0);
+    assert!(w.audits("emote.transfer_requested").await.is_empty());
+    assert!(w.audits("emote.transferred").await.is_empty());
+    assert!(
+        !w.notes(&alice)
+            .await
+            .iter()
+            .any(|k| k.starts_with("emote.transfer"))
+    );
+    for who in [&alice, &bob] {
+        let r = w.gql(who, REQUESTS, json!({ "e": first })).await;
+        assert_eq!(r["data"]["emoteTransferRequests"], json!([]), "{r}");
+    }
+    // Accepting is retired: the same answer for any ID, to anyone.
+    for who in [&alice, &bob, &carol] {
+        let r = w
+            .gql(who, ACCEPT, json!({ "id": "01JD8XTRANSFER000000000001" }))
+            .await;
+        assert_eq!(code(&r), "forbidden", "{r}");
+    }
+    w.db.close().await;
+}
+
+/// The owner's own transfer is unchanged: immediate, under the receiver rule (to themselves or an
+/// account that trusts them with uploads), refused while anyone involved is held, audited without
+/// `via`, and the receiver hears.
+#[tokio::test]
+async fn the_owner_still_gives_their_emote_away() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("7311").await; // the owner
+    let carol = w.user("7313").await; // trusts Alice with uploads, once granted
+    let first = w.emote(&alice, "first", EmoteState::Approved, false).await;
+
+    let r = w
+        .gql(&alice, TRANSFER, json!({ "id": first, "to": carol.tid() }))
         .await;
     assert_eq!(code(&r), "forbidden", "{r}");
-    w.grant(&carol, &alice, &["EMOTE_UPLOAD"], &[]).await;
     let r = w
-        .gql(&alice, TRANSFER, json!({ "id": second, "to": carol.tid() }))
+        .gql(&alice, TRANSFER, json!({ "id": first, "to": alice.tid() }))
+        .await;
+    assert_eq!(code(&r), "same_owner", "{r}");
+    w.grant(&carol, &alice, &["EMOTE_UPLOAD"], &[]).await;
+    for held in [&alice, &carol] {
+        w.restrict(held, true).await;
+        let r = w
+            .gql(&alice, TRANSFER, json!({ "id": first, "to": carol.tid() }))
+            .await;
+        assert_eq!(code(&r), "restricted", "{r}");
+        w.restrict(held, false).await;
+    }
+    let r = w
+        .gql(&alice, TRANSFER, json!({ "id": first, "to": carol.tid() }))
         .await;
     ok(&r);
     assert_eq!(
         r["data"]["transferEmote"]["owner"]["id"],
         w.db.public(carol.id).await.as_str()
     );
+    assert_eq!(w.owner_and_uploader(&first).await.0, Some(carol.id));
     let rows = w.audits("emote.transferred").await;
-    assert_eq!(rows[0].0.actor_account_id, Some(alice.id));
-    assert!(rows[0].0.after_json.as_ref().unwrap().get("via").is_none());
-    let r = w.gql(&bob, REQUESTS, json!({ "e": second })).await;
-    assert_eq!(r["data"]["emoteTransferRequests"], json!([]), "{r}");
-    w.db.close().await;
-}
-
-/// A request lasts only while the editor who made it can transfer the owner's emotes: accepting
-/// after their `emote_transfer` went (or their grant did) closes it instead, audited.
-#[tokio::test]
-async fn accepting_rechecks_the_editors_transfer_permission() {
-    let Some(w) = World::new().await else { return };
-    let alice = w.user("7401").await; // the owner
-    let bob = w.user("7402").await; // EMOTE_TRANSFER on Alice, then only EMOTE_MANAGE
-    let gina = w.user("7403").await; // trusts Bob with uploads
-    w.grant(&alice, &bob, &["EMOTE_TRANSFER"], &[]).await;
-    w.grant(&gina, &bob, &["EMOTE_UPLOAD"], &[]).await;
-    let first = w.emote(&alice, "first", EmoteState::Approved, false).await;
-    let second = w.emote(&alice, "second", EmoteState::Approved, false).await;
-    for emote in [&first, &second] {
-        ok(&w
-            .gql(&bob, TRANSFER, json!({ "id": emote, "to": gina.tid() }))
-            .await);
-    }
-    let one = w.open(&alice, &first).await;
-    let two = w.open(&alice, &second).await;
-
-    // The flag is taken away: accepting closes the request and nothing moves.
-    let r = w
-        .gql(
-            &alice,
-            "mutation($a: String!, $f: [EditorPermission!]!) {
-                updateAccountEditor(accountId: $a, permissions: $f) { permissions }
-            }",
-            json!({ "a": bob.tid(), "f": ["EMOTE_MANAGE"] }),
-        )
-        .await;
-    ok(&r);
-    let r = w.gql(&alice, ACCEPT, json!({ "id": one })).await;
-    assert_eq!(code(&r), "not_pending", "{r}");
-    assert_eq!(w.owner_and_uploader(&first).await.0, Some(alice.id));
-    let rows = w.audits("emote.transfer_cancelled").await;
     assert_eq!(rows.len(), 1);
-    assert_eq!(
-        rows[0].0.after_json.as_ref().unwrap()["reason"],
-        "editor_permission"
+    assert_eq!(rows[0].0.actor_account_id, Some(alice.id));
+    assert_eq!(rows[0].1, Some(alice.id));
+    assert!(rows[0].0.after_json.as_ref().unwrap().get("via").is_none());
+    assert!(
+        w.notes(&carol)
+            .await
+            .contains(&"emote.transferred".to_owned())
     );
-    let r = w.gql(&alice, ACCEPT, json!({ "id": one })).await;
-    assert_eq!(code(&r), "not_pending", "{r}");
-
-    // The grant is removed altogether: the same.
+    // It's Carol's now: Alice has no say over it.
     let r = w
-        .gql(
-            &alice,
-            "mutation($a: String!) { removeAccountEditor(accountId: $a) }",
-            json!({ "a": bob.tid() }),
-        )
+        .gql(&alice, TRANSFER, json!({ "id": first, "to": alice.tid() }))
         .await;
-    ok(&r);
-    let r = w.gql(&alice, ACCEPT, json!({ "id": two })).await;
-    assert_eq!(code(&r), "not_pending", "{r}");
-    assert_eq!(w.owner_and_uploader(&second).await.0, Some(alice.id));
-    assert_eq!(w.audits("emote.transfer_cancelled").await.len(), 2);
-    assert!(w.audits("emote.transferred").await.is_empty());
-    w.db.close().await;
-}
-
-/// Accepting a request and the owner's own transfer of the same emote at once take their locks
-/// in the same order (the emote, then its requests), so neither deadlocks into a 500: one wins,
-/// the other is refused cleanly, and the emote ends with one owner.
-#[tokio::test]
-async fn accept_and_owner_transfer_at_once_dont_deadlock() {
-    let Some(w) = World::new().await else { return };
-    let alice = w.user("7501").await; // the owner
-    let bob = w.user("7502").await; // EMOTE_TRANSFER on Alice
-    let carol = w.user("7503").await; // trusts Alice with uploads
-    w.grant(&alice, &bob, &["EMOTE_TRANSFER"], &[]).await;
-    w.grant(&carol, &alice, &["EMOTE_UPLOAD"], &[]).await;
-    for round in 0..8 {
-        let emote = w
-            .emote(&alice, &format!("race{round}"), EmoteState::Approved, false)
-            .await;
-        ok(&w
-            .gql(&bob, TRANSFER, json!({ "id": emote, "to": bob.tid() }))
-            .await);
-        let request = w.open(&alice, &emote).await;
-        let (accepted, moved) = tokio::join!(
-            w.gql(&alice, ACCEPT, json!({ "id": request })),
-            w.gql(&alice, TRANSFER, json!({ "id": emote, "to": carol.tid() })),
-        );
-        for r in [&accepted, &moved] {
-            assert_ne!(code(r), "internal", "round {round}: {r}");
-        }
-        let wins = [&accepted, &moved]
-            .iter()
-            .filter(|r| r["errors"].is_null())
-            .count();
-        assert!(wins >= 1, "round {round}: {accepted} {moved}");
-        let owner = w.owner_and_uploader(&emote).await.0;
-        assert!(
-            owner == Some(bob.id) || owner == Some(carol.id),
-            "round {round}: {owner:?}"
-        );
-    }
+    assert_eq!(code(&r), "forbidden", "{r}");
     w.db.close().await;
 }
 
 const NOTES: &str = "query { myNotifications { kind transferState payload } }";
 
-/// The transfer state each `emote.transfer_requested` notification of `user` shows, newest first.
-async fn asked_states(w: &World, user: &User) -> Vec<Value> {
-    let r = w.gql(user, NOTES, json!({})).await;
+/// Requests made before the change are withdrawn at start-up: cancelled, audited with
+/// `"reason": "retired"` and no actor, both the owner and the editor who asked told, the owner's
+/// old notification reading as cancelled. The emote stays; a second run finds nothing.
+#[tokio::test]
+async fn open_requests_from_before_are_withdrawn_and_both_sides_told() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("7321").await; // the owner
+    let bob = w.user("7322").await; // the editor who asked, before
+    let gina = w.user("7323").await; // where it would have gone
+    let first = w.emote(&alice, "first", EmoteState::Approved, false).await;
+    let second = w.emote(&alice, "second", EmoteState::Approved, false).await;
+    let later = chrono::Utc::now() + Duration::days(7);
+    let mut asked = Vec::new();
+    for (emote, to) in [(&first, &gina), (&second, &bob)] {
+        let row = w.db.row(emote).await;
+        let mut conn = w.db.conn().await;
+        let r = cyex_tv_db::transfers::create(&mut conn, row, alice.id, to.id, bob.id, later)
+            .await
+            .unwrap()
+            .unwrap();
+        notifications::create(
+            &mut conn,
+            alice.id,
+            "emote.transfer_requested",
+            &json!({ "request_id": ids::to_text(r.id), "emote_id": emote, "name": "x" }),
+        )
+        .await
+        .unwrap();
+        asked.push(r.id);
+    }
+
+    assert_eq!(
+        cyex_tv_api::transfers::withdraw_open(&w.state)
+            .await
+            .unwrap(),
+        2
+    );
+    let mut conn = w.db.conn().await;
+    for id in &asked {
+        let state: String =
+            sqlx::query_scalar("SELECT state FROM emote_transfer_requests WHERE id = $1")
+                .bind(id)
+                .fetch_one(&mut *conn)
+                .await
+                .unwrap();
+        assert_eq!(state, "cancelled");
+    }
+    drop(conn);
+    for emote in [&first, &second] {
+        assert_eq!(w.owner_and_uploader(emote).await.0, Some(alice.id));
+    }
+    let rows = w.audits("emote.transfer_cancelled").await;
+    assert_eq!(rows.len(), 2);
+    for row in &rows {
+        assert_eq!(row.0.actor_account_id, None);
+        assert_eq!(row.1, Some(alice.id));
+        assert_eq!(row.0.after_json.as_ref().unwrap()["reason"], "retired");
+    }
+    for who in [&alice, &bob] {
+        let kinds = w.notes(who).await;
+        assert_eq!(
+            kinds
+                .iter()
+                .filter(|k| *k == "emote.transfer_cancelled")
+                .count(),
+            2,
+            "{kinds:?}"
+        );
+    }
+    let r = w.gql(&alice, NOTES, json!({})).await;
     ok(&r);
-    r["data"]["myNotifications"]
+    let states: Vec<&Value> = r["data"]["myNotifications"]
         .as_array()
         .unwrap()
         .iter()
         .filter(|n| n["kind"] == "emote.transfer_requested")
-        .map(|n| n["transferState"].clone())
-        .collect()
-}
-
-#[tokio::test]
-async fn transfer_notifications_show_where_the_request_stands() {
-    let Some(w) = World::new().await else { return };
-    let alice = w.user("7401").await;
-    let bob = w.user("7402").await;
-    let gina = w.user("7403").await;
-    w.grant(&alice, &bob, &["EMOTE_TRANSFER"], &[]).await;
-    w.grant(&gina, &bob, &["EMOTE_UPLOAD"], &[]).await;
-    let emote = w.emote(&alice, "moving", EmoteState::Approved, false).await;
-
-    // Asked: pending. Other kinds carry no state.
-    ok(&w
-        .gql(&bob, TRANSFER, json!({ "id": emote, "to": gina.tid() }))
-        .await);
-    assert_eq!(asked_states(&w, &alice).await, [json!("PENDING")]);
-    let r = w.gql(&alice, NOTES, json!({})).await;
-    assert!(r["data"]["myNotifications"][0]["payload"].is_string());
-
-    // Declined elsewhere (the edit page): the notification follows.
-    let request = w.open(&alice, &emote).await;
-    ok(&w.gql(&alice, DECLINE, json!({ "id": request })).await);
-    assert_eq!(asked_states(&w, &alice).await, [json!("DECLINED")]);
-
-    // Asked again and withdrawn by the editor: cancelled; the older one stays declined.
-    ok(&w
-        .gql(&bob, TRANSFER, json!({ "id": emote, "to": gina.tid() }))
-        .await);
-    let request = w.open(&bob, &emote).await;
-    ok(&w.gql(&bob, CANCEL, json!({ "id": request })).await);
+        .map(|n| &n["transferState"])
+        .collect();
+    assert_eq!(states, [&json!("CANCELLED"), &json!("CANCELLED")]);
+    let r = w.gql(&alice, REQUESTS, json!({})).await;
+    assert_eq!(r["data"]["emoteTransferRequests"], json!([]), "{r}");
+    // Declining or cancelling one now: it isn't open any more.
+    let old = ids::to_text(asked[0]);
+    for (who, q) in [(&alice, DECLINE), (&bob, CANCEL)] {
+        let r = w.gql(who, q, json!({ "id": old })).await;
+        assert_eq!(code(&r), "not_pending", "{r}");
+    }
+    // Once done, there's nothing left to withdraw.
     assert_eq!(
-        asked_states(&w, &alice).await,
-        [json!("CANCELLED"), json!("DECLINED")]
+        cyex_tv_api::transfers::withdraw_open(&w.state)
+            .await
+            .unwrap(),
+        0
     );
-
-    // Asked again and left to run out, without anyone sweeping it: expired.
-    ok(&w
-        .gql(&bob, TRANSFER, json!({ "id": emote, "to": gina.tid() }))
-        .await);
-    let request = w.open(&alice, &emote).await;
-    let mut conn = w.db.conn().await;
-    sqlx::query(
-        "UPDATE emote_transfer_requests SET expires_at = now() - interval '1 minute' WHERE id = $1",
-    )
-    .bind(w.db.row(&request).await)
-    .execute(&mut *conn)
-    .await
-    .unwrap();
-    drop(conn);
-    assert_eq!(asked_states(&w, &alice).await[0], json!("EXPIRED"));
-
-    // Accepted: the last one, once the emote moves.
-    ok(&w
-        .gql(&bob, TRANSFER, json!({ "id": emote, "to": gina.tid() }))
-        .await);
-    let request = w.open(&alice, &emote).await;
-    ok(&w.gql(&alice, ACCEPT, json!({ "id": request })).await);
-    assert_eq!(asked_states(&w, &alice).await[0], json!("ACCEPTED"));
+    assert_eq!(w.audits("emote.transfer_cancelled").await.len(), 2);
     w.db.close().await;
 }

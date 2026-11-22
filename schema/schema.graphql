@@ -1002,17 +1002,19 @@ enum EditorPermission {
 	"""
 	CHANNELS
 	"""
-	Upload emotes for the owner. Stored for the feature that will check it; grants nothing yet.
+	Upload emotes for the owner (`POST /v1/emotes` with `owner_id`).
 	"""
 	EMOTE_UPLOAD
 	"""
-	Rename, retag and delete the owner's emotes. Stored; grants nothing yet.
+	See, rename, retag and delete the owner's emotes.
 	"""
 	EMOTE_MANAGE
 	"""
-	Hand the owner's emotes to another account. Stored; grants nothing yet.
+	Retired (ADR 0014, amendment 2026/11/22): only an emote's owner gives it away, and nobody
+	can ask for someone else's emote to be transferred. Kept so clients that send it still
+	parse; it is never granted, never listed and grants nothing (stored grants ignore it).
 	"""
-	EMOTE_TRANSFER
+	EMOTE_TRANSFER @deprecated(reason: "Retired: only an emote's owner can give it away. Never granted or listed; ignored when sent with other permissions.")
 	"""
 	Manage the owner's payment methods. Stored; grants nothing yet.
 	"""
@@ -1773,26 +1775,25 @@ type Mutation {
 	"""
 	setEmoteFlags(id: String!, input: EmoteFlagsInput!): Emote!
 	"""
-	Give an emote to another account (ADR 0014). Its owner, or an account editor of the owner
-	with `EMOTE_TRANSFER` on every set. The receiver is you, or an account you edit with
-	`EMOTE_UPLOAD` on every set. The owner's transfer is immediate (`emote.transferred`); an
-	editor's makes a request the owner accepts or declines within 7 days, and the emote comes
-	back unchanged (`emoteTransferRequests`; one open request per emote, `transfer_pending`).
-	60 an hour, with accepting, declining and cancelling.
+	Give your emote to another account (ADR 0014), at once (`emote.transferred`). Only the
+	emote's owner may: anyone else, account editors included, gets `forbidden` (amendment
+	2026/11/22; nobody can ask for someone else's emote). The receiver is you, or an account
+	you edit with `EMOTE_UPLOAD` on every set. 60 an hour.
 	"""
 	transferEmote(id: String!, toAccountId: String!): Emote!
 	"""
-	Accept an editor's transfer request of your emote: it moves if the rules still allow it.
+	Retired with editor transfer requests (amendment 2026/11/22): always `forbidden`.
 	"""
-	acceptEmoteTransfer(id: String!): Emote!
+	acceptEmoteTransfer(id: String!): Emote! @deprecated(reason: "Retired: editors can't ask for a transfer any more; only an emote's owner gives it away.")
 	"""
-	Decline an editor's transfer request of your emote.
+	Decline an editor's transfer request of your emote. None are open any more
+	(`not_pending`).
 	"""
-	declineEmoteTransfer(id: String!): EmoteTransferRequest!
+	declineEmoteTransfer(id: String!): EmoteTransferRequest! @deprecated(reason: "Retired: editors can't ask for a transfer any more; only an emote's owner gives it away.")
 	"""
-	Withdraw a transfer request you made.
+	Withdraw a transfer request you made. None are open any more (`not_pending`).
 	"""
-	cancelEmoteTransfer(id: String!): EmoteTransferRequest!
+	cancelEmoteTransfer(id: String!): EmoteTransferRequest! @deprecated(reason: "Retired: editors can't ask for a transfer any more; only an emote's owner gives it away.")
 	"""
 	Delete your emote, an emote of an account you edit with `EMOTE_MANAGE`, or anyone's with
 	`emotes.delete_any` (audited). It is removed from every set.
@@ -2645,10 +2646,10 @@ type Query {
 	"""
 	accountEditors(accountId: String): [AccountEditor!]!
 	"""
-	Open emote transfer requests you take part in (ADR 0014): those waiting for you to accept
-	or decline (your emotes), and those you made as an editor; of one emote when given.
+	Open emote transfer requests you take part in (ADR 0014). Editors can't ask for a transfer
+	any more (amendment 2026/11/22) and the open ones were withdrawn, so this is empty.
 	"""
-	emoteTransferRequests(emoteId: String): [EmoteTransferRequest!]!
+	emoteTransferRequests(emoteId: String): [EmoteTransferRequest!]! @deprecated(reason: "Retired: editors can't ask for a transfer any more; only an emote's owner gives it away.")
 	"""
 	The accounts you edit, with what you may do on each.
 	"""
@@ -3647,6 +3648,10 @@ type UserCosmetics {
 	paintId: String
 }
 
+"""
+Marks an element of a GraphQL schema as no longer supported.
+"""
+directive @deprecated(reason: String = "No longer supported") on FIELD_DEFINITION | ARGUMENT_DEFINITION | INPUT_FIELD_DEFINITION | ENUM_VALUE
 """
 Directs the executor to include this field or fragment only when the `if` argument is true.
 """

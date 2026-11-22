@@ -204,14 +204,22 @@ pub enum EditorPermission {
     Profile,
     /// Change the owner's channels' active set and settings. Granting `Sets` grants this too.
     Channels,
-    /// Upload emotes for the owner. Stored for the feature that will check it; grants nothing yet.
+    /// Upload emotes for the owner (`POST /v1/emotes` with `owner_id`).
     #[serde(rename = "emote_upload")]
     EmoteUpload,
-    /// Rename, retag and delete the owner's emotes. Stored; grants nothing yet.
+    /// See, rename, retag and delete the owner's emotes.
     #[serde(rename = "emote_manage")]
     EmoteManage,
-    /// Hand the owner's emotes to another account. Stored; grants nothing yet.
+    /// Retired (ADR 0014, amendment 2026/11/22): only an emote's owner gives it away, and nobody
+    /// can ask for someone else's emote to be transferred. Kept so clients that send it still
+    /// parse; it is never granted, never listed and grants nothing (stored grants ignore it).
     #[serde(rename = "emote_transfer")]
+    #[cfg_attr(
+        feature = "graphql",
+        graphql(
+            deprecation = "Retired: only an emote's owner can give it away. Never granted or listed; ignored when sent with other permissions."
+        )
+    )]
     EmoteTransfer,
     /// Manage the owner's payment methods. Stored; grants nothing yet.
     #[serde(rename = "billing_payment")]
@@ -222,7 +230,8 @@ pub enum EditorPermission {
 }
 
 impl EditorPermission {
-    pub const ALL: [Self; 10] = [
+    /// Every flag that can be granted. `EmoteTransfer` is retired and left out.
+    pub const ALL: [Self; 9] = [
         Self::Emotes,
         Self::Sets,
         Self::Editors,
@@ -230,7 +239,6 @@ impl EditorPermission {
         Self::Channels,
         Self::EmoteUpload,
         Self::EmoteManage,
-        Self::EmoteTransfer,
         Self::BillingPayment,
         Self::BillingSubscription,
     ];
@@ -250,7 +258,8 @@ impl EditorPermission {
         }
     }
 
-    /// `None` for a name this version doesn't know.
+    /// `None` for a name this version doesn't know, and for the retired `emote_transfer`: a
+    /// stored grant of it grants nothing.
     pub fn parse(s: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|p| p.as_str() == s)
     }

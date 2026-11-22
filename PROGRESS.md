@@ -2,6 +2,20 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Owner-only emote transfers; profile column gutters (branch `fix/editors-gap-no-transfer-requests`, owner requests of 2026/11/22)
+
+- [x] Spacing: the two-column profile tabs (Editors, Account) had the column hairline on the left column's edge (the right column pulled itself 40px left), so Change, Remove and Search ran into it. The line now sits in a 24px gutter on each side; the Overview tiles' column rule gets the same air (gap 48px). Test: `lib/profile/column-gutter.test.ts`; measured in the running app at 1920, 1440, 1024 and 375 (24px each side where two columns show, one column below 1240px for Editors and 1000px for Account).
+- [x] "users shouldnt be able to request another user to transfer ownership of an emote": ADR 0014 amendment 2026/11/22. Only the owner gives an emote away; editors get `forbidden`; `EMOTE_TRANSFER` retired (picker, grants, `retired_permission` alone, deprecated in GraphQL); open requests withdrawn at start-up with both sides notified; `acceptEmoteTransfer` always `forbidden`; the website has no transfer action for editors and no Accept or Decline. Migration `20261214000001_retire_editor_transfer.sql`. Schema, mock and codegen updated; changelog entry.
+- [x] Tests: Postgres in `editor_emotes_flow.rs` (editors refused with every flag, retired flag refused or dropped, a stored one grants nothing, no request or notification, accept refused; the owner's transfer with the receiver rule, holds, audit and notification; open requests withdrawn, audited, both sides told, old notifications read cancelled, decline and cancel `not_pending`, a second run finds nothing), the coverage contract (owner transfer), unit tests in `editors.rs`; vitest `no-editor-transfer.ui.test.ts`, `editors.test.ts`, `account.test.ts`, `prefs.test.ts`.
+- [x] Manual (mock, dark): `.claude/runs/2026-11-20-redesign/screens/editors-transfer/` (Editors tab before/after at 1920 and 375, Account at 1920, the editor's emote page and notifications at 1440 and 375, the permissions picker; `check-transfer.mjs` and `shoot.mjs` print the checks).
+
+### GitHub write log for this PR
+
+```
+git push -u origin fix/editors-gap-no-transfer-requests
+gh pr create --repo cyex-tv/platform --base main --head fix/editors-gap-no-transfer-requests --title "Owner-only emote transfers; a gutter around the profile column line" --body-file <file>
+```
+
 ## Person filters: one UserFilter with top suggestions (branch `feat/user-filter`, owner request of 2026/11/22)
 
 "For any filtering by user give me a search input box with top suggestions and also show the 5 most important users when nothing is typed (only when the search box is selected)".

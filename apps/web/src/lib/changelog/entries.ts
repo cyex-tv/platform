@@ -15,6 +15,15 @@ export type Entry = {
 
 export const ENTRIES: Entry[] = [
   {
+    id: '2026-11-22-owner-only-transfers',
+    date: '2026-11-22',
+    title: 'Only an emote’s owner can give it away',
+    items: [
+      'Editors of your account can no longer ask to give one of your emotes to another account. Giving an emote away is yours alone, from the emote’s edit page.',
+      'Requests that were still open were withdrawn; you and the editor who asked were both told. The Transfer permission is gone from the editor permissions.',
+    ],
+  },
+  {
     id: '2026-11-21-snowflake-ids',
     date: '2026-11-21',
     title: 'New IDs for emotes, accounts and sets',

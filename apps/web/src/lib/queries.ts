@@ -563,7 +563,6 @@ export const MY_NOTIFICATIONS = graphql(`
       payload
       createdAt
       read
-      transferState
     }
   }
 `);
@@ -1085,61 +1084,6 @@ export const TRANSFER_EMOTE = graphql(`
   mutation TransferEmote($id: String!, $toAccountId: String!) {
     transferEmote(id: $id, toAccountId: $toAccountId) {
       ...EmoteFields
-    }
-  }
-`);
-
-export const TRANSFER_REQUEST_FIELDS = graphql(`
-  fragment TransferRequestFields on EmoteTransferRequest {
-    id
-    emoteId
-    emoteName
-    state
-    createdAt
-    expiresAt
-    from {
-      id
-      displayName
-    }
-    to {
-      id
-      displayName
-    }
-    requestedBy {
-      id
-      displayName
-    }
-  }
-`);
-
-export const EMOTE_TRANSFER_REQUESTS = graphql(`
-  query EmoteTransferRequests($emoteId: String) {
-    emoteTransferRequests(emoteId: $emoteId) {
-      ...TransferRequestFields
-    }
-  }
-`);
-
-export const ACCEPT_EMOTE_TRANSFER = graphql(`
-  mutation AcceptEmoteTransfer($id: String!) {
-    acceptEmoteTransfer(id: $id) {
-      ...EmoteFields
-    }
-  }
-`);
-
-export const DECLINE_EMOTE_TRANSFER = graphql(`
-  mutation DeclineEmoteTransfer($id: String!) {
-    declineEmoteTransfer(id: $id) {
-      ...TransferRequestFields
-    }
-  }
-`);
-
-export const CANCEL_EMOTE_TRANSFER = graphql(`
-  mutation CancelEmoteTransfer($id: String!) {
-    cancelEmoteTransfer(id: $id) {
-      ...TransferRequestFields
     }
   }
 `);

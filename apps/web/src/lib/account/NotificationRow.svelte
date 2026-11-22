@@ -5,46 +5,16 @@
   import Icon from '$lib/components/Icon.svelte';
   import { isoParts } from '$lib/format';
   import ActivityWhen from '$lib/profile/ActivityWhen.svelte';
-  import { gql } from '$lib/api';
-  import { ACCEPT_EMOTE_TRANSFER, DECLINE_EMOTE_TRANSFER } from '$lib/queries';
-  import { fail, notify } from '$lib/tool/notices.svelte';
-  import { closedRequest, describe, requestGone } from './notifications';
-  import { answered, markRead, type Note } from './inbox.svelte';
+  import { describe } from './notifications';
+  import type { Note } from './inbox.svelte';
 
   // `variant`: 'card' is the bell's two-line row; 'dense' a fixed-height hairline row (icon, one line
   // that ellipsizes, mono time, an accent dot when unread) for lists; 'detail' the whole notification
-  // (full sentence, time, its actions and link) for an inspector panel.
+  // (full sentence, time and link) for an inspector panel. Nothing here is answered: transfer
+  // requests are retired (ADR 0014, amendment 2026/11/22).
   type Props = { note: Note; onpick?: (n: Note) => void; variant?: 'card' | 'dense' | 'detail'; picked?: boolean };
   let { note, onpick, variant = 'card', picked = false }: Props = $props();
   const line = $derived(describe(note.kind, note.payload));
-
-  // What the request is now (answered elsewhere, withdrawn or run out): the buttons go, the state stays.
-  const closed = $derived(closedRequest(note.transferState));
-  // A transfer request is answered here too (ADR 0014); the emote's edit page lists it as well.
-  let busy = $state(false);
-  async function answer(accept: boolean) {
-    const req = line.request;
-    if (!req || busy) return;
-    busy = true;
-    try {
-      if (accept) await gql(ACCEPT_EMOTE_TRANSFER, { id: req });
-      else await gql(DECLINE_EMOTE_TRANSFER, { id: req });
-      answered[req] = accept ? 'Accepted: it moved.' : 'Declined: it stays yours.';
-      notify(answered[req]);
-      // Answered is seen: the row stops being unread and the count follows.
-      if (!note.read) void markRead([note.id]);
-    } catch (err) {
-      fail(err);
-      // Closed already (expired, withdrawn or answered): say so once, then leave it. Any other
-      // failure (offline, a timeout, a rate limit) leaves the request open and the buttons here.
-      if (requestGone(err)) {
-        answered[req] = 'This request is closed.';
-        if (!note.read) void markRead([note.id]);
-      }
-    } finally {
-      busy = false;
-    }
-  }
 </script>
 
 {#snippet inner()}
@@ -62,23 +32,10 @@
   <span class="dot" aria-hidden="true"></span>
 {/snippet}
 
-{#snippet answers()}
-  {#if line.request}
-    <div class="answer" class:flush={variant === 'detail'}>
-      {#if answered[line.request] ?? closed}<span class="ui-hint" role="status">{answered[line.request] ?? closed}</span>
-      {:else}
-        <button class="ui-btn primary small" type="button" disabled={busy} onclick={() => answer(true)}>Accept</button>
-        <button class="ui-btn secondary small" type="button" disabled={busy} onclick={() => answer(false)}>Decline</button>
-      {/if}
-    </div>
-  {/if}
-{/snippet}
-
 {#if variant === 'detail'}
   <div class="detail">
     <p class="full" class:unread={!note.read}>{#each isoParts(line.text) as p}{#if p.name}<bdi>{p.text}</bdi>{:else}{p.text}{/if}{/each}</p>
     <p class="when ui-mono"><Icon name={line.icon} size={14} /><ActivityWhen at={note.createdAt} /></p>
-    {@render answers()}
     {#if line.href}<a class="ui-btn secondary small open" href={line.href}>Open</a>{/if}
   </div>
 {:else if variant === 'dense'}
@@ -93,7 +50,6 @@
   {:else}
     <button class="note" class:unread={!note.read} type="button" onclick={() => onpick?.(note)}>{@render inner()}</button>
   {/if}
-  {@render answers()}
 {/if}
 
 <style>
@@ -127,6 +83,4 @@
   .full { margin: 0; font-size: var(--t-ui); line-height: 1.5; overflow-wrap: anywhere; }
   .full.unread { font-weight: 600; }
   .detail .when { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: 12px; color: var(--muted); }
-  .answer.flush { padding: 0; }
-  .answer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 0 12px 10px 44px; }
 </style>
