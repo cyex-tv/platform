@@ -485,6 +485,18 @@ async fn every_site_operation_runs_against_the_real_api() {
         json!({ "emoteId": e1, "limit": 20 }),
     )
     .await;
+    c.op(
+        As::Nobody,
+        "ActivityTopActors",
+        json!({ "accountId": tid, "filter": { "groups": null }, "limit": 5 }),
+    )
+    .await;
+    c.op(
+        As::Nobody,
+        "ActivityTopActors",
+        json!({ "emoteId": e1, "limit": 5 }),
+    )
+    .await;
 
     // Account editors, and transfers by an editor that the owner answers.
     c.op(
@@ -649,6 +661,8 @@ async fn every_site_operation_runs_against_the_real_api() {
     .await;
     c.op(os, "EntitlementGraph", json!({ "accountId": tid }))
         .await;
+    c.op(os, "EntitlementTopHolders", json!({ "limit": 5 }))
+        .await;
     c.op(
         os,
         "EntitlementHolders",
@@ -724,6 +738,12 @@ async fn every_site_operation_runs_against_the_real_api() {
     .await;
     c.op(
         os,
+        "OrderTopBuyers",
+        json!({ "status": "PAID", "itemId": item, "limit": 5 }),
+    )
+    .await;
+    c.op(
+        os,
         "RefundOrder",
         json!({ "id": order, "reason": "contract test" }),
     )
@@ -757,6 +777,12 @@ async fn every_site_operation_runs_against_the_real_api() {
         os,
         "ReviewQueue",
         json!({ "page": 1, "perPage": 20, "filter": { "search": "cov", "descending": true } }),
+    )
+    .await;
+    c.op(
+        os,
+        "ReviewTopUploaders",
+        json!({ "filter": { "tab": "PUBLIC", "search": "cov" }, "limit": 5 }),
     )
     .await;
     c.op(
@@ -1006,6 +1032,12 @@ async fn every_site_operation_runs_against_the_real_api() {
     )
     .await;
     c.op(os, "Audit", json!({ "limit": 20 })).await;
+    c.op(
+        os,
+        "AuditTopPeople",
+        json!({ "by": "TARGET", "targetKind": "account", "limit": 5 }),
+    )
+    .await;
 
     // The site announcement.
     let announcement = c

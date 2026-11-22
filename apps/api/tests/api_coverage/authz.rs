@@ -32,6 +32,7 @@ const PUBLIC: &[&str] = &[
     "accountActivityPage",
     "emoteActivity",
     "emoteActivityPage",
+    "activityTopActors",
     "emoteChannels",
     "personalSet",
     "personalSets",
@@ -72,6 +73,10 @@ const STAFF: &[&str] = &[
     "reviewReasons",
     "accountsByLogin",
     "announcements",
+    "auditTopPeople",
+    "orderTopBuyers",
+    "reviewTopUploaders",
+    "entitlementTopHolders",
     // Mutations.
     "createBadge",
     "updateBadge",
