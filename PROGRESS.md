@@ -1494,3 +1494,41 @@ git push -u origin feat/redesign-admin-2
 gh pr create --repo cyex-tv/platform --base main --head feat/redesign-admin-2 --title "Redesign round 2: the admin area in the Workspace / Inspector language" --body-file <file>
 ```
   Not merged (owner reviews).
+
+## Full width, profile Account/Editors tabs, sign-out (branch `feat/full-width-profile-account`, 2026/11/22)
+
+Owner: the 1520 px page wrapper from the cyex skills is too narrow; Account and Editors belong on the profile;
+the account menu signs out this session only and Settings has one "sign out everywhere", no per-session revokes.
+Before/after screenshots (browse, profile overview/account/editors, settings, admin, shop; 1920 and 1440 dark, 375):
+`.claude/runs/2026-11-20-redesign/screens/fullwidth/` (`*-before.png` = main at c437ba5, `*-after.png` = this branch).
+
+- [x] Full width: `--page-max` and the `.wrap` max-width are gone; header, rails, content and right panels span the
+  window (rails at the left edge, panels at the right edge; the "surface past the wrap" box-shadow bleeds removed).
+  Long text keeps a measure inside its column (Row hints and Section leads 72ch, docs/help prose, ColumnLayout
+  `measure`/`form` centred); Settings rows span their column; the landing page keeps a 1480 px centred column.
+  Checked at 1280, 1440, 1920, 2560 and 375 (no horizontal overflow). design-rules.md updated.
+- [x] Profile Overview as a dashboard: a strip of numbers (uploads, channels, sets, editors, unread, paints; each a link)
+  and the tiles in balanced CSS columns (360 px min, up to four, hairline rules), no gaps beside taller tiles.
+- [x] Account and Editors moved from Settings to owner-only profile tabs (`?s=account`, `?s=editors`; `rows.ts`
+  `ownerTabs`/`profileTabs`). Visitors and account editors see the same public tabs as before. Settings keeps
+  Appearance, Notifications, Hidden, Billing; `/me/settings` opens Appearance. `/me/settings/account`, `/me/account`
+  and `/me/editors` redirect to the tabs (hash kept; `movedToProfile`). Account menu: Profile, Your emotes, Cosmetics,
+  Account, Settings, What's new, Sign out.
+- [x] Sign-out: the menu's Sign out calls `POST /v1/auth/logout`, which deletes only the caller's session row in the API
+  (checked in `crates/auth/src/session.rs`). The Account tab has one action, Sign out everywhere; the sessions list
+  (SessionsPanel: per-session Revoke, "sign out everywhere else") is removed from the UI; the API keeps
+  `mySessions`/`revokeSession`/`revokeOtherSessions`.
+- [x] Tests: `settings.test.ts` (rail, redirects, isSettingsPath), `activity.test.ts` (owner-only tabs, one current tab),
+  `shell/account.test.ts` (menu), `shell/signout.test.ts` (menu sign-out = one logout call, no everywhere/revoke; REST
+  call shape), `profile/account-tab.ui.test.ts` (one session action, no sessions list, two-click sign out everywhere).
+  Gates: check 0/0, vitest 150 files / 1019 tests, build, e2e cosmetics 25/25. Manual in headless Edge against the
+  mock: redirects land on the tabs, other profiles show no Account/Editors (and `?s=account` falls back), menu Sign out
+  goes home signed out.
+- Left: editors holding EDITORS on someone else's account still have no web page to manage that account's editors
+  (none before either; the API supports `ownerId`).
+
+### GitHub write log for this PR
+```
+git push -u origin feat/full-width-profile-account
+gh pr create --repo cyex-tv/platform --base main --head feat/full-width-profile-account --title "Full-width layout, Account and Editors on the profile, session sign-out" --body-file <file>
+```

@@ -67,10 +67,7 @@
   .has-tabs .ip-main { padding-top: 20px; }
   .ip-head-area:empty { display: none; }
   .ip-panel { grid-area: panel; align-self: start; position: sticky; top: var(--nav-h); height: calc(100svh - var(--nav-h)); overflow-y: auto;
-    overscroll-behavior: contain; margin-right: calc(-1 * var(--page-pad)); border-left: 1px solid var(--border); background: var(--surface);
-    /* Past the 1520px wrap the panel's surface runs on to the window's edge (its content stays put),
-       as on every page with a right panel: the shop, the admin inspector, the browse tray. */
-    box-shadow: 0 0 0 100vw var(--surface); clip-path: inset(0 -100vw 0 0); }
+    overscroll-behavior: contain; margin-right: calc(-1 * var(--page-pad)); border-left: 1px solid var(--border); background: var(--surface); }
   .ip-top { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 8px 0 16px;
     border-bottom: 1px solid var(--border); background: var(--surface); }
   .ip-label { margin: 0; font-size: var(--t-label, 12px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); line-height: 1; }

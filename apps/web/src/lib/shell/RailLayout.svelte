@@ -1,5 +1,5 @@
 <script lang="ts">
-  // Page layout 1 of 2: a SideRail beside the content, both in the 1520 wrapper (logo, rail and
+  // Page layout 1 of 2: a SideRail beside the content, both in the full-width wrapper (logo, rail and
   // footer share one left edge). Rail 240, gap 20, content the rest. Below 900px the rail turns
   // into its tab strip or sheet button above the content (SideRail decides), never the whole rail.
   //   <RailLayout>{#snippet rail()}<SideRail … />{/snippet}…content…</RailLayout>

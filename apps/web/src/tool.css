@@ -11,7 +11,7 @@
 .ui-page h1 { font-size: var(--t-page); line-height: 1.25; letter-spacing: -.02em; }
 .ui-page h2 { font-size: 16px; line-height: 1.35; letter-spacing: -.01em; }
 .ui-page p { margin: 0; }
-.ui-page .narrow { max-width: var(--measure-form); }
+/* Settings sections span their column (full-width site, 2026/11/22); Row and Section keep their text to a reading measure. */
 
 /* Page head: a title, an optional line under it, actions on the right. */
 /* Same measures as PageHead (lib/tool/PageHead.svelte): the line 8px under the title at --t-ui, 24px to the content. */

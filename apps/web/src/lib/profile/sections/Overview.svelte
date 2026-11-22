@@ -6,6 +6,9 @@
   // set each shows, notifications, your latest uploads with their state, the latest activity,
   // editors (names), cosmetics (what you show, how many you own) and your sets. Every tile loads on
   // its own and fails on its own (one tile's error never empties the page).
+  // Laid out as a dashboard for the full-width site (2026/11/22): a strip of numbers on top (each a
+  // link to its tab), then the tiles in balanced columns (CSS columns: as many 360px columns as
+  // fit, at most four, hairlines between), so no tile leaves a gap beside a taller one.
   import { onMount } from 'svelte';
   import { gql } from '$lib/api';
   import FactRows from '$lib/components/FactRows.svelte';
@@ -72,8 +75,20 @@
   {/snippet}
 </PageHead>
 
-<div class="cols">
-  <div class="col">
+{#snippet stat(label: string, value: number | null | undefined, href: string, failed = false)}
+  <li><a {href}><span class="st-l">{label}</span><span class="st-n ui-mono">{#if value != null}{count(value)}{:else if failed}–{:else}<span class="st-sk ui-skeleton" aria-hidden="true"></span><span class="sr-only">Loading</span>{/if}</span></a></li>
+{/snippet}
+
+<ul class="stats" aria-label="In numbers">
+  {@render stat('Uploads', uploads.data?.total, sectionHref(accountId, 'uploads'), uploads.failed)}
+  {@render stat('Channels', library.data?.channels.length, '/me/channels', library.failed)}
+  {@render stat('Emote sets', library.data?.sets.length, sectionHref(accountId, 'sets'), library.failed)}
+  {@render stat('Editors', editors.data?.length, sectionHref(accountId, 'editors'), editors.failed)}
+  {@render stat('Unread', inbox.items ? inbox.count : null, '/me/notifications', !!inbox.error)}
+  {@render stat('Paints owned', owned.data?.paints, sectionHref(accountId, 'cosmetics'), owned.failed)}
+</ul>
+
+<div class="tiles">
     <Section title="Channels" count={library.data ? count(library.data.channels.length) : undefined} id="ov-ch">
       {#snippet actions()}{@render more('/me/channels', 'Manage')}{/snippet}
       {#if library.data}
@@ -88,7 +103,7 @@
               </li>
             {/each}
           </ul>
-        {:else}<p class="ui-hint pad">No channels yet. Link Twitch or Kick in Settings to add yours.</p>{/if}
+        {:else}<p class="ui-hint pad">No channels yet. Link Twitch or Kick under Account to add yours.</p>{/if}
       {:else}{@render waiting(library)}{/if}
     </Section>
 
@@ -112,7 +127,7 @@
     </Section>
 
     <Section title="Editors" count={editors.data ? count(editors.data.length) : undefined} id="ov-ed">
-      {#snippet actions()}{@render more('/me/editors', 'Manage')}{/snippet}
+      {#snippet actions()}{@render more(sectionHref(accountId, 'editors'), 'Manage')}{/snippet}
       {#if editors.data}
         {#if editors.data.length}
           <ul class="rows">
@@ -123,9 +138,6 @@
         {:else}<p class="ui-hint pad">Nobody yet. Editors can manage your sets and emotes for you.</p>{/if}
       {:else}{@render waiting(editors)}{/if}
     </Section>
-  </div>
-
-  <div class="col">
     <Section title="Notifications" count={inbox.count ? `${count(inbox.count)} unread` : undefined} id="ov-no">
       {#snippet actions()}{@render more('/me/notifications', 'All')}{/snippet}
       {#if inbox.items}
@@ -168,15 +180,23 @@
         {:else}<p class="ui-hint pad">No sets yet.</p>{/if}
       {:else}{@render waiting(library)}{/if}
     </Section>
-  </div>
 </div>
 
 <style>
-  /* Two flat columns on wide with a hairline between; each Section is separated by its own hairline. */
-  .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 40px; align-items: start; }
-  .col { min-width: 0; }
-  @media (min-width: 900px) { .col + .col { padding-left: 40px; margin-left: -40px; border-left: 1px solid var(--border); } }
-  @media (max-width: 899.98px) { .cols { grid-template-columns: minmax(0, 1fr); } .col + .col > :global(.sec:first-child) { border-top: 1px solid var(--border); } }
+  /* The numbers: one sheet of cells sharing hairlines, as many per row as fit (two on a phone). */
+  .stats { list-style: none; margin: 0 0 24px; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    border-top: 1px solid var(--border); border-left: 1px solid var(--border); }
+  .stats li { min-width: 0; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+  .stats a { display: grid; gap: 6px; padding: 12px 14px; color: var(--text); }
+  @media (hover: hover) and (pointer: fine) { .stats a:hover { background: var(--surface-hover); } }
+  .stats a:focus-visible { outline-offset: -2px; }
+  .st-l { font-size: var(--t-label, 12px); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--dim); }
+  .st-n { font-size: 22px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; min-height: 22px; }
+  .st-sk { display: block; width: 48px; height: 18px; border-radius: var(--radius); }
+  @media (max-width: 479.98px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  /* The tiles: balanced columns of flat Sections, each opened by a hairline (the tops line up). */
+  .tiles { columns: 4 360px; column-gap: 40px; column-rule: 1px solid var(--border); }
+  .tiles > :global(.sec) { break-inside: avoid; border-top: 1px solid var(--border); }
   .more { display: inline-flex; align-items: center; gap: 2px; min-height: 32px; padding: 0 2px 0 8px; border-radius: var(--radius);
     font-size: var(--t-fine); font-weight: 500; color: var(--muted); white-space: nowrap; }
   @media (hover: hover) and (pointer: fine) { .more:hover { color: var(--text); } }

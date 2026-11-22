@@ -442,7 +442,7 @@
     :global(html[data-signed][data-tray='shut']) .ws, .ws.signed.shut { grid-template-columns: 248px minmax(0, 1fr) 44px; }
     :global(html[data-signed]) .tray-col, .signed .tray-col { display: block; position: sticky; top: var(--nav-h); height: calc(100svh - var(--nav-h));
       overflow-y: auto; overscroll-behavior: contain; margin-right: calc(-1 * var(--page-pad)); border-left: 1px solid var(--border); background: var(--surface);
-      scrollbar-width: thin; box-shadow: 0 0 0 100vw var(--surface); clip-path: inset(0 -100vw 0 0); /* on to the window's edge past the wrap, like every right panel */ }
+      scrollbar-width: thin; }
   }
   /* Signed out after all (the hint was stale): back to one column. */
   .ws:not(.signed) .rail-col:empty, .ws:not(.signed) .tray-col:empty { display: none; }

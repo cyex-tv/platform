@@ -16,7 +16,7 @@ export function profileLink(id: string): ShellLink {
   return { href: profile(id, 'overview'), label: 'Profile', icon: 'circle-user', match: (p, q) => on(id, 'overview')(p, q) || on(id, null)(p, q) };
 }
 
-/** The account menu's list after Profile: your emotes and your cosmetics, both on the profile. */
+/** The account menu's list after Profile: your emotes, your cosmetics and your account (with Editors), all on the profile. */
 export function menuLinks(id: string): ShellLink[] {
   return [
     {
@@ -26,17 +26,18 @@ export function menuLinks(id: string): ShellLink[] {
       match: (p, q) => on(id, 'uploads')(p, q) || p.startsWith('/me/emotes'),
     },
     { href: profile(id, 'cosmetics'), label: 'Cosmetics', icon: 'brush', match: on(id, 'cosmetics') },
+    { href: profile(id, 'account'), label: 'Account', icon: 'user', match: (p, q) => on(id, 'account')(p, q) || on(id, 'editors')(p, q) },
   ];
 }
 
 export const UPLOAD: ShellLink = { href: '/me/upload', label: 'Upload', icon: 'upload', match: under('/me/upload') };
 
-/** Settings (Account, Appearance, Editors, Billing); /me/account is its old address. */
-export const ACCOUNT: ShellLink = {
+/** Settings (Appearance, Notifications, Hidden, Billing); Account and Editors are on your profile. */
+export const SETTINGS: ShellLink = {
   href: '/me/settings',
   label: 'Settings',
   icon: 'settings',
-  match: (p) => under('/me/settings')(p) || under('/me/account')(p) || under('/me/editors')(p),
+  match: under('/me/settings'),
 };
 export const ADMIN: ShellLink = { href: '/admin', label: 'Admin', icon: 'shield', match: under('/admin') };
 export const EMOTES: ShellLink = {

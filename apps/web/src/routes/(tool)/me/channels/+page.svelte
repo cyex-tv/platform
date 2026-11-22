@@ -121,7 +121,7 @@
   {/if}
   <PanelBlock title="Related">
     <LinkRows items={[
-      { href: '/me/settings/account#conn-h', label: 'Connections', hint: 'Connect another platform to add its channel', icon: 'link' },
+      { href: '/me/account', label: 'Connections', hint: 'Connect another platform to add its channel', icon: 'link' },
       { href: sectionHref(session.me?.id ?? '', 'sets'), label: 'Your sets', icon: 'folder' },
       { href: '/me/editors', label: 'Editors', icon: 'circle-user' },
     ]} />
