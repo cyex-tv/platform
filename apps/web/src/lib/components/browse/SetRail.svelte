@@ -9,8 +9,13 @@
   //     it has text every group with a match is open.
   //   - A row is a drop target: drag a tile (or the picked tiles) onto it to add them there.
   //   - ↓ ↑ walk the field, the group heads and the rows, Home and End jump; Enter or Space picks.
+  //   - Right-click a row, or Shift+F10 / the context-menu key on it, for the set menu
+  //     (SetActions): rename in place, copy link, set active, capacity, open, delete.
   // The same rail fills the phone's bottom sheet (`sheet`), where picking a set closes it.
   import Icon from '$lib/components/Icon.svelte';
+  import InlineRename from '$lib/sets/InlineRename.svelte';
+  import SetActions from '$lib/sets/SetActions.svelte';
+  import { isMenuKey } from '$lib/sets/set-menu';
   import State from '$lib/components/State.svelte';
   import { clean, count } from '$lib/format';
   import { session } from '$lib/tool/session.svelte';
@@ -108,6 +113,20 @@
   }
 
   const pct = (s: TargetSet) => (s.capacity > 0 ? Math.min(100, (s.held.size / s.capacity) * 100) : 0);
+
+  // ---- The set menu, and renaming a row in place.
+  let acts = $state<SetActions>();
+  let renaming = $state<string | null>(null);
+  function openMenu(ev: MouseEvent, s: TargetSet) {
+    if (renaming === s.id) return;
+    ev.preventDefault();
+    acts?.open({ id: s.id, name: s.name, kind: s.kind ?? 'CHANNEL', ownerId: s.ownerId || me || null, capacity: s.capacity }, ev);
+  }
+  function renamed(id: string, next: string | null) {
+    renaming = null;
+    if (next) void store.refresh();
+    queueMicrotask(() => root?.querySelector<HTMLElement>(`[data-set="${CSS.escape(id)}"]`)?.focus());
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -160,6 +179,14 @@
                 {@const chosen = store.chosenId === s.id}
                 {@const full = s.held.size >= s.capacity}
                 <li>
+                  {#if renaming === s.id}
+                  <div class="set renaming" class:chosen>
+                    <span class="ico" aria-hidden="true"><Icon name="pencil" size={14} /></span>
+                    <span class="nm"><InlineRename id={s.id} name={s.name} ondone={(n) => renamed(s.id, n)} /></span>
+                    <span class="ct" aria-hidden="true">{count(s.held.size)}/{count(s.capacity)}</span>
+                    <span class="meter" class:full aria-hidden="true"><i style:width="{pct(s)}%"></i></span>
+                  </div>
+                  {:else}
                   <button
                     class="set"
                     class:chosen
@@ -169,6 +196,13 @@
                     data-set={s.id}
                     aria-pressed={chosen}
                     onclick={() => pick(s.id)}
+                    oncontextmenu={(ev) => openMenu(ev, s)}
+                    onkeydown={(ev) => {
+                      if (!isMenuKey(ev)) return;
+                      ev.preventDefault();
+                      ev.stopPropagation();
+                      acts?.open({ id: s.id, name: s.name, kind: s.kind ?? 'CHANNEL', ownerId: s.ownerId || me || null, capacity: s.capacity }, ev.currentTarget);
+                    }}
                     ondragover={(ev) => dragover(ev, s)}
                     ondragleave={() => (over = over === s.id ? '' : over)}
                     ondrop={(ev) => drop(ev, s)}
@@ -178,6 +212,7 @@
                     <span class="ct" class:full><span aria-hidden="true">{count(s.held.size)}/{count(s.capacity)}</span><span class="sr-only">, {count(s.held.size)} of {count(s.capacity)} used</span></span>
                     <span class="meter" class:full aria-hidden="true"><i style:width="{pct(s)}%"></i></span>
                   </button>
+                  {/if}
                 </li>
               {/each}
             </ul>
@@ -185,9 +220,10 @@
         </section>
       {/each}
     </div>
-    <p class="hint">The set you pick is where <b>+</b> adds emotes. Drag emotes onto any set to add them there.</p>
+    <p class="hint">The set you pick is where <b>+</b> adds emotes. Drag emotes onto any set to add them there. Right-click a set for more.</p>
   {/if}
 </div>
+<SetActions bind:this={acts} onrename={(id) => (renaming = id)} onchanged={() => void store.refresh()} />
 
 <style>
   p, h2 { margin: 0; }
@@ -235,6 +271,7 @@
   .set.chosen .ico { color: var(--accent-text); }
   /* A drag over a set: the accent hairline says "drop here". */
   .set.over { border-color: var(--accent-border); color: var(--text); }
+  .set.renaming { cursor: default; color: var(--text); }
 
   .msg { padding: 4px 8px; font-size: var(--t-small); color: var(--muted); }
   .link { border: 0; background: none; padding: 0; color: var(--accent-text); font: inherit; cursor: pointer; }

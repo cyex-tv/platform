@@ -5,7 +5,7 @@
 import type { LimitGroup, RoleLimitFieldsFragment } from '$lib/gql/graphql';
 import { count } from '$lib/format';
 
-export type LimitInfo = { label: string; hint: string };
+export type LimitInfo = { label: string; hint: string; /** What the number counts, for a cap that is neither per time nor at once (set capacity: slots a set). */ unit?: string };
 
 export const LIMIT_INFO: Record<string, LimitInfo> = {
   gql_account: { label: 'API requests', hint: 'Calls to the API a signed-in account may make. The site and the extension make several per page.' },
@@ -23,6 +23,7 @@ export const LIMIT_INFO: Record<string, LimitInfo> = {
   checkout: { label: 'Checkouts', hint: 'Starting a checkout in the shop.' },
   redeem: { label: 'Code tries', hint: 'Redeeming codes, right or wrong. Wrong codes also lock out for a while on their own.' },
   data_export: { label: 'Data downloads', hint: 'Downloading a copy of everything about your account.' },
+  set_capacity_max: { label: 'Set capacity', hint: 'The most emotes one channel set can hold, picked by its owner (a subscriber role could raise it). Staff can set any set up to 1.000.000.', unit: 'slots a set' },
 };
 
 export const GROUP_LABEL: Record<LimitGroup, string> = { REQUESTS: 'Requests', UPLOADS: 'Uploads', ACCOUNT: 'Account actions' };
@@ -48,8 +49,8 @@ export function per(seconds: number | null | undefined): string | null {
 }
 
 /** What a limit allows, in words: "600 a minute", "20 at once". */
-export function amount(n: number, seconds: number | null | undefined): string {
-  return `${count(n)} ${per(seconds) ?? 'at once'}`;
+export function amount(n: number, seconds: number | null | undefined, unit?: string): string {
+  return `${count(n)} ${unit ?? per(seconds) ?? 'at once'}`;
 }
 
 export type LimitGroupView = { group: LimitGroup; label: string; items: RoleLimitFieldsFragment[] };

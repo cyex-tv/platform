@@ -23,6 +23,8 @@ export type SetItem = Picture & { id: string; name: string };
 export type TargetSet = {
   id: string;
   name: string;
+  /** CHANNEL or PERSONAL (the set menu offers "Set active" on channel sets only). Left out by older callers. */
+  kind?: string;
   capacity: number;
   held: SvelteSet<string>;
   /** The emotes it holds, oldest first (the tray lists them newest first). */
@@ -120,6 +122,7 @@ class Target {
           return {
             id: s.id,
             name: s.name,
+            kind: s.kind,
             capacity: s.capacity,
             held,
             items,

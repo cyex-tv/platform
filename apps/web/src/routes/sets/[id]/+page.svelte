@@ -4,9 +4,10 @@
   // owner and size head the left column, then search inside the set and the emotes in the browse
   // grid (BrowseGrid: the same tiles, tile menu, Select mode with its bar, + to add to the set
   // you are adding to, drag to a set). On the right a panel: the actions (clone it into your own
-  // sets, copy the link, edit it when it is yours), its facts, its editors (for whoever may see
-  // them: the owner, its editors, staff) and a chat preview. Under 1100px the actions sit in the
-  // head and the rest of the panel folds above the grid.
+  // sets, copy the link, edit it when it is yours), its facts and its editors (for whoever may see
+  // them: the owner, its editors, staff). Under 1100px the actions sit in the head and the rest of
+  // the panel folds above the grid. The ⋯ next to the name, or a right-click on it, opens the set
+  // menu (SetActions): rename in place, copy link, set active, capacity, editor, delete.
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { gql } from '$lib/api';
@@ -33,7 +34,10 @@
   import { can, session } from '$lib/tool/session.svelte';
   import type { PublicSetQuery, SetEditorsQuery } from '$lib/gql/graphql';
   import CloneDialog from './CloneDialog.svelte';
-  import SetChat from './SetChat.svelte';
+  import InlineRename from '$lib/sets/InlineRename.svelte';
+  import SetActions, { type SetChange } from '$lib/sets/SetActions.svelte';
+  import { sectionHref } from '$lib/profile/rows';
+  import { forgetProfile } from '$lib/profile/data.svelte';
 
   type PageSet = NonNullable<PublicSetQuery['set']>;
   let { data } = $props();
@@ -63,13 +67,18 @@
   const asked = $derived(data.set ? null : late?.id === data.id ? late : undefined);
   const s = $derived(data.set ?? asked?.set ?? null);
 
-  const name = $derived(s ? clean(s.name) : '');
+  // What the set menu changed here, until the page is read again.
+  let edited = $state<{ id: string; name?: string; capacity?: number } | null>(null);
+  const local = $derived(edited && edited.id === s?.id ? edited : null);
+  const rawName = $derived(local?.name ?? s?.name ?? '');
+  const capacity = $derived(local?.capacity ?? s?.capacity ?? 0);
+  const name = $derived(s ? clean(rawName) : '');
   const owner = $derived(s?.owner ?? null);
   const mine = $derived(!!s && !!session.me && session.me.id === s.owner?.id);
   const used = $derived(s ? Math.max(s.slotsUsed, s.emotes.length) : 0);
-  const pct = $derived(s ? fillPercent(used, s.capacity) : 0);
+  const pct = $derived(s ? fillPercent(used, capacity) : 0);
+  // Every set is public; staff can still take one off the listings (moderation).
   const unlisted = $derived(s?.visibility === 'UNLISTED');
-  const VIS: Record<string, string> = { LISTED: 'Listed', UNLISTED: 'Unlisted', PRIVATE: 'Private' };
   const KIND: Record<string, string> = { CHANNEL: 'Channel set', PERSONAL: 'Personal set', GLOBAL: 'Global set' };
 
   const members = $derived(s?.emotes ?? []);
@@ -149,6 +158,29 @@
   }
 
   let dlg = $state<CloneDialog>();
+  let acts = $state<SetActions>();
+  let renaming = $state(false);
+  let menuButton = $state<HTMLButtonElement>();
+  const menuSet = $derived(s ? { id: s.id, name: rawName, kind: s.kind, ownerId: s.owner?.id ?? null, capacity } : null);
+  function changed(c: SetChange) {
+    if (!s) return;
+    forgetProfile('library:');
+    if (c.kind === 'capacity' && c.capacity != null) edited = { ...(local ?? { id: s.id }), capacity: c.capacity };
+    else if (c.kind === 'deleted') void goto(sectionHref(s.owner?.id ?? session.me?.id ?? '', 'sets'));
+  }
+  function renamed(next: string | null) {
+    renaming = false;
+    if (next && s) {
+      edited = { ...(local ?? { id: s.id }), name: next };
+      forgetProfile('library:');
+    }
+    menuButton?.focus({ preventScroll: true });
+  }
+  function menuAt(e: MouseEvent) {
+    if (!menuSet) return;
+    e.preventDefault();
+    acts?.open(menuSet, e);
+  }
   const back = $derived(`/signin?back=${encodeURIComponent(page.url.pathname)}`);
   const signin = $derived(`/signin?back=${encodeURIComponent(page.url.pathname + page.url.search)}`);
 </script>
@@ -191,7 +223,6 @@
       <FactRows label="Facts" items={[
         ...(owner ? [{ label: 'Owner', key: 'owner' }] : []),
         { label: 'Kind', value: KIND[s.kind] ?? 'Set' },
-        { label: 'Who can open it', value: VIS[s.visibility] ?? s.visibility },
         { label: 'Emotes', key: 'cap' },
         ...(s.createdAt ? [{ label: 'Made', key: 'made' }] : []),
       ]}>
@@ -199,7 +230,7 @@
           {#if k === 'owner' && owner}<a class="owner" href="/users/{owner.id}"><Avatar src={owner.avatar} name={owner.displayName} size={20} /><bdi>{clean(owner.displayName)}</bdi></a>
           {:else if k === 'cap'}
             <span class="cap">
-              <span class="ui-mono"><Capacity {used} capacity={s.capacity} /></span>
+              <span class="ui-mono"><Capacity {used} {capacity} /></span>
               <span class="bar" role="meter" aria-label="How full" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
                 <span class="fill" class:full={pct >= 90} style:width="{pct}%"></span>
               </span>
@@ -208,11 +239,6 @@
         {/snippet}
       </FactRows>
     </PanelBlock>
-    {#if members.length}
-      <PanelBlock title="Chat preview">
-        <SetChat {members} {owner} {name} inPanel />
-      </PanelBlock>
-    {/if}
     <!-- Editors come last: the block arrives after the session (owner and staff only), so nothing under it can move. -->
     {#if editorList && (editorList.length || mine)}
       <PanelBlock title="Editors" count={editorList.length ? count(editorList.length) : undefined} more={mine ? { href: '/me/editors', label: 'Manage' } : undefined}>
@@ -236,7 +262,16 @@
     <InspectorLayout title="Set" label="About {name}" panel={side} fold testid="set-panel">
       {#snippet head()}
         <header class="head" aria-labelledby="set-h">
-          <h1 class="page-title" id="set-h"><bdi>{name}</bdi></h1>
+          <div class="title-row">
+            {#if renaming && menuSet}
+              <h1 class="page-title editing" id="set-h"><InlineRename id={menuSet.id} name={menuSet.name} size="title" ondone={renamed} /></h1>
+            {:else}
+              <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+              <h1 class="page-title" id="set-h" oncontextmenu={menuAt}><bdi>{name}</bdi></h1>
+            {/if}
+            <button class="ui-icon more" type="button" bind:this={menuButton} aria-label="Set actions for {name}" aria-haspopup="menu"
+              onclick={(e) => menuSet && acts?.open(menuSet, e.currentTarget)} oncontextmenu={menuAt}><Icon name="more" size={18} /></button>
+          </div>
           <p class="meta">
             {#if owner}
               <a class="owner" href="/users/{owner.id}">
@@ -305,6 +340,7 @@
       {/if}
     </InspectorLayout>
     <CloneDialog bind:this={dlg} id={s.id} name={s.name} />
+    <SetActions bind:this={acts} here="page" onrename={() => (renaming = true)} onchanged={changed} />
   {/key}
 {:else if asked === undefined}
   <ColumnLayout top>
@@ -327,7 +363,11 @@
 
 <style>
   .head { display: grid; gap: 10px; margin-bottom: 20px; }
-  .head h1 { margin: 0; }
+  .head h1 { margin: 0; min-width: 0; }
+  .title-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .title-row h1 { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .title-row h1.editing { flex: 1 1 auto; overflow: visible; }
+  .more { flex: none; color: var(--muted); }
   .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; margin: 0; font-size: var(--t-small); color: var(--muted); }
   .owner { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; min-height: 32px; color: var(--text); font-weight: 500; }
   .owner span, .owner bdi { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

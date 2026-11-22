@@ -653,8 +653,8 @@ export type CreateSetInput = {
   /** Make the set for an account you edit with `sets` (ADR 0014). Empty: for yourself. */
   ownerId?: InputMaybe<Scalars['String']['input']>;
   /**
-   * Empty: `LISTED` for channel sets, `UNLISTED` for the personal set. Personal sets can't be
-   * `PRIVATE`.
+   * Empty or `LISTED`: every set is public. `UNLISTED` and `PRIVATE` need `sets.edit_any`
+   * (staff); personal sets can't be `PRIVATE`.
    */
   visibility?: InputMaybe<SetVisibility>;
 };
@@ -710,7 +710,7 @@ export type EditorPermission =
   | 'BILLING_PAYMENT'
   /** Manage the owner's subscription. Stored; grants nothing yet. */
   | 'BILLING_SUBSCRIPTION'
-  /** Change the owner's channels' active set and settings. Granting `Sets` grants this too. */
+  /** Change the owner's channels' settings (and pick their active set, as `Sets` does). */
   | 'CHANNELS'
   /** Add, change and remove editors, never granting more than you hold. */
   | 'EDITORS'
@@ -728,7 +728,7 @@ export type EditorPermission =
   | 'EMOTE_UPLOAD'
   /** Pick the badge and paint the owner shows (ADR 0015). Never grants. */
   | 'PROFILE'
-  /** Create, rename and delete sets and change their capacity. Always comes with `Channels`. */
+  /** Create, rename and delete sets, change their capacity, and pick a channel's active set. */
   | 'SETS';
 
 export type Emote = {
@@ -1159,7 +1159,7 @@ export type Mutation = {
   cancelEmoteTransfer: EmoteTransferRequest;
   /**
    * Copy a set you can open into a new channel set: yours, or with `ownerId` one for an account
-   * you edit with `SETS`. Name defaults to the source's; visibility to `LISTED`. Emotes go in
+   * you edit with `SETS`. Name defaults to the source's; the copy is public (`UNLISTED` and `PRIVATE` need `sets.edit_any`). Emotes go in
    * as `addSetEmote` would put them, in order, keeping their names: up to the capacity,
    * approved ones only (your own pending ones too), never other people's private emotes.
    * 30 copies an hour. `rate_limited`, `not_found`, `forbidden`, `bad_name`.
@@ -1506,8 +1506,11 @@ export type Mutation = {
    */
   updateRole: Role;
   /**
-   * Rename a set, change who sees it (`visibility`: owner or account editors with `SETS`), or
-   * change its capacity. Owner or editor; capacity needs `sets.edit_any`.
+   * Rename a set or change its capacity (owner, editors, account editors with `SETS`). Capacity
+   * is 1 to the owner's `set_capacity_max` role limit (1.000 by default; `capacity_over_limit`
+   * above it), up to 1.000.000 with `sets.edit_any`, and never below the emotes the set holds
+   * (`capacity_too_low`); see `setCapacityRange`. Every set is public: `visibility` other than
+   * what it is needs `sets.edit_any` (`bad_visibility`).
    */
   updateSet: EmoteSet;
   /** Rename an emote in a set, or change its zero-width flag there. */
@@ -2660,6 +2663,12 @@ export type Query = {
    * its owner, an editor or staff (a channel's active set is always public).
    */
   set?: Maybe<EmoteSet>;
+  /**
+   * What you may set a set's capacity to (`updateSet`): from the emotes it holds (at least 1)
+   * to the owner's `set_capacity_max` role limit (1.000 by default), or 1.000.000 with
+   * `sets.edit_any`. Null when you can't change its capacity. Signed in.
+   */
+  setCapacityRange?: Maybe<SetCapacityRange>;
   /** A set's editors. For its owner, its editors and `sets.edit_any`. */
   setEditors: Array<AccountSummary>;
   /**
@@ -3055,6 +3064,11 @@ export type QuerySetArgs = {
 };
 
 
+export type QuerySetCapacityRangeArgs = {
+  id: Scalars['String']['input'];
+};
+
+
 export type QuerySetEditorsArgs = {
   setId: Scalars['String']['input'];
 };
@@ -3335,6 +3349,27 @@ export type SetAccess =
   /** Through a staff permission (`sets.edit_any`); your changes are audited. */
   | 'STAFF';
 
+/** What you may set a set's capacity to (`setCapacityRange`; ADR 0017, amendment 2026/11/22). */
+export type SetCapacityRange = {
+  __typename?: 'SetCapacityRange';
+  /** The most slots you may pick. */
+  max: Scalars['Int']['output'];
+  /** The fewest slots: 1, or the emotes the set holds now if that is more. */
+  min: Scalars['Int']['output'];
+  /**
+   * The most without a staff permission: the owner's `set_capacity_max` role limit (1.000 by
+   * default) for a channel set, 5 for a personal set, or the set's capacity if it is higher.
+   */
+  ownerMax: Scalars['Int']['output'];
+  /**
+   * `max` comes from a staff permission (`sets.edit_any`, or `global_set.edit` for the global
+   * set): up to 1.000.000.
+   */
+  staff: Scalars['Boolean']['output'];
+  /** Emotes in the set now, pending ones included. */
+  used: Scalars['Int']['output'];
+};
+
 /** An emote as it sits in a set: the name it is typed as there, and who added it. */
 export type SetEmote = {
   __typename?: 'SetEmote';
@@ -3559,10 +3594,17 @@ export type UpdateSetEmoteInput = {
 };
 
 export type UpdateSetInput = {
-  /** Needs `sets.edit_any` to raise above the default. */
+  /**
+   * 1 to the owner's `set_capacity_max` role limit (1.000 by default; 5 for a personal set),
+   * never below the emotes the set holds; up to 1.000.000 with `sets.edit_any`.
+   * `setCapacityRange` says what you may pick.
+   */
   capacity?: InputMaybe<Scalars['Int']['input']>;
   name?: InputMaybe<Scalars['String']['input']>;
-  /** Personal sets can't be `PRIVATE`; the global set is always listed. */
+  /**
+   * Every set is public: changing it needs `sets.edit_any` (staff hiding a set). Personal sets
+   * can't be `PRIVATE`; the global set is always listed.
+   */
   visibility?: InputMaybe<SetVisibility>;
 };
 
@@ -3767,7 +3809,7 @@ export type UpdateSetMutationVariables = Exact<{
 }>;
 
 
-export type UpdateSetMutation = { __typename?: 'Mutation', updateSet: { __typename?: 'EmoteSet', id: string, name: string, visibility: SetVisibility } };
+export type UpdateSetMutation = { __typename?: 'Mutation', updateSet: { __typename?: 'EmoteSet', id: string, name: string, visibility: SetVisibility, capacity: number } };
 
 export type DeleteSetMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -3775,6 +3817,20 @@ export type DeleteSetMutationVariables = Exact<{
 
 
 export type DeleteSetMutation = { __typename?: 'Mutation', deleteSet: boolean };
+
+export type SetCapacityRangeQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type SetCapacityRangeQuery = { __typename?: 'Query', setCapacityRange?: { __typename?: 'SetCapacityRange', min: number, max: number, ownerMax: number, used: number, staff: boolean } | null };
+
+export type SetMenuQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type SetMenuQuery = { __typename?: 'Query', setCapacityRange?: { __typename?: 'SetCapacityRange', min: number, max: number, ownerMax: number, used: number, staff: boolean } | null, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, account: { __typename?: 'AccountSummary', id: string } }>, myChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }>, editorChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }> };
 
 export type AddSetEmoteMutationVariables = Exact<{
   setId: Scalars['String']['input'];
@@ -5949,6 +6005,7 @@ export const UpdateSetDocument = new TypedDocumentString(`
     id
     name
     visibility
+    capacity
   }
 }
     `) as unknown as TypedDocumentString<UpdateSetMutation, UpdateSetMutationVariables>;
@@ -5957,6 +6014,54 @@ export const DeleteSetDocument = new TypedDocumentString(`
   deleteSet(id: $id)
 }
     `) as unknown as TypedDocumentString<DeleteSetMutation, DeleteSetMutationVariables>;
+export const SetCapacityRangeDocument = new TypedDocumentString(`
+    query SetCapacityRange($id: String!) {
+  setCapacityRange(id: $id) {
+    min
+    max
+    ownerMax
+    used
+    staff
+  }
+}
+    `) as unknown as TypedDocumentString<SetCapacityRangeQuery, SetCapacityRangeQueryVariables>;
+export const SetMenuDocument = new TypedDocumentString(`
+    query SetMenu($id: String!) {
+  setCapacityRange(id: $id) {
+    min
+    max
+    ownerMax
+    used
+    staff
+  }
+  editorOf {
+    account {
+      id
+    }
+    permissions
+    allSets
+    setIds
+  }
+  myChannels {
+    platform
+    platformChannelId
+    login
+    activeSetId
+    account {
+      id
+    }
+  }
+  editorChannels {
+    platform
+    platformChannelId
+    login
+    activeSetId
+    account {
+      id
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<SetMenuQuery, SetMenuQueryVariables>;
 export const AddSetEmoteDocument = new TypedDocumentString(`
     mutation AddSetEmote($setId: String!, $emoteId: String!, $input: AddSetEmoteInput) {
   addSetEmote(setId: $setId, emoteId: $emoteId, input: $input) {

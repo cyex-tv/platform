@@ -364,6 +364,7 @@ export const UPDATE_SET = graphql(`
       id
       name
       visibility
+      capacity
     }
   }
 `);
@@ -371,6 +372,58 @@ export const UPDATE_SET = graphql(`
 export const DELETE_SET = graphql(`
   mutation DeleteSet($id: String!) {
     deleteSet(id: $id)
+  }
+`);
+
+/** What you may set a set's capacity to; null when you can't change it. */
+export const SET_CAPACITY_RANGE = graphql(`
+  query SetCapacityRange($id: String!) {
+    setCapacityRange(id: $id) {
+      min
+      max
+      ownerMax
+      used
+      staff
+    }
+  }
+`);
+
+/** What a set's right-click menu offers you: its capacity range (null: not yours to change), your grants and the channels you can point at it. */
+export const SET_MENU = graphql(`
+  query SetMenu($id: String!) {
+    setCapacityRange(id: $id) {
+      min
+      max
+      ownerMax
+      used
+      staff
+    }
+    editorOf {
+      account {
+        id
+      }
+      permissions
+      allSets
+      setIds
+    }
+    myChannels {
+      platform
+      platformChannelId
+      login
+      activeSetId
+      account {
+        id
+      }
+    }
+    editorChannels {
+      platform
+      platformChannelId
+      login
+      activeSetId
+      account {
+        id
+      }
+    }
   }
 `);
 
