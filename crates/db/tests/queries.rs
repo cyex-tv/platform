@@ -1613,7 +1613,7 @@ async fn quick_search_ranks_by_tier_then_use() {
 }
 
 /// One listed-emote rule for every search: `search` (relevance and the trending sort), `quick`
-/// and `trending_rank` all find the public emote and none of the unlisted, private, NSFW (unless
+/// and `trending_rank` all find the public emote and none of the unlisted, private, NSFW (not even
 /// asked), pending-deletion owner's or blocked owner's ones; an ended block lists them again.
 #[tokio::test]
 async fn every_search_uses_the_listed_emote_rule() {
@@ -1695,7 +1695,8 @@ async fn every_search_uses_the_listed_emote_rule() {
     for sort in [EmoteSort::Relevance, EmoteSort::Trending] {
         for (nsfw, want) in [
             (false, vec!["vispublic", "visunblocked"]),
-            (true, vec!["visnsfw", "vispublic", "visunblocked"]),
+            // NSFW emotes aren't allowed: an old flag keeps one out even when asked for.
+            (true, vec!["vispublic", "visunblocked"]),
         ] {
             let hits = search::search(
                 &mut c,
@@ -1717,7 +1718,7 @@ async fn every_search_uses_the_listed_emote_rule() {
     assert_eq!(names(&quick), ["vispublic", "visunblocked"], "quick");
     for (name, id) in &by_name {
         let rank = search::trending_rank(&mut c, *id, 7, 100).await.unwrap();
-        let listed = matches!(*name, "vispublic" | "visnsfw" | "visunblocked");
+        let listed = matches!(*name, "vispublic" | "visunblocked");
         assert_eq!(rank.is_some(), listed, "trending_rank {name}");
     }
     drop(c);

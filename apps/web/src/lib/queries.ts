@@ -14,7 +14,6 @@ export const EMOTE_FIELDS = graphql(`
     visibility
     flags {
       zeroWidth
-      nsfw
       private
       wide
     }
@@ -39,7 +38,6 @@ export const SEARCH = graphql(`
   query Search(
     $query: String!
     $animated: Boolean
-    $nsfw: Boolean
     $page: Int
     $perPage: Int
     $sort: EmoteSort
@@ -51,7 +49,6 @@ export const SEARCH = graphql(`
     searchEmotes(
       query: $query
       animated: $animated
-      nsfw: $nsfw
       page: $page
       perPage: $perPage
       sort: $sort

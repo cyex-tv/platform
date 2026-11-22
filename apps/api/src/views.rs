@@ -81,7 +81,9 @@ fn emote(
         flags: EmoteFlags {
             zero_width: row.zero_width,
             private: row.private,
-            nsfw: row.nsfw,
+            // Retired: NSFW emotes aren't allowed (ADR 0020); an old flag only keeps the emote
+            // off the listings until staff save its flags.
+            nsfw: false,
             wide: is_wide(&files),
         },
         visibility: EmoteVisibility::of(row.private, row.unlisted),

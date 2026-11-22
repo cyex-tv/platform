@@ -30,7 +30,6 @@ export function menuLinks(id: string): ShellLink[] {
   ];
 }
 
-export const UPLOAD: ShellLink = { href: '/me/upload', label: 'Upload', icon: 'upload', match: under('/me/upload') };
 
 /** Settings (Appearance, Notifications, Hidden, Billing); Account and Editors are on your profile. */
 export const SETTINGS: ShellLink = {

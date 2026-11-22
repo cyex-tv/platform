@@ -1637,3 +1637,41 @@ git push -u origin fix/select-toggle-hero-tilt
 gh pr create --repo cyex-tv/platform --base main --head fix/select-toggle-hero-tilt --title "Multi-select unselects too; the hero logo stops following the pointer" --body-file <file>
 ```
   Not merged (owner reviews).
+
+## Emote page sizes, upload dialog, two creator flags, no NSFW (branch `feat/emote-page-upload-flags`, owner requests of 2026/11/22)
+- [x] Emote page: every size shows at once on the stage at its real pixel size, nothing to pick; the largest (4x)
+  is the focus (full colour, bold caption), the smaller ones stand beside it on one baseline with just their
+  dimensions. No pause button: animated emotes play, or show their still frame under reduced motion. Facts:
+  Channels, Added in 7 days, Trending, Uploaded, Review (Kind, Formats and the file size are gone, also from the
+  profile's emote inspector and the emote edit page). `SizeRow.svelte` and the `kind`/`formats`/`fileSize`/`labels`
+  helpers are gone. Tests: `emote-stage.ui.test.ts`, `emote-tabs.ui.test.ts`, `emote-page.test.ts`.
+- [x] At most 128 px tall: it already held (4x = 128 px, no emote sizes past 4x). Pinned as
+  `encode::EMOTE_MAX_HEIGHT` with a compile-time check, and tests for every size of many original shapes and a
+  600 × 600 transcode (`crates/media/src/tests.rs`). ADR 0012 amendment. The upload preview (`LocalPreview`) now
+  fits sizes the way the worker does (never above the original, 4:1 at most).
+- [x] NSFW is no emote flag (NSFW emotes aren't allowed): upload `nsfw=true` and `updateEmote`/`setEmoteFlags`
+  `nsfw: true` are `400 nsfw_not_allowed`; `nsfw=false` is still taken. `EmoteFlags.nsfw` (always false),
+  `searchEmotes(nsfw:)` (no effect) and `EmoteFlag.NSFW` (finds nothing) are deprecated. The column stays; an emote
+  still flagged is off every listing (`LISTED_EMOTE` includes `NOT e.nsfw`) until staff save its flags, which
+  clears it. Seeded reject reason reworded by migration `20261215000001_retire_nsfw_reason.sql`. Website: no NSFW in
+  upload, flags (yours and staff's), browse filters (an old `?nsfw=1` is dropped), review cards and inspector,
+  admin lists, header search, docs and help; the guidelines say NSFW content isn't allowed and is removed.
+  ADR 0020 and 0024 amendments.
+- [x] Unlisted is staff's: creators choose Overlaying (zero-width) and Private only; upload and `updateEmote`
+  refuse `unlisted` (`bad_visibility`) without `emotes.flags`/`emotes.edit_any`, and an owner can't change the
+  visibility of an emote a moderator unlisted. Staff's Edit emote flags keeps Public / Unlisted / Private.
+- [x] Upload is a dialog again, and the only way to upload: the header's Upload is a button that opens it where
+  you are (the phone menu's too). One image at a time (matches the example, simpler): left the form (Uploading as
+  when you may upload for an account you edit, Name, Tags as chips, Overlaying and Private with one-line hints,
+  how many wait for review, "I accept the rules and guidelines" opening /guidelines in a new tab, Discard and
+  Upload), right a large drop zone with Browse files, the preview at the four sizes once picked, and our limits.
+  Phones: a full-height sheet with the actions pinned. `/me/upload` and `/upload` are no pages any more: they
+  redirect (303) to the page you came from (or home) with `?upload`, where the root layout opens the dialog
+  (signed out: sign in first, then back). Old links to them (profile, editors) open the dialog in place, with
+  their `?for=`. Tests: `upload-form.ui.test.ts`, `upload.test.ts`, `upload-quota.ui.test.ts`,
+  `header-upload.ui.test.ts`.
+- [x] API tests (Postgres, CI): `upload_flow` (nsfw refused, the dialog's flags, `only_staff_upload_unlisted`),
+  `moderation_flow` (nsfw refused, `only_staff_take_an_emote_off_the_listings`), `mod_flags_flow` (refused, a save
+  clears an old mark), `browse_flow`, `search_flow`, `visibility_flow`, `editor_emotes_flow`, `global_perms_flow`,
+  the contract test and `crates/db` `every_search_uses_the_listed_emote_rule`. Mock, schema, OpenAPI and codegen
+  updated; mock conformance checks the nsfw refusal.

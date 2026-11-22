@@ -1,37 +1,19 @@
 // The upload dialog, open from anywhere: the header's Upload button, an empty "Your emotes", any
-// link to /me/upload. One dialog for the whole site lives in the root layout; its queue stays
-// while you browse, so closing it and opening it again finds your files where you left them.
-// /me/upload itself still renders the same form as a page, for old links and new tabs.
+// old link to /me/upload or /upload. One dialog for the whole site lives in the root layout; what
+// you picked stays while you browse, so closing it and opening it again finds it where you left it.
+// There is no upload page (owner, 2026/11/22): /me/upload and /upload redirect to the page you came
+// from with `?upload` in the address, and the root layout opens the dialog there (`uploadParam`).
 
-export const UPLOAD_PATHS = ['/me/upload', '/upload'];
+export * from './upload-links';
 
-export const upload = $state({ open: false });
+/** `for`: the account to upload as (one you edit with Upload, ADR 0014); null for yourself. */
+export const upload = $state<{ open: boolean; for: string | null }>({ open: false, for: null });
 
-export function openUpload() {
+export function openUpload(forId: string | null = null) {
+  upload.for = forId;
   upload.open = true;
 }
 
 export function closeUpload() {
   upload.open = false;
-}
-
-type ClickLike = Pick<MouseEvent, 'button' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey' | 'defaultPrevented'>;
-type LinkLike = { href: string; target?: string; hasAttribute(name: string): boolean };
-
-/**
- * Whether a click on `link` should open the dialog instead of following it: a plain left click
- * (no modifier, so Ctrl/⌘-click still opens a new tab) on a same-site link to the upload page,
- * from any page but the upload page itself.
- */
-export function opensDialog(e: ClickLike, link: LinkLike, here: URL): boolean {
-  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return false;
-  if ((link.target && link.target !== '_self') || link.hasAttribute('download')) return false;
-  let to: URL;
-  try {
-    to = new URL(link.href, here);
-  } catch {
-    return false;
-  }
-  if (to.origin !== here.origin || !UPLOAD_PATHS.includes(to.pathname.replace(/\/$/, ''))) return false;
-  return !UPLOAD_PATHS.includes(here.pathname.replace(/\/$/, ''));
 }

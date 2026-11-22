@@ -578,7 +578,6 @@
         <span class="adm-flags fl">
           {#if resolved}<span class={e.state === 'APPROVED' ? 'ok' : e.state === 'PENDING' ? '' : 'warn'}>{e.state === 'APPROVED' ? 'Approved' : e.state === 'REJECTED' ? 'Rejected' : e.state === 'PENDING' ? 'Pending' : 'Taken down'}</span>{/if}
           {#if !ready(e)}<span>No files</span>{/if}
-          {#if e.flags.nsfw}<span class="warn">NSFW</span>{/if}
           {#if VIS_CHIP[e.visibility]}<span class="on">{VIS_CHIP[e.visibility]}</span>{/if}
           {#if e.flags.zeroWidth}<span>Zero-width</span>{/if}
           {#if e.flags.wide}<span>Wide</span>{/if}

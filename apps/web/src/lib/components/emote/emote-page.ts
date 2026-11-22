@@ -3,7 +3,7 @@
 import type { ChatEmote, ChatLine } from '$lib/components/ChatPreview.svelte';
 import type { IconName } from '$lib/components/Icon.svelte';
 import { isWide, type Picture } from '$lib/emote';
-import { bytes, count } from '$lib/format';
+import { count } from '$lib/format';
 import { visibilityOf } from '$lib/tool/visibility';
 import type { EmoteFieldsFragment, EmoteState } from '$lib/gql/graphql';
 
@@ -58,14 +58,6 @@ export function backTarget(from: URL | null | undefined, here: string): { href: 
   return { href: '/search', label: 'All emotes', back: false };
 }
 
-const FORMAT_NAMES: Record<string, string> = { WEBP: 'WebP', AVIF: 'AVIF' };
-
-/** The file formats, in a stable order: `WebP, AVIF`. */
-export function formats(files: PageEmote['files']): string[] {
-  const seen = [...new Set(files.map((f) => f.format))];
-  return seen.sort().reverse().map((f) => FORMAT_NAMES[f] ?? f);
-}
-
 /** The file shown at each scale (moving one for animated emotes, WebP first), smallest first. */
 export function scaleFiles(files: PageEmote['files']): PageEmote['files'] {
   const out: PageEmote['files'] = [];
@@ -77,42 +69,22 @@ export function scaleFiles(files: PageEmote['files']): PageEmote['files'] {
   return out;
 }
 
-/** `900 B` for a file whose size the API sent; empty when it is unknown (missing or 0). */
-export function fileSize(f: { size?: number | null }): string {
-  return typeof f.size === 'number' && f.size > 0 ? bytes(f.size) : '';
-}
-
-/** The type in words: `Animated, zero-width, wide`. */
-export function kind(e: PageEmote): string {
-  const parts = [e.animated ? 'Animated' : 'Still'];
-  if (e.flags.zeroWidth) parts.push('zero-width');
-  if (isWide(e)) parts.push('wide');
-  return parts.join(', ');
-}
-
-/** The small labels under the name. */
-export function labels(e: PageEmote): string[] {
-  return [e.animated && 'animated', e.flags.zeroWidth && 'zero-width', isWide(e) && 'wide', e.flags.nsfw && 'NSFW'].filter(
-    Boolean,
-  ) as string[];
-}
-
 /** One flag on the emote page's card: its icon, word, and what it means (the tooltip). */
-export type Flag = { key: 'animated' | 'zero-width' | 'wide' | 'nsfw' | 'unlisted' | 'private'; label: string; icon: IconName; tip: string };
+export type Flag = { key: 'animated' | 'zero-width' | 'wide' | 'unlisted' | 'private'; label: string; icon: IconName; tip: string };
 
 /**
- * The emote's flags, in reading order: how it moves, how it sits in chat, NSFW, then who can
- * find it (ADR 0020: unlisted and private say so). A still, public, ordinary emote has none.
+ * The emote's flags, in reading order: how it moves, how it sits in chat, then who can find it
+ * (ADR 0020: unlisted and private say so). A still, public, ordinary emote has none. There is no
+ * NSFW flag: NSFW emotes aren't allowed.
  */
 export function flagsOf(e: PageEmote): Flag[] {
   const out: Flag[] = [];
   if (e.animated) out.push({ key: 'animated', label: 'Animated', icon: 'play', tip: 'Moves in chat' });
   if (e.flags.zeroWidth) out.push({ key: 'zero-width', label: 'Zero-width', icon: 'layers', tip: 'Sits on top of the emote before it' });
   if (e.flags.wide || isWide(e)) out.push({ key: 'wide', label: 'Wide', icon: 'wide', tip: 'At least 1,75 times as wide as it is tall' });
-  if (e.flags.nsfw) out.push({ key: 'nsfw', label: 'NSFW', icon: 'eye-off', tip: 'Not safe for work: hidden unless a viewer shows NSFW emotes' });
   const vis = visibilityOf(e);
-  if (vis === 'UNLISTED') out.push({ key: 'unlisted', label: 'Unlisted', icon: 'link', tip: 'Search leaves it out: only people with the link find it' });
-  else if (vis === 'PRIVATE') out.push({ key: 'private', label: 'Private', icon: 'shield', tip: 'Only its creator and their editors can add it to sets' });
+  if (vis === 'UNLISTED') out.push({ key: 'unlisted', label: 'Unlisted', icon: 'link', tip: 'A moderator took it off the listings: only people with the link find it' });
+  else if (vis === 'PRIVATE') out.push({ key: 'private', label: 'Private', icon: 'shield', tip: 'Only for its creator’s own channel: nobody else can add it to sets' });
   return out;
 }
 

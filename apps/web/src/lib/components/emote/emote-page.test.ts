@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { backTarget, baseEmote, channelCount, chatLines, flagsOf, formats, kind, labels, rangeLabel, scaleFiles, tabFrom, tabUrl, tabUrlStale, trust, type PageEmote } from './emote-page';
+import { backTarget, baseEmote, channelCount, chatLines, flagsOf, rangeLabel, scaleFiles, tabFrom, tabUrl, tabUrlStale, trust, type PageEmote } from './emote-page';
 
 const file = (scale: number, opts: Partial<PageEmote['files'][number]> = {}) => ({
   name: `${scale}x${opts.isStatic ? '_static' : ''}.webp`,
@@ -23,7 +23,7 @@ function emote(over: Partial<PageEmote> = {}): PageEmote {
     createdAt: '2026-11-17T10:00:00.000Z',
     channelCount: 0,
     visibility: 'PUBLIC',
-    flags: { zeroWidth: false, nsfw: false, private: false, wide: false },
+    flags: { zeroWidth: false, private: false, wide: false },
     owner: { id: 'A1', displayName: 'nora_byte', avatar: null },
     files: [1, 2, 3, 4].flatMap((s) => [file(s), file(s, { isStatic: true, size: 400 * s })]),
     ...over,
@@ -51,28 +51,22 @@ describe('facts', () => {
     const files = scaleFiles([...emote().files, file(2, { name: '2x.avif', format: 'AVIF' })]);
     expect(files.map((f) => f.name)).toEqual(['1x.webp', '2x.webp', '3x.webp', '4x.webp']);
   });
-  it('lists formats once each', () => {
-    expect(formats([file(1), file(1, { format: 'AVIF' }), file(2)])).toEqual(['WebP', 'AVIF']);
-  });
-  it('describes type and labels', () => {
-    const e = emote({ flags: { zeroWidth: true, nsfw: true, private: false, wide: false } });
-    expect(kind(e)).toBe('Animated, zero-width');
-    expect(labels(e)).toEqual(['animated', 'zero-width', 'NSFW']);
-    const wide = emote({ animated: false, files: [file(1, { width: 64 })] });
-    expect(kind(wide)).toBe('Still, wide');
+  it('has no kind, format or file-size facts any more (owner, 2026/11/22)', async () => {
+    const mod: Record<string, unknown> = await import('./emote-page');
+    for (const gone of ['kind', 'formats', 'fileSize', 'labels']) expect(mod[gone]).toBeUndefined();
   });
 });
 
 describe('chat', () => {
   const pool = [
     emote({ id: 'G1', name: 'wideOne', files: [file(1, { width: 96 })] }),
-    emote({ id: 'G2', name: 'zw', flags: { zeroWidth: true, nsfw: false, private: false, wide: false } }),
+    emote({ id: 'G2', name: 'zw', flags: { zeroWidth: true, private: false, wide: false } }),
     emote({ id: 'G3', name: 'plain' }),
     emote({ id: 'G4', name: 'other' }),
   ];
   it('stands a zero-width emote on an ordinary, narrow global emote', () => {
     expect(baseEmote(pool, 'x')?.name).toBe('plain');
-    const e = emote({ name: 'hat', flags: { zeroWidth: true, nsfw: false, private: false, wide: false } });
+    const e = emote({ name: 'hat', flags: { zeroWidth: true, private: false, wide: false } });
     const lines = chatLines(e, pool);
     const layered = lines[1].parts.filter((p) => 'emote' in p).map((p) => ('emote' in p ? p.emote.name : ''));
     expect(layered).toEqual(['plain', 'hat']);
@@ -104,14 +98,14 @@ describe('flags on the card', () => {
   it('has none for a still, public, ordinary emote', () => {
     expect(flagsOf(emote({ animated: false }))).toEqual([]);
   });
-  it('lists motion, chat behaviour, NSFW, then visibility, in that order', () => {
-    const e = emote({ visibility: 'UNLISTED', flags: { zeroWidth: true, nsfw: true, private: false, wide: true } });
-    expect(flagsOf(e).map((f) => f.key)).toEqual(['animated', 'zero-width', 'wide', 'nsfw', 'unlisted']);
+  it('lists motion, chat behaviour, then visibility, in that order (no NSFW flag)', () => {
+    const e = emote({ visibility: 'UNLISTED', flags: { zeroWidth: true, private: false, wide: true } });
+    expect(flagsOf(e).map((f) => f.key)).toEqual(['animated', 'zero-width', 'wide', 'unlisted']);
     expect(flagsOf(e).every((f) => f.tip.length > 0)).toBe(true);
   });
   it('marks private emotes, also from the old private flag alone', () => {
     expect(flagsOf(emote({ visibility: 'PRIVATE' })).at(-1)?.key).toBe('private');
-    expect(flagsOf(emote({ visibility: null as never, flags: { zeroWidth: false, nsfw: false, private: true, wide: false } })).at(-1)?.key).toBe('private');
+    expect(flagsOf(emote({ visibility: null as never, flags: { zeroWidth: false, private: true, wide: false } })).at(-1)?.key).toBe('private');
   });
   it('derives wide from the 1x file when the API flag is off', () => {
     const files = [file(1, { width: 112, height: 32 })];
@@ -128,17 +122,6 @@ describe('pager range', () => {
   });
   it('is empty when nothing shows', () => {
     expect(rangeLabel(0, 0, 0)).toBe('');
-  });
-});
-
-describe('fileSize', () => {
-  it('formats a known size in cyex numbers and hides an unknown one', async () => {
-    const { fileSize } = await import('./emote-page');
-    expect(fileSize({ size: 900 })).toBe('900 B');
-    expect(fileSize({ size: 1536 })).toBe('1,5 KB');
-    expect(fileSize({ size: 0 })).toBe('');
-    expect(fileSize({})).toBe('');
-    expect(fileSize({ size: null })).toBe('');
   });
 });
 

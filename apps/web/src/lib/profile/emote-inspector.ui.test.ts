@@ -15,7 +15,7 @@ const file = (scale: number) => ({ name: `${scale}x.webp`, format: 'WEBP', scale
 const emote = {
   id: 'E1', name: 'beanSus', state: 'APPROVED', animated: false, tags: ['meme'], host: 'https://cdn.example/e/1',
   createdAt: '2026-11-10T10:00:00.000Z', channelCount: 820, visibility: 'PUBLIC',
-  flags: { zeroWidth: false, nsfw: false, private: false, wide: false },
+  flags: { zeroWidth: false, private: false, wide: false },
   owner: { id: 'A1', displayName: 'emberlynx', avatar: null },
   files: [1, 2, 3, 4].map(file),
 } as unknown as PageEmote;

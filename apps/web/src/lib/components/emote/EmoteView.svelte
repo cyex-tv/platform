@@ -1,11 +1,13 @@
 <script lang="ts">
   // The emote page's body, made once per emote (the route keys it by id): the Inspector layout
   // (redesign, 2026/11/21). A breadcrumb back to where you came from, then two columns:
-  //   left  the preview: the emote on one neutral stage (no ground switch, owner rule), the four
-  //         sizes under it as buttons (scale, pixels, file size; the one on the stage is bold with
-  //         an accent tick), and a line of chat with the emote in it at chat size;
+  //   left  the preview: one neutral stage (no ground switch, owner rule) with every size at its
+  //         real pixel size, nothing to pick (owner, 2026/11/22): the largest is the focus, the
+  //         smaller ones stand beside it on one baseline with just their dimensions; then a line
+  //         of chat with the emote in it at chat size. Animated emotes play, or show their still
+  //         frame under reduced motion (no pause button);
   //   right the name, the creator in their paint and the upload date, flags and tags, the
-  //         actions (add to set, edit, more), a grid of facts, then the
+  //         actions (add to set, edit, more), a grid of facts (channels, trending, review), then the
   //         tabs (Channels using it, Activity, More by the creator; `?tab=` in the address) with
   //         a pager in the tab bar, and last the staff flags panel.
   // Under 900px the columns stack; phones get the actions in a bar fixed to the bottom.
@@ -17,9 +19,7 @@
   import EmoteGrid from '$lib/components/EmoteGrid.svelte';
   import Avatar from '$lib/components/Avatar.svelte';
   import Icon, { type IconName } from '$lib/components/Icon.svelte';
-  import IconButton from '$lib/components/IconButton.svelte';
-  import { hasStill } from '$lib/emote';
-  import { bytes, clean, count, date } from '$lib/format';
+  import { clean, count, date } from '$lib/format';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { looks, wantLooks } from '$lib/cosmetics/store.svelte';
   import { ready } from '$lib/emote';
@@ -29,7 +29,7 @@
   import ActivityTab from './ActivityTab.svelte';
   import ChannelsTab from './ChannelsTab.svelte';
   import Pager from './Pager.svelte';
-  import { canReport, fileSize, flagsOf, formats, kind, scaleFiles, tabFrom, tabUrl, tabUrlStale, trust, type EmoteChannel, type PageEmote } from './emote-page';
+  import { canReport, flagsOf, scaleFiles, tabFrom, tabUrl, tabUrlStale, trust, type EmoteChannel, type PageEmote } from './emote-page';
   import type { PagerState } from './pager';
   import { Viewer } from './viewer.svelte';
   import { bottomBar } from '$lib/tool/bottom-bars.svelte';
@@ -58,12 +58,10 @@
   const ownerName = $derived(e.owner ? clean(e.owner.displayName) : '');
   const flags = $derived(flagsOf(e));
   const uploaded = $derived(date(e.createdAt));
-  const kinds = $derived(formats(e.files));
   const files = $derived(scaleFiles(e.files));
+  // The focus: the largest size (4x, at most 128 px tall). The smaller ones stand beside it.
   const biggest = $derived(files.at(-1));
-  // The size on the stage: the biggest until you pick another.
-  let picked = $state<number | null>(null);
-  const onStage = $derived(files.find((f) => f.scale === picked) ?? biggest);
+  const smaller = $derived(files.slice(0, -1));
   const chatFile = $derived(files.find((f) => f.scale === 2) ?? files[0]);
   const hasStillFiles = $derived(e.animated && e.files.some((f) => f.name === '1x_static.webp'));
   const fileUrl = (f: { scale: number; name: string }, frozen: boolean) => (frozen ? `${e.host}/${f.scale}x_static.webp` : `${e.host}/${f.name}`);
@@ -88,8 +86,7 @@
       : null,
   );
 
-  // Pause: null follows the reader's motion setting (decided by CSS before the script runs).
-  let paused = $state<boolean | null>(null);
+  // Motion follows the reader's setting: the still frame under reduced motion, no pause button.
   let reduced = $state(false);
   $effect(() => {
     const mq = matchMedia('(prefers-reduced-motion: reduce)');
@@ -98,8 +95,7 @@
     mq.addEventListener('change', on);
     return () => mq.removeEventListener('change', on);
   });
-  const still = $derived(paused ?? reduced);
-  const frozen = $derived(hasStillFiles && still);
+  const frozen = $derived(hasStillFiles && reduced);
 
   // Activity is only for listed emotes: pending, rejected, taken-down and private ones have none.
   const listed = $derived(public_ && !e.flags.private);
@@ -165,35 +161,32 @@
   <div class="cols">
     <section class="left" aria-label="Preview">
       <div class="stage" data-testid="emote-stage">
-        {#if ready(e) && onStage}
-          <img class="big" src={fileUrl(onStage, frozen)} width={onStage.width} height={onStage.height} alt={name} />
+        {#if ready(e) && biggest}
+          <ul class="sizes" aria-label="Sizes">
+            {#each smaller as f (f.name)}
+              <li class="size" data-scale={f.scale}>
+                <span class="pic" style:--w="{f.width}px"><img src={fileUrl(f, frozen)} width={f.width} height={f.height} alt="" /></span>
+                <span class="dm"><span class="x">{f.scale}x</span>{f.width} × {f.height}</span>
+              </li>
+            {/each}
+            <li class="size focus" data-scale={biggest.scale}>
+              <span class="pic" style:--w="{biggest.width}px"><img class="big" src={fileUrl(biggest, frozen)} width={biggest.width} height={biggest.height} alt={name} /></span>
+              <span class="dm"><span class="x">{biggest.scale}x</span>{biggest.width} × {biggest.height}</span>
+            </li>
+          </ul>
         {:else}
           <p class="wait">{e.state === 'APPROVED' && e.files.length === 0 ? 'The files for this emote are missing.' : 'The files are still being made. This takes a minute or so.'}</p>
         {/if}
-        <div class="stage-tools">
-          {#if trending}
+        {#if trending}
+          <div class="stage-tools">
             <a class="trend" href="/search?sort=trending" title="{count(trending.channels)} {trending.channels === 1 ? 'channel' : 'channels'} added it in the last 7 days">
               <Icon name="trending" size={14} />Trending <span class="rank">#{trending.rank}</span><span class="sr-only">this week, added by {count(trending.channels)} {trending.channels === 1 ? 'channel' : 'channels'}</span>
             </a>
-          {/if}
-          {#if hasStill(e)}
-            <IconButton icon={still ? 'play' : 'pause'} label={still ? 'Play' : 'Pause'} size="s" tip="top" onclick={() => (paused = !still)} />
-          {/if}
-        </div>
+          </div>
+        {/if}
       </div>
 
       {#if ready(e) && files.length}
-        <div class="sizes" role="group" aria-label="Sizes">
-          {#each files as f (f.name)}
-            {@const on = onStage?.scale === f.scale}
-            {@const h = Math.min(f.height, 24 * f.scale)}
-            <button type="button" class="size" class:on aria-pressed={on} onclick={() => (picked = f.scale)}>
-              <span class="pic"><img src={fileUrl(f, frozen)} alt="" height={h} style:height="{h}px" style:aspect-ratio="{f.width} / {f.height}" /></span>
-              <span class="x">{#if on}<Icon name="check" size={12} stroke={2.4} />{/if}{f.scale}x</span>
-              <span class="dm">{f.width} × {f.height}{#if fileSize(f)}<br />{fileSize(f)}{/if}</span>
-            </button>
-          {/each}
-        </div>
         {#if chatFile}
           <p class="chatline">
             <span class="sr-only">How it looks in chat: </span><span class="viewer">nora_byte</span><span>that ending</span><img
@@ -248,10 +241,8 @@
         {#if channelCount !== null}<div><dt>Channels</dt><dd class="num">{count(channelCount)}</dd></div>{/if}
         {#if trending}<div><dt>Added in 7 days</dt><dd class="num">+{count(trending.channels)}</dd></div>{/if}
         {#if trending}<div><dt>Trending</dt><dd class="num">#{trending.rank}</dd></div>{/if}
-        <div><dt>Kind</dt><dd>{kind(e)}</dd></div>
-        {#if kinds.length}<div><dt>{kinds.length > 1 ? 'Formats' : 'Format'}</dt><dd>{kinds.join(', ')}</dd></div>{/if}
-        {#if biggest && fileSize(biggest)}<div><dt>File at {biggest.scale}x</dt><dd class="num">{bytes(biggest.size)}</dd></div>{/if}
-        {#if public_}<div><dt>Review</dt><dd class="ok"><Icon name="check" size={12} stroke={2.4} />Approved</dd></div>{/if}
+        {#if uploaded}<div><dt>Uploaded</dt><dd class="num"><time datetime={e.createdAt}>{uploaded}</time></dd></div>{/if}
+        <div><dt>Review</dt><dd class={t.tone}>{#if public_}<Icon name="check" size={12} stroke={2.4} />{/if}{t.status}</dd></div>
       </dl>
 
       {#if tabs.length}
@@ -329,10 +320,22 @@
   .left { display: grid; gap: 12px; min-width: 0; position: sticky; top: calc(var(--nav-h) + 16px); }
   .right { display: grid; gap: 20px; min-width: 0; }
 
-  /* The stage: one neutral ground (the surface), the emote at its real size in the middle. */
-  .stage { position: relative; display: grid; place-items: center; height: clamp(240px, 28vw, 380px); padding: 24px;
+  /* The stage: one neutral ground (the surface), every size at its real pixel size on one
+     baseline, smallest first; the largest is the focus (full colour, bold caption), the smaller
+     ones step back. Nothing here is a control. */
+  .stage { position: relative; display: grid; place-items: center; min-height: clamp(240px, 28vw, 380px); padding: 56px 24px 24px;
     border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface); overflow: hidden; }
-  .big { display: block; max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; }
+  .sizes { list-style: none; margin: 0; padding: 0; max-width: 100%; display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center;
+    gap: 20px clamp(16px, 3vw, 40px); }
+  .size { display: grid; justify-items: center; gap: 12px; max-width: 100%; min-width: 0; }
+  .pic { display: grid; place-items: end center; width: min(var(--w), 100%); max-width: 100%; }
+  .pic img { display: block; max-width: 100%; height: auto; }
+  .size:not(.focus) .pic { opacity: .72; }
+  .dm { display: inline-flex; align-items: baseline; justify-content: center; gap: 6px; padding-top: 8px; min-width: 56px;
+    border-top: 1px solid var(--border-strong); font-size: var(--t-fine); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .x { font-size: var(--t-small); font-weight: 600; color: var(--muted); }
+  .focus .x { font-weight: 700; color: var(--text); }
+  .focus .dm { color: var(--text); }
   .wait { color: var(--muted); font-size: var(--t-small); text-align: center; max-width: 32ch; }
   .stage-tools { position: absolute; top: 10px; right: 10px; display: flex; align-items: center; gap: 8px; }
   .trend { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--border-strong);
@@ -341,21 +344,6 @@
   .trend::after { content: ''; position: absolute; inset: -8px 0; } /* 44px to hit */
   .trend :global(.icon) { color: var(--accent-text); }
   .trend .rank { font-variant-numeric: tabular-nums; color: var(--accent-text); }
-
-  /* The sizes: four cells sharing hairlines; the one on the stage is bold with an accent tick. */
-  .sizes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: var(--radius-card); overflow: hidden; }
-  .size { display: grid; justify-items: center; align-content: end; gap: 4px; min-height: 160px; padding: 12px 6px; border: 0;
-    border-left: 1px solid var(--border); background: none; color: var(--muted); font: inherit; cursor: pointer; min-width: 0;
-    transition: background-color var(--fast), color var(--fast); touch-action: manipulation; }
-  .size:first-child { border-left: 0; }
-  .size:focus-visible { outline-offset: -2px; }
-  .pic { display: grid; place-items: end center; max-width: 100%; }
-  .pic img { display: block; max-width: 100%; width: auto; object-fit: contain; }
-  .x { display: inline-flex; align-items: center; gap: 3px; margin-top: 6px; font-size: var(--t-small); font-weight: 600; color: var(--text); }
-  .x :global(.icon) { color: var(--accent-text); }
-  .size.on { color: var(--text); }
-  .size.on .x { font-weight: 700; }
-  .dm { font-size: var(--t-fine); line-height: 1.35; font-variant-numeric: tabular-nums; text-align: center; }
 
   /* One line of chat with the emote at chat size (28px tall). */
   .chatline { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-height: 50px; padding: 10px 14px;
@@ -376,8 +364,8 @@
   .flags { gap: 4px 12px; }
   .flag { display: inline-flex; align-items: center; gap: 5px; font-size: var(--t-small); font-weight: 500; color: var(--muted); }
   .flag :global(.icon) { color: var(--dim); }
-  .flag.nsfw, .flag.unlisted, .flag.private { color: var(--text); }
-  .flag.nsfw :global(.icon), .flag.unlisted :global(.icon), .flag.private :global(.icon) { color: var(--accent-text); }
+  .flag.unlisted, .flag.private { color: var(--text); }
+  .flag.unlisted :global(.icon), .flag.private :global(.icon) { color: var(--accent-text); }
   .tags { gap: 6px; }
   .tag { display: inline-flex; align-items: center; gap: 1px; height: 26px; padding: 0 9px; border-radius: var(--radius);
     background: var(--neutral-chip, var(--surface-2)); color: var(--text); font-size: var(--t-fine); font-weight: 600; transition: background-color var(--fast); }
@@ -393,6 +381,7 @@
   dd { margin: 0; display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-ui); font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
   dd.num { font-variant-numeric: tabular-nums; }
   dd.ok :global(.icon) { color: var(--accent-text); }
+  dd.wait, dd.off { color: var(--muted); }
 
   /* The tabs: a strip over hairline-ruled rows. */
   .tabbed { min-width: 0; }
@@ -420,7 +409,6 @@
     .creator:hover :global(bdi) { text-decoration: underline; text-underline-offset: 3px; }
     .trend:hover { border-color: var(--accent-border); }
     .tag:hover { background: var(--surface-hover); }
-    .size:hover { background: var(--row-hover); color: var(--text); }
     .tabbtn:hover:not([aria-selected='true']) { color: var(--text); }
   }
   @media (pointer: coarse) { .back, .tabbtn { min-height: 44px; } .tag { height: 36px; } }
@@ -430,7 +418,9 @@
     .left { position: static; }
   }
   @media (max-width: 560px) {
-    .size { min-height: 120px; padding: 10px 2px; }
+    .stage { padding: 52px 12px 20px; }
+    /* Phones: the largest on its own row on top, the smaller ones under it. */
+    .focus { order: -1; flex-basis: 100%; }
     .long { display: none; }
     .short { display: inline; }
     .tablist { gap: 0; }

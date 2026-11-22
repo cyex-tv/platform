@@ -205,7 +205,7 @@ async fn edit_any_and_delete_any_work_on_anyones_emotes_and_are_audited() {
     let deleter = w.user("7004", &["emotes.delete_any"]).await;
     let emote = w.emote(&owner, "ownersEmote").await;
     let change = json!({ "id": emote, "input": {
-        "name": "staffRenamed", "tags": ["calm"], "zeroWidth": true, "nsfw": true, "visibility": "UNLISTED"
+        "name": "staffRenamed", "tags": ["calm"], "zeroWidth": true, "visibility": "UNLISTED"
     } });
 
     // Deny: neither an unrelated account nor a deleter-only role may edit; nobody may delete or list.
@@ -235,7 +235,8 @@ async fn edit_any_and_delete_any_work_on_anyones_emotes_and_are_audited() {
     let e = &r["data"]["updateEmote"];
     assert_eq!(e["name"], "staffRenamed", "{r}");
     assert_eq!(e["tags"], json!(["calm"]));
-    assert_eq!(e["flags"], json!({ "zeroWidth": true, "nsfw": true }));
+    assert_eq!(e["flags"], json!({ "zeroWidth": true, "nsfw": false }));
+    // Staff may take it off the listings (unlisted is a moderator's call, ADR 0020).
     assert_eq!(e["visibility"], "UNLISTED");
     let updated = w.audit_rows("emote.updated").await;
     assert_eq!(updated.len(), 1);

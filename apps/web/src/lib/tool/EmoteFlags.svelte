@@ -1,67 +1,56 @@
 <script lang="ts">
-  // An emote's visibility and flags, the same controls on the upload form and the edit page:
-  // Visibility (Public / Unlisted / Private, ADR 0020) as a segmented control, then Zero-width
-  // and NSFW as switches.
-  // Turning NSFW on asks first (what it means, and that rule-breaking images are taken down);
-  // until "Mark NSFW" is chosen the flag stays off. Turning it off needs no question.
-  //   <EmoteFlags bind:zeroWidth bind:visibility bind:nsfw id="f1" />
-  import { tick } from 'svelte';
+  // An emote's flags. Two shapes (ADR 0020, amendment 2026/11/22):
+  //   creators (the upload dialog and the edit page): two checkboxes, Overlaying (zero-width) and
+  //     Private (only their own channel). Everything else is public. Unlisted is a moderator's
+  //     call: an emote a moderator took off the listings says so, and Private can't change then.
+  //   staff (`staff`, the Edit emote flags panel): Visibility (Public / Unlisted / Private) as a
+  //     segmented control, then Zero-width as a switch.
+  // NSFW is no flag: NSFW emotes aren't allowed on cyex.tv.
+  //   <EmoteFlags bind:zeroWidth bind:visibility id="f1" />
   import Segmented from '$lib/components/Segmented.svelte';
   import type { EmoteVisibility } from '$lib/api';
-  import { STAFF_VISIBILITY_HINT, VISIBILITY_HINT, VISIBILITY_OPTIONS } from './visibility';
+  import { FLAG_HINT, STAFF_VISIBILITY_HINT, VISIBILITY_OPTIONS } from './visibility';
 
-  /** `staff`: the hints speak of someone else's emote (the Emote flags panel). */
-  type Props = { zeroWidth: boolean; visibility: EmoteVisibility; nsfw: boolean; id: string; disabled?: boolean; staff?: boolean };
-  let { zeroWidth = $bindable(), visibility = $bindable(), nsfw = $bindable(), id, disabled = false, staff = false }: Props = $props();
-  const hints = $derived(staff ? STAFF_VISIBILITY_HINT : VISIBILITY_HINT);
-
-  let asking = $state(false);
-  let confirmBtn = $state<HTMLButtonElement>();
-  let nsfwSwitch = $state<HTMLInputElement>();
-
-  function toggleNsfw(e: Event & { currentTarget: HTMLInputElement }) {
-    if (e.currentTarget.checked && !nsfw) {
-      e.currentTarget.checked = false;
-      asking = true;
-      tick().then(() => confirmBtn?.focus());
-      return;
-    }
-    nsfw = e.currentTarget.checked;
-    asking = false;
-  }
-
-  function answer(yes: boolean) {
-    nsfw = yes;
-    asking = false;
-    nsfwSwitch?.focus();
-  }
+  type Props = { zeroWidth: boolean; visibility: EmoteVisibility; id: string; disabled?: boolean; staff?: boolean };
+  let { zeroWidth = $bindable(), visibility = $bindable(), id, disabled = false, staff = false }: Props = $props();
+  const locked = $derived(!staff && visibility === 'UNLISTED');
 </script>
 
-<div class="flags">
-  <div class="vis">
-    <span class="ui-label" id="{id}-vis">Visibility</span>
-    <Segmented label="Visibility" size="s" options={VISIBILITY_OPTIONS}
-      value={visibility} onchange={(v) => !disabled && (visibility = v)} />
-    <span class="ui-hint">{hints[visibility]}</span>
-  </div>
-  <label class="ui-row">
-    <div><strong>Zero-width</strong><span class="ui-hint">Drawn over the emote before it, like a hat or rain.</span></div>
-    <input class="ui-switch" type="checkbox" bind:checked={zeroWidth} {disabled} />
-  </label>
-  <label class="ui-row">
-    <div><strong>NSFW</strong><span class="ui-hint">Not for every stream. Search leaves it out unless people ask for it.</span></div>
-    <input class="ui-switch" type="checkbox" bind:this={nsfwSwitch} checked={nsfw} onchange={toggleNsfw} {disabled} aria-describedby={asking ? `${id}-ask` : undefined} />
-  </label>
-  {#if asking}
-    <div class="ask" id="{id}-ask" role="group" aria-label="Mark as NSFW?">
-      <p><strong>Mark it NSFW?</strong> It’s hidden from browsing unless people turn NSFW on. Anything against Twitch’s or Kick’s rules is taken down either way.</p>
-      <div class="ui-actions">
-        <button type="button" class="ui-btn secondary" bind:this={confirmBtn} onclick={() => answer(true)}>Mark NSFW</button>
-        <button type="button" class="ui-btn ghost" onclick={() => answer(false)}>Cancel</button>
-      </div>
+{#if staff}
+  <div class="flags">
+    <div class="vis">
+      <span class="ui-label" id="{id}-vis">Visibility</span>
+      <Segmented label="Visibility" size="s" options={VISIBILITY_OPTIONS}
+        value={visibility} onchange={(v) => !disabled && (visibility = v)} />
+      <span class="ui-hint">{STAFF_VISIBILITY_HINT[visibility]}</span>
     </div>
-  {/if}
-</div>
+    <label class="ui-row">
+      <div><strong>Zero-width</strong><span class="ui-hint">{FLAG_HINT.overlaying}</span></div>
+      <input class="ui-switch" type="checkbox" bind:checked={zeroWidth} {disabled} />
+    </label>
+  </div>
+{:else}
+  <div class="checks" role="group" aria-label="Flags">
+    <label class="check" for="{id}-overlay">
+      <input id="{id}-overlay" type="checkbox" data-testid="flag-overlaying" bind:checked={zeroWidth} {disabled} />
+      <span><strong>Overlaying</strong><span class="hint">{FLAG_HINT.overlaying}</span></span>
+    </label>
+    <label class="check" for="{id}-private">
+      <input
+        id="{id}-private"
+        type="checkbox"
+        data-testid="flag-private"
+        checked={visibility === 'PRIVATE'}
+        onchange={(e) => (visibility = e.currentTarget.checked ? 'PRIVATE' : 'PUBLIC')}
+        disabled={disabled || locked}
+      />
+      <span><strong>Private</strong><span class="hint">{FLAG_HINT.private}</span></span>
+    </label>
+    {#if locked}
+      <p class="hint locked" data-testid="flag-unlisted">A moderator took this emote off the listings: people with its link can still open it and add it.</p>
+    {/if}
+  </div>
+{/if}
 
 <style>
   .flags { display: grid; gap: 4px; }
@@ -69,7 +58,14 @@
   .ui-row .ui-hint { display: block; }
   /* The switch stays beside its text on phones too (the shared row wraps there). */
   .flags .ui-row { flex-wrap: nowrap; gap: 16px; }
-  .ask { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid var(--border-strong); border-radius: var(--radius-card); background: var(--surface-2, var(--surface)); }
-  .ask p { margin: 0; font-size: var(--t-small); line-height: 1.55; color: var(--muted); }
-  .ask strong { color: var(--text); }
+
+  .checks { display: grid; gap: 2px; }
+  .check { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; padding: 6px 0; cursor: pointer; }
+  .check input { flex: none; width: 18px; height: 18px; margin: 2px 0 0; accent-color: var(--accent); cursor: inherit; }
+  .check input:disabled { cursor: default; }
+  .check > span { display: grid; gap: 1px; min-width: 0; }
+  .check strong { font-size: var(--t-ui, 14px); font-weight: 600; color: var(--text); }
+  .hint { font-size: var(--t-small); line-height: 1.45; color: var(--muted); }
+  .locked { margin: 4px 0 0 28px; }
+  .check:has(input:disabled) strong { color: var(--muted); }
 </style>

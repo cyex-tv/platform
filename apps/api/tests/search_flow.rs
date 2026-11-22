@@ -81,7 +81,8 @@ async fn seed(db: &TestDb) -> Made {
     emotes::set_tags(&mut c, approved[2], &["poggers".to_owned()])
         .await
         .unwrap();
-    // Never found: pending, private, deleted; NSFW only when asked.
+    // Never found: pending, private, deleted, and one still flagged NSFW (NSFW emotes aren't
+    // allowed; an old flag keeps it off the listings until staff save its flags).
     emotes::create(&mut c, &make("PogPending")).await.unwrap();
     let private = emotes::create(&mut c, &make("PogPrivate")).await.unwrap();
     emotes::set_state(&mut c, private.id, EmoteState::Approved)
@@ -209,9 +210,10 @@ async fn search_finds_approved_listed_emotes_in_rank_order() {
     assert_eq!(r["total"], got.len());
     assert!(got.contains(&"PogTheirs".to_owned()));
 
-    // NSFW when asked.
+    // Not even when asked: `nsfw: true` is retired and changes nothing.
     let r = find(&app, r#"query: "pog", nsfw: true"#).await;
-    assert!(names(&r).contains(&"PogLewd".to_owned()));
+    assert!(!names(&r).contains(&"PogLewd".to_owned()));
+    assert_eq!(names(&r), got);
 
     // Filters.
     let r = find(&app, r#"query: "pog", animated: true"#).await;

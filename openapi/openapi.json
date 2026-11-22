@@ -850,7 +850,7 @@
           "emotes"
         ],
         "summary": "Upload an emote. It starts `pending`: usable in your own sets, hidden from everyone else until a\nmoderator approves it. Manage it afterwards through GraphQL.",
-        "description": "PNG, APNG, GIF, WebP (still or animated) or JPEG; at most 8 MB, 1000×1000 px and 1000\nframes. Sign in first (with the cookie, from `https://cyex.tv`). At most 20 uploads an hour.\nThe flags `zero_width`, `private` and `nsfw` may be set at once (each `true` or `false`,\ndefault `false`), and `visibility` (`public`, `unlisted` or `private`; with `private` too,\nthey must agree); `updateEmote` changes them later. `owner_id` uploads for an account you edit\nwith `EMOTE_UPLOAD` (ADR 0014): it owns the emote, and the upload counts against both of you.",
+        "description": "PNG, APNG, GIF, WebP (still or animated) or JPEG; at most 8 MB, 1000×1000 px and 1000\nframes. Sign in first (with the cookie, from `https://cyex.tv`). At most 20 uploads an hour.\nAn emote is public unless the form makes it private. The flags `zero_width` and `private` may\nbe set at once (each `true` or `false`, default `false`), and `visibility` (`public` or\n`private`; with `private` too, they must agree; `unlisted` is for staff with `emotes.flags`,\n`bad_visibility` for anyone else); `updateEmote` changes them later. NSFW emotes aren't\nallowed: `nsfw=true` is `nsfw_not_allowed` (`nsfw=false` is still taken). `owner_id` uploads for an account you edit\nwith `EMOTE_UPLOAD` (ADR 0014): it owns the emote, and the upload counts against both of you.",
         "operationId": "upload_emote",
         "requestBody": {
           "content": {
@@ -874,7 +874,7 @@
             }
           },
           "400": {
-            "description": "`bad_name`, `bad_tag`, `too_many_tags` or `bad_form`.",
+            "description": "`bad_name`, `bad_tag`, `too_many_tags`, `bad_form`, `bad_visibility` (`unlisted` without `emotes.flags`) or `nsfw_not_allowed`.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1618,7 +1618,9 @@
         ],
         "properties": {
           "nsfw": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Retired (ADR 0020, amendment 2026/11/22): NSFW emotes aren't allowed on cyex.tv, so this\nis always `false`.",
+            "deprecated": true
           },
           "private": {
             "type": "boolean",
@@ -2164,7 +2166,8 @@
               "string",
               "null"
             ],
-            "description": "As `zero_width`. Search leaves it out unless asked for NSFW."
+            "description": "Retired: NSFW emotes aren't allowed. `false` is still taken; `true` is `nsfw_not_allowed`.",
+            "deprecated": true
           },
           "owner_id": {
             "type": [
@@ -2192,7 +2195,7 @@
               "string",
               "null"
             ],
-            "description": "`public` (default), `unlisted` or `private` (ADR 0020). With `private` too, the two\nmust agree."
+            "description": "`public` (default) or `private` (ADR 0020). With `private` too, the two must agree.\n`unlisted` is for staff with `emotes.flags` (`bad_visibility` for anyone else)."
           },
           "zero_width": {
             "type": [

@@ -9,7 +9,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import State from '$lib/components/State.svelte';
-  import { canReport, fileSize, flagsOf, kind, scaleFiles, type PageEmote } from '$lib/components/emote/emote-page';
+  import { canReport, flagsOf, scaleFiles, type PageEmote } from '$lib/components/emote/emote-page';
   import { Viewer } from '$lib/components/emote/viewer.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { reduced, watchReduced } from '$lib/cosmetics/reduced.svelte';
@@ -94,8 +94,7 @@
     {/if}
     <dl class="kv">
       {#if e.channelCount != null}<dt>Channels</dt><dd>{count(e.channelCount)}</dd>{/if}
-      <dt>Kind</dt><dd>{kind(e)}</dd>
-      {#if big && fileSize(big)}<dt>File at {big.scale}x</dt><dd>{fileSize(big)}</dd>{/if}
+      <dt>Uploaded</dt><dd><time datetime={e.createdAt}>{date(e.createdAt)}</time></dd>
     </dl>
     <a class="btn btn-s open" href={path}>Open full page<Icon name="arrow-right" size={14} /></a>
   </div>

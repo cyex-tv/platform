@@ -361,6 +361,63 @@ mod encoding {
     }
 
     #[test]
+    fn no_emote_file_is_taller_than_128_px() {
+        use crate::encode::{EMOTE_MAX_HEIGHT, Profile};
+        assert_eq!(EMOTE_MAX_HEIGHT, 128);
+        let p = Profile::EMOTE;
+        assert!(p.large.is_empty(), "no emote sizes past 4x");
+        for (w, h) in [
+            (1000, 1000),
+            (1000, 999),
+            (999, 1000),
+            (129, 129),
+            (1000, 1),
+            (1, 1000),
+            (250, 1000),
+            (1000, 250),
+            (777, 333),
+            (128, 128),
+            (40, 40),
+        ] {
+            let steps = p.steps(w, h);
+            assert_eq!(steps.len(), 4, "{w}×{h}");
+            for s in &steps {
+                assert!(
+                    s.size.1 <= EMOTE_MAX_HEIGHT,
+                    "{w}×{h} {}: {:?}",
+                    s.stem,
+                    s.size
+                );
+                assert!(
+                    s.size.0 <= EMOTE_MAX_HEIGHT * 4,
+                    "{w}×{h} {}: {:?}",
+                    s.stem,
+                    s.size
+                );
+            }
+            // The largest file is 4x: as tall as the box allows, or the original when smaller.
+            let largest = steps.iter().map(|s| s.size.1).max().unwrap();
+            assert_eq!(steps.last().unwrap().size.1, largest);
+        }
+        assert_eq!(p.steps(1000, 1000).last().unwrap().size, (128, 128));
+        assert_eq!(p.steps(250, 1000).last().unwrap().size, (32, 128));
+        assert_eq!(
+            p.steps(40, 40).last().unwrap().size,
+            (40, 40),
+            "never scaled up"
+        );
+    }
+
+    #[test]
+    fn a_large_upload_makes_a_4x_file_128_px_tall() {
+        let out = transcode(&png(600, 600), &Limits::default()).unwrap();
+        let tallest = out.webp.iter().chain(&out.avif).map(|v| v.height).max();
+        assert_eq!(tallest, Some(128));
+        let four = out.webp.iter().find(|v| v.name == "4x.webp").unwrap();
+        assert_eq!((four.width, four.height), (128, 128));
+    }
+
+    #[test]
     fn an_animated_webp_upload_is_read() {
         let p = probe(&animated_webp(40, 40, 5), &Limits::default()).unwrap();
         assert_eq!((p.format, p.frames, p.animated), (Format::Webp, 5, true));

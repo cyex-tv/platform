@@ -33,7 +33,7 @@
   import ContactSheet from '$lib/components/ContactSheet.svelte';
   import { reduced, watchReduced } from '$lib/cosmetics/reduced.svelte';
   import { onMount } from 'svelte';
-  import { fileSize, formats, kind, scaleFiles } from '$lib/components/emote/emote-page';
+  import { scaleFiles } from '$lib/components/emote/emote-page';
   import PageHead from '$lib/tool/PageHead.svelte';
   import EmoteFlags from '$lib/tool/EmoteFlags.svelte';
   import { visibilityOf } from '$lib/tool/visibility';
@@ -47,7 +47,6 @@
   let tags = $state<string[]>([]);
   let zeroWidth = $state(false);
   let visibility = $state<EmoteVisibility>('PUBLIC');
-  let nsfw = $state(false);
   let saving = $state(false);
   let deleting = $state(false);
   let adding = $state(false);
@@ -84,8 +83,7 @@
       (name.trim() !== emote.name ||
         [...tags].sort().join(',') !== [...emote.tags].sort().join(',') ||
         zeroWidth !== emote.flags.zeroWidth ||
-        visibility !== visibilityOf(emote) ||
-        nsfw !== emote.flags.nsfw),
+        visibility !== visibilityOf(emote)),
   );
 
   function fill(e: EmoteFieldsFragment) {
@@ -94,7 +92,6 @@
     tags = [...e.tags];
     zeroWidth = e.flags.zeroWidth;
     visibility = visibilityOf(e);
-    nsfw = e.flags.nsfw;
   }
 
   const L = loader(async ({ fetch }) => {
@@ -153,7 +150,7 @@
     try {
       const r = await gql(UPDATE_EMOTE, {
         id: emote.id,
-        input: { name: name.trim(), tags, zeroWidth, visibility, nsfw },
+        input: { name: name.trim(), tags, zeroWidth, visibility },
       });
       fill(r.updateEmote);
       notify('Saved.');
@@ -209,7 +206,6 @@
       adding = false;
     }
   }
-  const kinds = $derived(emote ? formats(emote.files) : []);
   const one = $derived(emote ? size(emote) : { width: 0, height: 0 });
   const files = $derived(emote ? scaleFiles(emote.files) : []);
   const biggest = $derived(files.at(-1));
@@ -231,8 +227,6 @@
           { label: 'Uploaded', value: date(emote.createdAt), mono: true },
           { label: 'Id', value: emote.id, mono: true },
           { label: 'Channels', value: count(emote.channelCount), mono: true },
-          { label: 'Kind', value: kind(emote) },
-          ...(kinds.length ? [{ label: kinds.length > 1 ? 'Formats' : 'Format', value: kinds.join(', ') }] : []),
           ...(emote.files.length ? [{ label: 'Size at 1x', value: `${one.width} × ${one.height} px`, mono: true }] : []),
           ...(emote.owner && !mine ? [{ label: 'Owner', value: clean(emote.owner.displayName), href: ownerHome }] : []),
         ]}
@@ -303,7 +297,7 @@
             {#each files as f (f.name)}
               <li class="cell">
                 <span class="pic"><img src={fileUrl(f)} width={f.width} height={f.height} alt="" /></span>
-                <span class="cap"><span class="x">{f.scale}x</span><span class="dm ui-mono">{f.width} × {f.height}</span>{#if fileSize(f)}<span class="dm ui-mono">{fileSize(f)}</span>{/if}</span>
+                <span class="cap"><span class="x">{f.scale}x</span><span class="dm ui-mono">{f.width} × {f.height}</span></span>
               </li>
             {/each}
           </ContactSheet>
@@ -329,8 +323,8 @@
             </Row>
             {#if tagError}<p class="ui-error err">{tagError}</p>{/if}
           </Section>
-          <Section title="Flags and who can find it">
-            <div class="flags"><EmoteFlags id="edit" bind:zeroWidth bind:visibility bind:nsfw disabled={saving} /></div>
+          <Section title="Flags">
+            <div class="flags"><EmoteFlags id="edit" bind:zeroWidth bind:visibility disabled={saving} /></div>
             <div class="ui-actions save">
               <button class="ui-btn primary" type="submit" disabled={saving || !changed || !!nameError || !!tagError}>
                 {saving ? 'Saving…' : 'Save'}

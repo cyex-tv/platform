@@ -312,7 +312,6 @@ async fn flags_can_be_set_at_upload() {
     for (field, value, key) in [
         ("zero_width", "true", "zero_width"),
         ("private", "on", "private"),
-        ("nsfw", "1", "nsfw"),
     ] {
         let file = png(40, 40, field.len() as u8 + 30);
         let r = w
@@ -344,17 +343,12 @@ async fn flags_can_be_set_at_upload() {
         assert_eq!(stored, want, "{field} ({id}) is stored");
     }
 
-    // All three at once; explicit false and an empty field are off.
+    // Both at once; explicit false and an empty field are off.
     let r = w
         .post(
             Some(&alice),
             form(
-                &[
-                    ("name", "allOn"),
-                    ("zero_width", "TRUE"),
-                    ("private", "1"),
-                    ("nsfw", "on"),
-                ],
+                &[("name", "allOn"), ("zero_width", "TRUE"), ("private", "1")],
                 Some(&png(40, 40, 50)),
             ),
         )
@@ -362,7 +356,34 @@ async fn flags_can_be_set_at_upload() {
     assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
     assert_eq!(
         r.body["flags"],
-        json!({ "zero_width": true, "private": true, "nsfw": true, "wide": false })
+        json!({ "zero_width": true, "private": true, "nsfw": false, "wide": false })
+    );
+
+    // NSFW emotes aren't allowed (ADR 0020, amendment 2026/11/22): `nsfw` on is refused with a
+    // clear message and nothing is stored; `nsfw` off is still taken (old clients).
+    for value in ["1", "true", "on"] {
+        let r = w
+            .post(
+                Some(&alice),
+                form(
+                    &[("name", "lewdTry"), ("nsfw", value)],
+                    Some(&png(40, 40, 53)),
+                ),
+            )
+            .await;
+        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{value}: {:?}", r.body);
+        assert_eq!(r.body["error"], "nsfw_not_allowed");
+        assert!(
+            r.body["message"]
+                .as_str()
+                .unwrap()
+                .contains("NSFW emotes aren't allowed")
+        );
+    }
+    assert_eq!(
+        w.count("SELECT count(*) FROM emotes WHERE name = 'lewdTry'")
+            .await,
+        0
     );
     let r = w
         .post(
@@ -795,7 +816,7 @@ async fn the_upload_dialog_flags_arrive_together() {
         return;
     };
     let alice = w.user("85").await;
-    // What the website's upload dialog sends: zero-width, NSFW and unlisted at once.
+    // What the website's upload dialog sends: Overlaying (zero-width) and Private at once.
     let r = w
         .post(
             Some(&alice),
@@ -804,8 +825,8 @@ async fn the_upload_dialog_flags_arrive_together() {
                     ("name", "rainOver"),
                     ("tags", "rain,weather,overlay"),
                     ("zero_width", "true"),
-                    ("nsfw", "true"),
-                    ("visibility", "unlisted"),
+                    ("private", "true"),
+                    ("visibility", "private"),
                 ],
                 Some(&png(40, 40, 85)),
             ),
@@ -813,9 +834,9 @@ async fn the_upload_dialog_flags_arrive_together() {
         .await;
     assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
     assert_eq!(r.body["flags"]["zero_width"], true);
-    assert_eq!(r.body["flags"]["nsfw"], true);
-    assert_eq!(r.body["flags"]["private"], false);
-    assert_eq!(r.body["visibility"], "unlisted");
+    assert_eq!(r.body["flags"]["nsfw"], false);
+    assert_eq!(r.body["flags"]["private"], true);
+    assert_eq!(r.body["visibility"], "private");
     assert_eq!(r.body["tags"], json!(["overlay", "rain", "weather"]));
     let stored: (bool, bool, bool, bool) = {
         let mut conn = w.db.conn().await;
@@ -826,7 +847,60 @@ async fn the_upload_dialog_flags_arrive_together() {
         .await
         .unwrap()
     };
-    assert_eq!(stored, (true, true, false, true));
+    assert_eq!(stored, (true, false, true, false));
+    w.db.close().await;
+}
+
+/// Uploads are public unless private (ADR 0020, amendment 2026/11/22): `unlisted` is a
+/// moderator's call, refused for anyone without `emotes.flags` or `emotes.edit_any`.
+#[tokio::test]
+async fn only_staff_upload_unlisted() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let alice = w.user("86").await;
+    let r = w
+        .post(
+            Some(&alice),
+            form(
+                &[("name", "hideMe"), ("visibility", "unlisted")],
+                Some(&png(40, 40, 86)),
+            ),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST, "{:?}", r.body);
+    assert_eq!(r.body["error"], "bad_visibility");
+    assert_eq!(w.count("SELECT count(*) FROM emotes").await, 0);
+
+    let staff = w.user("87").await;
+    let mut conn = w.db.conn().await;
+    let role = cyex_tv_db::roles::create(
+        &mut conn,
+        &cyex_tv_db::roles::NewRole {
+            name: "Flags",
+            description: None,
+            position: 5,
+            permissions: &["emotes.flags"],
+            created_by: None,
+        },
+    )
+    .await
+    .unwrap();
+    cyex_tv_db::roles::assign(&mut conn, staff.id, role.id, None)
+        .await
+        .unwrap();
+    drop(conn);
+    let r = w
+        .post(
+            Some(&staff),
+            form(
+                &[("name", "hideMe"), ("visibility", "unlisted")],
+                Some(&png(40, 40, 87)),
+            ),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
+    assert_eq!(r.body["visibility"], "unlisted");
     w.db.close().await;
 }
 

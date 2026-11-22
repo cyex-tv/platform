@@ -11,7 +11,7 @@
   import Icon from '$lib/components/Icon.svelte';
   import { clean } from '$lib/format';
   import { isAdmin, session } from '$lib/tool/session.svelte';
-  import { SETTINGS, UPLOAD, menuLinks, platformName, profileLink, type ShellLink } from './account';
+  import { SETTINGS, menuLinks, platformName, profileLink, type ShellLink } from './account';
   import { headerLinks } from './nav';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { loadOwned, looks, NO_LOOK } from '$lib/cosmetics/store.svelte';
@@ -21,6 +21,7 @@
   import { leave } from './signout';
   import { theme, toggleTheme } from './theme.svelte';
   import { whatsNew } from '$lib/changelog/seen.svelte';
+  import { openUpload } from '$lib/upload/upload.svelte';
 
   /** `menu`: the items are menuitems of the Popover's role="menu" (the desktop account menu); otherwise a nav of links. */
   type Props = { emotes?: boolean; touch?: boolean; menu?: boolean; onpick?: () => void; signin?: string };
@@ -87,7 +88,8 @@
     {#if me}
       {#each menuLinks(me.id) as l (l.href)}{@render row(l)}{/each}
       {#if touch}
-        {@render row(UPLOAD)}
+        <!-- Upload opens the dialog (there is no upload page). -->
+        <button type="button" role={item} aria-haspopup="dialog" onclick={() => { onpick?.(); openUpload(); }}><Icon name="upload" /><span>Upload</span></button>
         <a href="/me/notifications" role={item} aria-current={path.startsWith('/me/notifications') ? 'page' : undefined} onclick={() => onpick?.()}>
           <Icon name="bell" /><span>Notifications</span>{#if badge(inbox.count)}<span class="value" aria-label="{inbox.count} unread">{badge(inbox.count)}</span>{/if}
         </a>

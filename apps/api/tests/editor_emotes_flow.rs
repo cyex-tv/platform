@@ -526,18 +526,18 @@ async fn manage_reads_changes_and_deletes_the_accounts_emotes() {
         .await;
     assert_eq!(code(&r), "forbidden", "{r}");
 
-    // Bob renames and makes it unlisted: as the owner, a new name goes back to review.
+    // Bob renames and makes it private: as the owner, a new name goes back to review.
     let r = w
         .gql(
             &bob,
             UPDATE,
-            json!({ "id": approved, "n": "renamed", "v": "UNLISTED" }),
+            json!({ "id": approved, "n": "renamed", "v": "PRIVATE" }),
         )
         .await;
     ok(&r);
     assert_eq!(r["data"]["updateEmote"]["name"], "renamed");
     assert_eq!(r["data"]["updateEmote"]["state"], "PENDING");
-    assert_eq!(r["data"]["updateEmote"]["visibility"], "UNLISTED");
+    assert_eq!(r["data"]["updateEmote"]["visibility"], "PRIVATE");
     let rows = w.audits("emote.updated").await;
     assert_eq!(rows.len(), 1);
     assert_editor_row(&rows[0], &bob, &alice);

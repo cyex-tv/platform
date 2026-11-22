@@ -30,3 +30,6 @@ libavif was not measured: its bindings build libavif and an AV1 encoder (aom or 
 - The worker needs a C compiler at build time (for libwebp), which the Rust images already have.
 - Clients that want animated AVIF don't get it yet; every client that shows WebP is covered.
 - The pipeline lives in `crates/media`, with nothing emote-specific in it, so cosmetic badge art can use it later.
+
+## Amendment (owner, 2026/11/22): at most 128 px tall
+Owner: "emotes should be max 128px tall". They already were: 4x (128 px) is the largest emote size, and no emote size goes past it (`Profile::EMOTE` has no sizes past 4x). It is now pinned: `cyex_tv_media::encode::EMOTE_MAX_HEIGHT` (128) with a compile-time check against `BASE_HEIGHT × 4`, and tests that every size of any original (up to 1000 × 1000, tall, wide, odd sizes) is at most 128 px tall and at most 512 px wide. The emote page shows all four sizes at once, the 4x one in focus.

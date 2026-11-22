@@ -193,8 +193,8 @@ const OVERRIDES: Record<string, (c: Ctx) => Record<string, unknown>> = {
   EditSet: (c) => ({ id: c.setId }),
   SetEditors: (c) => ({ id: c.setId }),
   CloneSet: (c) => ({ id: c.setId, name: 'Cloned mock set', visibility: 'LISTED' }),
-  UpdateEmote: (c) => ({ id: c.myEmoteId, input: { name: 'MockRenamed', tags: ['cat'], zeroWidth: false, nsfw: false } }),
-  SetEmoteFlags: (c) => ({ id: c.emoteId, input: { visibility: 'PUBLIC', nsfw: false, zeroWidth: false } }),
+  UpdateEmote: (c) => ({ id: c.myEmoteId, input: { name: 'MockRenamed', tags: ['cat'], zeroWidth: false } }),
+  SetEmoteFlags: (c) => ({ id: c.emoteId, input: { visibility: 'PUBLIC', zeroWidth: false } }),
   DeleteEmote: (c) => ({ id: c.deletableEmoteId }),
   CreateSet: () => ({ input: { name: 'Mock set', kind: 'PERSONAL', visibility: 'UNLISTED' } }),
   UpdateSet: (c) => ({ id: c.setId, input: { name: 'Mock set renamed' } }),
@@ -621,7 +621,7 @@ describe('mock-api conformance with the real schema', () => {
     }
 
     // Emote upload.
-    const em = await post('/v1/emotes', form({ name: 'ConformanceEmote', tags: 'cat,mock', zero_width: 'false', private: 'false', nsfw: 'false' }));
+    const em = await post('/v1/emotes', form({ name: 'ConformanceEmote', tags: 'cat,mock', zero_width: 'false', private: 'false' }));
     stats.rest += 1;
     checkResponse('post', '/v1/emotes', em.status, await em.json(), 'POST /v1/emotes', out);
     for (const [name, status] of [['blocked', 422], ['ratelimited', 429], ['toobig', 413], ['broken', 422]] as const) {
@@ -629,6 +629,15 @@ describe('mock-api conformance with the real schema', () => {
       stats.rest += 1;
       checkResponse('post', '/v1/emotes', r.status, await r.json(), `POST /v1/emotes (${name})`, out);
       if (r.status !== status) out.push(`POST /v1/emotes (${name}): status ${r.status}, expected ${status}`);
+    }
+    // NSFW emotes aren't allowed (ADR 0020, amendment 2026/11/22). (Unlisted is staff-only; this
+    // mock runs as staff, so that refusal is the API's flow tests' to check.)
+    for (const [label, fields, code] of [['nsfw', { name: 'nsfwTry', nsfw: 'true' }, 'nsfw_not_allowed']] as const) {
+      const r = await post('/v1/emotes', form(fields), 'mock_session=1');
+      stats.rest += 1;
+      const body = await r.json();
+      checkResponse('post', '/v1/emotes', r.status, body, `POST /v1/emotes (${label})`, out);
+      if (r.status !== 400 || body?.error !== code) out.push(`POST /v1/emotes (${label}): ${r.status} ${body?.error}, the API answers 400 ${code}`);
     }
     const so = await post('/v1/emotes', form({ name: 'x' }), '');
     stats.rest += 1;

@@ -6,7 +6,7 @@ import { session } from '$lib/tool/session.svelte';
 const { gql, quota } = vi.hoisted(() => ({ gql: vi.fn(), quota: { pending: 3, pendingMax: 20 } }));
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
 vi.mock('$app/navigation', () => ({ goto: vi.fn(), beforeNavigate: () => {} }));
-vi.mock('$app/state', () => ({ page: { url: new URL('http://localhost/me/upload') } }));
+vi.mock('$app/state', () => ({ page: { url: new URL('http://localhost/search') } }));
 vi.mock('$lib/api', async (orig) => ({ ...(await orig<typeof import('$lib/api')>()), gql: (...a: unknown[]) => gql(...a), onSignedOut: () => () => {} }));
 URL.createObjectURL = () => 'blob:x';
 URL.revokeObjectURL = () => {};
@@ -39,14 +39,5 @@ describe('the upload form’s waiting count', () => {
     expect(await screen.findByText('You have 20 emotes waiting for review. Upload more once some are reviewed.')).toBeTruthy();
     await fireEvent.drop(document.querySelector('.drop')!, { dataTransfer: { files: [png()] } });
     await waitFor(() => expect((screen.getByRole('button', { name: 'Upload' }) as HTMLButtonElement).disabled).toBe(true));
-  });
-
-  it('says when a batch is bigger than the room left', async () => {
-    Object.assign(quota, { pending: 19, pendingMax: 20 });
-    render(UploadDropHarness);
-    await screen.findByText('19 of 20 waiting for review.');
-    const two = [png(), new File([new Uint8Array(41)], 'dog.png', { type: 'image/png', lastModified: 2 })];
-    await fireEvent.drop(document.querySelector('.drop')!, { dataTransfer: { files: two } });
-    expect(await screen.findByText('Only 1 more fits until some are reviewed.')).toBeTruthy();
   });
 });

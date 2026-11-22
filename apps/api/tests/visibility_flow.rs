@@ -170,7 +170,7 @@ async fn unlisted_emotes_open_by_link_but_stay_out_of_listings() {
         .await;
     assert_eq!(r["data"]["emote"]["visibility"], "PUBLIC", "{r}");
 
-    // Unlisted through `visibility`; `private` stays false.
+    // Its owner can't unlist it: that is a moderator's call (ADR 0020, amendment 2026/11/22).
     let r = w
         .gql(
             Some(&ann),
@@ -178,8 +178,12 @@ async fn unlisted_emotes_open_by_link_but_stay_out_of_listings() {
             json!({ "id": quiet, "i": { "visibility": "UNLISTED" } }),
         )
         .await;
-    assert_eq!(r["data"]["updateEmote"]["visibility"], "UNLISTED", "{r}");
-    assert_eq!(r["data"]["updateEmote"]["flags"]["private"], false);
+    assert_eq!(code(&r), "bad_visibility", "{r}");
+    // A moderator takes it off the listings (setEmoteFlags, mod_flags_flow); here, as stored.
+    sqlx::query("UPDATE emotes SET unlisted = true WHERE name = 'AnnQuiet'")
+        .execute(&mut *w.db.conn().await)
+        .await
+        .unwrap();
     // An old client's `private: false` leaves it unlisted; the two can't disagree.
     let r = w
         .gql(

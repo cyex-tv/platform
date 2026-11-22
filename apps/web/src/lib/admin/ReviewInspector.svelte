@@ -158,10 +158,9 @@
         {:else}<span>Unknown uploader</span>{/if}
         <span class="when">uploaded <time class="adm-num" datetime={e.createdAt}>{dateTime(e.createdAt)}</time></span>
       </p>
-      {#if e.flags.nsfw || e.flags.zeroWidth || e.flags.wide || e.visibility !== 'PUBLIC' || e.tags.length}
+      {#if e.flags.zeroWidth || e.flags.wide || e.visibility !== 'PUBLIC' || e.tags.length}
         <div class="labels">
           <ul class="adm-flags" aria-label="Flags">
-            {#if e.flags.nsfw}<li class="warn"><Icon name="eye-off" size={13} />NSFW</li>{/if}
             {#if e.flags.zeroWidth}<li class="on"><Icon name="layers" size={13} />Zero-width</li>{/if}
             {#if e.flags.wide}<li class="on"><Icon name="wide" size={13} />Wide</li>{/if}
             {#if e.visibility !== 'PUBLIC'}<li class="on"><Icon name={e.visibility === 'UNLISTED' ? 'eye-off' : 'user'} size={13} />{VIS[e.visibility]}</li>{/if}

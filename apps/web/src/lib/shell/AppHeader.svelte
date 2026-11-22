@@ -31,6 +31,7 @@
   import { typing } from './search';
   import { headerSearch } from './search.svelte';
   import { whatsNew } from '$lib/changelog/seen.svelte';
+  import { openUpload } from '$lib/upload/upload.svelte';
 
   let { account = $bindable(false) }: { account?: boolean } = $props();
 
@@ -104,7 +105,8 @@
 
     <div class="end">
       {#if me}
-        <a class="btn hb up" href="/me/upload" title="Upload" aria-label="Upload"><Icon name="upload" /><span class="hl">Upload</span></a>
+        <!-- A button, not a link: there is no upload page, only the dialog (owner, 2026/11/22). -->
+        <button type="button" class="btn hb up" title="Upload" aria-label="Upload" aria-haspopup="dialog" data-testid="header-upload" onclick={() => openUpload()}><Icon name="upload" /><span class="hl">Upload</span></button>
       {:else if session.known}
         <!-- Signed out, or the API didn't answer (session.failed): either way a way in, never an empty box. -->
         <a class="btn btn-primary hb" href={signin}>Sign in</a>

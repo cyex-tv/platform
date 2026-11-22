@@ -426,13 +426,14 @@ impl Query {
     }
 
     /// Approved, listed emotes by name and tag, best match first, then the most used.
-    /// `perPage` is 1 to 100, default 50. NSFW emotes only with `nsfw: true`. `sort` is
+    /// `perPage` is 1 to 100, default 50. `nsfw` is retired and changes nothing: NSFW emotes
+    /// aren't allowed, so none is ever listed. `sort` is
     /// `RELEVANCE` (default: best match, then most used), `TOP` (most used, then name), `NEW`
     /// (newest first) or `TRENDING` (most channels added it in `window`, net of removals, then
     /// most used; only emotes with a net gain are listed). An empty `query` lists every approved,
     /// listed emote.
-    /// `flags` keeps the emotes that have every flag listed (`ZERO_WIDTH`, `WIDE`, `NSFW`; at most
-    /// 3 different ones). `NSFW` lists only NSFW emotes, with or without `nsfw: true`. `tags` keeps
+    /// `flags` keeps the emotes that have every flag listed (`ZERO_WIDTH`, `WIDE`; at most 3
+    /// different ones). `NSFW` is retired and finds nothing. `tags` keeps
     /// the emotes that have every tag listed (exact; a leading `#` and case are ignored, at most
     /// 10). `exact: true` makes a non-empty `query` match the whole name (any case) instead of
     /// roughly. `window` is `DAY`, `WEEK` (default) or `MONTH`, and only matters for `TRENDING`.
@@ -443,6 +444,7 @@ impl Query {
         query: String,
         animated: Option<bool>,
         owner: Option<String>,
+        #[graphql(deprecation = "NSFW emotes aren't allowed on cyex.tv; this changes nothing.")]
         nsfw: Option<bool>,
         page: Option<u32>,
         per_page: Option<u32>,
@@ -452,6 +454,8 @@ impl Query {
         exact: Option<bool>,
         window: Option<TrendingWindow>,
     ) -> Result<SearchResults> {
+        // Retired: taken so old clients keep working, and ignored.
+        let _ = nsfw;
         let flags: Vec<EmoteFlag> =
             flags
                 .unwrap_or_default()
@@ -468,7 +472,7 @@ impl Query {
                 text: &query,
                 animated,
                 owner: owner.as_deref(),
-                nsfw: nsfw.unwrap_or(false),
+                nsfw: false,
                 flags: &flags,
                 tags: tags.as_deref().unwrap_or_default(),
                 exact: exact.unwrap_or(false),
@@ -2109,8 +2113,9 @@ impl Mutation {
             .map_err(api_error)
     }
 
-    /// Change an emote's flags after review: visibility (`UNLISTED` takes it off the listings),
-    /// NSFW and zero-width. Needs `emotes.flags` or `emotes.edit_any`. Audited
+    /// Change an emote's flags after review: visibility (`UNLISTED` takes it off the listings)
+    /// and zero-width. `nsfw: true` is `nsfw_not_allowed` (NSFW emotes aren't allowed); saving
+    /// clears an old NSFW flag. Needs `emotes.flags` or `emotes.edit_any`. Audited
     /// (`emote.flags_changed`); the owner is told when the visibility changes (ADR 0024).
     async fn set_emote_flags(
         &self,
