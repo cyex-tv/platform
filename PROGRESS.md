@@ -1665,3 +1665,10 @@ gh pr create --repo cyex-tv/platform --base main --head fix/select-toggle-hero-t
   `activity-range.ui.test.ts`, `notifications-tab.ui.test.ts`, `activity-no-filter.ui.test.ts`, `activity.test.ts`
   and `settings.test.ts` (owner-only tab, redirect). Screens before/after in
   `.claude/runs/2026-11-20-redesign/screens/profile-activity/`.
+
+### GitHub write log for this PR
+```
+git push -u origin feat/profile-notifications-activity
+gh pr create --repo cyex-tv/platform --base main --head feat/profile-notifications-activity --title "Notifications as a profile tab; Activity: latest 100 for visitors, a date range for the owner" --body-file <file>
+```
+  PR #167. Not merged (owner reviews).
