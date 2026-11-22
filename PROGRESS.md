@@ -1515,3 +1515,11 @@ ADR 0010, amendment 2026/11/22. Migration `20261213004101_role_deny_invisible.sq
   `.claude/runs/2026-11-20-redesign/screens/roles/` (`before-*`, `after-*`).
 - [x] Tests: resolver unit tests (shared, db, admin), DB tests `role_deny_flow.rs`, upload and report denies,
   emote channels ordering with an invisible role; web `role-effects`, `permission-picker.ui`, `roles-page.ui`.
+
+### GitHub write log for this PR
+```
+git push -u origin feat/role-deny-invisible
+gh pr create --repo cyex-tv/platform --base main --head feat/role-deny-invisible --title "Roles: allow, deny or inherit each permission; invisible roles" --body-file <file>
+git push
+```
+  Not merged (owner reviews).
