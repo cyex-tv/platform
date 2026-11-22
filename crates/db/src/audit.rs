@@ -330,11 +330,11 @@ pub async fn activity_top_actors(
     limit: i64,
 ) -> DbResult<Vec<PersonCount>> {
     let actions = activity_actions(filter);
-    let rows = activity_sql(&format!("{ACTIVITY_SHOWN_ACTOR} AS who, a.id"));
+    let rows = activity_sql(&format!("{ACTIVITY_SHOWN_ACTOR} AS who, a.id, a.created_at"));
     Ok(sqlx::query_as(&format!(
         "SELECT r.who AS account_id, count(*) AS count FROM ({rows}) r
          JOIN accounts x ON x.id = r.who AND x.deleted_at IS NULL
-         GROUP BY r.who ORDER BY count(*) DESC, max(r.id) DESC LIMIT $8"
+         GROUP BY r.who ORDER BY count(*) DESC, max(r.created_at) DESC, r.who LIMIT $8"
     ))
     .bind(subject)
     .bind(None::<Uuid>)
@@ -359,10 +359,10 @@ pub async fn emote_top_actors(
     Ok(sqlx::query_as(&format!(
         "SELECT r.who AS account_id, count(*) AS count FROM (
              SELECT CASE WHEN f.action = 'emote.approved' THEN f.subject_account_id
-                         ELSE f.actor_account_id END AS who, f.id
+                         ELSE f.actor_account_id END AS who, f.id, f.created_at
              FROM ({rows}) f) r
          JOIN accounts x ON x.id = r.who AND x.deleted_at IS NULL
-         GROUP BY r.who ORDER BY count(*) DESC, max(r.id) DESC LIMIT $5"
+         GROUP BY r.who ORDER BY count(*) DESC, max(r.created_at) DESC, r.who LIMIT $5"
     ))
     .bind(emote_id)
     .bind(None::<Uuid>)
@@ -396,7 +396,7 @@ pub async fn top_people(
     };
     Ok(sqlx::query_as(&format!(
         "SELECT r.who AS account_id, count(*) AS count FROM (
-             SELECT {who} AS who, id FROM audit_log
+             SELECT {who} AS who, id, created_at FROM audit_log
              WHERE ($1::uuid IS NULL OR actor_account_id = $1)
                AND ($2::text IS NULL OR target_kind = $2)
                AND ($3::text IS NULL OR target_id = $3)
@@ -406,7 +406,7 @@ pub async fn top_people(
              ORDER BY id DESC
              LIMIT $7) r
          JOIN accounts x ON x.id = r.who AND x.deleted_at IS NULL
-         GROUP BY r.who ORDER BY count(*) DESC, max(r.id) DESC LIMIT $8"
+         GROUP BY r.who ORDER BY count(*) DESC, max(r.created_at) DESC, r.who LIMIT $8"
     ))
     .bind(filter.actor)
     .bind(kind)

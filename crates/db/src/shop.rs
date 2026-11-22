@@ -984,7 +984,7 @@ pub async fn top_buyers(
                 OR ($1 = 'paid' AND o.status = 'refund_requested'))
            AND ($2::uuid IS NULL OR o.item_id = $2)
          GROUP BY o.account_id
-         ORDER BY count(*) DESC, max(o.id) DESC
+         ORDER BY count(*) DESC, max(o.created_at) DESC, o.account_id
          LIMIT $3",
     )
     .bind(status)
