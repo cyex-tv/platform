@@ -27,7 +27,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 }
 
 /* ---------- Shell ---------- */
-/* The page frame is RailLayout (the 1520 wrapper, rail column + content). The index is the browse
+/* The page frame is RailLayout (full width, rail column + content). The index is the browse
    page's left rail (redesign, 2026/11/21): the full height of the window under the header, on the
    page ground, a hairline on its right, from the window's left edge; sticky, with its own scroll. */
 .docs .docs-nav {
@@ -202,8 +202,7 @@ html:has(.docs) { scroll-behavior: smooth; }
 }
 .docs .op-main { min-width: 0; }
 /* The sample panel is sticky per endpoint: it follows while you read that one, then hands off. */
-.docs .op-aside { min-width: 0; align-self: stretch; background: var(--surface); border-left: 1px solid var(--border); margin-right: calc(-1 * var(--page-pad));
-  box-shadow: 0 0 0 100vw var(--surface); clip-path: inset(0 -100vw 0 0); }
+.docs .op-aside { min-width: 0; align-self: stretch; background: var(--surface); border-left: 1px solid var(--border); margin-right: calc(-1 * var(--page-pad)); }
 .docs .op-aside > .code-panel { position: sticky; top: var(--docs-top); padding-right: var(--page-pad); }
 .docs .op-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .docs .op-title { font-size: 1.08rem; font-weight: 600; margin: 0; line-height: 1.35; }
@@ -335,7 +334,6 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .dp-panel {
   position: sticky; top: var(--docs-top); height: calc(100svh - var(--docs-top)); overflow-y: auto; overscroll-behavior: contain;
   margin: calc(-1 * var(--rail-gap)) calc(-1 * var(--page-pad)) 0 0; border-left: 1px solid var(--border); background: var(--surface);
-  box-shadow: 0 0 0 100vw var(--surface); clip-path: inset(0 -100vw 0 0);
 }
 .docs .dp-sec + .dp-sec { margin-top: 0; }
 .docs .dp-label { display: flex; align-items: center; justify-content: space-between; margin: 0; min-height: 48px; padding: 0 var(--page-pad) 0 16px; border-bottom: 1px solid var(--border);

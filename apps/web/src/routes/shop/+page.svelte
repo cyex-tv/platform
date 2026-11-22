@@ -306,7 +306,7 @@
 
   .panel { position: sticky; top: var(--nav-h); height: calc(100svh - var(--nav-h)); overflow-y: auto; overscroll-behavior: contain;
     margin-right: calc(-1 * var(--page-pad)); border-left: 1px solid var(--border); background: var(--surface);
-    box-shadow: 0 0 0 100vw var(--surface); clip-path: inset(0 -100vw 0 0); /* on to the window's edge past the wrap, like every right panel */ }
+    }
   .ip-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 8px; height: 48px; padding: 0 8px 0 16px;
     border-bottom: 1px solid var(--border); background: var(--surface); }
   .ip-body { display: grid; gap: 4px; padding: 8px 16px 16px; }
