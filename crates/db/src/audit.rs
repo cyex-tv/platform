@@ -330,7 +330,9 @@ pub async fn activity_top_actors(
     limit: i64,
 ) -> DbResult<Vec<PersonCount>> {
     let actions = activity_actions(filter);
-    let rows = activity_sql(&format!("{ACTIVITY_SHOWN_ACTOR} AS who, a.id, a.created_at"));
+    let rows = activity_sql(&format!(
+        "{ACTIVITY_SHOWN_ACTOR} AS who, a.id, a.created_at"
+    ));
     Ok(sqlx::query_as(&format!(
         "SELECT r.who AS account_id, count(*) AS count FROM ({rows}) r
          JOIN accounts x ON x.id = r.who AND x.deleted_at IS NULL
