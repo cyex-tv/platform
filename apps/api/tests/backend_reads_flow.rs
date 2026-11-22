@@ -723,3 +723,118 @@ async fn uploaded_lines_survive_a_deleted_approver() {
     );
     w.db.close().await;
 }
+
+const PAGE_IN: &str = "query($a: String!, $b: String, $l: Int, $f: ActivityFilter) {
+    accountActivityPage(accountId: $a, before: $b, limit: $l, filter: $f) { entries { id } next }
+}";
+
+/// Every line a reader reaches by following `next` from the top, `l` at a time.
+async fn reach(w: &World, auth: Option<(&str, bool)>, account: &User, l: u32, f: Value) -> usize {
+    let mut seen = 0;
+    let mut before: Option<String> = None;
+    for _ in 0..50 {
+        let r = w
+            .post(
+                auth,
+                PAGE_IN,
+                json!({ "a": account.tid(), "b": before, "l": l, "f": f }),
+            )
+            .await;
+        assert!(r["errors"].is_null(), "{r}");
+        seen += entries(&r, "accountActivityPage");
+        match r["data"]["accountActivityPage"]["next"].as_str() {
+            Some(next) => before = Some(next.to_owned()),
+            None => return seen,
+        }
+    }
+    panic!("the feed never ended");
+}
+
+#[tokio::test]
+async fn visitors_reach_the_newest_100_lines_and_the_owner_all_of_them() {
+    let Some(w) = World::new(Rates::default()).await else {
+        return;
+    };
+    let fox = w.user("7101").await;
+    let visitor = w.user("7102").await;
+    let public = w.emote(&fox, "Visible", EmoteState::Approved).await;
+    let listed = w.set(&fox, "Main", SetVisibility::Listed).await;
+    for _ in 0..130 {
+        w.added_row(&fox, listed, public).await;
+    }
+    let owner = Some((fox.cookie.as_str(), true));
+    let someone = Some((visitor.cookie.as_str(), true));
+
+    // Signed out or signed in as someone else: 100 lines, in pages of 30 or in one of 100.
+    assert_eq!(reach(&w, None, &fox, 30, Value::Null).await, 100);
+    assert_eq!(reach(&w, someone, &fox, 30, Value::Null).await, 100);
+    let r = w
+        .post(None, PAGE_IN, json!({ "a": fox.tid(), "l": 100 }))
+        .await;
+    assert_eq!(entries(&r, "accountActivityPage"), 100, "{r}");
+    assert!(r["data"]["accountActivityPage"]["next"].is_null(), "{r}");
+    // The owner reaches every line.
+    assert_eq!(reach(&w, owner, &fox, 30, Value::Null).await, 130);
+
+    // A cursor past the 100th line (the owner's) gives a visitor nothing.
+    let r = w
+        .post(owner, PAGE_IN, json!({ "a": fox.tid(), "l": 100 }))
+        .await;
+    let at_100 = r["data"]["accountActivityPage"]["next"]
+        .as_str()
+        .unwrap_or_else(|| panic!("the owner's feed goes on: {r}"))
+        .to_owned();
+    let r = w
+        .post(
+            None,
+            PAGE_IN,
+            json!({ "a": fox.tid(), "b": at_100, "l": 5 }),
+        )
+        .await;
+    assert_eq!(entries(&r, "accountActivityPage"), 0, "{r}");
+    assert!(r["data"]["accountActivityPage"]["next"].is_null(), "{r}");
+    let r = w
+        .post(
+            owner,
+            PAGE_IN,
+            json!({ "a": fox.tid(), "b": at_100, "l": 5 }),
+        )
+        .await;
+    assert_eq!(entries(&r, "accountActivityPage"), 5, "{r}");
+    let at_105 = r["data"]["accountActivityPage"]["next"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{r}"))
+        .to_owned();
+    let r = w
+        .post(
+            None,
+            PAGE_IN,
+            json!({ "a": fox.tid(), "b": at_105, "l": 5 }),
+        )
+        .await;
+    assert_eq!(entries(&r, "accountActivityPage"), 0, "{r}");
+
+    // A date range is the owner's: theirs narrows the feed, a visitor's is ignored.
+    let future = (chrono::Utc::now() + Duration::hours(1)).to_rfc3339();
+    let past = (chrono::Utc::now() - Duration::hours(1)).to_rfc3339();
+    assert_eq!(
+        reach(&w, owner, &fox, 100, json!({ "since": future })).await,
+        0
+    );
+    assert_eq!(
+        reach(
+            &w,
+            owner,
+            &fox,
+            100,
+            json!({ "since": past, "until": future })
+        )
+        .await,
+        130
+    );
+    assert_eq!(
+        reach(&w, None, &fox, 100, json!({ "since": future })).await,
+        100
+    );
+    w.db.close().await;
+}

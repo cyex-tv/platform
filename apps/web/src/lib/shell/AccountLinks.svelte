@@ -18,6 +18,7 @@
   import { rolesOf, type Role } from '$lib/profile/data.svelte';
   import { badge } from '$lib/account/notifications';
   import { inbox } from '$lib/account/inbox.svelte';
+  import { notificationsHref } from '$lib/profile/rows';
   import { leave } from './signout';
   import { theme, toggleTheme } from './theme.svelte';
   import { whatsNew } from '$lib/changelog/seen.svelte';
@@ -88,7 +89,7 @@
       {#each menuLinks(me.id) as l (l.href)}{@render row(l)}{/each}
       {#if touch}
         {@render row(UPLOAD)}
-        <a href="/me/notifications" role={item} aria-current={path.startsWith('/me/notifications') ? 'page' : undefined} onclick={() => onpick?.()}>
+        <a href={notificationsHref(me.id)} role={item} aria-current={page.url.searchParams.get('s') === 'notifications' && path === `/users/${encodeURIComponent(me.id)}` ? 'page' : undefined} onclick={() => onpick?.()}>
           <Icon name="bell" /><span>Notifications</span>{#if badge(inbox.count)}<span class="value" aria-label="{inbox.count} unread">{badge(inbox.count)}</span>{/if}
         </a>
       {/if}

@@ -13,7 +13,7 @@
   import SideRail from '$lib/shell/SideRail.svelte';
   import type { RailGroup, RailItem } from '$lib/shell/rail';
   import { session } from '$lib/tool/session.svelte';
-  import { sectionHref } from './rows';
+  import { notificationsHref, sectionHref } from './rows';
 
   /** The set the page shows (its id may be an old address's ULID, so the page names it). */
   let { current }: { current?: string } = $props();
@@ -36,7 +36,7 @@
       { href: sectionHref(me.id, 'uploads'), label: 'Your emotes', icon: 'smile', current: at('/me/emotes') },
       { href: sectionHref(me.id, 'favourites'), label: 'Favourites', icon: 'heart', count: personal.loaded ? personal.favourites.size : undefined, current: at('/me/favourites') },
       { href: '/me/channels', label: 'Channels', icon: 'tv', current: at('/me/channels') },
-      { href: '/me/notifications', label: 'Notifications', icon: 'bell', count: inbox.known && inbox.count > 0 ? inbox.count : undefined, current: at('/me/notifications') },
+      { href: notificationsHref(me.id), label: 'Notifications', icon: 'bell', count: inbox.known && inbox.count > 0 ? inbox.count : undefined },
       { href: '/me/upload', label: 'Upload', icon: 'upload', current: at('/me/upload') },
       // Subscriptions don't exist yet: the row shows only while you are on its page.
       ...(at('/me/subscription') ? [{ href: '/me/subscription', label: 'Subscription', icon: 'star' as const, current: true }] : []),

@@ -2,10 +2,13 @@
   // What happened on an account (7TV's activity feed): one row per change with an icon (added,
   // removed, renamed, paint or badge changed, an editor added or removed, …), a sentence with the
   // emote's picture and the names, who did it, and the date and time. Public. Pages back 30 at a
-  // time. A filter bar narrows it: what (Everything, Emotes, Sets, Cosmetics, Editors), by whom
+  // time. A filter bar narrows it: what (Everything, Emotes, Sets, Cosmetics, Editors) and by whom
   // (UserFilter: focused empty, the people with the most lines here, the owner first; typing, the
-  // people search) and when (the cyex logs timeframe and date picker). The filters live in the
-  // address (?k=, ?by=, ?d= or ?m=), so a view can be shared.
+  // people search). How far back (owner rule, 2026/11/22): everyone sees the latest 100 lines, all
+  // time, and paging stops there ("Latest 100"; the API holds the same cap); the owner and staff
+  // (`full`) page through all of it and get a date range instead (DateRangePicker: all time,
+  // last 7/30/90 days, or from and to). The filters live in the address (?k=, ?by=, and for
+  // `full` ?from= ?to=), so a view can be shared.
   import RetryNote from '$lib/components/RetryNote.svelte';
   import { quiet } from '$lib/quiet';
   import { onMount, untrack } from 'svelte';
@@ -25,10 +28,13 @@
   import { filterOf, loadActivity, type ActivityItem, type ActivityQuery } from '../activity';
   import ActivityRows from '../ActivityRows.svelte';
   import { profileOf } from '../data.svelte';
-  import TimeframePicker from '../TimeframePicker.svelte';
-  import { fromQuery, rangeOf, toQuery, type Timeframe } from '../timeframe';
+  import DateRangePicker from '../DateRangePicker.svelte';
+  import { ALL_TIME, fromQuery, rangeOf, toQuery, type DayRange } from '../range';
 
-  let { accountId, name = '' }: { accountId: string; name?: string } = $props();
+  /** How many lines anyone but the owner and staff may page back through (the API's cap too). */
+  const PUBLIC_LINES = 100;
+
+  let { accountId, name = '', full = false }: { accountId: string; name?: string; full?: boolean } = $props();
 
   type Group = NonNullable<ActivityQuery['group']>;
   const GROUPS: { value: Group; label: string }[] = [
@@ -44,9 +50,9 @@
   const q = $derived(page.url.searchParams);
   const group = $derived<Group>(isGroup(q.get('k')) ? (q.get('k') as Group) : 'all');
   const actor = $derived(q.get('by') ?? '');
-  const frame = $derived<Timeframe>(fromQuery(q));
-  const query = $derived<ActivityQuery>({ group, actor: actor || null, ...rangeOf(frame) });
-  const filtered = $derived(group !== 'all' || !!actor || frame.frame !== 'all');
+  const range = $derived<DayRange>(full ? fromQuery(q) : ALL_TIME);
+  const query = $derived<ActivityQuery>({ group, actor: actor || null, ...rangeOf(range) });
+  const filtered = $derived(group !== 'all' || !!actor || !!range.from || !!range.to);
 
   // Who can be picked under "By": the owner and the account's editors (public, names only).
   let editors = $state<{ id: string; displayName: string }[]>([]);
@@ -81,8 +87,8 @@
     }
     goto(url, { replaceState: true, keepFocus: true, noScroll: true });
   }
-  const setFrame = (t: Timeframe) => set({ d: null, m: null, ...toQuery(t) });
-  const reset = () => set({ k: null, by: null, d: null, m: null });
+  const setRange = (r: DayRange) => set({ from: null, to: null, ...toQuery(r) });
+  const reset = () => set({ k: null, by: null, from: null, to: null });
 
   // On a phone the five groups scroll sideways; an edge fades where there is more to reach.
   let strip = $state<HTMLDivElement>();
@@ -114,7 +120,9 @@
   let busy = $state(false);
   /** Where the next page starts; null once the feed has ended. */
   let cursor = $state<string | null>(null);
-  const more = $derived(cursor !== null);
+  const capped = $derived(!full && items.length >= PUBLIC_LINES);
+  const more = $derived(cursor !== null && !capped);
+  const shown = $derived(full ? items : items.slice(0, PUBLIC_LINES));
   let problem = $state('');
   let catalog = $state<Catalog | null>(null);
   // Answers for an older filter are dropped.
@@ -128,7 +136,8 @@
     try {
       const got = await loadActivity(accountId, fresh ? null : cursor, fetch, query);
       if (mine !== round) return;
-      items = fresh ? got.items : appendUnique(items, got.items);
+      const all = fresh ? got.items : appendUnique(items, got.items);
+      items = full ? all : all.slice(0, PUBLIC_LINES);
       cursor = got.next;
     } catch (e) {
       if (mine !== round) return;
@@ -143,7 +152,7 @@
 
   // A new filter starts the feed over.
   $effect(() => {
-    void query.group; void query.actor; void query.since; void query.until;
+    void query.group; void query.actor; void query.since; void query.until; void full;
     untrack(() => {
       first = true;
       next(true);
@@ -151,13 +160,15 @@
   });
 </script>
 
-<PageHead title="Activity" line="Changes to the sets, emotes, cosmetics and editors, newest first." />
+<PageHead title="Activity" line={full ? 'Changes to the sets, emotes, cosmetics and editors, newest first.' : 'The latest 100 changes to the sets, emotes, cosmetics and editors, newest first.'} />
 
 <div class="bar" role="group" aria-label="Filter activity">
   <div class="groups" class:fade-start={fadeStart} class:fade-end={fadeEnd} bind:this={strip}><Segmented label="Show" size="s" options={GROUPS} value={group} onchange={(v) => set({ k: v === 'all' ? null : v })} /></div>
   <UserFilter id="activity-by" label="By" value={actor} onchange={(id) => set({ by: id || null })} top={topActors} {topKey}
     pinned={owner} fallback={editorPeople} flag={flagOf} name={actor === accountId ? name : null} />
-  <TimeframePicker value={frame} onchange={setFrame} />
+  <div class="when">
+    {#if full}<DateRangePicker value={range} onchange={setRange} />{:else}<span class="cap" data-testid="activity-cap">Latest 100</span>{/if}
+  </div>
 </div>
 {#if editorsFailed}
   <RetryNote onretry={loadEditors}>Couldn’t load the editors to pick under “By”.</RetryNote>
@@ -170,19 +181,27 @@
 {:else if !items.length}
   {#if filtered}
     <State title="Nothing matches.">
-      Nothing like that happened then. Try another timeframe, or show everything.
+      {full ? 'Nothing like that happened then. Try another date range, or show everything.' : 'Nothing like that in the latest 100 changes. Show everything instead.'}
       {#snippet actions()}<button class="ui-btn secondary small" type="button" onclick={reset}>Show everything</button>{/snippet}
     </State>
   {:else}
     <State title="Nothing yet.">Changes to the sets, emotes, cosmetics and editors show up here.</State>
   {/if}
 {:else}
-  <ActivityRows {items} {catalog} subject={accountId} />
-  <div class="foot"><LoadMore hasMore={more} {busy} error={problem} total={items.length} onmore={() => next()} /></div>
+  <ActivityRows items={shown} {catalog} subject={accountId} />
+  <div class="foot">
+    {#if capped}<p class="ui-hint end">That’s the latest 100. Older changes aren’t listed.</p>
+    {:else}<LoadMore hasMore={more} {busy} error={problem} total={shown.length} onmore={() => next()} />{/if}
+  </div>
 {/if}
 
 <style>
+  /* One line, one vertical centre: every control is 34px high (44px on phones). */
   .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 0 0 16px; }
+  .bar > :global(*) { align-self: center; }
+  .when { display: flex; align-items: center; margin-left: auto; }
+  .cap { display: inline-flex; align-items: center; height: 34px; font: var(--t-fine) var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted); }
+  .end { margin: 0; text-align: center; }
   .foot { padding: 20px 0 0; }
   @media (max-width: 640px) {
     .bar { gap: 10px; }

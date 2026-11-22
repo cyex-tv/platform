@@ -1,7 +1,7 @@
 <script lang="ts">
   // One notification: an icon, one sentence and when (date and time, how long ago on hover). Unread ones are bold with an accent icon
   // (the cyex rule: no fills, no bars). A link when the notification leads somewhere; the
-  // sentence is printed as text, never as HTML. Used by the bell's popover and /me/notifications.
+  // sentence is printed as text, never as HTML. Used by the bell's popover and your profile's Notifications tab.
   import Icon from '$lib/components/Icon.svelte';
   import { isoParts } from '$lib/format';
   import ActivityWhen from '$lib/profile/ActivityWhen.svelte';

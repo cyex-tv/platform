@@ -13,8 +13,9 @@
   // Dashboard button), the owner and the account's editors Active emotes (from the dashboard, or
   // the band's button for editors), and the Cosmetics tab becomes the picker for the owner and
   // editors with PROFILE. The owner alone also has Account and Editors (?s=account, ?s=editors;
-  // they moved here from Settings, owner rule 2026/11/22), tabs nobody else is shown. Sections are
-  // ?s= tabs; the old ?s=collection opens Cosmetics.
+  // they moved here from Settings, owner rule 2026/11/22) and Notifications (?s=notifications, the
+  // old /me/notifications: the list on the left, the picked one or the numbers in the panel), tabs
+  // nobody else is shown. Sections are ?s= tabs; the old ?s=collection opens Cosmetics.
   import { setContext } from 'svelte';
   import { afterNavigate, goto, invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
@@ -42,6 +43,8 @@
   import { canProfile, canSets, manages, profileTabs, sectionFrom, sectionHref, sectionsFor, type SectionKey } from '$lib/profile/rows';
   import AccountSection from '$lib/profile/sections/AccountSection.svelte';
   import EditorsSection from '$lib/profile/sections/EditorsSection.svelte';
+  import NotificationsSection from '$lib/profile/sections/NotificationsSection.svelte';
+  import NotificationsPanel from '$lib/profile/NotificationsPanel.svelte';
   import ActiveEmotes from '$lib/profile/sections/ActiveEmotes.svelte';
   import ActivityFeed from '$lib/profile/sections/ActivityFeed.svelte';
   import CosmeticsPicker from '$lib/profile/sections/CosmeticsPicker.svelte';
@@ -71,7 +74,7 @@
   // A section only the owner or an editor has, asked for before the session is known: wait for it.
   const waiting = $derived(!!asked && asked !== section && (!session.known || (!!session.me && !granted)));
 
-  const TITLE: Record<SectionKey, string> = { overview: 'Overview', uploads: 'Uploaded emotes', active: 'Active emotes', sets: 'Emote sets', favourites: 'Favourites', cosmetics: 'Cosmetics', activity: 'Activity', account: 'Account', editors: 'Editors' };
+  const TITLE: Record<SectionKey, string> = { overview: 'Overview', uploads: 'Uploaded emotes', active: 'Active emotes', sets: 'Emote sets', favourites: 'Favourites', cosmetics: 'Cosmetics', activity: 'Activity', notifications: 'Notifications', account: 'Account', editors: 'Editors' };
 
   // The section tabs: the profile's public rows, the off-row section you are on, and the owner's own tabs.
   const tabList = $derived(
@@ -214,10 +217,11 @@
   </ColumnLayout>
 {:else}
   {@const account = { id: data.id, displayName: data.creator.displayName, avatar: data.creator.avatar }}
-  {@const showing = !!pickedId && wide}
+  {@const showing = !!pickedId && wide && section !== 'notifications'}
+  {@const notes = section === 'notifications' && relation.mine}
   <InspectorLayout
-    title={showing ? 'Selected emote' : 'About'}
-    label={showing ? 'Selected emote' : `About ${name}`}
+    title={notes ? 'Notification' : showing ? 'Selected emote' : 'About'}
+    label={notes ? 'About your notifications' : showing ? 'Selected emote' : `About ${name}`}
     fold={!showing}
     headPad={false}
     testid="profile-panel"
@@ -249,8 +253,10 @@
         <AccountSection />
       {:else if section === 'editors' && relation.mine}
         <EditorsSection />
+      {:else if notes}
+        <NotificationsSection />
       {:else if section === 'activity'}
-        {#key data.id}<ActivityFeed accountId={data.id} name={data.creator.displayName} />{/key}
+        {#key data.id}<ActivityFeed accountId={data.id} name={data.creator.displayName} full={relation.mine || !!session.me?.permissions.includes('users.view')} />{/key}
       {:else if relation.mine}
         <MyUploads />
       {:else if relation.perms.has('EMOTE_MANAGE')}
@@ -270,7 +276,9 @@
       {/if}
     {/snippet}
     {#snippet panel()}
-      {#if showing}
+      {#if notes}
+        <NotificationsPanel />
+      {:else if showing}
         <EmoteInspector head={false} emote={picked?.id === pickedId ? picked.emote : null} failed={picked?.id === pickedId && picked.failed} onclose={unpick} />
       {:else}
         <ProfileAbout accountId={data.id} profile={data.profile} uploads={data.total} />

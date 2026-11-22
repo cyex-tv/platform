@@ -19,6 +19,10 @@ describe('settings', () => {
     expect(movedToProfile('/me/account', 'a1', '#conn-h')).toBe('/users/a1?s=account#conn-h');
     expect(movedToProfile('/me/editors', 'a1')).toBe('/users/a1?s=editors');
     expect(movedToProfile('/me/editors/', 'a 1')).toBe('/users/a%201?s=editors');
+    // Notifications is a profile tab too: its filter and pick come along, nothing else does.
+    expect(movedToProfile('/me/notifications', 'a1')).toBe('/users/a1?s=notifications');
+    expect(movedToProfile('/me/notifications', 'a1', '', '?f=editors&n=N%201&x=1')).toBe('/users/a1?s=notifications&f=editors&n=N%201');
+    expect(movedToProfile('/me/settings/notifications', 'a1')).toBeNull();
     for (const p of ['/me/settings', '/me/settings/appearance', '/me/settings/billing', '/me/accounts', '/me/editorsx', '/me/sets']) expect(movedToProfile(p, 'a1')).toBeNull();
   });
   it('knows which pages are Settings', () => {

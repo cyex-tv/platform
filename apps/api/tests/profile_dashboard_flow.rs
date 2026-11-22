@@ -237,6 +237,19 @@ impl World {
             .collect()
     }
 
+    /// The feed as `account` itself reads it (the owner may narrow it by time).
+    async fn own_kinds(&self, account: &User, filter: Value) -> Vec<String> {
+        let r = self
+            .gql(account, FEED, json!({ "a": account.tid(), "f": filter }))
+            .await;
+        r["data"]["accountActivityPage"]["entries"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{r}"))
+            .iter()
+            .map(|e| e["kind"].as_str().unwrap().to_owned())
+            .collect()
+    }
+
     async fn approved_emote(&self, owner: &User, name: &str) -> String {
         let mut conn = self.db.conn().await;
         let emote = emotes::create(
@@ -497,22 +510,30 @@ async fn activity_filters_by_group_actor_and_time_with_editor_lines() {
         ["EDITOR_ADDED", "SET_CREATED"]
     );
 
-    // When: the window around now holds everything, a past or future one nothing.
+    // When (the owner's own view): the window around now holds everything, a past or future
+    // one nothing.
     let now = chrono::Utc::now();
     let iso = |d: chrono::DateTime<chrono::Utc>| d.to_rfc3339();
     assert_eq!(
-        w.kinds(&alice, json!({ "since": iso(now - Duration::hours(1)), "until": iso(now + Duration::hours(1)) })).await.len(),
+        w.own_kinds(&alice, json!({ "since": iso(now - Duration::hours(1)), "until": iso(now + Duration::hours(1)) })).await.len(),
         2
     );
     assert!(
-        w.kinds(&alice, json!({ "since": iso(now + Duration::hours(1)) }))
+        w.own_kinds(&alice, json!({ "since": iso(now + Duration::hours(1)) }))
             .await
             .is_empty()
     );
     assert!(
-        w.kinds(&alice, json!({ "until": iso(now - Duration::hours(1)) }))
+        w.own_kinds(&alice, json!({ "until": iso(now - Duration::hours(1)) }))
             .await
             .is_empty()
+    );
+    // Anyone else reads all time: their range is ignored (owner rule, 2026/11/22).
+    assert_eq!(
+        w.kinds(&alice, json!({ "since": iso(now + Duration::hours(1)) }))
+            .await
+            .len(),
+        2
     );
 
     // Bad input is named.

@@ -1,4 +1,4 @@
-// Your notifications, shared by the bell in the header, the phone menu and /me/notifications:
+// Your notifications, shared by the bell in the header, the phone menu and your profile's Notifications tab:
 // how many are unread (cheap, asked often) and the list itself (latest 100, asked when opened).
 // Reads and marks go through the API; a failed mark leaves things as they were.
 import { gql } from '$lib/api';
