@@ -166,7 +166,11 @@ async fn the_built_in_roles_exist_and_the_top_one_is_hidden() {
     assert_eq!(list[1]["builtIn"], "ADMIN");
     assert_eq!(list[1]["editable"], true);
     assert_eq!(list[2]["builtIn"], "USER");
-    assert_eq!(list[2]["permissions"], json!([]));
+    // The everyday permissions (migration `role_deny_invisible`).
+    assert_eq!(
+        list[2]["permissions"],
+        json!(["emotes.upload", "reports.file"])
+    );
     assert_eq!(list[2]["assignable"], false);
 
     // An admin never sees the top role, not in the list and not on the owner's account.
@@ -284,7 +288,7 @@ async fn the_user_role_is_everyones() {
     let me = "{ me { permissions } }";
     assert_eq!(
         w.gql(&plain, me, json!({})).await["data"]["me"]["permissions"],
-        json!([])
+        json!(["emotes.upload", "reports.file"])
     );
     let r = w
         .gql(
@@ -512,7 +516,7 @@ async fn only_the_owner_adds_staff_permissions_to_the_user_role() {
     assert_eq!(r["errors"][0]["extensions"]["code"], "owner_only", "{r}");
     assert_eq!(
         w.gql(&plain, me, json!({})).await["data"]["me"]["permissions"],
-        json!([])
+        json!(["emotes.upload", "reports.file"])
     );
     // A rename is fine.
     let r = w

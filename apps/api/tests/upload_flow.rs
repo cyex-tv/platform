@@ -947,3 +947,60 @@ async fn known_bytes_whose_original_is_gone_are_stored_and_made_again() {
     );
     w.db.close().await;
 }
+
+/// A role above User that denies `emotes.upload` stops uploads User allows; a role above that one
+/// allowing it again lets them through (ADR 0010, amendment 2026/11/22).
+#[tokio::test]
+async fn a_role_that_denies_uploading_stops_uploads() {
+    let Some(w) = World::new(true).await else {
+        return;
+    };
+    let muted = w.user("71").await;
+    let mut conn = w.db.conn().await;
+    let role = cyex_tv_db::roles::create(
+        &mut conn,
+        &cyex_tv_db::roles::NewRole {
+            name: "Muted",
+            description: None,
+            position: 5,
+            permissions: &[],
+            created_by: None,
+        },
+    )
+    .await
+    .unwrap();
+    cyex_tv_db::roles::set_effects(&mut conn, role.id, &[], &["emotes.upload"])
+        .await
+        .unwrap();
+    cyex_tv_db::roles::assign(&mut conn, muted.id, role.id, None)
+        .await
+        .unwrap();
+    drop(conn);
+
+    let r = w.upload(&muted, "mutedPog", &png(112, 112, 3)).await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN, "{:?}", r.body);
+    assert_eq!(r.body["error"], "forbidden", "{:?}", r.body);
+    assert_eq!(w.count("SELECT count(*) FROM emotes").await, 0);
+
+    // A more senior role that allows it wins over the Deny below.
+    let mut conn = w.db.conn().await;
+    let trusted = cyex_tv_db::roles::create(
+        &mut conn,
+        &cyex_tv_db::roles::NewRole {
+            name: "Trusted",
+            description: None,
+            position: 9,
+            permissions: &["emotes.upload"],
+            created_by: None,
+        },
+    )
+    .await
+    .unwrap();
+    cyex_tv_db::roles::assign(&mut conn, muted.id, trusted.id, None)
+        .await
+        .unwrap();
+    drop(conn);
+    let r = w.upload(&muted, "mutedPog", &png(112, 112, 3)).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
+    w.db.close().await;
+}

@@ -916,6 +916,16 @@ async fn every_site_operation_runs_against_the_real_api() {
     c.op(os, "AccountReports", json!({ "accountId": ttid }))
         .await;
     c.op(os, "AccountRoles", json!({ "accountId": ttid })).await;
+    let decided = c
+        .op(os, "AccountPermissions", json!({ "accountId": ttid }))
+        .await;
+    c.check(
+        decided["accountPermissions"].as_array().is_some_and(|l| {
+            l.iter()
+                .any(|d| d["permission"] == "emotes.upload" && d["granted"] == true)
+        }),
+        "AccountPermissions: the User role allows emotes.upload",
+    );
     let staff_note = c
         .id(
             os,
@@ -964,7 +974,7 @@ async fn every_site_operation_runs_against_the_real_api() {
     c.op(
         os,
         "UpdateRole",
-        json!({ "id": role, "input": { "description": "", "public": true } }),
+        json!({ "id": role, "input": { "description": "", "public": true, "invisible": true, "denies": ["reports.file"] } }),
     )
     .await;
     c.op(os, "LimitDefaults", json!({})).await;

@@ -157,7 +157,10 @@ async fn the_owner_holds_everything() {
     let me = w.gql(&owner, "{ me { permissions } }", json!({})).await;
     assert_eq!(me["data"]["me"]["permissions"], json!(permissions::ALL));
     let me = w.gql(&plain, "{ me { permissions } }", json!({})).await;
-    assert_eq!(me["data"]["me"]["permissions"], json!([]));
+    assert_eq!(
+        me["data"]["me"]["permissions"],
+        json!(["emotes.upload", "reports.file"])
+    );
 
     assert_eq!(
         code(&w.gql(&plain, "{ roles { id } }", json!({})).await),
@@ -392,7 +395,12 @@ async fn the_last_manager_stays() {
     let r = w.gql(&admin, "{ me { permissions } }", json!({})).await;
     assert_eq!(
         r["data"]["me"]["permissions"],
-        json!(["emotes.review", "roles.manage"])
+        json!([
+            "emotes.review",
+            "emotes.upload",
+            "reports.file",
+            "roles.manage"
+        ])
     );
 
     // With a second manager, the first may step down.

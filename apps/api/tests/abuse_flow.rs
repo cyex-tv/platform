@@ -906,3 +906,45 @@ async fn a_ticket_ban_stops_reports_until_lifted() {
     );
     w.close().await;
 }
+
+/// A role above User that denies `reports.file` stops its holders from reporting, though User
+/// allows it (ADR 0010, amendment 2026/11/22).
+#[tokio::test]
+async fn a_role_that_denies_reporting_stops_reports() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("61", &[]).await;
+    let bob = w.user("62", &[]).await;
+    let reviewer = w.user("63", &["emotes.review"]).await;
+    let (emote, _) = w.live_emote(&alice, &reviewer, "aliceMute", &png(4)).await;
+    let mut conn = w.db.conn().await;
+    let muted = roles::create(
+        &mut conn,
+        &roles::NewRole {
+            name: "Muted",
+            description: None,
+            position: 5,
+            permissions: &[],
+            created_by: None,
+        },
+    )
+    .await
+    .unwrap();
+    roles::set_effects(&mut conn, muted.id, &[], &["reports.file"])
+        .await
+        .unwrap();
+    roles::assign(&mut conn, bob.id, muted.id, None)
+        .await
+        .unwrap();
+    drop(conn);
+
+    let r = w
+        .gql(&bob, REPORT, json!({ "id": emote, "r": "spam" }))
+        .await;
+    assert_eq!(r["errors"][0]["extensions"]["code"], "forbidden", "{r}");
+    // Someone without the role still may.
+    let r = w
+        .gql(&reviewer, REPORT, json!({ "id": emote, "r": "spam" }))
+        .await;
+    assert_eq!(r["data"]["reportEmote"]["state"], "OPEN", "{r}");
+    w.close().await;
+}
