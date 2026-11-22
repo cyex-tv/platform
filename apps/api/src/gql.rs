@@ -2422,6 +2422,22 @@ impl Mutation {
         account::export(state(ctx), caller).await.map_err(api_error)
     }
 
+    /// Make a personal API token (a console token, ADR 0028): a Bearer token that acts as you,
+    /// for a GraphQL playground or a script. It has your account's own rights (your roles count;
+    /// owner-only and website-only actions don't work with it), lasts 90 days and shows in
+    /// `mySessions` as `Console token`. Only one at a time: making one signs the last one out.
+    /// The token is in this answer only. Website only (`website_only` with a Bearer token). 5 an
+    /// hour (`rate_limited`). Audited. Same as `POST /v1/auth/token/export`.
+    async fn create_console_token(
+        &self,
+        ctx: &Context<'_>,
+    ) -> Result<cyex_tv_shared::model::ConsoleToken> {
+        let caller = caller(ctx)?;
+        crate::console_token::mint(state(ctx), caller, None)
+            .await
+            .map_err(api_error)
+    }
+
     /// Delete your account. `confirm` is one of your Twitch or Kick logins. Website only
     /// (`website_only` with an app token); the owner's account can't be (`owner_protected`).
     /// The account is hidden at once (profile, sets, emotes and channels read as gone, every

@@ -8,6 +8,7 @@ pub mod activity;
 pub mod admin;
 pub mod catalog;
 pub mod codes;
+pub mod console_token;
 pub mod cors;
 pub mod cosmetics;
 pub mod editors;

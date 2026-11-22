@@ -2,6 +2,20 @@
 
 Checkpoint log for `PLAN.md`. Newest phase at the top. Every write action to GitHub is listed with its exact command.
 
+## Console tokens: your API token from the browser console (branch `feat/console-token`, owner request of 2026/11/22)
+
+"Let users export their authorization keys via console": ADR 0028. The website session stays an `HttpOnly` cookie; the console gets a separate, revocable personal token instead.
+- [x] API: `POST /v1/auth/token/export` and `createConsoleToken` (website cookie and `Origin` only; `website_only` with a Bearer token), a `console` session kind (90 days, never slid, one per account: a new one signs the last out), the account's own rights (roles yes, owner's all-permissions and website-only actions no), 5 an hour per account (`CYEX_TV_LIMIT_CONSOLE_TOKENS`), audited (`account.console_token_created`). `mySessions` lists it as `CONSOLE` / `Console token`. Migration `20261213009001_console_tokens.sql`.
+- [x] Website: `window.cyextv.token()` while signed in (`lib/account/console-token.ts`, wired in the root layout), one console hint per page load, nothing stored. Developers guide: "Your API token". (The website has no sessions list since #160; the token is listed by `mySessions` and ended by Sign out everywhere.)
+- [x] Tests: `apps/api/tests/console_token_flow.rs` (origin and cookie, `me` with the token, the sessions list, no sliding, one per account, revoke, sign out everywhere, logout, rights, website-only, rate limit, audit), the coverage contract (export, then signed out by SignOutEverywhere), `lib/account/console-token.test.ts`, the mock conformance REST check. Schema, OpenAPI, mock and codegen updated.
+
+### GitHub write log for this PR
+
+```
+git push -u origin feat/console-token
+gh pr create --repo cyex-tv/platform --base main --head feat/console-token --title "Console tokens: your API token from the browser console" --body-file <file>
+```
+
 ## Redesign part B: shop, redeem, docs pages, download, sign-in, errors (branch `feat/redesign-b`, owner request of 2026/11/21)
 
 "Redesign the whole platform top to bottom with the design picked": the reading and shop pages now use the Inspector shapes from `.claude/runs/2026-11-20-redesign/design-rules.md`. Shared components (`lib/components`) untouched (part A owns them).

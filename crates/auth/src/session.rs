@@ -1,4 +1,5 @@
-//! Who is calling: a site session from the cookie, or an app session from a Bearer token.
+//! Who is calling: a site session from the cookie, or an app session or console token
+//! (ADR 0028) from a Bearer token.
 
 use axum::http::header::AUTHORIZATION;
 use axum::http::{HeaderMap, Method};
@@ -32,11 +33,12 @@ pub struct Caller {
     pub app_client: Option<String>,
 }
 
-/// How long a session lasts after its last use (ADR 0009): site 30 days, app 90 days.
+/// How long a session lasts (ADR 0009): site 30 days after its last use, app 90 days. A console
+/// token (ADR 0028) lasts 90 days from when it was made and is never slid.
 pub fn ttl(kind: SessionKind) -> Duration {
     match kind {
         SessionKind::Site => Duration::days(30),
-        SessionKind::App => Duration::days(90),
+        SessionKind::App | SessionKind::Console => Duration::days(90),
     }
 }
 
@@ -55,8 +57,8 @@ fn bearer(headers: &HeaderMap) -> Option<&str> {
 impl Auth {
     /// The caller, if the request carries a live session.
     ///
-    /// - A Bearer token must be an app sign-in's session (one that names its client, ADR 0021);
-    ///   when one is sent the cookie is ignored.
+    /// - A Bearer token must be an app sign-in's session (one that names its client, ADR 0021)
+    ///   or a console token (ADR 0028); when one is sent the cookie is ignored.
     /// - The cookie must be a site session. On a write (anything but GET, HEAD and OPTIONS) it
     ///   counts only with `Origin` set to the site; otherwise the request fails with `bad_origin`
     ///   rather than quietly running signed out.
@@ -66,13 +68,13 @@ impl Auth {
         method: &Method,
         headers: &HeaderMap,
     ) -> Result<Option<Caller>, AuthError> {
-        let (token, kind, via) = if let Some(token) = bearer(headers) {
-            (token.to_owned(), SessionKind::App, Via::Bearer)
+        let (token, via) = if let Some(token) = bearer(headers) {
+            (token.to_owned(), Via::Bearer)
         } else if let Some(token) = cookies::read(headers, cookies::SESSION) {
             if !origin::is_safe(method) && !origin::is_allowed(self.config(), headers) {
                 return Err(AuthError::BadOrigin);
             }
-            (token, SessionKind::Site, Via::Cookie)
+            (token, Via::Cookie)
         } else {
             return Ok(None);
         };
@@ -85,13 +87,16 @@ impl Auth {
         let Some(session) = sessions::find_active(&mut conn, &hash).await? else {
             return Ok(None);
         };
-        if session.kind != kind {
-            return Ok(None);
-        }
-        // Unscoped app sessions are retired (ADR 0021, amendment of 2026/11/20): a Bearer token
-        // counts only for an app that signed in through `/v1/auth/app`. The database refuses
-        // new ones too; this is the second line.
-        if via == Via::Bearer && session.app_client_id.is_none() {
+        let kind = session.kind;
+        let fits = match (via, kind) {
+            (Via::Cookie, SessionKind::Site) | (Via::Bearer, SessionKind::Console) => true,
+            // Unscoped app sessions are retired (ADR 0021, amendment of 2026/11/20): an app's
+            // Bearer token counts only for an app that signed in through `/v1/auth/app`. The
+            // database refuses new ones too; this is the second line.
+            (Via::Bearer, SessionKind::App) => session.app_client_id.is_some(),
+            _ => false,
+        };
+        if !fits {
             return Ok(None);
         }
         if Utc::now() - session.last_seen_at > touch_after()
@@ -99,9 +104,11 @@ impl Auth {
         {
             tracing::warn!(error = %err, "session touch failed");
         }
-        // An app sign-in session (ADR 0021) is never the owner: staff grants don't count for apps.
+        // Only the website's own session is ever the owner. An app sign-in (ADR 0021) holds no
+        // staff grants at all; a console token (ADR 0028) holds the account's roles, but not the
+        // owner's all-permissions (owner-only work stays on the website).
         let owner =
-            session.app_client_id.is_none() && self.is_owner(&mut conn, session.account_id).await?;
+            kind == SessionKind::Site && self.is_owner(&mut conn, session.account_id).await?;
         Ok(Some(Caller {
             account_id: session.account_id,
             owner,
@@ -201,5 +208,6 @@ mod tests {
     fn lifetimes_match_adr_0009() {
         assert_eq!(ttl(SessionKind::Site), Duration::days(30));
         assert_eq!(ttl(SessionKind::App), Duration::days(90));
+        assert_eq!(ttl(SessionKind::Console), Duration::days(90));
     }
 }

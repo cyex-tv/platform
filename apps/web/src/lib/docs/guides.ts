@@ -138,6 +138,28 @@ export const guides: Guide[] = [
     ],
   },
   {
+    id: 'api-token',
+    title: 'Your API token',
+    search: 'token console bearer personal key copy devtools playground script revoke cyextv',
+    blocks: [
+      lede('To try the API as yourself (a GraphQL playground, a script, a one-off call), take a personal API token from the browser console. It is a Bearer token that acts as you.'),
+      ol(
+        'Sign in on cyex.tv and open the browser’s developer tools, then the Console.',
+        'Run `copy(await cyextv.token())`. The token is now on your clipboard; the page doesn’t keep it anywhere.',
+        'Send it as `Authorization: Bearer <token>` to `/v1/gql` and to the REST calls that need a session.',
+      ),
+      { t: 'pre', code: `curl -s '${baseUrl}/v1/gql' \\\n  -H 'authorization: Bearer <token>' \\\n  -H 'content-type: application/json' \\\n  -d '{"query":"{ me { id displayName } }"}'` },
+      table(
+        ['Rights', 'Your account’s own: what you can do on the site, with your roles. Owner-only work and the website-only actions (deleting the account, downloading your data, signing other sessions out, making another token) don’t work with it.'],
+        ['Lifetime', '90 days from when you made it, however much it is used.'],
+        ['One at a time', 'Making a new token signs the last one out. Five an hour.'],
+        ['Revoking', 'Sign out everywhere (your account’s Account tab) ends it. So do [Sign out](#rest-logout) with the token, [revokeSession](#gql-mutation-revokeSession) with its `session_id`, and making a new one. [mySessions](#gql-query-mySessions) lists it as `Console token`.'],
+      ),
+      p('Behind `cyextv.token()` is [Make a personal API token](#rest-export_token) (or the [createConsoleToken](#gql-mutation-createConsoleToken) mutation), which only the website’s own session can call.'),
+      note('Anyone with the token can act as you until it is signed out or runs out. Don’t paste it into sites or chats, and sign it out when you are done. The website’s own session stays in an `HttpOnly` cookie that scripts can’t read; this is the only way to hold a token.'),
+    ],
+  },
+  {
     id: 'errors',
     title: 'Errors and caching',
     search: 'error codes etag 304 cache if-none-match',
