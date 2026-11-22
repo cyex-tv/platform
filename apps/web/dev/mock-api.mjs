@@ -511,9 +511,9 @@ let PENDING_DELETION = null;
 let RESTORE_COOKIE = false;
 // As the API's me.roles: with every permission (the mock's owner) the top role comes first, hidden.
 const MY_ROLES = (admin) => [
-  ...(admin ? [{ id: ROLES.find((r) => r.builtIn === 'ROOT')?.id ?? 'owner', name: 'Owner', public: false }] : []),
+  ...(admin ? [{ id: ROLES.find((r) => r.builtIn === 'ROOT')?.id ?? 'owner', name: 'Owner', public: false, invisible: true }] : []),
   ...(ACCOUNT_ROLES[ME_ID] ?? []).map((id) => ROLES.find((r) => r.id === id)).filter(Boolean)
-    .sort((a, b) => b.position - a.position).filter((r) => r.builtIn !== 'ROOT').map((r) => ({ id: r.id, name: r.name, public: r.public })),
+    .sort((a, b) => b.position - a.position).filter((r) => r.builtIn !== 'ROOT').map((r) => ({ id: r.id, name: r.name, public: r.public, invisible: !!r.invisible })),
 ];
 let uploads = 0;
 const wideOf = (e) => {
@@ -653,19 +653,41 @@ const CLOSED_REPORTS = [
 // The built-in roles (ADR 0010): the owners' hidden top role, Admin and the User role everyone
 // holds. The mock's signed-in admin is the owner: it holds the top role and sees it.
 const ROLES = [
-  { id: 'ROLEROOT', name: 'Owner', description: 'Every permission. Held by the owners only and shown to nobody else.', position: 1000000, permissions: [], public: false, builtIn: 'ROOT' },
-  { id: 'ROLE1', name: 'Admin', description: 'Runs cyex.tv day to day.', position: 1000, permissions: ['roles.manage', 'users.view', 'users.restrict', 'audit.view', 'users.notes'], public: false, builtIn: 'ADMIN' },
-  { id: 'ROLE2', name: 'Moderator', description: 'Reviews uploads and reports.', position: 50, permissions: ['emotes.review', 'emotes.takedown', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets'], public: true, builtIn: null },
-  { id: 'ROLE3', name: 'Artist', description: 'Makes emotes people love.', position: 10, permissions: [], public: true, builtIn: null },
-  { id: 'ROLEUSER', name: 'User', description: 'Every account has this role. Its permissions are everyone’s.', position: 0, permissions: [], public: false, builtIn: 'USER' },
+  { id: 'ROLEROOT', name: 'Owner', description: 'Every permission. Held by the owners only and shown to nobody else.', position: 1000000, permissions: [], public: false, denies: [], invisible: true, builtIn: 'ROOT' },
+  { id: 'ROLE1', name: 'Admin', description: 'Runs cyex.tv day to day.', position: 1000, permissions: ['roles.manage', 'users.view', 'users.restrict', 'audit.view', 'users.notes'], public: false, denies: [], invisible: false, builtIn: 'ADMIN' },
+  { id: 'ROLE2', name: 'Moderator', description: 'Reviews uploads and reports.', position: 50, permissions: ['emotes.review', 'emotes.takedown', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets'], public: true, denies: [], invisible: false, builtIn: null },
+  { id: 'ROLE3', name: 'Artist', description: 'Makes emotes people love.', position: 10, permissions: [], public: true, denies: [], invisible: false, builtIn: null },
+  { id: 'ROLE5', name: 'Muted', description: 'Can’t upload emotes. Sits above User, so it beats what everyone is allowed.', position: 5, permissions: [], denies: ['emotes.upload'], public: false, invisible: true, builtIn: null },
+  { id: 'ROLEUSER', name: 'User', description: 'Every account has this role. Its permissions are everyone’s.', position: 0, permissions: ['emotes.upload', 'reports.file'], public: false, denies: [], invisible: false, builtIn: 'USER' },
 ];
-const ACCOUNT_ROLES = { [OTHERS[0].id]: ['ROLE2', 'ROLE3'], [OTHERS[1].id]: ['ROLE3'], [ME_ID]: [] };
+const ACCOUNT_ROLES = { [OTHERS[0].id]: ['ROLE2', 'ROLE3'], [OTHERS[1].id]: ['ROLE3', 'ROLE5'], [ME_ID]: [] };
 // A role as the signed-in owner sees it: the top role holds everything and can't be touched.
 const roleOut = (r) => {
   const root = r.builtIn === 'ROOT';
   const held = (ACCOUNT_ROLES[ME_ID] ?? []).includes(r.id);
-  return { ...r, builtIn: r.builtIn ?? null, permissions: root ? PERMISSIONS : r.permissions,
+  return { ...r, builtIn: r.builtIn ?? null, permissions: root ? PERMISSIONS : r.permissions, denies: r.denies ?? [], invisible: !!r.invisible,
     editable: !root && !held, assignable: !root && r.builtIn !== 'USER' };
+};
+// Effective permissions (the API's resolver): an account's roles from the highest position down,
+// the User role last; the first role with an explicit allow or deny decides, a deny wins a tie,
+// none means not granted. The mock's signed-in account is the owner: it holds everything.
+const decisionsFor = (accountId) => {
+  const root = ROLES.find((r) => r.builtIn === 'ROOT');
+  if (accountId === ME_ID) return PERMISSIONS.map((permission) => ({ permission, granted: true, effect: null, roleId: root.id, roleName: root.name, owner: true }));
+  const held = (ACCOUNT_ROLES[accountId] ?? []).map((id) => ROLES.find((r) => r.id === id)).filter(Boolean);
+  const user = ROLES.find((r) => r.builtIn === 'USER');
+  const rank = [...held.filter((r) => r.builtIn !== 'USER'), user].sort((a, b) => b.position - a.position);
+  return PERMISSIONS.map((permission) => {
+    for (let i = 0; i < rank.length; ) {
+      const tier = rank.filter((r) => r.position === rank[i].position);
+      const deny = tier.find((r) => (r.denies ?? []).includes(permission));
+      const allow = tier.find((r) => r.permissions.includes(permission));
+      if (deny) return { permission, granted: false, effect: 'DENY', roleId: deny.id, roleName: deny.name, owner: false };
+      if (allow) return { permission, granted: true, effect: 'ALLOW', roleId: allow.id, roleName: allow.name, owner: false };
+      i += tier.length;
+    }
+    return { permission, granted: false, effect: null, roleId: null, roleName: null, owner: false };
+  });
 };
 // Per-account limits (limits.rs): the defaults the API starts with, and each role's overrides
 // (setRoleLimits). The User and top roles keep the defaults. MOCK_PENDING_MAX lowers the cap on
@@ -863,7 +885,7 @@ const editorOfOut = () => EDITOR_OF.map((g) => ({ ...g }));
 
 const PERMISSIONS = ['emotes.review', 'emotes.takedown', 'emotes.edit_any', 'sets.edit_any', 'global_set.edit', 'users.view', 'users.restrict', 'roles.manage', 'audit.view', 'cosmetics.manage', 'cosmetics.grant', 'shop.manage', 'shop.orders', 'codes.manage',
   'roles.assign', 'reports.manage', 'users.restrict_uploads', 'users.restrict_tickets', 'users.block', 'users.sessions', 'users.notes', 'entitlements.view', 'billing.view', 'subscriptions.manage',
-  'emotes.delete_any', 'editors.manage_any', 'site.announce', 'review.settings', 'emotes.flags'];
+  'emotes.delete_any', 'editors.manage_any', 'site.announce', 'review.settings', 'emotes.flags', 'emotes.upload', 'reports.file'];
 
 // ---- Chat cosmetics (ADR 0015) ----------------------------------------------------------
 // SAMPLE DATA ONLY: two made-up badges (simple SVG drawn here) and three sample paints, so the
@@ -2222,12 +2244,18 @@ function signedIn(body, v, ADMIN) {
     }
     case 'Roles':
       return { data: { roles: ROLES.map(roleOut), permissions: PERMISSIONS } };
+    case 'AccountPermissions':
+      if (v.accountId !== ME_ID && !ADMIN) return err('This needs users.view.', 'forbidden');
+      return { data: { accountPermissions: decisionsFor(v.accountId) } };
     case 'AllRoles':
       return { data: { roles: ROLES.map(roleOut) } };
     case 'CreateRole': {
       if (!(v.input.position >= 1 && v.input.position < 1000000)) return err('Positions are 1 to 999999: above the User role, below the top role.', 'bad_position');
       if (ROLES.some((x) => x.name.toLowerCase() === v.input.name.toLowerCase())) return err('A role with that name exists.', 'role_name_taken');
-      const r = { id: 'ROLE' + (ROLES.length + 1), ...v.input, description: v.input.description ?? null, public: v.input.public ?? false, builtIn: null };
+      const overlap = (v.input.denies ?? []).some((k) => v.input.permissions.includes(k));
+      if (overlap) return err('A permission can’t be both allowed and denied.', 'bad_permissions');
+      const r = { id: 'ROLE' + (ROLES.length + 1), ...v.input, description: v.input.description ?? null, denies: v.input.denies ?? [],
+        invisible: v.input.invisible ?? false, public: v.input.invisible ? false : (v.input.public ?? false), builtIn: null };
       ROLES.push(r);
       ROLES.sort((a, b) => b.position - a.position);
       return { data: { createRole: roleOut(r) } };
@@ -2238,7 +2266,11 @@ function signedIn(body, v, ADMIN) {
       if (r.builtIn === 'ROOT') return err('This is a built-in role; it can’t be changed this way.', 'built_in_role');
       if (!roleOut(r).editable) return err('You can’t edit a role you hold. Someone above you has to.', 'own_role');
       if (r.builtIn === 'USER' && v.input.position != null && v.input.position !== 0) return err('This is a built-in role; it can’t be changed this way.', 'built_in_role');
+      const allows = v.input.permissions ?? r.permissions;
+      const denies = v.input.denies ?? r.denies ?? [];
+      if (denies.some((k) => allows.includes(k))) return err('A permission can’t be both allowed and denied.', 'bad_permissions');
       Object.assign(r, Object.fromEntries(Object.entries(v.input).filter(([, x]) => x != null)));
+      if (r.invisible) r.public = false;
       if (r.description === '') r.description = null;
       ROLES.sort((a, b) => b.position - a.position);
       return { data: { updateRole: roleOut(r) } };
@@ -2410,7 +2442,7 @@ function accountProfile(id) {
   const identities = id === ME_ID
     ? myIdentities().map((i) => ({ platform: i.platform, login: i.login, displayName: i.displayName }))
     : searchPeople().find((h) => h.account.id === id)?.identities ?? [];
-  const roles = (ACCOUNT_ROLES[id] ?? []).map((r) => ROLES.find((x) => x.id === r)).filter((r) => r?.public)
+  const roles = (ACCOUNT_ROLES[id] ?? []).map((r) => ROLES.find((x) => x.id === r)).filter((r) => r?.public && !r.invisible)
     .sort((a, b) => b.position - a.position).map((r) => ({ id: r.id, name: r.name }));
   const activeSets = [...CHANNELS, ...EDITOR_CHANNELS].filter((c) => c.account.id === id && c.activeSetId).map((c) => {
     const set = findSet(c.activeSetId);

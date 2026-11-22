@@ -42,7 +42,7 @@
   };
   let { account, relation, profile, seed = null, actions, heading = true, loading = false, facts = true, flat = false }: Props = $props();
 
-  type Role = { id: string; name: string; public: boolean };
+  type Role = { id: string; name: string; public: boolean; invisible?: boolean };
   /** localStorage: '1' when your roles show only to you (app.html holds their line on a phone). */
   const OWN_FLAGS_KEY = 'cyexOwnFlags';
   const name = $derived(clean(account.displayName));
@@ -101,8 +101,9 @@
 </script>
 
 {#snippet flag(r: Role)}
-  <li class="flag" class:hidden={!r.public}>
-    {#if !r.public}<Icon name="eye-off" size={12} />{/if}<bdi>{clean(r.name)}</bdi>{#if !r.public}<span class="hid">Hidden</span>{/if}
+  {@const hid = !r.public || !!r.invisible}
+  <li class="flag" class:hidden={hid}>
+    {#if hid}<Icon name="eye-off" size={12} />{/if}<bdi>{clean(r.name)}</bdi>{#if hid}<span class="hid">{r.invisible ? 'Invisible' : 'Hidden'}</span>{/if}
   </li>
 {/snippet}
 

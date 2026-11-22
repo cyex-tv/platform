@@ -12,6 +12,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
     id: 'emotes',
     label: 'Emotes',
     items: [
+      p('emotes.upload', 'Upload emotes', 'Upload new emotes. Everyone has it through the User role; deny it on a role above that to stop the people who hold that role.'),
       p('emotes.review', 'Review uploads', 'Approve or reject emotes waiting in the review queue.'),
       p('emotes.edit_any', 'Edit any emote', "Change the name, tags, flags and visibility of emotes other people uploaded."),
       p('emotes.flags', 'Edit emote flags', 'Including hidden ones: change the visibility, NSFW and zero-width flags of any emote after review, for example take it off the listings so it is unlisted. The owner is told when the visibility changes.'),
@@ -51,7 +52,10 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
   {
     id: 'reports',
     label: 'Tickets and reports',
-    items: [p('reports.manage', 'Handle reports', 'See the report queue, and dismiss reports or act on them.')],
+    items: [
+      p('reports.file', 'File reports', 'Report emotes and open tickets. Everyone has it through the User role; deny it on a role above that to stop the people who hold that role.'),
+      p('reports.manage', 'Handle reports', 'See the report queue, and dismiss reports or act on them.'),
+    ],
   },
   {
     id: 'cosmetics',
