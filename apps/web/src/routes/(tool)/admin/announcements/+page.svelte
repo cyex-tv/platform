@@ -143,7 +143,7 @@
       {#if fresh || picked}
         <div class="adm-ip-head">
           <span class="adm-label">{fresh ? 'New announcement' : editable(picked!) ? 'Announcement' : 'Ended announcement'}</span>
-          <IconButton label="Close" icon="x" size="s" onclick={close} />
+          <IconButton label="Close" icon="x" size="s" tip="bottom-end" onclick={close} />
         </div>
         <div class="adm-ip-body">
           {#if fresh}

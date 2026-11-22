@@ -229,7 +229,7 @@
       {@const list = pickedList}
       <div class="adm-ip-head">
         <span class="adm-label">Entry</span>
-        <IconButton label="Close" icon="x" size="s" onclick={close} />
+        <IconButton label="Close" icon="x" size="s" tip="bottom-end" onclick={close} />
       </div>
       <div class="adm-ip-body">
         <section class="adm-sec">

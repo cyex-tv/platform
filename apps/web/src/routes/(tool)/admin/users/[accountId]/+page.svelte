@@ -214,7 +214,7 @@
           <Box title="Roles" count={count(roles.length)}>
             {#each roles as r (r.id)}
               <div class="adm-lv rl">
-                <span class="l"><strong class="rn"><Name value={r.name} /></strong><small>{#if r.invisible}<Icon name="eye-off" size={12} />Invisible · {/if}{r.builtIn === 'ROOT' ? 'Every permission' : r.permissions.map(permissionLabel).join(', ') || 'No permissions'}{#if r.denies.length} · <span class="dn">Denies {r.denies.map(permissionLabel).join(', ')}</span>{/if}</small></span>
+                <span class="l"><strong class="rn"><Name value={r.name} /></strong><small>{#if r.invisible}<Icon name="eye-off" size={12} />{'Invisible · '}{/if}{r.builtIn === 'ROOT' ? 'Every permission' : r.permissions.map(permissionLabel).join(', ') || 'No permissions'}{#if r.denies.length}{' · '}<span class="dn">Denies {r.denies.map(permissionLabel).join(', ')}</span>{/if}</small></span>
                 <div class="v">{#if manageRoles && r.assignable}<button class="ui-btn ghost small" type="button" onclick={() => unassign(r)}>Take away</button>{/if}</div>
               </div>
             {:else}

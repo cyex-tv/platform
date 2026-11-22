@@ -179,7 +179,7 @@
       {@const p = picked}
       <div class="adm-ip-head">
         <span class="adm-label">Paint</span>
-        <IconButton label="Close" icon="x" size="s" onclick={unpick} />
+        <IconButton label="Close" icon="x" size="s" tip="bottom-end" onclick={unpick} />
       </div>
       <div class="adm-ip-body">
         <section class="adm-sec">

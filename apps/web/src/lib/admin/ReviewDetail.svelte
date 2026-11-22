@@ -149,7 +149,7 @@
       <span class="place ui-num" aria-live="polite">{count(place)} / {count(total)}</span>
       <IconButton label="Next" icon="arrow-right" size="s" disabled={!hasNext} onclick={onnext} />
       <span class="grow"></span>
-      <IconButton label="Close" icon="x" size="s" onclick={close} />
+      <IconButton label="Close" icon="x" size="s" tip="bottom-end" onclick={close} />
     </div>
 
     <div class="main">

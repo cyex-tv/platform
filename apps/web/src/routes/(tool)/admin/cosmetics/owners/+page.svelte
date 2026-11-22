@@ -198,7 +198,7 @@
     {#if itemId}
       <div class="adm-ip-head">
         <span class="adm-label">{kind === 'role' ? 'Role' : kind === 'paint' ? 'Paint' : 'Badge'}</span>
-        <IconButton label="Close" icon="x" size="s" onclick={() => go({ item: '' })} />
+        <IconButton label="Close" icon="x" size="s" tip="bottom-end" onclick={() => go({ item: '' })} />
       </div>
       <div class="adm-ip-body">
         <section class="adm-sec">

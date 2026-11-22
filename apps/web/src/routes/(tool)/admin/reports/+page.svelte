@@ -220,7 +220,7 @@
       {@const files = e ? sizesOf(e) : []}
       <div class="adm-ip-head">
         <span class="adm-label">Report</span>
-        <IconButton label="Close" icon="x" size="s" onclick={close} />
+        <IconButton label="Close" icon="x" size="s" tip="bottom-end" onclick={close} />
       </div>
       <div class="adm-ip-body">
         <section class="adm-sec">

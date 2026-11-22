@@ -60,12 +60,7 @@
               {@const st = decisionState(d)}
               <li class={st}>
                 <span class="p">{d.label}</span>
-                <span class="d"><Icon name={ICON[st]} size={13} />
-                  {#if d.owner}Owner
-                  {:else if st === 'allowed'}Allowed by <Name value={d.roleName ?? ''} />
-                  {:else if st === 'denied'}Denied by <Name value={d.roleName ?? ''} />
-                  {:else}Not granted{/if}
-                </span>
+                <span class="d"><Icon name={ICON[st]} size={13} /><span class="t">{#if d.owner}Owner{:else if st === 'allowed'}Allowed by <Name value={d.roleName ?? ''} />{:else if st === 'denied'}Denied by <Name value={d.roleName ?? ''} />{:else}Not granted{/if}</span></span>
               </li>
             {/each}
           </ul>
@@ -83,6 +78,7 @@
   .p { flex: 1; min-width: 0; }
   .d { display: inline-flex; align-items: center; gap: 6px; flex: none; max-width: 60%; font-size: var(--t-fine); color: var(--muted); text-align: right; }
   .d :global(svg) { flex: none; color: var(--dim); }
+  .t { min-width: 0; overflow-wrap: anywhere; }
   .allowed .d { color: var(--text); font-weight: 600; }
   .allowed .d :global(svg) { color: var(--accent-text); }
   .denied .d, .denied .d :global(svg) { color: var(--red); font-weight: 700; }
