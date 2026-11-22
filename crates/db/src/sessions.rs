@@ -19,6 +19,9 @@ pub enum SessionKind {
     Site,
     /// A Bearer token for the deck or another app.
     App,
+    /// A personal Bearer token the person minted on the website (ADR 0028), for using the API as
+    /// themselves. One per account, 90 days, never slid.
+    Console,
 }
 
 impl SessionKind {
@@ -26,6 +29,7 @@ impl SessionKind {
         match self {
             Self::Site => "site",
             Self::App => "app",
+            Self::Console => "console",
         }
     }
 }
@@ -51,6 +55,7 @@ impl<'r> Decode<'r, Postgres> for SessionKind {
         match <&str as Decode<Postgres>>::decode(value)? {
             "site" => Ok(Self::Site),
             "app" => Ok(Self::App),
+            "console" => Ok(Self::Console),
             other => Err(format!("unknown session kind: {other}").into()),
         }
     }
@@ -80,7 +85,8 @@ pub(crate) const SESSION: &str = "id_hash, account_id, kind, created_at, expires
 pub const USER_AGENT_MAX: usize = 512;
 
 /// Makes a session. Only `SessionKind::Site` works here: an `app` session must name its client
-/// (`app_auth`, ADR 0021), and the database refuses one without (`sessions_app_has_client`).
+/// (`app_auth`, ADR 0021), and the database refuses one without (`sessions_app_has_client`); a
+/// `console` session comes from [`replace_console`].
 pub async fn create(
     conn: &mut PgConnection,
     hash: &TokenHash,
@@ -117,6 +123,37 @@ pub async fn create_with(
     .bind(user_agent)
     .fetch_one(conn)
     .await?)
+}
+
+/// A new console token's session (ADR 0028) for the account, signing out the one it had (live or
+/// expired). Run it in a transaction: the delete and the insert go together, and the unique index
+/// `sessions_one_console` refuses a second one made at the same moment. Returns the new session
+/// and the public ID of the one it replaced, if any.
+pub async fn replace_console(
+    conn: &mut PgConnection,
+    hash: &TokenHash,
+    account_id: Uuid,
+    ttl: Duration,
+    user_agent: Option<&str>,
+) -> DbResult<(Session, Option<Uuid>)> {
+    let old: Option<(Uuid, DateTime<Utc>)> = sqlx::query_as(
+        "DELETE FROM sessions WHERE account_id = $1 AND kind = 'console' RETURNING id, expires_at",
+    )
+    .bind(account_id)
+    .fetch_optional(&mut *conn)
+    .await?;
+    let session = create_with(
+        conn,
+        hash,
+        account_id,
+        SessionKind::Console,
+        ttl,
+        user_agent,
+    )
+    .await?;
+    // An expired one was signed out already; only a live one counts as replaced.
+    let replaced = old.and_then(|(id, expires)| (expires > Utc::now()).then_some(id));
+    Ok((session, replaced))
 }
 
 /// An account's live sessions, the most recently used first.
@@ -179,7 +216,8 @@ pub async fn find_restorable(
 
 /// Marks the session as used and slides its expiry to `now + ttl` (never shortens it). Callers
 /// decide how often to call it, so a busy client doesn't write on every request. An app sign-in's
-/// session (ADR 0021) keeps its expiry: only a refresh moves it.
+/// session (ADR 0021) keeps its expiry: only a refresh moves it. So does a console token
+/// (ADR 0028): it ends when it was made to.
 pub async fn touch(
     conn: &mut PgConnection,
     hash: &TokenHash,
@@ -188,7 +226,7 @@ pub async fn touch(
     Ok(sqlx::query_as(&format!(
         "UPDATE sessions
          SET last_seen_at = now(),
-             expires_at = CASE WHEN access_expires_at IS NULL
+             expires_at = CASE WHEN access_expires_at IS NULL AND kind <> 'console'
                                THEN greatest(expires_at, now() + $2) ELSE expires_at END
          WHERE id_hash = $1 AND expires_at > now()
          RETURNING {SESSION}"

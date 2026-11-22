@@ -118,7 +118,7 @@ type AccountSession {
 	kind: SessionKind!
 	"""
 	For example `Firefox on Windows`, `cyex.tv app` or `Unknown device`, from the user agent
-	that signed in.
+	that signed in; `Console token` for a console token.
 	"""
 	device: String!
 	createdAt: String!
@@ -780,6 +780,32 @@ type CollectionItem {
 	`STAFF`, `PURCHASE` (the shop), `CODE` or `EVENT`.
 	"""
 	source: GrantSource!
+}
+
+"""
+A personal API token (ADR 0028): a Bearer token that acts as you, with your own account's
+rights, for a GraphQL playground, a script or moving things between your accounts. Only one
+at a time: making a new one signs the last one out. It lasts 90 days, shows in `mySessions` as
+`Console token`, and ends when you sign it out there or sign out everywhere. The token is in
+this answer only; it is never shown again.
+"""
+type ConsoleToken {
+	"""
+	Send as `Authorization: Bearer <token>`. Anyone holding it can act as you.
+	"""
+	token: String!
+	"""
+	`Bearer`.
+	"""
+	tokenType: String!
+	"""
+	When it stops working: 90 days after it was made, however much it is used.
+	"""
+	expiresAt: String!
+	"""
+	Its session's ID, as `mySessions` lists it; pass to `revokeSession` to sign it out.
+	"""
+	sessionId: String!
 }
 
 """
@@ -1890,6 +1916,15 @@ type Mutation {
 	only (`website_only` with an app token). 5 an hour (`rate_limited`). Audited.
 	"""
 	exportMyData: String!
+	"""
+	Make a personal API token (a console token, ADR 0028): a Bearer token that acts as you,
+	for a GraphQL playground or a script. It has your account's own rights (your roles count;
+	owner-only and website-only actions don't work with it), lasts 90 days and shows in
+	`mySessions` as `Console token`. Only one at a time: making one signs the last one out.
+	The token is in this answer only. Website only (`website_only` with a Bearer token). 5 an
+	hour (`rate_limited`). Audited. Same as `POST /v1/auth/token/export`.
+	"""
+	createConsoleToken: ConsoleToken!
 	"""
 	Delete your account. `confirm` is one of your Twitch or Kick logins. Website only
 	(`website_only` with an app token); the owner's account can't be (`owner_protected`).
@@ -3087,6 +3122,10 @@ enum SessionKind {
 	A Bearer token for an app (cyex deck, the extension).
 	"""
 	APP
+	"""
+	A personal API token you made on cyex.tv (`createConsoleToken`, ADR 0028).
+	"""
+	CONSOLE
 }
 
 """

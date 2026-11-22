@@ -119,6 +119,7 @@ impl World {
                 .await
                 .unwrap();
             }
+            SessionKind::Console => unreachable!("console tokens come from /v1/auth/token/export"),
         }
         token
     }

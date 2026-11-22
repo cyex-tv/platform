@@ -68,6 +68,9 @@ pub struct Rates {
     pub heavy_reads: Rate,
     /// `deleteAccount`, per account, tries with a wrong confirmation included.
     pub delete_account: Rate,
+    /// Console tokens minted (`POST /v1/auth/token/export`, `createConsoleToken`), per account
+    /// (ADR 0028). Not per role.
+    pub console_tokens: Rate,
     /// `transferEmote`, per account, refused tries included (ADR 0014).
     pub emote_transfers: Rate,
     /// Hiding, unhiding, favouriting and unfavouriting, per account.
@@ -99,6 +102,7 @@ impl Default for Rates {
             quick_search: Rate::per_minute(240),
             heavy_reads: Rate::per_minute(120),
             delete_account: Rate::per_hour(3),
+            console_tokens: Rate::per_hour(5),
             emote_transfers: Rate::per_hour(60),
             personal_lists: Rate::per_minute(120),
             prefs: Rate::per_hour(120),
@@ -113,7 +117,7 @@ pub const ENV_PREFIX: &str = "CYEX_TV_LIMIT_";
 
 impl Rates {
     /// Every `Rate` with its field name, in the order `.env.example` lists them.
-    fn rates_mut(&mut self) -> [(&'static str, &mut Rate); 19] {
+    fn rates_mut(&mut self) -> [(&'static str, &mut Rate); 20] {
         [
             ("auth", &mut self.auth),
             ("gql", &mut self.gql),
@@ -131,6 +135,7 @@ impl Rates {
             ("quick_search", &mut self.quick_search),
             ("heavy_reads", &mut self.heavy_reads),
             ("delete_account", &mut self.delete_account),
+            ("console_tokens", &mut self.console_tokens),
             ("emote_transfers", &mut self.emote_transfers),
             ("personal_lists", &mut self.personal_lists),
             ("prefs", &mut self.prefs),
@@ -381,6 +386,7 @@ pub struct Limits {
     pub quick_search: Limiter,
     pub heavy_reads: Limiter,
     pub delete_account: Limiter,
+    pub console_tokens: Limiter,
     pub emote_transfers: Limiter,
     pub personal_lists: Limiter,
     pub prefs: Limiter,
@@ -412,6 +418,7 @@ impl Limits {
             quick_search: Limiter::new(rates.quick_search),
             heavy_reads: Limiter::new(rates.heavy_reads),
             delete_account: Limiter::new(rates.delete_account),
+            console_tokens: Limiter::new(rates.console_tokens),
             emote_transfers: Limiter::new(rates.emote_transfers),
             personal_lists: Limiter::new(rates.personal_lists),
             prefs: Limiter::new(rates.prefs),
@@ -775,8 +782,9 @@ mod tests {
         for (field, _) in Rates::default().rates_mut() {
             names.push(field);
         }
-        assert_eq!(names.len(), 19);
+        assert_eq!(names.len(), 20);
         assert!(names.contains(&"delete_account"));
+        assert!(names.contains(&"console_tokens"));
 
         for (name, value) in [
             ("CYEX_TV_LIMIT_GQL", "fast"),

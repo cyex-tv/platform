@@ -384,6 +384,58 @@
         }
       }
     },
+    "/v1/auth/token/export": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Make a personal API token (a console token).",
+        "description": "A Bearer token that acts as you, for a GraphQL playground, a script or moving things between\nyour accounts (ADR 0028). Send it as `Authorization: Bearer <token>` to `/v1/gql` and the REST\ncalls. It has your account's own rights (your roles count; owner-only and website-only actions\nsuch as deleting the account don't work with it) and lasts 90 days. Only one at a time: making\na new one signs the last one out. It shows as `Console token` under your sessions, where you\ncan sign it out; signing out everywhere ends it too. The token is in this answer only.\n\nThe website's cookie only, from `https://cyex.tv` (`Origin`); a Bearer token can't make one.\n5 an hour. On cyex.tv, run `copy(await cyextv.token())` in the browser console.",
+        "operationId": "export_token",
+        "responses": {
+          "200": {
+            "description": "The new token. Never cached.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsoleToken"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`signed_out`: no website session.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`bad_origin`: the cookie was sent from another site, or `website_only`: sent with a Bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/auth/{platform}/callback": {
       "get": {
         "tags": [
@@ -1321,6 +1373,34 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "ConsoleToken": {
+        "type": "object",
+        "description": "A personal API token (ADR 0028): a Bearer token that acts as you, with your own account's\nrights, for a GraphQL playground, a script or moving things between your accounts. Only one\nat a time: making a new one signs the last one out. It lasts 90 days, shows in `mySessions` as\n`Console token`, and ends when you sign it out there or sign out everywhere. The token is in\nthis answer only; it is never shown again.",
+        "required": [
+          "token",
+          "token_type",
+          "expires_at",
+          "session_id"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": "string",
+            "description": "When it stops working: 90 days after it was made, however much it is used."
+          },
+          "session_id": {
+            "type": "string",
+            "description": "Its session's ID, as `mySessions` lists it; pass to `revokeSession` to sign it out."
+          },
+          "token": {
+            "type": "string",
+            "description": "Send as `Authorization: Bearer <token>`. Anyone holding it can act as you."
+          },
+          "token_type": {
+            "type": "string",
+            "description": "`Bearer`."
           }
         }
       },

@@ -129,6 +129,8 @@ pub enum SessionKindView {
     Site,
     /// A Bearer token for an app (cyex deck, the extension).
     App,
+    /// A personal API token you made on cyex.tv (`createConsoleToken`, ADR 0028).
+    Console,
 }
 
 /// One place you are signed in. Never holds the token or anything made from it.
@@ -139,7 +141,7 @@ pub struct AccountSession {
     pub id: String,
     pub kind: SessionKindView,
     /// For example `Firefox on Windows`, `cyex.tv app` or `Unknown device`, from the user agent
-    /// that signed in.
+    /// that signed in; `Console token` for a console token.
     pub device: String,
     pub created_at: String,
     /// Updated at most once an hour.
@@ -151,6 +153,24 @@ pub struct AccountSession {
     /// website sessions.
     #[serde(default)]
     pub app_client_id: Option<String>,
+}
+
+/// A personal API token (ADR 0028): a Bearer token that acts as you, with your own account's
+/// rights, for a GraphQL playground, a script or moving things between your accounts. Only one
+/// at a time: making a new one signs the last one out. It lasts 90 days, shows in `mySessions` as
+/// `Console token`, and ends when you sign it out there or sign out everywhere. The token is in
+/// this answer only; it is never shown again.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct ConsoleToken {
+    /// Send as `Authorization: Bearer <token>`. Anyone holding it can act as you.
+    pub token: String,
+    /// `Bearer`.
+    pub token_type: String,
+    /// When it stops working: 90 days after it was made, however much it is used.
+    pub expires_at: String,
+    /// Its session's ID, as `mySessions` lists it; pass to `revokeSession` to sign it out.
+    pub session_id: String,
 }
 
 /// A short reference to an account, for owners and editors.
