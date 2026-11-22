@@ -1126,7 +1126,14 @@ async fn roles_and_their_permissions() {
 
     assert_eq!(
         roles::permissions_of(&mut c, admin).await.unwrap(),
-        ["emotes.review", "emotes.takedown", "roles.manage"]
+        // The User role's everyday permissions (migration `role_deny_invisible`) included.
+        [
+            "emotes.review",
+            "emotes.takedown",
+            "emotes.upload",
+            "reports.file",
+            "roles.manage"
+        ]
     );
     assert_eq!(
         roles::highest_position(&mut c, admin).await.unwrap(),
@@ -1138,11 +1145,9 @@ async fn roles_and_their_permissions() {
     );
     let nobody = account(&mut c, "3").await;
     assert_eq!(roles::highest_position(&mut c, nobody).await.unwrap(), None);
-    assert!(
-        roles::permissions_of(&mut c, nobody)
-            .await
-            .unwrap()
-            .is_empty()
+    assert_eq!(
+        roles::permissions_of(&mut c, nobody).await.unwrap(),
+        ["emotes.upload", "reports.file"]
     );
 
     let mut reviewers = vec![admin, modr];
