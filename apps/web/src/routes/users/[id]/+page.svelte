@@ -12,7 +12,9 @@
   // owner also opens Overview (?s=overview, the dashboard: the account menu and the band's
   // Dashboard button), the owner and the account's editors Active emotes (from the dashboard, or
   // the band's button for editors), and the Cosmetics tab becomes the picker for the owner and
-  // editors with PROFILE. Sections are ?s= tabs; the old ?s=collection opens Cosmetics.
+  // editors with PROFILE. The owner alone also has Account and Editors (?s=account, ?s=editors;
+  // they moved here from Settings, owner rule 2026/11/22), tabs nobody else is shown. Sections are
+  // ?s= tabs; the old ?s=collection opens Cosmetics.
   import { setContext } from 'svelte';
   import { afterNavigate, goto, invalidateAll } from '$app/navigation';
   import { page } from '$app/state';
@@ -37,7 +39,9 @@
   import Icon from '$lib/components/Icon.svelte';
   import AdminLink from '$lib/profile/AdminLink.svelte';
   import Overview from '$lib/profile/sections/Overview.svelte';
-  import { canProfile, canSets, manages, profileRail, sectionFrom, sectionHref, sectionsFor, stripExtra, stripTabs, type SectionKey } from '$lib/profile/rows';
+  import { canProfile, canSets, manages, profileTabs, sectionFrom, sectionHref, sectionsFor, type SectionKey } from '$lib/profile/rows';
+  import AccountSection from '$lib/profile/sections/AccountSection.svelte';
+  import EditorsSection from '$lib/profile/sections/EditorsSection.svelte';
   import ActiveEmotes from '$lib/profile/sections/ActiveEmotes.svelte';
   import ActivityFeed from '$lib/profile/sections/ActivityFeed.svelte';
   import CosmeticsPicker from '$lib/profile/sections/CosmeticsPicker.svelte';
@@ -67,11 +71,11 @@
   // A section only the owner or an editor has, asked for before the session is known: wait for it.
   const waiting = $derived(!!asked && asked !== section && (!session.known || (!!session.me && !granted)));
 
-  const TITLE: Record<SectionKey, string> = { overview: 'Overview', uploads: 'Uploaded emotes', active: 'Active emotes', sets: 'Emote sets', favourites: 'Favourites', cosmetics: 'Cosmetics', activity: 'Activity' };
+  const TITLE: Record<SectionKey, string> = { overview: 'Overview', uploads: 'Uploaded emotes', active: 'Active emotes', sets: 'Emote sets', favourites: 'Favourites', cosmetics: 'Cosmetics', activity: 'Activity', account: 'Account', editors: 'Editors' };
 
-  // The section tabs: the profile's public rows, plus the off-row section you are on.
+  // The section tabs: the profile's public rows, the off-row section you are on, and the owner's own tabs.
   const tabList = $derived(
-    stripTabs(profileRail(data.id, section, ACTIVITY_READY), stripExtra(page.url.pathname, section)).map((t) =>
+    profileTabs(data.id, relation, section, page.url.pathname, ACTIVITY_READY).map((t) =>
       // The public count; whoever manages the account sees pending uploads too, so theirs has none.
       t.href === sectionHref(data.id, 'uploads') && !data.error && !manages(relation) ? { ...t, count: count(data.total) } : t,
     ),
@@ -241,6 +245,10 @@
         {#key data.id}<CosmeticsPicker accountId={data.id} mine={relation.mine} {name} />{/key}
       {:else if section === 'cosmetics'}
         {#key data.id}<ShownCosmetics accountId={data.id} {name} seed={data.look} />{/key}
+      {:else if section === 'account' && relation.mine && session.me}
+        <AccountSection />
+      {:else if section === 'editors' && relation.mine}
+        <EditorsSection />
       {:else if section === 'activity'}
         {#key data.id}<ActivityFeed accountId={data.id} name={data.creator.displayName} />{/key}
       {:else if relation.mine}

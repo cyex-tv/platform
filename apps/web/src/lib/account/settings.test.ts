@@ -1,20 +1,31 @@
 import { describe, expect, it } from 'vitest';
-import { canChooseName, canDisconnect, isSettingsPath, readMotion, settingsRail } from './settings';
+import { canChooseName, canDisconnect, isSettingsPath, movedToProfile, readMotion, settingsRail, SETTINGS_HOME } from './settings';
 
 const one = [{ platform: 'TWITCH' }];
 const two = [{ platform: 'TWITCH' }, { platform: 'KICK' }];
 
 describe('settings', () => {
-  it('lists Account, Appearance, Notifications, Hidden, Editors and Billing, the current one marked', () => {
-    const rows = settingsRail('/me/settings/appearance')[0].items;
-    expect(rows.map((r) => r.label)).toEqual(['Account', 'Appearance', 'Notifications', 'Hidden', 'Editors', 'Billing']);
-    expect(rows.filter((r) => r.current).map((r) => r.label)).toEqual(['Appearance']);
-    expect(settingsRail('/me/editors')[0].items.find((r) => r.current)?.href).toBe('/me/editors');
+  it('lists Appearance, Notifications, Hidden and Billing (Account and Editors moved to the profile), the current one marked', () => {
+    const rows = settingsRail('/me/settings/hidden')[0].items;
+    expect(rows.map((r) => r.label)).toEqual(['Appearance', 'Notifications', 'Hidden', 'Billing']);
+    expect(rows.filter((r) => r.current).map((r) => r.label)).toEqual(['Hidden']);
   });
-  it('treats /me/settings and the old /me/account as Account', () => {
-    for (const p of ['/me/settings', '/me/account']) expect(settingsRail(p)[0].items.find((r) => r.current)?.label).toBe('Account');
-    expect(isSettingsPath('/me/account')).toBe(true);
-    expect(isSettingsPath('/me/editors')).toBe(true);
+  it('opens /me/settings on Appearance', () => {
+    expect(SETTINGS_HOME).toBe('/me/settings/appearance');
+    expect(settingsRail('/me/settings')[0].items.find((r) => r.current)?.label).toBe('Appearance');
+  });
+  it('sends the old Account and Editors addresses to the profile tabs, the hash kept', () => {
+    expect(movedToProfile('/me/settings/account', 'a1')).toBe('/users/a1?s=account');
+    expect(movedToProfile('/me/account', 'a1', '#conn-h')).toBe('/users/a1?s=account#conn-h');
+    expect(movedToProfile('/me/editors', 'a1')).toBe('/users/a1?s=editors');
+    expect(movedToProfile('/me/editors/', 'a 1')).toBe('/users/a%201?s=editors');
+    for (const p of ['/me/settings', '/me/settings/appearance', '/me/settings/billing', '/me/accounts', '/me/editorsx', '/me/sets']) expect(movedToProfile(p, 'a1')).toBeNull();
+  });
+  it('knows which pages are Settings', () => {
+    expect(isSettingsPath('/me/account')).toBe(false);
+    expect(isSettingsPath('/me/editors')).toBe(false);
+    expect(isSettingsPath('/me/settings/account')).toBe(false);
+    expect(isSettingsPath('/me/settings')).toBe(true);
     expect(isSettingsPath('/me/settings/billing')).toBe(true);
     expect(isSettingsPath('/me/sets')).toBe(false);
     expect(isSettingsPath('/me/settingsx')).toBe(false);

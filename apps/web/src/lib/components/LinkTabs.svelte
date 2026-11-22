@@ -7,9 +7,22 @@
 
   type Tab = { href: string; label: string; count?: string | number; current?: boolean };
   let { label, items }: { label: string; items: Tab[] } = $props();
+
+  // On a phone the row scrolls: keep the current tab in view (the owner's Account and Editors sit
+  // at its end). Only the row scrolls sideways, never the page.
+  let row = $state<HTMLElement>();
+  $effect(() => {
+    const at = items.findIndex((t) => t.current);
+    const el = row;
+    if (!el || at < 0) return;
+    const a = el.children[at] as HTMLElement | undefined;
+    if (!a || el.scrollWidth <= el.clientWidth) return;
+    const left = a.offsetLeft - el.offsetLeft;
+    if (left < el.scrollLeft || left + a.offsetWidth > el.scrollLeft + el.clientWidth) el.scrollLeft = Math.max(0, left - 16);
+  });
 </script>
 
-<nav class="tabs" aria-label={label} use:arrowNav={'horizontal'}>
+<nav class="tabs" aria-label={label} use:arrowNav={'horizontal'} bind:this={row}>
   {#each items as t (t.href)}
     <a href={t.href} aria-current={t.current ? 'page' : undefined}>
       <span class="tl" data-t={t.label}>{t.label}</span>{#if t.count !== undefined}<span class="n">{t.count}</span>{/if}

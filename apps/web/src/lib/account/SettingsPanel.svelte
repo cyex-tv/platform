@@ -13,11 +13,6 @@
 
   type About = { title: string; text: string; links?: { href: string; label: string; hint?: string }[] };
   const ABOUT: Record<string, About> = {
-    account: {
-      title: 'Account',
-      text: 'Who you are on cyex.tv: the name you go by, the platforms you sign in with, the browsers and apps that are signed in, and your data.',
-      links: [{ href: '/help', label: 'Help', hint: 'Signing in, connections, deleting an account' }],
-    },
     appearance: {
       title: 'Appearance',
       text: 'How cyex.tv looks on this device: the theme and how much moves. Each browser keeps its own choice.',
@@ -32,10 +27,6 @@
       text: 'Emotes and creators you hid. They stay out of browse, search and suggestions for you; nobody else is told.',
       links: [{ href: '/search', label: 'Browse emotes', hint: 'Hide from a tile’s menu' }],
     },
-    editors: {
-      title: 'Editors',
-      text: 'People you let work on your account, and what each may do. You can change or take back their rights at any time.',
-    },
     billing: {
       title: 'Billing',
       text: 'What you bought in the shop: receipts, gifts and codes. Payments go through our payment provider; cyex.tv never sees your card.',
@@ -43,10 +34,8 @@
     },
   };
   const key = $derived.by(() => {
-    const p = page.url.pathname;
-    if (p.startsWith('/me/editors')) return 'editors';
-    const m = p.match(/^\/me\/settings\/([a-z]+)/);
-    return m && ABOUT[m[1]] ? m[1] : 'account';
+    const m = page.url.pathname.match(/^\/me\/settings\/([a-z]+)/);
+    return m && ABOUT[m[1]] ? m[1] : 'appearance';
   });
   const about = $derived(ABOUT[key]);
   const me = $derived(session.me);
@@ -72,6 +61,11 @@
     <FactRows label="Your account" items={facts} />
   </PanelBlock>
   <PanelBlock title="Related">
-    <LinkRows label="Related" items={[{ href: sectionHref(me.id, 'overview'), label: 'Your profile', hint: 'What everyone sees', icon: 'circle-user' }, ...(about.links ?? [])]} />
+    <LinkRows label="Related" items={[
+      { href: sectionHref(me.id, 'overview'), label: 'Your profile', hint: 'What everyone sees', icon: 'circle-user' },
+      { href: sectionHref(me.id, 'account'), label: 'Account', hint: 'Name, connections, sign out everywhere', icon: 'user' },
+      { href: sectionHref(me.id, 'editors'), label: 'Editors', hint: 'Who works on your account', icon: 'users' },
+      ...(about.links ?? []),
+    ]} />
   </PanelBlock>
 {/if}

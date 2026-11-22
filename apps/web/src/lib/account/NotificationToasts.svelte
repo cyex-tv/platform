@@ -108,7 +108,7 @@
 
 <style>
   .stack { position: fixed; top: calc(var(--nav-h) + 10px + env(safe-area-inset-top, 0px)); z-index: var(--z-toast);
-    right: max(var(--page-pad), calc((100vw - var(--page-max)) / 2 + var(--page-pad))); display: grid; gap: 8px;
+    right: var(--page-pad); display: grid; gap: 8px;
     width: min(360px, calc(100vw - 2 * var(--page-pad))); pointer-events: none; }
   .toast { position: relative; display: flex; align-items: flex-start; pointer-events: auto; border: 1px solid var(--border-strong);
     border-radius: var(--radius-m); background: var(--surface); color: var(--text); box-shadow: var(--shadow-pop); }

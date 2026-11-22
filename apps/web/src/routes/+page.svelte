@@ -4,6 +4,8 @@
   // cosmetics. Each has a small picture in the logo's language (ShowcaseArt) in its own mount, a
   // short heading and a sentence or two. No emotes here: browsing them is one click away.
   // Nothing loads before first paint that the page doesn't need.
+  // The app is full width (2026/11/22); this page is read, not operated, so its hero and zig-zag
+  // keep a 1480px column, centred, as cyex-web lays out landing pages.
   import { onMount } from 'svelte';
   import Icon from '$lib/components/Icon.svelte';
   import ColumnLayout from '$lib/shell/ColumnLayout.svelte';
@@ -24,6 +26,7 @@
 </svelte:head>
 
 <ColumnLayout top>
+<div class="landing">
   <section class="hero" aria-labelledby="hero-title">
     <div class="copy">
       <h1 id="hero-title">Emotes for every chat</h1>
@@ -85,9 +88,11 @@
       </li>
     </ul>
   </section>
+</div>
 </ColumnLayout>
 
 <style>
+  .landing { max-width: 1480px; margin-inline: auto; }
   /* Hero: one surface mount, copy beside the logo (the logo above the copy on phones). */
   .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 460px); align-items: center; gap: 24px 48px;
     padding: clamp(24px, 4vw, 64px); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface);

@@ -175,8 +175,8 @@
             </button>
           </div>
           <p class="fine note">
-            It can’t upload, delete or change your account. Sign it out any time in
-            <a href="/me/settings/account">Settings → Account → Sessions</a>.
+            It can’t upload, delete or change your account. Sign it out any time with
+            <a href="/me/account">Your profile → Account → Sign out everywhere</a>.
           </p>
         {/if}
       </section>
