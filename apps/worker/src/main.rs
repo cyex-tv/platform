@@ -14,6 +14,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // The worker serves no HTTP; the bind address is unused.
     let cfg = Config::from_env(SocketAddr::from(([127, 0, 0, 1], 0)))?;
     logging::init(&cfg.log_filter, cfg.log_format);
+    // The media limits and size ladder (`CYEX_TV_LIMIT_*`); the api reads the same variables.
+    cyex_tv_media::config::MediaConfig::init_from_env()?;
 
     let db = cyex_tv_db::connect(&cfg).await?;
     let store = match S3Config::from_source(|name| std::env::var(name).ok())? {

@@ -12,13 +12,14 @@ import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import { Kind, parse } from 'graphql';
 import { inward, outward, inwardId, registerAll } from './snowflake.mjs';
+import { withFileUrls } from './mock/file-urls.mjs';
 import { ADMIN_ENV, BASE, ME_ID, ME_SUMMARY, OPEN_ENV, ORIGIN, OWNERS, PORT } from './mock/config.mjs';
 import { avatar, picture } from './mock/art.mjs';
 import { ALL, MINE, emote, nextUpload, trendAdds, trendPool, twitchUrl, wideOf } from './mock/emotes.mjs';
 import { CHANNELS, IDENTITIES, NOTES, PENDING_DELETION, RESTORE_COOKIE, accountHub, endConsoleToken, mintConsoleToken, setPendingDeletion, setRestoreCookie } from './mock/account.mjs';
 import { SETS } from './mock/set-data.mjs';
 import { FILE_EMOTES, NSFW_REFUSAL, PENDING, UNLISTED_REFUSAL } from './mock/review.mjs';
-import { limitOf, pendingOf } from './mock/roles.mjs';
+import { limitOf, limitsAnswer, pendingOf, publicLimitsRest } from './mock/roles.mjs';
 import { grant } from './mock/entitlements.mjs';
 import { ACCOUNT_EDITORS, EDITOR_CHANNELS, EDITOR_OF, PUBLIC_SETS, SHARED_SETS, myEditableChannels } from './mock/editors.mjs';
 import { shopAnswer } from './mock/shop.mjs';
@@ -60,6 +61,7 @@ function newFields(q, v, session, admin = false) {
     const list = accountCosmetics(v.accountIds ?? v.ids);
     parts.push(list === null ? err('Look up at most 100 accounts at once.', 'too_many') : { data: { accountCosmetics: list } });
   }
+  if (/\blimits\s*\{/.test(q)) parts.push({ data: { limits: limitsAnswer(session) } });
   if (has('searchAccounts')) parts.push(searchAccounts(v));
   if (has('quickSearch')) parts.push(quickSearch(v));
   const top = topPeopleAnswer(q, v, session, admin);
@@ -232,6 +234,7 @@ createServer(async (req, res) => {
     const px = badgeArt[2] === 'original' ? (ORIGINAL_PX[badgeArt[1]] ?? 96) : BADGE_LADDER.find(([stem]) => stem === badgeArt[2])[2];
     return res.end(BADGE_ART[badgeArt[1]](px / 18));
   }
+  if (req.method === 'GET' && url.pathname === '/v1/limits') return json(res, 200, publicLimitsRest());
   if (req.method === 'GET' && url.pathname === '/v1/cosmetics') {
     const c = releasedCatalog(admin);
     return json(res, 200, restOf(c));
@@ -450,7 +453,7 @@ createServer(async (req, res) => {
         res.setHeader('set-cookie', out._cookie);
         delete out._cookie;
       }
-      return json(res, 200, pruneAnswer(body.query, out));
+      return json(res, 200, pruneAnswer(body.query, withFileUrls(out)));
     } catch (e) {
       return json(res, 400, { data: null, errors: [{ message: String(e?.message ?? e), extensions: { code: 'bad_request' } }] });
     }
@@ -462,9 +465,13 @@ createServer(async (req, res) => {
 // with upper-case enums).
 const REST_ENUM_KEYS = new Set(['kind', 'shape', 'format', 'state', 'visibility', 'processing']);
 function restOf(x, key = '') {
-  if (Array.isArray(x)) return x.map((v) => restOf(v, key));
+  return withFileUrls(restShape(x, key));
+}
+
+function restShape(x, key = '') {
+  if (Array.isArray(x)) return x.map((v) => restShape(v, key));
   if (x && typeof x === 'object') {
-    return Object.fromEntries(Object.entries(x).map(([k, v]) => [k.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase()), restOf(v, k)]));
+    return Object.fromEntries(Object.entries(x).map(([k, v]) => [k.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase()), restShape(v, k)]));
   }
   return typeof x === 'string' && REST_ENUM_KEYS.has(key) && /^[A-Z_]+$/.test(x) ? x.toLowerCase() : x;
 }

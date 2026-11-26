@@ -33,6 +33,8 @@ fn file_entry(v: &Variant) -> EmoteFile {
         height: u16::try_from(v.height).unwrap_or(u16::MAX),
         size: u32::try_from(v.bytes.len()).unwrap_or(u32::MAX),
         is_static: v.is_static,
+        url: String::new(),
+        mime: String::new(),
     }
 }
 

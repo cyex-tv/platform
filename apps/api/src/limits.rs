@@ -149,6 +149,15 @@ impl Rates {
         ]
     }
 
+    /// Every rate with its name (the `CYEX_TV_LIMIT_<NAME>` variable), in `.env.example` order.
+    pub fn entries(&self) -> Vec<(&'static str, Rate)> {
+        let mut copy = *self;
+        copy.rates_mut()
+            .into_iter()
+            .map(|(name, rate)| (name, *rate))
+            .collect()
+    }
+
     /// The defaults, with what the environment sets instead: `CYEX_TV_LIMIT_GQL_ACCOUNT=600/1m`
     /// for a rate (`Rate::parse`: a count per `s`, `m`, `h` or `d`), and a whole number for
     /// `CYEX_TV_LIMIT_UPLOADS_PER_HOUR`, `CYEX_TV_LIMIT_PENDING_EMOTES`,

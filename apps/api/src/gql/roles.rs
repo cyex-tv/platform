@@ -2,9 +2,11 @@
 
 use async_graphql::{Context, Object, Result};
 use cyex_tv_shared::model::{CreateRole, Role, UpdateRole};
-use cyex_tv_shared::model::{PermissionDecision, RoleLimit, RoleLimitInput, UploadQuota};
+use cyex_tv_shared::model::{
+    PermissionDecision, PublicLimits, RoleLimit, RoleLimitInput, UploadQuota,
+};
 
-use super::{api_error, caller, state};
+use super::{api_error, caller, caller_opt, state};
 use crate::admin;
 
 #[derive(Default)]
@@ -63,6 +65,13 @@ impl RoleQuery {
         admin::role_limits(state(ctx), caller, &id)
             .await
             .map_err(api_error)
+    }
+
+    /// Every upload and field limit in one public list: per kind (emote, badge, paint) the file
+    /// size, side, frames, pixels and duration; the name and tag lengths; the per-IP rates. Signed
+    /// in, `account` also lists your own per-account limits with your roles' overrides applied.
+    async fn limits(&self, ctx: &Context<'_>) -> Result<PublicLimits> {
+        Ok(crate::public_limits::load(state(ctx), caller_opt(ctx).map(|c| c.account_id)).await)
     }
 
     /// Where uploads stand: how many emotes wait for review and how many may, and the uploads
