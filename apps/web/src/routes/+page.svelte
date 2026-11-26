@@ -21,6 +21,7 @@
 </script>
 
 <svelte:head>
+  <link rel="preload" href="/fonts/Panchang-Bold.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
   <title>cyex.tv · Emotes for Twitch and Kick chat</title>
   <meta name="description" content="Upload emotes, put them in your channel's set, and see them in chat on Twitch and Kick." />
 </svelte:head>
@@ -92,12 +93,19 @@
 </ColumnLayout>
 
 <style>
+  /* Panchang (Indian Type Foundry, ITF Free Font License) for this page's headlines only; every
+     other page stays Geist, so this file's CSS is the only place that loads it. The fallback is
+     Arial Bold scaled to Panchang's widths (measured 1.50 to 1.65x; 156% is the mean) so the swap moves nothing. */
+  @font-face { font-family: 'Panchang'; font-style: normal; font-weight: 700; font-display: swap; src: url(/fonts/Panchang-Bold.woff2) format('woff2'); }
+  @font-face { font-family: 'Panchang Fallback'; font-weight: 700; src: local('Arial Bold'), local('Arial-BoldMT'); size-adjust: 156%; ascent-override: 62%; descent-override: 17%; line-gap-override: 0%; }
+  .landing { --display: 'Panchang', 'Panchang Fallback', var(--font); }
+  .hero h1, .block-title, .show h3 { font-family: var(--display); font-weight: 700; letter-spacing: .01em; word-spacing: .12em; }
   .landing { max-width: 1480px; margin-inline: auto; }
   /* Hero: one surface mount, copy beside the logo (the logo above the copy on phones). */
   .hero { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 460px); align-items: center; gap: 24px 48px;
     padding: clamp(24px, 4vw, 64px); border: 1px solid var(--border); border-radius: var(--radius-card); background: var(--surface);
     overflow: hidden; }
-  .hero h1 { font-size: clamp(38px, 4.8vw, 68px); line-height: 1; letter-spacing: -.04em; max-width: 12ch; }
+  .hero h1 { font-size: clamp(27px, 3.46vw, 49px); line-height: 1.12; max-width: 12ch; }
   .hero-lead { margin: 16px 0 0; font-size: var(--t-lead); line-height: 1.5; color: var(--muted); max-width: 42ch; }
   .actions { margin-top: 28px; }
   .actions .btn { height: 44px; }
@@ -115,6 +123,7 @@
   }
   .arrow { display: inline-flex; }
 
+  .block-title { font-size: 20px; line-height: 1.2; }
   .block { margin-top: clamp(40px, 4vw, 56px); scroll-margin-top: calc(var(--nav-h) + 20px); }
 
   /* The ways in: one under the other, the picture and the text trading sides each row. */
@@ -128,7 +137,7 @@
   .mount :global(.art) { width: clamp(150px, 42%, 252px); height: auto; }
   .text { min-width: 0; max-width: 46ch; }
   .show:nth-child(even) .text { justify-self: end; }
-  .show h3 { font-size: var(--t-h3-sub); line-height: 1.1; letter-spacing: -.03em; text-wrap: balance; }
+  .show h3 { font-size: calc(var(--t-h3-sub) * .72); line-height: 1.2; text-wrap: balance; }
   .text > p { margin: 14px 0 0; font-size: var(--t-body); line-height: 1.6; color: var(--muted); text-wrap: pretty; }
   .foot { display: grid; justify-items: start; gap: 10px; margin-top: 24px; }
   .fine { margin: 0; font-size: var(--t-fine); color: var(--dim); }
