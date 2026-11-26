@@ -774,3 +774,18 @@ pub async fn public_by_sha256(
     .fetch_all(conn)
     .await?)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn key_columns_go_into_the_emote_select_list() {
+        let sql = emote_row_with(", 1 AS keyset_0");
+        assert!(
+            sql.contains("AS processing_failed, 1 AS keyset_0\n     FROM emotes e"),
+            "{sql}"
+        );
+        assert_eq!(emote_row_with(""), EMOTE_ROW);
+    }
+}
