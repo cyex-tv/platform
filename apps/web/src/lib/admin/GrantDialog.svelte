@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Dialog from '$lib/components/Dialog.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   // Give an account a badge or paint, with a reason for the audit log (cosmetics.grant). Either
   // the cosmetic is fixed (from its admin row) and you find the account by its Twitch or Kick
@@ -21,7 +22,7 @@
   };
   let { kind, cosmetic, choices = [], account, ongranted }: Props = $props();
 
-  let dialog: HTMLDialogElement;
+  let dialog: Dialog;
   let platform = $state<Platform>('TWITCH');
   let login = $state('');
   let pick = $state('');
@@ -40,7 +41,7 @@
     reason = '';
     problem = '';
     pick = choices[0]?.id ?? '';
-    dialog.showModal();
+    dialog.open();
   }
 
   async function submit(e: SubmitEvent) {
@@ -72,47 +73,42 @@
   }
 </script>
 
-<dialog class="ui-dialog" bind:this={dialog} aria-labelledby="grant-title">
-  <form onsubmit={submit} novalidate>
-    <div class="body">
-      <h2 id="grant-title">Give {fixed ? iso(fixed.name) : `a ${noun}`}{account ? ` to ${iso(account.displayName)}` : ''}</h2>
-      <div>
-        {#if !account}
-          <div class="adm-lv">
-            <span class="l" id="grant-plat">Account</span>
-            <div class="v who">
-              <Segmented label="Account platform" size="s" options={[{ value: 'TWITCH', label: 'Twitch', icon: 'twitch' }, { value: 'KICK', label: 'Kick', icon: 'kick' }]} value={platform} onchange={(v) => (platform = v)} />
-              <input class="ui-input" bind:value={login} placeholder="Login" aria-label="Login" autocomplete="off" spellcheck="false" />
-            </div>
-          </div>
-        {/if}
-        {#if !fixed}
-          <label class="adm-lv">
-            <span class="l">{kind === 'BADGE' ? 'Badge' : 'Paint'}</span>
-            <span class="v">
-              {#if choices.length}
-                <select class="ui-input" bind:value={pick}>
-                  {#each choices as c (c.id)}<option value={c.id}>{iso(c.name)}</option>{/each}
-                </select>
-              {:else}
-                <span class="ui-hint">They own every {noun} already.</span>
-              {/if}
-            </span>
-          </label>
-        {/if}
-        <label class="adm-lv top">
-          <span class="l">Reason<small>Kept in the audit log</small></span>
-          <span class="v"><textarea class="ui-input" rows="3" maxlength="500" bind:value={reason} placeholder="Why they get it"></textarea></span>
-        </label>
+<Dialog bind:this={dialog} title="Give {fixed ? iso(fixed.name) : `a ${noun}`}{account ? ` to ${iso(account.displayName)}` : ''}" titleId="grant-title" onsubmit={submit}>
+  <div>
+    {#if !account}
+      <div class="adm-lv">
+        <span class="l" id="grant-plat">Account</span>
+        <div class="v who">
+          <Segmented label="Account platform" size="s" options={[{ value: 'TWITCH', label: 'Twitch', icon: 'twitch' }, { value: 'KICK', label: 'Kick', icon: 'kick' }]} value={platform} onchange={(v) => (platform = v)} />
+          <input class="ui-input" bind:value={login} placeholder="Login" aria-label="Login" autocomplete="off" spellcheck="false" />
+        </div>
       </div>
-      {#if problem}<p class="ui-error" role="alert">{problem}</p>{/if}
-    </div>
-    <footer>
-      <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="ui-btn primary" type="submit" disabled={busy || (!fixed && !choices.length)}>{busy ? 'Giving…' : 'Give'}</button>
-    </footer>
-  </form>
-</dialog>
+    {/if}
+    {#if !fixed}
+      <label class="adm-lv">
+        <span class="l">{kind === 'BADGE' ? 'Badge' : 'Paint'}</span>
+        <span class="v">
+          {#if choices.length}
+            <select class="ui-input" bind:value={pick}>
+              {#each choices as c (c.id)}<option value={c.id}>{iso(c.name)}</option>{/each}
+            </select>
+          {:else}
+            <span class="ui-hint">They own every {noun} already.</span>
+          {/if}
+        </span>
+      </label>
+    {/if}
+    <label class="adm-lv top">
+      <span class="l">Reason<small>Kept in the audit log</small></span>
+      <span class="v"><textarea class="ui-input" rows="3" maxlength="500" bind:value={reason} placeholder="Why they get it"></textarea></span>
+    </label>
+  </div>
+  {#if problem}<p class="ui-error" role="alert">{problem}</p>{/if}
+  {#snippet footer()}
+    <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
+    <button class="ui-btn primary" type="submit" disabled={busy || (!fixed && !choices.length)}>{busy ? 'Giving…' : 'Give'}</button>
+  {/snippet}
+</Dialog>
 
 <style>
   .who { display: flex; flex-wrap: wrap; gap: 8px; }
