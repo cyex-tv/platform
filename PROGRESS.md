@@ -1638,6 +1638,40 @@ gh pr create --repo cyex-tv/platform --base main --head fix/select-toggle-hero-t
 ```
   Not merged (owner reviews).
 
+## Notifications on the profile; Activity: latest 100 for visitors, a date range for the owner (branch `feat/profile-notifications-activity`, owner request of 2026/11/22)
+- [x] Notifications is an owner-only profile tab (`/users/<you>?s=notifications`), first of the owner tabs
+  (Notifications, Account, Editors), in the profile's Inspector frame: PageHead, the slim toolbar (All, Unread,
+  one filter per kind group, ?f=; the unread count and Mark all read), the dense list (20 at a time, a pick is
+  ?n=) on the left; the panel shows the picked notification or the numbers and the link to Settings →
+  Notifications. Nobody else sees the tab (`sectionsFor`, an address asking for it opens Uploaded emotes).
+  `/me/notifications` redirects there with its ?f= and ?n= (`movedToProfile`); the bell's "See all", the phone
+  menu, the /me rail, the dashboard and Settings → Notifications link to the tab (`notificationsHref`).
+- [x] Profile Activity: everyone but the owner and staff (`users.view`) reads the latest 100 lines, all time, with
+  no time control ("Latest 100" in the toolbar; paging stops at 100 with one closing line). The owner and staff
+  page through everything and get a date range picker instead of Day / Month (`DateRangePicker`: All time,
+  Last 7 / 30 / 90 days, or From and To in 2026/11/19 format; future days and backwards ranges refused in words);
+  the range is in the address (?from=2026-11-01&to=2026-11-22; the old ?d= / ?m= read as all time).
+- [x] API (additive, no new fields): `accountActivityPage` / `accountActivity` take the caller into account. For
+  anyone but the owner and staff, `since` / `until` are ignored and paging ends at the 100th line (`next` null
+  there; a cursor past it gets an empty page). The window is found once per page (skipped for a first page of
+  fewer than 100), scanning at most 20 rounds of 100 rows. Owner and staff behave as before. Mock does the same.
+- [x] Emote page Activity: no "By" field (no filters); an old ?by= is ignored.
+- [x] Toolbar alignment: UserFilter's label is the field's text size in a box as tall as the field, so "By", the
+  field, the segments and the range button share one vertical centre (measured in the running app: text middles
+  387.5 / 387.5 / 387.4 / 386.8 px at 1920 and 1440; before, the 13px label sat 1.8px higher). 375: each control
+  on its own line, label and field centred together.
+- [x] Tests: `backend_reads_flow.rs` visitors_reach_the_newest_100_lines_and_the_owner_all_of_them (Postgres, CI),
+  `profile_dashboard_flow.rs` (time filter as the owner; ignored for a visitor), `range.test.ts`,
+  `activity-range.ui.test.ts`, `notifications-tab.ui.test.ts`, `activity-no-filter.ui.test.ts`, `activity.test.ts`
+  and `settings.test.ts` (owner-only tab, redirect). Screens before/after in
+  `.claude/runs/2026-11-20-redesign/screens/profile-activity/`.
+
+### GitHub write log for this PR
+```
+git push -u origin feat/profile-notifications-activity
+gh pr create --repo cyex-tv/platform --base main --head feat/profile-notifications-activity --title "Notifications as a profile tab; Activity: latest 100 for visitors, a date range for the owner" --body-file <file>
+```
+  PR #167. Not merged (owner reviews).
 ## Emote page sizes, upload dialog, two creator flags, no NSFW (branch `feat/emote-page-upload-flags`, owner requests of 2026/11/22)
 - [x] Emote page: every size shows at once on the stage at its real pixel size, nothing to pick; the largest (4x)
   is the focus (full colour, bold caption), the smaller ones stand beside it on one baseline with just their

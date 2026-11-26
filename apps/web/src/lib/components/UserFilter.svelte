@@ -404,7 +404,10 @@
 
 <style>
   .uf { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; }
-  .lbl { flex: none; font-size: var(--t-fine); color: var(--muted); }
+  /* The label shares the toolbar's text size and one vertical centre with the field and the
+     controls beside it (owner, 2026/11/22: "By" sat higher than the field): same size as the
+     field's text, a line box no taller than the text, centred in the field's height. */
+  .lbl { flex: none; display: inline-flex; align-items: center; height: 34px; font-size: var(--t-small); line-height: 1; color: var(--muted); }
   .field { display: flex; align-items: center; gap: 6px; width: var(--uf-w); max-width: 100%; height: 34px; padding: 0 8px 0 10px;
     border: 1px solid var(--border); border-radius: var(--radius-btn); background: var(--surface); color: var(--muted); cursor: text;
     transition: border-color var(--dur-color), color var(--dur-color); }
@@ -455,7 +458,7 @@
     .uf { width: 100%; }
     .uf.labelled .field, .uf.labelled .chip { flex: 1; width: auto; max-width: none; }
     .uf:not(.labelled) .field, .uf:not(.labelled) .chip { width: 100%; max-width: none; }
-    .field, .chip { height: 44px; }
+    .field, .chip, .lbl { height: 44px; }
     input { font-size: 16px; } /* no zoom on focus (iOS) */
     .opt { min-height: 48px; }
     .x { width: 32px; height: 32px; }
