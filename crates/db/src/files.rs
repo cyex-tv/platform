@@ -1,4 +1,4 @@
-//! Stored images. Uploads with the same bytes share one file (Phase 3 writes them).
+//! Stored images. Uploads with the same bytes share one file (the upload writes them).
 
 use chrono::{DateTime, Utc};
 use sqlx::{FromRow, PgConnection};

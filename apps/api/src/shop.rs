@@ -20,7 +20,7 @@ use chrono::{DateTime, Utc};
 use cyex_tv_auth::Caller;
 use cyex_tv_db::cosmetics as cdb;
 use cyex_tv_db::shop::{self as db, ItemFields, ItemRow, OrderFilter, OrderRow};
-use cyex_tv_db::{DbError, accounts, audit, ids, reads};
+use cyex_tv_db::{DbError, accounts, ids, reads};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
     AccountSummary, Badge, Checkout, CosmeticKind, Order, OrderPage, OrderStatus, Paint, Recipient,
@@ -31,7 +31,8 @@ use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
-use crate::catalog::{db_error, forbidden, holds, not_found, parse_id};
+use crate::catalog::{db_error, holds, not_found, parse_id, require_any};
+use crate::errors::{self, Audit, bad, conflict, record_audit, sqlx_error};
 use crate::limits::AccountLimit;
 use crate::paddle::{self, PaddleError, SignatureError};
 use crate::state::AppState;
@@ -47,36 +48,6 @@ pub const ORDERS_PAGE: u32 = 50;
 pub const ORDERS_PAGE_MAX: u32 = 100;
 
 // Errors
-
-pub(crate) fn bad(code: &'static str, message: impl Into<String>) -> ApiError {
-    ApiError::new(StatusCode::BAD_REQUEST, code, message)
-}
-
-pub(crate) fn conflict(code: &'static str, message: &str) -> ApiError {
-    ApiError::new(StatusCode::CONFLICT, code, message)
-}
-
-pub(crate) fn sqlx_error(err: sqlx::Error) -> ApiError {
-    db_error(DbError::Sqlx(err))
-}
-
-pub(crate) async fn acquire(
-    state: &AppState,
-) -> ApiResult<sqlx::pool::PoolConnection<sqlx::Postgres>> {
-    state.db.acquire().await.map_err(sqlx_error)
-}
-
-pub(crate) async fn require(
-    conn: &mut PgConnection,
-    caller: &Caller,
-    permission: &str,
-) -> ApiResult<()> {
-    if holds(conn, caller, permission).await? {
-        Ok(())
-    } else {
-        Err(forbidden(&format!("This needs {permission}.")))
-    }
-}
 
 /// Staff shop and code writes share the cosmetics writes limit (300 an hour per account).
 pub(crate) fn staff_rate_limited(state: &AppState, caller: &Caller) -> ApiResult<()> {
@@ -116,31 +87,6 @@ fn provider_error(err: &PaddleError) -> ApiError {
         "payment_provider_error",
         "The payment provider didn't answer as expected. Try again in a moment.",
     )
-}
-
-pub(crate) async fn write_audit(
-    conn: &mut PgConnection,
-    actor: Option<Uuid>,
-    action: &str,
-    target_kind: &str,
-    target_id: Uuid,
-    before: Option<Value>,
-    after: Option<Value>,
-) -> ApiResult<()> {
-    audit::write(
-        conn,
-        &audit::NewEntry {
-            actor,
-            action,
-            target_kind,
-            target_id: &ids::to_text(target_id),
-            before,
-            after,
-        },
-    )
-    .await
-    .map_err(db_error)?;
-    Ok(())
 }
 
 // Checks on input (pure, unit-tested below)
@@ -580,7 +526,7 @@ pub async fn items(
     caller: Option<&Caller>,
     all: bool,
 ) -> ApiResult<Vec<ShopItem>> {
-    let mut conn = acquire(state).await?;
+    let mut conn = errors::conn(state).await?;
     if all {
         let caller = caller.ok_or_else(|| {
             ApiError::new(
@@ -589,7 +535,7 @@ pub async fn items(
                 "Sign in to use this.",
             )
         })?;
-        require(&mut conn, caller, permissions::SHOP_MANAGE).await?;
+        require_any(&mut conn, caller, &[permissions::SHOP_MANAGE]).await?;
     }
     let manager = all || is_manager(&mut conn, caller).await?;
     let rows = db::items(&mut conn, (!all).then(Utc::now))
@@ -621,7 +567,7 @@ pub async fn item(
     let Some(id) = ids::from_text(id.trim()) else {
         return Ok(None);
     };
-    let mut conn = acquire(state).await?;
+    let mut conn = errors::conn(state).await?;
     let Some(row) = db::get_item(&mut conn, id).await.map_err(db_error)? else {
         return Ok(None);
     };
@@ -649,8 +595,8 @@ async fn item_write(
     input: &ShopItemInput,
 ) -> ApiResult<ShopItem> {
     let checked = item_input(input)?;
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::SHOP_MANAGE).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::SHOP_MANAGE]).await?;
     staff_rate_limited(state, caller)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     check_exist(&mut tx, &checked.bundle).await?;
@@ -695,18 +641,19 @@ async fn item_write(
             .await?;
     }
     let to_json = |v: &ShopItem| serde_json::to_value(v).unwrap_or(Value::Null);
-    write_audit(
+    record_audit(
         &mut tx,
         Some(caller.account_id),
-        if before.is_some() {
-            "shop_item.updated"
-        } else {
-            "shop_item.created"
-        },
-        "shop_item",
-        row.id,
-        before.as_ref().map(to_json),
-        Some(to_json(&item)),
+        Audit::new(
+            if before.is_some() {
+                "shop_item.updated"
+            } else {
+                "shop_item.created"
+            },
+            "shop_item",
+            &ids::to_text(row.id),
+        )
+        .change(before.as_ref().map(to_json), Some(to_json(&item))),
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
@@ -735,21 +682,17 @@ pub async fn update_item(
 /// Deletes an item: it is never listed or sold again. Its orders and code batches stay.
 pub async fn delete_item(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bool> {
     let id = parse_id(id)?;
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::SHOP_MANAGE).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::SHOP_MANAGE]).await?;
     staff_rate_limited(state, caller)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     if !db::delete_item(&mut tx, id).await.map_err(db_error)? {
         return Ok(false);
     }
-    write_audit(
+    record_audit(
         &mut tx,
         Some(caller.account_id),
-        "shop_item.deleted",
-        "shop_item",
-        id,
-        None,
-        None,
+        Audit::new("shop_item.deleted", "shop_item", &ids::to_text(id)).change(None, None),
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
@@ -887,19 +830,23 @@ async fn checkout_failed(
     db::mark_failed(conn, order.id, reason)
         .await
         .map_err(db_error)?;
-    write_audit(
+    record_audit(
         conn,
         None,
-        "shop.checkout_failed",
-        "shop_order",
-        order.id,
-        Some(order_json(order)),
-        Some(json!({
-            "status": "failed",
-            "reason": reason,
-            "provider_transaction_id": transaction_id,
-            "error": error,
-        })),
+        Audit::new(
+            "shop.checkout_failed",
+            "shop_order",
+            &ids::to_text(order.id),
+        )
+        .change(
+            Some(order_json(order)),
+            Some(json!({
+                "status": "failed",
+                "reason": reason,
+                "provider_transaction_id": transaction_id,
+                "error": error,
+            })),
+        ),
     )
     .await
 }
@@ -916,7 +863,7 @@ pub async fn start_checkout(
 ) -> ApiResult<Checkout> {
     let item_id = parse_id(item_id)?;
     limited(state, AccountLimit::Checkout, caller)?;
-    let mut conn = acquire(state).await?;
+    let mut conn = errors::conn(state).await?;
     let item = db::get_item(&mut conn, item_id)
         .await
         .map_err(db_error)?
@@ -979,14 +926,13 @@ pub async fn start_checkout(
                 db::mark_failed(&mut tx, open.id, db::failed::REPLACED)
                     .await
                     .map_err(db_error)?;
-                write_audit(
+                record_audit(
                     &mut tx,
                     Some(caller.account_id),
-                    "shop.order_replaced",
-                    "shop_order",
-                    open.id,
-                    Some(order_json(&open)),
-                    Some(json!({ "status": "failed", "reason": db::failed::REPLACED })),
+                    Audit::new("shop.order_replaced", "shop_order", &ids::to_text(open.id)).change(
+                        Some(order_json(&open)),
+                        Some(json!({ "status": "failed", "reason": db::failed::REPLACED })),
+                    ),
                 )
                 .await?;
                 replaced = Some(open);
@@ -1039,7 +985,7 @@ pub async fn start_checkout(
         Err(first) => {
             tracing::warn!(error = %first, txn = %transaction.id, "saving the paddle transaction failed; trying again");
             drop(conn);
-            conn = acquire(state).await?;
+            conn = errors::conn(state).await?;
             db::set_transaction(&mut conn, order.id, &transaction.id, currency, url).await
         }
     };
@@ -1049,7 +995,7 @@ pub async fn start_checkout(
             // Paddle has a transaction we couldn't tie to the order. It is never fulfilled
             // automatically; the audit row (and this log line) name it for staff.
             tracing::error!(error = %err, txn = %transaction.id, order = %order_text, "paddle transaction not saved on its order");
-            let mut fresh = acquire(state).await?;
+            let mut fresh = errors::conn(state).await?;
             checkout_failed(
                 &mut fresh,
                 &order,
@@ -1089,18 +1035,22 @@ pub async fn cancel_transaction(
                 .await
                 .map_err(db_error)?
             {
-                write_audit(
+                record_audit(
                     conn,
                     None,
-                    "shop.transaction_cancel_failed",
-                    "shop_order",
-                    order.id,
-                    Some(order_json(order)),
-                    Some(json!({
-                        "provider_transaction_id": txn,
-                        "reason": order.failed_reason,
-                        "error": err.to_string(),
-                    })),
+                    Audit::new(
+                        "shop.transaction_cancel_failed",
+                        "shop_order",
+                        &ids::to_text(order.id),
+                    )
+                    .change(
+                        Some(order_json(order)),
+                        Some(json!({
+                            "provider_transaction_id": txn,
+                            "reason": order.failed_reason,
+                            "error": err.to_string(),
+                        })),
+                    ),
                 )
                 .await?;
             }
@@ -1119,7 +1069,7 @@ pub async fn my_orders(
     per_page: Option<u32>,
 ) -> ApiResult<OrderPage> {
     let (limit, offset) = paging(page, per_page);
-    let mut conn = acquire(state).await?;
+    let mut conn = errors::conn(state).await?;
     let filter = OrderFilter {
         party: Some(caller.account_id),
         ..OrderFilter::default()
@@ -1139,7 +1089,7 @@ pub async fn order(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Opt
     let Some(id) = ids::from_text(id.trim()) else {
         return Ok(None);
     };
-    let mut conn = acquire(state).await?;
+    let mut conn = errors::conn(state).await?;
     let Some(row) = db::get_order(&mut conn, id).await.map_err(db_error)? else {
         return Ok(None);
     };
@@ -1178,11 +1128,11 @@ pub async fn orders(
     let account = filter_id(account_id)?;
     let item = filter_id(item_id)?;
     let (limit, offset) = paging(page, per_page);
-    let mut conn = acquire(state).await?;
+    let mut conn = errors::conn(state).await?;
     // `billing.view` reads one account's orders (the staff account page); every order, and
     // refunds, need `shop.orders`.
     if account.is_none() || !holds(&mut conn, caller, permissions::BILLING_VIEW).await? {
-        require(&mut conn, caller, permissions::SHOP_ORDERS).await?;
+        require_any(&mut conn, caller, &[permissions::SHOP_ORDERS]).await?;
     }
     let filter = OrderFilter {
         account,
@@ -1253,23 +1203,22 @@ async fn reverse(
     let row = db::mark_refunded(conn, order.id, reason, adjustment_id)
         .await
         .map_err(db_error)?;
-    write_audit(
+    record_audit(
         conn,
         actor,
-        "shop.order_refunded",
-        "shop_order",
-        order.id,
-        Some(order_json(order)),
-        Some(json!({
-            "status": "refunded",
-            "reason": reason,
-            "via": via,
-            "provider_adjustment_id": adjustment_id,
-            "revoked": revoked
-                .iter()
-                .map(|(k, _, c)| json!({ "kind": k.as_str(), "cosmetic_id": ids::to_text(*c) }))
-                .collect::<Vec<_>>(),
-        })),
+        Audit::new("shop.order_refunded", "shop_order", &ids::to_text(order.id)).change(
+            Some(order_json(order)),
+            Some(json!({
+                "status": "refunded",
+                "reason": reason,
+                "via": via,
+                "provider_adjustment_id": adjustment_id,
+                "revoked": revoked
+                    .iter()
+                    .map(|(k, _, c)| json!({ "kind": k.as_str(), "cosmetic_id": ids::to_text(*c) }))
+                    .collect::<Vec<_>>(),
+            })),
+        ),
     )
     .await?;
     // The staff reason is a staff note; the recipient only hears that the order was refunded.
@@ -1341,8 +1290,8 @@ pub async fn refund_order(
 ) -> ApiResult<Order> {
     let id = parse_id(id)?;
     let why = refund_reason(reason)?;
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::SHOP_ORDERS).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::SHOP_ORDERS]).await?;
     staff_rate_limited(state, caller)?;
 
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
@@ -1381,14 +1330,13 @@ pub async fn refund_order(
     db::mark_refund_requested(&mut tx, id, &why)
         .await
         .map_err(db_error)?;
-    write_audit(
+    record_audit(
         &mut tx,
         Some(caller.account_id),
-        "shop.refund_requested",
-        "shop_order",
-        id,
-        Some(order_json(&order)),
-        Some(json!({ "status": "refund_requested", "reason": why, "retry": stuck })),
+        Audit::new("shop.refund_requested", "shop_order", &ids::to_text(id)).change(
+            Some(order_json(&order)),
+            Some(json!({ "status": "refund_requested", "reason": why, "retry": stuck })),
+        ),
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
@@ -1405,14 +1353,11 @@ pub async fn refund_order(
                         .await
                         .map_err(db_error)?;
                 }
-                write_audit(
+                record_audit(
                     &mut tx,
                     Some(caller.account_id),
-                    "shop.refund_failed",
-                    "shop_order",
-                    id,
-                    None,
-                    Some(json!({ "error": err.to_string() })),
+                    Audit::new("shop.refund_failed", "shop_order", &ids::to_text(id))
+                        .change(None, Some(json!({ "error": err.to_string() }))),
                 )
                 .await?;
                 tx.commit().await.map_err(sqlx_error)?;
@@ -1483,7 +1428,7 @@ pub async fn webhook(state: &AppState, signature: Option<&str>, body: &[u8]) -> 
     if note.event_id.is_empty() || note.event_id.len() > 128 {
         return Err(bad("bad_payload", "Not a Paddle notification."));
     }
-    let mut conn = acquire(state).await?;
+    let mut conn = errors::conn(state).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     if !db::record_event(&mut tx, &note.event_id, &note.event_type)
         .await
@@ -1567,18 +1512,22 @@ async fn paid_unfulfilled(
     reason: &str,
 ) -> ApiResult<()> {
     tracing::warn!(order = %ids::to_text(order.id), reason, "paddle payment gave nothing; check it by hand");
-    write_audit(
+    record_audit(
         conn,
         None,
-        "shop.order_paid_unfulfilled",
-        "shop_order",
-        order.id,
-        Some(order_json(order)),
-        Some(json!({
-            "provider_transaction_id": transaction,
-            "status": status,
-            "reason": reason,
-        })),
+        Audit::new(
+            "shop.order_paid_unfulfilled",
+            "shop_order",
+            &ids::to_text(order.id),
+        )
+        .change(
+            Some(order_json(order)),
+            Some(json!({
+                "provider_transaction_id": transaction,
+                "status": status,
+                "reason": reason,
+            })),
+        ),
     )
     .await
 }
@@ -1611,15 +1560,7 @@ async fn fulfil(conn: &mut PgConnection, data: &Value) -> ApiResult<()> {
     }
     if let Err(why) = matches_order(&order, data) {
         tracing::warn!(order = %ids::to_text(order.id), why, "paddle transaction doesn't match its order; not fulfilled");
-        return write_audit(
-            conn,
-            None,
-            "shop.order_mismatch",
-            "shop_order",
-            order.id,
-            Some(order_json(&order)),
-            Some(json!({ "why": why, "transaction": data["id"], "items": data["items"], "currency_code": data["currency_code"] })),
-        )
+        return record_audit(conn, None, Audit::new("shop.order_mismatch", "shop_order", &ids::to_text(order.id)).change(Some(order_json(&order)), Some(json!({ "why": why, "transaction": data["id"], "items": data["items"], "currency_code": data["currency_code"] }))))
         .await;
     }
     // What was sold at checkout; orders from before the snapshot get the item's cosmetics now.
@@ -1682,22 +1623,21 @@ async fn fulfil(conn: &mut PgConnection, data: &Value) -> ApiResult<()> {
     let row = db::mark_paid(conn, order.id, total, currency)
         .await
         .map_err(db_error)?;
-    write_audit(
+    record_audit(
         conn,
         None,
-        "shop.order_paid",
-        "shop_order",
-        order.id,
-        Some(order_json(&order)),
-        Some(json!({
-            "status": row.status,
-            "paid_total_cents": total,
-            "paid_currency": currency,
-            "granted": granted
-                .iter()
-                .map(|(k, c)| json!({ "kind": k.as_str(), "cosmetic_id": ids::to_text(*c) }))
-                .collect::<Vec<_>>(),
-        })),
+        Audit::new("shop.order_paid", "shop_order", &ids::to_text(order.id)).change(
+            Some(order_json(&order)),
+            Some(json!({
+                "status": row.status,
+                "paid_total_cents": total,
+                "paid_currency": currency,
+                "granted": granted
+                    .iter()
+                    .map(|(k, c)| json!({ "kind": k.as_str(), "cosmetic_id": ids::to_text(*c) }))
+                    .collect::<Vec<_>>(),
+            })),
+        ),
     )
     .await?;
     match recipient {
@@ -1711,17 +1651,21 @@ async fn fulfil(conn: &mut PgConnection, data: &Value) -> ApiResult<()> {
         }
         Some(_) if granted.is_empty() => {
             // Everything was owned already, say through two checkouts paid at the same time.
-            write_audit(
+            record_audit(
                 conn,
                 None,
-                "shop.order_paid_no_grant",
-                "shop_order",
-                order.id,
-                None,
-                Some(json!({
-                    "provider_transaction_id": data["id"],
-                    "reason": "owned_already",
-                })),
+                Audit::new(
+                    "shop.order_paid_no_grant",
+                    "shop_order",
+                    &ids::to_text(order.id),
+                )
+                .change(
+                    None,
+                    Some(json!({
+                        "provider_transaction_id": data["id"],
+                        "reason": "owned_already",
+                    })),
+                ),
             )
             .await?;
         }
@@ -1749,18 +1693,17 @@ async fn fulfil(conn: &mut PgConnection, data: &Value) -> ApiResult<()> {
     {
         let sold = db::sold(conn, item.id).await.map_err(db_error)?;
         if sold > i64::from(limit) {
-            write_audit(
+            record_audit(
                 conn,
                 None,
-                "shop.order_oversold",
-                "shop_order",
-                order.id,
-                None,
-                Some(json!({
-                    "item_id": ids::to_text(item.id),
-                    "stock_limit": limit,
-                    "sold": sold,
-                })),
+                Audit::new("shop.order_oversold", "shop_order", &ids::to_text(order.id)).change(
+                    None,
+                    Some(json!({
+                        "item_id": ids::to_text(item.id),
+                        "stock_limit": limit,
+                        "sold": sold,
+                    })),
+                ),
             )
             .await?;
         }
@@ -1833,14 +1776,13 @@ async fn cancel(conn: &mut PgConnection, data: &Value) -> ApiResult<()> {
     db::mark_failed(conn, order.id, db::failed::CANCELED)
         .await
         .map_err(db_error)?;
-    write_audit(
+    record_audit(
         conn,
         None,
-        "shop.order_failed",
-        "shop_order",
-        order.id,
-        Some(order_json(&order)),
-        Some(json!({ "status": "failed", "reason": db::failed::CANCELED })),
+        Audit::new("shop.order_failed", "shop_order", &ids::to_text(order.id)).change(
+            Some(order_json(&order)),
+            Some(json!({ "status": "failed", "reason": db::failed::CANCELED })),
+        ),
     )
     .await
 }
@@ -1872,18 +1814,22 @@ async fn adjust(conn: &mut PgConnection, data: &Value) -> ApiResult<()> {
                 .await
                 .map_err(db_error)?;
         }
-        return write_audit(
+        return record_audit(
             conn,
             None,
-            "shop.refund_rejected",
-            "shop_order",
-            order.id,
-            Some(order_json(&order)),
-            Some(json!({
-                "provider_adjustment_id": data["id"],
-                "action": action,
-                "flagged": flagged,
-            })),
+            Audit::new(
+                "shop.refund_rejected",
+                "shop_order",
+                &ids::to_text(order.id),
+            )
+            .change(
+                Some(order_json(&order)),
+                Some(json!({
+                    "provider_adjustment_id": data["id"],
+                    "action": action,
+                    "flagged": flagged,
+                })),
+            ),
         )
         .await;
     }
@@ -1902,14 +1848,18 @@ async fn adjust(conn: &mut PgConnection, data: &Value) -> ApiResult<()> {
     }
     let full = action == "chargeback" || data["type"].as_str() == Some("full");
     if !full {
-        return write_audit(
+        return record_audit(
             conn,
             None,
-            "shop.order_partial_refund",
-            "shop_order",
-            order.id,
-            Some(order_json(&order)),
-            Some(json!({ "provider_adjustment_id": data["id"], "totals": data["totals"] })),
+            Audit::new(
+                "shop.order_partial_refund",
+                "shop_order",
+                &ids::to_text(order.id),
+            )
+            .change(
+                Some(order_json(&order)),
+                Some(json!({ "provider_adjustment_id": data["id"], "totals": data["totals"] })),
+            ),
         )
         .await;
     }

@@ -5,9 +5,6 @@
 //! each naming the one it needs. Introspection stays on, so the private parts are visible in the
 //! schema but closed to anyone without the permission.
 
-// The stubs take the arguments the real resolvers will use; they go away as each one lands.
-#![allow(unused_variables)]
-
 use async_graphql::http::GraphiQLSource;
 use async_graphql::{Context, ErrorExtensions, MergedObject, Result, Schema, SchemaBuilder};
 use axum::response::Html;

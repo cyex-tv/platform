@@ -1,4 +1,4 @@
-//! The Phase 5 load test for the GraphQL socket (`/v1/gql/ws`, `graphql-transport-ws`): many
+//! The load test for the GraphQL socket (`/v1/gql/ws`, `graphql-transport-ws`): many
 //! subscriptions to `events` with ten topics each, events written to the outbox at a steady rate,
 //! and the time from each write to each delivery. The event WebSocket has its own
 //! (`apps/events/tests/load.rs`); this one is the same run against the API's socket. It runs in

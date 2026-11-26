@@ -87,30 +87,6 @@ pub async fn emotes(conn: &mut PgConnection, ids: &[Uuid]) -> DbResult<Vec<Emote
     .await?)
 }
 
-/// Emotes in `state`, oldest first (the review queue), and how many there are.
-pub async fn emotes_in_state(
-    conn: &mut PgConnection,
-    state: EmoteState,
-    limit: i64,
-    offset: i64,
-) -> DbResult<(Vec<EmoteRow>, i64)> {
-    let items = sqlx::query_as(&format!(
-        "{EMOTE_ROW} WHERE e.state = $1 AND e.deleted_at IS NULL
-         ORDER BY e.created_at, e.id LIMIT $2 OFFSET $3"
-    ))
-    .bind(state)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(&mut *conn)
-    .await?;
-    let total =
-        sqlx::query_scalar("SELECT count(*) FROM emotes WHERE state = $1 AND deleted_at IS NULL")
-            .bind(state)
-            .fetch_one(conn)
-            .await?;
-    Ok((items, total))
-}
-
 /// Which part of the review queue a read lists.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum QueueTab {

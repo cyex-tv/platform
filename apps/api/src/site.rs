@@ -17,7 +17,7 @@ use std::time::Instant;
 
 use chrono::{DateTime, Utc};
 use cyex_tv_auth::Caller;
-use cyex_tv_db::{accounts, announcements as db, audit, ids, prefs};
+use cyex_tv_db::{accounts, announcements as db, ids, prefs};
 use cyex_tv_shared::error::ApiResult;
 use cyex_tv_shared::model::{
     AccountCollection, Announcement, AnnouncementInput, AnnouncementKind, CollectionItem,
@@ -27,10 +27,10 @@ use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
 use serde_json::json;
 use sqlx::{Connection, PgConnection};
-use uuid::Uuid;
 
-use crate::catalog::permissions_of;
-use crate::errors::{bad, db_error, forbidden, limited_as, not_found, parse_id, sqlx_error};
+use crate::catalog::require_any;
+use crate::errors::{Audit, record_audit};
+use crate::errors::{bad, db_error, limited_as, not_found, parse_id, sqlx_error};
 use crate::limits::AccountLimit;
 use crate::read_cache::ANNOUNCEMENT_KEY;
 use crate::state::AppState;
@@ -99,18 +99,6 @@ async fn forget_announcement(conn: &mut PgConnection) -> ApiResult<()> {
     Ok(())
 }
 
-async fn require_announce(conn: &mut PgConnection, caller: &Caller) -> ApiResult<()> {
-    if caller.owner {
-        return Ok(());
-    }
-    let held = permissions_of(conn, caller).await?;
-    if held.iter().any(|p| p == permissions::SITE_ANNOUNCE) {
-        Ok(())
-    } else {
-        Err(forbidden("This needs site.announce."))
-    }
-}
-
 /// Whether a row is shown at `now`.
 fn is_live(row: &db::Announcement, now: DateTime<Utc>) -> bool {
     row.ended_at.is_none()
@@ -171,7 +159,7 @@ pub async fn active(state: &AppState) -> ApiResult<Option<Announcement>> {
 /// Every announcement, newest first (the latest 50), for staff with `site.announce`.
 pub async fn list(state: &AppState, caller: &Caller) -> ApiResult<Vec<Announcement>> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    require_announce(&mut conn, caller).await?;
+    require_any(&mut conn, caller, &[permissions::SITE_ANNOUNCE]).await?;
     let rows = db::list(&mut conn, LIST_MAX).await.map_err(db_error)?;
     drop(conn);
     let mut out = Vec::with_capacity(rows.len());
@@ -311,50 +299,24 @@ fn audit_json(r: &db::Announcement) -> serde_json::Value {
     })
 }
 
-async fn write_audit(
-    conn: &mut PgConnection,
-    caller: &Caller,
-    action: &str,
-    id: Uuid,
-    before: Option<serde_json::Value>,
-    after: Option<serde_json::Value>,
-) -> ApiResult<()> {
-    audit::write(
-        conn,
-        &audit::NewEntry {
-            actor: Some(caller.account_id),
-            action,
-            target_kind: "announcement",
-            target_id: &ids::to_text(id),
-            before,
-            after,
-        },
-    )
-    .await
-    .map_err(db_error)?;
-    Ok(())
-}
-
 pub async fn create(
     state: &AppState,
     caller: &Caller,
     input: &AnnouncementInput,
 ) -> ApiResult<Announcement> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    require_announce(&mut conn, caller).await?;
+    require_any(&mut conn, caller, &[permissions::SITE_ANNOUNCE]).await?;
     let f = fields(input, Utc::now())?;
     check_refs(state, &mut conn, &f).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let row = db::create(&mut tx, caller.account_id, &f)
         .await
         .map_err(db_error)?;
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "announcement.create",
-        row.id,
-        None,
-        Some(audit_json(&row)),
+        caller.account_id,
+        Audit::new("announcement.create", "announcement", &ids::to_text(row.id))
+            .change(None, Some(audit_json(&row))),
     )
     .await?;
     forget_announcement(&mut tx).await?;
@@ -370,7 +332,7 @@ pub async fn update(
     input: &AnnouncementInput,
 ) -> ApiResult<Announcement> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    require_announce(&mut conn, caller).await?;
+    require_any(&mut conn, caller, &[permissions::SITE_ANNOUNCE]).await?;
     let id = parse_id(id)?;
     let f = fields(input, Utc::now())?;
     check_refs(state, &mut conn, &f).await?;
@@ -383,13 +345,11 @@ pub async fn update(
         return Err(bad("ended", "This announcement has ended. Make a new one."));
     }
     let row = db::update(&mut tx, id, &f).await.map_err(db_error)?;
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "announcement.update",
-        id,
-        Some(audit_json(&before)),
-        Some(audit_json(&row)),
+        caller.account_id,
+        Audit::new("announcement.update", "announcement", &ids::to_text(id))
+            .change(Some(audit_json(&before)), Some(audit_json(&row))),
     )
     .await?;
     forget_announcement(&mut tx).await?;
@@ -401,7 +361,7 @@ pub async fn update(
 /// Ends it now; ending an ended one changes nothing (and writes no audit row).
 pub async fn end(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Announcement> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    require_announce(&mut conn, caller).await?;
+    require_any(&mut conn, caller, &[permissions::SITE_ANNOUNCE]).await?;
     let id = parse_id(id)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let before = db::lock(&mut tx, id)
@@ -410,13 +370,11 @@ pub async fn end(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Annou
         .ok_or_else(not_found)?;
     let row = match db::end(&mut tx, id).await.map_err(db_error)? {
         Some(row) => {
-            write_audit(
+            record_audit(
                 &mut tx,
-                caller,
-                "announcement.end",
-                id,
-                Some(audit_json(&before)),
-                Some(audit_json(&row)),
+                caller.account_id,
+                Audit::new("announcement.end", "announcement", &ids::to_text(id))
+                    .change(Some(audit_json(&before)), Some(audit_json(&row))),
             )
             .await?;
             row

@@ -28,11 +28,9 @@ use sha2::{Digest, Sha256};
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
-use crate::catalog::{db_error, not_found, parse_id};
-use crate::shop::{
-    Cosmetics, acquire, bad, bundle, check_exist, conflict, limited, paging, require, sqlx_error,
-    staff_rate_limited, timestamp, write_audit,
-};
+use crate::catalog::{db_error, not_found, parse_id, require_any};
+use crate::errors::{self, Audit, bad, conflict, record_audit, sqlx_error};
+use crate::shop::{Cosmetics, bundle, check_exist, limited, paging, staff_rate_limited, timestamp};
 use crate::state::AppState;
 use crate::views::time;
 
@@ -194,8 +192,8 @@ pub async fn create_batch(
         .map(parse_id)
         .transpose()?;
     let direct = bundle(&input.badge_ids, &input.paint_ids, item_id.is_some())?;
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::CODES_MANAGE).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::CODES_MANAGE]).await?;
     staff_rate_limited(state, caller)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     if let Some(item) = item_id
@@ -236,14 +234,11 @@ pub async fn create_batch(
     .map_err(db_error)?;
     let batch = one_batch(&mut tx, &row).await?;
     // Never the codes themselves.
-    write_audit(
+    record_audit(
         &mut tx,
         Some(caller.account_id),
-        "code_batch.created",
-        "code_batch",
-        row.id,
-        None,
-        Some(serde_json::to_value(&batch).unwrap_or_default()),
+        Audit::new("code_batch.created", "code_batch", &ids::to_text(row.id))
+            .change(None, Some(serde_json::to_value(&batch).unwrap_or_default())),
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
@@ -253,8 +248,8 @@ pub async fn create_batch(
 /// Stops every code of a batch from working.
 pub async fn disable_batch(state: &AppState, caller: &Caller, id: &str) -> ApiResult<CodeBatch> {
     let id = parse_id(id)?;
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::CODES_MANAGE).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::CODES_MANAGE]).await?;
     staff_rate_limited(state, caller)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     if db::get_batch(&mut tx, id)
@@ -268,14 +263,11 @@ pub async fn disable_batch(state: &AppState, caller: &Caller, id: &str) -> ApiRe
         .await
         .map_err(db_error)?
     {
-        write_audit(
+        record_audit(
             &mut tx,
             Some(caller.account_id),
-            "code_batch.disabled",
-            "code_batch",
-            id,
-            None,
-            Some(json!({ "disabled": true })),
+            Audit::new("code_batch.disabled", "code_batch", &ids::to_text(id))
+                .change(None, Some(json!({ "disabled": true }))),
         )
         .await?;
     }
@@ -295,8 +287,8 @@ pub async fn batches(
     per_page: Option<u32>,
 ) -> ApiResult<CodeBatchPage> {
     let (limit, offset) = paging(page, per_page);
-    let mut conn = acquire(state).await?;
-    require(&mut conn, caller, permissions::CODES_MANAGE).await?;
+    let mut conn = errors::conn(state).await?;
+    require_any(&mut conn, caller, &[permissions::CODES_MANAGE]).await?;
     let (rows, total) = db::batches(&mut conn, limit, offset)
         .await
         .map_err(db_error)?;
@@ -363,7 +355,7 @@ pub async fn redeem(
         return Err(failed());
     };
     let digest = hash(&normalized);
-    let mut conn = acquire(state).await?;
+    let mut conn = errors::conn(state).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let Some(code) = db::lock_code(&mut tx, &digest).await.map_err(db_error)? else {
         return Err(failed());
@@ -441,20 +433,19 @@ pub async fn redeem(
     db::record_redemption(&mut tx, code.id, caller.account_id)
         .await
         .map_err(db_error)?;
-    write_audit(
+    record_audit(
         &mut tx,
         Some(caller.account_id),
-        "code.redeemed",
-        "code_batch",
-        batch.id,
-        None,
-        Some(json!({
-            "code_id": ids::to_text(code.id),
-            "granted": granted
-                .iter()
-                .map(|(k, c)| json!({ "kind": k.as_str(), "cosmetic_id": ids::to_text(*c) }))
-                .collect::<Vec<_>>(),
-        })),
+        Audit::new("code.redeemed", "code_batch", &ids::to_text(batch.id)).change(
+            None,
+            Some(json!({
+                "code_id": ids::to_text(code.id),
+                "granted": granted
+                    .iter()
+                    .map(|(k, c)| json!({ "kind": k.as_str(), "cosmetic_id": ids::to_text(*c) }))
+                    .collect::<Vec<_>>(),
+            })),
+        ),
     )
     .await?;
     crate::shop::notify_cosmetics(

@@ -42,11 +42,6 @@ pub fn is_hidden(c: char) -> bool {
     )
 }
 
-/// True if `s` has a hidden character.
-pub fn has_hidden(s: &str) -> bool {
-    s.chars().any(is_hidden)
-}
-
 /// `s` without its hidden characters.
 pub fn strip_hidden(s: &str) -> String {
     s.chars().filter(|&c| !is_hidden(c)).collect()

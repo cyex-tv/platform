@@ -1,4 +1,4 @@
-//! Prometheus metrics in the text format, on their own listener (PLAN.md Phase 9).
+//! Prometheus metrics in the text format, on their own listener.
 //!
 //! Each service serves `GET /metrics` on `CYEX_TV_METRICS_BIND` when it is set, and nowhere when
 //! it isn't. That address is meant for the private Docker network only, never a tunnel route.
