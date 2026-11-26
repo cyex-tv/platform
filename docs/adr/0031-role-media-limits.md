@@ -1,4 +1,4 @@
-# 0030: Per-role media limits
+# 0031: Per-role media limits
 
 - Status: accepted (owner approved, 2026/11/26)
 - Date: 2026/11/26
