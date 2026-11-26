@@ -133,6 +133,18 @@ pub async fn my_sessions(state: &AppState, caller: &Caller) -> ApiResult<Vec<Acc
         .collect())
 }
 
+/// The caller's live console token (ADR 0028), as `mySessions` lists it, or `None`. Never the
+/// token itself: it is in the answer that made it only.
+pub async fn my_console_token(
+    state: &AppState,
+    caller: &Caller,
+) -> ApiResult<Option<AccountSession>> {
+    Ok(my_sessions(state, caller)
+        .await?
+        .into_iter()
+        .find(|s| s.kind == SessionKindView::Console))
+}
+
 /// Signs out one of the caller's sessions (the current one too). `(false, _)` when they have no
 /// session with that ID; another account's ID is just that. The second value says whether it was
 /// the session this request came with (the cookie then goes too).
@@ -150,9 +162,17 @@ pub async fn revoke_session(
         .map_err(db_error)?
         .iter()
         .any(|s| s.id == id && s.id_hash.as_slice() == caller.token_hash.as_slice());
-    let done = sessions::delete_by_id(&mut conn, caller.account_id, id)
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    let done = sessions::delete_by_id(&mut tx, caller.account_id, id)
         .await
         .map_err(db_error)?;
+    // Signing a session out rotates the console token (ADR 0029).
+    if done {
+        sessions::end_console(&mut tx, caller.account_id)
+            .await
+            .map_err(db_error)?;
+    }
+    tx.commit().await.map_err(sqlx_error)?;
     Ok((done, done && current))
 }
 
@@ -161,10 +181,16 @@ pub async fn revoke_session(
 pub async fn revoke_all_sessions(state: &AppState, caller: &Caller) -> ApiResult<u64> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     if caller.via != Via::Cookie {
-        let done = sessions::delete(&mut conn, &caller.token_hash)
+        // The console token rotates with any sign-out (ADR 0029), an app's too.
+        let mut tx = conn.begin().await.map_err(sqlx_error)?;
+        let done = sessions::delete(&mut tx, &caller.token_hash)
             .await
             .map_err(db_error)?;
-        return Ok(u64::from(done));
+        let console = sessions::end_console(&mut tx, caller.account_id)
+            .await
+            .map_err(db_error)?;
+        tx.commit().await.map_err(sqlx_error)?;
+        return Ok(u64::from(done) + console);
     }
     sessions::delete_for_account(&mut conn, caller.account_id, None)
         .await

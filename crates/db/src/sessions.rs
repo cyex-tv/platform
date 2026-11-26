@@ -20,7 +20,8 @@ pub enum SessionKind {
     /// A Bearer token for the deck or another app.
     App,
     /// A personal Bearer token the person minted on the website (ADR 0028), for using the API as
-    /// themselves. One per account, 90 days, never slid.
+    /// themselves. One per account, 3 days, never slid, ended whenever the account signs a
+    /// session out (ADR 0029).
     Console,
 }
 
@@ -154,6 +155,30 @@ pub async fn replace_console(
     // An expired one was signed out already; only a live one counts as replaced.
     let replaced = old.and_then(|(id, expires)| (expires > Utc::now()).then_some(id));
     Ok((session, replaced))
+}
+
+/// Ends the account's console token (ADR 0029: it rotates whenever the person signs a session
+/// out, one or all). The next one is made on request; the ended one never works again, since
+/// every request looks its session up. Returns how many ended (0 or 1).
+pub async fn end_console(conn: &mut PgConnection, account_id: Uuid) -> DbResult<u64> {
+    let done = sqlx::query("DELETE FROM sessions WHERE account_id = $1 AND kind = 'console'")
+        .bind(account_id)
+        .execute(conn)
+        .await?;
+    Ok(done.rows_affected())
+}
+
+/// [`end_console`] for the account a session (by its public ID) belongs to, as an app signing
+/// itself out (RFC 7009) knows only its session.
+pub async fn end_console_of_session(conn: &mut PgConnection, session_id: Uuid) -> DbResult<u64> {
+    let done = sqlx::query(
+        "DELETE FROM sessions WHERE kind = 'console'
+           AND account_id = (SELECT account_id FROM sessions WHERE id = $1)",
+    )
+    .bind(session_id)
+    .execute(conn)
+    .await?;
+    Ok(done.rows_affected())
 }
 
 /// An account's live sessions, the most recently used first.

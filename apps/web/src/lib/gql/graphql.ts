@@ -575,13 +575,13 @@ export type CollectionItem = {
 /**
  * A personal API token (ADR 0028): a Bearer token that acts as you, with your own account's
  * rights, for a GraphQL playground, a script or moving things between your accounts. Only one
- * at a time: making a new one signs the last one out. It lasts 90 days, shows in `mySessions` as
- * `Console token`, and ends when you sign it out there or sign out everywhere. The token is in
- * this answer only; it is never shown again.
+ * at a time: making a new one signs the last one out. It lasts 3 days, shows in `mySessions` as
+ * `Console token`, and ends when you sign it out there, sign out any other session, or sign out
+ * everywhere (ADR 0029). The token is in this answer only; it is never shown again.
  */
 export type ConsoleToken = {
   __typename?: 'ConsoleToken';
-  /** When it stops working: 90 days after it was made, however much it is used. */
+  /** When it stops working: 3 days after it was made, however much it is used. */
   expiresAt: Scalars['String']['output'];
   /** Its session's ID, as `mySessions` lists it; pass to `revokeSession` to sign it out. */
   sessionId: Scalars['String']['output'];
@@ -1196,8 +1196,9 @@ export type Mutation = {
   /**
    * Make a personal API token (a console token, ADR 0028): a Bearer token that acts as you,
    * for a GraphQL playground or a script. It has your account's own rights (your roles count;
-   * owner-only and website-only actions don't work with it), lasts 90 days and shows in
-   * `mySessions` as `Console token`. Only one at a time: making one signs the last one out.
+   * owner-only and website-only actions don't work with it), lasts 3 days and shows in
+   * `mySessions` as `Console token`. Signing out any session, or everywhere, ends it
+   * (ADR 0029). Only one at a time: making one signs the last one out.
    * The token is in this answer only. Website only (`website_only` with a Bearer token). 5 an
    * hour (`rate_limited`). Audited. Same as `POST /v1/auth/token/export`.
    */
@@ -2545,6 +2546,13 @@ export type Query = {
   /** Your channels: one per linked platform you have signed in with. */
   myChannels: Array<Channel>;
   /**
+   * Your live personal API token (a console token, ADR 0028), as `mySessions` lists it: its
+   * `id` (pass to `revokeSession`), when it was made and when it expires (3 days after). Null
+   * when you have none: it rotates whenever you sign a session out, one or all (ADR 0029), and
+   * `createConsoleToken` makes the next one. Never the token itself.
+   */
+  myConsoleToken?: Maybe<AccountSession>;
+  /**
    * The cosmetics you own and show; with `accountId`, those of an account you edit with
    * `PROFILE`.
    */
@@ -3727,6 +3735,11 @@ export type MySessionsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
 export type MySessionsQuery = { __typename?: 'Query', mySessions: Array<{ __typename?: 'AccountSession', id: string, kind: SessionKind, device: string, createdAt: string, lastSeenAt: string, expiresAt: string, current: boolean }> };
+
+export type MyConsoleTokenQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type MyConsoleTokenQuery = { __typename?: 'Query', myConsoleToken?: { __typename?: 'AccountSession', id: string, createdAt: string, expiresAt: string } | null };
 
 export type RevokeSessionMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -5582,6 +5595,15 @@ export const MySessionsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<MySessionsQuery, MySessionsQueryVariables>;
+export const MyConsoleTokenDocument = new TypedDocumentString(`
+    query MyConsoleToken {
+  myConsoleToken {
+    id
+    createdAt
+    expiresAt
+  }
+}
+    `) as unknown as TypedDocumentString<MyConsoleTokenQuery, MyConsoleTokenQueryVariables>;
 export const RevokeSessionDocument = new TypedDocumentString(`
     mutation RevokeSession($id: String!) {
   revokeSession(id: $id)

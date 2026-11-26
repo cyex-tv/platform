@@ -16,6 +16,7 @@
 
 use chrono::Duration;
 use cyex_tv_db::app_auth::{self, NewAuthCode};
+use cyex_tv_db::sessions;
 use sqlx::{Connection, PgPool};
 use url::Url;
 
@@ -610,7 +611,11 @@ impl Auth {
             None => app_auth::session_of_access(&mut conn, &hash).await?,
         };
         if let Some(id) = session {
-            app_auth::delete_session(&mut conn, id).await?;
+            // Signing a session out rotates the account's console token too (ADR 0029).
+            let mut tx = sqlx::Connection::begin(&mut *conn).await?;
+            sessions::end_console_of_session(&mut tx, id).await?;
+            app_auth::delete_session(&mut tx, id).await?;
+            tx.commit().await?;
         }
         Ok(())
     }

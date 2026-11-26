@@ -90,6 +90,20 @@ impl AccountQuery {
         me_of(ctx, caller).await
     }
 
+    /// Your live personal API token (a console token, ADR 0028), as `mySessions` lists it: its
+    /// `id` (pass to `revokeSession`), when it was made and when it expires (3 days after). Null
+    /// when you have none: it rotates whenever you sign a session out, one or all (ADR 0029), and
+    /// `createConsoleToken` makes the next one. Never the token itself.
+    async fn my_console_token(
+        &self,
+        ctx: &Context<'_>,
+    ) -> Result<Option<cyex_tv_shared::model::AccountSession>> {
+        let caller = caller(ctx)?;
+        account::my_console_token(state(ctx), caller)
+            .await
+            .map_err(api_error)
+    }
+
     /// The deletion you can still undo: set only for the cookie session that signing in to a
     /// deleted account within its 30 days gave (`restoreAccount` undoes it). Null otherwise,
     /// including for every normal session.
@@ -238,8 +252,9 @@ impl AccountSessionMutation {
 
     /// Make a personal API token (a console token, ADR 0028): a Bearer token that acts as you,
     /// for a GraphQL playground or a script. It has your account's own rights (your roles count;
-    /// owner-only and website-only actions don't work with it), lasts 90 days and shows in
-    /// `mySessions` as `Console token`. Only one at a time: making one signs the last one out.
+    /// owner-only and website-only actions don't work with it), lasts 3 days and shows in
+    /// `mySessions` as `Console token`. Signing out any session, or everywhere, ends it
+    /// (ADR 0029). Only one at a time: making one signs the last one out.
     /// The token is in this answer only. Website only (`website_only` with a Bearer token). 5 an
     /// hour (`rate_limited`). Audited. Same as `POST /v1/auth/token/export`.
     async fn create_console_token(

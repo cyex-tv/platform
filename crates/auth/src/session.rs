@@ -34,11 +34,12 @@ pub struct Caller {
 }
 
 /// How long a session lasts (ADR 0009): site 30 days after its last use, app 90 days. A console
-/// token (ADR 0028) lasts 90 days from when it was made and is never slid.
+/// token (ADR 0028) lasts 3 days from when it was made and is never slid (ADR 0029).
 pub fn ttl(kind: SessionKind) -> Duration {
     match kind {
         SessionKind::Site => Duration::days(30),
-        SessionKind::App | SessionKind::Console => Duration::days(90),
+        SessionKind::App => Duration::days(90),
+        SessionKind::Console => Duration::days(3),
     }
 }
 
@@ -171,8 +172,9 @@ impl Auth {
         )
     }
 
-    /// Ends the caller's session. Returns the `Set-Cookie` that clears the cookie, which is sent
-    /// even when there was no session, so a stale cookie goes away too.
+    /// Ends the caller's session, and the account's console token with it (ADR 0029: it rotates
+    /// whenever a session signs out). Returns the `Set-Cookie` that clears the cookie, which is
+    /// sent even when there was no session, so a stale cookie goes away too.
     pub async fn sign_out(
         &self,
         db: &PgPool,
@@ -180,7 +182,10 @@ impl Auth {
     ) -> Result<String, AuthError> {
         if let Some(caller) = caller {
             let mut conn = db.acquire().await?;
-            sessions::delete(&mut conn, &caller.token_hash).await?;
+            let mut tx = sqlx::Connection::begin(&mut *conn).await?;
+            sessions::delete(&mut tx, &caller.token_hash).await?;
+            sessions::end_console(&mut tx, caller.account_id).await?;
+            tx.commit().await?;
         }
         Ok(cookies::clear_session(self.config()))
     }
@@ -208,6 +213,6 @@ mod tests {
     fn lifetimes_match_adr_0009() {
         assert_eq!(ttl(SessionKind::Site), Duration::days(30));
         assert_eq!(ttl(SessionKind::App), Duration::days(90));
-        assert_eq!(ttl(SessionKind::Console), Duration::days(90));
+        assert_eq!(ttl(SessionKind::Console), Duration::days(3));
     }
 }

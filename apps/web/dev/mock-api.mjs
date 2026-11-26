@@ -15,7 +15,7 @@ import { inward, outward, inwardId, registerAll } from './snowflake.mjs';
 import { ADMIN_ENV, BASE, ME_ID, ME_SUMMARY, OPEN_ENV, ORIGIN, OWNERS, PORT } from './mock/config.mjs';
 import { avatar, picture } from './mock/art.mjs';
 import { ALL, MINE, emote, nextUpload, trendAdds, trendPool, twitchUrl, wideOf } from './mock/emotes.mjs';
-import { CHANNELS, IDENTITIES, NOTES, PENDING_DELETION, RESTORE_COOKIE, accountHub, mintConsoleToken, setPendingDeletion, setRestoreCookie } from './mock/account.mjs';
+import { CHANNELS, IDENTITIES, NOTES, PENDING_DELETION, RESTORE_COOKIE, accountHub, endConsoleToken, mintConsoleToken, setPendingDeletion, setRestoreCookie } from './mock/account.mjs';
 import { SETS } from './mock/set-data.mjs';
 import { FILE_EMOTES, NSFW_REFUSAL, PENDING, UNLISTED_REFUSAL } from './mock/review.mjs';
 import { limitOf, pendingOf } from './mock/roles.mjs';
@@ -33,7 +33,7 @@ import { noteOff, siteAnswer } from './mock/site.mjs';
 import { UPLOAD_FILES, mosaicPng, multipart, probeImage } from './mock/uploads.mjs';
 import { signedIn } from './mock/signed-in/index.mjs';
 function newFields(q, v, session, admin = false) {
-  if (/\b(mySessions|createConsoleToken|unreadNotificationCount|revokeSession|revokeOtherSessions|signOutEverywhere|exportMyData|deleteAccount|markNotificationsRead)\b/.test(q))
+  if (/\b(mySessions|myConsoleToken|createConsoleToken|unreadNotificationCount|revokeSession|revokeOtherSessions|signOutEverywhere|exportMyData|deleteAccount|markNotificationsRead)\b/.test(q))
     if (!session) return err('Sign in to use this.', 'signed_out');
   // Each handler answers one new field; an operation may ask for several, and for older ones too.
   const id = v.accountId ?? v.id ?? '';
@@ -361,6 +361,7 @@ createServer(async (req, res) => {
     return res.end(JSON.stringify({ token: t.token, token_type: t.tokenType, expires_at: t.expiresAt, session_id: t.sessionId }));
   }
   if (req.method === 'POST' && url.pathname === '/v1/auth/logout') {
+    endConsoleToken();
     res.writeHead(204, { 'set-cookie': ['mock_session=; Path=/; Max-Age=0', 'mock_restore=; Path=/; Max-Age=0'] });
     return res.end();
   }

@@ -79,7 +79,8 @@ const SESSIONS = [
   { id: '01JD8XSESS0000000000000004', kind: 'SITE', device: 'Chrome on Android', createdAt: '2026-11-02T10:00:00.000Z', lastSeenAt: '2026-11-03T10:00:00.000Z', expiresAt: '2026-12-03T10:00:00.000Z', current: false, appClientId: null },
 ];
 let exports = 0;
-// Console tokens (ADR 0028), as the API makes them: one per account, 90 days, listed in mySessions.
+// Console tokens (ADR 0028, 0029), as the API makes them: one per account, 3 days, listed in
+// mySessions (and myConsoleToken), ended whenever a session signs out, one or all.
 // The token is a fake; nothing here accepts it as a Bearer token.
 let consoleSeq = 0;
 export function mintConsoleToken() {
@@ -88,10 +89,15 @@ export function mintConsoleToken() {
   consoleSeq += 1;
   const now = new Date();
   const id = `01JD8XSESSC${String(consoleSeq).padStart(15, '0')}`;
-  const expiresAt = new Date(now.getTime() + 90 * 86400_000).toISOString();
+  const expiresAt = new Date(now.getTime() + 3 * 86400_000).toISOString();
   SESSIONS.push({ id, kind: 'CONSOLE', device: 'Console token', createdAt: now.toISOString(), lastSeenAt: now.toISOString(), expiresAt, current: false, appClientId: null });
   const token = `mockconsole${randomBytes(24).toString('base64url')}`.slice(0, 43);
   return { token, tokenType: 'Bearer', expiresAt, sessionId: id };
+}
+/** Signing a session out rotates the console token (ADR 0029): the API ends it. */
+export function endConsoleToken() {
+  const i = SESSIONS.findIndex((x) => x.kind === 'CONSOLE');
+  if (i >= 0) SESSIONS.splice(i, 1);
 }
 if (process.env.MOCK_LONG === '1') SESSIONS[1].device = 'Mozilla Firefox Developer Edition on Windows 11 Enterprise N with a rather long device name that keeps going and going';
 
@@ -113,10 +119,14 @@ const exportDoc = () => JSON.stringify({
 export function accountHub(q, v) {
   const data = {};
   if (/\bmySessions\b/.test(q)) data.mySessions = SESSIONS;
+  if (/\bmyConsoleToken\b/.test(q)) data.myConsoleToken = SESSIONS.find((x) => x.kind === 'CONSOLE') ?? null;
   if (/\bcreateConsoleToken\b/.test(q)) data.createConsoleToken = mintConsoleToken();
   if (/\brevokeSession\s*\(/.test(q)) {
     const i = SESSIONS.findIndex((x) => x.id === v.id);
-    if (i >= 0) SESSIONS.splice(i, 1);
+    if (i >= 0) {
+      SESSIONS.splice(i, 1);
+      endConsoleToken();
+    }
     data.revokeSession = i >= 0;
   }
   if (/\bsignOutEverywhere\b/.test(q)) {

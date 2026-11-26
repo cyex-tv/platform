@@ -64,6 +64,17 @@ export const MY_SESSIONS = graphql(`
   }
 `);
 
+// Your live API token (ADR 0028/0029): its expiry only, never the token.
+export const MY_CONSOLE_TOKEN = graphql(`
+  query MyConsoleToken {
+    myConsoleToken {
+      id
+      createdAt
+      expiresAt
+    }
+  }
+`);
+
 export const REVOKE_SESSION = graphql(`
   mutation RevokeSession($id: String!) {
     revokeSession(id: $id)

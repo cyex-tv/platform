@@ -220,9 +220,10 @@ async fn logout(
 /// A Bearer token that acts as you, for a GraphQL playground, a script or moving things between
 /// your accounts (ADR 0028). Send it as `Authorization: Bearer <token>` to `/v1/gql` and the REST
 /// calls. It has your account's own rights (your roles count; owner-only and website-only actions
-/// such as deleting the account don't work with it) and lasts 90 days. Only one at a time: making
+/// such as deleting the account don't work with it) and lasts 3 days. Only one at a time: making
 /// a new one signs the last one out. It shows as `Console token` under your sessions, where you
-/// can sign it out; signing out everywhere ends it too. The token is in this answer only.
+/// can sign it out; signing out any session, or everywhere, ends it too (ADR 0029). The token is
+/// in this answer only.
 ///
 /// The website's cookie only, from `https://cyex.tv` (`Origin`); a Bearer token can't make one.
 /// 5 an hour. On cyex.tv, run `copy(await cyextv.token())` in the browser console.
