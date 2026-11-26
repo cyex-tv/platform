@@ -43,5 +43,5 @@
 </Dialog>
 
 <style>
-  :global(.shop-item form) { max-height: calc(100dvh - 24px); grid-template-rows: minmax(0, 1fr) auto; }
+  :global(.ui-dialog.shop-item form) { max-height: calc(100dvh - 24px); grid-template-rows: minmax(0, 1fr) auto; }
 </style>
