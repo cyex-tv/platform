@@ -1,6 +1,7 @@
 // The guide sections of /developers, as data: the page renders them in order, and the index's
 // Notes group lists them. Inline `code` and [links](#anchor) are written as in the API spec.
 import { EX, paragraphs, type Segment } from './example';
+import spec from '../../../../../openapi/openapi.json';
 import { baseUrl } from './rest';
 
 export type Block =
@@ -9,8 +10,19 @@ export type Block =
   | { t: 'ol' | 'ul'; items: Segment[][][] }
   | { t: 'base'; rows: [string, string][] }
   | { t: 'fmt'; rows: [string, Segment[][]][]; plain?: boolean }
+  | { t: 'codes'; rows: ErrorCodeRow[] }
   | { t: 'note'; text: Segment[][] }
   | { t: 'pre'; code: string };
+
+export interface ErrorCodeRow {
+  code: string;
+  group: string;
+  meaning: string;
+  when: string;
+}
+
+/** Every stable error code, from `components.schemas.ErrorCode` of the spec (the one list in the API). */
+export const errorCodes: ErrorCodeRow[] = (spec.components.schemas as unknown as Record<string, { 'x-codes'?: ErrorCodeRow[] }>).ErrorCode?.['x-codes'] ?? [];
 
 export interface Guide {
   id: string;
@@ -165,6 +177,7 @@ export const guides: Guide[] = [
     search: 'error codes etag 304 cache if-none-match',
     blocks: [
       p('REST errors are `{ "error": "not_found", "message": "No emote with that ID." }`. Match on `error`, a stable code; `message` is for people. GraphQL errors carry the same codes in `extensions.code`, and an answer can hold data and errors together.'),
+      p('Every code the API answers with is listed in [Error codes](#error-codes).'),
       p('The reads send an `ETag`. Send it back as `If-None-Match` and you get `304` with no body while nothing changed: poll that way and a channel costs almost nothing.'),
       { t: 'pre', code: `curl -s -i '${baseUrl}/v1/sets/${EX.setId}' \\\n  -H 'if-none-match: "3f9a1c"'\n\nHTTP/2 304\netag: "3f9a1c"` },
       p('GraphQL queries are limited to a depth of 12, a complexity of 1.000 and 50 top-level fields (aliases count). The searches cost 50 each and single lookups such as `emote` or `channel` 10, so ask for many things in one list query, not in many aliases.'),
@@ -175,7 +188,8 @@ export const guides: Guide[] = [
     title: 'Rate limits',
     search: 'limits 429 retry-after throttle',
     blocks: [
-      p('Limits are per IP, and on GraphQL also per account. Past one you get `429` with the code `rate_limited` and a `Retry-After` header in seconds. Wait that long, then go on.'),
+      p('Limits are per IP, and on GraphQL also per account. Past one you get `429` with the code `rate_limited` and a `Retry-After` header in seconds. Wait that long, then go on. Every `429` has `Retry-After`, the event socket and the open-socket cap included.'),
+      p('The public reads and `POST /v1/gql` also say where you stand on every answer, with the `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` headers: the size of the allowance, the requests left in it, and the seconds until it is full again. On GraphQL, a signed-in call counts under the per-account allowance. Pace yourself with them and you never see a `429`.'),
       table(
         ['Reads', '1.200 a minute per IP. Most of them are answered by the cache.'],
         ['GraphQL', '300 a minute per IP, and 600 a minute per account.'],
@@ -185,6 +199,15 @@ export const guides: Guide[] = [
         ['Event socket', '60 connections a minute per IP, 50 open at once; 10 frames a second and 16 KB a frame from a client.'],
         ['GraphQL socket', '60 connections a minute per IP, 50 open at once; 64 KB a message, `connection_init` within 10 s, 8 subscriptions per socket.'],
       ),
+    ],
+  },
+  {
+    id: 'error-codes',
+    title: 'Error codes',
+    search: 'error codes list table meaning when rate_limited not_found forbidden bad_name',
+    blocks: [
+      p('The `error` of every error answer, and `extensions.code` in GraphQL, is one of these. Codes are stable: they are never renamed or reused for something else, and new ones may be added, so treat a code you do not know like its HTTP status. The same list is the `ErrorCode` schema of [openapi.json](' + SPEC + '/openapi/openapi.json).'),
+      { t: 'codes', rows: errorCodes },
     ],
   },
   {
@@ -200,7 +223,7 @@ export const guides: Guide[] = [
         ['1x.avif … 4x.avif', 'Still emotes also come as AVIF.'],
         ['1x_static.webp', 'Animated emotes: the first frame, for reduced motion or a paused chat.'],
       ),
-      p('The host is the hash of the picture, so a file never changes once it exists. Cache files for good.'),
+      p('The host is the hash of the picture, so a file never changes once it exists. The CDN sends them with `Cache-Control: public, max-age=31536000, immutable`: cache files for good. The API’s own reads (sets, channels, emote objects) are the opposite: they change, so they carry `max-age=30` and an `ETag`.'),
       note('A zero-width emote draws over the emote before it, not beside it.'),
     ],
   },

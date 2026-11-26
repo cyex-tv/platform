@@ -17,7 +17,6 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use axum::extract::{ConnectInfo, Request, State};
-use axum::http::header::RETRY_AFTER;
 use axum::http::{HeaderValue, Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
@@ -25,11 +24,11 @@ use cyex_tv_auth::Caller;
 use cyex_tv_db::ids;
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::LimitGroup;
-use cyex_tv_shared::ratelimit::{Limiter, OpenCap, Rate, client_ip};
+use cyex_tv_shared::ratelimit::{Limiter, OpenCap, Quota, Rate, client_ip};
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::errors::rate_limited;
+use crate::errors::rate_limited_in;
 use crate::state::AppState;
 
 #[derive(Clone, Copy, Debug)]
@@ -638,7 +637,7 @@ pub fn heavy_read(state: &AppState, caller: Option<&Caller>, ip: &str) -> ApiRes
             &person_key(caller, ip),
             caller.map(|c| c.account_id),
         )
-        .map_err(|_| rate_limited("That's a lot of reads. Try again in a minute."))
+        .map_err(|wait| rate_limited_in("That's a lot of reads. Try again in a minute.", wait))
 }
 
 /// Takes one token of the `account_search` limit.
@@ -650,7 +649,7 @@ pub fn account_search(state: &AppState, caller: Option<&Caller>, ip: &str) -> Ap
             &person_key(caller, ip),
             caller.map(|c| c.account_id),
         )
-        .map_err(|_| rate_limited("That's a lot of searches. Try again in a minute."))
+        .map_err(|wait| rate_limited_in("That's a lot of searches. Try again in a minute.", wait))
 }
 
 /// Takes one token of the `quick_search` limit.
@@ -662,36 +661,74 @@ pub fn quick_search(state: &AppState, caller: Option<&Caller>, ip: &str) -> ApiR
             &person_key(caller, ip),
             caller.map(|c| c.account_id),
         )
-        .map_err(|_| rate_limited("That's a lot of searches. Try again in a minute."))
+        .map_err(|wait| rate_limited_in("That's a lot of searches. Try again in a minute.", wait))
 }
 
 /// The 429 answer.
 pub fn too_many(wait: std::time::Duration) -> Response {
-    let mut response = ApiError::new(
+    let secs = wait.as_secs() + u64::from(wait.subsec_nanos() > 0);
+    ApiError::new(
         StatusCode::TOO_MANY_REQUESTS,
         "rate_limited",
         "Too many requests. Slow down and try again shortly.",
     )
-    .into_response();
-    let secs = wait.as_secs() + u64::from(wait.subsec_nanos() > 0);
-    if let Ok(v) = HeaderValue::from_str(&secs.max(1).to_string()) {
-        response.headers_mut().insert(RETRY_AFTER, v);
-    }
+    .retry_after(secs)
+    .into_response()
+}
+
+/// The 429 for a limit with a published quota: `too_many`, plus `RateLimit-*` (nothing left).
+pub fn too_many_quota(wait: std::time::Duration, quota: Quota) -> Response {
+    let mut response = too_many(wait);
+    set_quota(response.headers_mut(), quota);
     response
 }
 
 /// The 429 for an IP that holds as many sockets open as it may.
 pub fn too_many_open() -> Response {
-    let mut response = ApiError::new(
+    ApiError::new(
         StatusCode::TOO_MANY_REQUESTS,
         "rate_limited",
         "Too many open connections from this address. Close some and try again.",
     )
-    .into_response();
-    response
-        .headers_mut()
-        .insert(RETRY_AFTER, HeaderValue::from_static("30"));
-    response
+    .retry_after(30)
+    .into_response()
+}
+
+/// Sets the `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` headers (IETF
+/// draft-ietf-httpapi-ratelimit-headers): the bucket's size, the requests left, and the seconds
+/// until it is full again.
+pub fn set_quota(headers: &mut axum::http::HeaderMap, quota: Quota) {
+    headers.insert("ratelimit-limit", HeaderValue::from(quota.limit));
+    headers.insert("ratelimit-remaining", HeaderValue::from(quota.remaining));
+    headers.insert("ratelimit-reset", HeaderValue::from(quota.reset));
+}
+
+/// `set_quota` unless a handler already set its own (the per-account GraphQL limit).
+fn set_quota_if_absent(headers: &mut axum::http::HeaderMap, quota: Quota) {
+    if !headers.contains_key("ratelimit-limit") {
+        set_quota(headers, quota);
+    }
+}
+
+/// Takes one token of the per-account `limit` and returns what is left, for the endpoints that
+/// publish the `RateLimit-*` headers.
+pub fn take_quota(
+    limits: &Limits,
+    limit: AccountLimit,
+    key: &str,
+    account: Uuid,
+) -> Result<Quota, (std::time::Duration, Quota)> {
+    match limits.limiter(limit) {
+        Some(limiter) => limiter.check_quota_with(key, limits.rate(limit, Some(account))),
+        None => Err((
+            std::time::Duration::ZERO,
+            Quota {
+                limit: 0,
+                remaining: 0,
+                reset: 0,
+            },
+        )),
+    }
 }
 
 /// Which per-IP limit a request falls under, if any (health checks have none).
@@ -717,13 +754,39 @@ pub async fn middleware(State(state): State<AppState>, request: Request, next: N
     let ip = client_ip(request.headers(), peer, state.limits.trust_cloudflare);
     let mut request = request;
     request.extensions_mut().insert(ClientIp(ip.clone()));
-    if let Some(limiter) = class(&state.limits, request.method(), request.uri().path())
-        && let Err(wait) = limiter.check(&ip)
-    {
-        tracing::info!(%ip, path = request.uri().path(), "rate limited");
-        return too_many(wait);
+    let class = class(&state.limits, request.method(), request.uri().path());
+    let mut quota = None;
+    if let Some(limiter) = class {
+        match limiter.check_quota(&ip) {
+            Ok(q) => quota = Some(q),
+            Err((wait, q)) => {
+                tracing::info!(%ip, path = request.uri().path(), "rate limited");
+                // Reads and GraphQL publish their limit; the other classes only say when to retry.
+                return if publishes_quota(request.method(), request.uri().path()) {
+                    too_many_quota(wait, q)
+                } else {
+                    too_many(wait)
+                };
+            }
+        }
     }
-    next.run(request).await
+    let publish = publishes_quota(request.method(), request.uri().path());
+    let mut response = next.run(request).await;
+    if publish && let Some(q) = quota {
+        set_quota_if_absent(response.headers_mut(), q);
+    }
+    response
+}
+
+/// The routes whose answers carry `RateLimit-*`: the public REST reads and `POST /v1/gql`.
+fn publishes_quota(method: &Method, path: &str) -> bool {
+    match (method, path) {
+        (&Method::POST, "/v1/gql" | "/v1/personal-sets/lookup") => true,
+        (&Method::GET | &Method::HEAD, p) => {
+            p.starts_with("/v1/") && !p.starts_with("/v1/auth/") && p != "/v1/gql/ws"
+        }
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -952,6 +1015,7 @@ mod tests {
 
     #[test]
     fn the_answer_says_when_to_retry() {
+        use axum::http::header::RETRY_AFTER;
         let r = too_many(std::time::Duration::from_millis(1500));
         assert_eq!(r.status(), StatusCode::TOO_MANY_REQUESTS);
         assert_eq!(r.headers()[RETRY_AFTER], "2");

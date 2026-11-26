@@ -16,7 +16,7 @@ use cyex_tv_db::jobs::Job;
 use cyex_tv_media::encode::{self, Encoded, Kind, Profile, Variant};
 use cyex_tv_media::{Limits, MediaError};
 use cyex_tv_shared::model::{CosmeticKind, EmoteFile, ImageFormat};
-use cyex_tv_storage::{IMMUTABLE, Put, Store, cosmetic_key, sigv4};
+use cyex_tv_storage::{Put, Store, cache_control_for, cosmetic_key, sigv4};
 use serde_json::Value;
 
 use crate::{CancelOnDrop, Ctx, JobError, media_failure};
@@ -86,13 +86,14 @@ pub async fn store_all(
     variants: &[Variant],
 ) -> Result<(), JobError> {
     for v in variants {
+        let key = cosmetic_key(kind.as_str(), sha_hex, &v.name);
         store
             .put(
-                &cosmetic_key(kind.as_str(), sha_hex, &v.name),
+                &key,
                 v.bytes.clone().into(),
                 Put {
                     content_type: v.kind.mime(),
-                    cache_control: Some(IMMUTABLE),
+                    cache_control: cache_control_for(&key),
                 },
             )
             .await
@@ -166,6 +167,7 @@ mod tests {
     //! The job's image path without a database: fixtures made in code (a still PNG, an animated
     //! GIF), encoded at the cosmetic sizes and written to the in-memory store.
 
+    use cyex_tv_storage::IMMUTABLE;
     use std::io::Cursor;
 
     use image::codecs::gif::{GifEncoder, Repeat};

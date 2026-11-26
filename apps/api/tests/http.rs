@@ -479,3 +479,76 @@ async fn requests_are_counted_per_route() {
         "{gauges}"
     );
 }
+
+fn quota_of(headers: &axum::http::HeaderMap) -> Option<(u32, u32, u64)> {
+    let n = |name: &str| headers.get(name)?.to_str().ok()?.parse::<u64>().ok();
+    Some((
+        n("ratelimit-limit")? as u32,
+        n("ratelimit-remaining")? as u32,
+        n("ratelimit-reset")?,
+    ))
+}
+
+#[tokio::test]
+async fn reads_and_graphql_publish_their_limit_and_a_429_says_when_to_retry() {
+    let tiny = cyex_tv_shared::ratelimit::Rate::per_minute(2);
+    let rates = cyex_tv_api::limits::Limits::new(
+        cyex_tv_api::limits::Rates {
+            reads: tiny,
+            gql: tiny,
+            auth: tiny,
+            ..cyex_tv_api::limits::Rates::default()
+        },
+        false,
+    );
+    let app = cyex_tv_api::app(offline_state().with_limits(rates));
+    let read = || Request::get("/v1/sets/global").body(Body::empty()).unwrap();
+    let gql = || {
+        Request::post("/v1/gql")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"query":"{ __typename }"}"#))
+            .unwrap()
+    };
+    for (name, make) in [("read", &read as &dyn Fn() -> Request<Body>), ("gql", &gql)] {
+        let first = app.clone().oneshot(make()).await.unwrap();
+        let (limit, left, reset) = quota_of(first.headers()).unwrap_or_else(|| panic!("{name}"));
+        assert_eq!((limit, left), (2, 1), "{name}");
+        assert!((1..=60).contains(&reset), "{name} {reset}");
+        let second = app.clone().oneshot(make()).await.unwrap();
+        assert_eq!(quota_of(second.headers()).unwrap().1, 0, "{name}");
+        let third = app.clone().oneshot(make()).await.unwrap();
+        assert_eq!(third.status(), StatusCode::TOO_MANY_REQUESTS, "{name}");
+        assert!(
+            third.headers()["retry-after"]
+                .to_str()
+                .unwrap()
+                .parse::<u64>()
+                .unwrap()
+                >= 1
+        );
+        assert_eq!(quota_of(third.headers()).unwrap().0, 2, "{name}");
+        assert_eq!(quota_of(third.headers()).unwrap().1, 0, "{name}");
+    }
+    // Sign-in is limited too but publishes no quota; its 429 still says when to retry.
+    for _ in 0..2 {
+        app.clone()
+            .oneshot(
+                Request::get("/v1/auth/twitch/login")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+    }
+    let r = app
+        .oneshot(
+            Request::get("/v1/auth/twitch/login")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(r.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert!(r.headers().contains_key("retry-after"));
+    assert!(quota_of(r.headers()).is_none());
+}

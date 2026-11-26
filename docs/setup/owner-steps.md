@@ -75,6 +75,8 @@ The files carry `Cache-Control: public, max-age=31536000, immutable`, and their 
 - Edge TTL: use the cache-control header from the origin
 - Browser TTL: respect origin
 
+Only the sha256-keyed files (`emotes/`, `cosmetics/badges/`, `cosmetics/paints/`) are set to `immutable` by the worker (`cyex_tv_storage::cache_control_for`). The private `originals/` have no `Cache-Control` and the WAF rule keeps them unreachable. Reads from the API (`api.cyex.tv`) are not content-addressed and keep `max-age=30` with an `ETag`; do not add a long Cache Rule for them.
+
 ## 4. CORS
 Chat clients and the extension fetch the files from other origins. In R2 → `cyex-tv-cdn` → Settings → CORS policy:
 ```json

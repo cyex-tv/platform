@@ -46,8 +46,46 @@ use utoipa_axum::router::OpenApiRouter;
 use crate::gql::ApiSchema;
 use crate::state::{AppState, MaybeCaller};
 
+/// Adds `components.schemas.ErrorCode`: every stable error code (`cyex_tv_shared::error_codes`),
+/// as the enum of codes and, under `x-codes`, each one's group, meaning and when it happens.
+struct ErrorCodes;
+
+impl utoipa::Modify for ErrorCodes {
+    fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
+        use cyex_tv_shared::error_codes::ERROR_CODES;
+        use utoipa::openapi::extensions::ExtensionsBuilder;
+        use utoipa::openapi::schema::{ObjectBuilder, Type};
+
+        let table: Vec<serde_json::Value> = ERROR_CODES
+            .iter()
+            .map(|e| {
+                serde_json::json!({
+                    "code": e.code,
+                    "group": e.group,
+                    "meaning": e.meaning,
+                    "when": e.when,
+                })
+            })
+            .collect();
+        let schema = ObjectBuilder::new()
+            .schema_type(Type::String)
+            .description(Some(
+                "A stable error code, the `error` of an error answer (and `extensions.code` in                  GraphQL). Match on it; `message` is for people. Codes are never renamed or reused,                  and new ones may appear, so treat an unknown code like its HTTP status. `x-codes`                  says what each means and when it comes.",
+            ))
+            .enum_values(Some(ERROR_CODES.iter().map(|e| e.code)))
+            .extensions(Some(ExtensionsBuilder::new().add("x-codes", table).build()))
+            .build();
+        openapi
+            .components
+            .get_or_insert_with(Default::default)
+            .schemas
+            .insert("ErrorCode".to_owned(), schema.into());
+    }
+}
+
 #[derive(OpenApi)]
 #[openapi(
+    modifiers(&ErrorCodes),
     info(
         title = "cyex.tv REST API",
         description = "The REST part of the cyex.tv API: sign-in, uploads and the cacheable reads chat clients poll. Everything else is GraphQL at /v1/gql.",
@@ -60,7 +98,7 @@ use crate::state::{AppState, MaybeCaller};
         (name = "emotes", description = "Uploading emotes."),
         (name = "cosmetics", description = "cyex.tv chat badges and name paints (ADR 0015): the catalog, chatters' picks, and staff picture uploads."),
         (name = "shop", description = "The cosmetics shop (ADR 0016): Paddle's webhook. Items, checkout, orders and codes are GraphQL."),
-        (name = "reads", description = "Public, cacheable reads for chat clients.")
+        (name = "reads", description = "Public, cacheable reads for chat clients. Every answer carries `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (seconds until the allowance is full again); a `429` also has `Retry-After`.")
     )
 )]
 pub struct ApiDoc;
@@ -163,14 +201,19 @@ async fn graphql(
             Err(err) => return cyex_tv_shared::error::ApiError::from(err).into_response(),
         },
     };
-    if let Some(caller) = &caller
-        && let Err(wait) = state.limits.take(
+    // A signed-in caller counts under the per-account limit, which is the one the
+    // `RateLimit-*` headers describe (over the per-IP one the middleware sets).
+    let mut quota = None;
+    if let Some(caller) = &caller {
+        match limits::take_quota(
+            &state.limits,
             limits::AccountLimit::GqlAccount,
             &cyex_tv_db::ids::to_text(caller.account_id),
-            Some(caller.account_id),
-        )
-    {
-        return limits::too_many(wait);
+            caller.account_id,
+        ) {
+            Ok(q) => quota = Some(q),
+            Err((wait, q)) => return limits::too_many_quota(wait, q),
+        }
     }
     let ip = ip.map_or_else(|| limits::ClientIp(String::new()), |Extension(ip)| ip);
     let response: GraphQLResponse = schema
@@ -183,7 +226,11 @@ async fn graphql(
         )
         .await
         .into();
-    response.into_response()
+    let mut response = response.into_response();
+    if let Some(q) = quota {
+        limits::set_quota(response.headers_mut(), q);
+    }
+    response
 }
 
 /// `/v1/gql/ws` (`graphql-transport-ws`, or the older `graphql-ws`): subscriptions only, at most

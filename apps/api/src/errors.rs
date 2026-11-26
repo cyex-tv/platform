@@ -26,10 +26,17 @@ pub fn rate_limited(message: &str) -> ApiError {
     ApiError::new(StatusCode::TOO_MANY_REQUESTS, "rate_limited", message)
 }
 
+/// `rate_limited`, telling the client to wait `wait` (`Retry-After`).
+pub fn rate_limited_in(message: &str, wait: std::time::Duration) -> ApiError {
+    rate_limited(message).retry_after(wait.as_secs() + u64::from(wait.subsec_nanos() > 0))
+}
+
 /// Counts one use of `key` against `limiter`; over the limit it is `429 rate_limited` with the
 /// feature's own `message`.
 pub fn limited(limiter: &Limiter, key: &str, message: &str) -> ApiResult<()> {
-    limiter.check(key).map_err(|_| rate_limited(message))
+    limiter
+        .check(key)
+        .map_err(|wait| rate_limited_in(message, wait))
 }
 
 /// Counts one use of the per-account `limit` for `key`, at what `account`'s roles allow
@@ -44,7 +51,7 @@ pub fn limited_as(
     state
         .limits
         .take(limit, key, Some(account))
-        .map_err(|_| rate_limited(message))
+        .map_err(|wait| rate_limited_in(message, wait))
 }
 
 pub fn sqlx_error(err: sqlx::Error) -> ApiError {

@@ -37,7 +37,7 @@ use uuid::Uuid;
 
 use crate::editors::{has_flag, has_flag_on_all_sets, has_flag_on_set};
 use crate::errors::{Audit, record_audit};
-use crate::errors::{bad, conflict, paging, rate_limited, sqlx_error};
+use crate::errors::{bad, conflict, paging, rate_limited_in, sqlx_error};
 use crate::limits::AccountLimit;
 use crate::moderation::{QUEUE_PAGE, QUEUE_PAGE_MAX};
 use crate::state::AppState;
@@ -1035,7 +1035,9 @@ pub async fn clone_set(
             &ids::to_text(caller.account_id),
             Some(caller.account_id),
         )
-        .map_err(|_| rate_limited("That's a lot of copied sets. Try again in a while."))?;
+        .map_err(|wait| {
+            rate_limited_in("That's a lot of copied sets. Try again in a while.", wait)
+        })?;
     let mut conn = conn(state).await?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let source = load_set(&mut tx, source_id).await?;

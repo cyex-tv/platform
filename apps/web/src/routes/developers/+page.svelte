@@ -142,6 +142,11 @@
               <div class="fmt-grid" class:wide={!b.plain && b.rows.some(([k]) => k.length > 16)}>
                 {#each b.rows as [k, v]}<div class="fmt">{#if b.plain}<b>{k}</b>{:else}<code>{k}</code>{/if}<span><Inline paras={v} /></span></div>{/each}
               </div>
+            {:else if b.t === 'codes'}
+              <div class="codes-wrap"><table class="codes">
+                <thead><tr><th>Code</th><th>Meaning</th><th>When</th></tr></thead>
+                <tbody>{#each b.rows as r (r.code)}<tr id="code-{r.code}"><td><code>{r.code}</code></td><td>{r.meaning}</td><td>{r.when}</td></tr>{/each}</tbody>
+              </table></div>
             {:else if b.t === 'note'}
               <div class="note"><Prose paras={b.text} /></div>
             {:else if b.t === 'pre'}

@@ -24,6 +24,17 @@ use crate::sigv4::{Credentials, EMPTY_SHA256};
 /// `Cache-Control` for emote files: they never change under one key.
 pub const IMMUTABLE: &str = "public, max-age=31536000, immutable";
 
+/// The `Cache-Control` an object under `key` is stored with. Public files are keyed by the
+/// sha256 of their original (`emotes/{sha256}/..`, `cosmetics/badges|paints/{sha256}/..`), so one
+/// key never changes and is cached for a year. Everything else (the private `originals/`) has none.
+pub fn cache_control_for(key: &str) -> Option<&'static str> {
+    const ADDRESSED: [&str; 3] = ["emotes/", "cosmetics/badges/", "cosmetics/paints/"];
+    ADDRESSED
+        .iter()
+        .any(|prefix| key.starts_with(prefix))
+        .then_some(IMMUTABLE)
+}
+
 pub fn emote_key(sha256_hex: &str, variant: &str) -> String {
     format!("emotes/{sha256_hex}/{variant}")
 }
@@ -377,6 +388,22 @@ mod tests {
     use std::collections::HashMap;
 
     use super::*;
+
+    #[test]
+    fn content_addressed_files_are_immutable_and_originals_are_not() {
+        let sha = "ab".repeat(32);
+        for key in [
+            emote_key(&sha, "1x.webp"),
+            cosmetic_key("badge", &sha, "1x.webp"),
+            cosmetic_key("paint", &sha, "4x.avif"),
+        ] {
+            assert_eq!(cache_control_for(&key), Some(IMMUTABLE), "{key}");
+        }
+        for key in [original_key(&sha), cosmetic_original_key(&sha)] {
+            assert_eq!(cache_control_for(&key), None, "{key}");
+        }
+        assert_eq!(IMMUTABLE, "public, max-age=31536000, immutable");
+    }
 
     #[test]
     fn keys_follow_adr_0003() {

@@ -34,6 +34,7 @@ A hand-written spec also drifts from the code.
   - `GET /v1/auth/{platform}/callback`
   - `POST /v1/auth/logout`
 - Upload: `POST /v1/emotes` (multipart, streamed, size-limited).
+- **Error codes and limit headers:** the stable error codes are listed once, in `crates/shared/src/error_codes.rs`, published as `components.schemas.ErrorCode` in the OpenAPI document and as a table on the developer docs; a test fails when the source uses an unlisted code. Every `429` sends `Retry-After`; the public reads and `POST /v1/gql` also send `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset`.
 - **The chat-client read API** (public, no auth, `ETag` + `Cache-Control`, cacheable at Cloudflare):
   - `GET /v1/channels/{platform}/{id}`: the channel and its active set ID;
   - `GET /v1/sets/{id}`

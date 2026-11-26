@@ -1722,12 +1722,1029 @@
         ],
         "properties": {
           "error": {
-            "type": "string"
+            "type": "string",
+            "description": "One of the `ErrorCode` values."
           },
           "message": {
             "type": "string"
           }
         }
+      },
+      "ErrorCode": {
+        "type": "string",
+        "description": "A stable error code, the `error` of an error answer (and `extensions.code` in                  GraphQL). Match on it; `message` is for people. Codes are never renamed or reused,                  and new ones may appear, so treat an unknown code like its HTTP status. `x-codes`                  says what each means and when it comes.",
+        "enum": [
+          "internal",
+          "unavailable",
+          "not_implemented",
+          "not_found",
+          "forbidden",
+          "signed_out",
+          "insufficient_scope",
+          "website_only",
+          "restricted",
+          "own_account",
+          "owner_protected",
+          "owner_only",
+          "rate_limited",
+          "locked_out",
+          "too_many",
+          "too_many_fields",
+          "bad_origin",
+          "bad_idempotency_key",
+          "idempotency_key_reused",
+          "idempotency_in_progress",
+          "bad_form",
+          "bad_name",
+          "bad_text",
+          "bad_description",
+          "bad_reason",
+          "bad_note",
+          "bad_time",
+          "bad_scope",
+          "bad_search",
+          "bad_batch",
+          "bad_kind",
+          "unknown_kind",
+          "unknown_platform",
+          "bad_return_to",
+          "bad_state",
+          "declined",
+          "platform_error",
+          "identity_taken",
+          "platform_already_linked",
+          "last_identity",
+          "account_deleted",
+          "account_blocked",
+          "unknown_client",
+          "confirm_mismatch",
+          "nothing_to_restore",
+          "bad_visibility",
+          "nsfw_not_allowed",
+          "bad_tag",
+          "too_many_tags",
+          "too_many_pending",
+          "unsupported_format",
+          "invalid_image",
+          "too_large",
+          "blocked",
+          "bad_sha256",
+          "emote_unavailable",
+          "emote_private",
+          "not_approved",
+          "already_taken_down",
+          "not_pending",
+          "bad_emote",
+          "too_many_reasons",
+          "bad_logins",
+          "set_full",
+          "capacity_too_low",
+          "capacity_over_limit",
+          "bad_capacity",
+          "name_taken",
+          "already_in_set",
+          "set_in_use",
+          "invalid_set_kind",
+          "invalid_active_set",
+          "personal_set_exists",
+          "bad_channel",
+          "bad_set",
+          "limit_reached",
+          "already_editor",
+          "already_owner",
+          "too_many_editors",
+          "too_many_sets",
+          "no_permissions",
+          "retired_permission",
+          "bad_editor",
+          "same_owner",
+          "expired",
+          "recipient_not_found",
+          "bad_color",
+          "bad_angle",
+          "bad_stops",
+          "bad_shadows",
+          "bad_tooltip",
+          "bad_image",
+          "bad_dimensions",
+          "image_not_ready",
+          "original_missing",
+          "not_owned",
+          "bad_badge",
+          "bad_cosmetics",
+          "checkout_unavailable",
+          "checkout_failed",
+          "checkout_busy",
+          "payment_provider_error",
+          "bad_payload",
+          "bad_item",
+          "item_unavailable",
+          "sold_out",
+          "already_owned",
+          "bad_price",
+          "bad_price_id",
+          "bad_currency",
+          "bad_stock",
+          "order_not_ready",
+          "not_refundable",
+          "already_refunded",
+          "refund_in_progress",
+          "refund_failed",
+          "refund_unavailable",
+          "bad_code",
+          "already_redeemed",
+          "code_disabled",
+          "code_expired",
+          "code_used_up",
+          "bad_count",
+          "bad_prefix",
+          "bad_uses",
+          "bad_permissions",
+          "unknown_permission",
+          "role_name_taken",
+          "built_in_role",
+          "implicit_role",
+          "bad_position",
+          "bad_limit",
+          "unknown_limit",
+          "bad_label",
+          "bad_link",
+          "ended",
+          "required_kind",
+          "already_reported",
+          "not_open",
+          "tickets_blocked",
+          "invalid_topic",
+          "too_many_topics",
+          "too_many_subscriptions",
+          "subscriptions_only"
+        ],
+        "x-codes": [
+          {
+            "code": "internal",
+            "group": "General",
+            "meaning": "Something failed on our side.",
+            "when": "Unexpected server or database failure. Safe to retry later; report it if it keeps happening."
+          },
+          {
+            "code": "unavailable",
+            "group": "General",
+            "meaning": "The service or a dependency is not available right now.",
+            "when": "Sign-in with a platform is not configured, uploads or storage are down, or the database cannot be reached (503)."
+          },
+          {
+            "code": "not_implemented",
+            "group": "General",
+            "meaning": "The endpoint is part of the contract but not built yet.",
+            "when": "You call a route that answers 501."
+          },
+          {
+            "code": "not_found",
+            "group": "General",
+            "meaning": "Nothing with that ID, or you may not see it.",
+            "when": "Reading or changing something that does not exist. Private things answer the same way, so existence is not leaked."
+          },
+          {
+            "code": "forbidden",
+            "group": "General",
+            "meaning": "Your roles do not allow this.",
+            "when": "The signed-in account lacks the permission for the action (403)."
+          },
+          {
+            "code": "signed_out",
+            "group": "General",
+            "meaning": "You must sign in first.",
+            "when": "A call that needs an account came without a valid session or token (401)."
+          },
+          {
+            "code": "insufficient_scope",
+            "group": "General",
+            "meaning": "This app token may not do that.",
+            "when": "A token made for an app (not the website) calls something the app scope does not cover."
+          },
+          {
+            "code": "website_only",
+            "group": "General",
+            "meaning": "Only the website, signed in there, may do this.",
+            "when": "Account deletion and similar actions called with an app token or console token."
+          },
+          {
+            "code": "restricted",
+            "group": "General",
+            "meaning": "The account is restricted.",
+            "when": "A restricted account tries an action its restrictions block, like uploading or deleting itself."
+          },
+          {
+            "code": "own_account",
+            "group": "General",
+            "meaning": "You cannot do this to your own account.",
+            "when": "Staff change restrictions on their own account, or act on themselves where that makes no sense."
+          },
+          {
+            "code": "owner_protected",
+            "group": "General",
+            "meaning": "The owner's account is protected.",
+            "when": "Someone tries to restrict, block or delete an owner account."
+          },
+          {
+            "code": "owner_only",
+            "group": "General",
+            "meaning": "Only an owner may do this.",
+            "when": "Giving the User role a staff permission, or other owner-only changes."
+          },
+          {
+            "code": "rate_limited",
+            "group": "General",
+            "meaning": "Too many requests or tries.",
+            "when": "Over a rate or per-account limit. Wait the seconds in the Retry-After header, then go on."
+          },
+          {
+            "code": "locked_out",
+            "group": "General",
+            "meaning": "Too many wrong codes, locked out for a while.",
+            "when": "Several wrong redeem codes in a row. Retry-After holds the wait."
+          },
+          {
+            "code": "too_many",
+            "group": "General",
+            "meaning": "More items in one request than allowed.",
+            "when": "A batch call (look up users, mark notifications, and so on) goes over its cap, usually 100."
+          },
+          {
+            "code": "too_many_fields",
+            "group": "General",
+            "meaning": "The GraphQL query asks for too much at once.",
+            "when": "One request aliases or repeats fields past the cost cap. Split it."
+          },
+          {
+            "code": "bad_origin",
+            "group": "General",
+            "meaning": "Requests with the session cookie must come from cyex.tv.",
+            "when": "A cookie-signed POST from another origin (403)."
+          },
+          {
+            "code": "bad_idempotency_key",
+            "group": "General",
+            "meaning": "The Idempotency-Key is not a UUID.",
+            "when": "A write sends the header in another format."
+          },
+          {
+            "code": "idempotency_key_reused",
+            "group": "General",
+            "meaning": "The idempotency key was used for a different request.",
+            "when": "The same key arrives with a different body or operation."
+          },
+          {
+            "code": "idempotency_in_progress",
+            "group": "General",
+            "meaning": "The first request with this key is still running.",
+            "when": "A retry with the same key arrives before the first finished (409). Try again shortly."
+          },
+          {
+            "code": "bad_form",
+            "group": "General",
+            "meaning": "The upload form is malformed.",
+            "when": "A multipart upload misses its file, repeats a field or sends a field that is too long."
+          },
+          {
+            "code": "bad_name",
+            "group": "General",
+            "meaning": "A name is empty, too long or has characters that are not allowed.",
+            "when": "Emote, set, role, badge, paint or tag names break the length or character rules."
+          },
+          {
+            "code": "bad_text",
+            "group": "General",
+            "meaning": "Text is outside the allowed length.",
+            "when": "An announcement or similar text is empty or too long."
+          },
+          {
+            "code": "bad_description",
+            "group": "General",
+            "meaning": "A description is too long.",
+            "when": "Descriptions are at most 500 characters."
+          },
+          {
+            "code": "bad_reason",
+            "group": "General",
+            "meaning": "A reason is empty or too long.",
+            "when": "Reports, takedowns and moderator actions need a reason of 1 to 500 characters."
+          },
+          {
+            "code": "bad_note",
+            "group": "General",
+            "meaning": "A note is empty or too long.",
+            "when": "Staff notes are 1 to 2000 characters."
+          },
+          {
+            "code": "bad_time",
+            "group": "General",
+            "meaning": "A time is not in the expected format.",
+            "when": "A time field is not an RFC 3339 time like 2026-11-17T00:00:00Z."
+          },
+          {
+            "code": "bad_scope",
+            "group": "General",
+            "meaning": "The scope arguments conflict.",
+            "when": "Activity queries get both or neither of accountId and emoteId."
+          },
+          {
+            "code": "bad_search",
+            "group": "General",
+            "meaning": "The search text is too long.",
+            "when": "Searches are at most 100 characters."
+          },
+          {
+            "code": "bad_batch",
+            "group": "General",
+            "meaning": "The batch size is out of range.",
+            "when": "A moderation batch has fewer than 1 or more than 100 items."
+          },
+          {
+            "code": "bad_kind",
+            "group": "General",
+            "meaning": "The kind is not one of the allowed values.",
+            "when": "A cosmetics upload or list names a kind other than badge or paint."
+          },
+          {
+            "code": "unknown_kind",
+            "group": "General",
+            "meaning": "That is not a kind of notification.",
+            "when": "Notification preferences name an unknown kind."
+          },
+          {
+            "code": "unknown_platform",
+            "group": "Auth",
+            "meaning": "The platform must be twitch or kick.",
+            "when": "Sign-in or linking names another platform."
+          },
+          {
+            "code": "bad_return_to",
+            "group": "Auth",
+            "meaning": "return_to must be a cyex.tv URL.",
+            "when": "Sign-in is started with a return address outside cyex.tv."
+          },
+          {
+            "code": "bad_state",
+            "group": "Auth",
+            "meaning": "The sign-in expired or was already used.",
+            "when": "The OAuth state is missing, wrong or used twice. Start again."
+          },
+          {
+            "code": "declined",
+            "group": "Auth",
+            "meaning": "Sign-in was cancelled on the platform.",
+            "when": "The person declined on Twitch or Kick."
+          },
+          {
+            "code": "platform_error",
+            "group": "Auth",
+            "meaning": "The platform did not answer as expected.",
+            "when": "Twitch or Kick failed during sign-in (502). Try again."
+          },
+          {
+            "code": "identity_taken",
+            "group": "Auth",
+            "meaning": "That platform account is linked to another cyex.tv account.",
+            "when": "Linking a Twitch or Kick account already used elsewhere."
+          },
+          {
+            "code": "platform_already_linked",
+            "group": "Auth",
+            "meaning": "This platform is already linked to your account.",
+            "when": "Linking a platform you already linked."
+          },
+          {
+            "code": "last_identity",
+            "group": "Auth",
+            "meaning": "The last linked account cannot be removed.",
+            "when": "Unlinking the only platform identity of an account."
+          },
+          {
+            "code": "account_deleted",
+            "group": "Auth",
+            "meaning": "This account was deleted.",
+            "when": "Signing in to an account whose undo window ended."
+          },
+          {
+            "code": "account_blocked",
+            "group": "Auth",
+            "meaning": "This account is blocked.",
+            "when": "Signing in or acting as a blocked account."
+          },
+          {
+            "code": "unknown_client",
+            "group": "Auth",
+            "meaning": "Where the request came from is not known.",
+            "when": "Redeeming codes or app sign-in from an unregistered client."
+          },
+          {
+            "code": "confirm_mismatch",
+            "group": "Auth",
+            "meaning": "The confirmation does not match.",
+            "when": "Deleting an account without typing one of your own logins."
+          },
+          {
+            "code": "nothing_to_restore",
+            "group": "Auth",
+            "meaning": "There is no deleted account to restore.",
+            "when": "restoreAccount without an account in its undo window."
+          },
+          {
+            "code": "bad_visibility",
+            "group": "Emotes",
+            "meaning": "That visibility is not allowed.",
+            "when": "Setting a set private, or unlisting without the emotes.flags permission."
+          },
+          {
+            "code": "nsfw_not_allowed",
+            "group": "Emotes",
+            "meaning": "NSFW emotes are not allowed on cyex.tv.",
+            "when": "An upload asks for an NSFW flag. There is none."
+          },
+          {
+            "code": "bad_tag",
+            "group": "Emotes",
+            "meaning": "A tag is not valid.",
+            "when": "Tags are 1 to 32 letters, digits, - or _."
+          },
+          {
+            "code": "too_many_tags",
+            "group": "Emotes",
+            "meaning": "Too many tags.",
+            "when": "More than 10 tags on an emote."
+          },
+          {
+            "code": "too_many_pending",
+            "group": "Emotes",
+            "meaning": "You already have as many emotes waiting for review as allowed.",
+            "when": "Uploading with the pending cap reached (409). See uploadQuota."
+          },
+          {
+            "code": "unsupported_format",
+            "group": "Emotes",
+            "meaning": "The file is not a supported image type.",
+            "when": "Uploading something other than PNG, GIF, WebP, AVIF or APNG (415)."
+          },
+          {
+            "code": "invalid_image",
+            "group": "Emotes",
+            "meaning": "The file is not a valid image.",
+            "when": "The bytes are broken or the decoder refuses them (422)."
+          },
+          {
+            "code": "too_large",
+            "group": "Emotes",
+            "meaning": "The file or the picture is too big.",
+            "when": "Bytes, size in pixels or frame count go over the limits (413)."
+          },
+          {
+            "code": "blocked",
+            "group": "Emotes",
+            "meaning": "This image cannot be uploaded.",
+            "when": "The image matches one that was taken down for good (422)."
+          },
+          {
+            "code": "bad_sha256",
+            "group": "Emotes",
+            "meaning": "A sha256 is not 64 hex digits.",
+            "when": "A review call names an image by a malformed hash."
+          },
+          {
+            "code": "emote_unavailable",
+            "group": "Emotes",
+            "meaning": "The emote cannot be used.",
+            "when": "Adding an emote that is blocked, deleted or taken down."
+          },
+          {
+            "code": "emote_private",
+            "group": "Emotes",
+            "meaning": "Only its owner can add a private emote to sets.",
+            "when": "Adding a private emote to someone else's set."
+          },
+          {
+            "code": "not_approved",
+            "group": "Emotes",
+            "meaning": "The emote is not approved yet.",
+            "when": "Until approval an emote only goes in its owner's channel sets."
+          },
+          {
+            "code": "already_taken_down",
+            "group": "Emotes",
+            "meaning": "The emote is taken down already.",
+            "when": "Taking down an emote that is gone."
+          },
+          {
+            "code": "not_pending",
+            "group": "Emotes",
+            "meaning": "Only pending items can do that.",
+            "when": "Requeueing an emote that is not pending, or answering a transfer that is not pending."
+          },
+          {
+            "code": "bad_emote",
+            "group": "Emotes",
+            "meaning": "That emote does not exist.",
+            "when": "A site setting or list names an emote ID that does not exist."
+          },
+          {
+            "code": "too_many_reasons",
+            "group": "Emotes",
+            "meaning": "Too many ready reasons.",
+            "when": "A review reason list has more than 12."
+          },
+          {
+            "code": "bad_logins",
+            "group": "Emotes",
+            "meaning": "The login list is out of range.",
+            "when": "Give 1 to 100 logins at a time."
+          },
+          {
+            "code": "set_full",
+            "group": "Sets",
+            "meaning": "The set is full.",
+            "when": "Adding an emote to a set with no free slot (409)."
+          },
+          {
+            "code": "capacity_too_low",
+            "group": "Sets",
+            "meaning": "The set already holds more emotes than that.",
+            "when": "Lowering capacity below the emotes in the set."
+          },
+          {
+            "code": "capacity_over_limit",
+            "group": "Sets",
+            "meaning": "The capacity is above what you may have.",
+            "when": "Raising capacity over your cap (1000 normally)."
+          },
+          {
+            "code": "bad_capacity",
+            "group": "Sets",
+            "meaning": "The capacity is not a valid number.",
+            "when": "Capacity is a whole number from 1 to 1,000,000."
+          },
+          {
+            "code": "name_taken",
+            "group": "Sets",
+            "meaning": "That name is already used.",
+            "when": "An emote name repeats inside a set, or a badge or paint name repeats."
+          },
+          {
+            "code": "already_in_set",
+            "group": "Sets",
+            "meaning": "The emote is already in the set.",
+            "when": "Adding an emote twice."
+          },
+          {
+            "code": "set_in_use",
+            "group": "Sets",
+            "meaning": "A channel shows this set.",
+            "when": "Deleting an active set. Pick another active set first."
+          },
+          {
+            "code": "invalid_set_kind",
+            "group": "Sets",
+            "meaning": "Sets of this kind cannot be made or changed this way.",
+            "when": "Editing a global or personal set through the wrong call."
+          },
+          {
+            "code": "invalid_active_set",
+            "group": "Sets",
+            "meaning": "The active set is not one of the channel owner's sets.",
+            "when": "Setting a channel's active set to someone else's set."
+          },
+          {
+            "code": "personal_set_exists",
+            "group": "Sets",
+            "meaning": "You already have a personal set.",
+            "when": "Making a second personal set."
+          },
+          {
+            "code": "bad_channel",
+            "group": "Sets",
+            "meaning": "The channel is not identified properly.",
+            "when": "Give the channel's ID or login (one of them, up to 64 characters)."
+          },
+          {
+            "code": "bad_set",
+            "group": "Sets",
+            "meaning": "The set choice is not valid.",
+            "when": "Editor permissions name sets that do not belong to the account."
+          },
+          {
+            "code": "limit_reached",
+            "group": "Sets",
+            "meaning": "A personal list limit is reached.",
+            "when": "Hidden or favourite lists are full."
+          },
+          {
+            "code": "already_editor",
+            "group": "Editors",
+            "meaning": "They are an editor already.",
+            "when": "Adding an editor twice. Change their permissions instead."
+          },
+          {
+            "code": "already_owner",
+            "group": "Editors",
+            "meaning": "The owner can edit it already.",
+            "when": "Adding the set's owner as an editor."
+          },
+          {
+            "code": "too_many_editors",
+            "group": "Editors",
+            "meaning": "An account has too many editors.",
+            "when": "More than 50 editors on one account."
+          },
+          {
+            "code": "too_many_sets",
+            "group": "Editors",
+            "meaning": "Too many sets picked.",
+            "when": "An editor is limited to more than 200 sets."
+          },
+          {
+            "code": "no_permissions",
+            "group": "Editors",
+            "meaning": "No permission was picked.",
+            "when": "Editors need at least one permission. To take all away, remove the editor."
+          },
+          {
+            "code": "retired_permission",
+            "group": "Editors",
+            "meaning": "That permission is not available for editors any more.",
+            "when": "Giving editors the transfer permission."
+          },
+          {
+            "code": "bad_editor",
+            "group": "Editors",
+            "meaning": "The editor is not identified properly.",
+            "when": "Give the editor's account ID, or a platform and a login."
+          },
+          {
+            "code": "same_owner",
+            "group": "Transfers",
+            "meaning": "That account owns the emote already.",
+            "when": "Transferring an emote to its owner."
+          },
+          {
+            "code": "expired",
+            "group": "Transfers",
+            "meaning": "The request expired.",
+            "when": "Accepting a transfer request after its time ran out."
+          },
+          {
+            "code": "recipient_not_found",
+            "group": "Transfers",
+            "meaning": "No account has that login.",
+            "when": "Sending a transfer or a gift to an unknown login."
+          },
+          {
+            "code": "bad_color",
+            "group": "Cosmetics",
+            "meaning": "A colour is not valid.",
+            "when": "Use #RRGGBB or #RRGGBBAA."
+          },
+          {
+            "code": "bad_angle",
+            "group": "Cosmetics",
+            "meaning": "The angle is not valid.",
+            "when": "Gradient angles are 0 to 360 degrees."
+          },
+          {
+            "code": "bad_stops",
+            "group": "Cosmetics",
+            "meaning": "The gradient stops are not valid.",
+            "when": "Gradients take 2 to 10 stops."
+          },
+          {
+            "code": "bad_shadows",
+            "group": "Cosmetics",
+            "meaning": "Too many shadows.",
+            "when": "At most 4 shadows on a paint."
+          },
+          {
+            "code": "bad_tooltip",
+            "group": "Cosmetics",
+            "meaning": "The tooltip is not valid.",
+            "when": "Tooltips are 1 to 64 characters."
+          },
+          {
+            "code": "bad_image",
+            "group": "Cosmetics",
+            "meaning": "The image does not fit this paint.",
+            "when": "Only image paints take an image."
+          },
+          {
+            "code": "bad_dimensions",
+            "group": "Cosmetics",
+            "meaning": "The picture's size does not fit.",
+            "when": "Badge or paint pictures outside the allowed size or aspect (422)."
+          },
+          {
+            "code": "image_not_ready",
+            "group": "Cosmetics",
+            "meaning": "The picture's files are still being made.",
+            "when": "Using a picture before the worker finished it. Try again shortly."
+          },
+          {
+            "code": "original_missing",
+            "group": "Cosmetics",
+            "meaning": "The picture's original is gone from storage.",
+            "when": "Remaking files for a picture whose original was lost. Upload it again."
+          },
+          {
+            "code": "not_owned",
+            "group": "Cosmetics",
+            "meaning": "You do not own that cosmetic.",
+            "when": "Showing a badge or paint the account does not own."
+          },
+          {
+            "code": "bad_badge",
+            "group": "Cosmetics",
+            "meaning": "That badge does not exist.",
+            "when": "A site setting names an unknown badge ID."
+          },
+          {
+            "code": "bad_cosmetics",
+            "group": "Cosmetics",
+            "meaning": "A badge or paint does not exist.",
+            "when": "A grant or a shop item names an unknown cosmetic."
+          },
+          {
+            "code": "checkout_unavailable",
+            "group": "Shop",
+            "meaning": "Buying is not available.",
+            "when": "Checkout is off or not set up (503)."
+          },
+          {
+            "code": "checkout_failed",
+            "group": "Shop",
+            "meaning": "The checkout could not be started.",
+            "when": "The payment provider refused to start it. Nothing was charged (503)."
+          },
+          {
+            "code": "checkout_busy",
+            "group": "Shop",
+            "meaning": "A checkout for this is starting already.",
+            "when": "A second checkout for the same item at the same moment."
+          },
+          {
+            "code": "payment_provider_error",
+            "group": "Shop",
+            "meaning": "The payment provider answered wrongly.",
+            "when": "Paddle failed or sent something unexpected (502)."
+          },
+          {
+            "code": "bad_payload",
+            "group": "Shop",
+            "meaning": "Not a valid payment notification.",
+            "when": "The webhook body does not parse."
+          },
+          {
+            "code": "bad_item",
+            "group": "Shop",
+            "meaning": "No shop item with that ID.",
+            "when": "Checkout or redeem names an unknown item."
+          },
+          {
+            "code": "item_unavailable",
+            "group": "Shop",
+            "meaning": "That item is not on sale.",
+            "when": "Buying an item that is off sale."
+          },
+          {
+            "code": "sold_out",
+            "group": "Shop",
+            "meaning": "The item is sold out.",
+            "when": "Buying an item with no stock left."
+          },
+          {
+            "code": "already_owned",
+            "group": "Shop",
+            "meaning": "You own everything this gives.",
+            "when": "Buying or redeeming something you already own."
+          },
+          {
+            "code": "bad_price",
+            "group": "Shop",
+            "meaning": "The price is not valid.",
+            "when": "Prices are 0 to 100000 cents."
+          },
+          {
+            "code": "bad_price_id",
+            "group": "Shop",
+            "meaning": "The Paddle price ID is not valid.",
+            "when": "Price IDs look like pri_01h... in lower case."
+          },
+          {
+            "code": "bad_currency",
+            "group": "Shop",
+            "meaning": "The currency is not valid.",
+            "when": "Currencies are three letters, like EUR."
+          },
+          {
+            "code": "bad_stock",
+            "group": "Shop",
+            "meaning": "The stock is not valid.",
+            "when": "Stock is 1 to 1,000,000, or none for no limit."
+          },
+          {
+            "code": "order_not_ready",
+            "group": "Shop",
+            "meaning": "The order is not paid yet.",
+            "when": "Adjusting an order before payment (503). Try again later."
+          },
+          {
+            "code": "not_refundable",
+            "group": "Shop",
+            "meaning": "Only paid orders can be refunded.",
+            "when": "Refunding an order that is not paid."
+          },
+          {
+            "code": "already_refunded",
+            "group": "Shop",
+            "meaning": "The payment was refunded already.",
+            "when": "Refunding twice."
+          },
+          {
+            "code": "refund_in_progress",
+            "group": "Shop",
+            "meaning": "A refund of this order is under way.",
+            "when": "A second refund while one is pending."
+          },
+          {
+            "code": "refund_failed",
+            "group": "Shop",
+            "meaning": "The payment provider did not take the refund.",
+            "when": "Paddle refused. Nothing was changed (502)."
+          },
+          {
+            "code": "refund_unavailable",
+            "group": "Shop",
+            "meaning": "Refunds are not available right now.",
+            "when": "Paddle is unreachable or off (503)."
+          },
+          {
+            "code": "bad_code",
+            "group": "Codes",
+            "meaning": "That code does not work.",
+            "when": "A redeem code is unknown or wrongly typed."
+          },
+          {
+            "code": "already_redeemed",
+            "group": "Codes",
+            "meaning": "You used that code already.",
+            "when": "Redeeming the same code twice."
+          },
+          {
+            "code": "code_disabled",
+            "group": "Codes",
+            "meaning": "That code was turned off.",
+            "when": "Redeeming a code staff disabled."
+          },
+          {
+            "code": "code_expired",
+            "group": "Codes",
+            "meaning": "That code has expired.",
+            "when": "Redeeming after the end date."
+          },
+          {
+            "code": "code_used_up",
+            "group": "Codes",
+            "meaning": "That code has been used up.",
+            "when": "Redeeming a code with no uses left."
+          },
+          {
+            "code": "bad_count",
+            "group": "Codes",
+            "meaning": "The number of codes is out of range.",
+            "when": "A batch has 1 to 1000 codes."
+          },
+          {
+            "code": "bad_prefix",
+            "group": "Codes",
+            "meaning": "The prefix is not valid.",
+            "when": "Prefixes are 1 to 12 letters or digits."
+          },
+          {
+            "code": "bad_uses",
+            "group": "Codes",
+            "meaning": "The number of uses is out of range.",
+            "when": "A code can be used 1 to 10000 times."
+          },
+          {
+            "code": "bad_permissions",
+            "group": "Admin",
+            "meaning": "The permission list is contradictory.",
+            "when": "A role allows and denies the same permission."
+          },
+          {
+            "code": "unknown_permission",
+            "group": "Admin",
+            "meaning": "That permission does not exist.",
+            "when": "A role names an unknown permission."
+          },
+          {
+            "code": "role_name_taken",
+            "group": "Admin",
+            "meaning": "A role with that name exists.",
+            "when": "Creating or renaming a role to a taken name."
+          },
+          {
+            "code": "built_in_role",
+            "group": "Admin",
+            "meaning": "A built-in role cannot change this way.",
+            "when": "Editing the fixed parts of the User role."
+          },
+          {
+            "code": "implicit_role",
+            "group": "Admin",
+            "meaning": "Nobody is assigned this role.",
+            "when": "Granting or removing a role every account holds."
+          },
+          {
+            "code": "bad_position",
+            "group": "Admin",
+            "meaning": "The role position is not valid.",
+            "when": "Reordering roles to a position that does not exist."
+          },
+          {
+            "code": "bad_limit",
+            "group": "Admin",
+            "meaning": "A limit value is not valid.",
+            "when": "Role limits are 1 to 1,000,000 and listed once."
+          },
+          {
+            "code": "unknown_limit",
+            "group": "Admin",
+            "meaning": "That is not a limit.",
+            "when": "A role limit key does not exist or is not per role."
+          },
+          {
+            "code": "bad_label",
+            "group": "Site",
+            "meaning": "A link label is too long.",
+            "when": "Link words are up to 40 characters."
+          },
+          {
+            "code": "bad_link",
+            "group": "Site",
+            "meaning": "A link is not valid.",
+            "when": "Links start with https:// or are a path on cyex.tv, like /shop."
+          },
+          {
+            "code": "ended",
+            "group": "Site",
+            "meaning": "The announcement has ended.",
+            "when": "Editing an announcement after its end. Make a new one."
+          },
+          {
+            "code": "required_kind",
+            "group": "Site",
+            "meaning": "The notification kind is required.",
+            "when": "Turning off notices that are always sent."
+          },
+          {
+            "code": "already_reported",
+            "group": "Reports",
+            "meaning": "You reported this emote already.",
+            "when": "Filing a second report on the same emote."
+          },
+          {
+            "code": "not_open",
+            "group": "Reports",
+            "meaning": "The report was already resolved.",
+            "when": "Resolving a report twice."
+          },
+          {
+            "code": "tickets_blocked",
+            "group": "Reports",
+            "meaning": "You cannot file reports.",
+            "when": "The account was barred from filing reports."
+          },
+          {
+            "code": "invalid_topic",
+            "group": "GraphQL",
+            "meaning": "That is not a topic.",
+            "when": "A subscription topic is malformed."
+          },
+          {
+            "code": "too_many_topics",
+            "group": "GraphQL",
+            "meaning": "Too many topics.",
+            "when": "A subscription lists more than 500 topics."
+          },
+          {
+            "code": "too_many_subscriptions",
+            "group": "GraphQL",
+            "meaning": "Too many subscriptions on one socket.",
+            "when": "More than 8 subscriptions on a socket."
+          },
+          {
+            "code": "subscriptions_only",
+            "group": "GraphQL",
+            "meaning": "The socket runs subscriptions only.",
+            "when": "A query or mutation sent over /v1/gql/ws. Use POST /v1/gql."
+          }
+        ]
       },
       "Health": {
         "type": "object",
@@ -2270,7 +3287,7 @@
     },
     {
       "name": "reads",
-      "description": "Public, cacheable reads for chat clients."
+      "description": "Public, cacheable reads for chat clients. Every answer carries `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (seconds until the allowance is full again); a `429` also has `Retry-After`."
     }
   ]
 }
