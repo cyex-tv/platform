@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stillNow } from '$lib/media.svelte';
   // A sheet that rises from the bottom, for phones (filters, the nav menu). A modal <dialog>:
   // focus stays inside, the page behind is inert, Escape and a tap on the dimmed page close it,
   // and focus goes back to what opened it. The handle can be dragged down to dismiss (a quick
@@ -22,7 +23,7 @@
   let back: HTMLElement | null = null;
   let closing = false;
 
-  const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const still = stillNow;
   const ms = (name: string) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) * 1000 || 250;
   const ease = () => getComputedStyle(document.documentElement).getPropertyValue('--ease-drawer').trim() || 'ease-out';
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stillNow } from '$lib/media.svelte';
   // The entitlement graph drawn on a canvas: one dot per node in its kind's colour, hairline
   // links, and "Kind: name" labels where they fit (zoomed in, or on the hovered, focused, picked
   // and found nodes). Drag the ground to pan, wheel or pinch to zoom, drag a node to move it
@@ -55,7 +56,7 @@
   let focused = $state(false);
   let colours: Record<string, string> = {};
 
-  const still = () => typeof matchMedia === 'function' && (document.documentElement.dataset.motion === 'reduce' || (matchMedia('(prefers-reduced-motion: reduce)').matches && document.documentElement.dataset.motion !== 'full'));
+  const still = stillNow;
   const baseR = (n: GNode) => (n.root ? 10 : n.kind === 'role' || n.kind === 'badge' || n.kind === 'paint' || (n.kind === 'account' && !n.root) ? 4.5 : 7);
   const radius = (n: GNode) => baseR(n) * (0.4 + size * 0.15);
 

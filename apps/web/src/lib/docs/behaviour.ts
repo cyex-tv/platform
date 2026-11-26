@@ -26,6 +26,7 @@
 //                                               button[data-group-toggle=id][aria-expanded]
 //   button[data-group-all]                      "Expand all" / "Collapse all"
 
+import { stillNow } from '$lib/media.svelte';
 import { GROUP_KEY, allOpen, isOpen, parseGroupState, withAll, withGroup, type GroupState } from './groups';
 
 export interface DocsOptions {
@@ -59,7 +60,7 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
   const allBtn = root.querySelector<HTMLButtonElement>('[data-group-all]');
   const tools = root.querySelector<HTMLElement>('.nav-tools');
   const items = new Map([...nav.querySelectorAll<HTMLAnchorElement>('a.nav-item')].map((a) => [a.getAttribute('href')!.slice(1), a]));
-  const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduced = stillNow;
   const cleanups: (() => void)[] = [];
   const on = <E extends Event>(target: EventTarget, type: string, fn: (e: E) => void, options?: AddEventListenerOptions) => {
     target.addEventListener(type, fn as EventListener, options);
