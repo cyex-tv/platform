@@ -9,16 +9,7 @@
     <link rel="icon" href="%sveltekit.assets%/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="%sveltekit.assets%/favicon.png" type="image/png" sizes="32x32" />
     <link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <!-- Loaded as "print" so it doesn't block the first paint; the script below switches it on
-         (no inline onload: the CSP allows this one script by its hash, not event attributes). -->
-    <link
-      id="fonts"
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap"
-      media="print"
-    />
+    <link rel="preload" href="/fonts/geist-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin />
     <script>
       (function () {
         try {
@@ -77,15 +68,8 @@
         }
         document.documentElement.classList.add('js');
         var fonts = document.getElementById('fonts');
-        if (fonts) {
-          if (fonts.sheet) fonts.media = 'all';
-          else fonts.addEventListener('load', function () { fonts.media = 'all'; });
-        }
       })();
     </script>
-    <noscript>
-      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&display=swap" />
-    </noscript>
     %sveltekit.head%
   </head>
   <body data-sveltekit-preload-data="hover">

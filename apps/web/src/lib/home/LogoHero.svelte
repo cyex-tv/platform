@@ -11,6 +11,9 @@
   import { settled } from './settle';
   import type { LogoScene } from './logo-scene';
 
+  // The box is 340px wide up to 1100px and 460px above it (routes/+page.svelte): pick the 420w or 840w file.
+  const sizes = '(max-width: 1099.98px) 340px, 460px';
+
   let host: HTMLDivElement;
   let live = $state(false);
 
@@ -78,13 +81,20 @@
 
 <div class="logo-hero" class:live bind:this={host} aria-hidden="true">
   <!-- Lazy, so only the one for the theme in use loads (the other is display: none). -->
-  <img class="still dark" src="/home/logo-3d-dark.webp" width="840" height="840" alt="" loading="lazy" decoding="async" />
-  <img class="still light" src="/home/logo-3d-light.webp" width="840" height="840" alt="" loading="lazy" decoding="async" />
+  <picture class="still dark">
+    <source type="image/avif" srcset="/home/logo-3d-dark-420.avif 420w, /home/logo-3d-dark.avif 840w" sizes={sizes} />
+    <img src="/home/logo-3d-dark.webp" width="840" height="840" alt="" loading="lazy" decoding="async" />
+  </picture>
+  <picture class="still light">
+    <source type="image/avif" srcset="/home/logo-3d-light-420.avif 420w, /home/logo-3d-light.avif 840w" sizes={sizes} />
+    <img src="/home/logo-3d-light.webp" width="840" height="840" alt="" loading="lazy" decoding="async" />
+  </picture>
 </div>
 
 <style>
   .logo-hero { position: relative; width: 100%; aspect-ratio: 1; contain: layout paint; }
   .still, .logo-hero :global(canvas) { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .still img { display: block; width: 100%; height: 100%; }
   .still { display: block; transition: opacity .5s var(--ease); user-select: none; -webkit-user-drag: none; }
   .light { display: none; }
   :global([data-theme='light']) .light { display: block; }
