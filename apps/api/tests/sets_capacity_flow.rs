@@ -365,7 +365,8 @@ async fn capacity_is_one_to_the_owners_limit_and_never_below_what_it_holds() {
     assert!(r["data"]["setCapacityRange"].is_null(), "{r}");
 
     // Staff with sets.edit_any go up to 1.000.000, audited as staff.
-    w.role(&staff, "Staff", &["sets.edit_any"], json!({})).await;
+    w.role(&staff, "Test set staff 3103", &["sets.edit_any"], json!({}))
+        .await;
     let r = w.gql(&staff, RANGE, json!({ "id": set })).await;
     assert_eq!(r["data"]["setCapacityRange"]["max"], 1_000_000, "{r}");
     assert_eq!(r["data"]["setCapacityRange"]["staff"], true, "{r}");
