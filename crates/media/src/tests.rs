@@ -979,3 +979,28 @@ fn paint_limits_follow_the_badge_animation_rules() {
         Err(MediaError::TooLarge(_))
     ));
 }
+
+#[test]
+fn a_set_cancel_flag_stops_a_transcode_at_once() {
+    use std::sync::atomic::AtomicBool;
+    let cancel = AtomicBool::new(true);
+    let started = std::time::Instant::now();
+    let result = encode::transcode_cancellable(
+        &png(512, 512),
+        &Limits::emote(),
+        &encode::Profile::EMOTE,
+        &cancel,
+    );
+    assert!(matches!(result, Err(MediaError::Cancelled)));
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    let cancel = AtomicBool::new(false);
+    assert!(
+        encode::transcode_cancellable(
+            &png(64, 64),
+            &Limits::emote(),
+            &encode::Profile::EMOTE,
+            &cancel
+        )
+        .is_ok()
+    );
+}

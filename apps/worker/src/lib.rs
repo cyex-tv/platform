@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use chrono::Utc;
@@ -38,6 +39,36 @@ pub enum JobError {
     /// Won't work however often it runs (a corrupt file, a missing row).
     #[error("{0}")]
     Permanent(String),
+}
+
+/// Sets a flag when dropped. A handler holds one across its blocking encode: when the time limit
+/// drops the handler's future, the flag tells the encoding thread to stop, so retries don't pile
+/// up threads.
+#[derive(Default)]
+pub struct CancelOnDrop(Arc<AtomicBool>);
+
+impl CancelOnDrop {
+    /// The flag the blocking work checks.
+    pub fn flag(&self) -> Arc<AtomicBool> {
+        self.0.clone()
+    }
+}
+
+impl Drop for CancelOnDrop {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+}
+
+/// How a failed media step ends its job: a stopped or failed encoder is tried again, anything
+/// else is the file's fault.
+pub fn media_failure(err: cyex_tv_media::MediaError) -> JobError {
+    use cyex_tv_media::MediaError;
+    match err {
+        MediaError::Encode(message) => JobError::Retry(message),
+        MediaError::Cancelled => JobError::Retry("cancelled".into()),
+        other => JobError::Permanent(other.to_string()),
+    }
 }
 
 /// What handlers can reach.
@@ -255,6 +286,18 @@ pub async fn run_one(
     }
     tracing::info!(job = id, %kind, ?outcome, ms = elapsed.as_millis() as u64, "job finished");
     Ok(Some((id, outcome)))
+}
+
+/// Fails the jobs whose lease ran out on their last attempt (the worker died or was killed
+/// during it, so no handler reported). Without this they would sit as `running` for good.
+/// Returns how many.
+pub async fn sweep_exhausted(db: &PgPool) -> Result<u64, cyex_tv_db::DbError> {
+    let mut conn = db.acquire().await?;
+    let swept = jobs::sweep_exhausted(&mut conn).await?;
+    for (id, kind) in &swept {
+        tracing::warn!(job = id, %kind, "job failed: lease expired after last attempt");
+    }
+    Ok(swept.len() as u64)
 }
 
 /// Shop orders left pending this long are failed (`expired`); a late payment is still taken.
@@ -519,6 +562,11 @@ pub async fn run(
         tokio::select! {
             () = &mut shutdown => return Ok(()),
             _ = cleaner.tick() => {
+                match sweep_exhausted(&ctx.db).await {
+                    Ok(0) => {}
+                    Ok(n) => tracing::warn!(failed = n, "jobs out of attempts failed"),
+                    Err(err) => tracing::error!(error = %err, "sweeping exhausted jobs failed"),
+                }
                 if let Err(err) = clean_up(&ctx.db).await {
                     tracing::error!(error = %err, "clean-up failed");
                 }
@@ -559,6 +607,35 @@ mod tests {
         assert_eq!(backoff(9), Duration::from_secs(2560));
         assert_eq!(backoff(10), Duration::from_secs(3600));
         assert_eq!(backoff(1000), Duration::from_secs(3600));
+    }
+
+    #[tokio::test]
+    async fn the_time_limit_sets_the_cancel_flag() {
+        let cancel = CancelOnDrop::default();
+        let flag = cancel.flag();
+        let slow = async move {
+            let _held = cancel;
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        };
+        assert!(
+            tokio::time::timeout(Duration::from_millis(20), slow)
+                .await
+                .is_err()
+        );
+        assert!(flag.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn a_cancelled_encode_is_retried() {
+        use cyex_tv_media::MediaError;
+        assert!(matches!(
+            media_failure(MediaError::Cancelled),
+            JobError::Retry(_)
+        ));
+        assert!(matches!(
+            media_failure(MediaError::Invalid("x".into())),
+            JobError::Permanent(_)
+        ));
     }
 
     #[test]

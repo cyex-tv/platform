@@ -137,6 +137,9 @@ pub enum MediaError {
     /// Decoded, but an encoder failed (ours to fix, not the uploader's).
     #[error("encoding failed: {0}")]
     Encode(String),
+    /// Stopped on request (the worker's time limit passed); nothing is wrong with the image.
+    #[error("cancelled")]
+    Cancelled,
 }
 
 /// What a valid image is.

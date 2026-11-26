@@ -8,6 +8,8 @@
 //! `4x`), then `128`, `256` and `512`, each scaled from one 512 px master of the frame, and
 //! `original`: the picture as uploaded (at most 512 px), every frame kept, never scaled.
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use image::RgbaImage;
 use image::imageops::FilterType;
 use webp_animation::{Encoder, EncoderOptions, EncodingConfig, EncodingType, LossyEncodingConfig};
@@ -385,7 +387,18 @@ pub fn transcode_with(
     limits: &Limits,
     profile: &Profile,
 ) -> Result<Encoded, MediaError> {
-    run(bytes, limits, profile, false)
+    run(bytes, limits, profile, false, None)
+}
+
+/// [`transcode_with`] that stops with [`MediaError::Cancelled`] soon after `cancel` is set: it is
+/// checked for every decoded frame and between output sizes.
+pub fn transcode_cancellable(
+    bytes: &[u8],
+    limits: &Limits,
+    profile: &Profile,
+    cancel: &AtomicBool,
+) -> Result<Encoded, MediaError> {
+    run(bytes, limits, profile, false, Some(cancel))
 }
 
 /// Whether an animated picture's chat sizes fit their cap once converted
@@ -397,7 +410,7 @@ pub fn check_animated_scales(
     limits: &Limits,
     profile: &Profile,
 ) -> Result<(), MediaError> {
-    run(bytes, limits, profile, true).map(|_| ())
+    run(bytes, limits, profile, true, None).map(|_| ())
 }
 
 fn kb(bytes: usize) -> usize {
@@ -409,7 +422,9 @@ fn run(
     limits: &Limits,
     profile: &Profile,
     check_only: bool,
+    cancel: Option<&AtomicBool>,
 ) -> Result<Encoded, MediaError> {
+    let cancelled = || cancel.is_some_and(|flag| flag.load(Ordering::Relaxed));
     let mut scales: Vec<Scale> = Vec::new();
     let mut master: Option<(u32, u32)> = None;
     let mut first: Option<RgbaImage> = None;
@@ -419,6 +434,9 @@ fn run(
     let mut failure: Option<MediaError> = None;
 
     let (canvas, frames) = decode_frames(bytes, limits, &mut |canvas, frame, delay| {
+        if cancelled() {
+            return Err(MediaError::Cancelled);
+        }
         if scales.is_empty() {
             // The check resizes straight from the original: the 72 px file comes out the same
             // size in bytes, without scaling every frame to the master first.
@@ -467,6 +485,9 @@ fn run(
 
     let mut webp = Vec::new();
     for s in scales {
+        if cancelled() {
+            return Err(MediaError::Cancelled);
+        }
         let bytes = s
             .encoder
             .finalize(timestamp.max(1))
@@ -509,6 +530,9 @@ fn run(
 
     let mut avif = Vec::new();
     for step in &steps {
+        if cancelled() {
+            return Err(MediaError::Cancelled);
+        }
         let source = match (&first_raw, step.from_original) {
             (Some(raw), true) => raw,
             _ => &first,
