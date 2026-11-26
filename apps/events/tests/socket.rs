@@ -308,6 +308,48 @@ async fn new_connections_are_limited_per_ip() {
 }
 
 #[tokio::test]
+async fn open_connections_are_capped_per_ip() {
+    let Some(db) = TestDb::new().await else {
+        return;
+    };
+    let (_stop, stopping) = watch::channel(false);
+    let app =
+        router(EventsState::new(db.pool.clone(), Hub::new(), stopping).with_sockets_per_ip(2));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .await
+        .unwrap();
+    });
+    let url = format!("ws://{addr}/v1/events");
+    let (mut a, _) = tokio_tungstenite::connect_async(&url).await.unwrap();
+    let _b = tokio_tungstenite::connect_async(&url).await.unwrap();
+    match tokio_tungstenite::connect_async(&url).await {
+        Err(tokio_tungstenite::tungstenite::Error::Http(response)) => {
+            assert_eq!(response.status(), 429);
+        }
+        other => panic!("expected 429, got {other:?}"),
+    }
+    // Closing one frees its place.
+    a.close(None).await.unwrap();
+    drop(a);
+    let mut opened = false;
+    for _ in 0..50 {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        if tokio_tungstenite::connect_async(&url).await.is_ok() {
+            opened = true;
+            break;
+        }
+    }
+    assert!(opened, "a closed connection gives its place back");
+    db.close().await;
+}
+
+#[tokio::test]
 async fn limits_end_the_connection() {
     let Some(db) = TestDb::new().await else {
         return;

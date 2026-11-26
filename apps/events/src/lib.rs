@@ -28,7 +28,7 @@ use axum::routing::get;
 use cyex_tv_db::{event_sessions, ids, outbox};
 use cyex_tv_hub::topics::{self, MAX_TOPICS, TopicError};
 use cyex_tv_hub::{Hub, Message, Subscription, wire};
-use cyex_tv_shared::ratelimit::{Limiter, Peer, Rate, client_ip};
+use cyex_tv_shared::ratelimit::{Limiter, OpenCap, Peer, Rate, SOCKETS_PER_IP, client_ip};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sqlx::PgPool;
@@ -54,6 +54,8 @@ pub struct EventsState {
     pub stopping: watch::Receiver<bool>,
     /// New connections per IP (PLAN.md Phase 7).
     pub connects: Arc<Limiter>,
+    /// Connections open at once per IP (`SOCKETS_PER_IP`).
+    pub sockets: Arc<OpenCap>,
     /// Take the client IP from `CF-Connecting-IP` (`CYEX_TV_TRUST_CLOUDFLARE=true`).
     pub trust_cloudflare: bool,
 }
@@ -68,12 +70,19 @@ impl EventsState {
             hub,
             stopping,
             connects: Arc::new(Limiter::new(CONNECTS)),
+            sockets: Arc::new(OpenCap::new(SOCKETS_PER_IP)),
             trust_cloudflare: false,
         }
     }
 
     pub fn with_connect_rate(mut self, rate: Rate) -> Self {
         self.connects = Arc::new(Limiter::new(rate));
+        self
+    }
+
+    /// Connections one IP may hold open at once.
+    pub fn with_sockets_per_ip(mut self, max: u32) -> Self {
+        self.sockets = Arc::new(OpenCap::new(max));
         self
     }
 
@@ -105,10 +114,19 @@ async fn upgrade(
         )
             .into_response();
     }
+    let Some(slot) = state.sockets.try_take(&ip) else {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            [(RETRY_AFTER, "30".to_owned())],
+            axum::Json(json!({ "error": "rate_limited", "message": "Too many open connections from this address. Close some and try again." })),
+        )
+            .into_response();
+    };
     ws.max_message_size(MAX_FRAME)
         .max_frame_size(MAX_FRAME)
         .on_upgrade(move |socket| async move {
             Connection::new(state, socket).run().await;
+            drop(slot);
         })
 }
 
@@ -190,23 +208,31 @@ enum End {
     Reconnect,
 }
 
-/// The topic as stored (a set by its Snowflake) for one a client sent. A set's old ULID is
-/// looked up; an unknown one, or a failed lookup, stays as it is and hears nothing.
-async fn stored_topic(db: &PgPool, topic: &str) -> String {
-    let legacy = topic
-        .strip_prefix("set:")
-        .is_some_and(|id| cyex_tv_db::public_ids::parse(id).is_none());
-    if !legacy {
-        return topic.to_owned();
+/// The topics as stored (a set by its Snowflake) for the ones a client sent, in one lookup. A
+/// set's old ULID is looked up; an unknown one, or a failed lookup, stays as it is and hears
+/// nothing.
+async fn stored_topics(db: &PgPool, requested: &[String]) -> HashMap<String, String> {
+    let legacy = |topic: &String| {
+        topic
+            .strip_prefix("set:")
+            .is_some_and(|id| cyex_tv_db::public_ids::parse(id).is_none())
+    };
+    if !requested.iter().any(legacy) {
+        return HashMap::new();
     }
     match db.acquire().await {
-        Ok(mut conn) => outbox::public_topic(&mut conn, topic)
+        Ok(mut conn) => outbox::public_topics(&mut conn, requested)
             .await
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| topic.to_owned()),
-        Err(_) => topic.to_owned(),
+            .unwrap_or_default(),
+        Err(_) => HashMap::new(),
     }
+}
+
+/// `topic` as stored, from what [`stored_topics`] found.
+fn stored_form(found: &HashMap<String, String>, topic: &str) -> String {
+    found
+        .get(topic)
+        .map_or_else(|| topic.to_owned(), Clone::clone)
 }
 
 struct Connection {
@@ -394,13 +420,14 @@ impl Connection {
         let mut stored: Vec<String> = Vec::new();
         if op == "subscribe" {
             let current: HashSet<String> = self.sub.topics().into_iter().collect();
+            let found = stored_topics(&self.state.db, &requested).await;
             let mut room = MAX_TOPICS.saturating_sub(current.len());
             for topic in requested {
                 if !topics::is_valid(&topic) {
                     errors.insert(topic, TopicError::Invalid.code());
                     continue;
                 }
-                let inner = stored_topic(&self.state.db, &topic).await;
+                let inner = stored_form(&found, &topic);
                 if current.contains(&inner) || stored.contains(&inner) {
                     taken.push(topic);
                 } else if room == 0 {
@@ -417,8 +444,9 @@ impl Connection {
             taken.dedup();
             self.sub.subscribe(stored.iter().map(String::as_str));
         } else {
+            let found = stored_topics(&self.state.db, &requested).await;
             for topic in &requested {
-                let inner = stored_topic(&self.state.db, topic).await;
+                let inner = stored_form(&found, topic);
                 self.aliases.remove(&inner);
                 stored.push(inner);
             }

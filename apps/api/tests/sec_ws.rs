@@ -6,7 +6,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use cyex_tv_api::gql::MAX_SOCKET_SUBSCRIPTIONS;
+use cyex_tv_api::gql::{MAX_SOCKET_MESSAGE, MAX_SOCKET_SUBSCRIPTIONS, SOCKET_INIT_DEADLINE};
+use cyex_tv_api::limits::{Limits, Rates};
 use cyex_tv_api::state::AppState;
 use cyex_tv_auth::{Auth, AuthConfig};
 use cyex_tv_hub::Hub;
@@ -35,11 +36,15 @@ async fn hub_holds(hub: &Hub, n: usize) {
 const EVENTS: &str = "subscription($t: [String!]!) { events(topics: $t) { id } }";
 
 async fn start() -> (SocketAddr, Hub) {
+    start_with(Rates::default()).await
+}
+
+async fn start_with(rates: Rates) -> (SocketAddr, Hub) {
     let pool = sqlx::postgres::PgPoolOptions::new()
         .connect_lazy("postgres://nobody@127.0.0.1:1/none")
         .unwrap();
     let auth = Arc::new(Auth::new(AuthConfig::from_source(|_| None).unwrap()).unwrap());
-    let state = AppState::new(pool, auth);
+    let state = AppState::new(pool, auth).with_limits(Limits::new(rates, false));
     let hub = state.hub.clone();
     let app = cyex_tv_api::app(state);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -65,6 +70,34 @@ fn publish(hub: &Hub, id: i64, topic: &str) {
         payload: json!({ "emote_id": "E1", "name": "Pog" }),
         created_at: chrono::Utc::now(),
     }));
+}
+
+async fn open(addr: SocketAddr) -> Result<Socket, tokio_tungstenite::tungstenite::Error> {
+    let mut request = format!("ws://{addr}/v1/gql/ws")
+        .into_client_request()
+        .unwrap();
+    request.headers_mut().insert(
+        "sec-websocket-protocol",
+        "graphql-transport-ws".parse().unwrap(),
+    );
+    tokio_tungstenite::connect_async(request)
+        .await
+        .map(|(ws, _)| ws)
+}
+
+/// The socket closes within `within`: the close frame's code, or `None` when it just ends.
+async fn closes(ws: &mut Socket, within: Duration) -> Option<u16> {
+    let deadline = tokio::time::Instant::now() + within;
+    loop {
+        match tokio::time::timeout_at(deadline, ws.next())
+            .await
+            .expect("the socket closes in time")
+        {
+            Some(Ok(Message::Close(frame))) => return frame.map(|f| u16::from(f.code)),
+            Some(Ok(_)) => {}
+            Some(Err(_)) | None => return None,
+        }
+    }
 }
 
 async fn connect(addr: SocketAddr) -> Socket {
@@ -225,4 +258,67 @@ async fn one_socket_holds_at_most_eight_subscriptions() {
     // Closing the socket ends its streams.
     ws.close(None).await.unwrap();
     hub_holds(&hub, 1).await;
+}
+
+#[tokio::test]
+async fn an_oversized_message_closes_the_socket() {
+    let (addr, hub) = start().await;
+    let mut ws = connect(addr).await;
+    subscribe(&mut ws, "s", EVENTS, json!({ "t": ["channel:twitch:1"] })).await;
+    quiet(&mut ws).await;
+    // A valid subscribe message, padded past the limit: without it, this would just subscribe.
+    let huge = json!({
+        "id": "big",
+        "type": "subscribe",
+        "payload": {
+            "query": EVENTS,
+            "variables": { "t": ["channel:twitch:2"], "pad": "x".repeat(MAX_SOCKET_MESSAGE) }
+        }
+    });
+    let _ = ws.send(Message::Text(huge.to_string().into())).await;
+    let code = closes(&mut ws, Duration::from_secs(5)).await;
+    assert_ne!(
+        code,
+        Some(1000),
+        "an oversized message isn't a normal close"
+    );
+    hub_holds(&hub, 0).await;
+}
+
+#[tokio::test]
+async fn sockets_are_capped_per_ip() {
+    let (addr, _hub) = start_with(Rates {
+        sockets_per_ip: 2,
+        ..Rates::default()
+    })
+    .await;
+    let mut a = connect(addr).await;
+    let _b = connect(addr).await;
+    match open(addr).await {
+        Err(tokio_tungstenite::tungstenite::Error::Http(response)) => {
+            assert_eq!(response.status(), 429);
+            assert!(response.headers().contains_key("retry-after"));
+        }
+        other => panic!("expected 429, got {other:?}"),
+    }
+    // Closing one gives its place back.
+    a.close(None).await.unwrap();
+    drop(a);
+    let mut reopened = false;
+    for _ in 0..50 {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        if open(addr).await.is_ok() {
+            reopened = true;
+            break;
+        }
+    }
+    assert!(reopened, "a closed socket gives its place back");
+}
+
+#[tokio::test]
+async fn a_socket_without_connection_init_is_closed() {
+    let (addr, _hub) = start().await;
+    let mut ws = open(addr).await.unwrap();
+    let code = closes(&mut ws, SOCKET_INIT_DEADLINE + Duration::from_secs(5)).await;
+    assert_eq!(code, Some(4408));
 }

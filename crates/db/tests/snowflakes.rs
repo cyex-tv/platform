@@ -243,6 +243,24 @@ async fn events_are_stored_by_snowflake_and_old_set_topics_map() {
             .unwrap(),
         None
     );
+    // Many at once, in one lookup: the same answers.
+    let unknown = outbox::set_topic(ids::new_id());
+    let channel = "channel:twitch:1".to_owned();
+    let found = outbox::public_topics(
+        &mut c,
+        &[
+            legacy.clone(),
+            new.clone(),
+            unknown.clone(),
+            channel.clone(),
+        ],
+    )
+    .await
+    .unwrap();
+    assert_eq!(found.get(&legacy), Some(&new));
+    assert_eq!(found.get(&new), Some(&new));
+    assert_eq!(found.get(&unknown), None);
+    assert_eq!(found.get(&channel), Some(&channel));
     let replay = outbox::since(&mut c, 0, &[new], 10).await.unwrap();
     assert_eq!(replay.len(), 1);
     drop(c);

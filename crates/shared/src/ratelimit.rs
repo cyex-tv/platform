@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use axum::http::HeaderMap;
@@ -164,6 +164,63 @@ impl Limiter {
     }
 }
 
+/// Sockets one IP may hold open at once. Generous, since many people can share one IP behind
+/// carrier-grade NAT; it only stops one client from holding thousands of idle sockets.
+pub const SOCKETS_PER_IP: u32 = 50;
+
+/// A cap on what one key may hold open at once (sockets per IP). `try_take` hands out a guard
+/// that gives its place back when dropped.
+pub struct OpenCap {
+    max: u32,
+    open: Arc<Mutex<HashMap<String, u32>>>,
+}
+
+impl OpenCap {
+    pub fn new(max: u32) -> Self {
+        Self {
+            max,
+            open: Arc::default(),
+        }
+    }
+
+    /// The most one key may hold.
+    pub fn max(&self) -> u32 {
+        self.max
+    }
+
+    /// A place for `key`, or `None` when it holds the most it may.
+    pub fn try_take(&self, key: &str) -> Option<OpenSlot> {
+        let mut open = self.open.lock().unwrap_or_else(PoisonError::into_inner);
+        let count = open.entry(key.to_owned()).or_insert(0);
+        if *count >= self.max {
+            return None;
+        }
+        *count += 1;
+        Some(OpenSlot {
+            key: key.to_owned(),
+            open: self.open.clone(),
+        })
+    }
+}
+
+/// One place taken from an [`OpenCap`], given back on drop.
+pub struct OpenSlot {
+    key: String,
+    open: Arc<Mutex<HashMap<String, u32>>>,
+}
+
+impl Drop for OpenSlot {
+    fn drop(&mut self) {
+        let mut open = self.open.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(count) = open.get_mut(&self.key) {
+            *count -= 1;
+            if *count == 0 {
+                open.remove(&self.key);
+            }
+        }
+    }
+}
+
 /// The peer address when the server was started with connection info (`main` does that; tests
 /// calling the router directly have none).
 pub struct Peer(pub Option<SocketAddr>);
@@ -298,5 +355,16 @@ mod tests {
         headers.insert("cf-connecting-ip", HeaderValue::from_static("not an ip"));
         assert_eq!(client_ip(&headers, Some(peer), true), "10.0.0.2");
         assert_eq!(client_ip(&HeaderMap::new(), None, true), "unknown");
+    }
+
+    #[test]
+    fn open_cap_refuses_past_the_max_and_frees_on_drop() {
+        let cap = OpenCap::new(2);
+        let a = cap.try_take("1.2.3.4").unwrap();
+        let _b = cap.try_take("1.2.3.4").unwrap();
+        assert!(cap.try_take("1.2.3.4").is_none());
+        assert!(cap.try_take("5.6.7.8").is_some());
+        drop(a);
+        assert!(cap.try_take("1.2.3.4").is_some());
     }
 }

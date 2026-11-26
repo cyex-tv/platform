@@ -6,7 +6,7 @@
 //! a higher one is visible, so the Phase 5 readers must allow for that gap; this module only
 //! stores and reads.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
 use cyex_tv_shared::model::{EventType, Platform};
@@ -171,6 +171,38 @@ pub async fn public_topic(conn: &mut PgConnection, topic: &str) -> DbResult<Opti
         .await?
         .get(&set)
         .map(|public| format!("set:{public}")))
+}
+
+/// [`public_topic`] for many topics in one lookup: each topic to its stored form. A `set:` topic
+/// naming an unknown set is left out; every other topic maps to itself.
+pub async fn public_topics(
+    conn: &mut PgConnection,
+    topics: &[String],
+) -> DbResult<HashMap<String, String>> {
+    let legacy: Vec<Uuid> = topics
+        .iter()
+        .filter(|t| {
+            t.strip_prefix("set:")
+                .is_some_and(|id| public_ids::parse(id).is_none())
+        })
+        .filter_map(|t| topic_set(t))
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    let map = public_ids::publics(conn, &legacy).await?;
+    Ok(topics
+        .iter()
+        .filter_map(|topic| {
+            let Some(id) = topic.strip_prefix("set:") else {
+                return Some((topic.clone(), topic.clone()));
+            };
+            if public_ids::parse(id).is_some() {
+                return Some((topic.clone(), topic.clone()));
+            }
+            let public = map.get(&topic_set(topic)?)?;
+            Some((topic.clone(), format!("set:{public}")))
+        })
+        .collect())
 }
 
 /// Events after `after_id` for any of `topics`, oldest first. Used for resume.

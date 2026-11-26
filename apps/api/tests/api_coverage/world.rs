@@ -96,6 +96,7 @@ pub fn open_rates() -> Rates {
         uploads_per_hour: 1_000_000,
         pending_emotes: 1_000_000,
         set_capacity_max: 1000,
+        sockets_per_ip: 1_000_000,
     }
 }
 

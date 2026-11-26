@@ -16,6 +16,7 @@ pub struct EmoteQuery;
 #[Object]
 impl EmoteQuery {
     /// An emote. Pending ones are visible to their owner and to moderators only.
+    #[graphql(complexity = "10 + child_complexity")]
     async fn emote(&self, ctx: &Context<'_>, id: String) -> Result<Option<Emote>> {
         moderation::emote(state(ctx), caller_opt(ctx), &id)
             .await
@@ -35,6 +36,7 @@ impl EmoteQuery {
     /// 10). `exact: true` makes a non-empty `query` match the whole name (any case) instead of
     /// roughly. `window` is `DAY`, `WEEK` (default) or `MONTH`, and only matters for `TRENDING`.
     #[allow(clippy::too_many_arguments)]
+    #[graphql(complexity = "50 + child_complexity")]
     async fn search_emotes(
         &self,
         ctx: &Context<'_>,
@@ -86,6 +88,7 @@ impl EmoteQuery {
     /// Where an emote stands among the 100 most added in `window` (`DAY`, `WEEK` by default or
     /// `MONTH`): its rank and the channels that added it, net of removals. Null when `id` isn't
     /// an emote ID, the emote isn't approved and listed, or it is not in the top 100.
+    #[graphql(complexity = "10 + child_complexity")]
     async fn emote_trending(
         &self,
         ctx: &Context<'_>,

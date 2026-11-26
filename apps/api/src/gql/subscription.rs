@@ -48,16 +48,14 @@ impl Subscription {
                 .is_some_and(|id| cyex_tv_db::public_ids::parse(id).is_none())
         };
         if topics.iter().any(legacy) {
+            // One lookup for every legacy set topic, however many there are.
             let mut conn = crate::errors::conn(state(ctx)).await.map_err(api_error)?;
+            let found = cyex_tv_db::outbox::public_topics(&mut conn, &topics)
+                .await
+                .map_err(|e| api_error(crate::errors::db_error(e)))?;
+            drop(conn);
             for topic in &topics {
-                let inner = if legacy(topic) {
-                    cyex_tv_db::outbox::public_topic(&mut conn, topic)
-                        .await
-                        .map_err(|e| api_error(crate::errors::db_error(e)))?
-                        .unwrap_or_else(|| topic.clone())
-                } else {
-                    topic.clone()
-                };
+                let inner = found.get(topic).unwrap_or(topic).clone();
                 if &inner != topic {
                     aliases.insert(inner.clone(), topic.clone());
                 }

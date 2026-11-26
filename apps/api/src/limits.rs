@@ -25,7 +25,7 @@ use cyex_tv_auth::Caller;
 use cyex_tv_db::ids;
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::LimitGroup;
-use cyex_tv_shared::ratelimit::{Limiter, Rate, client_ip};
+use cyex_tv_shared::ratelimit::{Limiter, OpenCap, Rate, client_ip};
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -84,6 +84,9 @@ pub struct Rates {
     /// The most slots an account may give one of its channel sets (`updateSet`). Not a rate: a
     /// cap, like `pending_emotes`. Staff with `sets.edit_any` go up to `catalog::STAFF_CAPACITY_MAX`.
     pub set_capacity_max: u32,
+    /// `/v1/gql/ws` sockets one IP may hold open at once. Not a rate: a cap. Generous, since many
+    /// people can share one IP behind carrier-grade NAT.
+    pub sockets_per_ip: u32,
 }
 
 impl Default for Rates {
@@ -112,6 +115,7 @@ impl Default for Rates {
             uploads_per_hour: 20,
             pending_emotes: 20,
             set_capacity_max: 1000,
+            sockets_per_ip: cyex_tv_shared::ratelimit::SOCKETS_PER_IP,
         }
     }
 }
@@ -148,8 +152,8 @@ impl Rates {
 
     /// The defaults, with what the environment sets instead: `CYEX_TV_LIMIT_GQL_ACCOUNT=600/1m`
     /// for a rate (`Rate::parse`: a count per `s`, `m`, `h` or `d`), and a whole number for
-    /// `CYEX_TV_LIMIT_UPLOADS_PER_HOUR`, `CYEX_TV_LIMIT_PENDING_EMOTES` and
-    /// `CYEX_TV_LIMIT_SET_CAPACITY_MAX`. An unset or empty
+    /// `CYEX_TV_LIMIT_UPLOADS_PER_HOUR`, `CYEX_TV_LIMIT_PENDING_EMOTES`,
+    /// `CYEX_TV_LIMIT_SET_CAPACITY_MAX` and `CYEX_TV_LIMIT_SOCKETS_PER_IP`. An unset or empty
     /// variable keeps the default; one that doesn't read is an error naming it.
     pub fn from_env(get: impl Fn(&str) -> Option<String>) -> Result<Self, String> {
         let mut rates = Self::default();
@@ -167,6 +171,7 @@ impl Rates {
             ("uploads_per_hour", &mut rates.uploads_per_hour),
             ("pending_emotes", &mut rates.pending_emotes),
             ("set_capacity_max", &mut rates.set_capacity_max),
+            ("sockets_per_ip", &mut rates.sockets_per_ip),
         ] {
             if let (name, Some(raw)) = var(field) {
                 *count = raw
@@ -384,6 +389,8 @@ pub struct Limits {
     pub upload: Limiter,
     pub reads: Limiter,
     pub socket: Limiter,
+    /// `/v1/gql/ws` sockets open at once per IP (`Rates::sockets_per_ip`).
+    pub sockets: OpenCap,
     pub editors: Limiter,
     pub cosmetics: Limiter,
     pub checkout: Limiter,
@@ -417,6 +424,7 @@ impl Limits {
             upload: Limiter::new(rates.upload),
             reads: Limiter::new(rates.reads),
             socket: Limiter::new(rates.socket),
+            sockets: OpenCap::new(rates.sockets_per_ip),
             editors: Limiter::new(rates.editors),
             cosmetics: Limiter::new(rates.cosmetics),
             checkout: Limiter::new(rates.checkout),
@@ -669,6 +677,20 @@ pub fn too_many(wait: std::time::Duration) -> Response {
     if let Ok(v) = HeaderValue::from_str(&secs.max(1).to_string()) {
         response.headers_mut().insert(RETRY_AFTER, v);
     }
+    response
+}
+
+/// The 429 for an IP that holds as many sockets open as it may.
+pub fn too_many_open() -> Response {
+    let mut response = ApiError::new(
+        StatusCode::TOO_MANY_REQUESTS,
+        "rate_limited",
+        "Too many open connections from this address. Close some and try again.",
+    )
+    .into_response();
+    response
+        .headers_mut()
+        .insert(RETRY_AFTER, HeaderValue::from_static("30"));
     response
 }
 

@@ -167,7 +167,7 @@ export const guides: Guide[] = [
       p('REST errors are `{ "error": "not_found", "message": "No emote with that ID." }`. Match on `error`, a stable code; `message` is for people. GraphQL errors carry the same codes in `extensions.code`, and an answer can hold data and errors together.'),
       p('The reads send an `ETag`. Send it back as `If-None-Match` and you get `304` with no body while nothing changed: poll that way and a channel costs almost nothing.'),
       { t: 'pre', code: `curl -s -i '${baseUrl}/v1/sets/${EX.setId}' \\\n  -H 'if-none-match: "3f9a1c"'\n\nHTTP/2 304\netag: "3f9a1c"` },
-      p('GraphQL queries are limited to a depth of 12 and a complexity of 1.000.'),
+      p('GraphQL queries are limited to a depth of 12, a complexity of 1.000 and 50 top-level fields (aliases count). The searches cost 50 each and single lookups such as `emote` or `channel` 10, so ask for many things in one list query, not in many aliases.'),
     ],
   },
   {
@@ -182,7 +182,8 @@ export const guides: Guide[] = [
         ['Sign-in', '30 a minute per IP, app sign-in and refreshes included.'],
         ['Uploads', '30 an hour per IP, and 20 an hour per account.'],
         ['Reports', '10 an hour per account, one open report per emote.'],
-        ['Event socket', '60 connections a minute per IP; 10 frames a second and 16 KB a frame from a client.'],
+        ['Event socket', '60 connections a minute per IP, 50 open at once; 10 frames a second and 16 KB a frame from a client.'],
+        ['GraphQL socket', '60 connections a minute per IP, 50 open at once; 64 KB a message, `connection_init` within 10 s, 8 subscriptions per socket.'],
       ),
     ],
   },

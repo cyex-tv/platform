@@ -69,11 +69,12 @@ async fn many_subscriptions_get_their_events_fast() {
     let events = env("CYEX_TV_LOAD_EVENTS", 300);
 
     // The server: the API with its hub, the feeder, the socket. Every client comes from
-    // 127.0.0.1, so the per-IP socket limit is lifted here.
+    // 127.0.0.1, so the per-IP socket limits are lifted here.
     let auth = Arc::new(Auth::new(AuthConfig::from_source(|_| None).unwrap()).unwrap());
     let state = AppState::new(db.pool.clone(), auth).with_limits(Limits::new(
         Rates {
             socket: Rate::per_minute(1_000_000),
+            sockets_per_ip: 1_000_000,
             ..Rates::default()
         },
         false,

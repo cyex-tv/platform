@@ -14,6 +14,7 @@ impl ProfileQuery {
     /// An account's public profile: linked Twitch and Kick logins (no IDs), roles marked public,
     /// and each channel's active set ("Active emotes"). Listed sets: `accountSets`. Null when the
     /// account is unknown, deleted or blocked.
+    #[graphql(complexity = "10 + child_complexity")]
     async fn account_profile(
         &self,
         ctx: &Context<'_>,
@@ -27,6 +28,7 @@ impl ProfileQuery {
     /// The badge and paint up to 100 accounts show, with the badges and paints themselves, by
     /// cyex.tv account ID (for names on profiles, tiles and lists). Only accounts showing
     /// something are listed; blocked and deleted ones never. `too_many` over 100.
+    #[graphql(complexity = "10 + child_complexity")]
     async fn account_cosmetics(
         &self,
         ctx: &Context<'_>,
@@ -38,6 +40,7 @@ impl ProfileQuery {
     }
 
     /// An account's public summary. Null when the account is unknown, deleted or blocked.
+    #[graphql(complexity = "10 + child_complexity")]
     async fn account(&self, ctx: &Context<'_>, id: String) -> Result<Option<AccountSummary>> {
         catalog::account(state(ctx), &id).await.map_err(api_error)
     }
