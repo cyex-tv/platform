@@ -2534,7 +2534,7 @@
             "code": "too_large",
             "group": "Emotes",
             "meaning": "The file or the picture is too big.",
-            "when": "Bytes, size in pixels or frame count go over the limits (413)."
+            "when": "An emote's bytes (8 MB), side (1000 px) or frame count (1000) go over the fixed limits (413); also a badge or paint over its limits."
           },
           {
             "code": "blocked",
@@ -2774,7 +2774,7 @@
             "code": "bad_dimensions",
             "group": "Cosmetics",
             "meaning": "The picture's size does not fit.",
-            "when": "Badge or paint pictures outside the allowed size or aspect (422)."
+            "when": "Badge or paint pictures outside the allowed size or aspect, and an emote wider than 4:1 (422)."
           },
           {
             "code": "image_not_ready",
@@ -3008,7 +3008,7 @@
             "code": "bad_limit",
             "group": "Admin",
             "meaning": "A limit value is not valid.",
-            "when": "Role limits are 1 to 1,000,000 (a file limit up to its ceiling: an emote side at most 1000 px) and listed once."
+            "when": "Role limits are 1 to 1,000,000 (a file limit up to its ceiling) and listed once. Emote limits are fixed, not per role, and always refused."
           },
           {
             "code": "unknown_limit",
@@ -3161,7 +3161,7 @@
       },
       "MediaLimits": {
         "type": "object",
-        "description": "What one kind of picture (emote, badge, paint) may be. Sizes are px, the file size is bytes.",
+        "description": "What one kind of picture (emote, badge, paint) may be. Sizes are px, the file size is bytes.\nEmote numbers are fixed rules, the same for everyone; badge and paint numbers are the\nconfigured ones (a role may raise them).",
         "required": [
           "max_bytes",
           "max_side",
@@ -3176,7 +3176,7 @@
               "null"
             ],
             "format": "int32",
-            "description": "How many times as wide as tall a picture may be (badges 1, paints 8); null for no rule at\nupload (emotes wider than their `servedAspect` are scaled to fit)."
+            "description": "How many times as wide as tall a picture may be (emotes 4, badges 1, paints 8); null for\nno rule at upload. Emotes have no rule for a tall picture."
           },
           "max_bytes": {
             "type": "integer",
@@ -3190,6 +3190,14 @@
             ],
             "format": "int64",
             "description": "The longest one run of an animation may last, in ms; null when there is no cap."
+          },
+          "max_fps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The most frames a second (emotes 50; null for the others). Frames shown for under\n1000 / `maxFps` ms (20 ms: a 0 or 10 ms GIF delay) are shown for 100 ms, as browsers do."
           },
           "max_frames": {
             "type": "integer",

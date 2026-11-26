@@ -114,13 +114,15 @@ CYEX_TV_CLOUDFLARE_PURGE_TOKEN=<token value>
 ```
 
 ## 7. Media limits (optional)
-The upload limits (file size, side, frames, pixels, duration per emote, badge and paint) and the
+The upload limits (file size, side, frames, pixels, duration per badge and paint) and the
 badge and paint size ladder are `CYEX_TV_LIMIT_*` variables with the numbers the code ships with
 as defaults; `.env.example` lists them all. Set the same values in `api.env` and `worker.env`
 (the api checks uploads with them, the worker decodes with them), then restart both; either
 refuses to start on a value that doesn't read. Nothing needs setting unless a limit should
-change. An emote's side can't be set above 1000 px. `GET /v1/limits` and the GraphQL `limits`
-query show what a running api enforces, so check them after a change.
+change. Emotes have no variables: their rules are fixed in code and the same for everyone
+(1000 x 1000 px, 8 MB, 1000 frames, 50 fps, at most 4:1 wide; ADR 0031), so delete any old
+`CYEX_TV_LIMIT_EMOTE_*` or `CYEX_TV_LIMIT_ROLE_EMOTE_*` line (they are ignored now). `GET /v1/limits`
+and the GraphQL `limits` query show what a running api enforces, so check them after a change.
 
 ## Done (2026/11/17)
 - Twitch and Kick apps registered, redirect URLs as above.

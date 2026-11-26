@@ -377,7 +377,7 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "Emotes",
         "too_large",
         "The file or the picture is too big.",
-        "Bytes, size in pixels or frame count go over the limits (413).",
+        "An emote's bytes (8 MB), side (1000 px) or frame count (1000) go over the fixed limits (413); also a badge or paint over its limits.",
     ),
     e(
         "Emotes",
@@ -617,7 +617,7 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "Cosmetics",
         "bad_dimensions",
         "The picture's size does not fit.",
-        "Badge or paint pictures outside the allowed size or aspect (422).",
+        "Badge or paint pictures outside the allowed size or aspect, and an emote wider than 4:1 (422).",
     ),
     e(
         "Cosmetics",
@@ -851,7 +851,7 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "Admin",
         "bad_limit",
         "A limit value is not valid.",
-        "Role limits are 1 to 1,000,000 (a file limit up to its ceiling: an emote side at most 1000 px) and listed once.",
+        "Role limits are 1 to 1,000,000 (a file limit up to its ceiling) and listed once. Emote limits are fixed, not per role, and always refused.",
     ),
     e(
         "Admin",

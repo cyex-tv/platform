@@ -19,8 +19,8 @@ use crate::{Canvas, Limits, MediaError, decode_frames};
 /// 1x is this many pixels tall.
 pub const BASE_HEIGHT: u32 = 32;
 pub const SCALES: [u32; 4] = [1, 2, 3, 4];
-/// Wider than 4:1 is scaled to fit.
-pub const MAX_ASPECT: u32 = 4;
+/// Wider than 4:1 is scaled to fit (an upload wider than that is refused: [`crate::EmoteRules`]).
+pub const MAX_ASPECT: u32 = crate::EmoteRules::MAX_ASPECT;
 /// The tallest emote file: 4x, 128 px (owner, 2026/11/22: "emotes should be max 128px tall").
 /// Every emote file is at most this tall, whatever the original's size or shape; a smaller
 /// original is never scaled up.

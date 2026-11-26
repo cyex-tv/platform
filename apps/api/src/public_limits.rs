@@ -2,9 +2,10 @@
 //! The numbers are the ones the upload checks run with (`MediaConfig`, `Rates`, the constants of
 //! each area), so the answer can't drift from what is enforced.
 
+use cyex_tv_media::EmoteRules;
 use cyex_tv_media::Limits as Media;
 use cyex_tv_media::config::MediaConfig;
-use cyex_tv_media::encode::{EMOTE_MAX_HEIGHT, MAX_ASPECT};
+use cyex_tv_media::encode::EMOTE_MAX_HEIGHT;
 use cyex_tv_shared::model::{
     EffectiveLimit, MediaLimits, NameLimits, PublicLimits, RateInfo, TagLimits, TextLimit,
 };
@@ -23,6 +24,7 @@ fn wide(n: impl TryInto<i64>) -> i64 {
 }
 
 fn media(l: &Media, min_side: Option<u32>, max_aspect: Option<u32>, served: u32) -> MediaLimits {
+    let max_fps = l.max_aspect.map(|_| EmoteRules::MAX_FPS); // only emotes have the rule
     MediaLimits {
         max_bytes: int(l.max_bytes),
         max_side: int(l.max_side),
@@ -31,6 +33,7 @@ fn media(l: &Media, min_side: Option<u32>, max_aspect: Option<u32>, served: u32)
         max_duration_ms: (l.max_duration_ms != u64::MAX).then(|| wide(l.max_duration_ms)),
         min_side: min_side.map(int),
         max_aspect: max_aspect.map(int),
+        max_fps: max_fps.map(int),
         max_served_side: int(served),
     }
 }
@@ -47,7 +50,12 @@ pub fn build(config: &MediaConfig, rates: &Rates, account: Option<&AccountLimits
     let ladder = &config.ladder;
     let paint_served = ladder.paint_large.iter().map(|l| l.px).max().unwrap_or(0);
     PublicLimits {
-        emote: media(&config.emote, None, Some(MAX_ASPECT), EMOTE_MAX_HEIGHT),
+        emote: media(
+            &EmoteRules::limits(),
+            None,
+            Some(EmoteRules::MAX_ASPECT),
+            EMOTE_MAX_HEIGHT,
+        ),
         badge: media(
             &config.badge,
             Some(BADGE_MIN_SIDE),
@@ -122,8 +130,11 @@ mod tests {
         assert_eq!(l.emote.max_bytes, 8 * 1024 * 1024);
         assert_eq!(l.emote.max_side, 1000);
         assert_eq!(l.emote.max_frames, 1000);
-        assert_eq!(l.emote.max_total_pixels, 100_000_000);
+        assert_eq!(l.emote.max_total_pixels, 1_000_000_000);
         assert_eq!(l.emote.max_duration_ms, None);
+        assert_eq!((l.emote.max_aspect, l.emote.max_fps), (Some(4), Some(50)));
+        assert_eq!((l.badge.max_aspect, l.badge.max_fps), (Some(1), None));
+        assert_eq!(l.paint.max_fps, None);
         assert_eq!(l.emote.max_served_side, 128);
         assert_eq!(l.badge.max_side, 2048);
         assert_eq!(l.badge.min_side, Some(72));
@@ -163,7 +174,7 @@ mod tests {
         assert_eq!(l.badge.max_bytes, 2 * 1024 * 1024);
         assert_eq!(l.badge.max_side, 4096);
         assert_eq!(l.badge.max_served_side, 1024);
-        // The emote numbers keep their defaults.
+        // The emote numbers are fixed: no variable moves them.
         assert_eq!(l.emote.max_side, 1000);
     }
 
@@ -174,7 +185,6 @@ mod tests {
         overrides.insert(AccountLimit::PendingEmotes, 40);
         overrides.insert(AccountLimit::UploadsPerHour, 5);
         overrides.insert(AccountLimit::BadgeMaxSide, 4096);
-        overrides.insert(AccountLimit::EmoteMaxBytes, 2 * 1024 * 1024);
         let account = AccountLimits::resolve(&rates, &[overrides]);
         let l = build(&MediaConfig::builtin(), &rates, Some(&account));
         assert_eq!(l.account.len(), AccountLimit::ALL.len());
@@ -191,12 +201,7 @@ mod tests {
         let side = find("badge_max_side");
         assert_eq!((side.default, side.effective), (2048, 4096));
         assert_eq!(side.window_seconds, None);
-        let bytes = find("emote_max_bytes");
-        assert_eq!(
-            (bytes.default, bytes.effective),
-            (8 * 1024 * 1024, 2 * 1024 * 1024)
-        );
-        let emote_side = find("emote_max_side");
-        assert_eq!((emote_side.default, emote_side.effective), (1000, 1000));
+        // Emote numbers aren't per-account limits: they are fixed and listed above.
+        assert!(l.account.iter().all(|e| !e.key.starts_with("emote_max_")));
     }
 }

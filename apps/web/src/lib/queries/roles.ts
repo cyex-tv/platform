@@ -74,6 +74,8 @@ export const UPLOAD_QUOTA = graphql(`
       maxBytes
       maxSide
       maxFrames
+      maxFps
+      maxAspect
     }
   }
 `);
@@ -83,6 +85,7 @@ export const MEDIA_LIMIT_FIELDS = graphql(`
     maxBytes
     maxSide
     maxFrames
+    maxFps
     maxTotalPixels
     maxDurationMs
     minSide

@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 /// What one kind of picture (emote, badge, paint) may be. Sizes are px, the file size is bytes.
+/// Emote numbers are fixed rules, the same for everyone; badge and paint numbers are the
+/// configured ones (a role may raise them).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct MediaLimits {
@@ -20,9 +22,12 @@ pub struct MediaLimits {
     pub max_duration_ms: Option<i64>,
     /// The smallest side an upload may have (badges: both sides; paints: the height); null for none.
     pub min_side: Option<i32>,
-    /// How many times as wide as tall a picture may be (badges 1, paints 8); null for no rule at
-    /// upload (emotes wider than their `servedAspect` are scaled to fit).
+    /// How many times as wide as tall a picture may be (emotes 4, badges 1, paints 8); null for
+    /// no rule at upload. Emotes have no rule for a tall picture.
     pub max_aspect: Option<i32>,
+    /// The most frames a second (emotes 50; null for the others). Frames shown for under
+    /// 1000 / `maxFps` ms (20 ms: a 0 or 10 ms GIF delay) are shown for 100 ms, as browsers do.
+    pub max_fps: Option<i32>,
     /// The tallest file the CDN serves for this kind (emotes 128 px, badges the master size).
     pub max_served_side: i32,
 }

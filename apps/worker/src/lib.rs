@@ -71,9 +71,10 @@ pub fn media_failure(err: cyex_tv_media::MediaError) -> JobError {
     }
 }
 
-/// The media limits a transcode job runs under: the numbers the API stored on it (the uploader's
-/// effective limits, `limits` in the payload), cut at the configured ceiling, else the configured
-/// limits. Never re-derived from a role, which may have changed since the upload.
+/// The media limits a cosmetic (badge or paint) transcode job runs under: the numbers the API
+/// stored on it (the uploader's effective limits, `limits` in the payload), cut at the configured
+/// ceiling, else the configured limits. Never re-derived from a role, which may have changed
+/// since the upload. Emotes don't use this: their rules are fixed (`Limits::emote()`).
 pub fn job_limits(
     kind: cyex_tv_media::config::MediaKind,
     payload: &serde_json::Value,
@@ -687,11 +688,8 @@ mod tests {
             (l.max_bytes, l.max_side, l.max_frames),
             (ceiling.max_bytes, ceiling.max_side, ceiling.max_frames)
         );
-        // An emote never gets past 1000 px.
-        let emote = job_limits(MediaKind::Emote, &json!({ "limits": { "max_side": 4000 } }));
-        assert_eq!(emote.max_side, 1000);
         // Lowered works.
-        let low = job_limits(MediaKind::Emote, &json!({ "limits": { "max_side": 64 } }));
+        let low = job_limits(MediaKind::Paint, &json!({ "limits": { "max_side": 64 } }));
         assert_eq!(low.max_side, 64);
     }
 

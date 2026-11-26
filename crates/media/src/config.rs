@@ -4,17 +4,19 @@
 //! agree on every number. An unset or empty variable keeps the built-in default; one that doesn't
 //! read is an error naming it ([`MediaConfig::init_from_env`], called when a process starts).
 //!
-//! Per kind (`DEFAULT` for cosmetic pictures in general, `EMOTE`, `BADGE`, `PAINT`):
+//! Per kind (`DEFAULT` for cosmetic pictures in general, `BADGE`, `PAINT`):
 //! `CYEX_TV_LIMIT_<KIND>_MAX_BYTES`, `_MAX_SIDE`, `_MAX_FRAMES`, `_MAX_TOTAL_PIXELS` and
 //! `_MAX_DURATION_MS` (a number of ms, or `none` for no cap). The ladder:
 //! `CYEX_TV_LIMIT_BADGE_MASTER_PX`, `_BADGE_CHAT_ANIMATED_BYTES`, `_BADGE_128_ANIMATED_BYTES`,
 //! `_BADGE_256_ANIMATED_BYTES`, `_BADGE_512_ANIMATED_BYTES`, `_BADGE_ORIGINAL_PX`,
 //! `_BADGE_ORIGINAL_ANIMATED_BYTES` and `_PAINT_512_ANIMATED_BYTES`.
-//! An emote's side can't be set above [`EMOTE_SIDE_CEILING`] (1000 px, the owner's rule).
+//! Emotes are not configured here: their rules are fixed ([`crate::EmoteRules`], ADR 0031), the
+//! same for everyone, and no variable or role changes them.
 //!
-//! A role may override a kind's bytes, side and frames ([`Overrides`], `setRoleLimits`); what it
-//! sets is cut at the kind's [`Ceiling`] (`CYEX_TV_LIMIT_ROLE_<KIND>_MAX_BYTES`, `_MAX_SIDE`,
-//! `_MAX_FRAMES`), so the biggest file, picture and decoder buffer are known up front.
+//! A role may override a badge's or paint's bytes, side and frames ([`Overrides`],
+//! `setRoleLimits`); what it sets is cut at the kind's [`Ceiling`]
+//! (`CYEX_TV_LIMIT_ROLE_<KIND>_MAX_BYTES`, `_MAX_SIDE`, `_MAX_FRAMES`), so the biggest file,
+//! picture and decoder buffer are known up front.
 
 use std::sync::OnceLock;
 
@@ -23,13 +25,10 @@ use crate::encode::{BADGE_MASTER, BADGE_MAX_ANIMATED_CHAT_BYTES, Large, Profile}
 
 /// The prefix of every variable.
 pub const ENV_PREFIX: &str = "CYEX_TV_LIMIT_";
-/// An emote is never wider or taller than this, whatever the variables say.
-pub const EMOTE_SIDE_CEILING: u32 = 1000;
 
-/// What kind of picture a limit is for.
+/// What kind of cosmetic picture a limit is for (emotes have fixed rules: [`crate::EmoteRules`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum MediaKind {
-    Emote,
     Badge,
     Paint,
 }
@@ -43,11 +42,6 @@ pub struct Ceiling {
 }
 
 impl Ceiling {
-    const BUILTIN_EMOTE: Self = Self {
-        max_bytes: 16 * 1024 * 1024,
-        max_side: EMOTE_SIDE_CEILING,
-        max_frames: 2000,
-    };
     const BUILTIN_BADGE: Self = Self {
         max_bytes: 16 * 1024 * 1024,
         max_side: 4096,
@@ -119,13 +113,12 @@ impl Ladder {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MediaConfig {
     pub default: Limits,
-    pub emote: Limits,
     pub badge: Limits,
     pub paint: Limits,
     pub ladder: Ladder,
-    /// What a role may raise (or lower) each kind's bytes, side and frames to: emote, badge,
-    /// paint (see [`MediaConfig::ceiling`]).
-    ceilings: [Ceiling; 3],
+    /// What a role may raise (or lower) each kind's bytes, side and frames to: badge, paint (see
+    /// [`MediaConfig::ceiling`]).
+    ceilings: [Ceiling; 2],
 }
 
 static CURRENT: OnceLock<MediaConfig> = OnceLock::new();
@@ -142,39 +135,28 @@ impl MediaConfig {
     pub fn builtin() -> Self {
         Self {
             default: Limits::builtin_default(),
-            emote: Limits::builtin_emote(),
             badge: Limits::builtin_badge(),
             paint: Limits::builtin_paint(),
             ladder: Ladder::BUILTIN,
-            ceilings: [
-                Ceiling::BUILTIN_EMOTE,
-                Ceiling::BUILTIN_BADGE,
-                Ceiling::BUILTIN_PAINT,
-            ],
+            ceilings: [Ceiling::BUILTIN_BADGE, Ceiling::BUILTIN_PAINT],
         }
     }
 
     /// The configured limits of `kind`, for an account whose roles override nothing.
     pub fn limits(&self, kind: MediaKind) -> Limits {
         match kind {
-            MediaKind::Emote => self.emote,
             MediaKind::Badge => self.badge,
             MediaKind::Paint => self.paint,
         }
     }
 
-    /// The most a role may set `kind`'s limits to. Never below the configured number, and an
-    /// emote's side never above 1000 px.
+    /// The most a role may set `kind`'s limits to. Never below the configured number.
     pub fn ceiling(&self, kind: MediaKind) -> Ceiling {
         let c = self.ceilings[kind as usize];
         let l = self.limits(kind);
         Ceiling {
             max_bytes: c.max_bytes.max(l.max_bytes),
-            max_side: if kind == MediaKind::Emote {
-                c.max_side.max(l.max_side).min(EMOTE_SIDE_CEILING)
-            } else {
-                c.max_side.max(l.max_side)
-            },
+            max_side: c.max_side.max(l.max_side),
             max_frames: c.max_frames.max(l.max_frames),
         }
     }
@@ -236,15 +218,10 @@ impl MediaConfig {
         };
         for (kind, limits) in [
             ("DEFAULT", &mut c.default),
-            ("EMOTE", &mut c.emote),
             ("BADGE", &mut c.badge),
             ("PAINT", &mut c.paint),
         ] {
-            let side_max = if kind == "EMOTE" {
-                u64::from(EMOTE_SIDE_CEILING)
-            } else {
-                MAX_SIDE_CEILING
-            };
+            let side_max = MAX_SIDE_CEILING;
             let mut bytes = limits.max_bytes as u64;
             let mut side = u64::from(limits.max_side);
             let mut frames = u64::from(limits.max_frames);
@@ -283,12 +260,8 @@ impl MediaConfig {
             limits.max_frames = u32::try_from(frames).unwrap_or(u32::MAX);
             limits.max_total_pixels = pixels;
         }
-        for (kind, ceiling) in ["EMOTE", "BADGE", "PAINT"].into_iter().zip(&mut c.ceilings) {
-            let side_max = if kind == "EMOTE" {
-                u64::from(EMOTE_SIDE_CEILING)
-            } else {
-                MAX_SIDE_CEILING
-            };
+        for (kind, ceiling) in ["BADGE", "PAINT"].into_iter().zip(&mut c.ceilings) {
+            let side_max = MAX_SIDE_CEILING;
             let mut bytes = ceiling.max_bytes as u64;
             let mut side = u64::from(ceiling.max_side);
             let mut frames = u64::from(ceiling.max_frames);
@@ -349,11 +322,12 @@ impl MediaConfig {
     /// The biggest file any upload may be, a role's overrides included: what an upload request's
     /// body is cut at (each upload's own limit is checked while the file is read).
     pub fn max_upload_bytes(&self) -> usize {
-        [MediaKind::Emote, MediaKind::Badge, MediaKind::Paint]
+        [MediaKind::Badge, MediaKind::Paint]
             .into_iter()
             .map(|k| self.ceiling(k).max_bytes)
             .max()
             .unwrap_or(0)
+            .max(crate::EmoteRules::MAX_BYTES)
     }
 
     /// The badge sizes this config makes.
