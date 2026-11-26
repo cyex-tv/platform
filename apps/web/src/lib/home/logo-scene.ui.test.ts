@@ -27,8 +27,12 @@ vi.mock('three', async (orig) => {
   const three = await orig<typeof import('three')>();
   return {
     ...three,
-    WebGLRenderer: vi.fn(() => renderer),
-    PMREMGenerator: vi.fn(() => ({ fromScene: () => ({ texture: new three.Texture() }), dispose: vi.fn() })),
+    WebGLRenderer: vi.fn(function () {
+      return renderer;
+    }),
+    PMREMGenerator: vi.fn(function () {
+      return { fromScene: () => ({ texture: new three.Texture() }), dispose: vi.fn() };
+    }),
   };
 });
 
@@ -138,7 +142,7 @@ describe('3D logo scene', () => {
   });
   describe('the pointer', () => {
     const POINTER = /^(pointer|mouse|touch)/;
-    const pointerCalls = (spy: ReturnType<typeof vi.spyOn>) => spy.mock.calls.filter(([type]) => POINTER.test(String(type))).length;
+    const pointerCalls = (spy: ReturnType<typeof vi.spyOn>) => spy.mock.calls.filter(([type]: unknown[]) => POINTER.test(String(type))).length;
     const media = (m: { hover: boolean; fine: boolean; reduced: boolean }) => {
       const real = window.matchMedia;
       window.matchMedia = ((q: string) => ({

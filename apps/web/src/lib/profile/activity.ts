@@ -53,7 +53,9 @@ const KIND: Record<ApiKind, ActivityKind> = {
   EDITOR_REMOVED: 'editorRemoved',
 };
 
-type Entry = AccountActivityQuery['accountActivityPage']['entries'][number];
+type FullEntry = AccountActivityQuery['accountActivityPage']['entries'][number];
+/** The emote feed's lines carry no `editor`. */
+type Entry = Omit<FullEntry, 'editor'> & Partial<Pick<FullEntry, 'editor'>>;
 
 /** One API entry as a feed item; unknown kinds are dropped. */
 export function toItem(e: Entry): ActivityItem | null {
