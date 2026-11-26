@@ -52,7 +52,7 @@ export const total = (frames: readonly Timed[]) => frames.reduce((s, f) => s + f
 
 /** The shortest delay of an animation (Infinity for a still). */
 export function shortest(frames: readonly Timed[]): number {
-  return frames.length > 1 ? Math.min(...frames.map((f) => f.delay)) : Infinity;
+  return frames.length > 1 ? frames.reduce((m, f) => Math.min(m, f.delay), Infinity) : Infinity;
 }
 
 /** Frames per second at the shortest delay (0 for a still). */
