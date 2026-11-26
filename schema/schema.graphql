@@ -1699,6 +1699,8 @@ type Me {
 
 """
 What one kind of picture (emote, badge, paint) may be. Sizes are px, the file size is bytes.
+Emote numbers are fixed rules, the same for everyone; badge and paint numbers are the
+configured ones (a role may raise them).
 """
 type MediaLimits {
 	"""
@@ -1726,10 +1728,15 @@ type MediaLimits {
 	"""
 	minSide: Int
 	"""
-	How many times as wide as tall a picture may be (badges 1, paints 8); null for no rule at
-	upload (emotes wider than their `servedAspect` are scaled to fit).
+	How many times as wide as tall a picture may be (emotes 4, badges 1, paints 8); null for
+	no rule at upload. Emotes have no rule for a tall picture.
 	"""
 	maxAspect: Int
+	"""
+	The most frames a second (emotes 50; null for the others). Frames shown for under
+	1000 / `maxFps` ms (20 ms: a 0 or 10 ms GIF delay) are shown for 100 ms, as browsers do.
+	"""
+	maxFps: Int
 	"""
 	The tallest file the CDN serves for this kind (emotes 128 px, badges the master size).
 	"""
@@ -3492,7 +3499,7 @@ type RoleLimit {
 	`gql_account`, `uploads_per_hour`, `pending_emotes`, `editors`, `cosmetics`,
 	`set_clones`, `account_search`, `quick_search`, `heavy_reads`, `personal_lists`,
 	`emote_transfers`, `prefs`, `checkout`, `redeem`, `data_export`, `set_capacity_max`, or a
-	media limit: `emote_max_bytes`, `emote_max_side`, `emote_max_frames`, `badge_max_bytes`,
+	media limit: `badge_max_bytes`,
 	`badge_max_side`, `badge_max_frames`, `paint_max_bytes` or `paint_max_side` (bytes, px
 	and frames of the largest file an account may upload).
 	"""
@@ -4003,17 +4010,26 @@ type UploadQuota {
 	uploadsThisHour: Int!
 	uploadsPerHour: Int!
 	"""
-	The most bytes one emote file may be.
+	The most bytes one emote file may be (8 MB). Fixed, the same for everyone.
 	"""
 	maxBytes: Int!
 	"""
-	The longest side of an emote, in px.
+	The longest side of an emote, in px (1000). Fixed.
 	"""
 	maxSide: Int!
 	"""
-	The most frames an animated emote may have.
+	The most frames an animated emote may have (1000). Fixed.
 	"""
 	maxFrames: Int!
+	"""
+	The most frames a second (50). A frame shown for under 20 ms (a 0 or 10 ms GIF delay) is
+	shown for 100 ms, as browsers do, so an animation never runs faster. Fixed.
+	"""
+	maxFps: Int!
+	"""
+	How many times as wide as tall an emote may be (4, so 4:1). Fixed; a tall emote has no rule.
+	"""
+	maxAspect: Int!
 }
 
 """

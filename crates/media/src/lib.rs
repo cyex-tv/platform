@@ -161,7 +161,9 @@ impl EmoteRules {
             max_bytes: Self::MAX_BYTES,
             max_side: Self::MAX_SIDE,
             max_frames: Self::MAX_FRAMES,
-            max_total_pixels: (Self::MAX_SIDE as u64) * (Self::MAX_SIDE as u64) * (Self::MAX_FRAMES as u64),
+            max_total_pixels: (Self::MAX_SIDE as u64)
+                * (Self::MAX_SIDE as u64)
+                * (Self::MAX_FRAMES as u64),
             max_duration_ms: u64::MAX,
             max_aspect: Some(Self::MAX_ASPECT),
         }

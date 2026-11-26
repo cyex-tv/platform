@@ -1,6 +1,6 @@
-# 0031: Per-role media limits
+# 0031: Per-role media limits (badges and paints)
 
-- Status: accepted (owner approved, 2026/11/26)
+- Status: accepted (owner approved, 2026/11/26); amended 2026/11/26: emotes are fixed, not per role (see Amendment)
 - Date: 2026/11/26
 - Amends: 0025 (badge uploads), 0026 (paint uploads); builds on the configurable media limits (`CYEX_TV_LIMIT_*`)
 
@@ -18,3 +18,15 @@ Media limits (bytes, side, frames) came from the environment and were the same f
 ## Consequences
 - A bigger badge is accepted and stored as its original, but the size ladder is unchanged: files are made from the 512 px master and the `original` is fitted into `CYEX_TV_LIMIT_BADGE_ORIGINAL_PX` (512 by default). Raise that too for larger originals.
 - Additive: a nullable column, new limit keys, a new `MEDIA` group and a `max` field on `RoleLimit`.
+
+## Amendment (2026/11/26): emote rules are fixed
+The owner decided that emote upload rules are the same for everyone, whoever uploads. This replaces the emote parts above: a role can no longer set emote limits, and no environment variable can.
+- **Rules**, in one place (`cyex_tv_media::EmoteRules`): at most 1000 × 1000 px (each side), at most 8 MB (8 × 1024 × 1024 bytes), at most 1000 frames, at most 50 fps, and width at most 4 × height (4:1).
+- **50 fps** means no frame is shown for less than 20 ms. A GIF frame with a shorter delay (0 or 10 ms, as many tools write) isn't refused: as in browsers it is shown for 100 ms (`shown_ms`), so the effective rate never goes over 50 fps. The rule never rejects a file.
+- **Shape.** Wider than 4:1 is refused at upload with `bad_dimensions` (422, "Emotes can be at most 4 times as wide as tall (4:1). This one is W×H px."). Before this, a wider picture was accepted and scaled to fit. A tall picture has no ratio rule (only the 1000 px side): 10 × 1000 is fine. Emotes already stored are untouched; making files again from an original wider than 4:1 now fails in the worker.
+- **No hidden sixth rule.** The decode-work cap (width × height × frames) is exactly 1000 × 1000 × 1000, and there is no duration cap, so the five rules are all there is. (The 100 MP cap emotes had before would have refused 1000 × 1000 at more than 100 frames.)
+- **Checked three times**: `POST /v1/emotes` (the probe), the worker before it makes files (`emote.transcode` decodes with `Limits::emote()` and ignores a `limits` that an older job carries), and the client before the upload (read from the API with a built-in copy as fallback). The API no longer puts `limits` in the `emote.transcode` payload.
+- **Reported**, the same for everyone: the `limits` query / `GET /v1/limits` (`emote`: `maxBytes`, `maxSide`, `maxFrames`, `maxFps` 50, `maxAspect` 4, `maxTotalPixels`), `uploadQuota` (`maxBytes`, `maxSide`, `maxFrames`, `maxFps`, `maxAspect`) and `limits_used` in the upload answer.
+- **Removed**: `emote_max_bytes`, `emote_max_side` and `emote_max_frames` from role limits (`setRoleLimits`, `roleLimits`, `limitDefaults`, `limits.account`, the role editor's File sizes group), and `CYEX_TV_LIMIT_EMOTE_*` and `CYEX_TV_LIMIT_ROLE_EMOTE_*` (ignored if still set). They were added hours before in #193 and never released. For compatibility `setRoleLimits` answers `bad_limit` ("emote limits are fixed") to an input that still names one, and a migration strips the keys from stored role limits. Badge and paint role limits are unchanged.
+- Errors: a side or frame count over the rule, or a file over 8 MB, stays `too_large` (413; the byte cap carries `details {limit, current}`, ADR 0032). The messages state the limit.
+

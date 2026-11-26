@@ -2,8 +2,8 @@
 //! The numbers are the ones the upload checks run with (`MediaConfig`, `Rates`, the constants of
 //! each area), so the answer can't drift from what is enforced.
 
-use cyex_tv_media::Limits as Media;
 use cyex_tv_media::EmoteRules;
+use cyex_tv_media::Limits as Media;
 use cyex_tv_media::config::MediaConfig;
 use cyex_tv_media::encode::EMOTE_MAX_HEIGHT;
 use cyex_tv_shared::model::{

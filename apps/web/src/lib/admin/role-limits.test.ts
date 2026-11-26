@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { RoleLimitFieldsFragment } from '$lib/gql/graphql';
-import { amount, changed, grouped, info, overrides, per, toInput, toValues, valueProblem } from './role-limits';
+import { LIMIT_INFO, amount, changed, grouped, info, overrides, per, toInput, toValues, valueProblem } from './role-limits';
 
 const l = (key: string, group: RoleLimitFieldsFragment['group'], value: number | null = null, windowSeconds: number | null = 60): RoleLimitFieldsFragment => ({
   key, group, default: 20, max: 1_000_000, windowSeconds, value,
@@ -44,8 +44,10 @@ describe('role limits', () => {
     expect(amount(l('checkout', 'ACCOUNT', null, 3600), 1200)).toBe('1.200 an hour');
     expect(amount(l('pending_emotes', 'UPLOADS', null, null), 20)).toBe('20 at once');
     expect(amount(l('badge_max_side', 'MEDIA', null, null), 4096)).toBe('4.096 px');
-    expect(amount(l('emote_max_bytes', 'MEDIA', null, null), 8 * 1024 * 1024)).toBe('8 MB');
-    expect(amount(l('emote_max_bytes', 'MEDIA', null, null), 2.5 * 1024 * 1024)).toBe('2,5 MB');
+    expect(amount(l('paint_max_bytes', 'MEDIA', null, null), 8 * 1024 * 1024)).toBe('8 MB');
+    expect(amount(l('paint_max_bytes', 'MEDIA', null, null), 2.5 * 1024 * 1024)).toBe('2,5 MB');
+    // Emote rules are fixed for everyone: no emote limit is described here.
+    expect(Object.keys(LIMIT_INFO).filter((k) => k.startsWith('emote_max_'))).toEqual([]);
     expect(info('pending_emotes').label).toBe('Waiting for review');
     expect(info('some_new_limit').label).toBe('some new limit');
   });
@@ -58,21 +60,21 @@ describe('role limits', () => {
     expect(valueProblem('16', bytes)).toBeNull();
     expect(valueProblem('17', bytes)).toBe('0,01 to 16.');
     expect(valueProblem('lots', bytes)).toMatch(/number of MB/);
-    const side = { key: 'emote_max_side', max: 1000 };
+    const side = { key: 'badge_max_side', max: 1000 };
     expect(valueProblem('1000', side)).toBeNull();
     expect(valueProblem('1001', side)).toBe('1 to 1.000.');
     expect(valueProblem('0', side)).toBe('1 to 1.000.');
     const refs = [bytes, side];
-    const before = toValues([l('badge_max_bytes', 'MEDIA', 12 * 1024 * 1024, null), l('emote_max_side', 'MEDIA')]);
-    expect(before).toEqual({ badge_max_bytes: '12', emote_max_side: '' });
-    expect(toInput({ badge_max_bytes: '2,5', emote_max_side: '512' }, refs)).toEqual([
+    const before = toValues([l('badge_max_bytes', 'MEDIA', 12 * 1024 * 1024, null), l('badge_max_side', 'MEDIA')]);
+    expect(before).toEqual({ badge_max_bytes: '12', badge_max_side: '' });
+    expect(toInput({ badge_max_bytes: '2,5', badge_max_side: '512' }, refs)).toEqual([
       { key: 'badge_max_bytes', value: 2.5 * 1024 * 1024 },
-      { key: 'emote_max_side', value: 512 },
+      { key: 'badge_max_side', value: 512 },
     ]);
     // Past its own most a box isn't sent.
-    expect(toInput({ emote_max_side: '1001' }, refs)).toEqual([]);
+    expect(toInput({ badge_max_side: '1001' }, refs)).toEqual([]);
     expect(changed(before, { ...before, badge_max_bytes: '12,0' }, refs)).toBe(false);
-    expect(changed(before, { ...before, emote_max_side: '256' }, refs)).toBe(true);
+    expect(changed(before, { ...before, badge_max_side: '256' }, refs)).toBe(true);
   });
 
   it('lists only the limits a role overrides', () => {

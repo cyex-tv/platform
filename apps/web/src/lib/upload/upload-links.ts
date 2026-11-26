@@ -4,22 +4,23 @@
 export const UPLOAD_PATHS = ['/me/upload', '/upload'];
 
 /** What `uploadQuota` says about the files an account may upload (null: not read yet). */
-export type EmoteCaps = { maxBytes: number; maxSide: number; maxFrames: number };
+export type EmoteCaps = { maxBytes: number; maxSide: number; maxFrames: number; maxFps: number; maxAspect: number };
 
-/** The built-in caps, shown until the API says its own (crates/media defaults). */
-export const DEFAULT_EMOTE_CAPS: EmoteCaps = { maxBytes: 8 * 1024 * 1024, maxSide: 1000, maxFrames: 1000 };
+/** The built-in rules (fixed for everyone: `cyex_tv_media::EmoteRules`), until the API says them. */
+export const DEFAULT_EMOTE_CAPS: EmoteCaps = { maxBytes: 8 * 1024 * 1024, maxSide: 1000, maxFrames: 1000, maxFps: 50, maxAspect: 4 };
 
 const mb = (n: number) => String(Math.round((n / (1024 * 1024)) * 10) / 10).replace('.', ',');
 
-/** cyex.tv's limits, listed under the drop zone: the account's own numbers once known. */
+/** The emote rules, listed under the drop zone: the API's numbers once known. */
 export function uploadLimits(caps: EmoteCaps | null | undefined = null): string[] {
   const c = caps ?? DEFAULT_EMOTE_CAPS;
   return [
     'PNG, APNG, GIF, WebP or JPEG',
     `Up to ${mb(c.maxBytes)} MB`,
     `Up to ${c.maxSide} × ${c.maxSide} px and ${c.maxFrames} frames`,
+    `Up to ${c.maxFps} fps`,
+    `At most ${c.maxAspect} times as wide as tall (${c.maxAspect}:1)`,
     'Made 32 to 128 px tall (1x to 4x)',
-    'Wider than 4:1 is scaled to fit',
   ];
 }
 

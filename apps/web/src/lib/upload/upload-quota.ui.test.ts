@@ -46,7 +46,7 @@ describe('the upload form’s limits list', () => {
   it('shows the caps the API gave for the account', async () => {
     gql.mockImplementation(async (doc: unknown) =>
       String(doc).includes('uploadQuota')
-        ? { uploadQuota: { accountId: 'ME', uploadsThisHour: 0, uploadsPerHour: 20, pending: 1, pendingMax: 20, maxBytes: 4 * 1024 * 1024, maxSide: 512, maxFrames: 90 } }
+        ? { uploadQuota: { accountId: 'ME', uploadsThisHour: 0, uploadsPerHour: 20, pending: 1, pendingMax: 20, maxBytes: 4 * 1024 * 1024, maxSide: 512, maxFrames: 90, maxFps: 50, maxAspect: 4 } }
         : Promise.reject(new Error('not in this test')),
     );
     render(UploadDropHarness);

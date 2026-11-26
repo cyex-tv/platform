@@ -738,7 +738,8 @@ async fn limits_lists_every_limit_and_the_callers_role_overrides() {
     w.db.close().await;
 }
 
-const MEDIA_QUOTA: &str = "query { uploadQuota { maxBytes maxSide maxFrames maxFps maxAspect } limits {
+const MEDIA_QUOTA: &str =
+    "query { uploadQuota { maxBytes maxSide maxFrames maxFps maxAspect } limits {
     account { key default effective windowSeconds }
 } }";
 
@@ -979,7 +980,12 @@ async fn emote_size_and_file_rules_are_enforced_just_under_and_just_over() {
     ] {
         for user in [&alice, &owner] {
             let r = w.upload_file(user, name, &file).await;
-            assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{name} {:?}", r.body);
+            assert_eq!(
+                r.status,
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "{name} {:?}",
+                r.body
+            );
             assert_eq!(r.body["error"], "too_large");
             let message = r.body["message"].as_str().unwrap();
             assert!(message.contains("1000×1000 px"), "{message}");
@@ -1011,9 +1017,13 @@ async fn emote_frame_and_speed_rules_are_enforced() {
     let alice = w.user("8131").await;
 
     // 1000 frames pass, 1001 don't.
-    let r = w.upload_file(&alice, "frames1000", &tiny_gif(1000, 40)).await;
+    let r = w
+        .upload_file(&alice, "frames1000", &tiny_gif(1000, 40))
+        .await;
     assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
-    let r = w.upload_file(&alice, "frames1001", &tiny_gif(1001, 40)).await;
+    let r = w
+        .upload_file(&alice, "frames1001", &tiny_gif(1001, 40))
+        .await;
     assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{:?}", r.body);
     assert_eq!(r.body["error"], "too_large");
     assert!(
@@ -1052,7 +1062,12 @@ async fn emotes_are_at_most_4_to_1_wide_and_tall_has_no_ratio_rule() {
         ("wideLine", flat_png_of(500, 1, 7)),
     ] {
         let r = w.upload_file(&alice, name, &file).await;
-        assert_eq!(r.status, StatusCode::UNPROCESSABLE_ENTITY, "{name} {:?}", r.body);
+        assert_eq!(
+            r.status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{name} {:?}",
+            r.body
+        );
         assert_eq!(r.body["error"], "bad_dimensions");
         let message = r.body["message"].as_str().unwrap();
         assert!(message.contains("4:1"), "{message}");

@@ -1050,7 +1050,7 @@ mod tests {
         for l in AccountLimit::ALL {
             assert_eq!(AccountLimit::from_key(l.key()), Some(l));
         }
-        assert_eq!(AccountLimit::ALL.len(), 24);
+        assert_eq!(AccountLimit::ALL.len(), 21);
         // A role can raise the most slots a set may have (a subscriber role: 2.500).
         let rates = Rates::default();
         assert_eq!(

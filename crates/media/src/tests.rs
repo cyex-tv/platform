@@ -1235,10 +1235,7 @@ mod role_overrides {
     #[test]
     fn no_override_is_the_configured_limits() {
         let c = MediaConfig::builtin();
-        for (kind, l) in [
-            (MediaKind::Badge, c.badge),
-            (MediaKind::Paint, c.paint),
-        ] {
+        for (kind, l) in [(MediaKind::Badge, c.badge), (MediaKind::Paint, c.paint)] {
             assert_eq!(c.effective(kind, Overrides::default()), l);
         }
     }

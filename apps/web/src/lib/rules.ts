@@ -3,7 +3,7 @@
 
 import { unreachableMessage } from './components/problem';
 
-/** An emote file's size cap, as the API's (8 MB; `cyex_tv_media::EMOTE_MAX_BYTES`). */
+/** An emote file's size cap, as the API's (8 MB; `cyex_tv_media::EmoteRules::MAX_BYTES`). */
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
 /** The types the API decodes. AVIF is left out until the API takes it. */
 export const UPLOAD_TYPES = ['image/png', 'image/apng', 'image/gif', 'image/webp', 'image/jpeg'];
