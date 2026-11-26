@@ -11,7 +11,7 @@ const file = (scale: number) => ({ name: `${scale}x.webp`, format: 'WEBP', isSta
 const emote = (id: string, name: string, state = 'PENDING') =>
   ({
     id, name, state, visibility: 'PUBLIC', animated: false, tags: ['meme'], createdAt: '2026-11-21T10:00:00Z',
-    flags: { nsfw: true, zeroWidth: false, wide: false }, owner: { id: 'OWN', displayName: 'byteNod' },
+    flags: { zeroWidth: false, wide: false }, owner: { id: 'OWN', displayName: 'byteNod' },
     files: [1, 2, 3, 4].map(file),
   }) as unknown as EmoteFieldsFragment;
 
@@ -31,7 +31,7 @@ describe('ReviewInspector', () => {
     expect(screen.getByRole('heading', { name: 'pupHmm' })).toBeTruthy();
     expect(screen.getByText('3 / 41')).toBeTruthy();
     expect(screen.getAllByRole('figure')).toHaveLength(4);
-    expect(screen.getByText('NSFW')).toBeTruthy();
+    expect(screen.queryByText('NSFW')).toBeNull();
     // Earlier uploads leave this one out: two approved, one rejected.
     await screen.findByText('oldOne');
     expect(screen.getByText('approved').parentElement?.textContent).toContain('2');

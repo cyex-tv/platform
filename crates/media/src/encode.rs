@@ -18,6 +18,11 @@ pub const BASE_HEIGHT: u32 = 32;
 pub const SCALES: [u32; 4] = [1, 2, 3, 4];
 /// Wider than 4:1 is scaled to fit.
 pub const MAX_ASPECT: u32 = 4;
+/// The tallest emote file: 4x, 128 px (owner, 2026/11/22: "emotes should be max 128px tall").
+/// Every emote file is at most this tall, whatever the original's size or shape; a smaller
+/// original is never scaled up.
+pub const EMOTE_MAX_HEIGHT: u32 = 128;
+const _: () = assert!(BASE_HEIGHT * SCALES[SCALES.len() - 1] == EMOTE_MAX_HEIGHT);
 
 /// A size past a profile's scales: a square of `px`, named `{px}.webp` (`128.webp`,
 /// `256_static.avif` and so on).
@@ -74,7 +79,8 @@ pub const BADGE_MASTER: u32 = 512;
 pub const BADGE_MAX_ANIMATED_CHAT_BYTES: usize = 512 * 1024;
 
 impl Profile {
-    /// Emotes (ADR 0012): 32 px tall at 1x, 1x to 4x, up to 4:1.
+    /// Emotes (ADR 0012): 32 px tall at 1x, 1x to 4x (so at most [`EMOTE_MAX_HEIGHT`], 128 px,
+    /// tall), up to 4:1, no sizes past 4x.
     pub const EMOTE: Self = Self {
         base_height: BASE_HEIGHT,
         scales: &SCALES,

@@ -52,13 +52,12 @@ export function sizesOf<E extends Sized>(e: E): E['files'] {
     .sort((a, b) => a.scale - b.scale);
 }
 
-/** The emote's flags as words, for a flag row (animated, zero width, nsfw, private, wide). */
-export function flagWords(e: { animated: boolean; flags: { zeroWidth: boolean; nsfw: boolean; private: boolean; wide: boolean } }): string[] {
+/** The emote's flags as words, for a flag row (animated, zero width, wide, private). */
+export function flagWords(e: { animated: boolean; flags: { zeroWidth: boolean; private: boolean; wide: boolean } }): string[] {
   const out: string[] = [];
   if (e.animated) out.push('Animated');
   if (e.flags.zeroWidth) out.push('Zero width');
   if (e.flags.wide) out.push('Wide');
-  if (e.flags.nsfw) out.push('NSFW');
   if (e.flags.private) out.push('Private');
   return out;
 }

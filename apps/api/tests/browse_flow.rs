@@ -192,7 +192,8 @@ async fn flags_tags_and_exact_narrow_the_search() {
     seed(&db).await;
     let app = app_for(&db);
 
-    // Defaults are as before: NSFW hidden, every other emote listed.
+    // Every emote listed but echo, flagged NSFW from before NSFW emotes were refused (ADR 0020,
+    // amendment 2026/11/22): it stays off the listings until staff save its flags.
     let r = find(&app, r#"query: "", sort: TOP"#).await;
     assert_eq!(names(&r), ["alpha", "bravo", "charlie", "delta"]);
     assert_eq!(r["total"], 4);
@@ -237,16 +238,23 @@ async fn flags_tags_and_exact_narrow_the_search() {
         r#"query: "", sort: TOP, flags: [WIDE, WIDE], nsfw: true"#,
     )
     .await;
-    assert_eq!(names(&r), ["alpha", "charlie", "echo"]);
+    // `nsfw: true` is retired: it changes nothing.
+    assert_eq!(names(&r), ["alpha", "charlie"]);
 
     let r = find(&app, r#"query: "", sort: TOP, flags: [ZERO_WIDTH, WIDE]"#).await;
     assert_eq!(names(&r), ["alpha"]);
 
-    // NSFW lists only NSFW emotes, asked for or not.
+    // The retired NSFW flag finds nothing, and no emote says it is NSFW.
     let r = find(&app, r#"query: "", flags: [NSFW]"#).await;
-    assert_eq!(names(&r), ["echo"]);
-    assert_eq!(r["items"][0]["flags"]["nsfw"], true);
-    assert_eq!(r["items"][0]["flags"]["wide"], true);
+    assert_eq!(r["total"], 0);
+    let r = find(&app, r#"query: "", sort: TOP"#).await;
+    assert!(
+        r["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|i| i["flags"]["nsfw"] == false)
+    );
     let r = find(&app, r#"query: "", flags: [NSFW, ZERO_WIDTH]"#).await;
     assert_eq!(r["total"], 0);
 
@@ -336,13 +344,13 @@ async fn trending_orders_by_net_channel_adds_in_the_window() {
         r#"query: "", sort: TRENDING, window: DAY, nsfw: true"#,
     )
     .await;
-    assert_eq!(names(&r), ["echo", "alpha", "bravo"]);
+    assert_eq!(names(&r), ["alpha", "bravo"]);
     let r = find(
         &app,
         r#"query: "", sort: TRENDING, window: DAY, flags: [NSFW]"#,
     )
     .await;
-    assert_eq!(names(&r), ["echo"]);
+    assert_eq!(r["total"], 0);
     let r = find(
         &app,
         r#"query: "", sort: TRENDING, window: MONTH, flags: [WIDE]"#,
@@ -390,9 +398,8 @@ async fn trending_orders_by_net_channel_adds_in_the_window() {
     assert!(trending(&app, e.charlie, "WEEK").await.is_null());
     assert!(trending(&app, e.delta, "DAY").await.is_null());
     assert!(trending(&app, e.delta, "MONTH").await.is_null());
-    // An NSFW emote ranks among everything; the others don't see it.
-    let t = trending(&app, e.echo, "DAY").await;
-    assert_eq!(t, json!({ "rank": 1, "channels": 9, "window": "DAY" }));
+    // An emote still flagged NSFW isn't listed, so it has no rank either.
+    assert!(trending(&app, e.echo, "DAY").await.is_null());
     // Without a window, WEEK.
     let data = gql(
         &app,

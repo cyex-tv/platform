@@ -23,3 +23,6 @@ The owner's answers of 2026/11/20: moderators and above with the right permissio
 ## Consequences
 - Newest-first (`descending`) shows a requeued upload first, as it is the latest to (re)enter the queue.
 - The other sorts (uploader, name, review time) are unchanged.
+
+## Amendment (2026/11/22)
+NSFW is no emote flag any more (ADR 0020, amendment 2026/11/22): `setEmoteFlags` refuses `nsfw: true` (`nsfw_not_allowed`), and any save clears an old NSFW mark, which lets such an emote back on the listings. The audit rows keep their `nsfw` key (always `false` from now on). `emotes.flags` covers visibility and zero-width.

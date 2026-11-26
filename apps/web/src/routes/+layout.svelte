@@ -1,6 +1,7 @@
 <script lang="ts">
   import '../app.css';
   import { untrack } from 'svelte';
+  import { goto } from '$app/navigation';
   import { navigating, page } from '$app/state';
   import Footer from '$lib/components/Footer.svelte';
   import Meta from '$lib/components/Meta.svelte';
@@ -16,7 +17,7 @@
   import { offerConsoleToken } from '$lib/account/console-token';
   import { whatsNew } from '$lib/changelog/seen.svelte';
   import UploadDialog from '$lib/upload/UploadDialog.svelte';
-  import { openUpload, opensDialog } from '$lib/upload/upload.svelte';
+  import { openUpload, opensDialog, uploadFor, uploadParam, withoutUploadParam } from '$lib/upload/upload.svelte';
 
   let { children } = $props();
   // One shell for every route: AppHeader, main, Footer. Pages (and the signed-in group's layout)
@@ -60,17 +61,34 @@
     if (session.known) document.documentElement.removeAttribute('data-own');
   });
 
-  // Signed in, every link to the upload page (the header's Upload, an empty "Your emotes", help
-  // answers) opens the upload dialog over the current page instead. Ctrl/⌘-click and middle
-  // click still open the page in a new tab; signed out, the link goes to sign in as before.
+  // There is no upload page: every old link to /me/upload or /upload (an empty "Your emotes", the
+  // editors' Upload for an account) opens the upload dialog over the current page instead, with
+  // its `?for=`. Signed out, or Ctrl/⌘-click, the link goes to the server, which sends you back
+  // with `?upload` (below).
   function uploadLinks(e: MouseEvent) {
     if (!session.me) return;
     const link = (e.target as Element | null)?.closest?.('a[href]');
     if (!(link instanceof HTMLAnchorElement)) return;
-    if (!opensDialog(e, link, new URL(location.href))) return;
+    const here = new URL(location.href);
+    if (!opensDialog(e, link, here)) return;
     e.preventDefault();
-    openUpload();
+    openUpload(uploadFor(link.href, here));
   }
+  // `?upload` (from the /me/upload and /upload redirects): signed in, the dialog opens and the
+  // address loses it; signed out, sign in first and come back here.
+  $effect(() => {
+    const asked = uploadParam(page.url);
+    if (!asked || !session.known) return;
+    const clean = withoutUploadParam(page.url);
+    untrack(() => {
+      if (session.me) {
+        openUpload(asked.for);
+        void goto(clean, { replaceState: true, noScroll: true, keepFocus: true });
+      } else {
+        void goto(`/signin?back=${encodeURIComponent(page.url.pathname + page.url.search)}`, { replaceState: true });
+      }
+    });
+  });
   // Capture, so this runs before the router's own click handler (which skips prevented clicks).
   $effect(() => {
     document.addEventListener('click', uploadLinks, true);

@@ -6,7 +6,8 @@ const u = (s: string) => parse(new URLSearchParams(s));
 describe('browse params', () => {
   it('defaults', () => {
     const b = u('');
-    expect(b).toMatchObject({ q: '', sort: 'top', window: 'week', kind: 'all', pages: 1, nsfw: false, tags: [] });
+    expect(b).toMatchObject({ q: '', sort: 'top', window: 'week', kind: 'all', pages: 1, tags: [] });
+    expect(b).not.toHaveProperty('nsfw');
     expect(toSearch(b)).toBe('');
   });
   it('relevance needs a query', () => {
@@ -15,8 +16,14 @@ describe('browse params', () => {
     expect(u('q=pog&sort=new').sort).toBe('new');
   });
   it('round trips', () => {
-    const s = '?q=pog&sort=new&kind=animated&zw=1&wide=1&nsfw=1&tag=cat&tag=happy&n=3';
+    const s = '?q=pog&sort=new&kind=animated&zw=1&wide=1&tag=cat&tag=happy&n=3';
     expect(toSearch(u(s.slice(1)))).toBe(s);
+  });
+  it('has no NSFW filter: an old nsfw=1 link is ignored and dropped', () => {
+    const b = u('nsfw=1&tag=cat');
+    expect(toSearch(b)).toBe('?tag=cat');
+    expect(active(b).map((a) => a.label)).toEqual(['#cat']);
+    expect(apiVars(b, 1).flags).toBeNull();
   });
   it('clamps pages and junk', () => {
     expect(u('n=99').pages).toBe(10);
@@ -31,7 +38,7 @@ describe('browse params', () => {
   });
   it('lists active filters, one chip per tag', () => {
     expect(active(u('kind=still&wide=1')).map((a) => a.label)).toEqual(['Still', 'Wide']);
-    expect(active(u('nsfw=1&tag=cat&tag=dog')).map((a) => a.label)).toEqual(['NSFW', '#cat', '#dog']);
+    expect(active(u('zw=1&tag=cat&tag=dog')).map((a) => a.label)).toEqual(['Zero-width', '#cat', '#dog']);
   });
   it('removes one filter at a time, a tag alone', () => {
     const b = u('zw=1&tag=cat&tag=dog&kind=animated');
@@ -83,12 +90,12 @@ describe('apiSort and apiVars', () => {
     expect(apiSort(u('sort=trending').sort)).toBe('TRENDING');
   });
   it('sends every filter to the API', () => {
-    expect(apiVars(u('q=pog&kind=still&zw=1&wide=1&nsfw=1&tag=cat&exact=1&sort=trending&t=day'), 2)).toEqual({
+    expect(apiVars(u('q=pog&kind=still&zw=1&wide=1&tag=cat&exact=1&sort=trending&t=day'), 2)).toEqual({
       query: 'pog',
       animated: false,
       sort: 'TRENDING',
       window: 'DAY',
-      flags: ['ZERO_WIDTH', 'WIDE', 'NSFW'],
+      flags: ['ZERO_WIDTH', 'WIDE'],
       tags: ['cat'],
       exact: true,
       page: 2,

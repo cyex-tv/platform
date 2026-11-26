@@ -99,14 +99,33 @@ pub struct Upload {
     pub file: Bytes,
 }
 
-/// The flags an upload may set at once; all off unless the form says otherwise.
+/// The flags an upload may set at once; all off unless the form says otherwise. Uploads are public
+/// unless made private; NSFW emotes aren't allowed at all (ADR 0020).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Flags {
     pub zero_width: bool,
     pub private: bool,
-    /// Never with `private` (ADR 0020).
+    /// Never with `private` (ADR 0020). Staff only (`emotes.flags` or `emotes.edit_any`):
+    /// taking an emote off the listings is a moderator's call, not the uploader's.
     pub unlisted: bool,
-    pub nsfw: bool,
+}
+
+/// `400 bad_visibility`: only staff take an emote off the listings (ADR 0020).
+pub fn unlisted_staff_only() -> ApiError {
+    ApiError::new(
+        StatusCode::BAD_REQUEST,
+        "bad_visibility",
+        "Emotes are public unless you make them private. Only moderators can take an emote off the listings.",
+    )
+}
+
+/// `400 nsfw_not_allowed`: NSFW emotes aren't allowed on cyex.tv (ADR 0020).
+pub fn nsfw_not_allowed() -> ApiError {
+    ApiError::new(
+        StatusCode::BAD_REQUEST,
+        "nsfw_not_allowed",
+        "NSFW emotes aren't allowed on cyex.tv, so there is no NSFW flag. Emotes that break the guidelines are removed.",
+    )
 }
 
 /// A form flag: `true`/`false`, `1`/`0` or `on`/`off` (any case, spaces trimmed). An empty field
@@ -304,6 +323,13 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
             "Your roles don't allow uploading emotes.",
         ));
     }
+    if input.flags.unlisted
+        && !input.flags.private
+        && !crate::catalog::holds(&mut conn, caller, permissions::EMOTES_FLAGS).await?
+        && !crate::catalog::holds(&mut conn, caller, permissions::EMOTES_EDIT_ANY).await?
+    {
+        return Err(unlisted_staff_only());
+    }
     if for_someone
         && accounts::get(&mut conn, owner)
             .await
@@ -446,7 +472,7 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
             zero_width: input.flags.zero_width,
             private: input.flags.private,
             unlisted: input.flags.unlisted && !input.flags.private,
-            nsfw: input.flags.nsfw,
+            nsfw: false,
         },
     )
     .await
@@ -554,7 +580,6 @@ mod tests {
                 zero_width: false,
                 private: false,
                 unlisted: false,
-                nsfw: false
             }
         );
     }

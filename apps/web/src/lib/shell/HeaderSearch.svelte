@@ -139,7 +139,7 @@
           me ? gql(MY_FAVOURITES, { query: q, perPage: 5 }, signal).catch(() => null) : null,
         ]);
         if (ctl.signal.aborted) return;
-        emotes = favouritesFirst(personal.visible((favs?.myFavourites?.items ?? []).filter((e) => !e.flags.nsfw)), personal.visible(r.quickSearch.emotes), 5);
+        emotes = favouritesFirst(personal.visible(favs?.myFavourites?.items ?? []), personal.visible(r.quickSearch.emotes), 5);
         people = r.quickSearch.users.slice(0, 3);
         failed = false;
       } catch {

@@ -784,7 +784,9 @@ pub async fn history(
 /// `emotes.edit_any` (audited). A restricted owner can't edit, nor can a restricted editor, nor
 /// anyone for a restricted owner. When an owner or editor without `emotes.review` or
 /// `emotes.edit_any` changes the name or tags of an approved emote, it goes back to review
-/// (audited as `emote.resubmitted`); flags alone don't.
+/// (audited as `emote.resubmitted`); flags alone don't. Owners and editors choose public or
+/// private only: unlisted is a moderator's call (`emotes.flags` or `emotes.edit_any`), both ways
+/// (ADR 0020). NSFW emotes aren't allowed: `nsfw: true` is `nsfw_not_allowed`.
 pub async fn update(
     state: &AppState,
     caller: &Caller,
@@ -812,6 +814,9 @@ pub async fn update(
     if editor && let Some(o) = before.owner {
         not_restricted(&mut tx, o, OWNER_RESTRICTED).await?;
     }
+    if input.nsfw == Some(true) {
+        return Err(crate::upload::nsfw_not_allowed());
+    }
     let current = EmoteVisibility::of(before.private, before.unlisted);
     let visibility =
         EmoteVisibility::after(current, input.visibility, input.private).ok_or_else(|| {
@@ -820,6 +825,20 @@ pub async fn update(
                 "`visibility` and `private` say different things.",
             )
         })?;
+    if visibility != current
+        && (visibility == EmoteVisibility::Unlisted || current == EmoteVisibility::Unlisted)
+        && !edit_any
+        && !holds(&mut tx, caller, permissions::EMOTES_FLAGS).await?
+    {
+        return Err(if current == EmoteVisibility::Unlisted {
+            bad(
+                "bad_visibility",
+                "A moderator took this emote off the listings. Only staff can change that.",
+            )
+        } else {
+            crate::upload::unlisted_staff_only()
+        });
+    }
     let (private, unlisted) = visibility.flags();
     let old_tags = emotes::tags(&mut tx, id).await.map_err(db_error)?;
     let renamed = name.is_some_and(|n| n != before.name);
@@ -838,7 +857,7 @@ pub async fn update(
             zero_width: input.zero_width,
             private: Some(private),
             unlisted: Some(unlisted),
-            nsfw: input.nsfw,
+            nsfw: None,
         },
     )
     .await
@@ -898,8 +917,10 @@ pub async fn update(
 
 /// Staff with `emotes.flags` (or `emotes.edit_any`) change an emote's flags after review, without
 /// being its owner (ADR 0024): its visibility (taking a public emote off the listings makes it
-/// unlisted; private), NSFW and zero-width. Audited as `emote.flags_changed`; when the visibility
-/// changes the owner is told (`emote.visibility_changed`). Nothing changed, nothing written.
+/// unlisted; private) and zero-width. NSFW emotes aren't allowed: `nsfw: true` is
+/// `nsfw_not_allowed`, and saving clears an old NSFW flag (the review that lets the emote back
+/// on the listings). Audited as `emote.flags_changed`; when the visibility changes the owner is
+/// told (`emote.visibility_changed`). Nothing changed, nothing written.
 pub async fn set_flags(
     state: &AppState,
     caller: &Caller,
@@ -914,10 +935,14 @@ pub async fn set_flags(
     {
         return Err(forbidden("This needs emotes.flags."));
     }
+    if input.nsfw == Some(true) {
+        return Err(crate::upload::nsfw_not_allowed());
+    }
     let before = row(&mut tx, id).await?.ok_or_else(not_found)?;
     let was = EmoteVisibility::of(before.private, before.unlisted);
     let visibility = input.visibility.unwrap_or(was);
-    let nsfw = input.nsfw.unwrap_or(before.nsfw);
+    // Staff looking at the flags is the review an old NSFW flag waits for.
+    let nsfw = false;
     let zero_width = input.zero_width.unwrap_or(before.zero_width);
     if visibility == was && nsfw == before.nsfw && zero_width == before.zero_width {
         tx.commit().await.map_err(sqlx_error)?;

@@ -3,7 +3,8 @@
 //! is a new implementation of it, not a change to them.
 //!
 //! Only approved, public (not private or unlisted), not deleted emotes are found, and none of an
-//! account whose deletion is pending (ADR 0019). NSFW ones only when asked.
+//! account whose deletion is pending (ADR 0019). NSFW emotes aren't allowed (ADR 0020, amendment
+//! 2026/11/22): one still flagged from before is never listed, whatever the caller asks.
 //! Ranking: exact name, then name prefix, then name similarity, then popularity.
 
 use std::collections::HashMap;
@@ -20,7 +21,7 @@ use crate::ids;
 macro_rules! listed_emote {
     () => {
         "e.state = 'approved' AND e.deleted_at IS NULL
-     AND NOT e.private AND NOT e.unlisted
+     AND NOT e.private AND NOT e.unlisted AND NOT e.nsfw
      AND NOT EXISTS (SELECT 1 FROM accounts oa
                      WHERE oa.id = e.owner_account_id
                        AND (oa.deleted_at IS NOT NULL
@@ -30,9 +31,10 @@ macro_rules! listed_emote {
 }
 
 /// The rule every emote search shares (`search` and its count, `quick`, `trending_rank`), so
-/// they can't drift: approved, not deleted, public (not private or unlisted), and not of an
-/// account whose deletion is pending (ADR 0019) or that is blocked right now (an ended block
-/// lists them again). The emote is `e`. NSFW is each caller's own rule.
+/// they can't drift: approved, not deleted, public (not private or unlisted), not flagged NSFW
+/// (NSFW emotes aren't allowed; an old flag hides the emote until staff clear it, ADR 0020), and
+/// not of an account whose deletion is pending (ADR 0019) or that is blocked right now (an ended
+/// block lists them again). The emote is `e`.
 pub const LISTED_EMOTE: &str = listed_emote!();
 
 /// What to look for. `query` is trimmed and at most 100 characters.
@@ -41,6 +43,7 @@ pub struct Query<'a> {
     pub text: &'a str,
     pub animated: Option<bool>,
     pub owner: Option<Uuid>,
+    /// Retired: NSFW emotes are never listed ([`LISTED_EMOTE`]), so this changes nothing.
     pub nsfw: bool,
     /// Every listed flag must be set. Duplicates are ignored.
     pub flags: &'a [EmoteFlag],
@@ -131,8 +134,9 @@ fn net_adds(days: i32) -> String {
     )
 }
 
-/// The filters every emote search applies. `$1` text, `$2` animated, `$3` owner, `$4` nsfw,
-/// `$5` the lowercase LIKE pattern, `$8` zero-width, `$9` wide, `$10` NSFW only, `$11` tags,
+/// The filters every emote search applies. `$1` text, `$2` animated, `$3` owner, `$4` nsfw
+/// (retired), `$5` the lowercase LIKE pattern, `$8` zero-width, `$9` wide, `$10` NSFW only
+/// (retired: finds nothing, since NSFW emotes are never listed), `$11` tags,
 /// `$12` exact. Each costly check comes after a cheap test that skips it when it isn't asked
 /// for (Postgres stops an `OR` at the first true), and the name match finds its candidates
 /// through the name, word and tag indexes instead of testing every emote.
@@ -142,8 +146,8 @@ pub const SEARCH_WHERE: &str = concat!(
     "
            AND ($2::boolean IS NULL OR e.animated = $2)
            AND ($3::uuid IS NULL OR e.owner_account_id = $3)
-           AND ($4 OR $10 OR NOT e.nsfw)
-           AND (NOT $10 OR e.nsfw)
+           AND ($4 OR NOT $4)
+           AND NOT $10
            AND (NOT $8 OR e.zero_width)
            AND (NOT $9 OR EXISTS (SELECT 1 FROM files f
                                   WHERE f.id = e.file_id AND f.width * 4 >= f.height * 7))
@@ -314,7 +318,6 @@ pub async fn quick(conn: &mut PgConnection, text: &str, limit: i64) -> DbResult<
                     similarity(e.name, $1) AS sim
              FROM emotes e
              WHERE {LISTED_EMOTE}
-               AND NOT e.nsfw
                AND (e.name ILIKE '%' || $3 || '%'
                     OR (' ' || e.name_words) LIKE '% ' || $3 || '%'
                     OR e.name_initials LIKE $3 || '%'
@@ -514,7 +517,7 @@ pub async fn rollup_channel_adds(conn: &mut PgConnection) -> DbResult<u64> {
 
 /// Where an emote stands in `TRENDING` over the last `window_days`: its 1-based rank and net
 /// channel adds. Among approved, public (not private or unlisted), not deleted emotes with net adds above zero, ordered as
-/// the `TRENDING` sort is; NSFW emotes count only when this one is NSFW. None when it isn't among
+/// the `TRENDING` sort is. None when it isn't among
 /// them or ranks below `top`.
 pub async fn trending_rank(
     conn: &mut PgConnection,
@@ -530,7 +533,6 @@ pub async fn trending_rank(
              FROM emotes e
              JOIN ({net}) tr ON tr.emote_id = e.id
              WHERE {LISTED_EMOTE}
-               AND (NOT e.nsfw OR coalesce((SELECT nsfw FROM emotes WHERE id = $1), false))
          ) ranked
          WHERE id = $1 AND rank <= $2"
     ))

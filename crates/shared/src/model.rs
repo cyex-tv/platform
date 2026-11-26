@@ -500,6 +500,13 @@ pub struct EmoteFlags {
     pub zero_width: bool,
     /// Only its owner can add it to sets. True exactly when `visibility` is `PRIVATE`.
     pub private: bool,
+    /// Retired (ADR 0020, amendment 2026/11/22): NSFW emotes aren't allowed on cyex.tv, so this
+    /// is always `false`.
+    #[schema(deprecated)]
+    #[cfg_attr(
+        feature = "graphql",
+        graphql(deprecation = "NSFW emotes aren't allowed on cyex.tv; always false.")
+    )]
     pub nsfw: bool,
     /// About twice as wide as tall or more: the 1x file is at least 1.75 times as wide as it is
     /// tall. Derived from the files, not set by the uploader.
@@ -515,7 +522,8 @@ pub enum EmoteVisibility {
     #[default]
     Public,
     /// Anyone with its link can open it and add it to sets; search, browse, activity feeds and
-    /// its creator's page leave it out for everyone but its owner.
+    /// its creator's page leave it out for everyone but its owner. Set by staff only (a
+    /// moderator taking an emote off the listings); creators choose public or private.
     Unlisted,
     /// Only its owner can add it to sets, and it is left out of listings (`flags.private`).
     Private,
@@ -640,10 +648,11 @@ pub struct UploadEmote {
     pub zero_width: Option<String>,
     /// As `zero_width`. Only its owner can add it to sets, and search leaves it out.
     pub private: Option<String>,
-    /// `public` (default), `unlisted` or `private` (ADR 0020). With `private` too, the two
-    /// must agree.
+    /// `public` (default) or `private` (ADR 0020). With `private` too, the two must agree.
+    /// `unlisted` is for staff with `emotes.flags` (`bad_visibility` for anyone else).
     pub visibility: Option<String>,
-    /// As `zero_width`. Search leaves it out unless asked for NSFW.
+    /// Retired: NSFW emotes aren't allowed. `false` is still taken; `true` is `nsfw_not_allowed`.
+    #[schema(deprecated)]
     pub nsfw: Option<String>,
     /// The account that will own the emote: yours by default, or one you edit with
     /// `EMOTE_UPLOAD` on every set (ADR 0014).
@@ -662,9 +671,17 @@ pub struct UpdateEmote {
     /// `true` makes it private; `false` makes a private emote public (an unlisted one stays
     /// unlisted). Prefer `visibility`.
     pub private: Option<bool>,
+    /// Retired: NSFW emotes aren't allowed. `false` is ignored; `true` is `nsfw_not_allowed`.
+    #[cfg_attr(
+        feature = "graphql",
+        graphql(
+            deprecation = "NSFW emotes aren't allowed on cyex.tv. false is ignored; true is refused (nsfw_not_allowed)."
+        )
+    )]
     pub nsfw: Option<bool>,
-    /// `PUBLIC`, `UNLISTED` or `PRIVATE`. With `private` too, the two must agree
-    /// (`bad_visibility`).
+    /// `PUBLIC` or `PRIVATE`. With `private` too, the two must agree (`bad_visibility`).
+    /// `UNLISTED` (and changing an unlisted emote) is for staff with `emotes.flags` or
+    /// `emotes.edit_any`: a moderator takes an emote off the listings, not its owner.
     pub visibility: Option<EmoteVisibility>,
 }
 
@@ -674,6 +691,14 @@ pub struct UpdateEmote {
 pub struct EmoteFlagsInput {
     /// `UNLISTED` takes a public emote off search, browse and its creator's page.
     pub visibility: Option<EmoteVisibility>,
+    /// Retired: NSFW emotes aren't allowed. `false` clears an old flag (any change here clears
+    /// it too); `true` is `nsfw_not_allowed`.
+    #[cfg_attr(
+        feature = "graphql",
+        graphql(
+            deprecation = "NSFW emotes aren't allowed on cyex.tv. true is refused (nsfw_not_allowed); saving flags clears an old NSFW flag."
+        )
+    )]
     pub nsfw: Option<bool>,
     pub zero_width: Option<bool>,
 }
@@ -1008,7 +1033,11 @@ pub enum EmoteFlag {
     ZeroWidth,
     /// About twice as wide as tall or more.
     Wide,
-    /// Only NSFW emotes (they are listed even without `nsfw: true`).
+    /// Retired: NSFW emotes aren't allowed, so this finds nothing.
+    #[cfg_attr(
+        feature = "graphql",
+        graphql(deprecation = "NSFW emotes aren't allowed on cyex.tv; this flag finds nothing.")
+    )]
     Nsfw,
 }
 

@@ -191,7 +191,7 @@ export const guides: Guide[] = [
     title: 'Emotes and files',
     search: 'emote object cdn files webp avif static picture image host',
     blocks: [
-      p('An emote has an `id` (store this, as a string: names change; see [IDs](#ids)), a `name`, `flags` (`zero_width`, `nsfw`, `private`), and a `host` with a list of `files`. Public reads only return approved emotes; a pending one shows to its owner alone.'),
+      p('An emote has an `id` (store this, as a string: names change; see [IDs](#ids)), a `name`, `flags` (`zero_width`, `private`, `wide`; `nsfw` is retired and always false: NSFW emotes aren’t allowed), and a `host` with a list of `files`. Public reads only return approved emotes; a pending one shows to its owner alone.'),
       p('Each file is at `<host>/<name>`:'),
       { t: 'pre', code: `${EX.host}/2x.webp` },
       fmt(

@@ -29,11 +29,11 @@
     },
     {
       id: 'nsfw',
-      title: 'Sexual or graphic content only with NSFW, and never explicit',
+      title: 'No NSFW content',
       body: [
-        'Suggestive emotes are fine when marked NSFW: they stay out of browsing unless people turn NSFW on.',
-        'Nudity, sex acts and gore are never allowed, flagged or not. Nothing sexual involving minors or anyone who looks like one, ever; we report it.',
-        'Twitch’s and Kick’s own rules still apply in their chats, whatever the flag says.',
+        'Every emote on cyex.tv is meant for any stream, so there is no NSFW flag. Sexual or suggestive emotes, nudity, sex acts and gore aren’t allowed, and a moderator removes them.',
+        'Nothing sexual involving minors or anyone who looks like one, ever; we report it.',
+        'Twitch’s and Kick’s own rules apply in their chats too.',
       ],
     },
     {
@@ -82,7 +82,7 @@
 
 <svelte:head>
   <title>Emote guidelines - cyex.tv</title>
-  <meta name="description" content="What you may upload to cyex.tv: your own work, nothing hateful, sexual content only behind NSFW, no personal information, and emotes that read at chat size." />
+  <meta name="description" content="What you may upload to cyex.tv: your own work, nothing hateful, no NSFW content, no personal information, and emotes that read at chat size." />
   <meta property="og:title" content="Emote guidelines" />
 </svelte:head>
 
@@ -144,7 +144,7 @@
         <h2 class="dp-label" id="gp-glance">At a glance</h2>
         <dl class="dp-facts">
           <div class="dp-fact"><dt>Rules</dt><dd class="mono">{RULES.length}</dd></div>
-          <div class="dp-fact"><dt>NSFW</dt><dd>Flagged, never explicit</dd></div>
+          <div class="dp-fact"><dt>NSFW</dt><dd>Not allowed</dd></div>
           <div class="dp-fact"><dt>Checked by</dt><dd>A moderator</dd></div>
           <div class="dp-fact"><dt>Takedowns</dt><dd><a href="mailto:abuse@cyex.tv">abuse@cyex.tv</a></dd></div>
         </dl>

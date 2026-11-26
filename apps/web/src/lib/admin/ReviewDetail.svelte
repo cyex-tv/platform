@@ -180,9 +180,9 @@
               <dt>Uploaded</dt><dd>{dateTime(e.createdAt)}</dd>
               <dt>Visibility</dt><dd>{VIS[e.visibility]}</dd>
               <dt>State</dt><dd><span class="ui-chip {e.state.toLowerCase()}">{e.state === 'TAKEN_DOWN' ? 'Taken down' : e.state.charAt(0) + e.state.slice(1).toLowerCase()}</span></dd>
-              {#if e.flags.nsfw || e.flags.zeroWidth || e.flags.wide}
+              {#if e.flags.zeroWidth || e.flags.wide}
                 <dt>Flags</dt>
-                <dd class="chips">{#if e.flags.nsfw}<span class="ui-chip warn">NSFW</span>{/if}{#if e.flags.zeroWidth}<span class="ui-chip">Zero-width</span>{/if}{#if e.flags.wide}<span class="ui-chip">Wide</span>{/if}</dd>
+                <dd class="chips">{#if e.flags.zeroWidth}<span class="ui-chip">Zero-width</span>{/if}{#if e.flags.wide}<span class="ui-chip">Wide</span>{/if}</dd>
               {/if}
               <dt>Tags</dt>
               <dd class="chips">{#each e.tags as t (t)}<span class="ui-chip" title={t}><bdi>{t}</bdi></span>{:else}<span class="ui-hint">None</span>{/each}</dd>
@@ -319,7 +319,7 @@
   .who { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); font-size: var(--t-small); }
   .chips { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
   .chips .ui-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis; text-transform: none; letter-spacing: 0; }
-  .chips .warn, .dupes .warn { color: var(--red); }
+  .dupes .warn { color: var(--red); }
   .id { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
   .id .ui-mono { overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
   .dupes h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }

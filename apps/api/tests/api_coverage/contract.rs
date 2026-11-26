@@ -362,7 +362,7 @@ async fn every_site_operation_runs_against_the_real_api() {
     c.op(
         As::Nobody,
         "Search",
-        json!({ "query": "", "sort": "TRENDING", "window": "WEEK", "flags": ["ZERO_WIDTH"], "tags": ["cov"], "exact": false, "animated": false, "nsfw": false }),
+        json!({ "query": "", "sort": "TRENDING", "window": "WEEK", "flags": ["ZERO_WIDTH"], "tags": ["cov"], "exact": false, "animated": false }),
     )
     .await;
     c.op(
@@ -859,12 +859,12 @@ async fn every_site_operation_runs_against_the_real_api() {
         .op(
             os,
             "SetEmoteFlags",
-            json!({ "id": e_batch, "input": { "visibility": "PUBLIC", "nsfw": true } }),
+            json!({ "id": e_batch, "input": { "visibility": "PUBLIC", "zeroWidth": true } }),
         )
         .await;
     c.check(
         data["setEmoteFlags"]["visibility"] == "PUBLIC"
-            && data["setEmoteFlags"]["flags"]["nsfw"] == true,
+            && data["setEmoteFlags"]["flags"]["zeroWidth"] == true,
         format!("SetEmoteFlags: {data}"),
     );
     let data = c.op(os, "ReviewReasons", json!({})).await;

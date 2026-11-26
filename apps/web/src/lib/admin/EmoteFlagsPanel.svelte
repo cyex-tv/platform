@@ -7,7 +7,8 @@
 
 <script lang="ts">
   // Emote flags, for staff with emotes.flags (ADR 0024): the visibility (taking an emote off the
-  // listings makes it unlisted), zero-width and NSFW of anyone's emote, in any state. Saved with
+  // listings makes it unlisted) and zero-width of anyone's emote, in any state (NSFW is no flag:
+  // NSFW emotes aren't allowed; saving clears an old NSFW mark). Saved with
   // setEmoteFlags, which audits it and tells the owner when the visibility changes. Renders
   // nothing for anyone else. `bare` leaves out the panel frame, for use inside another panel.
   //   <EmoteFlagsPanel emote={e} onsaved={(next) => ...} />
@@ -20,7 +21,7 @@
   import { notify } from '$lib/tool/notices.svelte';
   import { visibilityOf } from '$lib/tool/visibility';
 
-  type Flagged = { id: string; name: string; visibility?: EmoteVisibility | null; flags: { private: boolean; nsfw: boolean; zeroWidth: boolean } };
+  type Flagged = { id: string; name: string; visibility?: EmoteVisibility | null; flags: { private: boolean; zeroWidth: boolean } };
   type Props = { emote: Flagged; onsaved?: (e: EmoteFieldsFragment) => void; id?: string; bare?: boolean };
   let { emote, onsaved, id = 'flags', bare = false }: Props = $props();
 
@@ -28,24 +29,22 @@
   const family = btnFamily();
   const shown = $derived(canEditFlags());
 
-  type Flags = { visibility: EmoteVisibility; nsfw: boolean; zeroWidth: boolean };
-  const of = (e: Flagged): Flags => ({ visibility: visibilityOf(e), nsfw: e.flags.nsfw, zeroWidth: e.flags.zeroWidth });
+  type Flags = { visibility: EmoteVisibility; zeroWidth: boolean };
+  const of = (e: Flagged): Flags => ({ visibility: visibilityOf(e), zeroWidth: e.flags.zeroWidth });
   // What the API last said (the emote given, then each save's answer) and what the form holds.
-  let base = $state<Flags>({ visibility: 'PUBLIC', nsfw: false, zeroWidth: false });
+  let base = $state<Flags>({ visibility: 'PUBLIC', zeroWidth: false });
   let visibility = $state<EmoteVisibility>('PUBLIC');
-  let nsfw = $state(false);
   let zeroWidth = $state(false);
   let saving = $state(false);
   let problem = $state('');
   function load(f: Flags) {
     base = f;
     visibility = f.visibility;
-    nsfw = f.nsfw;
     zeroWidth = f.zeroWidth;
     problem = '';
   }
   $effect(() => load(of(emote)));
-  const changed = $derived(visibility !== base.visibility || nsfw !== base.nsfw || zeroWidth !== base.zeroWidth);
+  const changed = $derived(visibility !== base.visibility || zeroWidth !== base.zeroWidth);
 
   async function save(ev: SubmitEvent) {
     ev.preventDefault();
@@ -54,7 +53,7 @@
     problem = '';
     const moved = visibility !== base.visibility;
     try {
-      const next = (await gql(SET_EMOTE_FLAGS, { id: emote.id, input: { visibility, nsfw, zeroWidth } })).setEmoteFlags;
+      const next = (await gql(SET_EMOTE_FLAGS, { id: emote.id, input: { visibility, zeroWidth } })).setEmoteFlags;
       load(of(next));
       notify(`Flags of ${clean(emote.name)} saved.${moved ? ' Its owner is told about the new visibility.' : ''}`, false);
       onsaved?.(next);
@@ -68,7 +67,7 @@
 
 {#snippet form()}
   <form class="body" onsubmit={save}>
-    <EmoteFlags {id} staff bind:visibility bind:nsfw bind:zeroWidth disabled={saving} />
+    <EmoteFlags {id} staff bind:visibility bind:zeroWidth disabled={saving} />
     <p class="ui-hint">Changes are audited. The owner is told when the visibility changes.</p>
     {#if problem}<p class="ui-error" role="alert">{problem}</p>{/if}
     <div class="ui-actions">

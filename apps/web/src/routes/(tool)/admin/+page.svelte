@@ -147,7 +147,7 @@
                   <span class="pic">{#if ready(e)}{@const t = thumb(e)}<img src={t.pic.src} srcset={t.pic.srcset} sizes={t.pic.srcset ? `${t.w}px` : undefined} width={t.d.width} height={t.d.height} alt="" loading="lazy" />{/if}</span>
                   <span class="nm"><bdi>{clean(e.name)}</bdi></span>
                   <span class="sub"><bdi>{clean(e.owner?.displayName) || 'Unknown'}</bdi></span>
-                  <span class="adm-flags">{#if e.flags.nsfw}<span class="warn">NSFW</span>{/if}<time class="adm-num" datetime={e.createdAt}>{date(e.createdAt)}</time></span>
+                  <span class="adm-flags"><time class="adm-num" datetime={e.createdAt}>{date(e.createdAt)}</time></span>
                 </a>
               </li>
             {/each}

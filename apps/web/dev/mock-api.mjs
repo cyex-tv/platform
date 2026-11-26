@@ -500,8 +500,7 @@ const ALL = FACES ? Array.from({ length: 300 }, (_, i) => emote(i)) : TWITCH.map
 ALL[11].flags.private = true;
 ALL[11].visibility = 'PRIVATE';
 ALL[12].visibility = 'UNLISTED';
-// A few NSFW emotes (left out of search unless asked for), and `wide` as the API derives it.
-for (const [n, e] of ALL.entries()) if (n % 23 === 7) e.flags.nsfw = true;
+// NSFW emotes aren't allowed (ADR 0020, amendment 2026/11/22): `flags.nsfw` is always false.
 const MINE = Array.from({ length: 9 }, (_, i) =>
   emote(600 + i, ME_SUMMARY, i < 2 ? 'PENDING' : i === 2 ? 'REJECTED' : 'APPROVED'));
 MINE[4].visibility = 'UNLISTED';
@@ -533,8 +532,8 @@ function trendAdds(e, window) {
   const month = week + ((n * 5) % 47);
   return { DAY: day, WEEK: week, MONTH: month }[window in TREND_DAYS ? window : 'WEEK'];
 }
-const trendPool = (window, nsfw) =>
-  ALL.filter((e) => e.state === 'APPROVED' && e.visibility === 'PUBLIC' && (nsfw || !e.flags.nsfw) && trendAdds(e, window) > 0).sort(
+const trendPool = (window) =>
+  ALL.filter((e) => e.state === 'APPROVED' && e.visibility === 'PUBLIC' && trendAdds(e, window) > 0).sort(
     (a, b) => trendAdds(b, window) - trendAdds(a, window) || b.channelCount - a.channelCount || a.id.localeCompare(b.id),
   );
 
@@ -567,7 +566,6 @@ const PENDING = Array.from({ length: Number(process.env.MOCK_PENDING ?? 60) }, (
   e.createdAt = new Date(NOW - (i + 1) * 7 * 60_000).toISOString();
   if (i % 7 === 3) Object.assign(e, { visibility: 'PRIVATE', flags: { ...e.flags, private: true } });
   else if (i % 5 === 2) e.visibility = 'UNLISTED';
-  if (i % 9 === 4) e.flags = { ...e.flags, nsfw: true };
   // Every 6th is a re-upload of an approved sample (the same picture, a near name), so the detail
   // dialog's "Possible duplicates" has something to show.
   if (i % 6 === 0) {
@@ -586,7 +584,10 @@ const logEmote = (id, action, after = null) => (EMOTE_LOG[id] ??= []).unshift({ 
 const FILE_EMOTES = {};
 if (process.env.MOCK_SAME_FILE) FILE_EMOTES[process.env.MOCK_SAME_FILE.toLowerCase()] = [ALL[3]];
 // The review queue's ready reject reasons (the API seeds the same six).
-let REVIEW_REASONS = ['Low quality or blurry', 'Already uploaded (a duplicate)', 'Not an emote', 'NSFW but not marked', 'Hateful or harassing', 'The name breaks the rules'];
+// The API's words for the two refusals (apps/api/src/upload.rs).
+const NSFW_REFUSAL = 'NSFW emotes aren’t allowed on cyex.tv, so there is no NSFW flag. Emotes that break the guidelines are removed.';
+const UNLISTED_REFUSAL = 'Emotes are public unless you make them private. Only moderators can take an emote off the listings.';
+let REVIEW_REASONS = ['Low quality or blurry', 'Already uploaded (a duplicate)', 'Not an emote', 'NSFW or sexual content (not allowed)', 'Hateful or harassing', 'The name breaks the rules'];
 // Trigram similarity, as pg_trgm's similarity(): lower-cased words padded with two spaces in front, one behind.
 function trigrams(s) {
   const out = new Set();
@@ -1821,17 +1822,19 @@ function signedIn(body, v, ADMIN) {
       // Staff with emotes.edit_any (the mock admin) change anyone's.
       const e = MINE.find((x) => x.id === v.id) ?? (ADMIN || managed(anyEmote(v.id)) ? anyEmote(v.id) : null);
       if (!e) return err('Only the emote’s owner can change it.', 'forbidden');
-      if (v.input.name !== undefined) e.name = v.input.name;
-      if (v.input.tags) e.tags = v.input.tags;
-      for (const k of ['zeroWidth', 'nsfw']) if (v.input[k] !== undefined) e.flags[k] = v.input[k];
-      // As the API (ADR 0020): visibility wins; private alone keeps an unlisted emote unlisted.
+      // As the API: NSFW emotes aren't allowed; unlisted is staff's call, both ways (ADR 0020).
+      if (v.input.nsfw === true) return err(NSFW_REFUSAL, 'nsfw_not_allowed');
       const vis = v.input.visibility;
       const priv = v.input.private;
       if (vis && priv !== undefined && priv !== null && priv !== (vis === 'PRIVATE'))
         return err('visibility and private say different things.', 'bad_visibility');
-      if (vis) e.visibility = vis;
-      else if (priv === true) e.visibility = 'PRIVATE';
-      else if (priv === false && e.visibility === 'PRIVATE') e.visibility = 'PUBLIC';
+      const next = vis ?? (priv === true ? 'PRIVATE' : priv === false && e.visibility === 'PRIVATE' ? 'PUBLIC' : e.visibility);
+      if (next !== e.visibility && (next === 'UNLISTED' || e.visibility === 'UNLISTED') && !ADMIN)
+        return err(e.visibility === 'UNLISTED' ? 'A moderator took this emote off the listings. Only staff can change that.' : UNLISTED_REFUSAL, 'bad_visibility');
+      if (v.input.name !== undefined) e.name = v.input.name;
+      if (v.input.tags) e.tags = v.input.tags;
+      if (v.input.zeroWidth !== undefined && v.input.zeroWidth !== null) e.flags.zeroWidth = v.input.zeroWidth;
+      e.visibility = next;
       e.flags.private = e.visibility === 'PRIVATE';
       return { data: { updateEmote: e } };
     }
@@ -2159,8 +2162,11 @@ function signedIn(body, v, ADMIN) {
       if (!ADMIN) return err('This needs emotes.flags.', 'forbidden');
       const e = anyEmote(v.id) ?? PENDING.find((x) => x.id === v.id) ?? RESOLVED.find((x) => x.id === v.id);
       if (!e) return err('Not found.', 'not_found');
+      if (v.input.nsfw === true) return err(NSFW_REFUSAL, 'nsfw_not_allowed');
       const before = { visibility: e.visibility.toLowerCase(), nsfw: e.flags.nsfw, zero_width: e.flags.zeroWidth };
-      for (const k of ['zeroWidth', 'nsfw']) if (v.input[k] !== undefined && v.input[k] !== null) e.flags[k] = v.input[k];
+      if (v.input.zeroWidth !== undefined && v.input.zeroWidth !== null) e.flags.zeroWidth = v.input.zeroWidth;
+      // Saving clears an old NSFW mark (the API's review of it).
+      e.flags.nsfw = false;
       if (v.input.visibility) e.visibility = v.input.visibility;
       e.flags.private = e.visibility === 'PRIVATE';
       const after = { visibility: e.visibility.toLowerCase(), nsfw: e.flags.nsfw, zero_width: e.flags.zeroWidth };
@@ -2972,12 +2978,12 @@ function baseAnswer(body, session, admin) {
   if (q.includes('query EmoteTrending')) {
     const e = ALL.find((x) => x.id === v.id);
     const window = v.window ?? 'WEEK';
-    const rank = e ? trendPool(window, e.flags.nsfw).indexOf(e) + 1 : 0;
+    const rank = e ? trendPool(window).indexOf(e) + 1 : 0;
     return { data: { emoteTrending: rank > 0 && rank <= 100 ? { rank, channels: trendAdds(e, window), window } : null } };
   }
   if (q.includes('query Search')) {
-    // As the API: the text (exact name or rough match), then type, owner, flags (all must be set; NSFW
-    // ones only when asked) and tags (all must be there).
+    // As the API: the text (exact name or rough match), then type, owner, flags (all must be set; the
+    // retired NSFW flag finds nothing, and `nsfw` changes nothing) and tags (all must be there).
     const text = (v.query ?? '').trim().toLowerCase();
     const terms = text.split(/\s+/).filter(Boolean);
     const flags = new Set(v.flags ?? []);
@@ -2990,8 +2996,7 @@ function baseAnswer(body, session, admin) {
     if (v.animated === true) hits = hits.filter((e) => e.animated);
     if (v.animated === false) hits = hits.filter((e) => !e.animated);
     if (v.owner) hits = hits.filter((e) => e.owner?.id === v.owner);
-    if (!v.nsfw && !flags.has('NSFW')) hits = hits.filter((e) => !e.flags.nsfw);
-    if (flags.has('NSFW')) hits = hits.filter((e) => e.flags.nsfw);
+    if (flags.has('NSFW')) hits = [];
     if (flags.has('ZERO_WIDTH')) hits = hits.filter((e) => e.flags.zeroWidth);
     if (flags.has('WIDE')) hits = hits.filter((e) => e.flags.wide);
     if (tags.length) hits = hits.filter((e) => tags.every((t) => e.tags.some((g) => g.toLowerCase() === t)));
@@ -3343,8 +3348,13 @@ createServer(async (req, res) => {
     };
     const flags = { zeroWidth: flag('zero_width'), private: flag('private'), nsfw: flag('nsfw') };
     if (Object.values(flags).includes(null)) return json(res, 400, { error: 'bad_form', message: 'A flag is true or false.' });
+    // NSFW emotes aren't allowed; `nsfw=false` is still taken (ADR 0020, amendment 2026/11/22).
+    if (flags.nsfw) return json(res, 400, { error: 'nsfw_not_allowed', message: NSFW_REFUSAL });
+    flags.nsfw = false;
     const visField = (field('visibility') ?? '').trim().toLowerCase();
-    if (visField && !['public', 'unlisted', 'private'].includes(visField)) return json(res, 400, { error: 'bad_form', message: 'Visibility is public, unlisted or private.' });
+    if (visField && !['public', 'unlisted', 'private'].includes(visField)) return json(res, 400, { error: 'bad_form', message: 'Visibility is public or private.' });
+    // Uploads are public unless private; only staff (the mock admin) may upload unlisted.
+    if (visField === 'unlisted' && !admin) return json(res, 400, { error: 'bad_visibility', message: UNLISTED_REFUSAL });
     const visibility = visField ? visField.toUpperCase() : flags.private ? 'PRIVATE' : 'PUBLIC';
     if (field('private') !== undefined && visField && flags.private !== (visibility === 'PRIVATE'))
       return json(res, 400, { error: 'bad_form', message: 'visibility and private say different things.' });

@@ -364,11 +364,28 @@ async fn owners_edit_and_delete_their_emotes() {
         "forbidden"
     );
 
+    // NSFW emotes aren't allowed (ADR 0020, amendment 2026/11/22): `nsfw: true` is refused for
+    // everyone, `nsfw: false` is taken and changes nothing.
+    for who in [&owner, &editor] {
+        assert_eq!(
+            code(
+                &w.gql(Some(who), update, json!({ "id": id, "nsfw": true }))
+                    .await
+            ),
+            "nsfw_not_allowed"
+        );
+    }
+    let r = w
+        .gql(Some(&owner), update, json!({ "id": id, "nsfw": false }))
+        .await;
+    assert_eq!(r["data"]["updateEmote"]["flags"]["nsfw"], false, "{r}");
+    assert!(w.audit().await.is_empty());
+
     // A moderator's edit goes in the audit log; the owner's doesn't.
     let r = w
-        .gql(Some(&editor), update, json!({ "id": id, "nsfw": true }))
+        .gql(Some(&editor), update, json!({ "id": id, "n": "Mine3" }))
         .await;
-    assert_eq!(r["data"]["updateEmote"]["flags"]["nsfw"], true, "{r}");
+    assert_eq!(r["data"]["updateEmote"]["name"], "Mine3", "{r}");
     let entries = w.audit().await;
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].action, "emote.updated");
@@ -407,4 +424,52 @@ async fn owners_edit_and_delete_their_emotes() {
     // It was never approved, so no public event named it, not even on the way out.
     assert!(w.event_types().await.is_empty());
     w.db.close().await;
+}
+
+/// Unlisted is a moderator's call (ADR 0020, amendment 2026/11/22): owners choose public or
+/// private only, and can't list again an emote a moderator took off the listings; staff can.
+#[tokio::test]
+async fn only_staff_take_an_emote_off_the_listings() {
+    let Some(w) = World::new().await else { return };
+    let owner = w.user("30", None).await;
+    let staff = w.user("31", Some("emotes.flags")).await;
+    let id = w.pending(&owner, "listMe").await;
+    let set = "mutation($id: String!, $v: EmoteVisibility, $z: Boolean) { updateEmote(id: $id, input: { visibility: $v, zeroWidth: $z }) { visibility flags { private zeroWidth } } }";
+
+    // The owner: private and back are fine, unlisted is not.
+    let r = w
+        .gql(Some(&owner), set, json!({ "id": id, "v": "PRIVATE" }))
+        .await;
+    assert_eq!(r["data"]["updateEmote"]["visibility"], "PRIVATE", "{r}");
+    let r = w
+        .gql(Some(&owner), set, json!({ "id": id, "v": "PUBLIC" }))
+        .await;
+    assert_eq!(r["data"]["updateEmote"]["visibility"], "PUBLIC", "{r}");
+    let r = w
+        .gql(Some(&owner), set, json!({ "id": id, "v": "UNLISTED" }))
+        .await;
+    assert_eq!(code(&r), "bad_visibility", "{r}");
+
+    // Staff unlist it; the owner can't list it again or make it private, but other changes work.
+    let flags = "mutation($id: String!) { setEmoteFlags(id: $id, input: { visibility: UNLISTED }) { visibility } }";
+    let r = w.gql(Some(&staff), flags, json!({ "id": id })).await;
+    assert_eq!(r["data"]["setEmoteFlags"]["visibility"], "UNLISTED", "{r}");
+    for v in ["PUBLIC", "PRIVATE"] {
+        let r = w.gql(Some(&owner), set, json!({ "id": id, "v": v })).await;
+        assert_eq!(code(&r), "bad_visibility", "{v}: {r}");
+    }
+    let r = w
+        .gql(
+            Some(&owner),
+            set,
+            json!({ "id": id, "v": "UNLISTED", "z": true }),
+        )
+        .await;
+    assert_eq!(r["data"]["updateEmote"]["visibility"], "UNLISTED", "{r}");
+    assert_eq!(r["data"]["updateEmote"]["flags"]["zeroWidth"], true);
+
+    // Staff list it again.
+    let list = "mutation($id: String!) { setEmoteFlags(id: $id, input: { visibility: PUBLIC }) { visibility } }";
+    let r = w.gql(Some(&staff), list, json!({ "id": id })).await;
+    assert_eq!(r["data"]["setEmoteFlags"]["visibility"], "PUBLIC", "{r}");
 }

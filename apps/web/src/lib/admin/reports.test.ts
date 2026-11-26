@@ -38,7 +38,7 @@ describe('the inspector helpers', () => {
     expect(sizesOf(e).map((x) => x.name)).toEqual(['1x.webp', '2x.webp']);
   });
   it('words the flags', () => {
-    expect(flagWords({ animated: true, flags: { zeroWidth: false, nsfw: true, private: false, wide: false } })).toEqual(['Animated', 'NSFW']);
-    expect(flagWords({ animated: false, flags: { zeroWidth: false, nsfw: false, private: false, wide: false } })).toEqual([]);
+    expect(flagWords({ animated: true, flags: { zeroWidth: false, private: false, wide: false } })).toEqual(['Animated']);
+    expect(flagWords({ animated: false, flags: { zeroWidth: false, private: false, wide: false } })).toEqual([]);
   });
 });

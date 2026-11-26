@@ -1,12 +1,16 @@
 <script lang="ts">
   // A picked file before it is uploaded, as cyex.tv will show it: 1x, 2x, 3x and 4x at their real pixel
-  // sizes (1x is 32 px tall, as the worker makes it) standing on one baseline with the scale and
+  // sizes (1x is 32 px tall and 4x at most 128 px, as the worker makes them) standing on one baseline with the scale and
   // size under each, the same plain row as the emote page. No ground or chat switch.
   type Props = { src: string; width: number; height: number; name: string };
   let { src, width, height, name }: Props = $props();
 
-  const ratio = $derived(Math.min(4, Math.max(0.25, width / Math.max(1, height))));
-  const at = (h: number) => ({ w: Math.round(h * ratio), h });
+  // As crates/media makes them (Profile::EMOTE): fitted in a box 32 px × the scale tall (so at
+  // most 128 px at 4x) and four times as wide, never above the original.
+  const at = (box: number) => {
+    const f = Math.min(box / Math.max(1, height), (box * 4) / Math.max(1, width), 1);
+    return { w: Math.max(1, Math.round(width * f)), h: Math.max(1, Math.round(height * f)) };
+  };
 </script>
 
 <ul class="sizes" aria-label="Sizes">

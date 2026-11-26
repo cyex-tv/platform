@@ -76,7 +76,7 @@ export function exampleString(name: string, ctx = ''): string {
   return EX.emoteName;
 }
 
-/** A believable flag: an ordinary emote is none of nsfw, private, zero-width or static. */
+/** A believable flag: an ordinary emote is none of private, zero-width or static. */
 export function exampleBool(name: string): boolean {
   const n = name.toLowerCase().replace(/_/g, '');
   return ['allowpersonalemotes', 'animated', 'listed', 'uploadsblocked', 'unreadonly'].includes(n);

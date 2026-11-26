@@ -1,7 +1,8 @@
 // The browse page's whole state lives in the URL: q, sort, t (the trending window), kind, zw, wide,
-// nsfw, tag (repeated, one per tag), exact, select (multi-select on) and n (pages loaded). A reload
+// tag (repeated, one per tag), exact, select (multi-select on) and n (pages loaded). A reload
 // or a shared link gives the same view. Every filter is the API's, so the total is always the real
-// one. Pure, so it is unit tested.
+// one. Pure, so it is unit tested. NSFW emotes aren't allowed, so there is no NSFW filter (an old
+// `nsfw=1` in a link is ignored and dropped).
 
 import { cleanTag } from '$lib/rules';
 
@@ -9,7 +10,7 @@ export type Sort = 'relevance' | 'trending' | 'top' | 'new';
 export type Kind = 'all' | 'animated' | 'still';
 /** How far back Trending counts the channels that added an emote. */
 export type Window = 'day' | 'week' | 'month';
-export type Flag = 'zeroWidth' | 'wide' | 'nsfw';
+export type Flag = 'zeroWidth' | 'wide';
 
 // Emotes only: people are found from the header search (an old ?tab=users address reads as this).
 export type Browse = {
@@ -20,8 +21,6 @@ export type Browse = {
   kind: Kind;
   zeroWidth: boolean;
   wide: boolean;
-  /** Only NSFW emotes (they are left out otherwise). */
-  nsfw: boolean;
   /** Tags the emotes must all carry (lower case, no #), at most MAX_TAGS. */
   tags: string[];
   /** The emote's name must equal the query (any case), not just contain it. */
@@ -72,7 +71,6 @@ export function parse(p: URLSearchParams): Browse {
     kind: k === 'animated' || k === 'still' ? k : 'all',
     zeroWidth: p.get('zw') === '1',
     wide: p.get('wide') === '1',
-    nsfw: p.get('nsfw') === '1',
     tags: cleanTags(p.getAll('tag')),
     exact: p.get('exact') === '1' && !!q,
     select: p.get('select') === '1',
@@ -89,7 +87,6 @@ export function toSearch(b: Browse): string {
   if (b.kind !== 'all') p.set('kind', b.kind);
   if (b.zeroWidth) p.set('zw', '1');
   if (b.wide) p.set('wide', '1');
-  if (b.nsfw) p.set('nsfw', '1');
   for (const t of b.tags) p.append('tag', t);
   if (b.exact && b.q) p.set('exact', '1');
   if (b.select) p.set('select', '1');
@@ -120,7 +117,6 @@ export function active(b: Browse): Active[] {
   if (b.kind !== 'all') out.push({ key: 'kind', label: b.kind === 'animated' ? 'Animated' : 'Still' });
   if (b.zeroWidth) out.push({ key: 'zeroWidth', label: 'Zero-width' });
   if (b.wide) out.push({ key: 'wide', label: 'Wide' });
-  if (b.nsfw) out.push({ key: 'nsfw', label: 'NSFW' });
   for (const t of b.tags) out.push({ key: `tag:${t}`, label: `#${t}` });
   if (b.exact && b.q) out.push({ key: 'exact', label: 'Exact name' });
   return out;
@@ -133,7 +129,7 @@ export function without(b: Browse, key: Active['key']): Partial<Browse> {
   return { [key]: false } as Partial<Browse>;
 }
 
-export const CLEARED: Partial<Browse> = { kind: 'all', zeroWidth: false, wide: false, nsfw: false, tags: [], exact: false };
+export const CLEARED: Partial<Browse> = { kind: 'all', zeroWidth: false, wide: false, tags: [], exact: false };
 
 /** A tag as the URL keeps it: the one rule uploads, edits and search share (lib/rules). */
 export { cleanTag };
@@ -145,7 +141,7 @@ export function cleanTags(tags: readonly string[]): string[] {
 
 /** The variables of the SEARCH query for a state and a page. */
 export function apiVars(b: Browse, page: number) {
-  const flags = [b.zeroWidth && 'ZERO_WIDTH', b.wide && 'WIDE', b.nsfw && 'NSFW'].filter(Boolean) as ('ZERO_WIDTH' | 'WIDE' | 'NSFW')[];
+  const flags = [b.zeroWidth && 'ZERO_WIDTH', b.wide && 'WIDE'].filter(Boolean) as ('ZERO_WIDTH' | 'WIDE')[];
   return {
     query: b.q,
     animated: b.kind === 'animated' ? true : b.kind === 'still' ? false : null,

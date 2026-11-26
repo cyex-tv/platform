@@ -211,7 +211,7 @@ Data model (final shape in ADRs 0009 and 0010):
   - Capacity defaults: channel 1.000 (D20), personal 5 (D21). One personal set per account.
 - `channel_settings`: channel_id, allow_personal_emotes (default true).
 - `emotes`: id, owner_account_id, name, flags, state, created_at, deleted_at.
-  - Flags: zero_width, private, nsfw, animated.
+  - Flags: zero_width, private, nsfw, animated. (2026/11/22: NSFW emotes aren't allowed, so nsfw is retired; creators set zero-width and private only, unlisted is for staff. ADR 0020 amendment.)
   - State: pending | approved | rejected | taken_down.
 - `emote_tags`: emote_id, tag.
 - `emote_set_members`: set_id, emote_id, alias, flags, added_by, added_at.

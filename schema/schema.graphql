@@ -1092,9 +1092,9 @@ enum EmoteFlag {
 	"""
 	WIDE
 	"""
-	Only NSFW emotes (they are listed even without `nsfw: true`).
+	Retired: NSFW emotes aren't allowed, so this finds nothing.
 	"""
-	NSFW
+	NSFW @deprecated(reason: "NSFW emotes aren't allowed on cyex.tv; this flag finds nothing.")
 }
 
 type EmoteFlags {
@@ -1103,7 +1103,11 @@ type EmoteFlags {
 	Only its owner can add it to sets. True exactly when `visibility` is `PRIVATE`.
 	"""
 	private: Boolean!
-	nsfw: Boolean!
+	"""
+	Retired (ADR 0020, amendment 2026/11/22): NSFW emotes aren't allowed on cyex.tv, so this
+	is always `false`.
+	"""
+	nsfw: Boolean! @deprecated(reason: "NSFW emotes aren't allowed on cyex.tv; always false.")
 	"""
 	About twice as wide as tall or more: the 1x file is at least 1.75 times as wide as it is
 	tall. Derived from the files, not set by the uploader.
@@ -1119,7 +1123,11 @@ input EmoteFlagsInput {
 	`UNLISTED` takes a public emote off search, browse and its creator's page.
 	"""
 	visibility: EmoteVisibility
-	nsfw: Boolean
+	"""
+	Retired: NSFW emotes aren't allowed. `false` clears an old flag (any change here clears
+	it too); `true` is `nsfw_not_allowed`.
+	"""
+	nsfw: Boolean @deprecated(reason: "NSFW emotes aren't allowed on cyex.tv. true is refused (nsfw_not_allowed); saving flags clears an old NSFW flag.")
 	zeroWidth: Boolean
 }
 
@@ -1249,7 +1257,8 @@ enum EmoteVisibility {
 	PUBLIC
 	"""
 	Anyone with its link can open it and add it to sets; search, browse, activity feeds and
-	its creator's page leave it out for everyone but its owner.
+	its creator's page leave it out for everyone but its owner. Set by staff only (a
+	moderator taking an emote off the listings); creators choose public or private.
 	"""
 	UNLISTED
 	"""
@@ -1772,8 +1781,9 @@ type Mutation {
 	"""
 	updateEmote(id: String!, input: UpdateEmoteInput!): Emote!
 	"""
-	Change an emote's flags after review: visibility (`UNLISTED` takes it off the listings),
-	NSFW and zero-width. Needs `emotes.flags` or `emotes.edit_any`. Audited
+	Change an emote's flags after review: visibility (`UNLISTED` takes it off the listings)
+	and zero-width. `nsfw: true` is `nsfw_not_allowed` (NSFW emotes aren't allowed); saving
+	clears an old NSFW flag. Needs `emotes.flags` or `emotes.edit_any`. Audited
 	(`emote.flags_changed`); the owner is told when the visibility changes (ADR 0024).
 	"""
 	setEmoteFlags(id: String!, input: EmoteFlagsInput!): Emote!
@@ -2489,18 +2499,19 @@ type Query {
 	emote(id: String!): Emote
 	"""
 	Approved, listed emotes by name and tag, best match first, then the most used.
-	`perPage` is 1 to 100, default 50. NSFW emotes only with `nsfw: true`. `sort` is
+	`perPage` is 1 to 100, default 50. `nsfw` is retired and changes nothing: NSFW emotes
+	aren't allowed, so none is ever listed. `sort` is
 	`RELEVANCE` (default: best match, then most used), `TOP` (most used, then name), `NEW`
 	(newest first) or `TRENDING` (most channels added it in `window`, net of removals, then
 	most used; only emotes with a net gain are listed). An empty `query` lists every approved,
 	listed emote.
-	`flags` keeps the emotes that have every flag listed (`ZERO_WIDTH`, `WIDE`, `NSFW`; at most
-	3 different ones). `NSFW` lists only NSFW emotes, with or without `nsfw: true`. `tags` keeps
+	`flags` keeps the emotes that have every flag listed (`ZERO_WIDTH`, `WIDE`; at most 3
+	different ones). `NSFW` is retired and finds nothing. `tags` keeps
 	the emotes that have every tag listed (exact; a leading `#` and case are ignored, at most
 	10). `exact: true` makes a non-empty `query` match the whole name (any case) instead of
 	roughly. `window` is `DAY`, `WEEK` (default) or `MONTH`, and only matters for `TRENDING`.
 	"""
-	searchEmotes(query: String!, animated: Boolean, owner: String, nsfw: Boolean, page: Int, perPage: Int, sort: EmoteSort, flags: [EmoteFlag!], tags: [String!], exact: Boolean, window: TrendingWindow): SearchResults!
+	searchEmotes(query: String!, animated: Boolean, owner: String, nsfw: Boolean @deprecated(reason: "NSFW emotes aren't allowed on cyex.tv; this changes nothing."), page: Int, perPage: Int, sort: EmoteSort, flags: [EmoteFlag!], tags: [String!], exact: Boolean, window: TrendingWindow): SearchResults!
 	"""
 	Where an emote stands among the 100 most added in `window` (`DAY`, `WEEK` by default or
 	`MONTH`): its rank and the channels that added it, net of removals. Null when `id` isn't
@@ -3606,10 +3617,14 @@ input UpdateEmoteInput {
 	unlisted). Prefer `visibility`.
 	"""
 	private: Boolean
-	nsfw: Boolean
 	"""
-	`PUBLIC`, `UNLISTED` or `PRIVATE`. With `private` too, the two must agree
-	(`bad_visibility`).
+	Retired: NSFW emotes aren't allowed. `false` is ignored; `true` is `nsfw_not_allowed`.
+	"""
+	nsfw: Boolean @deprecated(reason: "NSFW emotes aren't allowed on cyex.tv. false is ignored; true is refused (nsfw_not_allowed).")
+	"""
+	`PUBLIC` or `PRIVATE`. With `private` too, the two must agree (`bad_visibility`).
+	`UNLISTED` (and changing an unlisted emote) is for staff with `emotes.flags` or
+	`emotes.edit_any`: a moderator takes an emote off the listings, not its owner.
 	"""
 	visibility: EmoteVisibility
 }

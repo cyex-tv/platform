@@ -294,9 +294,11 @@ async fn capped_text(field: &mut Field<'_>, max: usize) -> ApiResult<String> {
 ///
 /// PNG, APNG, GIF, WebP (still or animated) or JPEG; at most 8 MB, 1000×1000 px and 1000
 /// frames. Sign in first (with the cookie, from `https://cyex.tv`). At most 20 uploads an hour.
-/// The flags `zero_width`, `private` and `nsfw` may be set at once (each `true` or `false`,
-/// default `false`), and `visibility` (`public`, `unlisted` or `private`; with `private` too,
-/// they must agree); `updateEmote` changes them later. `owner_id` uploads for an account you edit
+/// An emote is public unless the form makes it private. The flags `zero_width` and `private` may
+/// be set at once (each `true` or `false`, default `false`), and `visibility` (`public` or
+/// `private`; with `private` too, they must agree; `unlisted` is for staff with `emotes.flags`,
+/// `bad_visibility` for anyone else); `updateEmote` changes them later. NSFW emotes aren't
+/// allowed: `nsfw=true` is `nsfw_not_allowed` (`nsfw=false` is still taken). `owner_id` uploads for an account you edit
 /// with `EMOTE_UPLOAD` (ADR 0014): it owns the emote, and the upload counts against both of you.
 #[utoipa::path(
     post,
@@ -305,7 +307,7 @@ async fn capped_text(field: &mut Field<'_>, max: usize) -> ApiResult<String> {
     request_body(content = UploadEmote, content_type = "multipart/form-data"),
     responses(
         (status = 202, description = "Accepted; the files are being made. The emote is `pending`.", body = Emote),
-        (status = 400, description = "`bad_name`, `bad_tag`, `too_many_tags` or `bad_form`.", body = ErrorBody),
+        (status = 400, description = "`bad_name`, `bad_tag`, `too_many_tags`, `bad_form`, `bad_visibility` (`unlisted` without `emotes.flags`) or `nsfw_not_allowed`.", body = ErrorBody),
         (status = 401, description = "`signed_out`.", body = ErrorBody),
         (status = 403, description = "`restricted` (you or the owner you upload for), `forbidden` (no `EMOTE_UPLOAD` there), or `bad_origin` for a cookie from another site.", body = ErrorBody),
         (status = 409, description = "`too_many_pending`: the owner already has as many emotes waiting for review as it may (20 unless its roles say otherwise; `uploadQuota`).", body = ErrorBody),
@@ -370,7 +372,9 @@ async fn upload_emote(
                 match key.as_str() {
                     "zero_width" => flags.zero_width = on,
                     "private" => private = Some(on),
-                    _ => flags.nsfw = on,
+                    // Kept so old clients sending `nsfw=false` still work; NSFW isn't allowed.
+                    _ if on => return Err(upload::nsfw_not_allowed()),
+                    _ => {}
                 }
             }
             Some("owner_id") => {
@@ -381,12 +385,12 @@ async fn upload_emote(
                 let text = capped_text(&mut field, 16).await?;
                 visibility = Some(
                     text.parse()
-                        .map_err(|_| bad_form("Visibility is public, unlisted or private."))?,
+                        .map_err(|_| bad_form("Visibility is public or private."))?,
                 );
             }
             _ => {
                 return Err(bad_form(
-                    "Unknown form field. Send name, tags, zero_width, private, visibility, nsfw, owner_id and file.",
+                    "Unknown form field. Send name, tags, zero_width, private, visibility, owner_id and file.",
                 ));
             }
         }

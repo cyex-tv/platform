@@ -217,7 +217,7 @@ async fn flags_need_the_permission() {
             .gql(
                 who,
                 FLAGS,
-                json!({ "id": id, "i": { "visibility": "UNLISTED", "nsfw": true } }),
+                json!({ "id": id, "i": { "visibility": "UNLISTED", "zeroWidth": true } }),
             )
             .await;
         assert_eq!(code(&r), "forbidden", "{r}");
@@ -259,7 +259,7 @@ async fn moderator_unlists_and_flags_after_review_audited_and_owner_told() {
     assert_eq!(told[0]["was"], "public");
     assert_eq!(told[0]["emote_id"], id.as_str());
 
-    // NSFW and zero-width (emotes.edit_any covers it too): no notice, the visibility stays.
+    // NSFW is no flag any more (ADR 0020, amendment 2026/11/22): refused, nothing written.
     let r = w
         .gql(
             &admin,
@@ -267,10 +267,31 @@ async fn moderator_unlists_and_flags_after_review_audited_and_owner_told() {
             json!({ "id": id, "i": { "nsfw": true, "zeroWidth": true } }),
         )
         .await;
+    assert_eq!(code(&r), "nsfw_not_allowed", "{r}");
+    assert_eq!(w.audited("emote.flags_changed", &id).await.len(), 1);
+
+    // Zero-width (emotes.edit_any covers it too): no notice, the visibility stays. An old NSFW
+    // mark is cleared by the save: staff looking at the flags is its review.
+    sqlx::query("UPDATE emotes SET nsfw = true WHERE name = 'Wave'")
+        .execute(&mut *w.db.conn().await)
+        .await
+        .unwrap();
+    let r = w
+        .gql(
+            &admin,
+            FLAGS,
+            json!({ "id": id, "i": { "zeroWidth": true } }),
+        )
+        .await;
     assert!(r["errors"].is_null(), "{r}");
     let out = &r["data"]["setEmoteFlags"];
-    assert_eq!(out["flags"]["nsfw"], true);
+    assert_eq!(out["flags"]["nsfw"], false);
     assert_eq!(out["flags"]["zeroWidth"], true);
+    let (nsfw,): (bool,) = sqlx::query_as("SELECT nsfw FROM emotes WHERE name = 'Wave'")
+        .fetch_one(&mut *w.db.conn().await)
+        .await
+        .unwrap();
+    assert!(!nsfw, "the save cleared the old NSFW mark");
     assert_eq!(out["visibility"], "UNLISTED");
     assert_eq!(w.told(&owner).await.len(), 1);
 
