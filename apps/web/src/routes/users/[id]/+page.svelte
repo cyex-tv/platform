@@ -39,19 +39,8 @@
   import type { PageEmote } from '$lib/components/emote/emote-page';
   import Icon from '$lib/components/Icon.svelte';
   import AdminLink from '$lib/profile/AdminLink.svelte';
-  import Overview from '$lib/profile/sections/Overview.svelte';
   import { canProfile, canSets, manages, profileTabs, sectionFrom, sectionHref, sectionsFor, type SectionKey } from '$lib/profile/rows';
-  import AccountSection from '$lib/profile/sections/AccountSection.svelte';
-  import EditorsSection from '$lib/profile/sections/EditorsSection.svelte';
-  import NotificationsSection from '$lib/profile/sections/NotificationsSection.svelte';
-  import NotificationsPanel from '$lib/profile/NotificationsPanel.svelte';
-  import ActiveEmotes from '$lib/profile/sections/ActiveEmotes.svelte';
-  import ActivityFeed from '$lib/profile/sections/ActivityFeed.svelte';
-  import CosmeticsPicker from '$lib/profile/sections/CosmeticsPicker.svelte';
-  import ShownCosmetics from '$lib/profile/sections/ShownCosmetics.svelte';
-  import Favourites from '$lib/profile/sections/Favourites.svelte';
-  import MyUploads from '$lib/profile/sections/MyUploads.svelte';
-  import SetCards from '$lib/profile/sections/SetCards.svelte';
+  import { lazyFailed, lazyKeyFor, lazySection, loadSection } from '$lib/profile/sections/lazy.svelte';
   import Uploads from './Uploads.svelte';
 
   let { data } = $props();
@@ -63,6 +52,26 @@
   const allowed = $derived(sectionsFor(relation, ACTIVITY_READY));
   const asked = $derived(page.url.searchParams.get('s'));
   const section = $derived<SectionKey>(sectionFrom(page.url.searchParams, allowed));
+  // The section's chunk: the page's own Uploaded emotes is null; the rest load when first asked for
+  // (the page's load already fetched the one in the address) and ahead of time on tab hover or focus.
+  const lazyView = $derived({ mine: relation.mine, canProfile: canProfile(relation), manage: relation.perms.has('EMOTE_MANAGE'), signedIn: !!session.me });
+  const notes = $derived(section === 'notifications' && relation.mine);
+  const lazyKey = $derived(lazyKeyFor(section, lazyView));
+  const Lazy = $derived(lazyKey ? lazySection(lazyKey) : undefined);
+  $effect(() => {
+    if (lazyKey) void loadSection(lazyKey);
+  });
+  const Panel = $derived(notes ? lazySection('notificationsPanel') : undefined);
+  $effect(() => {
+    if (notes) void loadSection('notificationsPanel');
+  });
+  function ahead(ev: Event) {
+    const a = (ev.target as Element | null)?.closest?.('nav[aria-label$="profile"] a');
+    if (!(a instanceof HTMLAnchorElement)) return;
+    const want = sectionFrom(new URL(a.href, page.url).searchParams, allowed);
+    const key = lazyKeyFor(want, lazyView);
+    if (key) void loadSection(key);
+  }
   // Grants load after the session; give them a moment before falling back to Uploaded emotes.
   let granted = $state(false);
   $effect(() => {
@@ -182,7 +191,7 @@
   }
 </script>
 
-<svelte:window {onkeydown} />
+<svelte:window {onkeydown} onpointerover={ahead} onfocusin={ahead} />
 
 {#snippet actions()}
   {#if relation.mine}
@@ -218,7 +227,6 @@
 {:else}
   {@const account = { id: data.id, displayName: data.creator.displayName, avatar: data.creator.avatar }}
   {@const showing = !!pickedId && wide && section !== 'notifications'}
-  {@const notes = section === 'notifications' && relation.mine}
   <InspectorLayout
     title={notes ? 'Notification' : showing ? 'Selected emote' : 'About'}
     label={notes ? 'About your notifications' : showing ? 'Selected emote' : `About ${name}`}
@@ -237,30 +245,30 @@
     <div class="body" bind:this={body} onclickcapture={pick}>
       {#if waiting}
         <State kind="loading" title="Loading…" />
-      {:else if section === 'overview'}
-        {#key data.id}<Overview accountId={data.id} />{/key}
-      {:else if section === 'active'}
-        {#key data.id}<ActiveEmotes accountId={data.id} mine={relation.mine} />{/key}
-      {:else if section === 'sets'}
-        {#key data.id}<SetCards accountId={data.id} mine={relation.mine} canCreate={canSets(relation)} {name} />{/key}
-      {:else if section === 'favourites'}
-        <Favourites />
-      {:else if section === 'cosmetics' && canProfile(relation)}
-        {#key data.id}<CosmeticsPicker accountId={data.id} mine={relation.mine} {name} />{/key}
-      {:else if section === 'cosmetics'}
-        {#key data.id}<ShownCosmetics accountId={data.id} {name} seed={data.look} />{/key}
-      {:else if section === 'account' && relation.mine && session.me}
-        <AccountSection />
-      {:else if section === 'editors' && relation.mine}
-        <EditorsSection />
-      {:else if notes}
-        <NotificationsSection />
-      {:else if section === 'activity'}
-        {#key data.id}<ActivityFeed accountId={data.id} name={data.creator.displayName} full={relation.mine || !!session.me?.permissions.includes('users.view')} />{/key}
-      {:else if relation.mine}
-        <MyUploads />
-      {:else if relation.perms.has('EMOTE_MANAGE')}
-        {#key data.id}<MyUploads accountId={data.id} name={data.creator.displayName} canUpload={relation.perms.has('EMOTE_UPLOAD')} />{/key}
+      {:else if lazyKey && lazyFailed(lazyKey)}
+        <Problem cause="server" level={2} onretry={() => loadSection(lazyKey)} />
+      {:else if lazyKey && !Lazy}
+        <State kind="loading" title="Loading…" />
+      {:else if Lazy && lazyKey === 'overview'}
+        {#key data.id}<Lazy accountId={data.id} />{/key}
+      {:else if Lazy && lazyKey === 'active'}
+        {#key data.id}<Lazy accountId={data.id} mine={relation.mine} />{/key}
+      {:else if Lazy && lazyKey === 'sets'}
+        {#key data.id}<Lazy accountId={data.id} mine={relation.mine} canCreate={canSets(relation)} {name} />{/key}
+      {:else if Lazy && lazyKey === 'favourites'}
+        <Lazy />
+      {:else if Lazy && lazyKey === 'picker'}
+        {#key data.id}<Lazy accountId={data.id} mine={relation.mine} {name} />{/key}
+      {:else if Lazy && lazyKey === 'shown'}
+        {#key data.id}<Lazy accountId={data.id} {name} seed={data.look} />{/key}
+      {:else if Lazy && (lazyKey === 'account' || lazyKey === 'editors' || lazyKey === 'notifications')}
+        <Lazy />
+      {:else if Lazy && lazyKey === 'activity'}
+        {#key data.id}<Lazy accountId={data.id} name={data.creator.displayName} full={relation.mine || !!session.me?.permissions.includes('users.view')} />{/key}
+      {:else if Lazy && relation.mine}
+        <Lazy />
+      {:else if Lazy}
+        {#key data.id}<Lazy accountId={data.id} name={data.creator.displayName} canUpload={relation.perms.has('EMOTE_UPLOAD')} />{/key}
       {:else}
         {#key data.id}
           <Uploads id={data.id} {name} first={data.items} total={data.total} />
@@ -277,7 +285,7 @@
     {/snippet}
     {#snippet panel()}
       {#if notes}
-        <NotificationsPanel />
+        {#if Panel}<Panel />{/if}
       {:else if showing}
         <EmoteInspector head={false} emote={picked?.id === pickedId ? picked.emote : null} failed={picked?.id === pickedId && picked.failed} onclose={unpick} />
       {:else}

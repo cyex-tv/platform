@@ -1,10 +1,11 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { svelteTesting } from '@testing-library/svelte/vite';
 import { defineConfig } from 'vitest/config';
+import { gqlDocuments } from './dev/vite-gql-documents';
 
 // Two projects: `unit` (plain logic, node) and `ui` (components in jsdom, *.ui.test.ts).
 export default defineConfig({
-  plugins: [sveltekit()],
+  plugins: [gqlDocuments(), sveltekit()],
   test: {
     coverage: { provider: 'v8', include: ['src/**/*.{ts,svelte}'], exclude: ['src/lib/gql/**', '**/*.test.ts', '**/*.d.ts'], reporter: ['text-summary'] },
     projects: [

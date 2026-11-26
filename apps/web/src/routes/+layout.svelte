@@ -1,6 +1,6 @@
 <script lang="ts">
   import '../app.css';
-  import { untrack } from 'svelte';
+  import { untrack, type Component } from 'svelte';
   import { goto } from '$app/navigation';
   import { navigating, page } from '$app/state';
   import Footer from '$lib/components/Footer.svelte';
@@ -8,7 +8,7 @@
   import { siteMeta, type Meta as PageMeta } from '$lib/meta';
   import AnnouncementBar from '$lib/shell/AnnouncementBar.svelte';
   import AppHeader from '$lib/shell/AppHeader.svelte';
-  import ShortcutSheet from '$lib/shell/ShortcutSheet.svelte';
+  import { asksForSheet, shortcuts } from '$lib/shell/shortcuts.svelte';
   import { titleTruncated } from '$lib/shell/truncated';
   import Toasts from '$lib/tool/Toasts.svelte';
   import { syncMotion } from '$lib/shell/motion.svelte';
@@ -16,8 +16,7 @@
   import { loadMe, session } from '$lib/tool/session.svelte';
   import { offerConsoleToken } from '$lib/account/console-token';
   import { whatsNew } from '$lib/changelog/seen.svelte';
-  import UploadDialog from '$lib/upload/UploadDialog.svelte';
-  import { openUpload, opensDialog, uploadFor, uploadParam, withoutUploadParam } from '$lib/upload/upload.svelte';
+  import { openUpload, upload, opensDialog, uploadFor, uploadParam, withoutUploadParam } from '$lib/upload/upload.svelte';
 
   let { children } = $props();
   // One shell for every route: AppHeader, main, Footer. Pages (and the signed-in group's layout)
@@ -95,6 +94,24 @@
     return () => document.removeEventListener('click', uploadLinks, true);
   });
 
+  // The upload dialog and the shortcut sheet are built on first use (the Upload button, `?upload`,
+  // an upload link; `?` or the footer's link), not shipped with every page. Once built they stay,
+  // so what you picked to upload is still there when the dialog opens again.
+  let UploadDialog = $state.raw<Component | null>(null);
+  let ShortcutSheet = $state.raw<Component | null>(null);
+  $effect(() => {
+    if (session.me && upload.open && !UploadDialog) void import('$lib/upload/UploadDialog.svelte').then((m) => (UploadDialog = m.default));
+  });
+  $effect(() => {
+    if (shortcuts.open && !ShortcutSheet) void import('$lib/shell/ShortcutSheet.svelte').then((m) => (ShortcutSheet = m.default));
+  });
+  // `?` before the sheet exists: open it (it shows as soon as it is built); after, the sheet's own key handling runs.
+  function sheetKey(e: KeyboardEvent) {
+    if (ShortcutSheet || !asksForSheet(e) || document.querySelector('dialog[open]')) return;
+    e.preventDefault();
+    shortcuts.open = !shortcuts.open;
+  }
+
   // A thin bar under the nav while a page loads: it shows only after a short delay, crawls to
   // 85%, then fills and fades when the page arrives.
   let bar = $state<'idle' | 'run' | 'done'>('idle');
@@ -119,6 +136,7 @@
 </script>
 
 <svelte:document onpointerover={titleTruncated} />
+<svelte:window onkeydown={sheetKey} />
 
 <!-- Link previews: the page's own card (from its load) or the site's. -->
 <Meta meta={(page.data.meta as PageMeta | undefined) ?? siteMeta(page.url.pathname)} />
@@ -133,8 +151,8 @@
 </main>
 <Footer slim={page.data.footer === 'slim'} />
 <Toasts />
-<ShortcutSheet />
-{#if session.me}<UploadDialog />{/if}
+{#if ShortcutSheet}<ShortcutSheet />{/if}
+{#if session.me && UploadDialog}<UploadDialog />{/if}
 
 <style>
   main:focus { outline: none; }

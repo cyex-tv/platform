@@ -1,39 +1,32 @@
 <script lang="ts">
   // The signed-in pages (your emotes, sets, channels, account, admin). The root layout already
   // draws the one AppHeader and Footer; this layout only signs you in (or sends you to /signin)
-  // and frames the page: under /admin the admin frame (AdminShell); Settings in a RailLayout with
+  // and frames the page: under /admin the admin layout's frame (AdminShell); Settings in a RailLayout with
   // its rail; every other /me page draws its own Inspector frame (MeFrame, InspectorLayout), the
   // same shape as your profile.
   import { onMount } from 'svelte';
-  import { quiet } from '$lib/quiet';
   import { useToolButtons } from '$lib/components/btn';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
-  import { ApiError, gql } from '$lib/api';
-  import type { AdminCountsQuery } from '$lib/gql/graphql';
-  import { ADMIN_COUNTS } from '$lib/queries';
+  import { ApiError } from '$lib/api';
   import { settingsRail, isSettingsPath } from '$lib/account/settings';
   import Icon from '$lib/components/Icon.svelte';
   import RailLayout from '$lib/shell/RailLayout.svelte';
   import WorkspaceLayout from '$lib/shell/WorkspaceLayout.svelte';
   import SettingsPanel from '$lib/account/SettingsPanel.svelte';
   import SideRail from '$lib/shell/SideRail.svelte';
-  import type { RailGroup } from '$lib/shell/rail';
-  import AdminShell from '$lib/admin/shell/AdminShell.svelte';
-  import { adminRail as adminRailFor } from '$lib/admin/shell/sections';
   import PageTitle from '$lib/components/PageTitle.svelte';
   import Problem from '$lib/components/Problem.svelte';
   import { problemTitle } from '$lib/components/problem';
   import State from '$lib/components/State.svelte';
-  import { loadShopCounts, shopCounts } from '$lib/shop/counts.svelte';
-  import { can, isAdmin, loadMe, session } from '$lib/tool/session.svelte';
+  import { isAdmin, loadMe, session } from '$lib/tool/session.svelte';
 
   let { children } = $props();
   useToolButtons(); // the tool pages' buttons are .ui-btn; shared components follow
   let problem = $state(false);
 
   const path = $derived(page.url.pathname);
-  // Under /admin with staff permissions: the admin rail.
+  // Under /admin with staff permissions: the admin layout (admin/+layout.svelte) draws the frame.
   const adminPath = $derived(path === '/admin' || path.startsWith('/admin/'));
   const admin = $derived(adminPath && isAdmin(session.me));
 
@@ -42,27 +35,6 @@
   // No rail: a /me page outside Settings (staff under /admin get the admin rail; before the
   // account is known, the path says which).
   const framed = $derived(!settings && (session.me ? !admin : !adminPath));
-
-  // Open tickets for the admin rail's counts.
-  let counts = $state<AdminCountsQuery | null>(null);
-  $effect(() => {
-    if (!admin) return;
-    const review = can('emotes.review');
-    const reports = review || can('emotes.takedown') || can('reports.manage');
-    if (!review && !reports) return;
-    void quiet(gql(ADMIN_COUNTS, { review, reports }).then((r) => (counts = r)), 'admin counts');
-  });
-
-  $effect(() => {
-    if (admin) loadShopCounts();
-  });
-
-  // The admin rail: the sections your permissions open (lib/admin/shell/sections), with the open tickets and shop counts.
-  const adminRail = $derived.by<RailGroup[]>(() => {
-    void session.me; // permissions come from the account
-    const c = { review: counts?.reviewQueue?.total, reports: counts?.reportQueue?.total, items: shopCounts.items, orders: shopCounts.orders, codes: shopCounts.codes };
-    return adminRailFor(can, c, path);
-  });
 
   // A retry keeps the problem on screen until the answer is in, so the page's Try again button can tell it worked.
   async function signIn(fresh = false) {
@@ -93,9 +65,9 @@
 {/snippet}
 
 {#if adminPath && (admin || (!session.me && !problem))}
-  <!-- Staff under /admin: the admin frame (full-height rail, no band). Before the account is known
-       the path decides, so the frame is there from the first paint and its rows fill in. -->
-  <AdminShell groups={adminRail} me={session.me?.id}><div class="ui-page adm-page" class:pending={!problem && !session.me}>{@render body()}</div></AdminShell>
+  <!-- Staff under /admin: the admin layout draws its own frame (full-height rail, no band), and its
+       loading line before the account is known, so the frame is there from the first paint. -->
+  {@render children()}
 {:else if framed}
   <!-- A /me page draws its own frame (with the page wrapper); the sign-in states get a plain one. -->
   <div class="ui-page" class:pending={!problem && !session.me}>
@@ -146,9 +118,6 @@
   /* While the account is unknown the page is a loading line: the footer waits (hidden, not
      removed) so the page growing doesn't shove a visible footer down. */
   :global(main:has(.ui-page.pending) + .footer) { visibility: hidden; }
-  /* Its own block formatting context: the Split's pull-up margin stays inside, so the page's box
-     doesn't move when the loading line gives way to the page. */
-  .adm-page { display: flow-root; }
   .me-wait { padding-top: var(--rail-gap); padding-bottom: 48px; }
   .me { display: flex; align-items: center; gap: 12px; min-height: 40px; }
   .plain { font-size: var(--t-ui); font-weight: 600; color: var(--muted); }
