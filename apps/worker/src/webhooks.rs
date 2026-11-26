@@ -100,6 +100,9 @@ impl Sent {
     }
 }
 
+/// What the delivery log says when a host resolves to an address that isn't allowed.
+const DISALLOWED_ADDR: &str = "the host resolves to an address that isn't allowed";
+
 /// The addresses `host` may be reached at, all of them allowed by `policy`; an error when it
 /// doesn't resolve or any address it gives is refused (a name with one private address among
 /// public ones is refused whole, so it can't be raced to the private one).
@@ -122,10 +125,11 @@ pub async fn checked_addrs(
     }
     // An IPv4-mapped IPv6 address is judged as the IPv4 address it is.
     if let Some(bad) = addrs.iter().find(|a| !(policy.allow)(a.ip())) {
-        return Err(format!(
-            "the host resolves to an address that isn't allowed ({})",
-            bad.ip()
-        ));
+        // The delivery log is read by the webhook's owner and editors: the address a name
+        // resolves to stays out of it (it would let them probe internal DNS). It goes to the
+        // server's log only.
+        tracing::warn!(%host, ip = %bad.ip(), "webhook host resolves to a disallowed address");
+        return Err(DISALLOWED_ADDR.to_owned());
     }
     Ok(addrs)
 }
@@ -396,6 +400,26 @@ mod tests {
                 "{host}: {err}"
             );
         }
+        // The stored error is generic: it never carries the resolved address.
+        for host in [
+            "127.0.0.1",
+            "10.0.0.1",
+            "[::1]",
+            "169.254.169.254",
+            "localhost",
+        ] {
+            let err = checked_addrs(host, 443, &p).await.unwrap_err();
+            assert!(
+                !err.chars().any(|c| c.is_ascii_digit()) && !err.contains("::"),
+                "{host}: the error names an address: {err}"
+            );
+            assert!(
+                err == DISALLOWED_ADDR || err.contains("doesn't resolve"),
+                "{host}: {err}"
+            );
+        }
+        let sent = send("https://10.1.2.3/", b"{}", &["s"], "1", "webhook.test", &p).await;
+        assert_eq!(sent.error.as_deref(), Some(DISALLOWED_ADDR));
         assert!(checked_addrs("1.1.1.1", 443, &p).await.is_ok());
         // The test policy lets loopback through, and nothing private.
         let t = Policy::loopback_for_tests();

@@ -170,19 +170,36 @@ fn events_of(events: &[EventType]) -> ApiResult<Vec<String>> {
     Ok(names)
 }
 
-/// Refuses a webhook that would ask for the cosmetics catalog's events past the global cap
+/// Refuses a webhook that would ask for the cosmetics catalog's events past the per-account cap
+/// (`db::MAX_COSMETIC_PER_ACCOUNT`, counted on the channel owner's channel) or the global cap
 /// (`db::MAX_COSMETIC_SUBSCRIBERS`): every such event goes to all of them.
 async fn cosmetic_room(
     conn: &mut PgConnection,
     events: &[String],
     except: Option<uuid::Uuid>,
+    owner: uuid::Uuid,
     max: i64,
 ) -> ApiResult<()> {
-    if db::Webhook::wants_cosmetics(events)
-        && db::cosmetic_subscribers(conn, except)
-            .await
-            .map_err(db_error)?
-            >= max
+    if !db::Webhook::wants_cosmetics(events) {
+        return Ok(());
+    }
+    let per_account = db::MAX_COSMETIC_PER_ACCOUNT;
+    if db::cosmetic_subscribers_of(conn, owner, except)
+        .await
+        .map_err(db_error)?
+        >= per_account
+    {
+        return Err(ApiError::limit(
+            "too_many_webhooks",
+            "This account already has 2 webhooks asking for cosmetics events, the most it may. Pick channel events only, or turn one off.",
+            per_account.unsigned_abs(),
+            per_account.unsigned_abs(),
+        ));
+    }
+    if db::cosmetic_subscribers(conn, except)
+        .await
+        .map_err(db_error)?
+        >= max
     {
         return Err(ApiError::limit(
             "too_many_webhooks",
@@ -243,7 +260,14 @@ pub async fn create(
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let ch = channel_by_platform(&mut tx, caller, platform, id).await?;
-    cosmetic_room(&mut tx, &events, None, db::MAX_COSMETIC_SUBSCRIBERS).await?;
+    cosmetic_room(
+        &mut tx,
+        &events,
+        None,
+        ch.account_id,
+        db::MAX_COSMETIC_SUBSCRIBERS,
+    )
+    .await?;
     let secret = secret();
     let topic = outbox::channel_topic(ch.platform, &ch.platform_channel_id);
     let hook = db::create(
@@ -299,6 +323,7 @@ pub async fn update(
             &mut tx,
             &wanted,
             Some(before.id),
+            ch.account_id,
             db::MAX_COSMETIC_SUBSCRIBERS,
         )
         .await?;

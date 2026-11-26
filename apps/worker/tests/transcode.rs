@@ -432,10 +432,16 @@ async fn the_job_is_checked_under_the_fixed_emote_rules_whatever_it_carries() {
     )
     .await;
     assert_eq!(run().await, Outcome::Failed);
-    // Wider than 4:1 fails for good, whatever the job says (the API refuses it first; this is
-    // the second check).
-    uploaded_under(&db, &store, &png(500, 100), "image/png", json!({})).await;
-    assert_eq!(run().await, Outcome::Failed);
+    // The 4:1 rule is the upload's (the API refuses a wider file first): an original that is
+    // already stored, 6:1 say, is made again, fitted in the 4:1 box as before.
+    let (six, _) = uploaded_under(&db, &store, &png(600, 100), "image/png", json!({})).await;
+    assert_eq!(run().await, Outcome::Done);
+    let v = variants(&db, six).await;
+    assert!(!v.is_empty());
+    assert_eq!(
+        (v[0]["width"].as_u64(), v[0]["height"].as_u64()),
+        (Some(128), Some(21))
+    );
     // 4:1 exactly is made.
     let (wide, _) = uploaded_under(&db, &store, &png(400, 100), "image/png", json!({})).await;
     assert_eq!(run().await, Outcome::Done);
