@@ -24,7 +24,7 @@ const SITE_METHODS: &str = "GET, POST, OPTIONS";
 const SITE_HEADERS: &str = "content-type, authorization";
 const PUBLIC_METHODS: &str = "GET, HEAD, POST, OPTIONS";
 const PUBLIC_HEADERS: &str = "content-type, if-none-match";
-const EXPOSED: &str = "etag, retry-after, ratelimit-limit, ratelimit-remaining, ratelimit-reset";
+const EXPOSED: &str = "etag, retry-after, ratelimit-limit, ratelimit-remaining, ratelimit-reset, x-cyex-api-version, deprecation, sunset, link";
 /// How long a browser may keep a preflight answer.
 const MAX_AGE: &str = "600";
 
@@ -32,7 +32,8 @@ const MAX_AGE: &str = "600";
 pub fn is_public_read(method: &Method, path: &str) -> bool {
     let read = matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS);
     (read
-        && (path.starts_with("/v1/channels/")
+        && (path == "/v1/meta"
+            || path.starts_with("/v1/channels/")
             || path.starts_with("/v1/sets/")
             || path.starts_with("/v1/emotes/")))
         || (path == "/v1/personal-sets/lookup" && matches!(*method, Method::POST | Method::OPTIONS))
@@ -117,6 +118,7 @@ mod tests {
         assert!(is_public_read(&Method::GET, "/v1/channels/twitch/1"));
         assert!(is_public_read(&Method::GET, "/v1/sets/global"));
         assert!(is_public_read(&Method::GET, "/v1/emotes/x"));
+        assert!(is_public_read(&Method::GET, "/v1/meta"));
         assert!(is_public_read(&Method::POST, "/v1/personal-sets/lookup"));
         assert!(!is_public_read(&Method::POST, "/v1/gql"));
         assert!(!is_public_read(&Method::POST, "/v1/emotes"));

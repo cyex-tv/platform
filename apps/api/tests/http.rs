@@ -553,3 +553,87 @@ async fn reads_and_graphql_publish_their_limit_and_a_429_says_when_to_retry() {
     assert!(r.headers().contains_key("retry-after"));
     assert!(quota_of(r.headers()).is_none());
 }
+
+#[tokio::test]
+async fn meta_has_version_build_limits_link_and_deprecations() {
+    let response = cyex_tv_api::app(offline_state())
+        .oneshot(Request::get("/v1/meta").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()["x-cyex-api-version"],
+        env!("CARGO_PKG_VERSION")
+    );
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let meta: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(meta["api_version"], env!("CARGO_PKG_VERSION"));
+    assert!(meta["build"].as_str().is_some_and(|b| !b.is_empty()));
+    assert_eq!(meta["limits"]["rest"], "/v1/limits");
+    assert_eq!(meta["limits"]["graphql_field"], "limits");
+    let ulid = &meta["deprecations"][0];
+    assert_eq!(ulid["id"], "ulid_id_input");
+    assert_eq!(ulid["since"], "2026-11-26");
+    assert_eq!(ulid["sunset"], "2027-06-01");
+    for key in ["what", "replacement"] {
+        assert!(ulid[key].as_str().is_some_and(|t| !t.is_empty()), "{key}");
+    }
+}
+
+#[tokio::test]
+async fn graphql_meta_matches_rest_meta() {
+    let r = gql(
+        "{ meta { apiVersion build limits { rest graphqlField } deprecations { id what since sunset replacement } } }",
+    )
+    .await;
+    assert!(r["errors"].is_null(), "{r}");
+    let meta = &r["data"]["meta"];
+    assert_eq!(meta["apiVersion"], env!("CARGO_PKG_VERSION"));
+    assert_eq!(meta["limits"]["graphqlField"], "limits");
+    assert_eq!(meta["deprecations"][0]["id"], "ulid_id_input");
+    assert_eq!(meta["deprecations"][0]["sunset"], "2027-06-01");
+}
+
+#[tokio::test]
+async fn every_answer_carries_the_api_version_and_no_deprecation_by_default() {
+    for request in [
+        Request::get("/health").body(Body::empty()).unwrap(),
+        Request::get("/v1/nothing-here")
+            .body(Body::empty())
+            .unwrap(),
+        Request::post("/v1/gql")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({ "query": "{ meta { build } }" }).to_string(),
+            ))
+            .unwrap(),
+    ] {
+        let response = cyex_tv_api::app(offline_state())
+            .oneshot(request)
+            .await
+            .unwrap();
+        let headers = response.headers();
+        assert_eq!(headers["x-cyex-api-version"], env!("CARGO_PKG_VERSION"));
+        assert!(!headers.contains_key("deprecation") && !headers.contains_key("sunset"));
+    }
+}
+
+#[tokio::test]
+async fn cors_exposes_the_version_and_deprecation_headers() {
+    let response = cyex_tv_api::app(offline_state())
+        .oneshot(
+            Request::get("/v1/meta")
+                .header("origin", "https://example.org")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let exposed = response.headers()["access-control-expose-headers"]
+        .to_str()
+        .unwrap()
+        .to_owned();
+    for name in ["x-cyex-api-version", "deprecation", "sunset", "link"] {
+        assert!(exposed.contains(name), "{name} in {exposed}");
+    }
+}

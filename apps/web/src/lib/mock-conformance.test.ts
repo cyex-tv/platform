@@ -646,6 +646,12 @@ describe('mock-api conformance with the real schema', () => {
     stats.rest += 1;
     checkResponse('post', '/v1/emotes', so.status, await so.json(), 'POST /v1/emotes (signed out)', out);
 
+    // Version, build and deprecations.
+    const meta = await fetch(`${base}/v1/meta`);
+    stats.rest += 1;
+    checkResponse('get', '/v1/meta', meta.status, await meta.json(), 'GET /v1/meta', out);
+    if (!meta.headers.get('x-cyex-api-version')) out.push('GET /v1/meta: no X-Cyex-Api-Version header');
+
     // Sign-in redirect and sign-out.
     for (const platform of ['twitch', 'kick']) {
       const r = await fetch(`${base}/v1/auth/${platform}/login?return_to=/x`, { redirect: 'manual' });
