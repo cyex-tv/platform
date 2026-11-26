@@ -128,7 +128,7 @@ type Documents = {
     "\n  mutation Reject($id: String!, $reason: String!) {\n    rejectEmote(id: $id, reason: $reason) {\n      id\n      state\n    }\n  }\n": typeof types.RejectDocument,
     "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    denies\n    public\n    invisible\n    builtIn\n    editable\n    assignable\n  }\n": typeof types.RoleFieldsFragmentDoc,
     "\n  query Roles {\n    roles {\n      ...RoleFields\n    }\n    permissions\n  }\n": typeof types.RolesDocument,
-    "\n  fragment RoleLimitFields on RoleLimit {\n    key\n    group\n    default\n    windowSeconds\n    value\n  }\n": typeof types.RoleLimitFieldsFragmentDoc,
+    "\n  fragment RoleLimitFields on RoleLimit {\n    key\n    group\n    default\n    max\n    windowSeconds\n    value\n  }\n": typeof types.RoleLimitFieldsFragmentDoc,
     "\n  query LimitDefaults {\n    limitDefaults {\n      ...RoleLimitFields\n    }\n  }\n": typeof types.LimitDefaultsDocument,
     "\n  query RoleLimits($id: String!) {\n    roleLimits(id: $id) {\n      ...RoleLimitFields\n    }\n  }\n": typeof types.RoleLimitsDocument,
     "\n  mutation SetRoleLimits($id: String!, $limits: [RoleLimitInput!]!) {\n    setRoleLimits(id: $id, limits: $limits) {\n      ...RoleLimitFields\n    }\n  }\n": typeof types.SetRoleLimitsDocument,
@@ -312,7 +312,7 @@ const documents: Documents = {
     "\n  mutation Reject($id: String!, $reason: String!) {\n    rejectEmote(id: $id, reason: $reason) {\n      id\n      state\n    }\n  }\n": types.RejectDocument,
     "\n  fragment RoleFields on Role {\n    id\n    name\n    description\n    position\n    permissions\n    denies\n    public\n    invisible\n    builtIn\n    editable\n    assignable\n  }\n": types.RoleFieldsFragmentDoc,
     "\n  query Roles {\n    roles {\n      ...RoleFields\n    }\n    permissions\n  }\n": types.RolesDocument,
-    "\n  fragment RoleLimitFields on RoleLimit {\n    key\n    group\n    default\n    windowSeconds\n    value\n  }\n": types.RoleLimitFieldsFragmentDoc,
+    "\n  fragment RoleLimitFields on RoleLimit {\n    key\n    group\n    default\n    max\n    windowSeconds\n    value\n  }\n": types.RoleLimitFieldsFragmentDoc,
     "\n  query LimitDefaults {\n    limitDefaults {\n      ...RoleLimitFields\n    }\n  }\n": types.LimitDefaultsDocument,
     "\n  query RoleLimits($id: String!) {\n    roleLimits(id: $id) {\n      ...RoleLimitFields\n    }\n  }\n": types.RoleLimitsDocument,
     "\n  mutation SetRoleLimits($id: String!, $limits: [RoleLimitInput!]!) {\n    setRoleLimits(id: $id, limits: $limits) {\n      ...RoleLimitFields\n    }\n  }\n": types.SetRoleLimitsDocument,
@@ -838,7 +838,7 @@ export function graphql(source: "\n  query Roles {\n    roles {\n      ...RoleFi
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  fragment RoleLimitFields on RoleLimit {\n    key\n    group\n    default\n    windowSeconds\n    value\n  }\n"): typeof import('./graphql').RoleLimitFieldsFragmentDoc;
+export function graphql(source: "\n  fragment RoleLimitFields on RoleLimit {\n    key\n    group\n    default\n    max\n    windowSeconds\n    value\n  }\n"): typeof import('./graphql').RoleLimitFieldsFragmentDoc;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

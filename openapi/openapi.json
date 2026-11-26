@@ -2750,7 +2750,7 @@
             "code": "bad_limit",
             "group": "Admin",
             "meaning": "A limit value is not valid.",
-            "when": "Role limits are 1 to 1,000,000 and listed once."
+            "when": "Role limits are 1 to 1,000,000 (a file limit up to its ceiling: an emote side at most 1000 px) and listed once."
           },
           {
             "code": "unknown_limit",

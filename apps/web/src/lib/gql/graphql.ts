@@ -1123,6 +1123,11 @@ export type ImageFormat =
 export type LimitGroup =
   /** Writes to your account: editors, cosmetics, sets, lists, settings, the shop, your data. */
   | 'ACCOUNT'
+  /**
+   * How big the files an account uploads may be: bytes, side and frames of emotes, badges
+   * and paints.
+   */
+  | 'MEDIA'
   /** How often an account may call the API and search. */
   | 'REQUESTS'
   /** Uploads an hour, and how many may wait for review. */
@@ -3433,9 +3438,17 @@ export type RoleLimit = {
   /**
    * `gql_account`, `uploads_per_hour`, `pending_emotes`, `editors`, `cosmetics`,
    * `set_clones`, `account_search`, `quick_search`, `heavy_reads`, `personal_lists`,
-   * `emote_transfers`, `prefs`, `checkout`, `redeem` or `data_export`.
+   * `emote_transfers`, `prefs`, `checkout`, `redeem`, `data_export`, `set_capacity_max`, or a
+   * media limit: `emote_max_bytes`, `emote_max_side`, `emote_max_frames`, `badge_max_bytes`,
+   * `badge_max_side`, `badge_max_frames`, `paint_max_bytes` or `paint_max_side` (bytes, px
+   * and frames of the largest file an account may upload).
    */
   key: Scalars['String']['output'];
+  /**
+   * The most this limit may be set to: 1,000,000 for a count, and for a media limit the
+   * ceiling the API runs with (an emote's side never above 1000 px).
+   */
+  max: Scalars['Int']['output'];
   /** The role's own count; null when it keeps the default. */
   value?: Maybe<Scalars['Int']['output']>;
   /**
@@ -3448,7 +3461,7 @@ export type RoleLimit = {
 /** One override for `setRoleLimits`. */
 export type RoleLimitInput = {
   key: Scalars['String']['input'];
-  /** 1 to 1,000,000; null keeps the default. */
+  /** 1 up to the limit's `max` (1,000,000 for a count); null keeps the default. */
   value?: InputMaybe<Scalars['Int']['input']>;
 };
 
@@ -4572,19 +4585,19 @@ export type RolesQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type RolesQuery = { __typename?: 'Query', permissions: Array<string>, roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean }> };
 
-export type RoleLimitFieldsFragment = { __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null };
+export type RoleLimitFieldsFragment = { __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, max: number, windowSeconds?: number | null, value?: number | null };
 
 export type LimitDefaultsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type LimitDefaultsQuery = { __typename?: 'Query', limitDefaults: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null }> };
+export type LimitDefaultsQuery = { __typename?: 'Query', limitDefaults: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, max: number, windowSeconds?: number | null, value?: number | null }> };
 
 export type RoleLimitsQueryVariables = Exact<{
   id: Scalars['String']['input'];
 }>;
 
 
-export type RoleLimitsQuery = { __typename?: 'Query', roleLimits: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null }> };
+export type RoleLimitsQuery = { __typename?: 'Query', roleLimits: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, max: number, windowSeconds?: number | null, value?: number | null }> };
 
 export type SetRoleLimitsMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -4592,7 +4605,7 @@ export type SetRoleLimitsMutationVariables = Exact<{
 }>;
 
 
-export type SetRoleLimitsMutation = { __typename?: 'Mutation', setRoleLimits: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null }> };
+export type SetRoleLimitsMutation = { __typename?: 'Mutation', setRoleLimits: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, max: number, windowSeconds?: number | null, value?: number | null }> };
 
 export type UploadQuotaQueryVariables = Exact<{
   ownerId?: InputMaybe<Scalars['String']['input']>;
@@ -5211,6 +5224,7 @@ export const RoleLimitFieldsFragmentDoc = new TypedDocumentString(`
   key
   group
   default
+  max
   windowSeconds
   value
 }
@@ -7749,6 +7763,7 @@ export const LimitDefaultsDocument = new TypedDocumentString(`
   key
   group
   default
+  max
   windowSeconds
   value
 }`) as unknown as TypedDocumentString<LimitDefaultsQuery, LimitDefaultsQueryVariables>;
@@ -7762,6 +7777,7 @@ export const RoleLimitsDocument = new TypedDocumentString(`
   key
   group
   default
+  max
   windowSeconds
   value
 }`) as unknown as TypedDocumentString<RoleLimitsQuery, RoleLimitsQueryVariables>;
@@ -7775,6 +7791,7 @@ export const SetRoleLimitsDocument = new TypedDocumentString(`
   key
   group
   default
+  max
   windowSeconds
   value
 }`) as unknown as TypedDocumentString<SetRoleLimitsMutation, SetRoleLimitsMutationVariables>;
