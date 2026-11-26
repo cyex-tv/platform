@@ -5,7 +5,7 @@ import type { CodegenConfig } from '@graphql-codegen/cli';
 
 const config: CodegenConfig = {
   schema: '../../schema/schema.graphql',
-  documents: ['src/lib/queries.ts', 'src/lib/paint-studio/queries.ts'],
+  documents: ['src/lib/queries/*.ts', 'src/lib/paint-studio/queries.ts'],
   generates: {
     'src/lib/gql/': {
       preset: 'client',

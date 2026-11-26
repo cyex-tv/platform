@@ -3,7 +3,7 @@
 // current) and the REST answers are checked against openapi/openapi.json. The operations are read
 // from the site's own query files, not copied. One assertion at the end lists everything that differs.
 import { spawn, type ChildProcess } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,7 +34,10 @@ const schema: GraphQLSchema = buildSchema(readFileSync(resolve(ROOT, 'schema/sch
 const openapi = JSON.parse(readFileSync(resolve(ROOT, 'openapi/openapi.json'), 'utf8'));
 
 // ---- The site's operations, read from its source ------------------------------------------------
-const SOURCES = ['src/lib/queries.ts', 'src/lib/paint-studio/queries.ts'];
+const SOURCES = [
+  ...readdirSync(resolve(WEB, 'src/lib/queries')).filter((f) => f !== 'index.ts').sort().map((f) => `src/lib/queries/${f}`),
+  'src/lib/paint-studio/queries.ts',
+];
 const fragments = new Map<string, string>();
 const operations: { name: string; kind: string; text: string; file: string }[] = [];
 for (const file of SOURCES) {
