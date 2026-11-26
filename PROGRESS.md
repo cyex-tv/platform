@@ -1683,3 +1683,43 @@ gh pr create --repo cyex-tv/platform --base main --head feat/profile-notificatio
 - [x] Mock: the same rules (`SetCapacityRange`, `SetMenu`, capacity bounds, visibility refused, sets apart from channels).
 - [x] Tests: `apps/api/tests/sets_capacity_flow.rs` (new), `public_sets_flow.rs`, `sets_editors_flow.rs`, `sec_account_editors.rs`, `catalog_flow.rs`, `profile_flow.rs`, `emote_activity_flow.rs`, the API contract (`SetCapacityRange`, `SetMenu`), `editors.rs` and `limits.rs` unit tests; web `lib/sets/{capacity,set-menu,visibility,no-chat-preview,no-visibility-choice}.test.ts`, `lib/sets/set-actions.ui.test.ts`, `lib/tool/editors.test.ts`, `lib/tool/editor-dialog.ui.test.ts`.
 - [x] Checked in the running app (vite and mock on own ports): before/after screens in `.claude/runs/2026-11-20-redesign/screens/sets-editors/`.
+## Entitlement graph as a real graph, with search (branch `feat/entitlement-graph`, owner request of 2026/11/26)
+- [x] Admin → Entitlement graph draws a navigable node graph on a canvas (default view): one dot per node in its
+  kind's colour (`--node-*` tokens, both themes, each ≥ 3:1 on the grounds), hairline links on the page ground,
+  "Kind: name" labels where they fit (zoomed in, or on the hovered, focused, picked and found nodes; overlapping
+  ones left out). Pan (drag the ground), zoom (wheel, pinch, + / − / Fit), drag a node (pinned while held, back
+  into the layout when let go), click picks (?node=<kind:id> in the address; old ?node=<number> links still pick
+  that grant), double-click opens an item's holders graph or an account's own graph. The picked node's
+  neighbourhood is lit, the rest dimmed; the inspector shows its facts, its grants (source, order, code batch,
+  given, given by, taken away, reasons) and links (Who holds it, Open item, Their graph, Account page, order,
+  code batch).
+- [x] Layouts: Force (d3-force 3.0.0, stepped once per animation frame, stops when settled or after 420 ticks;
+  reduced motion computes it in one go and draws once) and Radial (each depth on a ring, arcs in proportion to
+  leaves). Node size 1 to 10. devicePixelRatio aware; redraws only while something moves.
+- [x] Nodes come from the data the API already returns (no API change): account (root) → shop product (bought
+  more than once: its orders under it, named by date) or a one-off order → items; code batch; event (by its
+  reason); staff member (grantedBy); built-in (Every account, Owner list). An item reached two ways is one node
+  with two links. For a badge, paint or role: item → product / batch / event / staff / built-in → holders.
+- [x] Legend under the graph with counts doubles as a kind filter (aria-pressed); hiding a kind reflows the graph
+  and drops a pick of that kind. "Find in graph" in the toolbar: matches ringed and counted, a list of the first 8
+  (arrows, Enter centres and picks), plus catalogue badges, paints and roles by name (Enter opens their holders
+  graph). Accounts stay on the UserFilter. Everything / Held now still works.
+- [x] Groups and List views keep the old tree and table for reading and assistive tech. The graph is keyboard
+  reachable: Tab in, arrows move between nodes, Enter picks, Esc clears, + − 0 zoom and fit, Home to the root;
+  an aria description with node, link and per-kind counts, and a live line for the focused node.
+- [x] Mock: nora_byte has a year of the "Supporter monthly" product (12 orders of 5 to 8 paints, one refunded),
+  a founders bundle, three code batches, two events, staff grants from two people, roles (136 nodes); seven
+  other accounts bought some of the same months, so a monthly paint's holders graph fans out.
+- [x] Tests: `entitlement-graph.test.ts` (grants → nodes and links, product/order fan-out, shared items, held
+  only, holders view, kind counts, hidden kinds, search ranking, catalogue search, radial rings, arrow-key
+  steps, fit) and `entitlement-graph-page.ui.test.ts` (pick from the address into the inspector, legend hides a
+  kind, find in graph and catalogue, List view). Screens before/after in
+  `.claude/runs/2026-11-20-redesign/screens/entitlement-graph/`.
+
+### GitHub write log for this PR
+```
+git push -u origin feat/entitlement-graph
+gh pr create --repo cyex-tv/platform --base main --head feat/entitlement-graph --title "Entitlement graph: a navigable node graph with search" --body-file <file>
+git push
+```
+  PR #170. Not merged (owner reviews).
