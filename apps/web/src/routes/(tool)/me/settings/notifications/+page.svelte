@@ -96,7 +96,7 @@
   .lab { display: none; font-size: var(--t-fine); color: var(--muted); }
   .foot { margin: 12px 0 0; font-size: var(--t-small); color: var(--muted); }
   /* Phones: the column heads go; each switch says what it is next to it. */
-  @media (max-width: 560px) {
+  @media (max-width: 639.98px) {
     .cols { display: none; }
     .pref { flex-wrap: wrap; }
     .switches { width: 100%; justify-content: flex-start; gap: 16px; }

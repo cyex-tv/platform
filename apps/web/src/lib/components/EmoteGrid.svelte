@@ -106,7 +106,7 @@
   .sheet li:has(.below) { gap: 0; padding-bottom: 6px; }
   li:has(.below) { display: grid; grid-template-rows: 1fr auto; gap: 6px; }
   .below { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 40px; min-width: 0; }
-  @media (max-width: 520px) {
+  @media (max-width: 639.98px) {
     .sheet, .sheet.compact { gap: 0; }
     .grid:not(.sheet) { gap: 8px; }
     .grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }

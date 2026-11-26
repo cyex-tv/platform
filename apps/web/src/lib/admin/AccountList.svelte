@@ -53,8 +53,8 @@
   .go { flex: none; display: inline-flex; color: var(--dim); }
   .compact { max-height: 260px; overflow-y: auto; }
   .compact .row { min-height: 44px; padding: 0 16px; }
-  @media (max-width: 900px) { .aid { display: none; } }
-  @media (max-width: 640px) {
+  @media (max-width: 899.98px) { .aid { display: none; } }
+  @media (max-width: 639.98px) {
     .row { min-height: 56px; flex-wrap: wrap; row-gap: 0; padding: 6px 2px; }
     .nm { max-width: calc(100% - 80px); }
     .logins { flex-basis: 100%; margin-left: 44px; max-height: 20px; order: 5; }

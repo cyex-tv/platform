@@ -92,7 +92,7 @@ export const guides: Guide[] = [
     blocks: [
       p(`The IDs of emotes, accounts and sets are Snowflakes: numbers written as strings of digits, like \`${EX.emoteId}\`. They fit in 64 bits, which is more than a JavaScript number holds exactly, so always store and send them as strings. The same goes for every field that points at one (\`owner_id\`, \`set_id\`, \`emote_id\`, \`active_set_id\` and the rest), in REST, GraphQL and the event socket.`),
       p('A Snowflake is not a secret and has no meaning you should depend on, but it does sort by age: a bigger one was made later. Every other kind of ID (badges, paints, roles, orders, images, notifications) is still a 26-character ULID.'),
-      note('Emotes, accounts and sets used to have ULIDs. Until further notice every place that takes one of those IDs also takes the old ULID, and `/emotes/<ULID>`, `/users/<ULID>` and `/sets/<ULID>` on the site send you to the new address. Answers always carry the Snowflake, so switch what you store to those, as strings. Event topics are `set:<Snowflake>`; `set:<ULID>` still subscribes.'),
+      note('Emotes, accounts and sets used to have ULIDs. Until 2027/06/01 (see [Versioning and deprecations](#versioning)) every place that takes one of those IDs also takes the old ULID, and `/emotes/<ULID>`, `/users/<ULID>` and `/sets/<ULID>` on the site send you to the new address. Answers always carry the Snowflake, so switch what you store to those, as strings. Event topics are `set:<Snowflake>`; `set:<ULID>` still subscribes.'),
     ],
   },
   {
@@ -231,6 +231,20 @@ export const guides: Guide[] = [
     blocks: [
       p('The `error` of every error answer, and `extensions.code` in GraphQL, is one of these. Codes are stable: they are never renamed or reused for something else, and new ones may be added, so treat a code you do not know like its HTTP status. The same list is the `ErrorCode` schema of [openapi.json](' + SPEC + '/openapi/openapi.json).'),
       { t: 'codes', rows: errorCodes },
+    ],
+  },
+  {
+    id: 'versioning',
+    title: 'Versioning and deprecations',
+    search: 'version versioning meta build deprecation deprecated sunset header x-cyex-api-version ulid',
+    blocks: [
+      p('Everything is under `/v1`, and inside v1 we only add. Every answer carries `X-Cyex-Api-Version`, the API’s semver version, and [GET /v1/meta](#rest-get_meta) (GraphQL: the `meta` query) says the same together with the build, where the limits are published and everything that is deprecated right now.'),
+      { t: 'pre', code: `curl -s '${baseUrl}/v1/meta'\n\n{ "api_version": "0.1.0", "build": "3ffc9b5d1e20",\n  "limits": { "rest": "/v1/limits", "graphql_field": "limits" },\n  "deprecations": [ { "id": "ulid_id_input", "since": "2026-11-26", "sunset": "2027-06-01", … } ] }` },
+      p('Each deprecation has an `id`, what it is (`what`), the day it started (`since`), the day it stops working (`sunset`) and what to use instead (`replacement`). Nothing is removed before its sunset day, and a sunset is announced in the changelog first.'),
+      p('A request that uses a deprecated input is told so in its answer: the REST headers `Deprecation: true`, `Sunset: <HTTP date>` and `Link: </v1/meta>; rel="deprecation"` (as in RFC 8594), and in GraphQL the answer’s `extensions.deprecations`, a list of the deprecation ids. Watch for them in your logs and you know what to change before the sunset day.'),
+      table(
+        ['ulid_id_input', 'An account, emote or set ID sent as a ULID. Sunset 2027/06/01. Send the Snowflake that answers carry (see [IDs](#ids)).'],
+      ),
     ],
   },
   {

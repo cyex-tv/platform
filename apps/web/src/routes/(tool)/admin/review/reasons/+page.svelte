@@ -138,7 +138,7 @@
   .tools { display: flex; gap: 2px; }
   footer { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
   .ro { margin: 0; }
-  @media (max-width: 520px) {
+  @media (max-width: 639.98px) {
     .rows li { grid-template-columns: minmax(0, 1fr) auto; padding-left: 8px; }
     .no { display: none; }
   }

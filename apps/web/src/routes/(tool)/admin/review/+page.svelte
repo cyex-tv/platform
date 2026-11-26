@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { media, PHONE_TABS } from '$lib/media.svelte';
+  import { media, PANEL, SMALL } from '$lib/media.svelte';
   // The emote review queue, a workspace: the queue on the left as a contact sheet of small tiles
   // (picture, name, uploader, flags; 50 a page, the server pages) under one toolbar (tabs by kind:
   // public, unlisted and private, resolved; a search by name or uploader; one uploader (UserFilter:
@@ -184,7 +184,7 @@
   // one inspected; nothing opens. Narrow ones open the dialog.
   let wide = $state(true);
   $effect(() => {
-    const m = matchMedia('(min-width: 1100px)');
+    const m = matchMedia(PANEL);
     wide = m.matches;
     const on = () => {
       wide = m.matches;
@@ -492,7 +492,7 @@
   }
 
   // Phones get the short tab names, so the counts still fit.
-  const narrow = $derived(media(PHONE_TABS).matches);
+  const narrow = $derived(media(SMALL).matches);
   const TABS = $derived([
     { value: 'public' as Tab, label: counts ? `Public ${count(counts.public)}` : 'Public', icon: 'eye' as const },
     { value: 'limited' as Tab, label: `${narrow ? 'Unlisted' : 'Unlisted and private'}${counts ? ` ${count(counts.limited)}` : ''}`, icon: 'eye-off' as const },
@@ -658,7 +658,7 @@
   .tabs::-webkit-scrollbar { display: none; }
   .find { flex: 1 1 180px; min-width: 0; }
   .pick { flex: none; width: auto; padding-left: 10px; }
-  @media (max-width: 900px) {
+  @media (max-width: 899.98px) {
     .tabs { flex-basis: 100%; }
     .find { flex-basis: 100%; max-width: none; }
     .pick { flex: 1 1 0; }

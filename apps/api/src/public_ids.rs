@@ -36,6 +36,25 @@ impl ExtensionFactory for PublicIds {
 struct PublicIdsRequest {
     /// The request's Snowflake-shaped strings, read while parsing.
     found: Mutex<Vec<i64>>,
+    /// The request's ULID-shaped strings (at most [`MAX_ULIDS`]): old-form IDs, or other ULIDs.
+    ulids: Mutex<Vec<Uuid>>,
+}
+
+/// How many ULID-shaped strings of a request are checked for the sunset notice.
+const MAX_ULIDS: usize = 100;
+
+fn ulids_in(value: &GqlValue, out: &mut Vec<Uuid>) {
+    match value {
+        GqlValue::String(s) => out.extend(ulid_of(s)),
+        GqlValue::List(items) => items.iter().for_each(|v| ulids_in(v, out)),
+        GqlValue::Object(map) => map.values().for_each(|v| ulids_in(v, out)),
+        _ => {}
+    }
+}
+
+/// ULID-shaped string literals (`"01J…"`) in GraphQL text.
+fn ulid_literals_in(text: &str, out: &mut Vec<Uuid>) {
+    out.extend(text.split('"').skip(1).step_by(2).filter_map(ulid_of));
 }
 
 fn strings_in(value: &GqlValue, out: &mut Vec<i64>) {
@@ -66,6 +85,17 @@ impl Extension for PublicIdsRequest {
         if let Ok(mut slot) = self.found.lock() {
             *slot = found;
         }
+        let mut ulids = Vec::new();
+        ulid_literals_in(query, &mut ulids);
+        for value in variables.values() {
+            ulids_in(value, &mut ulids);
+        }
+        ulids.sort_unstable();
+        ulids.dedup();
+        ulids.truncate(MAX_ULIDS);
+        if let Ok(mut slot) = self.ulids.lock() {
+            *slot = ulids;
+        }
         next.run(ctx, query, variables).await
     }
 
@@ -92,12 +122,43 @@ impl Extension for PublicIdsRequest {
             }
         };
         let mut response = public_ids::resolving(resolved, next.run(ctx, operation_name)).await;
+        let ulids = self
+            .ulids
+            .lock()
+            .map(|mut slot| std::mem::take(&mut *slot))
+            .unwrap_or_default();
+        if old_form_used(state, &ulids).await {
+            response.extensions.insert(
+                "deprecations".to_owned(),
+                GqlValue::List(vec![GqlValue::String(
+                    crate::meta::ULID_ID_INPUT.to_owned(),
+                )]),
+            );
+        }
         if let Err(err) = publish_value(state, &mut response.data).await {
             // The ULIDs stay: still valid IDs, only in the old form.
             tracing::warn!(code = err.code, "translating public IDs failed");
         }
         response
     }
+}
+
+/// Whether any of these ULIDs names an account, emote or set (other ULIDs are not deprecated),
+/// which is then noted for the request's `Deprecation` headers (ADR 0027).
+async fn old_form_used(state: &AppState, ulids: &[Uuid]) -> bool {
+    if ulids.is_empty() {
+        return false;
+    }
+    let Ok(mut conn) = conn(state).await else {
+        return false;
+    };
+    let used = public_ids::publics(&mut conn, ulids)
+        .await
+        .is_ok_and(|found| !found.is_empty());
+    if used {
+        crate::meta::note(crate::meta::ULID_ID_INPUT);
+    }
+    used
 }
 
 async fn resolve(state: &AppState, found: &[i64]) -> Result<HashMap<i64, Uuid>, ApiError> {
@@ -228,6 +289,9 @@ pub async fn publish<T: Serialize>(
 /// becomes its row's ULID; anything else is passed on as it came.
 pub async fn canonical(state: &AppState, text: &str) -> Result<String, ApiError> {
     if public_ids::parse(text.trim()).is_none() {
+        if let Some(id) = ulid_of(text.trim()) {
+            old_form_used(state, &[id]).await;
+        }
         return Ok(text.to_owned());
     }
     let mut conn = conn(state).await?;

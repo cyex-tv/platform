@@ -126,6 +126,6 @@
   .find { position: relative; display: block; flex: 0 1 280px; min-width: 0; }
   .find :global(svg) { position: absolute; left: 12px; top: 50%; translate: 0 -50%; color: var(--muted); pointer-events: none; }
   .find .input { width: 100%; height: 40px; padding-left: 36px; }
-  @media (max-width: 520px) { .find { flex-basis: 100%; order: 3; } }
+  @media (max-width: 639.98px) { .find { flex-basis: 100%; order: 3; } }
   .foot { padding: 24px 0 0; }
 </style>

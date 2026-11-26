@@ -240,5 +240,5 @@
   .steps code { padding: 1px 4px; border-radius: var(--radius); background: var(--neutral-chip, var(--surface-2)); }
   .i { font-family: var(--font-mono); font-weight: 600; color: var(--accent-text); font-variant-numeric: tabular-nums; }
   @media (hover: hover) and (pointer: fine) { .cell a:hover { background: var(--row-hover); } }
-  @media (max-width: 560px) { .rows { grid-template-columns: minmax(0, 1fr); } .rows dt { padding-bottom: 0; border-bottom: 0; } .rows dd { padding-top: 2px; } }
+  @media (max-width: 639.98px) { .rows { grid-template-columns: minmax(0, 1fr); } .rows dt { padding-bottom: 0; border-bottom: 0; } .rows dd { padding-top: 2px; } }
 </style>

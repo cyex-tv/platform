@@ -60,7 +60,7 @@
   .when { font-size: var(--t-small); color: var(--muted); }
   @media (hover: hover) and (pointer: fine) { .line a:hover { text-decoration-color: currentColor; } }
   /* Phones: the date and time go under the sentence. */
-  @media (max-width: 560px) {
+  @media (max-width: 639.98px) {
     .item { grid-template-columns: 28px minmax(0, 1fr); align-items: start; row-gap: 2px; }
     .ic { grid-row: span 2; }
     .when { font-size: var(--t-fine); }

@@ -97,7 +97,7 @@
     .close:hover { color: var(--text); background: var(--row-hover); }
   }
   /* Phones: the kind's word goes (its icon stays), so the line gets the room. */
-  @media (max-width: 560px) {
+  @media (max-width: 639.98px) {
     .word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .row { gap: 10px; align-items: flex-start; }
     .kind, .art { min-height: 32px; }

@@ -27,6 +27,7 @@
 //   button[data-group-all]                      "Expand all" / "Collapse all"
 
 import { stillNow } from '$lib/media.svelte';
+import { BP, from } from '$lib/breakpoints';
 import { GROUP_KEY, allOpen, isOpen, parseGroupState, withAll, withGroup, type GroupState } from './groups';
 
 export interface DocsOptions {
@@ -311,7 +312,7 @@ export function initDocs(root: ParentNode = document, opts: DocsOptions = {}): (
   // Beside the text the contents are always open; stacked above it they fold away, and picking an
   // entry (or a search that finds some) opens or closes them as needed.
   if (toc) {
-    const mq = matchMedia('(min-width: 900px)');
+    const mq = matchMedia(from(BP.narrow));
     const sync = () => {
       toc.open = mq.matches;
     };

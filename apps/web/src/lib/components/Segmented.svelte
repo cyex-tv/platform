@@ -92,9 +92,9 @@
   /* High contrast drops bold and the accent icon: the selected option keeps a system-colour outline. */
   @media (forced-colors: active) { button[aria-checked='true']:not(:focus-visible) { outline: 1px solid Highlight; outline-offset: -2px; } }
   /* Phones: tighter options so four icon + label options still fit a card without scrolling. */
-  @media (max-width: 480px) { .seg { gap: 0; } button { gap: 4px; padding: 0 7px; } .m button { padding: 0 10px; } }
+  @media (max-width: 479.98px) { .seg { gap: 0; } button { gap: 4px; padding: 0 7px; } .m button { padding: 0 10px; } }
   /* compact: below 380px an icon option drops its label (visually; it is still the name). */
-  @media (max-width: 380px) {
+  @media (max-width: 479.98px) {
     .compact .icon-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     .compact button { gap: 0; padding: 0 12px; }
   }

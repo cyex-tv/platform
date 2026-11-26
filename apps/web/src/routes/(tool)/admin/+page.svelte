@@ -289,7 +289,7 @@
   .who, .what, .tgt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .who { font-weight: 600; }
   .tgt { font-size: 12px; color: var(--dim); text-align: right; }
-  @media (max-width: 700px) {
+  @media (max-width: 719.98px) {
     .log li { grid-template-columns: 64px minmax(0, 1fr); padding: 6px 0; }
     .what { grid-column: 2; }
     .tgt { display: none; }

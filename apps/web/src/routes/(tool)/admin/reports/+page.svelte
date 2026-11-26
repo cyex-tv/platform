@@ -351,7 +351,7 @@
   .at { color: var(--dim); white-space: nowrap; }
   .more { justify-self: start; min-height: 32px; padding: 0; border: 0; background: none; font: inherit; font-size: var(--t-small); color: var(--accent-text); cursor: pointer; }
   .more:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
-  @media (max-width: 700px) {
+  @media (max-width: 719.98px) {
     .row { height: 64px; }
     .item { grid-template-columns: 40px minmax(0, 1fr) 30px 40px; gap: 10px; }
     .why { display: none; }

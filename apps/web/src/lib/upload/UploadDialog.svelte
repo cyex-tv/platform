@@ -80,7 +80,7 @@
   /* The form scrolls its own columns. */
   .scroll { min-height: 0; overflow: hidden; }
   /* Phones: a full-height sheet; the title bar stays put while the form scrolls. */
-  @media (max-width: 640px) {
+  @media (max-width: 639.98px) {
     .upload-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; border: 0; border-radius: 0;
       /* Full screen: it fades in place, with no scale (it would show the page edge behind it). */
       transition-property: opacity, overlay, display; scale: 1; }

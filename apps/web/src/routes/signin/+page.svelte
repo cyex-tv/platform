@@ -76,7 +76,7 @@
   .kv dt { color: var(--muted); padding-right: 16px; white-space: nowrap; }
   .kv dd { text-align: right; font-weight: 600; }
   @media (hover: hover) and (pointer: fine) { .choice:hover { background: var(--row-hover); } .choice:hover > :global(svg) { color: var(--text); } }
-  @media (max-width: 420px) {
+  @media (max-width: 479.98px) {
     .kv { grid-template-columns: minmax(0, 1fr); }
     .kv dt { padding-bottom: 0; border-bottom: 0; }
     .kv dd { text-align: left; padding-top: 2px; }

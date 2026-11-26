@@ -348,7 +348,7 @@
   .detail footer { position: static; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 12px; border-top: 1px solid var(--border); background: var(--elevated); }
   .small { display: flex; gap: 6px; }
   /* Phones: full screen, one scrolling column, the verdicts pinned at the bottom. */
-  @media (max-width: 860px) {
+  @media (max-width: 899.98px) {
     .detail { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; }
     .main { display: flex; flex-direction: column; overflow: auto; overscroll-behavior: contain; }
     .pics { flex: none; min-height: 180px; padding: 16px; overflow: visible; }

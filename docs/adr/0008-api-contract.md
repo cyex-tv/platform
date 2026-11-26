@@ -53,6 +53,7 @@ A hand-written spec also drifts from the code.
 **Versioning**
 - Everything is under `/v1`. Within v1 we only add fields, types and endpoints.
 - GraphQL fields are deprecated with `@deprecated` before removal, and only removed in v2.
+- Every answer carries `X-Cyex-Api-Version` (semver). `GET /v1/meta` and the GraphQL `meta` query give the version, the build, where the limits are published and the list of deprecations (id, what, since, sunset, replacement). A request that uses a deprecated input gets `Deprecation`, `Sunset` and `Link: </v1/meta>; rel="deprecation"` headers, and a GraphQL answer `extensions.deprecations` (first user: ULID ids, ADR 0027).
 
 **Clients**
 - The website and the extension generate TypeScript types from `schema.graphql` (GraphQL Code Generator).

@@ -93,7 +93,7 @@
   .st { flex: none; min-width: 64px; text-align: right; font-size: var(--t-fine); color: var(--muted); }
   .dim { color: var(--dim); }
   .foot { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
-  @media (max-width: 559.98px) {
+  @media (max-width: 639.98px) {
     .orders > li { flex-wrap: wrap; row-gap: 4px; }
     .what { flex-basis: 100%; }
     .amt { margin-right: auto; text-align: left; }

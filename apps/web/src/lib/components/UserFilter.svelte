@@ -453,7 +453,7 @@
   .line { margin: 0; padding: 8px 8px 10px; color: var(--muted); font-size: var(--t-fine); overflow-wrap: anywhere; }
   .mono { font-family: var(--font-mono); }
 
-  @media (max-width: 640px) {
+  @media (max-width: 639.98px) {
     .uf { width: 100%; }
     .uf.labelled .field, .uf.labelled .chip { flex: 1; width: auto; max-width: none; }
     .uf:not(.labelled) .field, .uf:not(.labelled) .chip { width: 100%; max-width: none; }

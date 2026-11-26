@@ -133,7 +133,7 @@
   .ps-swatch { display: flex; align-items: center; justify-content: center; justify-self: stretch; width: 100%; height: 56px; margin-bottom: 6px; border: 0; border-radius: var(--radius); background: var(--stage-dark); overflow: hidden; }
   .ps-swatch .ps-painted { flex: none; align-self: center; height: auto; margin: auto; width: max-content; max-width: calc(100% - 12px); font-size: 26px; color: inherit; line-height: 1.2; letter-spacing: -.01em; background-size: 100% 100%; background-repeat: no-repeat; }
   .ps-swatch .ps-painted.blank { -webkit-text-fill-color: var(--dim); }
-  @media (max-width: 640px) {
+  @media (max-width: 639.98px) {
     .ps-lib-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
     .ps-lib-nav { display: flex; gap: 4px; padding: 6px 8px; border-right: 0; border-bottom: 1px solid var(--border); overflow-x: auto; overflow-y: hidden; }
     .ps-lib-nav button { flex: none; }

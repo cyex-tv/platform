@@ -22,5 +22,5 @@
   .tb-start { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; min-width: 0; }
   .tb-end { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-left: auto; min-width: 0; }
   .toolbar :global(.tb-count) { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  @media (max-width: 559.98px) { .tb-end { margin-left: 0; width: 100%; } }
+  @media (max-width: 639.98px) { .tb-end { margin-left: 0; width: 100%; } }
 </style>

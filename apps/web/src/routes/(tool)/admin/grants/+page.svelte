@@ -275,7 +275,7 @@
   .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .who .ui-error { margin: 0; font-size: var(--t-small); }
   .ui-spinner.small { width: 13px; height: 13px; }
-  @media (max-width: 520px) {
+  @media (max-width: 639.98px) {
     .res li { grid-template-columns: minmax(0, 1fr) auto; padding-block: 6px; }
     .who { grid-column: 1 / -1; grid-row: 2; }
   }
