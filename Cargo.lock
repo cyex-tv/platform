@@ -749,14 +749,17 @@ dependencies = [
  "async-graphql",
  "axum",
  "dotenvy",
+ "hmac",
  "serde",
  "serde_json",
+ "sha2",
  "sqlx",
  "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
  "unicode-normalization",
+ "url",
  "utoipa",
 ]
 

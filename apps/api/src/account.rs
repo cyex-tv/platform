@@ -670,6 +670,7 @@ pub async fn delete_account(
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
+    state.key_cache.forget_account(account_id);
     tracing::info!(account = %ids::to_text(account_id), "account deletion scheduled");
     Ok(erase_after)
 }

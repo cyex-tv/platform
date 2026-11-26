@@ -78,6 +78,12 @@ pub struct Rates {
     pub personal_lists: Rate,
     /// Your own settings (notification preferences, the public collection).
     pub prefs: Rate,
+    /// Public reads with a developer API key (ADR 0033), per key, instead of the per-IP `reads`
+    /// and `gql` limits.
+    pub api_key: Rate,
+    /// All of one account's developer API keys together (ADR 0033), on top of each key's
+    /// `api_key`, so more keys don't mean more reads.
+    pub api_key_account: Rate,
     /// Emotes one account may upload, and get, per hour (`upload`).
     pub uploads_per_hour: u32,
     /// Emotes of one account that may wait for review at once (`upload`).
@@ -113,6 +119,8 @@ impl Default for Rates {
             emote_transfers: Rate::per_hour(60),
             personal_lists: Rate::per_minute(120),
             prefs: Rate::per_hour(120),
+            api_key: Rate::per_minute(3000),
+            api_key_account: Rate::per_minute(3000),
             uploads_per_hour: 20,
             pending_emotes: 20,
             set_capacity_max: 1000,
@@ -126,7 +134,7 @@ pub const ENV_PREFIX: &str = "CYEX_TV_LIMIT_";
 
 impl Rates {
     /// Every `Rate` with its field name, in the order `.env.example` lists them.
-    fn rates_mut(&mut self) -> [(&'static str, &mut Rate); 20] {
+    fn rates_mut(&mut self) -> [(&'static str, &mut Rate); 22] {
         [
             ("auth", &mut self.auth),
             ("gql", &mut self.gql),
@@ -148,6 +156,8 @@ impl Rates {
             ("emote_transfers", &mut self.emote_transfers),
             ("personal_lists", &mut self.personal_lists),
             ("prefs", &mut self.prefs),
+            ("api_key", &mut self.api_key),
+            ("api_key_account", &mut self.api_key_account),
         ]
     }
 
@@ -499,6 +509,10 @@ pub struct Limits {
     pub emote_transfers: Limiter,
     pub personal_lists: Limiter,
     pub prefs: Limiter,
+    /// Requests with a developer API key, per key (ADR 0033).
+    pub api_key: Limiter,
+    /// Requests with any of one account's developer API keys, per account.
+    pub api_key_account: Limiter,
     /// Take the client IP from `CF-Connecting-IP` (`CYEX_TV_TRUST_CLOUDFLARE=true`).
     pub trust_cloudflare: bool,
     /// What the limits were started with.
@@ -532,6 +546,8 @@ impl Limits {
             emote_transfers: Limiter::new(rates.emote_transfers),
             personal_lists: Limiter::new(rates.personal_lists),
             prefs: Limiter::new(rates.prefs),
+            api_key: Limiter::new(rates.api_key),
+            api_key_account: Limiter::new(rates.api_key_account),
             trust_cloudflare,
             rates,
             defaults: Arc::new(AccountLimits::defaults(&rates)),
@@ -853,6 +869,12 @@ pub async fn middleware(State(state): State<AppState>, request: Request, next: N
     let mut request = request;
     request.extensions_mut().insert(ClientIp(ip.clone()));
     let class = class(&state.limits, request.method(), request.uri().path());
+    // A developer API key counts under its own bucket and may only read (ADR 0033).
+    if let Some(raw) = crate::developers::presented(request.headers()) {
+        let raw = raw.to_owned();
+        let reads = publishes_quota(request.method(), request.uri().path());
+        return crate::developers::handle(&state, request, next, &raw, &ip, class, reads).await;
+    }
     let mut quota = None;
     if let Some(limiter) = class {
         match limiter.check_quota(&ip) {
@@ -980,9 +1002,10 @@ mod tests {
         for (field, _) in Rates::default().rates_mut() {
             names.push(field);
         }
-        assert_eq!(names.len(), 20);
+        assert_eq!(names.len(), 22);
         assert!(names.contains(&"delete_account"));
         assert!(names.contains(&"console_tokens"));
+        assert!(names.contains(&"api_key"));
 
         for (name, value) in [
             ("CYEX_TV_LIMIT_GQL", "fast"),

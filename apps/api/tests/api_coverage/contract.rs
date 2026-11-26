@@ -484,6 +484,45 @@ async fn every_site_operation_runs_against_the_real_api() {
     c.op(os, "MySets", json!({})).await;
     c.op(os, "MySetNames", json!({})).await;
     c.op(os, "MyChannels", json!({})).await;
+    // The developer platform (ADR 0033, 0034): a key on the Account tab, a webhook on the channel.
+    let key = c
+        .id(
+            os,
+            "CreateApiKey",
+            json!({ "name": "cov bot" }),
+            "/createApiKey/apiKey/id",
+        )
+        .await;
+    let keys = c.op(os, "MyApiKeys", json!({})).await;
+    c.check(
+        keys["myApiKeys"][0]["id"] == key.as_str() && keys["myApiKeys"][0]["prefix"].is_string(),
+        format!("MyApiKeys: {keys}"),
+    );
+    c.op(os, "RevokeApiKey", json!({ "id": key })).await;
+    let hook = c
+        .id(
+            os,
+            "CreateWebhook",
+            json!({ "platform": "TWITCH", "id": o.twitch_id, "input": { "url": "https://hooks.example.com/cyex", "events": ["SET_EMOTE_ADDED"] } }),
+            "/createWebhook/webhook/id",
+        )
+        .await;
+    c.op(
+        os,
+        "ChannelWebhooks",
+        json!({ "platform": "TWITCH", "id": o.twitch_id }),
+    )
+    .await;
+    c.op(
+        os,
+        "UpdateWebhook",
+        json!({ "id": hook, "input": { "enabled": false, "events": ["SET_EMOTE_ADDED", "EMOTE_UPDATED"] } }),
+    )
+    .await;
+    c.op(os, "TestWebhook", json!({ "id": hook })).await;
+    c.op(os, "WebhookDeliveries", json!({ "id": hook })).await;
+    c.op(os, "RotateWebhookSecret", json!({ "id": hook })).await;
+    c.op(os, "DeleteWebhook", json!({ "id": hook })).await;
     c.op(os, "ProfileMine", json!({})).await;
     c.op(As::Nobody, "AccountSets", json!({ "accountId": tid }))
         .await;

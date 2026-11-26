@@ -36,7 +36,7 @@ const fn e(
 }
 
 /// The groups, in the order the docs show them.
-pub const GROUPS: [&str; 13] = [
+pub const GROUPS: [&str; 14] = [
     "General",
     "Auth",
     "Emotes",
@@ -49,6 +49,7 @@ pub const GROUPS: [&str; 13] = [
     "Admin",
     "Site",
     "Reports",
+    "Developers",
     "GraphQL",
 ];
 
@@ -900,6 +901,42 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "tickets_blocked",
         "You cannot file reports.",
         "The account was barred from filing reports.",
+    ),
+    e(
+        "Developers",
+        "api_key_invalid",
+        "That API key is not valid.",
+        "A request sends `Authorization: Bearer cyex_live_...` with a key that was revoked, never existed, or whose account is deleted or blocked (401).",
+    ),
+    e(
+        "Developers",
+        "api_key_read_only",
+        "API keys read public data only.",
+        "A request with an API key tries a mutation, an upload, sign-in or anything else that is not a public read (403).",
+    ),
+    e(
+        "Developers",
+        "too_many_api_keys",
+        "You have as many API keys as you may.",
+        "Making a key past the limit per account (10). Revoke one first.",
+    ),
+    e(
+        "Developers",
+        "bad_webhook_url",
+        "That webhook URL can't be used.",
+        "The URL isn't https, has a user name or password, is too long, or points at a private, local or reserved address.",
+    ),
+    e(
+        "Developers",
+        "bad_webhook_events",
+        "Those event types can't be used.",
+        "No event type, or one a webhook can't subscribe to.",
+    ),
+    e(
+        "Developers",
+        "too_many_webhooks",
+        "This channel has as many webhooks as it may.",
+        "Adding a webhook past the limit per channel (5). Delete one first.",
     ),
     e(
         "GraphQL",

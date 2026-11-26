@@ -94,6 +94,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             shutdown::signal(),
         ));
     }
+    // Developer API key usage (ADR 0033), counted in memory and written every minute.
+    let usage = state.clone();
+    tokio::spawn(async move {
+        let mut every = tokio::time::interval(std::time::Duration::from_secs(60));
+        loop {
+            every.tick().await;
+            if let Err(err) = usage.key_usage.flush(&usage.db).await {
+                tracing::warn!(error = %err, "writing api key usage failed");
+            }
+        }
+    });
+    let flush_at_exit = state.clone();
     let app = cyex_tv_api::app(state);
     let listener = tokio::net::TcpListener::bind(cfg.bind).await?;
     tracing::info!(addr = %cfg.bind, "api listening");
@@ -104,6 +116,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .with_graceful_shutdown(shutdown::signal())
     .await?;
     let _ = stop_tx.send(true);
+    if let Err(err) = flush_at_exit.key_usage.flush(&flush_at_exit.db).await {
+        tracing::warn!(error = %err, "writing api key usage failed");
+    }
     feeder.await??;
     Ok(())
 }
