@@ -9,7 +9,6 @@
 mod common;
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use axum::Router;
 use axum::body::Body;
@@ -250,36 +249,43 @@ impl World {
     }
 }
 
-// Counting queries: sqlx reports every statement as a `sqlx::query` tracing event. The tests run
-// on a current-thread runtime, so a thread-local subscriber sees this test's statements only.
+// Counting queries: sqlx logs every statement under the `sqlx::query` target, through the `log`
+// facade while no tracing subscriber is set (none is in these tests). A process-wide logger counts
+// them per thread; the tests run on a current-thread runtime, so a test counts only its own.
 
-struct Counter(Arc<AtomicUsize>);
+thread_local! {
+    static COUNTING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static COUNTED: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
-impl tracing::Subscriber for Counter {
-    fn enabled(&self, metadata: &tracing::Metadata<'_>) -> bool {
+struct StatementLog;
+
+impl log::Log for StatementLog {
+    fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
         metadata.target() == "sqlx::query"
     }
-    fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
-        tracing::span::Id::from_u64(1)
-    }
-    fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
-    fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
-    fn event(&self, event: &tracing::Event<'_>) {
-        if event.metadata().target() == "sqlx::query" {
-            self.0.fetch_add(1, Ordering::SeqCst);
+    fn log(&self, record: &log::Record<'_>) {
+        if record.target() == "sqlx::query" && COUNTING.with(std::cell::Cell::get) {
+            COUNTED.with(|c| c.set(c.get() + 1));
         }
     }
-    fn enter(&self, _: &tracing::span::Id) {}
-    fn exit(&self, _: &tracing::span::Id) {}
+    fn flush(&self) {}
 }
+
+static LOGGER: StatementLog = StatementLog;
 
 /// How many statements `run` made.
 async fn statements<F: std::future::Future<Output = Value>>(run: F) -> (usize, Value) {
-    let count = Arc::new(AtomicUsize::new(0));
-    let guard = tracing::subscriber::set_default(Counter(count.clone()));
+    static INSTALLED: std::sync::Once = std::sync::Once::new();
+    INSTALLED.call_once(|| {
+        let _ = log::set_logger(&LOGGER);
+        log::set_max_level(log::LevelFilter::Trace);
+    });
+    COUNTED.with(|c| c.set(0));
+    COUNTING.with(|c| c.set(true));
     let out = run.await;
-    drop(guard);
-    (count.load(Ordering::SeqCst), out)
+    COUNTING.with(|c| c.set(false));
+    (COUNTED.with(std::cell::Cell::get), out)
 }
 
 const SETS: &str =
