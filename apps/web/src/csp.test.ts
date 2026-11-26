@@ -26,6 +26,11 @@ describe('Content-Security-Policy', () => {
     expect(csp['img-src']).not.toContain('*');
   });
 
+  it('plays local videos (the emote editor) and runs workers only from the site or blob URLs', () => {
+    expect(csp['media-src']).toEqual(['self', 'blob:']);
+    expect(csp['worker-src']).toEqual(['self', 'blob:']);
+  });
+
   it('never allows eval, a bare https: source, or wildcard scripts', () => {
     for (const [name, sources] of Object.entries(csp)) {
       expect(sources, name).not.toContain('unsafe-eval');

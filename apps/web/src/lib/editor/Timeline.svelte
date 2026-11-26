@@ -138,6 +138,8 @@
   // ---- Drag to reorder ----
   let press: { i: number; x: number; id: number } | null = null;
   let dropAt = $state<number | null>(null);
+  /** A drag just ended: the click that follows it doesn't pick a frame. */
+  let dragged = false;
 
   function itemDown(e: PointerEvent, i: number) {
     if (e.button !== 0) return;
@@ -156,6 +158,8 @@
     press = null;
     dropAt = null;
     if (!p || at === null || !doc) return;
+    dragged = true;
+    setTimeout(() => (dragged = false), 0);
     const moving = picked.has(p.i) ? [...picked].sort((a, b) => a - b) : [p.i];
     if (at >= moving[0] && at <= moving.at(-1)! + 1 && moving.length === moving.at(-1)! - moving[0] + 1) return;
     const before = moving.filter((i) => i < at).length;
@@ -261,7 +265,7 @@
               class:pick={picked.has(i)}
               style:left="{i * ITEM}px"
               onpointerdown={(e) => itemDown(e, i)}
-              onclick={(e) => pick(i, e)}
+              onclick={(e) => !dragged && pick(i, e)}
               onkeydown={() => {}}
             >
               <canvas class="th" use:thumb={{ d: doc, i }} aria-hidden="true"></canvas>

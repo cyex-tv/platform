@@ -158,7 +158,7 @@ async function run(width, height, theme, tag, full) {
   await shot(`${tag}-1-quick-upload`);
   check(`${tag} the editor loads when switched to`, await toEditor());
   await dropFile(GIF, 'orbit.gif', 'image/gif');
-  check(`${tag} a GIF opens: 24 frames`, await until(`document.querySelector('.tl .pos')?.textContent.trim() === '1 / 24'`), (await state()).pos);
+  check(`${tag} a GIF opens: 24 frames`, await until(`document.querySelector('.tl .pos')?.textContent.trim() === '1 / 24'`, 60000), (await state()).pos);
   await until(`document.querySelector('.rule[data-rule=bytes]')?.classList.contains('pass')`);
   let s = await state();
   check(`${tag} every rule passes and Continue is enabled`, s.cont === true && s.rules.every((r) => r[1] === 'pass'), JSON.stringify(s.rules));

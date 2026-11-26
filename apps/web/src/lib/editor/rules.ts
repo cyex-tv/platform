@@ -155,6 +155,6 @@ export function fixLabel(fix: FixId, l: EditorLimits): string {
     case 'aspect':
       return `Crop to ${l.maxAspect}:1`;
     case 'shrink':
-      return 'Scale to 75 %';
+      return 'Scale to 75%';
   }
 }
