@@ -342,9 +342,11 @@ async fn requested_scope(
         return Ok(Scope::All);
     }
     if raw.len() > editors::MAX_SCOPED_SETS {
-        return Err(bad(
+        return Err(ApiError::limit(
             "too_many_sets",
             "Pick at most 200 sets, or let them work on every set.",
+            editors::MAX_SCOPED_SETS as u64,
+            cyex_tv_shared::limit_errors::n(raw.len()),
         ));
     }
     let wanted: BTreeSet<Uuid> = raw
@@ -363,10 +365,13 @@ async fn requested_scope(
     Ok(Scope::Only(wanted))
 }
 
-fn too_many_editors() -> ApiError {
-    conflict(
+pub(crate) fn too_many_editors() -> ApiError {
+    let max = editors::MAX_PER_ACCOUNT.unsigned_abs();
+    ApiError::limit(
         "too_many_editors",
         "An account can have at most 50 editors. Remove one to add someone else.",
+        max,
+        max,
     )
 }
 

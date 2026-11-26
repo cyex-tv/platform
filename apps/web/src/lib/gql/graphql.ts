@@ -826,7 +826,9 @@ export type EmoteFile = {
   name: Scalars['String']['output'];
   /**
    * 1 to 4. A badge's larger sizes (`128`, `256`, `512`) carry their px ÷ 18, rounded: 7, 14
-   * and 28; read `width` for the size.
+   * and 28; read `width` for the size. **Deprecated for badge and paint files**: `width` is
+   * the contract (`file_scale_non_emote` in `/v1/meta`). Emote files keep `scale` as it is.
+   * @deprecated For badge and paint files: read `width`. Emote files keep `scale` (1 to 4).
    */
   scale: Scalars['Int']['output'];
   /** Bytes. */
@@ -2564,7 +2566,7 @@ export type Query = {
   channelEditableSets?: Maybe<ChannelEditableSets>;
   /**
    * Redeem code batches, newest first. Needs `codes.manage`. The codes themselves are shown
-   * only once, by `createCodeBatch`.
+   * only once, by `createCodeBatch`. `perPage` is 1 to 100, default 50.
    */
   codeBatches: CodeBatchPage;
   /**
@@ -2743,7 +2745,7 @@ export type Query = {
   myNotifications: Array<Notification>;
   /**
    * Orders you bought, and gifts you got once paid (without what the buyer paid), newest
-   * first. `perPage` 1 to 100, default 50.
+   * first. `perPage` is 1 to 100, default 50.
    */
   myOrders: OrderPage;
   /**
@@ -2765,7 +2767,8 @@ export type Query = {
   orderTopBuyers: Array<PersonCount>;
   /**
    * Every order, newest first; narrow by status, account (bought or received) and item.
-   * Needs `shop.orders`, or `billing.view` narrowed to one account.
+   * Needs `shop.orders`, or `billing.view` narrowed to one account. `perPage` is 1 to 100, default
+   * 50.
    */
   orders: OrderPage;
   /**
@@ -2789,7 +2792,10 @@ export type Query = {
    * account, or per IP signed out (`rate_limited`).
    */
   quickSearch: QuickSearch;
-  /** Open reports, oldest first. Needs `emotes.review` or `emotes.takedown`. */
+  /**
+   * Open reports, oldest first. Needs `emotes.review` or `emotes.takedown`. `perPage` is 1 to 100,
+   * default 50.
+   */
   reportQueue: ReportQueue;
   /**
    * Pending emotes, oldest first. Needs `emotes.review`. `perPage` is 1 to 100, default 50.

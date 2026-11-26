@@ -17,13 +17,12 @@ use uuid::Uuid;
 
 use crate::catalog::db_error;
 use crate::cursor;
-use crate::errors::{paging, sqlx_error};
+use crate::errors::sqlx_error;
 use crate::limits;
+use crate::paging::Paged;
 use crate::state::AppState;
 use crate::views;
 
-pub const PER_PAGE: u32 = 50;
-pub const PER_PAGE_MAX: u32 = 100;
 /// `emoteTrending` ranks the top this many emotes.
 pub const TRENDING_TOP: i64 = 100;
 
@@ -44,9 +43,6 @@ pub struct Params<'a> {
     pub after: Option<&'a str>,
 }
 
-pub const ACCOUNTS_PER_PAGE: u32 = 20;
-pub const ACCOUNTS_PER_PAGE_MAX: u32 = 50;
-
 /// `searchAccounts`: live accounts by Twitch or Kick login or display name, public fields only.
 /// A leading `@` is ignored; a query under two characters finds nobody. Limited per account, or
 /// per IP when signed out. Matches are counted up to 1000 (`total_capped`), so the pages end there; a page past the last is empty.
@@ -59,7 +55,7 @@ pub async fn accounts(
     per_page: Option<u32>,
     after: Option<&str>,
 ) -> ApiResult<AccountResults> {
-    let paged = paging(page, per_page, ACCOUNTS_PER_PAGE, ACCOUNTS_PER_PAGE_MAX);
+    let paged = Paged::SearchAccounts.paging(page, per_page);
     // A page past the last one comes back empty (with the real total), not as the last page.
     let (page, per_page) = (paged.page, paged.per_page);
     let empty = || AccountResults {
@@ -200,7 +196,7 @@ fn search_scope(p: &Params<'_>) -> String {
 }
 
 pub async fn search(state: &AppState, p: &Params<'_>) -> ApiResult<SearchResults> {
-    let paged = paging(p.page, p.per_page, PER_PAGE, PER_PAGE_MAX);
+    let paged = Paged::SearchEmotes.paging(p.page, p.per_page);
     let (page, per_page) = (paged.page, paged.per_page);
     let empty = || SearchResults {
         items: Vec::new(),

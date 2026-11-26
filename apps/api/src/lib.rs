@@ -20,6 +20,7 @@ pub mod limits;
 pub mod meta;
 pub mod moderation;
 pub mod paddle;
+pub mod paging;
 pub mod personal;
 pub mod public_ids;
 pub mod public_limits;
@@ -89,6 +90,7 @@ impl utoipa::Modify for ErrorCodes {
 #[derive(OpenApi)]
 #[openapi(
     modifiers(&ErrorCodes),
+    components(schemas(cyex_tv_shared::upload::UploadResult)),
     info(
         title = "cyex.tv REST API",
         description = "The REST part of the cyex.tv API: sign-in, uploads and the cacheable reads chat clients poll. Everything else is GraphQL at /v1/gql.",

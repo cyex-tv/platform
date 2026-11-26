@@ -516,8 +516,9 @@ async fn channel_sets_pending_emotes_and_public_reads() {
     assert_eq!(public.body["owner"]["display_name"], "user101");
     assert_eq!(
         public.headers["cache-control"],
-        "public, max-age=30, stale-while-revalidate=60"
+        "public, max-age=30, stale-while-revalidate=60, stale-if-error=600"
     );
+    assert_eq!(public.headers["vary"], "Accept-Encoding");
 
     // ETag round trip, then a change makes a new one.
     let etag = public.headers["etag"].to_str().unwrap().to_owned();
@@ -586,6 +587,11 @@ async fn active_set_and_channel_reads() {
     assert_eq!(channel.body["login"], "user201");
     assert_eq!(channel.body["allow_personal_emotes"], false);
     assert!(channel.headers.contains_key("etag"));
+    // The channel pointer is the short one.
+    assert_eq!(
+        channel.headers["cache-control"],
+        "public, max-age=10, stale-while-revalidate=30, stale-if-error=300"
+    );
     assert_eq!(
         w.get("/v1/channels/kick/201", None).await.status,
         StatusCode::NOT_FOUND
@@ -884,10 +890,11 @@ async fn personal_sets_and_the_chatter_lookup() {
         assert!(r["errors"].is_null(), "{r}");
     }
     let sixth = w.emote(&alice, "mine6", EmoteState::Approved, false).await;
-    assert_eq!(
-        code(&w.add(&alice, &personal, &sixth, None).await),
-        "set_full"
-    );
+    let full = w.add(&alice, &personal, &sixth, None).await;
+    assert_eq!(code(&full), "set_full");
+    // The numbers a client can show: the set holds 5 of 5.
+    assert_eq!(full["errors"][0]["extensions"]["limit"], 5, "{full}");
+    assert_eq!(full["errors"][0]["extensions"]["current"], 5, "{full}");
 
     // Events for a personal set reach its owner's user topic.
     let events = w.events().await;
@@ -943,6 +950,11 @@ async fn global_set_and_permissions() {
     assert_eq!(r.status, StatusCode::OK);
     assert_eq!(r.body["kind"], "global");
     assert_eq!(r.body["owner"], Value::Null);
+    // The global set changes rarely: kept longer, and long past an outage.
+    assert_eq!(
+        r.headers["cache-control"],
+        "public, max-age=300, stale-while-revalidate=600, stale-if-error=86400"
+    );
     let global = r.body["id"].as_str().unwrap().to_owned();
 
     assert_eq!(
@@ -969,13 +981,12 @@ async fn global_set_and_permissions() {
             .await["data"]["updateSet"]["capacity"],
         500
     );
-    assert_eq!(
-        code(
-            &w.gql(Some(&alice), capacity, json!({ "id": set, "c": 2000 }))
-                .await
-        ),
-        "capacity_over_limit"
-    );
+    let over = w
+        .gql(Some(&alice), capacity, json!({ "id": set, "c": 2000 }))
+        .await;
+    assert_eq!(code(&over), "capacity_over_limit");
+    assert_eq!(over["errors"][0]["extensions"]["limit"], 1000, "{over}");
+    assert_eq!(over["errors"][0]["extensions"]["current"], 2000, "{over}");
     assert_eq!(
         code(
             &w.gql(Some(&alice), capacity, json!({ "id": set, "c": 0 }))
