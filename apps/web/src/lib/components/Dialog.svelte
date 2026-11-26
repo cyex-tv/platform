@@ -12,6 +12,8 @@
 
   type Props = {
     title?: string;
+    /** A title with markup in it, in place of `title`; it is wrapped in the h2. */
+    heading?: Snippet;
     /** The accessible name when there is no visible `title`. */
     label?: string;
     /** Id for the title (aria-labelledby); one is made when left out. */
@@ -31,7 +33,7 @@
     children?: Snippet;
     footer?: Snippet;
   };
-  let { title, label, titleId, describedby, wide = false, class: className = '', busy = false, backdrop = false, oncancel, onclose, onsubmit, bare = false, children, footer }: Props = $props();
+  let { title, heading, label, titleId, describedby, wide = false, class: className = '', busy = false, backdrop = false, oncancel, onclose, onsubmit, bare = false, children, footer }: Props = $props();
 
   const generated = $props.id();
   const headingId = $derived(titleId ?? `${generated}-title`);
@@ -45,6 +47,10 @@
   }
   export function close() {
     dialog.close();
+  }
+  /** The <dialog> itself, for queries inside it. */
+  export function element() {
+    return dialog;
   }
   export function isOpen() {
     return !!dialog?.open;
@@ -73,8 +79,8 @@
   class={['ui-dialog', className]}
   class:wide
   bind:this={dialog}
-  aria-labelledby={title ? headingId : titleId}
-  aria-label={title ? undefined : label}
+  aria-labelledby={title || heading ? headingId : titleId}
+  aria-label={title || heading ? undefined : label}
   aria-describedby={describedby}
   oncancel={cancel}
   onclose={closed}
@@ -85,7 +91,7 @@
       {@render children?.()}
     {:else}
       <div class="body">
-        {#if title}<h2 id={headingId}>{title}</h2>{/if}
+        {#if title}<h2 id={headingId}>{title}</h2>{:else if heading}<h2 id={headingId}>{@render heading()}</h2>{/if}
         {@render children?.()}
       </div>
     {/if}
