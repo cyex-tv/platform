@@ -21,6 +21,8 @@ pub struct File {
     pub created_at: DateTime<Utc>,
     /// A `files.delete` for a file no live emote uses is queued or done (an account deletion).
     pub purged_at: Option<DateTime<Utc>>,
+    /// The transcode job failed for good and the file has no variants (see [`mark_failed`]).
+    pub processing_failed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Clone, Debug)]
@@ -35,7 +37,7 @@ pub struct NewFile<'a> {
 }
 
 const FILE: &str = "id, sha256, dhash, mime, width, height, frame_count, variants, storage_key, \
-                    created_at, purged_at";
+                    created_at, purged_at, processing_failed_at";
 
 /// Stores a file, or returns the one with the same sha256. The flag is true when it's new.
 pub async fn insert_or_get(conn: &mut PgConnection, new: &NewFile<'_>) -> DbResult<(File, bool)> {
@@ -108,6 +110,30 @@ pub async fn mark_orphans_purged(conn: &mut PgConnection, account_id: Uuid) -> D
 pub async fn revive(conn: &mut PgConnection, id: Uuid) -> DbResult<bool> {
     let done = sqlx::query(
         "UPDATE files SET purged_at = NULL, variants = '[]' WHERE id = $1 AND purged_at IS NOT NULL",
+    )
+    .bind(id)
+    .execute(conn)
+    .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// The transcode of a file failed for good. Marks it when it still has no variants and wasn't
+/// marked yet; true only for the call that marked it, so the uploaders are told once.
+pub async fn mark_failed(conn: &mut PgConnection, id: Uuid) -> DbResult<bool> {
+    let done = sqlx::query(
+        "UPDATE files SET processing_failed_at = now()
+         WHERE id = $1 AND processing_failed_at IS NULL AND variants = '[]'::jsonb",
+    )
+    .bind(id)
+    .execute(conn)
+    .await?;
+    Ok(done.rows_affected() > 0)
+}
+
+/// An upload of the same bytes tries again: the failed mark goes. True when it was set.
+pub async fn clear_failed(conn: &mut PgConnection, id: Uuid) -> DbResult<bool> {
+    let done = sqlx::query(
+        "UPDATE files SET processing_failed_at = NULL WHERE id = $1 AND processing_failed_at IS NOT NULL",
     )
     .bind(id)
     .execute(conn)

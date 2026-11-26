@@ -67,6 +67,12 @@ export function describe(kind: string, payload: string | null | undefined): Line
         text: withReason(`${name ? iso(name) : 'Your emote'} was rejected.`, reason),
         href: emote ? `/me/emotes/${emote}` : null,
       };
+    case 'emote.failed':
+      return {
+        icon: 'x',
+        text: `${name ? iso(name) : 'Your emote'} couldn’t be processed.`,
+        href: emote ? `/emotes/${emote}` : null,
+      };
     case 'emote.taken_down':
       return {
         icon: 'ban',

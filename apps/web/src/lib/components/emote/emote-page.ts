@@ -131,7 +131,11 @@ export function chatLines(e: PageEmote, pool: SetEmote[]): ChatLine[] {
 }
 
 /** What the review status says, in plain words. */
-export function trust(state: EmoteState): { status: string; line: string; tone: 'ok' | 'wait' | 'off' } {
+export function trust(state: EmoteState, processingFailed = false): { status: string; line: string; tone: 'ok' | 'wait' | 'off' } {
+  // An upload that couldn't be processed never reaches review: it says failed, not waiting.
+  if (processingFailed && state === 'PENDING') {
+    return { status: 'Failed', tone: 'off', line: 'The image couldn’t be processed, so it never goes to review. Delete it and upload it again.' };
+  }
   switch (state) {
     case 'APPROVED':
       return {

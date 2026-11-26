@@ -311,6 +311,20 @@ pub async fn count_since(
     .await?)
 }
 
+/// The live emotes made from a file, with their owners: who to tell when its transcode failed.
+pub async fn live_for_file(
+    conn: &mut PgConnection,
+    file_id: Uuid,
+) -> DbResult<Vec<(Uuid, Option<Uuid>, String)>> {
+    Ok(sqlx::query_as(
+        "SELECT id, owner_account_id, name FROM emotes
+         WHERE file_id = $1 AND deleted_at IS NULL ORDER BY id",
+    )
+    .bind(file_id)
+    .fetch_all(conn)
+    .await?)
+}
+
 /// How many of an account's emotes wait for review: what the review queue lists as pending
 /// (`state = 'pending'`, not deleted), ones still transcoding included.
 pub async fn count_pending(conn: &mut PgConnection, owner: Uuid) -> DbResult<i64> {

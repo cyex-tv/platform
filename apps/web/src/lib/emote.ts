@@ -3,12 +3,19 @@
 export type Picture = {
   host: string;
   animated: boolean;
+  /** Absent on older answers: then only the files tell. */
+  processing?: 'READY' | 'PROCESSING' | 'FAILED';
   files: { name: string; width: number; height: number; isStatic: boolean }[];
 };
 
 /** Whether the worker has made the emote's files yet. */
 export function ready(e: Picture): boolean {
   return e.host !== '' && e.files.some((f) => f.name === '1x.webp');
+}
+
+/** The transcode ran out of attempts: the emote never gets files (delete it, upload again). */
+export function failed(e: Picture): boolean {
+  return e.processing === 'FAILED' && !ready(e);
 }
 
 /** The WebP at a scale (1 to 4). `still` takes the first frame of an animated emote. */

@@ -1035,6 +1035,10 @@ type Emote {
 	name: String!
 	owner: AccountSummary
 	state: EmoteState!
+	"""
+	`READY`, `PROCESSING` or `FAILED`: whether the image is made (or could not be).
+	"""
+	processing: EmoteProcessing!
 	flags: EmoteFlags!
 	"""
 	`PUBLIC`, `UNLISTED` or `PRIVATE` (ADR 0020). `flags.private` says the same for
@@ -1153,6 +1157,25 @@ A page of emotes and how many there are in all.
 type EmotePage {
 	items: [Emote!]!
 	total: Int!
+}
+
+"""
+Whether an emote's image is made. Separate from [`EmoteState`] (review), so adding it
+breaks nobody: a client that doesn't know it keeps showing `Processing` as before.
+"""
+enum EmoteProcessing {
+	"""
+	The files are made.
+	"""
+	READY
+	"""
+	The transcode job is queued or running.
+	"""
+	PROCESSING
+	"""
+	The transcode ran out of attempts: the emote never gets files. Delete it or upload again.
+	"""
+	FAILED
 }
 
 type EmoteSet {

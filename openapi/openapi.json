@@ -1545,6 +1545,10 @@
               }
             ]
           },
+          "processing": {
+            "$ref": "#/components/schemas/EmoteProcessing",
+            "description": "`READY`, `PROCESSING` or `FAILED`: whether the image is made (or could not be)."
+          },
           "state": {
             "$ref": "#/components/schemas/EmoteState"
           },
@@ -1634,6 +1638,15 @@
             "type": "boolean"
           }
         }
+      },
+      "EmoteProcessing": {
+        "type": "string",
+        "description": "Whether an emote's image is made. Separate from [`EmoteState`] (review), so adding it\nbreaks nobody: a client that doesn't know it keeps showing `Processing` as before.",
+        "enum": [
+          "ready",
+          "processing",
+          "failed"
+        ]
       },
       "EmoteSet": {
         "type": "object",

@@ -18,8 +18,8 @@ use std::time::Duration;
 use chrono::Utc;
 use cyex_tv_db::jobs::{self, Job};
 use cyex_tv_db::{
-    audit, channel_counts, event_sessions, idempotency, ids, oauth_states, outbox, privacy, search,
-    sessions, shop,
+    audit, channel_counts, emotes, event_sessions, files, idempotency, ids, notifications,
+    oauth_states, outbox, privacy, search, sessions, shop,
 };
 use cyex_tv_shared::metrics::{self, Labels, Registry};
 use cyex_tv_storage::Store;
@@ -230,6 +230,7 @@ pub async fn run_one(
     let id = job.id;
     let attempts = job.attempts;
     let kind = job.kind.clone();
+    let job_payload = job.payload.clone();
     let Some(handler) = handlers.map.get(&job.kind).cloned() else {
         return Ok(None);
     };
@@ -260,6 +261,9 @@ pub async fn run_one(
             .await?;
             tracing::warn!(job = id, %kind, attempts, error = %err, %state, "job failed");
             if state == "failed" {
+                if let Err(err) = job_failed_for_good(&ctx.db, &kind, &job_payload).await {
+                    tracing::warn!(job = id, error = %err, "telling uploaders of a failed job failed");
+                }
                 Outcome::Failed
             } else {
                 Outcome::Retrying
@@ -288,14 +292,52 @@ pub async fn run_one(
     Ok(Some((id, outcome)))
 }
 
+/// What a job that ran out of attempts leaves behind. For a transcode: the file shows as failed
+/// (the emote stops saying "processing") and each uploader gets one `emote.failed` notification.
+/// Safe to call twice: only the call that marks the file tells anyone.
+async fn job_failed_for_good(
+    db: &PgPool,
+    kind: &str,
+    payload: &serde_json::Value,
+) -> Result<(), cyex_tv_db::DbError> {
+    if kind != transcode::KIND {
+        return Ok(());
+    }
+    let Some(file_id) = payload
+        .get("file_id")
+        .and_then(serde_json::Value::as_str)
+        .and_then(ids::from_text)
+    else {
+        return Ok(());
+    };
+    let mut tx = db.begin().await?;
+    if files::mark_failed(&mut tx, file_id).await? {
+        for (emote_id, owner, name) in emotes::live_for_file(&mut tx, file_id).await? {
+            let Some(owner) = owner else { continue };
+            notifications::create(
+                &mut tx,
+                owner,
+                "emote.failed",
+                &serde_json::json!({ "emote_id": ids::to_text(emote_id), "name": name }),
+            )
+            .await?;
+        }
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 /// Fails the jobs whose lease ran out on their last attempt (the worker died or was killed
 /// during it, so no handler reported). Without this they would sit as `running` for good.
 /// Returns how many.
 pub async fn sweep_exhausted(db: &PgPool) -> Result<u64, cyex_tv_db::DbError> {
     let mut conn = db.acquire().await?;
     let swept = jobs::sweep_exhausted(&mut conn).await?;
-    for (id, kind) in &swept {
+    for (id, kind, payload) in &swept {
         tracing::warn!(job = id, %kind, "job failed: lease expired after last attempt");
+        if let Err(err) = job_failed_for_good(db, kind, payload).await {
+            tracing::warn!(job = id, error = %err, "telling uploaders of a failed job failed");
+        }
     }
     Ok(swept.len() as u64)
 }

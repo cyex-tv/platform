@@ -11,8 +11,8 @@ use cyex_tv_db::reads::{self, EmoteRow, MemberRow, Summary};
 use cyex_tv_db::sets::Set;
 use cyex_tv_db::{DbResult, channels, editors, ids, sets};
 use cyex_tv_shared::model::{
-    AccountSummary, Channel, Emote, EmoteFile, EmoteFlags, EmoteSet, EmoteState, EmoteVisibility,
-    SetEmote, SetSummary, SetVisibility,
+    AccountSummary, Channel, Emote, EmoteFile, EmoteFlags, EmoteProcessing, EmoteSet, EmoteState,
+    EmoteVisibility, SetEmote, SetSummary, SetVisibility,
 };
 use sqlx::PgConnection;
 use uuid::Uuid;
@@ -65,6 +65,18 @@ fn is_wide(files: &[EmoteFile]) -> bool {
         .is_some_and(|f| u32::from(f.width) * 4 >= u32::from(f.height) * 7)
 }
 
+/// Made, failed for good, or still being made. A file with its 1x WebP is ready whatever else
+/// happened (the AVIF step may have failed after it).
+fn processing_of(row: &EmoteRow, files: &[EmoteFile]) -> EmoteProcessing {
+    if files.iter().any(|f| f.name == "1x.webp") {
+        EmoteProcessing::Ready
+    } else if row.processing_failed {
+        EmoteProcessing::Failed
+    } else {
+        EmoteProcessing::Processing
+    }
+}
+
 fn emote(
     row: &EmoteRow,
     tags: &HashMap<Uuid, Vec<String>>,
@@ -78,6 +90,7 @@ fn emote(
         name: row.name.clone(),
         owner: summary(summaries, row.owner),
         state: row.state,
+        processing: processing_of(row, &files),
         flags: EmoteFlags {
             zero_width: row.zero_width,
             private: row.private,

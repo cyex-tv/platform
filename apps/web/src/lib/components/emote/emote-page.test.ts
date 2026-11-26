@@ -17,6 +17,7 @@ function emote(over: Partial<PageEmote> = {}): PageEmote {
     id: 'E1',
     name: 'fernYawn',
     state: 'APPROVED',
+    processing: 'READY',
     animated: true,
     tags: [],
     host: 'https://cdn.example/emotes/1',

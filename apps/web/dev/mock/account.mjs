@@ -46,6 +46,7 @@ export const NOTES = [
   { id: '01JD8XNOTE0000000000000005', kind: 'editor.added', payload: JSON.stringify({ role: 'editor', owner_id: OTHERS[4].id, owner_name: OTHERS[4].displayName, editor_id: ME_ID, editor_name: ME_SUMMARY.displayName, actor_id: OTHERS[4].id, actor_name: OTHERS[4].displayName, permissions: ['emotes', 'profile'] }), createdAt: '2026-11-15T20:00:00.000Z', read: false },
   { id: '01JD8XNOTE0000000000000004', kind: 'editor.changed', payload: JSON.stringify({ role: 'owner', owner_id: ME_ID, owner_name: ME_SUMMARY.displayName, editor_id: OTHERS[1].id, editor_name: OTHERS[1].displayName, actor_id: OTHERS[2].id, actor_name: OTHERS[2].displayName, permissions: ['emotes'] }), createdAt: '2026-11-14T19:00:00.000Z', read: true },
   { id: '01JD8XNOTE0000000000000003', kind: 'emote.approved', payload: JSON.stringify({ emote_id: MINE[3].id, name: MINE[3].name }), createdAt: '2026-11-16T22:10:00.000Z', read: false },
+  { id: 'N2', kind: 'emote.failed', payload: JSON.stringify({ emote_id: MINE[9].id, name: MINE[9].name }), createdAt: '2026-11-16T21:30:00.000Z', read: false },
   { id: 'N1', kind: 'emote.rejected', payload: JSON.stringify({ emote_id: MINE[2].id, name: MINE[2].name, reason: 'Looks like a copy of a well-known emote.' }), createdAt: '2026-11-16T21:00:00.000Z', read: false },
 ];
 NOTES.sort((a, b) => b.createdAt.localeCompare(a.createdAt));

@@ -6,7 +6,7 @@ const pref = (kind: string, required = false) => ({ kind, notify: true, toast: t
 describe('notification kinds in words', () => {
   it('names every kind the API lists today', () => {
     const api = [
-      'emote.approved', 'emote.rejected', 'emote.taken_down', 'emote.transfer_requested', 'emote.transferred', 'emote.transfer_declined',
+      'emote.approved', 'emote.rejected', 'emote.failed', 'emote.taken_down', 'emote.transfer_requested', 'emote.transferred', 'emote.transfer_declined',
       'emote.transfer_cancelled', 'editor.added', 'editor.changed', 'editor.removed', 'cosmetic.granted', 'cosmetic.revoked',
     ];
     const known = KIND_GROUPS.flatMap((g) => g.kinds.map((k) => k.kind));
