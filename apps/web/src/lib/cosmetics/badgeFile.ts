@@ -58,3 +58,31 @@ export function lacksLadder(names: Iterable<string>, ladder: Ladder = BADGE_LADD
   if (!has.size) return false;
   return ladder.some(({ stem }) => !has.has(`${stem}.webp`) && !has.has(`${stem}_static.webp`));
 }
+
+/** The file name stem of the picture at its real size (at most 512 px), beside the ladder. */
+export const ORIGINAL_STEM = 'original';
+
+export type OriginalFile = { name: string; width: number; height: number };
+
+/**
+ * The original of a badge picture: the picture at its real size (up to 512 px; a bigger upload
+ * was scaled down to 512), with `still` its first frame when it is animated. Null for a picture
+ * made before originals existed (its largest ladder size stands in).
+ */
+export function badgeOriginal(files: readonly { name: string; width: number; height: number }[], still = false): OriginalFile | null {
+  const pick = (name: string) => files.find((f) => f.name === name);
+  const f = (still && pick(`${ORIGINAL_STEM}_static.webp`)) || pick(`${ORIGINAL_STEM}.webp`);
+  return f ? { name: f.name, width: f.width, height: f.height } : null;
+}
+
+/** Whether a made picture lacks its original (made before it existed). Remaking fills it in. */
+export function lacksOriginal(names: Iterable<string>): boolean {
+  const has = new Set(names);
+  return has.size > 0 && !has.has(`${ORIGINAL_STEM}.webp`) && !has.has(`${ORIGINAL_STEM}_static.webp`);
+}
+
+/**
+ * How to scale a picture of `px` (its longest side) when it is drawn larger than it is: small
+ * pixel art stays crisp (`pixelated`), a bigger picture scales smoothly.
+ */
+export const enlarge = (px: number): 'pixelated' | 'auto' => (px < 256 ? 'pixelated' : 'auto');

@@ -1258,6 +1258,7 @@ impl World {
             ("128", 7, 128),
             ("256", 14, 256),
             ("512", 28, 512),
+            ("original", 4, 72),
         ]
         .iter()
         .map(|(stem, scale, px)| {
@@ -1323,6 +1324,44 @@ async fn badge_pictures_follow_the_badge_upload_rules() {
         r.body["message"],
         "The animation runs longer than 10 seconds, the most it can."
     );
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn a_512_badge_is_stored_as_uploaded_and_a_bigger_one_is_kept_for_the_worker() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let owner = w.user(OWNER).await;
+
+    // 512×512 is stored as it was sent: its record says 512, the original bytes are untouched
+    // (the worker then makes the ladder and an `original` file at 512).
+    let file = png(512, 512);
+    let r = w.upload(&owner, "badge", &file).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{}", r.body);
+    assert_eq!(
+        (r.body["width"].as_u64(), r.body["height"].as_u64()),
+        (Some(512), Some(512))
+    );
+    assert!(
+        w.store
+            .keys()
+            .iter()
+            .any(|k| k.starts_with("originals/cosmetics/")),
+        "the original is stored"
+    );
+    // The size ladder is still what the picture is made at.
+    assert_eq!(
+        cyex_tv_media::encode::Profile::BADGE.stems(),
+        ["1x", "2x", "4x", "128", "256", "512", "original"]
+    );
+    // A smaller one is its own size too (the worker doesn't scale it up).
+    let r = w.upload(&owner, "badge", &png(300, 300)).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{}", r.body);
+    assert_eq!(r.body["width"], 300);
+    // Over 512 is accepted as before; the worker fits its original to 512.
+    let r = w.upload(&owner, "badge", &png(1024, 1024)).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{}", r.body);
     w.db.close().await;
 }
 

@@ -59,3 +59,22 @@ describe('the badge size ladder', () => {
     expect(lacksLadder([])).toBe(false);
   });
 });
+
+describe('the original of a badge picture', () => {
+  const file = (name: string, px: number) => ({ name, width: px, height: px });
+  it('is its own file at its real size, apart from the ladder', async () => {
+    const { badgeOriginal, lacksOriginal, enlarge } = await import('./badgeFile');
+    const files = [...ladder.map((n) => file(n, 512)), file('original.webp', 96), file('original_static.webp', 96)];
+    expect(badgeOriginal(files)).toEqual({ name: 'original.webp', width: 96, height: 96 });
+    expect(badgeOriginal(files, true)?.name).toBe('original_static.webp');
+    // The ladder picks never take it.
+    expect(pickBadgeFile(files.map((f) => f.name), 400, 1)?.name).toBe('512.webp');
+    expect(badgeFiles(files.map((f) => f.name), false).map((f) => f.name)).toEqual(ladder);
+    expect(badgeOriginal(ladder.map((n) => file(n, 512)))).toBeNull();
+    expect(lacksOriginal(ladder)).toBe(true);
+    expect(lacksOriginal([...ladder, 'original.webp'])).toBe(false);
+    expect(lacksOriginal([])).toBe(false);
+    expect(enlarge(96)).toBe('pixelated');
+    expect(enlarge(512)).toBe('auto');
+  });
+});

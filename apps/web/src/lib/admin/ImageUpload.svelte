@@ -10,12 +10,13 @@
   import { COSMETIC_IMAGE } from '$lib/queries';
   import { safeUrl } from '$lib/cosmetics/paint';
   import { animationOf, checkAnimation, checkFile, checkSize, pictureAccept, waitReady } from '$lib/cosmetics/upload';
-  import { pickBadgeFile } from '$lib/cosmetics/badgeFile';
+  import { badgeOriginal, enlarge, pickBadgeFile } from '$lib/cosmetics/badgeFile';
   import { pickPaintFile } from '$lib/cosmetics/paintFile';
   import { display } from '$lib/dpr.svelte';
 
-  // A badge's preview shows it at 72 px, a paint's in a 120 × 48 px box (cover), the file picked
-  // from its size ladder for the screen.
+  // A badge's preview shows its original at its real size (up to 512 px, smaller ones in a 72 px
+  // box at least; a picture made before originals existed: the ladder file for 72 px), a paint's
+  // in a 120 × 48 px box (cover), the file picked from its size ladder for the screen.
   const BADGE_PREVIEW = 72;
   const PAINT_PREVIEW = { height: 48, width: 120 } as const;
 
@@ -51,9 +52,10 @@
     !shown || !shown.ready
       ? null
       : kind === 'badge'
-        ? (pickBadgeFile(shown.files.map((f) => f.name), BADGE_PREVIEW, display.dpr)?.name ?? '4x.webp')
+        ? (badgeOriginal(shown.files)?.name ?? pickBadgeFile(shown.files.map((f) => f.name), BADGE_PREVIEW, display.dpr)?.name ?? '4x.webp')
         : (pickPaintFile(shown, false, { ...PAINT_PREVIEW, dpr: display.dpr }) ?? '1x.webp'),
   );
+  const real = $derived(kind === 'badge' && shown?.ready ? badgeOriginal(shown.files) : null);
   const remote = $derived(shown && madeName ? safeUrl(`${shown.host.replace(/\/+$/, '')}/${madeName}`) : null);
   // The picked file shows at once; the made file replaces it when it's ready (unless it won't load).
   const preview = $derived(remote && refused === remote ? local : phase === 'ready' ? (remote ?? local) : (local ?? remote));
@@ -167,8 +169,8 @@
     ondrop={dropped}
     onpaste={pasted}
   >
-    <span class="prev {kind}" aria-hidden="true">
-      {#if preview}<img src={preview} alt="" onerror={() => { if (preview === remote) refused = remote; }} />{/if}
+    <span class="prev {kind}" class:real aria-hidden="true">
+      {#if preview}<img src={preview} alt="" width={real && preview === remote ? real.width : undefined} height={real && preview === remote ? real.height : undefined} style:image-rendering={real && preview === remote ? enlarge(Math.max(real.width, real.height)) : undefined} onerror={() => { if (preview === remote) refused = remote; }} />{/if}
       {#if phase === 'uploading' || phase === 'making'}<span class="ui-spinner"></span>{/if}
     </span>
     <label class="ui-btn secondary">
@@ -190,6 +192,9 @@
   .prev > * { grid-area: 1 / 1; }
   .prev.badge { width: 72px; height: 72px; }
   .prev.badge img { width: 72px; height: 72px; }
+  /* The original at its real pixel size, up to 512 px, never wider than the field. */
+  .prev.badge.real { width: auto; min-width: 72px; max-width: 100%; height: auto; min-height: 72px; }
+  .prev.badge.real img { width: auto; height: auto; max-width: 100%; max-height: none; }
   .prev.paint { width: 120px; }
   .prev img { max-width: 100%; max-height: 100%; object-fit: contain; }
   .prev.paint img { width: 100%; height: 100%; object-fit: cover; }

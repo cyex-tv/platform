@@ -284,7 +284,7 @@ Goal: upload an image and get back a validated, transcoded emote, served from th
 
 Pipeline
 1. **Accept** the upload, streamed:
-   - limits: ≤ 5 MB in, ≤ 1000×1000 px, ≤ 1000 frames, and a cap on total decoded pixels (to stop decompression bombs);
+   - limits: ≤ 8 MB in, ≤ 1000×1000 px, ≤ 1000 frames, and a cap on total decoded pixels (to stop decompression bombs);
    - inputs: PNG, APNG, GIF, WebP, AVIF;
    - no video and no SVG in v1.
 2. **Validate** by actually decoding it, not by the extension. Reject unknown codecs.

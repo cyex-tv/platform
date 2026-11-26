@@ -107,3 +107,15 @@ describe('ImageUpload when the made file won’t load', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/firewall rule is blocking \/cosmetics\//);
   });
 });
+
+describe('ImageUpload previews a badge at its original size', () => {
+  it('shows original.webp at its real pixels, not a ladder size', () => {
+    const files = ['1x', '2x', '4x', '128', '256', '512', 'original'].map((s) => ({ name: `${s}.webp`, width: s === 'original' ? 300 : 512, height: s === 'original' ? 300 : 512, isStatic: false }));
+    const made = { id: 'img3', kind: 'BADGE', host: 'https://cdn.cyex.tv/cosmetics/badges/ghi', animated: false, ready: true, width: 300, height: 300, files };
+    render(ImageUpload, { kind: 'badge', label: 'Picture', current: made as never });
+    const img = document.querySelector('.prev img') as HTMLImageElement;
+    expect(img.getAttribute('src')).toBe('https://cdn.cyex.tv/cosmetics/badges/ghi/original.webp');
+    expect([img.getAttribute('width'), img.getAttribute('height')]).toEqual(['300', '300']);
+    expect(document.querySelector('.prev.real')).not.toBeNull();
+  });
+});

@@ -5,7 +5,8 @@
 //! to that scale's WebP encoder, so the full animation is never held in memory.
 //!
 //! Badges follow the cyex badge size ladder ([`Profile::BADGE`]): 18, 36 and 72 px (`1x`, `2x`,
-//! `4x`), then `128`, `256` and `512`, each scaled from one 512 px master of the frame.
+//! `4x`), then `128`, `256` and `512`, each scaled from one 512 px master of the frame, and
+//! `original`: the picture as uploaded (at most 512 px), every frame kept, never scaled.
 
 use image::RgbaImage;
 use image::imageops::FilterType;
@@ -49,6 +50,10 @@ pub struct Profile {
     /// An animated file at one of the scales over this many bytes fails the picture (chat sizes
     /// must animate).
     pub max_animated_scale_bytes: Option<usize>,
+    /// A file named `original` is made as well: the picture at its own size (a bigger one is
+    /// fitted into this many px), cut from the original itself, not from the master, with its
+    /// animated file kept up to the cap given here. `None`: no such file.
+    pub original: Option<Large>,
 }
 
 /// The cyex badge size ladder past the chat sizes, with the animated caps: 1, 2 and 4 MB.
@@ -73,6 +78,16 @@ const PAINT_LARGE: [Large; 1] = [Large {
     max_animated_bytes: 4 * 1024 * 1024,
 }];
 
+/// The badge original: a file at the uploaded size (at most 512 px), animated within 8 MB (the
+/// most an upload can be, so an upload's frames are never dropped for its size).
+const BADGE_ORIGINAL: Large = Large {
+    px: 512,
+    max_animated_bytes: 8 * 1024 * 1024,
+};
+
+/// The file name stem of a picture at its own size.
+pub const ORIGINAL_STEM: &str = "original";
+
 /// The badge master, and the largest badge size: 512 px.
 pub const BADGE_MASTER: u32 = 512;
 /// An animated chat-size badge file (18, 36 or 72 px) is at most 512 KB.
@@ -88,11 +103,12 @@ impl Profile {
         large: &[],
         master: None,
         max_animated_scale_bytes: None,
+        original: None,
     };
     /// Chat badges (ADR 0015), the cyex badge size ladder: square 18, 36 and 72 px (`1x`, `2x`,
     /// `4x`, as chat badges are), then 128, 256 and 512 px, all scaled from one 512 px master.
     /// Animated: 18, 36 and 72 always (each at most 512 KB), 128, 256 and 512 only within 1, 2
-    /// and 4 MB.
+    /// and 4 MB. Then `original`, the upload at its own size (at most 512 px).
     pub const BADGE: Self = Self {
         base_height: 18,
         scales: &[1, 2, 4],
@@ -100,6 +116,7 @@ impl Profile {
         large: &BADGE_LARGE,
         master: Some(BADGE_MASTER),
         max_animated_scale_bytes: Some(BADGE_MAX_ANIMATED_CHAT_BYTES),
+        original: Some(BADGE_ORIGINAL),
     };
     /// Paint images (ADR 0015, 0026): 64 px tall at 1x, then 2x and 4x (128 and 256 px), then
     /// `512` (512 px tall), up to 8:1. Each size is scaled from the original, never above it.
@@ -110,6 +127,7 @@ impl Profile {
         large: &PAINT_LARGE,
         master: None,
         max_animated_scale_bytes: None,
+        original: None,
     };
 
     /// The size at `scale`: `base_height × scale` tall, at most `max_aspect` times as wide,
@@ -151,6 +169,7 @@ impl Profile {
                 size: self.size_for(w, h, scale),
                 max_animated_bytes: self.max_animated_scale_bytes,
                 required: true,
+                from_original: false,
             })
             .collect();
         for large in self.large {
@@ -160,6 +179,19 @@ impl Profile {
                 size: self.fit(w, h, large.px, false),
                 max_animated_bytes: Some(large.max_animated_bytes),
                 required: false,
+                from_original: false,
+            });
+        }
+        if let Some(original) = self.original {
+            // The picture's own size, from the picture itself (`width`×`height`, not the master).
+            out.push(Step {
+                stem: ORIGINAL_STEM.to_owned(),
+                scale: (width.max(height).min(original.px) + self.base_height / 2)
+                    / self.base_height,
+                size: self.fit(width, height, original.px, false),
+                max_animated_bytes: Some(original.max_animated_bytes),
+                required: false,
+                from_original: true,
             });
         }
         out
@@ -207,6 +239,8 @@ pub struct Step {
     pub max_animated_bytes: Option<usize>,
     /// Over the cap fails the picture (`true`), or only drops the animated file (`false`).
     pub required: bool,
+    /// Cut from the picture itself, not from the master (the `original` file).
+    pub from_original: bool,
 }
 
 pub use crate::MIN_DELAY_MS;
@@ -291,14 +325,19 @@ fn resized(frame: &RgbaImage, (w, h): (u32, u32)) -> RgbaImage {
     }
 }
 
-fn webp_encoder((w, h): (u32, u32)) -> Result<Encoder, MediaError> {
+/// `lossless`: the `original` size, whose pixels stay exactly as uploaded when it isn't resized.
+fn webp_encoder((w, h): (u32, u32), lossless: bool) -> Result<Encoder, MediaError> {
     Encoder::new_with_options(
         (w, h),
         EncoderOptions {
             encoding_config: Some(EncodingConfig {
-                quality: WEBP_QUALITY,
+                quality: if lossless { 100.0 } else { WEBP_QUALITY },
                 method: 4,
-                encoding_type: EncodingType::Lossy(LossyEncodingConfig::default()),
+                encoding_type: if lossless {
+                    EncodingType::Lossless
+                } else {
+                    EncodingType::Lossy(LossyEncodingConfig::default())
+                },
             }),
             ..EncoderOptions::default()
         },
@@ -307,8 +346,8 @@ fn webp_encoder((w, h): (u32, u32)) -> Result<Encoder, MediaError> {
 }
 
 /// A still WebP: one frame through the same encoder comes out without an `ANIM` chunk.
-fn webp_still(frame: &RgbaImage) -> Result<Vec<u8>, MediaError> {
-    let mut encoder = webp_encoder(frame.dimensions())?;
+fn webp_still(frame: &RgbaImage, lossless: bool) -> Result<Vec<u8>, MediaError> {
+    let mut encoder = webp_encoder(frame.dimensions(), lossless)?;
     encoder.add_frame(frame.as_raw(), 0).map_err(encode_err)?;
     Ok(encoder.finalize(100).map_err(encode_err)?.to_vec())
 }
@@ -374,6 +413,8 @@ fn run(
     let mut scales: Vec<Scale> = Vec::new();
     let mut master: Option<(u32, u32)> = None;
     let mut first: Option<RgbaImage> = None;
+    // The first frame as uploaded, kept when a master stands in for it (for `original`).
+    let mut first_raw: Option<RgbaImage> = None;
     let mut timestamp: i32 = 0;
     let mut failure: Option<MediaError> = None;
 
@@ -390,16 +431,21 @@ fn run(
                 steps.drain(..steps.len().saturating_sub(1));
             }
             for step in steps {
-                let encoder = webp_encoder(step.size)?;
+                let encoder = webp_encoder(step.size, step.from_original)?;
                 scales.push(Scale { step, encoder });
             }
         }
-        let frame = match master {
-            Some(size) => resized(&frame, size),
-            None => frame,
+        // With a master, the frame as uploaded is kept beside it for the `original` size.
+        let (frame, raw) = match master {
+            Some(size) => (resized(&frame, size), Some(frame)),
+            None => (frame, None),
         };
         for s in &mut scales {
-            let small = resized(&frame, s.step.size);
+            let source = match (&raw, s.step.from_original) {
+                (Some(raw), true) => raw,
+                _ => &frame,
+            };
+            let small = resized(source, s.step.size);
             if let Err(err) = s.encoder.add_frame(small.as_raw(), timestamp) {
                 failure = Some(encode_err(err));
             }
@@ -407,6 +453,7 @@ fn run(
         let shown = crate::shown_ms(delay);
         timestamp = timestamp.saturating_add(i32::try_from(shown).unwrap_or(i32::MAX));
         if first.is_none() {
+            first_raw = raw;
             first = Some(frame);
         }
         Ok(())
@@ -462,7 +509,11 @@ fn run(
 
     let mut avif = Vec::new();
     for step in &steps {
-        let small = resized(&first, step.size);
+        let source = match (&first_raw, step.from_original) {
+            (Some(raw), true) => raw,
+            _ => &first,
+        };
+        let small = resized(source, step.size);
         if animated {
             webp.push(Variant {
                 name: name(&step.stem, Kind::Webp, true),
@@ -471,7 +522,7 @@ fn run(
                 width: step.size.0,
                 height: step.size.1,
                 is_static: true,
-                bytes: webp_still(&small)?,
+                bytes: webp_still(&small, step.from_original)?,
             });
         }
         avif.push(Variant {

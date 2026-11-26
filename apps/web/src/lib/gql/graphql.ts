@@ -605,7 +605,9 @@ export type CosmeticImage = {
   createdAt: Scalars['String']['output'];
   /**
    * WebP and AVIF at 1x, 2x and 4x, and static first frames for animations. Empty until the
-   * worker made them.
+   * worker made them. A badge also has the size ladder (`128`, `256`, `512`) and `original`:
+   * the picture at its real size (at most 512 px; a bigger upload is scaled down to 512),
+   * with the real `width` and `height` in its entry.
    */
   files: Array<EmoteFile>;
   height: Scalars['Int']['output'];
