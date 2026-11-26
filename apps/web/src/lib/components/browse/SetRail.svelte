@@ -263,7 +263,7 @@
   .live { flex: none; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--green); }
   .ct { grid-row: 1; font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
   .ct.full { color: var(--red); }
-  .meter { grid-column: 2 / 4; grid-row: 2; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; }
+  .meter { grid-column: 2 / 4; grid-row: 2; height: 3px; border-radius: var(--radius-sm); background: var(--border); overflow: hidden; }
   .meter i { display: block; height: 100%; background: var(--accent); border-radius: inherit; transition: width var(--base, .2s) var(--ease); }
   .meter.full i { background: var(--red); }
   /* The target: bold with an accent icon (owner rule: no fill, no bar). */

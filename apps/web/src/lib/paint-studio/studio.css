@@ -145,7 +145,7 @@
 
 .ps-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-height: 24px; font-size: var(--text-sub); color: var(--muted); }
 .ps-status.bad { color: var(--red); }
-.ps-progress { flex: 1 1 120px; height: 4px; max-width: 220px; background: var(--border-strong); border-radius: 2px; overflow: hidden; }
+.ps-progress { flex: 1 1 120px; height: 4px; max-width: 220px; background: var(--border-strong); border-radius: var(--radius-sm); overflow: hidden; }
 .ps-progress > span { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: 0 50%; transition: transform var(--fast) linear; }
 .ps-issues { margin: 0; padding-left: 18px; color: var(--red); font-size: var(--text-sub); display: grid; gap: 2px; }
 .ps-code { margin: 0; padding: 12px; max-height: 280px; overflow: auto; font: 13px/1.6 var(--font-mono); background: var(--elevated-2); border-radius: var(--radius); white-space: pre; color: var(--text); }

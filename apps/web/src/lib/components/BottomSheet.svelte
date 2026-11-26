@@ -137,7 +137,7 @@
     padding-bottom: env(safe-area-inset-bottom, 0px); }
   .grab { flex: none; padding: 8px max(var(--page-pad), env(safe-area-inset-left, 0px)) 0; touch-action: none; cursor: grab;
     -webkit-user-select: none; user-select: none; }
-  .handle { display: block; width: 36px; height: 4px; margin: 0 auto 4px; border-radius: 2px; background: var(--border-strong); }
+  .handle { display: block; width: 36px; height: 4px; margin: 0 auto 4px; border-radius: var(--radius-sm); background: var(--border-strong); }
   .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; }
   .title { font-size: var(--t-h3); line-height: 1.3; letter-spacing: -.015em; }
   .body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;

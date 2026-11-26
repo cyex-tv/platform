@@ -76,7 +76,7 @@
   .t { flex: 1; min-width: 0; font-size: var(--t-small); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ct { flex: none; font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
   .meter-row { display: grid; gap: 6px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
-  .meter { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+  .meter { height: 4px; border-radius: var(--radius-sm); background: var(--border); overflow: hidden; }
   .meter i { display: block; height: 100%; background: var(--accent); transition: width var(--base, .2s) var(--ease); }
   .meter.full i { background: var(--red); }
   .free { font-size: var(--t-fine); color: var(--muted); }

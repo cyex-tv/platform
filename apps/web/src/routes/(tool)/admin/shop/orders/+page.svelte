@@ -270,7 +270,7 @@
   .flag :global(svg) { flex: none; margin-top: 2px; color: var(--red); }
   .reason { margin: 0; font-size: var(--t-small); overflow-wrap: anywhere; }
   .link { padding: 0; border: 0; background: none; font: inherit; font-weight: 600; color: var(--accent-text); cursor: pointer; text-align: right; }
-  .link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 2px; }
+  .link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: var(--radius-sm); }
   /* Phones: each row stacks, its cells labelled. */
   @media (max-width: 719.98px) {
     .tb, .tb select { width: 100%; }

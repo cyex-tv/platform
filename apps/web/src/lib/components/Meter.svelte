@@ -15,7 +15,7 @@
   aria-valuenow={label ? pct : undefined} aria-hidden={label ? undefined : 'true'}><i style:width="{pct}%"></i></span>
 
 <style>
-  .meter { display: block; width: 100%; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; }
+  .meter { display: block; width: 100%; height: 3px; border-radius: var(--radius-sm); background: var(--border); overflow: hidden; }
   i { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width var(--base, .2s) var(--ease); }
   .near i { background: var(--yellow); }
   .full i { background: var(--red); }

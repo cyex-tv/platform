@@ -16,7 +16,7 @@
     font-size: var(--t-nav); font-weight: 500; color: var(--muted); cursor: pointer; user-select: none; }
   .switch.on { color: var(--text); font-weight: 700; }
   .switch input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
-  .track { position: relative; width: 36px; height: 20px; border-radius: 999px; background: var(--border-strong);
+  .track { position: relative; width: 36px; height: 20px; border-radius: var(--radius-pill); background: var(--border-strong);
     box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 40%, transparent); transition: background-color var(--fast) var(--ease); }
   .track::before { content: ''; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: var(--text);
     transition: translate var(--fast) var(--ease), background-color var(--fast); }
