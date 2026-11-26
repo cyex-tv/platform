@@ -44,6 +44,7 @@ const PUBLIC: &[&str] = &[
     "activeAnnouncement",
     "accountCollection",
     "limits",
+    "meta",
 ];
 
 /// Fields only staff (a role with the right permission, or the owner) may use.
