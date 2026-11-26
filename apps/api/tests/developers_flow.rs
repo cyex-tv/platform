@@ -18,11 +18,12 @@ use chrono::Duration;
 use common::TestDb;
 use cyex_tv_api::limits::{Limits, Rates};
 use cyex_tv_api::state::AppState;
+use cyex_tv_auth::Via;
 use cyex_tv_auth::{Auth, AuthConfig, cookies, tokens};
 use cyex_tv_db::accounts::{self, Profile};
 use cyex_tv_db::sessions::{self, SessionKind};
 use cyex_tv_db::{app_auth, channels, editors, privacy};
-use cyex_tv_shared::model::{EditorPermission, Platform};
+use cyex_tv_shared::model::{EditorPermission, Platform, RestrictionInput, RestrictionKind};
 use cyex_tv_shared::ratelimit::Rate;
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
@@ -424,13 +425,15 @@ async fn keys_end_when_revoked_blocked_or_deleted_but_not_on_sign_out() {
     assert_eq!(a.status, StatusCode::UNAUTHORIZED);
     assert_eq!(code(&a.body), "api_key_invalid");
 
-    // Blocked: refused while it lasts.
+    // Blocked: refused while it lasts. (Written straight to the database here, as another api
+    // instance would: the lookup cache keeps it for its TTL, forgotten here to stand for that.)
     let mut conn = w.db.conn().await;
     sqlx::query("UPDATE accounts SET blocked_at = now(), blocked_until = NULL WHERE id = $1")
         .bind(alice.id)
         .execute(&mut *conn)
         .await
         .unwrap();
+    w.state.key_cache.forget_account(alice.id);
     assert_eq!(
         w.get(As::Bearer(&kept), "/v1/sets/global").await.status,
         StatusCode::UNAUTHORIZED
@@ -440,6 +443,7 @@ async fn keys_end_when_revoked_blocked_or_deleted_but_not_on_sign_out() {
         .execute(&mut *conn)
         .await
         .unwrap();
+    w.state.key_cache.forget_account(alice.id);
     assert_eq!(
         w.get(As::Bearer(&kept), "/v1/sets/global").await.status,
         StatusCode::OK
@@ -508,7 +512,7 @@ async fn webhooks_are_for_the_channel_and_its_editors() {
         .await;
     let made = &r["data"]["createWebhook"];
     let secret = made["secret"].as_str().unwrap_or_else(|| panic!("{r}"));
-    assert!(secret.starts_with("whsec_"));
+    assert!(secret.starts_with("cyexhook_"));
     let hook_id = made["webhook"]["id"].as_str().unwrap().to_owned();
     assert_eq!(
         made["webhook"]["events"],
@@ -591,6 +595,8 @@ async fn webhooks_are_for_the_channel_and_its_editors() {
         "https://[::1]/",
         "https://[::ffff:10.0.0.1]/",
         "https://localhost:8443/",
+        "https://hooks.example.com:8443/hook",
+        "https://hooks.example.com:80/",
         "https://user:pw@hooks.example.com/",
         "not a url",
     ] {
@@ -679,7 +685,7 @@ async fn webhooks_are_for_the_channel_and_its_editors() {
         )
         .await;
     let new_secret = r["data"]["rotateWebhookSecret"]["secret"].as_str().unwrap();
-    assert!(new_secret.starts_with("whsec_") && new_secret != secret);
+    assert!(new_secret.starts_with("cyexhook_") && new_secret != secret);
     let r = w
         .gql(
             As::Site(&editor.site),
@@ -692,5 +698,262 @@ async fn webhooks_are_for_the_channel_and_its_editors() {
         .gql(As::Site(&owner.site), HOOKS, json!({ "id": "6501" }))
         .await;
     assert_eq!(list["data"]["channelWebhooks"].as_array().unwrap().len(), 4);
+    w.db.close().await;
+}
+
+/// Staff acting with every permission (an owner's website session), for the block below.
+fn staff(id: Uuid) -> cyex_tv_auth::Caller {
+    cyex_tv_auth::Caller {
+        account_id: id,
+        owner: true,
+        token_hash: [0; 32],
+        kind: SessionKind::Site,
+        via: Via::Cookie,
+        app_client: None,
+    }
+}
+
+#[tokio::test]
+async fn made_up_keys_never_reach_the_database_past_the_ip_limit() {
+    let rates = Rates {
+        reads: Rate::per_minute(3),
+        ..Rates::default()
+    };
+    let Some(w) = World::new(rates).await else {
+        return;
+    };
+    let bad = format!("cyex_live_{}", tokens::random_token());
+    // A miss costs the IP a token before the lookup, and the "no" one after.
+    assert_eq!(
+        w.get(As::Bearer(&bad), "/v1/sets/global").await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(w.state.key_cache.lookups(), 1);
+    // The same made-up key again: answered from the cache.
+    assert_eq!(
+        w.get(As::Bearer(&bad), "/v1/sets/global").await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        w.state.key_cache.lookups(),
+        1,
+        "a known bad key isn't looked up again"
+    );
+    // The IP's allowance is spent: another made-up key is refused before any lookup.
+    let other = format!("cyex_live_{}", tokens::random_token());
+    let a = w.get(As::Bearer(&other), "/v1/sets/global").await;
+    assert_eq!(a.status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(
+        w.state.key_cache.lookups(),
+        1,
+        "no lookup past the IP limit"
+    );
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn an_account_has_one_bucket_for_all_its_keys() {
+    let rates = Rates {
+        api_key: Rate::per_minute(3),
+        api_key_account: Rate::per_minute(4),
+        ..Rates::default()
+    };
+    let Some(w) = World::new(rates).await else {
+        return;
+    };
+    let alice = w.user("6601").await;
+    let (one, _) = w.make_key(&alice, "one").await;
+    let (two, _) = w.make_key(&alice, "two").await;
+    for _ in 0..3 {
+        assert_eq!(
+            w.get(As::Bearer(&one), "/v1/sets/global").await.status,
+            StatusCode::OK
+        );
+    }
+    let a = w.get(As::Bearer(&two), "/v1/sets/global").await;
+    assert_eq!(a.status, StatusCode::OK);
+    assert_eq!(
+        header(&a, "ratelimit-limit"),
+        "4",
+        "the tighter bucket is the account's"
+    );
+    assert_eq!(header(&a, "ratelimit-remaining"), "0");
+    let a = w.get(As::Bearer(&two), "/v1/sets/global").await;
+    assert_eq!(
+        a.status,
+        StatusCode::TOO_MANY_REQUESTS,
+        "a second key adds nothing"
+    );
+    // Another account's key has its own.
+    let bob = w.user("6602").await;
+    let (theirs, _) = w.make_key(&bob, "b").await;
+    assert_eq!(
+        w.get(As::Bearer(&theirs), "/v1/sets/global").await.status,
+        StatusCode::OK
+    );
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn a_staff_block_ends_keys_at_once_and_turns_webhooks_off() {
+    let Some(w) = World::new(Rates::default()).await else {
+        return;
+    };
+    let alice = w.user("6701").await;
+    let mod_ = w.user("6702").await;
+    let (key, _) = w.make_key(&alice, "k").await;
+    assert_eq!(
+        w.get(As::Bearer(&key), "/v1/sets/global").await.status,
+        StatusCode::OK
+    );
+    let r = w
+        .gql(
+            As::Site(&alice.site),
+            CREATE_HOOK,
+            json!({ "id": "6701", "url": "https://hooks.example.com/a", "events": ["SET_EMOTE_ADDED"] }),
+        )
+        .await;
+    assert!(r["data"]["createWebhook"].is_object(), "{r}");
+    cyex_tv_api::abuse::place(
+        &w.state,
+        &staff(mod_.id),
+        &cyex_tv_db::ids::to_text(alice.id),
+        &RestrictionInput {
+            kind: RestrictionKind::Account,
+            until: None,
+            reason: "spam".to_owned(),
+        },
+    )
+    .await
+    .unwrap();
+    // The key was cached as good a moment ago; the block forgets it on this instance.
+    let a = w.get(As::Bearer(&key), "/v1/sets/global").await;
+    assert_eq!(a.status, StatusCode::UNAUTHORIZED, "{}", a.body);
+    let mut conn = w.db.conn().await;
+    let hooks: Vec<(bool, Option<String>)> = sqlx::query_as(
+        "SELECT w.enabled, w.disabled_reason FROM webhooks w JOIN channels c ON c.id = w.channel_id
+          WHERE c.account_id = $1",
+    )
+    .bind(alice.id)
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    assert_eq!(hooks, vec![(false, Some("blocked".to_owned()))]);
+    drop(conn);
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn editors_see_only_the_host_of_a_webhook_url() {
+    let Some(w) = World::new(Rates::default()).await else {
+        return;
+    };
+    let owner = w.user("6801").await;
+    let editor = w.user("6802").await;
+    let mut conn = w.db.conn().await;
+    editors::add(
+        &mut conn,
+        owner.id,
+        editor.id,
+        &[EditorPermission::Channels.as_str().to_owned()],
+        None,
+    )
+    .await
+    .unwrap();
+    drop(conn);
+    let token_url = "https://chat.example.com/api/webhooks/1/s3cr3t-token";
+    let r = w
+        .gql(
+            As::Site(&owner.site),
+            CREATE_HOOK,
+            json!({ "id": "6801", "url": token_url, "events": ["SET_EMOTE_ADDED"] }),
+        )
+        .await;
+    assert_eq!(
+        r["data"]["createWebhook"]["webhook"]["url"], token_url,
+        "{r}"
+    );
+    let r = w
+        .gql(As::Site(&editor.site), CREATE_HOOK, json!({ "id": "6801", "url": "https://hooks.example.com/editor-token", "events": ["SET_EMOTE_ADDED"] }))
+        .await;
+    assert!(r["data"]["createWebhook"].is_object(), "{r}");
+    let urls = |list: &Value| -> Vec<String> {
+        list["data"]["channelWebhooks"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|h| h["url"].as_str().unwrap().to_owned())
+            .collect()
+    };
+    // The owner sees both whole; the editor sees their own whole and the owner's as its host.
+    let all = w
+        .gql(As::Site(&owner.site), HOOKS, json!({ "id": "6801" }))
+        .await;
+    assert_eq!(
+        urls(&all),
+        [token_url, "https://hooks.example.com/editor-token"]
+    );
+    let theirs = w
+        .gql(As::Site(&editor.site), HOOKS, json!({ "id": "6801" }))
+        .await;
+    assert_eq!(
+        urls(&theirs),
+        [
+            "https://chat.example.com/…",
+            "https://hooks.example.com/editor-token"
+        ]
+    );
+    assert!(!theirs.to_string().contains("s3cr3t"));
+    // The audit log keeps the host only.
+    let mut conn = w.db.conn().await;
+    let logged: Vec<String> = sqlx::query_scalar(
+        "SELECT coalesce(after_json::text, '') || coalesce(before_json::text, '') FROM audit_log
+          WHERE action LIKE 'channel.webhook_%'",
+    )
+    .fetch_all(&mut *conn)
+    .await
+    .unwrap();
+    assert!(!logged.is_empty());
+    assert!(
+        logged
+            .iter()
+            .all(|l| !l.contains("s3cr3t") && !l.contains("editor-token")),
+        "{logged:?}"
+    );
+    drop(conn);
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn deleting_webhooks_counts_under_the_settings_limit() {
+    let rates = Rates {
+        prefs: Rate::per_hour(3),
+        ..Rates::default()
+    };
+    let Some(w) = World::new(rates).await else {
+        return;
+    };
+    let owner = w.user("6901").await;
+    let mut ids = Vec::new();
+    for n in 0..2 {
+        let r = w
+            .gql(As::Site(&owner.site), CREATE_HOOK, json!({ "id": "6901", "url": format!("https://hooks.example.com/{n}"), "events": ["SET_EMOTE_ADDED"] }))
+            .await;
+        ids.push(
+            r["data"]["createWebhook"]["webhook"]["id"]
+                .as_str()
+                .unwrap_or_else(|| panic!("{r}"))
+                .to_owned(),
+        );
+    }
+    let del = "mutation($id: String!) { deleteWebhook(id: $id) }";
+    let r = w
+        .gql(As::Site(&owner.site), del, json!({ "id": ids[0] }))
+        .await;
+    assert_eq!(r["data"]["deleteWebhook"], true, "{r}");
+    let r = w
+        .gql(As::Site(&owner.site), del, json!({ "id": ids[1] }))
+        .await;
+    assert_eq!(code(&r), "rate_limited", "{r}");
     w.db.close().await;
 }

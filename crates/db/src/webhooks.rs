@@ -17,6 +17,15 @@ pub const DELIVER_ATTEMPTS: i32 = 8;
 pub const KEEP_DELIVERIES: i64 = 50;
 /// Deliveries in a row that fail for good before a webhook is turned off.
 pub const DISABLE_AFTER: i32 = 5;
+/// The other way to be turned off: at least this many failed in the 24-hour window...
+pub const WINDOW_MIN_FAILED: i32 = 20;
+/// ...and more than this percentage of the window's deliveries failed.
+pub const WINDOW_FAILED_PERCENT: i32 = 80;
+/// Live webhooks, across all channels, that may ask for the cosmetics catalog's events (each of
+/// those events is sent to all of them).
+pub const MAX_COSMETIC_SUBSCRIBERS: i64 = 1000;
+/// The cosmetics catalog's event types.
+pub const COSMETIC_EVENTS: [&str; 3] = ["cosmetic.created", "cosmetic.updated", "cosmetic.deleted"];
 
 #[derive(Clone, Debug, PartialEq, Eq, FromRow)]
 pub struct Webhook {
@@ -26,16 +35,58 @@ pub struct Webhook {
     pub url: String,
     pub event_types: Vec<String>,
     pub secret: String,
+    /// The secret before the last rotation, still signing until `previous_secret_until`.
+    pub previous_secret: Option<String>,
+    pub previous_secret_until: Option<DateTime<Utc>>,
     pub enabled: bool,
     pub disabled_reason: Option<String>,
     pub failed_deliveries: i32,
+    pub window_started_at: DateTime<Utc>,
+    pub window_finished: i32,
+    pub window_failed: i32,
+    pub disabled_notice_at: Option<DateTime<Utc>>,
     pub created_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
-const WEBHOOK: &str = "id, channel_id, topic, url, event_types, secret, enabled, disabled_reason, \
-                       failed_deliveries, created_by, created_at, updated_at";
+const WEBHOOK: &str = "id, channel_id, topic, url, event_types, secret, previous_secret, \
+                       previous_secret_until, enabled, disabled_reason, failed_deliveries, \
+                       window_started_at, window_finished, window_failed, disabled_notice_at, \
+                       created_by, created_at, updated_at";
+
+impl Webhook {
+    /// The secrets that sign a delivery now: the current one, and the one before a rotation for
+    /// its 24 hours.
+    pub fn signing_secrets(&self, now: DateTime<Utc>) -> Vec<&str> {
+        let mut out = vec![self.secret.as_str()];
+        if let (Some(prev), Some(until)) = (&self.previous_secret, self.previous_secret_until)
+            && until > now
+        {
+            out.push(prev.as_str());
+        }
+        out
+    }
+
+    /// Whether `event_types` asks for any of the cosmetics catalog's events.
+    pub fn wants_cosmetics(event_types: &[String]) -> bool {
+        event_types
+            .iter()
+            .any(|t| COSMETIC_EVENTS.contains(&t.as_str()))
+    }
+}
+
+/// Live webhooks that ask for the cosmetics catalog's events, `except` one (being changed).
+pub async fn cosmetic_subscribers(conn: &mut PgConnection, except: Option<Uuid>) -> DbResult<i64> {
+    Ok(sqlx::query_scalar(
+        "SELECT count(*) FROM webhooks
+          WHERE enabled AND event_types && $1 AND ($2::uuid IS NULL OR id <> $2)",
+    )
+    .bind(&COSMETIC_EVENTS[..])
+    .bind(except)
+    .fetch_one(conn)
+    .await?)
+}
 
 #[derive(Clone, Debug, PartialEq, FromRow)]
 pub struct Delivery {
@@ -135,6 +186,9 @@ pub async fn update(
                                     WHEN $4 IS FALSE THEN 'manual'
                                     ELSE disabled_reason END,
              failed_deliveries = CASE WHEN $4 IS TRUE THEN 0 ELSE failed_deliveries END,
+             window_started_at = CASE WHEN $4 IS TRUE THEN now() ELSE window_started_at END,
+             window_finished = CASE WHEN $4 IS TRUE THEN 0 ELSE window_finished END,
+             window_failed = CASE WHEN $4 IS TRUE THEN 0 ELSE window_failed END,
              updated_at = now()
          WHERE id = $1
          RETURNING {WEBHOOK}"
@@ -153,7 +207,10 @@ pub async fn set_secret(
     secret: &str,
 ) -> DbResult<Option<Webhook>> {
     Ok(sqlx::query_as(&format!(
-        "UPDATE webhooks SET secret = $2, updated_at = now() WHERE id = $1 RETURNING {WEBHOOK}"
+        "UPDATE webhooks
+         SET previous_secret = secret, previous_secret_until = now() + interval '24 hours',
+             secret = $2, updated_at = now()
+         WHERE id = $1 RETURNING {WEBHOOK}"
     ))
     .bind(id)
     .bind(secret)
@@ -173,6 +230,18 @@ pub async fn delete(conn: &mut PgConnection, id: Uuid) -> DbResult<bool> {
 pub async fn delete_for_account(conn: &mut PgConnection, account_id: Uuid) -> DbResult<u64> {
     let done = sqlx::query(
         "DELETE FROM webhooks WHERE channel_id IN (SELECT id FROM channels WHERE account_id = $1)",
+    )
+    .bind(account_id)
+    .execute(conn)
+    .await?;
+    Ok(done.rows_affected())
+}
+
+/// Turns off the live webhooks of every channel of the account (a staff block). Returns how many.
+pub async fn disable_for_account(conn: &mut PgConnection, account_id: Uuid) -> DbResult<u64> {
+    let done = sqlx::query(
+        "UPDATE webhooks SET enabled = false, disabled_reason = 'blocked', updated_at = now()
+          WHERE enabled AND channel_id IN (SELECT id FROM channels WHERE account_id = $1)",
     )
     .bind(account_id)
     .execute(conn)
@@ -259,35 +328,75 @@ pub async fn record_attempt(conn: &mut PgConnection, id: i64, a: &Attempt<'_>) -
     Ok(())
 }
 
-/// A delivery went through: the webhook's failure count starts over.
-pub async fn delivered(conn: &mut PgConnection, webhook_id: Uuid) -> DbResult<()> {
-    sqlx::query(
-        "UPDATE webhooks SET failed_deliveries = 0 WHERE id = $1 AND failed_deliveries > 0",
-    )
-    .bind(webhook_id)
-    .execute(conn)
-    .await?;
-    Ok(())
+/// What a finished delivery did to its webhook.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Outcome {
+    /// This delivery turned the webhook off.
+    pub turned_off: bool,
+    /// Tell the channel's owner: turned off, and nobody was told in the last 24 hours.
+    pub notify: bool,
 }
 
-/// A delivery failed for good: counts it, and turns the webhook off once `DISABLE_AFTER` in a row
-/// failed. True when this call turned it off.
-pub async fn failed_for_good(conn: &mut PgConnection, webhook_id: Uuid) -> DbResult<bool> {
-    let turned_off: Option<bool> = sqlx::query_scalar(
-        "UPDATE webhooks
-         SET failed_deliveries = failed_deliveries + 1,
-             enabled = enabled AND failed_deliveries + 1 < $2,
-             disabled_reason = CASE WHEN enabled AND failed_deliveries + 1 >= $2 THEN 'failures'
-                                    ELSE disabled_reason END,
-             updated_at = now()
-         WHERE id = $1
-         RETURNING (disabled_reason = 'failures' AND NOT enabled AND failed_deliveries = $2)",
+/// Counts a delivery that finished (`ok`, or failed after every attempt) against its webhook:
+/// the failures in a row, and the 24-hour window (started over once it is a day old). Turns the
+/// webhook off at `DISABLE_AFTER` failures in a row, or at `WINDOW_MIN_FAILED` failures making
+/// more than `WINDOW_FAILED_PERCENT`% of the window, so an occasional success can't keep a
+/// receiver that mostly fails alive. Tells at most once a day (`disabled_notice_at`).
+pub async fn record_outcome(
+    conn: &mut PgConnection,
+    webhook_id: Uuid,
+    ok: bool,
+) -> DbResult<Outcome> {
+    let row: Option<(bool, bool)> = sqlx::query_as(
+        "WITH w AS (
+             SELECT id, enabled, disabled_notice_at,
+                    CASE WHEN $2 THEN 0 ELSE failed_deliveries + 1 END AS in_row,
+                    window_started_at < now() - interval '24 hours' AS stale,
+                    window_finished, window_failed
+               FROM webhooks WHERE id = $1 FOR UPDATE
+         ), n AS (
+             SELECT id, enabled, disabled_notice_at, in_row, stale,
+                    CASE WHEN stale THEN 1 ELSE window_finished + 1 END AS finished,
+                    CASE WHEN stale THEN 0 ELSE window_failed END
+                        + CASE WHEN $2 THEN 0 ELSE 1 END AS failed
+               FROM w
+         ), d AS (
+             SELECT n.*,
+                    n.enabled AND NOT $2
+                    AND (n.in_row >= $3 OR (n.failed >= $4 AND n.failed * 100 > n.finished * $5)) AS off
+               FROM n
+         ), e AS (
+             SELECT d.*,
+                    d.off AND (d.disabled_notice_at IS NULL
+                               OR d.disabled_notice_at < now() - interval '24 hours') AS tell
+               FROM d
+         )
+         UPDATE webhooks h
+            SET failed_deliveries = e.in_row,
+                window_started_at = CASE WHEN e.stale THEN now() ELSE h.window_started_at END,
+                window_finished = e.finished,
+                window_failed = e.failed,
+                enabled = h.enabled AND NOT e.off,
+                disabled_reason = CASE WHEN e.off THEN 'failures' ELSE h.disabled_reason END,
+                disabled_notice_at = CASE WHEN e.tell THEN now() ELSE h.disabled_notice_at END,
+                updated_at = CASE WHEN e.off THEN now() ELSE h.updated_at END
+           FROM e
+          WHERE h.id = e.id
+         RETURNING e.off, e.tell",
     )
     .bind(webhook_id)
+    .bind(ok)
     .bind(DISABLE_AFTER)
+    .bind(WINDOW_MIN_FAILED)
+    .bind(WINDOW_FAILED_PERCENT)
     .fetch_optional(conn)
     .await?;
-    Ok(turned_off.unwrap_or(false))
+    Ok(
+        row.map_or_else(Outcome::default, |(turned_off, notify)| Outcome {
+            turned_off,
+            notify,
+        }),
+    )
 }
 
 /// Keeps the latest `KEEP_DELIVERIES` finished deliveries of a webhook.

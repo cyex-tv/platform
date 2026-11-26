@@ -21,7 +21,7 @@ use cyex_tv_worker::{Ctx, JobError};
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-const SECRET: &str = "whsec_0123456789abcdef0123456789abcdef";
+const SECRET: &str = "cyexhook_test_not_a_real_secret_0001";
 
 #[derive(Default)]
 struct Seen {
@@ -198,7 +198,7 @@ async fn events_are_delivered_signed() {
         "the signature checks out"
     );
     assert!(!verify(
-        "whsec_wrong_wrong_wrong_wrong_wrong_wrong",
+        "cyexhook_test_wrong_not_a_real_secret",
         sig,
         body,
         now,
@@ -386,5 +386,182 @@ async fn the_log_keeps_the_latest_fifty() {
     let kept = w.deliveries().await;
     assert_eq!(kept.len(), 50);
     assert!(kept.iter().all(|d| d.state == "delivered"));
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn a_slow_receiver_cannot_fill_the_queue() {
+    let seen = Shared::default();
+    seen.lock().unwrap().status = 204;
+    let port = receiver(seen.clone()).await;
+    let Some(w) = world(port, "/hook").await else {
+        return;
+    };
+    // Other event types never reach the trigger's matching.
+    w.publish(EventType::PersonalUpdated, &w.topic).await;
+    assert!(w.deliveries().await.is_empty());
+    for _ in 0..101 {
+        w.publish(EventType::SetEmoteAdded, &w.topic).await;
+    }
+    assert_eq!(w.jobs().await.len(), 100, "at most 100 waiting per webhook");
+    let log = w.deliveries().await;
+    let newest = &log[0];
+    assert_eq!(newest.state, "failed");
+    assert!(
+        newest.error.as_deref().unwrap().starts_with("dropped"),
+        "{newest:?}"
+    );
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn mostly_failing_receivers_are_turned_off_even_with_some_successes() {
+    let Some(w) = world(1, "/hook").await else {
+        return;
+    };
+    let mut conn = w.db.conn().await;
+    // 4 failures and a success, five times: never 5 in a row, 80% failed, still on.
+    for _ in 0..5 {
+        for _ in 0..4 {
+            assert!(
+                !webhooks::record_outcome(&mut conn, w.hook, false)
+                    .await
+                    .unwrap()
+                    .turned_off
+            );
+        }
+        webhooks::record_outcome(&mut conn, w.hook, true)
+            .await
+            .unwrap();
+    }
+    assert!(w.webhook().await.enabled);
+    // One more failure: 21 of 26 (81%), at least 20: off, though never 5 in a row.
+    let last = webhooks::record_outcome(&mut conn, w.hook, false)
+        .await
+        .unwrap();
+    assert!(last.turned_off && last.notify, "{last:?}");
+    let hook = w.webhook().await;
+    assert!(!hook.enabled);
+    assert_eq!(hook.disabled_reason.as_deref(), Some("failures"));
+    assert_eq!((hook.window_failed, hook.window_finished), (21, 26));
+
+    // Turned on and off again the same day: the owner isn't told twice.
+    webhooks::update(&mut conn, w.hook, None, None, Some(true))
+        .await
+        .unwrap();
+    let mut again = webhooks::Outcome::default();
+    for _ in 0..webhooks::DISABLE_AFTER {
+        again = webhooks::record_outcome(&mut conn, w.hook, false)
+            .await
+            .unwrap();
+    }
+    assert!(again.turned_off && !again.notify, "{again:?}");
+    drop(conn);
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn a_blocked_channel_sends_nothing() {
+    let seen = Shared::default();
+    seen.lock().unwrap().status = 204;
+    let port = receiver(seen.clone()).await;
+    let Some(w) = world(port, "/hook").await else {
+        return;
+    };
+    w.publish(EventType::SetEmoteAdded, &w.topic).await;
+    let job = w.jobs().await.remove(0);
+    let mut conn = w.db.conn().await;
+    sqlx::query("UPDATE accounts SET blocked_at = now() WHERE id = $1")
+        .bind(w.owner)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    drop(conn);
+    deliver_with(w.ctx.clone(), attempt(job, 1), Policy::loopback_for_tests())
+        .await
+        .unwrap();
+    assert!(seen.lock().unwrap().calls.is_empty(), "nothing is sent");
+    let d = &w.deliveries().await[0];
+    assert_eq!(d.state, "failed");
+    assert!(d.error.as_deref().unwrap().contains("blocked"));
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn a_new_secret_signs_beside_the_old_one_for_a_day() {
+    let seen = Shared::default();
+    seen.lock().unwrap().status = 204;
+    let port = receiver(seen.clone()).await;
+    let Some(w) = world(port, "/hook").await else {
+        return;
+    };
+    let new = "cyexhook_test_rotated_not_a_real_secret";
+    let mut conn = w.db.conn().await;
+    webhooks::set_secret(&mut conn, w.hook, new).await.unwrap();
+    drop(conn);
+    w.publish(EventType::SetEmoteAdded, &w.topic).await;
+    let job = w.jobs().await.remove(0);
+    deliver_with(w.ctx.clone(), attempt(job, 1), Policy::loopback_for_tests())
+        .await
+        .unwrap();
+    let (headers, body) = seen.lock().unwrap().calls.remove(0);
+    let sig = headers["x-cyex-signature"].to_str().unwrap().to_owned();
+    let now = chrono::Utc::now().timestamp();
+    assert_eq!(sig.matches("v1=").count(), 2, "{sig}");
+    assert!(verify(new, &sig, &body, now, 300));
+    assert!(
+        verify(SECRET, &sig, &body, now, 300),
+        "the old secret still checks out"
+    );
+    // Past its day the old one is dropped.
+    let mut conn = w.db.conn().await;
+    sqlx::query(
+        "UPDATE webhooks SET previous_secret_until = now() - interval '1 minute' WHERE id = $1",
+    )
+    .bind(w.hook)
+    .execute(&mut *conn)
+    .await
+    .unwrap();
+    let hook = webhooks::get(&mut conn, w.hook).await.unwrap().unwrap();
+    assert_eq!(hook.signing_secrets(chrono::Utc::now()), [new]);
+    drop(conn);
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn the_disabled_notice_names_the_host_only() {
+    let seen = Shared::default();
+    seen.lock().unwrap().status = 500;
+    let port = receiver(seen.clone()).await;
+    let Some(w) = world(port, "/hook?token=s3cr3t").await else {
+        return;
+    };
+    let policy = Policy::loopback_for_tests();
+    for _ in 0..webhooks::DISABLE_AFTER {
+        w.publish(EventType::SetEmoteAdded, &w.topic).await;
+        let job = w.jobs().await.pop().unwrap();
+        deliver_with(
+            w.ctx.clone(),
+            attempt(job, webhooks::DELIVER_ATTEMPTS),
+            policy,
+        )
+        .await
+        .unwrap();
+        let mut conn = w.db.conn().await;
+        sqlx::query("UPDATE jobs SET state = 'done' WHERE kind = 'webhook.deliver'")
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+    }
+    let mut conn = w.db.conn().await;
+    let told = notifications::all_for(&mut conn, w.owner).await.unwrap();
+    let note = told.iter().find(|n| n.kind == "webhook.disabled").unwrap();
+    assert!(
+        !note.payload.to_string().contains("s3cr3t"),
+        "{}",
+        note.payload
+    );
+    assert_eq!(note.payload["url"], "https://127.0.0.1/…");
+    drop(conn);
     w.db.close().await;
 }

@@ -32,7 +32,8 @@ describe('webhooks', () => {
     expect(webhookState({ enabled: true, failedDeliveries: 0 })).toBe('On');
     expect(webhookState({ enabled: true, failedDeliveries: 2 })).toBe('On, 2 failed in a row');
     expect(webhookState({ enabled: false, disabledReason: 'manual', failedDeliveries: 0 })).toBe('Off');
-    expect(webhookState({ enabled: false, disabledReason: 'failures', failedDeliveries: 5 })).toBe('Off after 5 failed deliveries in a row');
+    expect(webhookState({ enabled: false, disabledReason: 'failures', failedDeliveries: 5 })).toBe('Off: too many failed deliveries');
+    expect(webhookState({ enabled: false, disabledReason: 'blocked', failedDeliveries: 0 })).toBe('Off: the account was blocked');
   });
   it('describes deliveries', () => {
     expect(deliveryLine({ state: 'delivered', attempts: 1, responseStatus: 204, durationMs: 1234 })).toBe('Delivered · 204 · 1.234 ms');
@@ -45,5 +46,7 @@ describe('webhooks', () => {
     expect(urlProblem('http://hooks.example.com')).toMatch(/https/);
     expect(urlProblem('nope')).toMatch(/isn't a URL/);
     expect(urlProblem('https://a:b@example.com')).toMatch(/password/);
+    expect(urlProblem('https://example.com:8443/x')).toMatch(/443/);
+    expect(urlProblem('https://example.com:443/x')).toBeNull();
   });
 });

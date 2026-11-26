@@ -18,8 +18,10 @@ use std::time::{Duration, Instant};
 
 use cyex_tv_db::jobs::Job;
 use cyex_tv_db::webhooks::{self as db, Attempt};
-use cyex_tv_db::{channels, ids, notifications};
-use cyex_tv_shared::webhooks::{SIGNATURE_HEADER, TEST_EVENT, is_public_ip, signature};
+use cyex_tv_db::{accounts, channels, ids, notifications};
+use cyex_tv_shared::webhooks::{
+    PORT, SIGNATURE_HEADER, TEST_EVENT, is_public_ip, redacted, signature_all,
+};
 use serde_json::json;
 
 use crate::{Ctx, JobError};
@@ -31,6 +33,11 @@ pub const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 pub const TIMEOUT: Duration = Duration::from_secs(10);
 /// The most of an answer that is read.
 pub const MAX_RESPONSE: usize = 64 * 1024;
+/// How long resolving the host may take.
+pub const DNS_TIMEOUT: Duration = Duration::from_secs(3);
+/// Deliveries sent at once by one worker (`webhook_lanes`): their own lanes, so a slow receiver
+/// never holds up the queue's other jobs.
+pub const LANES: usize = 4;
 
 /// Which addresses a delivery may reach.
 #[derive(Clone, Copy, Debug)]
@@ -38,6 +45,8 @@ pub struct Policy {
     allow: fn(IpAddr) -> bool,
     /// Sends an `https://` URL as `http://`. For tests against a local server only.
     plain_http: bool,
+    /// Any port, not only 443. For tests against a local server only.
+    any_port: bool,
 }
 
 impl Default for Policy {
@@ -46,6 +55,7 @@ impl Default for Policy {
         Self {
             allow: is_public_ip,
             plain_http: false,
+            any_port: false,
         }
     }
 }
@@ -57,6 +67,7 @@ impl Policy {
         Self {
             allow: |ip| ip.is_loopback() || is_public_ip(ip),
             plain_http: true,
+            any_port: true,
         }
     }
 }
@@ -92,8 +103,9 @@ pub async fn checked_addrs(
     let literal = host.trim_start_matches('[').trim_end_matches(']');
     let addrs: Vec<SocketAddr> = match literal.parse::<IpAddr>() {
         Ok(ip) => vec![SocketAddr::new(ip, port)],
-        Err(_) => tokio::net::lookup_host((host, port))
+        Err(_) => tokio::time::timeout(DNS_TIMEOUT, tokio::net::lookup_host((host, port)))
             .await
+            .map_err(|_| "resolving the host name timed out".to_owned())?
             .map_err(|_| "the host name doesn't resolve".to_owned())?
             .collect(),
     };
@@ -114,7 +126,7 @@ pub async fn checked_addrs(
 pub async fn send(
     url: &str,
     body: &[u8],
-    secret: &str,
+    secrets: &[&str],
     delivery_id: &str,
     event_type: &str,
     policy: &Policy,
@@ -128,7 +140,10 @@ pub async fn send(
     let Some(host) = url.host_str().map(str::to_owned) else {
         return Sent::failed("the URL has no host");
     };
-    let port = url.port_or_known_default().unwrap_or(443);
+    let port = url.port_or_known_default().unwrap_or(PORT);
+    if port != PORT && !policy.any_port {
+        return Sent::failed("only port 443 is delivered to");
+    }
     let addrs = match checked_addrs(&host, port, policy).await {
         Ok(addrs) => addrs,
         Err(err) => return Sent::failed(err),
@@ -156,7 +171,7 @@ pub async fn send(
     let response = client
         .post(url)
         .header("content-type", "application/json")
-        .header(SIGNATURE_HEADER, signature(secret, timestamp, body))
+        .header(SIGNATURE_HEADER, signature_all(secrets, timestamp, body))
         .header("X-Cyex-Delivery", delivery_id)
         .header("X-Cyex-Event", event_type)
         .body(body.to_vec())
@@ -239,6 +254,32 @@ pub async fn deliver_with(ctx: Ctx, job: Job, policy: Policy) -> Result<(), JobE
     else {
         return Ok(());
     };
+    // A blocked or deleted account's channels send nothing (the block turns the webhooks off
+    // too; this covers deliveries already queued).
+    let live = accounts::get(&mut conn, channel.account_id)
+        .await
+        .map_err(db_failure)?
+        .is_some_and(|a| {
+            a.deleted_at.is_none()
+                && a.blocked_at
+                    .is_none_or(|_| a.blocked_until.is_some_and(|u| u <= chrono::Utc::now()))
+        });
+    if !live {
+        db::record_attempt(
+            &mut conn,
+            id,
+            &Attempt {
+                attempts: delivery.attempts,
+                response_status: None,
+                error: Some("the channel's account is blocked or deleted"),
+                duration_ms: 0,
+                state: "failed",
+            },
+        )
+        .await
+        .map_err(db_failure)?;
+        return Ok(());
+    }
     drop(conn);
 
     let delivery_id = delivery.id.to_string();
@@ -257,7 +298,7 @@ pub async fn deliver_with(ctx: Ctx, job: Job, policy: Policy) -> Result<(), JobE
     let sent = send(
         &hook.url,
         &bytes,
-        &hook.secret,
+        &hook.signing_secrets(chrono::Utc::now()),
         &delivery_id,
         &delivery.event_type,
         &policy,
@@ -287,22 +328,21 @@ pub async fn deliver_with(ctx: Ctx, job: Job, policy: Policy) -> Result<(), JobE
     )
     .await
     .map_err(db_failure)?;
-    if sent.ok() {
-        if !test {
-            db::delivered(&mut tx, hook.id).await.map_err(db_failure)?;
-        }
-    } else if last
+    let finished = sent.ok() || last;
+    if finished
         && !test
-        && db::failed_for_good(&mut tx, hook.id)
+        && db::record_outcome(&mut tx, hook.id, sent.ok())
             .await
             .map_err(db_failure)?
+            .notify
     {
+        // The URL may hold a token: the notification names its host only. Once a day at most.
         let payload = json!({
             "webhook_id": ids::to_text(hook.id),
             "platform": channel.platform,
             "channel_id": channel.platform_channel_id,
             "login": channel.login,
-            "url": hook.url,
+            "url": redacted(&hook.url),
         });
         notifications::create(&mut tx, channel.account_id, "webhook.disabled", &payload)
             .await
@@ -360,7 +400,7 @@ mod tests {
         let sent = send(
             "http://example.com/",
             b"{}",
-            "s",
+            &["s"],
             "1",
             "webhook.test",
             &Policy::default(),
@@ -370,13 +410,23 @@ mod tests {
         let sent = send(
             "https://127.0.0.1/",
             b"{}",
-            "s",
+            &["s"],
             "1",
             "webhook.test",
             &Policy::default(),
         )
         .await;
         assert!(sent.error.unwrap().contains("isn't allowed"));
+        let sent = send(
+            "https://1.1.1.1:8443/",
+            b"{}",
+            &["s"],
+            "1",
+            "webhook.test",
+            &Policy::default(),
+        )
+        .await;
+        assert_eq!(sent.error.as_deref(), Some("only port 443 is delivered to"));
         assert!(
             !Sent {
                 status: Some(301),

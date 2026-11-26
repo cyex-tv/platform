@@ -62,7 +62,7 @@ export function usageLine(usage: { day: string; requests: number }[], now = new 
 
 /** What a webhook's state says. */
 export function webhookState(h: { enabled: boolean; disabledReason?: string | null; failedDeliveries: number }): string {
-  if (!h.enabled) return h.disabledReason === 'failures' ? 'Off after 5 failed deliveries in a row' : 'Off';
+  if (!h.enabled) return h.disabledReason === 'failures' ? 'Off: too many failed deliveries' : h.disabledReason === 'blocked' ? 'Off: the account was blocked' : 'Off';
   if (h.failedDeliveries > 0) return `On, ${count(h.failedDeliveries)} failed in a row`;
   return 'On';
 }
@@ -89,5 +89,6 @@ export function urlProblem(raw: string): string | null {
   }
   if (u.protocol !== 'https:') return 'Webhook URLs must start with https://.';
   if (u.username || u.password) return 'Leave the user name and password out of the URL.';
+  if (u.port && u.port !== '443') return 'Webhook URLs use the https port, 443. Leave the port out.';
   return null;
 }

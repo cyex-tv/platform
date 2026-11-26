@@ -142,7 +142,7 @@ export function describe(kind: string, payload: string | null | undefined): Line
       const login = str(d, 'login', 64);
       return {
         icon: 'x',
-        text: `A webhook of ${login ? iso(login) : 'your channel'} was turned off after 5 failed deliveries in a row. Fix the receiver, then turn it on again.`,
+        text: `A webhook of ${login ? iso(login) : 'your channel'} was turned off after too many failed deliveries. Fix the receiver, then turn it on again.`,
         href: '/me/channels',
       };
     }

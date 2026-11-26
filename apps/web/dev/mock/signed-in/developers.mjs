@@ -23,7 +23,7 @@ for (const [id, url, events] of [
   [MOCK_HOOK_ID, 'https://bot.example.com/cyex', ['SET_EMOTE_ADDED', 'SET_EMOTE_REMOVED']],
   [MOCK_HOOK_DELETABLE_ID, 'https://old.example.com/hook', ['EMOTE_UPDATED']],
 ]) {
-  HOOKS.push({ id, url, events, enabled: true, disabledReason: null, failedDeliveries: 0, createdAt: '2026-11-20T09:00:00.000Z', channel: CHANNELS[0], secret: `whsec_${rand(43)}` });
+  HOOKS.push({ id, url, events, enabled: true, disabledReason: null, failedDeliveries: 0, createdAt: '2026-11-20T09:00:00.000Z', channel: CHANNELS[0], secret: `cyexhook_${rand(43)}` });
   DELIVERIES.set(id, []);
 }
 DELIVERIES.get(MOCK_HOOK_ID).push({ id: '41', eventType: 'set.emote_added', eventId: '9021', state: 'delivered', attempts: 1, responseStatus: 200, error: null, durationMs: 88, createdAt: '2026-11-26T10:00:00.000Z', finishedAt: '2026-11-26T10:00:00.100Z' });
@@ -83,7 +83,7 @@ export function signedInDevelopers(op, body, v) {
       const e = eventsProblem(v.input?.events);
       if (e) return err(e, 'bad_webhook_events');
       if (HOOKS.filter((h) => h.channel === ch).length >= 5) return err('This channel has 5 webhooks, the most it may. Delete one first.', 'too_many_webhooks');
-      const secret = `whsec_${rand(43)}`;
+      const secret = `cyexhook_${rand(43)}`;
       const hook = { id: nid(), url: String(v.input.url).trim(), events: [...new Set(v.input.events)], enabled: true, disabledReason: null, failedDeliveries: 0, createdAt: now(), channel: ch, secret };
       HOOKS.push(hook);
       DELIVERIES.set(hook.id, []);
@@ -115,7 +115,7 @@ export function signedInDevelopers(op, body, v) {
     case 'RotateWebhookSecret': {
       const h = HOOKS.find((x) => x.id === v.id);
       if (!h) return err('Not found.', 'not_found');
-      h.secret = `whsec_${rand(43)}`;
+      h.secret = `cyexhook_${rand(43)}`;
       return { data: { rotateWebhookSecret: { secret: h.secret, webhook: hookView(h) } } };
     }
     case 'TestWebhook': {

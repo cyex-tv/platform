@@ -679,8 +679,12 @@ pub async fn restrict(
             sessions::delete_for_account(&mut tx, account_id, None)
                 .await
                 .map_err(db_error)?;
-            // A block ends the account's developer API keys too (ADR 0033).
+            // A block ends the account's developer API keys (ADR 0033) and turns its channels'
+            // webhooks off (ADR 0034).
             cyex_tv_db::api_keys::delete_for_account(&mut tx, account_id)
+                .await
+                .map_err(db_error)?;
+            cyex_tv_db::webhooks::disable_for_account(&mut tx, account_id)
                 .await
                 .map_err(db_error)?;
         }
@@ -688,6 +692,7 @@ pub async fn restrict(
     record_audit(&mut tx, caller.account_id, Audit::new("account.restricted", "account", &ids::to_text(account_id)).change(Some(json!({ "uploads_blocked": before.restricted_at.is_some(), "blocked": before.blocked_at.is_some() })), Some(json!({ "uploads_blocked": after.restricted_at.is_some(), "blocked": after.blocked_at.is_some() }))))
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
+    state.key_cache.forget_account(account_id);
     Ok(status_of(&after))
 }
 
@@ -727,6 +732,9 @@ pub async fn place(
         cyex_tv_db::api_keys::delete_for_account(&mut tx, account_id)
             .await
             .map_err(db_error)?;
+        cyex_tv_db::webhooks::disable_for_account(&mut tx, account_id)
+            .await
+            .map_err(db_error)?;
     }
     let mut after_snap = snapshot(&after);
     after_snap["kind"] = json!(hold.kind());
@@ -745,6 +753,7 @@ pub async fn place(
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
+    state.key_cache.forget_account(account_id);
     Ok(status_of(&after))
 }
 

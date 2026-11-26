@@ -7,7 +7,7 @@ use std::time::Duration;
 use cyex_tv_shared::config::Config;
 use cyex_tv_shared::{logging, shutdown};
 use cyex_tv_storage::{S3Config, Store};
-use cyex_tv_worker::{Ctx, Handlers, Limits};
+use cyex_tv_worker::{Ctx, Limits};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -39,21 +39,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             shutdown::signal(),
         ));
     }
-    let handlers = Handlers::default()
-        .on(
-            cyex_tv_worker::transcode::KIND,
-            cyex_tv_worker::transcode::run,
-        )
-        .on(cyex_tv_worker::purge::KIND, cyex_tv_worker::purge::run)
-        .on(
-            cyex_tv_worker::cosmetics::KIND,
-            cyex_tv_worker::cosmetics::run,
-        )
-        .on(
-            cyex_tv_worker::webhooks::KIND,
-            cyex_tv_worker::webhooks::run,
-        )
-        .with_metrics(registry);
+    let handlers = cyex_tv_worker::main_handlers().with_metrics(registry.clone());
+    // Webhook deliveries in lanes of their own (ADR 0034).
+    let webhook_handlers = cyex_tv_worker::webhook_handlers().with_metrics(registry);
     let purge = cyex_tv_worker::purge::Purge::from_env(|name| std::env::var(name).ok())?;
     if purge.is_none() {
         tracing::warn!("CYEX_TV_CLOUDFLARE_PURGE_TOKEN not set; takedowns won't purge the CDN");
@@ -69,18 +57,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
     tracing::info!(kinds = ?handlers.kinds(), "worker started");
+    let ctx = Ctx {
+        db,
+        store,
+        purge,
+        paddle,
+    };
+    let (stop_lanes, lanes_stop) = tokio::sync::watch::channel(false);
+    let lanes: Vec<_> = (0..cyex_tv_worker::webhooks::LANES)
+        .map(|_| {
+            tokio::spawn(cyex_tv_worker::run_lane(
+                ctx.clone(),
+                webhook_handlers.clone(),
+                Limits::default(),
+                lanes_stop.clone(),
+            ))
+        })
+        .collect();
     cyex_tv_worker::run(
-        Ctx {
-            db,
-            store,
-            purge,
-            paddle,
-        },
+        ctx,
         handlers,
         Limits::default(),
         Duration::from_secs(3600),
         shutdown::signal(),
     )
     .await?;
+    let _ = stop_lanes.send(true);
+    for lane in lanes {
+        let _ = lane.await;
+    }
     Ok(())
 }

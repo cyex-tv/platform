@@ -134,7 +134,7 @@
           </div>
           {#if secret?.hook === h.id}
             <div class="secret" role="status">
-              <p>Copy the signing secret now. It isn't shown again.</p>
+              <p>Copy the signing secret now. It isn't shown again. After New secret, the old one also signs for 24 hours.</p>
               <div class="tok">
                 <input class="ui-input ui-mono" type="text" readonly aria-label="Signing secret" value={secret.value} onfocus={(e) => e.currentTarget.select()} />
                 <button class="ui-btn secondary small" type="button" onclick={() => secret && copied.copy(secret.value)}>{copied.copied ? 'Copied' : copied.failed ? 'Copy failed' : 'Copy'}</button>

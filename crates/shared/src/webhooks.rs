@@ -32,6 +32,10 @@ pub const SIGNATURE_HEADER: &str = "X-Cyex-Signature";
 /// The longest URL a webhook may have.
 pub const URL_MAX: usize = 2000;
 
+/// The only port deliveries go to: 443, the https default. Webhook URLs can't name another, so a
+/// URL can't aim at a service on another port of a public host.
+pub const PORT: u16 = 443;
+
 /// Whether `event_type` is one a webhook may subscribe to.
 pub fn is_event_type(event_type: &str) -> bool {
     EVENT_TYPES.contains(&event_type)
@@ -45,6 +49,7 @@ pub enum UrlProblem {
     NotHttps,
     Credentials,
     PrivateHost,
+    Port,
 }
 
 impl UrlProblem {
@@ -55,6 +60,7 @@ impl UrlProblem {
             Self::NotHttps => "Webhook URLs must start with https://.",
             Self::Credentials => "Leave the user name and password out of the URL.",
             Self::PrivateHost => "That URL points at a private or local address.",
+            Self::Port => "Webhook URLs use the https port, 443. Leave the port out.",
         }
     }
 }
@@ -103,6 +109,9 @@ pub fn check_url(raw: &str) -> Result<url::Url, UrlProblem> {
             return Err(UrlProblem::PrivateHost);
         }
         Some(_) => {}
+    }
+    if url.port_or_known_default() != Some(PORT) {
+        return Err(UrlProblem::Port);
     }
     url.set_fragment(None);
     if url.as_str().len() > URL_MAX {
@@ -175,6 +184,31 @@ fn is_public_v6(ip: Ipv6Addr) -> bool {
 /// `t=<timestamp>,v1=<hex HMAC-SHA256 of "<timestamp>.<body>" under the secret>`.
 pub fn signature(secret: &str, timestamp: i64, body: &[u8]) -> String {
     format!("t={timestamp},v1={}", sign_hex(secret, timestamp, body))
+}
+
+/// The header for a delivery signed with every secret in `secrets` (the current one first, and
+/// the one before a rotation while it still signs): `t=<timestamp>,v1=<sig>,v1=<sig>`. A receiver
+/// accepts the delivery when any `v1` matches its secret.
+pub fn signature_all(secrets: &[&str], timestamp: i64, body: &[u8]) -> String {
+    let mut out = format!("t={timestamp}");
+    for secret in secrets {
+        out.push_str(",v1=");
+        out.push_str(&sign_hex(secret, timestamp, body));
+    }
+    out
+}
+
+/// A URL as people who didn't make the webhook see it: its host, and `/…` when it has a path or
+/// query, which can hold a token (chat-service webhooks do).
+pub fn redacted(url: &str) -> String {
+    match url::Url::parse(url) {
+        Ok(u) => {
+            let host = u.host_str().unwrap_or_default();
+            let more = u.path() != "/" || u.query().is_some();
+            format!("{}://{host}{}", u.scheme(), if more { "/…" } else { "/" })
+        }
+        Err(_) => "…".to_owned(),
+    }
 }
 
 fn sign_hex(secret: &str, timestamp: i64, body: &[u8]) -> String {
@@ -332,7 +366,15 @@ mod tests {
                 .as_str(),
             "https://hooks.example.com/cyex"
         );
-        assert!(check_url("https://203.0.114.1:8443/hook").is_ok());
+        assert!(check_url("https://203.0.114.1:443/hook").is_ok());
+        assert_eq!(
+            check_url("https://hooks.example.com:8443/hook").unwrap_err(),
+            UrlProblem::Port
+        );
+        assert_eq!(
+            check_url("https://hooks.example.com:22/").unwrap_err(),
+            UrlProblem::Port
+        );
         assert!(check_url("https://[2606:4700:4700::1111]/hook").is_ok());
         for (raw, problem) in [
             ("http://hooks.example.com/", UrlProblem::NotHttps),
@@ -368,23 +410,91 @@ mod tests {
     #[test]
     fn deliveries_are_signed_and_verify() {
         let body = br#"{"event":{"type":"webhook.test"}}"#;
-        let sig = signature("whsec_test", 1_764_000_000, body);
+        let sig = signature("cyexhook_test_not_a_real_secret", 1_764_000_000, body);
         // Known answer, so other languages can check their code against it (the docs show it).
         assert_eq!(
             sig,
-            "t=1764000000,v1=3ac1107f1c9307e690044eef0358ea17ba739ffa6b747d4eb66d16fd7516464e"
+            "t=1764000000,v1=b21cbc9c5f20a666e719401e1763ca92d8bd0a2177157ef4f4abf3ed4bb90025"
         );
         assert!(sig.starts_with("t=1764000000,v1="));
         assert_eq!(sig.len(), "t=1764000000,v1=".len() + 64);
-        assert!(verify("whsec_test", &sig, body, 1_764_000_100, 300));
+        assert!(verify(
+            "cyexhook_test_not_a_real_secret",
+            &sig,
+            body,
+            1_764_000_100,
+            300
+        ));
         // Too old, wrong secret, changed body, junk.
-        assert!(!verify("whsec_test", &sig, body, 1_764_000_301, 300));
-        assert!(!verify("whsec_other", &sig, body, 1_764_000_000, 300));
-        assert!(!verify("whsec_test", &sig, b"{}", 1_764_000_000, 300));
-        assert!(!verify("whsec_test", "v1=abc", body, 1_764_000_000, 300));
+        assert!(!verify(
+            "cyexhook_test_not_a_real_secret",
+            &sig,
+            body,
+            1_764_000_301,
+            300
+        ));
+        assert!(!verify(
+            "cyexhook_test_other",
+            &sig,
+            body,
+            1_764_000_000,
+            300
+        ));
+        assert!(!verify(
+            "cyexhook_test_not_a_real_secret",
+            &sig,
+            b"{}",
+            1_764_000_000,
+            300
+        ));
+        assert!(!verify(
+            "cyexhook_test_not_a_real_secret",
+            "v1=abc",
+            body,
+            1_764_000_000,
+            300
+        ));
         // The same input always signs the same; another timestamp signs differently.
-        assert_eq!(sig, signature("whsec_test", 1_764_000_000, body));
-        assert_ne!(sig, signature("whsec_test", 1_764_000_001, body));
+        assert_eq!(
+            sig,
+            signature("cyexhook_test_not_a_real_secret", 1_764_000_000, body)
+        );
+        assert_ne!(
+            sig,
+            signature("cyexhook_test_not_a_real_secret", 1_764_000_001, body)
+        );
+    }
+
+    #[test]
+    fn a_rotation_signs_with_both_secrets() {
+        let body = b"{}";
+        let sig = signature_all(&["cyexhook_test_new", "cyexhook_test_old"], 10, body);
+        assert_eq!(sig.matches("v1=").count(), 2);
+        assert!(sig.starts_with(&signature("cyexhook_test_new", 10, body)));
+        assert!(verify("cyexhook_test_new", &sig, body, 10, 300));
+        assert!(verify("cyexhook_test_old", &sig, body, 10, 300));
+        assert!(!verify("cyexhook_test_other", &sig, body, 10, 300));
+        assert_eq!(
+            signature_all(&["cyexhook_test_new"], 10, body),
+            signature("cyexhook_test_new", 10, body)
+        );
+    }
+
+    #[test]
+    fn others_see_only_the_host() {
+        assert_eq!(
+            redacted("https://chat.example.com/api/webhooks/123/s3cr3t-token"),
+            "https://chat.example.com/…"
+        );
+        assert_eq!(
+            redacted("https://hooks.example.com/?token=x"),
+            "https://hooks.example.com/…"
+        );
+        assert_eq!(
+            redacted("https://hooks.example.com/"),
+            "https://hooks.example.com/"
+        );
+        assert!(!redacted("https://a.example/x?k=secret").contains("secret"));
     }
 
     #[test]

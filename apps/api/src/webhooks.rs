@@ -16,7 +16,7 @@ use cyex_tv_shared::model::{
     CreateWebhook, CreatedWebhook, EditorPermission, EventType, Platform, UpdateWebhook, Webhook,
     WebhookDelivery,
 };
-use cyex_tv_shared::webhooks::{TEST_EVENT, check_url, is_event_type};
+use cyex_tv_shared::webhooks::{TEST_EVENT, check_url, is_event_type, redacted};
 use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 
@@ -33,7 +33,7 @@ use crate::views;
 pub const MAX_PER_CHANNEL: i64 = 5;
 
 fn secret() -> String {
-    format!("whsec_{}", cyex_tv_auth::tokens::random_token())
+    format!("cyexhook_{}", cyex_tv_auth::tokens::random_token())
 }
 
 /// The channel, if the caller may manage its webhooks: its owner, or an account editor of the
@@ -97,10 +97,26 @@ fn event_type_of(name: &str) -> Option<EventType> {
     serde_json::from_value(Value::String(name.to_owned())).ok()
 }
 
-pub fn view(hook: &db::Webhook) -> Webhook {
+/// Whether `caller` sees the webhook's whole URL: its creator and the channel's owner do. A URL
+/// can hold a token (chat-service webhooks put one in the path), so editors see the host only.
+fn sees_url(caller: &Caller, ch: &channels::Channel, hook: &db::Webhook) -> bool {
+    caller.account_id == ch.account_id || hook.created_by == Some(caller.account_id)
+}
+
+/// The webhook as `caller` sees it (`sees_url`).
+pub fn view_for(caller: &Caller, ch: &channels::Channel, hook: &db::Webhook) -> Webhook {
+    view(hook, sees_url(caller, ch, hook))
+}
+
+/// The webhook, with its whole URL when `full`, else its host only (`webhooks::redacted`).
+pub fn view(hook: &db::Webhook, full: bool) -> Webhook {
     Webhook {
         id: ids::to_text(hook.id),
-        url: hook.url.clone(),
+        url: if full {
+            hook.url.clone()
+        } else {
+            redacted(&hook.url)
+        },
         events: hook
             .event_types
             .iter()
@@ -155,6 +171,28 @@ fn events_of(events: &[EventType]) -> ApiResult<Vec<String>> {
     Ok(names)
 }
 
+/// Refuses a webhook that would ask for the cosmetics catalog's events past the global cap
+/// (`db::MAX_COSMETIC_SUBSCRIBERS`): every such event goes to all of them.
+async fn cosmetic_room(
+    conn: &mut PgConnection,
+    events: &[String],
+    except: Option<uuid::Uuid>,
+    max: i64,
+) -> ApiResult<()> {
+    if db::Webhook::wants_cosmetics(events)
+        && db::cosmetic_subscribers(conn, except)
+            .await
+            .map_err(db_error)?
+            >= max
+    {
+        return Err(conflict(
+            "too_many_webhooks",
+            "Too many webhooks ask for cosmetics events already. Pick channel events only.",
+        ));
+    }
+    Ok(())
+}
+
 fn limited(state: &AppState, caller: &Caller) -> ApiResult<()> {
     limited_as(
         state,
@@ -165,9 +203,10 @@ fn limited(state: &AppState, caller: &Caller) -> ApiResult<()> {
     )
 }
 
+/// What the audit log keeps of a webhook: the URL's host only, never a token in its path.
 fn audit_snapshot(hook: &db::Webhook) -> Value {
     json!({
-        "url": hook.url,
+        "url": redacted(&hook.url),
         "events": hook.event_types,
         "enabled": hook.enabled,
     })
@@ -186,7 +225,7 @@ pub async fn list(
         .await
         .map_err(db_error)?
         .iter()
-        .map(view)
+        .map(|h| view_for(caller, &ch, h))
         .collect())
 }
 
@@ -203,6 +242,7 @@ pub async fn create(
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let ch = channel_by_platform(&mut tx, caller, platform, id).await?;
+    cosmetic_room(&mut tx, &events, None, db::MAX_COSMETIC_SUBSCRIBERS).await?;
     let secret = secret();
     let topic = outbox::channel_topic(ch.platform, &ch.platform_channel_id);
     let hook = db::create(
@@ -234,7 +274,7 @@ pub async fn create(
     tx.commit().await.map_err(sqlx_error)?;
     Ok(CreatedWebhook {
         secret,
-        webhook: view(&hook),
+        webhook: view(&hook, true),
     })
 }
 
@@ -250,6 +290,16 @@ pub async fn update(
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let (before, ch) = webhook_of(&mut tx, caller, id).await?;
+    let wanted = events.clone().unwrap_or_else(|| before.event_types.clone());
+    if input.enabled.unwrap_or(before.enabled) {
+        cosmetic_room(
+            &mut tx,
+            &wanted,
+            Some(before.id),
+            db::MAX_COSMETIC_SUBSCRIBERS,
+        )
+        .await?;
+    }
     let hook = db::update(
         &mut tx,
         before.id,
@@ -269,10 +319,11 @@ pub async fn update(
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
-    Ok(view(&hook))
+    Ok(view_for(caller, &ch, &hook))
 }
 
 pub async fn delete(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bool> {
+    limited(state, caller)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
     let (hook, ch) = webhook_of(&mut tx, caller, id).await?;
@@ -289,7 +340,8 @@ pub async fn delete(state: &AppState, caller: &Caller, id: &str) -> ApiResult<bo
     Ok(done)
 }
 
-/// Replaces the secret; the old one stops signing at once.
+/// Replaces the secret. The old one keeps signing (a second `v1=`) for 24 hours, so receivers
+/// can switch over without dropping deliveries.
 pub async fn rotate_secret(
     state: &AppState,
     caller: &Caller,
@@ -318,7 +370,7 @@ pub async fn rotate_secret(
     tx.commit().await.map_err(sqlx_error)?;
     Ok(CreatedWebhook {
         secret,
-        webhook: view(&hook),
+        webhook: view_for(caller, &ch, &hook),
     })
 }
 
@@ -386,6 +438,6 @@ mod tests {
             Some(EventType::EmoteUpdated)
         );
         assert!(url_of("http://example.com").is_err());
-        assert!(secret().starts_with("whsec_") && secret().len() == 49);
+        assert!(secret().starts_with("cyexhook_") && secret().len() == 52);
     }
 }

@@ -185,10 +185,10 @@ export const guides: Guide[] = [
       { t: 'pre', code: `curl -s '${baseUrl}/v1/sets/global' \\n  -H 'authorization: Bearer cyex_live_<key>'` },
       table(
         ['Rights', 'Public reads only. A request with a key runs signed out: it never acts as you, holds none of your roles, and the cookie is ignored. Mutations, uploads, sign-in and the sockets answer `api_key_read_only`.'],
-        ['Rate limit', '3.000 a minute per key, in place of the per-IP read and GraphQL limits. `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` describe the key’s allowance.'],
+        ['Rate limit', '3.000 a minute per key, and 3.000 a minute for all of an account’s keys together, in place of the per-IP read and GraphQL limits. `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` describe the tighter of the two.'],
         ['How many', 'Up to 10 keys per account. Made on the website only, never with a token.'],
         ['Usage', 'The Account tab shows each key’s prefix, when it was made and last used, and its requests per day for 30 days ([myApiKeys](#gql-query-myApiKeys)).'],
-        ['Revoking', 'Revoke stops a key at once ([revokeApiKey](#gql-mutation-revokeApiKey)). Deleting the account and a staff block end its keys too. Signing out does not: keys are for bots that run without you.'],
+        ['Revoking', 'Revoke stops a key within 30 seconds ([revokeApiKey](#gql-mutation-revokeApiKey)). Deleting the account and a staff block end its keys too. Signing out does not: keys are for bots that run without you.'],
       ),
       note('A key that was revoked or never existed answers `401 api_key_invalid`. Keep keys on your server; a leaked one can only read what anyone can, but it spends your allowance.'),
     ],
@@ -200,10 +200,10 @@ export const guides: Guide[] = [
     blocks: [
       lede('A webhook sends a channel’s events to your server as HTTP POSTs, so a bot doesn’t need to hold the event socket open. The channel’s owner, and its account editors with the channel settings permission, add them on the Channels page.'),
       table(
-        ['URL', 'An `https://` URL on a public address. Private, local and reserved addresses are refused when you save it and again before every delivery. Redirects are never followed.'],
+        ['URL', 'An `https://` URL on a public address, on the https port (443). Private, local and reserved addresses are refused when you save it and again before every delivery. Redirects are never followed. Only you and whoever made the webhook see the whole URL; editors see its host.'],
         ['Events', '`set.emote_added`, `set.emote_removed`, `set.emote_renamed`, `channel.active_set_changed` and `emote.updated` for the channel’s active set, and `cosmetic.created`, `cosmetic.updated`, `cosmetic.deleted` for the cosmetics catalog.'],
         ['How many', '5 per channel.'],
-        ['Retries', 'Answer with a 2xx within 10 seconds. Anything else is tried again with backoff (10 s, 20 s, 40 s, …), 8 times in all. After 5 deliveries in a row fail every try, the webhook turns off and the channel’s owner is told; turn it on again when your server is fixed.'],
+        ['Retries', 'Answer with a 2xx within 10 seconds. Anything else is tried again with backoff (10 s, 20 s, 40 s, …), 8 times in all. The webhook turns off after 5 deliveries in a row fail every try, or when at least 20 and over 80% of a day’s deliveries failed; the channel’s owner is told (once a day at most). Turn it on again when your server is fixed. With 100 deliveries waiting, new ones are dropped and logged.'],
         ['Send test', 'Sends one `webhook.test` delivery at once. The log keeps the latest 50 deliveries.'],
       ),
       p('Every delivery is a JSON body like this, with the headers `X-Cyex-Signature`, `X-Cyex-Event` and `X-Cyex-Delivery`:'),
@@ -216,17 +216,17 @@ export const guides: Guide[] = [
     title: 'Checking webhook signatures',
     search: 'signature verify hmac sha256 secret x-cyex-signature timestamp replay node python rust',
     blocks: [
-      p('Each webhook has a secret (`whsec_…`), shown once when you add it or make a new one. Every delivery is signed with it: `X-Cyex-Signature: t=<unix seconds>,v1=<signature>`, where the signature is the hex HMAC-SHA256 of the timestamp, a dot and the raw body, under the secret.'),
+      p('Each webhook has a secret (`cyexhook_…`), shown once when you add it or make a new one. Every delivery is signed with it: `X-Cyex-Signature: t=<unix seconds>,v1=<signature>`, where the signature is the hex HMAC-SHA256 of the timestamp, a dot and the raw body, under the secret. For 24 hours after you make a new secret, the header carries a second `v1=` signed with the old one: accept the delivery when any `v1` matches.'),
       ol(
         'Read the raw body as bytes, before any JSON parsing.',
         'Split the header on `,` and take `t` and `v1`.',
         'Compute HMAC-SHA256 of `<t>.<body>` with the secret, as hex, and compare it to `v1` in constant time.',
         'Refuse it when `t` is more than 5 minutes from your clock, so an old delivery can’t be replayed.',
       ),
-      { t: 'pre', code: `// Node.js\nimport { createHmac, timingSafeEqual } from 'node:crypto';\n\nexport function verify(secret, header, rawBody, tolerance = 300) {\n  const parts = Object.fromEntries(header.split(',').map((p) => p.trim().split('=')));\n  const t = Number(parts.t);\n  if (!Number.isFinite(t) || Math.abs(Date.now() / 1000 - t) > tolerance) return false;\n  const expected = createHmac('sha256', secret).update(\`\${t}.\`).update(rawBody).digest('hex');\n  const given = Buffer.from(parts.v1 ?? '', 'utf8');\n  return given.length === expected.length && timingSafeEqual(given, Buffer.from(expected, 'utf8'));\n}` },
-      { t: 'pre', code: `# Python\nimport hashlib, hmac, time\n\ndef verify(secret: str, header: str, raw_body: bytes, tolerance: int = 300) -> bool:\n    parts = dict(p.strip().split("=", 1) for p in header.split(",") if "=" in p)\n    t = int(parts.get("t", "0"))\n    if abs(time.time() - t) > tolerance:\n        return False\n    expected = hmac.new(secret.encode(), f"{t}.".encode() + raw_body, hashlib.sha256).hexdigest()\n    return hmac.compare_digest(expected, parts.get("v1", ""))` },
+      { t: 'pre', code: `// Node.js\nimport { createHmac, timingSafeEqual } from 'node:crypto';\n\nexport function verify(secret, header, rawBody, tolerance = 300) {\n  const parts = header.split(',').map((p) => p.trim().split('='));\n  const t = Number(parts.find(([k]) => k === 't')?.[1]);\n  if (!Number.isFinite(t) || Math.abs(Date.now() / 1000 - t) > tolerance) return false;\n  const expected = Buffer.from(createHmac('sha256', secret).update(\`\${t}.\`).update(rawBody).digest('hex'), 'utf8');\n  return parts.filter(([k]) => k === 'v1').some(([, v]) => {\n    const given = Buffer.from(v ?? '', 'utf8');\n    return given.length === expected.length && timingSafeEqual(given, expected);\n  });\n}` },
+      { t: 'pre', code: `# Python\nimport hashlib, hmac, time\n\ndef verify(secret: str, header: str, raw_body: bytes, tolerance: int = 300) -> bool:\n    parts = [p.strip().split("=", 1) for p in header.split(",") if "=" in p]\n    t = int(next((v for k, v in parts if k == "t"), "0"))\n    if abs(time.time() - t) > tolerance:\n        return False\n    expected = hmac.new(secret.encode(), f"{t}.".encode() + raw_body, hashlib.sha256).hexdigest()\n    return any(hmac.compare_digest(expected, v) for k, v in parts if k == "v1")` },
       p('To check your code: with the secret `key`, the timestamp `1` and the body `{}`, the signature is `1ba6b8171186efc613e8bcc0cbdab2748f24984d7c5a84faa2637afa0e40d224`.'),
-      note('Keep the secret on your server. If it leaks, make a new one on the Channels page ([rotateWebhookSecret](#gql-mutation-rotateWebhookSecret)); the old one stops signing at once.'),
+      note('Keep the secret on your server. If it leaks, make a new one on the Channels page ([rotateWebhookSecret](#gql-mutation-rotateWebhookSecret)); the old one stops signing after 24 hours.'),
     ],
   },
   {

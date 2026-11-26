@@ -40,6 +40,8 @@ pub struct AppState {
     pub announcement: Arc<crate::site::AnnouncementCache>,
     /// Requests per developer API key not yet written (ADR 0033, `developers::Usage::flush`).
     pub key_usage: Arc<crate::developers::Usage>,
+    /// Developer API key lookups, found or not (`developers::KeyCache`).
+    pub key_cache: Arc<crate::developers::KeyCache>,
 }
 
 impl AppState {
@@ -56,6 +58,7 @@ impl AppState {
             reads: Arc::new(ReadCache::disabled()),
             announcement: Arc::default(),
             key_usage: Arc::default(),
+            key_cache: Arc::default(),
         }
     }
 
