@@ -486,6 +486,9 @@ async fn lists_stop_at_their_caps() {
     for q in [HIDE, FAV] {
         let r = w.gql(Some(&t), q, json!({ "id": extra })).await;
         assert_eq!(code(&r), "limit_reached", "{q}: {r}");
+        let ext = &r["errors"][0]["extensions"];
+        assert_eq!(ext["limit"], ext["current"], "{r}");
+        assert!(ext["limit"].as_u64().is_some_and(|n| n > 0), "{r}");
     }
     // One already listed still answers false at the cap, without an error.
     let listed: Uuid = sqlx::query_scalar("SELECT emote_id FROM hidden_emotes LIMIT 1")
@@ -518,6 +521,8 @@ async fn lists_stop_at_their_caps() {
         .gql(Some(&t), HIDE_CREATOR, json!({ "id": ids::to_text(maker) }))
         .await;
     assert_eq!(code(&r), "limit_reached", "{r}");
+    assert_eq!(r["errors"][0]["extensions"]["limit"], 200, "{r}");
+    assert_eq!(r["errors"][0]["extensions"]["current"], 200, "{r}");
     w.db.close().await;
 }
 

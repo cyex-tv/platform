@@ -1,4 +1,4 @@
-// The mock's faster reads (ADR 0032): persisted queries over GET (miss, hit, mismatch, mutations
+// The mock's faster reads (ADR 0035): persisted queries over GET (miss, hit, mismatch, mutations
 // refused) and the bulk reads' order, de-duplication and caps, as the API answers them.
 import { describe, expect, it } from 'vitest';
 import { getRequest, hashOf } from './mock/persisted.mjs';

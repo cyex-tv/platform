@@ -65,7 +65,7 @@ Fix PRs, each with a regression test and green CI (DB tests ran, not skipped): p
 | L11 | Introspection and GraphiQL on in production (by design, `gql.rs`) | Accepted |
 | L12 | The original is stored before the transaction commits and orphaned on rollback | Open |
 | L13 | Frame delays: huge delays saturate timestamps and fail every transcode attempt; 20-99 ms strobing is allowed | Open: clamp delays and total length |
-| L14 | Upload form text fields are read whole before the length check; repeated `file` fields accepted | Open (bounded by the 5 MB body limit) |
+| L14 | Upload form text fields are read whole before the length check; repeated `file` fields accepted | Open (bounded by the upload body limit: the largest role ceiling plus 64 KB, ADR 0031) |
 | L15 | Re-uploading bytes whose transcode failed reuses the failed file and stays pending forever | Open |
 | L16 | Takedown blocks the sha256 and the first-frame dHash only; a re-encode with a new first frame passes unless another frame matches | Open (follow-up to M6) |
 | L17 | Containers lack `read_only`, `cap_drop` and `no-new-privileges`; images use floating tags | Open (infra) |

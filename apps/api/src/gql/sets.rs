@@ -23,7 +23,7 @@ impl SetQuery {
             .map_err(api_error)
     }
 
-    /// Several sets at once, in the order asked, each once (ADR 0032): who may see what is the
+    /// Several sets at once, in the order asked, each once (ADR 0035): who may see what is the
     /// rule of `set`, and unknown or hidden sets are left out. At most 25 IDs (`too_many`); one
     /// call costs what that many `set` lookups would.
     #[graphql(complexity = "ids.len() * (10 + child_complexity)")]
@@ -34,7 +34,7 @@ impl SetQuery {
             .map_err(api_error)
     }
 
-    /// What changed in a set after `since`, a `version` you hold (delta sync, ADR 0032). Apply
+    /// What changed in a set after `since`, a `version` you hold (delta sync, ADR 0035). Apply
     /// `added`, `renamed` and `updated` as upserts by emote ID and `removedIds` as deletes, then
     /// keep `version`. `full: true` (with the whole set in `set`) when the change log no longer
     /// reaches back to `since` (7 days or 1.000 versions) or `since` isn't a version of this

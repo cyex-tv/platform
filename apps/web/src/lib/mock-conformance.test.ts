@@ -413,7 +413,13 @@ function resolveRef(s: any): any {
 function checkSchema(value: unknown, schemaIn: any, path: string, out: string[]) {
   const s = resolveRef(schemaIn);
   if (!s) return;
-  if (s.allOf) return s.allOf.forEach((x: any) => checkSchema(value, x, path, out));
+  if (s.allOf) {
+    // Objects joined by allOf (a flattened `#[serde(flatten)]`, like the upload answers) are one object.
+    const parts = s.allOf.map(resolveRef);
+    if (parts.every((x: any) => x?.properties))
+      return checkSchema(value, { type: 'object', properties: Object.assign({}, ...parts.map((x: any) => x.properties)), required: parts.flatMap((x: any) => x.required ?? []) }, path, out);
+    return s.allOf.forEach((x: any) => checkSchema(value, x, path, out));
+  }
   if (s.oneOf || s.anyOf) {
     const alts: any[] = s.oneOf ?? s.anyOf;
     const tries = alts.map((a) => {
@@ -626,7 +632,12 @@ describe('mock-api conformance with the real schema', () => {
     // Emote upload.
     const em = await post('/v1/emotes', form({ name: 'ConformanceEmote', tags: 'cat,mock', zero_width: 'false', private: 'false' }));
     stats.rest += 1;
-    checkResponse('post', '/v1/emotes', em.status, await em.json(), 'POST /v1/emotes', out);
+    const emBody = await em.json();
+    checkResponse('post', '/v1/emotes', em.status, emBody, 'POST /v1/emotes', out);
+    // Both upload routes answer with the fields of the one UploadResult schema.
+    for (const [label, body] of [['POST /v1/emotes', emBody], ['POST /v1/cosmetics/images', firstBody]] as const)
+      for (const field of openapi.components.schemas.UploadResult.required) if (!(field in (body ?? {}))) out.push(`${label}: the answer has no \`${field}\` (UploadResult)`);
+    if (firstBody?.state !== 'processing' || emBody?.state !== 'pending') out.push('uploads: states are processing (picture) and pending (emote)');
     for (const [name, status] of [['blocked', 422], ['ratelimited', 429], ['toobig', 413], ['broken', 422]] as const) {
       const r = await post('/v1/emotes', form({ name }));
       stats.rest += 1;
@@ -691,7 +702,7 @@ describe('mock-api conformance with the real schema', () => {
     if (plBody?.sets?.length !== 1) out.push('POST /v1/personal-sets/lookup: the linked chatter should have exactly one personal set');
     stats.rest += 4;
 
-    // Bulk reads and delta sync (ADR 0032).
+    // Bulk reads and delta sync (ADR 0035).
     const json = (body: unknown) => ({ method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
     const sl = await fetch(`${base}/v1/sets/lookup`, json({ ids: [chBody?.active_set_id, '1'] }));
     const slBody = await sl.json();

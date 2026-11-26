@@ -48,7 +48,7 @@ export function extensionRead(method, pathname, body, query = new URLSearchParam
     const s = id === BUILT_IN_PERSONAL.id ? BUILT_IN_PERSONAL : findSet(id);
     return s && s.visibility !== 'PRIVATE' ? s : null;
   };
-  // Bulk reads (ADR 0032): in the order asked, each once, unknown and hidden ones left out.
+  // Bulk reads (ADR 0035): in the order asked, each once, unknown and hidden ones left out.
   if (method === 'POST' && pathname === '/v1/sets/lookup') {
     const ids = Array.isArray(body?.ids) ? body.ids : null;
     if (!ids || !ids.every((i) => typeof i === 'string')) return { status: 400, body: { error: 'bad_request', message: 'Send ids.' } };
@@ -67,7 +67,7 @@ export function extensionRead(method, pathname, body, query = new URLSearchParam
   if (method === 'GET' && m) {
     const s = setOf(decodeURIComponent(m[1]));
     if (!s) return { status: 404, body: { error: 'not_found', message: 'No such set.' } };
-    // Delta sync (ADR 0032): the mock's sets stay at their version, so only that version is an empty delta.
+    // Delta sync (ADR 0035): the mock's sets stay at their version, so only that version is an empty delta.
     if (query.has('since')) {
       const since = Number(query.get('since'));
       const out = setBody(s);

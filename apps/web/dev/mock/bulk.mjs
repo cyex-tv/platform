@@ -1,4 +1,4 @@
-// Mock API: bulk reads and delta sync (ADR 0032). GraphQL `emotes(ids)`, `sets(ids)`,
+// Mock API: bulk reads and delta sync (ADR 0035). GraphQL `emotes(ids)`, `sets(ids)`,
 // `channels(platform, ids)` and `setChanges(id, since)`; the REST lookups are in mock/extension.mjs.
 // Caps as the API: 100 emotes, 100 channels, 25 sets (`too_many`). The mock's sets don't count
 // versions: every set stays at its version (0), so `since` equal to it is an empty delta and anything

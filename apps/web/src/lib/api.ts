@@ -119,7 +119,7 @@ export async function sha256Hex(text: string): Promise<string | null> {
 
 /**
  * Runs a public query, the same for everyone, as `GET /v1/gql` with its persisted-query hash
- * (ADR 0032), so the CDN and the browser can cache the answer. No cookie goes with it: the API
+ * (ADR 0035), so the CDN and the browser can cache the answer. No cookie goes with it: the API
  * never reads one over GET, so this is only for reads that don't depend on who asks. An unknown
  * hash is answered `PersistedQueryNotFound`; then the text goes once with its hash. Mutations,
  * signed-in reads and anything too long for an address use `gql` (POST).

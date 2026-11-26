@@ -826,7 +826,9 @@ export type EmoteFile = {
   name: Scalars['String']['output'];
   /**
    * 1 to 4. A badge's larger sizes (`128`, `256`, `512`) carry their px ÷ 18, rounded: 7, 14
-   * and 28; read `width` for the size.
+   * and 28; read `width` for the size. **Deprecated for badge and paint files**: `width` is
+   * the contract (`file_scale_non_emote` in `/v1/meta`). Emote files keep `scale` as it is.
+   * @deprecated For badge and paint files: read `width`. Emote files keep `scale` (1 to 4).
    */
   scale: Scalars['Int']['output'];
   /** Bytes. */
@@ -934,7 +936,7 @@ export type EmoteSet = {
   slotsUsed: Scalars['Int']['output'];
   /**
    * Goes up by one or more with every change to what the set shows: a member added, removed
-   * or renamed, the set renamed, an emote in it changed (ADR 0032). Keep it with your copy
+   * or renamed, the set renamed, an emote in it changed (ADR 0035). Keep it with your copy
    * and ask `setChanges` (or `GET /v1/sets/{id}?since=`) for what changed after it.
    */
   version: Scalars['Int']['output'];
@@ -2570,13 +2572,13 @@ export type Query = {
   channelEditableSets?: Maybe<ChannelEditableSets>;
   /**
    * Several channels of one platform at once, by their platform IDs, in the order asked,
-   * each once (ADR 0032). Channels not on cyex.tv are left out. At most 100 IDs
+   * each once (ADR 0035). Channels not on cyex.tv are left out. At most 100 IDs
    * (`too_many`); every 10 IDs cost what one `channel` lookup would.
    */
   channels: Array<Channel>;
   /**
    * Redeem code batches, newest first. Needs `codes.manage`. The codes themselves are shown
-   * only once, by `createCodeBatch`.
+   * only once, by `createCodeBatch`. `perPage` is 1 to 100, default 50.
    */
   codeBatches: CodeBatchPage;
   /**
@@ -2651,7 +2653,7 @@ export type Query = {
    */
   emoteTrending?: Maybe<EmoteTrending>;
   /**
-   * Several emotes at once, in the order asked, each once (ADR 0032): who may see what is the
+   * Several emotes at once, in the order asked, each once (ADR 0035): who may see what is the
    * rule of `emote`, and unknown or hidden emotes are left out. At most 100 IDs (`too_many`);
    * every 10 IDs cost what one `emote` lookup would.
    */
@@ -2761,7 +2763,7 @@ export type Query = {
   myNotifications: Array<Notification>;
   /**
    * Orders you bought, and gifts you got once paid (without what the buyer paid), newest
-   * first. `perPage` 1 to 100, default 50.
+   * first. `perPage` is 1 to 100, default 50.
    */
   myOrders: OrderPage;
   /**
@@ -2783,7 +2785,8 @@ export type Query = {
   orderTopBuyers: Array<PersonCount>;
   /**
    * Every order, newest first; narrow by status, account (bought or received) and item.
-   * Needs `shop.orders`, or `billing.view` narrowed to one account.
+   * Needs `shop.orders`, or `billing.view` narrowed to one account. `perPage` is 1 to 100, default
+   * 50.
    */
   orders: OrderPage;
   /**
@@ -2807,7 +2810,10 @@ export type Query = {
    * account, or per IP signed out (`rate_limited`).
    */
   quickSearch: QuickSearch;
-  /** Open reports, oldest first. Needs `emotes.review` or `emotes.takedown`. */
+  /**
+   * Open reports, oldest first. Needs `emotes.review` or `emotes.takedown`. `perPage` is 1 to 100,
+   * default 50.
+   */
   reportQueue: ReportQueue;
   /**
    * Pending emotes, oldest first. Needs `emotes.review`. `perPage` is 1 to 100, default 50.
@@ -2880,7 +2886,7 @@ export type Query = {
    */
   setCapacityRange?: Maybe<SetCapacityRange>;
   /**
-   * What changed in a set after `since`, a `version` you hold (delta sync, ADR 0032). Apply
+   * What changed in a set after `since`, a `version` you hold (delta sync, ADR 0035). Apply
    * `added`, `renamed` and `updated` as upserts by emote ID and `removedIds` as deletes, then
    * keep `version`. `full: true` (with the whole set in `set`) when the change log no longer
    * reaches back to `since` (7 days or 1.000 versions) or `since` isn't a version of this
@@ -2899,7 +2905,7 @@ export type Query = {
    */
   setEmotes: SetEmotePage;
   /**
-   * Several sets at once, in the order asked, each once (ADR 0032): who may see what is the
+   * Several sets at once, in the order asked, each once (ADR 0035): who may see what is the
    * rule of `set`, and unknown or hidden sets are left out. At most 25 IDs (`too_many`); one
    * call costs what that many `set` lookups would.
    */
@@ -3653,7 +3659,7 @@ export type SetCapacityRange = {
 };
 
 /**
- * What changed in a set after a version (`setChanges`, `GET /v1/sets/{id}?since=`; ADR 0032).
+ * What changed in a set after a version (`setChanges`, `GET /v1/sets/{id}?since=`; ADR 0035).
  * Apply `added`, `renamed` and `updated` as upserts by `emote.id`, and `removedIds` as deletes;
  * then keep `version`. With `full: true` the change log doesn't reach back to `since` (or
  * `since` is not a version this set had): replace your copy with `set` instead.

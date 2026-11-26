@@ -91,10 +91,7 @@ pub fn db_error(err: DbError) -> ApiError {
         DbError::EmoteUnavailable => conflict("emote_unavailable", "That emote can't be used."),
         DbError::RoleNameTaken => conflict("role_name_taken", "A role with that name exists."),
         DbError::UnknownPermission(_) => bad("unknown_permission", "Unknown permission name."),
-        DbError::TooManyEditors => conflict(
-            "too_many_editors",
-            "An account can have at most 50 editors. Remove one to add someone else.",
-        ),
+        DbError::TooManyEditors => crate::editors::too_many_editors(),
         DbError::AlreadyEditor => conflict("already_editor", "They are an editor already."),
         DbError::CosmeticNameTaken => conflict(
             "name_taken",
@@ -193,74 +190,11 @@ pub fn parse_id(raw: &str) -> ApiResult<Uuid> {
     ids::from_text(raw.trim()).ok_or_else(not_found)
 }
 
-/// The deepest page a list serves. A page past it is empty (the total is still counted), so a
-/// huge page number never makes the database step over that many rows.
-pub const MAX_PAGE: u32 = 1000;
-
-/// One page of a list: the page and size as answered, and the rows to read.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Paging {
-    /// From 1, as asked.
-    pub page: u32,
-    /// Clamped to 1 to the list's maximum.
-    pub per_page: u32,
-    /// Rows to read: `per_page`, or 0 past [`MAX_PAGE`].
-    pub limit: i64,
-    pub offset: i64,
-}
-
-impl Paging {
-    /// Past [`MAX_PAGE`]: no rows are read.
-    pub fn past_end(&self) -> bool {
-        self.page > MAX_PAGE
-    }
-}
-
-/// `page` (from 1, default 1) and `per_page` (`default`, clamped to 1 to `max`) as the rows to
-/// read. Every paged list goes through this.
-pub fn paging(page: Option<u32>, per_page: Option<u32>, default: u32, max: u32) -> Paging {
-    let per_page = per_page.unwrap_or(default).clamp(1, max);
-    let page = page.unwrap_or(1).max(1);
-    if page > MAX_PAGE {
-        return Paging {
-            page,
-            per_page,
-            limit: 0,
-            offset: 0,
-        };
-    }
-    Paging {
-        page,
-        per_page,
-        limit: i64::from(per_page),
-        offset: i64::from(page - 1) * i64::from(per_page),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use cyex_tv_shared::ratelimit::{Limiter, Rate};
 
     use super::*;
-
-    #[test]
-    fn paging_clamps_and_stops_past_the_last_page() {
-        let p = paging(None, None, 50, 100);
-        assert_eq!((p.page, p.per_page, p.limit, p.offset), (1, 50, 50, 0));
-        let p = paging(Some(0), Some(500), 50, 100);
-        assert_eq!((p.page, p.per_page, p.limit, p.offset), (1, 100, 100, 0));
-        let p = paging(Some(3), Some(0), 50, 100);
-        assert_eq!((p.page, p.per_page, p.limit, p.offset), (3, 1, 1, 2));
-        let p = paging(Some(MAX_PAGE), Some(100), 50, 100);
-        assert_eq!(p.offset, 99_900);
-        assert!(!p.past_end());
-        let p = paging(Some(1_000_000_000), Some(100), 50, 100);
-        assert!(p.past_end());
-        assert_eq!(
-            (p.page, p.per_page, p.limit, p.offset),
-            (1_000_000_000, 100, 0, 0)
-        );
-    }
 
     #[test]
     fn limited_passes_until_the_burst_is_used_then_says_the_features_message() {

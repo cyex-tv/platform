@@ -1,4 +1,4 @@
-// Mock API: GraphQL over GET with automatic persisted queries (ADR 0032), as the API answers them:
+// Mock API: GraphQL over GET with automatic persisted queries (ADR 0035), as the API answers them:
 // a known hash runs its stored text, an unknown one is `PersistedQueryNotFound`, text with a wrong
 // hash is `persisted_query_mismatch`, and only queries run over GET (`post_required`, 405). The
 // cookie is never read over GET, so the request runs signed out.

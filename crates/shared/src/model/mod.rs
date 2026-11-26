@@ -618,7 +618,15 @@ pub struct EmoteFile {
     pub name: String,
     pub format: ImageFormat,
     /// 1 to 4. A badge's larger sizes (`128`, `256`, `512`) carry their px ÷ 18, rounded: 7, 14
-    /// and 28; read `width` for the size.
+    /// and 28; read `width` for the size. **Deprecated for badge and paint files**: `width` is
+    /// the contract (`file_scale_non_emote` in `/v1/meta`). Emote files keep `scale` as it is.
+    #[cfg_attr(
+        feature = "graphql",
+        graphql(
+            deprecation = "For badge and paint files: read `width`. Emote files keep `scale` (1 to 4)."
+        )
+    )]
+    #[schema(deprecated)]
     pub scale: u8,
     pub width: u16,
     pub height: u16,
@@ -867,13 +875,13 @@ pub struct EmoteSet {
     #[serde(default)]
     pub created_at: String,
     /// Goes up by one or more with every change to what the set shows: a member added, removed
-    /// or renamed, the set renamed, an emote in it changed (ADR 0032). Keep it with your copy
+    /// or renamed, the set renamed, an emote in it changed (ADR 0035). Keep it with your copy
     /// and ask `setChanges` (or `GET /v1/sets/{id}?since=`) for what changed after it.
     #[serde(default)]
     pub version: i64,
 }
 
-/// What changed in a set after a version (`setChanges`, `GET /v1/sets/{id}?since=`; ADR 0032).
+/// What changed in a set after a version (`setChanges`, `GET /v1/sets/{id}?since=`; ADR 0035).
 /// Apply `added`, `renamed` and `updated` as upserts by `emote.id`, and `removedIds` as deletes;
 /// then keep `version`. With `full: true` the change log doesn't reach back to `since` (or
 /// `since` is not a version this set had): replace your copy with `set` instead.
@@ -1030,7 +1038,7 @@ pub struct PersonalSetEntry {
     pub set: EmoteSet,
 }
 
-/// `POST /v1/sets/lookup`: several sets at once (ADR 0032).
+/// `POST /v1/sets/lookup`: several sets at once (ADR 0035).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct SetsLookup {
     /// Up to 25 set IDs (Snowflakes, or old ULIDs while clients move over).
@@ -1043,7 +1051,7 @@ pub struct SetsLookupResult {
     pub sets: Vec<EmoteSet>,
 }
 
-/// `POST /v1/channels/lookup`: several channels of one platform at once (ADR 0032).
+/// `POST /v1/channels/lookup`: several channels of one platform at once (ADR 0035).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ChannelsLookup {
     pub platform: Platform,
@@ -1970,7 +1978,7 @@ pub struct SetEmotesQuery {
 }
 
 /// The query of `GET /v1/sets/{id}`: with `since`, only what changed after that version
-/// (ADR 0032).
+/// (ADR 0035).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
 pub struct SetQuery {

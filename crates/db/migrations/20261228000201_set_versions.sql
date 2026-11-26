@@ -1,4 +1,4 @@
--- Set versions and a bounded change log for delta sync (ADR 0032, additive).
+-- Set versions and a bounded change log for delta sync (ADR 0035, additive).
 --
 -- `emote_sets.version` goes up by one for every statement that changes what the set shows: a
 -- member added, removed, renamed or its zero-width flag changed, the set renamed, or an emote in

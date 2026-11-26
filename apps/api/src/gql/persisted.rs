@@ -1,4 +1,4 @@
-//! Automatic persisted queries and GraphQL over `GET` (ADR 0032).
+//! Automatic persisted queries and GraphQL over `GET` (ADR 0035).
 //!
 //! A client sends `extensions.persistedQuery = { version: 1, sha256Hash }` (the SHA-256 of the
 //! query text, lowercase hex). Without the text, a known hash runs the query stored for it; an

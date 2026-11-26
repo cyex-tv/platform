@@ -37,7 +37,7 @@ pub struct Set {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub visibility: SetVisibility,
-    /// Goes up with every change to what the set shows (ADR 0032; triggers keep it).
+    /// Goes up with every change to what the set shows (ADR 0035; triggers keep it).
     pub version: i64,
     /// The newest version whose change rows were pruned: a delta from before it is a full resync.
     pub change_floor: i64,
@@ -562,7 +562,7 @@ pub async fn can_edit(conn: &mut PgConnection, account_id: Uuid, set_id: Uuid) -
     .await?)
 }
 
-// Versions and changes (ADR 0032)
+// Versions and changes (ADR 0035)
 
 /// One change row: the member (or, for `set`, the set itself) touched at `version`.
 #[derive(Clone, Debug, PartialEq, Eq, FromRow)]

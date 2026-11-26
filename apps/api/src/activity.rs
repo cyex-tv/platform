@@ -32,9 +32,6 @@ use crate::errors::bad;
 use crate::state::AppState;
 use crate::views;
 
-/// The most entries one page returns.
-pub const ACTIVITY_PAGE_MAX: u32 = 100;
-pub const ACTIVITY_PAGE: u32 = 30;
 /// Candidate rows read per round. Rows can be dropped after the SQL filter (what it can't tell:
 /// deleted sets, emotes that aren't public), so a page may take a few rounds. A page that runs out
 /// of rounds comes back short with a `next` cursor to carry on from.
@@ -491,7 +488,7 @@ pub async fn account_activity_where(
 ) -> ApiResult<ActivityPage> {
     let mut wanted = sql_filter(filter)?;
     let before_id = before.map(parse_id).transpose()?;
-    let limit = limit.unwrap_or(ACTIVITY_PAGE).clamp(1, ACTIVITY_PAGE_MAX) as usize;
+    let limit = crate::paging::Paged::Activity.params().size(limit) as usize;
     let Some(owner) = ids::from_text(account_id.trim()) else {
         return Ok(ActivityPage::default());
     };
@@ -638,7 +635,7 @@ pub async fn emote_activity_where(
         .map(parse_id)
         .transpose()?;
     let before_id = before.map(parse_id).transpose()?;
-    let limit = limit.unwrap_or(ACTIVITY_PAGE).clamp(1, ACTIVITY_PAGE_MAX) as usize;
+    let limit = crate::paging::Paged::Activity.params().size(limit) as usize;
     let Some(emote) = ids::from_text(emote_id.trim()) else {
         return Ok(ActivityPage::default());
     };

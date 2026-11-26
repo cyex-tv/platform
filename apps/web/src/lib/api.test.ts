@@ -100,7 +100,7 @@ describe('ApiError messages for a request with no answer', () => {
   });
 });
 
-describe('gqlPublic (GET with a persisted-query hash, ADR 0032)', () => {
+describe('gqlPublic (GET with a persisted-query hash, ADR 0035)', () => {
   const doc = (text: string) => ({ toString: () => text }) as never;
   const ok = (data: unknown) => new Response(JSON.stringify({ data }));
 

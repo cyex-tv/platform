@@ -260,7 +260,7 @@ createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/v1/cosmetics/users') {
     const ids = (url.searchParams.get('ids') ?? '').split(',').filter(Boolean);
     const out = userCosmeticsOut((url.searchParams.get('platform') ?? '').toUpperCase(), ids);
-    if (!out) return json(res, 400, { error: 'too_many', message: 'Look up at most 100 users at once.' });
+    if (!out) return json(res, 400, { error: 'too_many', message: 'Look up at most 100 users at once.', details: { limit: 100, current: ids.length } });
     return json(res, 200, { users: out.map((u) => ({ platform_user_id: u.platformUserId, badge_id: u.badgeId, paint_id: u.paintId })) });
   }
   if (req.method === 'POST' && url.pathname === '/v1/cosmetics/images') {
@@ -287,7 +287,7 @@ createServer(async (req, res) => {
     // (the API keys pictures by their SHA-256), already ready.
     const sha = createHash('sha256').update(file).digest('hex');
     const again = UPLOADED.get(sha);
-    if (again) return json(res, 202, restOf(again));
+    if (again) return json(res, 202, uploadReply(again, kind, again.ready ? 'ready' : 'processing'));
     const id = `01JD8XIMG${String(100 + nextCosmeticSeq()).padStart(17, '0')}`;
     // A badge's original is its own size, at most 512 px (bigger is scaled down to 512).
     const fit = Math.min(1, 512 / Math.max(probe.width, probe.height));
@@ -303,7 +303,7 @@ createServer(async (req, res) => {
     UPLOADED.set(sha, img);
     // The files are "made" a moment later, as the worker would.
     setTimeout(() => Object.assign(img, { ready: true, files }), Number(process.env.MOCK_IMAGE_DELAY ?? 2000));
-    return json(res, 202, restOf(img));
+    return json(res, 202, uploadReply(img, kind, 'processing'));
   }
   const uploaded = url.pathname.match(/^\/cosmetics\/uploads\/([0-9A-Z]+)\/(?:[124]x|128|256|512|original)(?:_static)?\.(?:webp|avif)$/);
   if (uploaded) {
@@ -405,7 +405,7 @@ createServer(async (req, res) => {
     if (name === 'hang') return;
     if (name === 'blocked') return json(res, 422, { error: 'blocked', message: 'This image can’t be uploaded to cyex.tv.' });
     if (name === 'ratelimited') return json(res, 429, { error: 'rate_limited', message: 'That’s a lot of uploads. Try again in an hour.' });
-    if (name === 'toobig') return json(res, 413, { error: 'too_large', message: 'The file is over 8 MB, the most an upload can be.' });
+    if (name === 'toobig') return json(res, 413, { error: 'too_large', message: 'The file is over 8 MB, the most an upload can be.', details: { limit: 8 * 1024 * 1024, current: 9 * 1024 * 1024 } });
     if (name === 'broken') return json(res, 422, { error: 'invalid_image', message: 'That file isn’t a valid image. Try a PNG, GIF, WebP or JPEG that opens elsewhere.' });
     // The flags, as the API reads them (POST /v1/emotes): true/1/on, false/0/off/empty.
     const flag = (k) => {
@@ -438,7 +438,7 @@ createServer(async (req, res) => {
       const waiting = cap === 1 ? '1 emote' : `${cap} emotes`;
       return json(res, 409, { error: 'too_many_pending', message: forOther
         ? `That account has ${waiting} waiting for review. Upload more once some are reviewed.`
-        : `You have ${waiting} waiting for review. Upload more once some are reviewed.` });
+        : `You have ${waiting} waiting for review. Upload more once some are reviewed.`, details: { limit: cap, current: cap } });
     }
     await new Promise((r) => setTimeout(r, 700)); // long enough to see the progress
     const owner = forOther ? EDITOR_OF.find((g) => g.account.id === ownerId).account : ME_SUMMARY;
@@ -458,9 +458,9 @@ createServer(async (req, res) => {
       Object.assign(e, { host: emote(700).host, files: emote(700).files });
       e.flags.wide = wideOf(e);
     }, 4000);
-    return json(res, 202, restOf(e));
+    return json(res, 202, uploadReply(e, 'emote', e.state?.toLowerCase() ?? 'pending'));
   }
-  // GraphQL over GET (ADR 0032): queries only, persisted queries by hash, never the cookie.
+  // GraphQL over GET (ADR 0035): queries only, persisted queries by hash, never the cookie.
   if ((req.method === 'GET' || req.method === 'HEAD') && url.pathname === '/v1/gql' && (url.searchParams.has('query') || url.searchParams.has('extensions'))) {
     const got = getRequest(url.searchParams);
     if (!got.request) {
@@ -500,6 +500,16 @@ createServer(async (req, res) => {
 // The REST API's JSON: snake_case keys and lower-case enum values (the GraphQL shapes are camelCase
 // with upper-case enums).
 const REST_ENUM_KEYS = new Set(['kind', 'shape', 'format', 'state', 'visibility', 'processing']);
+/** What both upload routes add to their object: `state` and `limits_used` (crates/shared/src/upload.rs). */
+const UPLOAD_LIMITS = { emote: { max_bytes: 8 * 1024 * 1024, max_side: 1000, max_frames: 1000 }, badge: { max_bytes: 8 * 1024 * 1024, max_side: 2048, max_frames: 120 }, paint: { max_bytes: 8 * 1024 * 1024, max_side: 4096, max_frames: 120 } };
+function uploadReply(x, kind, state) {
+  const body = restOf(x);
+  // An emote already has its review `state`; a picture gets `processing` or `ready`.
+  if (kind !== 'emote') body.state = state;
+  body.limits_used = { kind, ...UPLOAD_LIMITS[kind] };
+  return body;
+}
+
 function restOf(x, key = '') {
   return withFileUrls(restShape(x, key));
 }

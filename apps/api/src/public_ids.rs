@@ -300,7 +300,7 @@ pub async fn canonical(state: &AppState, text: &str) -> Result<String, ApiError>
         .map_err(db_error)
 }
 
-/// [`canonical`] for many IDs in one lookup (the bulk reads, ADR 0032), in the order given.
+/// [`canonical`] for many IDs in one lookup (the bulk reads, ADR 0035), in the order given.
 pub async fn canonical_many(state: &AppState, texts: &[String]) -> Result<Vec<String>, ApiError> {
     let publics: Vec<i64> = texts
         .iter()

@@ -20,6 +20,7 @@ pub mod limits;
 pub mod meta;
 pub mod moderation;
 pub mod paddle;
+pub mod paging;
 pub mod personal;
 pub mod public_ids;
 pub mod public_limits;
@@ -89,6 +90,7 @@ impl utoipa::Modify for ErrorCodes {
 #[derive(OpenApi)]
 #[openapi(
     modifiers(&ErrorCodes),
+    components(schemas(cyex_tv_shared::upload::UploadResult)),
     info(
         title = "cyex.tv REST API",
         description = "The REST part of the cyex.tv API: sign-in, uploads and the cacheable reads chat clients poll. Everything else is GraphQL at /v1/gql.",
@@ -282,7 +284,7 @@ fn bad_get(message: &'static str) -> axum::response::Response {
     response
 }
 
-/// `GET /v1/gql` (ADR 0032): GraphiQL without a query; otherwise a query (never a mutation,
+/// `GET /v1/gql` (ADR 0035): GraphiQL without a query; otherwise a query (never a mutation,
 /// `post_required`), by its text or as a persisted query. The session cookie is never read here,
 /// so no other site can make a signed-in browser run anything; a Bearer token is (an app or a
 /// console token). Public answers are cacheable (`public, max-age=30`, `ETag`, `304`), signed-in
@@ -362,7 +364,7 @@ async fn graphql_get(
     } else if signed_in {
         "private, no-cache".to_owned()
     } else {
-        format!("public, max-age={GQL_GET_MAX_AGE}, stale-while-revalidate=60")
+        format!("public, max-age={GQL_GET_MAX_AGE}, stale-while-revalidate=60, stale-if-error=600")
     };
     let fresh = !failed
         && headers

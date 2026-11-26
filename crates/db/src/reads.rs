@@ -582,7 +582,7 @@ pub async fn members(conn: &mut PgConnection, set_ids: &[Uuid]) -> DbResult<Vec<
 }
 
 /// The members of one set among `emote_ids` (deleted emotes left out), oldest first: what a
-/// delta read (ADR 0032) shows of the members that changed.
+/// delta read (ADR 0035) shows of the members that changed.
 pub async fn members_among(
     conn: &mut PgConnection,
     set_id: Uuid,

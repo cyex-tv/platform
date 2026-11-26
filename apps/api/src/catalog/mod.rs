@@ -38,9 +38,10 @@ use uuid::Uuid;
 
 use crate::editors::{has_flag, has_flag_on_all_sets, has_flag_on_set};
 use crate::errors::{Audit, record_audit};
-use crate::errors::{bad, conflict, paging, rate_limited_in, sqlx_error};
+use crate::errors::{bad, conflict, rate_limited_in, sqlx_error};
 use crate::limits::AccountLimit;
-use crate::moderation::{QUEUE_PAGE, QUEUE_PAGE_MAX};
+use crate::paging::Paged;
+
 use crate::state::AppState;
 use crate::views::{self, Viewer};
 
@@ -368,6 +369,12 @@ pub const STAFF_CAPACITY_MAX: u32 = 1_000_000;
 /// `set` without a staff permission: a channel set the owner's `set_capacity_max` role limit (1.000
 /// unless a role raises it), the personal set its default, and never less than it has now (staff
 /// may have raised it: lowering it again stays allowed). The global set is staff-only anyway.
+/// `set_full` with the set's capacity: it holds that many, and that is the most.
+pub(crate) fn set_full(capacity: i32) -> ApiError {
+    let capacity = u64::try_from(capacity).unwrap_or(0);
+    ApiError::limit("set_full", "The set is full.", capacity, capacity)
+}
+
 pub(crate) async fn user_capacity_max(state: &AppState, set: &Set) -> u32 {
     let current = u32::try_from(set.capacity).unwrap_or(0);
     let limit = match (set.kind, set.owner_account_id) {
@@ -458,8 +465,6 @@ pub async fn account(state: &AppState, id: &str) -> ApiResult<Option<AccountSumm
     Ok(summaries.get(&id).map(AccountSummary::from))
 }
 
-pub const EMOTE_CHANNELS: u32 = 8;
-pub const EMOTE_CHANNELS_MAX: u32 = 50;
 /// How far into the list `offset` may reach (a page past it is empty).
 pub const EMOTE_CHANNELS_OFFSET_MAX: u32 = 10_000;
 
@@ -490,7 +495,7 @@ pub async fn emote_channels(
     let Some(id) = ids::from_text(id.trim()) else {
         return Ok(Vec::new());
     };
-    let limit = limit.unwrap_or(EMOTE_CHANNELS).clamp(1, EMOTE_CHANNELS_MAX);
+    let limit = Paged::EmoteChannels.params().size(limit);
     let offset = offset.unwrap_or(0);
     if offset > EMOTE_CHANNELS_OFFSET_MAX {
         return Ok(Vec::new());
@@ -542,7 +547,7 @@ pub async fn set(
         .map_err(db_error)
 }
 
-// Bulk reads (ADR 0032)
+// Bulk reads (ADR 0035)
 
 /// The most sets one bulk read takes: a set can hold 1.000 emotes (staff sets far more), so 25
 /// sets is already up to 25.000 members in one answer.
@@ -561,9 +566,14 @@ pub(crate) fn distinct_ids<S: AsRef<str>>(raw: &[S]) -> Vec<Uuid> {
         .collect()
 }
 
-/// `too_many` for a bulk read over its cap.
-pub(crate) fn too_many_ids(what: &str, max: usize) -> ApiError {
-    bad("too_many", format!("Look up at most {max} {what} at once."))
+/// `too_many` (400, `details { limit, current }`) for a bulk read of `asked` IDs over its cap.
+pub(crate) fn too_many_ids(what: &str, max: usize, asked: usize) -> ApiError {
+    ApiError::limit(
+        "too_many",
+        format!("Look up at most {max} {what} at once."),
+        cyex_tv_shared::limit_errors::n(max),
+        cyex_tv_shared::limit_errors::n(asked),
+    )
 }
 
 /// The sets among `rows` that `caller` may open, by the rule of [`may_view`], in the order
@@ -642,7 +652,7 @@ pub async fn sets_by_ids<S: AsRef<str>>(
     raw: &[S],
 ) -> ApiResult<Vec<EmoteSet>> {
     if raw.len() > SETS_LOOKUP_LIMIT {
-        return Err(too_many_ids("sets", SETS_LOOKUP_LIMIT));
+        return Err(too_many_ids("sets", SETS_LOOKUP_LIMIT, raw.len()));
     }
     let wanted = distinct_ids(raw);
     if wanted.is_empty() {
@@ -668,7 +678,7 @@ pub async fn channels_by_ids<S: AsRef<str>>(
     raw: &[S],
 ) -> ApiResult<Vec<Channel>> {
     if raw.len() > CHANNELS_LOOKUP_LIMIT {
-        return Err(too_many_ids("channels", CHANNELS_LOOKUP_LIMIT));
+        return Err(too_many_ids("channels", CHANNELS_LOOKUP_LIMIT, raw.len()));
     }
     let mut seen = HashSet::new();
     let wanted: Vec<String> = raw
@@ -700,7 +710,7 @@ pub async fn channels_by_ids<S: AsRef<str>>(
         .map_err(db_error)
 }
 
-// Delta sync (ADR 0032)
+// Delta sync (ADR 0035)
 
 /// The most change rows one delta answer reads; past it the answer is a full resync, which is
 /// then no bigger than the set.
@@ -817,7 +827,7 @@ pub async fn set_emotes(
     let Some(id) = ids::from_text(id.trim()) else {
         return Ok(empty);
     };
-    let paged = paging(page, per_page, 120, 200);
+    let paged = Paged::SetEmotes.paging(page, per_page);
     // The cursor belongs to this set and filter.
     let scope = format!(
         "setEmotes|{}|{}",
@@ -998,8 +1008,6 @@ pub async fn account_profile(
 
 /// Cards per `accountSets` answer, and emotes per card.
 pub const ACCOUNT_SETS_MAX: i64 = 50;
-pub const SET_PREVIEW: u32 = 12;
-pub const SET_PREVIEW_MAX: u32 = 50;
 
 /// An account's listed sets, oldest first, as profile cards. Empty when the account is unknown,
 /// deleted or blocked.
@@ -1012,7 +1020,10 @@ pub async fn account_sets(
     let Some(id) = ids::from_text(account_id.trim()) else {
         return Ok(Vec::new());
     };
-    let preview = preview.unwrap_or(SET_PREVIEW).min(SET_PREVIEW_MAX) as usize;
+    let preview = {
+        let size = Paged::SetPreview.params();
+        preview.unwrap_or(size.default).min(size.max) as usize
+    };
     let mut conn = conn(state).await?;
     let live = accounts::get(&mut conn, id)
         .await
@@ -1047,7 +1058,12 @@ pub async fn personal_sets(
     user_ids: &[String],
 ) -> ApiResult<Vec<PersonalSetEntry>> {
     if user_ids.len() > LOOKUP_LIMIT {
-        return Err(bad("too_many", "Look up at most 100 users at once."));
+        return Err(ApiError::limit(
+            "too_many",
+            "Look up at most 100 users at once.",
+            LOOKUP_LIMIT as u64,
+            cyex_tv_shared::limit_errors::n(user_ids.len()),
+        ));
     }
     let mut seen = HashSet::new();
     let wanted: Vec<String> = user_ids
@@ -1116,7 +1132,7 @@ pub async fn my_emotes(
     per_page: Option<u32>,
     after: Option<&str>,
 ) -> ApiResult<EmotePage> {
-    let paged = paging(page, per_page, QUEUE_PAGE, QUEUE_PAGE_MAX);
+    let paged = Paged::ReviewQueue.paging(page, per_page);
     let mut conn = conn(state).await?;
     owner_emotes(state, &mut conn, caller.account_id, paged, after).await
 }
@@ -1127,7 +1143,7 @@ pub(crate) async fn owner_emotes(
     state: &AppState,
     conn: &mut PgConnection,
     owner: Uuid,
-    paged: crate::errors::Paging,
+    paged: crate::paging::Paging,
     after: Option<&str>,
 ) -> ApiResult<EmotePage> {
     let scope = format!("ownerEmotes|{}", ids::to_text(owner));
@@ -1462,9 +1478,11 @@ pub async fn update_set(
         let mut grant_used = grant;
         if capacity > mine && set.kind != SetKind::Global {
             if !staff {
-                return Err(bad(
+                return Err(ApiError::limit(
                     "capacity_over_limit",
                     format!("This set can have up to {} slots.", dotted(mine)),
+                    mine,
+                    capacity,
                 ));
             }
             grant_used = Grant::Permission(permissions::SETS_EDIT_ANY);
@@ -1641,7 +1659,10 @@ pub async fn add_set_emote(
         },
     )
     .await
-    .map_err(db_error)?;
+    .map_err(|err| match err {
+        DbError::SetFull => set_full(set.capacity),
+        err => db_error(err),
+    })?;
     publish_member_event(
         &mut tx,
         &set,

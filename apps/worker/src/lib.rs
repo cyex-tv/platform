@@ -534,7 +534,7 @@ pub async fn erase_due_accounts(db: &PgPool) -> Result<u64, cyex_tv_db::DbError>
 /// window (48 h, ADR 0005), event socket sessions after 24 h, finished jobs after a week, shop
 /// orders pending for a day (failed, see [`expire_orders`]), Paddle webhook events after 90
 /// days, idempotency keys after 24 h and set change rows after 7 days or 1.000 versions
-/// (ADR 0032). Erases accounts deleted over 30 days ago
+/// (ADR 0035). Erases accounts deleted over 30 days ago
 /// ([`erase_due_accounts`]). Puts staff refunds stuck for an hour back to paid
 /// ([`revert_refunds`]). Also refreshes
 /// the search ranking, the trending counts and every stored channel count. The worker's loop also runs [`cancel_stale_checkouts`] after it.
@@ -547,7 +547,7 @@ pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
     let trending = search::rollup_channel_adds(&mut conn).await?;
     let events =
         outbox::delete_older_than(&mut conn, Utc::now() - chrono::Duration::hours(48)).await?;
-    // Delta sync (ADR 0032): a week of set changes, at most the last 1.000 versions of a set.
+    // Delta sync (ADR 0035): a week of set changes, at most the last 1.000 versions of a set.
     let set_changes = cyex_tv_db::sets::prune_changes(
         &mut conn,
         Utc::now() - chrono::Duration::days(cyex_tv_db::sets::CHANGES_KEEP_DAYS),

@@ -13,7 +13,8 @@ pub struct ModerationQuery;
 
 #[Object]
 impl ModerationQuery {
-    /// Open reports, oldest first. Needs `emotes.review` or `emotes.takedown`.
+    /// Open reports, oldest first. Needs `emotes.review` or `emotes.takedown`. `perPage` is 1 to 100,
+    /// default 50.
     async fn report_queue(
         &self,
         ctx: &Context<'_>,

@@ -33,7 +33,7 @@ pub fn is_public_read(method: &Method, path: &str) -> bool {
     let read = matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS);
     (read
         && (path == "/v1/meta"
-            // GraphQL queries over GET (persisted queries, ADR 0032): cookies are never read there.
+            // GraphQL queries over GET (persisted queries, ADR 0035): cookies are never read there.
             || path == "/v1/gql"
             || path.starts_with("/v1/channels/")
             || path.starts_with("/v1/sets/")

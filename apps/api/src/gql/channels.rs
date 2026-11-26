@@ -27,7 +27,7 @@ impl ChannelQuery {
     }
 
     /// Several channels of one platform at once, by their platform IDs, in the order asked,
-    /// each once (ADR 0032). Channels not on cyex.tv are left out. At most 100 IDs
+    /// each once (ADR 0035). Channels not on cyex.tv are left out. At most 100 IDs
     /// (`too_many`); every 10 IDs cost what one `channel` lookup would.
     #[graphql(complexity = "5 + ids.len().div_ceil(10) * (10 + child_complexity)")]
     async fn channels(

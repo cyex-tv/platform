@@ -314,7 +314,7 @@ pub async fn scoped_sets(
     .await?)
 }
 
-/// What `editor` may do with each of `set_ids`, in one query (bulk reads, ADR 0032).
+/// What `editor` may do with each of `set_ids`, in one query (bulk reads, ADR 0035).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, FromRow)]
 pub struct SetAccess {
     pub set_id: Uuid,
@@ -337,7 +337,7 @@ pub async fn set_access(
     }
     Ok(sqlx::query_as(
         "SELECT s.id AS set_id,
-                (s.owner_account_id = $1
+                (s.owner_account_id IS NOT DISTINCT FROM $1
                  OR EXISTS (SELECT 1 FROM set_editors se
                             WHERE se.set_id = s.id AND se.account_id = $1)) AS direct,
                 coalesce(g.covers, false) AS covered,

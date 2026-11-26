@@ -23,7 +23,7 @@ impl EmoteQuery {
             .map_err(api_error)
     }
 
-    /// Several emotes at once, in the order asked, each once (ADR 0032): who may see what is the
+    /// Several emotes at once, in the order asked, each once (ADR 0035): who may see what is the
     /// rule of `emote`, and unknown or hidden emotes are left out. At most 100 IDs (`too_many`);
     /// every 10 IDs cost what one `emote` lookup would.
     #[graphql(complexity = "5 + ids.len().div_ceil(10) * (10 + child_complexity)")]

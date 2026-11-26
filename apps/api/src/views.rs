@@ -383,7 +383,7 @@ pub async fn set_emotes(
 }
 
 /// The members of `set` among `emote_ids` that `viewer` may see, oldest first (delta reads,
-/// ADR 0032). Members missing from the answer are not in the set as the viewer sees it.
+/// ADR 0035). Members missing from the answer are not in the set as the viewer sees it.
 pub async fn set_members_among(
     conn: &mut PgConnection,
     set: &Set,

@@ -1,4 +1,4 @@
-//! Faster client reads (ADR 0032): bulk reads (`emotes`, `sets`, `channels` and their REST
+//! Faster client reads (ADR 0035): bulk reads (`emotes`, `sets`, `channels` and their REST
 //! twins) with caps, the single reads' visibility and a query count that doesn't grow with the
 //! IDs; set versions bumped by every write path and delta sync (`setChanges`,
 //! `GET /v1/sets/{id}?since=`) including a `since` too old; persisted queries over `GET` (hash
@@ -394,6 +394,8 @@ async fn bulk_reads_keep_order_hide_like_single_reads_and_cap() {
     let many = |n: usize| (0..n).map(|i| (i + 1).to_string()).collect::<Vec<_>>();
     let r = w.gql(None, SETS, json!({ "ids": many(26) })).await;
     assert_eq!(code(&r), "too_many", "{r}");
+    assert_eq!(r["errors"][0]["extensions"]["limit"], 25, "{r}");
+    assert_eq!(r["errors"][0]["extensions"]["current"], 26, "{r}");
     assert!(data(&w.gql(None, SETS, json!({ "ids": many(25) })).await, "sets").is_array());
     let r = w.gql(None, EMOTES, json!({ "ids": many(101) })).await;
     assert_eq!(code(&r), "too_many", "{r}");
@@ -402,6 +404,7 @@ async fn bulk_reads_keep_order_hide_like_single_reads_and_cap() {
     let r = w.post("/v1/sets/lookup", json!({ "ids": many(26) })).await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST);
     assert_eq!(r.body["error"], "too_many");
+    assert_eq!(r.body["details"], json!({ "limit": 25, "current": 26 }));
     let r = w
         .post(
             "/v1/channels/lookup",

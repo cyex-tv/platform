@@ -38,8 +38,9 @@ use crate::catalog::require_any;
 use crate::catalog::{LOOKUP_LIMIT, db_error, forbidden, not_found, parse_id};
 use crate::editors::has_flag;
 use crate::errors::{self, Audit, record_audit};
-use crate::errors::{bad, conflict, limited_as, paging, sqlx_error};
+use crate::errors::{bad, conflict, limited_as, sqlx_error};
 use crate::limits::AccountLimit;
+use crate::paging::Paged;
 use crate::state::AppState;
 use crate::upload::media_error;
 use crate::views::time;
@@ -61,8 +62,6 @@ pub const SHADOWS_MAX: usize = 4;
 /// Shadow offsets and radius, in px.
 pub const SHADOW_OFFSET_MAX: f64 = 16.0;
 pub const SHADOW_RADIUS_MAX: f64 = 16.0;
-pub const ENTITLEMENTS_PAGE: u32 = 50;
-pub const ENTITLEMENTS_PAGE_MAX: u32 = 100;
 
 // Errors
 
@@ -302,7 +301,12 @@ pub fn check_dimensions(kind: CosmeticKind, width: u32, height: u32) -> ApiResul
 /// Platform user IDs from a lookup: at most 100, digits only, each once.
 pub fn user_ids(raw: &[String]) -> ApiResult<Vec<String>> {
     if raw.len() > LOOKUP_LIMIT {
-        return Err(bad("too_many", "Look up at most 100 users at once."));
+        return Err(ApiError::limit(
+            "too_many",
+            "Look up at most 100 users at once.",
+            LOOKUP_LIMIT as u64,
+            cyex_tv_shared::limit_errors::n(raw.len()),
+        ));
     }
     let mut seen = HashSet::new();
     Ok(raw
@@ -597,10 +601,11 @@ pub async fn account_cosmetics(
     raw_ids: &[String],
 ) -> ApiResult<Vec<cyex_tv_shared::model::AccountCosmetics>> {
     if raw_ids.len() > 100 {
-        return Err(ApiError::new(
-            axum::http::StatusCode::BAD_REQUEST,
+        return Err(ApiError::limit(
             "too_many",
             "Look up at most 100 accounts at once.",
+            100u32,
+            cyex_tv_shared::limit_errors::n(raw_ids.len()),
         ));
     }
     let mut wanted: Vec<Uuid> = raw_ids
@@ -816,10 +821,11 @@ pub async fn upload_image(
     let bytes = file.clone();
     let own = state.limits.load(&state.db, caller.account_id).await;
     let limits = picture_limits_for(kind, &own);
+    let size = file.len();
     let probe: Probe = tokio::task::spawn_blocking(move || cyex_tv_media::probe(&bytes, &limits))
         .await
         .map_err(|_| ApiError::internal())?
-        .map_err(media_error)?;
+        .map_err(|err| crate::upload::media_error_sized(err, &limits, size))?;
     check_dimensions(kind, probe.width, probe.height)?;
     if probe.animated && picture_profile(kind).max_animated_scale_bytes.is_some() {
         // An animated badge must animate in chat: its 72 px file at most 512 KB. Said now, not
@@ -1465,7 +1471,7 @@ pub async fn entitlements(
     };
     let account = filter(account_id)?;
     let cosmetic = filter(cosmetic_id)?;
-    let paged = paging(page, per_page, ENTITLEMENTS_PAGE, ENTITLEMENTS_PAGE_MAX);
+    let paged = Paged::CosmeticEntitlements.paging(page, per_page);
     let mut conn = errors::conn(state).await?;
     require_any(&mut conn, caller, &[permissions::COSMETICS_GRANT]).await?;
     let (rows, total) = db::entitlements(
