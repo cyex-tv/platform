@@ -63,15 +63,6 @@ impl PersistedStore {
         store.order.push_back(hash.clone());
         store.texts.insert(hash, text);
     }
-
-    #[cfg(test)]
-    fn len(&self) -> usize {
-        self.0
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .texts
-            .len()
-    }
 }
 
 /// The SHA-256 of a query text, as persisted queries name it.
@@ -184,6 +175,16 @@ impl Extension for QueriesOnlyOverGet {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    impl PersistedStore {
+        fn len(&self) -> usize {
+            self.0
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .texts
+                .len()
+        }
+    }
 
     #[test]
     fn the_store_keeps_at_most_its_cap_and_drops_the_oldest() {
