@@ -26,4 +26,15 @@ describe('BadgeOriginal shows the original at its real size', () => {
     const el = img(badge(ladder, 512));
     expect(el.getAttribute('src')).toBe(`${host}/512.webp`);
   });
+
+  it('with a caption says its pixel size and whether it is the original', () => {
+    const a = render(BadgeOriginal, { badge: badge([...ladder, file('original.webp', 256)], 256), caption: true }).container;
+    expect(a.querySelector('figcaption')?.textContent).toMatch(/256 × 256 px\s*Original/);
+    const b = render(BadgeOriginal, { badge: badge(ladder, 512), caption: true }).container;
+    expect(b.querySelector('figcaption')?.textContent).toMatch(/512 × 512 px\s*Largest size/);
+  });
+
+  it('draws nothing for a picture with no files', () => {
+    expect(render(BadgeOriginal, { badge: badge([], 0), caption: true }).container.querySelector('figure')).toBeNull();
+  });
 });

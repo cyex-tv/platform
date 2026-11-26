@@ -22,7 +22,7 @@ import { limitOf, pendingOf } from './mock/roles.mjs';
 import { grant } from './mock/entitlements.mjs';
 import { ACCOUNT_EDITORS, EDITOR_CHANNELS, EDITOR_OF, PUBLIC_SETS, SHARED_SETS, myEditableChannels } from './mock/editors.mjs';
 import { shopAnswer } from './mock/shop.mjs';
-import { BADGE_ART, BADGE_LADDER, C_IMAGES, PAINT_LADDER, UPLOADED, cosmeticsAnswer, ladderFiles, nextCosmeticSeq, releasedCatalog, userCosmeticsOut } from './mock/cosmetics.mjs';
+import { BADGE_ART, ORIGINAL_PX, BADGE_LADDER, C_IMAGES, PAINT_LADDER, UPLOADED, cosmeticsAnswer, ladderFiles, nextCosmeticSeq, releasedCatalog, userCosmeticsOut } from './mock/cosmetics.mjs';
 import { activityAnswer, activityPageAnswer, emoteActivityAnswer, emoteActivityPageAnswer } from './mock/activity.mjs';
 import { channelByLogin, emoteChannels, publicAccount, sorted } from './mock/directory.mjs';
 import { accountSets, cloneSet, emoteGrant, err, findEmote, findSet, mayView, setOut } from './mock/sets.mjs';
@@ -228,8 +228,8 @@ createServer(async (req, res) => {
   const badgeArt = url.pathname.match(/^\/cosmetics\/badges\/([a-z-]+)\/([124]x|128|256|512|original)\.webp$/);
   if (badgeArt && BADGE_ART[badgeArt[1]]) {
     res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' });
-    // `original` is the picture's own size: 96 px for the sample shield (see mock/cosmetics.mjs).
-    const px = badgeArt[2] === 'original' ? 96 : BADGE_LADDER.find(([stem]) => stem === badgeArt[2])[2];
+    // `original` is the picture's own size (ORIGINAL_PX in mock/cosmetics.mjs; 96 for uploads made earlier).
+    const px = badgeArt[2] === 'original' ? (ORIGINAL_PX[badgeArt[1]] ?? 96) : BADGE_LADDER.find(([stem]) => stem === badgeArt[2])[2];
     return res.end(BADGE_ART[badgeArt[1]](px / 18));
   }
   if (req.method === 'GET' && url.pathname === '/v1/cosmetics') {

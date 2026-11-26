@@ -19,6 +19,8 @@ import { err } from './sets.mjs';
 export const BADGE_ART = {
   'sample-star': (k) => `<svg xmlns="http://www.w3.org/2000/svg" width="${18 * k}" height="${18 * k}" viewBox="0 0 18 18"><circle cx="9" cy="9" r="8.5" fill="hsl(268 70% 55%)"/><path d="M9 3.2l1.7 3.6 3.9.5-2.9 2.7.8 3.9L9 12l-3.5 1.9.8-3.9-2.9-2.7 3.9-.5z" fill="hsl(46 95% 62%)"/></svg>`,
   'sample-shield': (k) => `<svg xmlns="http://www.w3.org/2000/svg" width="${18 * k}" height="${18 * k}" viewBox="0 0 18 18"><path d="M9 1l7 2.6v5c0 4.2-3 7.3-7 8.4-4-1.1-7-4.2-7-8.4v-5z" fill="hsl(160 60% 38%)"/><path d="M5.6 9.2l2.3 2.3 4.6-4.7" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  'sample-ring': (k) => `<svg xmlns="http://www.w3.org/2000/svg" width="${18 * k}" height="${18 * k}" viewBox="0 0 18 18"><circle cx="9" cy="9" r="8.5" fill="hsl(200 80% 45%)"/><circle cx="9" cy="9" r="5.2" fill="none" stroke="hsl(46 95% 62%)" stroke-width="1.6"/><circle cx="9" cy="9" r="2" fill="#fff"/></svg>`,
+  'sample-crest': (k) => `<svg xmlns="http://www.w3.org/2000/svg" width="${18 * k}" height="${18 * k}" viewBox="0 0 18 18"><rect x=".5" y=".5" width="17" height="17" rx="3.5" fill="hsl(350 70% 48%)"/><path d="M9 3l5 3v4.5L9 15l-5-4.5V6z" fill="none" stroke="#fff" stroke-width="1.1"/><path d="M9 6l2.4 1.5v2.4L9 11.4 6.6 9.9V7.5z" fill="hsl(46 95% 62%)"/></svg>`,
 };
 export const C_TIME = '2026-11-17T12:00:00.000Z';
 // The badge size ladder (crates/media Profile::BADGE): file stem, scale and px.
@@ -28,12 +30,14 @@ export const BADGE_LADDER = [['1x', 1, 18], ['2x', 2, 36], ['4x', 4, 72], ['128'
 export const ladderFiles = (animated = false, size = 300, sizes = BADGE_LADDER, original = null) =>
   [...sizes.map(([stem, scale, px]) => [stem, scale, px, px]), ...(original ? [['original', Math.round(Math.max(original[0], original[1]) / 18), original[0], original[1]]] : [])].flatMap(([stem, scale, w, h]) =>
     (animated ? [false, true] : [false]).map((still) => ({ name: `${stem}${still ? '_static' : ''}.webp`, format: 'WEBP', scale, width: w, height: h, size, isStatic: still })));
-// The sample shield is a 96 px picture: its original is 96 px, not scaled up to the 512 master.
+// The sample badges have originals of different sizes (the picture's own pixels, at most 512): the star
+// has none (made before originals), the shield is 72 px, the ring 256 px and the crest 512 px.
+export const ORIGINAL_PX = { 'sample-shield': 72, 'sample-ring': 256, 'sample-crest': 512 };
 const cImage = (key, kind = 'BADGE', full = true) => ({
   id: `01JD8XIMG${key.replace(/[^a-z]/g, '').toUpperCase().padEnd(17, '0').slice(0, 17)}`,
   kind, host: `${BASE}/cosmetics/${kind === 'BADGE' ? 'badges' : 'paints'}/${key}`, animated: false,
-  width: full ? 96 : 512, height: full ? 96 : 512, ready: true, createdAt: C_TIME,
-  files: ladderFiles(false, 300, full ? BADGE_LADDER : BADGE_LADDER.slice(0, 3), full ? [96, 96] : null),
+  width: ORIGINAL_PX[key] ?? 512, height: ORIGINAL_PX[key] ?? 512, ready: true, createdAt: C_TIME,
+  files: ladderFiles(false, 300, full ? BADGE_LADDER : BADGE_LADDER.slice(0, 3), ORIGINAL_PX[key] ? [ORIGINAL_PX[key], ORIGINAL_PX[key]] : null),
 });
 // The paint size ladder (crates/media Profile::PAINT): 64, 128, 256 and 512 px tall, 4:1 here.
 export const PAINT_LADDER = [['1x', 1, 64], ['2x', 2, 128], ['4x', 4, 256], ['512', 8, 512]];
@@ -46,10 +50,12 @@ const pImage = (key, full = true) => ({
   files: paintFiles(false, 3000, full ? PAINT_LADDER : PAINT_LADDER.slice(0, 3)),
 });
 export const UPLOADED = new Map(); // SHA-256 of an uploaded file -> its picture
-export const C_IMAGES = [cImage('sample-star', 'BADGE', false), cImage('sample-shield'), pImage('sample-mosaic'), pImage('sample-mosaic-old', false)];
+export const C_IMAGES = [cImage('sample-star', 'BADGE', false), cImage('sample-shield'), pImage('sample-mosaic'), pImage('sample-mosaic-old', false), cImage('sample-ring'), cImage('sample-crest')];
 export const BADGES = [
   { id: '01JD8XBDG000000000000000001', name: 'Sample: Early', tooltip: 'Sample badge (mock data)', image: C_IMAGES[0], createdAt: C_TIME, updatedAt: C_TIME },
   { id: '01JD8XBDG000000000000000002', name: 'Sample: Helper', tooltip: 'Sample badge (mock data)', image: C_IMAGES[1], createdAt: C_TIME, updatedAt: C_TIME },
+  { id: '01JD8XBDG000000000000000003', name: 'Sample: Ring', tooltip: 'Sample badge, 256 px original (mock data)', image: C_IMAGES[4], createdAt: C_TIME, updatedAt: C_TIME },
+  { id: '01JD8XBDG000000000000000004', name: 'Sample: Crest', tooltip: 'Sample badge, 512 px original (mock data)', image: C_IMAGES[5], createdAt: C_TIME, updatedAt: C_TIME },
 ];
 const paintOf = (id, name, kind, rest) => ({ id, name, kind, angle: 90, repeat: false, shape: 'CIRCLE', color: null, stops: [], shadows: [], image: null, createdAt: C_TIME, updatedAt: C_TIME, ...rest });
 export const PAINTS = [
@@ -72,7 +78,7 @@ const CHANNEL_ACC = (k) => `01JD8XACC${String(k).padStart(17, '0')}`;
 export const C_OWNED = {
   [CHANNEL_ACC(4)]: { BADGE: [], PAINT: [PAINTS[0].id] },
   [CHANNEL_ACC(6)]: { BADGE: [], PAINT: [PAINTS[1].id] },
-  [ME_ID]: { BADGE: [BADGES[0].id, BADGES[1].id], PAINT: [PAINTS[0].id, PAINTS[1].id, PAINTS[3].id] },
+  [ME_ID]: { BADGE: [BADGES[0].id, BADGES[1].id, BADGES[2].id, BADGES[3].id], PAINT: [PAINTS[0].id, PAINTS[1].id, PAINTS[3].id] },
   [OTHERS[0].id]: { BADGE: [BADGES[1].id], PAINT: [PAINTS[2].id] },
   [OTHERS[4].id]: { BADGE: [], PAINT: [PAINTS[1].id] },
 };
