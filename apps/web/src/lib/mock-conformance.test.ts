@@ -711,6 +711,37 @@ describe('mock-api conformance with the real schema', () => {
     if (plBody?.sets?.length !== 1) out.push('POST /v1/personal-sets/lookup: the linked chatter should have exactly one personal set');
     stats.rest += 4;
 
+    // Bulk reads and delta sync (ADR 0035).
+    const json = (body: unknown) => ({ method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const sl = await fetch(`${base}/v1/sets/lookup`, json({ ids: [chBody?.active_set_id, '1'] }));
+    const slBody = await sl.json();
+    checkResponse('post', '/v1/sets/lookup', sl.status, slBody, 'POST /v1/sets/lookup', out);
+    if (slBody?.sets?.length !== 1) out.push('POST /v1/sets/lookup: the active set should be found, the unknown one left out');
+    const cl = await fetch(`${base}/v1/channels/lookup`, json({ platform: 'twitch', ids: ['700000001', '1'] }));
+    checkResponse('post', '/v1/channels/lookup', cl.status, await cl.json(), 'POST /v1/channels/lookup', out);
+    const tooMany = await fetch(`${base}/v1/sets/lookup`, json({ ids: Array.from({ length: 26 }, (_, i) => String(i + 1)) }));
+    const tooManyBody = await tooMany.json();
+    checkResponse('post', '/v1/sets/lookup', tooMany.status, tooManyBody, 'POST /v1/sets/lookup (26 ids)', out);
+    if (tooMany.status !== 400 || tooManyBody?.error !== 'too_many') out.push('POST /v1/sets/lookup (26 ids): the API answers 400 too_many');
+    for (const since of [0, 99]) {
+      const d = await fetch(`${base}/v1/sets/${chBody?.active_set_id}?since=${since}`);
+      checkResponse('get', '/v1/sets/{id}', d.status, await d.json(), `GET /v1/sets/{active}?since=${since}`, out);
+    }
+    // GraphQL over GET: a persisted query by hash, after one miss.
+    const q = 'query ActiveAnnouncement { activeAnnouncement { id } }';
+    const { createHash } = await import('node:crypto');
+    const ext = JSON.stringify({ persistedQuery: { version: 1, sha256Hash: createHash('sha256').update(q).digest('hex') } });
+    const miss = await (await fetch(`${base}/v1/gql?${new URLSearchParams({ extensions: ext })}`)).json();
+    if (miss?.errors?.[0]?.message !== 'PersistedQueryNotFound') out.push('GET /v1/gql: an unknown hash should answer PersistedQueryNotFound');
+    await fetch(`${base}/v1/gql?${new URLSearchParams({ query: q, extensions: ext })}`);
+    const hit = await fetch(`${base}/v1/gql?${new URLSearchParams({ extensions: ext })}`);
+    const hitBody = await hit.json();
+    if (hitBody?.errors || !('activeAnnouncement' in (hitBody?.data ?? {}))) out.push(`GET /v1/gql: a stored hash should run its query, got ${JSON.stringify(hitBody)}`);
+    if (!hit.headers.get('cache-control')?.startsWith('public')) out.push('GET /v1/gql: a public answer should be Cache-Control: public');
+    const mut = await fetch(`${base}/v1/gql?${new URLSearchParams({ query: 'mutation { revokeOtherSessions }' })}`);
+    if (mut.status !== 405) out.push(`GET /v1/gql with a mutation: status ${mut.status}, the API answers 405 post_required`);
+    stats.rest += 9;
+
     failures.push(...out);
   }, 30000);
 

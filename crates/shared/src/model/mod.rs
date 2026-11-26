@@ -875,6 +875,39 @@ pub struct EmoteSet {
     pub slots_used: u32,
     #[serde(default)]
     pub created_at: String,
+    /// Goes up by one or more with every change to what the set shows: a member added, removed
+    /// or renamed, the set renamed, an emote in it changed (ADR 0035). Keep it with your copy
+    /// and ask `setChanges` (or `GET /v1/sets/{id}?since=`) for what changed after it.
+    #[serde(default)]
+    pub version: i64,
+}
+
+/// What changed in a set after a version (`setChanges`, `GET /v1/sets/{id}?since=`; ADR 0035).
+/// Apply `added`, `renamed` and `updated` as upserts by `emote.id`, and `removedIds` as deletes;
+/// then keep `version`. With `full: true` the change log doesn't reach back to `since` (or
+/// `since` is not a version this set had): replace your copy with `set` instead.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct SetChanges {
+    pub id: String,
+    /// The version this answer brings you to.
+    pub version: i64,
+    /// The `since` asked for.
+    pub since: i64,
+    /// True when this is a full resync: `set` holds the whole set and the lists are empty.
+    pub full: bool,
+    /// The whole set, only when `full` is true.
+    pub set: Option<EmoteSet>,
+    /// The set's name now.
+    pub name: String,
+    /// Members added since (or newly visible to you, for example an emote approved).
+    pub added: Vec<SetEmote>,
+    /// Members whose name or zero-width flag in the set changed.
+    pub renamed: Vec<SetEmote>,
+    /// Members whose emote changed (its files, flags, state or own name).
+    pub updated: Vec<SetEmote>,
+    /// Emotes no longer in the set as you see it (removed, taken down, deleted, hidden).
+    pub removed_ids: Vec<String>,
 }
 
 /// What you may set a set's capacity to (`setCapacityRange`; ADR 0017, amendment 2026/11/22).
@@ -1004,6 +1037,33 @@ pub struct PersonalLookup {
 pub struct PersonalSetEntry {
     pub platform_user_id: String,
     pub set: EmoteSet,
+}
+
+/// `POST /v1/sets/lookup`: several sets at once (ADR 0035).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct SetsLookup {
+    /// Up to 25 set IDs (Snowflakes, or old ULIDs while clients move over).
+    pub ids: Vec<String>,
+}
+
+/// The sets found, in the order asked; unknown and hidden ones are left out.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct SetsLookupResult {
+    pub sets: Vec<EmoteSet>,
+}
+
+/// `POST /v1/channels/lookup`: several channels of one platform at once (ADR 0035).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct ChannelsLookup {
+    pub platform: Platform,
+    /// Up to 100 broadcaster platform user IDs.
+    pub ids: Vec<String>,
+}
+
+/// The channels found, in the order asked; channels not on cyex.tv are left out.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+pub struct ChannelsLookupResult {
+    pub channels: Vec<Channel>,
 }
 
 /// Only users with a non-empty personal set are listed.
@@ -1921,6 +1981,15 @@ pub struct SetEmotesQuery {
     /// The `next` of the page before (also in its `Link: rel="next"` header); none for the first
     /// page.
     pub after: Option<String>,
+}
+
+/// The query of `GET /v1/sets/{id}`: with `since`, only what changed after that version
+/// (ADR 0035).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct SetQuery {
+    /// A `version` of the set you hold. The answer is then a `SetChanges`, not the set.
+    pub since: Option<i64>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, IntoParams)]

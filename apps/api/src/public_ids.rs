@@ -300,6 +300,30 @@ pub async fn canonical(state: &AppState, text: &str) -> Result<String, ApiError>
         .map_err(db_error)
 }
 
+/// [`canonical`] for many IDs in one lookup (the bulk reads, ADR 0035), in the order given.
+pub async fn canonical_many(state: &AppState, texts: &[String]) -> Result<Vec<String>, ApiError> {
+    let publics: Vec<i64> = texts
+        .iter()
+        .filter_map(|t| public_ids::parse(t.trim()))
+        .collect();
+    let ulids: Vec<Uuid> = texts.iter().filter_map(|t| ulid_of(t.trim())).collect();
+    if !ulids.is_empty() {
+        old_form_used(state, &ulids).await;
+    }
+    if publics.is_empty() {
+        return Ok(texts.to_vec());
+    }
+    let map = resolve(state, &publics).await?;
+    Ok(texts
+        .iter()
+        .map(|t| {
+            public_ids::parse(t.trim())
+                .and_then(|p| map.get(&p))
+                .map_or_else(|| t.clone(), |id| cyex_tv_db::ids::to_text(*id))
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use async_graphql::indexmap::IndexMap;

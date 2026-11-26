@@ -295,6 +295,42 @@ export const guides: Guide[] = [
     ],
   },
   {
+    id: 'bulk-reads',
+    title: 'Bulk reads',
+    search: 'bulk batch many ids lookup emotes sets channels too_many cap',
+    blocks: [
+      p('Read many emotes, sets or channels in one call instead of one call each. GraphQL `emotes(ids:)` and `sets(ids:)` take emote and set IDs, `channels(platform:, ids:)` broadcaster platform IDs. Over REST, [POST /v1/sets/lookup](#rest-lookup_sets) takes `{ "ids": [...] }` and [POST /v1/channels/lookup](#rest-lookup_channels) takes `{ "platform": "twitch", "ids": [...] }`, like the personal-set lookup.'),
+      { t: 'pre', code: `query {\n  sets(ids: ["${EX.setId}", "99908371611660331"]) { id version emotes { name emote { id } } }\n  channels(platform: TWITCH, ids: ["${EX.twitchId}"]) { login activeSetId }\n}` },
+      p('Answers keep the order you asked in and list each item once. Unknown items, and items you may not see, are left out rather than null: who sees what is the rule of the single read (`emote`, `set`, `channel`). The REST lookups answer as signed out, approved emotes only, as the other chat-client reads do.'),
+      p('At most 100 emotes, 100 channels or 25 sets per call; more is `too_many` (`400`, with `details { limit, current }`, see [Limit errors](#limit-errors)). Sets are capped lower because a set can hold 1.000 emotes. A REST lookup counts as one read against your rate limit; in GraphQL `sets` costs what that many `set` lookups would, and `emotes` and `channels` cost one lookup per 10 IDs.'),
+      { t: 'pre', code: `curl -s -X POST '${baseUrl}/v1/sets/lookup' \\\n  -H 'content-type: application/json' \\\n  -d '{"ids":["${EX.setId}"]}'` },
+    ],
+  },
+  {
+    id: 'delta-sync',
+    title: 'Delta sync',
+    search: 'delta sync since version changes setChanges resync full etag poll',
+    blocks: [
+      p('Every set has a `version` that goes up whenever what it shows changes: an emote added, removed or renamed in it, the set renamed, or an emote in it changed (approved, taken down, its files ready). Keep the version with your copy of the set, then ask only for what changed after it: [GET /v1/sets/{id}?since=<version>](#rest-get_set) over REST, `setChanges(id:, since:)` in GraphQL.'),
+      { t: 'pre', code: `curl -s '${baseUrl}/v1/sets/${EX.setId}?since=41'\n\n{ "id": "${EX.setId}", "version": 44, "since": 41, "full": false, "set": null,\n  "name": "Main", "added": [ … ], "renamed": [ … ], "updated": [ … ], "removed_ids": ["${EX.emoteId}"] }` },
+      p('Apply `added`, `renamed` and `updated` as upserts by emote ID (each is a whole set emote, as the set shows it now), remove the emotes in `removed_ids` (`removedIds` in GraphQL), and keep the new `version`. Applying the same answer twice is harmless. With nothing new the lists are empty and `version` is the one you sent.'),
+      p('The change log keeps 7 days, and at most the last 1.000 versions of a set. When `since` is older than that, newer than the set, or too far behind, the answer is `full: true` with the whole set in `set`: replace your copy. `ETag` and `If-None-Match` work on both answers. A delta doesn’t follow an emote’s `channel_count`, its owner’s name or its tags; read the full set now and then if you show those.'),
+      note('Live events (`set.emote_added` and the rest) still come first. Use deltas to catch up after a reconnect, or instead of rereading the whole set when its `ETag` changes.'),
+    ],
+  },
+  {
+    id: 'persisted-queries',
+    title: 'Persisted queries',
+    search: 'persisted queries apq automatic get cache cdn sha256 hash persistedquerynotfound post_required',
+    blocks: [
+      p('GraphQL queries can go over `GET`, so browsers and the CDN can cache them. Send the query in the address (`query`, `variables` and `operationName`, the last two as JSON), or send only its hash as an automatic persisted query: `extensions={"persistedQuery":{"version":1,"sha256Hash":"<sha-256 of the query text, lowercase hex>"}}`.'),
+      p('An unknown hash is answered with the error `PersistedQueryNotFound` (code `persisted_query_not_found`): send the same request once more with the `query` text, which stores it, and from then on the hash alone is enough. A hash that isn’t the text’s is `persisted_query_mismatch`. Apollo Client’s persisted-queries link does all this for you. Persisted queries work over `POST` too.'),
+      { t: 'pre', code: `curl -s -G '${baseUrl}/v1/gql' \\\n  --data-urlencode 'query={ globalSet { id version } }' \\\n  --data-urlencode 'extensions={"persistedQuery":{"version":1,"sha256Hash":"…"}}'` },
+      p('Only queries run over `GET`. A mutation or subscription is refused with `post_required` (`405`, `Allow: POST`). `GET` never reads the session cookie, so a page on another site can’t make a signed-in browser run anything; send a Bearer token if the query needs you signed in.'),
+      p('Signed-out answers without errors are `Cache-Control: public, max-age=30` with an `ETag` (send `If-None-Match` for a `304`). Answers with a Bearer token are `private, no-cache`, answers with errors `no-store`, and every answer has `Vary: Authorization`. `GET` counts against the GraphQL rate limit like `POST`.'),
+    ],
+  },
+  {
     id: 'limit-errors',
     title: 'Limit errors',
     search: 'limit errors 409 413 422 details current set_full too_many_pending limit_reached too_many status',

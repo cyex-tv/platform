@@ -988,6 +988,12 @@ export type EmoteSet = {
    * counts the emotes this answer may show them (approved ones, plus their own pending ones).
    */
   slotsUsed: Scalars['Int']['output'];
+  /**
+   * Goes up by one or more with every change to what the set shows: a member added, removed
+   * or renamed, the set renamed, an emote in it changed (ADR 0035). Keep it with your copy
+   * and ask `setChanges` (or `GET /v1/sets/{id}?since=`) for what changed after it.
+   */
+  version: Scalars['Int']['output'];
   /** Who can find and open it. */
   visibility: SetVisibility;
 };
@@ -2696,6 +2702,12 @@ export type Query = {
    */
   channelWebhooks: Array<Webhook>;
   /**
+   * Several channels of one platform at once, by their platform IDs, in the order asked,
+   * each once (ADR 0035). Channels not on cyex.tv are left out. At most 100 IDs
+   * (`too_many`); every 10 IDs cost what one `channel` lookup would.
+   */
+  channels: Array<Channel>;
+  /**
    * Redeem code batches, newest first. Needs `codes.manage`. The codes themselves are shown
    * only once, by `createCodeBatch`. `perPage` is 1 to 100, default 50.
    */
@@ -2771,6 +2783,12 @@ export type Query = {
    * an emote ID, the emote isn't approved and listed, or it is not in the top 100.
    */
   emoteTrending?: Maybe<EmoteTrending>;
+  /**
+   * Several emotes at once, in the order asked, each once (ADR 0035): who may see what is the
+   * rule of `emote`, and unknown or hidden emotes are left out. At most 100 IDs (`too_many`);
+   * every 10 IDs cost what one `emote` lookup would.
+   */
+  emotes: Array<Emote>;
   /**
    * Public emotes already made from the file with this sha256 (64 hex digits), oldest first,
    * at most 3: the upload form asks before sending, so it can say "looks like" (it never
@@ -3003,6 +3021,14 @@ export type Query = {
    * `sets.edit_any`. Null when you can't change its capacity. Signed in.
    */
   setCapacityRange?: Maybe<SetCapacityRange>;
+  /**
+   * What changed in a set after `since`, a `version` you hold (delta sync, ADR 0035). Apply
+   * `added`, `renamed` and `updated` as upserts by emote ID and `removedIds` as deletes, then
+   * keep `version`. `full: true` (with the whole set in `set`) when the change log no longer
+   * reaches back to `since` (7 days or 1.000 versions) or `since` isn't a version of this
+   * set. Null when `set` would be.
+   */
+  setChanges?: Maybe<SetChanges>;
   /** A set's editors. For its owner, its editors and `sets.edit_any`. */
   setEditors: Array<AccountSummary>;
   /**
@@ -3014,6 +3040,12 @@ export type Query = {
    * ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
    */
   setEmotes: SetEmotePage;
+  /**
+   * Several sets at once, in the order asked, each once (ADR 0035): who may see what is the
+   * rule of `set`, and unknown or hidden sets are left out. At most 25 IDs (`too_many`); one
+   * call costs what that many `set` lookups would.
+   */
+  sets: Array<EmoteSet>;
   /** One shop item: on sale for everyone; any, deleted ones too, with `shop.manage`. */
   shopItem?: Maybe<ShopItem>;
   /**
@@ -3197,6 +3229,12 @@ export type QueryChannelWebhooksArgs = {
 };
 
 
+export type QueryChannelsArgs = {
+  ids: Array<Scalars['String']['input']>;
+  platform: Platform;
+};
+
+
 export type QueryCodeBatchesArgs = {
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
@@ -3267,6 +3305,11 @@ export type QueryEmoteTransferRequestsArgs = {
 export type QueryEmoteTrendingArgs = {
   id: Scalars['String']['input'];
   window?: InputMaybe<TrendingWindow>;
+};
+
+
+export type QueryEmotesArgs = {
+  ids: Array<Scalars['ID']['input']>;
 };
 
 
@@ -3418,6 +3461,12 @@ export type QuerySetCapacityRangeArgs = {
 };
 
 
+export type QuerySetChangesArgs = {
+  id: Scalars['String']['input'];
+  since: Scalars['Int']['input'];
+};
+
+
 export type QuerySetEditorsArgs = {
   setId: Scalars['String']['input'];
 };
@@ -3429,6 +3478,11 @@ export type QuerySetEmotesArgs = {
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
   query?: InputMaybe<Scalars['String']['input']>;
+};
+
+
+export type QuerySetsArgs = {
+  ids: Array<Scalars['ID']['input']>;
 };
 
 
@@ -3751,6 +3805,35 @@ export type SetCapacityRange = {
   staff: Scalars['Boolean']['output'];
   /** Emotes in the set now, pending ones included. */
   used: Scalars['Int']['output'];
+};
+
+/**
+ * What changed in a set after a version (`setChanges`, `GET /v1/sets/{id}?since=`; ADR 0035).
+ * Apply `added`, `renamed` and `updated` as upserts by `emote.id`, and `removedIds` as deletes;
+ * then keep `version`. With `full: true` the change log doesn't reach back to `since` (or
+ * `since` is not a version this set had): replace your copy with `set` instead.
+ */
+export type SetChanges = {
+  __typename?: 'SetChanges';
+  /** Members added since (or newly visible to you, for example an emote approved). */
+  added: Array<SetEmote>;
+  /** True when this is a full resync: `set` holds the whole set and the lists are empty. */
+  full: Scalars['Boolean']['output'];
+  id: Scalars['String']['output'];
+  /** The set's name now. */
+  name: Scalars['String']['output'];
+  /** Emotes no longer in the set as you see it (removed, taken down, deleted, hidden). */
+  removedIds: Array<Scalars['String']['output']>;
+  /** Members whose name or zero-width flag in the set changed. */
+  renamed: Array<SetEmote>;
+  /** The whole set, only when `full` is true. */
+  set?: Maybe<EmoteSet>;
+  /** The `since` asked for. */
+  since: Scalars['Int']['output'];
+  /** Members whose emote changed (its files, flags, state or own name). */
+  updated: Array<SetEmote>;
+  /** The version this answer brings you to. */
+  version: Scalars['Int']['output'];
 };
 
 /** An emote as it sits in a set: the name it is typed as there, and who added it. */

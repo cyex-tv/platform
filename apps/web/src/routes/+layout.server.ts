@@ -4,7 +4,7 @@
 // prerendered at build time (help, guidelines, changelog, download, developers) can't know it:
 // `undefined` tells the bar to ask from the browser, where app.html's hint holds its place.
 import { building } from '$app/environment';
-import { fetchWith, gql } from '$lib/api';
+import { fetchWith, gqlPublic } from '$lib/api';
 import { ACTIVE_ANNOUNCEMENT } from '$lib/queries';
 import { CLOSED_COOKIE, readClosedCookie } from '$lib/shell/announcement';
 import type { Announcement } from '$lib/shell/announcement.svelte';
@@ -18,7 +18,7 @@ export const load: LayoutServerLoad = async ({ fetch, cookies }) => {
   const announceClosed = readClosedCookie(cookies.get(CLOSED_COOKIE));
   let announcement: Announcement | null | undefined = null;
   try {
-    announcement = (await gql(ACTIVE_ANNOUNCEMENT, {}, fetchWith(AbortSignal.timeout(ANNOUNCE_WAIT_MS), fetch))).activeAnnouncement ?? null;
+    announcement = (await gqlPublic(ACTIVE_ANNOUNCEMENT, {}, fetchWith(AbortSignal.timeout(ANNOUNCE_WAIT_MS), fetch))).activeAnnouncement ?? null;
   } catch {
     /* no bar this time */
   }
