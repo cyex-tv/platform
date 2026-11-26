@@ -1,7 +1,7 @@
 // Settings (opened from the account menu, like 7TV's): one rail, Appearance / Notifications /
 // Hidden / Billing. Account and Editors moved to your profile (owner rule, 2026/11/22: owner-only
 // tabs ?s=account and ?s=editors); their old addresses (/me/settings/account, /me/account,
-// /me/editors) open those tabs (movedToProfile). Pure, so it is tested.
+// /me/editors) open those tabs (movedToProfile), and so does /me/notifications (?s=notifications). Pure, so it is tested.
 import { markCurrent, type RailGroup } from '$lib/shell/rail';
 import { sectionHref } from '$lib/profile/rows';
 
@@ -20,16 +20,26 @@ const ROWS = [
 const under = (path: string, base: string) => path === base || path.startsWith(`${base}/`);
 
 /** The old addresses of what is now on your profile, and the tab each opens. */
-const MOVED: { base: string; tab: 'account' | 'editors' }[] = [
+const MOVED: { base: string; tab: 'account' | 'editors' | 'notifications' }[] = [
   { base: `${SETTINGS}/account`, tab: 'account' },
   { base: '/me/account', tab: 'account' },
   { base: '/me/editors', tab: 'editors' },
+  { base: '/me/notifications', tab: 'notifications' },
 ];
 
-/** The profile tab an old Settings address opens (`/users/<you>?s=account`, the hash kept), or null. */
-export function movedToProfile(path: string, me: string, hash = ''): string | null {
+/** Query keys an old address hands on to its tab (Notifications' filter and pick). */
+const KEPT = ['f', 'n'];
+
+/**
+ * The profile tab an old address opens (`/users/<you>?s=account`, the hash kept; for
+ * /me/notifications its `?f=` and `?n=` too), or null.
+ */
+export function movedToProfile(path: string, me: string, hash = '', search = ''): string | null {
   const hit = MOVED.find((m) => under(path, m.base));
-  return hit ? `${sectionHref(me, hit.tab)}${hash}` : null;
+  if (!hit) return null;
+  const from = new URLSearchParams(search);
+  const kept = hit.tab === 'notifications' ? KEPT.filter((k) => from.get(k)).map((k) => `&${k}=${encodeURIComponent(from.get(k)!)}`).join('') : '';
+  return `${sectionHref(me, hit.tab)}${kept}${hash}`;
 }
 
 /** Whether a path is one of the Settings pages (their rail, not the profile's). */

@@ -1638,6 +1638,41 @@ gh pr create --repo cyex-tv/platform --base main --head fix/select-toggle-hero-t
 ```
   Not merged (owner reviews).
 
+## Notifications on the profile; Activity: latest 100 for visitors, a date range for the owner (branch `feat/profile-notifications-activity`, owner request of 2026/11/22)
+- [x] Notifications is an owner-only profile tab (`/users/<you>?s=notifications`), first of the owner tabs
+  (Notifications, Account, Editors), in the profile's Inspector frame: PageHead, the slim toolbar (All, Unread,
+  one filter per kind group, ?f=; the unread count and Mark all read), the dense list (20 at a time, a pick is
+  ?n=) on the left; the panel shows the picked notification or the numbers and the link to Settings →
+  Notifications. Nobody else sees the tab (`sectionsFor`, an address asking for it opens Uploaded emotes).
+  `/me/notifications` redirects there with its ?f= and ?n= (`movedToProfile`); the bell's "See all", the phone
+  menu, the /me rail, the dashboard and Settings → Notifications link to the tab (`notificationsHref`).
+- [x] Profile Activity: everyone but the owner and staff (`users.view`) reads the latest 100 lines, all time, with
+  no time control ("Latest 100" in the toolbar; paging stops at 100 with one closing line). The owner and staff
+  page through everything and get a date range picker instead of Day / Month (`DateRangePicker`: All time,
+  Last 7 / 30 / 90 days, or From and To in 2026/11/19 format; future days and backwards ranges refused in words);
+  the range is in the address (?from=2026-11-01&to=2026-11-22; the old ?d= / ?m= read as all time).
+- [x] API (additive, no new fields): `accountActivityPage` / `accountActivity` take the caller into account. For
+  anyone but the owner and staff, `since` / `until` are ignored and paging ends at the 100th line (`next` null
+  there; a cursor past it gets an empty page). The window is found once per page (skipped for a first page of
+  fewer than 100), scanning at most 20 rounds of 100 rows. Owner and staff behave as before. Mock does the same.
+- [x] Emote page Activity: no "By" field (no filters); an old ?by= is ignored.
+- [x] Toolbar alignment: UserFilter's label is the field's text size in a box as tall as the field, so "By", the
+  field, the segments and the range button share one vertical centre (measured in the running app: text middles
+  387.5 / 387.5 / 387.4 / 386.8 px at 1920 and 1440; before, the 13px label sat 1.8px higher). 375: each control
+  on its own line, label and field centred together.
+- [x] Tests: `backend_reads_flow.rs` visitors_reach_the_newest_100_lines_and_the_owner_all_of_them (Postgres, CI),
+  `profile_dashboard_flow.rs` (time filter as the owner; ignored for a visitor), `range.test.ts`,
+  `activity-range.ui.test.ts`, `notifications-tab.ui.test.ts`, `activity-no-filter.ui.test.ts`, `activity.test.ts`
+  and `settings.test.ts` (owner-only tab, redirect). Screens before/after in
+  `.claude/runs/2026-11-20-redesign/screens/profile-activity/`.
+
+### GitHub write log for this PR
+```
+git push -u origin feat/profile-notifications-activity
+gh pr create --repo cyex-tv/platform --base main --head feat/profile-notifications-activity --title "Notifications as a profile tab; Activity: latest 100 for visitors, a date range for the owner" --body-file <file>
+```
+  PR #167. Not merged (owner reviews).
+
 ## Sets and editors: sets apart from channel settings, every set public, capacity, the set menu (branch `feat/sets-editors-capacity`, owner requests of 2026/11/22)
 - [x] Editor permissions: `sets` (make, rename, delete, resize sets, pick the active set) no longer brings `channels` (channel settings); `channels` keeps picking the active set. `updateChannelSettings` checks `activeSetId` against `sets` or `channels` and `allowPersonalEmotes` against `channels`. Migration `20261215004101_editor_sets_without_channels.sql` writes `channels` onto every grant that held `sets` without it (nobody loses anything). ADR 0014 amendment.
 - [x] Permissions dialog: two columns of one-line rows, explanations as tooltips, grouped; no inner or page scroll inside the dialog at 1440x900 and 1920x1080, a full-height sheet on phones. "Sets they can edit" is a dropdown over the dialog with a filter and checkboxes that stays open while ticking and closes on Confirm, Esc or a click outside ("All sets", one set's name, or "3 sets" on the trigger).

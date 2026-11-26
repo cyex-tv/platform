@@ -1,5 +1,5 @@
 // Notification kinds in words: the groups Settings → Notifications and the filter on
-// /me/notifications use, each kind's name and what it is about. The kinds are the API's
+// your profile's Notifications tab use, each kind's name and what it is about. The kinds are the API's
 // (`myNotificationPrefs`, apps/api/src/site.rs); one the site doesn't know yet goes in Other.
 // Pure, so it is tested.
 

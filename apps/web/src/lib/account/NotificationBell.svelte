@@ -1,7 +1,7 @@
 <script lang="ts">
   // The bell in the header, on every width (like the deck's Twitch bell): a 40px button with the
   // unread count, opening a panel anchored under it with the newest notifications, Mark all read
-  // and a link to the full page (/me/notifications); on phones the panel is a bottom sheet and
+  // and a link to the full list (your profile's Notifications tab); on phones the panel is a bottom sheet and
   // the button is borderless like the other phone header buttons. Enter or Space opens it,
   // Escape closes it with focus back on the bell. The count is kept fresh by watchInbox (the
   // AppHeader starts it); new ones also pop up as NotificationToasts.
@@ -14,6 +14,8 @@
   import { badge } from './notifications';
   import { inbox, loadInbox, markRead, type Note } from './inbox.svelte';
   import NotificationRow from './NotificationRow.svelte';
+  import { notificationsHref } from '$lib/profile/rows';
+  import { session } from '$lib/tool/session.svelte';
 
   let { phone = false }: { phone?: boolean } = $props();
   let open = $state(false);
@@ -76,7 +78,7 @@
     </ul>
   {/if}
   {#snippet footer()}
-    <a class="all" href="/me/notifications" onclick={() => (open = false)}>See all notifications<Icon name="chevron-right" size={14} /></a>
+    <a class="all" href={notificationsHref(session.me?.id)} onclick={() => (open = false)}>See all notifications<Icon name="chevron-right" size={14} /></a>
   {/snippet}
 </Popover>
 

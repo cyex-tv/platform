@@ -12,6 +12,7 @@
 use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
+use cyex_tv_auth::Caller;
 use cyex_tv_db::cosmetics as cosmetics_db;
 use cyex_tv_db::reads::{self, EmoteRow};
 use cyex_tv_db::sets::Set;
@@ -21,11 +22,12 @@ use cyex_tv_shared::model::{
     AccountSummary, ActivityCosmeticChange, ActivityEmote, ActivityEntry, ActivityFilter,
     ActivityGroup, ActivityKind, ActivityPage, ActivitySet, EmoteState, SetVisibility,
 };
+use cyex_tv_shared::permissions;
 use serde_json::Value;
 use sqlx::PgConnection;
 use uuid::Uuid;
 
-use crate::catalog::{conn, db_error, parse_id, public_emote};
+use crate::catalog::{conn, db_error, holds, parse_id, public_emote};
 use crate::errors::bad;
 use crate::state::AppState;
 use crate::views;
@@ -38,6 +40,12 @@ pub const ACTIVITY_PAGE: u32 = 30;
 /// of rounds comes back short with a `next` cursor to carry on from.
 const BATCH: i64 = 100;
 const ROUNDS: usize = 4;
+/// How far back an account's feed reaches for everyone but its owner and staff: the newest 100
+/// lines, all time (owner rule, 2026/11/22). Paging stops at the 100th line.
+pub const PUBLIC_LINES: usize = 100;
+/// Rounds the search for the 100th line reads at most; a feed that drops more rows than that
+/// ends where the search stopped.
+const WINDOW_ROUNDS: usize = 20;
 
 /// Everything the rows of one round refer to.
 struct Lookup {
@@ -372,23 +380,27 @@ fn entry(row: &audit::Entry, owner: Uuid, look: &Lookup) -> Option<ActivityEntry
 /// `limit` is 1 to 100, default 30. Empty for an unknown, deleted or blocked account.
 pub async fn account_activity(
     state: &AppState,
+    caller: Option<&Caller>,
     account_id: &str,
     before: Option<&str>,
     limit: Option<u32>,
 ) -> ApiResult<Vec<ActivityEntry>> {
-    Ok(account_activity_page(state, account_id, before, limit)
-        .await?
-        .entries)
+    Ok(
+        account_activity_page(state, caller, account_id, before, limit)
+            .await?
+            .entries,
+    )
 }
 
 /// `account_activity` with the cursor for the next page.
 pub async fn account_activity_page(
     state: &AppState,
+    caller: Option<&Caller>,
     account_id: &str,
     before: Option<&str>,
     limit: Option<u32>,
 ) -> ApiResult<ActivityPage> {
-    account_activity_where(state, account_id, before, limit, None).await
+    account_activity_where(state, caller, account_id, before, limit, None).await
 }
 
 /// The audit actions behind each group.
@@ -465,14 +477,19 @@ pub(crate) fn sql_filter(filter: Option<&ActivityFilter>) -> ApiResult<audit::Ac
 }
 
 /// `account_activity_page`, narrowed by `filter`: groups, who did it, and a time range.
+///
+/// For anyone but the owner and staff (`users.view`), the feed is the newest [`PUBLIC_LINES`]
+/// lines, all time: `since` and `until` are ignored, and paging ends at the 100th line (a cursor
+/// past it gets an empty page).
 pub async fn account_activity_where(
     state: &AppState,
+    caller: Option<&Caller>,
     account_id: &str,
     before: Option<&str>,
     limit: Option<u32>,
     filter: Option<&ActivityFilter>,
 ) -> ApiResult<ActivityPage> {
-    let wanted = sql_filter(filter)?;
+    let mut wanted = sql_filter(filter)?;
     let before_id = before.map(parse_id).transpose()?;
     let limit = limit.unwrap_or(ACTIVITY_PAGE).clamp(1, ACTIVITY_PAGE_MAX) as usize;
     let Some(owner) = ids::from_text(account_id.trim()) else {
@@ -485,7 +502,23 @@ pub async fn account_activity_where(
     if account.deleted_at.is_some() || account.blocked_at.is_some() {
         return Ok(ActivityPage::default());
     }
+    let mut floor = None;
+    if !sees_all(&mut conn, caller, owner).await? {
+        wanted.since = None;
+        wanted.until = None;
+        // A first page of fewer than 100 lines is inside the window by itself.
+        if before_id.is_some() || limit >= PUBLIC_LINES {
+            let window = public_window(&mut conn, owner, &wanted, &state.cdn_url).await?;
+            if let Some(last) = window.floor
+                && before_id.is_some_and(|b| b == last || !window.rows.contains(&b))
+            {
+                return Ok(ActivityPage::default());
+            }
+            floor = window.floor;
+        }
+    }
     let mut page = Page::new(limit, before_id);
+    page.floor = floor;
     while page.wants_more() {
         let rows = audit::activity_rows_where(&mut conn, owner, page.cursor, BATCH, &wanted)
             .await
@@ -495,6 +528,74 @@ pub async fn account_activity_where(
         page.round(rows.len(), lines);
     }
     Ok(page.finish())
+}
+
+/// Whether `caller` sees all of `owner`'s feed and may narrow it by time: the owner, or staff
+/// (`users.view`).
+async fn sees_all(
+    conn: &mut PgConnection,
+    caller: Option<&Caller>,
+    owner: Uuid,
+) -> ApiResult<bool> {
+    let Some(caller) = caller else {
+        return Ok(false);
+    };
+    if caller.account_id == owner {
+        return Ok(true);
+    }
+    holds(conn, caller, permissions::USERS_VIEW).await
+}
+
+/// The part of a feed everyone may page through.
+struct Window {
+    /// The row of the 100th line; `None` when the feed has fewer lines (all of it is open).
+    floor: Option<Uuid>,
+    /// Every row read down to the floor: the cursors a page may start from.
+    rows: HashSet<Uuid>,
+}
+
+/// Finds the newest [`PUBLIC_LINES`] lines of `owner`'s feed under `wanted`.
+async fn public_window(
+    conn: &mut PgConnection,
+    owner: Uuid,
+    wanted: &audit::ActivityFilter,
+    cdn_url: &str,
+) -> ApiResult<Window> {
+    let mut rows_seen = HashSet::new();
+    let mut lines = 0;
+    let mut cursor = None;
+    for _ in 0..WINDOW_ROUNDS {
+        let rows = audit::activity_rows_where(conn, owner, cursor, BATCH, wanted)
+            .await
+            .map_err(db_error)?;
+        let look = lookup(conn, &rows, &[owner], None, cdn_url).await?;
+        for row in &rows {
+            rows_seen.insert(row.id);
+            if entry(row, owner, &look).is_some() {
+                lines += 1;
+                if lines == PUBLIC_LINES {
+                    return Ok(Window {
+                        floor: Some(row.id),
+                        rows: rows_seen,
+                    });
+                }
+            }
+        }
+        match rows.last() {
+            Some(last) if rows.len() >= BATCH as usize => cursor = Some(last.id),
+            _ => {
+                return Ok(Window {
+                    floor: None,
+                    rows: rows_seen,
+                });
+            }
+        }
+    }
+    // Out of rounds: the feed ends at the last row read.
+    Ok(Window {
+        floor: cursor,
+        rows: rows_seen,
+    })
 }
 
 /// One emote's public activity, newest first (gap list G2): when it was uploaded (approved), and
@@ -578,6 +679,8 @@ struct Page {
     /// The last row looked at, when the page ended before the feed did.
     more_after: Option<Uuid>,
     done: bool,
+    /// The last row this reader may see (a visitor's 100th line): the page ends there.
+    floor: Option<Uuid>,
 }
 
 impl Page {
@@ -589,6 +692,7 @@ impl Page {
             out: Vec::new(),
             more_after: None,
             done: false,
+            floor: None,
         }
     }
 
@@ -607,16 +711,23 @@ impl Page {
         let mut lines = lines.peekable();
         while let Some((id, line)) = lines.next() {
             last = Some(id);
+            let at_floor = self.floor == Some(id);
             if let Some(line) = line {
                 self.out.push(line);
                 if self.out.len() == self.limit {
                     // Resume right after the line that filled the page, unless that was the
-                    // last row of a short batch: nothing is left to read then.
-                    let exhausted = lines.peek().is_none() && fetched < BATCH as usize;
+                    // last row of a short batch (or the reader's floor): nothing is left then.
+                    let exhausted =
+                        at_floor || (lines.peek().is_none() && fetched < BATCH as usize);
                     self.more_after = if exhausted { None } else { Some(id) };
                     self.done = true;
                     return;
                 }
+            }
+            if at_floor {
+                self.more_after = None;
+                self.done = true;
+                return;
             }
         }
         match last {

@@ -1550,6 +1550,11 @@ const ACTIVITY = {
     act(33, 2 * 1440, 'COSMETICS_SELECTED', OTHERS[4], { paint: aChange(null, PAINTS[1]) }),
   ],
 };
+// Long feeds, to see the visitor's cap (the newest 100 lines) and the owner's date range: 140
+// older adds for lumen_fox and quietoak, one every 9 hours going back from 4 days ago.
+for (const [who, set, base] of [[ME_SUMMARY, FOX_MAIN, 100], [OTHERS[0], OAK_MAIN, 300]]) {
+  for (let i = 0; i < 140; i++) ACTIVITY[who.id].push(act(base + i, 4 * 1440 + i * 540, 'SET_EMOTE_ADDED', who, { set: aSet(set), emote: aEmote(ALL[(i * 7) % 60]) }));
+}
 // `accountActivity(accountId, before, limit)`: newest first, `limit` 1 to 100 (default 30).
 function activityAnswer(v) {
   if (statusOf(v.accountId).blocked) return { data: { accountActivity: [] } };
@@ -1582,12 +1587,18 @@ function filtered(rows, f) {
     && (!f?.since || Date.parse(a.createdAt) >= Date.parse(f.since))
     && (!f?.until || Date.parse(a.createdAt) < Date.parse(f.until)));
 }
-function activityPageAnswer(v) {
+// Anyone but the owner and staff reads the newest 100 lines, all time: their since/until are
+// ignored and paging ends at the 100th line (owner rule, 2026/11/22; as the API).
+const PUBLIC_LINES = 100;
+function activityPageAnswer(v, session, admin) {
   if (statusOf(v.accountId).blocked) return { data: { accountActivityPage: { entries: [], next: null } } };
-  const f = v.filter ?? null;
+  let f = v.filter ?? null;
   for (const k of ['since', 'until']) if (f?.[k] && Number.isNaN(Date.parse(f[k]))) return err(`${k} must be an RFC 3339 time.`, 'bad_time');
+  const all = !!session && (v.accountId === ME_ID || !!admin);
+  if (!all && f) f = { ...f, since: null, until: null };
   const short = v.accountId === ME_ID && !f?.actorId && !f?.since ? 4 : 0;
-  return { data: { accountActivityPage: activityPageOf(filtered(ACTIVITY[v.accountId] ?? [], f), v, short) } };
+  const rows = filtered(ACTIVITY[v.accountId] ?? [], f);
+  return { data: { accountActivityPage: activityPageOf(all ? rows : rows.slice(0, PUBLIC_LINES), v, short) } };
 }
 
 // `emoteActivity(emoteId, before, limit)`: the sample lines about this emote from every account's
@@ -2896,7 +2907,7 @@ function baseAnswer(body, session, admin) {
   if (cosmetic) return cosmetic;
   const shop = shopAnswer(q, v, session, admin);
   if (shop) return shop;
-  if (/accountActivityPage\s*\(/.test(q)) return activityPageAnswer(v);
+  if (/accountActivityPage\s*\(/.test(q)) return activityPageAnswer(v, session, admin);
   if (/emoteActivityPage\s*\(/.test(q)) return emoteActivityPageAnswer(v);
   if (/accountActivity\s*\(/.test(q)) return activityAnswer(v);
   if (/emoteActivity\s*\(/.test(q)) return emoteActivityAnswer(v);

@@ -11,6 +11,9 @@
 //     account) and Editors (?s=editors: your editors and the accounts you edit), owner rule
 //     2026/11/22: they moved here from Settings. Owner-only tabs after the public ones
 //     (ownerTabs); nobody else ever sees them, so the public profile is unchanged.
+//   - Notifications (?s=notifications: the filters, the list and the picked one in the panel),
+//     owner rule 2026/11/22: it was /me/notifications (which now opens this tab). The first of
+//     the owner-only tabs; private like the others.
 // What a section shows can still depend on who looks (the owner's Uploaded emotes lists pending
 // ones, the owner's Cosmetics tab is the picker), but the rows never do.
 // Sections are query-param tabs on /users/<id> (?s=sets); Uploaded emotes is the default (no
@@ -19,10 +22,10 @@
 import type { EditorPermission } from '$lib/gql/graphql';
 import type { RailGroup, RailItem } from '$lib/shell/rail';
 
-export const SECTIONS = ['overview', 'uploads', 'active', 'sets', 'favourites', 'cosmetics', 'activity', 'account', 'editors'] as const;
+export const SECTIONS = ['overview', 'uploads', 'active', 'sets', 'favourites', 'cosmetics', 'activity', 'notifications', 'account', 'editors'] as const;
 export type SectionKey = (typeof SECTIONS)[number];
 /** The owner's own tabs, after the public ones (never shown to anyone else). */
-export const OWNER_SECTIONS = ['account', 'editors'] as const satisfies readonly SectionKey[];
+export const OWNER_SECTIONS = ['notifications', 'account', 'editors'] as const satisfies readonly SectionKey[];
 /** The sections in the rail, for everyone. */
 export const RAIL_SECTIONS = ['uploads', 'sets', 'cosmetics', 'activity'] as const satisfies readonly SectionKey[];
 /** A profile section, or a /me page that sits in the profile's rail. */
@@ -74,6 +77,7 @@ export function railKeyForPath(path: string): RailKey {
   if (path.startsWith('/me/cosmetics')) return 'cosmetics';
   if (path.startsWith('/me/account') || path.startsWith('/me/settings/account')) return 'account';
   if (path.startsWith('/me/editors')) return 'editors';
+  if (path.startsWith('/me/notifications')) return 'notifications';
   return null;
 }
 
@@ -85,6 +89,7 @@ const LABEL: Record<SectionKey, string> = {
   favourites: 'Favourites',
   cosmetics: 'Cosmetics',
   activity: 'Activity',
+  notifications: 'Notifications',
   account: 'Account',
   editors: 'Editors',
 };
@@ -96,6 +101,7 @@ const ICON: Record<SectionKey, RailItem['icon']> = {
   favourites: 'heart',
   cosmetics: 'brush',
   activity: 'activity',
+  notifications: 'bell',
   account: 'user',
   editors: 'users',
 };
@@ -108,7 +114,7 @@ export function profileRail(accountId: string, current: RailKey, activity: boole
 }
 
 /**
- * The pages that have no row in the profile rail (the /me pages Upload, Notifications, Channels
+ * The pages that have no row in the profile rail (the /me pages Upload, Channels
  * and Favourites, and the off-rail sections Overview, Active emotes and
  * Favourites), as the extra tab the phone strip shows while you are on one, so the strip always
  * says where you are. Null on every other page.
@@ -116,7 +122,6 @@ export function profileRail(accountId: string, current: RailKey, activity: boole
 export function stripExtra(path: string, section?: SectionKey | null): RailItem | null {
   const at = (base: string) => path === base || path.startsWith(`${base}/`);
   if (at('/me/upload')) return { href: '/me/upload', label: 'Upload', icon: 'upload', current: true };
-  if (at('/me/notifications')) return { href: '/me/notifications', label: 'Notifications', icon: 'bell', current: true };
   if (at('/me/channels')) return { href: '/me/channels', label: 'Channels', icon: 'tv', current: true };
   if (at('/me/favourites')) return { href: '/me/favourites', label: 'Favourites', icon: 'heart', current: true };
   if (path.startsWith('/users/') && (section === 'overview' || section === 'active' || section === 'favourites'))
@@ -130,7 +135,7 @@ export function stripTabs(groups: RailGroup[], extra: RailItem | null): RailItem
   return extra ? [...flat.map((i) => ({ ...i, current: false })), extra] : flat;
 }
 
-/** The owner's tabs (Account, Editors) on their own profile; none for anyone else. */
+/** The owner's tabs (Notifications, Account, Editors) on their own profile; none for anyone else. */
 export function ownerTabs(accountId: string, r: Relation, current: SectionKey | null): RailItem[] {
   if (!r.mine) return [];
   return OWNER_SECTIONS.map((k) => ({ href: sectionHref(accountId, k), label: LABEL[k], icon: ICON[k], current: current === k }));
@@ -145,3 +150,6 @@ export function profileTabs(accountId: string, r: Relation, section: SectionKey,
   const own = ownerTabs(accountId, r, section);
   return [...stripTabs(profileRail(accountId, section, activity), extra), ...own];
 }
+
+/** Your notifications: the owner-only tab on your profile (the old /me/notifications opens it). */
+export const notificationsHref = (me: string | null | undefined) => (me ? sectionHref(me, 'notifications') : '/me/notifications');

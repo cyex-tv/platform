@@ -2262,6 +2262,7 @@ export type Query = {
    * Page back with `before` (an entry ID); `limit` is 1 to 100, default 30. Empty when the
    * account is unknown, deleted or blocked. Nothing private or from moderation shows. A page
    * can be shorter than `limit` and still not the last: use `accountActivityPage` to know.
+   * Anyone but the owner and staff pages back through the newest 100 lines only.
    * A heavy read: 120 a minute per account, or per IP signed out (`rate_limited`).
    */
   accountActivity: Array<ActivityEntry>;
@@ -2273,6 +2274,10 @@ export type Query = {
    * `filter` narrows it: `groups` (emotes, sets, cosmetics, editors; editor lines only show
    * when asked for), `actorId` (only lines by the owner or that editor), and `since` /
    * `until` (RFC 3339; `bad_time` otherwise).
+   *
+   * Only the owner and staff (`users.view`) see the whole feed and may narrow it by time. For
+   * everyone else it is the newest 100 lines, all time: `since` and `until` are ignored and
+   * paging ends at the 100th line (`next` is null there; a cursor past it gets no entries).
    */
   accountActivityPage: ActivityPage;
   /**
