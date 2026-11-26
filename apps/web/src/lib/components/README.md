@@ -57,6 +57,14 @@ Every page outside landing, browse, emote and profile is built from these (rules
 - Animated emotes always play (`EmotePicture`); under reduced motion they show `*_static.webp`. Labels: animated, zero-width, wide. Every tile in a grid row is the row's height.
 - `eager` = cards above the fold (they load without `loading="lazy"`).
 
+## Sets (`$lib/sets`)
+
+| Component | Props | Usage |
+|---|---|---|
+| `SetActions` | `here?: 'page' \| 'editor'`, `onrename?(id)`, `onchanged?({ kind, id, capacity? })` | One per page that lists sets. `acts.open(set, event)` for a right-click (or Shift+F10), `acts.open(set, button)` for a ⋯ button. Asks `SetMenu` (the query) what you may do, then offers Rename, Copy link, Set active on each channel, Change capacity (dialog), Open set page / editor, Delete (confirm dialog). Leave out `onrename` where the name can't be edited in place. |
+| `InlineRename` | `id`, `name`, `size?: 'row' \| 'title'`, `ondone(name \| null)` | Put it where the name is, never inside a link or button (swap the `<a>` for a `<div>` while renaming). Enter or blur saves, Esc cancels. |
+| `CapacityForm` | `setId`, `capacity`, `range: CapacityRange`, `compact?`, `onsaved(n)`, `oncancel?` | The capacity field with the allowed range under it (`setCapacityRange`); in the set editor's panel and in the menu's dialog. |
+
 ## Chat
 
 | Component | Props | Usage |

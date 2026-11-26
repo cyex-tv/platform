@@ -370,6 +370,20 @@ impl Query {
             .map_err(api_error)
     }
 
+    /// What you may set a set's capacity to (`updateSet`): from the emotes it holds (at least 1)
+    /// to the owner's `set_capacity_max` role limit (1.000 by default), or 1.000.000 with
+    /// `sets.edit_any`. Null when you can't change its capacity. Signed in.
+    async fn set_capacity_range(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+    ) -> Result<Option<cyex_tv_shared::model::SetCapacityRange>> {
+        let caller = caller(ctx)?;
+        catalog::set_capacity_range(state(ctx), caller, &id)
+            .await
+            .map_err(api_error)
+    }
+
     /// A page of a set's emotes, oldest first, for sets too big to read whole. Who may see what is
     /// the rule of `set`; an unknown or hidden set is an empty page. `query` keeps the emotes whose
     /// name in the set or own name contains it (case-insensitive). `perPage` is 1 to 200, default
@@ -1674,7 +1688,7 @@ impl Mutation {
     }
 
     /// Copy a set you can open into a new channel set: yours, or with `ownerId` one for an account
-    /// you edit with `SETS`. Name defaults to the source's; visibility to `LISTED`. Emotes go in
+    /// you edit with `SETS`. Name defaults to the source's; the copy is public (`UNLISTED` and `PRIVATE` need `sets.edit_any`). Emotes go in
     /// as `addSetEmote` would put them, in order, keeping their names: up to the capacity,
     /// approved ones only (your own pending ones too), never other people's private emotes.
     /// 30 copies an hour. `rate_limited`, `not_found`, `forbidden`, `bad_name`.
@@ -1699,8 +1713,11 @@ impl Mutation {
         .map_err(api_error)
     }
 
-    /// Rename a set, change who sees it (`visibility`: owner or account editors with `SETS`), or
-    /// change its capacity. Owner or editor; capacity needs `sets.edit_any`.
+    /// Rename a set or change its capacity (owner, editors, account editors with `SETS`). Capacity
+    /// is 1 to the owner's `set_capacity_max` role limit (1.000 by default; `capacity_over_limit`
+    /// above it), up to 1.000.000 with `sets.edit_any`, and never below the emotes the set holds
+    /// (`capacity_too_low`); see `setCapacityRange`. Every set is public: `visibility` other than
+    /// what it is needs `sets.edit_any` (`bad_visibility`).
     async fn update_set(
         &self,
         ctx: &Context<'_>,

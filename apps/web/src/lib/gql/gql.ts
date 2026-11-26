@@ -39,8 +39,10 @@ type Documents = {
     "\n  query SetEmotes($id: String!, $query: String, $page: Int, $perPage: Int) {\n    setEmotes(id: $id, query: $query, page: $page, perPage: $perPage) {\n      total\n      items {\n        name\n        zeroWidth\n        addedAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": typeof types.SetEmotesDocument,
     "\n  query SetMembers($id: String!, $page: Int, $perPage: Int) {\n    setEmotes(id: $id, page: $page, perPage: $perPage) {\n      total\n      items {\n        name\n        emote {\n          id\n        }\n      }\n    }\n  }\n": typeof types.SetMembersDocument,
     "\n  mutation CreateSet($input: CreateSetInput!) {\n    createSet(input: $input) {\n      id\n    }\n  }\n": typeof types.CreateSetDocument,
-    "\n  mutation UpdateSet($id: String!, $input: UpdateSetInput!) {\n    updateSet(id: $id, input: $input) {\n      id\n      name\n      visibility\n    }\n  }\n": typeof types.UpdateSetDocument,
+    "\n  mutation UpdateSet($id: String!, $input: UpdateSetInput!) {\n    updateSet(id: $id, input: $input) {\n      id\n      name\n      visibility\n      capacity\n    }\n  }\n": typeof types.UpdateSetDocument,
     "\n  mutation DeleteSet($id: String!) {\n    deleteSet(id: $id)\n  }\n": typeof types.DeleteSetDocument,
+    "\n  query SetCapacityRange($id: String!) {\n    setCapacityRange(id: $id) {\n      min\n      max\n      ownerMax\n      used\n      staff\n    }\n  }\n": typeof types.SetCapacityRangeDocument,
+    "\n  query SetMenu($id: String!) {\n    setCapacityRange(id: $id) {\n      min\n      max\n      ownerMax\n      used\n      staff\n    }\n    editorOf {\n      account {\n        id\n      }\n      permissions\n      allSets\n      setIds\n    }\n    myChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n  }\n": typeof types.SetMenuDocument,
     "\n  mutation AddSetEmote($setId: String!, $emoteId: String!, $input: AddSetEmoteInput) {\n    addSetEmote(setId: $setId, emoteId: $emoteId, input: $input) {\n      name\n    }\n  }\n": typeof types.AddSetEmoteDocument,
     "\n  mutation UpdateSetEmote($setId: String!, $emoteId: String!, $input: UpdateSetEmoteInput!) {\n    updateSetEmote(setId: $setId, emoteId: $emoteId, input: $input) {\n      name\n      zeroWidth\n    }\n  }\n": typeof types.UpdateSetEmoteDocument,
     "\n  mutation RemoveSetEmote($setId: String!, $emoteId: String!) {\n    removeSetEmote(setId: $setId, emoteId: $emoteId)\n  }\n": typeof types.RemoveSetEmoteDocument,
@@ -218,8 +220,10 @@ const documents: Documents = {
     "\n  query SetEmotes($id: String!, $query: String, $page: Int, $perPage: Int) {\n    setEmotes(id: $id, query: $query, page: $page, perPage: $perPage) {\n      total\n      items {\n        name\n        zeroWidth\n        addedAt\n        emote {\n          ...EmoteFields\n        }\n      }\n    }\n  }\n": types.SetEmotesDocument,
     "\n  query SetMembers($id: String!, $page: Int, $perPage: Int) {\n    setEmotes(id: $id, page: $page, perPage: $perPage) {\n      total\n      items {\n        name\n        emote {\n          id\n        }\n      }\n    }\n  }\n": types.SetMembersDocument,
     "\n  mutation CreateSet($input: CreateSetInput!) {\n    createSet(input: $input) {\n      id\n    }\n  }\n": types.CreateSetDocument,
-    "\n  mutation UpdateSet($id: String!, $input: UpdateSetInput!) {\n    updateSet(id: $id, input: $input) {\n      id\n      name\n      visibility\n    }\n  }\n": types.UpdateSetDocument,
+    "\n  mutation UpdateSet($id: String!, $input: UpdateSetInput!) {\n    updateSet(id: $id, input: $input) {\n      id\n      name\n      visibility\n      capacity\n    }\n  }\n": types.UpdateSetDocument,
     "\n  mutation DeleteSet($id: String!) {\n    deleteSet(id: $id)\n  }\n": types.DeleteSetDocument,
+    "\n  query SetCapacityRange($id: String!) {\n    setCapacityRange(id: $id) {\n      min\n      max\n      ownerMax\n      used\n      staff\n    }\n  }\n": types.SetCapacityRangeDocument,
+    "\n  query SetMenu($id: String!) {\n    setCapacityRange(id: $id) {\n      min\n      max\n      ownerMax\n      used\n      staff\n    }\n    editorOf {\n      account {\n        id\n      }\n      permissions\n      allSets\n      setIds\n    }\n    myChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n  }\n": types.SetMenuDocument,
     "\n  mutation AddSetEmote($setId: String!, $emoteId: String!, $input: AddSetEmoteInput) {\n    addSetEmote(setId: $setId, emoteId: $emoteId, input: $input) {\n      name\n    }\n  }\n": types.AddSetEmoteDocument,
     "\n  mutation UpdateSetEmote($setId: String!, $emoteId: String!, $input: UpdateSetEmoteInput!) {\n    updateSetEmote(setId: $setId, emoteId: $emoteId, input: $input) {\n      name\n      zeroWidth\n    }\n  }\n": types.UpdateSetEmoteDocument,
     "\n  mutation RemoveSetEmote($setId: String!, $emoteId: String!) {\n    removeSetEmote(setId: $setId, emoteId: $emoteId)\n  }\n": types.RemoveSetEmoteDocument,
@@ -472,11 +476,19 @@ export function graphql(source: "\n  mutation CreateSet($input: CreateSetInput!)
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  mutation UpdateSet($id: String!, $input: UpdateSetInput!) {\n    updateSet(id: $id, input: $input) {\n      id\n      name\n      visibility\n    }\n  }\n"): typeof import('./graphql').UpdateSetDocument;
+export function graphql(source: "\n  mutation UpdateSet($id: String!, $input: UpdateSetInput!) {\n    updateSet(id: $id, input: $input) {\n      id\n      name\n      visibility\n      capacity\n    }\n  }\n"): typeof import('./graphql').UpdateSetDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation DeleteSet($id: String!) {\n    deleteSet(id: $id)\n  }\n"): typeof import('./graphql').DeleteSetDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query SetCapacityRange($id: String!) {\n    setCapacityRange(id: $id) {\n      min\n      max\n      ownerMax\n      used\n      staff\n    }\n  }\n"): typeof import('./graphql').SetCapacityRangeDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query SetMenu($id: String!) {\n    setCapacityRange(id: $id) {\n      min\n      max\n      ownerMax\n      used\n      staff\n    }\n    editorOf {\n      account {\n        id\n      }\n      permissions\n      allSets\n      setIds\n    }\n    myChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n    editorChannels {\n      platform\n      platformChannelId\n      login\n      activeSetId\n      account {\n        id\n      }\n    }\n  }\n"): typeof import('./graphql').SetMenuDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

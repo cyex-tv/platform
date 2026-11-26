@@ -196,13 +196,13 @@ pub struct AccountSummary {
 pub enum EditorPermission {
     /// Add, remove, rename and alias emotes in the owner's sets, the active channel sets too.
     Emotes,
-    /// Create, rename and delete sets and change their capacity. Always comes with `Channels`.
+    /// Create, rename and delete sets, change their capacity, and pick a channel's active set.
     Sets,
     /// Add, change and remove editors, never granting more than you hold.
     Editors,
     /// Pick the badge and paint the owner shows (ADR 0015). Never grants.
     Profile,
-    /// Change the owner's channels' active set and settings. Granting `Sets` grants this too.
+    /// Change the owner's channels' settings (and pick their active set, as `Sets` does).
     Channels,
     /// Upload emotes for the owner (`POST /v1/emotes` with `owner_id`).
     #[serde(rename = "emote_upload")]
@@ -820,6 +820,23 @@ pub struct EmoteSet {
     pub created_at: String,
 }
 
+/// What you may set a set's capacity to (`setCapacityRange`; ADR 0017, amendment 2026/11/22).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
+pub struct SetCapacityRange {
+    /// The fewest slots: 1, or the emotes the set holds now if that is more.
+    pub min: u32,
+    /// The most slots you may pick.
+    pub max: u32,
+    /// The most without a staff permission: the owner's `set_capacity_max` role limit (1.000 by
+    /// default) for a channel set, 5 for a personal set, or the set's capacity if it is higher.
+    pub owner_max: u32,
+    /// Emotes in the set now, pending ones included.
+    pub used: u32,
+    /// `max` comes from a staff permission (`sets.edit_any`, or `global_set.edit` for the global
+    /// set): up to 1.000.000.
+    pub staff: bool,
+}
 /// A page of a set's members and how many match, in all (`setEmotes`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
@@ -873,8 +890,8 @@ pub struct CreateSet {
     /// Make the set for an account you edit with `sets` (ADR 0014). Empty: for yourself.
     #[serde(default)]
     pub owner_id: Option<String>,
-    /// Empty: `LISTED` for channel sets, `UNLISTED` for the personal set. Personal sets can't be
-    /// `PRIVATE`.
+    /// Empty or `LISTED`: every set is public. `UNLISTED` and `PRIVATE` need `sets.edit_any`
+    /// (staff); personal sets can't be `PRIVATE`.
     #[serde(default)]
     pub visibility: Option<SetVisibility>,
 }
@@ -884,9 +901,12 @@ pub struct CreateSet {
 #[cfg_attr(feature = "graphql", graphql(name = "UpdateSetInput"))]
 pub struct UpdateSet {
     pub name: Option<String>,
-    /// Needs `sets.edit_any` to raise above the default.
+    /// 1 to the owner's `set_capacity_max` role limit (1.000 by default; 5 for a personal set),
+    /// never below the emotes the set holds; up to 1.000.000 with `sets.edit_any`.
+    /// `setCapacityRange` says what you may pick.
     pub capacity: Option<u32>,
-    /// Personal sets can't be `PRIVATE`; the global set is always listed.
+    /// Every set is public: changing it needs `sets.edit_any` (staff hiding a set). Personal sets
+    /// can't be `PRIVATE`; the global set is always listed.
     #[serde(default)]
     pub visibility: Option<SetVisibility>,
 }

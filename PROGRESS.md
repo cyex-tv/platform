@@ -1672,6 +1672,57 @@ git push -u origin feat/profile-notifications-activity
 gh pr create --repo cyex-tv/platform --base main --head feat/profile-notifications-activity --title "Notifications as a profile tab; Activity: latest 100 for visitors, a date range for the owner" --body-file <file>
 ```
   PR #167. Not merged (owner reviews).
+
+## Sets and editors: sets apart from channel settings, every set public, capacity, the set menu (branch `feat/sets-editors-capacity`, owner requests of 2026/11/22)
+- [x] Editor permissions: `sets` (make, rename, delete, resize sets, pick the active set) no longer brings `channels` (channel settings); `channels` keeps picking the active set. `updateChannelSettings` checks `activeSetId` against `sets` or `channels` and `allowPersonalEmotes` against `channels`. Migration `20261215004101_editor_sets_without_channels.sql` writes `channels` onto every grant that held `sets` without it (nobody loses anything). ADR 0014 amendment.
+- [x] Permissions dialog: two columns of one-line rows, explanations as tooltips, grouped; no inner or page scroll inside the dialog at 1440x900 and 1920x1080, a full-height sheet on phones. "Sets they can edit" is a dropdown over the dialog with a filter and checkboxes that stays open while ticking and closes on Confirm, Esc or a click outside ("All sets", one set's name, or "3 sets" on the trigger).
+- [x] Every set is public: users can't pick unlisted or private (create, copy, edit), the API answers `bad_visibility`; staff with `sets.edit_any` still can (moderation). Migration `20261215004102_sets_all_public.sql` lists every unlisted and private set; private emotes are untouched. New personal sets are listed. ADR 0017 amendment.
+- [x] Capacity: 1 to the owner's `set_capacity_max` role limit (new `AccountLimit`, default 1.000, `CYEX_TV_LIMIT_SET_CAPACITY_MAX`; 5 for a personal set), up to 1.000.000 with `sets.edit_any`, never below what the set holds (`capacity_over_limit`, `bad_capacity`, `capacity_too_low`). `setCapacityRange(id)` says what you may pick. Migration `20261215004103_set_capacity_million.sql` widens the column check to 1.000.000. Role editor lists "Set capacity".
+- [x] Set menu (`lib/sets/SetActions.svelte`): right-click, Shift+F10 or ⋯ on profile set cards, the browse rail's rows and the set page head: Rename (in place), Copy link, Set active on each channel you can, Change capacity (dialog with the range), Open set page / editor, Delete (confirm). Capacity field in the set editor too.
+- [x] The set chat preview is gone from the set page and the set editor (`SetChat.svelte`, `lib/sets/chat.ts` removed).
+- [x] Mock: the same rules (`SetCapacityRange`, `SetMenu`, capacity bounds, visibility refused, sets apart from channels).
+- [x] Tests: `apps/api/tests/sets_capacity_flow.rs` (new), `public_sets_flow.rs`, `sets_editors_flow.rs`, `sec_account_editors.rs`, `catalog_flow.rs`, `profile_flow.rs`, `emote_activity_flow.rs`, the API contract (`SetCapacityRange`, `SetMenu`), `editors.rs` and `limits.rs` unit tests; web `lib/sets/{capacity,set-menu,visibility,no-chat-preview,no-visibility-choice}.test.ts`, `lib/sets/set-actions.ui.test.ts`, `lib/tool/editors.test.ts`, `lib/tool/editor-dialog.ui.test.ts`.
+- [x] Checked in the running app (vite and mock on own ports): before/after screens in `.claude/runs/2026-11-20-redesign/screens/sets-editors/`.
+## Entitlement graph as a real graph, with search (branch `feat/entitlement-graph`, owner request of 2026/11/26)
+- [x] Admin → Entitlement graph draws a navigable node graph on a canvas (default view): one dot per node in its
+  kind's colour (`--node-*` tokens, both themes, each ≥ 3:1 on the grounds), hairline links on the page ground,
+  "Kind: name" labels where they fit (zoomed in, or on the hovered, focused, picked and found nodes; overlapping
+  ones left out). Pan (drag the ground), zoom (wheel, pinch, + / − / Fit), drag a node (pinned while held, back
+  into the layout when let go), click picks (?node=<kind:id> in the address; old ?node=<number> links still pick
+  that grant), double-click opens an item's holders graph or an account's own graph. The picked node's
+  neighbourhood is lit, the rest dimmed; the inspector shows its facts, its grants (source, order, code batch,
+  given, given by, taken away, reasons) and links (Who holds it, Open item, Their graph, Account page, order,
+  code batch).
+- [x] Layouts: Force (d3-force 3.0.0, stepped once per animation frame, stops when settled or after 420 ticks;
+  reduced motion computes it in one go and draws once) and Radial (each depth on a ring, arcs in proportion to
+  leaves). Node size 1 to 10. devicePixelRatio aware; redraws only while something moves.
+- [x] Nodes come from the data the API already returns (no API change): account (root) → shop product (bought
+  more than once: its orders under it, named by date) or a one-off order → items; code batch; event (by its
+  reason); staff member (grantedBy); built-in (Every account, Owner list). An item reached two ways is one node
+  with two links. For a badge, paint or role: item → product / batch / event / staff / built-in → holders.
+- [x] Legend under the graph with counts doubles as a kind filter (aria-pressed); hiding a kind reflows the graph
+  and drops a pick of that kind. "Find in graph" in the toolbar: matches ringed and counted, a list of the first 8
+  (arrows, Enter centres and picks), plus catalogue badges, paints and roles by name (Enter opens their holders
+  graph). Accounts stay on the UserFilter. Everything / Held now still works.
+- [x] Groups and List views keep the old tree and table for reading and assistive tech. The graph is keyboard
+  reachable: Tab in, arrows move between nodes, Enter picks, Esc clears, + − 0 zoom and fit, Home to the root;
+  an aria description with node, link and per-kind counts, and a live line for the focused node.
+- [x] Mock: nora_byte has a year of the "Supporter monthly" product (12 orders of 5 to 8 paints, one refunded),
+  a founders bundle, three code batches, two events, staff grants from two people, roles (136 nodes); seven
+  other accounts bought some of the same months, so a monthly paint's holders graph fans out.
+- [x] Tests: `entitlement-graph.test.ts` (grants → nodes and links, product/order fan-out, shared items, held
+  only, holders view, kind counts, hidden kinds, search ranking, catalogue search, radial rings, arrow-key
+  steps, fit) and `entitlement-graph-page.ui.test.ts` (pick from the address into the inspector, legend hides a
+  kind, find in graph and catalogue, List view). Screens before/after in
+  `.claude/runs/2026-11-20-redesign/screens/entitlement-graph/`.
+
+### GitHub write log for this PR
+```
+git push -u origin feat/entitlement-graph
+gh pr create --repo cyex-tv/platform --base main --head feat/entitlement-graph --title "Entitlement graph: a navigable node graph with search" --body-file <file>
+git push
+```
+  PR #170. Not merged (owner reviews).
 ## Emote page sizes, upload dialog, two creator flags, no NSFW (branch `feat/emote-page-upload-flags`, owner requests of 2026/11/22)
 - [x] Emote page: every size shows at once on the stage at its real pixel size, nothing to pick; the largest (4x)
   is the focus (full colour, bold caption), the smaller ones stand beside it on one baseline with just their

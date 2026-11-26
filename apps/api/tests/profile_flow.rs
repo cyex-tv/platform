@@ -247,11 +247,13 @@ async fn profiles_show_only_public_things() {
     let r = w
         .post(
             Some(&alice),
-            "mutation { createSet(input: { name: \"Main\", kind: CHANNEL, visibility: PRIVATE }) { id } }",
+            "mutation { createSet(input: { name: \"Main\", kind: CHANNEL }) { id } }",
             json!({}),
         )
         .await;
     let set = r["data"]["createSet"]["id"].as_str().unwrap().to_owned();
+    // Even a set staff hid shows while a channel shows it.
+    w.db.hide_set(&set, "PRIVATE").await;
     let r = w
         .post(
             Some(&alice),

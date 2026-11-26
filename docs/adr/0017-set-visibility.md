@@ -24,3 +24,21 @@
 - Migration `20261207000011_default_sets.sql` gives every live account that has no channel set of that name (any case) one, with a ULID stamped with the account's creation time so it sorts before the account's other sets. Running it again adds nothing.
 - It isn't made the channels' active set: the owner picks it with "Use on my channel" on the set page (`updateChannelSettings`), like any other set.
 - Tests: `default_sets_are_backfilled_once_for_accounts_without_one` and the sign-in checks in `auth_flow.rs`.
+
+## Amendment (owner decision, 2026/11/22): every set is public; capacity is the owner's to pick
+The owner: "emote sets shouldnt be public, private or unlisted for regular users. all emote sets are public" and "emote set capacity should be possible to be adjusted (1-1000 for regular users) in the future subscribers get 2500 slots and as an admin i should be able to change any set to up to a million slots".
+
+**Visibility**
+- Every set is public: `createSet`, `cloneSet` and `updateSet` take `LISTED` (or nothing) from anyone, and `UNLISTED` or `PRIVATE` only from staff with `sets.edit_any` (`400 bad_visibility` otherwise). New sets of every kind are `LISTED`, personal sets too.
+- Staff keep the ability to take a set off the listings (`UNLISTED`) or hide it (`PRIVATE`), audited as `set.visibility_changed` through `sets.edit_any`: moderation needs a way to hide a reported set without deleting the owner's work. The owner can't list it again; staff can. The rules above for unlisted and private sets apply to those.
+- **Migration** `20261215004102_sets_all_public.sql` (data only): every unlisted and private set becomes listed. Private *emotes* are not touched: they stay usable only by their owner, in their owner's sets (ADR 0020).
+- The website has no visibility choice anywhere (new set, copy, set editor); a set staff hid shows a small mark on its card.
+
+**Capacity**
+- A set's capacity is 1 to the owner's `set_capacity_max` (a role limit, `limits::AccountLimit::SetCapacityMax`, default 1.000, `CYEX_TV_LIMIT_SET_CAPACITY_MAX`; a role can raise it, e.g. a future subscriber role to 2.500) for a channel set, 1 to 5 for a personal set, for the owner, the set's editors and account editors with `sets`. Above that, `400 capacity_over_limit`. A set staff raised can be lowered again by its owner (never raised past what it has).
+- Staff with `sets.edit_any` (or `global_set.edit` for the global set) set any set from 1 to 1.000.000, audited through the permission. Over 1.000.000 or 0 is `400 bad_capacity`.
+- Never below what the set holds: `409 capacity_too_low`.
+- **Migration** `20261215004103_set_capacity_million.sql` widens the check on `emote_sets.capacity` to 1 to 1.000.000.
+- **API (additive):** `setCapacityRange(id)` (`min`, `max`, `ownerMax`, `used`, `staff`; null when you can't change it), the role limit key `set_capacity_max` in `limitDefaults`/`roleLimits`/`setRoleLimits`.
+- **Website:** a Capacity block in the set editor and "Change capacity" in the set menu (right-click a set card, a row of the browse rail, or the set page's ⋯), both showing the allowed range. The set menu also renames in place, copies the link, sets the set active on each channel you can, opens the set page or editor, and deletes (with a confirmation). The chat preview on the set page and in the set editor is gone.
+- Tests: `apps/api/tests/sets_capacity_flow.rs`, `public_sets_flow.rs`, `lib/sets/*.test.ts`.

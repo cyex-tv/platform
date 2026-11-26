@@ -17,7 +17,7 @@ export const GROUPS: PermissionGroup[] = [
     label: 'Emote sets',
     items: [
       { key: 'EMOTES', label: 'Edit set emotes', line: 'Add, remove and rename emotes in sets.' },
-      { key: 'SETS', label: 'Create and manage sets', line: 'Make, rename and delete sets.' },
+      { key: 'SETS', label: 'Create and manage sets', line: 'Make, rename, delete, resize sets; pick the active one.' },
     ],
   },
   {
@@ -34,7 +34,7 @@ export const GROUPS: PermissionGroup[] = [
   },
   {
     label: 'Channels',
-    items: [{ key: 'CHANNELS', label: 'Channel settings', line: 'The set each channel shows.' }],
+    items: [{ key: 'CHANNELS', label: 'Channel settings', line: 'Channel settings, such as personal emotes.' }],
   },
   {
     label: 'Billing and subscription',
@@ -76,10 +76,10 @@ export function ordered(perms: readonly EditorPermission[]): EditorPermission[] 
   return ORDER.filter((k) => perms.includes(k));
 }
 
-/** "edit set emotes and manage sets" for a list of permissions; channel settings are left out when Sets brings them. */
+/** "edit set emotes and manage sets" for a list of permissions; "do everything" when every listed one is there. */
 export function permissionPhrase(perms: readonly EditorPermission[]): string {
-  const list = ordered(perms).filter((k) => !(k === 'CHANNELS' && perms.includes('SETS')));
-  if (list.length === ORDER.length - 1 && perms.includes('SETS')) return 'do everything';
+  const list = ordered(perms);
+  if (list.length === ORDER.length) return 'do everything';
   const names = list.map((k) => SHORT[k as keyof typeof SHORT]);
   if (names.length < 2) return names[0] ?? 'do nothing';
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
@@ -93,20 +93,9 @@ export function permissionLabels(perms: readonly EditorPermission[]): string {
   return p.charAt(0).toUpperCase() + p.slice(1);
 }
 
-/** `SETS` comes with `CHANNELS` (the API grants both). */
-export function implied(perms: readonly EditorPermission[]): EditorPermission[] {
-  return ordered(perms.includes('SETS') ? [...perms, 'CHANNELS'] : perms);
-}
-
-/** A box that can't be unticked on its own: Channel settings while Sets is on. */
-export function locked(perms: readonly EditorPermission[], key: EditorPermission): boolean {
-  return key === 'CHANNELS' && perms.includes('SETS');
-}
-
-/** Ticks or unticks one permission, keeping what it brings along. */
+/** Ticks or unticks one permission. Each stands alone: Sets no longer brings Channel settings. */
 export function toggle(perms: readonly EditorPermission[], key: EditorPermission, on: boolean): EditorPermission[] {
-  if (!on && locked(perms, key)) return ordered(perms);
-  return implied(on ? [...perms, key] : perms.filter((k) => k !== key));
+  return ordered(on ? [...perms, key] : perms.filter((k) => k !== key));
 }
 
 /** Whether every permission you may grant is ticked. */
@@ -116,7 +105,7 @@ export function allOn(perms: readonly EditorPermission[], offer: readonly Permis
 
 /** "Everything": every permission you may grant, or none. */
 export function setAll(on: boolean, offer: readonly PermissionInfo[]): EditorPermission[] {
-  return on ? implied(offer.map((p) => p.key)) : [];
+  return on ? ordered(offer.map((p) => p.key)) : [];
 }
 
 type Grant = { account: { id: string }; permissions: readonly EditorPermission[]; allSets?: boolean; setIds?: readonly string[] };
@@ -125,7 +114,7 @@ type Grant = { account: { id: string }; permissions: readonly EditorPermission[]
 export function grantOn(grants: readonly Grant[] | null | undefined, ownerId: string | null | undefined, me: string | null | undefined) {
   if (!ownerId) return new Set<EditorPermission>();
   if (ownerId === me) return new Set<EditorPermission>(ORDER);
-  return new Set<EditorPermission>(implied(grants?.find((g) => g.account.id === ownerId)?.permissions ?? []));
+  return new Set<EditorPermission>(grants?.find((g) => g.account.id === ownerId)?.permissions ?? []);
 }
 
 /** The flags you may hand out on an account: the ones you hold there. */
@@ -182,7 +171,7 @@ export function canManage(
   mine: Scope = ALL_SETS,
   theirScope: Scope = ALL_SETS,
 ): boolean {
-  return held.has('EDITORS') && implied(theirs).every((p) => held.has(p)) && within(theirScope, mine);
+  return held.has('EDITORS') && theirs.every((p) => held.has(p)) && within(theirScope, mine);
 }
 
 // Emotes belong to the account, not to a set: the emote permissions count only on a grant that
@@ -194,7 +183,7 @@ type EmoteGrant = { account: { id: string }; permissions: readonly EditorPermiss
 
 /** What a grant lets you do, as the API checks it: the emote permissions drop out on a set-limited grant. */
 export function effective(g: { permissions: readonly EditorPermission[]; allSets?: boolean }): EditorPermission[] {
-  const perms = implied(g.permissions);
+  const perms = ordered(g.permissions);
   return g.allSets === false ? perms.filter((p) => !EMOTE_PERMISSIONS.includes(p)) : perms;
 }
 

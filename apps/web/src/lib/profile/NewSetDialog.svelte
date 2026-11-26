@@ -4,8 +4,7 @@
   //   <NewSetDialog bind:this={dlg} ownerId={id} mine hasPersonal={false} oncreated={…} />  dlg.open()
   import { goto } from '$app/navigation';
   import { ApiError, gql } from '$lib/api';
-  import type { SetKind, SetVisibility } from '$lib/gql/graphql';
-  import { defaultVisibility, visibilityHint, visibilityOptions } from '$lib/sets/visibility';
+  import type { SetKind } from '$lib/gql/graphql';
   import { CREATE_SET } from '$lib/queries';
   import { notify } from '$lib/tool/notices.svelte';
   import { forgetProfile } from './data.svelte';
@@ -16,9 +15,6 @@
   let dialog: HTMLDialogElement;
   let name = $state('');
   let kind = $state<SetKind>('CHANNEL');
-  let visibility = $state<SetVisibility>('LISTED');
-  /** The person picked a visibility: switching the kind then leaves it alone. */
-  let chosen = false;
   let failure = $state('');
   let creating = $state(false);
   let tried = $state(false);
@@ -26,17 +22,12 @@
 
   function pickKind(k: SetKind) {
     kind = k;
-    // A personal set can't be private; until a choice is made it follows the kind's default.
-    if (!chosen) visibility = defaultVisibility(k);
-    else if (k === 'PERSONAL' && visibility === 'PRIVATE') visibility = 'UNLISTED';
   }
 
   export function open() {
     name = '';
     tried = false;
     kind = 'CHANNEL';
-    visibility = defaultVisibility('CHANNEL');
-    chosen = false;
     failure = '';
     dialog.showModal();
   }
@@ -50,7 +41,7 @@
     if (!trimmed) return;
     creating = true;
     try {
-      const r = await gql(CREATE_SET, { input: { name: trimmed, kind, visibility, ownerId: mine ? null : ownerId } });
+      const r = await gql(CREATE_SET, { input: { name: trimmed, kind, ownerId: mine ? null : ownerId } });
       dialog.close();
       forgetProfile('library:');
       notify(`${trimmed} created.`);
@@ -80,11 +71,7 @@
           {#if hasPersonal}{mine ? 'You have' : 'This account has'} a personal set already; there’s one per account.{:else if kind === 'PERSONAL'}Approved emotes only, shown wherever {mine ? 'you chat' : 'they chat'}.{:else}For a channel’s chat. Pick it as the active set in Channels.{/if}
         </span>
       </div>
-      <div class="ui-field">
-        <span class="ui-label">Who can open it</span>
-        <Segmented label="Who can open it" options={visibilityOptions(kind)} value={visibility} onchange={(v) => { visibility = v; chosen = true; }} />
-        <span class="ui-hint">{visibilityHint(visibility)}</span>
-      </div>
+
     </div>
     <footer>
       <button class="btn btn-s" type="button" onclick={() => dialog.close()}>Cancel</button>

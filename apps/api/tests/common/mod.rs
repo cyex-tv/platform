@@ -65,6 +65,20 @@ impl TestDb {
         cyex_tv_db::ids::from_text(&ulid).unwrap_or_else(|| panic!("{text} names nothing"))
     }
 
+    /// Takes a set off the listings as staff would (`UNLISTED` or `PRIVATE`; users can't any more,
+    /// ADR 0017 amendment 2026/11/22), straight in the database.
+    #[allow(dead_code)]
+    pub async fn hide_set(&self, set: &str, visibility: &str) {
+        let id = self.row(set).await;
+        let mut conn = self.conn().await;
+        sqlx::query("UPDATE emote_sets SET visibility = $2 WHERE id = $1")
+            .bind(id)
+            .bind(visibility.to_lowercase())
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+    }
+
     pub async fn conn(&self) -> sqlx::pool::PoolConnection<sqlx::Postgres> {
         self.pool.acquire().await.unwrap()
     }

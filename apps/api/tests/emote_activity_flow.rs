@@ -110,15 +110,20 @@ impl World {
         r
     }
 
+    /// A channel set; `UNLISTED` or `PRIVATE` hides it as staff would (users can't any more).
     async fn set(&self, owner: &User, name: &str, vis: &str) -> String {
         let r = self
             .ok(
                 owner,
-                "mutation($n: String!, $v: SetVisibility) { createSet(input: { name: $n, kind: CHANNEL, visibility: $v }) { id } }",
-                json!({ "n": name, "v": vis }),
+                "mutation($n: String!) { createSet(input: { name: $n, kind: CHANNEL }) { id } }",
+                json!({ "n": name }),
             )
             .await;
-        r["data"]["createSet"]["id"].as_str().unwrap().to_owned()
+        let id = r["data"]["createSet"]["id"].as_str().unwrap().to_owned();
+        if vis != "LISTED" {
+            self.db.hide_set(&id, vis).await;
+        }
+        id
     }
 
     async fn feed(&self, emote: &str) -> Vec<Value> {

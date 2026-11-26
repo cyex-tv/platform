@@ -7,8 +7,9 @@
 //! - An editor can always remove themselves.
 //! - A grant covers every set of the owner, new ones included, or only a list of them. A manager
 //!   limited to some sets only grants within their list and only changes editors inside it.
-//! - `sets` also allows what `channels` does (it did before that flag existed), so holding `sets`
-//!   counts as holding `channels` in every check. Grants are listed as stored.
+//! - `sets` and `channels` are separate (amendment 2026/11/22): `sets` makes, renames, deletes and
+//!   resizes sets and picks a channel's active set; `channels` changes channel settings (and may
+//!   still pick the active set, as it always could). Grants are listed as stored.
 //! - Grants of blocked or deleted accounts, and grants on them, count for nothing.
 //! - The emote flags (`emote_upload`, `emote_manage`) need a grant on every set
 //!   (`has_emote_flag`): an account's emotes aren't in any one set. `emote_transfer` is retired
@@ -40,15 +41,12 @@ use crate::views;
 
 pub type Flags = BTreeSet<EditorPermission>;
 
-/// Stored names to the flags they grant. A name this version doesn't know grants nothing; `sets`
-/// brings `channels`.
+/// Stored names to the flags they grant. A name this version doesn't know grants nothing.
 fn flags_of(names: &[String]) -> Flags {
-    implied(
-        names
-            .iter()
-            .filter_map(|n| EditorPermission::parse(n))
-            .collect(),
-    )
+    names
+        .iter()
+        .filter_map(|n| EditorPermission::parse(n))
+        .collect()
 }
 
 /// Stored names as listed by the API: as stored, unknown names left out.
@@ -58,14 +56,6 @@ fn listed(names: &[String]) -> Vec<EditorPermission> {
         .filter_map(|n| EditorPermission::parse(n))
         .collect();
     flags.into_iter().collect()
-}
-
-/// `sets` comes with `channels`.
-fn implied(mut flags: Flags) -> Flags {
-    if flags.contains(&EditorPermission::Sets) {
-        flags.insert(EditorPermission::Channels);
-    }
-    flags
 }
 
 /// Which of the owner's sets a grant covers.
@@ -318,9 +308,9 @@ fn requested(permissions: &[EditorPermission]) -> ApiResult<Flags> {
     Ok(flags)
 }
 
-/// What `flags` grant (with what `sets` brings) is all within `manager`.
+/// What `flags` grant is all within `manager`.
 fn no_escalation(manager: &Flags, flags: &Flags) -> ApiResult<()> {
-    if implied(flags.clone()).is_subset(manager) {
+    if flags.is_subset(manager) {
         Ok(())
     } else {
         Err(forbidden("You can only grant permissions you hold."))
@@ -1009,17 +999,19 @@ mod tests {
     }
 
     #[test]
-    fn sets_brings_channels() {
+    fn sets_and_channels_are_separate() {
         use EditorPermission::*;
         assert_eq!(requested(&[Sets]).unwrap(), set(&[Sets]));
-        assert_eq!(flags_of(&["sets".to_owned()]), set(&[Sets, Channels]));
+        assert_eq!(flags_of(&["sets".to_owned()]), set(&[Sets]));
         assert_eq!(listed(&["sets".to_owned(), "nope".to_owned()]), [Sets]);
-        // Granting `sets` grants `channels` too, so it needs both.
-        assert!(no_escalation(&set(&[Sets]), &set(&[Sets])).is_err());
-        assert!(no_escalation(&flags_of(&["sets".to_owned()]), &set(&[Sets])).is_ok());
-        // An editor holding `sets` may hand out `channels` alone.
+        // `sets` alone is enough to grant `sets`, and grants nothing about channels.
+        assert!(no_escalation(&set(&[Sets]), &set(&[Sets])).is_ok());
         let manager = flags_of(&["sets".to_owned(), "editors".to_owned()]);
-        assert!(no_escalation(&manager, &set(&[Channels])).is_ok());
+        assert!(no_escalation(&manager, &set(&[Channels])).is_err());
+        // And the other way round.
+        let channels = flags_of(&["channels".to_owned(), "editors".to_owned()]);
+        assert!(no_escalation(&channels, &set(&[Channels])).is_ok());
+        assert!(no_escalation(&channels, &set(&[Sets])).is_err());
     }
 
     #[test]

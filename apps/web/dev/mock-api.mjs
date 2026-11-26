@@ -699,6 +699,8 @@ const LIMIT_DEFAULTS = [
   ['uploads_per_hour', 'UPLOADS', 20, 3600], ['pending_emotes', 'UPLOADS', Number(process.env.MOCK_PENDING_MAX) || 20, null],
   ['editors', 'ACCOUNT', 60, 3600], ['cosmetics', 'ACCOUNT', 300, 3600], ['set_clones', 'ACCOUNT', 30, 3600], ['personal_lists', 'ACCOUNT', 120, 60],
   ['emote_transfers', 'ACCOUNT', 60, 3600], ['prefs', 'ACCOUNT', 120, 3600], ['checkout', 'ACCOUNT', 30, 3600], ['redeem', 'ACCOUNT', 30, 3600], ['data_export', 'ACCOUNT', 5, 3600],
+  // The most slots an account may give one of its channel sets (a cap, not a rate; ADR 0017 amendment 2026/11/22).
+  ['set_capacity_max', 'ACCOUNT', 1000, null],
 ];
 const ROLE_LIMITS = { ROLE2: { pending_emotes: 100 } };
 const limitsOut = (o = {}) => LIMIT_DEFAULTS.map(([key, group, d, w]) => ({ key, group, default: d, windowSeconds: w, value: o[key] ?? null }));
@@ -752,9 +754,49 @@ const graphOf = (id) => {
     grant({ kind: 'PAINT', itemId: 'PAINT2', itemName: 'Aurora', accountId: id, source: 'CODE', codeBatchId: 'BATCH1', codeBatchName: 'Launch week', grantedAt: '2026-11-10T08:00:00.000Z' }),
     grant({ kind: 'BADGE', itemId: 'BADGE2', itemName: 'Event host', accountId: id, source: 'STAFF', grantedBy: '01JD8X0000000000000000OAK1', grantedAt: '2026-11-03T12:00:00.000Z', revokedAt: '2026-11-09T12:00:00.000Z', revokedBy: ME_ID, revokeReason: 'Event over', active: false }),
     grant({ kind: 'PAINT', itemId: 'PAINT3', itemName: 'Ember', accountId: id, source: 'PURCHASE', orderId: 'ORDER2', orderName: 'Ember collector', orderStatus: 'refunded', grantedAt: '2026-11-11T10:00:00.000Z', revokedAt: '2026-11-12T10:00:00.000Z', revokeReason: 'Order refunded', active: false }),
+    ...richGraph(id),
     ...base,
   ];
 };
+// A real fan-out for the graph: nora_byte has bought the monthly supporter pack for a year (each
+// month's order a bundle of 5 to 8 paints), a founders bundle, redeemed several code batches, was
+// in two events and was given things by two staff members; a few other accounts bought some of the
+// same months, so a monthly paint's holders graph has several holders. About 150 nodes for nora.
+const MONTH_WORDS = ['Tide', 'Frost', 'Ember', 'Moss', 'Dune', 'Comet', 'Lumen', 'Cinder', 'Fern', 'Halo', 'Quartz', 'Drift', 'Petal', 'Storm', 'Saffron', 'Indigo', 'Velvet', 'Rust', 'Glacier', 'Nova'];
+const MONTH_NAMES = ['December', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November'];
+const monthPaints = (m) => Array.from({ length: 5 + ((m * 3) % 4) }, (_, i) => ({ id: `MPNT${String(m).padStart(2, '0')}${i}`, name: `${MONTH_WORDS[(m * 7 + i * 3) % MONTH_WORDS.length]} ${MONTH_NAMES[m].slice(0, 3).toLowerCase()} ${i + 1}` }));
+const monthStart = (m) => new Date(Date.UTC(2025, 11 + m, 1, 9, 0)).toISOString();
+const RICH_MONTHS = { '01JD8X0000000000000000NORA': [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] };
+OTHERS.slice(2, 9).forEach((o, i) => (RICH_MONTHS[o.id] = [6, 7, 8, 9, 10, 11].filter((m) => m !== 6 + (i % 6))));
+function richGraph(id) {
+  const months = RICH_MONTHS[id];
+  if (!months) return [];
+  const out = months.flatMap((m) => monthPaints(m).map((p) => grant({ kind: 'PAINT', itemId: p.id, itemName: p.name, accountId: id, source: 'PURCHASE',
+    orderId: `ORDM${id.slice(-4)}${m}`, orderName: 'Supporter monthly', orderStatus: m === 4 && id.endsWith('NORA') ? 'refunded' : 'paid', grantedAt: monthStart(m),
+    ...(m === 4 && id.endsWith('NORA') ? { active: false, revokedAt: '2026-04-03T10:00:00.000Z', revokeReason: 'Order refunded' } : {}) })));
+  if (!id.endsWith('NORA')) return out;
+  const at = (d) => `2026-${d}T12:00:00.000Z`;
+  const item = (kind, n, name, o) => grant({ kind, itemId: `${kind[0]}X${n}`, itemName: name, accountId: id, ...o });
+  return [
+    ...out,
+    ...['Founder', 'First hundred'].map((n, i) => item('BADGE', 10 + i, n, { source: 'PURCHASE', orderId: 'ORDFOUND', orderName: 'Founders bundle', orderStatus: 'paid', grantedAt: at('01-15') })),
+    ...['Gilded', 'Obsidian', 'Opal', 'Brass'].map((n, i) => item('PAINT', 10 + i, n, { source: 'PURCHASE', orderId: 'ORDFOUND', orderName: 'Founders bundle', orderStatus: 'paid', grantedAt: at('01-15') })),
+    ...['Snowfall', 'Pine', 'Aurora night', 'Hearth', 'Icicle'].map((n, i) => item('PAINT', 20 + i, n, { source: 'CODE', codeBatchId: 'BATCHWINTER', codeBatchName: 'Twitch drop: Winter', grantedAt: at('01-08') })),
+    ...['Creator', 'Mossgate crew'].map((n, i) => item(i ? 'PAINT' : 'BADGE', 30 + i, n, { source: 'CODE', codeBatchId: 'BATCHMOSS', codeBatchName: 'Creator code: mossgate', grantedAt: at('06-20') })),
+    item('PAINT', 40, 'Pumpkin', { source: 'EVENT', reason: 'Halloween 2026', grantedAt: at('10-31') }),
+    item('PAINT', 41, 'Witchlight', { source: 'EVENT', reason: 'Halloween 2026', grantedAt: at('10-31') }),
+    item('BADGE', 42, 'Spooky', { source: 'EVENT', reason: 'Halloween 2026', grantedAt: at('10-31') }),
+    item('PAINT', 43, 'Bonfire', { source: 'EVENT', reason: 'Halloween 2026', grantedAt: at('10-31') }),
+    item('BADGE', 44, 'Jam winner', { source: 'EVENT', reason: 'Emote jam: spring', grantedAt: at('04-12') }),
+    item('BADGE', 45, 'Jam entrant', { source: 'EVENT', reason: 'Emote jam: spring', grantedAt: at('04-12') }),
+    item('PAINT', 46, 'Confetti', { source: 'EVENT', reason: 'Emote jam: spring', grantedAt: at('04-12') }),
+    // The same paint reached two ways: bought in the founders bundle and given again by staff.
+    item('PAINT', 10, 'Gilded', { source: 'STAFF', reason: 'Lost it in the refund mix-up', grantedBy: ME_ID, grantedAt: at('05-02') }),
+    ...['Translator', 'Bug hunter', 'Helper'].map((n, i) => item('BADGE', 50 + i, n, { source: 'STAFF', reason: 'Community work', grantedBy: ME_ID, grantedAt: at(`0${7 + i}-01`) })),
+    item('PAINT', 54, 'Staff pick', { source: 'STAFF', reason: 'Featured emote artist', grantedBy: '01JD8X0000000000000000OAK1', grantedAt: at('09-14') }),
+    item('BADGE', 55, 'Moderator alumni', { source: 'STAFF', grantedBy: '01JD8X0000000000000000OAK1', grantedAt: at('03-01'), revokedAt: at('08-01'), revokedBy: ME_ID, revokeReason: 'Stepped down', active: false }),
+  ];
+}
 const AUDIT = Array.from({ length: 64 }, (_, i) => ({
   id: '01JD8XAUD' + String(1000 - i).padStart(17, '0'), actorId: i % 5 === 0 ? null : i % 3 === 0 ? OWNERS[1].id : ME_ID,
   action: ['emote.approved', 'set.editor_added', 'role.updated', 'account.restricted'][i % 4],
@@ -799,14 +841,16 @@ else if (Number(process.env.MOCK_NOTES) > NOTES.length) {
   NOTES.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 // Account editors (ADR 0014): two people work on the mock account, and it works on two others'.
-// Flags in the API's order; SETS brings CHANNELS. A grant covers every set (allSets) or setIds.
+// Flags in the API's order. SETS and CHANNELS are separate (ADR 0014, amendment 2026/11/22): SETS
+// makes, renames, deletes and resizes sets and picks the active one; CHANNELS changes channel
+// settings (and may pick the active set too, as before). A grant covers every set (allSets) or setIds.
 // EMOTE_TRANSFER is retired (ADR 0014, amendment 2026/11/22): dropped when sent with others,
 // refused alone (retired_permission), never listed.
 const EDITOR_FLAGS = ['EMOTES', 'SETS', 'EDITORS', 'PROFILE', 'CHANNELS', 'EMOTE_UPLOAD', 'EMOTE_MANAGE', 'BILLING_PAYMENT', 'BILLING_SUBSCRIPTION'];
 const RETIRED_ONLY = (flags) => flags?.length > 0 && flags.every((f) => f === 'EMOTE_TRANSFER');
 const RETIRED_ERR = () => err('Editors can’t be given the transfer permission any more: only an emote’s owner can give it away.', 'retired_permission');
 const MAX_EDITORS = 50;
-const withImplied = (flags) => EDITOR_FLAGS.filter((f) => flags.includes(f) || (f === 'CHANNELS' && flags.includes('SETS')));
+const withImplied = (flags) => EDITOR_FLAGS.filter((f) => flags.includes(f));
 const ACCOUNT_EDITORS = [
   { account: OTHERS[1], permissions: ['EMOTES'], allSets: false, setIds: ['01JD8XSET0000000000000MAIN'], grantedBy: ME_SUMMARY, grantedAt: '2026-11-12T10:00:00.000Z', updatedAt: '2026-11-12T10:00:00.000Z' },
   { account: OTHERS[2], permissions: ['EMOTES', 'SETS', 'EDITORS', 'CHANNELS', 'EMOTE_MANAGE'], allSets: true, setIds: [], grantedBy: ME_SUMMARY, grantedAt: '2026-11-14T18:30:00.000Z', updatedAt: '2026-11-14T18:30:00.000Z' },
@@ -1682,6 +1726,19 @@ const STAFF_EDITORS = {};
 const findEmote = (id) => MINE.find((e) => e.id === id) ?? ALL.find((e) => e.id === id);
 const findSet = (id) => SETS.find((s) => s.id === id) ?? SHARED_SETS.find((s) => s.id === id) ?? PUBLIC_SETS.find((s) => s.id === id);
 const ALL_SETS = () => [...SETS, ...SHARED_SETS, ...PUBLIC_SETS];
+// Every set is public (ADR 0017, amendment 2026/11/22): the migration listed every unlisted and
+// private set. Only staff can take one off the listings now.
+for (const s of ALL_SETS()) s.visibility = 'LISTED';
+const PUBLIC_ONLY = () => err('Every set is public. Only staff can take a set off the listings.', 'bad_visibility');
+// setCapacityRange: from what the set holds (at least 1) to the owner's set_capacity_max role
+// limit (5 for a personal set, never below its capacity now), 1.000.000 for staff; null when you
+// can't change it.
+const capRange = (s, admin) => {
+  if (!s || !mayView(s, true) || !setRights(s, admin).rename) return null;
+  const used = s.emotes.length;
+  const ownerMax = Math.max(s.kind === 'PERSONAL' ? 5 : limitOf(s.owner?.id ?? ME_ID, 'set_capacity_max'), s.capacity);
+  return { min: Math.max(1, used), max: admin ? 1_000_000 : ownerMax, ownerMax, used, staff: !!admin };
+};
 const ACTIVE_SET_IDS = () => new Set([...CHANNELS, ...EDITOR_CHANNELS].map((c) => c.activeSetId).filter(Boolean));
 // The API's rule: anyone opens listed and unlisted sets; a private one only its owner, editors and
 // account editors, or anyone while a channel shows it.
@@ -1722,7 +1779,7 @@ const VISIBILITIES = ['LISTED', 'UNLISTED', 'PRIVATE'];
 let clones = 0;
 // cloneSet(id, name, ownerId, visibility): the API's rules in small: approved emotes only,
 // others' private emotes skipped, capacity 1000.
-function cloneSet(v, session) {
+function cloneSet(v, session, admin = false) {
   const src = findSet(v.id);
   if (!src || !mayView(src, session)) return err('Not found.', 'not_found');
   const ownerId = v.ownerId || ME_ID;
@@ -1732,6 +1789,7 @@ function cloneSet(v, session) {
   const name = (v.name ?? src.name).trim();
   if (!name || name.length > 100) return err('Set names are 1 to 100 characters.', 'bad_name');
   if (v.visibility && !VISIBILITIES.includes(v.visibility)) return err('Unknown visibility.', 'bad_visibility');
+  if (v.visibility && v.visibility !== 'LISTED' && !admin) return PUBLIC_ONLY();
   const owner = ownerId === ME_ID ? ME_SUMMARY : EDITOR_OF.find((g) => g.account.id === ownerId).account;
   const keep = src.emotes.filter((m) => m.emote.state === 'APPROVED' && (!m.emote.flags.private || m.emote.owner?.id === ownerId));
   const copied = keep.slice(0, 1000);
@@ -1809,6 +1867,11 @@ function signedIn(body, v, ADMIN) {
       if (!setRights(s, ADMIN).emotes) return forbidden();
       return { data: { setEditors: s.editors } };
     }
+    case 'SetCapacityRange':
+      return { data: { setCapacityRange: capRange(findSet(v.id), ADMIN) } };
+    // The set menu: what you may do with one set (capacity range, grants, the channels you change).
+    case 'SetMenu':
+      return { data: { setCapacityRange: capRange(findSet(v.id), ADMIN), editorOf: editorOfOut(), myChannels: CHANNELS, editorChannels: editorChannels() } };
     case 'EditSet': {
       const s = findSet(v.id);
       const channels = { myChannels: CHANNELS, editorChannels: editorChannels() };
@@ -1838,7 +1901,8 @@ function signedIn(body, v, ADMIN) {
       const list = ownerId === ME_ID ? SETS : SHARED_SETS;
       if (v.input.kind === 'PERSONAL' && [...SETS, ...SHARED_SETS].some((s) => s.kind === 'PERSONAL' && s.owner?.id === ownerId))
         return err('You already have a personal set.', 'personal_set_exists');
-      const visibility = v.input.visibility ?? (v.input.kind === 'PERSONAL' ? 'UNLISTED' : 'LISTED');
+      const visibility = v.input.visibility ?? 'LISTED';
+      if (visibility !== 'LISTED' && !ADMIN) return PUBLIC_ONLY();
       if (v.input.kind === 'PERSONAL' && visibility === 'PRIVATE')
         return err('Personal sets can’t be private, and the global set is always listed.', 'bad_visibility');
       const s = { id: `01JD8XSETNEW${String(++newSets).padStart(14, "0")}`, name: v.input.name, kind: v.input.kind,
@@ -1849,12 +1913,20 @@ function signedIn(body, v, ADMIN) {
     case 'UpdateSet': {
       const s = findSet(v.id);
       if (!s || !mayView(s, true)) return err('Not found.', 'not_found');
-      if (v.input.visibility) {
+      if (v.input.visibility && v.input.visibility !== (s.visibility ?? 'LISTED')) {
         if (s.kind === 'GLOBAL' || (s.kind === 'PERSONAL' && v.input.visibility === 'PRIVATE'))
           return err('Personal sets can’t be private, and the global set is always listed.', 'bad_visibility');
-        if (!setRights(s, ADMIN).manage)
-          return err('Only the set’s owner and their editors with the sets permission can change who sees it.', 'forbidden');
+        if (!ADMIN) return PUBLIC_ONLY();
         s.visibility = v.input.visibility;
+      }
+      if (v.input.capacity != null) {
+        const c = v.input.capacity;
+        if (!setRights(s, ADMIN).rename) return forbidden();
+        if (!Number.isInteger(c) || c < 1 || c > 1_000_000) return err('Capacity is a whole number from 1 to 1.000.000.', 'bad_capacity');
+        const r = capRange(s, ADMIN);
+        if (c > r.max) return err(`This set can have up to ${r.max.toLocaleString('de-DE')} slots.`, 'capacity_over_limit');
+        if (c < s.emotes.length) return err('The set already holds more emotes than that.', 'capacity_too_low');
+        s.capacity = c;
       }
       if (v.input.name) {
         if (!setRights(s, ADMIN).rename) return forbidden();
@@ -1908,8 +1980,12 @@ function signedIn(body, v, ADMIN) {
     }
     case 'UpdateChannel': {
       const c = [...CHANNELS, ...editorChannels()].find((x) => x.platform === v.platform && x.platformChannelId === v.id);
-      if (!c || !flagsOn(c.account.id).includes('CHANNELS'))
-        return err('Only the channel’s owner and its account editors with the channels permission can change it.', 'forbidden');
+      const held = c ? flagsOn(c.account.id) : [];
+      // Picking the active set: SETS (or CHANNELS, as before); the other settings: CHANNELS.
+      if (!c || (!held.includes('CHANNELS') && !held.includes('SETS')))
+        return err('Only the channel’s owner and its account editors can change it.', 'forbidden');
+      if (v.input.allowPersonalEmotes !== undefined && v.input.allowPersonalEmotes !== null && !held.includes('CHANNELS'))
+        return err('Only the channel’s owner and its account editors with the channel settings permission can change its settings.', 'forbidden');
       if (v.input.activeSetId) {
         const target = findSet(v.input.activeSetId);
         if (!target || target.kind !== 'CHANNEL' || target.owner?.id !== c.account.id)
@@ -2352,10 +2428,11 @@ function signedIn(body, v, ADMIN) {
       return { data: { entitlementGraph: graphOf(v.accountId) } };
     case 'EntitlementHolders': {
       // Catalog items stand in for the made-up ones: odd ones held now by most, even ones taken back from some.
-      const stand = { BADGE: ['BADGE1', 'BADGE2'], PAINT: ['PAINT1', 'PAINT2', 'PAINT3'] }[v.kind];
-      const like = stand && !stand.includes(v.id) ? stand[[...v.id].reduce((n, c) => n + c.charCodeAt(0), 0) % stand.length] : v.id;
-      const all = [ME_ID, ...OTHERS.map((o) => o.id)].flatMap((id, i) => graphOf(id).map((g) => ({ ...g, grantedAt: g.grantedAt ? new Date(Date.parse(g.grantedAt) - i * 5 * 3600_000).toISOString() : null })))
-        .filter((g) => g.kind === v.kind && g.itemId === like).map((g) => ({ ...g, itemId: v.id }));
+      // The catalogue's paints stand in for a monthly one too, so their holders graph fans out.
+      const stand = { BADGE: ['BADGE1', 'BADGE2'], PAINT: ['PAINT1', 'PAINT2', 'PAINT3', 'MPNT110', 'MPNT100'] }[v.kind];
+      const every = [ME_ID, ...OTHERS.map((o) => o.id)].flatMap((id, i) => graphOf(id).map((g) => ({ ...g, grantedAt: g.grantedAt ? new Date(Date.parse(g.grantedAt) - i * 5 * 3600_000).toISOString() : null })));
+      const like = stand && !stand.includes(v.id) && !every.some((g) => g.itemId === v.id) ? stand[[...v.id].reduce((n, c) => n + c.charCodeAt(0), 0) % stand.length] : v.id;
+      const all = every.filter((g) => g.kind === v.kind && g.itemId === like).map((g) => ({ ...g, itemId: v.id }));
       return { data: { entitlementHolders: all } };
     }
     case 'AccountRestrictions': {
@@ -2677,7 +2754,7 @@ function newFields(q, v, session, admin = false) {
   if (top?.errors) return top;
   if (top) parts.push(top);
   if (/\bmyEditableChannels\b/.test(q)) parts.push(session ? { data: { myEditableChannels: myEditableChannels() } } : err('Sign in to use this.', 'signed_out'));
-  if (has('cloneSet')) parts.push(session ? cloneSet(v, session) : err('Sign in to use this.', 'signed_out'));
+  if (has('cloneSet')) parts.push(session ? cloneSet(v, session, admin) : err('Sign in to use this.', 'signed_out'));
   if (has('accountSets')) parts.push({ data: { accountSets: accountSets(id, v.preview) } });
   const site = siteAnswer(q, v, session, admin);
   if (site?.errors) return site;
