@@ -63,6 +63,14 @@ impl Default for Policy {
 impl Policy {
     /// For tests: loopback is allowed and the request goes out as plain http, so a local test
     /// server can stand in for a receiver. Never used by the worker itself.
+    /// For tests: this policy, but any port, so the address check is what a local test server
+    /// on a random port meets. Never used by the worker itself.
+    #[must_use]
+    pub fn any_port_for_tests(mut self) -> Self {
+        self.any_port = true;
+        self
+    }
+
     pub fn loopback_for_tests() -> Self {
         Self {
             allow: |ip| ip.is_loopback() || is_public_ip(ip),

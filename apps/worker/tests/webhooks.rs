@@ -272,10 +272,15 @@ async fn private_addresses_and_redirects_are_not_followed() {
         matches!(&err, JobError::Retry(e) if e.contains("redirects are not followed")),
         "{err}"
     );
-    // The real policy refuses loopback before connecting.
-    let err = deliver_with(w.ctx.clone(), attempt(job, 2), Policy::default())
-        .await
-        .unwrap_err();
+    // The real address check refuses loopback before connecting (the port is the test server's,
+    // so the port rule is lifted to reach the address check).
+    let err = deliver_with(
+        w.ctx.clone(),
+        attempt(job, 2),
+        Policy::default().any_port_for_tests(),
+    )
+    .await
+    .unwrap_err();
     assert!(
         matches!(&err, JobError::Retry(e) if e.contains("isn't allowed")),
         "{err}"
@@ -420,30 +425,28 @@ async fn mostly_failing_receivers_are_turned_off_even_with_some_successes() {
         return;
     };
     let mut conn = w.db.conn().await;
-    // 4 failures and a success, five times: never 5 in a row, 80% failed, still on.
-    for _ in 0..5 {
-        for _ in 0..4 {
-            assert!(
-                !webhooks::record_outcome(&mut conn, w.hook, false)
-                    .await
-                    .unwrap()
-                    .turned_off
-            );
-        }
-        webhooks::record_outcome(&mut conn, w.hook, true)
+    // 4 failures, then a success and 4 failures four times: never 5 in a row. The last failure
+    // makes 20 of 24 (83%): off then, not before.
+    let mut seq = vec![false; 4];
+    for _ in 0..4 {
+        seq.push(true);
+        seq.extend([false; 4]);
+    }
+    let mut last = webhooks::Outcome::default();
+    for (i, ok) in seq.iter().enumerate() {
+        last = webhooks::record_outcome(&mut conn, w.hook, *ok)
             .await
             .unwrap();
+        if i + 1 < seq.len() {
+            assert!(!last.turned_off, "off too early, at {i}");
+        }
     }
-    assert!(w.webhook().await.enabled);
-    // One more failure: 21 of 26 (81%), at least 20: off, though never 5 in a row.
-    let last = webhooks::record_outcome(&mut conn, w.hook, false)
-        .await
-        .unwrap();
     assert!(last.turned_off && last.notify, "{last:?}");
     let hook = w.webhook().await;
     assert!(!hook.enabled);
     assert_eq!(hook.disabled_reason.as_deref(), Some("failures"));
-    assert_eq!((hook.window_failed, hook.window_finished), (21, 26));
+    assert_eq!((hook.window_failed, hook.window_finished), (20, 24));
+    assert!(hook.failed_deliveries < webhooks::DISABLE_AFTER);
 
     // Turned on and off again the same day: the owner isn't told twice.
     webhooks::update(&mut conn, w.hook, None, None, Some(true))
