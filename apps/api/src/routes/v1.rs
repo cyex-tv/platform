@@ -655,7 +655,7 @@ async fn get_channel(
     .await
 }
 
-/// What `GET /v1/sets/{id}` answers: the set, or with `since` what changed (for the spec only).
+/// The answer of `GET /v1/sets/{id}`: the set, or with `since` what changed since that version.
 #[derive(Serialize, utoipa::ToSchema)]
 #[allow(dead_code)]
 #[serde(untagged)]
