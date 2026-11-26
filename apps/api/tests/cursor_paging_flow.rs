@@ -38,7 +38,7 @@ const ACCOUNTS: &str = "query($q: String!, $per: Int, $after: String) {
     }
 }";
 const SET_EMOTES: &str = "query($id: String!, $per: Int, $after: String) {
-    setEmotes(id: $id, perPage: $per, after: $after) { total next items { id name } }
+    setEmotes(id: $id, perPage: $per, after: $after) { total next items { name emote { id } } }
 }";
 const MY_EMOTES: &str = "query($per: Int, $after: String) {
     myEmotes(perPage: $per, after: $after) { total next items { id name } }
@@ -81,6 +81,7 @@ fn ids_of(page: &Value) -> Vec<String> {
             i["id"]
                 .as_str()
                 .or_else(|| i["account"]["id"].as_str())
+                .or_else(|| i["emote"]["id"].as_str())
                 .unwrap()
                 .to_owned()
         })
