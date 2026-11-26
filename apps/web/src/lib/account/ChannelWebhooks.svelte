@@ -209,7 +209,7 @@
   .hint a { color: var(--text); text-decoration: underline; text-decoration-color: var(--border-strong); text-underline-offset: 3px; }
   .skel { height: 72px; background: var(--surface-2); border-radius: 3px; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  @media (max-width: 560px) {
+  @media (max-width: 639.98px) {
     .new input, .tok input { font-size: 16px; }
     .log li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
     .chk { min-height: 44px; }
