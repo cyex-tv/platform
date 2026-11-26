@@ -351,7 +351,7 @@
   .set .lbl bdi { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .live { flex: none; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--green); }
   .fill { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
-  .meter { width: 36px; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; }
+  .meter { width: 36px; height: 3px; border-radius: var(--radius-sm); background: var(--border); overflow: hidden; }
   .meter i { display: block; height: 100%; background: var(--accent); }
   .meter.full i { background: var(--red); }
   .none { padding: 8px; font-size: var(--t-small); color: var(--muted); }

@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { stillNow } from '$lib/media.svelte';
   import type { Picture } from '$lib/emote';
 
   /** What a tile needs: the emote's pictures, id and name; owner and flags when known. */
@@ -79,7 +80,7 @@
   const paint = $derived(ownerId ? (looks[ownerId]?.paint ?? null) : null);
   // A lazy picture that is already cached shows at once; one that loads late fades in.
   function settle(node: HTMLImageElement) {
-    if (node.complete || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (node.complete || stillNow()) return;
     node.classList.add('fade');
     node.addEventListener('load', () => node.classList.remove('fade'), { once: true });
     node.addEventListener('error', () => node.classList.remove('fade'), { once: true });

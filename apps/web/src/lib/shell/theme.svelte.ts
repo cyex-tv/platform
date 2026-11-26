@@ -3,6 +3,8 @@
 // by app.html's inline script before first paint, cross-faded with a view transition unless
 // reduced motion is on (read at the moment it runs, cyex-design).
 
+import { now, stillNow } from '$lib/media.svelte';
+
 export const theme = $state({ light: false });
 
 /** Reads the theme the inline script applied (call once mounted). */
@@ -15,7 +17,7 @@ export function syncTheme() {
 function pinFavicon() {
   const link = document.querySelector<HTMLLinkElement>('link[rel="icon"][type="image/svg+xml"]');
   if (!link) return;
-  const os = matchMedia('(prefers-color-scheme: light)').matches;
+  const os = now('(prefers-color-scheme: light)');
   const file = os === theme.light ? 'favicon.svg' : theme.light ? 'favicon-light.svg' : 'favicon-dark.svg';
   link.href = new URL(`/${file}`, location.href).href;
 }
@@ -34,7 +36,7 @@ function apply() {
 }
 
 export function toggleTheme() {
-  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const still = stillNow();
   const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
   if (!still && doc.startViewTransition) {
     const root = document.documentElement;

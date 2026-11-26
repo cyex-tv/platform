@@ -160,7 +160,7 @@
   .find .input { width: 100%; height: 40px; padding-left: 36px; }
   @media (max-width: 520px) { .find { flex-basis: 100%; } }
   .slots { display: flex; align-items: center; gap: 12px; margin: 8px 0 20px; font-variant-numeric: tabular-nums; }
-  .meter { flex: 0 1 160px; height: 4px; border-radius: 2px; background: var(--border-strong); overflow: hidden; }
+  .meter { flex: 0 1 160px; height: 4px; border-radius: var(--radius-sm); background: var(--border-strong); overflow: hidden; }
   .meter span { display: block; height: 100%; background: var(--accent); }
   .more { display: flex; justify-content: center; padding: 24px 0 0; }
   .gap { margin-top: 20px; }

@@ -377,7 +377,7 @@
   .meta { max-width: 100%; font-size: var(--t-fine); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .same { max-width: 52ch; font-size: var(--t-fine); line-height: 1.45; color: var(--muted); overflow-wrap: anywhere; }
   .same a { color: var(--accent-text); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
-  .bar { display: block; width: min(240px, 100%); height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; }
+  .bar { display: block; width: min(240px, 100%); height: 3px; border-radius: var(--radius-sm); background: var(--border); overflow: hidden; }
   .bar span { display: block; height: 100%; background: var(--accent); transform-origin: 0 50%; transition: transform var(--fast) linear; }
   @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .bar span { transition: none; } }
   .small { min-height: 32px; height: 32px; padding: 0 12px; }

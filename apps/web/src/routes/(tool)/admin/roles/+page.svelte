@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Dialog from '$lib/components/Dialog.svelte';
   // Roles, most senior first. Built-in ones are marked: User (everyone holds it), Admin, and the
   // owners' top role (only its holders see it). The API says per role whether you may edit it
   // (below your highest, not one you hold) or give it; the page follows that and says why not.
@@ -39,7 +40,7 @@
   const permissions = $derived(L.data?.permissions ?? []);
   const held = $derived(L.data?.held ?? new Set<string>());
   const manager = $derived(can('roles.manage'));
-  let dialog: HTMLDialogElement;
+  let dialog: Dialog;
   let editing = $state<RoleFieldsFragment | null>(null);
   let name = $state('');
   let description = $state('');
@@ -95,7 +96,7 @@
     limitValues = {};
     limitsBefore = {};
     if (manager && role?.builtIn !== 'USER') void loadLimits(role);
-    dialog.showModal();
+    dialog.open();
   }
 
   async function loadLimits(role: RoleFieldsFragment | null) {
@@ -370,74 +371,69 @@
   {/snippet}
 </Split>
 
-<dialog class="ui-dialog wide" bind:this={dialog} aria-labelledby="role-title">
-  <form onsubmit={save} novalidate>
-    <div class="body">
-      <h2 id="role-title">{editing ? `Edit ${iso(editing.name)}` : 'New role'}</h2>
-      {#if userRole}<p class="ui-hint">Every account has this role, so what you give it, everyone gets. It always sits at position 0.</p>{/if}
-      <section class="grp">
-        <h3 class="adm-label">Basics</h3>
-        <div class="two">
-          <label class="ui-field">
-            <span class="ui-label">Name</span>
-            <input class="ui-input" bind:value={name} maxlength="50" aria-invalid={nameError ? 'true' : undefined} aria-describedby={nameError ? 'role-name-err' : undefined} />
-            {#if nameError}<span class="ui-error" id="role-name-err">{nameError}</span>{/if}
-          </label>
-          <label class="ui-field">
-            <span class="ui-label">Position</span>
-            <input class="ui-input ui-mono num" type="number" bind:value={position} min="1" max={MAX_POS} disabled={userRole}
-              aria-invalid={posError ? 'true' : undefined} aria-describedby={posError ? 'role-pos-err' : undefined} />
-            {#if posError}<span class="ui-error" id="role-pos-err">{posError}</span>{/if}
-          </label>
-        </div>
-        <label class="ui-field">
-          <span class="ui-label">Description</span>
-          <input class="ui-input" bind:value={description} maxlength="200" />
-        </label>
-        {#if !userRole}
-          <label class="ui-check" class:dim={invisible}>
-            <input type="checkbox" bind:checked={shown} disabled={invisible} />
-            <span>Shown on profiles <span class="ui-hint">{invisible ? 'Invisible wins: an invisible role is never shown.' : 'Everyone sees this role on the profile of anyone who holds it.'}</span></span>
-          </label>
-          <label class="sw">
-            <input class="ui-switch" type="checkbox" role="switch" bind:checked={invisible} aria-describedby="role-inv-hint" />
-            <span class="swt"><strong>Invisible</strong>
-              <span class="ui-hint" id="role-inv-hint">Never shown on profiles or user cards, and ignored wherever roles rank people (like the channels on an emote page). Staff and holders still see it.</span></span>
-          </label>
-        {/if}
-      </section>
-      <section class="grp">
-        <h3 class="adm-label" id="perm-label">Permissions <span class="ui-num count">{count(allows.length)} allowed · {count(denies.length)} denied</span></h3>
-        <div role="group" aria-labelledby="perm-label">
-          <PermissionPicker available={permissions} bind:allows bind:denies canChange={canChange} noDeny={userRole} />
-        </div>
-        <span class="ui-hint">Allow or Deny decides it for everyone who holds this role; Inherit leaves it to the roles below. A person’s highest role with an Allow or Deny wins, so a Deny here beats an Allow from a lower role. Hover or focus a permission to see what it does.</span>
-        {#if userRole}<span class="ui-hint">Deny isn’t offered here: the User role is last, so a Deny on it would never win.</span>{/if}
-      </section>
-      {#if manager}
-        <section class="grp">
-          <h3 class="adm-label" id="limits-label">Limits</h3>
-          {#if userRole}
-            <span class="ui-hint">Everyone gets the default limits. Give a role its own to raise or lower them for the people who hold it.</span>
-          {:else if limitsFailed}
-            <span class="ui-hint">Couldn’t load this role’s limits. The rest of the role still saves; try again to change them.</span>
-          {:else if !limits}
-            <span class="ui-hint">Loading limits…</span>
-          {:else}
-            <div role="group" aria-labelledby="limits-label">
-              <RoleLimits {limits} bind:values={limitValues} {tried} />
-            </div>
-            <span class="ui-hint">Empty keeps the default, shown in grey. Someone with several roles gets the highest of their roles’ limits.</span>
-          {/if}
-        </section>
-      {/if}
+<Dialog bind:this={dialog} wide class="role-dialog" title={editing ? `Edit ${iso(editing.name)}` : 'New role'} titleId="role-title" onsubmit={save}>
+  {#if userRole}<p class="ui-hint">Every account has this role, so what you give it, everyone gets. It always sits at position 0.</p>{/if}
+  <section class="grp">
+    <h3 class="adm-label">Basics</h3>
+    <div class="two">
+      <label class="ui-field">
+        <span class="ui-label">Name</span>
+        <input class="ui-input" bind:value={name} maxlength="50" aria-invalid={nameError ? 'true' : undefined} aria-describedby={nameError ? 'role-name-err' : undefined} />
+        {#if nameError}<span class="ui-error" id="role-name-err">{nameError}</span>{/if}
+      </label>
+      <label class="ui-field">
+        <span class="ui-label">Position</span>
+        <input class="ui-input ui-mono num" type="number" bind:value={position} min="1" max={MAX_POS} disabled={userRole}
+          aria-invalid={posError ? 'true' : undefined} aria-describedby={posError ? 'role-pos-err' : undefined} />
+        {#if posError}<span class="ui-error" id="role-pos-err">{posError}</span>{/if}
+      </label>
     </div>
-    <footer>
-      <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="ui-btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
-    </footer>
-  </form>
-</dialog>
+    <label class="ui-field">
+      <span class="ui-label">Description</span>
+      <input class="ui-input" bind:value={description} maxlength="200" />
+    </label>
+    {#if !userRole}
+      <label class="ui-check" class:dim={invisible}>
+        <input type="checkbox" bind:checked={shown} disabled={invisible} />
+        <span>Shown on profiles <span class="ui-hint">{invisible ? 'Invisible wins: an invisible role is never shown.' : 'Everyone sees this role on the profile of anyone who holds it.'}</span></span>
+      </label>
+      <label class="sw">
+        <input class="ui-switch" type="checkbox" role="switch" bind:checked={invisible} aria-describedby="role-inv-hint" />
+        <span class="swt"><strong>Invisible</strong>
+          <span class="ui-hint" id="role-inv-hint">Never shown on profiles or user cards, and ignored wherever roles rank people (like the channels on an emote page). Staff and holders still see it.</span></span>
+      </label>
+    {/if}
+  </section>
+  <section class="grp">
+    <h3 class="adm-label" id="perm-label">Permissions <span class="ui-num count">{count(allows.length)} allowed · {count(denies.length)} denied</span></h3>
+    <div role="group" aria-labelledby="perm-label">
+      <PermissionPicker available={permissions} bind:allows bind:denies canChange={canChange} noDeny={userRole} />
+    </div>
+    <span class="ui-hint">Allow or Deny decides it for everyone who holds this role; Inherit leaves it to the roles below. A person’s highest role with an Allow or Deny wins, so a Deny here beats an Allow from a lower role. Hover or focus a permission to see what it does.</span>
+    {#if userRole}<span class="ui-hint">Deny isn’t offered here: the User role is last, so a Deny on it would never win.</span>{/if}
+  </section>
+  {#if manager}
+    <section class="grp">
+      <h3 class="adm-label" id="limits-label">Limits</h3>
+      {#if userRole}
+        <span class="ui-hint">Everyone gets the default limits. Give a role its own to raise or lower them for the people who hold it.</span>
+      {:else if limitsFailed}
+        <span class="ui-hint">Couldn’t load this role’s limits. The rest of the role still saves; try again to change them.</span>
+      {:else if !limits}
+        <span class="ui-hint">Loading limits…</span>
+      {:else}
+        <div role="group" aria-labelledby="limits-label">
+          <RoleLimits {limits} bind:values={limitValues} {tried} />
+        </div>
+        <span class="ui-hint">Empty keeps the default, shown in grey. Someone with several roles gets the highest of their roles’ limits.</span>
+      {/if}
+    </section>
+  {/if}
+  {#snippet footer()}
+    <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
+    <button class="ui-btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+  {/snippet}
+</Dialog>
 
 <style>
   /* One flush row per role: position, name, flags, members (mono). Picked = bold name + accent tick. */
@@ -468,7 +464,7 @@
   .locked { display: flex; gap: 8px; align-items: flex-start; margin: 0; font-size: var(--t-small); color: var(--muted); }
   .locked :global(svg) { flex: none; margin-top: 2px; }
 
-  .wide { width: min(860px, calc(100vw - 24px)); }
+  :global(.ui-dialog.role-dialog.wide) { width: min(860px, calc(100vw - 24px)); }
   .grp { display: grid; gap: 6px; }
   .grp + .grp { padding-top: 14px; border-top: 1px solid var(--border); }
   .two { display: grid; grid-template-columns: minmax(0, 1fr) 130px; gap: 12px; }

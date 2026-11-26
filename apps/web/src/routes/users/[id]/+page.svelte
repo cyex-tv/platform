@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { media, PANEL } from '$lib/media.svelte';
   // The one profile page, for everyone, in the Inspector layout (redesign, 2026/11/21): the person
   // (ProfileHeader, flat: name, roles as flags, member since, the owner's or an editor's buttons;
   // the roles replaced the link-copy button, owner rule) heads the left column, then the
@@ -94,14 +95,7 @@
   );
 
   // ---- The panel's emote: a tile picked in the grid shows on the right (wide screens only).
-  let wide = $state(false);
-  $effect(() => {
-    const mq = matchMedia('(min-width: 1100px)');
-    wide = mq.matches;
-    const on = () => (wide = mq.matches);
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  });
+  const wide = $derived(media(PANEL).matches);
   const pickedId = $derived(page.url.searchParams.get('e'));
   let picked = $state<{ id: string; emote: PageEmote | null; failed: boolean } | null>(null);
   const cache = new Map<string, PageEmote>();

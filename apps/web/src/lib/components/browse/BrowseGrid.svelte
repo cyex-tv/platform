@@ -477,7 +477,7 @@
     color: var(--accent-ink); font: 600 13px/1.2 var(--font, inherit); }
 
   /* The drag rectangle: a hairline in the accent over a faint tint of it. */
-  .band { position: absolute; z-index: 2; pointer-events: none; border: 1px solid var(--accent-border); border-radius: 2px;
+  .band { position: absolute; z-index: 2; pointer-events: none; border: 1px solid var(--accent-border); border-radius: var(--radius-sm);
     background: color-mix(in srgb, var(--accent) 8%, transparent); }
 
   .grid.sheet { gap: 0; }

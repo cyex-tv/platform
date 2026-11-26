@@ -9,6 +9,7 @@
 </script>
 
 <script lang="ts">
+  import { reducedMotion } from '$lib/media.svelte';
   // A neutral chat frame, labelled "Twitch" or "Kick" (no logos, no platform colours), with
   // made-up viewers and emotes inline at chat size (28px tall; wide ones wider; zero-width ones
   // stacked on the emote before them). With `live`, a new line arrives every ~2.5s, cycling
@@ -56,7 +57,7 @@
   }
 
   let root: HTMLElement;
-  let still = $state(false);
+  const still = $derived(reducedMotion.matches);
   let held = $state(false); // hovered or focused: lines stop arriving so they can be read
   let paused = $state(false); // the reader's own pause
   let next = 0;
@@ -74,14 +75,6 @@
     key = 0;
     shown = Array.from({ length: n }, (_, i) => at(i));
     next = n;
-  });
-
-  $effect(() => {
-    const mq = matchMedia('(prefers-reduced-motion: reduce)');
-    still = mq.matches;
-    const on = () => (still = mq.matches);
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
   });
 
   $effect(() => {

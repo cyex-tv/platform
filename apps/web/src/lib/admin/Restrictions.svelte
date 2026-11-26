@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Dialog from '$lib/components/Dialog.svelte';
   // An account's restrictions on its staff page: uploads, reports and tickets, the whole account.
   // Each row says what holds now and until when, and places one (a reason and a length: 1 hour,
   // 1 day, 7 days, 30 days, until a day you pick, or for good) or lifts it. The API ends a timed
@@ -61,7 +62,7 @@
   const label = (k: HoldKind) => HOLDS.find((h) => h.kind === k)?.label ?? k;
 
   // The dialog.
-  let dialog: HTMLDialogElement;
+  let dialog: Dialog;
   let kind = $state<HoldKind>('UPLOADS');
   let length = $state<Duration>('1d');
   let custom = $state('');
@@ -78,7 +79,7 @@
     custom = toLocalInput(new Date(now.getTime() + 14 * 24 * 3_600_000));
     reason = '';
     error = '';
-    dialog.showModal();
+    dialog.open();
   }
 
   async function place(e: SubmitEvent) {
@@ -179,37 +180,33 @@
   {/if}
 </Box>
 
-<dialog class="ui-dialog restrict" bind:this={dialog} aria-labelledby="rd-title">
-  <form onsubmit={place} novalidate>
-    <div class="body">
-      <h2 id="rd-title">Restrict: {label(kind)}</h2>
-      <div class="ui-field">
-        <span class="ui-label" aria-hidden="true">How long</span>
-        <!-- Six choices don't fit a phone's row: a menu there, the switch on wider screens. -->
-        <div class="len wide-only"><Segmented label="How long" size="s" options={DURATIONS} value={length} onchange={(v) => (length = v)} /></div>
-        <select class="ui-input narrow-only" aria-label="How long" bind:value={length}>
-          {#each DURATIONS as d (d.value)}<option value={d.value}>{d.label}</option>{/each}
-        </select>
-        {#if length === 'custom'}
-          <label class="ui-field until">
-            <span class="ui-label">Ends</span>
-            <input class="ui-input" type="datetime-local" bind:value={custom} min={minLocal} />
-          </label>
-        {/if}
-      </div>
-      <label class="ui-field">
-        <span class="ui-label">Reason</span>
-        <textarea class="ui-input" rows="3" maxlength="500" bind:value={reason} aria-describedby="rd-reason-hint"></textarea>
-        <span class="ui-hint" id="rd-reason-hint">Staff see it in the history; the account doesn’t.{#if kind === 'ACCOUNT'} Blocking signs them out everywhere.{/if}</span>
+<Dialog bind:this={dialog} class="restrict" titleId="rd-title" onsubmit={place}>
+  {#snippet heading()}Restrict: {label(kind)}{/snippet}
+  <div class="ui-field">
+    <span class="ui-label" aria-hidden="true">How long</span>
+    <!-- Six choices don't fit a phone's row: a menu there, the switch on wider screens. -->
+    <div class="len wide-only"><Segmented label="How long" size="s" options={DURATIONS} value={length} onchange={(v) => (length = v)} /></div>
+    <select class="ui-input narrow-only" aria-label="How long" bind:value={length}>
+      {#each DURATIONS as d (d.value)}<option value={d.value}>{d.label}</option>{/each}
+    </select>
+    {#if length === 'custom'}
+      <label class="ui-field until">
+        <span class="ui-label">Ends</span>
+        <input class="ui-input" type="datetime-local" bind:value={custom} min={minLocal} />
       </label>
-      {#if error}<p class="ui-error" role="alert">{error}</p>{/if}
-    </div>
-    <footer>
-      <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="ui-btn {kind === 'ACCOUNT' ? 'danger' : 'primary'}" type="submit" disabled={busy}>{kind === 'ACCOUNT' ? 'Block' : 'Restrict'}</button>
-    </footer>
-  </form>
-</dialog>
+    {/if}
+  </div>
+  <label class="ui-field">
+    <span class="ui-label">Reason</span>
+    <textarea class="ui-input" rows="3" maxlength="500" bind:value={reason} aria-describedby="rd-reason-hint"></textarea>
+    <span class="ui-hint" id="rd-reason-hint">Staff see it in the history; the account doesn’t.{#if kind === 'ACCOUNT'} Blocking signs them out everywhere.{/if}</span>
+  </label>
+  {#if error}<p class="ui-error" role="alert">{error}</p>{/if}
+  {#snippet footer()}
+    <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
+    <button class="ui-btn {kind === 'ACCOUNT' ? 'danger' : 'primary'}" type="submit" disabled={busy}>{kind === 'ACCOUNT' ? 'Block' : 'Restrict'}</button>
+  {/snippet}
+</Dialog>
 
 <style>
   ul { list-style: none; margin: 0; padding: 0; }
@@ -224,7 +221,7 @@
   .top .adm-flags { flex: none; }
   .reason { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
   .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .restrict { width: min(560px, calc(100vw - 24px)); }
+  :global(.ui-dialog.restrict) { width: min(560px, calc(100vw - 24px)); }
   .narrow-only { display: none; }
   @media (max-width: 599.98px) { .wide-only { display: none; } .narrow-only { display: block; } }
   .until { margin-top: 8px; }

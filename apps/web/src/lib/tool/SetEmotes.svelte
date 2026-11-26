@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Dialog from '$lib/components/Dialog.svelte';
   // The emotes of a set, a page at a time (a set can hold a thousand): the first 120, Load more
   // for the next, and Filter asks the API, so it looks through the whole set and not just what
   // is drawn. Rename and remove are on every tile.
@@ -56,7 +57,7 @@
   let saving = $state(false);
   /** Why the rename failed, in the dialog (a toast would sit behind it). */
   let failure = $state('');
-  let dialog: HTMLDialogElement;
+  let dialog: Dialog;
   const aliasError = $derived(nameProblem(alias));
 
   let token = 0;
@@ -146,7 +147,7 @@
     alias = m.name;
     zeroWidth = m.zeroWidth;
     failure = '';
-    dialog.showModal();
+    dialog.open();
   }
 
   async function save(e: SubmitEvent) {
@@ -250,26 +251,22 @@
   {/if}
 </section>
 
-<dialog class="ui-dialog" bind:this={dialog} aria-labelledby="alias-title">
-  <form onsubmit={save}>
-    <div class="body">
-      <h2 id="alias-title">Rename {#if aliasFor}<bdi>{aliasFor}</bdi>{:else}the emote{/if} in this set</h2>
-      <label class="ui-field">
-        <span class="ui-label">Name here</span>
-        <input class="ui-input" bind:value={alias} maxlength="100" spellcheck="false" aria-invalid={aliasError ? 'true' : undefined} />
-        {#if aliasError}<span class="ui-error">{aliasError}</span>{:else if failure}<span class="ui-error" role="alert">{failure}</span>{:else}<span class="ui-hint">Only this set; the emote keeps its own name.</span>{/if}
-      </label>
-      <label class="ui-row">
-        <div><strong>Zero-width</strong><span class="ui-hint">Drawn over the emote before it.</span></div>
-        <input class="ui-switch" type="checkbox" bind:checked={zeroWidth} />
-      </label>
-    </div>
-    <footer>
-      <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="ui-btn primary" type="submit" disabled={!!aliasError || saving}>{saving ? 'Saving…' : 'Save'}</button>
-    </footer>
-  </form>
-</dialog>
+<Dialog bind:this={dialog} titleId="alias-title" onsubmit={save}>
+  {#snippet heading()}Rename {#if aliasFor}<bdi>{aliasFor}</bdi>{:else}the emote{/if} in this set{/snippet}
+  <label class="ui-field">
+    <span class="ui-label">Name here</span>
+    <input class="ui-input" bind:value={alias} maxlength="100" spellcheck="false" aria-invalid={aliasError ? 'true' : undefined} />
+    {#if aliasError}<span class="ui-error">{aliasError}</span>{:else if failure}<span class="ui-error" role="alert">{failure}</span>{:else}<span class="ui-hint">Only this set; the emote keeps its own name.</span>{/if}
+  </label>
+  <label class="ui-row">
+    <div><strong>Zero-width</strong><span class="ui-hint">Drawn over the emote before it.</span></div>
+    <input class="ui-switch" type="checkbox" bind:checked={zeroWidth} />
+  </label>
+  {#snippet footer()}
+    <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
+    <button class="ui-btn primary" type="submit" disabled={!!aliasError || saving}>{saving ? 'Saving…' : 'Save'}</button>
+  {/snippet}
+</Dialog>
 
 <style>
   .bar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 52px; padding: 6px 0; margin-bottom: 16px;

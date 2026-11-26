@@ -388,7 +388,7 @@
   .wide-only :global(.pb-actions .btn) { width: 100%; }
   .cap .owner, :global(.facts) .owner { justify-content: flex-end; min-height: 0; font-weight: 600; }
   .cap { display: grid; justify-items: end; gap: 6px; }
-  .bar { display: block; width: 120px; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; }
+  .bar { display: block; width: 120px; height: 3px; border-radius: var(--radius-sm); background: var(--border); overflow: hidden; }
   .fill { display: block; height: 100%; background: var(--accent); }
   .fill.full { background: var(--yellow); }
   @media (forced-colors: active) { .fill { background: Highlight; } }

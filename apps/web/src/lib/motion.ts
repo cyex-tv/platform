@@ -1,11 +1,12 @@
 // Shared motion for Svelte transitions. Every helper reads prefers-reduced-motion when it runs
 // (cyex-design: read the query at the moment you animate), and returns no motion under it.
+import { stillNow } from '$lib/media.svelte';
 import { cubicOut } from 'svelte/easing';
 import type { TransitionConfig } from 'svelte/transition';
 
 /** Whether the reader asked for reduced motion, read now. */
 export function still(): boolean {
-  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return stillNow();
 }
 
 /** `ms`, or 0 under reduced motion: for duration params of fly, fade, flip and friends. */

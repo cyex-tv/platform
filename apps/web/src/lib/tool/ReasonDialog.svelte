@@ -1,5 +1,6 @@
 <script lang="ts">
   // Asks for a reason (reject, take down, a report note), then hands it back.
+  import Dialog from '$lib/components/Dialog.svelte';
   let {
     title,
     hint,
@@ -26,7 +27,7 @@
   } = $props();
   let field = $state<HTMLTextAreaElement>();
 
-  let dialog: HTMLDialogElement;
+  let dialog: Dialog;
   let reason = $state('');
   let busy = $state(false);
   let problem = $state('');
@@ -34,7 +35,7 @@
   export function open() {
     reason = '';
     problem = '';
-    dialog.showModal();
+    dialog.open();
   }
 
   async function submit(e: SubmitEvent) {
@@ -54,30 +55,25 @@
   }
 </script>
 
-<dialog class="ui-dialog" bind:this={dialog} aria-label={title}>
-  <form onsubmit={submit}>
-    <div class="body">
-      <h2>{title}</h2>
-      <label class="ui-field">
-        <span class="ui-label">{optional ? 'Note (optional)' : 'Reason'}</span>
-        <textarea class="ui-input" rows="3" maxlength={max} bind:value={reason} bind:this={field} aria-describedby="rd-hint"></textarea>
-        <span class="ui-hint" id="rd-hint">{hint}</span>
-      </label>
-      {#if presets.length}
-        <div class="presets" role="group" aria-label="Common reasons">
-          {#each presets as p (p)}
-            <button class="ui-btn secondary small" type="button" aria-pressed={reason.trim() === p} onclick={() => { reason = p; field?.focus(); }}>{p}</button>
-          {/each}
-        </div>
-      {/if}
-      {#if problem}<p class="ui-error" role="alert">{problem}</p>{/if}
+<Dialog bind:this={dialog} {title} onsubmit={submit}>
+  <label class="ui-field">
+    <span class="ui-label">{optional ? 'Note (optional)' : 'Reason'}</span>
+    <textarea class="ui-input" rows="3" maxlength={max} bind:value={reason} bind:this={field} aria-describedby="rd-hint"></textarea>
+    <span class="ui-hint" id="rd-hint">{hint}</span>
+  </label>
+  {#if presets.length}
+    <div class="presets" role="group" aria-label="Common reasons">
+      {#each presets as p (p)}
+        <button class="ui-btn secondary small" type="button" aria-pressed={reason.trim() === p} onclick={() => { reason = p; field?.focus(); }}>{p}</button>
+      {/each}
     </div>
-    <footer>
-      <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="ui-btn {danger ? 'danger' : 'primary'}" type="submit" disabled={busy || (!optional && !reason.trim())}>{action}</button>
-    </footer>
-  </form>
-</dialog>
+  {/if}
+  {#if problem}<p class="ui-error" role="alert">{problem}</p>{/if}
+  {#snippet footer()}
+    <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
+    <button class="ui-btn {danger ? 'danger' : 'primary'}" type="submit" disabled={busy || (!optional && !reason.trim())}>{action}</button>
+  {/snippet}
+</Dialog>
 
 <style>
   textarea { resize: vertical; min-height: 72px; }
