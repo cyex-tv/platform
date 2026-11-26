@@ -1,5 +1,5 @@
 // Mock API: cosmetics. See ../mock-api.mjs.
-import { BASE, ME_ID, ME_SUMMARY, OTHERS } from './config.mjs';
+import { BASE, ME_ID, ME_SUMMARY, OTHERS, linkedChatter } from './config.mjs';
 import { flagsOn } from './editors.mjs';
 import { SHOP_ITEMS } from './shop.mjs';
 import { publicAccount } from './directory.mjs';
@@ -116,8 +116,9 @@ const ownedOut = (accountId) => {
 };
 export const userCosmeticsOut = (platform, ids = []) => {
   if (ids.length > 100) return null;
-  return [...new Set(ids)].filter((id) => platform === 'TWITCH' && C_CHATTERS[id]).sort().map((id) => {
-    const sel = C_SELECTED[C_CHATTERS[id]] ?? {};
+  const chatter = (id) => linkedChatter(platform, id) ?? (platform === 'TWITCH' ? C_CHATTERS[id] : undefined);
+  return [...new Set(ids)].filter((id) => chatter(id)).sort().map((id) => {
+    const sel = C_SELECTED[chatter(id)] ?? {};
     return { platformUserId: id, badgeId: sel.badgeId ?? null, paintId: sel.paintId ?? null };
   }).filter((u) => u.badgeId || u.paintId);
 };
