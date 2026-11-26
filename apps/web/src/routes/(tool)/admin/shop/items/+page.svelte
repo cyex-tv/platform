@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Dialog from '$lib/components/Dialog.svelte';
   // Admin: every shop item, hidden and scheduled ones too (shop.manage), as a contact sheet: the
   // picture, the name, the price and the state as a flag word (on sale, hidden, scheduled, ended,
   // sold out). The picked
@@ -45,7 +46,7 @@
   };
 
   // The form: new (editing null) or edit.
-  let dialog: HTMLDialogElement;
+  let dialog: Dialog;
   let editing = $state<ShopItemFieldsFragment | null>(null);
   let catalog = $state<Catalog | null>(null);
   let name = $state('');
@@ -95,7 +96,7 @@
     sort = String(item?.sortOrder ?? 0);
     tried = false;
     problem = null;
-    dialog.showModal();
+    dialog.open();
   }
 
   async function save(e: SubmitEvent) {
@@ -104,7 +105,7 @@
     tried = true;
     problem = null;
     if (cents === null || invalid) {
-      dialog.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+      dialog.element()?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
       return;
     }
     const input = {
@@ -288,71 +289,66 @@
   {/snippet}
 </Split>
 
-<dialog class="ui-dialog wide" bind:this={dialog} aria-labelledby="item-title">
-  <form onsubmit={save} novalidate>
-    <div class="body">
-      <h2 id="item-title">{editing ? `Edit ${iso(editing.name)}` : 'New shop item'}</h2>
-      <h3 class="adm-label">Item</h3>
-      <div>
-        <label class="adm-lv">
-          <span class="l">Name</span>
-          <span class="v"><input class="ui-input" bind:value={name} maxlength="64" aria-invalid={errors.name ? 'true' : undefined} />{#if errors.name}<span class="ui-error">{errors.name}</span>{/if}</span>
-        </label>
-        <label class="adm-lv top">
-          <span class="l">Description</span>
-          <span class="v"><textarea class="ui-input" rows="3" maxlength="500" bind:value={description}></textarea></span>
-        </label>
-      </div>
-      <h3 class="adm-label sect">Price</h3>
-      <div>
-        <label class="adm-lv">
-          <span class="l">Price</span>
-          <span class="v"><input class="ui-input adm-num" inputmode="decimal" bind:value={priceText} placeholder="4,99" aria-invalid={errors.price ? 'true' : undefined} />{#if errors.price}<span class="ui-error">{errors.price}</span>{/if}</span>
-        </label>
-        <label class="adm-lv">
-          <span class="l">Currency</span>
-          <span class="v"><input class="ui-input" bind:value={currency} maxlength="3" autocapitalize="characters" aria-invalid={errors.currency ? 'true' : undefined} />{#if errors.currency}<span class="ui-error">{errors.currency}</span>{/if}</span>
-        </label>
-        <label class="adm-lv">
-          <span class="l">Paddle price ID</span>
-          <span class="v"><input class="ui-input mono" bind:value={priceId} placeholder="pri_01abc…" autocomplete="off" spellcheck="false" aria-invalid={errors.priceId ? 'true' : undefined} />{#if errors.priceId}<span class="ui-error">{errors.priceId}</span>{/if}</span>
-        </label>
-      </div>
-      <h3 class="adm-label sect">Contents</h3>
-      {#if catalog}
-        <CosmeticsPick badges={[...catalog.badges.values()]} paints={[...catalog.paints.values()]} bind:badgeIds bind:paintIds error={errors.cosmetics} />
-      {/if}
-      <h3 class="adm-label sect">Availability</h3>
-      <div>
-        <label class="adm-lv">
-          <span class="l">On sale from<small>Empty: now</small></span>
-          <span class="v"><input class="ui-input" type="datetime-local" bind:value={from} /></span>
-        </label>
-        <label class="adm-lv">
-          <span class="l">On sale until<small>Empty: no end</small></span>
-          <span class="v"><input class="ui-input" type="datetime-local" bind:value={to} aria-invalid={errors.window ? 'true' : undefined} />{#if errors.window}<span class="ui-error">{errors.window}</span>{/if}</span>
-        </label>
-        <label class="adm-lv">
-          <span class="l">Copies<small>Empty: no limit</small></span>
-          <span class="v"><input class="ui-input adm-num" inputmode="numeric" bind:value={stock} placeholder="No limit" aria-invalid={errors.stock ? 'true' : undefined} />{#if errors.stock}<span class="ui-error">{errors.stock}</span>{/if}</span>
-        </label>
-        <label class="adm-lv">
-          <span class="l">Sort order<small>Lower first</small></span>
-          <span class="v"><input class="ui-input adm-num" inputmode="numeric" bind:value={sort} aria-invalid={errors.sort ? 'true' : undefined} />{#if errors.sort}<span class="ui-error">{errors.sort}</span>{/if}</span>
-        </label>
-        <label class="adm-lv">
-          <span class="l">Listed in the shop</span>
-          <span class="v"><input type="checkbox" bind:checked={visible} /></span>
-        </label>
-      </div>
-      {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
-    </div>
-    <footer>
-      <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="ui-btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : editing ? 'Save' : 'Make item'}</button>
-    </footer>
-  </form>
-</dialog>
+<Dialog bind:this={dialog} wide class="item-dialog" title={editing ? `Edit ${iso(editing.name)}` : 'New shop item'} titleId="item-title" onsubmit={save}>
+  <h3 class="adm-label">Item</h3>
+  <div>
+    <label class="adm-lv">
+      <span class="l">Name</span>
+      <span class="v"><input class="ui-input" bind:value={name} maxlength="64" aria-invalid={errors.name ? 'true' : undefined} />{#if errors.name}<span class="ui-error">{errors.name}</span>{/if}</span>
+    </label>
+    <label class="adm-lv top">
+      <span class="l">Description</span>
+      <span class="v"><textarea class="ui-input" rows="3" maxlength="500" bind:value={description}></textarea></span>
+    </label>
+  </div>
+  <h3 class="adm-label sect">Price</h3>
+  <div>
+    <label class="adm-lv">
+      <span class="l">Price</span>
+      <span class="v"><input class="ui-input adm-num" inputmode="decimal" bind:value={priceText} placeholder="4,99" aria-invalid={errors.price ? 'true' : undefined} />{#if errors.price}<span class="ui-error">{errors.price}</span>{/if}</span>
+    </label>
+    <label class="adm-lv">
+      <span class="l">Currency</span>
+      <span class="v"><input class="ui-input" bind:value={currency} maxlength="3" autocapitalize="characters" aria-invalid={errors.currency ? 'true' : undefined} />{#if errors.currency}<span class="ui-error">{errors.currency}</span>{/if}</span>
+    </label>
+    <label class="adm-lv">
+      <span class="l">Paddle price ID</span>
+      <span class="v"><input class="ui-input mono" bind:value={priceId} placeholder="pri_01abc…" autocomplete="off" spellcheck="false" aria-invalid={errors.priceId ? 'true' : undefined} />{#if errors.priceId}<span class="ui-error">{errors.priceId}</span>{/if}</span>
+    </label>
+  </div>
+  <h3 class="adm-label sect">Contents</h3>
+  {#if catalog}
+    <CosmeticsPick badges={[...catalog.badges.values()]} paints={[...catalog.paints.values()]} bind:badgeIds bind:paintIds error={errors.cosmetics} />
+  {/if}
+  <h3 class="adm-label sect">Availability</h3>
+  <div>
+    <label class="adm-lv">
+      <span class="l">On sale from<small>Empty: now</small></span>
+      <span class="v"><input class="ui-input" type="datetime-local" bind:value={from} /></span>
+    </label>
+    <label class="adm-lv">
+      <span class="l">On sale until<small>Empty: no end</small></span>
+      <span class="v"><input class="ui-input" type="datetime-local" bind:value={to} aria-invalid={errors.window ? 'true' : undefined} />{#if errors.window}<span class="ui-error">{errors.window}</span>{/if}</span>
+    </label>
+    <label class="adm-lv">
+      <span class="l">Copies<small>Empty: no limit</small></span>
+      <span class="v"><input class="ui-input adm-num" inputmode="numeric" bind:value={stock} placeholder="No limit" aria-invalid={errors.stock ? 'true' : undefined} />{#if errors.stock}<span class="ui-error">{errors.stock}</span>{/if}</span>
+    </label>
+    <label class="adm-lv">
+      <span class="l">Sort order<small>Lower first</small></span>
+      <span class="v"><input class="ui-input adm-num" inputmode="numeric" bind:value={sort} aria-invalid={errors.sort ? 'true' : undefined} />{#if errors.sort}<span class="ui-error">{errors.sort}</span>{/if}</span>
+    </label>
+    <label class="adm-lv">
+      <span class="l">Listed in the shop</span>
+      <span class="v"><input type="checkbox" bind:checked={visible} /></span>
+    </label>
+  </div>
+  {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
+  {#snippet footer()}
+    <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
+    <button class="ui-btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : editing ? 'Save' : 'Make item'}</button>
+  {/snippet}
+</Dialog>
 </Gate>
 
 <style>
@@ -372,10 +368,9 @@
   .bundle li > span:first-of-type { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bundle :global(svg) { flex: none; color: var(--dim); }
   .kind { font-size: var(--t-fine); color: var(--dim); }
-  .wide { width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); }
-  form { max-height: calc(100dvh - 24px); grid-template-rows: minmax(0, 1fr) auto; }
-  .body { overflow-y: auto; overscroll-behavior: contain; }
-  h2 { margin: 0; font-size: 18px; }
+  :global(.ui-dialog.item-dialog form) { max-height: calc(100dvh - 24px); grid-template-rows: minmax(0, 1fr) auto; }
+  :global(.ui-dialog.item-dialog .body) { overflow-y: auto; overscroll-behavior: contain; }
+  :global(.ui-dialog.item-dialog h2) { margin: 0; font-size: 18px; }
   .sect { padding-top: 12px; border-top: 1px solid var(--border); }
   .mono { font-family: var(--font-mono); }
   .adm-lv .v .ui-input { flex: 1 1 180px; min-width: 0; }

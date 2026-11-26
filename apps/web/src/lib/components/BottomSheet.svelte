@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stillNow } from '$lib/media.svelte';
   // A sheet that rises from the bottom, for phones (filters, the nav menu). A modal <dialog>:
   // focus stays inside, the page behind is inert, Escape and a tap on the dimmed page close it,
   // and focus goes back to what opened it. The handle can be dragged down to dismiss (a quick
@@ -22,7 +23,7 @@
   let back: HTMLElement | null = null;
   let closing = false;
 
-  const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const still = stillNow;
   const ms = (name: string) => parseFloat(getComputedStyle(document.documentElement).getPropertyValue(name)) * 1000 || 250;
   const ease = () => getComputedStyle(document.documentElement).getPropertyValue('--ease-drawer').trim() || 'ease-out';
 
@@ -136,7 +137,7 @@
     padding-bottom: env(safe-area-inset-bottom, 0px); }
   .grab { flex: none; padding: 8px max(var(--page-pad), env(safe-area-inset-left, 0px)) 0; touch-action: none; cursor: grab;
     -webkit-user-select: none; user-select: none; }
-  .handle { display: block; width: 36px; height: 4px; margin: 0 auto 4px; border-radius: 2px; background: var(--border-strong); }
+  .handle { display: block; width: 36px; height: 4px; margin: 0 auto 4px; border-radius: var(--radius-sm); background: var(--border-strong); }
   .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; }
   .title { font-size: var(--t-h3); line-height: 1.3; letter-spacing: -.015em; }
   .body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;

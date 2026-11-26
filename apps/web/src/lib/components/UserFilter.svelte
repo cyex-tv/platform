@@ -417,8 +417,7 @@
   input:focus, input:focus-visible { outline: none; }
   input::placeholder { color: var(--muted); opacity: 1; }
   input::-webkit-search-cancel-button { display: none; }
-  .spin { flex: none; width: 12px; height: 12px; border: 2px solid var(--border-strong); border-top-color: var(--muted); border-radius: 50%; animation: spin .7s linear infinite; }
-  @keyframes spin { to { transform: rotate(1turn); } }
+  .spin { flex: none; width: 12px; height: 12px; border: 2px solid var(--border-strong); border-top-color: var(--muted); border-radius: 50%; animation: ui-spin .7s linear infinite; }
   @media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2s; } }
 
   /* The picked person: a 3px chip with the painted name; the name reopens the search, × removes it. */

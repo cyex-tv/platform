@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Dialog from '$lib/components/Dialog.svelte';
   // Guards unsaved work. While `dirty`, closing or reloading the tab asks the browser's own
   // question, and leaving for another page inside the app opens this dialog: Stay, or Leave
   // and lose the changes. `inApp={false}` keeps only the browser's question, for work that
@@ -7,7 +8,7 @@
 
   let { dirty, what = 'your changes', inApp = true }: { dirty: boolean; what?: string; inApp?: boolean } = $props();
 
-  let dialog: HTMLDialogElement;
+  let dialog: Dialog;
   let target: URL | null = null;
   let leaving = false;
 
@@ -15,7 +16,7 @@
     if (!dirty || !inApp || leaving || nav.willUnload || !nav.to) return; // a real unload is the beforeunload handler's
     nav.cancel();
     target = nav.to.url;
-    if (!dialog.open) dialog.showModal();
+    if (!dialog.isOpen()) dialog.open();
   });
 
   function leave() {
@@ -35,13 +36,10 @@
   }}
 />
 
-<dialog class="ui-dialog" bind:this={dialog} aria-labelledby="leave-title" aria-describedby="leave-body">
-  <div class="body">
-    <h2 id="leave-title">Leave without saving?</h2>
-    <p id="leave-body" class="ui-hint">Leaving loses {what}.</p>
-  </div>
-  <footer>
+<Dialog bind:this={dialog} title="Leave without saving?" titleId="leave-title" describedby="leave-body">
+  <p id="leave-body" class="ui-hint">Leaving loses {what}.</p>
+  {#snippet footer()}
     <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Stay</button>
     <button class="ui-btn danger" type="button" onclick={leave}>Leave</button>
-  </footer>
-</dialog>
+  {/snippet}
+</Dialog>

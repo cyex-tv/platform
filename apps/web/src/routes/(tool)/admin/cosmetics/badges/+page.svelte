@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Dialog from '$lib/components/Dialog.svelte';
   // Every badge as a tile (picture, name, how many own it) with an inspector on the right for the
   // picked one (?badge=<id>): its sizes, tooltip and id, its owners (Give, Revoke) and Edit,
   // Make larger sizes, Delete. New badge / Edit share one dialog (name, tooltip, picture upload
@@ -79,7 +80,7 @@
   let busy = $state(false);
 
   // The badge dialog: new (editing null) or edit.
-  let dialog: HTMLDialogElement;
+  let dialog: Dialog;
   let editing = $state<Badge | null>(null);
   let name = $state('');
   let tooltip = $state('');
@@ -105,7 +106,7 @@
     opened += 1;
     tried = false;
     problem = '';
-    dialog.showModal();
+    dialog.open();
   }
 
   async function save(e: SubmitEvent) {
@@ -120,7 +121,7 @@
       // A picture that then fails says why in its field; nothing is saved without it.
       const waited = picturing;
       while (picturing) await new Promise((r) => setTimeout(r, 200));
-      if (!dialog.open || ((waited || !editing) && !imageId)) return;
+      if (!dialog.isOpen() || ((waited || !editing) && !imageId)) return;
       if (editing) {
         await gql(UPDATE_BADGE, { id: editing.id, input: { name: name.trim(), tooltip: tooltip.trim(), imageId: imageId || null } });
         notify(`${iso(name.trim())} saved.`);
@@ -298,32 +299,27 @@
   if (pickedId === giving?.id) ownerList?.load(1);
 }} />
 
-<dialog class="ui-dialog" bind:this={dialog} aria-labelledby="badge-title">
-  <form onsubmit={save} novalidate>
-    <div class="body">
-      <h2 id="badge-title">{editing ? `Edit ${iso(editing.name)}` : 'New badge'}</h2>
-      <label class="ui-field">
-        <span class="ui-label">Name</span>
-        <input class="ui-input" bind:value={name} maxlength="32" aria-invalid={nameError ? 'true' : undefined} aria-describedby={nameError ? 'b-name-err' : undefined} />
-        {#if nameError}<span class="ui-error" id="b-name-err">{nameError}</span>{/if}
-      </label>
-      <label class="ui-field">
-        <span class="ui-label">Tooltip</span>
-        <input class="ui-input" bind:value={tooltip} maxlength="64" placeholder="What chat sees on hover" aria-invalid={tipError ? 'true' : undefined} aria-describedby={tipError ? 'b-tip-err' : undefined} />
-        {#if tipError}<span class="ui-error" id="b-tip-err">{tipError}</span>{/if}
-      </label>
-      {#key opened}
-        <ImageUpload kind="badge" label="Picture" bind:imageId bind:busy={picturing} current={editing?.image ?? null} />
-      {/key}
-      {#if imageError}<span class="ui-error" role="alert">{imageError}</span>{/if}
-      {#if problem}<p class="ui-error" role="alert">{problem}</p>{/if}
-    </div>
-    <footer>
-      <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="ui-btn primary" type="submit" disabled={saving}>{saving ? (picturing ? 'Waiting for the picture…' : 'Saving…') : editing ? 'Save' : 'Make badge'}</button>
-    </footer>
-  </form>
-</dialog>
+<Dialog bind:this={dialog} title={editing ? `Edit ${iso(editing.name)}` : 'New badge'} titleId="badge-title" onsubmit={save}>
+  <label class="ui-field">
+    <span class="ui-label">Name</span>
+    <input class="ui-input" bind:value={name} maxlength="32" aria-invalid={nameError ? 'true' : undefined} aria-describedby={nameError ? 'b-name-err' : undefined} />
+    {#if nameError}<span class="ui-error" id="b-name-err">{nameError}</span>{/if}
+  </label>
+  <label class="ui-field">
+    <span class="ui-label">Tooltip</span>
+    <input class="ui-input" bind:value={tooltip} maxlength="64" placeholder="What chat sees on hover" aria-invalid={tipError ? 'true' : undefined} aria-describedby={tipError ? 'b-tip-err' : undefined} />
+    {#if tipError}<span class="ui-error" id="b-tip-err">{tipError}</span>{/if}
+  </label>
+  {#key opened}
+    <ImageUpload kind="badge" label="Picture" bind:imageId bind:busy={picturing} current={editing?.image ?? null} />
+  {/key}
+  {#if imageError}<span class="ui-error" role="alert">{imageError}</span>{/if}
+  {#if problem}<p class="ui-error" role="alert">{problem}</p>{/if}
+  {#snippet footer()}
+    <button class="ui-btn secondary" type="button" onclick={() => dialog.close()}>Cancel</button>
+    <button class="ui-btn primary" type="submit" disabled={saving}>{saving ? (picturing ? 'Waiting for the picture…' : 'Saving…') : editing ? 'Save' : 'Make badge'}</button>
+  {/snippet}
+</Dialog>
 
 <style>
   /* The contact sheet (admin.css .adm-sheet): the badge on its own ground, the name, how many own it. */

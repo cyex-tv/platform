@@ -1,6 +1,8 @@
 // Whether this device gets the 3D logo, or keeps the static one. Pure over what it's given, so
 // it's tested without a browser; `readEnv` reads the real values once the page has settled.
 
+import { stillNow } from '$lib/media.svelte';
+
 export type Env = {
   reducedMotion: boolean;
   saveData: boolean;
@@ -37,7 +39,7 @@ function hasWebgl(): boolean {
  * `data-motion="reduce"` attribute on <html>, where the site sets one). Read now.
  */
 export function motionReduced(): boolean {
-  return document.documentElement.dataset.motion === 'reduce' || matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return stillNow();
 }
 
 type Nav = Navigator & { connection?: { saveData?: boolean }; deviceMemory?: number };

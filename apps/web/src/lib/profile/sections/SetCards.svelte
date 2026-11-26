@@ -173,7 +173,7 @@
   .on { display: inline-grid; color: var(--accent-text); }
   .meta { font-size: var(--t-fine); color: var(--dim); }
   .cap { display: flex; align-items: center; gap: 10px; font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .bar { flex: 1; min-width: 0; height: 3px; border-radius: 2px; background: var(--border); overflow: hidden; }
+  .bar { flex: 1; min-width: 0; height: 3px; border-radius: var(--radius-sm); background: var(--border); overflow: hidden; }
   .fill { display: block; height: 100%; background: var(--accent); }
   .fill.full { background: var(--yellow); }
   .n { flex: none; }

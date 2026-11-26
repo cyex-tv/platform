@@ -6,11 +6,10 @@
   // smallest picture file that is sharp at the size the name is drawn (its font size, its length and
   // the screen's pixel ratio; measured once after mount and again when the window settles).
   //   <PaintedName name={who.displayName} paint={look.paint} badge={look.badge} />
-  import { onMount } from 'svelte';
   import { clean } from '$lib/format';
   import BadgeIcon from './BadgeIcon.svelte';
   import { paintFloor, paintStyle, type PaintLike } from './paint';
-  import { reduced, watchReduced } from './reduced.svelte';
+  import { reduced } from './reduced.svelte';
   import { fitOfText } from './paintFile';
   import { display } from '$lib/dpr.svelte';
   import type { Badge } from './store.svelte';
@@ -26,7 +25,6 @@
     class?: string;
   };
   let { name, paint = null, badge = null, badgeSize = 18, size, class: cls = '' }: Props = $props();
-  onMount(watchReduced);
 
   // The font size the name is drawn at: read from the element (one style read, no layout), only
   // for image paints, which are the ones with files to pick from. 0 until mounted.

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { reducedMotion } from '$lib/media.svelte';
   // The emote page's body, made once per emote (the route keys it by id): the Inspector layout
   // (redesign, 2026/11/21). A breadcrumb back to where you came from, then two columns:
   //   left  the preview: one neutral stage (no ground switch, owner rule) with every size at its
@@ -87,14 +88,7 @@
   );
 
   // Motion follows the reader's setting: the still frame under reduced motion, no pause button.
-  let reduced = $state(false);
-  $effect(() => {
-    const mq = matchMedia('(prefers-reduced-motion: reduce)');
-    reduced = mq.matches;
-    const on = () => (reduced = mq.matches);
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  });
+  const reduced = $derived(reducedMotion.matches);
   const frozen = $derived(hasStillFiles && reduced);
 
   // Activity is only for listed emotes: pending, rejected, taken-down and private ones have none.

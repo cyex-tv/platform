@@ -14,6 +14,6 @@
   .note { margin: 0; }
   button { padding: 0; border: 0; background: none; font: inherit; color: var(--text); font-weight: 500; text-decoration: underline;
     text-decoration-color: var(--border-strong); text-underline-offset: 3px; cursor: pointer; }
-  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
   @media (hover: hover) and (pointer: fine) { button:hover { text-decoration-color: currentColor; } }
 </style>

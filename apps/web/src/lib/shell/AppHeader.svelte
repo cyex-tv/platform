@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { media, now, PHONE } from '$lib/media.svelte';
   // The one header, identical on every route (public, signed in, admin, docs, errors, sign in):
   // 56px, sticky, flat on the ground with a hairline, its content in the full-width wrapper. The
   // Inspector layout (redesign, 2026/11/21): on the left the mark + cyex.tv and the main links as
@@ -66,16 +67,15 @@
   }
   // Phone or not: only one search field is mounted (so only one asks the API), and wider than a
   // phone again the bar is back to normal.
-  let narrow = $state(false);
+  const narrow = $derived(media(PHONE).matches);
+  let wasNarrow = false;
   $effect(() => {
-    const mq = matchMedia('(max-width: 720px)');
-    narrow = mq.matches;
-    const on = () => {
-      narrow = mq.matches;
-      if (!mq.matches) headerSearch.phoneOpen = false;
-    };
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
+    // Back to a wider window: the phone's open search field closes.
+    if (narrow) wasNarrow = true;
+    else if (wasNarrow) {
+      wasNarrow = false;
+      headerSearch.phoneOpen = false;
+    }
   });
 
   function onwindowkey(e: KeyboardEvent) {
@@ -83,7 +83,7 @@
     e.preventDefault();
     const own = document.querySelector<HTMLInputElement>('input[data-page-search]');
     if (own) own.focus();
-    else if (matchMedia('(max-width: 720px)').matches) void openPhoneSearch();
+    else if (now(PHONE)) void openPhoneSearch();
     else headerSearch.focusTick += 1;
   }
 </script>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { media, NARROW } from '$lib/media.svelte';
   // The one vertical rail (7TV's side bar, cyex styling): context for the page's subject, never a
   // second top bar. 240px on a surface card, sticky under the header while it fits the window;
   // a taller rail scrolls with the page instead, never inside itself (owner: no scroll bar in the
@@ -55,19 +56,12 @@
   const total = (g: RailGroup) => g.items.reduce((n, i) => n + (typeof i.count === 'number' ? i.count : 0), 0);
   const isOpen = (g: RailGroup) => !g.toggle || g.items.some((i) => i.current) || !closed[g.toggle.label];
 
-  let narrow = $state(false);
+  const narrow = $derived(media(NARROW).matches);
   let sheet = $state(false);
   let strip = $state<HTMLElement>();
 
   $effect(() => {
-    const mq = matchMedia('(max-width: 899.98px)');
-    narrow = mq.matches;
-    const on = () => {
-      narrow = mq.matches;
-      if (!narrow) sheet = false;
-    };
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
+    if (!narrow) sheet = false;
   });
 
   // Edge fades only where there is more to scroll to.

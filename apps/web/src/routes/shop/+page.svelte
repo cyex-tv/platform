@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { media, PANEL } from '$lib/media.svelte';
   // /shop, in the Inspector shape (like a profile): the page head, a kind filter and the grid of
   // items on the left; on the right a panel that shows how buying works until an item is open,
   // then that item in full (ItemBuy: on your own name, what it holds, buy it or give it). Each item
@@ -108,14 +109,7 @@
   }
 
   // Wide windows show the item in the right panel; narrow ones in a dialog.
-  let wide = $state(false);
-  $effect(() => {
-    const mq = matchMedia('(min-width: 1100px)');
-    wide = mq.matches;
-    const on = () => (wide = mq.matches);
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  });
+  const wide = $derived(media(PANEL).matches);
 
   let buyPanel = $state<ItemBuy>();
   let panel = $state<HTMLElement>();

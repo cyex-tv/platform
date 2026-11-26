@@ -4,15 +4,13 @@
   // screen or a zoom enlarges it, a bigger picture scales smoothly. A picture made before
   // originals existed shows its largest ladder size instead (never enlarged past its own size).
   // Animated badges show their first frame under reduced motion.
-  import { onMount } from 'svelte';
   import type { Badge } from './store.svelte';
-  import { reduced, watchReduced } from './reduced.svelte';
+  import { reduced } from './reduced.svelte';
   import { safeUrl } from './paint';
   import { badgeFiles, badgeOriginal, enlarge } from './badgeFile';
 
   type Props = { badge: Pick<Badge, 'name' | 'tooltip' | 'image'> };
   let { badge }: Props = $props();
-  onMount(watchReduced);
 
   const still = $derived(reduced.on && badge.image.animated);
   const file = $derived.by(() => {

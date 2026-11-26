@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { stillNow } from '$lib/media.svelte';
   // Pick a layer or an effect. A sidebar of the studio's categories (All first, each with its
   // count) beside cards that show every option as a live preview: the option painted on a sample
   // name (a layer on its own, an effect over a sample gradient). Hovering or focusing a card plays
@@ -31,7 +32,7 @@
   let stills = $state<Record<string, string | null>>({});
   let live = $state<{ id: string; url: string } | null>(null);
   let stopLive: (() => void) | null = null;
-  const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduce = stillNow();
   $effect(() => {
     const k = kind;
     if (!k) return;

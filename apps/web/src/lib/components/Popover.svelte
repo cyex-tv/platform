@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { media, PHONE } from '$lib/media.svelte';
   // A panel anchored to its trigger (filters, the account menu). It scales in from the corner
   // nearest the trigger and fades out a little faster (no motion under reduced motion), flips
   // above when there's no room below, and closes on Escape (focus back to the trigger, at once),
@@ -53,16 +54,7 @@
   let top = $state(0);
   let maxH = $state(560);
   let left = $state(0);
-  let phone = $state(false);
-
-  $effect(() => {
-    if (!sheet) return;
-    const mq = matchMedia('(max-width: 720px)');
-    phone = mq.matches;
-    const on = () => (phone = mq.matches);
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  });
+  const phone = $derived(media(PHONE).matches);
 
   const asSheet = $derived(sheet && phone);
 

@@ -4,8 +4,7 @@
   // first in fixed-height rows, each with a remove button (Undo in the toast). A set holds up to a
   // thousand, so the list shows a hundred at a time. The tray folds to a slim strip (`open`,
   // remembered by the page) and opens again from there.
-  import { onMount } from 'svelte';
-  import { reduced, watchReduced } from '$lib/cosmetics/reduced.svelte';
+  import { reduced } from '$lib/cosmetics/reduced.svelte';
   import IconButton from '$lib/components/IconButton.svelte';
   import { clean, count } from '$lib/format';
   import { target as store, setLabel, free } from './target.svelte';
@@ -24,7 +23,6 @@
   const shown = $derived(items.slice(0, steps * STEP));
   const pct = $derived(set && set.capacity > 0 ? Math.min(100, (set.held.size / set.capacity) * 100) : 0);
   // Under reduced motion animated emotes show their first frame, as everywhere.
-  onMount(watchReduced);
   const still = (e: { animated: boolean; files: { name: string }[] }) => reduced.on && e.animated && e.files.some((f) => f.name === '1x_static.webp');
 </script>
 
@@ -78,7 +76,7 @@
   .t { flex: 1; min-width: 0; font-size: var(--t-small); font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ct { flex: none; font-size: var(--t-fine); color: var(--dim); font-variant-numeric: tabular-nums; }
   .meter-row { display: grid; gap: 6px; padding: 12px 14px; border-bottom: 1px solid var(--border); }
-  .meter { height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+  .meter { height: 4px; border-radius: var(--radius-sm); background: var(--border); overflow: hidden; }
   .meter i { display: block; height: 100%; background: var(--accent); transition: width var(--base, .2s) var(--ease); }
   .meter.full i { background: var(--red); }
   .free { font-size: var(--t-fine); color: var(--muted); }

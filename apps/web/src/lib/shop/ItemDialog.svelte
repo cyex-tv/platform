@@ -4,6 +4,7 @@
   // Starting the purchase closes it (Paddle's checkout opens above the page, and a modal would
   // hide it); the shop page then shows the progress (CheckoutStatus).
   import { tick } from 'svelte';
+  import Dialog from '$lib/components/Dialog.svelte';
   import type { ShopItemFieldsFragment } from '$lib/gql/graphql';
   import ItemBuy from './ItemBuy.svelte';
 
@@ -17,31 +18,30 @@
   };
   let { item, gift = false, name, signedIn, onclose }: Props = $props();
 
-  let dialog: HTMLDialogElement;
+  let dialog: Dialog;
   let buy = $state<ItemBuy>();
 
   $effect(() => {
-    if (item && !dialog.open) {
+    if (item && !dialog.isOpen()) {
       // The form is drawn for this item on the next tick; opening after it lets focus land on the
       // first control (who gets it, or the login for a gift), not the dialog itself.
       tick().then(() => {
-        if (!item || dialog.open) return;
-        dialog.showModal();
+        if (!item || dialog.isOpen()) return;
+        dialog.open();
         buy?.focusStart();
       });
-    } else if (!item && dialog.open) dialog.close();
+    } else if (!item && dialog.isOpen()) dialog.close();
   });
 </script>
 
-<dialog class="ui-dialog wide" bind:this={dialog} aria-labelledby="shop-item-title" onclose={onclose}>
+<Dialog wide bare class="shop-item" bind:this={dialog} titleId="shop-item-title" {onclose}>
   {#if item}
     {#key `${item.id}:${gift}`}
-      <ItemBuy bind:this={buy} {item} {gift} {name} {signedIn} onclose={() => dialog.close()} onstarted={() => dialog.close()} showing={() => !!dialog?.open} />
+      <ItemBuy bind:this={buy} {item} {gift} {name} {signedIn} onclose={() => dialog.close()} onstarted={() => dialog.close()} showing={() => !!dialog?.isOpen()} />
     {/key}
   {/if}
-</dialog>
+</Dialog>
 
 <style>
-  .wide { width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); }
-  .wide :global(form) { max-height: calc(100dvh - 24px); grid-template-rows: minmax(0, 1fr) auto; }
+  :global(.ui-dialog.shop-item form) { max-height: calc(100dvh - 24px); grid-template-rows: minmax(0, 1fr) auto; }
 </style>
