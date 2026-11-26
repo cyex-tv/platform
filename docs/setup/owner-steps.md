@@ -125,7 +125,7 @@ CYEX_TV_CLOUDFLARE_PURGE_TOKEN=<token value>
 
 The website's Node server sets its security headers and a Content-Security-Policy on every page
 it renders. Prerendered pages are files the server sends as they are, without that code: today
-only `/developers` (the API docs). They carry their script policy in a `<meta>` tag, but a
+`/developers` (the API docs), `/help`, `/guidelines`, `/changelog` and `/download`. They carry their script policy in a `<meta>` tag, but a
 `<meta>` policy can't say `frame-ancestors`, and the other headers aren't there at all. These two
 rules add them at Cloudflare. Nothing here touches cyex.app, api.cyex.tv or cdn.cyex.tv.
 
@@ -155,7 +155,7 @@ Only for the prerendered paths: **Set** replaces a header, and on every other pa
 replace the server's full policy (with its per-request nonce) with this short one.
 - Custom filter expression:
   ```
-  (http.host eq "cyex.tv" and http.request.uri.path in {"/developers" "/developers/"})
+  (http.host eq "cyex.tv" and http.request.uri.path in {"/developers" "/developers/" "/help" "/help/" "/guidelines" "/guidelines/" "/changelog" "/changelog/" "/download" "/download/"})
   ```
 - Then, operation **Set static**:
 
@@ -165,7 +165,7 @@ replace the server's full policy (with its per-request nonce) with this short on
 
   The page's own `<meta>` policy (scripts by hash, styles, images, connections) still applies;
   the browser enforces both.
-- Deploy. If a later release prerenders another page, add its path to this expression (the
+- Deploy. If a later release prerenders another page, add its path (and the trailing-slash form) to this expression; a test (`src/prerender-doc.test.ts`) fails until you do (the
   build lists them under `apps/web/build/prerendered/`).
 
 ## 3. Check

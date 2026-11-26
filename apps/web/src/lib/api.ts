@@ -1,5 +1,6 @@
 // Talking to api.cyex.tv. The browser sends the session cookie itself (credentials: 'include';
 // the API allows it for this site's origin). Server-side rendering only asks for public data.
+import { browser } from '$app/environment';
 import { env } from '$env/dynamic/public';
 import { serverMessage, unreachableMessage } from './components/problem';
 import type { TypedDocumentString } from './gql/graphql';
@@ -67,7 +68,8 @@ export async function gql<TResult, TVariables>(
   try {
     response = await fetcher(`${apiUrl()}/v1/gql`, {
       method: 'POST',
-      credentials: 'include',
+      // The server-side render never forwards the visitor's cookie to the API subdomain.
+      credentials: browser ? 'include' : 'omit',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ query: doc.toString(), variables }),
       signal,
@@ -90,9 +92,10 @@ export async function gql<TResult, TVariables>(
   return body.data;
 }
 
-/** `back` when it is a path on this site; otherwise `/`. Rejects `//host` and backslash forms that browsers read as another host. */
+/** `back` when it is a path on this site; otherwise `/`. Rejects `//host`, backslash and control-character (tab, newline) forms that browsers read as another host. */
 export function safeBack(back: string): string {
-  return back.startsWith('/') && !back.startsWith('//') && !back.includes('\\') ? back : '/';
+  if (/[\u0000-\u001F\u007F\\]/.test(back)) return '/';
+  return back.startsWith('/') && !back.startsWith('//') ? back : '/';
 }
 
 /** The address that starts signing in with a platform, and comes back to `back`. */

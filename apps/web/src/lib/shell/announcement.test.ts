@@ -38,7 +38,7 @@ describe('links', () => {
   it('keeps paths here and https only', () => {
     expect(safeLink('/shop')).toBe('/shop');
     expect(safeLink(' https://example.com/a ')).toBe('https://example.com/a');
-    for (const bad of ['//evil.example', '/\\evil', 'http://example.com', 'javascript:alert(1)', 'data:text/html,x', '', null]) expect(safeLink(bad)).toBeNull();
+    for (const bad of ['//evil.example', '/\\evil', '/\t/evil.example', '/\n/x', ' /\t/evil.example', 'http://example.com', 'javascript:alert(1)', 'data:text/html,x', '', null]) expect(safeLink(bad)).toBeNull();
   });
 
   it('opens only other sites in a new tab', () => {

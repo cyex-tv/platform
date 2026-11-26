@@ -26,6 +26,14 @@ describe('hooks.server security headers', () => {
     expect(r.headers.get('X-Content-Type-Options')).toBe('nosniff');
   });
 
+  it('marks rendered HTML private, no-store, and leaves other responses and own values alone', async () => {
+    const html = (h: Record<string, string> = {}) => new Response('<p>x</p>', { headers: { 'content-type': 'text/html; charset=utf-8', ...h } });
+    expect((await run('http://localhost/', html())).headers.get('Cache-Control')).toBe('private, no-store');
+    expect((await run('http://localhost/', html({ 'Cache-Control': 'max-age=60' }))).headers.get('Cache-Control')).toBe('max-age=60');
+    const asset = new Response('x', { headers: { 'content-type': 'text/javascript' } });
+    expect((await run('http://localhost/a.js', asset)).headers.get('Cache-Control')).toBeNull();
+  });
+
   it('adds HSTS on https only, and keeps one a route set', async () => {
     expect((await run('http://localhost/', new Response('ok'))).headers.get('Strict-Transport-Security')).toBeNull();
     expect((await run('https://cyex.tv/', new Response('ok'))).headers.get('Strict-Transport-Security')).toBe('max-age=31536000');

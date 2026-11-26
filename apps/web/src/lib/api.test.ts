@@ -14,9 +14,26 @@ describe('safeBack', () => {
     }
   });
 
+  it('refuses tabs, newlines and other control characters (browsers strip them into //host)', () => {
+    for (const bad of ['/\t/evil.test', '/\n/x', '/\r/x', '/\u0000/x', '/\u007F/x', ' /\t/evil.test']) expect(safeBack(bad)).toBe('/');
+    expect(safeBack('/%09/x')).toBe('/%09/x');
+  });
+
   it('is applied to the sign-in address', () => {
     expect(signInUrl('twitch', '//evil.test')).toContain('return_to=%2F');
     expect(signInUrl('twitch', '//evil.test')).not.toContain('evil');
+  });
+});
+
+describe('gql credentials', () => {
+  it('sends no cookie on the server (SSR): credentials omit', async () => {
+    let seen: RequestInit | undefined;
+    const spy = (async (_u: unknown, init?: RequestInit) => {
+      seen = init;
+      return new Response(JSON.stringify({ data: { ok: true } }));
+    }) as unknown as typeof fetch;
+    await gql({ toString: () => 'query { ok }' } as never, {}, spy);
+    expect(seen?.credentials).toBe('omit');
   });
 });
 
