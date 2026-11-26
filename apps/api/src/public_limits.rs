@@ -144,7 +144,7 @@ mod tests {
         assert!(l.account.is_empty());
         let reads = l.rates.iter().find(|r| r.key == "reads").unwrap();
         assert_eq!((reads.count, reads.window_seconds), (1200, 60));
-        assert_eq!(l.rates.len(), 20);
+        assert_eq!(l.rates.len(), 21);
     }
 
     #[test]

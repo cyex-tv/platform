@@ -1,7 +1,9 @@
 <script lang="ts">
   // Channels: your channel on each platform you signed in with, and the channels of accounts you
-  // edit, each with the set its chat shows and whether chatters' personal emotes show. In your
+  // edit, each with the set its chat shows, whether chatters' personal emotes show and its
+  // webhooks (ADR 0034, folded until opened). In your
   // profile's frame (MeFrame); the panel sums them up and links to what they depend on.
+  import ChannelWebhooks from '$lib/account/ChannelWebhooks.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import FactRows from '$lib/components/FactRows.svelte';
   import LinkRows from '$lib/components/LinkRows.svelte';
@@ -73,7 +75,7 @@
 
 <svelte:head><title>Channels - cyex.tv</title></svelte:head>
 
-{#snippet block(ch: Channel, options: { id: string; name: string }[], owner?: string)}
+{#snippet block(ch: Channel, options: { id: string; name: string }[], owner?: string, hooks = true)}
   {@const busy = saving.has(`${ch.platform}:${ch.platformChannelId}`)}
   {@const key = `${ch.platform}-${ch.platformChannelId}`.toLowerCase()}
   <div class="ch" data-platform={ch.platform.toLowerCase()}>
@@ -97,6 +99,8 @@
       <input id="pe-{key}" class="ui-switch" type="checkbox" aria-disabled={busy} checked={ch.allowPersonalEmotes}
         onchange={(e) => { const el = e.currentTarget; update(ch, { allowPersonalEmotes: el.checked }, () => (el.checked = ch.allowPersonalEmotes)); }} />
     </Row>
+    <!-- Webhooks (ADR 0034): the owner, and editors with the channel settings permission. -->
+    {#if hooks}<ChannelWebhooks platform={ch.platform} id={ch.platformChannelId} {key} />{/if}
   </div>
 {/snippet}
 
@@ -150,7 +154,7 @@
     {#each managed as g (g.ownerId)}
       <Section title="{clean(g.channels[0].account.displayName)} · Editor" id="of-{g.ownerId}" lead="You edit this account: {permissionLabels(g.permissions)}">
         {#each g.channels as ch (ch.platform + ch.platformChannelId)}
-          {@render block(ch, g.sets, g.channels[0].account.displayName)}
+          {@render block(ch, g.sets, g.channels[0].account.displayName, g.permissions.includes('CHANNELS'))}
         {/each}
       </Section>
     {/each}

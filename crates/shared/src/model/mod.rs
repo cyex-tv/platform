@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
 pub use crate::cosmetics::*;
+pub use crate::developers::*;
 pub use crate::public_limits::*;
 pub use crate::shop::*;
 pub use crate::site::*;

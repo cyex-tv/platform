@@ -29,6 +29,7 @@ use sqlx::postgres::PgListener;
 pub mod cosmetics;
 pub mod purge;
 pub mod transcode;
+pub mod webhooks;
 
 /// How a job failed.
 #[derive(Debug, thiserror::Error)]
@@ -541,6 +542,14 @@ pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
     let ranked = search::refresh_popularity(&mut conn).await?;
     // Stored channel counts, all of them (the minutely refresh only does the queued ones).
     let counts_reconciled = channel_counts::reconcile_all(&mut conn).await?;
+    // Developer platform (ADR 0033, 0034): key usage past the 30 days shown, and deliveries
+    // whose job was lost.
+    let key_usage = cyex_tv_db::api_keys::delete_usage_before(
+        &mut conn,
+        Utc::now().date_naive() - chrono::Duration::days(31),
+    )
+    .await?;
+    let stale_deliveries = cyex_tv_db::webhooks::fail_stale(&mut conn).await?;
     drop(conn);
     let orders_expired = expire_orders(db).await?;
     let refunds_reverted = revert_refunds(db).await?;
@@ -559,6 +568,8 @@ pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
         accounts_erased,
         ranked,
         counts_reconciled,
+        key_usage,
+        stale_deliveries,
         "cleaned up"
     );
     Ok(())

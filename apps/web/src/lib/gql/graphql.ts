@@ -399,6 +399,32 @@ export type ApiDeprecation = {
   what: Scalars['String']['output'];
 };
 
+/** One of your developer API keys. The key itself is shown once, when it is made. */
+export type ApiKey = {
+  __typename?: 'ApiKey';
+  createdAt: Scalars['String']['output'];
+  id: Scalars['String']['output'];
+  /** When it last made a request, to the minute or so. `None` until it is used. */
+  lastUsedAt?: Maybe<Scalars['String']['output']>;
+  /** What you called it. */
+  name: Scalars['String']['output'];
+  /** The start of the key (`cyex_live_` and 8 more characters), to tell keys apart. */
+  prefix: Scalars['String']['output'];
+  /**
+   * Requests it made per UTC day, the last 30 days, oldest first; days without any are left
+   * out. Written every minute or so, so the last minute may be missing.
+   */
+  usage: Array<ApiKeyDay>;
+};
+
+/** One day of an API key's requests. */
+export type ApiKeyDay = {
+  __typename?: 'ApiKeyDay';
+  /** The UTC day, `YYYY-MM-DD`. */
+  day: Scalars['String']['output'];
+  requests: Scalars['Int']['output'];
+};
+
 /** Where the limits are published. */
 export type ApiLimitsLink = {
   __typename?: 'ApiLimitsLink';
@@ -698,11 +724,39 @@ export type CreateSetInput = {
   visibility?: InputMaybe<SetVisibility>;
 };
 
+/** A new webhook. */
+export type CreateWebhookInput = {
+  /**
+   * At least one of: `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED`,
+   * `CHANNEL_ACTIVE_SET_CHANGED`, `EMOTE_UPDATED`, `COSMETIC_CREATED`, `COSMETIC_UPDATED`,
+   * `COSMETIC_DELETED`.
+   */
+  events: Array<EventType>;
+  /** An `https://` URL on a public address. */
+  url: Scalars['String']['input'];
+};
+
+/** A key just made: the key itself is in this answer only. */
+export type CreatedApiKey = {
+  __typename?: 'CreatedApiKey';
+  apiKey: ApiKey;
+  /** Send as `Authorization: Bearer <key>`. It reads public data only. */
+  key: Scalars['String']['output'];
+};
+
 /** A new batch and its codes in plain text. This is the only time they are shown. */
 export type CreatedCodeBatch = {
   __typename?: 'CreatedCodeBatch';
   batch: CodeBatch;
   codes: Array<Scalars['String']['output']>;
+};
+
+/** A webhook just made, or its secret just replaced: the secret is in this answer only. */
+export type CreatedWebhook = {
+  __typename?: 'CreatedWebhook';
+  /** Signs every delivery (`X-Cyex-Signature`). Keep it on your server. */
+  secret: Scalars['String']['output'];
+  webhook: Webhook;
 };
 
 /** Another emote that may be the same as one in the review queue. */
@@ -1279,6 +1333,12 @@ export type Mutation = {
    */
   createAnnouncement: Announcement;
   /**
+   * Make a developer API key: a Bearer token for bots and tools that reads public data at a
+   * higher rate than signed-out requests. The key is in this answer only. At most 10 per
+   * account (`too_many_api_keys`); made on cyex.tv only (`website_only` with a token).
+   */
+  createApiKey: CreatedApiKey;
+  /**
    * Make a badge from a ready badge picture (`POST /v1/cosmetics/images`). Needs
    * `cosmetics.manage`. Audited; publishes `cosmetic.created`.
    */
@@ -1309,6 +1369,11 @@ export type Mutation = {
   createSet: EmoteSet;
   /** Make a shop item: a bundle of 1 to 10 badges and paints. Needs `shop.manage`. Audited. */
   createShopItem: ShopItem;
+  /**
+   * Point a channel's events at an https URL. The secret that signs every delivery is in this
+   * answer only. At most 5 per channel (`too_many_webhooks`).
+   */
+  createWebhook: CreatedWebhook;
   /**
    * Decline an editor's transfer request of your emote. None are open any more
    * (`not_pending`).
@@ -1362,6 +1427,8 @@ export type Mutation = {
   deleteShopItem: Scalars['Boolean']['output'];
   /** Delete a staff note: its author may, and the owner. False if it was gone. Audited. */
   deleteStaffNote: Scalars['Boolean']['output'];
+  /** Delete a webhook and its delivery log. */
+  deleteWebhook: Scalars['Boolean']['output'];
   /** Turn off every code of a batch. Needs `codes.manage`. Audited. */
   disableCodeBatch: CodeBatch;
   /**
@@ -1486,6 +1553,8 @@ export type Mutation = {
    * outcome instead of listing every emote as `not_pending`.
    */
   reviewEmotes: BatchOutcome;
+  /** Revoke one of your API keys; it stops working at once. False when there was no such key. */
+  revokeApiKey: Scalars['Boolean']['output'];
   /**
    * Take a badge or paint away; if they showed it, it stops. False when they didn't own it.
    * Needs `cosmetics.grant`. Audited.
@@ -1501,6 +1570,8 @@ export type Mutation = {
    * when you have none with that ID.
    */
   revokeSession: Scalars['Boolean']['output'];
+  /** Replace a webhook's secret. The new one is in this answer only; the old one stops at once. */
+  rotateWebhookSecret: CreatedWebhook;
   /**
    * Pick the badge and paint you show, from what you own (ADR 0015). Leave a field out to keep
    * it; send null or an empty string to show none. With `ownerId`, for an account you edit
@@ -1564,6 +1635,8 @@ export type Mutation = {
    * its owners told. Needs `emotes.takedown`. Audited.
    */
   takedownEmote: Emote;
+  /** Send a `webhook.test` delivery now (once, no retries), even while the webhook is off. */
+  testWebhook: WebhookDelivery;
   /**
    * Give your emote to another account (ADR 0014), at once (`emote.transferred`). Only the
    * emote's owner may: anyone else, account editors included, gets `forbidden` (amendment
@@ -1630,6 +1703,8 @@ export type Mutation = {
    * `shop.manage`. Audited.
    */
   updateShopItem: ShopItem;
+  /** Change a webhook's URL or events, or turn it off or on again. */
+  updateWebhook: Webhook;
 };
 
 
@@ -1699,6 +1774,11 @@ export type MutationCreateAnnouncementArgs = {
 };
 
 
+export type MutationCreateApiKeyArgs = {
+  name: Scalars['String']['input'];
+};
+
+
 export type MutationCreateBadgeArgs = {
   input: CreateBadgeInput;
 };
@@ -1726,6 +1806,13 @@ export type MutationCreateSetArgs = {
 
 export type MutationCreateShopItemArgs = {
   input: ShopItemInput;
+};
+
+
+export type MutationCreateWebhookArgs = {
+  id: Scalars['String']['input'];
+  input: CreateWebhookInput;
+  platform: Platform;
 };
 
 
@@ -1775,6 +1862,11 @@ export type MutationDeleteShopItemArgs = {
 
 
 export type MutationDeleteStaffNoteArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type MutationDeleteWebhookArgs = {
   id: Scalars['String']['input'];
 };
 
@@ -1908,6 +2000,11 @@ export type MutationReviewEmotesArgs = {
 };
 
 
+export type MutationRevokeApiKeyArgs = {
+  id: Scalars['String']['input'];
+};
+
+
 export type MutationRevokeCosmeticArgs = {
   accountId: Scalars['String']['input'];
   cosmeticId: Scalars['String']['input'];
@@ -1917,6 +2014,11 @@ export type MutationRevokeCosmeticArgs = {
 
 
 export type MutationRevokeSessionArgs = {
+  id: Scalars['String']['input'];
+};
+
+
+export type MutationRotateWebhookSecretArgs = {
   id: Scalars['String']['input'];
 };
 
@@ -1970,6 +2072,11 @@ export type MutationStartCheckoutArgs = {
 export type MutationTakedownEmoteArgs = {
   id: Scalars['String']['input'];
   reason: Scalars['String']['input'];
+};
+
+
+export type MutationTestWebhookArgs = {
+  id: Scalars['String']['input'];
 };
 
 
@@ -2066,6 +2173,12 @@ export type MutationUpdateSetEmoteArgs = {
 export type MutationUpdateShopItemArgs = {
   id: Scalars['String']['input'];
   input: ShopItemInput;
+};
+
+
+export type MutationUpdateWebhookArgs = {
+  id: Scalars['String']['input'];
+  input: UpdateWebhookInput;
 };
 
 /** The lengths of the names and notes clients type. */
@@ -2546,6 +2659,11 @@ export type Query = {
    */
   channelEditableSets?: Maybe<ChannelEditableSets>;
   /**
+   * A channel's webhooks, for its owner and its account editors with the channel settings
+   * permission (`forbidden` for anyone else).
+   */
+  channelWebhooks: Array<Webhook>;
+  /**
    * Redeem code batches, newest first. Needs `codes.manage`. The codes themselves are shown
    * only once, by `createCodeBatch`.
    */
@@ -2678,6 +2796,11 @@ export type Query = {
    * is deprecated, with the sunset date of each. Public. Same as `GET /v1/meta`.
    */
   meta: ApiMeta;
+  /**
+   * Your developer API keys, oldest first, each with its requests per day for the last 30
+   * days. Never the keys themselves.
+   */
+  myApiKeys: Array<ApiKey>;
   /** Your channels: one per linked platform you have signed in with. */
   myChannels: Array<Channel>;
   /**
@@ -2863,6 +2986,8 @@ export type Query = {
    * something are listed.
    */
   userCosmetics: Array<UserCosmetics>;
+  /** A webhook's latest deliveries, newest first (the last 50 are kept). */
+  webhookDeliveries: Array<WebhookDelivery>;
 };
 
 
@@ -3011,6 +3136,12 @@ export type QueryChannelByLoginArgs = {
 export type QueryChannelEditableSetsArgs = {
   id?: InputMaybe<Scalars['String']['input']>;
   login?: InputMaybe<Scalars['String']['input']>;
+  platform: Platform;
+};
+
+
+export type QueryChannelWebhooksArgs = {
+  id: Scalars['String']['input'];
   platform: Platform;
 };
 
@@ -3268,6 +3399,11 @@ export type QueryUploadQuotaArgs = {
 export type QueryUserCosmeticsArgs = {
   platform: Platform;
   userIds: Array<Scalars['String']['input']>;
+};
+
+
+export type QueryWebhookDeliveriesArgs = {
+  id: Scalars['String']['input'];
 };
 
 /** The header search: the best emotes and accounts for one query. */
@@ -3802,6 +3938,14 @@ export type UpdateSetInput = {
   visibility?: InputMaybe<SetVisibility>;
 };
 
+/** What to change on a webhook; what is left out stays. */
+export type UpdateWebhookInput = {
+  /** Turning it on again starts its failure count over. */
+  enabled?: InputMaybe<Scalars['Boolean']['input']>;
+  events?: InputMaybe<Array<EventType>>;
+  url?: InputMaybe<Scalars['String']['input']>;
+};
+
 /**
  * Where an account stands with uploads (`uploadQuota`): how many of its emotes wait for review
  * and how many may, and its uploads this hour.
@@ -3831,6 +3975,43 @@ export type UserCosmetics = {
   badgeId?: Maybe<Scalars['String']['output']>;
   paintId?: Maybe<Scalars['String']['output']>;
   platformUserId: Scalars['String']['output'];
+};
+
+/** A channel's webhook: where its events are sent. */
+export type Webhook = {
+  __typename?: 'Webhook';
+  createdAt: Scalars['String']['output'];
+  /** Why it is off: `manual` or `failures`. `None` while it is on. */
+  disabledReason?: Maybe<Scalars['String']['output']>;
+  /** Off: nothing is sent. It is turned off by hand, or after 5 deliveries in a row failed. */
+  enabled: Scalars['Boolean']['output'];
+  /** The event types it is sent. */
+  events: Array<EventType>;
+  /** Deliveries in a row that failed after every retry. */
+  failedDeliveries: Scalars['Int']['output'];
+  id: Scalars['String']['output'];
+  url: Scalars['String']['output'];
+};
+
+/** One delivery of a webhook: what was sent and how it went. */
+export type WebhookDelivery = {
+  __typename?: 'WebhookDelivery';
+  attempts: Scalars['Int']['output'];
+  createdAt: Scalars['String']['output'];
+  /** How long the last attempt took, in milliseconds. */
+  durationMs?: Maybe<Scalars['Int']['output']>;
+  /** What went wrong on the last attempt. */
+  error?: Maybe<Scalars['String']['output']>;
+  /** The outbox event's ID, as the event sockets send it. `None` for a test. */
+  eventId?: Maybe<Scalars['String']['output']>;
+  /** The event's type, or `webhook.test` for Send test. */
+  eventType: Scalars['String']['output'];
+  finishedAt?: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  /** The receiver's HTTP status on the last attempt, if it answered. */
+  responseStatus?: Maybe<Scalars['Int']['output']>;
+  /** `pending`, `delivered` or `failed`. */
+  state: Scalars['String']['output'];
 };
 
 export type StudioPaintFieldsFragment = { __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, updatedAt: string, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, host: string, ready: boolean, width: number, height: number, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, isStatic: boolean }> } | null };
@@ -4182,6 +4363,80 @@ export type RevokeCosmeticMutationVariables = Exact<{
 
 
 export type RevokeCosmeticMutation = { __typename?: 'Mutation', revokeCosmetic: boolean };
+
+export type MyApiKeysQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type MyApiKeysQuery = { __typename?: 'Query', myApiKeys: Array<{ __typename?: 'ApiKey', id: string, name: string, prefix: string, createdAt: string, lastUsedAt?: string | null, usage: Array<{ __typename?: 'ApiKeyDay', day: string, requests: number }> }> };
+
+export type CreateApiKeyMutationVariables = Exact<{
+  name: Scalars['String']['input'];
+}>;
+
+
+export type CreateApiKeyMutation = { __typename?: 'Mutation', createApiKey: { __typename?: 'CreatedApiKey', key: string, apiKey: { __typename?: 'ApiKey', id: string, name: string, prefix: string, createdAt: string, lastUsedAt?: string | null, usage: Array<{ __typename?: 'ApiKeyDay', day: string, requests: number }> } } };
+
+export type RevokeApiKeyMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type RevokeApiKeyMutation = { __typename?: 'Mutation', revokeApiKey: boolean };
+
+export type WebhookFieldsFragment = { __typename?: 'Webhook', id: string, url: string, events: Array<EventType>, enabled: boolean, disabledReason?: string | null, failedDeliveries: number, createdAt: string };
+
+export type ChannelWebhooksQueryVariables = Exact<{
+  platform: Platform;
+  id: Scalars['String']['input'];
+}>;
+
+
+export type ChannelWebhooksQuery = { __typename?: 'Query', channelWebhooks: Array<{ __typename?: 'Webhook', id: string, url: string, events: Array<EventType>, enabled: boolean, disabledReason?: string | null, failedDeliveries: number, createdAt: string }> };
+
+export type CreateWebhookMutationVariables = Exact<{
+  platform: Platform;
+  id: Scalars['String']['input'];
+  input: CreateWebhookInput;
+}>;
+
+
+export type CreateWebhookMutation = { __typename?: 'Mutation', createWebhook: { __typename?: 'CreatedWebhook', secret: string, webhook: { __typename?: 'Webhook', id: string, url: string, events: Array<EventType>, enabled: boolean, disabledReason?: string | null, failedDeliveries: number, createdAt: string } } };
+
+export type UpdateWebhookMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: UpdateWebhookInput;
+}>;
+
+
+export type UpdateWebhookMutation = { __typename?: 'Mutation', updateWebhook: { __typename?: 'Webhook', id: string, url: string, events: Array<EventType>, enabled: boolean, disabledReason?: string | null, failedDeliveries: number, createdAt: string } };
+
+export type DeleteWebhookMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DeleteWebhookMutation = { __typename?: 'Mutation', deleteWebhook: boolean };
+
+export type RotateWebhookSecretMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type RotateWebhookSecretMutation = { __typename?: 'Mutation', rotateWebhookSecret: { __typename?: 'CreatedWebhook', secret: string, webhook: { __typename?: 'Webhook', id: string, url: string, events: Array<EventType>, enabled: boolean, disabledReason?: string | null, failedDeliveries: number, createdAt: string } } };
+
+export type TestWebhookMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type TestWebhookMutation = { __typename?: 'Mutation', testWebhook: { __typename?: 'WebhookDelivery', id: string, state: string } };
+
+export type WebhookDeliveriesQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type WebhookDeliveriesQuery = { __typename?: 'Query', webhookDeliveries: Array<{ __typename?: 'WebhookDelivery', id: string, eventType: string, eventId?: string | null, state: string, attempts: number, responseStatus?: number | null, error?: string | null, durationMs?: number | null, createdAt: string, finishedAt?: string | null }> };
 
 export type AccountEditorFieldsFragment = { __typename?: 'AccountEditor', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null };
 
@@ -5139,6 +5394,17 @@ export const StudioPaintFieldsFragmentDoc = new TypedDocumentString(`
   updatedAt
 }
     `, {"fragmentName":"StudioPaintFields"}) as unknown as TypedDocumentString<StudioPaintFieldsFragment, unknown>;
+export const WebhookFieldsFragmentDoc = new TypedDocumentString(`
+    fragment WebhookFields on Webhook {
+  id
+  url
+  events
+  enabled
+  disabledReason
+  failedDeliveries
+  createdAt
+}
+    `, {"fragmentName":"WebhookFields"}) as unknown as TypedDocumentString<WebhookFieldsFragment, unknown>;
 export const AccountEditorFieldsFragmentDoc = new TypedDocumentString(`
     fragment AccountEditorFields on AccountEditor {
   account {
@@ -6506,6 +6772,139 @@ export const RevokeCosmeticDocument = new TypedDocumentString(`
   )
 }
     `) as unknown as TypedDocumentString<RevokeCosmeticMutation, RevokeCosmeticMutationVariables>;
+export const MyApiKeysDocument = new TypedDocumentString(`
+    query MyApiKeys {
+  myApiKeys {
+    id
+    name
+    prefix
+    createdAt
+    lastUsedAt
+    usage {
+      day
+      requests
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<MyApiKeysQuery, MyApiKeysQueryVariables>;
+export const CreateApiKeyDocument = new TypedDocumentString(`
+    mutation CreateApiKey($name: String!) {
+  createApiKey(name: $name) {
+    key
+    apiKey {
+      id
+      name
+      prefix
+      createdAt
+      lastUsedAt
+      usage {
+        day
+        requests
+      }
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<CreateApiKeyMutation, CreateApiKeyMutationVariables>;
+export const RevokeApiKeyDocument = new TypedDocumentString(`
+    mutation RevokeApiKey($id: String!) {
+  revokeApiKey(id: $id)
+}
+    `) as unknown as TypedDocumentString<RevokeApiKeyMutation, RevokeApiKeyMutationVariables>;
+export const ChannelWebhooksDocument = new TypedDocumentString(`
+    query ChannelWebhooks($platform: Platform!, $id: String!) {
+  channelWebhooks(platform: $platform, id: $id) {
+    ...WebhookFields
+  }
+}
+    fragment WebhookFields on Webhook {
+  id
+  url
+  events
+  enabled
+  disabledReason
+  failedDeliveries
+  createdAt
+}`) as unknown as TypedDocumentString<ChannelWebhooksQuery, ChannelWebhooksQueryVariables>;
+export const CreateWebhookDocument = new TypedDocumentString(`
+    mutation CreateWebhook($platform: Platform!, $id: String!, $input: CreateWebhookInput!) {
+  createWebhook(platform: $platform, id: $id, input: $input) {
+    secret
+    webhook {
+      ...WebhookFields
+    }
+  }
+}
+    fragment WebhookFields on Webhook {
+  id
+  url
+  events
+  enabled
+  disabledReason
+  failedDeliveries
+  createdAt
+}`) as unknown as TypedDocumentString<CreateWebhookMutation, CreateWebhookMutationVariables>;
+export const UpdateWebhookDocument = new TypedDocumentString(`
+    mutation UpdateWebhook($id: String!, $input: UpdateWebhookInput!) {
+  updateWebhook(id: $id, input: $input) {
+    ...WebhookFields
+  }
+}
+    fragment WebhookFields on Webhook {
+  id
+  url
+  events
+  enabled
+  disabledReason
+  failedDeliveries
+  createdAt
+}`) as unknown as TypedDocumentString<UpdateWebhookMutation, UpdateWebhookMutationVariables>;
+export const DeleteWebhookDocument = new TypedDocumentString(`
+    mutation DeleteWebhook($id: String!) {
+  deleteWebhook(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeleteWebhookMutation, DeleteWebhookMutationVariables>;
+export const RotateWebhookSecretDocument = new TypedDocumentString(`
+    mutation RotateWebhookSecret($id: String!) {
+  rotateWebhookSecret(id: $id) {
+    secret
+    webhook {
+      ...WebhookFields
+    }
+  }
+}
+    fragment WebhookFields on Webhook {
+  id
+  url
+  events
+  enabled
+  disabledReason
+  failedDeliveries
+  createdAt
+}`) as unknown as TypedDocumentString<RotateWebhookSecretMutation, RotateWebhookSecretMutationVariables>;
+export const TestWebhookDocument = new TypedDocumentString(`
+    mutation TestWebhook($id: String!) {
+  testWebhook(id: $id) {
+    id
+    state
+  }
+}
+    `) as unknown as TypedDocumentString<TestWebhookMutation, TestWebhookMutationVariables>;
+export const WebhookDeliveriesDocument = new TypedDocumentString(`
+    query WebhookDeliveries($id: String!) {
+  webhookDeliveries(id: $id) {
+    id
+    eventType
+    eventId
+    state
+    attempts
+    responseStatus
+    error
+    durationMs
+    createdAt
+    finishedAt
+  }
+}
+    `) as unknown as TypedDocumentString<WebhookDeliveriesQuery, WebhookDeliveriesQueryVariables>;
 export const EditorsDocument = new TypedDocumentString(`
     query Editors {
   accountEditors {

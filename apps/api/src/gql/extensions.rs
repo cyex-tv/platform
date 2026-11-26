@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use super::coded;
 
-/// App sign-in sessions (ADR 0021) run only the mutations their scopes name and the queries
+/// Requests with a developer API key run no mutations (ADR 0033). App sign-in sessions (ADR 0021) run only the mutations their scopes name and the queries
 /// `app::APP_QUERIES` lists (no staff reads). Checked per resolved top-level field, so aliases
 /// and fragments change nothing.
 pub(super) struct AppScopes;
@@ -26,6 +26,18 @@ impl async_graphql::extensions::Extension for AppScopes {
         info: async_graphql::extensions::ResolveInfo<'_>,
         next: async_graphql::extensions::NextResolve<'_>,
     ) -> async_graphql::ServerResult<Option<async_graphql::Value>> {
+        // A developer API key (ADR 0033) only reads: it runs signed out, and no mutation runs
+        // with it, not even one a signed-out person could.
+        let keyed = ctx
+            .data_opt::<Option<crate::developers::KeyUse>>()
+            .is_some_and(Option::is_some);
+        if keyed && info.parent_type == "Mutation" {
+            return Err(coded(
+                "api_key_read_only",
+                "API keys read public data only. Sign in on cyex.tv for anything else.",
+            )
+            .into_server_error(async_graphql::Pos::default()));
+        }
         let client = ctx
             .data_opt::<Option<Caller>>()
             .and_then(Option::as_ref)

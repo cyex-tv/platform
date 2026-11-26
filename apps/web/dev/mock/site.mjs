@@ -26,7 +26,7 @@ const activeAnnouncement = () => {
 };
 const NOTE_KINDS = [['emote.approved', false], ['emote.rejected', false], ['emote.failed', false], ['emote.taken_down', true], ['emote.transfer_requested', true], ['emote.transferred', false],
   ['emote.transfer_declined', false], ['emote.transfer_cancelled', false], ['editor.added', false], ['editor.changed', false], ['editor.removed', false],
-  ['cosmetic.granted', false], ['cosmetic.revoked', false]];
+  ['cosmetic.granted', false], ['cosmetic.revoked', false], ['webhook.disabled', true]];
 const NOTE_PREFS = { off: new Set(), quiet: new Set() };
 const prefsOut = () => NOTE_KINDS.map(([kind, required]) => ({ kind, notify: required || !NOTE_PREFS.off.has(kind), toast: !NOTE_PREFS.quiet.has(kind), required }));
 export const COLLECTION_PUBLIC = { [OTHERS[0].id]: true, [OTHERS[4].id]: true };

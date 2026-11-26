@@ -38,6 +38,8 @@ pub struct AppState {
     pub reads: Arc<ReadCache>,
     /// The live site announcement, shared for as long as `reads` keeps entries (`site`).
     pub announcement: Arc<crate::site::AnnouncementCache>,
+    /// Requests per developer API key not yet written (ADR 0033, `developers::Usage::flush`).
+    pub key_usage: Arc<crate::developers::Usage>,
 }
 
 impl AppState {
@@ -53,6 +55,7 @@ impl AppState {
             paddle: None,
             reads: Arc::new(ReadCache::disabled()),
             announcement: Arc::default(),
+            key_usage: Arc::default(),
         }
     }
 

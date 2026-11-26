@@ -11,6 +11,7 @@ pub mod codes;
 pub mod console_token;
 pub mod cors;
 pub mod cosmetics;
+pub mod developers;
 pub mod editors;
 pub mod errors;
 pub mod gql;
@@ -34,6 +35,7 @@ pub mod top_people;
 pub mod transfers;
 pub mod upload;
 pub mod views;
+pub mod webhooks;
 
 use async_graphql::http::ALL_WEBSOCKET_PROTOCOLS;
 use async_graphql_axum::{GraphQLProtocol, GraphQLRequest, GraphQLResponse};
@@ -100,7 +102,7 @@ impl utoipa::Modify for ErrorCodes {
         (name = "emotes", description = "Uploading emotes."),
         (name = "cosmetics", description = "cyex.tv chat badges and name paints (ADR 0015): the catalog, chatters' picks, and staff picture uploads."),
         (name = "shop", description = "The cosmetics shop (ADR 0016): Paddle's webhook. Items, checkout, orders and codes are GraphQL."),
-        (name = "reads", description = "Public, cacheable reads for chat clients. Every answer carries `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (seconds until the allowance is full again); a `429` also has `Retry-After`.")
+        (name = "reads", description = "Public, cacheable reads for chat clients. Every answer carries `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (seconds until the allowance is full again); a `429` also has `Retry-After`. Bots can send a developer API key as `Authorization: Bearer cyex_live_...` (made on your cyex.tv profile, ADR 0033): it reads the same data under a limit of its own, which the headers then describe.")
     )
 )]
 pub struct ApiDoc;
@@ -184,10 +186,13 @@ fn pool_gauges(out: &mut String, db: &sqlx::PgPool) {
 
 /// `POST /v1/gql`, run as the caller. A cookie caller must send the site's `Origin`, since every
 /// POST counts as a write (`bad_origin` otherwise).
+// Each argument is an axum extractor; grouping them would only hide what the handler reads.
+#[allow(clippy::too_many_arguments)]
 async fn graphql(
     State(state): State<AppState>,
     Extension(schema): Extension<ApiSchema>,
     ip: Option<Extension<limits::ClientIp>>,
+    key: Option<Extension<developers::KeyUse>>,
     method: axum::http::Method,
     headers: axum::http::HeaderMap,
     MaybeCaller(caller): MaybeCaller,
@@ -227,6 +232,7 @@ async fn graphql(
                 .into_inner()
                 .data(caller)
                 .data(gql::Restorable(restorable))
+                .data(key.map(|Extension(k)| k))
                 .data(ip),
         )
         .await

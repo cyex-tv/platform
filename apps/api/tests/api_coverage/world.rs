@@ -93,6 +93,7 @@ pub fn open_rates() -> Rates {
         emote_transfers: r,
         personal_lists: r,
         prefs: r,
+        api_key: r,
         uploads_per_hour: 1_000_000,
         pending_emotes: 1_000_000,
         set_capacity_max: 1000,

@@ -6,6 +6,7 @@
 
 pub mod accounts;
 pub mod announcements;
+pub mod api_keys;
 pub mod app_auth;
 pub mod audit;
 pub mod blocklist;
@@ -40,6 +41,7 @@ pub mod staff;
 #[cfg(feature = "testing")]
 pub mod testing;
 pub mod transfers;
+pub mod webhooks;
 
 pub use error::{DbError, DbResult};
 

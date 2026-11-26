@@ -679,6 +679,10 @@ pub async fn restrict(
             sessions::delete_for_account(&mut tx, account_id, None)
                 .await
                 .map_err(db_error)?;
+            // A block ends the account's developer API keys too (ADR 0033).
+            cyex_tv_db::api_keys::delete_for_account(&mut tx, account_id)
+                .await
+                .map_err(db_error)?;
         }
     }
     record_audit(&mut tx, caller.account_id, Audit::new("account.restricted", "account", &ids::to_text(account_id)).change(Some(json!({ "uploads_blocked": before.restricted_at.is_some(), "blocked": before.blocked_at.is_some() })), Some(json!({ "uploads_blocked": after.restricted_at.is_some(), "blocked": after.blocked_at.is_some() }))))
@@ -718,6 +722,9 @@ pub async fn place(
     .map_err(db_error)?;
     if hold == Hold::Account {
         sessions::delete_for_account(&mut tx, account_id, None)
+            .await
+            .map_err(db_error)?;
+        cyex_tv_db::api_keys::delete_for_account(&mut tx, account_id)
             .await
             .map_err(db_error)?;
     }

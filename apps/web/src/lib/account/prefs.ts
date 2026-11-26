@@ -46,6 +46,11 @@ export const KIND_GROUPS: KindGroup[] = [
       k('cosmetic.revoked', 'Taken away', 'A badge or a paint was taken away, for example after a refund.'),
     ],
   },
+  {
+    id: 'developers',
+    label: 'Developers',
+    kinds: [k('webhook.disabled', 'Webhook turned off', 'A channel webhook was turned off after 5 failed deliveries in a row. Always on.')],
+  },
 ];
 
 /**

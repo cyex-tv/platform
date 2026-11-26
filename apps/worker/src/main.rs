@@ -1,5 +1,5 @@
 //! The worker: turns uploads into emote files (`emote.transcode`), deletes taken-down files and
-//! purges the CDN (`files.delete`), and runs the hourly clean-up.
+//! purges the CDN (`files.delete`), delivers channel webhooks (`webhook.deliver`), and runs the hourly clean-up.
 
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -48,6 +48,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .on(
             cyex_tv_worker::cosmetics::KIND,
             cyex_tv_worker::cosmetics::run,
+        )
+        .on(
+            cyex_tv_worker::webhooks::KIND,
+            cyex_tv_worker::webhooks::run,
         )
         .with_metrics(registry);
     let purge = cyex_tv_worker::purge::Purge::from_env(|name| std::env::var(name).ok())?;
