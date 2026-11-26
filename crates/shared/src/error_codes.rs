@@ -231,6 +231,13 @@ pub const ERROR_CODES: &[ErrorCode] = &[
     ),
     e(
         "General",
+        "bad_cursor",
+        "A paging cursor is not one this list gave out.",
+        "`after` was cut, edited or made up, comes from another list, or the list's filters or \
+         order changed since. Start again from the first page.",
+    ),
+    e(
+        "General",
         "bad_batch",
         "The batch size is out of range.",
         "A moderation batch has fewer than 1 or more than 100 items.",
@@ -845,7 +852,7 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "Admin",
         "bad_limit",
         "A limit value is not valid.",
-        "Role limits are 1 to 1,000,000 and listed once.",
+        "Role limits are 1 to 1,000,000 (a file limit up to its ceiling: an emote side at most 1000 px) and listed once.",
     ),
     e(
         "Admin",

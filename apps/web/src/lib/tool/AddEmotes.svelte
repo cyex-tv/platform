@@ -37,7 +37,8 @@
   /** How many public results the search found in all, and how many of them are in the list. */
   let found = $state(0);
   let fetched = $state(0);
-  let nextPage = $state(2);
+  /** Where the next page of public results starts (cursor paging); null when there is none. */
+  let after = $state<string | null>(null);
   let moreBusy = $state(false);
   let moreProblem = $state('');
   let problem = $state<string | null>(null);
@@ -88,7 +89,7 @@
       searched = text;
       found = everyone.searchEmotes.total;
       fetched = everyone.searchEmotes.items.length;
-      nextPage = 2;
+      after = everyone.searchEmotes.next ?? null;
       moreProblem = '';
     } catch (err) {
       if (mine !== token) return;
@@ -106,12 +107,13 @@
     moreBusy = true;
     moreProblem = '';
     try {
-      const r = await gql(SEARCH, { query: searched, page: nextPage, perPage: RESULT_PAGE });
+      if (!after) return;
+      const r = await gql(SEARCH, { query: searched, after, perPage: RESULT_PAGE });
       if (mine !== token || !results) return;
       results = appendResults(results, lists.visible(r.searchEmotes.items));
       fetched += r.searchEmotes.items.length;
       found = r.searchEmotes.total;
-      nextPage += 1;
+      after = r.searchEmotes.next ?? null;
     } catch (err) {
       if (mine !== token) return;
       moreProblem = err instanceof ApiError && err.code === 'rate_limited' ? err.message : 'That page didn’t load. Try again.';
@@ -199,7 +201,7 @@
         </li>
       {/each}
     </ul>
-    {#if found > fetched || moreProblem}
+    {#if (found > fetched && after) || moreProblem}
       <div class="more">
         <p class="ui-hint" role="status">{moreProblem || showingLine(fetched, found, count)}</p>
         <button class="ui-btn secondary small" type="button" disabled={moreBusy} aria-busy={moreBusy} onclick={loadMore}>

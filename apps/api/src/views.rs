@@ -345,6 +345,7 @@ pub async fn set(
 
 /// One page of a set's members the viewer may see, oldest first, narrowed by `query`, and how
 /// many match in all.
+#[allow(clippy::too_many_arguments)]
 pub async fn set_emotes(
     conn: &mut PgConnection,
     set: &Set,
@@ -353,7 +354,8 @@ pub async fn set_emotes(
     query: Option<&str>,
     limit: i64,
     offset: i64,
-) -> DbResult<(Vec<SetEmote>, i64)> {
+    after: Option<&[cyex_tv_db::keyset::Value]>,
+) -> DbResult<(Vec<SetEmote>, i64, Option<Vec<cyex_tv_db::keyset::Value>>)> {
     let edits: Vec<Uuid> = editable(conn, std::slice::from_ref(set), viewer)
         .await?
         .into_iter()
@@ -363,7 +365,9 @@ pub async fn set_emotes(
         reviewer: viewer.reviewer,
         edit_sets: &edits,
     };
-    let (rows, total) = reads::members_page(conn, set.id, &access, query, limit, offset).await?;
+    let (page, total) =
+        reads::members_page(conn, set.id, &access, query, limit, offset, after).await?;
+    let rows = page.rows;
     let emote_ids: Vec<Uuid> = rows.iter().map(|r| r.emote_id).collect();
     let tags = reads::tags(conn, &emote_ids).await?;
     let owners: Vec<Uuid> = rows
@@ -378,7 +382,7 @@ pub async fn set_emotes(
         .iter()
         .map(|row| set_emote(row, &tags, &summaries, &counts, cdn_url))
         .collect();
-    Ok((items, total))
+    Ok((items, total, page.next))
 }
 
 /// One member as `SetEmote`, for the answer to a set edit (the editor sees pending emotes).

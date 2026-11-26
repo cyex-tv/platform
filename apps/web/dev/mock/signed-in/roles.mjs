@@ -2,7 +2,7 @@
 import { ME_ID } from '../config.mjs';
 import { MINE } from '../emotes.mjs';
 import { PENDING } from '../review.mjs';
-import { ACCOUNT_ROLES, LIMIT_DEFAULTS, MEDIA_LIMITS, ROLES, ROLE_LIMITS, decisionsFor, limitOf, limitsOut, pendingOf, roleOut } from '../roles.mjs';
+import { ACCOUNT_ROLES, LIMIT_DEFAULTS, ROLES, ROLE_LIMITS, decisionsFor, limitMax, limitOf, limitsOut, pendingOf, roleOut } from '../roles.mjs';
 import { PERMISSIONS } from '../editors.mjs';
 import { emoteGrant, err } from '../sets.mjs';
 
@@ -61,7 +61,8 @@ export function signedInRoles(op, body, v, ADMIN) {
       for (const l of v.limits ?? []) {
         if (!LIMIT_DEFAULTS.some((d) => d[0] === l.key.trim())) return err(`"${l.key}" is not a limit.`, 'unknown_limit');
         if (l.value == null) continue;
-        if (!(Number.isInteger(l.value) && l.value >= 1 && l.value <= 1000000)) return err('Limits are 1 to 1000000; leave one empty to keep the default.', 'bad_limit');
+        const most = limitMax(l.key.trim());
+        if (!(Number.isInteger(l.value) && l.value >= 1 && l.value <= most)) return err(`${l.key.trim()} is 1 to ${most}; leave it empty to keep the default.`, 'bad_limit');
         next[l.key.trim()] = l.value;
       }
       ROLE_LIMITS[r.id] = next;
@@ -75,7 +76,7 @@ export function signedInRoles(op, body, v, ADMIN) {
       return { data: { uploadQuota: { accountId: owner, pending: pendingOf(owner), pendingMax: limitOf(owner, 'pending_emotes'),
         uploadsThisHour: [...MINE, ...PENDING].filter((e) => e.owner?.id === owner && Date.parse(e.createdAt) > hour).length,
         uploadsPerHour: limitOf(owner, 'uploads_per_hour'),
-        maxBytes: MEDIA_LIMITS.emote.maxBytes, maxSide: MEDIA_LIMITS.emote.maxSide, maxFrames: MEDIA_LIMITS.emote.maxFrames } } };
+        maxBytes: limitOf(ME_ID, 'emote_max_bytes'), maxSide: limitOf(ME_ID, 'emote_max_side'), maxFrames: limitOf(ME_ID, 'emote_max_frames') } } };
     }
     case 'DeleteRole': {
       const r = ROLES.find((x) => x.id === v.id);

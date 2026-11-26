@@ -9,6 +9,7 @@ import { ACCOUNT_EDITORS, EDITOR_CHANNELS } from './editors.mjs';
 import { C_SELECTED, cosmeticCatalog } from './cosmetics.mjs';
 import { err, findSet } from './sets.mjs';
 import { COLLECTION_PUBLIC } from './site.mjs';
+import { badCursor, pageOf } from './cursor.mjs';
 
 // searchAccounts(query, page, perPage): the mock's people by login or display name, exact login
 // first, then prefixes, then anything containing the text. Blocked accounts are never listed.
@@ -36,7 +37,9 @@ export function searchAccounts(v) {
     .filter((x) => x.m.tier >= 0)
     .sort((a, b) => b.m.tier - a.m.tier || b.m.score - a.m.score || a.h.account.id.localeCompare(b.h.account.id))
     .map((x) => x.h);
-  return { data: { searchAccounts: { total: hits.length, totalCapped: false, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
+  const p = pageOf(hits, { ...v, page }, 20, 50);
+  if (!p) return badCursor();
+  return { data: { searchAccounts: { total: hits.length, totalCapped: false, ...p } } };
 }
 
 // accountProfile(accountId): public logins (no IDs), roles marked public, each channel's active set.

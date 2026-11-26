@@ -92,7 +92,9 @@ pub struct PublicLimits {
     pub paint: MediaLimits,
     pub names: NameLimits,
     pub tags: TagLimits,
-    /// The per-IP request rates.
+    /// The request rates, by the name of their `CYEX_TV_LIMIT_*` variable: per IP for the route
+    /// classes (`auth`, `gql`, `reads`, `upload`, `socket`), per account (or per IP signed out)
+    /// for the account limits, and per developer API key for `api_key` (ADR 0033).
     pub rates: Vec<RateInfo>,
     /// The caller's per-account limits with their roles' overrides applied. Empty when signed out
     /// and on `GET /v1/limits`.

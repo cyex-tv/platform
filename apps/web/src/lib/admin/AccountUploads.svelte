@@ -19,6 +19,8 @@
 
   let rows = $state<Row[]>([]);
   let total = $state(0);
+  /** Where the next page starts (cursor paging); null when there is none. */
+  let after = $state<string | null>(null);
   let loading = $state(true);
   let problem = $state('');
   let seq = 0;
@@ -28,11 +30,12 @@
     loading = true;
     problem = '';
     try {
-      const page = more ? Math.floor(rows.length / PER) + 1 : 1;
-      const r = (await gql(ACCOUNT_EMOTES, { accountId, page, perPage: PER })).accountEmotes;
+      const from = more ? after : null;
+      const r = (await gql(ACCOUNT_EMOTES, { accountId, perPage: PER, after: from })).accountEmotes;
       if (mine !== seq) return;
       rows = more ? [...rows, ...r.items] : r.items;
       total = r.total;
+      after = r.next ?? null;
     } catch (e) {
       if (mine === seq) problem = e instanceof Error ? e.message : 'That didn’t load.';
     } finally {
@@ -80,7 +83,7 @@
         </div>
       {/if}
     {/if}
-    {#if rows.length < total}
+    {#if rows.length < total && after}
       <div class="more"><span class="ui-hint ui-num">{count(rows.length)} of {count(total)}</span><button class="ui-btn ghost small" type="button" disabled={loading} onclick={() => load(true)}>{loading ? 'Loading…' : 'Show more'}</button></div>
     {/if}
   {/if}

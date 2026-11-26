@@ -550,15 +550,28 @@ pub async fn set_emotes(
     query: Option<&str>,
     page: Option<u32>,
     per_page: Option<u32>,
+    after: Option<&str>,
 ) -> ApiResult<SetEmotePage> {
     let empty = SetEmotePage {
         items: Vec::new(),
         total: 0,
+        next: None,
     };
     let Some(id) = ids::from_text(id.trim()) else {
         return Ok(empty);
     };
     let paged = paging(page, per_page, 120, 200);
+    // The cursor belongs to this set and filter.
+    let scope = format!(
+        "setEmotes|{}|{}",
+        ids::to_text(id),
+        query.map(str::trim).unwrap_or_default()
+    );
+    let after = crate::cursor::decode(after, &scope, &reads::member_keys())?;
+    let (limit, offset) = match after {
+        Some(_) => (i64::from(paged.per_page), 0),
+        None => (paged.limit, paged.offset),
+    };
     let mut conn = conn(state).await?;
     let Some(set) = sets::get(&mut conn, id).await.map_err(db_error)? else {
         return Ok(empty);
@@ -567,20 +580,22 @@ pub async fn set_emotes(
         return Ok(empty);
     }
     let viewer = viewer(&mut conn, caller).await?;
-    let (items, total) = views::set_emotes(
+    let (items, total, next) = views::set_emotes(
         &mut conn,
         &set,
         &viewer,
         &state.cdn_url,
         query,
-        paged.limit,
-        paged.offset,
+        limit,
+        offset,
+        after.as_deref(),
     )
     .await
     .map_err(db_error)?;
     Ok(SetEmotePage {
         items,
         total: u64::try_from(total).unwrap_or(0),
+        next: crate::cursor::next(&scope, next.as_ref()),
     })
 }
 
@@ -842,18 +857,37 @@ pub async fn my_emotes(
     caller: &Caller,
     page: Option<u32>,
     per_page: Option<u32>,
+    after: Option<&str>,
 ) -> ApiResult<EmotePage> {
     let paged = paging(page, per_page, QUEUE_PAGE, QUEUE_PAGE_MAX);
     let mut conn = conn(state).await?;
-    let (rows, total) =
-        reads::emotes_by_owner(&mut conn, caller.account_id, paged.limit, paged.offset)
-            .await
-            .map_err(db_error)?;
+    owner_emotes(state, &mut conn, caller.account_id, paged, after).await
+}
+
+/// One page of an account's own emotes in every state, newest first (`myEmotes`,
+/// `accountEmotes`), by number or after a cursor. The cursor is bound to the account.
+pub(crate) async fn owner_emotes(
+    state: &AppState,
+    conn: &mut PgConnection,
+    owner: Uuid,
+    paged: crate::errors::Paging,
+    after: Option<&str>,
+) -> ApiResult<EmotePage> {
+    let scope = format!("ownerEmotes|{}", ids::to_text(owner));
+    let after = crate::cursor::decode(after, &scope, &reads::owner_keys())?;
+    let (limit, offset) = match after {
+        Some(_) => (i64::from(paged.per_page), 0),
+        None => (paged.limit, paged.offset),
+    };
+    let (page, total) = reads::emotes_by_owner_page(conn, owner, limit, offset, after.as_deref())
+        .await
+        .map_err(db_error)?;
     Ok(EmotePage {
-        items: views::emotes(&mut conn, &rows, &state.cdn_url)
+        items: views::emotes(conn, &page.rows, &state.cdn_url)
             .await
             .map_err(db_error)?,
         total: u64::try_from(total).unwrap_or(0),
+        next: crate::cursor::next(&scope, page.next.as_ref()),
     })
 }
 

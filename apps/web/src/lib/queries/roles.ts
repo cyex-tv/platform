@@ -31,6 +31,7 @@ export const ROLE_LIMIT_FIELDS = graphql(`
     key
     group
     default
+    max
     windowSeconds
     value
   }

@@ -266,7 +266,21 @@ export const guides: Guide[] = [
     blocks: [
       p('Every upload and field limit is one public list: the GraphQL `limits` query, or `GET /v1/limits` over REST. Per kind (`emote`, `badge`, `paint`) it gives `maxBytes`, `maxSide`, `maxFrames`, `maxTotalPixels` and `maxDurationMs` (null: no cap), the smallest side and widest shape a picture may have, and the tallest file the CDN serves. It also lists the name and tag lengths and the per-IP request rates. Read it instead of copying numbers: an operator can change the media limits, and they change here with them.'),
       p('Signed in, the GraphQL `limits.account` lists your own per-account limits (`uploads_per_hour`, `pending_emotes`, `set_capacity_max` and the rest) with the `default` and what applies to you, `effective`, after your roles’ overrides. `uploadQuota` adds the file limits an upload for that account is checked against: `maxBytes`, `maxSide` and `maxFrames`, next to `pendingMax` and `uploadsPerHour`.'),
-      note('An emote is at most 1000 × 1000 px whatever the operator sets, and the CDN serves it at most 128 px tall.'),
+      p('A role can also change the file limits of the people who hold it: `emote_max_bytes`, `emote_max_side`, `emote_max_frames`, `badge_max_bytes`, `badge_max_side`, `badge_max_frames`, `paint_max_bytes` and `paint_max_side`, listed in `limits.account` with the rest. A badge or paint role may be raised above the public numbers, up to a ceiling the operator sets (16 MB; 4096 px for a badge, 6144 px for a paint, by default). An emote role can only lower its side. An upload is checked, and made by the worker, under the limits of whoever uploaded it at that moment.'),
+      note('An emote is at most 1000 × 1000 px whatever the operator or a role sets, and the CDN serves it at most 128 px tall.'),
+    ],
+  },
+  {
+    id: 'paging',
+    title: 'Paging',
+    search: 'paging pagination cursor after next page perpage link rel next bad_cursor',
+    blocks: [
+      p('Long lists page with a cursor. Every page of `searchEmotes`, `searchAccounts`, `setEmotes`, `myEmotes`, `accountEmotes` and `reviewQueue` carries `next`: pass it back as `after` (with the same filters, order and `perPage`) for the page that follows. `next` is null on the last page. The order stays the one the list documents, and nothing is shown twice or skipped while rows are added or removed between pages, which numbered pages can’t promise.'),
+      { t: 'pre', code: `query {\n  searchEmotes(query: "pog", sort: NEW, perPage: 50, after: "eyJ2Ijox…") {\n    total\n    next\n    items { id name }\n  }\n}` },
+      p('Cursors are opaque: don’t read or build them, and keep one only as long as you page through that list. A cursor that was changed, made up or comes from another list (other text, filters or order) answers `bad_cursor`; start again from the first page. The page size caps hold as before, and `page` is ignored when `after` is given.'),
+      p('`page` and `perPage` still work as they always did. With a cursor there is no deepest page; numbered pages stop at page 1.000.'),
+      p('Over REST, [a set’s emotes, a page at a time](#rest-get_set_emotes) answers `next` too, and a `Link` header with the next page’s address:'),
+      { t: 'pre', code: `curl -s -i '${baseUrl}/v1/sets/${EX.setId}/emotes?per_page=120'\n\nHTTP/2 200\nlink: </v1/sets/${EX.setId}/emotes?per_page=120&after=eyJ2Ijox…>; rel="next"` },
     ],
   },
   {

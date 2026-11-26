@@ -56,6 +56,25 @@ fn form(fields: &[(&str, &str)], file: &[u8]) -> Vec<u8> {
     body
 }
 
+/// A flat picture `side` px square: tiny as a file, big once decoded.
+fn flat_png(side: u32, seed: u8) -> Vec<u8> {
+    let mut out = Cursor::new(Vec::new());
+    RgbaImage::from_pixel(side, side, Rgba([seed, 90, 200, 255]))
+        .write_to(&mut out, ImageFormat::Png)
+        .unwrap();
+    out.into_inner()
+}
+
+fn cosmetic_form(kind: &str, file: &[u8]) -> Vec<u8> {
+    let mut body = format!(
+        "--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"kind\"\r\n\r\n{kind}\r\n--{BOUNDARY}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"art.png\"\r\nContent-Type: image/png\r\n\r\n"
+    )
+    .into_bytes();
+    body.extend_from_slice(file);
+    body.extend_from_slice(format!("\r\n--{BOUNDARY}--\r\n").as_bytes());
+    body
+}
+
 fn code(r: &Value) -> &str {
     r["errors"][0]["extensions"]["code"]
         .as_str()
@@ -84,7 +103,7 @@ struct World {
 }
 
 const SET_LIMITS: &str = "mutation($id: String!, $l: [RoleLimitInput!]!) {
-    setRoleLimits(id: $id, limits: $l) { key group default windowSeconds value }
+    setRoleLimits(id: $id, limits: $l) { key group default max windowSeconds value }
 }";
 const ROLE_LIMITS: &str =
     "query($id: String!) { roleLimits(id: $id) { key group default windowSeconds value } }";
@@ -170,6 +189,30 @@ impl World {
         let r = self.gql_raw(user, query, variables).await;
         assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
         r.body
+    }
+
+    async fn upload_file(&self, user: &User, name: &str, file: &[u8]) -> Reply {
+        self.send(
+            user,
+            Request::post("/v1/emotes").header(
+                "content-type",
+                format!("multipart/form-data; boundary={BOUNDARY}"),
+            ),
+            Body::from(form(&[("name", name)], file)),
+        )
+        .await
+    }
+
+    async fn upload_picture(&self, user: &User, kind: &str, file: &[u8]) -> Reply {
+        self.send(
+            user,
+            Request::post("/v1/cosmetics/images").header(
+                "content-type",
+                format!("multipart/form-data; boundary={BOUNDARY}"),
+            ),
+            Body::from(cosmetic_form(kind, file)),
+        )
+        .await
     }
 
     async fn upload(&self, user: &User, name: &str, seed: u8, owner: Option<&User>) -> Reply {
@@ -569,7 +612,7 @@ async fn changing_limits_follows_the_role_edit_rules() {
         .await;
     assert_eq!(
         r["data"]["limitDefaults"].as_array().unwrap().len(),
-        16,
+        24,
         "{r}"
     );
 
@@ -686,6 +729,242 @@ async fn limits_lists_every_limit_and_the_callers_role_overrides() {
     assert_eq!(
         limit(&r["data"]["limits"]["account"], "pending_emotes")["effective"],
         20,
+        "{r}"
+    );
+    w.db.close().await;
+}
+
+const MEDIA_QUOTA: &str = "query { uploadQuota { maxBytes maxSide maxFrames } limits {
+    account { key default effective windowSeconds }
+} }";
+
+async fn last_payload(w: &World, kind: &str) -> Value {
+    let mut conn = w.db.conn().await;
+    sqlx::query_scalar("SELECT payload FROM jobs WHERE kind = $1 ORDER BY id DESC LIMIT 1")
+        .bind(kind)
+        .fetch_one(&mut *conn)
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn a_role_raises_the_badge_side_and_the_upload_passes() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let owner = w.user("900").await;
+    let plain = w.user("8120").await;
+    let crew = w.user("8121").await;
+    let staff = w
+        .create_role(&owner, "Badge staff", 20, &["cosmetics.manage"])
+        .await;
+    w.assign(&owner, &plain, &staff).await;
+    w.assign(&owner, &crew, &staff).await;
+    let supporters = w.create_role(&owner, "Supporters", 10, &[]).await;
+    let r = w
+        .set_limits(
+            &owner,
+            &supporters,
+            json!([
+                { "key": "badge_max_side", "value": 2300 },
+                { "key": "badge_max_bytes", "value": 12 * 1024 * 1024 },
+            ]),
+        )
+        .await;
+    let list = &r["data"]["setRoleLimits"];
+    assert_eq!(limit(list, "badge_max_side")["value"], 2300, "{r}");
+    assert_eq!(limit(list, "badge_max_side")["default"], 2048, "{r}");
+    assert_eq!(limit(list, "badge_max_side")["max"], 4096, "{r}");
+    assert_eq!(limit(list, "badge_max_side")["group"], "MEDIA", "{r}");
+    w.assign(&owner, &crew, &supporters).await;
+
+    // 2100 px is over the 2048 everyone gets, and under what the Supporters role sets.
+    let big = flat_png(2100, 5);
+    let r = w.upload_picture(&plain, "badge", &big).await;
+    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{:?}", r.body);
+    assert_eq!(r.body["error"], "too_large");
+    assert_eq!(
+        w.count("SELECT count(*) FROM cosmetic_images").await,
+        0,
+        "a refused picture leaves nothing behind"
+    );
+    let r = w.upload_picture(&crew, "badge", &big).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
+    // And still not past what the role sets.
+    let r = w.upload_picture(&crew, "badge", &flat_png(2400, 6)).await;
+    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{:?}", r.body);
+
+    // The worker gets the limits the picture was uploaded under, and a remake keeps them.
+    let stored: Value = {
+        let mut conn = w.db.conn().await;
+        sqlx::query_scalar("SELECT media_limits FROM cosmetic_images")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap()
+    };
+    assert_eq!(stored["max_side"], 2300, "{stored}");
+    assert_eq!(stored["max_bytes"], 12 * 1024 * 1024, "{stored}");
+    let payload = last_payload(&w, "cosmetic.transcode").await;
+    assert_eq!(payload["limits"]["max_side"], 2300, "{payload}");
+    let id: String = {
+        let mut conn = w.db.conn().await;
+        let id: Uuid = sqlx::query_scalar("SELECT id FROM cosmetic_images")
+            .fetch_one(&mut *conn)
+            .await
+            .unwrap();
+        ids::to_text(id)
+    };
+    // The role changes meanwhile: the remake still goes out under the stored limits.
+    w.set_limits(&owner, &supporters, json!([])).await;
+    let r = w
+        .gql(
+            &plain,
+            "mutation($id: String!) { remakeCosmeticImage(id: $id) { id } }",
+            json!({ "id": id }),
+        )
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+    let payload = last_payload(&w, "cosmetic.transcode").await;
+    assert_eq!(payload["limits"]["max_side"], 2300, "{payload}");
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn an_emote_side_can_only_go_down_from_1000() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let owner = w.user("900").await;
+    let alice = w.user("8122").await;
+    let role = w.create_role(&owner, "Emote people", 10, &[]).await;
+
+    // 1000 x 1000 is a hard ceiling: it can't be set above it.
+    for value in [1001, 2048, 5000] {
+        let r = w
+            .set_limits(
+                &owner,
+                &role,
+                json!([{ "key": "emote_max_side", "value": value }]),
+            )
+            .await;
+        assert_eq!(code(&r), "bad_limit", "{r}");
+    }
+    let r = w
+        .set_limits(
+            &owner,
+            &role,
+            json!([{ "key": "badge_max_side", "value": 5000 }]),
+        )
+        .await;
+    assert_eq!(code(&r), "bad_limit", "{r}");
+
+    // Even a value written past the API (by hand) isn't believed: the upload still stops at 1000.
+    {
+        let mut conn = w.db.conn().await;
+        sqlx::query("UPDATE roles SET limits = $2 WHERE id = $1")
+            .bind(w.db.row(&role).await)
+            .bind(json!({ "emote_max_side": 5000, "emote_max_bytes": 4_194_304 }))
+            .execute(&mut *conn)
+            .await
+            .unwrap();
+    }
+    w.assign(&owner, &alice, &role).await;
+    let r = w.upload_file(&alice, "tooWide", &flat_png(1200, 8)).await;
+    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{:?}", r.body);
+    assert_eq!(r.body["error"], "too_large");
+    let q = w.gql(&alice, MEDIA_QUOTA, json!({})).await;
+    assert_eq!(q["data"]["uploadQuota"]["maxSide"], 1000, "{q}");
+    assert_eq!(q["data"]["uploadQuota"]["maxBytes"], 4_194_304, "{q}");
+
+    // Lowering works: 20 px a side refuses a 24 px emote, 30 px takes it.
+    w.set_limits(
+        &owner,
+        &role,
+        json!([{ "key": "emote_max_side", "value": 20 }]),
+    )
+    .await;
+    let r = w.upload(&alice, "smallOnly", 9, None).await;
+    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{:?}", r.body);
+    w.set_limits(
+        &owner,
+        &role,
+        json!([{ "key": "emote_max_side", "value": 30 }]),
+    )
+    .await;
+    let r = w.upload(&alice, "fits", 10, None).await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
+    // The transcode job carries the numbers it was checked under.
+    let payload = last_payload(&w, "emote.transcode").await;
+    assert_eq!(payload["limits"]["max_side"], 30, "{payload}");
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn the_quota_and_limits_report_the_effective_media_numbers() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let owner = w.user("900").await;
+    let alice = w.user("8123").await;
+    let bob = w.user("8124").await;
+
+    let q = w.gql(&alice, MEDIA_QUOTA, json!({})).await;
+    assert_eq!(q["data"]["uploadQuota"]["maxBytes"], 8 * 1024 * 1024, "{q}");
+    assert_eq!(q["data"]["uploadQuota"]["maxFrames"], 1000, "{q}");
+    let account = &q["data"]["limits"]["account"];
+    for (key, default) in [
+        ("emote_max_bytes", 8 * 1024 * 1024),
+        ("emote_max_side", 1000),
+        ("emote_max_frames", 1000),
+        ("badge_max_bytes", 8 * 1024 * 1024),
+        ("badge_max_side", 2048),
+        ("badge_max_frames", 120),
+        ("paint_max_bytes", 8 * 1024 * 1024),
+        ("paint_max_side", 4096),
+    ] {
+        assert_eq!(limit(account, key)["default"], default, "{key} {q}");
+        assert_eq!(limit(account, key)["effective"], default, "{key} {q}");
+        assert!(limit(account, key)["windowSeconds"].is_null(), "{key}");
+    }
+
+    let role = w.create_role(&owner, "Big files", 10, &[]).await;
+    w.set_limits(
+        &owner,
+        &role,
+        json!([
+            { "key": "emote_max_bytes", "value": 12 * 1024 * 1024 },
+            { "key": "emote_max_frames", "value": 1500 },
+            { "key": "paint_max_side", "value": 6144 },
+            { "key": "badge_max_frames", "value": 240 },
+        ]),
+    )
+    .await;
+    w.assign(&owner, &alice, &role).await;
+    let q = w.gql(&alice, MEDIA_QUOTA, json!({})).await;
+    assert_eq!(
+        q["data"]["uploadQuota"]["maxBytes"],
+        12 * 1024 * 1024,
+        "{q}"
+    );
+    assert_eq!(q["data"]["uploadQuota"]["maxFrames"], 1500, "{q}");
+    assert_eq!(q["data"]["uploadQuota"]["maxSide"], 1000, "{q}");
+    let account = &q["data"]["limits"]["account"];
+    assert_eq!(limit(account, "paint_max_side")["effective"], 6144, "{q}");
+    assert_eq!(limit(account, "paint_max_side")["default"], 4096, "{q}");
+    assert_eq!(limit(account, "badge_max_frames")["effective"], 240, "{q}");
+    // Not for anyone who doesn't hold the role.
+    let q = w.gql(&bob, MEDIA_QUOTA, json!({})).await;
+    assert_eq!(q["data"]["uploadQuota"]["maxBytes"], 8 * 1024 * 1024, "{q}");
+    assert_eq!(
+        limit(&q["data"]["limits"]["account"], "paint_max_side")["effective"],
+        4096,
+        "{q}"
+    );
+    // The public numbers are the configured ones for everybody.
+    let r = w.gql(&alice, LIMITS, json!({})).await;
+    assert_eq!(
+        r["data"]["limits"]["emote"]["maxBytes"],
+        8 * 1024 * 1024,
         "{r}"
     );
     w.db.close().await;

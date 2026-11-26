@@ -248,5 +248,6 @@ pub async fn my_favourites(
     Ok(EmotePage {
         items: wanted.iter().filter_map(|id| found.remove(id)).collect(),
         total: u64::try_from(total).unwrap_or(0),
+        next: None,
     })
 }

@@ -71,16 +71,19 @@
   // ---- Results: the pages the server rendered, plus the ones loaded here.
   let loaded = $state.raw(untrack(() => data.items));
   let pageNo = $state(untrack(() => data.pages));
+  // Where the next page starts (cursor paging, ADR 0030); null when there is none.
+  let after = $state(untrack(() => data.next));
   let busy = $state(false);
   let moreError = $state('');
   $effect.pre(() => {
     loaded = data.items;
     pageNo = data.pages;
+    after = data.next;
     moreError = '';
   });
 
   const totalPages = $derived(Math.ceil(data.total / PER_PAGE));
-  const hasMore = $derived(pageNo < totalPages);
+  const hasMore = $derived(pageNo < totalPages && after !== null);
   // What you hid for yourself ("Hide for me") drops out here; the API answers the same for everyone.
   $effect(() => personal.ensure());
   const shown = $derived(personal.visible(loaded));
@@ -234,13 +237,14 @@
     try {
       const r = await gql(
         SEARCH,
-        apiVars(view, pageNo + 1),
+        { ...apiVars(view, pageNo + 1), after },
         fetch,
       );
       if (from !== data) return; // the view changed while this loaded
       const seen = new Set(loaded.map((e) => e.id));
       loaded = [...loaded, ...r.searchEmotes.items.filter((e) => !seen.has(e.id))];
       pageNo += 1;
+      after = r.searchEmotes.next ?? null;
       if (asked || scrollY > 0) replaceState(`/search${toSearch({ ...here, pages: Math.min(pageNo, MAX_PAGES) })}`, page.state);
     } catch (e) {
       moreError = e instanceof ApiError ? e.message : 'Couldn’t load more emotes.';

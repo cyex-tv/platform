@@ -105,6 +105,11 @@ type AccountResults {
 	totalCapped: Boolean!
 	page: Int!
 	perPage: Int!
+	"""
+	Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+	page. Opaque: a list's cursor only works for the same list, filters and order.
+	"""
+	next: String
 }
 
 """
@@ -1324,6 +1329,11 @@ A page of emotes and how many there are in all.
 type EmotePage {
 	items: [Emote!]!
 	total: Int!
+	"""
+	Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+	page. Opaque: a list's cursor only works for the same list, filters and order.
+	"""
+	next: String
 }
 
 """
@@ -1711,6 +1721,11 @@ enum LimitGroup {
 	Writes to your account: editors, cosmetics, sets, lists, settings, the shop, your data.
 	"""
 	ACCOUNT
+	"""
+	How big the files an account uploads may be: bytes, side and frames of emotes, badges
+	and paints.
+	"""
+	MEDIA
 }
 
 """
@@ -2787,8 +2802,10 @@ type Query {
 	the rule of `set`; an unknown or hidden set is an empty page. `query` keeps the emotes whose
 	name in the set or own name contains it (case-insensitive). `perPage` is 1 to 200, default
 	120; `total` counts every match.
+	Pass a page's `next` as `after` for the page after it (cursor paging, ADR 0030; `page` is
+	ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
 	"""
-	setEmotes(id: String!, query: String, page: Int, perPage: Int): SetEmotePage!
+	setEmotes(id: String!, query: String, page: Int, perPage: Int, after: String): SetEmotePage!
 	"""
 	An account's `LISTED` sets as profile cards, oldest first, at most 50. `preview` is how
 	many of each set's newest emotes to include, 0 to 50, default 12. Empty when the account
@@ -2817,8 +2834,13 @@ type Query {
 	the emotes that have every tag listed (exact; a leading `#` and case are ignored, at most
 	10). `exact: true` makes a non-empty `query` match the whole name (any case) instead of
 	roughly. `window` is `DAY`, `WEEK` (default) or `MONTH`, and only matters for `TRENDING`.
+	
+	Cursor paging (ADR 0030): pass a page's `next` as `after` to read the page after it, in
+	the same order, with nothing shown twice or skipped when emotes are added meanwhile; `page`
+	is ignored then and there is no depth limit. `next` is null on the last page. A cursor only
+	works with the same `query`, filters and `sort` (`bad_cursor` otherwise).
 	"""
-	searchEmotes(query: String!, animated: Boolean, owner: String, nsfw: Boolean @deprecated(reason: "NSFW emotes aren't allowed on cyex.tv; this changes nothing."), page: Int, perPage: Int, sort: EmoteSort, flags: [EmoteFlag!], tags: [String!], exact: Boolean, window: TrendingWindow): SearchResults!
+	searchEmotes(query: String!, animated: Boolean, owner: String, nsfw: Boolean @deprecated(reason: "NSFW emotes aren't allowed on cyex.tv; this changes nothing."), page: Int, perPage: Int, sort: EmoteSort, flags: [EmoteFlag!], tags: [String!], exact: Boolean, window: TrendingWindow, after: String): SearchResults!
 	"""
 	Where an emote stands among the 100 most added in `window` (`DAY`, `WEEK` by default or
 	`MONTH`): its rank and the channels that added it, net of removals. Null when `id` isn't
@@ -2831,9 +2853,10 @@ type Query {
 	blocked accounts are never listed. `perPage` is 1 to 50, default 20. 60 searches a minute
 	per account, or per IP signed out (`rate_limited`). A `query` under 2 characters (after the
 	`@`) finds nobody. Matches are counted up to 1000: `totalCapped` says there are more, and
-	the pages end there.
+	the pages end there. Pass a page's `next` as `after` for the page after it (cursor paging,
+	ADR 0030; `page` is ignored then); a cursor only works for the same `query` (`bad_cursor`).
 	"""
-	searchAccounts(query: String!, page: Int, perPage: Int): AccountResults!
+	searchAccounts(query: String!, page: Int, perPage: Int, after: String): AccountResults!
 	"""
 	The header search: the top 5 emotes for `query` by the name matcher (exact name, same
 	ignoring case, name prefix, word or initials prefix such as `point` or `pp` for
@@ -2927,8 +2950,10 @@ type Query {
 	mySets: [EmoteSet!]!
 	"""
 	Your own emotes in every state, newest first. `perPage` is 1 to 100, default 50.
+	Pass a page's `next` as `after` for the page after it (cursor paging, ADR 0030; `page` is
+	ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
 	"""
-	myEmotes(page: Int, perPage: Int): EmotePage!
+	myEmotes(page: Int, perPage: Int, after: String): EmotePage!
 	"""
 	Emotes you hid from your own view ("Hide for me"), the latest first: all of them, up to
 	1000. Only you can read it; the public reads stay the same for everyone, so filter with
@@ -3099,9 +3124,11 @@ type Query {
 	"""
 	Pending emotes, oldest first. Needs `emotes.review`. `perPage` is 1 to 100, default 50.
 	With `filter`: one tab (public, unlisted and private, or resolved), a search by name or
-	uploader, and an order.
+	uploader, and an order. A cursor only works for the same filter (`bad_cursor`).
+	Pass a page's `next` as `after` for the page after it (cursor paging, ADR 0030; `page` is
+	ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
 	"""
-	reviewQueue(page: Int, perPage: Int, filter: ReviewQueueFilter): ReviewQueue!
+	reviewQueue(page: Int, perPage: Int, filter: ReviewQueueFilter, after: String): ReviewQueue!
 	"""
 	Emotes that may duplicate one in the review queue: the same file (sha256) first, then
 	similar names, closest first; at most 12, any state but deleted. Needs `emotes.review`.
@@ -3199,8 +3226,10 @@ type Query {
 	An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`,
 	`emotes.takedown`, `emotes.edit_any`, `emotes.delete_any` or `emotes.flags`, or to be the account or its
 	editor with `EMOTE_MANAGE` on every set. `perPage` is 1 to 100, default 50.
+	Pass a page's `next` as `after` for the page after it (cursor paging, ADR 0030; `page` is
+	ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
 	"""
-	accountEmotes(accountId: String!, page: Int, perPage: Int): EmotePage!
+	accountEmotes(accountId: String!, page: Int, perPage: Int, after: String): EmotePage!
 	"""
 	Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,
 	`emote.rejected`, `emote.taken_down`, `emote.visibility_changed` (staff changed its
@@ -3449,6 +3478,11 @@ type ReviewQueue {
 	How many wait in each pending tab, whatever the read asked for.
 	"""
 	counts: ReviewCounts!
+	"""
+	Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+	page. Opaque: a list's cursor only works for the same list, filters and order.
+	"""
+	next: String
 }
 
 """
@@ -3573,7 +3607,10 @@ type RoleLimit {
 	"""
 	`gql_account`, `uploads_per_hour`, `pending_emotes`, `editors`, `cosmetics`,
 	`set_clones`, `account_search`, `quick_search`, `heavy_reads`, `personal_lists`,
-	`emote_transfers`, `prefs`, `checkout`, `redeem` or `data_export`.
+	`emote_transfers`, `prefs`, `checkout`, `redeem`, `data_export`, `set_capacity_max`, or a
+	media limit: `emote_max_bytes`, `emote_max_side`, `emote_max_frames`, `badge_max_bytes`,
+	`badge_max_side`, `badge_max_frames`, `paint_max_bytes` or `paint_max_side` (bytes, px
+	and frames of the largest file an account may upload).
 	"""
 	key: String!
 	group: LimitGroup!
@@ -3581,6 +3618,11 @@ type RoleLimit {
 	What everyone gets without an override (set when the API starts).
 	"""
 	default: Int!
+	"""
+	The most this limit may be set to: 1,000,000 for a count, and for a media limit the
+	ceiling the API runs with (an emote's side never above 1000 px).
+	"""
+	max: Int!
 	"""
 	The window the count is per, in seconds; null for `pending_emotes`, a cap on how many
 	wait at once.
@@ -3598,7 +3640,7 @@ One override for `setRoleLimits`.
 input RoleLimitInput {
 	key: String!
 	"""
-	1 to 1,000,000; null keeps the default.
+	1 up to the limit's `max` (1,000,000 for a count); null keeps the default.
 	"""
 	value: Int
 }
@@ -3608,6 +3650,11 @@ type SearchResults {
 	total: Int!
 	page: Int!
 	perPage: Int!
+	"""
+	Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+	page. Opaque: a list's cursor only works for the same list, filters and order.
+	"""
+	next: String
 }
 
 """
@@ -3701,6 +3748,11 @@ type SetEmotePage {
 	Members the viewer may see that match `query`, over every page.
 	"""
 	total: Int!
+	"""
+	Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+	page. Opaque: a list's cursor only works for the same list, filters and order.
+	"""
+	next: String
 }
 
 enum SetKind {

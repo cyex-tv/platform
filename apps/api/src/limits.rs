@@ -22,6 +22,8 @@ use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use cyex_tv_auth::Caller;
 use cyex_tv_db::ids;
+use cyex_tv_media::Limits as Media;
+use cyex_tv_media::config::{MediaConfig, MediaKind, Overrides};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::LimitGroup;
 use cyex_tv_shared::ratelimit::{Limiter, OpenCap, Quota, Rate, client_ip};
@@ -222,6 +224,7 @@ impl Rates {
             AccountLimit::Checkout => rate(self.checkout),
             AccountLimit::Redeem => rate(self.redeem),
             AccountLimit::DataExport => rate(self.data_export),
+            media => (media.media_default(MediaConfig::current()), None),
         }
     }
 }
@@ -248,10 +251,26 @@ pub enum AccountLimit {
     Redeem,
     DataExport,
     SetCapacityMax,
+    EmoteMaxBytes,
+    EmoteMaxSide,
+    EmoteMaxFrames,
+    BadgeMaxBytes,
+    BadgeMaxSide,
+    BadgeMaxFrames,
+    PaintMaxBytes,
+    PaintMaxSide,
+}
+
+/// Which number of a kind's media limits an [`AccountLimit`] sets.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MediaField {
+    Bytes,
+    Side,
+    Frames,
 }
 
 impl AccountLimit {
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 24] = [
         Self::GqlAccount,
         Self::AccountSearch,
         Self::QuickSearch,
@@ -268,6 +287,14 @@ impl AccountLimit {
         Self::Redeem,
         Self::DataExport,
         Self::SetCapacityMax,
+        Self::EmoteMaxBytes,
+        Self::EmoteMaxSide,
+        Self::EmoteMaxFrames,
+        Self::BadgeMaxBytes,
+        Self::BadgeMaxSide,
+        Self::BadgeMaxFrames,
+        Self::PaintMaxBytes,
+        Self::PaintMaxSide,
     ];
 
     pub const fn key(self) -> &'static str {
@@ -288,6 +315,55 @@ impl AccountLimit {
             Self::Redeem => "redeem",
             Self::DataExport => "data_export",
             Self::SetCapacityMax => "set_capacity_max",
+            Self::EmoteMaxBytes => "emote_max_bytes",
+            Self::EmoteMaxSide => "emote_max_side",
+            Self::EmoteMaxFrames => "emote_max_frames",
+            Self::BadgeMaxBytes => "badge_max_bytes",
+            Self::BadgeMaxSide => "badge_max_side",
+            Self::BadgeMaxFrames => "badge_max_frames",
+            Self::PaintMaxBytes => "paint_max_bytes",
+            Self::PaintMaxSide => "paint_max_side",
+        }
+    }
+
+    /// The media number this limit sets, if it is one: the kind of picture and which number.
+    pub const fn media(self) -> Option<(MediaKind, MediaField)> {
+        Some(match self {
+            Self::EmoteMaxBytes => (MediaKind::Emote, MediaField::Bytes),
+            Self::EmoteMaxSide => (MediaKind::Emote, MediaField::Side),
+            Self::EmoteMaxFrames => (MediaKind::Emote, MediaField::Frames),
+            Self::BadgeMaxBytes => (MediaKind::Badge, MediaField::Bytes),
+            Self::BadgeMaxSide => (MediaKind::Badge, MediaField::Side),
+            Self::BadgeMaxFrames => (MediaKind::Badge, MediaField::Frames),
+            Self::PaintMaxBytes => (MediaKind::Paint, MediaField::Bytes),
+            Self::PaintMaxSide => (MediaKind::Paint, MediaField::Side),
+            _ => return None,
+        })
+    }
+
+    fn media_default(self, config: &MediaConfig) -> u32 {
+        let Some((kind, field)) = self.media() else {
+            return 0;
+        };
+        let l = config.limits(kind);
+        match field {
+            MediaField::Bytes => u32::try_from(l.max_bytes).unwrap_or(u32::MAX),
+            MediaField::Side => l.max_side,
+            MediaField::Frames => l.max_frames,
+        }
+    }
+
+    /// The most a role may set this limit to: [`MAX_LIMIT`], and for a media number the ceiling
+    /// in the media config (an emote's side never above 1000 px).
+    pub fn max_value(self) -> u32 {
+        let Some((kind, field)) = self.media() else {
+            return MAX_LIMIT;
+        };
+        let c = MediaConfig::current().ceiling(kind);
+        match field {
+            MediaField::Bytes => u32::try_from(c.max_bytes).unwrap_or(u32::MAX),
+            MediaField::Side => c.max_side,
+            MediaField::Frames => c.max_frames,
         }
     }
 
@@ -301,6 +377,7 @@ impl AccountLimit {
                 LimitGroup::Requests
             }
             Self::UploadsPerHour | Self::PendingEmotes => LimitGroup::Uploads,
+            _ if self.media().is_some() => LimitGroup::Media,
             _ => LimitGroup::Account,
         }
     }
@@ -323,7 +400,7 @@ pub fn overrides_from_json(value: &serde_json::Value) -> RoleOverrides {
         .filter_map(|(k, v)| {
             let limit = AccountLimit::from_key(k)?;
             let n = u32::try_from(v.as_u64()?).ok()?;
-            (1..=MAX_LIMIT).contains(&n).then_some((limit, n))
+            (1..=limit.max_value()).contains(&n).then_some((limit, n))
         })
         .collect()
 }
@@ -364,6 +441,25 @@ impl AccountLimits {
 
     pub fn get(&self, limit: AccountLimit) -> u32 {
         self.0[limit.index()]
+    }
+
+    /// The media limits this account uploads `kind` under: the configured ones with its roles'
+    /// overrides applied, cut at the ceiling (an emote's side at 1000 px).
+    pub fn media(&self, kind: MediaKind) -> Media {
+        let n = |f: MediaField| {
+            AccountLimit::ALL
+                .into_iter()
+                .find(|l| l.media() == Some((kind, f)))
+                .map(|l| self.get(l))
+        };
+        MediaConfig::current().effective(
+            kind,
+            Overrides {
+                max_bytes: n(MediaField::Bytes).and_then(|v| usize::try_from(v).ok()),
+                max_side: n(MediaField::Side),
+                max_frames: n(MediaField::Frames),
+            },
+        )
     }
 }
 
@@ -492,6 +588,14 @@ impl Limits {
             AccountLimit::UploadsPerHour
             | AccountLimit::PendingEmotes
             | AccountLimit::SetCapacityMax => return None,
+            AccountLimit::EmoteMaxBytes
+            | AccountLimit::EmoteMaxSide
+            | AccountLimit::EmoteMaxFrames
+            | AccountLimit::BadgeMaxBytes
+            | AccountLimit::BadgeMaxSide
+            | AccountLimit::BadgeMaxFrames
+            | AccountLimit::PaintMaxBytes
+            | AccountLimit::PaintMaxSide => return None,
         })
     }
 
@@ -976,7 +1080,7 @@ mod tests {
         for l in AccountLimit::ALL {
             assert_eq!(AccountLimit::from_key(l.key()), Some(l));
         }
-        assert_eq!(AccountLimit::ALL.len(), 16);
+        assert_eq!(AccountLimit::ALL.len(), 24);
         // A role can raise the most slots a set may have (a subscriber role: 2.500).
         let rates = Rates::default();
         assert_eq!(
@@ -994,6 +1098,53 @@ mod tests {
                 .take(AccountLimit::SetCapacityMax, "a", None)
                 .is_ok()
         );
+    }
+
+    #[test]
+    fn media_limits_resolve_per_kind_from_the_most_generous_role() {
+        let rates = Rates::default();
+        let plain = AccountLimits::resolve(&rates, &[]);
+        assert_eq!(plain.media(MediaKind::Badge), MediaConfig::current().badge);
+        assert_eq!(plain.media(MediaKind::Emote), MediaConfig::current().emote);
+        let supporter = overrides(&[
+            (AccountLimit::BadgeMaxSide, 4096),
+            (AccountLimit::BadgeMaxBytes, 12 * 1024 * 1024),
+            (AccountLimit::EmoteMaxBytes, 2 * 1024 * 1024),
+        ]);
+        let small = overrides(&[(AccountLimit::BadgeMaxSide, 512)]);
+        let both = AccountLimits::resolve(&rates, &[small.clone(), supporter.clone()]);
+        let badge = both.media(MediaKind::Badge);
+        assert_eq!((badge.max_side, badge.max_bytes), (4096, 12 * 1024 * 1024));
+        // The other kinds and numbers keep their defaults, or the role's.
+        assert_eq!(badge.max_frames, MediaConfig::current().badge.max_frames);
+        assert_eq!(both.media(MediaKind::Emote).max_bytes, 2 * 1024 * 1024);
+        assert_eq!(both.media(MediaKind::Paint), MediaConfig::current().paint);
+        // Lowered when it is the only role that says.
+        let lowered = AccountLimits::resolve(&rates, &[small]);
+        assert_eq!(lowered.media(MediaKind::Badge).max_side, 512);
+    }
+
+    #[test]
+    fn an_emote_side_stays_inside_1000_px_whatever_is_stored_or_resolved() {
+        let rates = Rates::default();
+        // A stored value past the ceiling isn't read at all.
+        let stored = serde_json::json!({ "emote_max_side": 1500, "emote_max_bytes": 4_194_304 });
+        let read = overrides_from_json(&stored);
+        assert_eq!(read, overrides(&[(AccountLimit::EmoteMaxBytes, 4_194_304)]));
+        // And one that gets through anyway is cut where the limits are made.
+        let forced = overrides(&[(AccountLimit::EmoteMaxSide, 1500)]);
+        let l = AccountLimits::resolve(&rates, &[forced]).media(MediaKind::Emote);
+        assert_eq!(l.max_side, 1000);
+        let lowered = overrides(&[(AccountLimit::EmoteMaxSide, 256)]);
+        assert_eq!(
+            AccountLimits::resolve(&rates, &[lowered])
+                .media(MediaKind::Emote)
+                .max_side,
+            256
+        );
+        assert_eq!(AccountLimit::EmoteMaxSide.max_value(), 1000);
+        assert_eq!(AccountLimit::BadgeMaxSide.max_value(), 4096);
+        assert_eq!(AccountLimit::EmoteMaxSide.group(), LimitGroup::Media);
     }
 
     #[test]

@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 use crate::error::DbResult;
 use crate::ids;
+use crate::keyset::{self, Key, KeyType, Value};
 
 /// [`LISTED_EMOTE`] as a literal, so `concat!` can build other constants on it.
 macro_rules! listed_emote {
@@ -56,16 +57,76 @@ pub struct Query<'a> {
     pub window: TrendingWindow,
     pub sort: EmoteSort,
     pub limit: i64,
+    /// Ignored when `after` is set.
     pub offset: i64,
+    /// Read the page after this position (in [`emote_keys`] order) instead of at `offset`.
+    pub after: Option<&'a [Value]>,
 }
 
-/// Matching emote IDs in rank order, and how many match in all.
+/// Matching IDs in rank order, and how many match in all.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Hits {
     pub ids: Vec<Uuid>,
     pub total: i64,
     /// `total` stopped counting at `ACCOUNT_TOTAL_CAP` (account search only).
     pub capped: bool,
+    /// Where the next page starts; `None` on the last page.
+    pub next: Option<Vec<Value>>,
+}
+
+/// The keys an emote search is ordered by, for cursor paging: the same order as the numbered
+/// pages, written so that every key goes up (numbers and scores negated, flags as `NOT`), which
+/// makes "after a position" one row comparison that the keyset indexes read as a range.
+pub fn emote_keys(sort: EmoteSort, text_is_empty: bool) -> Vec<Key> {
+    let id = Key::asc("e.id", KeyType::Uuid);
+    match sort {
+        EmoteSort::Relevance if text_is_empty => {
+            vec![Key::asc("(-e.popularity)", KeyType::Int), id]
+        }
+        EmoteSort::Relevance => vec![
+            Key::asc("(NOT lower(e.name) = lower($1))", KeyType::Bool),
+            Key::asc("(NOT lower(e.name) LIKE $5 || '%')", KeyType::Bool),
+            Key::asc("(-similarity(e.name, $1))", KeyType::Real),
+            Key::asc("(-e.popularity)", KeyType::Int),
+            id,
+        ],
+        EmoteSort::Top => vec![
+            Key::asc("(-e.popularity)", KeyType::Int),
+            Key::asc("lower(e.name)", KeyType::Text),
+            id,
+        ],
+        EmoteSort::New => vec![
+            Key::desc("e.created_at", KeyType::Time),
+            Key::desc("e.id", KeyType::Uuid),
+        ],
+        EmoteSort::Trending => vec![
+            Key::asc("(-tr.net)", KeyType::Int),
+            Key::asc("(-e.popularity)", KeyType::Int),
+            id,
+        ],
+    }
+}
+
+/// The join a trending read ranks by; empty for the other orders.
+fn trending_join(q: &Query<'_>) -> String {
+    if matches!(q.sort, EmoteSort::Trending) {
+        format!(
+            "JOIN ({}) tr ON tr.emote_id = e.id",
+            net_adds(q.window.days())
+        )
+    } else {
+        String::new()
+    }
+}
+
+/// The count of every match for `q` (its page can't always carry it).
+fn count_sql(q: &Query<'_>) -> String {
+    format!(
+        "SELECT count(*) FROM emotes e {}
+         WHERE {SEARCH_WHERE}
+           AND $6::bigint IS NOT NULL AND $7::bigint IS NOT NULL",
+        trending_join(q)
+    )
 }
 
 /// `accounts` counts matches up to this many; more are reported as this, `capped`.
@@ -185,6 +246,25 @@ macro_rules! bind_search {
 
 /// The statement that reads one page of ids (and, for trending, the total).
 fn page_sql(q: &Query<'_>, text_is_empty: bool) -> String {
+    let keys = emote_keys(q.sort, text_is_empty);
+    let cols = keyset::columns(&keys);
+    if q.after.is_some() {
+        // After a position: the rows past it in key order, one more than a page to know whether
+        // another follows. The total is counted apart.
+        return format!(
+            "SELECT e.id{cols}
+             FROM emotes e
+             {}
+             WHERE {SEARCH_WHERE}
+               AND $7::bigint IS NOT NULL
+               AND {}
+             ORDER BY {}
+             LIMIT $6 + 1",
+            trending_join(q),
+            keyset::after(&keys, 13),
+            keyset::order(&keys)
+        );
+    }
     // The order and the join are fixed strings, never user text. Without text, the relevance
     // order is popularity then ID (the text terms are the same for every row), which an index
     // reads in order.
@@ -215,7 +295,7 @@ fn page_sql(q: &Query<'_>, text_is_empty: bool) -> String {
         (String::new(), "0::bigint")
     };
     format!(
-        "SELECT e.id, {total_col} AS total
+        "SELECT e.id, {total_col} AS total{cols}
          FROM emotes e
          {join}
          WHERE {SEARCH_WHERE}
@@ -235,9 +315,14 @@ pub async fn explain_page(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<St
     let text: String = q.text.trim().chars().take(100).collect();
     let pattern = like_escape(&text.to_lowercase());
     let sql = format!("EXPLAIN (COSTS OFF) {}", page_sql(q, text.is_empty()));
-    let lines: Vec<String> = bind_search!(sqlx::query_scalar(&sql), &text, &pattern, &tags, q)
+    let query = bind_search!(sqlx::query(&sql), &text, &pattern, &tags, q);
+    let rows = keyset::bind(query, q.after.unwrap_or_default())
         .fetch_all(conn)
         .await?;
+    let lines: Vec<String> = rows
+        .iter()
+        .map(|r| sqlx::Row::try_get::<String, _>(r, 0))
+        .collect::<Result<_, _>>()?;
     Ok(lines.join(
         "
 ",
@@ -250,46 +335,53 @@ pub async fn search(conn: &mut PgConnection, q: &Query<'_>) -> DbResult<Hits> {
             ids: Vec::new(),
             total: 0,
             capped: false,
+            next: None,
         });
     };
     let text: String = q.text.trim().chars().take(100).collect();
     let pattern = like_escape(&text.to_lowercase());
     let trending = matches!(q.sort, EmoteSort::Trending);
-    let rows: Vec<(Uuid, i64)> = bind_search!(
-        sqlx::query_as(&page_sql(q, text.is_empty())),
-        &text,
-        &pattern,
-        &tags,
-        q
-    )
-    .fetch_all(&mut *conn)
-    .await?;
-    let ids: Vec<Uuid> = rows.iter().map(|(id, _)| *id).collect();
+    let keys = emote_keys(q.sort, text.is_empty());
+    let sql = page_sql(q, text.is_empty());
+    if let Some(after) = q.after {
+        if !keyset::fits(&keys, after) {
+            return Err(crate::error::DbError::NotFound);
+        }
+        let query = bind_search!(sqlx::query(&sql), &text, &pattern, &tags, q);
+        let rows = keyset::bind(query, after).fetch_all(&mut *conn).await?;
+        let page = keyset::split(keyset::decode::<(Uuid,)>(&rows, &keys)?, q.limit);
+        let total: i64 = bind_search!(sqlx::query_scalar(&count_sql(q)), &text, &pattern, &tags, q)
+            .fetch_one(&mut *conn)
+            .await?;
+        return Ok(Hits {
+            ids: page.rows.into_iter().map(|(id,)| id).collect(),
+            total,
+            capped: false,
+            next: page.next,
+        });
+    }
+    let rows = bind_search!(sqlx::query(&sql), &text, &pattern, &tags, q)
+        .fetch_all(&mut *conn)
+        .await?;
+    let rows = keyset::decode::<(Uuid, i64)>(&rows, &keys)?;
+    let ids: Vec<Uuid> = rows.iter().map(|((id, _), _)| *id).collect();
     // A page past the last one has no rows and, as before, a total of 0. A short page is the
     // last one, so its total needs no count.
     let total = if trending || ids.is_empty() {
-        rows.first().map_or(0, |(_, t)| *t)
+        rows.first().map_or(0, |((_, t), _)| *t)
     } else if (ids.len() as i64) < q.limit {
         q.offset + ids.len() as i64
     } else {
-        bind_search!(
-            sqlx::query_scalar(&format!(
-                "SELECT count(*) FROM emotes e
-                 WHERE {SEARCH_WHERE}
-                   AND $6::bigint IS NOT NULL AND $7::bigint IS NOT NULL"
-            )),
-            &text,
-            &pattern,
-            &tags,
-            q
-        )
-        .fetch_one(&mut *conn)
-        .await?
+        bind_search!(sqlx::query_scalar(&count_sql(q)), &text, &pattern, &tags, q)
+            .fetch_one(&mut *conn)
+            .await?
     };
+    let more = q.offset + (ids.len() as i64) < total;
     Ok(Hits {
         ids,
         total,
         capped: false,
+        next: keyset::finish(rows, more).next,
     })
 }
 
@@ -341,6 +433,16 @@ pub async fn quick(conn: &mut PgConnection, text: &str, limit: i64) -> DbResult<
     Ok(rows.into_iter().map(|(id,)| id).collect())
 }
 
+/// The keys `accounts` ranks by, for cursor paging: tier, then similarity (both best first),
+/// then account ID.
+pub fn account_keys() -> Vec<Key> {
+    vec![
+        Key::asc("(-r.tier)", KeyType::Int),
+        Key::asc("(-r.score)", KeyType::Real),
+        Key::asc("r.account_id", KeyType::Uuid),
+    ]
+}
+
 /// Live accounts (not deleted, not blocked) whose Twitch or Kick login or display name matches
 /// `text` (lowercase, trimmed, at most 64 characters, at least `ACCOUNT_QUERY_MIN`), in rank order,
 /// and how many match (counted up to `ACCOUNT_TOTAL_CAP`).
@@ -351,12 +453,27 @@ pub async fn accounts(
     limit: i64,
     offset: i64,
 ) -> DbResult<Hits> {
-    let hits = accounts_window(conn, text, limit, offset).await?;
+    accounts_page(conn, text, limit, offset, None).await
+}
+
+/// `accounts`, from `offset` or, when `after` is set, after that position ([`account_keys`]).
+pub async fn accounts_page(
+    conn: &mut PgConnection,
+    text: &str,
+    limit: i64,
+    offset: i64,
+    after: Option<&[Value]>,
+) -> DbResult<Hits> {
+    if after.is_some_and(|a| !keyset::fits(&account_keys(), a)) {
+        return Err(crate::error::DbError::NotFound);
+    }
+    let hits = accounts_window(conn, text, limit, offset, after).await?;
     // A page past the last one has no rows to carry the count; ask for the first row instead.
-    if hits.ids.is_empty() && offset > 0 {
-        let first = accounts_window(conn, text, 1, 0).await?;
+    if hits.ids.is_empty() && (offset > 0 || after.is_some()) {
+        let first = accounts_window(conn, text, 1, 0, None).await?;
         return Ok(Hits {
             ids: Vec::new(),
+            next: None,
             ..first
         });
     }
@@ -368,6 +485,7 @@ async fn accounts_window(
     text: &str,
     limit: i64,
     offset: i64,
+    after: Option<&[Value]>,
 ) -> DbResult<Hits> {
     let text: String = text.trim().to_lowercase().chars().take(64).collect();
     if text.chars().count() < ACCOUNT_QUERY_MIN {
@@ -375,10 +493,16 @@ async fn accounts_window(
             ids: Vec::new(),
             total: 0,
             capped: false,
+            next: None,
         });
     }
     let pattern = like_escape(&text);
-    let rows: Vec<(Uuid, i64)> = sqlx::query_as(
+    let keys = account_keys();
+    let (position, fetch) = match after {
+        Some(_) => (keyset::after(&keys, 6), limit + 1),
+        None => ("TRUE".to_owned(), limit),
+    };
+    let sql = format!(
         "WITH hits AS (
              SELECT i.account_id,
                     max(CASE WHEN lower(i.login) = $1 THEN 3
@@ -401,23 +525,39 @@ async fn accounts_window(
              ORDER BY tier DESC, score DESC, account_id
              LIMIT $5
          )
-         SELECT account_id, count(*) OVER () AS total
-         FROM ranked
-         ORDER BY tier DESC, score DESC, account_id
+         , counted AS (
+             SELECT account_id, tier, score, count(*) OVER () AS total FROM ranked
+         )
+         SELECT r.account_id, r.total{}
+         FROM counted r
+         WHERE {position}
+         ORDER BY r.tier DESC, r.score DESC, r.account_id
          LIMIT $3 OFFSET $4",
-    )
-    .bind(&text)
-    .bind(&pattern)
-    .bind(limit)
-    .bind(offset)
-    .bind(ACCOUNT_TOTAL_CAP + 1)
-    .fetch_all(conn)
-    .await?;
-    let counted = rows.first().map_or(0, |(_, t)| *t);
+        keyset::columns(&keys)
+    );
+    let query = sqlx::query(&sql)
+        .bind(&text)
+        .bind(&pattern)
+        .bind(fetch)
+        .bind(if after.is_some() { 0 } else { offset })
+        .bind(ACCOUNT_TOTAL_CAP + 1);
+    let rows = keyset::bind(query, after.unwrap_or_default())
+        .fetch_all(conn)
+        .await?;
+    let rows = keyset::decode::<(Uuid, i64)>(&rows, &keys)?;
+    let counted = rows.first().map_or(0, |((_, t), _)| *t);
+    let total = counted.min(ACCOUNT_TOTAL_CAP);
+    let page = if after.is_some() {
+        keyset::split(rows, limit)
+    } else {
+        let more = offset + (rows.len() as i64) < total;
+        keyset::finish(rows, more)
+    };
     Ok(Hits {
-        ids: rows.into_iter().map(|(id, _)| id).collect(),
-        total: counted.min(ACCOUNT_TOTAL_CAP),
+        ids: page.rows.into_iter().map(|(id, _)| id).collect(),
+        total,
         capped: counted > ACCOUNT_TOTAL_CAP,
+        next: page.next,
     })
 }
 

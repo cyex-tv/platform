@@ -90,6 +90,11 @@ export type AccountReports = {
 export type AccountResults = {
   __typename?: 'AccountResults';
   items: Array<AccountHit>;
+  /**
+   * Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+   * page. Opaque: a list's cursor only works for the same list, filters and order.
+   */
+  next?: Maybe<Scalars['String']['output']>;
   page: Scalars['Int']['output'];
   perPage: Scalars['Int']['output'];
   /** How many accounts match, counted up to 1000. */
@@ -943,6 +948,11 @@ export type EmoteNote = {
 export type EmotePage = {
   __typename?: 'EmotePage';
   items: Array<Emote>;
+  /**
+   * Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+   * page. Opaque: a list's cursor only works for the same list, filters and order.
+   */
+  next?: Maybe<Scalars['String']['output']>;
   total: Scalars['Int']['output'];
 };
 
@@ -1214,6 +1224,11 @@ export type ImageFormat =
 export type LimitGroup =
   /** Writes to your account: editors, cosmetics, sets, lists, settings, the shop, your data. */
   | 'ACCOUNT'
+  /**
+   * How big the files an account uploads may be: bytes, side and frames of emotes, badges
+   * and paints.
+   */
+  | 'MEDIA'
   /** How often an account may call the API and search. */
   | 'REQUESTS'
   /** Uploads an hour, and how many may wait for review. */
@@ -2554,6 +2569,8 @@ export type Query = {
    * An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`,
    * `emotes.takedown`, `emotes.edit_any`, `emotes.delete_any` or `emotes.flags`, or to be the account or its
    * editor with `EMOTE_MANAGE` on every set. `perPage` is 1 to 100, default 50.
+   * Pass a page's `next` as `after` for the page after it (cursor paging, ADR 0030; `page` is
+   * ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
    */
   accountEmotes: EmotePage;
   /**
@@ -2822,7 +2839,11 @@ export type Query = {
    * `SET_EDITOR`), then login (ignoring case), then platform. Signed-in only.
    */
   myEditableChannels: Array<EditableChannel>;
-  /** Your own emotes in every state, newest first. `perPage` is 1 to 100, default 50. */
+  /**
+   * Your own emotes in every state, newest first. `perPage` is 1 to 100, default 50.
+   * Pass a page's `next` as `after` for the page after it (cursor paging, ADR 0030; `page` is
+   * ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
+   */
   myEmotes: EmotePage;
   /**
    * Your favourite emotes, the latest added first. `query` keeps the ones whose name holds it
@@ -2896,7 +2917,9 @@ export type Query = {
   /**
    * Pending emotes, oldest first. Needs `emotes.review`. `perPage` is 1 to 100, default 50.
    * With `filter`: one tab (public, unlisted and private, or resolved), a search by name or
-   * uploader, and an order.
+   * uploader, and an order. A cursor only works for the same filter (`bad_cursor`).
+   * Pass a page's `next` as `after` for the page after it (cursor paging, ADR 0030; `page` is
+   * ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
    */
   reviewQueue: ReviewQueue;
   /**
@@ -2926,7 +2949,8 @@ export type Query = {
    * blocked accounts are never listed. `perPage` is 1 to 50, default 20. 60 searches a minute
    * per account, or per IP signed out (`rate_limited`). A `query` under 2 characters (after the
    * `@`) finds nobody. Matches are counted up to 1000: `totalCapped` says there are more, and
-   * the pages end there.
+   * the pages end there. Pass a page's `next` as `after` for the page after it (cursor paging,
+   * ADR 0030; `page` is ignored then); a cursor only works for the same `query` (`bad_cursor`).
    */
   searchAccounts: AccountResults;
   /**
@@ -2942,6 +2966,11 @@ export type Query = {
    * the emotes that have every tag listed (exact; a leading `#` and case are ignored, at most
    * 10). `exact: true` makes a non-empty `query` match the whole name (any case) instead of
    * roughly. `window` is `DAY`, `WEEK` (default) or `MONTH`, and only matters for `TRENDING`.
+   *
+   * Cursor paging (ADR 0030): pass a page's `next` as `after` to read the page after it, in
+   * the same order, with nothing shown twice or skipped when emotes are added meanwhile; `page`
+   * is ignored then and there is no depth limit. `next` is null on the last page. A cursor only
+   * works with the same `query`, filters and `sort` (`bad_cursor` otherwise).
    */
   searchEmotes: SearchResults;
   /**
@@ -2962,6 +2991,8 @@ export type Query = {
    * the rule of `set`; an unknown or hidden set is an empty page. `query` keeps the emotes whose
    * name in the set or own name contains it (case-insensitive). `perPage` is 1 to 200, default
    * 120; `total` counts every match.
+   * Pass a page's `next` as `after` for the page after it (cursor paging, ADR 0030; `page` is
+   * ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
    */
   setEmotes: SetEmotePage;
   /** One shop item: on sale for everyone; any, deleted ones too, with `shop.manage`. */
@@ -3028,6 +3059,7 @@ export type QueryAccountEditorsArgs = {
 
 export type QueryAccountEmotesArgs = {
   accountId: Scalars['String']['input'];
+  after?: InputMaybe<Scalars['String']['input']>;
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
 };
@@ -3246,6 +3278,7 @@ export type QueryMyCosmeticsArgs = {
 
 
 export type QueryMyEmotesArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
 };
@@ -3314,6 +3347,7 @@ export type QueryReportQueueArgs = {
 
 
 export type QueryReviewQueueArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
   filter?: InputMaybe<ReviewQueueFilter>;
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
@@ -3332,6 +3366,7 @@ export type QueryRoleLimitsArgs = {
 
 
 export type QuerySearchAccountsArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
   query: Scalars['String']['input'];
@@ -3339,6 +3374,7 @@ export type QuerySearchAccountsArgs = {
 
 
 export type QuerySearchEmotesArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
   animated?: InputMaybe<Scalars['Boolean']['input']>;
   exact?: InputMaybe<Scalars['Boolean']['input']>;
   flags?: InputMaybe<Array<EmoteFlag>>;
@@ -3369,6 +3405,7 @@ export type QuerySetEditorsArgs = {
 
 
 export type QuerySetEmotesArgs = {
+  after?: InputMaybe<Scalars['String']['input']>;
   id: Scalars['String']['input'];
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
@@ -3521,6 +3558,11 @@ export type ReviewQueue = {
   /** How many wait in each pending tab, whatever the read asked for. */
   counts: ReviewCounts;
   items: Array<Emote>;
+  /**
+   * Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+   * page. Opaque: a list's cursor only works for the same list, filters and order.
+   */
+  next?: Maybe<Scalars['String']['output']>;
   /** How many match the read in all (its tab and search). */
   total: Scalars['Int']['output'];
 };
@@ -3611,9 +3653,17 @@ export type RoleLimit = {
   /**
    * `gql_account`, `uploads_per_hour`, `pending_emotes`, `editors`, `cosmetics`,
    * `set_clones`, `account_search`, `quick_search`, `heavy_reads`, `personal_lists`,
-   * `emote_transfers`, `prefs`, `checkout`, `redeem` or `data_export`.
+   * `emote_transfers`, `prefs`, `checkout`, `redeem`, `data_export`, `set_capacity_max`, or a
+   * media limit: `emote_max_bytes`, `emote_max_side`, `emote_max_frames`, `badge_max_bytes`,
+   * `badge_max_side`, `badge_max_frames`, `paint_max_bytes` or `paint_max_side` (bytes, px
+   * and frames of the largest file an account may upload).
    */
   key: Scalars['String']['output'];
+  /**
+   * The most this limit may be set to: 1,000,000 for a count, and for a media limit the
+   * ceiling the API runs with (an emote's side never above 1000 px).
+   */
+  max: Scalars['Int']['output'];
   /** The role's own count; null when it keeps the default. */
   value?: Maybe<Scalars['Int']['output']>;
   /**
@@ -3626,13 +3676,18 @@ export type RoleLimit = {
 /** One override for `setRoleLimits`. */
 export type RoleLimitInput = {
   key: Scalars['String']['input'];
-  /** 1 to 1,000,000; null keeps the default. */
+  /** 1 up to the limit's `max` (1,000,000 for a count); null keeps the default. */
   value?: InputMaybe<Scalars['Int']['input']>;
 };
 
 export type SearchResults = {
   __typename?: 'SearchResults';
   items: Array<Emote>;
+  /**
+   * Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+   * page. Opaque: a list's cursor only works for the same list, filters and order.
+   */
+  next?: Maybe<Scalars['String']['output']>;
   page: Scalars['Int']['output'];
   perPage: Scalars['Int']['output'];
   total: Scalars['Int']['output'];
@@ -3694,6 +3749,11 @@ export type SetEmote = {
 export type SetEmotePage = {
   __typename?: 'SetEmotePage';
   items: Array<SetEmote>;
+  /**
+   * Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+   * page. Opaque: a list's cursor only works for the same list, filters and order.
+   */
+  next?: Maybe<Scalars['String']['output']>;
   /** Members the viewer may see that match `query`, over every page. */
   total: Scalars['Int']['output'];
 };
@@ -4488,10 +4548,11 @@ export type SearchByOwnerQueryVariables = Exact<{
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
   sort?: InputMaybe<EmoteSort>;
+  after?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
-export type SearchByOwnerQuery = { __typename?: 'Query', searchEmotes: { __typename?: 'SearchResults', total: number, page: number, perPage: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, processing: EmoteProcessing, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+export type SearchByOwnerQuery = { __typename?: 'Query', searchEmotes: { __typename?: 'SearchResults', total: number, page: number, perPage: number, next?: string | null, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, processing: EmoteProcessing, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
 
 export type AdminAccountQueryVariables = Exact<{
   accountId: Scalars['String']['input'];
@@ -4512,10 +4573,11 @@ export type AccountEmotesQueryVariables = Exact<{
   accountId: Scalars['String']['input'];
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
+  after?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
-export type AccountEmotesQuery = { __typename?: 'Query', accountEmotes: { __typename?: 'EmotePage', total: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, processing: EmoteProcessing, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+export type AccountEmotesQuery = { __typename?: 'Query', accountEmotes: { __typename?: 'EmotePage', total: number, next?: string | null, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, processing: EmoteProcessing, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
 
 export type AccountReportsQueryVariables = Exact<{
   accountId: Scalars['String']['input'];
@@ -4552,19 +4614,21 @@ export type SearchQueryVariables = Exact<{
   tags?: InputMaybe<Array<Scalars['String']['input']> | Scalars['String']['input']>;
   exact?: InputMaybe<Scalars['Boolean']['input']>;
   window?: InputMaybe<TrendingWindow>;
+  after?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
-export type SearchQuery = { __typename?: 'Query', searchEmotes: { __typename?: 'SearchResults', total: number, page: number, perPage: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, processing: EmoteProcessing, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+export type SearchQuery = { __typename?: 'Query', searchEmotes: { __typename?: 'SearchResults', total: number, page: number, perPage: number, next?: string | null, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, processing: EmoteProcessing, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
 
 export type FindPeopleQueryVariables = Exact<{
   query: Scalars['String']['input'];
   page?: InputMaybe<Scalars['Int']['input']>;
   perPage?: InputMaybe<Scalars['Int']['input']>;
+  after?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
-export type FindPeopleQuery = { __typename?: 'Query', searchAccounts: { __typename?: 'AccountResults', total: number, page: number, perPage: number, items: Array<{ __typename?: 'AccountHit', account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }> }> } };
+export type FindPeopleQuery = { __typename?: 'Query', searchAccounts: { __typename?: 'AccountResults', total: number, page: number, perPage: number, next?: string | null, items: Array<{ __typename?: 'AccountHit', account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }> }> } };
 
 export type EmoteQueryVariables = Exact<{
   id: Scalars['String']['input'];
@@ -4869,19 +4933,19 @@ export type RolesQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type RolesQuery = { __typename?: 'Query', permissions: Array<string>, roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean }> };
 
-export type RoleLimitFieldsFragment = { __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null };
+export type RoleLimitFieldsFragment = { __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, max: number, windowSeconds?: number | null, value?: number | null };
 
 export type LimitDefaultsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type LimitDefaultsQuery = { __typename?: 'Query', limitDefaults: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null }> };
+export type LimitDefaultsQuery = { __typename?: 'Query', limitDefaults: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, max: number, windowSeconds?: number | null, value?: number | null }> };
 
 export type RoleLimitsQueryVariables = Exact<{
   id: Scalars['String']['input'];
 }>;
 
 
-export type RoleLimitsQuery = { __typename?: 'Query', roleLimits: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null }> };
+export type RoleLimitsQuery = { __typename?: 'Query', roleLimits: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, max: number, windowSeconds?: number | null, value?: number | null }> };
 
 export type SetRoleLimitsMutationVariables = Exact<{
   id: Scalars['String']['input'];
@@ -4889,7 +4953,7 @@ export type SetRoleLimitsMutationVariables = Exact<{
 }>;
 
 
-export type SetRoleLimitsMutation = { __typename?: 'Mutation', setRoleLimits: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null }> };
+export type SetRoleLimitsMutation = { __typename?: 'Mutation', setRoleLimits: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, max: number, windowSeconds?: number | null, value?: number | null }> };
 
 export type UploadQuotaQueryVariables = Exact<{
   ownerId?: InputMaybe<Scalars['String']['input']>;
@@ -5519,6 +5583,7 @@ export const RoleLimitFieldsFragmentDoc = new TypedDocumentString(`
   key
   group
   default
+  max
   windowSeconds
   value
 }
@@ -7019,17 +7084,19 @@ export const MySetNamesDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<MySetNamesQuery, MySetNamesQueryVariables>;
 export const SearchByOwnerDocument = new TypedDocumentString(`
-    query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {
+    query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort, $after: String) {
   searchEmotes(
     query: ""
     owner: $owner
     page: $page
     perPage: $perPage
     sort: $sort
+    after: $after
   ) {
     total
     page
     perPage
+    next
     items {
       ...EmoteFields
     }
@@ -7127,9 +7194,15 @@ export const TransferEmoteDocument = new TypedDocumentString(`
   }
 }`) as unknown as TypedDocumentString<TransferEmoteMutation, TransferEmoteMutationVariables>;
 export const AccountEmotesDocument = new TypedDocumentString(`
-    query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {
-  accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {
+    query AccountEmotes($accountId: String!, $page: Int, $perPage: Int, $after: String) {
+  accountEmotes(
+    accountId: $accountId
+    page: $page
+    perPage: $perPage
+    after: $after
+  ) {
     total
+    next
     items {
       ...EmoteFields
     }
@@ -7243,7 +7316,7 @@ export const EmoteChannelsDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<EmoteChannelsQuery, EmoteChannelsQueryVariables>;
 export const SearchDocument = new TypedDocumentString(`
-    query Search($query: String!, $animated: Boolean, $page: Int, $perPage: Int, $sort: EmoteSort, $flags: [EmoteFlag!], $tags: [String!], $exact: Boolean, $window: TrendingWindow) {
+    query Search($query: String!, $animated: Boolean, $page: Int, $perPage: Int, $sort: EmoteSort, $flags: [EmoteFlag!], $tags: [String!], $exact: Boolean, $window: TrendingWindow, $after: String) {
   searchEmotes(
     query: $query
     animated: $animated
@@ -7254,10 +7327,12 @@ export const SearchDocument = new TypedDocumentString(`
     tags: $tags
     exact: $exact
     window: $window
+    after: $after
   ) {
     total
     page
     perPage
+    next
     items {
       ...EmoteFields
     }
@@ -7295,11 +7370,12 @@ export const SearchDocument = new TypedDocumentString(`
   }
 }`) as unknown as TypedDocumentString<SearchQuery, SearchQueryVariables>;
 export const FindPeopleDocument = new TypedDocumentString(`
-    query FindPeople($query: String!, $page: Int, $perPage: Int) {
-  searchAccounts(query: $query, page: $page, perPage: $perPage) {
+    query FindPeople($query: String!, $page: Int, $perPage: Int, $after: String) {
+  searchAccounts(query: $query, page: $page, perPage: $perPage, after: $after) {
     total
     page
     perPage
+    next
     items {
       account {
         id
@@ -8190,6 +8266,7 @@ export const LimitDefaultsDocument = new TypedDocumentString(`
   key
   group
   default
+  max
   windowSeconds
   value
 }`) as unknown as TypedDocumentString<LimitDefaultsQuery, LimitDefaultsQueryVariables>;
@@ -8203,6 +8280,7 @@ export const RoleLimitsDocument = new TypedDocumentString(`
   key
   group
   default
+  max
   windowSeconds
   value
 }`) as unknown as TypedDocumentString<RoleLimitsQuery, RoleLimitsQueryVariables>;
@@ -8216,6 +8294,7 @@ export const SetRoleLimitsDocument = new TypedDocumentString(`
   key
   group
   default
+  max
   windowSeconds
   value
 }`) as unknown as TypedDocumentString<SetRoleLimitsMutation, SetRoleLimitsMutationVariables>;

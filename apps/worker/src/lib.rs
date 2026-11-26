@@ -72,6 +72,29 @@ pub fn media_failure(err: cyex_tv_media::MediaError) -> JobError {
     }
 }
 
+/// The media limits a transcode job runs under: the numbers the API stored on it (the uploader's
+/// effective limits, `limits` in the payload), cut at the configured ceiling, else the configured
+/// limits. Never re-derived from a role, which may have changed since the upload.
+pub fn job_limits(
+    kind: cyex_tv_media::config::MediaKind,
+    payload: &serde_json::Value,
+) -> cyex_tv_media::Limits {
+    let stored = payload.get("limits");
+    let get = |key: &str| {
+        stored
+            .and_then(|l| l.get(key))
+            .and_then(serde_json::Value::as_u64)
+    };
+    cyex_tv_media::config::MediaConfig::current().effective(
+        kind,
+        cyex_tv_media::config::Overrides {
+            max_bytes: get("max_bytes").and_then(|n| usize::try_from(n).ok()),
+            max_side: get("max_side").and_then(|n| u32::try_from(n).ok()),
+            max_frames: get("max_frames").and_then(|n| u32::try_from(n).ok()),
+        },
+    )
+}
+
 /// What handlers can reach.
 #[derive(Clone)]
 pub struct Ctx {
@@ -650,6 +673,38 @@ pub async fn run(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_job_decodes_under_the_limits_stored_on_it_cut_at_the_ceiling() {
+        use cyex_tv_media::config::{MediaConfig, MediaKind};
+        use serde_json::json;
+        let config = MediaConfig::current();
+        // Nothing stored (a job from before): the configured limits.
+        assert_eq!(job_limits(MediaKind::Badge, &json!({})), config.badge);
+        // Stored: those, whatever a role says now.
+        let stored =
+            json!({ "limits": { "max_bytes": 1_000_000, "max_side": 4096, "max_frames": 200 } });
+        let l = job_limits(MediaKind::Badge, &stored);
+        assert_eq!(
+            (l.max_bytes, l.max_side, l.max_frames),
+            (1_000_000, 4096, 200)
+        );
+        assert_eq!(l.max_total_pixels, config.badge.max_total_pixels);
+        // A number past the ceiling (a tampered job, or a ceiling lowered since) is cut.
+        let wild = json!({ "limits": { "max_bytes": 1u64 << 40, "max_side": 90_000, "max_frames": 90_000 } });
+        let l = job_limits(MediaKind::Badge, &wild);
+        let ceiling = config.ceiling(MediaKind::Badge);
+        assert_eq!(
+            (l.max_bytes, l.max_side, l.max_frames),
+            (ceiling.max_bytes, ceiling.max_side, ceiling.max_frames)
+        );
+        // An emote never gets past 1000 px.
+        let emote = job_limits(MediaKind::Emote, &json!({ "limits": { "max_side": 4000 } }));
+        assert_eq!(emote.max_side, 1000);
+        // Lowered works.
+        let low = job_limits(MediaKind::Emote, &json!({ "limits": { "max_side": 64 } }));
+        assert_eq!(low.max_side, 64);
+    }
 
     #[test]
     fn backoff_doubles_up_to_an_hour() {

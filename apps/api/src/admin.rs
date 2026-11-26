@@ -42,9 +42,7 @@ use uuid::Uuid;
 use crate::catalog::{db_error, forbidden, not_found, parse_id, permissions_of};
 use crate::errors::{Audit, record_audit};
 use crate::errors::{bad, sqlx_error};
-use crate::limits::{
-    AccountLimit, MAX_LIMIT, Rates, RoleOverrides, overrides_from_json, overrides_to_json,
-};
+use crate::limits::{AccountLimit, Rates, RoleOverrides, overrides_from_json, overrides_to_json};
 use crate::state::AppState;
 use crate::views;
 
@@ -938,6 +936,7 @@ fn limit_view(rates: &Rates, overrides: &RoleOverrides) -> Vec<RoleLimit> {
                 key: l.key().to_owned(),
                 group: l.group(),
                 default: int(default),
+                max: int(l.max_value()),
                 window_seconds: window.map(|w| i32::try_from(w.as_secs()).unwrap_or(i32::MAX)),
                 value: overrides.get(&l).copied().map(int),
             }
@@ -945,7 +944,8 @@ fn limit_view(rates: &Rates, overrides: &RoleOverrides) -> Vec<RoleLimit> {
         .collect()
 }
 
-/// The overrides `setRoleLimits` was given: known keys, each once, 1 to `MAX_LIMIT`; a null
+/// The overrides `setRoleLimits` was given: known keys, each once, 1 to the limit's most
+/// (`MAX_LIMIT`, or the ceiling of a media number: an emote's side never above 1000 px); a null
 /// value keeps the default.
 pub fn parse_limits(input: &[RoleLimitInput]) -> ApiResult<RoleOverrides> {
     let mut out = RoleOverrides::new();
@@ -959,14 +959,15 @@ pub fn parse_limits(input: &[RoleLimitInput]) -> ApiResult<RoleOverrides> {
             return Err(bad("bad_limit", format!("{key} is listed twice.")));
         }
         let Some(value) = item.value else { continue };
+        let most = limit.max_value();
         match u32::try_from(value) {
-            Ok(n) if (1..=MAX_LIMIT).contains(&n) => {
+            Ok(n) if (1..=most).contains(&n) => {
                 out.insert(limit, n);
             }
             _ => {
                 return Err(bad(
                     "bad_limit",
-                    format!("Limits are 1 to {MAX_LIMIT}; leave one empty to keep the default."),
+                    format!("{key} is 1 to {most}; leave it empty to keep the default."),
                 ));
             }
         }
@@ -1078,6 +1079,34 @@ mod tests {
         ] {
             assert_eq!(parse_limits(&bad_input).unwrap_err().code, code);
         }
+    }
+
+    #[test]
+    fn media_limits_stop_at_their_ceilings_and_an_emote_stays_inside_1000_px() {
+        let got = parse_limits(&[
+            item("emote_max_side", Some(1000)),
+            item("badge_max_side", Some(4096)),
+            item("badge_max_bytes", Some(16 * 1024 * 1024)),
+            item("paint_max_bytes", Some(1)),
+        ])
+        .unwrap();
+        assert_eq!(got[&AccountLimit::BadgeMaxSide], 4096);
+        for key in [
+            ("emote_max_side", 1001),
+            ("emote_max_side", 4096),
+            ("badge_max_side", 4097),
+            ("badge_max_bytes", 16 * 1024 * 1024 + 1),
+            ("emote_max_frames", 2001),
+            ("paint_max_side", 0),
+        ] {
+            let err = parse_limits(&[item(key.0, Some(key.1))]).unwrap_err();
+            assert_eq!(err.code, "bad_limit", "{key:?}");
+        }
+        let view = limit_view(&Rates::default(), &RoleOverrides::new());
+        let max = |k: &str| view.iter().find(|l| l.key == k).unwrap().max;
+        assert_eq!(max("emote_max_side"), 1000);
+        assert_eq!(max("badge_max_side"), 4096);
+        assert_eq!(max("gql_account"), 1_000_000);
     }
 
     #[test]

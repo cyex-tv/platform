@@ -38,6 +38,24 @@ describe('picture rules from the API', () => {
     expect(checkSize('paint', 130, 32, rules)).toMatch(/at most 4 times as wide as they are tall, 4:1/);
   });
 
+  it('follow the account’s own numbers when its roles set bigger ones', () => {
+    const l = { ...answer().limits, account: [
+      { key: 'badge_max_side', effective: 3000 },
+      { key: 'badge_max_bytes', effective: 12 * 1024 * 1024 },
+      { key: 'paint_max_side', effective: 6144 },
+      { key: 'pending_emotes', effective: 25 },
+    ] };
+    const rules = rulesFromLimits(l);
+    expect(rules.badge.maxSide).toBe(3000);
+    expect(rules.badge.maxBytes).toBe(12 * 1024 * 1024);
+    expect(rules.paint.maxSide).toBe(6144);
+    // What the account doesn't set is the public number.
+    expect(rules.badge.maxFrames).toBe(120);
+    expect(checkSize('badge', 2500, 2500, rules)).toBeNull();
+    expect(checkSize('badge', 2500, 2500)).toMatch(/at most 2048/);
+    expect(pictureHint('badge', rules)).toContain('up to 12 MB');
+  });
+
   it('fall back to the built-in rules without an answer', () => {
     expect(rulesFromLimits(null)).toBe(PICTURE_RULES);
   });

@@ -26,11 +26,12 @@ export const MY_SET_NAMES = graphql(`
 
 // A creator's public emotes (the creator page): the search, narrowed to one owner.
 export const SEARCH_BY_OWNER = graphql(`
-  query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {
-    searchEmotes(query: "", owner: $owner, page: $page, perPage: $perPage, sort: $sort) {
+  query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort, $after: String) {
+    searchEmotes(query: "", owner: $owner, page: $page, perPage: $perPage, sort: $sort, after: $after) {
       total
       page
       perPage
+      next
       items {
         ...EmoteFields
       }
@@ -72,9 +73,10 @@ export const TRANSFER_EMOTE = graphql(`
 `);
 
 export const ACCOUNT_EMOTES = graphql(`
-  query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {
-    accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {
+  query AccountEmotes($accountId: String!, $page: Int, $perPage: Int, $after: String) {
+    accountEmotes(accountId: $accountId, page: $page, perPage: $perPage, after: $after) {
       total
+      next
       items {
         ...EmoteFields
       }

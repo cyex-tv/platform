@@ -1166,6 +1166,89 @@
         }
       }
     },
+    "/v1/sets/{id}/emotes": {
+      "get": {
+        "tags": [
+          "reads"
+        ],
+        "summary": "A page of a set's emotes, oldest first, for clients that read big sets in parts (cursor\npaging, ADR 0030). `next` (and the `Link: <...>; rel=\"next\"` header) is where the following\npage starts; it is null, and the header missing, on the last page. Approved emotes only, as\nin `GET /v1/sets/{id}`.",
+        "operationId": "get_set_emotes",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "The set's ID: its Snowflake (digits), or its old ULID while clients move over.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "description": "Emotes per page, 1 to 200 (default 120).",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "description": "The `next` of the page before (also in its `Link: rel=\"next\"` header); none for the first\npage.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "headers": {
+              "Link": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "`<...>; rel=\"next\"`: the next page, when there is one."
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetEmotePage"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified."
+          },
+          "400": {
+            "description": "`bad_cursor`: `after` isn't a cursor this list gave out.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/shop/paddle/webhook": {
       "post": {
         "tags": [
@@ -1946,6 +2029,7 @@
           "bad_time",
           "bad_scope",
           "bad_search",
+          "bad_cursor",
           "bad_batch",
           "bad_kind",
           "unknown_kind",
@@ -2242,6 +2326,12 @@
             "group": "General",
             "meaning": "The search text is too long.",
             "when": "Searches are at most 100 characters."
+          },
+          {
+            "code": "bad_cursor",
+            "group": "General",
+            "meaning": "A paging cursor is not one this list gave out.",
+            "when": "`after` was cut, edited or made up, comes from another list, or the list's filters or order changed since. Start again from the first page."
           },
           {
             "code": "bad_batch",
@@ -2859,7 +2949,7 @@
             "code": "bad_limit",
             "group": "Admin",
             "meaning": "A limit value is not valid.",
-            "when": "Role limits are 1 to 1,000,000 and listed once."
+            "when": "Role limits are 1 to 1,000,000 (a file limit up to its ceiling: an emote side at most 1000 px) and listed once."
           },
           {
             "code": "unknown_limit",
@@ -3428,6 +3518,35 @@
           },
           "zero_width": {
             "type": "boolean"
+          }
+        }
+      },
+      "SetEmotePage": {
+        "type": "object",
+        "description": "A page of a set's members and how many match, in all (`setEmotes`).",
+        "required": [
+          "items",
+          "total"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SetEmote"
+            }
+          },
+          "next": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last\npage. Opaque: a list's cursor only works for the same list, filters and order."
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Members the viewer may see that match `query`, over every page.",
+            "minimum": 0
           }
         }
       },

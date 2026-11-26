@@ -893,6 +893,10 @@ pub struct SetEmotePage {
     pub items: Vec<SetEmote>,
     /// Members the viewer may see that match `query`, over every page.
     pub total: u64,
+    /// Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+    /// page. Opaque: a list's cursor only works for the same list, filters and order.
+    #[serde(default)]
+    pub next: Option<String>,
 }
 
 /// A set as a card on a profile: its facts and the first few emotes (`accountSets`).
@@ -1055,6 +1059,10 @@ pub struct AccountResults {
     pub total_capped: bool,
     pub page: u32,
     pub per_page: u32,
+    /// Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+    /// page. Opaque: a list's cursor only works for the same list, filters and order.
+    #[serde(default)]
+    pub next: Option<String>,
 }
 
 /// How `searchEmotes` orders its results.
@@ -1133,6 +1141,10 @@ pub struct SearchResults {
     pub total: u64,
     pub page: u32,
     pub per_page: u32,
+    /// Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+    /// page. Opaque: a list's cursor only works for the same list, filters and order.
+    #[serde(default)]
+    pub next: Option<String>,
 }
 
 /// The header search: the best emotes and accounts for one query.
@@ -1154,6 +1166,10 @@ pub struct ReviewQueue {
     /// How many wait in each pending tab, whatever the read asked for.
     #[serde(default)]
     pub counts: ReviewCounts,
+    /// Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+    /// page. Opaque: a list's cursor only works for the same list, filters and order.
+    #[serde(default)]
+    pub next: Option<String>,
 }
 
 /// What a batch review does to every emote in it.
@@ -1283,6 +1299,10 @@ pub struct EmoteNote {
 pub struct EmotePage {
     pub items: Vec<Emote>,
     pub total: u64,
+    /// Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+    /// page. Opaque: a list's cursor only works for the same list, filters and order.
+    #[serde(default)]
+    pub next: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -1748,6 +1768,9 @@ pub enum LimitGroup {
     Uploads,
     /// Writes to your account: editors, cosmetics, sets, lists, settings, the shop, your data.
     Account,
+    /// How big the files an account uploads may be: bytes, side and frames of emotes, badges
+    /// and paints.
+    Media,
 }
 
 /// One per-account limit and a role's override of it (`roleLimits`, `limitDefaults`). An
@@ -1757,11 +1780,17 @@ pub enum LimitGroup {
 pub struct RoleLimit {
     /// `gql_account`, `uploads_per_hour`, `pending_emotes`, `editors`, `cosmetics`,
     /// `set_clones`, `account_search`, `quick_search`, `heavy_reads`, `personal_lists`,
-    /// `emote_transfers`, `prefs`, `checkout`, `redeem` or `data_export`.
+    /// `emote_transfers`, `prefs`, `checkout`, `redeem`, `data_export`, `set_capacity_max`, or a
+    /// media limit: `emote_max_bytes`, `emote_max_side`, `emote_max_frames`, `badge_max_bytes`,
+    /// `badge_max_side`, `badge_max_frames`, `paint_max_bytes` or `paint_max_side` (bytes, px
+    /// and frames of the largest file an account may upload).
     pub key: String,
     pub group: LimitGroup,
     /// What everyone gets without an override (set when the API starts).
     pub default: i32,
+    /// The most this limit may be set to: 1,000,000 for a count, and for a media limit the
+    /// ceiling the API runs with (an emote's side never above 1000 px).
+    pub max: i32,
     /// The window the count is per, in seconds; null for `pending_emotes`, a cap on how many
     /// wait at once.
     pub window_seconds: Option<i32>,
@@ -1775,7 +1804,7 @@ pub struct RoleLimit {
 #[cfg_attr(feature = "graphql", graphql(name = "RoleLimitInput"))]
 pub struct RoleLimitInput {
     pub key: String,
-    /// 1 to 1,000,000; null keeps the default.
+    /// 1 up to the limit's `max` (1,000,000 for a count); null keeps the default.
     pub value: Option<i32>,
 }
 
@@ -1869,6 +1898,17 @@ pub struct Event {
 }
 
 // REST query strings
+
+/// The query of `GET /v1/sets/{id}/emotes`: a page size and where to start (ADR 0030).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct SetEmotesQuery {
+    /// Emotes per page, 1 to 200 (default 120).
+    pub per_page: Option<u32>,
+    /// The `next` of the page before (also in its `Link: rel="next"` header); none for the first
+    /// page.
+    pub after: Option<String>,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]
