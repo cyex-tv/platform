@@ -59,7 +59,7 @@ kbd { font: inherit; }
 @media (pointer: coarse) { .btn-s { position: relative; } .btn-s::after { content: ''; position: absolute; inset: -2px 0; } }
 .btn[disabled] { opacity: 1; color: var(--muted); cursor: default; pointer-events: none; }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; }
-@media (max-width: 480px) { .actions { display: grid; } }
+@media (max-width: 479.98px) { .actions { display: grid; } }
 
 .link { color: var(--accent-text); font-weight: 500; display: inline-flex; align-items: center; gap: 8px;
   min-height: 40px; margin-block: -8px; } /* a 40px target that takes no more room than its line */

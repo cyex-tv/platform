@@ -203,7 +203,7 @@
     .split { grid-template-columns: minmax(0, 1fr); }
     .view { position: static; padding: 12px 0 0; border-left: 0; border-top: 1px solid var(--border); }
   }
-  @media (max-width: 640px) {
+  @media (max-width: 639.98px) {
     .tools { width: 100%; }
     .find { order: 3; flex: 1 1 100%; width: auto; }
   }

@@ -206,5 +206,5 @@
   .panel .body { padding: 16px 16px 0; align-content: start; }
   .panel footer { margin: 20px 16px 0; padding: 0 0 24px; }
   .dialog footer { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); }
-  @media (max-width: 420px) { .row { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 8px 0; } }
+  @media (max-width: 479.98px) { .row { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 8px 0; } }
 </style>

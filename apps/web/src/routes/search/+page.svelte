@@ -438,7 +438,7 @@
       border-right: 1px solid var(--border); scrollbar-width: thin; }
     .tgt { display: none; }
   }
-  @media (min-width: 1280px) {
+  @media (min-width: 1100px) {
     :global(html[data-signed]) .ws, .ws.signed { grid-template-columns: 248px minmax(0, 1fr) 300px; }
     :global(html[data-signed][data-tray='shut']) .ws, .ws.signed.shut { grid-template-columns: 248px minmax(0, 1fr) 44px; }
     :global(html[data-signed]) .tray-col, .signed .tray-col { display: block; position: sticky; top: var(--nav-h); height: calc(100svh - var(--nav-h));
@@ -499,10 +499,10 @@
   .state { margin-top: 16px; }
 
   /* Narrow: the field takes its own row first, the rest wraps under it. */
-  @media (max-width: 760px) {
+  @media (max-width: 719.98px) {
     .find { order: -1; flex-basis: 100%; max-width: none; }
     .acts { margin-left: 0; }
   }
-  @media (max-width: 480px) { .title { flex-direction: column; align-items: flex-start; gap: 0; } }
+  @media (max-width: 479.98px) { .title { flex-direction: column; align-items: flex-start; gap: 0; } }
   @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .results, :global(html:not([data-motion='full'])) .track, :global(html:not([data-motion='full'])) .track::before { transition: none; } }
 </style>

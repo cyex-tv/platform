@@ -89,7 +89,7 @@
   .adm-table.stack td.ell { overflow: visible; white-space: normal; text-overflow: clip; }
 }
 /* The narrowest phones: one pair per line, so a long value never runs into the next label. */
-@media (max-width: 419.98px) { .adm-table.stack tr { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 479.98px) { .adm-table.stack tr { grid-template-columns: minmax(0, 1fr); } }
 
 /* A list of rows that are buttons (a card list), one column. */
 .adm-rows { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
@@ -153,7 +153,7 @@
 .adm-lv > .l { color: var(--muted); }
 .adm-lv > .l small { display: block; font-size: var(--t-fine); color: var(--dim); }
 .adm-lv > .v { min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-@media (max-width: 599.98px) { .adm-lv { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 639.98px) { .adm-lv { grid-template-columns: minmax(0, 1fr); } }
 
 .adm-facts { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); border: 1px solid var(--border); overflow: hidden; }
 .adm-facts > div { display: grid; align-content: start; gap: 2px; padding: 9px 12px; min-width: 0; box-shadow: 1px 0 0 var(--border), 0 1px 0 var(--border); }

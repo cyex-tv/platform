@@ -85,6 +85,15 @@
   --radius-in: var(--radius);  /* a picture's corner inside a mount */
   --radius-pill: 999px;        /* switch tracks and count badges only */
 
+  /* Breakpoints: the only widths a layout switches at (CSS has no custom media, so write the number;
+     the names and the code side are in lib/breakpoints.ts, and breakpoints.test.ts fails on any other).
+       480  tiny    small phones: shortest tab names and rows
+       640  small   phones: one column
+       720  phone   header search and popovers become sheets
+       900  narrow  the side rail becomes a strip
+       1100 panel   a right-hand panel fits beside the list
+       1600 wide    extra columns (the paint studio's three)
+     Below W: (max-width: W - 0.02px), e.g. (max-width: 899.98px). From W: (min-width: Wpx). */
   /* Layout: full width (owner, 2026/11/22, overriding cyex-design's 1520px wrapper): the header, rails,
      content and panels span the window with 20px sides; only long text keeps a measure. */
   --page-pad: max(20px, env(safe-area-inset-left, 0px), env(safe-area-inset-right, 0px)); /* clears the notch in landscape */

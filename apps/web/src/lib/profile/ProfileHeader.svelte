@@ -249,7 +249,7 @@
   }
   /* Phones: the roles get their own line under the name, so its height never depends on the name;
      on your own profile (app.html's hint) that line is kept until your roles arrive. */
-  @media (max-width: 599.98px) {
+  @media (max-width: 639.98px) {
     .top { flex-direction: column; align-items: flex-start; }
     :global(html[data-own-flags]) .top:not(:has(.flags)) { min-height: 52px; }
   }

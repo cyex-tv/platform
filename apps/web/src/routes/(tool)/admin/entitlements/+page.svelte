@@ -9,6 +9,7 @@
   import { page } from '$app/state';
   import { goto } from '$app/navigation';
   import { fetchWith, gql } from '$lib/api';
+  import { BP } from '$lib/breakpoints';
   import UserFilter from '$lib/components/UserFilter.svelte';
   import { topHolders, pastedAccount } from '$lib/admin/people';
   import type { GrantKind } from '$lib/gql/graphql';
@@ -179,7 +180,7 @@
   function fillDown(node: HTMLElement) {
     const fit = () => {
       const top = node.getBoundingClientRect().top + window.scrollY;
-      node.style.height = `${Math.max(window.innerWidth < 760 ? 560 : 380, Math.round(window.innerHeight - top - 20))}px`;
+      node.style.height = `${Math.max(window.innerWidth < BP.phone ? 560 : 380, Math.round(window.innerHeight - top - 20))}px`;
     };
     fit();
     const ro = new ResizeObserver(fit);
@@ -372,7 +373,7 @@
   @media (hover: hover) and (pointer: fine) { .legend button:not(:disabled):hover { background: var(--row-hover); } }
   .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
   .adm-sec .none { padding: 12px 0 0; }
-  @media (max-width: 760px) {
+  @media (max-width: 719.98px) {
     .grp, .acc, .find, .field, .field input { width: 100%; }
     .grp.end { margin-left: 0; }
     .field input { font-size: 16px; }

@@ -105,7 +105,7 @@
   .row label { font-size: var(--t-fine); color: var(--muted); }
   .problem { margin: 0; font-size: var(--t-fine); color: var(--red); }
   .go { width: 100%; justify-content: center; }
-  @media (max-width: 720px) {
+  @media (max-width: 719.98px) {
     .preset { min-height: 44px; }
     .row input { font-size: 16px; min-height: 44px; }
     .ui-btn.trig { height: 44px; }

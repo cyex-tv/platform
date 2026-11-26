@@ -62,7 +62,7 @@
   @media (hover: hover) and (pointer: fine) { .who:hover { background: var(--surface-hover); border-color: var(--border-strong); } }
   @media (pointer: coarse) { .who::after { content: ''; position: absolute; inset: -2px 0; } }
   @media (forced-colors: active) { .who[aria-expanded='true'] { outline: 2px solid Highlight; outline-offset: 1px; } }
-  @media (max-width: 1000px) { .name { display: none; } .who { padding-right: 6px; } }
+  @media (max-width: 899.98px) { .name { display: none; } .who { padding-right: 6px; } }
   .who.hold { width: 120px; }
-  @media (max-width: 1000px) { .who.hold { width: 40px; } }
+  @media (max-width: 899.98px) { .who.hold { width: 40px; } }
 </style>

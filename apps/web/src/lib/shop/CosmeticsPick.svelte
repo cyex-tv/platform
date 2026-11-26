@@ -93,5 +93,5 @@
   .lb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .none { padding: 10px; font-size: var(--t-small); color: var(--dim); }
   @media (hover: hover) and (pointer: fine) { .opt:hover { background: var(--row-hover); color: var(--text); } }
-  @media (max-width: 560px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 639.98px) { .cols { grid-template-columns: minmax(0, 1fr); } }
 </style>

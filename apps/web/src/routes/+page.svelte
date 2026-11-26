@@ -113,11 +113,11 @@
   .flat, .flat:hover { box-shadow: none; }
   .art { width: 100%; justify-self: end; }
   @media (max-width: 1099.98px) { .hero { grid-template-columns: minmax(0, 1fr) minmax(0, 340px); gap: 24px 32px; } }
-  @media (max-width: 699.98px) {
+  @media (max-width: 719.98px) {
     .hero { grid-template-columns: minmax(0, 1fr); }
     .art { order: -1; justify-self: center; max-width: 240px; }
   }
-  @media (max-width: 520px) {
+  @media (max-width: 639.98px) {
     .hero-lead { font-size: 16px; }
     .actions { margin-top: 20px; grid-template-columns: minmax(0, 1fr); }
   }

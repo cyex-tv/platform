@@ -213,5 +213,5 @@
   .tile .pic { height: 44px; max-width: 100%; overflow: hidden; font-size: 18px; font-weight: 700; }
   .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
   .adm-name { display: flex; align-items: center; gap: 10px; }
-  @media (max-width: 760px) { :global(.adm-shell .adm-toolbar) .find, .which, .who { max-width: none; flex-basis: 100%; margin-left: 0; } }
+  @media (max-width: 719.98px) { :global(.adm-shell .adm-toolbar) .find, .which, .who { max-width: none; flex-basis: 100%; margin-left: 0; } }
 </style>

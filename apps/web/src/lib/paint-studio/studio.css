@@ -16,7 +16,7 @@
   .ps-stagecol { grid-area: stage; order: 0; position: sticky; top: calc(var(--nav-h) + var(--ps-bar-h, 84px) + 12px); }
 }
 /* Wider still: library, the preview in the middle, settings on the right. */
-@media (min-width: 1560px) {
+@media (min-width: 1600px) {
   .ps-layout { grid-template-columns: 300px minmax(0, 1fr) 380px; grid-template-areas: 'lib stage par'; }
 }
 
@@ -190,7 +190,7 @@ textarea.ps-text { min-height: 180px; font-family: var(--font-mono); font-size: 
   .ps-item .ps-pick { flex: 1 1 100%; }
 }
 .ps .ui-check { gap: 8px; align-items: center; }
-@media (max-width: 699px) { .ps-savebar { position: static; } .ps-mini { top: var(--nav-h); } }
+@media (max-width: 719.98px) { .ps-savebar { position: static; } .ps-mini { top: var(--nav-h); } }
 
 /* ======== Round 2: the admin language (flush sections between hairlines, uppercase labels, mono numbers) ======== */
 .ps-panel { background: none; border: 0; border-top: 1px solid var(--border); border-radius: 0; }

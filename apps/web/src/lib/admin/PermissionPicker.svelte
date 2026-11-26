@@ -146,7 +146,7 @@
   .opt:disabled, .allbtn:disabled { cursor: not-allowed; }
   .item.off .opt[aria-checked='true'] { color: var(--muted); }
   @media (pointer: coarse) { .item { min-height: 44px; } .opt { height: 44px; } .allbtn { height: 44px; } }
-  @media (max-width: 520px) {
+  @media (max-width: 639.98px) {
     .groups { grid-template-columns: minmax(0, 1fr); }
     .item { flex-wrap: wrap; row-gap: 0; padding-top: 6px; }
     .lbl { flex-basis: 100%; }

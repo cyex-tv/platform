@@ -278,7 +278,7 @@
   .find { position: relative; display: block; flex: 0 1 260px; min-width: 0; margin-left: auto; }
   .find :global(svg) { position: absolute; left: 11px; top: 50%; translate: 0 -50%; color: var(--dim); pointer-events: none; }
   .filter { width: 100%; height: 36px; min-height: 36px; padding-left: 34px; }
-  @media (max-width: 559.98px) { .find { flex-basis: 100%; margin-left: 0; } .filter { height: 44px; } }
+  @media (max-width: 639.98px) { .find { flex-basis: 100%; margin-left: 0; } .filter { height: 44px; } }
   .grid :global(.below) { min-height: 36px; }
   .foot { margin-top: 16px; }
   @media (hover: hover) and (pointer: fine) { .danger:hover { color: var(--red); } }

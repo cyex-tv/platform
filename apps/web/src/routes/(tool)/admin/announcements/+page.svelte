@@ -199,7 +199,7 @@
   .st.on { color: var(--text); font-weight: 700; }
   .st.on :global(svg) { color: var(--accent-text); }
   .none { margin: 0; padding: 16px; font-size: var(--t-small); color: var(--dim); }
-  @media (max-width: 640px) {
+  @media (max-width: 639.98px) {
     .item { grid-template-columns: 20px minmax(0, 1fr); height: auto; min-height: 64px; padding-block: 8px; }
     .st { grid-column: 2; }
   }
