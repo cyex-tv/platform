@@ -31,7 +31,7 @@ impl ShopQuery {
     }
 
     /// Orders you bought, and gifts you got once paid (without what the buyer paid), newest
-    /// first. `perPage` 1 to 100, default 50.
+    /// first. `perPage` is 1 to 100, default 50.
     async fn my_orders(
         &self,
         ctx: &Context<'_>,
@@ -54,7 +54,8 @@ impl ShopQuery {
     }
 
     /// Every order, newest first; narrow by status, account (bought or received) and item.
-    /// Needs `shop.orders`, or `billing.view` narrowed to one account.
+    /// Needs `shop.orders`, or `billing.view` narrowed to one account. `perPage` is 1 to 100, default
+    /// 50.
     #[allow(clippy::too_many_arguments)]
     async fn orders(
         &self,
@@ -80,7 +81,7 @@ impl ShopQuery {
     }
 
     /// Redeem code batches, newest first. Needs `codes.manage`. The codes themselves are shown
-    /// only once, by `createCodeBatch`.
+    /// only once, by `createCodeBatch`. `perPage` is 1 to 100, default 50.
     async fn code_batches(
         &self,
         ctx: &Context<'_>,

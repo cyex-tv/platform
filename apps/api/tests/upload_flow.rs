@@ -573,6 +573,13 @@ async fn bad_files_are_refused() {
                 r.body["message"],
                 "The file is over 8 MB, the most an upload can be.",
             );
+            // And the numbers: the cap, and what was sent.
+            assert_eq!(r.body["details"]["limit"], 8 * 1024 * 1024, "{:?}", r.body);
+            assert!(
+                r.body["details"]["current"].as_u64().unwrap() > 8 * 1024 * 1024,
+                "{:?}",
+                r.body
+            );
         }
         if code == "invalid_image" {
             // The decoder's own words stay in the logs.

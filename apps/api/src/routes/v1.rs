@@ -10,7 +10,7 @@ use axum::Json;
 use axum::extract::multipart::Field;
 use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
 use axum::http::header::{
-    CACHE_CONTROL, CONTENT_TYPE, ETAG, IF_NONE_MATCH, LINK, LOCATION, SET_COOKIE,
+    CACHE_CONTROL, CONTENT_TYPE, ETAG, IF_NONE_MATCH, LINK, LOCATION, SET_COOKIE, VARY,
 };
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
@@ -20,11 +20,12 @@ use cyex_tv_auth::flow::Callback;
 use cyex_tv_media::config::MediaKind;
 use cyex_tv_shared::error::{ApiError, ApiResult, ErrorBody};
 use cyex_tv_shared::model::{
-    CallbackQuery, Channel, ConsoleToken, CosmeticCatalog, CosmeticImage, CosmeticKind, Emote,
-    EmoteSet, EmoteVisibility, LoginQuery, PersonalLookup, PersonalLookupResult, Platform,
-    PublicLimits, SetEmotePage, SetEmotesQuery, UploadCosmeticImage, UploadEmote,
-    UserCosmeticsQuery, UserCosmeticsResult,
+    CallbackQuery, Channel, ConsoleToken, CosmeticCatalog, CosmeticKind, Emote, EmoteSet,
+    EmoteVisibility, LoginQuery, PersonalLookup, PersonalLookupResult, Platform, PublicLimits,
+    SetEmotePage, SetEmotesQuery, UploadCosmeticImage, UploadEmote, UserCosmeticsQuery,
+    UserCosmeticsResult,
 };
+use cyex_tv_shared::upload::{CosmeticImageUploaded, EmoteUploaded, LimitsUsed};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use utoipa_axum::router::OpenApiRouter;
@@ -316,14 +317,14 @@ async fn capped_text(field: &mut Field<'_>, max: usize) -> ApiResult<String> {
     tag = "emotes",
     request_body(content = UploadEmote, content_type = "multipart/form-data"),
     responses(
-        (status = 202, description = "Accepted; the files are being made. The emote is `pending`.", body = Emote),
-        (status = 400, description = "`bad_name`, `bad_tag`, `too_many_tags`, `bad_form`, `bad_visibility` (`unlisted` without `emotes.flags`) or `nsfw_not_allowed`.", body = ErrorBody),
+        (status = 202, description = "Accepted; the files are being made. The emote is `pending`. `id`, `state`, `files` and `limits_used` are the same fields `POST /v1/cosmetics/images` answers with (`UploadResult`).", body = EmoteUploaded),
+        (status = 400, description = "`bad_form`, or for emotes `bad_name`, `bad_tag`, `too_many_tags` (with `details`), `bad_visibility` (`unlisted` without `emotes.flags`) or `nsfw_not_allowed`; for pictures `bad_kind` (kind is badge or paint).", body = ErrorBody),
         (status = 401, description = "`signed_out`.", body = ErrorBody),
-        (status = 403, description = "`restricted` (you or the owner you upload for), `forbidden` (no `EMOTE_UPLOAD` there), or `bad_origin` for a cookie from another site.", body = ErrorBody),
-        (status = 409, description = "`too_many_pending`: the owner already has as many emotes waiting for review as it may (20 unless its roles say otherwise; `uploadQuota`).", body = ErrorBody),
-        (status = 413, description = "`too_large`: over 8 MB, 1000×1000 px or 1000 frames.", body = ErrorBody),
+        (status = 403, description = "`restricted` (you or the owner you upload for), `forbidden` (no `EMOTE_UPLOAD` there, or no `cosmetics.manage` for a picture), or `bad_origin` for a cookie from another site.", body = ErrorBody),
+        (status = 409, description = "`too_many_pending` (emotes only): the owner already has as many emotes waiting for review as it may (20 unless its roles say otherwise; `uploadQuota`). `details` has `limit` and `current`.", body = ErrorBody),
+        (status = 413, description = "`too_large`: over the byte cap of the account's role, or the side or frame cap. For bytes, `details` has the cap and the size sent.", body = ErrorBody),
         (status = 415, description = "`unsupported_format`: not PNG, APNG, GIF, WebP or JPEG (AVIF isn't taken yet).", body = ErrorBody),
-        (status = 422, description = "`invalid_image` (doesn't decode) or `blocked`.", body = ErrorBody),
+        (status = 422, description = "`invalid_image` (doesn't decode), `blocked`, or for pictures `bad_dimensions`.", body = ErrorBody),
         (status = 429, description = "`rate_limited`: the uploads an hour (20 unless the account's roles say otherwise) or the per-IP limit.", body = ErrorBody),
         (status = 503, description = "`unavailable`: storage isn't reachable.", body = ErrorBody)
     )
@@ -365,7 +366,10 @@ async fn upload_emote(
                     }
                 })? {
                     if bytes.len() + chunk.len() > emote_limits.max_bytes {
-                        return Err(upload::too_large_for(&emote_limits));
+                        return Err(upload::too_large_over(
+                            &emote_limits,
+                            bytes.len() + chunk.len(),
+                        ));
                     }
                     bytes.extend_from_slice(&chunk);
                 }
@@ -428,10 +432,25 @@ async fn upload_emote(
         },
     )
     .await?;
-    Ok((
-        StatusCode::ACCEPTED,
-        Json(crate::public_ids::publish(&state, &emote).await?),
-    ))
+    let mut body = crate::public_ids::publish(&state, &emote).await?;
+    if let serde_json::Value::Object(map) = &mut body {
+        map.insert(
+            "limits_used".to_owned(),
+            serde_json::to_value(limits_used("emote", &emote_limits))
+                .map_err(|_| ApiError::internal())?,
+        );
+    }
+    Ok((StatusCode::ACCEPTED, Json(body)))
+}
+
+/// The limits an upload was checked under, as the answer reports them.
+fn limits_used(kind: &str, limits: &cyex_tv_media::Limits) -> LimitsUsed {
+    LimitsUsed {
+        kind: kind.to_owned(),
+        max_bytes: cyex_tv_shared::limit_errors::n(limits.max_bytes),
+        max_side: limits.max_side,
+        max_frames: limits.max_frames,
+    }
 }
 
 /// Reads a multipart file field under the bigger of the uploader's badge and paint caps.
@@ -453,7 +472,7 @@ async fn file_field(
         }
     })? {
         if bytes.len() + chunk.len() > limits.max_bytes {
-            return Err(upload::too_large_for(&limits));
+            return Err(upload::too_large_over(&limits, bytes.len() + chunk.len()));
         }
         bytes.extend_from_slice(&chunk);
     }
@@ -483,14 +502,15 @@ async fn file_field(
     tag = "cosmetics",
     request_body(content = UploadCosmeticImage, content_type = "multipart/form-data"),
     responses(
-        (status = 202, description = "Accepted; the files are being made.", body = CosmeticImage),
-        (status = 400, description = "`bad_form` or `bad_kind`.", body = ErrorBody),
+        (status = 202, description = "Accepted; the files are being made (`state` is `processing`, then `ready`). `id`, `state`, `files` and `limits_used` are the same fields `POST /v1/emotes` answers with (`UploadResult`).", body = CosmeticImageUploaded),
+        (status = 400, description = "`bad_form`, or `bad_kind` (kind is badge or paint).", body = ErrorBody),
         (status = 401, description = "`signed_out`.", body = ErrorBody),
-        (status = 403, description = "`forbidden` (needs `cosmetics.manage`), or `bad_origin`.", body = ErrorBody),
-        (status = 413, description = "`too_large`.", body = ErrorBody),
-        (status = 415, description = "`unsupported_format`.", body = ErrorBody),
-        (status = 422, description = "`invalid_image` or `bad_dimensions`.", body = ErrorBody),
-        (status = 429, description = "`rate_limited`.", body = ErrorBody),
+        (status = 403, description = "`restricted`, `forbidden` (needs `cosmetics.manage`), or `bad_origin` for a cookie from another site.", body = ErrorBody),
+        (status = 409, description = "Not used for pictures; `too_many_pending` is for emotes.", body = ErrorBody),
+        (status = 413, description = "`too_large`: over the byte cap of the account's role, or the side or frame cap. For bytes, `details` has the cap and the size sent.", body = ErrorBody),
+        (status = 415, description = "`unsupported_format`: not PNG, APNG, GIF, WebP or JPEG.", body = ErrorBody),
+        (status = 422, description = "`invalid_image` (doesn't decode), or `bad_dimensions`; emotes also `blocked`.", body = ErrorBody),
+        (status = 429, description = "`rate_limited`: the per-account or per-IP limit.", body = ErrorBody),
         (status = 503, description = "`unavailable`: storage isn't reachable.", body = ErrorBody)
     )
 )]
@@ -498,7 +518,7 @@ async fn upload_cosmetic_image(
     State(state): State<AppState>,
     MaybeCaller(caller): MaybeCaller,
     mut form: Multipart,
-) -> ApiResult<(StatusCode, Json<CosmeticImage>)> {
+) -> ApiResult<(StatusCode, Json<CosmeticImageUploaded>)> {
     let caller = caller.ok_or_else(|| ApiError::from(AuthError::SignedOut))?;
     no_app_scope(&caller)?;
     let own = state.limits.load(&state.db, caller.account_id).await;
@@ -541,14 +561,94 @@ async fn upload_cosmetic_image(
     let kind = kind.ok_or_else(|| bad_form("Say what it is for: kind=badge or kind=paint."))?;
     let file = file.ok_or_else(|| bad_form("Attach the image as `file`."))?;
     let image = cosmetics::upload_image(&state, &caller, kind, file.into()).await?;
-    Ok((StatusCode::ACCEPTED, Json(image)))
+    let used = match kind {
+        CosmeticKind::Badge => limits_used("badge", &badge_limits),
+        CosmeticKind::Paint => limits_used("paint", &paint_limits),
+    };
+    let image_state = if image.ready { "ready" } else { "processing" };
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(CosmeticImageUploaded {
+            image,
+            state: image_state.to_owned(),
+            limits_used: used,
+        }),
+    ))
 }
 
 // Chat-client reads: public, no auth, `ETag` and `Cache-Control`.
 
-/// How long clients and the CDN may keep a read before asking again (`If-None-Match` then gets a
-/// cheap 304). Live updates (the events socket) push changes sooner.
-const READ_MAX_AGE: u32 = 30;
+/// How one read may be cached (API review 2026-11-26, item 10). One table, [`ReadCache`]'s
+/// constants: how long it is fresh (`max-age`; then `If-None-Match` gets a cheap 304), how long
+/// a stale copy may be served while a fresh one is fetched (`stale-while-revalidate`), and how
+/// long when the API is failing (`stale-if-error`). Live updates (the events socket) push
+/// changes sooner than any of these.
+///
+/// Every read here is the same for everyone, so they are `public`; they vary only by
+/// `Accept-Encoding`. `GET /v1/cosmetics` is the exception: staff see more, so it also varies by
+/// `Cookie` and `Authorization`, and a signed-in answer is `private` (a staff one is
+/// `private, no-cache`), never kept by a shared cache.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ReadCache {
+    max_age: u32,
+    stale_while_revalidate: u32,
+    stale_if_error: u32,
+    /// What the answer depends on besides the URL, for `Vary`.
+    vary: &'static str,
+}
+
+impl ReadCache {
+    const fn new(max_age: u32, stale_while_revalidate: u32, stale_if_error: u32) -> Self {
+        Self {
+            max_age,
+            stale_while_revalidate,
+            stale_if_error,
+            vary: "Accept-Encoding",
+        }
+    }
+
+    /// A channel's active set pointer: the one thing a chat client polls, and what a set switch
+    /// changes. Short.
+    const CHANNEL: Self = Self::new(10, 30, 300);
+    /// A set and its emotes, and a page of them.
+    const SET: Self = Self::new(30, 60, 600);
+    /// The global set changes rarely (staff edit it): longer, and long past an outage.
+    const GLOBAL_SET: Self = Self::new(300, 600, 86_400);
+    /// One emote object (its files never change; its name and state rarely).
+    const EMOTE: Self = Self::new(30, 60, 86_400);
+    /// The limits are configuration: they change on a deploy or a role edit.
+    const LIMITS: Self = Self::new(300, 600, 86_400);
+    /// Badges and paints, for everyone (a signed-in answer is `private`, see `cookie_aware`).
+    const COSMETICS: Self = Self {
+        max_age: 60,
+        stale_while_revalidate: 120,
+        stale_if_error: 3600,
+        vary: "Accept-Encoding, Cookie, Authorization",
+    };
+    /// What chatters show; changes come as `user.cosmetics_updated`.
+    const USER_COSMETICS: Self = Self::new(30, 60, 600);
+
+    /// The `Cache-Control` of a public answer.
+    fn public_header(self) -> String {
+        format!(
+            "public, max-age={}, stale-while-revalidate={}, stale-if-error={}",
+            self.max_age, self.stale_while_revalidate, self.stale_if_error
+        )
+    }
+
+    /// The `Cache-Control` of an answer for a signed-in client: its own browser may keep it, no
+    /// shared cache.
+    fn private_header(self) -> String {
+        format!("private, max-age={}", self.max_age)
+    }
+}
+
+/// Whether the request names an account (a session cookie or an `Authorization` header), so a
+/// shared cache must not keep the answer for others.
+fn names_an_account(headers: &HeaderMap) -> bool {
+    headers.contains_key(axum::http::header::COOKIE)
+        || headers.contains_key(axum::http::header::AUTHORIZATION)
+}
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -562,15 +662,21 @@ fn built<T: Serialize>(value: &T) -> ApiResult<Arc<Body>> {
 }
 
 /// Answers JSON with a strong `ETag` (a hash of the body), or `304` when `If-None-Match` has it.
-fn cached<T: Serialize>(headers: &HeaderMap, value: &T, max_age: u32) -> ApiResult<Response> {
+fn cached<T: Serialize>(headers: &HeaderMap, value: &T, cache: ReadCache) -> ApiResult<Response> {
     let body = built(value)?;
-    respond(headers, &body, max_age)
+    respond(headers, &body, cache)
 }
 
 /// `cached` for an answer already built.
-fn respond(headers: &HeaderMap, body: &Body, max_age: u32) -> ApiResult<Response> {
+fn respond(headers: &HeaderMap, body: &Body, cache: ReadCache) -> ApiResult<Response> {
     let etag = body.etag.as_str();
-    let cache = format!("public, max-age={max_age}, stale-while-revalidate=60");
+    // Only the cosmetics catalog depends on who asks; its signed-in answers stay out of shared
+    // caches.
+    let control = if cache.vary.contains("Cookie") && names_an_account(headers) {
+        cache.private_header()
+    } else {
+        cache.public_header()
+    };
     let fresh = headers
         .get(IF_NONE_MATCH)
         .and_then(|v| v.to_str().ok())
@@ -591,8 +697,9 @@ fn respond(headers: &HeaderMap, body: &Body, max_age: u32) -> ApiResult<Response
     );
     out.insert(
         CACHE_CONTROL,
-        HeaderValue::from_str(&cache).map_err(|_| ApiError::internal())?,
+        HeaderValue::from_str(&control).map_err(|_| ApiError::internal())?,
     );
+    out.append(VARY, HeaderValue::from_static(cache.vary));
     Ok(response)
 }
 
@@ -602,6 +709,7 @@ async fn shared_read<T, F, Fut>(
     state: &AppState,
     headers: &HeaderMap,
     key: Option<String>,
+    cache: ReadCache,
     load: F,
 ) -> ApiResult<Response>
 where
@@ -621,7 +729,7 @@ where
         None => build().await?,
     };
     let body = answer.ok_or_else(catalog::not_found)?;
-    respond(headers, &body, READ_MAX_AGE)
+    respond(headers, &body, cache)
 }
 
 /// A channel and its active set ID. Poll this, then fetch the set.
@@ -646,7 +754,7 @@ async fn get_channel(
 ) -> ApiResult<Response> {
     let platform = platform(&raw)?;
     let key = cyex_tv_db::outbox::channel_topic(platform, id.trim());
-    shared_read(&state, &headers, Some(key), || {
+    shared_read(&state, &headers, Some(key), ReadCache::CHANNEL, || {
         catalog::channel(&state, platform, &id)
     })
     .await
@@ -672,7 +780,10 @@ async fn get_set(
     // By Snowflake, or by the set's old ULID (ADR 0027).
     let id = crate::public_ids::canonical(&state, &id).await?;
     let key = cyex_tv_db::ids::from_text(id.trim()).map(read_cache::set_key);
-    shared_read(&state, &headers, key, || catalog::set(&state, None, &id)).await
+    shared_read(&state, &headers, key, ReadCache::SET, || {
+        catalog::set(&state, None, &id)
+    })
+    .await
 }
 
 /// Every upload and field limit: per kind (emote, badge, paint) the file size, side, frames,
@@ -686,7 +797,7 @@ async fn get_set(
 )]
 async fn get_limits(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Response> {
     let limits = crate::public_limits::load(&state, None).await;
-    cached(&headers, &limits, READ_MAX_AGE)
+    cached(&headers, &limits, ReadCache::LIMITS)
 }
 
 /// A page of a set's emotes, oldest first, for clients that read big sets in parts (cursor
@@ -745,7 +856,7 @@ async fn get_set_emotes(
     let mut response = cached(
         &headers,
         &crate::public_ids::publish(&state, &page).await?,
-        READ_MAX_AGE,
+        ReadCache::SET,
     )?;
     if let Some(link) = link {
         response.headers_mut().insert(
@@ -768,6 +879,7 @@ async fn get_global_set(State(state): State<AppState>, headers: HeaderMap) -> Ap
         &state,
         &headers,
         Some(read_cache::GLOBAL_SET_KEY.to_owned()),
+        ReadCache::GLOBAL_SET,
         || async { catalog::global_set(&state, None).await.map(Some) },
     )
     .await
@@ -792,7 +904,7 @@ async fn get_emote(
 ) -> ApiResult<Response> {
     let id = crate::public_ids::canonical(&state, &id).await?;
     let key = cyex_tv_db::ids::from_text(id.trim()).map(read_cache::emote_key);
-    shared_read(&state, &headers, key, || {
+    shared_read(&state, &headers, key, ReadCache::EMOTE, || {
         moderation::emote(&state, None, &id)
     })
     .await
@@ -845,7 +957,7 @@ async fn get_cosmetics(
             drop(conn);
             let all = cosmetics::catalog_all(&state).await?;
             // Only for this caller: no shared cache or CDN may keep it.
-            let mut response = cached(&headers, &all, 0)?;
+            let mut response = cached(&headers, &all, ReadCache::COSMETICS)?;
             response
                 .headers_mut()
                 .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-cache"));
@@ -856,6 +968,7 @@ async fn get_cosmetics(
         &state,
         &headers,
         Some(read_cache::COSMETICS_KEY.to_owned()),
+        ReadCache::COSMETICS,
         || async { cosmetics::catalog(&state).await.map(Some) },
     )
     .await
@@ -886,7 +999,11 @@ async fn get_user_cosmetics(
         .filter(|s| !s.trim().is_empty())
         .collect();
     let users = cosmetics::user_cosmetics(&state, query.platform, &ids).await?;
-    cached(&headers, &UserCosmeticsResult { users }, READ_MAX_AGE)
+    cached(
+        &headers,
+        &UserCosmeticsResult { users },
+        ReadCache::USER_COSMETICS,
+    )
 }
 
 // Shop

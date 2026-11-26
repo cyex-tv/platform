@@ -54,6 +54,7 @@ struct Reply {
     status: StatusCode,
     body: Value,
     etag: Option<String>,
+    headers: axum::http::HeaderMap,
 }
 
 fn code(response: &Value) -> &str {
@@ -257,11 +258,13 @@ impl World {
             .get("etag")
             .and_then(|v| v.to_str().ok())
             .map(str::to_owned);
+        let headers = response.headers().clone();
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
         Reply {
             status,
             body: serde_json::from_slice(&bytes).unwrap_or(Value::Null),
             etag,
+            headers,
         }
     }
 
@@ -280,11 +283,13 @@ impl World {
             .unwrap();
         let response = self.app.clone().oneshot(request).await.unwrap();
         let status = response.status();
+        let headers = response.headers().clone();
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
         Reply {
             status,
             body: serde_json::from_slice(&bytes).unwrap_or(Value::Null),
             etag: None,
+            headers,
         }
     }
 
@@ -599,6 +604,15 @@ async fn unreleased_cosmetics_are_for_staff_only() {
     assert_eq!(names(&signed_out, "paints"), public_paints);
     let rest = w.get("/v1/cosmetics", None).await;
     assert_eq!(rest.status, StatusCode::OK);
+    // Signed out: shared caches may keep it, and it varies by who asks.
+    assert_eq!(
+        rest.headers["cache-control"],
+        "public, max-age=60, stale-while-revalidate=120, stale-if-error=3600"
+    );
+    assert_eq!(
+        rest.headers["vary"],
+        "Accept-Encoding, Cookie, Authorization"
+    );
     assert_eq!(names(&rest.body, "badges"), public_badges);
     assert_eq!(names(&rest.body, "paints"), public_paints);
     assert!(rest.body["badges"][0]["image"]["host"].is_string());
@@ -608,6 +622,8 @@ async fn unreleased_cosmetics_are_for_staff_only() {
         assert_eq!(names(&g, "badges"), public_badges);
         let r = w.get_as("/v1/cosmetics", None, Some(who)).await;
         assert_eq!(names(&r.body, "paints"), public_paints);
+        // Signed in: never kept by a shared cache.
+        assert_eq!(r.headers["cache-control"], "private, max-age=60");
     }
     // Staff with any cosmetics permission see all of it, over both reads.
     for who in [&owner, &granter] {
@@ -615,6 +631,8 @@ async fn unreleased_cosmetics_are_for_staff_only() {
         assert_eq!(names(&g, "badges"), all_badges);
         assert_eq!(names(&g, "paints"), all_paints);
         let r = w.get_as("/v1/cosmetics", None, Some(who)).await;
+        assert_eq!(r.headers["cache-control"], "private, no-cache");
+        assert!(r.headers["vary"].to_str().unwrap().contains("Cookie"));
         assert_eq!(names(&r.body, "badges"), all_badges);
         assert_eq!(names(&r.body, "paints"), all_paints);
     }
