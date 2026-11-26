@@ -65,10 +65,10 @@ export default {
         'script-src': ['self', ...inline, 'unsafe-hashes', replay, ...PADDLE_SCRIPT],
         // Inline style attributes (Svelte's style: directives and static style="" in templates)
         // need 'unsafe-inline'; <style> elements don't, so they get their own, stricter list.
-        'style-src': ['self', 'unsafe-inline', 'https://fonts.googleapis.com'],
-        'style-src-elem': ['self', 'https://fonts.googleapis.com', ...PADDLE_STYLE],
+        'style-src': ['self', 'unsafe-inline'],
+        'style-src-elem': ['self', ...PADDLE_STYLE],
         'style-src-attr': ['unsafe-inline'],
-        'font-src': ['self', 'https://fonts.gstatic.com'],
+        'font-src': ['self'],
         'img-src': ['self', 'data:', 'blob:', 'https://cdn.cyex.tv', ...cdn, ...AVATARS, api, ...mock],
         // GitHub's release list: the front page reads which cyex deck installer is newest (src/lib/home/deck.svelte.ts).
         'connect-src': ['self', api, 'https://api.github.com', ...mock],
