@@ -1,11 +1,10 @@
 <script lang="ts">
   // The role editor's Limits: every per-account limit a role can change, grouped (Requests,
-  // Uploads, Account actions). Each box shows the default as its placeholder; empty keeps it, a
+  // Uploads, File sizes, Account actions). Each box shows the default as its placeholder; empty keeps it, a
   // number sets it for everyone who holds the role. A tooltip on hover and keyboard focus says
   // what the limit counts (read out as the box's description), as the permissions do.
   import type { RoleLimitFieldsFragment } from '$lib/gql/graphql';
-  import { count } from '$lib/format';
-  import { amount, grouped, info, LIMIT_MAX, per, valueProblem } from './role-limits';
+  import { amount, grouped, info, numberText, per, valueProblem } from './role-limits';
 
   let {
     limits,
@@ -46,7 +45,7 @@
       <ul>
         {#each g.items as l (l.key)}
           {@const what = info(l.key)}
-          {@const problem = tried || touched[l.key] ? valueProblem(values[l.key]) : null}
+          {@const problem = tried || touched[l.key] ? valueProblem(values[l.key], l) : null}
           {@const unit = what.unit ?? per(l.windowSeconds) ?? 'at once'}
           <li class="item" class:hushed={hushed === l.key} class:set={!!values[l.key]?.trim()}
             onfocusin={() => ((shown = l.key), hushed !== l.key && (hushed = null))} onfocusout={() => (shown = hushed = null)}
@@ -55,7 +54,7 @@
               <label class="lbl" for="{idPrefix}-{l.key}">{what.label}</label>
               <span class="box">
                 <input class="ui-input ui-mono num" id="{idPrefix}-{l.key}" inputmode="numeric" autocomplete="off" maxlength="7"
-                  placeholder={count(l.default)} bind:value={values[l.key]} {disabled}
+                  placeholder={numberText(l.key, l.default)} bind:value={values[l.key]} {disabled}
                   oninput={() => (touched[l.key] = true)}
                   aria-invalid={problem ? 'true' : undefined}
                   aria-describedby="{idPrefix}-{l.key}-tip{problem ? ` ${idPrefix}-${l.key}-err` : ''}" />
@@ -64,7 +63,7 @@
             </div>
             {#if problem}<span class="ui-error" id="{idPrefix}-{l.key}-err">{problem}</span>{/if}
             <span class="tip" role="tooltip" id="{idPrefix}-{l.key}-tip">
-              {what.hint} Default: {amount(l.default, l.windowSeconds, what.unit)}. Empty keeps it; 1 to {count(LIMIT_MAX)} replaces it.
+              {what.hint} Default: {amount(l, l.default)}. Empty keeps it; {info(l.key).unit === 'MB' ? '0,01' : '1'} to {numberText(l.key, l.max)} replaces it.
             </span>
           </li>
         {/each}

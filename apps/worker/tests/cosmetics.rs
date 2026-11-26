@@ -161,3 +161,87 @@ async fn a_badge_picture_is_transcoded_under_cosmetics() {
     drop(conn);
     db.close().await;
 }
+
+/// A badge picture of `side` px stored and queued with `extra` (the limits) on its job.
+async fn queued_badge(
+    db: &TestDb,
+    store: &Store,
+    side: u32,
+    extra: serde_json::Value,
+) -> uuid::Uuid {
+    let mut out = Cursor::new(Vec::new());
+    RgbaImage::from_pixel(side, side, Rgba([30, 60, 200, 255]))
+        .write_to(&mut out, Fmt::Png)
+        .unwrap();
+    let bytes = out.into_inner();
+    let sha: [u8; 32] = Sha256::digest(&bytes).into();
+    let key = cosmetic_original_key(&sigv4::hex(&sha));
+    store
+        .put(
+            &key,
+            bytes.into(),
+            Put {
+                content_type: "image/png",
+                cache_control: None,
+            },
+        )
+        .await
+        .unwrap();
+    let mut conn = db.conn().await;
+    let (image, _) = cosmetics::insert_image(
+        &mut conn,
+        &NewImage {
+            kind: CosmeticKind::Badge,
+            sha256: &sha,
+            mime: "image/png",
+            width: i32::try_from(side).unwrap(),
+            height: i32::try_from(side).unwrap(),
+            frame_count: 1,
+            animated: false,
+            storage_key: &key,
+            created_by: None,
+        },
+    )
+    .await
+    .unwrap();
+    let mut payload = extra;
+    payload["image_id"] = json!(ids::to_text(image.id));
+    jobs::enqueue(&mut conn, job::KIND, &payload, 3)
+        .await
+        .unwrap();
+    image.id
+}
+
+#[tokio::test]
+async fn a_picture_is_made_under_the_limits_stored_on_its_job() {
+    let Some(db) = TestDb::new().await else {
+        return;
+    };
+    let store = Store::memory();
+    let ctx = Ctx {
+        db: db.pool.clone(),
+        store: Some(store.clone()),
+        purge: None,
+        paddle: None,
+    };
+    let handlers = Handlers::default().on(job::KIND, job::run);
+    let run = || async { run_one(&ctx, &handlers, limits()).await.unwrap().unwrap().1 };
+
+    // 2100 px is over the 2048 of a badge, so a job without limits fails it ...
+    queued_badge(&db, &store, 2100, json!({})).await;
+    assert_eq!(run().await, Outcome::Failed);
+    // ... and a job whose uploader's roles allowed 2300 px makes it.
+    let id = queued_badge(&db, &store, 2101, json!({ "limits": { "max_side": 2300 } })).await;
+    assert_eq!(run().await, Outcome::Done);
+    let mut conn = db.conn().await;
+    let row = cosmetics::get_image(&mut conn, id).await.unwrap().unwrap();
+    assert!(!row.variants.as_array().unwrap().is_empty());
+    drop(conn);
+    // A lowered limit fails a picture the defaults take.
+    queued_badge(&db, &store, 96, json!({ "limits": { "max_side": 64 } })).await;
+    assert_eq!(run().await, Outcome::Failed);
+    // A job can't ask for more than the ceiling (4096 px for a badge).
+    queued_badge(&db, &store, 4200, json!({ "limits": { "max_side": 9000 } })).await;
+    assert_eq!(run().await, Outcome::Failed);
+    db.close().await;
+}

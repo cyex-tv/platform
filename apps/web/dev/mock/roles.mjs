@@ -46,6 +46,7 @@ export const decisionsFor = (accountId) => {
 // Per-account limits (limits.rs): the defaults the API starts with, and each role's overrides
 // (setRoleLimits). The User and top roles keep the defaults. MOCK_PENDING_MAX lowers the cap on
 // emotes waiting for review, to see the upload form at it.
+const MB = 1024 * 1024;
 export const LIMIT_DEFAULTS = [
   ['gql_account', 'REQUESTS', 600, 60], ['account_search', 'REQUESTS', 60, 60], ['quick_search', 'REQUESTS', 240, 60], ['heavy_reads', 'REQUESTS', 120, 60],
   ['uploads_per_hour', 'UPLOADS', 20, 3600], ['pending_emotes', 'UPLOADS', Number(process.env.MOCK_PENDING_MAX) || 20, null],
@@ -53,9 +54,16 @@ export const LIMIT_DEFAULTS = [
   ['emote_transfers', 'ACCOUNT', 60, 3600], ['prefs', 'ACCOUNT', 120, 3600], ['checkout', 'ACCOUNT', 30, 3600], ['redeem', 'ACCOUNT', 30, 3600], ['data_export', 'ACCOUNT', 5, 3600],
   // The most slots an account may give one of its channel sets (a cap, not a rate; ADR 0017 amendment 2026/11/22).
   ['set_capacity_max', 'ACCOUNT', 1000, null],
+  // The files an account uploads (crates/media config): the configured numbers and the most a role may set
+  // (an emote's side never above 1000 px; badges and paints may be raised, up to the ceiling).
+  ['emote_max_bytes', 'MEDIA', 8 * MB, null, 16 * MB], ['emote_max_side', 'MEDIA', 1000, null, 1000], ['emote_max_frames', 'MEDIA', 1000, null, 2000],
+  ['badge_max_bytes', 'MEDIA', 8 * MB, null, 16 * MB], ['badge_max_side', 'MEDIA', 2048, null, 4096], ['badge_max_frames', 'MEDIA', 120, null, 240],
+  ['paint_max_bytes', 'MEDIA', 8 * MB, null, 16 * MB], ['paint_max_side', 'MEDIA', 4096, null, 6144],
 ];
+/** The most a role may set a limit to (the API's `max`). */
+export const limitMax = (key) => LIMIT_DEFAULTS.find((l) => l[0] === key)?.[4] ?? 1000000;
 export const ROLE_LIMITS = { ROLE2: { pending_emotes: 100 } };
-export const limitsOut = (o = {}) => LIMIT_DEFAULTS.map(([key, group, d, w]) => ({ key, group, default: d, windowSeconds: w, value: o[key] ?? null }));
+export const limitsOut = (o = {}) => LIMIT_DEFAULTS.map(([key, group, d, w, max = 1000000]) => ({ key, group, default: d, max, windowSeconds: w, value: o[key] ?? null }));
 /** An account's limit: the most generous override among its roles, else the default. */
 export const limitOf = (accountId, key) => {
   const set = (ACCOUNT_ROLES[accountId] ?? []).map((r) => ROLE_LIMITS[r]?.[key]).filter((n) => n != null);
@@ -63,7 +71,6 @@ export const limitOf = (accountId, key) => {
 };
 // `limits` (public_limits.rs): the numbers the API enforces. `account` lists the signed-in
 // account's own per-account limits with its roles' overrides; empty signed out and on REST.
-const MB = 1024 * 1024;
 const kind = (o) => ({ maxDurationMs: null, minSide: null, maxAspect: null, ...o });
 export const MEDIA_LIMITS = {
   emote: kind({ maxBytes: 8 * MB, maxSide: 1000, maxFrames: 1000, maxTotalPixels: 100_000_000, maxAspect: 4, maxServedSide: 128 }),
