@@ -3434,7 +3434,7 @@
             "items": {
               "$ref": "#/components/schemas/RateInfo"
             },
-            "description": "The per-IP request rates."
+            "description": "The request rates, by the name of their `CYEX_TV_LIMIT_*` variable: per IP for the route\nclasses (`auth`, `gql`, `reads`, `upload`, `socket`), per account (or per IP signed out)\nfor the account limits, and per developer API key for `api_key` (ADR 0033)."
           },
           "tags": {
             "$ref": "#/components/schemas/TagLimits"

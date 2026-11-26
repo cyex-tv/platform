@@ -2507,7 +2507,11 @@ export type PublicLimits = {
   emote: MediaLimits;
   names: NameLimits;
   paint: MediaLimits;
-  /** The per-IP request rates. */
+  /**
+   * The request rates, by the name of their `CYEX_TV_LIMIT_*` variable: per IP for the route
+   * classes (`auth`, `gql`, `reads`, `upload`, `socket`), per account (or per IP signed out)
+   * for the account limits, and per developer API key for `api_key` (ADR 0033).
+   */
   rates: Array<RateInfo>;
   tags: TagLimits;
 };
