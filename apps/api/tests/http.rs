@@ -419,7 +419,10 @@ async fn other_origins_get_the_public_reads_only() {
     )
     .await;
     assert_eq!(h["access-control-allow-origin"], "*");
-    // GraphQL, uploads and sign-in: nothing for other origins.
+    // GraphQL queries over GET are public reads too (ADR 0035); POST (and its preflight) isn't.
+    let h = cors("GET", "/v1/gql", "https://www.twitch.tv", false).await;
+    assert_eq!(h["access-control-allow-origin"], "*");
+    // GraphQL over POST, uploads and sign-in: nothing for other origins.
     for (method, uri) in [
         ("OPTIONS", "/v1/gql"),
         ("OPTIONS", "/v1/emotes"),
