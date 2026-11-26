@@ -960,7 +960,8 @@ async fn global_set_and_permissions() {
         json!([{ "name": "globalOne" }])
     );
 
-    // Capacity: owners may stay at or below the default; above needs sets.edit_any.
+    // Capacity: owners pick 1 to their set_capacity_max (1.000 by default); above needs
+    // sets.edit_any (ADR 0017, amendment 2026/11/22).
     let set = w.create_set(&alice, "Main", "CHANNEL").await;
     let capacity = "mutation($id: String!, $c: Int!) { updateSet(id: $id, input: { capacity: $c }) { capacity } }";
     assert_eq!(
@@ -973,7 +974,7 @@ async fn global_set_and_permissions() {
             &w.gql(Some(&alice), capacity, json!({ "id": set, "c": 2000 }))
                 .await
         ),
-        "forbidden"
+        "capacity_over_limit"
     );
     assert_eq!(
         code(
