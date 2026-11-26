@@ -302,6 +302,14 @@
         {:else if ed.encoding}Checking the file size…
         {:else}Waiting for the file size.{/if}
       </p>
+      {#if failing}
+        <div class="fixes">
+          {#each rules.filter((r) => r.state === 'fail') as r (r.id)}
+            <span class="fl"><span class="ui-mono">{r.label}: {r.value}</span>
+              {#if r.fix}<button type="button" class="ui-btn secondary small" onclick={() => ed.fix(r.fix!)}>{fixLabel(r.fix, ed.limits)}</button>{/if}</span>
+          {/each}
+        </div>
+      {/if}
       <button type="button" class="ui-btn primary cont" disabled={!ed.ready || !!ed.encoding} onclick={oncontinue} data-testid="editor-continue">
         Continue to upload <Icon name="arrow-right" size={16} />
       </button>
@@ -365,6 +373,10 @@
   .end { display: grid; gap: 8px; padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--border); background: var(--elevated); }
   .state { margin: 0; min-height: 1.45em; font-size: var(--t-fine); color: var(--muted); }
   .cont { width: 100%; min-height: 40px; }
+  /* What fails, pinned with its fix, whatever the panel is scrolled to. */
+  .fixes { display: grid; gap: 6px; }
+  .fl { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; font-size: var(--t-fine); color: var(--red); }
+  .fl > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @media (hover: hover) and (pointer: fine) {
     .tb:hover { color: var(--text); background: var(--surface-hover); }
     .row:hover { background: var(--surface-hover); }

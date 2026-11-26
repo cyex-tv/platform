@@ -271,7 +271,8 @@
 
   function down(e: PointerEvent) {
     if (!doc || ed.importing) return;
-    surface.focus({ preventScroll: true });
+    // Focus for the keys, without the keyboard ring a click shouldn't show.
+    surface.focus({ preventScroll: true, focusVisible: false } as FocusOptions);
     surface.setPointerCapture(e.pointerId);
     const p = local(e);
     pointers.set(e.pointerId, p);

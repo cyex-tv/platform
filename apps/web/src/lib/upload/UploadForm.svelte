@@ -36,7 +36,9 @@
   import { notify } from '$lib/tool/notices.svelte';
   import { sameFileEmotes, sameFileLine, type SameFileEmote } from './same-file';
   import { DEFAULT_EMOTE_CAPS, upload, uploadLimits, type EmoteCaps } from './upload.svelte';
-  import { EDITOR_ACCEPT } from '$lib/editor/sniff';
+  // What the editor opens besides these (lib/editor/sniff.ts EDITOR_ACCEPT); written out so the
+  // quick form doesn't load any of the editor's code.
+  const EDITOR_EXTRA = 'image/*,video/mp4,video/webm,video/quicktime,.mp4,.m4v,.mov,.webm,.avif';
 
   type Props = {
     /** Sending right now (the dialog won't close while it is). */
@@ -352,7 +354,7 @@
       {/if}
       {#if note}<p class="ui-hint">{note}</p>{/if}
     </div>
-    <input bind:this={input} class="sr-only" type="file" tabindex="-1" accept={onedit ? `${UPLOAD_ACCEPT},${EDITOR_ACCEPT}` : UPLOAD_ACCEPT}
+    <input bind:this={input} class="sr-only" type="file" tabindex="-1" accept={onedit ? `${UPLOAD_ACCEPT},${EDITOR_EXTRA}` : UPLOAD_ACCEPT}
       onchange={(e) => { add(e.currentTarget.files); e.currentTarget.value = ''; }} />
     <ul class="limits" id="limits-{uid}" aria-label="Limits">
       {#each uploadLimits(quota ? caps : null) as l (l)}<li>{l}</li>{/each}

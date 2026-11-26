@@ -26,6 +26,8 @@ async function launch(port) {
   const pend = new Map();
   ws.addEventListener('message', (e) => {
     const m = JSON.parse(e.data);
+    // The editor's leave guard asks before a reload drops edits: say yes (each run starts fresh).
+    if (m.method === 'Page.javascriptDialogOpening') ws.send(JSON.stringify({ id: ++id, method: 'Page.handleJavaScriptDialog', params: { accept: true } }));
     if (m.id && pend.has(m.id)) {
       const { res, rej } = pend.get(m.id);
       pend.delete(m.id);
@@ -36,8 +38,11 @@ async function launch(port) {
 }
 
 const b = await launch(Number(process.env.CDP ?? 5452));
+await b.send('Page.handleJavaScriptDialog', { accept: true }).catch(() => {}); // one left open by an earlier run
 await b.send('Runtime.enable');
 await b.send('Page.enable');
+await b.send('Network.enable');
+await b.send('Network.setCookie', { name: 'mock_session', value: '1', url: process.env.API ?? 'http://localhost:5450' });
 const ev = async (expr) => {
   const r = await b.send('Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true });
   if (r.exceptionDetails) throw new Error(`${expr.slice(0, 120)}: ${r.exceptionDetails.exception?.description}`);
@@ -173,7 +178,7 @@ async function run(width, height, theme, tag, full) {
   check(`${tag} drawing adds undo steps`, await until(`document.querySelector('.hist button')?.getAttribute('aria-label')?.startsWith('Undo Draw')`));
   await shot(`${tag}-3-drawing`);
 
-  if (full) {
+  {
     await press('z', 2); // Ctrl
     check(`${tag} Ctrl+Z undoes the arrow`, await until(`document.querySelector('.hist button')?.getAttribute('aria-label') === 'Undo Draw a rectangle'`));
     await press('z', 2 | 8); // Ctrl+Shift
@@ -183,14 +188,17 @@ async function run(width, height, theme, tag, full) {
     check(`${tag} 2400 px fails the size rule and disables Continue`, await until(`document.querySelector('.rule[data-rule=side]')?.classList.contains('fail') && document.querySelector('[data-testid=editor-continue]').disabled`));
     await click(`document.querySelector('.rule[data-rule=side] .fix')`);
     check(`${tag} "Fit to 1.000 px" passes again`, await until(`document.querySelector('.rule[data-rule=side]')?.classList.contains('pass')`), (await state()).rules.find((r) => r[0] === 'side')?.[2]);
-    await click(`[...document.querySelectorAll('.tl .speed')][0]`);
     await ev(`(() => { const s = document.querySelector('.tl .speed'); s.value = '4'; s.dispatchEvent(new Event('change', { bubbles: true })); return 0; })()`);
     check(`${tag} 4× speed (10 ms frames) fails the frame rate rule`, await until(`document.querySelector('.rule[data-rule=fps]')?.classList.contains('fail')`));
+    await ev(`document.querySelector('.rules')?.scrollIntoView({ block: 'start' }), 0`);
     await shot(`${tag}-4-rules-failing`);
     await click(`document.querySelector('.rule[data-rule=fps] .fix')`);
     check(`${tag} "Limit to 50 fps" passes again`, await until(`document.querySelector('.rule[data-rule=fps]')?.classList.contains('pass')`));
     await until(`!document.querySelector('[data-testid=editor-continue]').disabled`, 30000);
+    await ev(`document.querySelector('.rules')?.scrollIntoView({ block: 'start' }), 0`);
     await shot(`${tag}-5-rules-passing`);
+  }
+  if (full) {
     // Continue: the file goes to the quick form.
     await click(`document.querySelector('[data-testid=editor-continue]')`);
     check(`${tag} Continue hands a WebP to Quick upload`, await until(`/orbit\\.(webp|gif)/.test(document.querySelector('.meta')?.textContent ?? '') && document.querySelector('.modes [aria-checked=true]')?.textContent.includes('Quick')`), await ev(`document.querySelector('.meta')?.textContent`));

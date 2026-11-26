@@ -287,7 +287,8 @@
   .sep { width: 24px; height: 1px; margin: 4px 0; background: var(--border); }
   .tool { position: relative; display: grid; place-items: center; width: 40px; height: 40px; padding: 0; border: 0; border-radius: var(--radius-btn); background: none; color: var(--muted); cursor: pointer;
     transition: color var(--dur-color), background-color var(--dur-color), transform var(--dur-press) ease-out; }
-  .tool[aria-pressed='true'] { color: var(--accent-text); background: var(--accent-dim); }
+  /* Picked: the accent icon, no fill (the site's selected-state rule). */
+  .tool[aria-pressed='true'] { color: var(--accent-text); }
   .tool:active { transform: scale(var(--press)); }
   .tool:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
   .tip { position: absolute; left: calc(100% + 8px); top: 50%; z-index: var(--z-tip); display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: var(--radius-btn);
@@ -297,7 +298,7 @@
   .tool:focus-visible .tip { opacity: 1; transform: translateY(-50%); }
   @media (hover: hover) and (pointer: fine) {
     .tool:hover { color: var(--text); background: var(--surface-hover); }
-    .tool[aria-pressed='true']:hover { color: var(--accent-text); background: var(--accent-dim); }
+    .tool[aria-pressed='true']:hover { color: var(--accent-text); }
     .tool:hover .tip { opacity: 1; transform: translateY(-50%); transition-delay: var(--delay-tip); }
     .tb:hover:not(:disabled) { color: var(--text); background: var(--surface-hover); }
   }
@@ -325,7 +326,8 @@
 
   /* Narrower: the panel goes under the stage and frames; the whole editor scrolls. */
   @media (max-width: 1099.98px) {
-    .work { grid-template-columns: 52px minmax(0, 1fr); grid-template-rows: auto auto; overflow: hidden auto; overscroll-behavior: contain; }
+    /* max-content rows: the frames and the panel keep their height and the editor scrolls. */
+    .work { grid-template-columns: 52px minmax(0, 1fr); grid-template-rows: max-content; grid-auto-rows: max-content; overflow: hidden auto; overscroll-behavior: contain; }
     .rail { grid-row: 1; }
     .centre { grid-template-rows: min(56dvh, 520px) auto; }
     .work > :global(.panel) { grid-column: 1 / -1; }
