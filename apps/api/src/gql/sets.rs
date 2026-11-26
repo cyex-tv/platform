@@ -1,9 +1,9 @@
 //! GraphQL: sets.
 
-use async_graphql::{Context, Object, Result};
+use async_graphql::{Context, ID, Object, Result};
 use cyex_tv_shared::model::{
-    AddSetEmote, ClonedSet, CreateSet, EmoteSet, SetEmote, SetEmotePage, SetSummary, SetVisibility,
-    UpdateSet, UpdateSetEmote,
+    AddSetEmote, ClonedSet, CreateSet, EmoteSet, SetChanges, SetEmote, SetEmotePage, SetSummary,
+    SetVisibility, UpdateSet, UpdateSetEmote,
 };
 
 use super::{api_error, caller, caller_opt, heavy_read, state};
@@ -19,6 +19,34 @@ impl SetQuery {
     #[graphql(complexity = "10 + child_complexity")]
     async fn set(&self, ctx: &Context<'_>, id: String) -> Result<Option<EmoteSet>> {
         catalog::set(state(ctx), caller_opt(ctx), &id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Several sets at once, in the order asked, each once (ADR 0032): who may see what is the
+    /// rule of `set`, and unknown or hidden sets are left out. At most 25 IDs (`too_many`); one
+    /// call costs what that many `set` lookups would.
+    #[graphql(complexity = "ids.len() * (10 + child_complexity)")]
+    async fn sets(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<Vec<EmoteSet>> {
+        let ids: Vec<String> = ids.into_iter().map(|id| id.0).collect();
+        catalog::sets_by_ids(state(ctx), caller_opt(ctx), &ids)
+            .await
+            .map_err(api_error)
+    }
+
+    /// What changed in a set after `since`, a `version` you hold (delta sync, ADR 0032). Apply
+    /// `added`, `renamed` and `updated` as upserts by emote ID and `removedIds` as deletes, then
+    /// keep `version`. `full: true` (with the whole set in `set`) when the change log no longer
+    /// reaches back to `since` (7 days or 1.000 versions) or `since` isn't a version of this
+    /// set. Null when `set` would be.
+    #[graphql(complexity = "10 + child_complexity")]
+    async fn set_changes(
+        &self,
+        ctx: &Context<'_>,
+        id: String,
+        since: i64,
+    ) -> Result<Option<SetChanges>> {
+        catalog::set_changes(state(ctx), caller_opt(ctx), &id, since)
             .await
             .map_err(api_error)
     }

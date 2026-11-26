@@ -99,3 +99,61 @@ describe('ApiError messages for a request with no answer', () => {
     expect(e.message).toBe(`${COPY.server.title} ${COPY.server.body}`);
   });
 });
+
+describe('gqlPublic (GET with a persisted-query hash, ADR 0032)', () => {
+  const doc = (text: string) => ({ toString: () => text }) as never;
+  const ok = (data: unknown) => new Response(JSON.stringify({ data }));
+
+  it('asks by hash over GET without credentials, and sends the text once on a miss', async () => {
+    const { gqlPublic, sha256Hex } = await import('./api');
+    const seen: { url: string; init?: RequestInit }[] = [];
+    let n = 0;
+    const spy = (async (u: string, init?: RequestInit) => {
+      seen.push({ url: String(u), init });
+      n += 1;
+      if (n === 1) return new Response(JSON.stringify({ errors: [{ message: 'PersistedQueryNotFound', extensions: { code: 'persisted_query_not_found' } }] }));
+      return ok({ activeAnnouncement: null });
+    }) as unknown as typeof fetch;
+    const out = await gqlPublic(doc('query A { activeAnnouncement { id } }'), {}, spy);
+    expect(out).toEqual({ activeAnnouncement: null });
+    expect(seen).toHaveLength(2);
+    const hash = await sha256Hex('query A { activeAnnouncement { id } }');
+    for (const { url, init } of seen) {
+      expect(init?.method).toBe('GET');
+      expect(init?.credentials).toBe('omit');
+      const q = new URL(url).searchParams;
+      expect(JSON.parse(q.get('extensions')!)).toEqual({ persistedQuery: { version: 1, sha256Hash: hash } });
+    }
+    expect(new URL(seen[0].url).searchParams.has('query')).toBe(false);
+    expect(new URL(seen[1].url).searchParams.get('query')).toBe('query A { activeAnnouncement { id } }');
+  });
+
+  it('a hit is one request; variables go along as JSON', async () => {
+    const { gqlPublic } = await import('./api');
+    const urls: string[] = [];
+    const spy = (async (u: string) => {
+      urls.push(String(u));
+      return ok({ x: 1 });
+    }) as unknown as typeof fetch;
+    await gqlPublic(doc('query B($id: String!) { x(id: $id) }'), { id: '7' }, spy);
+    expect(urls).toHaveLength(1);
+    expect(JSON.parse(new URL(urls[0]).searchParams.get('variables')!)).toEqual({ id: '7' });
+  });
+
+  it('a mutation never goes over GET', async () => {
+    const { gqlPublic } = await import('./api');
+    let method: string | undefined;
+    const spy = (async (_u: string, init?: RequestInit) => {
+      method = init?.method;
+      return ok({ y: true });
+    }) as unknown as typeof fetch;
+    await gqlPublic(doc('mutation C { y }'), {}, spy);
+    expect(method).toBe('POST');
+  });
+
+  it('throws the API error of a failed answer', async () => {
+    const { gqlPublic } = await import('./api');
+    const spy = (async () => new Response(JSON.stringify({ errors: [{ message: 'No.', extensions: { code: 'forbidden' } }] }))) as unknown as typeof fetch;
+    await expect(gqlPublic(doc('query D { z }'), {}, spy)).rejects.toMatchObject({ code: 'forbidden' });
+  });
+});

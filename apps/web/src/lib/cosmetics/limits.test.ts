@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PICTURE_RULES, checkAnimation, checkFile, checkSize, pictureHint, rulesFromLimits } from './upload';
 
 const { gql } = vi.hoisted(() => ({ gql: vi.fn() }));
-vi.mock('$lib/api', async (orig) => ({ ...(await orig<typeof import('$lib/api')>()), gql: (...a: unknown[]) => gql(...a) }));
+vi.mock('$lib/api', async (orig) => ({ ...(await orig<typeof import('$lib/api')>()), gql: (...a: unknown[]) => gql(...a), gqlPublic: (...a: unknown[]) => gql(...a) }));
 
 import { forgetLimits, loadLimits, loadPictureRules } from './limits';
 

@@ -142,7 +142,7 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "General",
         "too_many",
         "More items in one request than allowed.",
-        "A batch call (look up users, mark notifications, and so on) goes over its cap, usually 100.",
+        "A batch call (look up users, emotes, channels or sets, mark notifications, and so on) goes \n         over its cap, usually 100 (25 for sets).",
     ),
     e(
         "General",
@@ -924,6 +924,30 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "subscriptions_only",
         "The socket runs subscriptions only.",
         "A query or mutation sent over /v1/gql/ws. Use POST /v1/gql.",
+    ),
+    e(
+        "GraphQL",
+        "post_required",
+        "Over GET only queries run.",
+        "A mutation or subscription sent with GET /v1/gql (405, `Allow: POST`). Send it with          POST.",
+    ),
+    e(
+        "GraphQL",
+        "persisted_query_not_found",
+        "The persisted query's hash isn't known here.",
+        "`extensions.persistedQuery` without the query text, for a hash this server hasn't          stored (the message is `PersistedQueryNotFound`). Send the text with the hash once.",
+    ),
+    e(
+        "GraphQL",
+        "persisted_query_mismatch",
+        "The hash isn't the query's SHA-256.",
+        "`extensions.persistedQuery.sha256Hash` differs from the SHA-256 of the query text sent          with it.",
+    ),
+    e(
+        "GraphQL",
+        "bad_persisted_query",
+        "The persisted query extension is malformed.",
+        "`extensions.persistedQuery` needs `version: 1` and a `sha256Hash` of 64 lowercase hex          digits.",
     ),
 ];
 

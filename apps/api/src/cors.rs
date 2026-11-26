@@ -3,8 +3,8 @@
 //! - **The site** (`CYEX_TV_SITE_URL`, `https://cyex.tv`): credentialed, every method the API has,
 //!   so the website can call GraphQL and upload with the session cookie. Its writes still pass the
 //!   Origin check (ADR 0009).
-//! - **Anyone else:** the public reads only (`GET` of channels, sets and emotes, and the personal-set
-//!   lookup), with `Access-Control-Allow-Origin: *` and no credentials, so chat clients running in
+//! - **Anyone else:** the public reads only (`GET` of channels, sets and emotes, GraphQL queries over
+//!   `GET`, and the personal-set, set and channel lookups), with `Access-Control-Allow-Origin: *` and no credentials, so chat clients running in
 //!   other pages (the extension on twitch.tv) can read them. Nothing signed-in is offered to other
 //!   origins: the cookie is `SameSite=Lax` and isn't sent anyway, and Bearer clients aren't browsers.
 
@@ -33,10 +33,15 @@ pub fn is_public_read(method: &Method, path: &str) -> bool {
     let read = matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS);
     (read
         && (path == "/v1/meta"
+            // GraphQL queries over GET (persisted queries, ADR 0032): cookies are never read there.
+            || path == "/v1/gql"
             || path.starts_with("/v1/channels/")
             || path.starts_with("/v1/sets/")
             || path.starts_with("/v1/emotes/")))
-        || (path == "/v1/personal-sets/lookup" && matches!(*method, Method::POST | Method::OPTIONS))
+        || (matches!(
+            path,
+            "/v1/personal-sets/lookup" | "/v1/sets/lookup" | "/v1/channels/lookup"
+        ) && matches!(*method, Method::POST | Method::OPTIONS))
 }
 
 enum Who {
@@ -120,6 +125,9 @@ mod tests {
         assert!(is_public_read(&Method::GET, "/v1/emotes/x"));
         assert!(is_public_read(&Method::GET, "/v1/meta"));
         assert!(is_public_read(&Method::POST, "/v1/personal-sets/lookup"));
+        assert!(is_public_read(&Method::POST, "/v1/sets/lookup"));
+        assert!(is_public_read(&Method::POST, "/v1/channels/lookup"));
+        assert!(is_public_read(&Method::GET, "/v1/gql"));
         assert!(!is_public_read(&Method::POST, "/v1/gql"));
         assert!(!is_public_read(&Method::POST, "/v1/emotes"));
         assert!(!is_public_read(&Method::GET, "/v1/auth/twitch/login"));

@@ -313,3 +313,52 @@ pub async fn scoped_sets(
     .fetch_all(conn)
     .await?)
 }
+
+/// What `editor` may do with each of `set_ids`, in one query (bulk reads, ADR 0032).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FromRow)]
+pub struct SetAccess {
+    pub set_id: Uuid,
+    /// Owns the set or is one of its set editors (`sets::can_edit`).
+    pub direct: bool,
+    /// An account editor of the owner whose grant covers the set (`covers_set`).
+    pub covered: bool,
+    /// `covered`, with the `emotes` or `sets` flag: works on the set's emotes.
+    pub works_on_sets: bool,
+}
+
+/// [`SetAccess`] of `editor` for every set of `set_ids` that exists.
+pub async fn set_access(
+    conn: &mut PgConnection,
+    editor: Uuid,
+    set_ids: &[Uuid],
+) -> DbResult<Vec<SetAccess>> {
+    if set_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(sqlx::query_as(
+        "SELECT s.id AS set_id,
+                (s.owner_account_id = $1
+                 OR EXISTS (SELECT 1 FROM set_editors se
+                            WHERE se.set_id = s.id AND se.account_id = $1)) AS direct,
+                coalesce(g.covers, false) AS covered,
+                coalesce(g.covers AND ('emotes' = ANY(g.permissions) OR 'sets' = ANY(g.permissions)),
+                         false) AS works_on_sets
+         FROM emote_sets s
+         LEFT JOIN LATERAL (
+             SELECT e.permissions,
+                    (e.all_sets OR EXISTS (
+                        SELECT 1 FROM account_editor_sets a
+                        WHERE a.account_id = e.account_id AND a.editor_id = e.editor_id
+                          AND a.set_id = s.id)) AS covers
+             FROM account_editors e
+             JOIN accounts o ON o.id = e.account_id AND o.deleted_at IS NULL AND (o.blocked_at IS NULL OR o.blocked_until <= now())
+             JOIN accounts x ON x.id = e.editor_id AND x.deleted_at IS NULL AND (x.blocked_at IS NULL OR x.blocked_until <= now())
+             WHERE e.account_id = s.owner_account_id AND e.editor_id = $1
+         ) g ON true
+         WHERE s.id = ANY($2)",
+    )
+    .bind(editor)
+    .bind(set_ids)
+    .fetch_all(conn)
+    .await?)
+}

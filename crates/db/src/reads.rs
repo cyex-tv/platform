@@ -581,6 +581,25 @@ pub async fn members(conn: &mut PgConnection, set_ids: &[Uuid]) -> DbResult<Vec<
     .await?)
 }
 
+/// The members of one set among `emote_ids` (deleted emotes left out), oldest first: what a
+/// delta read (ADR 0032) shows of the members that changed.
+pub async fn members_among(
+    conn: &mut PgConnection,
+    set_id: Uuid,
+    emote_ids: &[Uuid],
+) -> DbResult<Vec<MemberRow>> {
+    if emote_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(sqlx::query_as(&format!(
+        "{MEMBER_ROW} WHERE m.set_id = $1 AND m.emote_id = ANY($2) ORDER BY m.added_at, m.emote_id"
+    ))
+    .bind(set_id)
+    .bind(emote_ids)
+    .fetch_all(conn)
+    .await?)
+}
+
 /// One member of one set, if the emote is in it and not deleted.
 pub async fn member(
     conn: &mut PgConnection,

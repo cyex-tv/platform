@@ -24,6 +24,7 @@ mod emotes;
 mod entitlements;
 mod extensions;
 mod moderation;
+mod persisted;
 mod personal;
 mod profile;
 mod review;
@@ -39,6 +40,7 @@ pub use extensions::{
     MAX_ROOT_FIELDS, MAX_SOCKET_MESSAGE, MAX_SOCKET_SUBSCRIPTIONS, SOCKET_IDLE,
     SOCKET_INIT_DEADLINE, SOCKET_PING_EVERY, SocketConnection, serve_socket,
 };
+pub use persisted::{MAX_PERSISTED, MAX_PERSISTED_BYTES, OverGet, hash_of};
 pub use subscription::Subscription;
 
 // The root query: one object per area, merged in the order the schema lists the fields.
@@ -88,11 +90,14 @@ pub type ApiSchema = Schema<Query, Mutation, Subscription>;
 /// Depth and complexity limits apply to every request (ADR 0008), and an operation selects at
 /// most `MAX_ROOT_FIELDS` top-level fields. The public reads that fan out carry their own weight
 /// (`searchEmotes` and `searchAccounts` 50, the single lookups 10), so a request can't alias
-/// hundreds of them past the limit.
+/// hundreds of them past the limit. Persisted queries and the `GET` rule are in `persisted`
+/// (ADR 0032).
 pub fn builder() -> SchemaBuilder<Query, Mutation, Subscription> {
     Schema::build(Query::default(), Mutation::default(), Subscription)
         .limit_depth(12)
         .limit_complexity(1_000)
+        .extension(persisted::PersistedQueries::default())
+        .extension(persisted::QueriesOnlyOverGet)
         .extension(SocketRunsSubscriptionsOnly)
         .extension(RootFieldCap)
         .extension(AppScopes)
@@ -104,7 +109,7 @@ pub fn sdl() -> String {
     builder().finish().sdl()
 }
 
-/// `GET /v1/gql` in a browser: GraphiQL against this API.
+/// `GET /v1/gql` without a query: GraphiQL against this API.
 pub async fn graphiql() -> Html<String> {
     Html(
         GraphiQLSource::build()

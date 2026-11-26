@@ -19,10 +19,11 @@ use cyex_tv_auth::cookies;
 use cyex_tv_auth::flow::Callback;
 use cyex_tv_shared::error::{ApiError, ApiResult, ErrorBody};
 use cyex_tv_shared::model::{
-    CallbackQuery, Channel, ConsoleToken, CosmeticCatalog, CosmeticImage, CosmeticKind, Emote,
-    EmoteSet, EmoteVisibility, LoginQuery, PersonalLookup, PersonalLookupResult, Platform,
-    PublicLimits, SetEmotePage, SetEmotesQuery, UploadCosmeticImage, UploadEmote,
-    UserCosmeticsQuery, UserCosmeticsResult,
+    CallbackQuery, Channel, ChannelsLookup, ChannelsLookupResult, ConsoleToken, CosmeticCatalog,
+    CosmeticImage, CosmeticKind, Emote, EmoteSet, EmoteVisibility, LoginQuery, PersonalLookup,
+    PersonalLookupResult, Platform, PublicLimits, SetEmotePage, SetEmotesQuery, SetQuery,
+    SetsLookup, SetsLookupResult, UploadCosmeticImage, UploadEmote, UserCosmeticsQuery,
+    UserCosmeticsResult,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -63,6 +64,8 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(export_token))
         .routes(routes!(get_channel))
         .routes(routes!(get_set))
+        .routes(routes!(lookup_sets))
+        .routes(routes!(lookup_channels))
         .routes(routes!(get_set_emotes))
         .routes(routes!(get_global_set))
         .routes(routes!(get_limits))
@@ -642,14 +645,31 @@ async fn get_channel(
     .await
 }
 
-/// A set with its emotes.
+/// What `GET /v1/sets/{id}` answers: the set, or with `since` what changed (for the spec only).
+#[derive(Serialize, utoipa::ToSchema)]
+#[allow(dead_code)]
+#[serde(untagged)]
+enum SetOrChanges {
+    Set(EmoteSet),
+    Changes(cyex_tv_shared::model::SetChanges),
+}
+
+/// A set with its emotes, and its `version` (ADR 0032).
+///
+/// With `since` (a `version` you hold), only what changed after it: a `SetChanges` with the
+/// members added, renamed and updated (apply as upserts by emote ID) and `removed_ids` (deletes).
+/// `full: true` with the whole set in `set` when the change log no longer reaches back that far
+/// (7 days or 1.000 versions) or `since` isn't a version of this set. Both answers have an `ETag`.
 #[utoipa::path(
     get,
     path = "/v1/sets/{id}",
     tag = "reads",
-    params(("id" = String, Path, description = "The set's ID: its Snowflake (digits), or its old ULID while clients move over.")),
+    params(
+        ("id" = String, Path, description = "The set's ID: its Snowflake (digits), or its old ULID while clients move over."),
+        SetQuery
+    ),
     responses(
-        (status = 200, body = EmoteSet),
+        (status = 200, description = "The set, or with `since` a `SetChanges`.", body = SetOrChanges),
         (status = 304, description = "Not modified."),
         (status = 404, body = ErrorBody)
     )
@@ -657,12 +677,68 @@ async fn get_channel(
 async fn get_set(
     State(state): State<AppState>,
     Path(id): Path<String>,
+    Query(query): Query<SetQuery>,
     headers: HeaderMap,
 ) -> ApiResult<Response> {
     // By Snowflake, or by the set's old ULID (ADR 0027).
     let id = crate::public_ids::canonical(&state, &id).await?;
+    if let Some(since) = query.since {
+        return shared_read(&state, &headers, None, || {
+            catalog::set_changes(&state, None, &id, since)
+        })
+        .await;
+    }
     let key = cyex_tv_db::ids::from_text(id.trim()).map(read_cache::set_key);
     shared_read(&state, &headers, key, || catalog::set(&state, None, &id)).await
+}
+
+/// Several sets at once, in the order asked (ADR 0032): what `GET /v1/sets/{id}` answers for
+/// each, approved emotes only. Unknown and hidden sets are left out. Counts as one read.
+#[utoipa::path(
+    post,
+    path = "/v1/sets/lookup",
+    tag = "reads",
+    request_body = SetsLookup,
+    responses(
+        (status = 200, body = SetsLookupResult),
+        (status = 400, description = "`too_many`: more than 25 set IDs.", body = ErrorBody)
+    )
+)]
+async fn lookup_sets(
+    State(state): State<AppState>,
+    Json(lookup): Json<SetsLookup>,
+) -> ApiResult<Json<serde_json::Value>> {
+    if lookup.ids.len() > catalog::SETS_LOOKUP_LIMIT {
+        return Err(catalog::too_many_ids("sets", catalog::SETS_LOOKUP_LIMIT));
+    }
+    let ids = crate::public_ids::canonical_many(&state, &lookup.ids).await?;
+    let sets = catalog::sets_by_ids(&state, None, &ids).await?;
+    Ok(Json(
+        crate::public_ids::publish(&state, &SetsLookupResult { sets }).await?,
+    ))
+}
+
+/// Several channels of one platform at once, in the order asked (ADR 0032): what
+/// `GET /v1/channels/{platform}/{id}` answers for each. Channels not on cyex.tv are left out.
+/// Counts as one read.
+#[utoipa::path(
+    post,
+    path = "/v1/channels/lookup",
+    tag = "reads",
+    request_body = ChannelsLookup,
+    responses(
+        (status = 200, body = ChannelsLookupResult),
+        (status = 400, description = "`too_many`: more than 100 channel IDs.", body = ErrorBody)
+    )
+)]
+async fn lookup_channels(
+    State(state): State<AppState>,
+    Json(lookup): Json<ChannelsLookup>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let channels = catalog::channels_by_ids(&state, lookup.platform, &lookup.ids).await?;
+    Ok(Json(
+        crate::public_ids::publish(&state, &ChannelsLookupResult { channels }).await?,
+    ))
 }
 
 /// Every upload and field limit: per kind (emote, badge, paint) the file size, side, frames,

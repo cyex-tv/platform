@@ -37,6 +37,10 @@ pub struct Set {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub visibility: SetVisibility,
+    /// Goes up with every change to what the set shows (ADR 0032; triggers keep it).
+    pub version: i64,
+    /// The newest version whose change rows were pruned: a delta from before it is a full resync.
+    pub change_floor: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, FromRow)]
@@ -75,7 +79,7 @@ pub struct NewMember<'a> {
     pub added_by: Option<Uuid>,
 }
 
-const SET: &str = "id, owner_account_id, name, kind, capacity, created_at, updated_at, visibility";
+const SET: &str = "id, owner_account_id, name, kind, capacity, created_at, updated_at, visibility, \n                   version, change_floor";
 const MEMBER: &str = "set_id, emote_id, name, zero_width, added_by, added_at";
 const EDITOR: &str = "set_id, account_id, granted_by, granted_at";
 
@@ -230,7 +234,7 @@ pub async fn owned_ids(conn: &mut PgConnection, owner: Uuid, ids: &[Uuid]) -> Db
 pub async fn list_editable(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<Set>> {
     Ok(sqlx::query_as(
         "SELECT s.id, s.owner_account_id, s.name, s.kind, s.capacity, s.created_at, s.updated_at,
-                s.visibility
+                s.visibility, s.version, s.change_floor
          FROM emote_sets s
          JOIN set_editors e ON e.set_id = s.id
          WHERE e.account_id = $1
@@ -259,7 +263,7 @@ pub async fn personal_for_users(
     Ok(sqlx::query_as(
         "SELECT i.platform_user_id,
                 s.id, s.owner_account_id, s.name, s.kind, s.capacity, s.created_at, s.updated_at,
-                s.visibility
+                s.visibility, s.version, s.change_floor
          FROM identities i
          JOIN accounts a ON a.id = i.account_id AND a.deleted_at IS NULL
          JOIN emote_sets s ON s.owner_account_id = i.account_id AND s.kind = 'personal'
@@ -556,4 +560,82 @@ pub async fn can_edit(conn: &mut PgConnection, account_id: Uuid, set_id: Uuid) -
     .bind(set_id)
     .fetch_one(conn)
     .await?)
+}
+
+// Versions and changes (ADR 0032)
+
+/// One change row: the member (or, for `set`, the set itself) touched at `version`.
+#[derive(Clone, Debug, PartialEq, Eq, FromRow)]
+pub struct Change {
+    pub version: i64,
+    pub emote_id: Option<Uuid>,
+    /// `added`, `removed`, `renamed` (the member's name or zero-width flag in the set), `emote`
+    /// (the emote itself, or its file) or `set` (the set's name).
+    pub kind: String,
+}
+
+/// How long change rows are kept.
+pub const CHANGES_KEEP_DAYS: i64 = 7;
+/// How many of a set's newest versions keep their change rows.
+pub const CHANGES_KEEP_VERSIONS: i64 = 1000;
+
+/// The changes of a set after `since` up to `upto`, oldest first, at most `limit`.
+pub async fn changes_since(
+    conn: &mut PgConnection,
+    set_id: Uuid,
+    since: i64,
+    upto: i64,
+    limit: i64,
+) -> DbResult<Vec<Change>> {
+    Ok(sqlx::query_as(
+        "SELECT version, emote_id, kind FROM emote_set_changes
+         WHERE set_id = $1 AND version > $2 AND version <= $3
+         ORDER BY version, id
+         LIMIT $4",
+    )
+    .bind(set_id)
+    .bind(since)
+    .bind(upto)
+    .bind(limit)
+    .fetch_all(conn)
+    .await?)
+}
+
+/// Removes change rows older than `cutoff` or more than `keep_versions` versions behind their
+/// set, and raises each set's `change_floor` to the newest version it lost. In batches, like the
+/// outbox. Returns how many rows went.
+pub async fn prune_changes(
+    conn: &mut PgConnection,
+    cutoff: DateTime<Utc>,
+    keep_versions: i64,
+) -> DbResult<u64> {
+    const BATCH: i64 = 10_000;
+    let mut removed = 0;
+    loop {
+        let gone: i64 = sqlx::query_scalar(
+            "WITH gone AS (
+                 DELETE FROM emote_set_changes WHERE id IN (
+                     SELECT c.id FROM emote_set_changes c
+                     JOIN emote_sets s ON s.id = c.set_id
+                     WHERE c.changed_at < $1 OR c.version <= s.version - $2
+                     ORDER BY c.id LIMIT $3)
+                 RETURNING set_id, version
+             ), floors AS (
+                 UPDATE emote_sets s SET change_floor = GREATEST(s.change_floor, g.v)
+                 FROM (SELECT set_id, max(version) AS v FROM gone GROUP BY set_id) g
+                 WHERE s.id = g.set_id
+                 RETURNING 1
+             )
+             SELECT count(*) FROM gone",
+        )
+        .bind(cutoff)
+        .bind(keep_versions)
+        .bind(BATCH)
+        .fetch_one(&mut *conn)
+        .await?;
+        removed += u64::try_from(gone).unwrap_or(0);
+        if gone < BATCH {
+            return Ok(removed);
+        }
+    }
 }

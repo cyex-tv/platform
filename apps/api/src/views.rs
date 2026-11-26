@@ -152,37 +152,33 @@ fn visible(row: &MemberRow, viewer: &Viewer, edits: &HashSet<Uuid>) -> bool {
     }
 }
 
-/// The sets `viewer` owns or edits, among `sets`.
+/// The sets `viewer` owns or edits, among `sets`: the owner, set editors, and account editors of
+/// the owner who work on sets (`emotes` or `sets`, ADR 0014) with a grant covering the set. One
+/// query however many sets.
 async fn editable(
     conn: &mut PgConnection,
     sets: &[Set],
     viewer: &Viewer,
 ) -> DbResult<HashSet<Uuid>> {
-    let mut out = HashSet::new();
     let Some(account) = viewer.account_id else {
-        return Ok(out);
+        return Ok(HashSet::new());
     };
-    for set in sets {
-        if set.owner_account_id == Some(account)
-            || sets::can_edit(conn, account, set.id).await?
-            || account_editor(conn, set, account).await?
-        {
-            out.insert(set.id);
+    let mut out: HashSet<Uuid> = sets
+        .iter()
+        .filter(|s| s.owner_account_id == Some(account))
+        .map(|s| s.id)
+        .collect();
+    let rest: Vec<Uuid> = sets
+        .iter()
+        .map(|s| s.id)
+        .filter(|id| !out.contains(id))
+        .collect();
+    for access in editors::set_access(conn, account, &rest).await? {
+        if access.direct || access.works_on_sets {
+            out.insert(access.set_id);
         }
     }
     Ok(out)
-}
-
-/// An account editor of the set's owner who works on sets (`emotes` or `sets`, ADR 0014) and
-/// whose grant covers this one.
-async fn account_editor(conn: &mut PgConnection, set: &Set, account: Uuid) -> DbResult<bool> {
-    let Some(owner) = set.owner_account_id else {
-        return Ok(false);
-    };
-    let works_on_sets = editors::permissions_of(conn, owner, account)
-        .await?
-        .is_some_and(|flags| flags.iter().any(|f| f == "emotes" || f == "sets"));
-    Ok(works_on_sets && editors::covers_set(conn, owner, account, set.id).await?)
 }
 
 fn set_emote(
@@ -295,6 +291,7 @@ async fn build_sets(
                 .get(&set.id)
                 .map_or(0, |n| u32::try_from(*n).unwrap_or(u32::MAX)),
             created_at: time(set.created_at),
+            version: set.version,
         })
         .collect())
 }
@@ -383,6 +380,37 @@ pub async fn set_emotes(
         .map(|row| set_emote(row, &tags, &summaries, &counts, cdn_url))
         .collect();
     Ok((items, total, page.next))
+}
+
+/// The members of `set` among `emote_ids` that `viewer` may see, oldest first (delta reads,
+/// ADR 0032). Members missing from the answer are not in the set as the viewer sees it.
+pub async fn set_members_among(
+    conn: &mut PgConnection,
+    set: &Set,
+    viewer: &Viewer,
+    cdn_url: &str,
+    emote_ids: &[Uuid],
+) -> DbResult<Vec<SetEmote>> {
+    let edits = editable(conn, std::slice::from_ref(set), viewer).await?;
+    let rows: Vec<MemberRow> = reads::members_among(conn, set.id, emote_ids)
+        .await?
+        .into_iter()
+        .filter(|row| visible(row, viewer, &edits))
+        .collect();
+    let ids: Vec<Uuid> = rows.iter().map(|r| r.emote_id).collect();
+    let tags = reads::tags(conn, &ids).await?;
+    let owners: Vec<Uuid> = rows
+        .iter()
+        .filter_map(|r| r.emote_owner)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    let summaries = reads::summaries(conn, &owners).await?;
+    let counts = reads::channel_counts(conn, &ids).await?;
+    Ok(rows
+        .iter()
+        .map(|row| set_emote(row, &tags, &summaries, &counts, cdn_url))
+        .collect())
 }
 
 /// One member as `SetEmote`, for the answer to a set edit (the editor sees pending emotes).
