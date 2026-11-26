@@ -2339,6 +2339,12 @@
           "already_reported",
           "not_open",
           "tickets_blocked",
+          "api_key_invalid",
+          "api_key_read_only",
+          "too_many_api_keys",
+          "bad_webhook_url",
+          "bad_webhook_events",
+          "too_many_webhooks",
           "invalid_topic",
           "too_many_topics",
           "too_many_subscriptions",
@@ -2671,7 +2677,7 @@
             "code": "too_large",
             "group": "Emotes",
             "meaning": "The file or the picture is too big.",
-            "when": "Bytes, size in pixels or frame count go over the limits (413)."
+            "when": "An emote's bytes (8 MB), side (1000 px) or frame count (1000) go over the fixed limits (413); also a badge or paint over its limits."
           },
           {
             "code": "blocked",
@@ -2911,7 +2917,7 @@
             "code": "bad_dimensions",
             "group": "Cosmetics",
             "meaning": "The picture's size does not fit.",
-            "when": "Badge or paint pictures outside the allowed size or aspect (422)."
+            "when": "Badge or paint pictures outside the allowed size or aspect, and an emote wider than 4:1 (422)."
           },
           {
             "code": "image_not_ready",
@@ -3145,7 +3151,7 @@
             "code": "bad_limit",
             "group": "Admin",
             "meaning": "A limit value is not valid.",
-            "when": "Role limits are 1 to 1,000,000 (a file limit up to its ceiling: an emote side at most 1000 px) and listed once."
+            "when": "Role limits are 1 to 1,000,000 (a file limit up to its ceiling) and listed once. Emote limits are fixed, not per role, and always refused."
           },
           {
             "code": "unknown_limit",
@@ -3194,6 +3200,42 @@
             "group": "Reports",
             "meaning": "You cannot file reports.",
             "when": "The account was barred from filing reports."
+          },
+          {
+            "code": "api_key_invalid",
+            "group": "Developers",
+            "meaning": "That API key is not valid.",
+            "when": "A request sends `Authorization: Bearer cyex_live_...` with a key that was revoked, never existed, or whose account is deleted or blocked (401)."
+          },
+          {
+            "code": "api_key_read_only",
+            "group": "Developers",
+            "meaning": "API keys read public data only.",
+            "when": "A request with an API key tries a mutation, an upload, sign-in or anything else that is not a public read (403)."
+          },
+          {
+            "code": "too_many_api_keys",
+            "group": "Developers",
+            "meaning": "You have as many API keys as you may.",
+            "when": "Making a key past the limit per account (10). Revoke one first."
+          },
+          {
+            "code": "bad_webhook_url",
+            "group": "Developers",
+            "meaning": "That webhook URL can't be used.",
+            "when": "The URL isn't https, has a user name or password, is too long, or points at a private, local or reserved address."
+          },
+          {
+            "code": "bad_webhook_events",
+            "group": "Developers",
+            "meaning": "Those event types can't be used.",
+            "when": "No event type, or one a webhook can't subscribe to."
+          },
+          {
+            "code": "too_many_webhooks",
+            "group": "Developers",
+            "meaning": "This channel has as many webhooks as it may.",
+            "when": "Adding a webhook past the limit per channel (5). Delete one first."
           },
           {
             "code": "invalid_topic",
@@ -3322,7 +3364,7 @@
       },
       "MediaLimits": {
         "type": "object",
-        "description": "What one kind of picture (emote, badge, paint) may be. Sizes are px, the file size is bytes.",
+        "description": "What one kind of picture (emote, badge, paint) may be. Sizes are px, the file size is bytes.\nEmote numbers are fixed rules, the same for everyone; badge and paint numbers are the\nconfigured ones (a role may raise them).",
         "required": [
           "max_bytes",
           "max_side",
@@ -3337,7 +3379,7 @@
               "null"
             ],
             "format": "int32",
-            "description": "How many times as wide as tall a picture may be (badges 1, paints 8); null for no rule at\nupload (emotes wider than their `servedAspect` are scaled to fit)."
+            "description": "How many times as wide as tall a picture may be (emotes 4, badges 1, paints 8); null for\nno rule at upload. Emotes have no rule for a tall picture."
           },
           "max_bytes": {
             "type": "integer",
@@ -3351,6 +3393,14 @@
             ],
             "format": "int64",
             "description": "The longest one run of an animation may last, in ms; null when there is no cap."
+          },
+          "max_fps": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The most frames a second (emotes 50; null for the others). Frames shown for under\n1000 / `maxFps` ms (20 ms: a 0 or 10 ms GIF delay) are shown for 100 ms, as browsers do."
           },
           "max_frames": {
             "type": "integer",
@@ -3674,7 +3724,7 @@
             "items": {
               "$ref": "#/components/schemas/RateInfo"
             },
-            "description": "The per-IP request rates."
+            "description": "The request rates, by the name of their `CYEX_TV_LIMIT_*` variable: per IP for the route\nclasses (`auth`, `gql`, `reads`, `upload`, `socket`), per account (or per IP signed out)\nfor the account limits, and per developer API key for `api_key` (ADR 0033)."
           },
           "tags": {
             "$ref": "#/components/schemas/TagLimits"
@@ -4220,7 +4270,7 @@
     },
     {
       "name": "reads",
-      "description": "Public, cacheable reads for chat clients. Every answer carries `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (seconds until the allowance is full again); a `429` also has `Retry-After`."
+      "description": "Public, cacheable reads for chat clients. Every answer carries `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (seconds until the allowance is full again); a `429` also has `Retry-After`. Bots can send a developer API key as `Authorization: Bearer cyex_live_...` (made on your cyex.tv profile, ADR 0033): it reads the same data under a limit of its own, which the headers then describe."
     }
   ]
 }

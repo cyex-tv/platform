@@ -36,7 +36,7 @@ const fn e(
 }
 
 /// The groups, in the order the docs show them.
-pub const GROUPS: [&str; 13] = [
+pub const GROUPS: [&str; 14] = [
     "General",
     "Auth",
     "Emotes",
@@ -49,6 +49,7 @@ pub const GROUPS: [&str; 13] = [
     "Admin",
     "Site",
     "Reports",
+    "Developers",
     "GraphQL",
 ];
 
@@ -377,7 +378,7 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "Emotes",
         "too_large",
         "The file or the picture is too big.",
-        "Bytes, size in pixels or frame count go over the limits (413).",
+        "An emote's bytes (8 MB), side (1000 px) or frame count (1000) go over the fixed limits (413); also a badge or paint over its limits.",
     ),
     e(
         "Emotes",
@@ -617,7 +618,7 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "Cosmetics",
         "bad_dimensions",
         "The picture's size does not fit.",
-        "Badge or paint pictures outside the allowed size or aspect (422).",
+        "Badge or paint pictures outside the allowed size or aspect, and an emote wider than 4:1 (422).",
     ),
     e(
         "Cosmetics",
@@ -851,7 +852,7 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "Admin",
         "bad_limit",
         "A limit value is not valid.",
-        "Role limits are 1 to 1,000,000 (a file limit up to its ceiling: an emote side at most 1000 px) and listed once.",
+        "Role limits are 1 to 1,000,000 (a file limit up to its ceiling) and listed once. Emote limits are fixed, not per role, and always refused.",
     ),
     e(
         "Admin",
@@ -900,6 +901,42 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "tickets_blocked",
         "You cannot file reports.",
         "The account was barred from filing reports.",
+    ),
+    e(
+        "Developers",
+        "api_key_invalid",
+        "That API key is not valid.",
+        "A request sends `Authorization: Bearer cyex_live_...` with a key that was revoked, never existed, or whose account is deleted or blocked (401).",
+    ),
+    e(
+        "Developers",
+        "api_key_read_only",
+        "API keys read public data only.",
+        "A request with an API key tries a mutation, an upload, sign-in or anything else that is not a public read (403).",
+    ),
+    e(
+        "Developers",
+        "too_many_api_keys",
+        "You have as many API keys as you may.",
+        "Making a key past the limit per account (10). Revoke one first.",
+    ),
+    e(
+        "Developers",
+        "bad_webhook_url",
+        "That webhook URL can't be used.",
+        "The URL isn't https, has a user name or password, is too long, or points at a private, local or reserved address.",
+    ),
+    e(
+        "Developers",
+        "bad_webhook_events",
+        "Those event types can't be used.",
+        "No event type, or one a webhook can't subscribe to.",
+    ),
+    e(
+        "Developers",
+        "too_many_webhooks",
+        "This channel has as many webhooks as it may.",
+        "Adding a webhook past the limit per channel (5). Delete one first.",
     ),
     e(
         "GraphQL",

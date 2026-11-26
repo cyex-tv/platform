@@ -50,6 +50,18 @@ pub const LIMIT_ERRORS: &[LimitError] = &[
     l("too_many_pending", 409, "emotes waiting for review", ""),
     l("too_many_editors", 409, "editors an account can have", ""),
     l(
+        "too_many_api_keys",
+        409,
+        "developer API keys an account can have",
+        "",
+    ),
+    l(
+        "too_many_webhooks",
+        409,
+        "webhooks a channel can have, or webhooks asking for cosmetics events",
+        "",
+    ),
+    l(
         "limit_reached",
         409,
         "hidden emotes, hidden creators or favourites",

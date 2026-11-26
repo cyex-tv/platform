@@ -138,6 +138,14 @@ export function describe(kind: string, payload: string | null | undefined): Line
       const n = noun(str(d, 'kind', 20));
       return { icon: 'brush', text: withReason(`${name ? `The ${iso(name)} ${n}` : `A ${n}`} was taken away.`, reason), href: '/me/cosmetics' };
     }
+    case 'webhook.disabled': {
+      const login = str(d, 'login', 64);
+      return {
+        icon: 'x',
+        text: `A webhook of ${login ? iso(login) : 'your channel'} was turned off after too many failed deliveries. Fix the receiver, then turn it on again.`,
+        href: '/me/channels',
+      };
+    }
     default:
       return { icon: 'bell', text: 'There’s an update on your account.', href: null };
   }

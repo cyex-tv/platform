@@ -167,6 +167,9 @@ pub async fn erase(conn: &mut PgConnection, account_id: Uuid) -> DbResult<()> {
         "UPDATE reports SET reporter_id = NULL WHERE reporter_id = $1",
         "UPDATE emote_set_members SET added_by = NULL WHERE added_by = $1",
         "DELETE FROM sessions WHERE account_id = $1",
+        "DELETE FROM api_keys WHERE account_id = $1",
+        "DELETE FROM webhooks WHERE channel_id IN (SELECT id FROM channels WHERE account_id = $1)",
+        "UPDATE webhooks SET created_by = NULL WHERE created_by = $1",
         "DELETE FROM identities WHERE account_id = $1",
         "UPDATE accounts SET deleted_at = coalesce(deleted_at, now()), erase_after = NULL
           WHERE id = $1",
@@ -208,6 +211,9 @@ pub async fn schedule_erase(
         .bind(account_id)
         .execute(&mut *conn)
         .await?;
+    // Developer keys end with the account (ADR 0033); its channels' webhooks stop with it.
+    crate::api_keys::delete_for_account(conn, account_id).await?;
+    crate::webhooks::delete_for_account(conn, account_id).await?;
     announce(conn, account_id, false).await?;
     Ok(true)
 }

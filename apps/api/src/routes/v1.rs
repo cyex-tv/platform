@@ -339,12 +339,9 @@ async fn upload_emote(
 ) -> ApiResult<(StatusCode, Json<serde_json::Value>)> {
     let caller = caller.ok_or_else(|| ApiError::from(AuthError::SignedOut))?;
     no_app_scope(&caller)?;
-    // The uploader's own cap (their roles may raise or lower it), read while the file streams in.
-    let emote_limits = state
-        .limits
-        .load(&state.db, caller.account_id)
-        .await
-        .media(MediaKind::Emote);
+    // The emote rules are fixed for everyone (`EmoteRules`); the size is checked as the file
+    // streams in.
+    let emote_limits = cyex_tv_media::Limits::emote();
     let bad_form = |message: &str| ApiError::new(StatusCode::BAD_REQUEST, "bad_form", message);
     let mut name = None;
     let mut tags = None;

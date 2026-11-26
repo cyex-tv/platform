@@ -560,6 +560,42 @@ type ApiDeprecation {
 }
 
 """
+One of your developer API keys. The key itself is shown once, when it is made.
+"""
+type ApiKey {
+	id: String!
+	"""
+	What you called it.
+	"""
+	name: String!
+	"""
+	The start of the key (`cyex_live_` and 8 more characters), to tell keys apart.
+	"""
+	prefix: String!
+	createdAt: String!
+	"""
+	When it last made a request, to the minute or so. `None` until it is used.
+	"""
+	lastUsedAt: String
+	"""
+	Requests it made per UTC day, the last 30 days, oldest first; days without any are left
+	out. Written every minute or so, so the last minute may be missing.
+	"""
+	usage: [ApiKeyDay!]!
+}
+
+"""
+One day of an API key's requests.
+"""
+type ApiKeyDay {
+	"""
+	The UTC day, `YYYY-MM-DD`.
+	"""
+	day: String!
+	requests: Int!
+}
+
+"""
 Where the limits are published.
 """
 type ApiLimitsLink {
@@ -987,11 +1023,49 @@ input CreateSetInput {
 }
 
 """
+A new webhook.
+"""
+input CreateWebhookInput {
+	"""
+	An `https://` URL on a public address.
+	"""
+	url: String!
+	"""
+	At least one of: `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED`,
+	`CHANNEL_ACTIVE_SET_CHANGED`, `EMOTE_UPDATED`, `COSMETIC_CREATED`, `COSMETIC_UPDATED`,
+	`COSMETIC_DELETED`.
+	"""
+	events: [EventType!]!
+}
+
+"""
+A key just made: the key itself is in this answer only.
+"""
+type CreatedApiKey {
+	"""
+	Send as `Authorization: Bearer <key>`. It reads public data only.
+	"""
+	key: String!
+	apiKey: ApiKey!
+}
+
+"""
 A new batch and its codes in plain text. This is the only time they are shown.
 """
 type CreatedCodeBatch {
 	batch: CodeBatch!
 	codes: [String!]!
+}
+
+"""
+A webhook just made, or its secret just replaced: the secret is in this answer only.
+"""
+type CreatedWebhook {
+	"""
+	Signs every delivery (`X-Cyex-Signature`). Keep it on your server.
+	"""
+	secret: String!
+	webhook: Webhook!
 }
 
 """
@@ -1705,6 +1779,8 @@ type Me {
 
 """
 What one kind of picture (emote, badge, paint) may be. Sizes are px, the file size is bytes.
+Emote numbers are fixed rules, the same for everyone; badge and paint numbers are the
+configured ones (a role may raise them).
 """
 type MediaLimits {
 	"""
@@ -1732,10 +1808,15 @@ type MediaLimits {
 	"""
 	minSide: Int
 	"""
-	How many times as wide as tall a picture may be (badges 1, paints 8); null for no rule at
-	upload (emotes wider than their `servedAspect` are scaled to fit).
+	How many times as wide as tall a picture may be (emotes 4, badges 1, paints 8); null for
+	no rule at upload. Emotes have no rule for a tall picture.
 	"""
 	maxAspect: Int
+	"""
+	The most frames a second (emotes 50; null for the others). Frames shown for under
+	1000 / `maxFps` ms (20 ms: a 0 or 10 ms GIF delay) are shown for 100 ms, as browsers do.
+	"""
+	maxFps: Int
 	"""
 	The tallest file the CDN serves for this kind (emotes 128 px, badges the master size).
 	"""
@@ -2161,6 +2242,37 @@ type Mutation {
 	has passed. Audited.
 	"""
 	restoreAccount: Boolean!
+	"""
+	Make a developer API key: a Bearer token for bots and tools that reads public data at a
+	higher rate than signed-out requests. The key is in this answer only. At most 10 per
+	account (`too_many_api_keys`); made on cyex.tv only (`website_only` with a token).
+	"""
+	createApiKey(name: String!): CreatedApiKey!
+	"""
+	Revoke one of your API keys; it stops working at once. False when there was no such key.
+	"""
+	revokeApiKey(id: String!): Boolean!
+	"""
+	Point a channel's events at an https URL. The secret that signs every delivery is in this
+	answer only. At most 5 per channel (`too_many_webhooks`).
+	"""
+	createWebhook(platform: Platform!, id: String!, input: CreateWebhookInput!): CreatedWebhook!
+	"""
+	Change a webhook's URL or events, or turn it off or on again.
+	"""
+	updateWebhook(id: String!, input: UpdateWebhookInput!): Webhook!
+	"""
+	Delete a webhook and its delivery log.
+	"""
+	deleteWebhook(id: String!): Boolean!
+	"""
+	Replace a webhook's secret. The new one is in this answer only; the old one stops at once.
+	"""
+	rotateWebhookSecret(id: String!): CreatedWebhook!
+	"""
+	Send a `webhook.test` delivery now (once, no retries), even while the webhook is off.
+	"""
+	testWebhook(id: String!): WebhookDelivery!
 	"""
 	Create a role. You can only grant permissions you hold. Needs `roles.manage`. Audited.
 	"""
@@ -2644,7 +2756,9 @@ type PublicLimits {
 	names: NameLimits!
 	tags: TagLimits!
 	"""
-	The per-IP request rates.
+	The request rates, by the name of their `CYEX_TV_LIMIT_*` variable: per IP for the route
+	classes (`auth`, `gql`, `reads`, `upload`, `socket`), per account (or per IP signed out)
+	for the account limits, and per developer API key for `api_key` (ADR 0033).
 	"""
 	rates: [RateInfo!]!
 	"""
@@ -2974,6 +3088,20 @@ type Query {
 	`cosmeticId`. `perPage` is 1 to 100, default 50. Needs `cosmetics.grant`.
 	"""
 	cosmeticEntitlements(kind: CosmeticKind!, accountId: String, cosmeticId: String, page: Int, perPage: Int): EntitlementPage!
+	"""
+	Your developer API keys, oldest first, each with its requests per day for the last 30
+	days. Never the keys themselves.
+	"""
+	myApiKeys: [ApiKey!]!
+	"""
+	A channel's webhooks, for its owner and its account editors with the channel settings
+	permission (`forbidden` for anyone else).
+	"""
+	channelWebhooks(platform: Platform!, id: String!): [Webhook!]!
+	"""
+	A webhook's latest deliveries, newest first (the last 50 are kept).
+	"""
+	webhookDeliveries(id: String!): [WebhookDelivery!]!
 	"""
 	The API's version, build, where its limits are published (the `limits` field) and what
 	is deprecated, with the sunset date of each. Public. Same as `GET /v1/meta`.
@@ -3524,7 +3652,7 @@ type RoleLimit {
 	`gql_account`, `uploads_per_hour`, `pending_emotes`, `editors`, `cosmetics`,
 	`set_clones`, `account_search`, `quick_search`, `heavy_reads`, `personal_lists`,
 	`emote_transfers`, `prefs`, `checkout`, `redeem`, `data_export`, `set_capacity_max`, or a
-	media limit: `emote_max_bytes`, `emote_max_side`, `emote_max_frames`, `badge_max_bytes`,
+	media limit: `badge_max_bytes`,
 	`badge_max_side`, `badge_max_frames`, `paint_max_bytes` or `paint_max_side` (bytes, px
 	and frames of the largest file an account may upload).
 	"""
@@ -4059,6 +4187,18 @@ input UpdateSetInput {
 }
 
 """
+What to change on a webhook; what is left out stays.
+"""
+input UpdateWebhookInput {
+	url: String
+	events: [EventType!]
+	"""
+	Turning it on again starts its failure count over.
+	"""
+	enabled: Boolean
+}
+
+"""
 Where an account stands with uploads (`uploadQuota`): how many of its emotes wait for review
 and how many may, and its uploads this hour.
 """
@@ -4081,17 +4221,26 @@ type UploadQuota {
 	uploadsThisHour: Int!
 	uploadsPerHour: Int!
 	"""
-	The most bytes one emote file may be.
+	The most bytes one emote file may be (8 MB). Fixed, the same for everyone.
 	"""
 	maxBytes: Int!
 	"""
-	The longest side of an emote, in px.
+	The longest side of an emote, in px (1000). Fixed.
 	"""
 	maxSide: Int!
 	"""
-	The most frames an animated emote may have.
+	The most frames an animated emote may have (1000). Fixed.
 	"""
 	maxFrames: Int!
+	"""
+	The most frames a second (50). A frame shown for under 20 ms (a 0 or 10 ms GIF delay) is
+	shown for 100 ms, as browsers do, so an animation never runs faster. Fixed.
+	"""
+	maxFps: Int!
+	"""
+	How many times as wide as tall an emote may be (4, so 4:1). Fixed; a tall emote has no rule.
+	"""
+	maxAspect: Int!
 }
 
 """
@@ -4101,6 +4250,65 @@ type UserCosmetics {
 	platformUserId: String!
 	badgeId: String
 	paintId: String
+}
+
+"""
+A channel's webhook: where its events are sent.
+"""
+type Webhook {
+	id: String!
+	url: String!
+	"""
+	The event types it is sent.
+	"""
+	events: [EventType!]!
+	"""
+	Off: nothing is sent. It is turned off by hand, or after 5 deliveries in a row failed.
+	"""
+	enabled: Boolean!
+	"""
+	Why it is off: `manual` or `failures`. `None` while it is on.
+	"""
+	disabledReason: String
+	"""
+	Deliveries in a row that failed after every retry.
+	"""
+	failedDeliveries: Int!
+	createdAt: String!
+}
+
+"""
+One delivery of a webhook: what was sent and how it went.
+"""
+type WebhookDelivery {
+	id: String!
+	"""
+	The event's type, or `webhook.test` for Send test.
+	"""
+	eventType: String!
+	"""
+	The outbox event's ID, as the event sockets send it. `None` for a test.
+	"""
+	eventId: String
+	"""
+	`pending`, `delivered` or `failed`.
+	"""
+	state: String!
+	attempts: Int!
+	"""
+	The receiver's HTTP status on the last attempt, if it answered.
+	"""
+	responseStatus: Int
+	"""
+	What went wrong on the last attempt.
+	"""
+	error: String
+	"""
+	How long the last attempt took, in milliseconds.
+	"""
+	durationMs: Int
+	createdAt: String!
+	finishedAt: String
 }
 
 """

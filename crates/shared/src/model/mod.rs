@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
 pub use crate::cosmetics::*;
+pub use crate::developers::*;
 pub use crate::public_limits::*;
 pub use crate::shop::*;
 pub use crate::site::*;
@@ -1848,7 +1849,7 @@ pub struct RoleLimit {
     /// `gql_account`, `uploads_per_hour`, `pending_emotes`, `editors`, `cosmetics`,
     /// `set_clones`, `account_search`, `quick_search`, `heavy_reads`, `personal_lists`,
     /// `emote_transfers`, `prefs`, `checkout`, `redeem`, `data_export`, `set_capacity_max`, or a
-    /// media limit: `emote_max_bytes`, `emote_max_side`, `emote_max_frames`, `badge_max_bytes`,
+    /// media limit: `badge_max_bytes`,
     /// `badge_max_side`, `badge_max_frames`, `paint_max_bytes` or `paint_max_side` (bytes, px
     /// and frames of the largest file an account may upload).
     pub key: String,
@@ -1889,12 +1890,17 @@ pub struct UploadQuota {
     /// Emotes it got in the last hour.
     pub uploads_this_hour: i32,
     pub uploads_per_hour: i32,
-    /// The most bytes one emote file may be.
+    /// The most bytes one emote file may be (8 MB). Fixed, the same for everyone.
     pub max_bytes: i32,
-    /// The longest side of an emote, in px.
+    /// The longest side of an emote, in px (1000). Fixed.
     pub max_side: i32,
-    /// The most frames an animated emote may have.
+    /// The most frames an animated emote may have (1000). Fixed.
     pub max_frames: i32,
+    /// The most frames a second (50). A frame shown for under 20 ms (a 0 or 10 ms GIF delay) is
+    /// shown for 100 ms, as browsers do, so an animation never runs faster. Fixed.
+    pub max_fps: i32,
+    /// How many times as wide as tall an emote may be (4, so 4:1). Fixed; a tall emote has no rule.
+    pub max_aspect: i32,
 }
 
 // Live updates (ADR 0005)

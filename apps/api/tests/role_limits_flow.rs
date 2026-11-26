@@ -614,7 +614,7 @@ async fn changing_limits_follows_the_role_edit_rules() {
         .await;
     assert_eq!(
         r["data"]["limitDefaults"].as_array().unwrap().len(),
-        24,
+        21,
         "{r}"
     );
 
@@ -668,7 +668,7 @@ async fn the_owner_isnt_capped() {
 }
 
 const LIMITS: &str = "query { limits {
-    emote { maxBytes maxSide maxFrames maxTotalPixels maxDurationMs minSide maxAspect maxServedSide }
+    emote { maxBytes maxSide maxFrames maxFps maxTotalPixels maxDurationMs minSide maxAspect maxServedSide }
     badge { maxBytes maxSide maxFrames maxDurationMs minSide maxAspect maxServedSide }
     paint { maxBytes maxSide minSide maxAspect }
     names { emote { min max } tooltip { min max } }
@@ -691,6 +691,8 @@ async fn limits_lists_every_limit_and_the_callers_role_overrides() {
     assert_eq!(l["emote"]["maxBytes"], 8 * 1024 * 1024, "{r}");
     assert_eq!(l["emote"]["maxSide"], 1000, "{r}");
     assert_eq!(l["emote"]["maxFrames"], 1000, "{r}");
+    assert_eq!(l["emote"]["maxFps"], 50, "{r}");
+    assert_eq!(l["emote"]["maxAspect"], 4, "{r}");
     assert!(l["emote"]["maxDurationMs"].is_null(), "{r}");
     assert_eq!(l["emote"]["maxServedSide"], 128, "{r}");
     assert_eq!(l["badge"]["maxSide"], 2048, "{r}");
@@ -736,7 +738,8 @@ async fn limits_lists_every_limit_and_the_callers_role_overrides() {
     w.db.close().await;
 }
 
-const MEDIA_QUOTA: &str = "query { uploadQuota { maxBytes maxSide maxFrames } limits {
+const MEDIA_QUOTA: &str =
+    "query { uploadQuota { maxBytes maxSide maxFrames maxFps maxAspect } limits {
     account { key default effective windowSeconds }
 } }";
 
@@ -850,8 +853,46 @@ async fn a_role_raises_the_badge_side_and_the_upload_passes() {
     w.db.close().await;
 }
 
+/// A flat picture `w` x `h` px.
+fn flat_png_of(w: u32, h: u32, seed: u8) -> Vec<u8> {
+    let mut out = Cursor::new(Vec::new());
+    RgbaImage::from_pixel(w, h, Rgba([seed, 90, 200, 255]))
+        .write_to(&mut out, ImageFormat::Png)
+        .unwrap();
+    out.into_inner()
+}
+
+/// A GIF of `frames` flat 2 x 2 px frames, each shown `delay_ms`.
+fn tiny_gif(frames: u32, delay_ms: u32) -> Vec<u8> {
+    use image::codecs::gif::{GifEncoder, Repeat};
+    use image::{Delay, Frame};
+    let mut out = Vec::new();
+    {
+        let mut enc = GifEncoder::new(&mut out);
+        enc.set_repeat(Repeat::Infinite).unwrap();
+        for i in 0..frames {
+            enc.encode_frame(Frame::from_parts(
+                RgbaImage::from_pixel(2, 2, Rgba([(i % 250) as u8, (i / 250) as u8, 7, 255])),
+                0,
+                0,
+                Delay::from_numer_denom_ms(delay_ms, 1),
+            ))
+            .unwrap();
+        }
+    }
+    out
+}
+
+/// A PNG of exactly `total` bytes: trailing bytes after the image are ignored by decoders.
+fn padded_png(total: usize) -> Vec<u8> {
+    let mut file = png(3);
+    assert!(file.len() < total);
+    file.resize(total, 0);
+    file
+}
+
 #[tokio::test]
-async fn an_emote_side_can_only_go_down_from_1000() {
+async fn emote_limits_are_fixed_a_role_cannot_change_them() {
     let Some(w) = World::new().await else {
         return;
     };
@@ -859,17 +900,21 @@ async fn an_emote_side_can_only_go_down_from_1000() {
     let alice = w.user("8122").await;
     let role = w.create_role(&owner, "Emote people", 10, &[]).await;
 
-    // 1000 x 1000 is a hard ceiling: it can't be set above it.
-    for value in [1001, 2048, 5000] {
+    // Any emote key, any value (up, down, or empty): bad_limit, saying they are fixed.
+    for (key, value) in [
+        ("emote_max_side", json!(20)),
+        ("emote_max_side", json!(5000)),
+        ("emote_max_bytes", json!(1_048_576)),
+        ("emote_max_frames", json!(null)),
+    ] {
         let r = w
-            .set_limits(
-                &owner,
-                &role,
-                json!([{ "key": "emote_max_side", "value": value }]),
-            )
+            .set_limits(&owner, &role, json!([{ "key": key, "value": value }]))
             .await;
-        assert_eq!(code(&r), "bad_limit", "{r}");
+        assert_eq!(code(&r), "bad_limit", "{key} {r}");
+        let message = r["errors"][0]["message"].as_str().unwrap_or_default();
+        assert!(message.contains("fixed"), "{message}");
     }
+    // Badge and paint limits are as they were.
     let r = w
         .set_limits(
             &owner,
@@ -879,49 +924,159 @@ async fn an_emote_side_can_only_go_down_from_1000() {
         .await;
     assert_eq!(code(&r), "bad_limit", "{r}");
 
-    // Even a value written past the API (by hand) isn't believed: the upload still stops at 1000.
+    // The role lists and defaults don't offer them.
+    let r = w
+        .gql(
+            &owner,
+            "query($id: String!) { roleLimits(id: $id) { key } limitDefaults { key } }",
+            json!({ "id": role }),
+        )
+        .await;
+    for list in ["roleLimits", "limitDefaults"] {
+        let keys = r["data"][list].as_array().unwrap();
+        assert!(!keys.is_empty(), "{r}");
+        assert!(
+            keys.iter()
+                .all(|k| !k["key"].as_str().unwrap().starts_with("emote_max_")),
+            "{r}"
+        );
+    }
+
+    // Emote numbers left in a role by hand (20 px, 1 MB) change nothing: 24 px passes.
     {
         let mut conn = w.db.conn().await;
         sqlx::query("UPDATE roles SET limits = $2 WHERE id = $1")
             .bind(w.db.row(&role).await)
-            .bind(json!({ "emote_max_side": 5000, "emote_max_bytes": 4_194_304 }))
+            .bind(json!({ "emote_max_side": 20, "emote_max_bytes": 1_000 }))
             .execute(&mut *conn)
             .await
             .unwrap();
     }
     w.assign(&owner, &alice, &role).await;
-    let r = w.upload_file(&alice, "tooWide", &flat_png(1200, 8)).await;
-    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{:?}", r.body);
-    assert_eq!(r.body["error"], "too_large");
-    let q = w.gql(&alice, MEDIA_QUOTA, json!({})).await;
-    assert_eq!(q["data"]["uploadQuota"]["maxSide"], 1000, "{q}");
-    assert_eq!(q["data"]["uploadQuota"]["maxBytes"], 4_194_304, "{q}");
-
-    // Lowering works: 20 px a side refuses a 24 px emote, 30 px takes it.
-    w.set_limits(
-        &owner,
-        &role,
-        json!([{ "key": "emote_max_side", "value": 20 }]),
-    )
-    .await;
-    let r = w.upload(&alice, "smallOnly", 9, None).await;
-    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{:?}", r.body);
-    w.set_limits(
-        &owner,
-        &role,
-        json!([{ "key": "emote_max_side", "value": 30 }]),
-    )
-    .await;
-    let r = w.upload(&alice, "fits", 10, None).await;
+    let r = w.upload(&alice, "fixedRules", 10, None).await;
     assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
-    // The transcode job carries the numbers it was checked under.
+    // The job carries no limits: the worker uses the same fixed rules.
     let payload = last_payload(&w, "emote.transcode").await;
-    assert_eq!(payload["limits"]["max_side"], 30, "{payload}");
+    assert!(payload.get("limits").is_none(), "{payload}");
     w.db.close().await;
 }
 
 #[tokio::test]
-async fn the_quota_and_limits_report_the_effective_media_numbers() {
+async fn emote_size_and_file_rules_are_enforced_just_under_and_just_over() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let alice = w.user("8130").await;
+    let owner = w.user("900").await;
+
+    // 1000 x 1000 passes, one px over either side doesn't, for everyone (the owner too).
+    let r = w
+        .upload_file(&alice, "full1000", &flat_png_of(1000, 1000, 1))
+        .await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
+    for (name, file) in [
+        ("tooWide", flat_png_of(1001, 1000, 2)),
+        ("tooTall", flat_png_of(1000, 1001, 3)),
+    ] {
+        for user in [&alice, &owner] {
+            let r = w.upload_file(user, name, &file).await;
+            assert_eq!(
+                r.status,
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "{name} {:?}",
+                r.body
+            );
+            assert_eq!(r.body["error"], "too_large");
+            let message = r.body["message"].as_str().unwrap();
+            assert!(message.contains("1000×1000 px"), "{message}");
+        }
+    }
+    // 8 MB exactly passes, one byte more doesn't.
+    let r = w
+        .upload_file(&alice, "eightMb", &padded_png(8 * 1024 * 1024))
+        .await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
+    let r = w
+        .upload_file(&alice, "overMb", &padded_png(8 * 1024 * 1024 + 1))
+        .await;
+    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{:?}", r.body);
+    assert_eq!(r.body["error"], "too_large");
+    assert!(
+        r.body["message"].as_str().unwrap().contains("8 MB"),
+        "{:?}",
+        r.body
+    );
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn emote_frame_and_speed_rules_are_enforced() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let alice = w.user("8131").await;
+
+    // 1000 frames pass, 1001 don't.
+    let r = w
+        .upload_file(&alice, "frames1000", &tiny_gif(1000, 40))
+        .await;
+    assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
+    let r = w
+        .upload_file(&alice, "frames1001", &tiny_gif(1001, 40))
+        .await;
+    assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{:?}", r.body);
+    assert_eq!(r.body["error"], "too_large");
+    assert!(
+        r.body["message"].as_str().unwrap().contains("1000 frames"),
+        "{:?}",
+        r.body
+    );
+    // 50 fps (20 ms) passes, and so do 0 and 10 ms delays: they are shown for 100 ms, so the
+    // rate never goes over 50 fps.
+    for (name, delay) in [("fps50", 20), ("delay10", 10), ("delay0", 0)] {
+        let r = w.upload_file(&alice, name, &tiny_gif(3, delay)).await;
+        assert_eq!(r.status, StatusCode::ACCEPTED, "{name} {:?}", r.body);
+    }
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn emotes_are_at_most_4_to_1_wide_and_tall_has_no_ratio_rule() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let alice = w.user("8132").await;
+
+    for (name, file) in [
+        ("wide4to1", flat_png_of(1000, 250, 1)),
+        ("small4to1", flat_png_of(40, 10, 2)),
+        ("tallOne", flat_png_of(10, 1000, 3)),
+        ("tallSkinny", flat_png_of(1, 1000, 4)),
+    ] {
+        let r = w.upload_file(&alice, name, &file).await;
+        assert_eq!(r.status, StatusCode::ACCEPTED, "{name} {:?}", r.body);
+    }
+    for (name, file) in [
+        ("wide41", flat_png_of(41, 10, 5)),
+        ("wide1000", flat_png_of(1000, 249, 6)),
+        ("wideLine", flat_png_of(500, 1, 7)),
+    ] {
+        let r = w.upload_file(&alice, name, &file).await;
+        assert_eq!(
+            r.status,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "{name} {:?}",
+            r.body
+        );
+        assert_eq!(r.body["error"], "bad_dimensions");
+        let message = r.body["message"].as_str().unwrap();
+        assert!(message.contains("4:1"), "{message}");
+    }
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn the_quota_and_limits_report_the_fixed_emote_numbers_and_the_role_media_ones() {
     let Some(w) = World::new().await else {
         return;
     };
@@ -929,14 +1084,18 @@ async fn the_quota_and_limits_report_the_effective_media_numbers() {
     let alice = w.user("8123").await;
     let bob = w.user("8124").await;
 
+    let check_emote = |q: &Value| {
+        let quota = &q["data"]["uploadQuota"];
+        assert_eq!(quota["maxBytes"], 8 * 1024 * 1024, "{q}");
+        assert_eq!(quota["maxSide"], 1000, "{q}");
+        assert_eq!(quota["maxFrames"], 1000, "{q}");
+        assert_eq!(quota["maxFps"], 50, "{q}");
+        assert_eq!(quota["maxAspect"], 4, "{q}");
+    };
     let q = w.gql(&alice, MEDIA_QUOTA, json!({})).await;
-    assert_eq!(q["data"]["uploadQuota"]["maxBytes"], 8 * 1024 * 1024, "{q}");
-    assert_eq!(q["data"]["uploadQuota"]["maxFrames"], 1000, "{q}");
+    check_emote(&q);
     let account = &q["data"]["limits"]["account"];
     for (key, default) in [
-        ("emote_max_bytes", 8 * 1024 * 1024),
-        ("emote_max_side", 1000),
-        ("emote_max_frames", 1000),
         ("badge_max_bytes", 8 * 1024 * 1024),
         ("badge_max_side", 2048),
         ("badge_max_frames", 120),
@@ -947,46 +1106,48 @@ async fn the_quota_and_limits_report_the_effective_media_numbers() {
         assert_eq!(limit(account, key)["effective"], default, "{key} {q}");
         assert!(limit(account, key)["windowSeconds"].is_null(), "{key}");
     }
+    assert!(
+        account
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|l| !l["key"].as_str().unwrap().starts_with("emote_max_")),
+        "{q}"
+    );
 
     let role = w.create_role(&owner, "Big files", 10, &[]).await;
     w.set_limits(
         &owner,
         &role,
         json!([
-            { "key": "emote_max_bytes", "value": 12 * 1024 * 1024 },
-            { "key": "emote_max_frames", "value": 1500 },
             { "key": "paint_max_side", "value": 6144 },
             { "key": "badge_max_frames", "value": 240 },
         ]),
     )
     .await;
     w.assign(&owner, &alice, &role).await;
+    // A role raises badges and paints, and the emote numbers stay the same for its holder.
     let q = w.gql(&alice, MEDIA_QUOTA, json!({})).await;
-    assert_eq!(
-        q["data"]["uploadQuota"]["maxBytes"],
-        12 * 1024 * 1024,
-        "{q}"
-    );
-    assert_eq!(q["data"]["uploadQuota"]["maxFrames"], 1500, "{q}");
-    assert_eq!(q["data"]["uploadQuota"]["maxSide"], 1000, "{q}");
+    check_emote(&q);
     let account = &q["data"]["limits"]["account"];
     assert_eq!(limit(account, "paint_max_side")["effective"], 6144, "{q}");
     assert_eq!(limit(account, "paint_max_side")["default"], 4096, "{q}");
     assert_eq!(limit(account, "badge_max_frames")["effective"], 240, "{q}");
     // Not for anyone who doesn't hold the role.
     let q = w.gql(&bob, MEDIA_QUOTA, json!({})).await;
-    assert_eq!(q["data"]["uploadQuota"]["maxBytes"], 8 * 1024 * 1024, "{q}");
+    check_emote(&q);
     assert_eq!(
         limit(&q["data"]["limits"]["account"], "paint_max_side")["effective"],
         4096,
         "{q}"
     );
-    // The public numbers are the configured ones for everybody.
+    // The public numbers are the same for everybody, signed in or not.
     let r = w.gql(&alice, LIMITS, json!({})).await;
     assert_eq!(
         r["data"]["limits"]["emote"]["maxBytes"],
         8 * 1024 * 1024,
         "{r}"
     );
+    assert_eq!(r["data"]["limits"]["emote"]["maxFps"], 50, "{r}");
     w.db.close().await;
 }
