@@ -3,12 +3,13 @@
   // copied or downloaded, Esc does nothing, the way out asks first ("Close without saving") and
   // closing or reloading the tab asks the browser's own question; after that it closes normally.
   //   <CodesDialog bind:this={d} />   d.show('Launch giveaway', ['LAUNCH-AAAA-…'])
+  import Dialog from '$lib/components/Dialog.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import { copy } from '$lib/clipboard.svelte';
   import { clean, count } from '$lib/format';
   import { codesFilename, codesText } from './shop';
 
-  let dialog: HTMLDialogElement;
+  let dialog: Dialog;
   let codesBox = $state<HTMLTextAreaElement>();
   let shown = $state<{ name: string; codes: string[] } | null>(null);
   let copied = $state<'idle' | 'copied' | 'failed'>('idle');
@@ -20,7 +21,7 @@
     copied = 'idle';
     saved = false;
     asking = false;
-    dialog.showModal();
+    dialog.open();
   }
 
   function cancel(e: Event) {
@@ -68,7 +69,7 @@
   }}
 />
 
-<dialog class="ui-dialog wide" bind:this={dialog} aria-labelledby="codes-title" oncancel={cancel} onclose={() => { shown = null; }}>
+<Dialog wide bare bind:this={dialog} titleId="codes-title" oncancel={cancel} onclose={() => { shown = null; }}>
   {#if shown}
     <div class="body">
       <h2 id="codes-title">{count(shown.codes.length)} {shown.codes.length === 1 ? 'code' : 'codes'} for <bdi>{clean(shown.name)}</bdi></h2>
@@ -94,10 +95,9 @@
       {/if}
     </footer>
   {/if}
-</dialog>
+</Dialog>
 
 <style>
-  .wide { width: min(640px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); }
   .body { overflow-y: auto; overscroll-behavior: contain; }
   h2 { margin: 0; font-size: 18px; overflow-wrap: anywhere; }
   .mono { font-family: var(--font-mono); }
