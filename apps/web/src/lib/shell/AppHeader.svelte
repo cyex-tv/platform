@@ -206,12 +206,12 @@
     .menu-btn:hover { color: var(--text); }
   }
   /* Not enough room for the label: Upload becomes its icon (name and tooltip stay), before the search or anything else gives up. */
-  @media (max-width: 800px) {
+  @media (max-width: 899.98px) {
     .up { width: 40px; padding: 0; }
     :global(html[data-signed]) .hb-hold { width: 40px; }
     .hl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   }
-  @media (max-width: 720px) {
+  @media (max-width: 719.98px) {
     .bar { position: relative; justify-content: space-between; }
     .links, .search, .end { display: none; }
     .phone { display: flex; }

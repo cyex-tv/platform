@@ -125,5 +125,5 @@
   .check { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: var(--t-ui); }
   .check .fine { grid-column: 2; }
   .chats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
-  @media (max-width: 900px) { .chats { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 899.98px) { .chats { grid-template-columns: minmax(0, 1fr); } }
 </style>

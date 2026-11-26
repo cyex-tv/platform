@@ -481,6 +481,6 @@
     background: color-mix(in srgb, var(--accent) 8%, transparent); }
 
   .grid.sheet { gap: 0; }
-  @media (max-width: 520px) { .grid { gap: 8px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } .grid.sheet { gap: 0; } }
+  @media (max-width: 639.98px) { .grid { gap: 8px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); } .grid.sheet { gap: 0; } }
   @media (forced-colors: active) { .band { border-color: Highlight; } }
 </style>

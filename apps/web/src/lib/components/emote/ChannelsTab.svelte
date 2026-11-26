@@ -86,5 +86,5 @@
   .platform { flex: none; font-size: var(--t-label); color: var(--muted); }
   .empty { padding: 8px 0; color: var(--muted); font-size: var(--t-small); }
   @media (hover: hover) and (pointer: fine) { a:hover { background: var(--row-hover); border-color: var(--border); } }
-  @media (max-width: 480px) { ul { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 479.98px) { ul { grid-template-columns: minmax(0, 1fr); } }
 </style>

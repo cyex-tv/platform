@@ -388,7 +388,7 @@
   .limits li { white-space: nowrap; }
   .ui-spinner.small { width: 13px; height: 13px; border-color: color-mix(in srgb, var(--accent-ink) 35%, transparent); border-top-color: var(--accent-ink); }
 
-  @media (max-width: 760px) {
+  @media (max-width: 719.98px) {
     .up { display: flex; flex-direction: column; overflow: hidden auto; overscroll-behavior: contain; }
     .side { order: 1; flex: none; grid-template-rows: auto auto; overflow: visible; padding-bottom: 8px; }
     .fields { order: 2; flex: none; overflow: visible; padding-top: 4px; border-right: 0; }
@@ -396,7 +396,7 @@
     .drop { min-height: 200px; }
   }
   /* Phones: 16px fields, 44px targets. */
-  @media (pointer: coarse), (max-width: 640px) {
+  @media (pointer: coarse), (max-width: 639.98px) {
     .small, .actions .ui-btn { min-height: 44px; height: 44px; }
     .accept { min-height: 44px; }
   }

@@ -52,8 +52,14 @@ key uses it. Changing the keys would touch every table and every query for no ga
     payload's IDs by Snowflake, and the set's Snowflake as `payload.set_id` (the `set_id` column
     keeps the uuid for the read caches). Replays need no translation.
 - **Transition.** Every input that takes an account, emote or set ID takes the Snowflake or the
-  old ULID, until further notice (removing the ULID form will be its own decision, announced in
-  the changelog first). Answers always carry Snowflakes. `set:<ULID>` still subscribes, on the
+  old ULID, until the **sunset date 2027/06/01** (amendment 2026/11/26; removing the ULID form on
+  that day is still its own decision, announced in the changelog first, and it is not removed
+  before then). Until then a request that used a ULID for an account, emote or set (a GraphQL
+  argument or variable, a REST path, an upload's `owner_id`) gets `Deprecation: true`,
+  `Sunset: Tue, 01 Jun 2027 00:00:00 GMT` and `Link: </v1/meta>; rel="deprecation"` (RFC 8594), and a
+  GraphQL answer `extensions.deprecations: ["ulid_id_input"]`; a Snowflake gets none. ULIDs of
+  other things (roles, badges) are not deprecated. `GET /v1/meta` and the `meta` query list it as
+  `ulid_id_input` with its dates and replacement (`apps/api/src/meta.rs`). Answers always carry Snowflakes. `set:<ULID>` still subscribes, on the
   event socket and on the GraphQL `events` subscription: it is mapped to the Snowflake topic, and
   that client gets the set's events under the name it subscribed with; payloads carry
   Snowflakes either way. Cursors were page numbers or audit-entry IDs (ULIDs), so none changed.

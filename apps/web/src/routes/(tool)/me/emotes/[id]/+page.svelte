@@ -383,5 +383,5 @@
   .save { margin-top: 12px; }
   .add { display: flex; gap: 8px; }
   .add select { flex: 1; min-width: 0; }
-  @media (max-width: 559.98px) { .name-in, .give-in { width: 100%; } }
+  @media (max-width: 639.98px) { .name-in, .give-in { width: 100%; } }
 </style>

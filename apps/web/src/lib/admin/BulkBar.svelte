@@ -43,5 +43,5 @@
   .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
   .link { min-height: 40px; padding: 0 4px; border: 0; background: none; color: var(--accent-text); font: inherit; font-size: var(--t-small); cursor: pointer; }
   .link:disabled { color: var(--dim); cursor: default; }
-  @media (max-width: 520px) { .bar { bottom: 8px; padding-left: 12px; } .acts { width: 100%; justify-content: flex-end; } }
+  @media (max-width: 639.98px) { .bar { bottom: 8px; padding-left: 12px; } .acts { width: 100%; justify-content: flex-end; } }
 </style>

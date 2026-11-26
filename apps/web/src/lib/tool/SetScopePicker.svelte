@@ -153,5 +153,5 @@
   .none { margin: 0; padding: 8px 6px; font-size: var(--t-small); color: var(--muted); }
   @media (hover: hover) and (pointer: fine) { .row:hover { background: var(--surface-hover); } }
   @media (pointer: coarse) { .row { min-height: 44px; } .pick { min-height: 44px; } .find input { height: 44px; font-size: 16px; } }
-  @media (max-width: 560px) { .find input { font-size: 16px; } }
+  @media (max-width: 639.98px) { .find input { font-size: 16px; } }
 </style>

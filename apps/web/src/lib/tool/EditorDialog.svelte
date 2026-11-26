@@ -226,7 +226,7 @@
   @media (pointer: coarse) { .perm label, .all { min-height: 44px; } }
 
   /* Phones: a full-height sheet; the body scrolls, the footer stays at the bottom. */
-  @media (max-width: 560px) {
+  @media (max-width: 639.98px) {
     .perms-dialog { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; margin: 0; inset: 0; border: 0; border-radius: 0; }
     .perms-dialog form { height: 100%; max-height: 100dvh; }
     .head { padding-top: max(12px, env(safe-area-inset-top)); }

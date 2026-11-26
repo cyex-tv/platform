@@ -13,6 +13,7 @@ pub fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(health))
         .routes(routes!(ready))
+        .routes(routes!(get_meta))
 }
 
 /// The process is up.
@@ -46,4 +47,23 @@ async fn ready(State(state): State<AppState>) -> ApiResult<Json<Health>> {
     Ok(Json(Health {
         status: "ok".to_owned(),
     }))
+}
+
+/// The API's version, build, where its limits are published, and what is deprecated with the
+/// sunset date of each (ADR 0027 for the first one). The GraphQL `meta` query answers the same.
+/// Every answer of the API also carries `X-Cyex-Api-Version`.
+#[utoipa::path(
+    get,
+    path = "/v1/meta",
+    tag = "system",
+    responses((status = 200, description = "Version, build, limits link and deprecations.", body = crate::meta::ApiMeta))
+)]
+async fn get_meta() -> (
+    [(axum::http::HeaderName, &'static str); 1],
+    Json<crate::meta::ApiMeta>,
+) {
+    (
+        [(axum::http::header::CACHE_CONTROL, "public, max-age=60")],
+        Json(crate::meta::meta()),
+    )
 }

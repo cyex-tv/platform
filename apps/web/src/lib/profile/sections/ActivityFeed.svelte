@@ -203,7 +203,7 @@
   .cap { display: inline-flex; align-items: center; height: 34px; font: var(--t-fine) var(--font-mono); font-variant-numeric: tabular-nums; color: var(--muted); }
   .end { margin: 0; text-align: center; }
   .foot { padding: 20px 0 0; }
-  @media (max-width: 640px) {
+  @media (max-width: 639.98px) {
     .bar { gap: 10px; }
     /* Five groups don't fit a phone: they scroll sideways, edge to edge, without a bar. */
     .groups { width: calc(100% + 2 * var(--page-pad)); margin-inline: calc(-1 * var(--page-pad)); padding-inline: var(--page-pad);

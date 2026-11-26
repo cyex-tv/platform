@@ -11,6 +11,12 @@ pub struct SiteQuery;
 
 #[Object]
 impl SiteQuery {
+    /// The API's version, build, where its limits are published (the `limits` field) and what
+    /// is deprecated, with the sunset date of each. Public. Same as `GET /v1/meta`.
+    async fn meta(&self) -> crate::meta::ApiMeta {
+        crate::meta::meta()
+    }
+
     /// The site announcement shown under the header right now, or null. Public; shared for a few
     /// seconds, so a change shows within that.
     async fn active_announcement(&self, ctx: &Context<'_>) -> Result<Option<Announcement>> {

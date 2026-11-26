@@ -449,7 +449,7 @@
   .rrow[aria-current='true'] .nm :global(svg) { display: block; }
   .rrow:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
   @media (hover: hover) and (pointer: fine) { .rrow:hover { background: var(--row-hover); } }
-  @media (max-width: 760px) {
+  @media (max-width: 719.98px) {
     .rhead, .rrow { grid-template-columns: 84px minmax(0, 1fr) auto; }
     .rhead span:nth-child(3), .rrow .adm-flags { display: none; }
     .rrow { height: 48px; }

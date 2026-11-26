@@ -384,6 +384,43 @@ export type AnnouncementKind =
   /** Downtime or something not working. */
   | 'MAINTENANCE';
 
+/** A deprecated behaviour of the API. */
+export type ApiDeprecation = {
+  __typename?: 'ApiDeprecation';
+  /** Stable name, also what `extensions.deprecations` lists in a GraphQL answer. */
+  id: Scalars['String']['output'];
+  /** What to use instead. */
+  replacement: Scalars['String']['output'];
+  /** The day it was deprecated, `YYYY-MM-DD`. */
+  since: Scalars['String']['output'];
+  /** The day it stops working, `YYYY-MM-DD`. Answers that used it carry it as `Sunset`. */
+  sunset: Scalars['String']['output'];
+  /** What is deprecated. */
+  what: Scalars['String']['output'];
+};
+
+/** Where the limits are published. */
+export type ApiLimitsLink = {
+  __typename?: 'ApiLimitsLink';
+  /** The GraphQL query field. */
+  graphqlField: Scalars['String']['output'];
+  /** The REST route. */
+  rest: Scalars['String']['output'];
+};
+
+/** `GET /v1/meta` and the GraphQL `meta` query. */
+export type ApiMeta = {
+  __typename?: 'ApiMeta';
+  /** The API's version (semver). Within v1 it only gains fields, types and endpoints. */
+  apiVersion: Scalars['String']['output'];
+  /** The git commit it was built from, or `dev`. */
+  build: Scalars['String']['output'];
+  /** Everything deprecated right now, with the sunset date of each. */
+  deprecations: Array<ApiDeprecation>;
+  /** Where the limits (sizes, counts, rates) are published. */
+  limits: ApiLimitsLink;
+};
+
 /** One audited change (ADR 0010). `before` and `after` are JSON, as text. */
 export type AuditEntry = {
   __typename?: 'AuditEntry';
@@ -2641,6 +2678,11 @@ export type Query = {
   limits: PublicLimits;
   /** The signed-in account. */
   me: Me;
+  /**
+   * The API's version, build, where its limits are published (the `limits` field) and what
+   * is deprecated, with the sunset date of each. Public. Same as `GET /v1/meta`.
+   */
+  meta: ApiMeta;
   /** Your channels: one per linked platform you have signed in with. */
   myChannels: Array<Channel>;
   /**

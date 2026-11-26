@@ -76,10 +76,20 @@ function annInput(i, now = Date.now()) {
 }
 /** Whether a kind is turned off (the API never creates it). */
 export const noteOff = (kind) => NOTE_PREFS.off.has(kind) && !NOTE_KINDS.find(([k]) => k === kind)?.[1];
+/** GET /v1/meta and the `meta` query (apps/api/src/meta.rs). */
+export const META = {
+  api_version: '0.1.0', build: 'dev', limits: { rest: '/v1/limits', graphql_field: 'limits' },
+  deprecations: [{
+    id: 'ulid_id_input', what: "An account, emote or set ID given as a ULID (26 characters) in an input: a GraphQL argument or variable, a REST path or an upload's owner_id.",
+    since: '2026-11-26', sunset: '2027-06-01', replacement: 'Send the Snowflake (a decimal string) that every answer already carries (ADR 0027).',
+  }],
+};
+const metaAnswer = () => ({ apiVersion: META.api_version, build: META.build, limits: { rest: META.limits.rest, graphqlField: META.limits.graphql_field }, deprecations: META.deprecations });
 export function siteAnswer(q, v, session, admin) {
   const field = (name) => new RegExp(`\\b${name}\\b`).test(q);
   const data = {};
   const needAdmin = () => (!session ? err('Sign in to use this.', 'signed_out') : !admin ? err('This needs site.announce.', 'forbidden') : null);
+  if (/metas*{/.test(q)) data.meta = metaAnswer();
   if (field('activeAnnouncement')) data.activeAnnouncement = activeAnnouncement();
   if (/\{\s*announcements\s*\{/.test(q)) {
     const no = needAdmin();

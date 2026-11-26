@@ -529,6 +529,68 @@ enum AnnouncementKind {
 }
 
 """
+A deprecated behaviour of the API.
+"""
+type ApiDeprecation {
+	"""
+	Stable name, also what `extensions.deprecations` lists in a GraphQL answer.
+	"""
+	id: String!
+	"""
+	What is deprecated.
+	"""
+	what: String!
+	"""
+	The day it was deprecated, `YYYY-MM-DD`.
+	"""
+	since: String!
+	"""
+	The day it stops working, `YYYY-MM-DD`. Answers that used it carry it as `Sunset`.
+	"""
+	sunset: String!
+	"""
+	What to use instead.
+	"""
+	replacement: String!
+}
+
+"""
+Where the limits are published.
+"""
+type ApiLimitsLink {
+	"""
+	The REST route.
+	"""
+	rest: String!
+	"""
+	The GraphQL query field.
+	"""
+	graphqlField: String!
+}
+
+"""
+`GET /v1/meta` and the GraphQL `meta` query.
+"""
+type ApiMeta {
+	"""
+	The API's version (semver). Within v1 it only gains fields, types and endpoints.
+	"""
+	apiVersion: String!
+	"""
+	The git commit it was built from, or `dev`.
+	"""
+	build: String!
+	"""
+	Where the limits (sizes, counts, rates) are published.
+	"""
+	limits: ApiLimitsLink!
+	"""
+	Everything deprecated right now, with the sunset date of each.
+	"""
+	deprecations: [ApiDeprecation!]!
+}
+
+"""
 One audited change (ADR 0010). `before` and `after` are JSON, as text.
 """
 type AuditEntry {
@@ -2859,6 +2921,11 @@ type Query {
 	`cosmeticId`. `perPage` is 1 to 100, default 50. Needs `cosmetics.grant`.
 	"""
 	cosmeticEntitlements(kind: CosmeticKind!, accountId: String, cosmeticId: String, page: Int, perPage: Int): EntitlementPage!
+	"""
+	The API's version, build, where its limits are published (the `limits` field) and what
+	is deprecated, with the sunset date of each. Public. Same as `GET /v1/meta`.
+	"""
+	meta: ApiMeta!
 	"""
 	The site announcement shown under the header right now, or null. Public; shared for a few
 	seconds, so a change shows within that.

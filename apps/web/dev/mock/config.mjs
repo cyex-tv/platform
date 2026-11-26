@@ -1,4 +1,7 @@
 // Mock API: config. See ../mock-api.mjs.
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 
 export const PORT = Number(process.env.PORT ?? 8787);
@@ -26,3 +29,27 @@ if (process.env.MOCK_LONG === '1') {
 }
 export const ME_SUMMARY = OWNERS[0];
 export const OTHERS = OWNERS.slice(1);
+
+// Real chat linked to the mock, for the extension's local beta (see ./extension.mjs): numeric ids
+// from the environment or the gitignored apps/web/dev/.env.mock.
+const FILE = join(dirname(fileURLToPath(import.meta.url)), '..', '.env.mock');
+const fileEnv = existsSync(FILE)
+  ? Object.fromEntries(readFileSync(FILE, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#') && l.includes('='))
+      .map((l) => [l.slice(0, l.indexOf('=')).trim(), l.slice(l.indexOf('=') + 1).trim()]))
+  : {};
+
+function idOf(name) {
+  const v = (process.env[name] ?? fileEnv[name] ?? '').trim();
+  if (!v) return null;
+  if (!/^\d{1,20}$/.test(v)) throw new Error(`${name} must be a numeric platform id, not "${v}"`);
+  return v;
+}
+
+/** The real channel and chatter ids linked to the mock, per platform. */
+export const LINKED = {
+  TWITCH: { channel: idOf('MOCK_TWITCH_CHANNEL'), user: idOf('MOCK_TWITCH_USER') },
+  KICK: { channel: idOf('MOCK_KICK_CHANNEL'), user: idOf('MOCK_KICK_USER') },
+};
+
+/** The mock account behind a linked chatter id, else undefined. */
+export const linkedChatter = (platform, id) => (LINKED[platform]?.user === id ? ME_ID : undefined);

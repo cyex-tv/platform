@@ -550,3 +550,79 @@ async fn every_mutation_family_takes_the_old_ulid() {
     assert_eq!(code(&r), "not_found", "{r}");
     w.db.close().await;
 }
+
+/// A request through the router, with the answer's headers.
+async fn raw(w: &World, request: Request<Body>) -> (axum::http::HeaderMap, Value) {
+    let response = w.app.clone().oneshot(request).await.unwrap();
+    let headers = response.headers().clone();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (
+        headers,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
+}
+
+fn gql_post(query: &str, variables: &Value) -> Request<Body> {
+    Request::post("/v1/gql")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            json!({ "query": query, "variables": variables }).to_string(),
+        ))
+        .unwrap()
+}
+
+/// ADR 0027: an account, emote or set ULID as input gets the sunset notice (headers on REST and
+/// GraphQL, `extensions.deprecations` on GraphQL); a Snowflake, or a ULID of something else, not.
+#[tokio::test]
+async fn ulid_input_is_marked_deprecated_and_snowflake_input_is_not() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("8301").await;
+    let emote = w.emote(&alice, "sunsetPog").await;
+
+    // GraphQL, variable.
+    let (h, r) = raw(&w, gql_post(EMOTE, &json!({ "id": emote.ulid }))).await;
+    ok(&r);
+    assert_eq!(h["deprecation"], "true");
+    assert_eq!(h["sunset"], "Tue, 01 Jun 2027 00:00:00 GMT");
+    assert_eq!(h["link"], "</v1/meta>; rel=\"deprecation\"");
+    assert_eq!(h["x-cyex-api-version"], cyex_tv_api::meta::API_VERSION);
+    assert_eq!(r["extensions"]["deprecations"], json!(["ulid_id_input"]));
+    // GraphQL, literal in the query text.
+    let literal = format!("{{ emote(id: \"{}\") {{ id }} }}", emote.ulid);
+    let (h, r) = raw(&w, gql_post(&literal, &json!({}))).await;
+    ok(&r);
+    assert_eq!(h["deprecation"], "true");
+    assert_eq!(r["extensions"]["deprecations"], json!(["ulid_id_input"]));
+    // GraphQL, Snowflake: no notice, but the version header.
+    let (h, r) = raw(&w, gql_post(EMOTE, &json!({ "id": emote.public }))).await;
+    ok(&r);
+    assert!(!h.contains_key("deprecation") && !h.contains_key("sunset") && !h.contains_key("link"));
+    assert!(r["extensions"]["deprecations"].is_null(), "{r}");
+    assert_eq!(h["x-cyex-api-version"], cyex_tv_api::meta::API_VERSION);
+    // A ULID that is not an account, emote or set (a role) is not deprecated.
+    let role = ids::to_text(ids::new_id());
+    let (h, r) = raw(&w, gql_post(EMOTE, &json!({ "id": role }))).await;
+    assert!(!h.contains_key("deprecation"));
+    assert!(r["extensions"]["deprecations"].is_null(), "{r}");
+
+    // REST.
+    let (h, _) = raw(
+        &w,
+        Request::get(format!("/v1/emotes/{}", emote.ulid))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(h["deprecation"], "true");
+    assert_eq!(h["sunset"], "Tue, 01 Jun 2027 00:00:00 GMT");
+    assert_eq!(h["link"], "</v1/meta>; rel=\"deprecation\"");
+    let (h, _) = raw(
+        &w,
+        Request::get(format!("/v1/emotes/{}", emote.public))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert!(!h.contains_key("deprecation") && !h.contains_key("sunset") && !h.contains_key("link"));
+    assert_eq!(h["x-cyex-api-version"], cyex_tv_api::meta::API_VERSION);
+}
