@@ -1176,6 +1176,14 @@ async fn every_site_operation_runs_against_the_real_api() {
         me["errors"].is_null(),
         format!("the console token doesn't read me: {me}"),
     );
+    // The Account tab shows its expiry (ADR 0029), never the token.
+    let data = c.op(ts, "MyConsoleToken", json!({})).await;
+    c.check(
+        data["myConsoleToken"]["id"] == r.body["session_id"]
+            && data["myConsoleToken"]["expiresAt"] == r.body["expires_at"]
+            && !data.to_string().contains(&console),
+        format!("MyConsoleToken: {data}"),
+    );
 
     c.op(ts, "SignOutEverywhere", json!({})).await;
     let r = w.gql(ts, "{ me { id } }", json!({})).await;

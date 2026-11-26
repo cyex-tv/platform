@@ -6,8 +6,9 @@
 //! - Made only with the website's cookie session (and its `Origin`, checked by `MaybeCaller`):
 //!   a Bearer token, a console token included, can't make another (`website_only`).
 //! - One per account: making one signs the last one out, in the same transaction.
-//! - A `console` session: 90 days from when it was made, never slid; listed in `mySessions` as
-//!   `Console token`, and ended there, by "sign out everywhere", deletion and blocking.
+//! - A `console` session: 3 days from when it was made, never slid (ADR 0029; the database holds
+//!   it to that); listed in `mySessions` as `Console token`, and ended there, by signing out any
+//!   session or everywhere (ADR 0029), deletion and blocking.
 //! - It acts with the account's own rights: its roles count (staff ones too), the owner's
 //!   all-permissions don't (owner-only work stays on the website), and website-only actions
 //!   (deleting the account, the data copy, signing other sessions out) stay website only.

@@ -1,7 +1,8 @@
 //! Console tokens (ADR 0028): `POST /v1/auth/token/export` and `createConsoleToken` make a
 //! personal Bearer token, with the website's cookie and `Origin` only. The token reads `me`, shows
-//! in `mySessions` as `Console token`, lasts 90 days without sliding, is the account's only one
-//! (making another signs the last out), ends with "sign out everywhere" and `revokeSession`, holds
+//! in `mySessions` as `Console token`, lasts 3 days without sliding, is the account's only one
+//! (making another signs the last out), ends with "sign out everywhere" and `revokeSession` and
+//! rotates whenever any session signs out (ADR 0029), holds
 //! the account's roles but never the owner's all-permissions or website-only actions, is rate
 //! limited and audited. Through the real router against a real Postgres; runs when
 //! `CYEX_TV_TEST_DATABASE_URL` is set (CI sets it) and skips otherwise.
@@ -34,6 +35,7 @@ const OWNER: &str = "90001";
 const EXPORT: &str = "/v1/auth/token/export";
 const ME: &str = "{ me { id permissions } }";
 const SESSIONS: &str = "{ mySessions { id kind device expiresAt current appClientId } }";
+const CURRENT: &str = "{ myConsoleToken { id kind device createdAt expiresAt } }";
 
 struct User {
     id: Uuid,
@@ -270,7 +272,7 @@ async fn the_token_reads_me_and_shows_as_a_console_session() {
     assert!(me["errors"].is_null(), "{me}");
     assert_eq!(me["data"]["me"]["id"], site_me["data"]["me"]["id"]);
 
-    // Listed once, as a console token, with the answer's ID and expiry, 90 days out.
+    // Listed once, as a console token, with the answer's ID and expiry, 3 days out.
     let list = w.gql(As::Site(&alice.site), SESSIONS, json!({})).await;
     let consoles: Vec<&Value> = list["data"]["mySessions"]
         .as_array()
@@ -285,7 +287,7 @@ async fn the_token_reads_me_and_shows_as_a_console_session() {
     assert!(consoles[0]["appClientId"].is_null());
     let expires: DateTime<Utc> = a.body["expires_at"].as_str().unwrap().parse().unwrap();
     let days = (expires - Utc::now()).num_hours();
-    assert!((89 * 24..=90 * 24).contains(&days), "{days} hours");
+    assert!((3 * 24 - 1..=3 * 24).contains(&days), "{days} hours");
 
     // Used later, it doesn't slide.
     {
@@ -530,5 +532,186 @@ async fn minting_is_rate_limited_per_account() {
     assert!(w.gql(As::Bearer(&last), ME, json!({})).await["errors"].is_null());
     // Another account has its own count.
     w.mint(&bob).await;
+    w.db.close().await;
+}
+
+/// Whether a console token still works, over GraphQL and REST alike.
+async fn works(w: &World, token: &str) -> bool {
+    let r = w.gql(As::Bearer(token), ME, json!({})).await;
+    let gql = r["errors"].is_null();
+    // REST: a live token is refused making another (`website_only`); an ended one is nobody.
+    let a = w.export(As::Bearer(token)).await;
+    let rest = a.status == StatusCode::FORBIDDEN;
+    assert!(rest || a.status == StatusCode::UNAUTHORIZED, "{}", a.body);
+    assert_eq!(gql, rest, "GraphQL and REST disagree: {r} / {}", a.status);
+    gql
+}
+
+/// A second website session for the user (another browser): its token and public ID.
+async fn other_browser(w: &World, user: &User) -> (String, String) {
+    let mut conn = w.db.conn().await;
+    let token = tokens::random_token();
+    let s = sessions::create(
+        &mut conn,
+        &tokens::hash(&token),
+        user.id,
+        SessionKind::Site,
+        Duration::days(30),
+    )
+    .await
+    .unwrap();
+    (token, cyex_tv_db::ids::to_text(s.id))
+}
+
+#[tokio::test]
+async fn it_stops_working_three_days_after_it_was_made() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("5701").await;
+    let body = w.mint(&alice).await;
+    let old = token_of(&body);
+    assert!(works(&w, &old).await);
+
+    // `myConsoleToken` shows it (never the token), with the answer's ID and expiry.
+    let r = w.gql(As::Site(&alice.site), CURRENT, json!({})).await;
+    assert!(r["errors"].is_null(), "{r}");
+    assert_eq!(r["data"]["myConsoleToken"]["id"], body["session_id"]);
+    assert_eq!(r["data"]["myConsoleToken"]["expiresAt"], body["expires_at"]);
+    assert_eq!(r["data"]["myConsoleToken"]["kind"], "CONSOLE");
+    assert!(!r.to_string().contains(&old));
+
+    {
+        let mut conn = w.db.conn().await;
+        // The database refuses a console session longer than 3 days.
+        let longer = sqlx::query(
+            "UPDATE sessions SET expires_at = created_at + interval '4 days' WHERE kind = 'console'",
+        )
+        .execute(&mut *conn)
+        .await;
+        assert!(longer.is_err(), "a 4-day console token was written");
+        // Three days and a minute later.
+        sqlx::query(
+            "UPDATE sessions SET created_at = created_at - interval '3 days 1 minute',
+                                 expires_at = expires_at - interval '3 days 1 minute',
+                                 last_seen_at = last_seen_at - interval '3 days 1 minute'
+             WHERE kind = 'console'",
+        )
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    }
+    assert!(!works(&w, &old).await);
+    let r = w.gql(As::Site(&alice.site), CURRENT, json!({})).await;
+    assert!(r["data"]["myConsoleToken"].is_null(), "{r}");
+
+    // A new one works; the old one still doesn't.
+    let new = token_of(&w.mint(&alice).await);
+    assert!(works(&w, &new).await);
+    assert!(!works(&w, &old).await);
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn signing_out_one_session_rotates_it() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("5801").await;
+    let bob = w.user("5802").await;
+    let bobs = token_of(&w.mint(&bob).await);
+
+    // Sign out (POST /v1/auth/logout) in another browser.
+    let old = token_of(&w.mint(&alice).await);
+    let (browser, _) = other_browser(&w, &alice).await;
+    let a = w
+        .send(
+            World::with(Request::post("/v1/auth/logout"), As::Site(&browser))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(a.status, StatusCode::NO_CONTENT);
+    assert!(!works(&w, &old).await);
+    assert!(w.console_rows(alice.id).await.is_empty());
+    // This browser stays signed in, and someone else's token is theirs alone.
+    assert!(w.gql(As::Site(&alice.site), ME, json!({})).await["errors"].is_null());
+    assert!(works(&w, &bobs).await);
+    let new = token_of(&w.mint(&alice).await);
+    assert!(works(&w, &new).await);
+    assert!(!works(&w, &old).await);
+
+    // Signing one other session out by its ID (`revokeSession`).
+    let old = new;
+    let (_, id) = other_browser(&w, &alice).await;
+    let r = w
+        .gql(
+            As::Site(&alice.site),
+            "mutation($id: String!) { revokeSession(id: $id) }",
+            json!({ "id": id }),
+        )
+        .await;
+    assert_eq!(r["data"]["revokeSession"], true, "{r}");
+    assert!(!works(&w, &old).await);
+    // An ID that isn't one of yours signs nothing out, and rotates nothing.
+    let new = token_of(&w.mint(&alice).await);
+    let r = w
+        .gql(
+            As::Site(&alice.site),
+            "mutation($id: String!) { revokeSession(id: $id) }",
+            json!({ "id": "nope" }),
+        )
+        .await;
+    assert_eq!(r["data"]["revokeSession"], false, "{r}");
+    assert!(works(&w, &new).await);
+
+    // An app signing itself out (RFC 7009).
+    let old = new;
+    let a = w
+        .send(
+            Request::post("/v1/auth/app/revoke")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .body(Body::from(format!(
+                    "token={}&client_id=cyex-deck",
+                    alice.app
+                )))
+                .unwrap(),
+        )
+        .await;
+    assert_eq!(a.status, StatusCode::OK);
+    assert!(!works(&w, &old).await);
+    let new = token_of(&w.mint(&alice).await);
+    assert!(works(&w, &new).await);
+    assert!(works(&w, &bobs).await);
+    w.db.close().await;
+}
+
+#[tokio::test]
+async fn signing_out_everywhere_rotates_it() {
+    let Some(w) = World::new().await else { return };
+    let alice = w.user("5901").await;
+    let old = token_of(&w.mint(&alice).await);
+    let r = w
+        .gql(
+            As::Site(&alice.site),
+            "mutation { signOutEverywhere }",
+            json!({}),
+        )
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+    assert!(!works(&w, &old).await);
+
+    // Signed in again, the new token works and the old one never does.
+    let alice = w.user("5901").await;
+    let new = token_of(&w.mint(&alice).await);
+    assert!(works(&w, &new).await);
+    assert!(!works(&w, &old).await);
+
+    // "Sign out everywhere but here" ends it too.
+    let r = w
+        .gql(
+            As::Site(&alice.site),
+            "mutation { revokeOtherSessions }",
+            json!({}),
+        )
+        .await;
+    assert!(r["errors"].is_null(), "{r}");
+    assert!(!works(&w, &new).await);
     w.db.close().await;
 }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EXPORT_PATH, HINT, exportToken, offerConsoleToken, resetHint } from './console-token';
+import { EXPORT_PATH, HINT, expiryText, exportToken, makeToken, offerConsoleToken, resetHint } from './console-token';
 
 const TOKEN = 'Zm9vYmFyYmF6cXV4cXV1eGNvcmdlZ3JhdWx0Z2FycGx5';
 const ok = () => vi.fn(async () => Response.json({ token: TOKEN, token_type: 'Bearer', expires_at: '2027-02-20T00:00:00.000Z', session_id: '1' }));
@@ -50,6 +50,15 @@ describe('console token', () => {
     const [url, init] = f.mock.calls[0] as unknown as [string, RequestInit];
     expect(url.endsWith(EXPORT_PATH)).toBe(true);
     expect(init).toMatchObject({ method: 'POST', credentials: 'include' });
+    storageUntouched();
+  });
+
+  it('makes a token with its expiry, written 2026/11/26, 14:05', async () => {
+    expect(await makeToken(ok() as unknown as typeof fetch)).toEqual({ token: TOKEN, expiresAt: '2027-02-20T00:00:00.000Z' });
+    const d = new Date(2026, 10, 26, 14, 5);
+    expect(expiryText(d.toISOString())).toBe('2026/11/26, 14:05');
+    expect(expiryText(null)).toBe('');
+    expect(expiryText('nope')).toBe('');
     storageUntouched();
   });
 

@@ -161,9 +161,9 @@ pub struct AccountSession {
 
 /// A personal API token (ADR 0028): a Bearer token that acts as you, with your own account's
 /// rights, for a GraphQL playground, a script or moving things between your accounts. Only one
-/// at a time: making a new one signs the last one out. It lasts 90 days, shows in `mySessions` as
-/// `Console token`, and ends when you sign it out there or sign out everywhere. The token is in
-/// this answer only; it is never shown again.
+/// at a time: making a new one signs the last one out. It lasts 3 days, shows in `mySessions` as
+/// `Console token`, and ends when you sign it out there, sign out any other session, or sign out
+/// everywhere (ADR 0029). The token is in this answer only; it is never shown again.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::SimpleObject))]
 pub struct ConsoleToken {
@@ -171,7 +171,7 @@ pub struct ConsoleToken {
     pub token: String,
     /// `Bearer`.
     pub token_type: String,
-    /// When it stops working: 90 days after it was made, however much it is used.
+    /// When it stops working: 3 days after it was made, however much it is used.
     pub expires_at: String,
     /// Its session's ID, as `mySessions` lists it; pass to `revokeSession` to sign it out.
     pub session_id: String,

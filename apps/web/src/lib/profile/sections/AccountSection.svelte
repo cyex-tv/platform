@@ -4,9 +4,11 @@
   // on cyex.tv; every login still finds you), your connections (Disconnect while more than one is
   // linked; the last one always stays, and the API refuses it too), Sign out everywhere (the one
   // session action: every browser and app, this one too; the account menu's Sign out ends only
-  // this one), your data, and deleting the account. Two flat columns on wide screens.
+  // this one), your API token (its expiry, and a new one shown with Copy), your data, and
+  // deleting the account. Two flat columns on wide screens.
   import { gql, linkUrl } from '$lib/api';
   import { unlinkMessage } from '$lib/account/errors';
+  import ApiTokenPanel from '$lib/account/ApiTokenPanel.svelte';
   import DataPanel from '$lib/account/DataPanel.svelte';
   import DeleteAccount from '$lib/account/DeleteAccount.svelte';
   import { canChooseName, canDisconnect } from '$lib/account/settings';
@@ -133,6 +135,8 @@
       <Confirm small label="Sign out everywhere" confirm="Click again to sign out" busy={busy !== null} onconfirm={everywhere} />
     </Row>
   </Section>
+
+  <ApiTokenPanel />
 
   <DataPanel />
 

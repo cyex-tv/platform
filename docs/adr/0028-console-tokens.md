@@ -3,6 +3,7 @@
 - Status: accepted (pending the owner's review)
 - Date: 2026/11/22
 - Amends: 0009 (sessions), 0021 (Bearer tokens are app sign-ins only)
+- Amended by: 0029 (3 days, rotated by any sign-out)
 
 ## Context
 The owner asked (2026/11/22) that people can export their authorization from the browser console, the way some emote sites let you run `copy(localStorage.getItem('…-token'))`. It helps for a GraphQL playground, for scripts, and for merging accounts later if someone signs in with the other platform by mistake and makes a second profile.
