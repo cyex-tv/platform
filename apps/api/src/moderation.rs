@@ -243,28 +243,39 @@ pub async fn review_queue(
     page: Option<u32>,
     per_page: Option<u32>,
     filter: Option<&ReviewQueueFilter>,
+    after: Option<&str>,
 ) -> ApiResult<ReviewQueue> {
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     require_any(&mut conn, caller, &[permissions::EMOTES_REVIEW]).await?;
     let paged = paging(page, per_page, QUEUE_PAGE, QUEUE_PAGE_MAX);
     let query = QueueRead::from_filter(filter.cloned().unwrap_or_default())?;
-    let (rows, total) = reads::review_queue(
-        &mut conn,
-        &reads::QueueQuery {
-            tab: query.tab,
-            search: query.search.as_deref(),
-            uploader: query.uploader,
-            sort: query.sort,
-            descending: query.descending,
-        },
-        paged.limit,
-        paged.offset,
-    )
-    .await
-    .map_err(db_error)?;
+    let read = reads::QueueQuery {
+        tab: query.tab,
+        search: query.search.as_deref(),
+        uploader: query.uploader,
+        sort: query.sort,
+        descending: query.descending,
+    };
+    // The cursor is bound to the tab, search, uploader and order.
+    let scope = format!(
+        "reviewQueue|{:?}|{}|{:?}|{:?}|{}",
+        read.tab,
+        read.search.unwrap_or_default(),
+        read.uploader,
+        read.sort,
+        read.descending
+    );
+    let after = crate::cursor::decode(after, &scope, &reads::queue_keys(&read))?;
+    let (limit, offset) = match after {
+        Some(_) => (i64::from(paged.per_page), 0),
+        None => (paged.limit, paged.offset),
+    };
+    let (page, total) = reads::review_queue_page(&mut conn, &read, limit, offset, after.as_deref())
+        .await
+        .map_err(db_error)?;
     let counts = reads::queue_counts(&mut conn).await.map_err(db_error)?;
     Ok(ReviewQueue {
-        items: views::emotes(&mut conn, &rows, &state.cdn_url)
+        items: views::emotes(&mut conn, &page.rows, &state.cdn_url)
             .await
             .map_err(db_error)?,
         total: u64::try_from(total).unwrap_or(0),
@@ -272,6 +283,7 @@ pub async fn review_queue(
             public: u64::try_from(counts.public).unwrap_or(0),
             limited: u64::try_from(counts.limited).unwrap_or(0),
         },
+        next: crate::cursor::next(&scope, page.next.as_ref()),
     })
 }
 
@@ -339,6 +351,7 @@ pub async fn account_emotes(
     account_id: &str,
     page: Option<u32>,
     per_page: Option<u32>,
+    after: Option<&str>,
 ) -> ApiResult<EmotePage> {
     let owner = parse_id(account_id)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
@@ -366,15 +379,7 @@ pub async fn account_emotes(
         ));
     }
     let paged = paging(page, per_page, QUEUE_PAGE, QUEUE_PAGE_MAX);
-    let (rows, total) = reads::emotes_by_owner(&mut conn, owner, paged.limit, paged.offset)
-        .await
-        .map_err(db_error)?;
-    Ok(EmotePage {
-        items: views::emotes(&mut conn, &rows, &state.cdn_url)
-            .await
-            .map_err(db_error)?,
-        total: u64::try_from(total).unwrap_or(0),
-    })
+    crate::catalog::owner_emotes(state, &mut conn, owner, paged, after).await
 }
 
 // Writes

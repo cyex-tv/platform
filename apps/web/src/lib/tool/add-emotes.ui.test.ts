@@ -24,4 +24,22 @@ describe('Add emotes search', () => {
     expect(screen.queryAllByRole('button', { name: /^Add / })).toHaveLength(0);
     expect(document.querySelector('.ui-spinner, [aria-busy="true"]')).toBeNull();
   });
+
+  it('Load more goes on from the cursor of the page before, and stops when there is none', async () => {
+    gql.mockReset();
+    const second = { ...emote, id: 'E2', name: 'catSPIN' };
+    gql
+      .mockResolvedValueOnce({ searchEmotes: { items: [emote], total: 2, next: 'cursor-1' } })
+      .mockResolvedValueOnce({ searchEmotes: { items: [second], total: 2, next: null } });
+    render(AddEmotes, { setId: 'S', personal: false, taken: new Set<string>(), names: new Set<string>(), full: false, onadded: () => {} });
+    const input = document.getElementById('add-find') as HTMLInputElement;
+    await fireEvent.input(input, { target: { value: 'cat' } });
+    await fireEvent.submit(input.form!);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Load more' }));
+    await screen.findByText('catSPIN');
+    const vars = gql.mock.calls[1][1] as Record<string, unknown>;
+    expect(vars.after).toBe('cursor-1');
+    expect(vars.page).toBeUndefined();
+    expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
+  });
 });

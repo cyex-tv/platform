@@ -2,6 +2,7 @@
 import { ME_ID, OTHERS } from './config.mjs';
 import { ALL, MINE, NOW, emote } from './emotes.mjs';
 import { findEmote } from './sets.mjs';
+import { badCursor, pageOf } from './cursor.mjs';
 
 // The review queue: MOCK_PENDING uploads (default 60; try 3000 for a busy day), every 5th unlisted
 // and every 7th private, each a few minutes after the last, all mixed across uploaders.
@@ -82,10 +83,10 @@ export function reviewQueueAnswer(v) {
   const key = (e) => (sort === 'NAME' ? e.name.toLowerCase() : sort === 'UPLOADER' ? (e.owner?.displayName ?? '').toLowerCase() : sort === 'REVIEWED' ? e.reviewedAt ?? '' : (REQUEUED.get(e.id) ?? e.createdAt));
   rows.sort((a, b) => (key(a) < key(b) ? -1 : key(a) > key(b) ? 1 : a.createdAt.localeCompare(b.createdAt)) * (desc && sort !== 'UPLOADER' && sort !== 'NAME' ? -1 : 1));
   if (desc && (sort === 'UPLOADER' || sort === 'NAME')) rows.reverse();
-  const per = Math.min(100, Math.max(1, v.perPage ?? 50));
-  const page = Math.max(1, v.page ?? 1);
+  const p = pageOf(rows, v);
+  if (!p) return badCursor();
   const counts = { public: PENDING.filter((e) => e.visibility === 'PUBLIC').length, limited: PENDING.filter((e) => e.visibility !== 'PUBLIC').length };
-  return { data: { reviewQueue: { total: rows.length, counts, items: rows.slice((page - 1) * per, page * per) } } };
+  return { data: { reviewQueue: { total: rows.length, counts, items: p.items, next: p.next } } };
 }
 export const REPORTS = [
   { id: 'R1', reason: 'This is a copy of my emote.', reporterId: OTHERS[1].id, state: 'OPEN', createdAt: '2026-11-16T18:00:00.000Z', emote: ALL[5] },

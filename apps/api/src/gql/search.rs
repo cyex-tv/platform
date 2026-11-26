@@ -16,7 +16,8 @@ impl SearchQuery {
     /// blocked accounts are never listed. `perPage` is 1 to 50, default 20. 60 searches a minute
     /// per account, or per IP signed out (`rate_limited`). A `query` under 2 characters (after the
     /// `@`) finds nobody. Matches are counted up to 1000: `totalCapped` says there are more, and
-    /// the pages end there.
+    /// the pages end there. Pass a page's `next` as `after` for the page after it (cursor paging,
+    /// ADR 0030; `page` is ignored then); a cursor only works for the same `query` (`bad_cursor`).
     #[graphql(complexity = "50 + child_complexity")]
     async fn search_accounts(
         &self,
@@ -24,11 +25,20 @@ impl SearchQuery {
         query: String,
         page: Option<u32>,
         per_page: Option<u32>,
+        after: Option<String>,
     ) -> Result<AccountResults> {
         let ip = client_ip(ctx);
-        search::accounts(state(ctx), caller_opt(ctx), ip, &query, page, per_page)
-            .await
-            .map_err(api_error)
+        search::accounts(
+            state(ctx),
+            caller_opt(ctx),
+            ip,
+            &query,
+            page,
+            per_page,
+            after.as_deref(),
+        )
+        .await
+        .map_err(api_error)
     }
 
     /// The header search: the top 5 emotes for `query` by the name matcher (exact name, same

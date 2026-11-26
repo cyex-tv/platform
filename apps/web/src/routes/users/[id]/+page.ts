@@ -27,7 +27,7 @@ export const load: PageLoad = async ({ fetch, params, url, untrack }) => {
     ]);
   } catch (e) {
     const message = e instanceof ApiError ? e.message : 'This page can’t load right now.';
-    return { id: params.id, profile: null, creator: null, look: null, items: [], total: 0, error: message, meta: missingMeta(`/users/${encodeURIComponent(params.id)}`, 'cyex.tv') };
+    return { id: params.id, profile: null, creator: null, look: null, items: [], total: 0, next: null as string | null, error: message, meta: missingMeta(`/users/${encodeURIComponent(params.id)}`, 'cyex.tv') };
   }
   const [{ searchEmotes }, { accountProfile }, { accountCosmetics }] = loaded;
   await preload;
@@ -44,6 +44,7 @@ export const load: PageLoad = async ({ fetch, params, url, untrack }) => {
     look,
     items: searchEmotes.items,
     total: searchEmotes.total,
+    next: searchEmotes.next ?? null,
     error: null as string | null,
     meta: accountProfile ? profileMeta(accountProfile, searchEmotes.total) : missingMeta(`/users/${encodeURIComponent(params.id)}`, 'No profile here'),
   };

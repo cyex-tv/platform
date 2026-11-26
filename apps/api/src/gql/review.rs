@@ -22,18 +22,28 @@ impl ReviewQuery {
 
     /// Pending emotes, oldest first. Needs `emotes.review`. `perPage` is 1 to 100, default 50.
     /// With `filter`: one tab (public, unlisted and private, or resolved), a search by name or
-    /// uploader, and an order.
+    /// uploader, and an order. A cursor only works for the same filter (`bad_cursor`).
+    /// Pass a page's `next` as `after` for the page after it (cursor paging, ADR 0030; `page` is
+    /// ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
     async fn review_queue(
         &self,
         ctx: &Context<'_>,
         page: Option<u32>,
         per_page: Option<u32>,
         filter: Option<ReviewQueueFilter>,
+        after: Option<String>,
     ) -> Result<ReviewQueue> {
         let caller = caller(ctx)?;
-        moderation::review_queue(state(ctx), caller, page, per_page, filter.as_ref())
-            .await
-            .map_err(api_error)
+        moderation::review_queue(
+            state(ctx),
+            caller,
+            page,
+            per_page,
+            filter.as_ref(),
+            after.as_deref(),
+        )
+        .await
+        .map_err(api_error)
     }
 
     /// Emotes that may duplicate one in the review queue: the same file (sha256) first, then

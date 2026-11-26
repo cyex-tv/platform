@@ -10,6 +10,7 @@ use sqlx::{FromRow, PgConnection};
 use uuid::Uuid;
 
 use crate::error::DbResult;
+use crate::keyset::{self, Key, KeyType};
 
 /// A set member joined with its emote and the emote's file. Deleted emotes are left out.
 #[derive(Clone, Debug, PartialEq, FromRow)]
@@ -142,13 +143,73 @@ const UPLOADER: &str =
     "(SELECT i.display_name FROM identities i WHERE i.account_id = e.owner_account_id
        ORDER BY i.platform DESC LIMIT 1)";
 
-/// A page of the review queue and how many match in all.
-pub async fn review_queue(
+/// The keys a review queue read is ordered by, for cursor paging: the order of its numbered
+/// pages, with `NULLS LAST` spelled as an "is missing" flag first so no key is ever NULL.
+pub fn queue_keys(q: &QueueQuery<'_>) -> Vec<Key> {
+    let way = |expr: String, ty: KeyType| {
+        if q.descending {
+            Key::desc(expr, ty)
+        } else {
+            Key::asc(expr, ty)
+        }
+    };
+    match q.sort {
+        QueueSort::Uploaded => vec![
+            way(
+                "coalesce(e.requeued_at, e.created_at)".into(),
+                KeyType::Time,
+            ),
+            way("e.id".into(), KeyType::Uuid),
+        ],
+        QueueSort::Reviewed => vec![
+            Key::asc("(e.reviewed_at IS NULL)", KeyType::Bool),
+            way(
+                "coalesce(e.reviewed_at, 'epoch'::timestamptz)".into(),
+                KeyType::Time,
+            ),
+            way("e.created_at".into(), KeyType::Time),
+            way("e.id".into(), KeyType::Uuid),
+        ],
+        QueueSort::Uploader => vec![
+            Key::asc(format!("(lower({UPLOADER}) IS NULL)"), KeyType::Bool),
+            way(format!("coalesce(lower({UPLOADER}), '')"), KeyType::Text),
+            Key::asc("e.created_at", KeyType::Time),
+            Key::asc("e.id", KeyType::Uuid),
+        ],
+        QueueSort::Name => vec![
+            way("lower(e.name)".into(), KeyType::Text),
+            Key::asc("e.created_at", KeyType::Time),
+            Key::asc("e.id", KeyType::Uuid),
+        ],
+    }
+}
+
+/// [`EMOTE_ROW`] with `cols` added to its select list.
+fn emote_row_with(cols: &str) -> String {
+    EMOTE_ROW.replacen(
+        "
+     FROM emotes e",
+        &format!(
+            "{cols}
+     FROM emotes e"
+        ),
+        1,
+    )
+}
+
+/// A page of the review queue and how many match in all: from `offset`, or after the position
+/// `after` ([`queue_keys`]) when set; the page says where the next one starts.
+pub async fn review_queue_page(
     conn: &mut PgConnection,
     q: &QueueQuery<'_>,
     limit: i64,
     offset: i64,
-) -> DbResult<(Vec<EmoteRow>, i64)> {
+    after: Option<&[keyset::Value]>,
+) -> DbResult<(keyset::Page<EmoteRow>, i64)> {
+    let keys = queue_keys(q);
+    if after.is_some_and(|a| !keyset::fits(&keys, a)) {
+        return Err(crate::error::DbError::NotFound);
+    }
     let tab = queue_tab(q.tab);
     let dir = if q.descending { "DESC" } else { "ASC" };
     let order = match q.sort {
@@ -168,17 +229,25 @@ pub async fn review_queue(
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| format!("%{}%", crate::search::like_escape(s)));
-    let items = sqlx::query_as(&format!(
-        "{EMOTE_ROW} WHERE {tab} AND e.deleted_at IS NULL AND {QUEUE_MATCHES}
-         ORDER BY {order} LIMIT $2 OFFSET $3"
-    ))
-    .bind(pattern.as_deref())
-    .bind(limit)
-    .bind(offset)
-    .bind(q.uploader)
-    .fetch_all(&mut *conn)
-    .await?;
-    let total = sqlx::query_scalar(&format!(
+    let (position, fetch, order) = match after {
+        Some(_) => (keyset::after(&keys, 5), limit + 1, keyset::order(&keys)),
+        None => ("TRUE".to_owned(), limit, order),
+    };
+    let sql = format!(
+        "{} WHERE {tab} AND e.deleted_at IS NULL AND {QUEUE_MATCHES} AND {position}
+         ORDER BY {order} LIMIT $2 OFFSET $3",
+        emote_row_with(&keyset::columns(&keys))
+    );
+    let query = sqlx::query(&sql)
+        .bind(pattern.as_deref())
+        .bind(fetch)
+        .bind(if after.is_some() { 0 } else { offset })
+        .bind(q.uploader);
+    let rows = keyset::bind(query, after.unwrap_or_default())
+        .fetch_all(&mut *conn)
+        .await?;
+    let rows = keyset::decode::<EmoteRow>(&rows, &keys)?;
+    let total: i64 = sqlx::query_scalar(&format!(
         "SELECT count(*) FROM emotes e WHERE {tab} AND e.deleted_at IS NULL AND {QUEUE_MATCHES}"
     ))
     .bind(pattern.as_deref())
@@ -187,7 +256,14 @@ pub async fn review_queue(
     .bind(q.uploader)
     .fetch_one(conn)
     .await?;
-    Ok((items, total))
+    let page = match after {
+        Some(_) => keyset::split(rows, limit),
+        None => {
+            let more = offset + (rows.len() as i64) < total;
+            keyset::finish(rows, more)
+        }
+    };
+    Ok((page, total))
 }
 
 /// The review queue's search (`$1`, a LIKE pattern) and uploader (`$4`).
@@ -246,6 +322,14 @@ pub async fn queue_counts(conn: &mut PgConnection) -> DbResult<QueueCounts> {
     .await?)
 }
 
+/// The keys an account's own emotes are ordered by: newest first, then ID.
+pub fn owner_keys() -> Vec<Key> {
+    vec![
+        Key::desc("e.created_at", KeyType::Time),
+        Key::desc("e.id", KeyType::Uuid),
+    ]
+}
+
 /// An account's own emotes in every state, newest first, and how many there are.
 pub async fn emotes_by_owner(
     conn: &mut PgConnection,
@@ -253,22 +337,53 @@ pub async fn emotes_by_owner(
     limit: i64,
     offset: i64,
 ) -> DbResult<(Vec<EmoteRow>, i64)> {
-    let items = sqlx::query_as(&format!(
-        "{EMOTE_ROW} WHERE e.owner_account_id = $1 AND e.deleted_at IS NULL
-         ORDER BY e.created_at DESC, e.id DESC LIMIT $2 OFFSET $3"
-    ))
-    .bind(owner)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(&mut *conn)
-    .await?;
-    let total = sqlx::query_scalar(
+    let (page, total) = emotes_by_owner_page(conn, owner, limit, offset, None).await?;
+    Ok((page.rows, total))
+}
+
+/// `emotes_by_owner` from `offset`, or after the position `after` ([`owner_keys`]) when set.
+pub async fn emotes_by_owner_page(
+    conn: &mut PgConnection,
+    owner: Uuid,
+    limit: i64,
+    offset: i64,
+    after: Option<&[keyset::Value]>,
+) -> DbResult<(keyset::Page<EmoteRow>, i64)> {
+    let keys = owner_keys();
+    if after.is_some_and(|a| !keyset::fits(&keys, a)) {
+        return Err(crate::error::DbError::NotFound);
+    }
+    let (position, fetch) = match after {
+        Some(_) => (keyset::after(&keys, 4), limit + 1),
+        None => ("TRUE".to_owned(), limit),
+    };
+    let sql = format!(
+        "{} WHERE e.owner_account_id = $1 AND e.deleted_at IS NULL AND {position}
+         ORDER BY e.created_at DESC, e.id DESC LIMIT $2 OFFSET $3",
+        emote_row_with(&keyset::columns(&keys))
+    );
+    let query = sqlx::query(&sql)
+        .bind(owner)
+        .bind(fetch)
+        .bind(if after.is_some() { 0 } else { offset });
+    let rows = keyset::bind(query, after.unwrap_or_default())
+        .fetch_all(&mut *conn)
+        .await?;
+    let rows = keyset::decode::<EmoteRow>(&rows, &keys)?;
+    let total: i64 = sqlx::query_scalar(
         "SELECT count(*) FROM emotes WHERE owner_account_id = $1 AND deleted_at IS NULL",
     )
     .bind(owner)
     .fetch_one(conn)
     .await?;
-    Ok((items, total))
+    let page = match after {
+        Some(_) => keyset::split(rows, limit),
+        None => {
+            let more = offset + (rows.len() as i64) < total;
+            keyset::finish(rows, more)
+        }
+    };
+    Ok((page, total))
 }
 
 macro_rules! member_columns {
@@ -343,9 +458,18 @@ pub async fn newest_members(
         .await?)
 }
 
+/// The keys a set's members are ordered by: oldest added first, then emote ID.
+pub fn member_keys() -> Vec<Key> {
+    vec![
+        Key::asc("m.added_at", KeyType::Time),
+        Key::asc("m.emote_id", KeyType::Uuid),
+    ]
+}
+
 /// A page of one set's members that `access` shows, oldest first (the order `members` reads),
 /// narrowed to the ones whose name in the set or own name contains `query` (case-insensitive,
-/// literally), with how many match in all.
+/// literally), with how many match in all. From `offset`, or after the position `after`
+/// ([`member_keys`]) when set; the page says where the next one starts.
 pub async fn members_page(
     conn: &mut PgConnection,
     set_id: Uuid,
@@ -353,7 +477,12 @@ pub async fn members_page(
     query: Option<&str>,
     limit: i64,
     offset: i64,
-) -> DbResult<(Vec<MemberRow>, i64)> {
+    after: Option<&[keyset::Value]>,
+) -> DbResult<(keyset::Page<MemberRow>, i64)> {
+    let keys = member_keys();
+    if after.is_some_and(|a| !keyset::fits(&keys, a)) {
+        return Err(crate::error::DbError::NotFound);
+    }
     let pattern = query.map(str::trim).filter(|q| !q.is_empty()).map(|q| {
         let escaped = q
             .replace('\\', "\\\\")
@@ -366,26 +495,34 @@ pub async fn members_page(
                     OR (e.state = 'pending'
                         AND ($2 OR m.set_id = ANY($3) OR e.owner_account_id = $4)))
                AND ($5::text IS NULL OR m.name ILIKE $5 OR e.name ILIKE $5)";
-    let rows = sqlx::query_as(&format!(
-        "SELECT {}
+    let (position, fetch) = match after {
+        Some(_) => (keyset::after(&keys, 8), limit + 1),
+        None => ("TRUE".to_owned(), limit),
+    };
+    let sql = format!(
+        "SELECT {}{}
          FROM emote_set_members m
          JOIN emotes e ON e.id = m.emote_id AND e.deleted_at IS NULL
          LEFT JOIN files f ON f.id = e.file_id
-         WHERE {RULE}
+         WHERE {RULE} AND {position}
          ORDER BY m.added_at, m.emote_id
          LIMIT $6 OFFSET $7",
-        member_columns!()
-    ))
-    .bind(set_id)
-    .bind(access.reviewer)
-    .bind(access.edit_sets)
-    .bind(access.account)
-    .bind(pattern.as_deref())
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(&mut *conn)
-    .await?;
-    let total = sqlx::query_scalar(&format!(
+        member_columns!(),
+        keyset::columns(&keys)
+    );
+    let rows = sqlx::query(&sql)
+        .bind(set_id)
+        .bind(access.reviewer)
+        .bind(access.edit_sets)
+        .bind(access.account)
+        .bind(pattern.as_deref())
+        .bind(fetch)
+        .bind(if after.is_some() { 0 } else { offset });
+    let rows = keyset::bind(rows, after.unwrap_or_default())
+        .fetch_all(&mut *conn)
+        .await?;
+    let rows = keyset::decode::<MemberRow>(&rows, &keys)?;
+    let total: i64 = sqlx::query_scalar(&format!(
         "SELECT count(*)
          FROM emote_set_members m
          JOIN emotes e ON e.id = m.emote_id AND e.deleted_at IS NULL
@@ -398,7 +535,14 @@ pub async fn members_page(
     .bind(pattern.as_deref())
     .fetch_one(conn)
     .await?;
-    Ok((rows, total))
+    let page = match after {
+        Some(_) => keyset::split(rows, limit),
+        None => {
+            let more = offset + (rows.len() as i64) < total;
+            keyset::finish(rows, more)
+        }
+    };
+    Ok((page, total))
 }
 
 /// How many members of each given set `access` shows (the rule of `newest_members`). Sets with

@@ -248,6 +248,31 @@ async fn hot_reads_use_their_indexes() {
         assert_eq!(hits.ids.len(), 48);
         assert!(hits.total > 15_000, "{sort:?} total {}", hits.total);
     }
+    // A page after a cursor deep in the list reads from the position through the keyset index,
+    // not by stepping over the rows before it (ADR 0030).
+    for (sort, index) in [
+        (EmoteSort::Top, &["emotes_keyset_top"][..]),
+        (EmoteSort::New, &["emotes_browse_new"][..]),
+        (EmoteSort::Relevance, &["emotes_keyset_popular"][..]),
+    ] {
+        let mut q = browse(sort, "");
+        q.offset = 9_000;
+        let deep = search::search(c, &q).await.unwrap();
+        let at = deep.next.expect("a next page");
+        let q = search::Query {
+            after: Some(&at),
+            ..browse(sort, "")
+        };
+        let plan = search::explain_page(c, &q).await.unwrap();
+        assert_index_scan(&format!("browse {sort:?} after"), &plan, "emotes", index);
+        assert!(
+            !plan.contains("Sort"),
+            "browse {sort:?} after: the page is sorted instead of read in order:
+{plan}"
+        );
+        let hits = search::search(c, &q).await.unwrap();
+        assert_eq!(hits.ids.len(), 48);
+    }
     // Text search: at this size a table read can be the cheaper plan; the full-scale run prints
     // the plan.
     let hits = search::search(c, &browse(EmoteSort::Relevance, "PepeJam"))
@@ -348,8 +373,48 @@ async fn rewritten_reads_match_the_old_ones() {
             q.offset = offset;
             let new = search::search(c, &q).await.unwrap();
             let old = old_search(c, &q).await;
-            assert_eq!(new, old, "{sort:?} {text:?} offset {offset}");
+            assert_eq!(
+                (new.ids, new.total),
+                (old.ids, old.total),
+                "{sort:?} {text:?} offset {offset}"
+            );
         }
+    }
+    // Walking by cursor shows exactly what the numbered pages show (ADR 0030).
+    for (sort, text) in [
+        (EmoteSort::Top, ""),
+        (EmoteSort::New, ""),
+        (EmoteSort::Relevance, ""),
+        (EmoteSort::Relevance, "pog"),
+        (EmoteSort::Trending, ""),
+    ] {
+        let mut by_offset = Vec::new();
+        let mut q = browse(sort, text);
+        q.limit = 400;
+        loop {
+            let hits = search::search(c, &q).await.unwrap();
+            by_offset.extend(hits.ids.iter().copied());
+            if hits.ids.is_empty() || hits.next.is_none() {
+                break;
+            }
+            q.offset += 400;
+        }
+        let mut by_cursor = Vec::new();
+        let mut at: Option<Vec<cyex_tv_db::keyset::Value>> = None;
+        loop {
+            let q = search::Query {
+                limit: 400,
+                after: at.as_deref(),
+                ..browse(sort, text)
+            };
+            let hits = search::search(c, &q).await.unwrap();
+            by_cursor.extend(hits.ids.iter().copied());
+            match hits.next {
+                Some(next) => at = Some(next),
+                None => break,
+            }
+        }
+        assert_eq!(by_cursor, by_offset, "{sort:?} {text:?}");
     }
     let sets = set_ids(c, 20).await;
     for per_set in [1, 12, 500] {
@@ -685,6 +750,7 @@ async fn old_search(c: &mut PgConnection, q: &search::Query<'_>) -> search::Hits
         total: rows.first().map_or(0, |(_, t)| *t),
         ids: rows.into_iter().map(|(id, _)| id).collect(),
         capped: false,
+        next: None,
     }
 }
 

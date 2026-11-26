@@ -26,6 +26,7 @@ async-graphql-axum.workspace = true
 async-trait.workspace = true
 axum.workspace = true
 bytes.workspace = true
+base64.workspace = true
 chrono.workspace = true
 cyex-tv-auth.workspace = true
 cyex-tv-db.workspace = true

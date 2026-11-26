@@ -35,6 +35,11 @@ impl EmoteQuery {
     /// the emotes that have every tag listed (exact; a leading `#` and case are ignored, at most
     /// 10). `exact: true` makes a non-empty `query` match the whole name (any case) instead of
     /// roughly. `window` is `DAY`, `WEEK` (default) or `MONTH`, and only matters for `TRENDING`.
+    ///
+    /// Cursor paging (ADR 0030): pass a page's `next` as `after` to read the page after it, in
+    /// the same order, with nothing shown twice or skipped when emotes are added meanwhile; `page`
+    /// is ignored then and there is no depth limit. `next` is null on the last page. A cursor only
+    /// works with the same `query`, filters and `sort` (`bad_cursor` otherwise).
     #[allow(clippy::too_many_arguments)]
     #[graphql(complexity = "50 + child_complexity")]
     async fn search_emotes(
@@ -52,6 +57,7 @@ impl EmoteQuery {
         tags: Option<Vec<String>>,
         exact: Option<bool>,
         window: Option<TrendingWindow>,
+        after: Option<String>,
     ) -> Result<SearchResults> {
         // Retired: taken so old clients keep working, and ignored.
         let _ = nsfw;
@@ -79,6 +85,7 @@ impl EmoteQuery {
                 sort: sort.unwrap_or_default(),
                 page,
                 per_page,
+                after: after.as_deref(),
             },
         )
         .await

@@ -41,6 +41,8 @@ impl SetQuery {
     /// the rule of `set`; an unknown or hidden set is an empty page. `query` keeps the emotes whose
     /// name in the set or own name contains it (case-insensitive). `perPage` is 1 to 200, default
     /// 120; `total` counts every match.
+    /// Pass a page's `next` as `after` for the page after it (cursor paging, ADR 0030; `page` is
+    /// ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
     #[graphql(complexity = "10 + child_complexity")]
     async fn set_emotes(
         &self,
@@ -49,6 +51,7 @@ impl SetQuery {
         query: Option<String>,
         page: Option<u32>,
         per_page: Option<u32>,
+        after: Option<String>,
     ) -> Result<SetEmotePage> {
         catalog::set_emotes(
             state(ctx),
@@ -57,6 +60,7 @@ impl SetQuery {
             query.as_deref(),
             page,
             per_page,
+            after.as_deref(),
         )
         .await
         .map_err(api_error)

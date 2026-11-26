@@ -265,7 +265,7 @@
         {#key data.id}<Lazy accountId={data.id} name={data.creator.displayName} canUpload={relation.perms.has('EMOTE_UPLOAD')} />{/key}
       {:else}
         {#key data.id}
-          <Uploads id={data.id} {name} first={data.items} total={data.total} />
+          <Uploads id={data.id} {name} first={data.items} total={data.total} firstNext={data.next} />
         {/key}
       {/if}
       <AdminLink accountId={data.id} />

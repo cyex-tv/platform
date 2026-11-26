@@ -46,14 +46,17 @@ impl PersonalQuery {
     }
 
     /// Your own emotes in every state, newest first. `perPage` is 1 to 100, default 50.
+    /// Pass a page's `next` as `after` for the page after it (cursor paging, ADR 0030; `page` is
+    /// ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
     async fn my_emotes(
         &self,
         ctx: &Context<'_>,
         page: Option<u32>,
         per_page: Option<u32>,
+        after: Option<String>,
     ) -> Result<EmotePage> {
         let caller = caller(ctx)?;
-        catalog::my_emotes(state(ctx), caller, page, per_page)
+        catalog::my_emotes(state(ctx), caller, page, per_page, after.as_deref())
             .await
             .map_err(api_error)
     }

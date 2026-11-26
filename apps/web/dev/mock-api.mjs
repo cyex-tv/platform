@@ -32,6 +32,7 @@ import { topPeopleAnswer } from './mock/top-people.mjs';
 import { noteOff, siteAnswer } from './mock/site.mjs';
 import { UPLOAD_FILES, mosaicPng, multipart, probeImage } from './mock/uploads.mjs';
 import { signedIn } from './mock/signed-in/index.mjs';
+import { badCursor, pageOf } from './mock/cursor.mjs';
 function newFields(q, v, session, admin = false) {
   if (/\b(mySessions|myConsoleToken|createConsoleToken|unreadNotificationCount|revokeSession|revokeOtherSessions|signOutEverywhere|exportMyData|deleteAccount|markNotificationsRead)\b/.test(q))
     if (!session) return err('Sign in to use this.', 'signed_out');
@@ -140,9 +141,9 @@ function baseAnswer(body, session, admin) {
     if (flags.has('WIDE')) hits = hits.filter((e) => e.flags.wide);
     if (tags.length) hits = hits.filter((e) => tags.every((t) => e.tags.some((g) => g.toLowerCase() === t)));
     hits = sorted(hits, v.sort ?? 'RELEVANCE', v.window ?? 'WEEK');
-    const per = v.perPage ?? 50;
-    const page = v.page ?? 1;
-    return { data: { searchEmotes: { total: hits.length, page, perPage: per, items: hits.slice((page - 1) * per, page * per) } } };
+    const p = pageOf(hits, v);
+    if (!p) return badCursor();
+    return { data: { searchEmotes: { total: hits.length, ...p } } };
   }
   if (q.includes('query Emote(')) return { data: { emote: ALL.find((e) => e.id === v.id) ?? null } };
   if (q.includes('query Channel')) {
