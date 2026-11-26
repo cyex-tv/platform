@@ -1035,6 +1035,27 @@
         }
       }
     },
+    "/v1/meta": {
+      "get": {
+        "tags": [
+          "system"
+        ],
+        "summary": "The API's version, build, where its limits are published, and what is deprecated with the\nsunset date of each (ADR 0027 for the first one). The GraphQL `meta` query answers the same.\nEvery answer of the API also carries `X-Cyex-Api-Version`.",
+        "operationId": "get_meta",
+        "responses": {
+          "200": {
+            "description": "Version, build, limits link and deprecations.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiMeta"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/personal-sets/lookup": {
       "post": {
         "tags": [
@@ -1235,6 +1256,88 @@
           "id": {
             "type": "string",
             "description": "The account's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input."
+          }
+        }
+      },
+      "ApiDeprecation": {
+        "type": "object",
+        "description": "A deprecated behaviour of the API.",
+        "required": [
+          "id",
+          "what",
+          "since",
+          "sunset",
+          "replacement"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable name, also what `extensions.deprecations` lists in a GraphQL answer."
+          },
+          "replacement": {
+            "type": "string",
+            "description": "What to use instead."
+          },
+          "since": {
+            "type": "string",
+            "description": "The day it was deprecated, `YYYY-MM-DD`."
+          },
+          "sunset": {
+            "type": "string",
+            "description": "The day it stops working, `YYYY-MM-DD`. Answers that used it carry it as `Sunset`."
+          },
+          "what": {
+            "type": "string",
+            "description": "What is deprecated."
+          }
+        }
+      },
+      "ApiLimitsLink": {
+        "type": "object",
+        "description": "Where the limits are published.",
+        "required": [
+          "rest",
+          "graphql_field"
+        ],
+        "properties": {
+          "graphql_field": {
+            "type": "string",
+            "description": "The GraphQL query field."
+          },
+          "rest": {
+            "type": "string",
+            "description": "The REST route."
+          }
+        }
+      },
+      "ApiMeta": {
+        "type": "object",
+        "description": "`GET /v1/meta` and the GraphQL `meta` query.",
+        "required": [
+          "api_version",
+          "build",
+          "limits",
+          "deprecations"
+        ],
+        "properties": {
+          "api_version": {
+            "type": "string",
+            "description": "The API's version (semver). Within v1 it only gains fields, types and endpoints."
+          },
+          "build": {
+            "type": "string",
+            "description": "The git commit it was built from, or `dev`."
+          },
+          "deprecations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ApiDeprecation"
+            },
+            "description": "Everything deprecated right now, with the sunset date of each."
+          },
+          "limits": {
+            "$ref": "#/components/schemas/ApiLimitsLink",
+            "description": "Where the limits (sizes, counts, rates) are published."
           }
         }
       },
