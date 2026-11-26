@@ -393,7 +393,7 @@ async fn a_swept_transcode_fails_the_file_and_a_finished_one_is_left_alone() {
 }
 
 #[tokio::test]
-async fn the_job_is_checked_under_the_limits_stored_on_it() {
+async fn the_job_is_checked_under_the_fixed_emote_rules_whatever_it_carries() {
     let Some(db) = TestDb::new().await else {
         return;
     };
@@ -411,29 +411,18 @@ async fn the_job_is_checked_under_the_limits_stored_on_it() {
             .unwrap()
             .1
     };
-    // The uploader's roles allowed 64 px a side: a 100 px file is over what the job was checked
-    // under, whatever the configured limits (or a role now) say.
-    uploaded_under(
+    // A job from before carries limits (a role's 64 px a side): ignored, a 100 px file is fine.
+    let (file, _) = uploaded_under(
         &db,
         &store,
         &png(100, 100),
         "image/png",
-        json!({ "limits": { "max_bytes": 8_388_608, "max_side": 64, "max_frames": 1000 } }),
-    )
-    .await;
-    assert_eq!(run().await, Outcome::Failed);
-    // The same size passes under a job that allowed it.
-    let (file, _) = uploaded_under(
-        &db,
-        &store,
-        &png(101, 101),
-        "image/png",
-        json!({ "limits": { "max_side": 128 } }),
+        json!({ "limits": { "max_bytes": 8_388_608, "max_side": 64, "max_frames": 2 } }),
     )
     .await;
     assert_eq!(run().await, Outcome::Done);
     assert!(!variants(&db, file).await.is_empty());
-    // A job asking for more than an emote may be (1000 px) is cut at the ceiling.
+    // Asking for more than an emote may be (1000 px) doesn't get it either.
     uploaded_under(
         &db,
         &store,
@@ -443,15 +432,16 @@ async fn the_job_is_checked_under_the_limits_stored_on_it() {
     )
     .await;
     assert_eq!(run().await, Outcome::Failed);
-    // Frames too: 3 frames under a job that allows 2.
-    uploaded_under(
-        &db,
-        &store,
-        &gif(16, 16, 3),
-        "image/gif",
-        json!({ "limits": { "max_frames": 2 } }),
-    )
-    .await;
+    // Wider than 4:1 fails for good, whatever the job says (the API refuses it first; this is
+    // the second check).
+    uploaded_under(&db, &store, &png(500, 100), "image/png", json!({})).await;
+    assert_eq!(run().await, Outcome::Failed);
+    // 4:1 exactly is made.
+    let (wide, _) = uploaded_under(&db, &store, &png(400, 100), "image/png", json!({})).await;
+    assert_eq!(run().await, Outcome::Done);
+    assert!(!variants(&db, wide).await.is_empty());
+    // Over 1000 frames fails (1001 tiny frames).
+    uploaded_under(&db, &store, &gif(2, 2, 1001), "image/gif", json!({})).await;
     assert_eq!(run().await, Outcome::Failed);
     db.close().await;
 }

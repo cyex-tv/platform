@@ -40,14 +40,13 @@ impl Format {
 
 /// The file size cap of [`Limits::default`] (cosmetic pictures): 5 MB.
 pub const DEFAULT_MAX_BYTES: usize = 5 * 1024 * 1024;
-/// The file size cap of an emote upload ([`Limits::emote`]): 8 MB.
-pub const EMOTE_MAX_BYTES: usize = 8 * 1024 * 1024;
 /// The file size cap of a badge picture ([`Limits::badge`]): 8 MB.
 pub const BADGE_MAX_BYTES: usize = 8 * 1024 * 1024;
 /// The file size cap of a paint picture ([`Limits::paint`]): 8 MB.
 pub const PAINT_MAX_BYTES: usize = 8 * 1024 * 1024;
-/// Frames shorter than this show for 100 ms, as browsers do with GIFs.
-pub const MIN_DELAY_MS: u32 = 20;
+/// Frames shorter than this show for 100 ms, as browsers do with GIFs. It is the emote rule of
+/// at most 50 fps ([`EmoteRules::MAX_FPS`]): no frame is ever shown for less.
+pub const MIN_DELAY_MS: u32 = EmoteRules::MIN_FRAME_MS;
 
 /// How long a frame with `delay` ms shows: as browsers show it.
 pub fn shown_ms(delay: u32) -> u32 {
@@ -64,6 +63,8 @@ pub struct Limits {
     pub max_total_pixels: u64,
     /// How long one run of an animation may last, as shown (see [`shown_ms`]).
     pub max_duration_ms: u64,
+    /// A picture wider than this many times its height is refused (emotes, 4); `None`: no rule.
+    pub max_aspect: Option<u32>,
 }
 
 impl Default for Limits {
@@ -82,21 +83,14 @@ impl Limits {
             max_frames: 1000,
             max_total_pixels: 100_000_000,
             max_duration_ms: u64::MAX,
+            max_aspect: None,
         }
     }
 
-    /// An emote upload's limits: the defaults, with files up to 8 MB. The API checks uploads with
-    /// these and the worker decodes the originals with them, so the two always agree.
-    pub fn emote() -> Self {
-        config::MediaConfig::current().emote
-    }
-
-    /// The built-in emote limits.
-    pub fn builtin_emote() -> Self {
-        Self {
-            max_bytes: EMOTE_MAX_BYTES,
-            ..Self::builtin_default()
-        }
+    /// An emote upload's limits: [`EmoteRules`], fixed, the same for everyone. The API checks
+    /// uploads with these and the worker decodes the originals with them, so the two always agree.
+    pub const fn emote() -> Self {
+        EmoteRules::limits()
     }
 
     /// A badge picture's limits (the size ladder of cyex badges): up to 8 MB; an animation at most 120 frames, 10
@@ -115,6 +109,7 @@ impl Limits {
             max_frames: 120,
             max_total_pixels: 64_000_000,
             max_duration_ms: 10_000,
+            max_aspect: None,
         }
     }
 
@@ -135,6 +130,44 @@ impl Limits {
     }
 }
 
+/// The emote upload rules: fixed, the same for everyone whoever uploads. Nothing here is read from
+/// a role or the environment (ADR 0031). The API checks uploads with them (`POST /v1/emotes`), the
+/// worker checks the original again before it makes files, and the public `limits` query reports
+/// these numbers.
+#[derive(Clone, Copy, Debug)]
+pub struct EmoteRules;
+
+impl EmoteRules {
+    /// Neither side is longer than this many px.
+    pub const MAX_SIDE: u32 = 1000;
+    /// The file is at most this many bytes (8 MB).
+    pub const MAX_BYTES: usize = 8 * 1024 * 1024;
+    /// An animation has at most this many frames.
+    pub const MAX_FRAMES: u32 = 1000;
+    /// At most this many frames a second.
+    pub const MAX_FPS: u32 = 50;
+    /// No frame shows for less than this many ms (`1000 / MAX_FPS`). A GIF frame with a shorter
+    /// delay (0 or 10 ms) isn't refused: browsers show it for 100 ms ([`shown_ms`]), so the rate
+    /// never goes over [`Self::MAX_FPS`].
+    pub const MIN_FRAME_MS: u32 = 1000 / Self::MAX_FPS;
+    /// Width is at most this many times the height (4:1). A tall picture has no rule beyond
+    /// [`Self::MAX_SIDE`]: only the width-to-height ratio is limited.
+    pub const MAX_ASPECT: u32 = 4;
+
+    /// The limits an emote is decoded under. The cap on width × height × frames is exactly what
+    /// the rules allow (1000 × 1000 px, 1000 frames), so no sixth rule hides behind them.
+    pub const fn limits() -> Limits {
+        Limits {
+            max_bytes: Self::MAX_BYTES,
+            max_side: Self::MAX_SIDE,
+            max_frames: Self::MAX_FRAMES,
+            max_total_pixels: (Self::MAX_SIDE as u64) * (Self::MAX_SIDE as u64) * (Self::MAX_FRAMES as u64),
+            max_duration_ms: u64::MAX,
+            max_aspect: Some(Self::MAX_ASPECT),
+        }
+    }
+}
+
 /// What a client hears about a file over `limits.max_bytes`.
 pub fn too_large_message(limits: &Limits) -> String {
     format!(
@@ -151,6 +184,9 @@ pub enum MediaError {
     /// Over a limit.
     #[error("{0}")]
     TooLarge(String),
+    /// The wrong shape: wider than the emote rule's 4:1.
+    #[error("{0}")]
+    BadShape(String),
     /// Says it is an image but doesn't decode.
     #[error("the image doesn't decode: {0}")]
     Invalid(String),
@@ -208,6 +244,13 @@ fn check_side(width: u32, height: u32, limits: &Limits) -> Result<(), MediaError
         return Err(MediaError::TooLarge(format!(
             "{width}×{height} px is over the {0}×{0} px limit",
             limits.max_side
+        )));
+    }
+    if let Some(aspect) = limits.max_aspect
+        && u64::from(width) > u64::from(height) * u64::from(aspect)
+    {
+        return Err(MediaError::BadShape(format!(
+            "Emotes can be at most {aspect} times as wide as tall ({aspect}:1). This one is {width}×{height} px."
         )));
     }
     Ok(())

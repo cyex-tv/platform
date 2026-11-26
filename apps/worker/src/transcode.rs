@@ -6,13 +6,12 @@
 
 use cyex_tv_db::jobs::Job;
 use cyex_tv_db::{blocklist, files};
-use cyex_tv_media::config::MediaKind;
 use cyex_tv_media::encode::{self, Kind, Profile, Variant};
 use cyex_tv_shared::model::{EmoteFile, ImageFormat};
 use cyex_tv_storage::{Put, Store, cache_control_for, emote_key, sigv4};
 use serde_json::Value;
 
-use crate::{CancelOnDrop, Ctx, JobError, job_limits, media_failure};
+use crate::{CancelOnDrop, Ctx, JobError, media_failure};
 
 /// The job kind the upload queues.
 pub const KIND: &str = "emote.transcode";
@@ -113,8 +112,9 @@ pub async fn run(ctx: Ctx, job: Job) -> Result<(), JobError> {
         .ok_or_else(|| JobError::Permanent(format!("{} is missing", file.storage_key)))?;
 
     let bytes = original.bytes.clone();
-    // The limits the upload was checked under, stored on the job.
-    let limits = job_limits(MediaKind::Emote, &job.payload);
+    // The fixed emote rules, the same the upload was checked under (a `limits` an older job
+    // carries is ignored: emote rules are the same for everyone).
+    let limits = cyex_tv_media::Limits::emote();
     // The guard sets the flag if the time limit drops this future, so the thread stops too.
     let cancel = CancelOnDrop::default();
     let flag = cancel.flag();
