@@ -83,7 +83,7 @@ async function startMock(): Promise<{ base: string; proc: ChildProcess }> {
   const port = await freePort(9341, 9349);
   const proc = spawn(process.execPath, ['dev/mock-api.mjs'], {
     cwd: WEB,
-    env: { ...process.env, PORT: String(port), MOCK_ADMIN: '1', SITE_ORIGIN: 'http://localhost:5173' },
+    env: { ...process.env, PORT: String(port), MOCK_ADMIN: '1', SITE_ORIGIN: 'http://localhost:5173', MOCK_TWITCH_CHANNEL: '700000001', MOCK_TWITCH_USER: '700000002' },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   await new Promise<void>((ok, fail) => {
@@ -670,6 +670,20 @@ describe('mock-api conformance with the real schema', () => {
     const lim = await fetch(`${base}/v1/limits`);
     stats.rest += 1;
     checkResponse('get', '/v1/limits', lim.status, await lim.json(), 'GET /v1/limits', out);
+
+    // The extension's reads (mock/extension.mjs), with a linked channel and chatter.
+    const glob = await fetch(`${base}/v1/sets/global`);
+    checkResponse('get', '/v1/sets/global', glob.status, await glob.json(), 'GET /v1/sets/global', out);
+    const ch = await fetch(`${base}/v1/channels/twitch/700000001`);
+    const chBody = await ch.json();
+    checkResponse('get', '/v1/channels/{platform}/{id}', ch.status, chBody, 'GET /v1/channels/twitch/{linked}', out);
+    const st = await fetch(`${base}/v1/sets/${chBody?.active_set_id}`);
+    checkResponse('get', '/v1/sets/{id}', st.status, await st.json(), 'GET /v1/sets/{active}', out);
+    const pl = await fetch(`${base}/v1/personal-sets/lookup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ platform: 'twitch', user_ids: ['700000002', '1'] }) });
+    const plBody = await pl.json();
+    checkResponse('post', '/v1/personal-sets/lookup', pl.status, plBody, 'POST /v1/personal-sets/lookup', out);
+    if (plBody?.sets?.length !== 1) out.push('POST /v1/personal-sets/lookup: the linked chatter should have exactly one personal set');
+    stats.rest += 4;
 
     failures.push(...out);
   }, 30000);

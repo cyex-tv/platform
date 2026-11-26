@@ -7,6 +7,9 @@
 // resets when it restarts. MOCK_ADMIN=1, or opening /mock/admin once, gives the mock account
 // every permission (/mock/admin?off clears it). MOCK_OPEN=1 is for a shared preview: every
 // visitor counts as signed in as the staff account with every permission, no cookie needed.
+// It also answers the browser extension's public reads (mock/extension.mjs): link a real channel
+// and chatter with MOCK_TWITCH_CHANNEL / MOCK_TWITCH_USER (and the KICK pair) in the environment or
+// in the gitignored dev/.env.mock, then load the extension's local beta.
 // Development only; nothing here ships.
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -33,6 +36,7 @@ import { topPeopleAnswer } from './mock/top-people.mjs';
 import { noteOff, siteAnswer } from './mock/site.mjs';
 import { UPLOAD_FILES, mosaicPng, multipart, probeImage } from './mock/uploads.mjs';
 import { signedIn } from './mock/signed-in/index.mjs';
+import { extensionRead, linkedNote } from './mock/extension.mjs';
 function newFields(q, v, session, admin = false) {
   if (/\b(mySessions|myConsoleToken|createConsoleToken|unreadNotificationCount|revokeSession|revokeOtherSessions|signOutEverywhere|exportMyData|deleteAccount|markNotificationsRead)\b/.test(q))
     if (!session) return err('Sign in to use this.', 'signed_out');
@@ -233,6 +237,15 @@ createServer(async (req, res) => {
     // `original` is the picture's own size (ORIGINAL_PX in mock/cosmetics.mjs; 96 for uploads made earlier).
     const px = badgeArt[2] === 'original' ? (ORIGINAL_PX[badgeArt[1]] ?? 96) : BADGE_LADDER.find(([stem]) => stem === badgeArt[2])[2];
     return res.end(BADGE_ART[badgeArt[1]](px / 18));
+  }
+  // The extension's public reads (sets, channels, personal sets); see mock/extension.mjs.
+  if (url.pathname.startsWith('/v1/sets/') || url.pathname.startsWith('/v1/channels/') || url.pathname === '/v1/personal-sets/lookup') {
+    let body = null;
+    if (req.method === 'POST') {
+      try { body = JSON.parse((await read(req)).toString('utf8') || 'null'); } catch { return json(res, 400, { error: 'bad_request', message: 'The body isn’t JSON.' }); }
+    }
+    const answer = extensionRead(req.method, url.pathname, body);
+    if (answer) return json(res, answer.status, answer.status === 200 ? restOf(answer.body) : answer.body);
   }
   if (req.method === 'GET' && url.pathname === '/v1/limits') return json(res, 200, publicLimitsRest());
   if (req.method === 'GET' && url.pathname === '/v1/cosmetics') {
@@ -459,7 +472,7 @@ createServer(async (req, res) => {
     }
   }
   res.writeHead(404).end();
-}).listen(PORT, process.env.MOCK_HOST ?? 'localhost', () => console.log(`mock api on ${BASE}${OPEN_ENV ? ' (open: everyone is staff)' : ADMIN_ENV ? ' (admin)' : ''}`));
+}).listen(PORT, process.env.MOCK_HOST ?? 'localhost', () => console.log(`mock api on ${BASE}${OPEN_ENV ? ' (open: everyone is staff)' : ADMIN_ENV ? ' (admin)' : ''}${linkedNote().length ? `; linked for the extension: ${linkedNote().join(', ')}` : ''}`));
 
 // The REST API's JSON: snake_case keys and lower-case enum values (the GraphQL shapes are camelCase
 // with upper-case enums).
