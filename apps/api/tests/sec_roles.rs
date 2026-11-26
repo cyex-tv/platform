@@ -220,6 +220,7 @@ async fn assigning_respects_seniority() {
         .await;
     w.role("Admins", 100, &["roles.manage"], Some(&admin)).await;
     let low = ids::to_text(w.role("Low", 10, &[], None).await);
+    let other = ids::to_text(w.role("Other", 20, &[], None).await);
 
     // A junior manager can't hand even a low role to someone senior.
     let r = w.assign(&manager, &admin, &low).await;
@@ -231,7 +232,7 @@ async fn assigning_respects_seniority() {
     let r = w.assign(&manager, &manager, &low).await;
     assert_eq!(r["data"]["assignRole"], true, "{r}");
     // The senior one and the owner still can.
-    let r = w.assign(&admin, &manager, &low).await;
+    let r = w.assign(&admin, &manager, &other).await;
     assert_eq!(r["data"]["assignRole"], true, "{r}");
     let r = w.assign(&owner, &admin, &low).await;
     assert_eq!(r["data"]["assignRole"], true, "{r}");
