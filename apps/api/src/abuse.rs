@@ -799,6 +799,7 @@ pub async fn lift(
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
+    state.key_cache.forget_account(account_id);
     Ok(status_of(&after))
 }
 

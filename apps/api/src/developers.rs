@@ -143,7 +143,8 @@ const CACHE_SWEEP_AT: usize = 50_000;
 /// again and again) doesn't reach the database on every request.
 pub struct KeyCache {
     ttl: Duration,
-    entries: Mutex<HashMap<TokenHash, (Instant, Option<KeyUse>)>>,
+    /// The key and whether its account is live; `None` for a key that doesn't exist.
+    entries: Mutex<HashMap<TokenHash, (Instant, Option<(KeyUse, bool)>)>>,
     lookups: AtomicU64,
 }
 
@@ -162,18 +163,22 @@ impl KeyCache {
         }
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<TokenHash, (Instant, Option<KeyUse>)>> {
+    #[allow(clippy::type_complexity)]
+    fn lock(
+        &self,
+    ) -> std::sync::MutexGuard<'_, HashMap<TokenHash, (Instant, Option<(KeyUse, bool)>)>> {
         self.entries.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    /// `None` on a miss; `Some(None)` for a key known not to exist.
+    /// `None` on a miss; `Some(None)` for a key known not to work (it doesn't exist, or its
+    /// account is blocked or deleted).
     fn get(&self, hash: &TokenHash) -> Option<Option<KeyUse>> {
         let entries = self.lock();
         let (at, found) = entries.get(hash)?;
-        (at.elapsed() < self.ttl).then_some(*found)
+        (at.elapsed() < self.ttl).then(|| found.and_then(|(k, live)| live.then_some(k)))
     }
 
-    fn put(&self, hash: TokenHash, found: Option<KeyUse>) {
+    fn put(&self, hash: TokenHash, found: Option<(KeyUse, bool)>) {
         let now = Instant::now();
         let ttl = self.ttl;
         let mut entries = self.lock();
@@ -186,13 +191,13 @@ impl KeyCache {
     /// Forgets one key (it was revoked).
     pub fn forget_key(&self, key_id: Uuid) {
         self.lock()
-            .retain(|_, (_, k)| k.is_none_or(|k| k.key_id != key_id));
+            .retain(|_, (_, k)| k.is_none_or(|(k, _)| k.key_id != key_id));
     }
 
-    /// Forgets every key of an account (blocked or deleted).
+    /// Forgets every key of an account (blocked, unblocked or deleted), working or not.
     pub fn forget_account(&self, account_id: Uuid) {
         self.lock()
-            .retain(|_, (_, k)| k.is_none_or(|k| k.account_id != account_id));
+            .retain(|_, (_, k)| k.is_none_or(|(k, _)| k.account_id != account_id));
     }
 
     /// Lookups that reached the database, for tests and metrics.
@@ -253,17 +258,22 @@ pub async fn handle(
             state.key_cache.lookups.fetch_add(1, Ordering::Relaxed);
             let lookup = async {
                 let mut conn = state.db.acquire().await?;
-                api_keys::find_active(&mut conn, &hash).await
+                api_keys::find(&mut conn, &hash).await
             };
             let found = match lookup.await {
-                Ok(found) => found.map(|k| KeyUse {
-                    key_id: k.id,
-                    account_id: k.account_id,
+                Ok(found) => found.map(|(k, live)| {
+                    (
+                        KeyUse {
+                            key_id: k.id,
+                            account_id: k.account_id,
+                        },
+                        live,
+                    )
                 }),
                 Err(err) => return db_error(err).into_response(),
             };
             state.key_cache.put(hash, found);
-            found
+            found.and_then(|(k, live)| live.then_some(k))
         }
     };
     let Some(key) = found else {
@@ -451,8 +461,11 @@ mod tests {
             account_id: b,
         };
         assert_eq!(c.get(&[1; 32]), None);
-        c.put([1; 32], Some(ka));
+        c.put([1; 32], Some((ka, true)));
         c.put([2; 32], None);
+        // A blocked account's key: refused, but remembered by its account.
+        c.put([4; 32], Some((ka, false)));
+        assert_eq!(c.get(&[4; 32]), Some(None));
         assert_eq!(c.get(&[1; 32]), Some(Some(ka)));
         assert_eq!(
             c.get(&[2; 32]),
@@ -461,8 +474,13 @@ mod tests {
         );
         c.forget_account(b);
         assert_eq!(c.get(&[1; 32]), None);
+        assert_eq!(
+            c.get(&[4; 32]),
+            None,
+            "unblocking forgets the refused key too"
+        );
         assert_eq!(c.get(&[2; 32]), Some(None));
-        c.put([1; 32], Some(ka));
+        c.put([1; 32], Some((ka, true)));
         c.forget_key(a);
         assert_eq!(c.get(&[1; 32]), None);
         let short = KeyCache::new(Duration::ZERO);

@@ -66,6 +66,28 @@ pub async fn list(conn: &mut PgConnection, account_id: Uuid) -> DbResult<Vec<Api
     .await?)
 }
 
+/// The key for a hash, and whether its account is live (neither deleted nor blocked), so a
+/// cache can remember a blocked account's key by its account and forget it when that changes.
+pub async fn find(conn: &mut PgConnection, hash: &TokenHash) -> DbResult<Option<(ApiKey, bool)>> {
+    #[derive(FromRow)]
+    struct Row {
+        #[sqlx(flatten)]
+        key: ApiKey,
+        live: bool,
+    }
+    let row: Option<Row> = sqlx::query_as(
+        "SELECT k.id, k.account_id, k.name, k.prefix, k.created_at, k.last_used_at,
+                a.deleted_at IS NULL AND (a.blocked_at IS NULL OR a.blocked_until <= now()) AS live
+         FROM api_keys k
+         JOIN accounts a ON a.id = k.account_id
+         WHERE k.key_hash = $1",
+    )
+    .bind(&hash[..])
+    .fetch_optional(conn)
+    .await?;
+    Ok(row.map(|r| (r.key, r.live)))
+}
+
 /// The key for a hash, if its account is neither deleted nor blocked.
 pub async fn find_active(conn: &mut PgConnection, hash: &TokenHash) -> DbResult<Option<ApiKey>> {
     Ok(sqlx::query_as(
