@@ -14,7 +14,7 @@
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { reduced } from '$lib/cosmetics/reduced.svelte';
   import { looks, wantLooks } from '$lib/cosmetics/store.svelte';
-  import { ready } from '$lib/emote';
+  import { failed as failedPicture, ready } from '$lib/emote';
   import { clean, count, date } from '$lib/format';
   import { session } from '$lib/tool/session.svelte';
 
@@ -57,6 +57,8 @@
     <div class="ip-stage">
       {#if ready(e) && big}
         <img src={url(big)} width={big.width} height={big.height} alt={name} />
+      {:else if failedPicture(e)}
+        <p class="dim failed" data-testid="emote-failed">We couldn’t make this emote’s image. Open it to delete it.</p>
       {:else}
         <p class="dim">The files are still being made.</p>
       {/if}
@@ -113,6 +115,7 @@
   .by { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: var(--t-small); font-weight: 600; color: var(--text); }
   .by :global(.pn) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .dim { color: var(--muted); font-weight: 400; white-space: nowrap; }
+  .dim.failed { white-space: normal; text-align: center; color: var(--red); }
   .chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px; }
   .chip { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border-radius: var(--radius);
     background: var(--neutral-chip, var(--surface-2)); color: var(--muted); font-size: var(--t-fine); font-weight: 600; }

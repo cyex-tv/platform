@@ -71,14 +71,14 @@ pub async fn claim(
 }
 
 /// Fails the jobs whose lease expired with no attempts left (the worker died during the last
-/// one), the same final state [`fail`] gives. Returns their IDs and kinds.
-pub async fn sweep_exhausted(conn: &mut PgConnection) -> DbResult<Vec<(i64, String)>> {
+/// one), the same final state [`fail`] gives. Returns their IDs, kinds and payloads.
+pub async fn sweep_exhausted(conn: &mut PgConnection) -> DbResult<Vec<(i64, String, Value)>> {
     Ok(sqlx::query_as(
         "UPDATE jobs
          SET state = 'failed', locked_until = NULL,
              last_error = 'lease expired after last attempt', updated_at = now()
          WHERE state = 'running' AND locked_until < now() AND attempts >= max_attempts
-         RETURNING id, kind",
+         RETURNING id, kind, payload",
     )
     .fetch_all(conn)
     .await?)

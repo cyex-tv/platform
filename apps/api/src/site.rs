@@ -393,6 +393,7 @@ pub async fn end(state: &AppState, caller: &Caller, id: &str) -> ApiResult<Annou
 pub const NOTIFICATION_KINDS: &[(&str, bool)] = &[
     ("emote.approved", false),
     ("emote.rejected", false),
+    ("emote.failed", false),
     ("emote.taken_down", true),
     ("emote.visibility_changed", true),
     ("emote.transfer_requested", true),

@@ -6,6 +6,7 @@ export const EMOTE_FIELDS = graphql(`
     id
     name
     state
+    processing
     animated
     tags
     host

@@ -459,7 +459,7 @@ createServer(async (req, res) => {
 
 // The REST API's JSON: snake_case keys and lower-case enum values (the GraphQL shapes are camelCase
 // with upper-case enums).
-const REST_ENUM_KEYS = new Set(['kind', 'shape', 'format', 'state', 'visibility']);
+const REST_ENUM_KEYS = new Set(['kind', 'shape', 'format', 'state', 'visibility', 'processing']);
 function restOf(x, key = '') {
   if (Array.isArray(x)) return x.map((v) => restOf(v, key));
   if (x && typeof x === 'object') {

@@ -476,6 +476,21 @@ impl EmoteState {
     }
 }
 
+/// Whether an emote's image is made. Separate from [`EmoteState`] (review), so adding it
+/// breaks nobody: a client that doesn't know it keeps showing `Processing` as before.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]
+#[serde(rename_all = "snake_case")]
+pub enum EmoteProcessing {
+    /// The files are made.
+    #[default]
+    Ready,
+    /// The transcode job is queued or running.
+    Processing,
+    /// The transcode ran out of attempts: the emote never gets files. Delete it or upload again.
+    Failed,
+}
+
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 #[error("unknown emote state: {0}")]
 pub struct UnknownEmoteState(pub String);
@@ -620,6 +635,10 @@ pub struct Emote {
     pub name: String,
     pub owner: Option<AccountSummary>,
     pub state: EmoteState,
+    /// `READY`, `PROCESSING` or `FAILED`: whether the image is made (or could not be).
+    #[serde(default)]
+    #[schema(required = false)]
+    pub processing: EmoteProcessing,
     pub flags: EmoteFlags,
     /// `PUBLIC`, `UNLISTED` or `PRIVATE` (ADR 0020). `flags.private` says the same for
     /// `PRIVATE`, for clients from before `UNLISTED`.

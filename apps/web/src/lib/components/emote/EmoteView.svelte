@@ -23,7 +23,7 @@
   import { clean, count, date } from '$lib/format';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { looks, wantLooks } from '$lib/cosmetics/store.svelte';
-  import { ready } from '$lib/emote';
+  import { failed, ready } from '$lib/emote';
   import { can, session } from '$lib/tool/session.svelte';
   import { editorOf, type Grant } from '$lib/profile/data.svelte';
   import { emoteCan } from '$lib/tool/editors';
@@ -54,7 +54,7 @@
   onMount(() => void viewer.load());
 
   const public_ = $derived(e.state === 'APPROVED');
-  const t = $derived(trust(e.state));
+  const t = $derived(trust(e.state, failed(e)));
   const name = $derived(clean(e.name));
   const ownerName = $derived(e.owner ? clean(e.owner.displayName) : '');
   const flags = $derived(flagsOf(e));
@@ -168,6 +168,12 @@
               <span class="dm"><span class="x">{biggest.scale}x</span>{biggest.width} × {biggest.height}</span>
             </li>
           </ul>
+        {:else if failed(e)}
+          <div class="failed" data-testid="emote-failed">
+            <Icon name="x" size={20} />
+            <p class="wait">We couldn’t make this emote’s image. It may be damaged or in a format we can’t read.</p>
+            {#if editHref}<a class="btn btn-s" href={editHref}>Delete emote</a>{/if}
+          </div>
         {:else}
           <p class="wait">{e.state === 'APPROVED' && e.files.length === 0 ? 'The files for this emote are missing.' : 'The files are still being made. This takes a minute or so.'}</p>
         {/if}
@@ -330,6 +336,7 @@
   .x { font-size: var(--t-small); font-weight: 600; color: var(--muted); }
   .focus .x { font-weight: 700; color: var(--text); }
   .focus .dm { color: var(--text); }
+  .failed { display: grid; justify-items: center; gap: 12px; color: var(--red); }
   .wait { color: var(--muted); font-size: var(--t-small); text-align: center; max-width: 32ch; }
   .stage-tools { position: absolute; top: 10px; right: 10px; display: flex; align-items: center; gap: 8px; }
   .trend { position: relative; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--border-strong);

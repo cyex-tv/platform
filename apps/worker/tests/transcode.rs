@@ -241,3 +241,138 @@ async fn bad_originals_fail_for_good() {
     );
     db.close().await;
 }
+
+async fn uploader(db: &TestDb, file_id: uuid::Uuid, name: &str) -> (uuid::Uuid, uuid::Uuid) {
+    use cyex_tv_db::accounts::{self, Profile};
+    use cyex_tv_db::emotes::{self, NewEmote};
+    let mut conn = db.conn().await;
+    let owner = accounts::sign_in(
+        &mut conn,
+        Profile {
+            platform: cyex_tv_shared::model::Platform::Twitch,
+            platform_user_id: "9001",
+            login: "failer",
+            display_name: "failer",
+            avatar: None,
+        },
+    )
+    .await
+    .unwrap()
+    .account
+    .id;
+    let emote = emotes::create(
+        &mut conn,
+        &NewEmote {
+            owner_account_id: owner,
+            file_id: Some(file_id),
+            name,
+            ..NewEmote::default()
+        },
+    )
+    .await
+    .unwrap();
+    (owner, emote.id)
+}
+
+#[tokio::test]
+async fn a_transcode_that_runs_out_of_attempts_marks_the_file_failed_and_tells_the_uploader_once() {
+    use cyex_tv_db::notifications;
+    let Some(db) = TestDb::new().await else {
+        return;
+    };
+    let store = Store::memory();
+    let ctx = Ctx {
+        db: db.pool.clone(),
+        store: Some(store.clone()),
+        purge: None,
+        paddle: None,
+    };
+    // An original that never decodes: the job fails for good on its first attempt.
+    let (file_id, _) = uploaded(&db, &store, b"\x89PNG\r\n\x1a\nnot really", "image/png").await;
+    let (owner, emote_id) = uploader(&db, file_id, "broken").await;
+    {
+        let mut conn = db.conn().await;
+        let before = files::get(&mut conn, file_id).await.unwrap().unwrap();
+        assert!(before.processing_failed_at.is_none());
+    }
+
+    assert_eq!(
+        run_one(&ctx, &handlers(), limits())
+            .await
+            .unwrap()
+            .unwrap()
+            .1,
+        Outcome::Failed
+    );
+    let mut conn = db.conn().await;
+    let file = files::get(&mut conn, file_id).await.unwrap().unwrap();
+    assert!(file.processing_failed_at.is_some());
+    let notes = notifications::list(&mut conn, owner, false).await.unwrap();
+    assert_eq!(notes.len(), 1);
+    assert_eq!(notes[0].kind, "emote.failed");
+    assert_eq!(notes[0].payload["emote_id"], ids::to_text(emote_id));
+    assert_eq!(notes[0].payload["name"], "broken");
+
+    // Marking again (a sweep of the same job, a second call) tells nobody twice.
+    assert!(!files::mark_failed(&mut conn, file_id).await.unwrap());
+    drop(conn);
+    let mut conn = db.conn().await;
+    assert_eq!(
+        notifications::list(&mut conn, owner, false)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+
+    // An upload of the same bytes tries again: the mark is cleared.
+    assert!(files::clear_failed(&mut conn, file_id).await.unwrap());
+    assert!(!files::clear_failed(&mut conn, file_id).await.unwrap());
+    drop(conn);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn a_swept_transcode_fails_the_file_and_a_finished_one_is_left_alone() {
+    use cyex_tv_db::notifications;
+    let Some(db) = TestDb::new().await else {
+        return;
+    };
+    let store = Store::memory();
+    let (file_id, _) = uploaded(&db, &store, &png(22, 22), "image/png").await;
+    let (owner, _) = uploader(&db, file_id, "swept").await;
+    // The worker died during the last attempt: the lease expires with no attempts left.
+    sqlx::query(
+        "UPDATE jobs SET state = 'running', attempts = max_attempts,
+                         locked_until = now() - interval '1 second'",
+    )
+    .execute(&db.pool)
+    .await
+    .unwrap();
+    assert_eq!(cyex_tv_worker::sweep_exhausted(&db.pool).await.unwrap(), 1);
+    let mut conn = db.conn().await;
+    assert!(
+        files::get(&mut conn, file_id)
+            .await
+            .unwrap()
+            .unwrap()
+            .processing_failed_at
+            .is_some()
+    );
+    assert_eq!(
+        notifications::list(&mut conn, owner, false)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+
+    // A file that already has its variants is never marked (its emote is usable).
+    let (done_id, _) = uploaded(&db, &store, &png(23, 23), "image/png").await;
+    files::set_variants(&mut conn, done_id, &json!([{ "name": "1x.webp" }]))
+        .await
+        .unwrap();
+    assert!(!files::mark_failed(&mut conn, done_id).await.unwrap());
+    drop(conn);
+    db.close().await;
+}

@@ -24,7 +24,7 @@ const activeAnnouncement = () => {
   const live = ANNOUNCEMENTS.filter((a) => annLive(a)).sort((a, b) => Date.parse(b.startsAt ?? b.createdAt) - Date.parse(a.startsAt ?? a.createdAt));
   return live[0] ? annOut(live[0]) : null;
 };
-const NOTE_KINDS = [['emote.approved', false], ['emote.rejected', false], ['emote.taken_down', true], ['emote.transfer_requested', true], ['emote.transferred', false],
+const NOTE_KINDS = [['emote.approved', false], ['emote.rejected', false], ['emote.failed', false], ['emote.taken_down', true], ['emote.transfer_requested', true], ['emote.transferred', false],
   ['emote.transfer_declined', false], ['emote.transfer_cancelled', false], ['editor.added', false], ['editor.changed', false], ['editor.removed', false],
   ['cosmetic.granted', false], ['cosmetic.revoked', false]];
 const NOTE_PREFS = { off: new Set(), quiet: new Set() };

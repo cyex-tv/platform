@@ -44,7 +44,7 @@
   import type { Snippet } from 'svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { looks, wantLooks } from '$lib/cosmetics/store.svelte';
-  import { isWide, ready, size } from '$lib/emote';
+  import { failed, isWide, ready, size } from '$lib/emote';
   import { clean } from '$lib/format';
   import EmotePicture from './EmotePicture.svelte';
   import Icon from './Icon.svelte';
@@ -123,7 +123,7 @@
     {#if ready(e)}
       <EmotePicture emote={e} class="pic" shown={shownW} {eager} use={settle} />
     {:else}
-      <span class="processing">Processing</span>
+      <span class="processing" class:failed={failed(e)}>{failed(e) ? 'Failed' : 'Processing'}</span>
     {/if}
   </span>
   <span class="name"><bdi title={name}>{name}</bdi></span>
@@ -163,6 +163,7 @@
   .compact .mk { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .compact .mark { padding: 0 4px; }
   .processing { font-size: var(--t-fine); color: var(--muted); }
+  .processing.failed { color: var(--danger); }
   /* Truncated names stay centred: the bdi is a block that ends in an ellipsis. */
   .name bdi { display: block; overflow: hidden; text-overflow: ellipsis; }
   /* The creator is always a PaintedName (plain until the paint arrives), so the box never changes

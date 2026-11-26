@@ -14,6 +14,7 @@ export const emote = (i, owner = OTHERS[i % OTHERS.length], state = 'APPROVED') 
     id: `01JD8X${String(i).padStart(20, '0')}`,
     name: nameFor(i),
     state,
+    processing: 'READY',
     animated: s.animated,
     tags: [...s.tags],
     host: `${BASE}/emotes/${i}`,
@@ -141,6 +142,7 @@ const twitchEmote = (n, owner = OTHERS[n % OTHERS.length]) => {
     id: `01JD8X${String(n).padStart(20, '0')}`,
     name,
     state: 'APPROVED',
+    processing: 'READY',
     animated,
     tags: tags.split(','),
     host: `${BASE}/twitch/${n}`,
@@ -173,6 +175,11 @@ ALL[12].visibility = 'UNLISTED';
 export const MINE = Array.from({ length: 9 }, (_, i) =>
   emote(600 + i, ME_SUMMARY, i < 2 ? 'PENDING' : i === 2 ? 'REJECTED' : 'APPROVED'));
 MINE[4].visibility = 'UNLISTED';
+// An upload whose transcode ran out of attempts: no files, shown as failed (notification
+// `emote.failed`, see account.mjs).
+export const FAILED = { ...emote(609, ME_SUMMARY, 'PENDING'), files: [], processing: 'FAILED' };
+FAILED.name = 'BrokenUpload';
+MINE.push(FAILED);
 
 let uploads = 0;
 // The next number for an emote the mock account uploads.

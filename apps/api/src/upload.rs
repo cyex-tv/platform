@@ -444,7 +444,14 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
             .await
             .map_err(db_error)?;
     }
-    if created || revived || lost {
+    // An earlier upload of these bytes failed to transcode: try again.
+    let retry = !created
+        && !revived
+        && !lost
+        && files::clear_failed(&mut tx, file.id)
+            .await
+            .map_err(db_error)?;
+    if created || revived || lost || retry {
         store
             .put(
                 &key,

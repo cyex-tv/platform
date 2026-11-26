@@ -33,6 +33,8 @@ pub struct MemberRow {
     pub emote_created_at: DateTime<Utc>,
     pub sha256: Option<Vec<u8>>,
     pub variants: Option<Value>,
+    /// The file's transcode failed for good.
+    pub processing_failed: bool,
 }
 
 /// An emote with its file, as the API shows it.
@@ -50,6 +52,8 @@ pub struct EmoteRow {
     pub created_at: DateTime<Utc>,
     pub sha256: Option<Vec<u8>>,
     pub variants: Option<Value>,
+    /// The file's transcode failed for good.
+    pub processing_failed: bool,
 }
 
 impl MemberRow {
@@ -68,12 +72,14 @@ impl MemberRow {
             created_at: self.emote_created_at,
             sha256: self.sha256.clone(),
             variants: self.variants.clone(),
+            processing_failed: self.processing_failed,
         }
     }
 }
 
 const EMOTE_ROW: &str = "SELECT e.id, e.owner_account_id AS owner, e.name, e.zero_width, e.private,
-            e.unlisted, e.nsfw, e.animated, e.state, e.created_at, f.sha256, f.variants
+            e.unlisted, e.nsfw, e.animated, e.state, e.created_at, f.sha256, f.variants,
+            (f.processing_failed_at IS NOT NULL) AS processing_failed
      FROM emotes e
      LEFT JOIN files f ON f.id = e.file_id";
 
@@ -271,7 +277,7 @@ macro_rules! member_columns {
                 e.owner_account_id AS emote_owner, e.name AS emote_name,
                 e.zero_width AS emote_zero_width, e.private, e.unlisted, e.nsfw,
                 e.animated, e.state, e.created_at AS emote_created_at,
-                f.sha256, f.variants"
+                f.sha256, f.variants, (f.processing_failed_at IS NOT NULL) AS processing_failed"
     };
 }
 
