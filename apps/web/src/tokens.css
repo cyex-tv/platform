@@ -149,6 +149,19 @@
   --checker-a: #ffffff;
   --checker-b: #d6d9df;
   --checker-size: 16px;
+
+  /* The entitlement graph's node kinds: a small categorical set, each ≥ 3:1 on --bg and --surface
+     (a dot is a graphic, WCAG 1.4.11), told apart by hue and by the "Kind: name" label beside it. */
+  --node-account: #7ea4ff;
+  --node-staff: #b18cff;
+  --node-product: #f5d547;
+  --node-order: #ffa64d;
+  --node-code: #4fd6ff;
+  --node-event: #ff7ec8;
+  --node-builtin: #9ba1ad;
+  --node-role: #33d68f;
+  --node-badge: #a6e35a;
+  --node-paint: #ff5c5c;
 }
 
 [data-theme="light"] {
@@ -188,6 +201,17 @@
   --cyan: #0b6d8a;
   --purple: #6b34c9;
   --danger-solid: #c42b1c;
+
+  --node-account: #1d4fd8;
+  --node-staff: #6b34c9;
+  --node-product: #806600;
+  --node-order: #b35900;
+  --node-code: #0b6d8a;
+  --node-event: #b0247a;
+  --node-builtin: #636975;
+  --node-role: #0a7a48;
+  --node-badge: #4d7a00;
+  --node-paint: #c42b2b;
 
   --shadow: 0 40px 80px -40px rgb(13 15 20 / .3);
   --scrim: rgb(13 15 20 / .32);
