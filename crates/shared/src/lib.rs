@@ -4,6 +4,7 @@
 pub mod config;
 pub mod cosmetics;
 pub mod error;
+pub mod error_codes;
 pub mod logging;
 pub mod metrics;
 pub mod model;

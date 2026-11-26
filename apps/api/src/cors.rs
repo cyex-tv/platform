@@ -24,7 +24,7 @@ const SITE_METHODS: &str = "GET, POST, OPTIONS";
 const SITE_HEADERS: &str = "content-type, authorization";
 const PUBLIC_METHODS: &str = "GET, HEAD, POST, OPTIONS";
 const PUBLIC_HEADERS: &str = "content-type, if-none-match";
-const EXPOSED: &str = "etag, retry-after";
+const EXPOSED: &str = "etag, retry-after, ratelimit-limit, ratelimit-remaining, ratelimit-reset";
 /// How long a browser may keep a preflight answer.
 const MAX_AGE: &str = "600";
 

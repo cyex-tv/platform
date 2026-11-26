@@ -63,12 +63,8 @@ pub(crate) fn limited(state: &AppState, limit: AccountLimit, caller: &Caller) ->
             &ids::to_text(caller.account_id),
             Some(caller.account_id),
         )
-        .map_err(|_| {
-            ApiError::new(
-                StatusCode::TOO_MANY_REQUESTS,
-                "rate_limited",
-                "That's a lot of tries. Try again in a while.",
-            )
+        .map_err(|wait| {
+            crate::errors::rate_limited_in("That's a lot of tries. Try again in a while.", wait)
         })
 }
 

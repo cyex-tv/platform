@@ -175,6 +175,12 @@ html:has(.docs) { scroll-behavior: smooth; }
 .docs .fmt > code { justify-self: start; max-width: 100%; overflow-wrap: anywhere; }
 .docs .fmt > span { color: var(--muted); font-size: .86rem; line-height: 1.55; }
 .docs .fmt > b { font-size: .86rem; font-weight: 600; color: var(--text); }
+.docs .codes-wrap { overflow-x: auto; margin: 14px 0; border-block: 1px solid var(--border); }
+.docs .codes { width: 100%; border-collapse: collapse; font-size: .86rem; line-height: 1.55; }
+.docs .codes th { text-align: start; font-weight: 600; color: var(--text); padding: 9px 14px 9px 0; border-bottom: 1px solid var(--border); }
+.docs .codes td { padding: 9px 14px 9px 0; vertical-align: baseline; color: var(--muted); border-top: 1px solid var(--border); }
+.docs .codes tbody tr:first-child td { border-top: 0; }
+.docs .codes td:first-child { white-space: nowrap; }
 .docs .fmt-grid.wide .fmt { grid-template-columns: 220px minmax(0, 1fr); }
 /* A note is a labelled line of text between hairlines: NOTE, then the words. */
 .docs .note { position: relative; border-block: 1px solid var(--border); padding: 36px 0 14px; font-size: .85rem; color: var(--muted); line-height: 1.6; margin: 16px 0; }

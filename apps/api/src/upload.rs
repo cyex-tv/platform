@@ -186,7 +186,8 @@ async fn hourly_limit(
             } else {
                 "That account has had a lot of uploads this hour. Try again later."
             },
-        ));
+        )
+        .retry_after(3600));
     }
     Ok(())
 }

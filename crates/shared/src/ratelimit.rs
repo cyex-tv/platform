@@ -82,6 +82,21 @@ impl std::fmt::Display for Rate {
     }
 }
 
+/// What a limiter has left for a key after a check, for the `RateLimit-*` headers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Quota {
+    /// The bucket's size.
+    pub limit: u32,
+    /// Whole requests left right now.
+    pub remaining: u32,
+    /// Seconds until the bucket is full again (at least 1 unless it already is).
+    pub reset: u64,
+}
+
+fn secs_up(d: Duration) -> u64 {
+    d.as_secs() + u64::from(d.subsec_nanos() > 0)
+}
+
 struct Bucket {
     tokens: f64,
     at: Instant,
@@ -118,17 +133,50 @@ impl Limiter {
 
     /// Takes one token for `key`. `Err` holds how long until one is free.
     pub fn check(&self, key: &str) -> Result<(), Duration> {
-        self.check_at(key, self.rate, Instant::now())
+        self.check_at(key, self.rate, Instant::now()).map(|_| ())
+    }
+
+    /// `check`, and what is left afterwards. On `Err`, the quota is empty and `reset` is the wait.
+    pub fn check_quota(&self, key: &str) -> Result<Quota, (Duration, Quota)> {
+        self.quota_at(key, self.rate, Instant::now())
+    }
+
+    /// `check_quota` at `rate`, for a key with its own (an account whose roles change the limit).
+    pub fn check_quota_with(&self, key: &str, rate: Rate) -> Result<Quota, (Duration, Quota)> {
+        self.quota_at(key, rate, Instant::now())
+    }
+
+    fn quota_at(&self, key: &str, rate: Rate, now: Instant) -> Result<Quota, (Duration, Quota)> {
+        let burst = rate.burst;
+        match self.check_at(key, rate, now) {
+            Ok(tokens) => {
+                let missing = (f64::from(burst) - tokens).max(0.0) * per_token(rate);
+                Ok(Quota {
+                    limit: burst,
+                    remaining: tokens.floor() as u32,
+                    reset: secs_up(Duration::from_secs_f64(missing)),
+                })
+            }
+            Err(wait) => Err((
+                wait,
+                Quota {
+                    limit: burst,
+                    remaining: 0,
+                    reset: secs_up(wait).max(1),
+                },
+            )),
+        }
     }
 
     /// Takes one token for `key`, whose bucket holds `rate.burst` and refills over `rate.per`.
     /// A key whose rate changes keeps what it has used, capped at the new burst.
     pub fn check_with(&self, key: &str, rate: Rate) -> Result<(), Duration> {
-        self.check_at(key, rate, Instant::now())
+        self.check_at(key, rate, Instant::now()).map(|_| ())
     }
 
     /// `check_with` with the clock passed in, so tests can advance time without sleeping.
-    fn check_at(&self, key: &str, rate: Rate, now: Instant) -> Result<(), Duration> {
+    /// `Ok` holds the tokens left.
+    fn check_at(&self, key: &str, rate: Rate, now: Instant) -> Result<f64, Duration> {
         let burst = f64::from(rate.burst);
         let per_token = per_token(rate);
         let mut buckets = self.buckets.lock().unwrap_or_else(PoisonError::into_inner);
@@ -149,7 +197,7 @@ impl Limiter {
         bucket.at = now;
         if bucket.tokens >= 1.0 {
             bucket.tokens -= 1.0;
-            Ok(())
+            Ok(bucket.tokens)
         } else {
             Err(Duration::from_secs_f64((1.0 - bucket.tokens) * per_token))
         }
@@ -253,6 +301,18 @@ mod tests {
     use axum::http::HeaderValue;
 
     use super::*;
+
+    #[test]
+    fn quota_counts_down_and_says_when_it_resets() {
+        let l = Limiter::new(Rate::per_minute(3));
+        let q = l.check_quota("a").unwrap();
+        assert_eq!((q.limit, q.remaining, q.reset), (3, 2, 20));
+        assert_eq!(l.check_quota("a").unwrap().remaining, 1);
+        assert_eq!(l.check_quota("a").unwrap().remaining, 0);
+        let (wait, q) = l.check_quota("a").unwrap_err();
+        assert_eq!((q.limit, q.remaining), (3, 0));
+        assert!(q.reset >= 1 && q.reset <= 20 && q.reset == secs_up(wait));
+    }
 
     #[test]
     fn a_bucket_allows_its_burst_then_refills() {

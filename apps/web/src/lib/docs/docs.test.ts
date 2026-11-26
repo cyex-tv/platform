@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import spec from '../../../../../openapi/openapi.json';
 import { graphqlReference } from './graphql';
-import { guides } from './guides';
+import { errorCodes, guides } from './guides';
 import { defaultOpen, isOpen, parseGroupState, restGroupId, withAll, withGroup, allOpen } from './groups';
 import { restGroups, restOperations } from './rest';
 
@@ -42,6 +42,14 @@ describe('guides', () => {
         const runs = 'text' in b ? [b.text] : 'items' in b ? b.items : 'rows' in b && b.t === 'fmt' ? b.rows.map((r) => r[1]) : [];
         for (const para of runs.flat(2)) if (para.href?.startsWith('#')) expect(ids, para.href).toContain(para.href.slice(1));
       }
+  });
+
+  it('list every error code of the spec in a table', () => {
+    const block = guides.find((g) => g.id === 'error-codes')?.blocks.find((b) => b.t === 'codes');
+    expect(errorCodes.length).toBeGreaterThan(100);
+    expect(block && 'rows' in block ? block.rows : []).toEqual(errorCodes);
+    expect(errorCodes.map((c) => c.code)).toContain('rate_limited');
+    for (const c of errorCodes) expect(c.meaning && c.when, c.code).toBeTruthy();
   });
 
   it('never use the owner IDs as examples', () => {

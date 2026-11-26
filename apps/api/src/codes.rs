@@ -311,6 +311,7 @@ fn locked_out(wait: std::time::Duration) -> ApiError {
         "locked_out",
         format!("Too many wrong codes. Try again in {minutes} min."),
     )
+    .retry_after(wait.as_secs().max(1))
 }
 
 fn unknown_client() -> ApiError {

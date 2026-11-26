@@ -9,7 +9,7 @@ use cyex_tv_db::{blocklist, files};
 use cyex_tv_media::Limits;
 use cyex_tv_media::encode::{self, Kind, Profile, Variant};
 use cyex_tv_shared::model::{EmoteFile, ImageFormat};
-use cyex_tv_storage::{IMMUTABLE, Put, Store, emote_key, sigv4};
+use cyex_tv_storage::{Put, Store, cache_control_for, emote_key, sigv4};
 use serde_json::Value;
 
 use crate::{CancelOnDrop, Ctx, JobError, media_failure};
@@ -43,13 +43,14 @@ fn entries(variants: &[&Variant]) -> Result<Value, JobError> {
 
 async fn store_all(store: &Store, sha_hex: &str, variants: &[Variant]) -> Result<(), JobError> {
     for v in variants {
+        let key = emote_key(sha_hex, &v.name);
         store
             .put(
-                &emote_key(sha_hex, &v.name),
+                &key,
                 v.bytes.clone().into(),
                 Put {
                     content_type: v.kind.mime(),
-                    cache_control: Some(IMMUTABLE),
+                    cache_control: cache_control_for(&key),
                 },
             )
             .await

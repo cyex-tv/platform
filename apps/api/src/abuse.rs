@@ -207,7 +207,8 @@ pub async fn report(
             StatusCode::TOO_MANY_REQUESTS,
             "rate_limited",
             "That's a lot of reports. Try again in an hour.",
-        ));
+        )
+        .retry_after(3600));
     }
     let created = match reports::create(&mut conn, emote_id, caller.account_id, &reason).await {
         Ok(r) => r,

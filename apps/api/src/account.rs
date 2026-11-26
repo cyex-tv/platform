@@ -29,7 +29,7 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::catalog::{db_error, my_sets, not_found};
-use crate::errors::{Audit, bad, rate_limited, record_audit, sqlx_error};
+use crate::errors::{Audit, bad, rate_limited_in, record_audit, sqlx_error};
 use crate::state::AppState;
 use crate::views;
 
@@ -271,11 +271,10 @@ pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
             &ids::to_text(caller.account_id),
             Some(caller.account_id),
         )
-        .map_err(|_| {
-            ApiError::new(
-                StatusCode::TOO_MANY_REQUESTS,
-                "rate_limited",
+        .map_err(|wait| {
+            rate_limited_in(
                 "You asked for a copy of your data a few times already. Try again in an hour.",
+                wait,
             )
         })?;
     let account_id = caller.account_id;
@@ -580,8 +579,11 @@ pub async fn delete_account(
         .limits
         .delete_account
         .check(&ids::to_text(caller.account_id))
-        .map_err(|_| {
-            rate_limited("That's a lot of tries to delete the account. Try again in an hour.")
+        .map_err(|wait| {
+            rate_limited_in(
+                "That's a lot of tries to delete the account. Try again in an hour.",
+                wait,
+            )
         })?;
     let account_id = caller.account_id;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;

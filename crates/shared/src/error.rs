@@ -1,7 +1,8 @@
 //! The one error shape every endpoint returns: `{ "error": "<code>", "message": "<text>" }`.
 
 use axum::Json;
-use axum::http::StatusCode;
+use axum::http::header::RETRY_AFTER;
+use axum::http::{HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -9,6 +10,7 @@ use utoipa::ToSchema;
 /// An error answer. `error` is a stable code clients can match on; `message` is for people.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 pub struct ErrorBody {
+    /// One of the `ErrorCode` values.
     pub error: String,
     pub message: String,
 }
@@ -18,7 +20,13 @@ pub struct ApiError {
     pub status: StatusCode,
     pub code: &'static str,
     pub message: String,
+    /// Seconds to wait before trying again, sent as `Retry-After`. Only 429 answers send it; one
+    /// without a wait of its own says `DEFAULT_RETRY_AFTER`.
+    pub retry_after: Option<u64>,
 }
+
+/// The `Retry-After` of a 429 that has no wait of its own, in seconds.
+pub const DEFAULT_RETRY_AFTER: u64 = 60;
 
 pub type ApiResult<T> = Result<T, ApiError>;
 
@@ -28,7 +36,15 @@ impl ApiError {
             status,
             code,
             message: message.into(),
+            retry_after: None,
         }
+    }
+
+    /// Tells the client how many seconds to wait (sent as `Retry-After` on a 429).
+    #[must_use]
+    pub fn retry_after(mut self, seconds: u64) -> Self {
+        self.retry_after = Some(seconds.max(1));
+        self
     }
 
     /// Part of the v1 contract, not built yet.
@@ -59,6 +75,29 @@ impl IntoResponse for ApiError {
             error: self.code.to_owned(),
             message: self.message,
         };
-        (self.status, Json(body)).into_response()
+        let wait = (self.status == StatusCode::TOO_MANY_REQUESTS)
+            .then(|| self.retry_after.unwrap_or(DEFAULT_RETRY_AFTER));
+        let mut response = (self.status, Json(body)).into_response();
+        if let Some(wait) = wait {
+            response
+                .headers_mut()
+                .insert(RETRY_AFTER, HeaderValue::from(wait));
+        }
+        response
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_429_carries_retry_after() {
+        let plain = ApiError::new(StatusCode::TOO_MANY_REQUESTS, "rate_limited", "x");
+        assert_eq!(plain.into_response().headers()[RETRY_AFTER], "60");
+        let timed = ApiError::new(StatusCode::TOO_MANY_REQUESTS, "locked_out", "x").retry_after(0);
+        assert_eq!(timed.into_response().headers()[RETRY_AFTER], "1");
+        let other = ApiError::new(StatusCode::BAD_REQUEST, "bad", "x").retry_after(5);
+        assert!(other.into_response().headers().get(RETRY_AFTER).is_none());
     }
 }
