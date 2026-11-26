@@ -265,6 +265,21 @@ async fn unlisted_emotes_open_by_link_but_stay_out_of_listings() {
     assert!(text.contains(&shown), "{r}");
     assert!(!text.contains(&quiet), "{r}");
 
+    // Its owner can't move it off unlisted either: only staff list it again (ADR 0020).
+    let r = w
+        .gql(
+            Some(&ann),
+            UPDATE,
+            json!({ "id": quiet, "i": { "visibility": "PRIVATE" } }),
+        )
+        .await;
+    assert_eq!(code(&r), "bad_visibility", "{r}");
+    // A moderator lists it again (as stored); then its owner may make it private.
+    sqlx::query("UPDATE emotes SET unlisted = false WHERE name = 'AnnQuiet'")
+        .execute(&mut *w.db.conn().await)
+        .await
+        .unwrap();
+
     // Private still means only its owner can add it.
     let r = w
         .gql(
