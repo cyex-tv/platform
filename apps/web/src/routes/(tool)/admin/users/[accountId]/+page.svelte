@@ -69,7 +69,7 @@
       } else {
         // Without users.view only the public summary is known.
         const a = (await gql(ACCOUNT, { id }, fetch)).account;
-        account = a ? { id: a.id, displayName: a.displayName, avatar: a.avatar, createdAt: '', uploadsBlocked: false, ticketsBlocked: false, blocked: false, uploadsBlockedUntil: null, ticketsBlockedUntil: null, blockedUntil: null, identities: [] } : null;
+        account = a ? { id: a.id, displayName: a.displayName, avatar: a.avatar, createdAt: '', uploadsBlocked: false, ticketsBlocked: false, blocked: false, identities: [] } : null;
       }
     } catch (e) {
       if (e instanceof ApiError && e.code === 'not_found') return { account: null, status: null, roles: [] };
