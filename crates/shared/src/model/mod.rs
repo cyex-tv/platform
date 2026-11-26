@@ -619,7 +619,15 @@ pub struct EmoteFile {
     pub name: String,
     pub format: ImageFormat,
     /// 1 to 4. A badge's larger sizes (`128`, `256`, `512`) carry their px ÷ 18, rounded: 7, 14
-    /// and 28; read `width` for the size.
+    /// and 28; read `width` for the size. **Deprecated for badge and paint files**: `width` is
+    /// the contract (`file_scale_non_emote` in `/v1/meta`). Emote files keep `scale` as it is.
+    #[cfg_attr(
+        feature = "graphql",
+        graphql(
+            deprecation = "For badge and paint files: read `width`. Emote files keep `scale` (1 to 4)."
+        )
+    )]
+    #[schema(deprecated)]
     pub scale: u8,
     pub width: u16,
     pub height: u16,

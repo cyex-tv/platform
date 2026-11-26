@@ -237,7 +237,12 @@ pub async fn mark_read(
             .map_err(db_error);
     };
     if raw.len() > MARK_READ_MAX {
-        return Err(bad("too_many", "Mark at most 100 notifications at once."));
+        return Err(ApiError::limit(
+            "too_many",
+            "Mark at most 100 notifications at once.",
+            MARK_READ_MAX as u64,
+            cyex_tv_shared::limit_errors::n(raw.len()),
+        ));
     }
     let wanted: Vec<Uuid> = raw
         .iter()

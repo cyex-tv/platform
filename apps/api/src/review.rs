@@ -136,7 +136,12 @@ pub fn clean_reasons(raw: &[String]) -> ApiResult<Vec<String>> {
         }
     }
     if out.len() > REASONS_MAX {
-        return Err(bad("too_many_reasons", "At most 12 ready reasons."));
+        return Err(cyex_tv_shared::error::ApiError::limit(
+            "too_many_reasons",
+            "At most 12 ready reasons.",
+            REASONS_MAX as u64,
+            cyex_tv_shared::limit_errors::n(out.len()),
+        ));
     }
     Ok(out)
 }

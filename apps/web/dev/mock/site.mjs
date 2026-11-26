@@ -82,6 +82,9 @@ export const META = {
   deprecations: [{
     id: 'ulid_id_input', what: "An account, emote or set ID given as a ULID (26 characters) in an input: a GraphQL argument or variable, a REST path or an upload's owner_id.",
     since: '2026-11-26', sunset: '2027-06-01', replacement: 'Send the Snowflake (a decimal string) that every answer already carries (ADR 0027).',
+  }, {
+    id: 'file_scale_non_emote', what: 'The `scale` of a badge or paint picture file. It is 1, 2 or 4 for the chat sizes but 7, 14 and 28 for the larger badge sizes (128, 256 and 512 px), which is no scale of anything. Emote files keep `scale` (1 to 4) and are not affected.',
+    since: '2026-11-26', sunset: '2027-11-26', replacement: "Read the file's `width` (and `height`): it is the contract for every file. `scale` stays in v1 and is only dropped for badge and paint files in v2.",
   }],
 };
 const metaAnswer = () => ({ apiVersion: META.api_version, build: META.build, limits: { rest: META.limits.rest, graphqlField: META.limits.graphql_field }, deprecations: META.deprecations });

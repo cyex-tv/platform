@@ -121,6 +121,16 @@ fn coded(code: &'static str, message: &'static str) -> async_graphql::Error {
     async_graphql::Error::new(message).extend_with(|_, e| e.set("code", code))
 }
 
+/// A limit error: its code, and the numbers as `extensions.limit` and `extensions.current`.
+fn limit_error(
+    code: &'static str,
+    message: &'static str,
+    limit: u64,
+    current: u64,
+) -> async_graphql::Error {
+    api_error(ApiError::limit(code, message, limit, current))
+}
+
 fn internal(err: impl std::fmt::Display) -> async_graphql::Error {
     tracing::error!(error = %err, "graphql resolver failed");
     coded("internal", "Something went wrong on our side.")
@@ -128,7 +138,13 @@ fn internal(err: impl std::fmt::Display) -> async_graphql::Error {
 
 /// An API error as a GraphQL error, keeping its code.
 fn api_error(err: ApiError) -> async_graphql::Error {
-    async_graphql::Error::new(err.message).extend_with(move |_, e| e.set("code", err.code))
+    async_graphql::Error::new(err.message).extend_with(move |_, e| {
+        e.set("code", err.code);
+        if let Some(details) = err.details {
+            e.set("limit", details.limit);
+            e.set("current", details.current);
+        }
+    })
 }
 
 /// The client's IP as the limits saw it; empty when unknown (a test without the middleware).

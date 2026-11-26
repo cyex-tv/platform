@@ -11,7 +11,7 @@
 
 use cyex_tv_auth::Caller;
 use cyex_tv_db::{channels, ids, outbox, webhooks as db};
-use cyex_tv_shared::error::ApiResult;
+use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
     CreateWebhook, CreatedWebhook, EditorPermission, EventType, Platform, UpdateWebhook, Webhook,
     WebhookDelivery,
@@ -22,8 +22,7 @@ use sqlx::{Connection, PgConnection};
 
 use crate::editors::has_flag;
 use crate::errors::{
-    Audit, bad, conflict, db_error, forbidden, limited_as, not_found, parse_id, record_audit,
-    sqlx_error,
+    Audit, bad, db_error, forbidden, limited_as, not_found, parse_id, record_audit, sqlx_error,
 };
 use crate::limits::AccountLimit;
 use crate::state::AppState;
@@ -185,9 +184,11 @@ async fn cosmetic_room(
             .map_err(db_error)?
             >= max
     {
-        return Err(conflict(
+        return Err(ApiError::limit(
             "too_many_webhooks",
             "Too many webhooks ask for cosmetics events already. Pick channel events only.",
+            max.unsigned_abs(),
+            max.unsigned_abs(),
         ));
     }
     Ok(())
@@ -258,9 +259,11 @@ pub async fn create(
     .await
     .map_err(db_error)?
     .ok_or_else(|| {
-        conflict(
+        ApiError::limit(
             "too_many_webhooks",
             "This channel has 5 webhooks, the most it may. Delete one first.",
+            MAX_PER_CHANNEL.unsigned_abs(),
+            MAX_PER_CHANNEL.unsigned_abs(),
         )
     })?;
     record_audit(

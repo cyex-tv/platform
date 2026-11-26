@@ -118,12 +118,16 @@ impl async_graphql::extensions::Extension for RootFieldCap {
         next: async_graphql::extensions::NextParseQuery<'_>,
     ) -> async_graphql::ServerResult<async_graphql::parser::types::ExecutableDocument> {
         let document = next.run(ctx, query, variables).await?;
-        if let Some((_, op)) = document.operations.iter().find(|(_, op)| {
-            root_fields(&op.node.selection_set.node, &document.fragments, 0) > MAX_ROOT_FIELDS
+        if let Some((op, count)) = document.operations.iter().find_map(|(_, op)| {
+            let count = root_fields(&op.node.selection_set.node, &document.fragments, 0);
+            (count > MAX_ROOT_FIELDS).then_some((op, count))
         }) {
-            return Err(coded(
+            // The count stops past the limit, so `current` is "more than" `limit`.
+            return Err(super::limit_error(
                 "too_many_fields",
                 "That asks for too much at once. Split it into smaller requests.",
+                MAX_ROOT_FIELDS as u64,
+                cyex_tv_shared::limit_errors::n(count),
             )
             .into_server_error(op.pos));
         }

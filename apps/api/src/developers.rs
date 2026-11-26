@@ -38,7 +38,7 @@ use serde_json::json;
 use sqlx::Connection;
 use uuid::Uuid;
 
-use crate::errors::{Audit, bad, conflict, db_error, limited_as, record_audit, sqlx_error};
+use crate::errors::{Audit, bad, db_error, limited_as, record_audit, sqlx_error};
 use crate::limits::{self, AccountLimit};
 use crate::state::AppState;
 use crate::views;
@@ -139,12 +139,15 @@ pub const CACHE_TTL: Duration = Duration::from_secs(30);
 /// Entries kept before stale ones are swept out.
 const CACHE_SWEEP_AT: usize = 50_000;
 
+/// When a lookup was made, and the key with whether its account is live (`None`: no such key).
+type Cached = (Instant, Option<(KeyUse, bool)>);
+
 /// Key lookups by the key's hash, positive and negative, so a busy key (or a made-up one tried
 /// again and again) doesn't reach the database on every request.
 pub struct KeyCache {
     ttl: Duration,
     /// The key and whether its account is live; `None` for a key that doesn't exist.
-    entries: Mutex<HashMap<TokenHash, (Instant, Option<(KeyUse, bool)>)>>,
+    entries: Mutex<HashMap<TokenHash, Cached>>,
     lookups: AtomicU64,
 }
 
@@ -163,10 +166,7 @@ impl KeyCache {
         }
     }
 
-    #[allow(clippy::type_complexity)]
-    fn lock(
-        &self,
-    ) -> std::sync::MutexGuard<'_, HashMap<TokenHash, (Instant, Option<(KeyUse, bool)>)>> {
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<TokenHash, Cached>> {
         self.entries.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
@@ -380,9 +380,11 @@ pub async fn create(state: &AppState, caller: &Caller, name: &str) -> ApiResult<
     .await
     .map_err(db_error)?
     .ok_or_else(|| {
-        conflict(
+        ApiError::limit(
             "too_many_api_keys",
             "You have 10 API keys, the most you may. Revoke one first.",
+            MAX_KEYS.unsigned_abs(),
+            MAX_KEYS.unsigned_abs(),
         )
     })?;
     let id = ids::to_text(made.id);
