@@ -16,6 +16,7 @@ pub mod errors;
 pub mod gql;
 pub mod idempotency;
 pub mod limits;
+pub mod meta;
 pub mod moderation;
 pub mod paddle;
 pub mod personal;
@@ -130,6 +131,9 @@ pub fn app(state: AppState) -> Router {
             state.clone(),
             cors::middleware,
         ))
+        // Outside the limits and CORS: the version header (and the deprecation headers) go on
+        // 429s too.
+        .layer(axum::middleware::from_fn(meta::middleware))
         // Around the limits and CORS, so 429s and refused preflights are counted too. Requests
         // for no route at all are not.
         .route_layer(axum::middleware::from_fn_with_state(

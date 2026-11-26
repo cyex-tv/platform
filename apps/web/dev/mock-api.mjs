@@ -30,7 +30,7 @@ import { accountSets, cloneSet, emoteGrant, err, findEmote, findSet, mayView, se
 import { accountCosmetics, accountProfile, quickSearch, searchAccounts } from './mock/people.mjs';
 import { PERSONAL_FIELDS, personalLists } from './mock/personal.mjs';
 import { topPeopleAnswer } from './mock/top-people.mjs';
-import { noteOff, siteAnswer } from './mock/site.mjs';
+import { META, noteOff, siteAnswer } from './mock/site.mjs';
 import { UPLOAD_FILES, mosaicPng, multipart, probeImage } from './mock/uploads.mjs';
 import { signedIn } from './mock/signed-in/index.mjs';
 function newFields(q, v, session, admin = false) {
@@ -370,6 +370,7 @@ createServer(async (req, res) => {
   }
   // A route that never answers, for timeout checks.
   if (req.method === 'GET' && (url.pathname === '/health' || url.pathname === '/health/ready')) return res.writeHead(200, { 'content-type': 'application/json' }).end('{"status":"ok"}');
+  if (req.method === 'GET' && url.pathname === '/v1/meta') return res.writeHead(200, { 'content-type': 'application/json', 'x-cyex-api-version': META.api_version }).end(JSON.stringify(META));
   if (url.pathname === '/mock/hang') return;
   if (req.method === 'POST' && url.pathname === '/v1/emotes') {
     // UTF-8, as the API reads it: names in any script and emoji arrive whole.
