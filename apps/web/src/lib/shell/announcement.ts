@@ -59,6 +59,7 @@ export function withClosed(list: readonly string[], id: string): string[] {
 export function safeLink(url: string | null | undefined): string | null {
   if (!url) return null;
   const u = url.trim();
+  if (/[\u0000-\u001F\u007F\\]/.test(u)) return null;
   if (u.startsWith('/') && !u.startsWith('//') && !u.startsWith('/\\')) return u;
   try {
     const parsed = new URL(u);
