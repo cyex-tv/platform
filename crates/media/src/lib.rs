@@ -89,9 +89,10 @@ impl Limits {
         }
     }
 
-    /// A badge picture's limits (the size ladder of cyex badges): up to 8 MB and 2048 px a side
-    /// (bigger than the 512 px master is scaled down); an animation at most 120 frames, 10
-    /// seconds, and width × height × frames at most 64 MP (512×512 × 120 frames fits).
+    /// A badge picture's limits (the size ladder of cyex badges): up to 8 MB; an animation at most 120 frames, 10
+    /// seconds, and width × height × frames at most 64 MP (512×512 × 120 frames fits). A side is
+    /// decoded up to 2048 px so a badge made before the 512 px cap can be made again; the API
+    /// refuses an upload over 512 px (a badge keeps its original size, up to 512).
     pub fn badge() -> Self {
         Self {
             max_bytes: BADGE_MAX_BYTES,

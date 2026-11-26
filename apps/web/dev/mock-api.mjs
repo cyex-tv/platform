@@ -225,11 +225,12 @@ createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'no-store' });
     return res.end(mosaicPng(px));
   }
-  const badgeArt = url.pathname.match(/^\/cosmetics\/badges\/([a-z-]+)\/([124]x|128|256|512)\.webp$/);
+  const badgeArt = url.pathname.match(/^\/cosmetics\/badges\/([a-z-]+)\/([124]x|128|256|512|original)\.webp$/);
   if (badgeArt && BADGE_ART[badgeArt[1]]) {
     res.writeHead(200, { 'content-type': 'image/svg+xml', 'cache-control': 'no-store' });
-    const step = BADGE_LADDER.find(([stem]) => stem === badgeArt[2]);
-    return res.end(BADGE_ART[badgeArt[1]](step[2] / 18));
+    // `original` is the picture's own size: 96 px for the sample shield (see mock/cosmetics.mjs).
+    const px = badgeArt[2] === 'original' ? 96 : BADGE_LADDER.find(([stem]) => stem === badgeArt[2])[2];
+    return res.end(BADGE_ART[badgeArt[1]](px / 18));
   }
   if (req.method === 'GET' && url.pathname === '/v1/cosmetics') {
     const c = releasedCatalog(admin);
@@ -267,7 +268,9 @@ createServer(async (req, res) => {
     const again = UPLOADED.get(sha);
     if (again) return json(res, 202, restOf(again));
     const id = `01JD8XIMG${String(100 + nextCosmeticSeq()).padStart(17, '0')}`;
-    const files = kind === 'badge' ? ladderFiles(probe.animated, file.length) : PAINT_LADDER.flatMap(([stem, scale, px]) => {
+    // A badge's original is its own size, at most 512 px (bigger is scaled down to 512).
+    const fit = Math.min(1, 512 / Math.max(probe.width, probe.height));
+    const files = kind === 'badge' ? ladderFiles(probe.animated, file.length, BADGE_LADDER, [Math.round(probe.width * fit), Math.round(probe.height * fit)]) : PAINT_LADDER.flatMap(([stem, scale, px]) => {
       const h = Math.min(px, probe.height); // never above the original
       const w = Math.round((probe.width / probe.height) * h);
       return (probe.animated ? [false, true] : [false]).map((still) => ({ name: `${stem}${still ? '_static' : ''}.webp`, format: 'WEBP', scale, width: w, height: h, size: file.length, isStatic: still }));
@@ -281,7 +284,7 @@ createServer(async (req, res) => {
     setTimeout(() => Object.assign(img, { ready: true, files }), Number(process.env.MOCK_IMAGE_DELAY ?? 2000));
     return json(res, 202, restOf(img));
   }
-  const uploaded = url.pathname.match(/^\/cosmetics\/uploads\/([0-9A-Z]+)\/(?:[124]x|128|256|512)(?:_static)?\.(?:webp|avif)$/);
+  const uploaded = url.pathname.match(/^\/cosmetics\/uploads\/([0-9A-Z]+)\/(?:[124]x|128|256|512|original)(?:_static)?\.(?:webp|avif)$/);
   if (uploaded) {
     const u = UPLOAD_FILES.get(uploaded[1]);
     if (!u) return res.writeHead(404).end();

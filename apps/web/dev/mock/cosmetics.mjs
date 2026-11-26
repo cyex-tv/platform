@@ -23,14 +23,17 @@ export const BADGE_ART = {
 export const C_TIME = '2026-11-17T12:00:00.000Z';
 // The badge size ladder (crates/media Profile::BADGE): file stem, scale and px.
 export const BADGE_LADDER = [['1x', 1, 18], ['2x', 2, 36], ['4x', 4, 72], ['128', 7, 128], ['256', 14, 256], ['512', 28, 512]];
-export const ladderFiles = (animated = false, size = 300, sizes = BADGE_LADDER) =>
-  sizes.flatMap(([stem, scale, px]) =>
-    (animated ? [false, true] : [false]).map((still) => ({ name: `${stem}${still ? '_static' : ''}.webp`, format: 'WEBP', scale, width: px, height: px, size, isStatic: still })));
+// `original`: the picture at its real size (up to 512 px; a bigger upload is scaled down to 512), kept
+// beside the ladder (crates/media Profile::BADGE `original`). `null` for a picture made before it.
+export const ladderFiles = (animated = false, size = 300, sizes = BADGE_LADDER, original = null) =>
+  [...sizes.map(([stem, scale, px]) => [stem, scale, px, px]), ...(original ? [['original', Math.round(Math.max(original[0], original[1]) / 18), original[0], original[1]]] : [])].flatMap(([stem, scale, w, h]) =>
+    (animated ? [false, true] : [false]).map((still) => ({ name: `${stem}${still ? '_static' : ''}.webp`, format: 'WEBP', scale, width: w, height: h, size, isStatic: still })));
+// The sample shield is a 96 px picture: its original is 96 px, not scaled up to the 512 master.
 const cImage = (key, kind = 'BADGE', full = true) => ({
   id: `01JD8XIMG${key.replace(/[^a-z]/g, '').toUpperCase().padEnd(17, '0').slice(0, 17)}`,
   kind, host: `${BASE}/cosmetics/${kind === 'BADGE' ? 'badges' : 'paints'}/${key}`, animated: false,
-  width: 512, height: 512, ready: true, createdAt: C_TIME,
-  files: ladderFiles(false, 300, full ? BADGE_LADDER : BADGE_LADDER.slice(0, 3)),
+  width: full ? 96 : 512, height: full ? 96 : 512, ready: true, createdAt: C_TIME,
+  files: ladderFiles(false, 300, full ? BADGE_LADDER : BADGE_LADDER.slice(0, 3), full ? [96, 96] : null),
 });
 // The paint size ladder (crates/media Profile::PAINT): 64, 128, 256 and 512 px tall, 4:1 here.
 export const PAINT_LADDER = [['1x', 1, 64], ['2x', 2, 128], ['4x', 4, 256], ['512', 8, 512]];
@@ -212,7 +215,7 @@ export function cosmeticsAnswer(q, v, session, admin) {
     if (!img) return err('Not found.', 'not_found');
     // The job runs again: a badge gets every size of the ladder a moment later.
     if (img.kind === 'BADGE')
-      setTimeout(() => Object.assign(img, { files: ladderFiles(img.animated, img.files[0]?.size ?? 300) }), Number(process.env.MOCK_IMAGE_DELAY ?? 2000));
+      setTimeout(() => Object.assign(img, { files: ladderFiles(img.animated, img.files[0]?.size ?? 300, BADGE_LADDER, [Math.min(img.width, 512), Math.min(img.height, 512)]) }), Number(process.env.MOCK_IMAGE_DELAY ?? 2000));
     // A paint gets the 512 px tall file (4:1 pictures here, as the originals the mock keeps).
     if (img.kind === 'PAINT' && !img.files.some((f) => f.name === '512.webp'))
       setTimeout(() => Object.assign(img, { files: paintFiles(img.animated, img.files[0]?.size ?? 3000) }), Number(process.env.MOCK_IMAGE_DELAY ?? 2000));

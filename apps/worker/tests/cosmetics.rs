@@ -111,10 +111,12 @@ async fn a_badge_picture_is_transcoded_under_cosmetics() {
             ("4x.webp", 72),
             ("128.webp", 128),
             ("256.webp", 256),
-            ("512.webp", 512)
+            ("512.webp", 512),
+            // The upload's own size, not scaled up to the master.
+            ("original.webp", 96)
         ]
     );
-    assert_eq!(files.len(), 12);
+    assert_eq!(files.len(), 14);
     for f in &files {
         let object = store
             .get(&format!("cosmetics/badges/{hex}/{}", f.name))

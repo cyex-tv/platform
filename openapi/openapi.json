@@ -1452,7 +1452,7 @@
             "items": {
               "$ref": "#/components/schemas/EmoteFile"
             },
-            "description": "WebP and AVIF at 1x, 2x and 4x, and static first frames for animations. Empty until the\nworker made them."
+            "description": "WebP and AVIF at 1x, 2x and 4x, and static first frames for animations. Empty until the\nworker made them. A badge also has the size ladder (`128`, `256`, `512`) and `original`:\nthe picture at its real size (at most 512 px; a bigger upload is scaled down to 512),\nwith the real `width` and `height` in its entry."
           },
           "height": {
             "type": "integer",

@@ -203,7 +203,7 @@ mod tests {
             .unwrap();
         let mut keys = store.keys();
         keys.sort();
-        let mut want: Vec<String> = ["1x", "2x", "4x", "128", "256", "512"]
+        let mut want: Vec<String> = ["1x", "2x", "4x", "128", "256", "512", "original"]
             .iter()
             .flat_map(|stem| {
                 ["avif", "webp"].map(|ext| format!("cosmetics/badges/abcd/{stem}.{ext}"))
@@ -236,10 +236,30 @@ mod tests {
                 ("4x.webp", 4, 72, 72),
                 ("128.webp", 7, 128, 128),
                 ("256.webp", 14, 256, 256),
-                ("512.webp", 28, 512, 512)
+                ("512.webp", 28, 512, 512),
+                // 128 px is the picture's own size, not scaled up to the master.
+                ("original.webp", 7, 128, 128)
             ]
         );
         assert!(Profile::BADGE.is_complete(files.iter().map(|f| f.name.as_str())));
+    }
+
+    #[test]
+    fn a_512_badge_is_kept_at_512_and_a_big_one_is_fitted_to_it() {
+        let size_of = |bytes: &[u8]| {
+            let encoded = make(CosmeticKind::Badge, bytes).unwrap();
+            let all: Vec<&Variant> = encoded.webp.iter().collect();
+            let files: Vec<EmoteFile> = serde_json::from_value(entries(&all)).unwrap();
+            let sizes: Vec<_> = files.iter().map(|f| (f.width, f.name.as_str())).collect();
+            assert!(sizes.contains(&(512, "512.webp")), "the ladder stays");
+            files
+                .iter()
+                .find(|f| f.name == "original.webp")
+                .map(|f| (f.width, f.height))
+        };
+        assert_eq!(size_of(&png(512, 512)), Some((512, 512)));
+        assert_eq!(size_of(&png(300, 300)), Some((300, 300)));
+        assert_eq!(size_of(&png(1024, 1024)), Some((512, 512)));
     }
 
     #[test]

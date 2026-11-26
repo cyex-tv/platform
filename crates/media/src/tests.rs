@@ -531,9 +531,12 @@ mod encoding {
         assert_eq!(b.size_for(72, 72, 4), (72, 72));
         // Square boxes: a wide picture fits the width.
         assert_eq!(b.size_for(144, 72, 1), (18, 9));
-        // Six sizes, each as WebP, AVIF and their still forms.
-        assert_eq!(b.all_names().len(), 24);
-        assert_eq!(b.stems(), ["1x", "2x", "4x", "128", "256", "512"]);
+        // Six sizes and the original, each as WebP, AVIF and their still forms.
+        assert_eq!(b.all_names().len(), 28);
+        assert_eq!(
+            b.stems(),
+            ["1x", "2x", "4x", "128", "256", "512", "original"]
+        );
         assert!(!b.all_names().contains(&"3x.webp".to_owned()));
         assert!(b.all_names().contains(&"512_static.avif".to_owned()));
         let p = Profile::PAINT;
@@ -564,14 +567,22 @@ mod encoding {
                 ("4x.webp", 4, 72, 72),
                 ("128.webp", 7, 128, 128),
                 ("256.webp", 14, 256, 256),
-                ("512.webp", 28, 512, 512)
+                ("512.webp", 28, 512, 512),
+                // 96 px stays 96 px: not scaled to the 512 master.
+                ("original.webp", 5, 96, 96)
             ]
         );
         let avif: Vec<_> = still.avif.iter().map(|v| v.name.as_str()).collect();
         assert_eq!(
             avif,
             [
-                "1x.avif", "2x.avif", "4x.avif", "128.avif", "256.avif", "512.avif"
+                "1x.avif",
+                "2x.avif",
+                "4x.avif",
+                "128.avif",
+                "256.avif",
+                "512.avif",
+                "original.avif"
             ]
         );
         assert!(still.avif.iter().all(|v| is_avif(&v.bytes)));
@@ -591,22 +602,28 @@ mod encoding {
                 "128.webp",
                 "256.webp",
                 "512.webp",
+                "original.webp",
                 "1x_static.webp",
                 "2x_static.webp",
                 "4x_static.webp",
                 "128_static.webp",
                 "256_static.webp",
-                "512_static.webp"
+                "512_static.webp",
+                "original_static.webp"
             ]
         );
         assert!(moving.avif.iter().all(|v| v.is_static));
-        assert_eq!(moving.avif.len(), 6);
+        assert_eq!(moving.avif.len(), 7);
         let (animated, frames, dims) = webp_frames(&moving.webp[0].bytes);
         assert!(animated);
         assert_eq!((frames, dims), (3, (18, 18)));
         let (animated, frames, dims) = webp_frames(&moving.webp[5].bytes);
         assert!(animated);
         assert_eq!((frames, dims), (3, (512, 512)));
+        // The original keeps every frame at 80 px.
+        let (animated, frames, dims) = webp_frames(&moving.webp[6].bytes);
+        assert!(animated);
+        assert_eq!((frames, dims), (3, (80, 80)));
         for v in moving.webp.iter().chain(&moving.avif) {
             assert!(b.all_names().contains(&v.name), "{}", v.name);
         }
@@ -624,6 +641,7 @@ mod encoding {
                 .unwrap()
                 .webp
                 .iter()
+                .filter(|v| v.name != "original.webp")
                 .map(|v| (v.width, v.height))
                 .collect()
         };
@@ -640,6 +658,54 @@ mod encoding {
         assert_eq!(sizes(&png(1024, 1024)), ladder);
         // Emotes still never grow past the original.
         assert_eq!(size_for(20, 20, 4), (20, 20));
+    }
+
+    #[test]
+    fn a_badge_original_is_kept_at_its_size_up_to_512() {
+        use crate::encode::{Profile, transcode_with};
+        let b = Profile::BADGE;
+        let original = |bytes: &[u8]| {
+            let made = transcode_with(bytes, &Limits::badge(), &b).unwrap();
+            let v = made
+                .webp
+                .iter()
+                .find(|v| v.name == "original.webp")
+                .unwrap();
+            let (_, _, dims) = webp_frames(&v.bytes);
+            assert_eq!(dims, (v.width, v.height));
+            // The ladder is still all there.
+            let ladder: Vec<_> = made
+                .webp
+                .iter()
+                .filter(|v| v.name != "original.webp")
+                .map(|v| v.width)
+                .collect();
+            assert_eq!(ladder, [18, 36, 72, 128, 256, 512]);
+            dims
+        };
+        // Up to 512 it is as uploaded: 512 stays 512, 300 is not scaled up to the master.
+        assert_eq!(original(&png(512, 512)), (512, 512));
+        assert_eq!(original(&png(300, 300)), (300, 300));
+        assert_eq!(original(&png(72, 72)), (72, 72));
+        // Over 512 it is scaled down to 512, the only downscale.
+        assert_eq!(original(&png(1024, 1024)), (512, 512));
+        assert_eq!(b.steps(2048, 2048).last().unwrap().size, (512, 512));
+    }
+
+    #[test]
+    fn a_badge_original_is_lossless() {
+        use crate::encode::{Profile, transcode_with};
+        let made = transcode_with(&png(64, 64), &Limits::badge(), &Profile::BADGE).unwrap();
+        let v = made
+            .webp
+            .iter()
+            .find(|v| v.name == "original.webp")
+            .unwrap();
+        let decoded = image::load_from_memory_with_format(&v.bytes, image::ImageFormat::WebP)
+            .unwrap()
+            .to_rgba8();
+        let source = image::load_from_memory(&png(64, 64)).unwrap().to_rgba8();
+        assert_eq!(decoded.as_raw(), source.as_raw());
     }
 
     #[test]
@@ -717,6 +783,17 @@ mod encoding {
         let new = [
             "1x.webp", "2x.webp", "4x.webp", "128.webp", "256.webp", "512.webp",
         ];
+        // A ladder without the original lacks it (made again).
+        assert!(!b.is_complete(new));
+        let new = [
+            "1x.webp",
+            "2x.webp",
+            "4x.webp",
+            "128.webp",
+            "256.webp",
+            "512.webp",
+            "original.webp",
+        ];
         assert!(b.is_complete(new));
         let animated = [
             "1x.webp",
@@ -725,6 +802,7 @@ mod encoding {
             "128.webp",
             "256_static.webp",
             "512_static.webp",
+            "original_static.webp",
         ];
         assert!(b.is_complete(animated));
         // Emotes have no larger sizes: their four scales are all.

@@ -1712,8 +1712,21 @@ mod tests {
     fn badges_from_before_the_ladder_lack_sizes() {
         let old: Vec<_> = ["1x.webp", "2x.webp", "4x.webp"].map(file).into();
         assert!(lacks_sizes(CosmeticKind::Badge, &old));
-        let full: Vec<_> = [
+        let ladder: Vec<_> = [
             "1x.webp", "2x.webp", "4x.webp", "128.webp", "256.webp", "512.webp",
+        ]
+        .map(file)
+        .into();
+        // A ladder without the original (made before it existed) is made again.
+        assert!(lacks_sizes(CosmeticKind::Badge, &ladder));
+        let full: Vec<_> = [
+            "1x.webp",
+            "2x.webp",
+            "4x.webp",
+            "128.webp",
+            "256.webp",
+            "512.webp",
+            "original.webp",
         ]
         .map(file)
         .into();
@@ -1726,6 +1739,7 @@ mod tests {
             "128_static.webp",
             "256_static.webp",
             "512_static.webp",
+            "original_static.webp",
         ]
         .map(file)
         .into();

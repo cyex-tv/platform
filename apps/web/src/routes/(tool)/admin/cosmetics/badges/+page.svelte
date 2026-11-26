@@ -17,7 +17,8 @@
   import { forgetCatalog, loadCatalog, type Badge } from '$lib/cosmetics/store.svelte';
   import { clean, count, iso } from '$lib/format';
   import { COSMETIC_IMAGE, CREATE_BADGE, DELETE_BADGE, ENTITLEMENTS, REMAKE_COSMETIC_IMAGE, UPDATE_BADGE } from '$lib/queries';
-  import { lacksLadder } from '$lib/cosmetics/badgeFile';
+  import BadgeOriginal from '$lib/cosmetics/BadgeOriginal.svelte';
+  import { badgeOriginal, lacksLadder, lacksOriginal } from '$lib/cosmetics/badgeFile';
   import { waitReady } from '$lib/cosmetics/upload';
   import GrantDialog from '$lib/admin/GrantDialog.svelte';
   import ImageUpload from '$lib/admin/ImageUpload.svelte';
@@ -138,7 +139,12 @@
 
   // Badges whose files are being made again.
   let remaking = $state<Record<string, boolean>>({});
-  const lacks = (b: Badge) => lacksLadder(b.image.files.map((f) => f.name));
+  const lacksNames = (names: string[]) => lacksLadder(names) || lacksOriginal(names);
+  const originalText = (b: Badge) => {
+    const o = badgeOriginal(b.image.files);
+    return o ? `${o.width} × ${o.height} px` : 'Not made yet';
+  };
+  const lacks = (b: Badge) => lacksNames(b.image.files.map((f) => f.name));
 
   async function remake(b: Badge) {
     remaking[b.id] = true;
@@ -147,7 +153,7 @@
       // Done when the picture has every size; its old files stay in use meanwhile.
       await waitReady(async () => {
         const img = (await gql(COSMETIC_IMAGE, { id: b.image.id })).cosmeticImage;
-        return img && { ...img, ready: img.ready && !lacksLadder(img.files.map((f) => f.name)) };
+        return img && { ...img, ready: img.ready && !lacksNames(img.files.map((f) => f.name)) };
       });
       notify(`${iso(b.name)} has every size now.`);
       await L.reload();
@@ -241,6 +247,11 @@
           <div class="ladder" aria-label="Sizes">
             {#each [18, 36, 72] as px (px)}<span class="step"><BadgeIcon badge={b} size={px} /><span class="ui-hint ui-num">{px}</span></span>{/each}
           </div>
+          {#key b.image.id}
+            <div class="orig" aria-label="Original">
+              <BadgeOriginal badge={b} />
+            </div>
+          {/key}
           <h2 class="adm-name"><bdi>{clean(b.name)}</bdi></h2>
           <p class="tip">“<bdi>{clean(b.tooltip)}</bdi>”</p>
         </section>
@@ -248,7 +259,8 @@
           <h3 class="adm-label">Facts</h3>
           <dl class="adm-kv">
             {#if grant}<dt>Owners</dt><dd>{owners[b.id] === undefined ? '…' : count(owners[b.id])}</dd>{/if}
-            <dt>Sizes</dt><dd class="txt">{lacks(b) ? 'Up to 72 px' : 'Up to 512 px'}</dd>
+            <dt>Original</dt><dd class="txt ui-num">{originalText(b)}</dd>
+            <dt>Sizes</dt><dd class="txt">{lacksLadder(b.image.files.map((f) => f.name)) ? 'Up to 72 px' : 'Up to 512 px'}</dd>
             <dt>ID</dt><dd class="mono">{b.id}</dd>
           </dl>
         </section>
@@ -257,7 +269,7 @@
             <div class="adm-acts row">
               <button class="ui-btn secondary small" type="button" onclick={() => edit(b)}><Icon name="pencil" size={14} />Edit</button>
               {#if lacks(b)}
-                <button class="ui-btn secondary small" type="button" disabled={remaking[b.id]} title="Made before the 128, 256 and 512 px sizes: make them from the stored original" onclick={() => remake(b)}>
+                <button class="ui-btn secondary small" type="button" disabled={remaking[b.id]} title="Made before the larger sizes or the original: make them from the stored picture" onclick={() => remake(b)}>
                   {#if remaking[b.id]}<span class="ui-spinner" aria-hidden="true"></span>Making sizes…{:else}<Icon name="refresh" size={14} />Make larger sizes{/if}
                 </button>
               {/if}
@@ -324,6 +336,7 @@
   .ladder { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; border: 1px solid var(--border); }
   .ladder .step { min-height: 112px; padding: 14px 8px 8px; align-content: end; box-shadow: -1px 0 0 var(--border); }
   .step { display: grid; justify-items: center; gap: 6px; }
+  .orig { display: grid; place-items: center; padding: 12px; border: 1px solid var(--border); border-top: 0; background: var(--elevated-2); overflow: hidden; }
   .tip { margin: 0; font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }
   .sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   .owners { margin: 0 -16px -12px; border-top: 1px solid var(--border); }
