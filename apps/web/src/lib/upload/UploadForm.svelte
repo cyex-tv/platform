@@ -14,7 +14,9 @@
   // progress and can be cancelled; one that sends nothing for 30 s stalls (UPLOAD_STALL_MS). A
   // refusal is said in words and the image stays to fix or retry. A file whose bytes are already a
   // public emote says "Looks like <emote>" (same-file.ts); it can still be uploaded. When it goes
-  // through, the dialog closes and the new emote's page opens.
+  // through, the dialog closes and the new emote's page opens. A file the rules turn down (a video,
+  // AVIF, too big, too many frames) offers "Open in editor" (the dialog's other mode, `onedit`),
+  // and so does any picked image, to crop or cut it first.
   import { goto } from '$app/navigation';
   import { ApiError, gql, uploadEmote, type EmoteVisibility } from '$lib/api';
   import { UPLOAD_QUOTA } from '$lib/queries';
@@ -33,14 +35,19 @@
   import LeaveGuard from '$lib/tool/LeaveGuard.svelte';
   import { notify } from '$lib/tool/notices.svelte';
   import { sameFileEmotes, sameFileLine, type SameFileEmote } from './same-file';
-  import { DEFAULT_EMOTE_CAPS, upload, uploadLimits } from './upload.svelte';
+  import { DEFAULT_EMOTE_CAPS, upload, uploadLimits, type EmoteCaps } from './upload.svelte';
+  import { EDITOR_ACCEPT } from '$lib/editor/sniff';
 
   type Props = {
     /** Sending right now (the dialog won't close while it is). */
     busy?: boolean;
     onclose?: () => void;
+    /** Opens the file in the editor (the dialog's other mode). */
+    onedit?: (file: File) => void;
+    /** The account's caps once `uploadQuota` answers (the editor checks against them too). */
+    caps?: EmoteCaps | null;
   };
-  let { busy = $bindable(false), onclose }: Props = $props();
+  let { busy = $bindable(false), onclose, onedit, caps: capsOut = $bindable(null) }: Props = $props();
   const uid = $props.id();
 
   type Picked = { file: File; url: string; width: number; height: number; sizeError: string | null; same: SameFileEmote[] };
@@ -103,6 +110,9 @@
   const room = $derived(quotaView(quota, forOther));
   // The caps for this account, as the API says them (`uploadQuota`); the built-in numbers until then.
   const caps = $derived(quota ? { maxBytes: quota.maxBytes, maxSide: quota.maxSide, maxFrames: quota.maxFrames } : DEFAULT_EMOTE_CAPS);
+  $effect(() => {
+    capsOut = quota ? caps : null;
+  });
 
   const fileError = $derived(picked ? (fileProblem(picked.file, caps.maxBytes) ?? picked.sizeError) : null);
   const nameError = $derived(tried || name !== prefilled ? nameProblem(name) : null);
@@ -311,7 +321,7 @@
           {#if picked.width && !fileError}
             <LocalPreview src={picked.url} width={picked.width} height={picked.height} name={name.trim() || picked.file.name} />
           {:else if fileError}
-            <p class="ui-error" role="alert">{fileError} Pick another image.</p>
+            <p class="ui-error" role="alert">{fileError} {onedit ? 'Open it in the editor to fix it, or pick another file.' : 'Pick another image.'}</p>
           {:else}
             <p class="ui-hint">Reading the image…</p>
           {/if}
@@ -320,7 +330,12 @@
         {#if busy}
           <span class="bar" role="progressbar" aria-label="Uploading {name}" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(progress * 100)}><span style:transform="scaleX({Math.max(0.04, progress)})"></span></span>
         {:else}
-          <button type="button" class="ui-btn secondary small" bind:this={browse} onclick={() => input.click()}>Replace image</button>
+          <div class="ui-actions pick">
+            {#if onedit}
+              <button type="button" class="ui-btn small {fileError ? 'primary' : 'secondary'}" onclick={() => picked && onedit(picked.file)} data-testid="open-in-editor">Open in editor</button>
+            {/if}
+            <button type="button" class="ui-btn secondary small" bind:this={browse} onclick={() => input.click()}>Replace image</button>
+          </div>
         {/if}
         {#if picked.same.length}
           {@const line = sameFileLine(picked.same)}
@@ -336,7 +351,7 @@
       {/if}
       {#if note}<p class="ui-hint">{note}</p>{/if}
     </div>
-    <input bind:this={input} class="sr-only" type="file" tabindex="-1" accept={UPLOAD_ACCEPT}
+    <input bind:this={input} class="sr-only" type="file" tabindex="-1" accept={onedit ? `${UPLOAD_ACCEPT},${EDITOR_ACCEPT}` : UPLOAD_ACCEPT}
       onchange={(e) => { add(e.currentTarget.files); e.currentTarget.value = ''; }} />
     <ul class="limits" id="limits-{uid}" aria-label="Limits">
       {#each uploadLimits(quota ? caps : null) as l (l)}<li>{l}</li>{/each}
@@ -383,6 +398,7 @@
   .bar span { display: block; height: 100%; background: var(--accent); transform-origin: 0 50%; transition: transform var(--fast) linear; }
   @media (prefers-reduced-motion: reduce) { :global(html:not([data-motion='full'])) .bar span { transition: none; } }
   .small { min-height: 32px; height: 32px; padding: 0 12px; }
+  .pick { justify-content: center; }
   .limits { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px;
     font-size: var(--t-fine); color: var(--muted); font-variant-numeric: tabular-nums; }
   .limits li { white-space: nowrap; }
