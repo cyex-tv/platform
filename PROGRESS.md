@@ -1705,3 +1705,11 @@ gh pr create --repo cyex-tv/platform --base main --head feat/profile-notificatio
   steps, fit) and `entitlement-graph-page.ui.test.ts` (pick from the address into the inspector, legend hides a
   kind, find in graph and catalogue, List view). Screens before/after in
   `.claude/runs/2026-11-20-redesign/screens/entitlement-graph/`.
+
+### GitHub write log for this PR
+```
+git push -u origin feat/entitlement-graph
+gh pr create --repo cyex-tv/platform --base main --head feat/entitlement-graph --title "Entitlement graph: a navigable node graph with search" --body-file <file>
+git push
+```
+  PR #170. Not merged (owner reviews).
