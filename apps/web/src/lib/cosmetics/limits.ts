@@ -1,7 +1,7 @@
 // The API's `limits` query, read once per page load and shared: the picture rules and the
 // emote caps the upload dialogs check against. A failed read is not kept (the next dialog asks
 // again) and the built-in numbers stand in meanwhile.
-import { gql } from '$lib/api';
+import { gqlPublic } from '$lib/api';
 import { PUBLIC_LIMITS } from '$lib/queries';
 import type { PublicLimitsQuery } from '$lib/gql/graphql';
 import { PICTURE_RULES, rulesFromLimits, type PictureRules } from './upload';
@@ -12,7 +12,7 @@ let pending: Promise<PublicLimits> | null = null;
 
 /** The public limits, asked once (again after a failure). */
 export function loadLimits(): Promise<PublicLimits> {
-  pending ??= gql(PUBLIC_LIMITS, {})
+  pending ??= gqlPublic(PUBLIC_LIMITS, {})
     .then((r) => r.limits)
     .catch((e) => {
       pending = null;

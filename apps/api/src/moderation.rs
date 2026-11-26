@@ -239,6 +239,81 @@ pub async fn emote(
     build(state, &mut conn, &found).await.map(Some)
 }
 
+/// Several emotes at once (ADR 0035), in the order asked, each once, by the rule of [`emote`]:
+/// unknown, deleted and hidden ones are left out. At most
+/// [`crate::catalog::EMOTES_LOOKUP_LIMIT`] IDs (`too_many`). A fixed handful of queries however
+/// many emotes; only pending emotes of other accounts cost one query per such owner.
+pub async fn emotes_by_ids<S: AsRef<str>>(
+    state: &AppState,
+    caller: Option<&Caller>,
+    raw: &[S],
+) -> ApiResult<Vec<Emote>> {
+    use std::collections::{HashMap, HashSet};
+    let max = crate::catalog::EMOTES_LOOKUP_LIMIT;
+    if raw.len() > max {
+        return Err(crate::catalog::too_many_ids("emotes", max, raw.len()));
+    }
+    let wanted = crate::catalog::distinct_ids(raw);
+    if wanted.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
+    let mut rows = reads::emotes(&mut conn, &wanted).await.map_err(db_error)?;
+    let order: HashMap<Uuid, usize> = wanted.iter().enumerate().map(|(i, id)| (*id, i)).collect();
+    rows.sort_by_key(|r| order.get(&r.id).copied().unwrap_or(usize::MAX));
+    let owners: Vec<Uuid> = rows
+        .iter()
+        .filter_map(|r| r.owner)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    let deleted: HashSet<Uuid> = accounts::deleted_among(&mut conn, &owners)
+        .await
+        .map_err(db_error)?
+        .into_iter()
+        .collect();
+    let mut reviewer: Option<bool> = None;
+    let mut managed: HashMap<Option<Uuid>, bool> = HashMap::new();
+    let mut open = Vec::with_capacity(rows.len());
+    for row in rows {
+        let pending = row.state != EmoteState::Approved;
+        let hidden = row.owner.is_some_and(|o| deleted.contains(&o));
+        if !pending && !hidden {
+            open.push(row);
+            continue;
+        }
+        let Some(c) = caller else {
+            continue;
+        };
+        if reviewer.is_none() {
+            reviewer = Some(holds(&mut conn, c, permissions::EMOTES_REVIEW).await?);
+        }
+        let staff = reviewer == Some(true);
+        if hidden && !staff {
+            continue;
+        }
+        let allowed = !pending
+            || staff
+            || row.owner == Some(c.account_id)
+            || match managed.get(&row.owner) {
+                Some(known) => *known,
+                None => {
+                    let may =
+                        editor_of_owner(&mut conn, c, row.owner, EditorPermission::EmoteManage)
+                            .await?;
+                    managed.insert(row.owner, may);
+                    may
+                }
+            };
+        if allowed {
+            open.push(row);
+        }
+    }
+    views::emotes(&mut conn, &open, &state.cdn_url)
+        .await
+        .map_err(db_error)
+}
+
 /// The review queue: pending emotes (all, public or unlisted and private) or the resolved ones,
 /// searched by name or uploader and sorted. Needs `emotes.review`.
 pub async fn review_queue(

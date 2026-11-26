@@ -185,3 +185,19 @@ pub async fn delete_for(
         .await?;
     Ok(done.rows_affected() > 0)
 }
+
+/// Channels of one platform by their platform IDs, in no particular order. Unknown IDs are left
+/// out.
+pub async fn find_many(
+    conn: &mut PgConnection,
+    platform: Platform,
+    platform_channel_ids: &[String],
+) -> DbResult<Vec<Channel>> {
+    Ok(sqlx::query_as(&format!(
+        "SELECT {CHANNEL} FROM channels WHERE platform = $1 AND platform_channel_id = ANY($2)"
+    ))
+    .bind(platform)
+    .bind(platform_channel_ids)
+    .fetch_all(conn)
+    .await?)
+}

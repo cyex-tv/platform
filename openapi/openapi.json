@@ -600,6 +600,47 @@
         }
       }
     },
+    "/v1/channels/lookup": {
+      "post": {
+        "tags": [
+          "reads"
+        ],
+        "summary": "Several channels of one platform at once, in the order asked (ADR 0035): what\n`GET /v1/channels/{platform}/{id}` answers for each. Channels not on cyex.tv are left out.\nCounts as one read.",
+        "operationId": "lookup_channels",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChannelsLookup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChannelsLookupResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`too_many`: more than 100 channel IDs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/channels/{platform}/{id}": {
       "get": {
         "tags": [
@@ -1131,12 +1172,54 @@
         }
       }
     },
+    "/v1/sets/lookup": {
+      "post": {
+        "tags": [
+          "reads"
+        ],
+        "summary": "Several sets at once, in the order asked (ADR 0035): what `GET /v1/sets/{id}` answers for\neach, approved emotes only. Unknown and hidden sets are left out. Counts as one read.",
+        "operationId": "lookup_sets",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetsLookup"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetsLookupResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`too_many`: more than 25 set IDs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sets/{id}": {
       "get": {
         "tags": [
           "reads"
         ],
-        "summary": "A set with its emotes.",
+        "summary": "A set with its emotes, and its `version` (ADR 0035).",
+        "description": "With `since` (a `version` you hold), only what changed after it: a `SetChanges` with the\nmembers added, renamed and updated (apply as upserts by emote ID) and `removed_ids` (deletes).\n`full: true` with the whole set in `set` when the change log no longer reaches back that far\n(7 days or 1.000 versions) or `since` isn't a version of this set. Both answers have an `ETag`.",
         "operationId": "get_set",
         "parameters": [
           {
@@ -1147,15 +1230,25 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "description": "A `version` of the set you hold. The answer is then a `SetChanges`, not the set.",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "",
+            "description": "The set, or with `since` a `SetChanges`.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/EmoteSet"
+                  "$ref": "#/components/schemas/SetOrChanges"
                 }
               }
             }
@@ -1538,6 +1631,41 @@
           "platform_channel_id": {
             "type": "string",
             "description": "Twitch: the broadcaster's user ID. Kick: `broadcaster_user_id`."
+          }
+        }
+      },
+      "ChannelsLookup": {
+        "type": "object",
+        "description": "`POST /v1/channels/lookup`: several channels of one platform at once (ADR 0035).",
+        "required": [
+          "platform",
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Up to 100 broadcaster platform user IDs."
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Platform"
+          }
+        }
+      },
+      "ChannelsLookupResult": {
+        "type": "object",
+        "description": "The channels found, in the order asked; channels not on cyex.tv are left out.",
+        "required": [
+          "channels"
+        ],
+        "properties": {
+          "channels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Channel"
+            }
           }
         }
       },
@@ -1990,6 +2118,11 @@
             "description": "How many of `capacity` the set uses. For whoever may edit the set it counts every emote in\nit, pending ones included, so `capacity - slotsUsed` is what still fits. For anyone else it\ncounts the emotes this answer may show them (approved ones, plus their own pending ones).",
             "minimum": 0
           },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Goes up by one or more with every change to what the set shows: a member added, removed\nor renamed, the set renamed, an emote in it changed (ADR 0035). Keep it with your copy\nand ask `setChanges` (or `GET /v1/sets/{id}?since=`) for what changed after it."
+          },
           "visibility": {
             "$ref": "#/components/schemas/SetVisibility",
             "description": "Who can find and open it."
@@ -2215,7 +2348,11 @@
           "invalid_topic",
           "too_many_topics",
           "too_many_subscriptions",
-          "subscriptions_only"
+          "subscriptions_only",
+          "post_required",
+          "persisted_query_not_found",
+          "persisted_query_mismatch",
+          "bad_persisted_query"
         ],
         "x-codes": [
           {
@@ -2306,7 +2443,7 @@
             "code": "too_many",
             "group": "General",
             "meaning": "More items in one request than allowed.",
-            "when": "A batch call (look up users, mark notifications, and so on) goes over its cap, usually 100."
+            "when": "A batch call (look up users, emotes, channels or sets, mark notifications, and so on) goes \n         over its cap, usually 100 (25 for sets)."
           },
           {
             "code": "too_many_fields",
@@ -3123,6 +3260,30 @@
             "group": "GraphQL",
             "meaning": "The socket runs subscriptions only.",
             "when": "A query or mutation sent over /v1/gql/ws. Use POST /v1/gql."
+          },
+          {
+            "code": "post_required",
+            "group": "GraphQL",
+            "meaning": "Over GET only queries run.",
+            "when": "A mutation or subscription sent with GET /v1/gql (405, `Allow: POST`). Send it with          POST."
+          },
+          {
+            "code": "persisted_query_not_found",
+            "group": "GraphQL",
+            "meaning": "The persisted query's hash isn't known here.",
+            "when": "`extensions.persistedQuery` without the query text, for a hash this server hasn't          stored (the message is `PersistedQueryNotFound`). Send the text with the hash once."
+          },
+          {
+            "code": "persisted_query_mismatch",
+            "group": "GraphQL",
+            "meaning": "The hash isn't the query's SHA-256.",
+            "when": "`extensions.persistedQuery.sha256Hash` differs from the SHA-256 of the query text sent          with it."
+          },
+          {
+            "code": "bad_persisted_query",
+            "group": "GraphQL",
+            "meaning": "The persisted query extension is malformed.",
+            "when": "`extensions.persistedQuery` needs `version: 1` and a `sha256Hash` of 64 lowercase hex          digits."
           }
         ]
       },
@@ -3619,6 +3780,83 @@
           }
         }
       },
+      "SetChanges": {
+        "type": "object",
+        "description": "What changed in a set after a version (`setChanges`, `GET /v1/sets/{id}?since=`; ADR 0035).\nApply `added`, `renamed` and `updated` as upserts by `emote.id`, and `removedIds` as deletes;\nthen keep `version`. With `full: true` the change log doesn't reach back to `since` (or\n`since` is not a version this set had): replace your copy with `set` instead.",
+        "required": [
+          "id",
+          "version",
+          "since",
+          "full",
+          "name",
+          "added",
+          "renamed",
+          "updated",
+          "removed_ids"
+        ],
+        "properties": {
+          "added": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SetEmote"
+            },
+            "description": "Members added since (or newly visible to you, for example an emote approved)."
+          },
+          "full": {
+            "type": "boolean",
+            "description": "True when this is a full resync: `set` holds the whole set and the lists are empty."
+          },
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "The set's name now."
+          },
+          "removed_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Emotes no longer in the set as you see it (removed, taken down, deleted, hidden)."
+          },
+          "renamed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SetEmote"
+            },
+            "description": "Members whose name or zero-width flag in the set changed."
+          },
+          "set": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EmoteSet",
+                "description": "The whole set, only when `full` is true."
+              }
+            ]
+          },
+          "since": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The `since` asked for."
+          },
+          "updated": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SetEmote"
+            },
+            "description": "Members whose emote changed (its files, flags, state or own name)."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The version this answer brings you to."
+          }
+        }
+      },
       "SetEmote": {
         "type": "object",
         "description": "An emote as it sits in a set: the name it is typed as there, and who added it.",
@@ -3687,6 +3925,17 @@
           "global"
         ]
       },
+      "SetOrChanges": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/EmoteSet"
+          },
+          {
+            "$ref": "#/components/schemas/SetChanges"
+          }
+        ],
+        "description": "The answer of `GET /v1/sets/{id}`: the set, or with `since` what changed since that version."
+      },
       "SetVisibility": {
         "type": "string",
         "description": "Who can find and open a set.",
@@ -3695,6 +3944,37 @@
           "unlisted",
           "private"
         ]
+      },
+      "SetsLookup": {
+        "type": "object",
+        "description": "`POST /v1/sets/lookup`: several sets at once (ADR 0035).",
+        "required": [
+          "ids"
+        ],
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Up to 25 set IDs (Snowflakes, or old ULIDs while clients move over)."
+          }
+        }
+      },
+      "SetsLookupResult": {
+        "type": "object",
+        "description": "The sets found, in the order asked; unknown and hidden ones are left out.",
+        "required": [
+          "sets"
+        ],
+        "properties": {
+          "sets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmoteSet"
+            }
+          }
+        }
       },
       "TagLimits": {
         "type": "object",

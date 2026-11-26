@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const gql = vi.fn();
 const data: { announcement?: unknown; announceClosed?: string[] } = {};
 vi.mock('$env/dynamic/public', () => ({ env: {} }));
-vi.mock('$lib/api', async (orig) => ({ ...(await orig<typeof import('$lib/api')>()), gql: (...a: unknown[]) => gql(...a), onSignedOut: () => () => {} }));
+vi.mock('$lib/api', async (orig) => ({ ...(await orig<typeof import('$lib/api')>()), gql: (...a: unknown[]) => gql(...a), gqlPublic: (...a: unknown[]) => gql(...a), onSignedOut: () => () => {} }));
 vi.mock('$app/state', () => ({ page: { get data() { return data; }, url: new URL('http://x/') } }));
 
 const live = {

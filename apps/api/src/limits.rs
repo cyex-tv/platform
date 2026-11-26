@@ -851,10 +851,12 @@ fn class<'a>(limits: &'a Limits, method: &Method, path: &str) -> Option<&'a Limi
         return Some(&limits.auth);
     }
     match (method, path) {
-        (&Method::POST, "/v1/gql") => Some(&limits.gql),
+        (&Method::POST | &Method::GET | &Method::HEAD, "/v1/gql") => Some(&limits.gql),
         (_, "/v1/gql/ws") => Some(&limits.socket),
         (&Method::POST, "/v1/emotes" | "/v1/cosmetics/images") => Some(&limits.upload),
-        (&Method::POST, "/v1/personal-sets/lookup") => Some(&limits.reads),
+        (&Method::POST, "/v1/personal-sets/lookup" | "/v1/sets/lookup" | "/v1/channels/lookup") => {
+            Some(&limits.reads)
+        }
         (&Method::GET | &Method::HEAD, p) if p.starts_with("/v1/") => Some(&limits.reads),
         _ => None,
     }
@@ -901,7 +903,10 @@ pub async fn middleware(State(state): State<AppState>, request: Request, next: N
 /// The routes whose answers carry `RateLimit-*`: the public REST reads and `POST /v1/gql`.
 fn publishes_quota(method: &Method, path: &str) -> bool {
     match (method, path) {
-        (&Method::POST, "/v1/gql" | "/v1/personal-sets/lookup") => true,
+        (
+            &Method::POST,
+            "/v1/gql" | "/v1/personal-sets/lookup" | "/v1/sets/lookup" | "/v1/channels/lookup",
+        ) => true,
         (&Method::GET | &Method::HEAD, p) => {
             p.starts_with("/v1/") && !p.starts_with("/v1/auth/") && p != "/v1/gql/ws"
         }

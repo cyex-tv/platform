@@ -6,6 +6,9 @@ import { gqlDocuments } from './dev/vite-gql-documents';
 // Two projects: `unit` (plain logic, node) and `ui` (components in jsdom, *.ui.test.ts).
 export default defineConfig({
   plugins: [gqlDocuments(), sveltekit()],
+  // The emote editor's worker libraries, found only when the editor first opens: optimized up
+  // front, so the dev server doesn't reload the page right then.
+  optimizeDeps: { include: ['gifenc', 'gifuct-js', 'mp4box'] },
   test: {
     coverage: { provider: 'v8', include: ['src/**/*.{ts,svelte}'], exclude: ['src/lib/gql/**', '**/*.test.ts', '**/*.d.ts'], reporter: ['text-summary'] },
     projects: [

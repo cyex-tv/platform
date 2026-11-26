@@ -51,7 +51,7 @@ export const emoteGrant = (ownerId, flag) => EDITOR_OF.some((g) => g.account.id 
 export const managed = (e) => !!e && !!e.owner && e.owner.id !== ME_ID && emoteGrant(e.owner.id, 'EMOTE_MANAGE');
 export const anyEmote = (id) => findEmote(id) ?? PENDING.find((e) => e.id === id);
 export const setOut = (s) => ({ ...s, editors: undefined, visibility: s.visibility ?? 'LISTED', listed: (s.visibility ?? 'LISTED') === 'LISTED',
-  slotsUsed: s.emotes.length, createdAt: s.createdAt ?? '2026-11-10T12:00:00.000Z' });
+  slotsUsed: s.emotes.length, createdAt: s.createdAt ?? '2026-11-10T12:00:00.000Z', version: s.version ?? 0 });
 const setCard = (s, preview = 12) => {
   const o = setOut(s);
   return { id: o.id, name: o.name, kind: o.kind, owner: o.owner, visibility: o.visibility, listed: o.listed, capacity: o.capacity,

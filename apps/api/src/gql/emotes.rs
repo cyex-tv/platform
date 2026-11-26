@@ -1,6 +1,6 @@
 //! GraphQL: emotes.
 
-use async_graphql::{Context, Object, Result};
+use async_graphql::{Context, ID, Object, Result};
 use cyex_tv_shared::model::TrendingWindow;
 use cyex_tv_shared::model::{
     Emote, EmoteFlag, EmoteFlagsInput, EmoteSort, EmoteTransferRequest, EmoteTrending,
@@ -19,6 +19,17 @@ impl EmoteQuery {
     #[graphql(complexity = "10 + child_complexity")]
     async fn emote(&self, ctx: &Context<'_>, id: String) -> Result<Option<Emote>> {
         moderation::emote(state(ctx), caller_opt(ctx), &id)
+            .await
+            .map_err(api_error)
+    }
+
+    /// Several emotes at once, in the order asked, each once (ADR 0035): who may see what is the
+    /// rule of `emote`, and unknown or hidden emotes are left out. At most 100 IDs (`too_many`);
+    /// every 10 IDs cost what one `emote` lookup would.
+    #[graphql(complexity = "5 + ids.len().div_ceil(10) * (10 + child_complexity)")]
+    async fn emotes(&self, ctx: &Context<'_>, ids: Vec<ID>) -> Result<Vec<Emote>> {
+        let ids: Vec<String> = ids.into_iter().map(|id| id.0).collect();
+        moderation::emotes_by_ids(state(ctx), caller_opt(ctx), &ids)
             .await
             .map_err(api_error)
     }

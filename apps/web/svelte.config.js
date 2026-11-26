@@ -76,6 +76,9 @@ export default {
         // The paint studio renders animated paints in a module worker; the dev server hands it
         // over as a blob: URL (without this, script-src blocked it and rendering fell back to the page).
         'worker-src': ['self', 'blob:'],
+        // The emote editor plays a video it can't decode itself in a <video> from a blob: URL
+        // (the file never leaves the browser).
+        'media-src': ['self', 'blob:'],
         'form-action': ['self'],
         'base-uri': ['self'],
         'object-src': ['none'],

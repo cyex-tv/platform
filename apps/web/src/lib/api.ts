@@ -78,8 +78,15 @@ export async function gql<TResult, TVariables>(
     if (signal.aborted) throw new ApiError(unreachableMessage(), 'timeout');
     throw new ApiError(unreachableMessage(), 'offline');
   }
+  return answerOf<TResult>(response, signal);
+}
+
+type GqlBody<TResult> = { data?: TResult; errors?: { message: string; extensions?: { code?: string } }[] };
+
+/** A GraphQL answer's data, or the `ApiError` of its first error. */
+async function answerOf<TResult>(response: Response, signal: AbortSignal): Promise<TResult> {
   if (response.status === 429) throw new ApiError('Too many requests. Try again in a moment.', 'rate_limited');
-  let body: { data?: TResult; errors?: { message: string; extensions?: { code?: string } }[] };
+  let body: GqlBody<TResult>;
   try {
     body = await response.json();
   } catch {
@@ -90,6 +97,74 @@ export async function gql<TResult, TVariables>(
   if (first) throw seen(new ApiError(first.message, first.extensions?.code ?? 'error'));
   if (!body.data) throw new ApiError(serverMessage(), 'bad_answer');
   return body.data;
+}
+
+/** The longest `GET /v1/gql` address `gqlPublic` sends; longer ones go as POST. */
+export const GQL_GET_MAX_URL = 6000;
+
+// Query text → its SHA-256, so each document is hashed once.
+const hashes = new Map<string, string>();
+
+/** The SHA-256 of `text`, lowercase hex; null where Web Crypto isn't there. */
+export async function sha256Hex(text: string): Promise<string | null> {
+  const known = hashes.get(text);
+  if (known) return known;
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) return null;
+  const digest = new Uint8Array(await subtle.digest('SHA-256', new TextEncoder().encode(text)));
+  const hex = [...digest].map((b) => b.toString(16).padStart(2, '0')).join('');
+  hashes.set(text, hex);
+  return hex;
+}
+
+/**
+ * Runs a public query, the same for everyone, as `GET /v1/gql` with its persisted-query hash
+ * (ADR 0035), so the CDN and the browser can cache the answer. No cookie goes with it: the API
+ * never reads one over GET, so this is only for reads that don't depend on who asks. An unknown
+ * hash is answered `PersistedQueryNotFound`; then the text goes once with its hash. Mutations,
+ * signed-in reads and anything too long for an address use `gql` (POST).
+ */
+export async function gqlPublic<TResult, TVariables>(
+  doc: TypedDocumentString<TResult, TVariables>,
+  variables: TVariables,
+  fetcher: Fetch = fetch,
+): Promise<TResult> {
+  const query = doc.toString();
+  const hash = /^\s*query\b/.test(query) ? await sha256Hex(query) : null;
+  if (!hash) return gql(doc, variables, fetcher);
+  const extensions = JSON.stringify({ persistedQuery: { version: 1, sha256Hash: hash } });
+  const vars = variables && Object.keys(variables as object).length ? JSON.stringify(variables) : '';
+  const address = (withText: boolean) => {
+    const params = new URLSearchParams();
+    if (withText) params.set('query', query);
+    if (vars) params.set('variables', vars);
+    params.set('extensions', extensions);
+    return `${apiUrl()}/v1/gql?${params}`;
+  };
+  const once = async (withText: boolean): Promise<Response> => {
+    const signal = AbortSignal.timeout(GQL_TIMEOUT_MS);
+    try {
+      const response = await fetcher(address(withText), { method: 'GET', credentials: 'omit', signal });
+      // Read the body here, inside this call's deadline.
+      const text = await response.text();
+      return new Response(text, { status: response.status, headers: response.headers });
+    } catch {
+      if (signal.aborted) throw new ApiError(unreachableMessage(), 'timeout');
+      throw new ApiError(unreachableMessage(), 'offline');
+    }
+  };
+  if (address(true).length > GQL_GET_MAX_URL) return gql(doc, variables, fetcher);
+  let response = await once(false);
+  let miss = false;
+  try {
+    const body = (await response.clone().json()) as GqlBody<TResult>;
+    const first = body.errors?.[0];
+    miss = first?.message === 'PersistedQueryNotFound' || first?.extensions?.code === 'persisted_query_not_found';
+  } catch {
+    // Not JSON: answerOf says so below.
+  }
+  if (miss) response = await once(true);
+  return answerOf<TResult>(response, AbortSignal.timeout(GQL_TIMEOUT_MS));
 }
 
 /** `back` when it is a path on this site; otherwise `/`. Rejects `//host`, backslash and control-character (tab, newline) forms that browsers read as another host. */

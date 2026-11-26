@@ -124,7 +124,7 @@ pub fn app(state: AppState) -> Router {
     let schema = gql::builder().data(state.clone()).finish();
     let (rest_router, _spec) = router().split_for_parts();
     rest_router
-        .route("/v1/gql", get(gql::graphiql).post(graphql))
+        .route("/v1/gql", get(graphql_get).post(graphql))
         .route("/v1/gql/ws", get(graphql_ws))
         .layer(Extension(schema))
         .layer(axum::middleware::from_fn_with_state(
@@ -243,6 +243,169 @@ async fn graphql(
     let mut response = response.into_response();
     if let Some(q) = quota {
         limits::set_quota(response.headers_mut(), q);
+    }
+    response
+}
+
+/// How long a shared cache may keep a public GraphQL answer over `GET` (as the REST reads).
+pub const GQL_GET_MAX_AGE: u32 = 30;
+
+/// A `GET /v1/gql` request as async-graphql takes it: `query`, `operationName` (or
+/// `operation_name`), and `variables` and `extensions` as JSON text.
+fn get_request(
+    params: &std::collections::HashMap<String, String>,
+) -> Result<async_graphql::Request, &'static str> {
+    let mut request = async_graphql::Request::new(params.get("query").cloned().unwrap_or_default());
+    if let Some(name) = params
+        .get("operationName")
+        .or_else(|| params.get("operation_name"))
+        .filter(|n| !n.is_empty())
+    {
+        request = request.operation_name(name.clone());
+    }
+    if let Some(raw) = params.get("variables").filter(|v| !v.is_empty()) {
+        let json: serde_json::Value =
+            serde_json::from_str(raw).map_err(|_| "`variables` isn't JSON.")?;
+        request = request.variables(async_graphql::Variables::from_json(json));
+    }
+    if let Some(raw) = params.get("extensions").filter(|v| !v.is_empty()) {
+        let map: std::collections::HashMap<String, async_graphql::Value> =
+            serde_json::from_str(raw).map_err(|_| "`extensions` isn't a JSON object.")?;
+        request.extensions = async_graphql::Extensions(map);
+    }
+    Ok(request)
+}
+
+fn bad_get(message: &'static str) -> axum::response::Response {
+    use axum::http::StatusCode;
+    let body = serde_json::json!({
+        "data": null,
+        "errors": [{ "message": message, "extensions": { "code": "bad_request" } }],
+    });
+    let mut response = (StatusCode::BAD_REQUEST, axum::Json(body)).into_response();
+    response.headers_mut().insert(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-store"),
+    );
+    response
+}
+
+/// `GET /v1/gql` (ADR 0035): GraphiQL without a query; otherwise a query (never a mutation,
+/// `post_required`), by its text or as a persisted query. The session cookie is never read here,
+/// so no other site can make a signed-in browser run anything; a Bearer token is (an app or a
+/// console token). Public answers are cacheable (`public, max-age=30`, `ETag`, `304`), signed-in
+/// and failed ones are not, and `Vary: Authorization` keeps them apart.
+async fn graphql_get(
+    State(state): State<AppState>,
+    Extension(schema): Extension<ApiSchema>,
+    ip: Option<Extension<limits::ClientIp>>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+    headers: axum::http::HeaderMap,
+) -> axum::response::Response {
+    use axum::http::header::{
+        ALLOW, CACHE_CONTROL, CONTENT_TYPE, COOKIE, ETAG, IF_NONE_MATCH, VARY,
+    };
+    use axum::http::{HeaderValue, StatusCode};
+
+    if !params.contains_key("query") && !params.contains_key("extensions") {
+        return gql::graphiql().await.into_response();
+    }
+    let request = match get_request(&params) {
+        Ok(request) => request,
+        Err(message) => return bad_get(message),
+    };
+    // Bearer only: without the cookie, a cross-site `GET` runs signed out.
+    let mut bare = headers.clone();
+    bare.remove(COOKIE);
+    let caller = match state
+        .auth
+        .caller(&state.db, &axum::http::Method::GET, &bare)
+        .await
+    {
+        Ok(caller) => caller,
+        Err(err) => return cyex_tv_shared::error::ApiError::from(err).into_response(),
+    };
+    let mut quota = None;
+    if let Some(caller) = &caller {
+        state.limits.load(&state.db, caller.account_id).await;
+        match limits::take_quota(
+            &state.limits,
+            limits::AccountLimit::GqlAccount,
+            &cyex_tv_db::ids::to_text(caller.account_id),
+            caller.account_id,
+        ) {
+            Ok(q) => quota = Some(q),
+            Err((wait, q)) => return limits::too_many_quota(wait, q),
+        }
+    }
+    let signed_in = caller.is_some();
+    let ip = ip.map_or_else(|| limits::ClientIp(String::new()), |Extension(ip)| ip);
+    let answer = schema
+        .execute(
+            request
+                .data(caller)
+                .data(gql::Restorable(None))
+                .data(ip)
+                .data(gql::OverGet),
+        )
+        .await;
+    let refused = answer.errors.iter().any(|e| {
+        e.extensions
+            .as_ref()
+            .and_then(|x| x.get("code"))
+            .is_some_and(|c| *c == async_graphql::Value::from("post_required"))
+    });
+    let failed = !answer.errors.is_empty();
+    let Ok(json) = serde_json::to_vec(&answer) else {
+        return cyex_tv_shared::error::ApiError::internal().into_response();
+    };
+    let etag = {
+        use sha2::Digest;
+        let digest = sha2::Sha256::digest(&json);
+        let hex: String = digest[..16].iter().map(|b| format!("{b:02x}")).collect();
+        format!("\"{hex}\"")
+    };
+    let cache = if refused || failed {
+        "no-store".to_owned()
+    } else if signed_in {
+        "private, no-cache".to_owned()
+    } else {
+        format!("public, max-age={GQL_GET_MAX_AGE}, stale-while-revalidate=60, stale-if-error=600")
+    };
+    let fresh = !failed
+        && headers
+            .get(IF_NONE_MATCH)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|v| {
+                v.split(',')
+                    .map(str::trim)
+                    .any(|t| t == etag || t.strip_prefix("W/") == Some(etag.as_str()))
+            });
+    let mut response = if refused {
+        (
+            StatusCode::METHOD_NOT_ALLOWED,
+            [(CONTENT_TYPE, "application/json")],
+            json,
+        )
+            .into_response()
+    } else if fresh {
+        StatusCode::NOT_MODIFIED.into_response()
+    } else {
+        ([(CONTENT_TYPE, "application/json")], json).into_response()
+    };
+    let out = response.headers_mut();
+    if refused {
+        out.insert(ALLOW, HeaderValue::from_static("POST"));
+    }
+    if !failed && let Ok(v) = HeaderValue::from_str(&etag) {
+        out.insert(ETAG, v);
+    }
+    if let Ok(v) = HeaderValue::from_str(&cache) {
+        out.insert(CACHE_CONTROL, v);
+    }
+    out.append(VARY, HeaderValue::from_static("authorization"));
+    if let Some(q) = quota {
+        limits::set_quota(out, q);
     }
     response
 }

@@ -38,6 +38,8 @@ import { UPLOAD_FILES, mosaicPng, multipart, probeImage } from './mock/uploads.m
 import { signedIn } from './mock/signed-in/index.mjs';
 import { badCursor, pageOf } from './mock/cursor.mjs';
 import { extensionRead, linkedNote } from './mock/extension.mjs';
+import { bulkAnswer } from './mock/bulk.mjs';
+import { getRequest } from './mock/persisted.mjs';
 function newFields(q, v, session, admin = false) {
   if (/\b(mySessions|myConsoleToken|createConsoleToken|unreadNotificationCount|revokeSession|revokeOtherSessions|signOutEverywhere|exportMyData|deleteAccount|markNotificationsRead)\b/.test(q))
     if (!session) return err('Sign in to use this.', 'signed_out');
@@ -104,6 +106,8 @@ function baseAnswer(body, session, admin) {
   if (/emoteActivityPage\s*\(/.test(q)) return emoteActivityPageAnswer(v);
   if (/accountActivity\s*\(/.test(q)) return activityAnswer(v);
   if (/emoteActivity\s*\(/.test(q)) return emoteActivityAnswer(v);
+  const bulk = bulkAnswer(q, v, session);
+  if (bulk) return bulk;
   if (session) {
     const out = signedIn(body, v, admin);
     if (out) return out;
@@ -245,7 +249,7 @@ createServer(async (req, res) => {
     if (req.method === 'POST') {
       try { body = JSON.parse((await read(req)).toString('utf8') || 'null'); } catch { return json(res, 400, { error: 'bad_request', message: 'The body isn’t JSON.' }); }
     }
-    const answer = extensionRead(req.method, url.pathname, body);
+    const answer = extensionRead(req.method, url.pathname, body, url.searchParams);
     if (answer) return json(res, answer.status, answer.status === 200 ? restOf(answer.body) : answer.body);
   }
   if (req.method === 'GET' && url.pathname === '/v1/limits') return json(res, 200, publicLimitsRest());
@@ -455,6 +459,23 @@ createServer(async (req, res) => {
       e.flags.wide = wideOf(e);
     }, 4000);
     return json(res, 202, uploadReply(e, 'emote', e.state?.toLowerCase() ?? 'pending'));
+  }
+  // GraphQL over GET (ADR 0035): queries only, persisted queries by hash, never the cookie.
+  if ((req.method === 'GET' || req.method === 'HEAD') && url.pathname === '/v1/gql' && (url.searchParams.has('query') || url.searchParams.has('extensions'))) {
+    const got = getRequest(url.searchParams);
+    if (!got.request) {
+      res.writeHead(got.status, { 'content-type': 'application/json', 'cache-control': 'no-store', ...(got.status === 405 ? { allow: 'POST' } : {}) });
+      return res.end(JSON.stringify(got.body));
+    }
+    try {
+      const body = got.request;
+      if (body.variables) body.variables = inward(body.variables);
+      const out = pruneAnswer(body.query, withFileUrls(answer(body, false, false)));
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': out?.errors ? 'no-store' : 'public, max-age=30, stale-while-revalidate=60', vary: 'authorization' });
+      return res.end(JSON.stringify(outward(out)));
+    } catch (e) {
+      return json(res, 400, { data: null, errors: [{ message: String(e?.message ?? e), extensions: { code: 'bad_request' } }] });
+    }
   }
   if (req.method === 'POST' && url.pathname === '/v1/gql') {
     const raw = (await read(req)).toString('utf8');

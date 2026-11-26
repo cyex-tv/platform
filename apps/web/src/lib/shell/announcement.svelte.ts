@@ -4,7 +4,7 @@
 // staff edit asks again (`load(true)`), closing one writes the cookie and localStorage. A failed
 // read shows nothing: the bar must never complain. Never written to on the server (it is shared
 // by every request there).
-import { gql } from '$lib/api';
+import { gqlPublic } from '$lib/api';
 import type { AnnouncementFieldsFragment } from '$lib/gql/graphql';
 import { ACTIVE_ANNOUNCEMENT } from '$lib/queries';
 import { CLOSED_COOKIE, DISMISS_KEY, SEEN_KEY, closedCookie, mergeClosed, readClosed, readClosedCookie, withClosed } from './announcement';
@@ -46,7 +46,7 @@ class Banner {
     if (all.length !== fromCookie.length) writeCookie(all);
     this.closed = all;
     if (!force) return;
-    gql(ACTIVE_ANNOUNCEMENT, {})
+    gqlPublic(ACTIVE_ANNOUNCEMENT, {})
       .then((r) => (this.current = r.activeAnnouncement ?? null))
       .catch(() => {});
   }

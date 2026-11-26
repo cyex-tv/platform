@@ -18,7 +18,7 @@
 //! Every write runs in one transaction with its outbox event (ADR 0005) and, when it grants
 //! something or relies on a permission instead of ownership, its audit row.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use cyex_tv_auth::{Caller, rbac};
 use cyex_tv_db::sets::{self, NewMember, Set};
@@ -26,8 +26,9 @@ use cyex_tv_db::{DbError, accounts, channels, emotes, ids, outbox, reads, roles}
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
     AccountSummary, AddSetEmote, Channel, ClonedSet, CreateSet, EditorPermission, EmotePage,
-    EmoteSet, EmoteState, EventType, PersonalSetEntry, Platform, SetEmote, SetEmotePage, SetKind,
-    SetSummary, SetVisibility, UpdateChannelSettings, UpdateSet, UpdateSetEmote,
+    EmoteSet, EmoteState, EventType, PersonalSetEntry, Platform, SetChanges, SetEmote,
+    SetEmotePage, SetKind, SetSummary, SetVisibility, UpdateChannelSettings, UpdateSet,
+    UpdateSetEmote,
 };
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
@@ -544,6 +545,267 @@ pub async fn set(
         .await
         .map(Some)
         .map_err(db_error)
+}
+
+// Bulk reads (ADR 0035)
+
+/// The most sets one bulk read takes: a set can hold 1.000 emotes (staff sets far more), so 25
+/// sets is already up to 25.000 members in one answer.
+pub const SETS_LOOKUP_LIMIT: usize = 25;
+/// The most channels one bulk read takes.
+pub const CHANNELS_LOOKUP_LIMIT: usize = 100;
+/// The most emotes one bulk read takes.
+pub const EMOTES_LOOKUP_LIMIT: usize = 100;
+
+/// IDs as uuids, in the order given, each once; text that names nothing is dropped.
+pub(crate) fn distinct_ids<S: AsRef<str>>(raw: &[S]) -> Vec<Uuid> {
+    let mut seen = HashSet::new();
+    raw.iter()
+        .filter_map(|t| ids::from_text(t.as_ref().trim()))
+        .filter(|id| seen.insert(*id))
+        .collect()
+}
+
+/// `too_many` (400, `details { limit, current }`) for a bulk read of `asked` IDs over its cap.
+pub(crate) fn too_many_ids(what: &str, max: usize, asked: usize) -> ApiError {
+    ApiError::limit(
+        "too_many",
+        format!("Look up at most {max} {what} at once."),
+        cyex_tv_shared::limit_errors::n(max),
+        cyex_tv_shared::limit_errors::n(asked),
+    )
+}
+
+/// The sets among `rows` that `caller` may open, by the rule of [`may_view`], in the order
+/// given. The checks run once for all of them; only private sets no channel shows (staff-made,
+/// rare) may cost one more query, once.
+pub(crate) async fn visible_sets(
+    conn: &mut PgConnection,
+    caller: Option<&Caller>,
+    rows: Vec<Set>,
+) -> ApiResult<Vec<Set>> {
+    let owners: Vec<Uuid> = rows
+        .iter()
+        .filter_map(|s| s.owner_account_id)
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+    let deleted: HashSet<Uuid> = accounts::deleted_among(conn, &owners)
+        .await
+        .map_err(db_error)?
+        .into_iter()
+        .collect();
+    let private: Vec<Uuid> = rows
+        .iter()
+        .filter(|s| s.visibility == SetVisibility::Private)
+        .map(|s| s.id)
+        .collect();
+    let shown = sets::active(conn, &private).await.map_err(db_error)?;
+    let access: HashMap<Uuid, cyex_tv_db::editors::SetAccess> = match caller {
+        Some(c) if !private.is_empty() => {
+            cyex_tv_db::editors::set_access(conn, c.account_id, &private)
+                .await
+                .map_err(db_error)?
+                .into_iter()
+                .map(|a| (a.set_id, a))
+                .collect()
+        }
+        _ => HashMap::new(),
+    };
+    let mut staff: Option<bool> = None;
+    let mut out = Vec::with_capacity(rows.len());
+    for set in rows {
+        let hidden_owner = set.owner_account_id.is_some_and(|o| deleted.contains(&o));
+        let open = if hidden_owner || set.visibility == SetVisibility::Private {
+            let plain = !hidden_owner
+                && (shown.contains(&set.id)
+                    || caller.is_some_and(|c| {
+                        set.owner_account_id == Some(c.account_id)
+                            || access.get(&set.id).is_some_and(|a| a.direct || a.covered)
+                    }));
+            if plain {
+                true
+            } else if let Some(c) = caller {
+                if staff.is_none() {
+                    staff = Some(holds(conn, c, permissions::SETS_EDIT_ANY).await?);
+                }
+                staff == Some(true)
+            } else {
+                false
+            }
+        } else {
+            true
+        };
+        if open {
+            out.push(set);
+        }
+    }
+    Ok(out)
+}
+
+/// Several sets at once, in the order asked, each once: the ones `caller` may open, as `set`
+/// shows them. Unknown and hidden ones are left out. At most [`SETS_LOOKUP_LIMIT`] IDs
+/// (`too_many`). A fixed handful of queries however many sets.
+pub async fn sets_by_ids<S: AsRef<str>>(
+    state: &AppState,
+    caller: Option<&Caller>,
+    raw: &[S],
+) -> ApiResult<Vec<EmoteSet>> {
+    if raw.len() > SETS_LOOKUP_LIMIT {
+        return Err(too_many_ids("sets", SETS_LOOKUP_LIMIT, raw.len()));
+    }
+    let wanted = distinct_ids(raw);
+    if wanted.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut conn = conn(state).await?;
+    let mut found = sets::get_many(&mut conn, &wanted).await.map_err(db_error)?;
+    let order: HashMap<Uuid, usize> = wanted.iter().enumerate().map(|(i, id)| (*id, i)).collect();
+    found.sort_by_key(|s| order.get(&s.id).copied().unwrap_or(usize::MAX));
+    let open = visible_sets(&mut conn, caller, found).await?;
+    let viewer = viewer(&mut conn, caller).await?;
+    views::sets(&mut conn, &open, &viewer, &state.cdn_url)
+        .await
+        .map_err(db_error)
+}
+
+/// Several channels of one platform at once, in the order asked, each once. Channels not on
+/// cyex.tv (or whose account is gone) are left out. At most [`CHANNELS_LOOKUP_LIMIT`] IDs
+/// (`too_many`). Two queries however many channels.
+pub async fn channels_by_ids<S: AsRef<str>>(
+    state: &AppState,
+    platform: Platform,
+    raw: &[S],
+) -> ApiResult<Vec<Channel>> {
+    if raw.len() > CHANNELS_LOOKUP_LIMIT {
+        return Err(too_many_ids("channels", CHANNELS_LOOKUP_LIMIT, raw.len()));
+    }
+    let mut seen = HashSet::new();
+    let wanted: Vec<String> = raw
+        .iter()
+        .map(|id| id.as_ref().trim().to_owned())
+        .filter(|id| !id.is_empty() && id.len() <= 64)
+        .filter(|id| seen.insert(id.clone()))
+        .collect();
+    if wanted.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut conn = conn(state).await?;
+    let mut found = channels::find_many(&mut conn, platform, &wanted)
+        .await
+        .map_err(db_error)?;
+    let order: HashMap<&str, usize> = wanted
+        .iter()
+        .enumerate()
+        .map(|(i, id)| (id.as_str(), i))
+        .collect();
+    found.sort_by_key(|c| {
+        order
+            .get(c.platform_channel_id.as_str())
+            .copied()
+            .unwrap_or(usize::MAX)
+    });
+    views::channels_of(&mut conn, &found)
+        .await
+        .map_err(db_error)
+}
+
+// Delta sync (ADR 0035)
+
+/// The most change rows one delta answer reads; past it the answer is a full resync, which is
+/// then no bigger than the set.
+pub const SET_CHANGES_MAX: i64 = 2_000;
+
+/// What changed in a set after version `since`, as `caller` sees it. `None` when `set` would be
+/// `None`. All reads run in one repeatable-read snapshot, so the version and the members agree.
+pub async fn set_changes(
+    state: &AppState,
+    caller: Option<&Caller>,
+    id: &str,
+    since: i64,
+) -> ApiResult<Option<SetChanges>> {
+    let Some(id) = ids::from_text(id.trim()) else {
+        return Ok(None);
+    };
+    let mut conn = conn(state).await?;
+    let mut tx = conn.begin().await.map_err(sqlx_error)?;
+    sqlx::query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY")
+        .execute(&mut *tx)
+        .await
+        .map_err(sqlx_error)?;
+    let Some(set) = sets::get(&mut tx, id).await.map_err(db_error)? else {
+        return Ok(None);
+    };
+    if !may_view(&mut tx, caller, &set).await? {
+        return Ok(None);
+    }
+    let viewer = viewer(&mut tx, caller).await?;
+    let reachable = since >= set.change_floor && since <= set.version;
+    let changes = if reachable {
+        sets::changes_since(&mut tx, id, since, set.version, SET_CHANGES_MAX + 1)
+            .await
+            .map_err(db_error)?
+    } else {
+        Vec::new()
+    };
+    let mut answer = SetChanges {
+        id: ids::to_text(set.id),
+        version: set.version,
+        since,
+        full: false,
+        set: None,
+        name: set.name.clone(),
+        added: Vec::new(),
+        renamed: Vec::new(),
+        updated: Vec::new(),
+        removed_ids: Vec::new(),
+    };
+    if !reachable || changes.len() as i64 > SET_CHANGES_MAX {
+        let built = views::set(&mut tx, &set, &viewer, &state.cdn_url)
+            .await
+            .map_err(db_error)?;
+        tx.commit().await.map_err(sqlx_error)?;
+        answer.full = true;
+        answer.set = Some(built);
+        return Ok(Some(answer));
+    }
+    // Each touched emote once, with every kind of change it had, in the order first touched.
+    let mut touched: Vec<Uuid> = Vec::new();
+    let mut kinds: HashMap<Uuid, HashSet<String>> = HashMap::new();
+    for change in changes {
+        if let Some(emote) = change.emote_id {
+            if !kinds.contains_key(&emote) {
+                touched.push(emote);
+            }
+            kinds.entry(emote).or_default().insert(change.kind);
+        }
+    }
+    let present = views::set_members_among(&mut tx, &set, &viewer, &state.cdn_url, &touched)
+        .await
+        .map_err(db_error)?;
+    tx.commit().await.map_err(sqlx_error)?;
+    let mut still: HashSet<Uuid> = HashSet::new();
+    for member in present {
+        let Some(emote) = ids::from_text(&member.emote.id) else {
+            continue;
+        };
+        still.insert(emote);
+        let had = kinds.get(&emote);
+        let has = |k: &str| had.is_some_and(|h| h.contains(k));
+        if has("added") || has("removed") {
+            answer.added.push(member);
+        } else if has("renamed") {
+            answer.renamed.push(member);
+        } else {
+            answer.updated.push(member);
+        }
+    }
+    answer.removed_ids = touched
+        .iter()
+        .filter(|e| !still.contains(e))
+        .map(|e| ids::to_text(*e))
+        .collect();
+    Ok(Some(answer))
 }
 
 /// A page of a set's emotes, oldest first, with the same visibility rule as `set`: `query` keeps
