@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Dialog from '$lib/components/Dialog.svelte';
   import Segmented from '$lib/components/Segmented.svelte';
   // Make a set for an account: yours, or one you edit with SETS. Opens its editor when made.
   //   <NewSetDialog bind:this={dlg} ownerId={id} mine hasPersonal={false} oncreated={…} />  dlg.open()
@@ -12,7 +13,7 @@
   type Props = { ownerId: string; mine: boolean; hasPersonal: boolean };
   let { ownerId, mine, hasPersonal }: Props = $props();
 
-  let dialog: HTMLDialogElement;
+  let dialog: Dialog;
   let name = $state('');
   let kind = $state<SetKind>('CHANNEL');
   let failure = $state('');
@@ -29,7 +30,7 @@
     tried = false;
     kind = 'CHANNEL';
     failure = '';
-    dialog.showModal();
+    dialog.open();
   }
 
   async function create(e: SubmitEvent) {
@@ -55,30 +56,21 @@
   }
 </script>
 
-<dialog class="ui-dialog" bind:this={dialog} aria-labelledby="new-set-title">
-  <form onsubmit={create} novalidate>
-    <div class="body">
-      <h2 id="new-set-title">New set</h2>
-      <label class="ui-field">
-        <span class="ui-label">Name</span>
-        <input class="ui-input" bind:value={name} maxlength="100" placeholder="Main" aria-invalid={nameError ? 'true' : undefined} aria-describedby={nameError ? 'new-set-err' : undefined} />
-        {#if nameError}<span class="ui-error" id="new-set-err" role="alert">{nameError}</span>{/if}
-      </label>
-      <div class="ui-field">
-        <span class="ui-label" id="kind-label">Kind</span>
-        <Segmented label="Kind" options={[{ value: 'CHANNEL', label: 'Channel', icon: 'tv' }, { value: 'PERSONAL', label: 'Personal', icon: 'user', disabled: hasPersonal }]} value={kind} onchange={pickKind} />
-        <span class="ui-hint">
-          {#if hasPersonal}{mine ? 'You have' : 'This account has'} a personal set already; there’s one per account.{:else if kind === 'PERSONAL'}Approved emotes only, shown wherever {mine ? 'you chat' : 'they chat'}.{:else}For a channel’s chat. Pick it as the active set in Channels.{/if}
-        </span>
-      </div>
-
-    </div>
-    <footer>
-      <button class="btn btn-s" type="button" onclick={() => dialog.close()}>Cancel</button>
-      <button class="btn btn-s btn-primary" type="submit" disabled={creating}>{creating ? 'Creating…' : 'Create'}</button>
-    </footer>
-  </form>
-</dialog>
-
-<style>
-</style>
+<Dialog bind:this={dialog} title="New set" titleId="new-set-title" onsubmit={create}>
+  <label class="ui-field">
+    <span class="ui-label">Name</span>
+    <input class="ui-input" bind:value={name} maxlength="100" placeholder="Main" aria-invalid={nameError ? 'true' : undefined} aria-describedby={nameError ? 'new-set-err' : undefined} />
+    {#if nameError}<span class="ui-error" id="new-set-err" role="alert">{nameError}</span>{/if}
+  </label>
+  <div class="ui-field">
+    <span class="ui-label" id="kind-label">Kind</span>
+    <Segmented label="Kind" options={[{ value: 'CHANNEL', label: 'Channel', icon: 'tv' }, { value: 'PERSONAL', label: 'Personal', icon: 'user', disabled: hasPersonal }]} value={kind} onchange={pickKind} />
+    <span class="ui-hint">
+      {#if hasPersonal}{mine ? 'You have' : 'This account has'} a personal set already; there’s one per account.{:else if kind === 'PERSONAL'}Approved emotes only, shown wherever {mine ? 'you chat' : 'they chat'}.{:else}For a channel’s chat. Pick it as the active set in Channels.{/if}
+    </span>
+  </div>
+  {#snippet footer()}
+    <button class="btn btn-s" type="button" onclick={() => dialog.close()}>Cancel</button>
+    <button class="btn btn-s btn-primary" type="submit" disabled={creating}>{creating ? 'Creating…' : 'Create'}</button>
+  {/snippet}
+</Dialog>
