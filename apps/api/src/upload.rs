@@ -264,6 +264,7 @@ pub async fn quota(
     let hour = emotes::count_since(&mut conn, owner, Utc::now() - chrono::Duration::hours(1))
         .await
         .map_err(db_error)?;
+    let emote = Limits::emote();
     let int = |n: i64| i32::try_from(n).unwrap_or(i32::MAX);
     let lim = |l: AccountLimit| i32::try_from(limits.get(l)).unwrap_or(i32::MAX);
     Ok(UploadQuota {
@@ -272,6 +273,11 @@ pub async fn quota(
         pending_max: (!caller.owner).then(|| lim(AccountLimit::PendingEmotes)),
         uploads_this_hour: int(hour),
         uploads_per_hour: lim(AccountLimit::UploadsPerHour),
+        // The media limits are the same for every account today (`CYEX_TV_LIMIT_EMOTE_*`); the
+        // per-role overrides are the counts above.
+        max_bytes: int(i64::try_from(emote.max_bytes).unwrap_or(i64::MAX)),
+        max_side: int(i64::from(emote.max_side)),
+        max_frames: int(i64::from(emote.max_frames)),
     })
 }
 

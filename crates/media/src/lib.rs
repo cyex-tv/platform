@@ -67,7 +67,15 @@ pub struct Limits {
 }
 
 impl Default for Limits {
+    /// The cosmetic default, as configured (`CYEX_TV_LIMIT_DEFAULT_*`, see [`config`]).
     fn default() -> Self {
+        config::MediaConfig::current().default
+    }
+}
+
+impl Limits {
+    /// The built-in cosmetic default.
+    pub fn builtin_default() -> Self {
         Self {
             max_bytes: DEFAULT_MAX_BYTES,
             max_side: 1000,
@@ -76,15 +84,18 @@ impl Default for Limits {
             max_duration_ms: u64::MAX,
         }
     }
-}
 
-impl Limits {
     /// An emote upload's limits: the defaults, with files up to 8 MB. The API checks uploads with
     /// these and the worker decodes the originals with them, so the two always agree.
     pub fn emote() -> Self {
+        config::MediaConfig::current().emote
+    }
+
+    /// The built-in emote limits.
+    pub fn builtin_emote() -> Self {
         Self {
             max_bytes: EMOTE_MAX_BYTES,
-            ..Self::default()
+            ..Self::builtin_default()
         }
     }
 
@@ -93,6 +104,11 @@ impl Limits {
     /// decoded up to 2048 px so a badge made before the 512 px cap can be made again; the API
     /// refuses an upload over 512 px (a badge keeps its original size, up to 512).
     pub fn badge() -> Self {
+        config::MediaConfig::current().badge
+    }
+
+    /// The built-in badge limits.
+    pub fn builtin_badge() -> Self {
         Self {
             max_bytes: BADGE_MAX_BYTES,
             max_side: 2048,
@@ -106,10 +122,15 @@ impl Limits {
     /// seconds and 64 MP of frames) with a side up to 4096 px, so a 512 px tall picture can be 8:1
     /// (the shape rules, at least 64 px tall and at most 8:1, are the API's).
     pub fn paint() -> Self {
+        config::MediaConfig::current().paint
+    }
+
+    /// The built-in paint limits.
+    pub fn builtin_paint() -> Self {
         Self {
             max_bytes: PAINT_MAX_BYTES,
             max_side: 4096,
-            ..Self::badge()
+            ..Self::builtin_badge()
         }
     }
 }
@@ -383,6 +404,7 @@ pub fn distance(a: u64, b: u64) -> u32 {
     (a ^ b).count_ones()
 }
 
+pub mod config;
 pub mod encode;
 
 #[cfg(test)]

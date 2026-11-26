@@ -132,6 +132,19 @@ impl Profile {
         original: None,
     };
 
+    /// The badge sizes as configured (`CYEX_TV_LIMIT_BADGE_*`, see [`crate::config`]); [`Self::BADGE`]
+    /// holds the built-in numbers.
+    pub fn badge() -> &'static Self {
+        static P: std::sync::OnceLock<Profile> = std::sync::OnceLock::new();
+        P.get_or_init(|| crate::config::MediaConfig::current().badge_profile())
+    }
+
+    /// The paint sizes as configured.
+    pub fn paint() -> &'static Self {
+        static P: std::sync::OnceLock<Profile> = std::sync::OnceLock::new();
+        P.get_or_init(|| crate::config::MediaConfig::current().paint_profile())
+    }
+
     /// The size at `scale`: `base_height × scale` tall, at most `max_aspect` times as wide,
     /// aspect kept, never larger than the original.
     pub fn size_for(&self, width: u32, height: u32, scale: u32) -> (u32, u32) {

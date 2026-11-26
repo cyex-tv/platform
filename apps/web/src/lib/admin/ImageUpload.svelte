@@ -4,12 +4,13 @@
   // files are made (cosmeticImage.ready). `imageId` is bound: set when the picture is ready,
   // cleared when a new one is picked. `busy` is bound too, so the form can wait for the picture
   // instead of refusing to save.
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { gql, uploadCosmeticImage } from '$lib/api';
   import type { CosmeticImageFieldsFragment } from '$lib/gql/graphql';
   import { COSMETIC_IMAGE } from '$lib/queries';
   import { safeUrl } from '$lib/cosmetics/paint';
-  import { animationOf, checkAnimation, checkFile, checkSize, pictureAccept, waitReady } from '$lib/cosmetics/upload';
+  import { PICTURE_RULES, animationOf, checkAnimation, checkFile, checkSize, pictureAccept, pictureHint, waitReady, type PictureRules } from '$lib/cosmetics/upload';
+  import { loadPictureRules } from '$lib/cosmetics/limits';
   import { badgeOriginal, enlarge, pickBadgeFile } from '$lib/cosmetics/badgeFile';
   import { pickPaintFile } from '$lib/cosmetics/paintFile';
   import { display } from '$lib/dpr.svelte';
@@ -28,6 +29,12 @@
     label: string;
   };
   let { kind, imageId = $bindable(''), busy = $bindable(false), current = null, label }: Props = $props();
+
+  // The API's own numbers (`limits`); the built-in copy until they arrive or if they can't.
+  let rules = $state<PictureRules>(PICTURE_RULES);
+  onMount(() => {
+    void loadPictureRules().then((r) => (rules = r));
+  });
 
   let phase = $state<'idle' | 'checking' | 'uploading' | 'making' | 'ready' | 'failed'>('idle');
   let problem = $state('');
@@ -105,14 +112,14 @@
     refused = null;
     // Reading the picture's size takes a moment; the form waits for it, and a newer pick wins.
     phase = 'checking';
-    const bad = checkFile(file, kind);
+    const bad = checkFile(file, kind, rules);
     const dims = bad ? null : await size(file);
     const anim = !bad && dims ? await animation(file) : null;
     if (signal.aborted) return;
     const why =
       bad ??
       (dims
-        ? (checkSize(kind, dims.width, dims.height) ?? checkAnimation(kind, anim, dims.width, dims.height))
+        ? (checkSize(kind, dims.width, dims.height, rules) ?? checkAnimation(kind, anim, dims.width, dims.height, rules))
         : 'That file isn’t a picture this browser can open. Try another one.');
     if (why) {
       setLocal(null);
@@ -178,7 +185,7 @@
       <input class="file" type="file" accept={pictureAccept(kind)} onchange={picked} />
     </label>
     <span class="ui-hint" role="status">
-      {#if phase === 'checking'}Checking the file…{:else if phase === 'uploading'}Uploading…{:else if phase === 'making'}Making the files…{:else if phase === 'ready'}Ready.{:else if kind === 'badge'}Square, at least 72 × 72 px. PNG, JPEG, GIF or WebP, up to 8 MB; animated up to 120 frames and 10 seconds. Or drop it here.{:else}At least 64 px tall, up to 8:1. PNG, JPEG, GIF or WebP, up to 8 MB; animated up to 120 frames and 10 seconds. Or drop it here.{/if}
+      {#if phase === 'checking'}Checking the file…{:else if phase === 'uploading'}Uploading…{:else if phase === 'making'}Making the files…{:else if phase === 'ready'}Ready.{:else}{pictureHint(kind, rules)} Or drop it here.{/if}
     </span>
   </div>
   {#if problem}<span class="ui-error" role="alert">{problem}</span>

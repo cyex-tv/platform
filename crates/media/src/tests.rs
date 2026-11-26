@@ -1004,3 +1004,151 @@ fn a_set_cancel_flag_stops_a_transcode_at_once() {
         .is_ok()
     );
 }
+
+mod config_env {
+    use crate::Limits;
+    use crate::config::{EMOTE_SIDE_CEILING, Ladder, MediaConfig};
+    use crate::encode::Profile;
+
+    fn env(pairs: &'static [(&str, &str)]) -> impl Fn(&str) -> Option<String> {
+        move |name| {
+            pairs
+                .iter()
+                .find(|(k, _)| *k == name)
+                .map(|(_, v)| (*v).to_owned())
+        }
+    }
+
+    #[test]
+    fn nothing_set_is_the_built_in_numbers() {
+        let c = MediaConfig::from_env(|_| None).unwrap();
+        assert_eq!(c, MediaConfig::builtin());
+        assert_eq!(c.emote, Limits::builtin_emote());
+        assert_eq!(c.emote.max_bytes, 8 * 1024 * 1024);
+        assert_eq!((c.emote.max_side, c.emote.max_frames), (1000, 1000));
+        assert_eq!(c.badge.max_side, 2048);
+        assert_eq!(c.paint.max_side, 4096);
+        assert_eq!(c.ladder, Ladder::BUILTIN);
+        // An empty value counts as unset.
+        let blank = MediaConfig::from_env(env(&[("CYEX_TV_LIMIT_EMOTE_MAX_BYTES", "  ")])).unwrap();
+        assert_eq!(blank, c);
+        // The compiled profiles hold the same ladder.
+        let c: &'static MediaConfig = Box::leak(Box::new(c));
+        assert_eq!(c.badge_profile(), Profile::BADGE);
+        assert_eq!(c.paint_profile(), Profile::PAINT);
+        assert_eq!(*Profile::badge(), Profile::BADGE);
+        assert_eq!(*Profile::paint(), Profile::PAINT);
+    }
+
+    #[test]
+    fn each_kind_reads_its_own_variables() {
+        let c = MediaConfig::from_env(env(&[
+            ("CYEX_TV_LIMIT_EMOTE_MAX_BYTES", "4194304"),
+            ("CYEX_TV_LIMIT_EMOTE_MAX_FRAMES", "500"),
+            ("CYEX_TV_LIMIT_EMOTE_MAX_DURATION_MS", "15000"),
+            ("CYEX_TV_LIMIT_BADGE_MAX_SIDE", "4096"),
+            ("CYEX_TV_LIMIT_BADGE_MAX_TOTAL_PIXELS", "128000000"),
+            ("CYEX_TV_LIMIT_BADGE_MAX_DURATION_MS", "none"),
+            ("CYEX_TV_LIMIT_PAINT_MAX_BYTES", " 16777216 "),
+            ("CYEX_TV_LIMIT_DEFAULT_MAX_BYTES", "1048576"),
+        ]))
+        .unwrap();
+        assert_eq!(c.emote.max_bytes, 4 * 1024 * 1024);
+        assert_eq!(c.emote.max_frames, 500);
+        assert_eq!(c.emote.max_duration_ms, 15_000);
+        assert_eq!(c.emote.max_side, 1000);
+        assert_eq!(c.badge.max_side, 4096);
+        assert_eq!(c.badge.max_total_pixels, 128_000_000);
+        assert_eq!(c.badge.max_duration_ms, u64::MAX);
+        assert_eq!(c.badge.max_bytes, 8 * 1024 * 1024);
+        assert_eq!(c.paint.max_bytes, 16 * 1024 * 1024);
+        assert_eq!(c.default.max_bytes, 1024 * 1024);
+        assert_eq!(c.max_upload_bytes(), 16 * 1024 * 1024);
+    }
+
+    #[test]
+    fn the_ladder_reads_its_variables_and_the_profiles_follow() {
+        let c = MediaConfig::from_env(env(&[
+            ("CYEX_TV_LIMIT_BADGE_MASTER_PX", "1024"),
+            ("CYEX_TV_LIMIT_BADGE_CHAT_ANIMATED_BYTES", "262144"),
+            ("CYEX_TV_LIMIT_BADGE_256_ANIMATED_BYTES", "3145728"),
+            ("CYEX_TV_LIMIT_BADGE_ORIGINAL_PX", "2048"),
+            ("CYEX_TV_LIMIT_BADGE_ORIGINAL_ANIMATED_BYTES", "1048576"),
+            ("CYEX_TV_LIMIT_PAINT_512_ANIMATED_BYTES", "2097152"),
+        ]))
+        .unwrap();
+        assert_eq!(c.ladder.badge_master, 1024);
+        assert_eq!(c.ladder.badge_chat_animated_bytes, 256 * 1024);
+        assert_eq!(c.ladder.badge_large[0].max_animated_bytes, 1024 * 1024);
+        assert_eq!(c.ladder.badge_large[1].max_animated_bytes, 3 * 1024 * 1024);
+        assert_eq!(c.ladder.badge_original.px, 2048);
+        assert_eq!(c.ladder.paint_large[0].max_animated_bytes, 2 * 1024 * 1024);
+        // A profile built from it: a 2000 px badge is mastered at 1024 and its original is 2000.
+        let c: &'static MediaConfig = Box::leak(Box::new(c));
+        let badge = c.badge_profile();
+        assert_eq!(badge.master_size(2000, 2000), Some((1024, 1024)));
+        let steps = badge.steps(2000, 2000);
+        let original = steps.iter().find(|s| s.stem == "original").unwrap();
+        assert_eq!(original.size, (2000, 2000));
+        assert_eq!(original.max_animated_bytes, Some(1024 * 1024));
+        let large = steps.iter().find(|s| s.stem == "256").unwrap();
+        assert_eq!(large.max_animated_bytes, Some(3 * 1024 * 1024));
+        assert_eq!(
+            steps
+                .iter()
+                .find(|s| s.stem == "1x")
+                .unwrap()
+                .max_animated_bytes,
+            Some(256 * 1024)
+        );
+    }
+
+    #[test]
+    fn a_value_that_does_not_read_is_an_error_naming_the_variable() {
+        for (name, value) in [
+            ("CYEX_TV_LIMIT_EMOTE_MAX_BYTES", "eight"),
+            ("CYEX_TV_LIMIT_EMOTE_MAX_BYTES", "0"),
+            ("CYEX_TV_LIMIT_EMOTE_MAX_BYTES", "-5"),
+            ("CYEX_TV_LIMIT_BADGE_MAX_FRAMES", "1.5"),
+            ("CYEX_TV_LIMIT_BADGE_MAX_DURATION_MS", "soon"),
+            ("CYEX_TV_LIMIT_BADGE_MAX_DURATION_MS", "0"),
+            ("CYEX_TV_LIMIT_BADGE_MASTER_PX", "8"),
+            ("CYEX_TV_LIMIT_BADGE_512_ANIMATED_BYTES", "lots"),
+            ("CYEX_TV_LIMIT_PAINT_MAX_SIDE", "99999999"),
+        ] {
+            let err = MediaConfig::from_env(|n| (n == name).then(|| value.to_owned())).unwrap_err();
+            assert!(err.starts_with(name), "{err}");
+        }
+    }
+
+    #[test]
+    fn an_emote_stays_within_1000_px_whatever_is_set() {
+        assert_eq!(EMOTE_SIDE_CEILING, 1000);
+        let ok = MediaConfig::from_env(env(&[("CYEX_TV_LIMIT_EMOTE_MAX_SIDE", "512")])).unwrap();
+        assert_eq!(ok.emote.max_side, 512);
+        let err =
+            MediaConfig::from_env(env(&[("CYEX_TV_LIMIT_EMOTE_MAX_SIDE", "1001")])).unwrap_err();
+        assert!(err.starts_with("CYEX_TV_LIMIT_EMOTE_MAX_SIDE"), "{err}");
+    }
+
+    #[test]
+    fn a_configured_limit_is_what_a_check_enforces() {
+        let c = MediaConfig::from_env(env(&[("CYEX_TV_LIMIT_EMOTE_MAX_SIDE", "16")])).unwrap();
+        let bytes = super::png(20, 10);
+        assert!(crate::probe(&bytes, &Limits::builtin_emote()).is_ok());
+        assert!(matches!(
+            crate::probe(&bytes, &c.emote),
+            Err(crate::MediaError::TooLarge(_))
+        ));
+    }
+
+    #[test]
+    fn the_process_wide_config_is_the_built_in_numbers_without_variables() {
+        // The test environment sets none of the variables.
+        assert_eq!(*MediaConfig::current(), MediaConfig::builtin());
+        assert_eq!(Limits::emote(), Limits::builtin_emote());
+        assert_eq!(Limits::badge(), Limits::builtin_badge());
+        assert_eq!(Limits::paint(), Limits::builtin_paint());
+        assert_eq!(Limits::default(), Limits::builtin_default());
+    }
+}

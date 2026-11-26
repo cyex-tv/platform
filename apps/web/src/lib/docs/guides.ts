@@ -202,6 +202,16 @@ export const guides: Guide[] = [
     ],
   },
   {
+    id: 'upload-limits',
+    title: 'Upload limits',
+    search: 'limits upload size bytes side frames pixels duration name tags quota effective role badge paint emote',
+    blocks: [
+      p('Every upload and field limit is one public list: the GraphQL `limits` query, or `GET /v1/limits` over REST. Per kind (`emote`, `badge`, `paint`) it gives `maxBytes`, `maxSide`, `maxFrames`, `maxTotalPixels` and `maxDurationMs` (null: no cap), the smallest side and widest shape a picture may have, and the tallest file the CDN serves. It also lists the name and tag lengths and the per-IP request rates. Read it instead of copying numbers: an operator can change the media limits, and they change here with them.'),
+      p('Signed in, the GraphQL `limits.account` lists your own per-account limits (`uploads_per_hour`, `pending_emotes`, `set_capacity_max` and the rest) with the `default` and what applies to you, `effective`, after your roles’ overrides. `uploadQuota` adds the file limits an upload for that account is checked against: `maxBytes`, `maxSide` and `maxFrames`, next to `pendingMax` and `uploadsPerHour`.'),
+      note('An emote is at most 1000 × 1000 px whatever the operator sets, and the CDN serves it at most 128 px tall.'),
+    ],
+  },
+  {
     id: 'error-codes',
     title: 'Error codes',
     search: 'error codes list table meaning when rate_limited not_found forbidden bad_name',
@@ -216,7 +226,7 @@ export const guides: Guide[] = [
     search: 'emote object cdn files webp avif static picture image host',
     blocks: [
       p('An emote has an `id` (store this, as a string: names change; see [IDs](#ids)), a `name`, `flags` (`zero_width`, `private`, `wide`; `nsfw` is retired and always false: NSFW emotes aren’t allowed), and a `host` with a list of `files`. Public reads only return approved emotes; a pending one shows to its owner alone.'),
-      p('Each file is at `<host>/<name>`:'),
+      p('Each file entry carries its full address as `url` (`<host>/<name>`) and its media type as `mime` (`image/webp` or `image/avif`), so a client uses `url` as it is instead of joining `host` and `name`. `host` and `name` stay. The address is:'),
       { t: 'pre', code: `${EX.host}/2x.webp` },
       fmt(
         ['1x.webp … 4x.webp', 'Scales 1 to 4. Pick by line height times the device pixel ratio.'],

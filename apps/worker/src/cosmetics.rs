@@ -31,8 +31,8 @@ fn retry(err: impl std::fmt::Display) -> JobError {
 /// The sizes a kind of cosmetic picture is made at.
 pub fn profile(kind: CosmeticKind) -> &'static Profile {
     match kind {
-        CosmeticKind::Badge => &Profile::BADGE,
-        CosmeticKind::Paint => &Profile::PAINT,
+        CosmeticKind::Badge => Profile::badge(),
+        CosmeticKind::Paint => Profile::paint(),
     }
 }
 
@@ -73,6 +73,8 @@ pub fn entries(variants: &[&Variant]) -> Value {
             height: u16::try_from(v.height).unwrap_or(u16::MAX),
             size: u32::try_from(v.bytes.len()).unwrap_or(u32::MAX),
             is_static: v.is_static,
+            url: String::new(),
+            mime: String::new(),
         })
         .collect();
     serde_json::to_value(files).unwrap_or_else(|_| Value::Array(Vec::new()))

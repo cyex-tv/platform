@@ -9,6 +9,7 @@ pub mod logging;
 pub mod metrics;
 pub mod model;
 pub mod permissions;
+pub mod public_limits;
 pub mod ratelimit;
 pub mod shop;
 pub mod shutdown;

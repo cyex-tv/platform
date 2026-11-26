@@ -70,6 +70,43 @@ export const UPLOAD_QUOTA = graphql(`
       pendingMax
       uploadsThisHour
       uploadsPerHour
+      maxBytes
+      maxSide
+      maxFrames
+    }
+  }
+`);
+
+export const MEDIA_LIMIT_FIELDS = graphql(`
+  fragment MediaLimitFields on MediaLimits {
+    maxBytes
+    maxSide
+    maxFrames
+    maxTotalPixels
+    maxDurationMs
+    minSide
+    maxAspect
+    maxServedSide
+  }
+`);
+
+/** Every upload and field limit, public; signed in, the caller's own per-account limits too. */
+export const PUBLIC_LIMITS = graphql(`
+  query PublicLimits {
+    limits {
+      emote { ...MediaLimitFields }
+      badge { ...MediaLimitFields }
+      paint { ...MediaLimitFields }
+      names {
+        emote { min max }
+        set { min max }
+        badge { min max }
+        paint { min max }
+        tooltip { min max }
+      }
+      tags { max maxLen }
+      rates { key count windowSeconds }
+      account { key default effective windowSeconds }
     }
   }
 `);

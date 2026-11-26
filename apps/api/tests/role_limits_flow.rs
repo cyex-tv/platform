@@ -89,7 +89,7 @@ const SET_LIMITS: &str = "mutation($id: String!, $l: [RoleLimitInput!]!) {
 const ROLE_LIMITS: &str =
     "query($id: String!) { roleLimits(id: $id) { key group default windowSeconds value } }";
 const QUOTA: &str = "query($o: String) {
-    uploadQuota(ownerId: $o) { accountId pending pendingMax uploadsThisHour uploadsPerHour }
+    uploadQuota(ownerId: $o) { accountId pending pendingMax uploadsThisHour uploadsPerHour maxBytes maxSide maxFrames }
 }";
 
 impl World {
@@ -283,6 +283,10 @@ async fn twenty_waiting_emotes_refuse_the_next_upload() {
     let q = w.quota(&alice, None).await;
     assert_eq!(q["data"]["uploadQuota"]["pending"], 20, "{q}");
     assert_eq!(q["data"]["uploadQuota"]["pendingMax"], 20, "{q}");
+    // The effective file limits, the same the upload checks run with.
+    assert_eq!(q["data"]["uploadQuota"]["maxBytes"], 8 * 1024 * 1024, "{q}");
+    assert_eq!(q["data"]["uploadQuota"]["maxSide"], 1000, "{q}");
+    assert_eq!(q["data"]["uploadQuota"]["maxFrames"], 1000, "{q}");
     assert_eq!(
         q["data"]["uploadQuota"]["accountId"],
         w.db.public(alice.id).await
@@ -616,4 +620,73 @@ async fn the_owner_isnt_capped() {
     assert!(q["data"]["uploadQuota"]["pendingMax"].is_null(), "{q}");
     let r = w.upload(&owner, "ownerMore", 2, None).await;
     assert_ne!(r.status, StatusCode::CONFLICT, "{:?}", r.body);
+}
+
+const LIMITS: &str = "query { limits {
+    emote { maxBytes maxSide maxFrames maxTotalPixels maxDurationMs minSide maxAspect maxServedSide }
+    badge { maxBytes maxSide maxFrames maxDurationMs minSide maxAspect maxServedSide }
+    paint { maxBytes maxSide minSide maxAspect }
+    names { emote { min max } tooltip { min max } }
+    tags { max maxLen }
+    rates { key count windowSeconds }
+    account { key default effective windowSeconds }
+} }";
+
+#[tokio::test]
+async fn limits_lists_every_limit_and_the_callers_role_overrides() {
+    let Some(w) = World::new().await else {
+        return;
+    };
+    let owner = w.user("900").await;
+    let alice = w.user("8110").await;
+
+    // Signed in: the media numbers, the field limits, the rates, and the account's own limits.
+    let r = w.gql(&alice, LIMITS, json!({})).await;
+    let l = &r["data"]["limits"];
+    assert_eq!(l["emote"]["maxBytes"], 8 * 1024 * 1024, "{r}");
+    assert_eq!(l["emote"]["maxSide"], 1000, "{r}");
+    assert_eq!(l["emote"]["maxFrames"], 1000, "{r}");
+    assert!(l["emote"]["maxDurationMs"].is_null(), "{r}");
+    assert_eq!(l["emote"]["maxServedSide"], 128, "{r}");
+    assert_eq!(l["badge"]["maxSide"], 2048, "{r}");
+    assert_eq!(l["badge"]["minSide"], 72, "{r}");
+    assert_eq!(l["badge"]["maxDurationMs"], 10_000, "{r}");
+    assert_eq!(l["paint"]["maxSide"], 4096, "{r}");
+    assert_eq!(l["paint"]["maxAspect"], 8, "{r}");
+    assert_eq!(l["names"]["emote"]["max"], 100, "{r}");
+    assert_eq!(l["tags"]["max"], 10, "{r}");
+    assert_eq!(l["tags"]["maxLen"], 32, "{r}");
+    assert!(
+        l["rates"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|x| x["key"] == "reads"),
+        "{r}"
+    );
+    let pending = limit(&l["account"], "pending_emotes");
+    assert_eq!(pending["default"], 20, "{r}");
+    assert_eq!(pending["effective"], 20, "{r}");
+
+    // A role that raises the cap shows in the holder's `account`, and in nobody else's.
+    let partners = w.create_role(&owner, "Partners", 10, &[]).await;
+    w.set_limits(
+        &owner,
+        &partners,
+        json!([{ "key": "pending_emotes", "value": 25 }]),
+    )
+    .await;
+    w.assign(&owner, &alice, &partners).await;
+    let r = w.gql(&alice, LIMITS, json!({})).await;
+    let pending = limit(&r["data"]["limits"]["account"], "pending_emotes");
+    assert_eq!(pending["default"], 20, "{r}");
+    assert_eq!(pending["effective"], 25, "{r}");
+    let bob = w.user("8111").await;
+    let r = w.gql(&bob, LIMITS, json!({})).await;
+    assert_eq!(
+        limit(&r["data"]["limits"]["account"], "pending_emotes")["effective"],
+        20,
+        "{r}"
+    );
+    w.db.close().await;
 }

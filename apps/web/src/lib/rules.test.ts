@@ -93,3 +93,13 @@ describe('upload batches', () => {
     expect(uploadProblem('something_new', '')).toBe('The upload didn’t go through.');
   });
 });
+
+describe('a file against the account’s own cap', () => {
+  it('uses the cap the API gave', () => {
+    const type = 'image/gif';
+    expect(fileProblem({ type, size: 3 * 1024 * 1024 }, 2 * 1024 * 1024)).toBe('It’s 3,0 MB; at most 2 MB.');
+    expect(fileProblem({ type, size: 2 * 1024 * 1024 }, 2 * 1024 * 1024)).toBeNull();
+    expect(fileProblem({ type, size: 9 * 1024 * 1024 }, 12.5 * 1024 * 1024)).toBeNull();
+    expect(fileProblem({ type, size: 13 * 1024 * 1024 }, 12.5 * 1024 * 1024)).toBe('It’s 13,0 MB; at most 12,5 MB.');
+  });
+});

@@ -1011,6 +1011,30 @@
         }
       }
     },
+    "/v1/limits": {
+      "get": {
+        "tags": [
+          "reads"
+        ],
+        "summary": "Every upload and field limit: per kind (emote, badge, paint) the file size, side, frames,\npixels and duration, the name and tag lengths and the per-IP rates. The same for everyone, so\n`account` is empty here; the GraphQL `limits` query adds the signed-in caller's own limits.",
+        "operationId": "get_limits",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublicLimits"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not modified."
+          }
+        }
+      }
+    },
     "/v1/personal-sets/lookup": {
       "post": {
         "tags": [
@@ -1489,6 +1513,39 @@
           "paint"
         ]
       },
+      "EffectiveLimit": {
+        "type": "object",
+        "description": "One of the signed-in caller's per-account limits, with the default and what applies to them.",
+        "required": [
+          "key",
+          "default",
+          "effective"
+        ],
+        "properties": {
+          "default": {
+            "type": "integer",
+            "format": "int32",
+            "description": "What everyone gets."
+          },
+          "effective": {
+            "type": "integer",
+            "format": "int32",
+            "description": "What the caller gets: the most generous override among their roles, else the default."
+          },
+          "key": {
+            "type": "string",
+            "description": "`uploads_per_hour`, `pending_emotes`, `set_capacity_max` and so on (see `RoleLimit`)."
+          },
+          "window_seconds": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The window the count is per, in seconds; null for a cap on how many exist at once."
+          }
+        }
+      },
       "Emote": {
         "type": "object",
         "required": [
@@ -1574,7 +1631,9 @@
           "width",
           "height",
           "size",
-          "is_static"
+          "is_static",
+          "url",
+          "mime"
         ],
         "properties": {
           "format": {
@@ -1588,6 +1647,10 @@
           "is_static": {
             "type": "boolean",
             "description": "The first frame of an animated emote."
+          },
+          "mime": {
+            "type": "string",
+            "description": "`image/webp` or `image/avif`. Filled in by the API like `url`."
           },
           "name": {
             "type": "string",
@@ -1604,6 +1667,10 @@
             "format": "int32",
             "description": "Bytes.",
             "minimum": 0
+          },
+          "url": {
+            "type": "string",
+            "description": "The full CDN address of this file: `{host}/{name}`. Filled in by the API (empty only in\nthe records the worker writes)."
           },
           "width": {
             "type": "integer",
@@ -2778,6 +2845,98 @@
           "avif"
         ]
       },
+      "MediaLimits": {
+        "type": "object",
+        "description": "What one kind of picture (emote, badge, paint) may be. Sizes are px, the file size is bytes.",
+        "required": [
+          "max_bytes",
+          "max_side",
+          "max_frames",
+          "max_total_pixels",
+          "max_served_side"
+        ],
+        "properties": {
+          "max_aspect": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "How many times as wide as tall a picture may be (badges 1, paints 8); null for no rule at\nupload (emotes wider than their `servedAspect` are scaled to fit)."
+          },
+          "max_bytes": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The most bytes an uploaded file may be."
+          },
+          "max_duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The longest one run of an animation may last, in ms; null when there is no cap."
+          },
+          "max_frames": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The most frames an animation may have."
+          },
+          "max_served_side": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The tallest file the CDN serves for this kind (emotes 128 px, badges the master size)."
+          },
+          "max_side": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The longest side of an upload."
+          },
+          "max_total_pixels": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Width x height x frames, all frames together: the cap on decoding work."
+          },
+          "min_side": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The smallest side an upload may have (badges: both sides; paints: the height); null for none."
+          }
+        }
+      },
+      "NameLimits": {
+        "type": "object",
+        "description": "The lengths of the names and notes clients type.",
+        "required": [
+          "emote",
+          "set",
+          "badge",
+          "paint",
+          "tooltip"
+        ],
+        "properties": {
+          "badge": {
+            "$ref": "#/components/schemas/TextLimit"
+          },
+          "emote": {
+            "$ref": "#/components/schemas/TextLimit",
+            "description": "An emote's name in a set (no spaces)."
+          },
+          "paint": {
+            "$ref": "#/components/schemas/TextLimit"
+          },
+          "set": {
+            "$ref": "#/components/schemas/TextLimit"
+          },
+          "tooltip": {
+            "$ref": "#/components/schemas/TextLimit",
+            "description": "A badge's tooltip."
+          }
+        }
+      },
       "OAuthErrorBody": {
         "type": "object",
         "description": "An OAuth error answer (RFC 6749 5.2); `message` repeats the description, as elsewhere.",
@@ -3003,6 +3162,74 @@
           "kick"
         ]
       },
+      "PublicLimits": {
+        "type": "object",
+        "description": "Every limit, as `limits` answers.",
+        "required": [
+          "emote",
+          "badge",
+          "paint",
+          "names",
+          "tags",
+          "rates",
+          "account"
+        ],
+        "properties": {
+          "account": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffectiveLimit"
+            },
+            "description": "The caller's per-account limits with their roles' overrides applied. Empty when signed out\nand on `GET /v1/limits`."
+          },
+          "badge": {
+            "$ref": "#/components/schemas/MediaLimits"
+          },
+          "emote": {
+            "$ref": "#/components/schemas/MediaLimits"
+          },
+          "names": {
+            "$ref": "#/components/schemas/NameLimits"
+          },
+          "paint": {
+            "$ref": "#/components/schemas/MediaLimits"
+          },
+          "rates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RateInfo"
+            },
+            "description": "The per-IP request rates."
+          },
+          "tags": {
+            "$ref": "#/components/schemas/TagLimits"
+          }
+        }
+      },
+      "RateInfo": {
+        "type": "object",
+        "description": "A count of requests or writes per window.",
+        "required": [
+          "key",
+          "count",
+          "window_seconds"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Requests allowed per window (the burst)."
+          },
+          "key": {
+            "type": "string",
+            "description": "For example `gql`, `reads`, `upload`: the name of `CYEX_TV_LIMIT_<NAME>`."
+          },
+          "window_seconds": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
       "RevokeForm": {
         "type": "object",
         "description": "The revoke request (RFC 7009).",
@@ -3075,6 +3302,44 @@
           "unlisted",
           "private"
         ]
+      },
+      "TagLimits": {
+        "type": "object",
+        "description": "Tags on an emote.",
+        "required": [
+          "max",
+          "max_len"
+        ],
+        "properties": {
+          "max": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The most tags one emote has."
+          },
+          "max_len": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The longest tag, in characters."
+          }
+        }
+      },
+      "TextLimit": {
+        "type": "object",
+        "description": "A text field's length in characters.",
+        "required": [
+          "min",
+          "max"
+        ],
+        "properties": {
+          "max": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "min": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
       },
       "TokenAnswer": {
         "type": "object",

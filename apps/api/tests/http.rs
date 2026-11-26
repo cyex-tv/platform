@@ -239,6 +239,7 @@ fn openapi_lists_only_the_rest_part() {
         "/v1/cosmetics",
         "/v1/cosmetics/users",
         "/v1/cosmetics/images",
+        "/v1/limits",
     ] {
         assert!(spec.paths.paths.contains_key(path), "missing {path}");
     }

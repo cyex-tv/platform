@@ -1062,6 +1062,7 @@ async fn every_site_operation_runs_against_the_real_api() {
     )
     .await;
     c.op(As::Nobody, "ActiveAnnouncement", json!({})).await;
+    c.op(As::Nobody, "PublicLimits", json!({})).await;
     c.op(os, "Announcements", json!({})).await;
     c.op(os, "EndAnnouncement", json!({ "id": announcement }))
         .await;

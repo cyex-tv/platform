@@ -666,6 +666,11 @@ describe('mock-api conformance with the real schema', () => {
     stats.rest += 1;
     checkResponse('post', '/v1/auth/logout', lo.status, (await lo.text()) || undefined, 'POST /v1/auth/logout', out);
 
+    // The public limits list (GET /v1/limits), and a created emote's files with `url` and `mime`.
+    const lim = await fetch(`${base}/v1/limits`);
+    stats.rest += 1;
+    checkResponse('get', '/v1/limits', lim.status, await lim.json(), 'GET /v1/limits', out);
+
     failures.push(...out);
   }, 30000);
 

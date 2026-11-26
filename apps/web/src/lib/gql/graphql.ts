@@ -733,6 +733,19 @@ export type EditorPermission =
   /** Create, rename and delete sets, change their capacity, and pick a channel's active set. */
   | 'SETS';
 
+/** One of the signed-in caller's per-account limits, with the default and what applies to them. */
+export type EffectiveLimit = {
+  __typename?: 'EffectiveLimit';
+  /** What everyone gets. */
+  default: Scalars['Int']['output'];
+  /** What the caller gets: the most generous override among their roles, else the default. */
+  effective: Scalars['Int']['output'];
+  /** `uploads_per_hour`, `pending_emotes`, `set_capacity_max` and so on (see `RoleLimit`). */
+  key: Scalars['String']['output'];
+  /** The window the count is per, in seconds; null for a cap on how many exist at once. */
+  windowSeconds?: Maybe<Scalars['Int']['output']>;
+};
+
 export type Emote = {
   __typename?: 'Emote';
   animated: Scalars['Boolean']['output'];
@@ -765,6 +778,8 @@ export type EmoteFile = {
   height: Scalars['Int']['output'];
   /** The first frame of an animated emote. */
   isStatic: Scalars['Boolean']['output'];
+  /** `image/webp` or `image/avif`. Filled in by the API like `url`. */
+  mime: Scalars['String']['output'];
   /** For example `2x.webp` or `1x_static.avif`. */
   name: Scalars['String']['output'];
   /**
@@ -774,6 +789,11 @@ export type EmoteFile = {
   scale: Scalars['Int']['output'];
   /** Bytes. */
   size: Scalars['Int']['output'];
+  /**
+   * The full CDN address of this file: `{host}/{name}`. Filled in by the API (empty only in
+   * the records the worker writes).
+   */
+  url: Scalars['String']['output'];
   width: Scalars['Int']['output'];
 };
 
@@ -1140,6 +1160,30 @@ export type Me = {
    * that aren't public: your profile marks them hidden; others see `AccountProfile.roles`.
    */
   roles: Array<OwnRole>;
+};
+
+/** What one kind of picture (emote, badge, paint) may be. Sizes are px, the file size is bytes. */
+export type MediaLimits = {
+  __typename?: 'MediaLimits';
+  /**
+   * How many times as wide as tall a picture may be (badges 1, paints 8); null for no rule at
+   * upload (emotes wider than their `servedAspect` are scaled to fit).
+   */
+  maxAspect?: Maybe<Scalars['Int']['output']>;
+  /** The most bytes an uploaded file may be. */
+  maxBytes: Scalars['Int']['output'];
+  /** The longest one run of an animation may last, in ms; null when there is no cap. */
+  maxDurationMs?: Maybe<Scalars['Int']['output']>;
+  /** The most frames an animation may have. */
+  maxFrames: Scalars['Int']['output'];
+  /** The tallest file the CDN serves for this kind (emotes 128 px, badges the master size). */
+  maxServedSide: Scalars['Int']['output'];
+  /** The longest side of an upload. */
+  maxSide: Scalars['Int']['output'];
+  /** Width x height x frames, all frames together: the cap on decoding work. */
+  maxTotalPixels: Scalars['Int']['output'];
+  /** The smallest side an upload may have (badges: both sides; paints: the height); null for none. */
+  minSide?: Maybe<Scalars['Int']['output']>;
 };
 
 export type Mutation = {
@@ -1987,6 +2031,18 @@ export type MutationUpdateShopItemArgs = {
   input: ShopItemInput;
 };
 
+/** The lengths of the names and notes clients type. */
+export type NameLimits = {
+  __typename?: 'NameLimits';
+  badge: TextLimit;
+  /** An emote's name in a set (no spaces). */
+  emote: TextLimit;
+  paint: TextLimit;
+  set: TextLimit;
+  /** A badge's tooltip. */
+  tooltip: TextLimit;
+};
+
 /** Something the platform tells you, such as a takedown of your emote. */
 export type Notification = {
   __typename?: 'Notification';
@@ -2274,6 +2330,23 @@ export type PublicIdentity = {
   platform: Platform;
 };
 
+/** Every limit, as `limits` answers. */
+export type PublicLimits = {
+  __typename?: 'PublicLimits';
+  /**
+   * The caller's per-account limits with their roles' overrides applied. Empty when signed out
+   * and on `GET /v1/limits`.
+   */
+  account: Array<EffectiveLimit>;
+  badge: MediaLimits;
+  emote: MediaLimits;
+  names: NameLimits;
+  paint: MediaLimits;
+  /** The per-IP request rates. */
+  rates: Array<RateInfo>;
+  tags: TagLimits;
+};
+
 /** A role as anyone may see it on a profile. */
 export type PublicRole = {
   __typename?: 'PublicRole';
@@ -2555,6 +2628,12 @@ export type Query = {
    * `roles.manage`.
    */
   limitDefaults: Array<RoleLimit>;
+  /**
+   * Every upload and field limit in one public list: per kind (emote, badge, paint) the file
+   * size, side, frames, pixels and duration; the name and tag lengths; the per-IP rates. Signed
+   * in, `account` also lists your own per-account limits with your roles' overrides applied.
+   */
+  limits: PublicLimits;
   /** The signed-in account. */
   me: Me;
   /** Your channels: one per linked platform you have signed in with. */
@@ -3156,6 +3235,16 @@ export type QuickSearch = {
   users: Array<AccountHit>;
 };
 
+/** A count of requests or writes per window. */
+export type RateInfo = {
+  __typename?: 'RateInfo';
+  /** Requests allowed per window (the burst). */
+  count: Scalars['Int']['output'];
+  /** For example `gql`, `reads`, `upload`: the name of `CYEX_TV_LIMIT_<NAME>`. */
+  key: Scalars['String']['output'];
+  windowSeconds: Scalars['Int']['output'];
+};
+
 /** Who gets a gift: their Twitch or Kick login. */
 export type RecipientInput = {
   login: Scalars['String']['input'];
@@ -3562,6 +3651,22 @@ export type SubscriptionState =
   | 'FUTURE'
   | 'PAST';
 
+/** Tags on an emote. */
+export type TagLimits = {
+  __typename?: 'TagLimits';
+  /** The most tags one emote has. */
+  max: Scalars['Int']['output'];
+  /** The longest tag, in characters. */
+  maxLen: Scalars['Int']['output'];
+};
+
+/** A text field's length in characters. */
+export type TextLimit = {
+  __typename?: 'TextLimit';
+  max: Scalars['Int']['output'];
+  min: Scalars['Int']['output'];
+};
+
 /** Where an emote transfer request stands (ADR 0014). */
 export type TransferRequestState =
   | 'ACCEPTED'
@@ -3663,6 +3768,12 @@ export type UploadQuota = {
   __typename?: 'UploadQuota';
   /** The account uploads go to. */
   accountId: Scalars['String']['output'];
+  /** The most bytes one emote file may be. */
+  maxBytes: Scalars['Int']['output'];
+  /** The most frames an animated emote may have. */
+  maxFrames: Scalars['Int']['output'];
+  /** The longest side of an emote, in px. */
+  maxSide: Scalars['Int']['output'];
   /** Its emotes waiting for review, ones still being processed included. */
   pending: Scalars['Int']['output'];
   /** How many may wait at once; an upload at this many is refused (`too_many_pending`). Null when the caller isn't capped (the owners). */
@@ -4488,7 +4599,14 @@ export type UploadQuotaQueryVariables = Exact<{
 }>;
 
 
-export type UploadQuotaQuery = { __typename?: 'Query', uploadQuota: { __typename?: 'UploadQuota', accountId: string, pending: number, pendingMax?: number | null, uploadsThisHour: number, uploadsPerHour: number } };
+export type UploadQuotaQuery = { __typename?: 'Query', uploadQuota: { __typename?: 'UploadQuota', accountId: string, pending: number, pendingMax?: number | null, uploadsThisHour: number, uploadsPerHour: number, maxBytes: number, maxSide: number, maxFrames: number } };
+
+export type MediaLimitFieldsFragment = { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxServedSide: number };
+
+export type PublicLimitsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type PublicLimitsQuery = { __typename?: 'Query', limits: { __typename?: 'PublicLimits', emote: { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxServedSide: number }, badge: { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxServedSide: number }, paint: { __typename?: 'MediaLimits', maxBytes: number, maxSide: number, maxFrames: number, maxTotalPixels: number, maxDurationMs?: number | null, minSide?: number | null, maxAspect?: number | null, maxServedSide: number }, names: { __typename?: 'NameLimits', emote: { __typename?: 'TextLimit', min: number, max: number }, set: { __typename?: 'TextLimit', min: number, max: number }, badge: { __typename?: 'TextLimit', min: number, max: number }, paint: { __typename?: 'TextLimit', min: number, max: number }, tooltip: { __typename?: 'TextLimit', min: number, max: number } }, tags: { __typename?: 'TagLimits', max: number, maxLen: number }, rates: Array<{ __typename?: 'RateInfo', key: string, count: number, windowSeconds: number }>, account: Array<{ __typename?: 'EffectiveLimit', key: string, default: number, effective: number, windowSeconds?: number | null }> } };
 
 export type CreateRoleMutationVariables = Exact<{
   input: CreateRoleInput;
@@ -5097,6 +5215,18 @@ export const RoleLimitFieldsFragmentDoc = new TypedDocumentString(`
   value
 }
     `, {"fragmentName":"RoleLimitFields"}) as unknown as TypedDocumentString<RoleLimitFieldsFragment, unknown>;
+export const MediaLimitFieldsFragmentDoc = new TypedDocumentString(`
+    fragment MediaLimitFields on MediaLimits {
+  maxBytes
+  maxSide
+  maxFrames
+  maxTotalPixels
+  maxDurationMs
+  minSide
+  maxAspect
+  maxServedSide
+}
+    `, {"fragmentName":"MediaLimitFields"}) as unknown as TypedDocumentString<MediaLimitFieldsFragment, unknown>;
 export const SetFieldsFragmentDoc = new TypedDocumentString(`
     fragment SetFields on EmoteSet {
   id
@@ -7656,9 +7786,73 @@ export const UploadQuotaDocument = new TypedDocumentString(`
     pendingMax
     uploadsThisHour
     uploadsPerHour
+    maxBytes
+    maxSide
+    maxFrames
   }
 }
     `) as unknown as TypedDocumentString<UploadQuotaQuery, UploadQuotaQueryVariables>;
+export const PublicLimitsDocument = new TypedDocumentString(`
+    query PublicLimits {
+  limits {
+    emote {
+      ...MediaLimitFields
+    }
+    badge {
+      ...MediaLimitFields
+    }
+    paint {
+      ...MediaLimitFields
+    }
+    names {
+      emote {
+        min
+        max
+      }
+      set {
+        min
+        max
+      }
+      badge {
+        min
+        max
+      }
+      paint {
+        min
+        max
+      }
+      tooltip {
+        min
+        max
+      }
+    }
+    tags {
+      max
+      maxLen
+    }
+    rates {
+      key
+      count
+      windowSeconds
+    }
+    account {
+      key
+      default
+      effective
+      windowSeconds
+    }
+  }
+}
+    fragment MediaLimitFields on MediaLimits {
+  maxBytes
+  maxSide
+  maxFrames
+  maxTotalPixels
+  maxDurationMs
+  minSide
+  maxAspect
+  maxServedSide
+}`) as unknown as TypedDocumentString<PublicLimitsQuery, PublicLimitsQueryVariables>;
 export const CreateRoleDocument = new TypedDocumentString(`
     mutation CreateRole($input: CreateRoleInput!) {
   createRole(input: $input) {
