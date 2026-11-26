@@ -1,5 +1,5 @@
 //! The website's side of the contract. Every GraphQL operation the site sends is read from its
-//! source (`apps/web/src/lib/queries.ts` and `paint-studio/queries.ts`, not copied here), with
+//! source (`apps/web/src/lib/queries/*.ts` and `paint-studio/queries.ts`, not copied here), with
 //! the fragments it uses, and run against the real schema through the real router: as the site
 //! sends it (the cookie and its `Origin`), with seeded data and real variables. A field or an
 //! operation the API doesn't have fails validation; a read or a main mutation that answers an
@@ -34,7 +34,20 @@ fn web_dir() -> PathBuf {
 /// Every `graphql(`...`)` template in the site's query files.
 fn site_documents() -> Vec<Doc> {
     let mut docs = Vec::new();
-    for file in ["queries.ts", "paint-studio/queries.ts"] {
+    let mut files: Vec<String> = std::fs::read_dir(web_dir().join("queries"))
+        .expect("the queries folder")
+        .map(|e| {
+            e.expect("a directory entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .filter(|n| n.ends_with(".ts") && n != "index.ts")
+        .map(|n| format!("queries/{n}"))
+        .collect();
+    files.sort();
+    files.push("paint-studio/queries.ts".to_owned());
+    for file in &files {
         let path = web_dir().join(file);
         let source = std::fs::read_to_string(&path)
             .unwrap_or_else(|err| panic!("read {}: {err}", path.display()));
