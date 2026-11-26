@@ -240,8 +240,8 @@ pub fn picture_limits(kind: CosmeticKind) -> Limits {
 /// The sizes a kind of picture is made at (the worker's `cosmetics::profile`).
 pub fn picture_profile(kind: CosmeticKind) -> &'static Profile {
     match kind {
-        CosmeticKind::Badge => &Profile::BADGE,
-        CosmeticKind::Paint => &Profile::PAINT,
+        CosmeticKind::Badge => Profile::badge(),
+        CosmeticKind::Paint => Profile::paint(),
     }
 }
 
@@ -311,14 +311,15 @@ pub fn image_view(image: &Image, cdn_url: &str) -> CosmeticImage {
     let files = files_of(&image.variants);
     let kind = kind_of(image);
     let ready = files.iter().any(|f| f.format == ImageFormat::Webp);
+    let host = format!(
+        "{cdn_url}/{}",
+        cosmetic_prefix(kind.as_str(), &sigv4::hex(&image.sha256))
+    );
     CosmeticImage {
         id: ids::to_text(image.id),
         kind,
-        host: format!(
-            "{cdn_url}/{}",
-            cosmetic_prefix(kind.as_str(), &sigv4::hex(&image.sha256))
-        ),
-        files,
+        files: EmoteFile::with_urls(files, &host),
+        host,
         animated: image.animated,
         width: u32::try_from(image.width).unwrap_or(0),
         height: u32::try_from(image.height).unwrap_or(0),
@@ -1628,6 +1629,8 @@ mod tests {
             height: 18,
             size: 1,
             is_static: false,
+            url: String::new(),
+            mime: String::new(),
         }
     }
 

@@ -33,7 +33,7 @@
   import LeaveGuard from '$lib/tool/LeaveGuard.svelte';
   import { notify } from '$lib/tool/notices.svelte';
   import { sameFileEmotes, sameFileLine, type SameFileEmote } from './same-file';
-  import { UPLOAD_LIMITS, upload } from './upload.svelte';
+  import { DEFAULT_EMOTE_CAPS, upload, uploadLimits } from './upload.svelte';
 
   type Props = {
     /** Sending right now (the dialog won't close while it is). */
@@ -101,8 +101,10 @@
     loadQuota();
   });
   const room = $derived(quotaView(quota, forOther));
+  // The caps for this account, as the API says them (`uploadQuota`); the built-in numbers until then.
+  const caps = $derived(quota ? { maxBytes: quota.maxBytes, maxSide: quota.maxSide, maxFrames: quota.maxFrames } : DEFAULT_EMOTE_CAPS);
 
-  const fileError = $derived(picked ? (fileProblem(picked.file) ?? picked.sizeError) : null);
+  const fileError = $derived(picked ? (fileProblem(picked.file, caps.maxBytes) ?? picked.sizeError) : null);
   const nameError = $derived(tried || name !== prefilled ? nameProblem(name) : null);
   const tagError = $derived(tagsProblem(tags));
   const dirty = $derived(!!picked || !!name.trim() || tags.length > 0);
@@ -113,13 +115,13 @@
 
   /** Reads the picture's size, so a too-big or unreadable file is named before the upload. */
   async function measure(p: Picked) {
-    if (fileProblem(p.file)) return;
+    if (fileProblem(p.file, caps.maxBytes)) return;
     try {
       const bmp = await createImageBitmap(p.file);
       if (picked?.url === p.url) {
         picked.width = bmp.width;
         picked.height = bmp.height;
-        if (bmp.width > 1000 || bmp.height > 1000) picked.sizeError = `It’s ${bmp.width} × ${bmp.height} px; at most 1000 × 1000.`;
+        if (bmp.width > caps.maxSide || bmp.height > caps.maxSide) picked.sizeError = `It’s ${bmp.width} × ${bmp.height} px; at most ${caps.maxSide} × ${caps.maxSide}.`;
       }
       bmp.close();
     } catch {
@@ -129,7 +131,7 @@
 
   /** Asks whether the file is already a public emote; quietly. */
   async function checkSame(p: Picked) {
-    if (!session.me || fileProblem(p.file)) return;
+    if (!session.me || fileProblem(p.file, caps.maxBytes)) return;
     const found = await sameFileEmotes(p.file);
     if (picked?.url === p.url && found.length) picked.same = found;
   }
@@ -337,7 +339,7 @@
     <input bind:this={input} class="sr-only" type="file" tabindex="-1" accept={UPLOAD_ACCEPT}
       onchange={(e) => { add(e.currentTarget.files); e.currentTarget.value = ''; }} />
     <ul class="limits" id="limits-{uid}" aria-label="Limits">
-      {#each UPLOAD_LIMITS as l (l)}<li>{l}</li>{/each}
+      {#each uploadLimits(quota ? caps : null) as l (l)}<li>{l}</li>{/each}
     </ul>
   </div>
 </form>

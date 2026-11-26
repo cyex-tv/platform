@@ -113,6 +113,15 @@ CYEX_TV_CLOUDFLARE_ZONE_ID=<zone id>
 CYEX_TV_CLOUDFLARE_PURGE_TOKEN=<token value>
 ```
 
+## 7. Media limits (optional)
+The upload limits (file size, side, frames, pixels, duration per emote, badge and paint) and the
+badge and paint size ladder are `CYEX_TV_LIMIT_*` variables with the numbers the code ships with
+as defaults; `.env.example` lists them all. Set the same values in `api.env` and `worker.env`
+(the api checks uploads with them, the worker decodes with them), then restart both; either
+refuses to start on a value that doesn't read. Nothing needs setting unless a limit should
+change. An emote's side can't be set above 1000 px. `GET /v1/limits` and the GraphQL `limits`
+query show what a running api enforces, so check them after a change.
+
 ## Done (2026/11/17)
 - Twitch and Kick apps registered, redirect URLs as above.
 - Cloudflare: the cyex.tv zone; R2 bucket `cyex-tv-cdn` (location automatic, Eastern Europe;

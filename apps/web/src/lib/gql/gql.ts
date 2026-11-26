@@ -132,7 +132,9 @@ type Documents = {
     "\n  query LimitDefaults {\n    limitDefaults {\n      ...RoleLimitFields\n    }\n  }\n": typeof types.LimitDefaultsDocument,
     "\n  query RoleLimits($id: String!) {\n    roleLimits(id: $id) {\n      ...RoleLimitFields\n    }\n  }\n": typeof types.RoleLimitsDocument,
     "\n  mutation SetRoleLimits($id: String!, $limits: [RoleLimitInput!]!) {\n    setRoleLimits(id: $id, limits: $limits) {\n      ...RoleLimitFields\n    }\n  }\n": typeof types.SetRoleLimitsDocument,
-    "\n  query UploadQuota($ownerId: String) {\n    uploadQuota(ownerId: $ownerId) {\n      accountId\n      pending\n      pendingMax\n      uploadsThisHour\n      uploadsPerHour\n    }\n  }\n": typeof types.UploadQuotaDocument,
+    "\n  query UploadQuota($ownerId: String) {\n    uploadQuota(ownerId: $ownerId) {\n      accountId\n      pending\n      pendingMax\n      uploadsThisHour\n      uploadsPerHour\n      maxBytes\n      maxSide\n      maxFrames\n    }\n  }\n": typeof types.UploadQuotaDocument,
+    "\n  fragment MediaLimitFields on MediaLimits {\n    maxBytes\n    maxSide\n    maxFrames\n    maxTotalPixels\n    maxDurationMs\n    minSide\n    maxAspect\n    maxServedSide\n  }\n": typeof types.MediaLimitFieldsFragmentDoc,
+    "\n  query PublicLimits {\n    limits {\n      emote { ...MediaLimitFields }\n      badge { ...MediaLimitFields }\n      paint { ...MediaLimitFields }\n      names {\n        emote { min max }\n        set { min max }\n        badge { min max }\n        paint { min max }\n        tooltip { min max }\n      }\n      tags { max maxLen }\n      rates { key count windowSeconds }\n      account { key default effective windowSeconds }\n    }\n  }\n": typeof types.PublicLimitsDocument,
     "\n  mutation CreateRole($input: CreateRoleInput!) {\n    createRole(input: $input) {\n      ...RoleFields\n    }\n  }\n": typeof types.CreateRoleDocument,
     "\n  mutation UpdateRole($id: String!, $input: UpdateRoleInput!) {\n    updateRole(id: $id, input: $input) {\n      ...RoleFields\n    }\n  }\n": typeof types.UpdateRoleDocument,
     "\n  mutation DeleteRole($id: String!) {\n    deleteRole(id: $id)\n  }\n": typeof types.DeleteRoleDocument,
@@ -314,7 +316,9 @@ const documents: Documents = {
     "\n  query LimitDefaults {\n    limitDefaults {\n      ...RoleLimitFields\n    }\n  }\n": types.LimitDefaultsDocument,
     "\n  query RoleLimits($id: String!) {\n    roleLimits(id: $id) {\n      ...RoleLimitFields\n    }\n  }\n": types.RoleLimitsDocument,
     "\n  mutation SetRoleLimits($id: String!, $limits: [RoleLimitInput!]!) {\n    setRoleLimits(id: $id, limits: $limits) {\n      ...RoleLimitFields\n    }\n  }\n": types.SetRoleLimitsDocument,
-    "\n  query UploadQuota($ownerId: String) {\n    uploadQuota(ownerId: $ownerId) {\n      accountId\n      pending\n      pendingMax\n      uploadsThisHour\n      uploadsPerHour\n    }\n  }\n": types.UploadQuotaDocument,
+    "\n  query UploadQuota($ownerId: String) {\n    uploadQuota(ownerId: $ownerId) {\n      accountId\n      pending\n      pendingMax\n      uploadsThisHour\n      uploadsPerHour\n      maxBytes\n      maxSide\n      maxFrames\n    }\n  }\n": types.UploadQuotaDocument,
+    "\n  fragment MediaLimitFields on MediaLimits {\n    maxBytes\n    maxSide\n    maxFrames\n    maxTotalPixels\n    maxDurationMs\n    minSide\n    maxAspect\n    maxServedSide\n  }\n": types.MediaLimitFieldsFragmentDoc,
+    "\n  query PublicLimits {\n    limits {\n      emote { ...MediaLimitFields }\n      badge { ...MediaLimitFields }\n      paint { ...MediaLimitFields }\n      names {\n        emote { min max }\n        set { min max }\n        badge { min max }\n        paint { min max }\n        tooltip { min max }\n      }\n      tags { max maxLen }\n      rates { key count windowSeconds }\n      account { key default effective windowSeconds }\n    }\n  }\n": types.PublicLimitsDocument,
     "\n  mutation CreateRole($input: CreateRoleInput!) {\n    createRole(input: $input) {\n      ...RoleFields\n    }\n  }\n": types.CreateRoleDocument,
     "\n  mutation UpdateRole($id: String!, $input: UpdateRoleInput!) {\n    updateRole(id: $id, input: $input) {\n      ...RoleFields\n    }\n  }\n": types.UpdateRoleDocument,
     "\n  mutation DeleteRole($id: String!) {\n    deleteRole(id: $id)\n  }\n": types.DeleteRoleDocument,
@@ -850,7 +854,15 @@ export function graphql(source: "\n  mutation SetRoleLimits($id: String!, $limit
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n  query UploadQuota($ownerId: String) {\n    uploadQuota(ownerId: $ownerId) {\n      accountId\n      pending\n      pendingMax\n      uploadsThisHour\n      uploadsPerHour\n    }\n  }\n"): typeof import('./graphql').UploadQuotaDocument;
+export function graphql(source: "\n  query UploadQuota($ownerId: String) {\n    uploadQuota(ownerId: $ownerId) {\n      accountId\n      pending\n      pendingMax\n      uploadsThisHour\n      uploadsPerHour\n      maxBytes\n      maxSide\n      maxFrames\n    }\n  }\n"): typeof import('./graphql').UploadQuotaDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment MediaLimitFields on MediaLimits {\n    maxBytes\n    maxSide\n    maxFrames\n    maxTotalPixels\n    maxDurationMs\n    minSide\n    maxAspect\n    maxServedSide\n  }\n"): typeof import('./graphql').MediaLimitFieldsFragmentDoc;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query PublicLimits {\n    limits {\n      emote { ...MediaLimitFields }\n      badge { ...MediaLimitFields }\n      paint { ...MediaLimitFields }\n      names {\n        emote { min max }\n        set { min max }\n        badge { min max }\n        paint { min max }\n        tooltip { min max }\n      }\n      tags { max maxLen }\n      rates { key count windowSeconds }\n      account { key default effective windowSeconds }\n    }\n  }\n"): typeof import('./graphql').PublicLimitsDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

@@ -61,6 +61,36 @@ export const limitOf = (accountId, key) => {
   const set = (ACCOUNT_ROLES[accountId] ?? []).map((r) => ROLE_LIMITS[r]?.[key]).filter((n) => n != null);
   return set.length ? Math.max(...set) : LIMIT_DEFAULTS.find((l) => l[0] === key)[2];
 };
+// `limits` (public_limits.rs): the numbers the API enforces. `account` lists the signed-in
+// account's own per-account limits with its roles' overrides; empty signed out and on REST.
+const MB = 1024 * 1024;
+const kind = (o) => ({ maxDurationMs: null, minSide: null, maxAspect: null, ...o });
+export const MEDIA_LIMITS = {
+  emote: kind({ maxBytes: 8 * MB, maxSide: 1000, maxFrames: 1000, maxTotalPixels: 100_000_000, maxAspect: 4, maxServedSide: 128 }),
+  badge: kind({ maxBytes: 8 * MB, maxSide: 2048, maxFrames: 120, maxTotalPixels: 64_000_000, maxDurationMs: 10_000, minSide: 72, maxAspect: 1, maxServedSide: 512 }),
+  paint: kind({ maxBytes: 8 * MB, maxSide: 4096, maxFrames: 120, maxTotalPixels: 64_000_000, maxDurationMs: 10_000, minSide: 64, maxAspect: 8, maxServedSide: 512 }),
+};
+const RATES = [['auth', 30, 60], ['gql', 300, 60], ['gql_account', 600, 60], ['upload', 30, 3600], ['reads', 1200, 60], ['socket', 60, 60]];
+const snake = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`), v]));
+export const publicLimitsRest = () => ({
+  emote: snake(MEDIA_LIMITS.emote),
+  badge: snake(MEDIA_LIMITS.badge),
+  paint: snake(MEDIA_LIMITS.paint),
+  names: { emote: { min: 1, max: 100 }, set: { min: 1, max: 100 }, badge: { min: 1, max: 32 }, paint: { min: 1, max: 32 }, tooltip: { min: 0, max: 64 } },
+  tags: { max: 10, max_len: 32 },
+  rates: RATES.map(([key, count, window]) => ({ key, count, window_seconds: window })),
+  account: [],
+});
+export const limitsAnswer = (session) => {
+  const r = publicLimitsRest();
+  return {
+    ...MEDIA_LIMITS,
+    names: r.names,
+    tags: { max: 10, maxLen: 32 },
+    rates: r.rates.map(({ key, count, window_seconds }) => ({ key, count, windowSeconds: window_seconds })),
+    account: session ? LIMIT_DEFAULTS.map(([key, , d, w]) => ({ key, default: d, effective: limitOf(ME_ID, key), windowSeconds: w })) : [],
+  };
+};
 export const pendingOf = (accountId) => [...MINE, ...PENDING].filter((e) => e.owner?.id === accountId && e.state === 'PENDING').length;
 export const rolesOf = (accountId) => [
   ...(accountId === ME_ID ? [ROLES[0]] : []),

@@ -2,7 +2,7 @@
 import { ME_ID } from '../config.mjs';
 import { MINE } from '../emotes.mjs';
 import { PENDING } from '../review.mjs';
-import { ACCOUNT_ROLES, LIMIT_DEFAULTS, ROLES, ROLE_LIMITS, decisionsFor, limitOf, limitsOut, pendingOf, roleOut } from '../roles.mjs';
+import { ACCOUNT_ROLES, LIMIT_DEFAULTS, MEDIA_LIMITS, ROLES, ROLE_LIMITS, decisionsFor, limitOf, limitsOut, pendingOf, roleOut } from '../roles.mjs';
 import { PERMISSIONS } from '../editors.mjs';
 import { emoteGrant, err } from '../sets.mjs';
 
@@ -74,7 +74,8 @@ export function signedInRoles(op, body, v, ADMIN) {
       const hour = Date.now() - 3600_000;
       return { data: { uploadQuota: { accountId: owner, pending: pendingOf(owner), pendingMax: limitOf(owner, 'pending_emotes'),
         uploadsThisHour: [...MINE, ...PENDING].filter((e) => e.owner?.id === owner && Date.parse(e.createdAt) > hour).length,
-        uploadsPerHour: limitOf(owner, 'uploads_per_hour') } } };
+        uploadsPerHour: limitOf(owner, 'uploads_per_hour'),
+        maxBytes: MEDIA_LIMITS.emote.maxBytes, maxSide: MEDIA_LIMITS.emote.maxSide, maxFrames: MEDIA_LIMITS.emote.maxFrames } } };
     }
     case 'DeleteRole': {
       const r = ROLES.find((x) => x.id === v.id);

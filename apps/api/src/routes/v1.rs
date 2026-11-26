@@ -21,8 +21,8 @@ use cyex_tv_shared::error::{ApiError, ApiResult, ErrorBody};
 use cyex_tv_shared::model::{
     CallbackQuery, Channel, ConsoleToken, CosmeticCatalog, CosmeticImage, CosmeticKind, Emote,
     EmoteSet, EmoteVisibility, LoginQuery, PersonalLookup, PersonalLookupResult, Platform,
-    SetEmotePage, SetEmotesQuery, UploadCosmeticImage, UploadEmote, UserCosmeticsQuery,
-    UserCosmeticsResult,
+    PublicLimits, SetEmotePage, SetEmotesQuery, UploadCosmeticImage, UploadEmote,
+    UserCosmeticsQuery, UserCosmeticsResult,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -36,9 +36,12 @@ use crate::state::{AppState, MaybeCaller};
 use crate::{catalog, cosmetics, moderation, shop, upload};
 
 /// The upload body may be a little over the 8 MB emote file limit (multipart framing, the name
-/// and tags); anything beyond this is cut off before it is read. Cosmetic pictures stop at 5 MB
-/// while they are read (`file_field`).
-const UPLOAD_BODY_LIMIT: usize = cyex_tv_media::EMOTE_MAX_BYTES + 64 * 1024;
+/// and tags); anything beyond this is cut off before it is read. The biggest of the configured
+/// emote, badge and paint file caps (`CYEX_TV_LIMIT_*_MAX_BYTES`); each kind's own cap is checked
+/// while the file is read.
+fn upload_body_limit() -> usize {
+    cyex_tv_media::config::MediaConfig::current().max_upload_bytes() + 64 * 1024
+}
 
 /// Paddle's notifications are a few KB; anything over 64 KB is refused before it is read.
 const WEBHOOK_BODY_LIMIT: usize = 64 * 1024;
@@ -47,7 +50,7 @@ pub fn router() -> OpenApiRouter<AppState> {
     let upload = OpenApiRouter::new()
         .routes(routes!(upload_emote))
         .routes(routes!(upload_cosmetic_image))
-        .layer(DefaultBodyLimit::max(UPLOAD_BODY_LIMIT));
+        .layer(DefaultBodyLimit::max(upload_body_limit()));
     let webhook = OpenApiRouter::new()
         .routes(routes!(paddle_webhook))
         .layer(DefaultBodyLimit::max(WEBHOOK_BODY_LIMIT));
@@ -62,6 +65,7 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(get_set))
         .routes(routes!(get_set_emotes))
         .routes(routes!(get_global_set))
+        .routes(routes!(get_limits))
         .routes(routes!(get_emote))
         .routes(routes!(lookup_personal_sets))
         .routes(routes!(get_cosmetics))
@@ -353,7 +357,7 @@ async fn upload_emote(
                         bad_form("The file couldn't be read.")
                     }
                 })? {
-                    if bytes.len() + chunk.len() > cyex_tv_media::EMOTE_MAX_BYTES {
+                    if bytes.len() + chunk.len() > cyex_tv_media::Limits::emote().max_bytes {
                         return Err(upload::too_large());
                     }
                     bytes.extend_from_slice(&chunk);
@@ -430,7 +434,10 @@ async fn file_field(
 ) -> ApiResult<Vec<u8>> {
     // Badges and paints share the 8 MB cap; the kind may come after the file, and the per-kind
     // cap is checked when the picture is decoded.
-    let limits = cyex_tv_media::Limits::badge();
+    let mut limits = cyex_tv_media::Limits::badge();
+    limits.max_bytes = limits
+        .max_bytes
+        .max(cyex_tv_media::Limits::paint().max_bytes);
     let mut bytes = Vec::new();
     while let Some(chunk) = field.chunk().await.map_err(|err| {
         if err.status() == StatusCode::PAYLOAD_TOO_LARGE {
@@ -656,6 +663,20 @@ async fn get_set(
     let id = crate::public_ids::canonical(&state, &id).await?;
     let key = cyex_tv_db::ids::from_text(id.trim()).map(read_cache::set_key);
     shared_read(&state, &headers, key, || catalog::set(&state, None, &id)).await
+}
+
+/// Every upload and field limit: per kind (emote, badge, paint) the file size, side, frames,
+/// pixels and duration, the name and tag lengths and the per-IP rates. The same for everyone, so
+/// `account` is empty here; the GraphQL `limits` query adds the signed-in caller's own limits.
+#[utoipa::path(
+    get,
+    path = "/v1/limits",
+    tag = "reads",
+    responses((status = 200, body = PublicLimits), (status = 304, description = "Not modified."))
+)]
+async fn get_limits(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Response> {
+    let limits = crate::public_limits::load(&state, None).await;
+    cached(&headers, &limits, READ_MAX_AGE)
 }
 
 /// A page of a set's emotes, oldest first, for clients that read big sets in parts (cursor

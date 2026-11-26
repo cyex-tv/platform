@@ -1032,6 +1032,28 @@ enum EditorPermission {
 	BILLING_SUBSCRIPTION
 }
 
+"""
+One of the signed-in caller's per-account limits, with the default and what applies to them.
+"""
+type EffectiveLimit {
+	"""
+	`uploads_per_hour`, `pending_emotes`, `set_capacity_max` and so on (see `RoleLimit`).
+	"""
+	key: String!
+	"""
+	What everyone gets.
+	"""
+	default: Int!
+	"""
+	What the caller gets: the most generous override among their roles, else the default.
+	"""
+	effective: Int!
+	"""
+	The window the count is per, in seconds; null for a cap on how many exist at once.
+	"""
+	windowSeconds: Int
+}
+
 type Emote {
 	"""
 	The emote's Snowflake ID, as decimal digits (ADR 0027). Its old ULID is still taken as input.
@@ -1088,6 +1110,15 @@ type EmoteFile {
 	The first frame of an animated emote.
 	"""
 	isStatic: Boolean!
+	"""
+	The full CDN address of this file: `{host}/{name}`. Filled in by the API (empty only in
+	the records the worker writes).
+	"""
+	url: String!
+	"""
+	`image/webp` or `image/avif`. Filled in by the API like `url`.
+	"""
+	mime: String!
 }
 
 """
@@ -1598,6 +1629,45 @@ type Me {
 	roles: [OwnRole!]!
 }
 
+"""
+What one kind of picture (emote, badge, paint) may be. Sizes are px, the file size is bytes.
+"""
+type MediaLimits {
+	"""
+	The most bytes an uploaded file may be.
+	"""
+	maxBytes: Int!
+	"""
+	The longest side of an upload.
+	"""
+	maxSide: Int!
+	"""
+	The most frames an animation may have.
+	"""
+	maxFrames: Int!
+	"""
+	Width x height x frames, all frames together: the cap on decoding work.
+	"""
+	maxTotalPixels: Int!
+	"""
+	The longest one run of an animation may last, in ms; null when there is no cap.
+	"""
+	maxDurationMs: Int
+	"""
+	The smallest side an upload may have (badges: both sides; paints: the height); null for none.
+	"""
+	minSide: Int
+	"""
+	How many times as wide as tall a picture may be (badges 1, paints 8); null for no rule at
+	upload (emotes wider than their `servedAspect` are scaled to fit).
+	"""
+	maxAspect: Int
+	"""
+	The tallest file the CDN serves for this kind (emotes 128 px, badges the master size).
+	"""
+	maxServedSide: Int!
+}
+
 type Mutation {
 	"""
 	Unlink a platform from your account. The last identity can't be removed, and a
@@ -2050,6 +2120,23 @@ type Mutation {
 }
 
 """
+The lengths of the names and notes clients type.
+"""
+type NameLimits {
+	"""
+	An emote's name in a set (no spaces).
+	"""
+	emote: TextLimit!
+	set: TextLimit!
+	badge: TextLimit!
+	paint: TextLimit!
+	"""
+	A badge's tooltip.
+	"""
+	tooltip: TextLimit!
+}
+
+"""
 Something the platform tells you, such as a takedown of your emote.
 """
 type Notification {
@@ -2471,6 +2558,26 @@ type PublicIdentity {
 	platform: Platform!
 	login: String!
 	displayName: String!
+}
+
+"""
+Every limit, as `limits` answers.
+"""
+type PublicLimits {
+	emote: MediaLimits!
+	badge: MediaLimits!
+	paint: MediaLimits!
+	names: NameLimits!
+	tags: TagLimits!
+	"""
+	The per-IP request rates.
+	"""
+	rates: [RateInfo!]!
+	"""
+	The caller's per-account limits with their roles' overrides applied. Empty when signed out
+	and on `GET /v1/limits`.
+	"""
+	account: [EffectiveLimit!]!
 }
 
 """
@@ -2996,6 +3103,12 @@ type Query {
 	"""
 	roleLimits(id: String!): [RoleLimit!]!
 	"""
+	Every upload and field limit in one public list: per kind (emote, badge, paint) the file
+	size, side, frames, pixels and duration; the name and tag lengths; the per-IP rates. Signed
+	in, `account` also lists your own per-account limits with your roles' overrides applied.
+	"""
+	limits: PublicLimits!
+	"""
 	Where uploads stand: how many emotes wait for review and how many may, and the uploads
 	this hour. Yours, or with `ownerId` an account you may upload for.
 	"""
@@ -3008,6 +3121,21 @@ The header search: the best emotes and accounts for one query.
 type QuickSearch {
 	emotes: [Emote!]!
 	users: [AccountHit!]!
+}
+
+"""
+A count of requests or writes per window.
+"""
+type RateInfo {
+	"""
+	For example `gql`, `reads`, `upload`: the name of `CYEX_TV_LIMIT_<NAME>`.
+	"""
+	key: String!
+	"""
+	Requests allowed per window (the burst).
+	"""
+	count: Int!
+	windowSeconds: Int!
 }
 
 """
@@ -3626,6 +3754,28 @@ enum SubscriptionState {
 }
 
 """
+Tags on an emote.
+"""
+type TagLimits {
+	"""
+	The most tags one emote has.
+	"""
+	max: Int!
+	"""
+	The longest tag, in characters.
+	"""
+	maxLen: Int!
+}
+
+"""
+A text field's length in characters.
+"""
+type TextLimit {
+	min: Int!
+	max: Int!
+}
+
+"""
 Where an emote transfer request stands (ADR 0014).
 """
 enum TransferRequestState {
@@ -3769,6 +3919,18 @@ type UploadQuota {
 	"""
 	uploadsThisHour: Int!
 	uploadsPerHour: Int!
+	"""
+	The most bytes one emote file may be.
+	"""
+	maxBytes: Int!
+	"""
+	The longest side of an emote, in px.
+	"""
+	maxSide: Int!
+	"""
+	The most frames an animated emote may have.
+	"""
+	maxFrames: Int!
 }
 
 """

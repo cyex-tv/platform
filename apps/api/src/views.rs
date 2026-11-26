@@ -84,29 +84,33 @@ fn emote(
     counts: &HashMap<Uuid, u32>,
     cdn_url: &str,
 ) -> Emote {
+    let host = row
+        .sha256
+        .as_deref()
+        .map(|sha| format!("{cdn_url}/emotes/{}", hex(sha)))
+        .unwrap_or_default();
     let files = files(row.variants.as_ref());
+    let processing = processing_of(row, &files);
+    let wide = is_wide(&files);
+    let files = EmoteFile::with_urls(files, &host);
     Emote {
         id: ids::to_text(row.id),
         name: row.name.clone(),
         owner: summary(summaries, row.owner),
         state: row.state,
-        processing: processing_of(row, &files),
+        processing,
         flags: EmoteFlags {
             zero_width: row.zero_width,
             private: row.private,
             // Retired: NSFW emotes aren't allowed (ADR 0020); an old flag only keeps the emote
             // off the listings until staff save its flags.
             nsfw: false,
-            wide: is_wide(&files),
+            wide,
         },
         visibility: EmoteVisibility::of(row.private, row.unlisted),
         animated: row.animated,
         tags: tags.get(&row.id).cloned().unwrap_or_default(),
-        host: row
-            .sha256
-            .as_deref()
-            .map(|sha| format!("{cdn_url}/emotes/{}", hex(sha)))
-            .unwrap_or_default(),
+        host,
         files,
         created_at: time(row.created_at),
         channel_count: counts.get(&row.id).copied().unwrap_or(0),
@@ -451,6 +455,20 @@ mod tests {
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].name, "1x.webp");
         assert!(files(None).is_empty());
+    }
+
+    #[test]
+    fn an_emote_view_gives_every_file_its_url_and_mime() {
+        let variants = serde_json::json!([
+            { "name": "1x.webp", "format": "webp", "scale": 1, "width": 32, "height": 32, "size": 900, "is_static": false },
+            { "name": "1x.avif", "format": "avif", "scale": 1, "width": 32, "height": 32, "size": 600, "is_static": false }
+        ]);
+        let host = "https://cdn.example.test/emotes/ab".to_owned();
+        let files = EmoteFile::with_urls(files(Some(&variants)), &host);
+        assert_eq!(files[0].url, "https://cdn.example.test/emotes/ab/1x.webp");
+        assert_eq!(files[0].mime, "image/webp");
+        assert_eq!(files[1].url, "https://cdn.example.test/emotes/ab/1x.avif");
+        assert_eq!(files[1].mime, "image/avif");
     }
 
     #[test]

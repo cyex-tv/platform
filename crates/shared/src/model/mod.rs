@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
 pub use crate::cosmetics::*;
+pub use crate::public_limits::*;
 pub use crate::shop::*;
 pub use crate::site::*;
 
@@ -625,6 +626,34 @@ pub struct EmoteFile {
     pub size: u32,
     /// The first frame of an animated emote.
     pub is_static: bool,
+    /// The full CDN address of this file: `{host}/{name}`. Filled in by the API (empty only in
+    /// the records the worker writes).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[schema(required = true)]
+    pub url: String,
+    /// `image/webp` or `image/avif`. Filled in by the API like `url`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    #[schema(required = true)]
+    pub mime: String,
+}
+
+impl EmoteFile {
+    /// The media type of `format`.
+    pub fn mime_of(format: ImageFormat) -> &'static str {
+        match format {
+            ImageFormat::Webp => "image/webp",
+            ImageFormat::Avif => "image/avif",
+        }
+    }
+
+    /// The files with their `url` (`{host}/{name}`) and `mime` filled in.
+    pub fn with_urls(mut files: Vec<Self>, host: &str) -> Vec<Self> {
+        for f in &mut files {
+            f.url = format!("{host}/{}", f.name);
+            f.mime = Self::mime_of(f.format).to_owned();
+        }
+        files
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -1783,6 +1812,12 @@ pub struct UploadQuota {
     /// Emotes it got in the last hour.
     pub uploads_this_hour: i32,
     pub uploads_per_hour: i32,
+    /// The most bytes one emote file may be.
+    pub max_bytes: i32,
+    /// The longest side of an emote, in px.
+    pub max_side: i32,
+    /// The most frames an animated emote may have.
+    pub max_frames: i32,
 }
 
 // Live updates (ADR 0005)
@@ -2113,5 +2148,55 @@ mod visibility_tests {
         assert_eq!(V::of(false, true), V::Unlisted);
         assert_eq!(" Unlisted ".parse::<V>(), Ok(V::Unlisted));
         assert!("hidden".parse::<V>().is_err());
+    }
+}
+
+#[cfg(test)]
+mod file_url_tests {
+    use super::*;
+
+    fn file(name: &str, format: ImageFormat) -> EmoteFile {
+        EmoteFile {
+            name: name.into(),
+            format,
+            scale: 1,
+            width: 32,
+            height: 32,
+            size: 100,
+            is_static: false,
+            url: String::new(),
+            mime: String::new(),
+        }
+    }
+
+    #[test]
+    fn files_get_their_full_cdn_url_and_media_type() {
+        let files = EmoteFile::with_urls(
+            vec![
+                file("1x.webp", ImageFormat::Webp),
+                file("1x_static.avif", ImageFormat::Avif),
+            ],
+            "https://cdn.cyex.tv/emotes/abc",
+        );
+        assert_eq!(files[0].url, "https://cdn.cyex.tv/emotes/abc/1x.webp");
+        assert_eq!(files[0].mime, "image/webp");
+        assert_eq!(
+            files[1].url,
+            "https://cdn.cyex.tv/emotes/abc/1x_static.avif"
+        );
+        assert_eq!(files[1].mime, "image/avif");
+    }
+
+    #[test]
+    fn a_stored_entry_without_url_and_mime_still_reads_and_writes_without_them() {
+        let stored = r#"{"name":"1x.webp","format":"webp","scale":1,"width":32,"height":32,"size":9,"is_static":false}"#;
+        let f: EmoteFile = serde_json::from_str(stored).unwrap();
+        assert!(f.url.is_empty() && f.mime.is_empty());
+        let out = serde_json::to_value(&f).unwrap();
+        assert!(out.get("url").is_none() && out.get("mime").is_none());
+        let sent = EmoteFile::with_urls(vec![f], "https://cdn/x");
+        let out = serde_json::to_value(&sent[0]).unwrap();
+        assert_eq!(out["url"], "https://cdn/x/1x.webp");
+        assert_eq!(out["mime"], "image/webp");
     }
 }

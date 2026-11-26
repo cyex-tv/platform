@@ -33,6 +33,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     // Every limit can be set from the environment (`CYEX_TV_LIMIT_*`, see `.env.example`).
     let rates = cyex_tv_api::limits::Rates::from_env(|name| std::env::var(name).ok())?;
+    // The media limits and size ladder too; the worker reads the same variables.
+    cyex_tv_media::config::MediaConfig::init_from_env()?;
     let mut state = AppState::new(db, auth)
         .with_limits(cyex_tv_api::limits::Limits::new(rates, trust_cloudflare));
     // Chat-client reads shared for a few seconds per instance (`read_cache`); 0 turns it off.

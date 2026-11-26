@@ -36,14 +36,72 @@ export const PICTURE_RULES = {
   },
 } as const;
 
+/** The shape of `PICTURE_RULES`, so rules read from the API's `limits` query can stand in for it. */
+export type PictureRules = {
+  badge: { types: readonly string[]; maxBytes: number; minSide: number; maxSide: number; maxFrames: number; maxDurationMs: number; maxTotalPixels: number };
+  paint: { types: readonly string[]; maxBytes: number; minHeight: number; maxAspect: number; maxSide: number; maxFrames: number; maxDurationMs: number; maxTotalPixels: number };
+};
+
+/** What `limits { badge paint }` answers (the fields this file reads). */
+export type MediaLimitsLike = {
+  maxBytes: number;
+  maxSide: number;
+  maxFrames: number;
+  maxTotalPixels: number;
+  maxDurationMs?: number | null;
+  minSide?: number | null;
+  maxAspect?: number | null;
+};
+
+/**
+ * The rules from the API's `limits` query (the numbers it enforces, which an operator may have
+ * changed), each falling back to the built-in copy above for anything it doesn't say.
+ */
+export function rulesFromLimits(l: { badge: MediaLimitsLike; paint: MediaLimitsLike } | null | undefined): PictureRules {
+  if (!l) return PICTURE_RULES;
+  const b = PICTURE_RULES.badge;
+  const p = PICTURE_RULES.paint;
+  return {
+    badge: {
+      types: b.types,
+      maxBytes: l.badge.maxBytes,
+      minSide: l.badge.minSide ?? b.minSide,
+      maxSide: l.badge.maxSide,
+      maxFrames: l.badge.maxFrames,
+      maxDurationMs: l.badge.maxDurationMs ?? b.maxDurationMs,
+      maxTotalPixels: l.badge.maxTotalPixels,
+    },
+    paint: {
+      types: p.types,
+      maxBytes: l.paint.maxBytes,
+      minHeight: l.paint.minSide ?? p.minHeight,
+      maxAspect: l.paint.maxAspect ?? p.maxAspect,
+      maxSide: l.paint.maxSide,
+      maxFrames: l.paint.maxFrames,
+      maxDurationMs: l.paint.maxDurationMs ?? p.maxDurationMs,
+      maxTotalPixels: l.paint.maxTotalPixels,
+    },
+  };
+}
+
+/** The picture hint under a drop zone, from `rules`: "up to 8 MB; animated up to 120 frames and 10 seconds". */
+export function pictureHint(kind: CosmeticUploadKind, rules: PictureRules = PICTURE_RULES): string {
+  const r = rules[kind];
+  const shape =
+    kind === 'badge'
+      ? `Square, at least ${rules.badge.minSide} × ${rules.badge.minSide} px.`
+      : `At least ${rules.paint.minHeight} px tall, up to ${rules.paint.maxAspect}:1.`;
+  return `${shape} PNG, JPEG, GIF or WebP, up to ${r.maxBytes / 1024 / 1024} MB; animated up to ${r.maxFrames} frames and ${r.maxDurationMs / 1000} seconds.`;
+}
+
 /** The `accept` list for a picture input of `kind`. */
 export const pictureAccept = (kind: CosmeticUploadKind) => PICTURE_RULES[kind].types.join(',');
 
 const mb = (n: number) => (n / 1024 / 1024).toFixed(1).replace('.', ',');
 
 /** Why a file can't be a `kind` picture (type and size); null when it can be sent. */
-export function checkFile(file: Pick<File, 'type' | 'size'>, kind: CosmeticUploadKind): string | null {
-  const rules = PICTURE_RULES[kind];
+export function checkFile(file: Pick<File, 'type' | 'size'>, kind: CosmeticUploadKind, all: PictureRules = PICTURE_RULES): string | null {
+  const rules = all[kind];
   if (!(rules.types as readonly string[]).includes(file.type))
     return 'Choose a PNG, JPEG, GIF or WebP file.';
   const most = rules.maxBytes / 1024 / 1024;
@@ -53,19 +111,19 @@ export function checkFile(file: Pick<File, 'type' | 'size'>, kind: CosmeticUploa
 }
 
 /** Why a picture of this size can't be used for `kind`; null when it can. */
-export function checkSize(kind: CosmeticUploadKind, width: number, height: number): string | null {
+export function checkSize(kind: CosmeticUploadKind, width: number, height: number, all: PictureRules = PICTURE_RULES): string | null {
   if (kind === 'badge') {
-    const r = PICTURE_RULES.badge;
+    const r = all.badge;
     if (!(width === height && width >= r.minSide))
-      return `Badge pictures are square and at least 72 × 72 px (this one is ${width} × ${height} px).`;
+      return `Badge pictures are square and at least ${r.minSide} × ${r.minSide} px (this one is ${width} × ${height} px).`;
     if (width > r.maxSide)
       return `Badge pictures are at most ${r.maxSide} × ${r.maxSide} px (this one is ${width} × ${height} px). The largest size made is 512 px.`;
     return null;
   }
-  const r = PICTURE_RULES.paint;
-  if (height < r.minHeight) return `Paint pictures are at least 64 px tall (this one is ${height} px).`;
+  const r = all.paint;
+  if (height < r.minHeight) return `Paint pictures are at least ${r.minHeight} px tall (this one is ${height} px).`;
   if (width > height * r.maxAspect)
-    return `Paint pictures are at most 8 times as wide as they are tall, 8:1 (this one is ${width} × ${height} px).`;
+    return `Paint pictures are at most ${r.maxAspect} times as wide as they are tall, ${r.maxAspect}:1 (this one is ${width} × ${height} px).`;
   if (width > r.maxSide || height > r.maxSide)
     return `Paint pictures are at most ${r.maxSide} px a side (this one is ${width} × ${height} px). The largest size made is 512 px tall.`;
   return null;
@@ -168,9 +226,9 @@ export function animationOf(bytes: Uint8Array): Animation | null {
 }
 
 /** Why an animated `kind` picture of `width`×`height` can't be used; null when it can. */
-export function checkAnimation(kind: CosmeticUploadKind, anim: Animation | null, width: number, height: number): string | null {
+export function checkAnimation(kind: CosmeticUploadKind, anim: Animation | null, width: number, height: number, all: PictureRules = PICTURE_RULES): string | null {
   if (!anim) return null;
-  const r = PICTURE_RULES[kind];
+  const r = all[kind];
   const what = kind === 'badge' ? 'badges' : 'paints';
   if (anim.frames > r.maxFrames) return `Animated ${what} have at most ${r.maxFrames} frames (this one has ${anim.frames}).`;
   if (anim.durationMs > r.maxDurationMs)

@@ -41,3 +41,16 @@ describe('the upload form’s waiting count', () => {
     await waitFor(() => expect((screen.getByRole('button', { name: 'Upload' }) as HTMLButtonElement).disabled).toBe(true));
   });
 });
+
+describe('the upload form’s limits list', () => {
+  it('shows the caps the API gave for the account', async () => {
+    gql.mockImplementation(async (doc: unknown) =>
+      String(doc).includes('uploadQuota')
+        ? { uploadQuota: { accountId: 'ME', uploadsThisHour: 0, uploadsPerHour: 20, pending: 1, pendingMax: 20, maxBytes: 4 * 1024 * 1024, maxSide: 512, maxFrames: 90 } }
+        : Promise.reject(new Error('not in this test')),
+    );
+    render(UploadDropHarness);
+    expect(await screen.findByText('Up to 4 MB')).toBeTruthy();
+    expect(screen.getByText('Up to 512 × 512 px and 90 frames')).toBeTruthy();
+  });
+});
