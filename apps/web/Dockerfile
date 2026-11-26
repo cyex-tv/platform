@@ -16,6 +16,8 @@ COPY schema /repo/schema
 COPY apps/web ./
 ARG PUBLIC_API_URL=
 ARG PUBLIC_CDN_URL=
+# Panchang (landing headlines) is fetched here, not stored in the repo: see scripts/fetch-fonts.mjs.
+RUN npm run fonts
 RUN npm run build
 
 FROM node:22-bookworm-slim AS web
