@@ -172,6 +172,64 @@ export const guides: Guide[] = [
     ],
   },
   {
+    id: 'api-keys',
+    title: 'API keys',
+    search: 'developer key bot read-only bearer cyex_live usage revoke rate limit',
+    blocks: [
+      lede('A bot or tool that reads a lot can use a developer API key: a read-only key with a rate limit of its own, instead of sharing the per-IP limit with everyone at the same address.'),
+      ol(
+        'Sign in on cyex.tv, open your profile’s Account tab and find Developers.',
+        'Name a key (one per bot or tool, so you can revoke it alone) and make it. Copy it then: it is shown once.',
+        'Send it as `Authorization: Bearer cyex_live_…` to the REST reads and to `POST /v1/gql` queries.',
+      ),
+      { t: 'pre', code: `curl -s '${baseUrl}/v1/sets/global' \\n  -H 'authorization: Bearer cyex_live_<key>'` },
+      table(
+        ['Rights', 'Public reads only. A request with a key runs signed out: it never acts as you, holds none of your roles, and the cookie is ignored. Mutations, uploads, sign-in and the sockets answer `api_key_read_only`.'],
+        ['Rate limit', '3.000 a minute per key, and 3.000 a minute for all of an account’s keys together, in place of the per-IP read and GraphQL limits. `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` describe the tighter of the two.'],
+        ['How many', 'Up to 10 keys per account. Made on the website only, never with a token.'],
+        ['Usage', 'The Account tab shows each key’s prefix, when it was made and last used, and its requests per day for 30 days ([myApiKeys](#gql-query-myApiKeys)).'],
+        ['Revoking', 'Revoke stops a key within 30 seconds ([revokeApiKey](#gql-mutation-revokeApiKey)). Deleting the account and a staff block end its keys too. Signing out does not: keys are for bots that run without you.'],
+      ),
+      note('A key that was revoked or never existed answers `401 api_key_invalid`. Keep keys on your server; a leaked one can only read what anyone can, but it spends your allowance.'),
+    ],
+  },
+  {
+    id: 'webhooks',
+    title: 'Webhooks',
+    search: 'webhook push http callback events channel signature hmac retry delivery secret',
+    blocks: [
+      lede('A webhook sends a channel’s events to your server as HTTP POSTs, so a bot doesn’t need to hold the event socket open. The channel’s owner, and its account editors with the channel settings permission, add them on the Channels page.'),
+      table(
+        ['URL', 'An `https://` URL on a public address, on the https port (443). Private, local and reserved addresses are refused when you save it and again before every delivery. Redirects are never followed. Only you and whoever made the webhook see the whole URL; editors see its host.'],
+        ['Events', '`set.emote_added`, `set.emote_removed`, `set.emote_renamed`, `channel.active_set_changed` and `emote.updated` for the channel’s active set, and `cosmetic.created`, `cosmetic.updated`, `cosmetic.deleted` for the cosmetics catalog.'],
+        ['How many', '5 per channel.'],
+        ['Retries', 'Answer with a 2xx within 10 seconds. Anything else is tried again with backoff (10 s, 20 s, 40 s, …), 8 times in all. The webhook turns off after 5 deliveries in a row fail every try, or when at least 20 and over 80% of a day’s deliveries failed; the channel’s owner is told (once a day at most). Turn it on again when your server is fixed. With 100 deliveries waiting, new ones are dropped and logged.'],
+        ['Send test', 'Sends one `webhook.test` delivery at once. The log keeps the latest 50 deliveries.'],
+      ),
+      p('Every delivery is a JSON body like this, with the headers `X-Cyex-Signature`, `X-Cyex-Event` and `X-Cyex-Delivery`:'),
+      { t: 'pre', code: `{\n  "delivery_id": "1842",\n  "webhook_id": "01JDK3Z8Q4M9V2N6R7T5W1X0YA",\n  "channel": { "platform": "twitch", "id": "${EX.twitchId}", "login": "${EX.login}" },\n  "event": {\n    "id": "90211",\n    "type": "set.emote_added",\n    "created_at": "2026-11-26T14:05:00.000+00:00",\n    "data": { "set_id": "${EX.setId}", "emote_id": "${EX.emoteId}", "name": "KEKW" }\n  }\n}` },
+      p('`event.data` is what the [event socket](#live-events) sends for the same event. Delivery is at least once and in no set order: use `delivery_id` to drop repeats, and `event.id` to order them. Manage webhooks with [createWebhook](#gql-mutation-createWebhook), [updateWebhook](#gql-mutation-updateWebhook), [testWebhook](#gql-mutation-testWebhook) and [webhookDeliveries](#gql-query-webhookDeliveries).'),
+    ],
+  },
+  {
+    id: 'webhook-signatures',
+    title: 'Checking webhook signatures',
+    search: 'signature verify hmac sha256 secret x-cyex-signature timestamp replay node python rust',
+    blocks: [
+      p('Each webhook has a secret (`cyexhook_…`), shown once when you add it or make a new one. Every delivery is signed with it: `X-Cyex-Signature: t=<unix seconds>,v1=<signature>`, where the signature is the hex HMAC-SHA256 of the timestamp, a dot and the raw body, under the secret. For 24 hours after you make a new secret, the header carries a second `v1=` signed with the old one: accept the delivery when any `v1` matches.'),
+      ol(
+        'Read the raw body as bytes, before any JSON parsing.',
+        'Split the header on `,` and take `t` and `v1`.',
+        'Compute HMAC-SHA256 of `<t>.<body>` with the secret, as hex, and compare it to `v1` in constant time.',
+        'Refuse it when `t` is more than 5 minutes from your clock, so an old delivery can’t be replayed.',
+      ),
+      { t: 'pre', code: `// Node.js\nimport { createHmac, timingSafeEqual } from 'node:crypto';\n\nexport function verify(secret, header, rawBody, tolerance = 300) {\n  const parts = header.split(',').map((p) => p.trim().split('='));\n  const t = Number(parts.find(([k]) => k === 't')?.[1]);\n  if (!Number.isFinite(t) || Math.abs(Date.now() / 1000 - t) > tolerance) return false;\n  const expected = Buffer.from(createHmac('sha256', secret).update(\`\${t}.\`).update(rawBody).digest('hex'), 'utf8');\n  return parts.filter(([k]) => k === 'v1').some(([, v]) => {\n    const given = Buffer.from(v ?? '', 'utf8');\n    return given.length === expected.length && timingSafeEqual(given, expected);\n  });\n}` },
+      { t: 'pre', code: `# Python\nimport hashlib, hmac, time\n\ndef verify(secret: str, header: str, raw_body: bytes, tolerance: int = 300) -> bool:\n    parts = [p.strip().split("=", 1) for p in header.split(",") if "=" in p]\n    t = int(next((v for k, v in parts if k == "t"), "0"))\n    if abs(time.time() - t) > tolerance:\n        return False\n    expected = hmac.new(secret.encode(), f"{t}.".encode() + raw_body, hashlib.sha256).hexdigest()\n    return any(hmac.compare_digest(expected, v) for k, v in parts if k == "v1")` },
+      p('To check your code: with the secret `key`, the timestamp `1` and the body `{}`, the signature is `1ba6b8171186efc613e8bcc0cbdab2748f24984d7c5a84faa2637afa0e40d224`.'),
+      note('Keep the secret on your server. If it leaks, make a new one on the Channels page ([rotateWebhookSecret](#gql-mutation-rotateWebhookSecret)); the old one stops signing after 24 hours.'),
+    ],
+  },
+  {
     id: 'errors',
     title: 'Errors and caching',
     search: 'error codes etag 304 cache if-none-match',
@@ -188,7 +246,7 @@ export const guides: Guide[] = [
     title: 'Rate limits',
     search: 'limits 429 retry-after throttle',
     blocks: [
-      p('Limits are per IP, and on GraphQL also per account. Past one you get `429` with the code `rate_limited` and a `Retry-After` header in seconds. Wait that long, then go on. Every `429` has `Retry-After`, the event socket and the open-socket cap included.'),
+      p('Limits are per IP, and on GraphQL also per account; a request with an [API key](#api-keys) counts under the key’s own limit instead. Past one you get `429` with the code `rate_limited` and a `Retry-After` header in seconds. Wait that long, then go on. Every `429` has `Retry-After`, the event socket and the open-socket cap included.'),
       p('The public reads and `POST /v1/gql` also say where you stand on every answer, with the `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` headers: the size of the allowance, the requests left in it, and the seconds until it is full again. On GraphQL, a signed-in call counts under the per-account allowance. Pace yourself with them and you never see a `429`.'),
       table(
         ['Reads', '1.200 a minute per IP. Most of them are answered by the cache.'],

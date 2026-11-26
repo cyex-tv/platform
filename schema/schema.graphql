@@ -560,6 +560,42 @@ type ApiDeprecation {
 }
 
 """
+One of your developer API keys. The key itself is shown once, when it is made.
+"""
+type ApiKey {
+	id: String!
+	"""
+	What you called it.
+	"""
+	name: String!
+	"""
+	The start of the key (`cyex_live_` and 8 more characters), to tell keys apart.
+	"""
+	prefix: String!
+	createdAt: String!
+	"""
+	When it last made a request, to the minute or so. `None` until it is used.
+	"""
+	lastUsedAt: String
+	"""
+	Requests it made per UTC day, the last 30 days, oldest first; days without any are left
+	out. Written every minute or so, so the last minute may be missing.
+	"""
+	usage: [ApiKeyDay!]!
+}
+
+"""
+One day of an API key's requests.
+"""
+type ApiKeyDay {
+	"""
+	The UTC day, `YYYY-MM-DD`.
+	"""
+	day: String!
+	requests: Int!
+}
+
+"""
 Where the limits are published.
 """
 type ApiLimitsLink {
@@ -987,11 +1023,49 @@ input CreateSetInput {
 }
 
 """
+A new webhook.
+"""
+input CreateWebhookInput {
+	"""
+	An `https://` URL on a public address.
+	"""
+	url: String!
+	"""
+	At least one of: `SET_EMOTE_ADDED`, `SET_EMOTE_REMOVED`, `SET_EMOTE_RENAMED`,
+	`CHANNEL_ACTIVE_SET_CHANGED`, `EMOTE_UPDATED`, `COSMETIC_CREATED`, `COSMETIC_UPDATED`,
+	`COSMETIC_DELETED`.
+	"""
+	events: [EventType!]!
+}
+
+"""
+A key just made: the key itself is in this answer only.
+"""
+type CreatedApiKey {
+	"""
+	Send as `Authorization: Bearer <key>`. It reads public data only.
+	"""
+	key: String!
+	apiKey: ApiKey!
+}
+
+"""
 A new batch and its codes in plain text. This is the only time they are shown.
 """
 type CreatedCodeBatch {
 	batch: CodeBatch!
 	codes: [String!]!
+}
+
+"""
+A webhook just made, or its secret just replaced: the secret is in this answer only.
+"""
+type CreatedWebhook {
+	"""
+	Signs every delivery (`X-Cyex-Signature`). Keep it on your server.
+	"""
+	secret: String!
+	webhook: Webhook!
 }
 
 """
@@ -2163,6 +2237,37 @@ type Mutation {
 	"""
 	restoreAccount: Boolean!
 	"""
+	Make a developer API key: a Bearer token for bots and tools that reads public data at a
+	higher rate than signed-out requests. The key is in this answer only. At most 10 per
+	account (`too_many_api_keys`); made on cyex.tv only (`website_only` with a token).
+	"""
+	createApiKey(name: String!): CreatedApiKey!
+	"""
+	Revoke one of your API keys; it stops working at once. False when there was no such key.
+	"""
+	revokeApiKey(id: String!): Boolean!
+	"""
+	Point a channel's events at an https URL. The secret that signs every delivery is in this
+	answer only. At most 5 per channel (`too_many_webhooks`).
+	"""
+	createWebhook(platform: Platform!, id: String!, input: CreateWebhookInput!): CreatedWebhook!
+	"""
+	Change a webhook's URL or events, or turn it off or on again.
+	"""
+	updateWebhook(id: String!, input: UpdateWebhookInput!): Webhook!
+	"""
+	Delete a webhook and its delivery log.
+	"""
+	deleteWebhook(id: String!): Boolean!
+	"""
+	Replace a webhook's secret. The new one is in this answer only; the old one stops at once.
+	"""
+	rotateWebhookSecret(id: String!): CreatedWebhook!
+	"""
+	Send a `webhook.test` delivery now (once, no retries), even while the webhook is off.
+	"""
+	testWebhook(id: String!): WebhookDelivery!
+	"""
 	Create a role. You can only grant permissions you hold. Needs `roles.manage`. Audited.
 	"""
 	createRole(input: CreateRoleInput!): Role!
@@ -2645,7 +2750,9 @@ type PublicLimits {
 	names: NameLimits!
 	tags: TagLimits!
 	"""
-	The per-IP request rates.
+	The request rates, by the name of their `CYEX_TV_LIMIT_*` variable: per IP for the route
+	classes (`auth`, `gql`, `reads`, `upload`, `socket`), per account (or per IP signed out)
+	for the account limits, and per developer API key for `api_key` (ADR 0033).
 	"""
 	rates: [RateInfo!]!
 	"""
@@ -2949,6 +3056,20 @@ type Query {
 	`cosmeticId`. `perPage` is 1 to 100, default 50. Needs `cosmetics.grant`.
 	"""
 	cosmeticEntitlements(kind: CosmeticKind!, accountId: String, cosmeticId: String, page: Int, perPage: Int): EntitlementPage!
+	"""
+	Your developer API keys, oldest first, each with its requests per day for the last 30
+	days. Never the keys themselves.
+	"""
+	myApiKeys: [ApiKey!]!
+	"""
+	A channel's webhooks, for its owner and its account editors with the channel settings
+	permission (`forbidden` for anyone else).
+	"""
+	channelWebhooks(platform: Platform!, id: String!): [Webhook!]!
+	"""
+	A webhook's latest deliveries, newest first (the last 50 are kept).
+	"""
+	webhookDeliveries(id: String!): [WebhookDelivery!]!
 	"""
 	The API's version, build, where its limits are published (the `limits` field) and what
 	is deprecated, with the sunset date of each. Public. Same as `GET /v1/meta`.
@@ -3988,6 +4109,18 @@ input UpdateSetInput {
 }
 
 """
+What to change on a webhook; what is left out stays.
+"""
+input UpdateWebhookInput {
+	url: String
+	events: [EventType!]
+	"""
+	Turning it on again starts its failure count over.
+	"""
+	enabled: Boolean
+}
+
+"""
 Where an account stands with uploads (`uploadQuota`): how many of its emotes wait for review
 and how many may, and its uploads this hour.
 """
@@ -4039,6 +4172,65 @@ type UserCosmetics {
 	platformUserId: String!
 	badgeId: String
 	paintId: String
+}
+
+"""
+A channel's webhook: where its events are sent.
+"""
+type Webhook {
+	id: String!
+	url: String!
+	"""
+	The event types it is sent.
+	"""
+	events: [EventType!]!
+	"""
+	Off: nothing is sent. It is turned off by hand, or after 5 deliveries in a row failed.
+	"""
+	enabled: Boolean!
+	"""
+	Why it is off: `manual` or `failures`. `None` while it is on.
+	"""
+	disabledReason: String
+	"""
+	Deliveries in a row that failed after every retry.
+	"""
+	failedDeliveries: Int!
+	createdAt: String!
+}
+
+"""
+One delivery of a webhook: what was sent and how it went.
+"""
+type WebhookDelivery {
+	id: String!
+	"""
+	The event's type, or `webhook.test` for Send test.
+	"""
+	eventType: String!
+	"""
+	The outbox event's ID, as the event sockets send it. `None` for a test.
+	"""
+	eventId: String
+	"""
+	`pending`, `delivered` or `failed`.
+	"""
+	state: String!
+	attempts: Int!
+	"""
+	The receiver's HTTP status on the last attempt, if it answered.
+	"""
+	responseStatus: Int
+	"""
+	What went wrong on the last attempt.
+	"""
+	error: String
+	"""
+	How long the last attempt took, in milliseconds.
+	"""
+	durationMs: Int
+	createdAt: String!
+	finishedAt: String
 }
 
 """

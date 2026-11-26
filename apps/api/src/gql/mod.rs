@@ -19,6 +19,7 @@ mod admin;
 mod audit;
 mod channels;
 mod cosmetics;
+mod developers;
 mod editors;
 mod emotes;
 mod entitlements;
@@ -54,6 +55,7 @@ pub struct Query(
     personal::PersonalQuery,
     editors::EditorQuery,
     cosmetics::CosmeticQuery,
+    developers::DeveloperQuery,
     site::SiteQuery,
     shop::ShopQuery,
     review::ReviewQuery,
@@ -80,6 +82,7 @@ pub struct Mutation(
     moderation::ModerationMutation,
     personal::PersonalMutation,
     account::AccountSessionMutation,
+    developers::DeveloperMutation,
     roles::RoleMutation,
 );
 

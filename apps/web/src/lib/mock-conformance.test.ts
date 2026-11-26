@@ -183,6 +183,7 @@ function valueFor(type: GraphQLInputType, name: string, depth = 0): unknown {
   }
 }
 
+// The mock's seeded webhooks (dev/mock/signed-in/developers.mjs): one to use, one to delete.
 // Per-operation variables where the generic guess is not enough (the mock is a stateful fake).
 const OVERRIDES: Record<string, (c: Ctx) => Record<string, unknown>> = {
   Search: () => ({ query: 'cat' }),
@@ -206,6 +207,14 @@ const OVERRIDES: Record<string, (c: Ctx) => Record<string, unknown>> = {
   UpdateSetEmote: (c) => ({ setId: c.setId, emoteId: c.emoteId, input: { name: 'MockAlias2' } }),
   RemoveSetEmote: (c) => ({ setId: c.setId, emoteId: c.emoteId }),
   RemoveSetEditor: (c) => ({ setId: c.setId, accountId: c.otherAccount }),
+  ChannelWebhooks: (c) => ({ platform: c.channelPlatform, id: c.channelId }),
+  CreateWebhook: (c) => ({ platform: c.channelPlatform, id: c.channelId, input: { url: 'https://hooks.example.com/mock', events: ['SET_EMOTE_ADDED'] } }),
+  UpdateWebhook: () => ({ id: '01JDEVH00K00000000000000A1', input: { enabled: true } }),
+  RotateWebhookSecret: () => ({ id: '01JDEVH00K00000000000000A1' }),
+  TestWebhook: () => ({ id: '01JDEVH00K00000000000000A1' }),
+  WebhookDeliveries: () => ({ id: '01JDEVH00K00000000000000A1' }),
+  DeleteWebhook: () => ({ id: '01JDEVH00K00000000000000A2' }),
+  CreateApiKey: () => ({ name: 'mock bot' }),
   UpdateChannel: (c) => ({ platform: c.channelPlatform, id: c.channelId, input: { allowPersonalEmotes: true } }),
   AddAccountEditor: (c) => ({ input: { accountId: c.otherAccount, permissions: ['EMOTE_UPLOAD'] } }),
   UpdateAccountEditor: (c) => ({ accountId: c.otherAccount, permissions: ['EMOTE_UPLOAD'] }),

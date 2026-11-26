@@ -1865,6 +1865,8 @@ async fn every_reference_to_an_account_is_handled_by_erase() {
     let handled: &[(&str, &str, &str)] = &[
         ("identities", "account_id", "deleted"),
         ("sessions", "account_id", "deleted"),
+        ("api_keys", "account_id", "deleted"),
+        ("webhooks", "created_by", "set to NULL"),
         ("emotes", "owner_account_id", "deleted or disowned (NULL)"),
         ("emotes", "uploaded_by", "set to NULL"),
         ("emote_sets", "owner_account_id", "the sets are deleted"),

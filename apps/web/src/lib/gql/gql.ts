@@ -67,6 +67,17 @@ type Documents = {
     "\n  mutation DeletePaint($id: String!) {\n    deletePaint(id: $id)\n  }\n": typeof types.DeletePaintDocument,
     "\n  mutation GrantCosmetic($input: GrantCosmeticInput!) {\n    grantCosmetic(input: $input) {\n      cosmeticId\n    }\n  }\n": typeof types.GrantCosmeticDocument,
     "\n  mutation RevokeCosmetic($accountId: String!, $kind: CosmeticKind!, $cosmeticId: String!, $reason: String) {\n    revokeCosmetic(accountId: $accountId, kind: $kind, cosmeticId: $cosmeticId, reason: $reason)\n  }\n": typeof types.RevokeCosmeticDocument,
+    "\n  query MyApiKeys {\n    myApiKeys {\n      id\n      name\n      prefix\n      createdAt\n      lastUsedAt\n      usage {\n        day\n        requests\n      }\n    }\n  }\n": typeof types.MyApiKeysDocument,
+    "\n  mutation CreateApiKey($name: String!) {\n    createApiKey(name: $name) {\n      key\n      apiKey {\n        id\n        name\n        prefix\n        createdAt\n        lastUsedAt\n        usage {\n          day\n          requests\n        }\n      }\n    }\n  }\n": typeof types.CreateApiKeyDocument,
+    "\n  mutation RevokeApiKey($id: String!) {\n    revokeApiKey(id: $id)\n  }\n": typeof types.RevokeApiKeyDocument,
+    "\n  fragment WebhookFields on Webhook {\n    id\n    url\n    events\n    enabled\n    disabledReason\n    failedDeliveries\n    createdAt\n  }\n": typeof types.WebhookFieldsFragmentDoc,
+    "\n  query ChannelWebhooks($platform: Platform!, $id: String!) {\n    channelWebhooks(platform: $platform, id: $id) {\n      ...WebhookFields\n    }\n  }\n": typeof types.ChannelWebhooksDocument,
+    "\n  mutation CreateWebhook($platform: Platform!, $id: String!, $input: CreateWebhookInput!) {\n    createWebhook(platform: $platform, id: $id, input: $input) {\n      secret\n      webhook {\n        ...WebhookFields\n      }\n    }\n  }\n": typeof types.CreateWebhookDocument,
+    "\n  mutation UpdateWebhook($id: String!, $input: UpdateWebhookInput!) {\n    updateWebhook(id: $id, input: $input) {\n      ...WebhookFields\n    }\n  }\n": typeof types.UpdateWebhookDocument,
+    "\n  mutation DeleteWebhook($id: String!) {\n    deleteWebhook(id: $id)\n  }\n": typeof types.DeleteWebhookDocument,
+    "\n  mutation RotateWebhookSecret($id: String!) {\n    rotateWebhookSecret(id: $id) {\n      secret\n      webhook {\n        ...WebhookFields\n      }\n    }\n  }\n": typeof types.RotateWebhookSecretDocument,
+    "\n  mutation TestWebhook($id: String!) {\n    testWebhook(id: $id) {\n      id\n      state\n    }\n  }\n": typeof types.TestWebhookDocument,
+    "\n  query WebhookDeliveries($id: String!) {\n    webhookDeliveries(id: $id) {\n      id\n      eventType\n      eventId\n      state\n      attempts\n      responseStatus\n      error\n      durationMs\n      createdAt\n      finishedAt\n    }\n  }\n": typeof types.WebhookDeliveriesDocument,
     "\n  fragment AccountEditorFields on AccountEditor {\n    account {\n      id\n      displayName\n      avatar\n    }\n    permissions\n    allSets\n    setIds\n    grantedBy {\n      id\n      displayName\n    }\n    grantedAt\n  }\n": typeof types.AccountEditorFieldsFragmentDoc,
     "\n  query Editors {\n    accountEditors {\n      ...AccountEditorFields\n    }\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n      allSets\n      setIds\n      grantedAt\n    }\n    mySets {\n      id\n      name\n      kind\n      owner {\n        id\n      }\n    }\n  }\n": typeof types.EditorsDocument,
     "\n  mutation AddAccountEditor($input: AddAccountEditorInput!) {\n    addAccountEditor(input: $input) {\n      ...AccountEditorFields\n    }\n  }\n": typeof types.AddAccountEditorDocument,
@@ -251,6 +262,17 @@ const documents: Documents = {
     "\n  mutation DeletePaint($id: String!) {\n    deletePaint(id: $id)\n  }\n": types.DeletePaintDocument,
     "\n  mutation GrantCosmetic($input: GrantCosmeticInput!) {\n    grantCosmetic(input: $input) {\n      cosmeticId\n    }\n  }\n": types.GrantCosmeticDocument,
     "\n  mutation RevokeCosmetic($accountId: String!, $kind: CosmeticKind!, $cosmeticId: String!, $reason: String) {\n    revokeCosmetic(accountId: $accountId, kind: $kind, cosmeticId: $cosmeticId, reason: $reason)\n  }\n": types.RevokeCosmeticDocument,
+    "\n  query MyApiKeys {\n    myApiKeys {\n      id\n      name\n      prefix\n      createdAt\n      lastUsedAt\n      usage {\n        day\n        requests\n      }\n    }\n  }\n": types.MyApiKeysDocument,
+    "\n  mutation CreateApiKey($name: String!) {\n    createApiKey(name: $name) {\n      key\n      apiKey {\n        id\n        name\n        prefix\n        createdAt\n        lastUsedAt\n        usage {\n          day\n          requests\n        }\n      }\n    }\n  }\n": types.CreateApiKeyDocument,
+    "\n  mutation RevokeApiKey($id: String!) {\n    revokeApiKey(id: $id)\n  }\n": types.RevokeApiKeyDocument,
+    "\n  fragment WebhookFields on Webhook {\n    id\n    url\n    events\n    enabled\n    disabledReason\n    failedDeliveries\n    createdAt\n  }\n": types.WebhookFieldsFragmentDoc,
+    "\n  query ChannelWebhooks($platform: Platform!, $id: String!) {\n    channelWebhooks(platform: $platform, id: $id) {\n      ...WebhookFields\n    }\n  }\n": types.ChannelWebhooksDocument,
+    "\n  mutation CreateWebhook($platform: Platform!, $id: String!, $input: CreateWebhookInput!) {\n    createWebhook(platform: $platform, id: $id, input: $input) {\n      secret\n      webhook {\n        ...WebhookFields\n      }\n    }\n  }\n": types.CreateWebhookDocument,
+    "\n  mutation UpdateWebhook($id: String!, $input: UpdateWebhookInput!) {\n    updateWebhook(id: $id, input: $input) {\n      ...WebhookFields\n    }\n  }\n": types.UpdateWebhookDocument,
+    "\n  mutation DeleteWebhook($id: String!) {\n    deleteWebhook(id: $id)\n  }\n": types.DeleteWebhookDocument,
+    "\n  mutation RotateWebhookSecret($id: String!) {\n    rotateWebhookSecret(id: $id) {\n      secret\n      webhook {\n        ...WebhookFields\n      }\n    }\n  }\n": types.RotateWebhookSecretDocument,
+    "\n  mutation TestWebhook($id: String!) {\n    testWebhook(id: $id) {\n      id\n      state\n    }\n  }\n": types.TestWebhookDocument,
+    "\n  query WebhookDeliveries($id: String!) {\n    webhookDeliveries(id: $id) {\n      id\n      eventType\n      eventId\n      state\n      attempts\n      responseStatus\n      error\n      durationMs\n      createdAt\n      finishedAt\n    }\n  }\n": types.WebhookDeliveriesDocument,
     "\n  fragment AccountEditorFields on AccountEditor {\n    account {\n      id\n      displayName\n      avatar\n    }\n    permissions\n    allSets\n    setIds\n    grantedBy {\n      id\n      displayName\n    }\n    grantedAt\n  }\n": types.AccountEditorFieldsFragmentDoc,
     "\n  query Editors {\n    accountEditors {\n      ...AccountEditorFields\n    }\n    editorOf {\n      account {\n        id\n        displayName\n        avatar\n      }\n      permissions\n      allSets\n      setIds\n      grantedAt\n    }\n    mySets {\n      id\n      name\n      kind\n      owner {\n        id\n      }\n    }\n  }\n": types.EditorsDocument,
     "\n  mutation AddAccountEditor($input: AddAccountEditorInput!) {\n    addAccountEditor(input: $input) {\n      ...AccountEditorFields\n    }\n  }\n": types.AddAccountEditorDocument,
@@ -591,6 +613,50 @@ export function graphql(source: "\n  mutation GrantCosmetic($input: GrantCosmeti
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
 export function graphql(source: "\n  mutation RevokeCosmetic($accountId: String!, $kind: CosmeticKind!, $cosmeticId: String!, $reason: String) {\n    revokeCosmetic(accountId: $accountId, kind: $kind, cosmeticId: $cosmeticId, reason: $reason)\n  }\n"): typeof import('./graphql').RevokeCosmeticDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query MyApiKeys {\n    myApiKeys {\n      id\n      name\n      prefix\n      createdAt\n      lastUsedAt\n      usage {\n        day\n        requests\n      }\n    }\n  }\n"): typeof import('./graphql').MyApiKeysDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateApiKey($name: String!) {\n    createApiKey(name: $name) {\n      key\n      apiKey {\n        id\n        name\n        prefix\n        createdAt\n        lastUsedAt\n        usage {\n          day\n          requests\n        }\n      }\n    }\n  }\n"): typeof import('./graphql').CreateApiKeyDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation RevokeApiKey($id: String!) {\n    revokeApiKey(id: $id)\n  }\n"): typeof import('./graphql').RevokeApiKeyDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  fragment WebhookFields on Webhook {\n    id\n    url\n    events\n    enabled\n    disabledReason\n    failedDeliveries\n    createdAt\n  }\n"): typeof import('./graphql').WebhookFieldsFragmentDoc;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query ChannelWebhooks($platform: Platform!, $id: String!) {\n    channelWebhooks(platform: $platform, id: $id) {\n      ...WebhookFields\n    }\n  }\n"): typeof import('./graphql').ChannelWebhooksDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation CreateWebhook($platform: Platform!, $id: String!, $input: CreateWebhookInput!) {\n    createWebhook(platform: $platform, id: $id, input: $input) {\n      secret\n      webhook {\n        ...WebhookFields\n      }\n    }\n  }\n"): typeof import('./graphql').CreateWebhookDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation UpdateWebhook($id: String!, $input: UpdateWebhookInput!) {\n    updateWebhook(id: $id, input: $input) {\n      ...WebhookFields\n    }\n  }\n"): typeof import('./graphql').UpdateWebhookDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation DeleteWebhook($id: String!) {\n    deleteWebhook(id: $id)\n  }\n"): typeof import('./graphql').DeleteWebhookDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation RotateWebhookSecret($id: String!) {\n    rotateWebhookSecret(id: $id) {\n      secret\n      webhook {\n        ...WebhookFields\n      }\n    }\n  }\n"): typeof import('./graphql').RotateWebhookSecretDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  mutation TestWebhook($id: String!) {\n    testWebhook(id: $id) {\n      id\n      state\n    }\n  }\n"): typeof import('./graphql').TestWebhookDocument;
+/**
+ * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
+ */
+export function graphql(source: "\n  query WebhookDeliveries($id: String!) {\n    webhookDeliveries(id: $id) {\n      id\n      eventType\n      eventId\n      state\n      attempts\n      responseStatus\n      error\n      durationMs\n      createdAt\n      finishedAt\n    }\n  }\n"): typeof import('./graphql').WebhookDeliveriesDocument;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */

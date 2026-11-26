@@ -29,6 +29,7 @@ use sqlx::postgres::PgListener;
 pub mod cosmetics;
 pub mod purge;
 pub mod transcode;
+pub mod webhooks;
 
 /// How a job failed.
 #[derive(Debug, thiserror::Error)]
@@ -234,6 +235,52 @@ pub async fn queue_metrics(db: &PgPool) -> String {
 
 fn chrono(d: Duration) -> chrono::Duration {
     chrono::Duration::from_std(d).unwrap_or(chrono::Duration::hours(1))
+}
+
+/// The queue's own jobs: transcodes, file deletions and cosmetics. Webhook deliveries run in
+/// their own lanes (`webhook_handlers`, `run_lane`), so a slow receiver never holds these up.
+pub fn main_handlers() -> Handlers {
+    Handlers::default()
+        .on(transcode::KIND, transcode::run)
+        .on(purge::KIND, purge::run)
+        .on(cosmetics::KIND, cosmetics::run)
+}
+
+/// Webhook deliveries only (ADR 0034), for `webhooks::LANES` lanes of `run_lane`.
+pub fn webhook_handlers() -> Handlers {
+    Handlers::default().on(webhooks::KIND, webhooks::run)
+}
+
+/// How often an idle lane looks for work.
+pub const LANE_POLL: Duration = Duration::from_secs(1);
+
+/// Runs the jobs of `handlers`' kinds, one at a time, until `stop` turns true. Several lanes run
+/// side by side; each claims its own job (`FOR UPDATE SKIP LOCKED`).
+pub async fn run_lane(
+    ctx: Ctx,
+    handlers: Handlers,
+    limits: Limits,
+    mut stop: tokio::sync::watch::Receiver<bool>,
+) {
+    loop {
+        loop {
+            if *stop.borrow() {
+                return;
+            }
+            match run_one(&ctx, &handlers, limits).await {
+                Ok(Some(_)) => continue,
+                Ok(None) => break,
+                Err(err) => {
+                    tracing::error!(error = %err, "job lane error");
+                    break;
+                }
+            }
+        }
+        tokio::select! {
+            changed = stop.changed() => if changed.is_err() || *stop.borrow() { return },
+            () = tokio::time::sleep(LANE_POLL) => {}
+        }
+    }
 }
 
 /// Claims and runs one job. `None` when nothing is due.
@@ -565,6 +612,14 @@ pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
     let ranked = search::refresh_popularity(&mut conn).await?;
     // Stored channel counts, all of them (the minutely refresh only does the queued ones).
     let counts_reconciled = channel_counts::reconcile_all(&mut conn).await?;
+    // Developer platform (ADR 0033, 0034): key usage past the 30 days shown, and deliveries
+    // whose job was lost.
+    let key_usage = cyex_tv_db::api_keys::delete_usage_before(
+        &mut conn,
+        Utc::now().date_naive() - chrono::Duration::days(31),
+    )
+    .await?;
+    let stale_deliveries = cyex_tv_db::webhooks::fail_stale(&mut conn).await?;
     drop(conn);
     let orders_expired = expire_orders(db).await?;
     let refunds_reverted = revert_refunds(db).await?;
@@ -583,6 +638,8 @@ pub async fn clean_up(db: &PgPool) -> Result<(), cyex_tv_db::DbError> {
         accounts_erased,
         ranked,
         counts_reconciled,
+        key_usage,
+        stale_deliveries,
         "cleaned up"
     );
     Ok(())
@@ -731,6 +788,18 @@ mod tests {
             media_failure(MediaError::Invalid("x".into())),
             JobError::Permanent(_)
         ));
+    }
+
+    #[test]
+    fn deliveries_never_share_the_main_queue() {
+        // Transcodes and deletions must never wait behind webhook deliveries.
+        assert!(!main_handlers().kinds().contains(&webhooks::KIND.to_owned()));
+        let main = main_handlers().kinds();
+        for kind in [transcode::KIND, purge::KIND, cosmetics::KIND] {
+            assert!(main.contains(&kind.to_owned()), "{kind}");
+        }
+        assert_eq!(webhook_handlers().kinds(), [webhooks::KIND]);
+        const { assert!(webhooks::LANES >= 2) };
     }
 
     #[test]

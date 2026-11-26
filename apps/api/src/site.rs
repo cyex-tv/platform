@@ -405,6 +405,8 @@ pub const NOTIFICATION_KINDS: &[(&str, bool)] = &[
     ("editor.removed", false),
     ("cosmetic.granted", false),
     ("cosmetic.revoked", false),
+    // A channel webhook was turned off after repeated failed deliveries (ADR 0034).
+    ("webhook.disabled", true),
 ];
 
 fn prefs_view(p: &prefs::Prefs) -> Vec<NotificationPref> {

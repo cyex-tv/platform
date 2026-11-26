@@ -8,6 +8,7 @@ describe('notification kinds in words', () => {
     const api = [
       'emote.approved', 'emote.rejected', 'emote.failed', 'emote.taken_down', 'emote.transfer_requested', 'emote.transferred', 'emote.transfer_declined',
       'emote.transfer_cancelled', 'editor.added', 'editor.changed', 'editor.removed', 'cosmetic.granted', 'cosmetic.revoked',
+      'webhook.disabled',
     ];
     const known = KIND_GROUPS.flatMap((g) => g.kinds.map((k) => k.kind));
     expect(known.sort()).toEqual([...api].sort());
