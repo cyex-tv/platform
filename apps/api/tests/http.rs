@@ -637,3 +637,115 @@ async fn cors_exposes_the_version_and_deprecation_headers() {
         assert!(exposed.contains(name), "{name} in {exposed}");
     }
 }
+
+#[tokio::test]
+async fn limits_read_is_cached_long_and_varies_only_by_encoding() {
+    let response = cyex_tv_api::app(offline_state())
+        .oneshot(Request::get("/v1/limits").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()["cache-control"],
+        "public, max-age=300, stale-while-revalidate=600, stale-if-error=86400"
+    );
+    assert_eq!(response.headers()["vary"], "Accept-Encoding");
+    assert!(response.headers().contains_key("etag"));
+}
+
+#[tokio::test]
+async fn meta_lists_the_scale_deprecation_for_badge_and_paint_files() {
+    let response = cyex_tv_api::app(offline_state())
+        .oneshot(Request::get("/v1/meta").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let meta: Value = serde_json::from_slice(&body).unwrap();
+    let entry = meta["deprecations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["id"] == "file_scale_non_emote")
+        .expect("the scale deprecation is listed");
+    assert_eq!(entry["since"], "2026-11-26");
+    assert!(entry["replacement"].as_str().unwrap().contains("width"));
+    // The schema says the same, and emote files are not named as going away.
+    let sdl = cyex_tv_api::gql::sdl();
+    let line = sdl
+        .lines()
+        .find(|l| l.trim_start().starts_with("scale: Int!"))
+        .expect("EmoteFile.scale");
+    assert!(line.contains("@deprecated"), "{line}");
+    assert!(line.contains("Emote files keep"), "{line}");
+}
+
+/// The properties a schema has, following one `allOf`.
+fn schema_properties(spec: &Value, name: &str) -> std::collections::BTreeSet<String> {
+    let schema = &spec["components"]["schemas"][name];
+    assert!(schema.is_object(), "no schema {name}");
+    let mut found = std::collections::BTreeSet::new();
+    let mut parts = vec![schema.clone()];
+    while let Some(part) = parts.pop() {
+        if let Some(reference) = part["$ref"].as_str() {
+            let target = reference.rsplit('/').next().unwrap();
+            parts.push(spec["components"]["schemas"][target].clone());
+        }
+        for key in part["allOf"].as_array().into_iter().flatten() {
+            parts.push(key.clone());
+        }
+        for key in part["properties"]
+            .as_object()
+            .into_iter()
+            .flat_map(|o| o.keys())
+        {
+            found.insert(key.clone());
+        }
+    }
+    found
+}
+
+#[test]
+fn both_upload_responses_carry_the_one_upload_result_shape() {
+    let spec = serde_json::to_value(cyex_tv_api::openapi()).unwrap();
+    let common = schema_properties(&spec, "UploadResult");
+    let required: Vec<&str> = spec["components"]["schemas"]["UploadResult"]["required"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap())
+        .collect();
+    assert_eq!(required, ["id", "state", "files", "limits_used"]);
+    for response in ["EmoteUploaded", "CosmeticImageUploaded"] {
+        let own = schema_properties(&spec, response);
+        for field in &required {
+            assert!(own.contains(*field), "{response} lacks {field}");
+        }
+        assert!(common.is_subset(&own), "{response}");
+    }
+    // Both routes answer with them, and share the documented error statuses.
+    let status_list = |path: &str| -> Vec<String> {
+        spec["paths"][path]["post"]["responses"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect()
+    };
+    let (mut emote, mut picture) = (
+        status_list("/v1/emotes"),
+        status_list("/v1/cosmetics/images"),
+    );
+    emote.sort();
+    picture.sort();
+    assert_eq!(emote, picture);
+    for (path, schema) in [
+        ("/v1/emotes", "EmoteUploaded"),
+        ("/v1/cosmetics/images", "CosmeticImageUploaded"),
+    ] {
+        let reference = spec["paths"][path]["post"]["responses"]["202"]["content"]
+            ["application/json"]["schema"]["$ref"]
+            .as_str()
+            .unwrap();
+        assert!(reference.ends_with(schema), "{path}: {reference}");
+    }
+}

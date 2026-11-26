@@ -490,7 +490,12 @@ pub async fn set_notification_prefs(
     changes: &[NotificationPrefInput],
 ) -> ApiResult<Vec<NotificationPref>> {
     if changes.len() > NOTIFICATION_KINDS.len() {
-        return Err(bad("too_many", "Too many kinds at once."));
+        return Err(cyex_tv_shared::error::ApiError::limit(
+            "too_many",
+            "Too many kinds at once.",
+            cyex_tv_shared::limit_errors::n(NOTIFICATION_KINDS.len()),
+            cyex_tv_shared::limit_errors::n(changes.len()),
+        ));
     }
     rate(state, caller)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;

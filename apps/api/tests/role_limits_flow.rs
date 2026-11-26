@@ -338,6 +338,8 @@ async fn twenty_waiting_emotes_refuse_the_next_upload() {
     let r = w.upload(&alice, "oneMore", 1, None).await;
     assert_eq!(r.status, StatusCode::CONFLICT, "{:?}", r.body);
     assert_eq!(r.body["error"], "too_many_pending");
+    assert_eq!(r.body["details"]["limit"], 20, "{:?}", r.body);
+    assert_eq!(r.body["details"]["current"], 20, "{:?}", r.body);
     assert_eq!(
         r.body["message"],
         "You have 20 emotes waiting for review. Upload more once some are reviewed."
@@ -792,6 +794,25 @@ async fn a_role_raises_the_badge_side_and_the_upload_passes() {
     );
     let r = w.upload_picture(&crew, "badge", &big).await;
     assert_eq!(r.status, StatusCode::ACCEPTED, "{:?}", r.body);
+    // Both upload routes answer with the same fields: id, state, files and limits_used.
+    let emote = w.upload(&crew, "ShapeCheck", 99, None).await;
+    assert_eq!(emote.status, StatusCode::ACCEPTED, "{:?}", emote.body);
+    for (what, body) in [("picture", &r.body), ("emote", &emote.body)] {
+        assert!(body["id"].as_str().is_some_and(|s| !s.is_empty()), "{what}");
+        assert!(body["state"].as_str().is_some(), "{what}: {body}");
+        assert!(body["files"].is_array(), "{what}: {body}");
+        let used = &body["limits_used"];
+        assert!(used["kind"].is_string(), "{what}: {body}");
+        for key in ["max_bytes", "max_side", "max_frames"] {
+            assert!(used[key].as_u64().is_some_and(|n| n > 0), "{what} {key}");
+        }
+    }
+    assert_eq!(emote.body["state"], "pending");
+    assert_eq!(emote.body["limits_used"]["kind"], "emote");
+    assert_eq!(emote.body["limits_used"]["max_side"], 1000);
+    assert_eq!(r.body["state"], "processing");
+    assert_eq!(r.body["limits_used"]["kind"], "badge");
+    assert_eq!(r.body["limits_used"]["max_side"], 2300);
     // And still not past what the role sets.
     let r = w.upload_picture(&crew, "badge", &flat_png(2400, 6)).await;
     assert_eq!(r.status, StatusCode::PAYLOAD_TOO_LARGE, "{:?}", r.body);

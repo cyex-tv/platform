@@ -389,5 +389,7 @@ async fn account_cosmetics_by_account_id() {
     let many: Vec<String> = (0..101).map(|_| alice.tid()).collect();
     let r = w.post(None, LOOKUP, json!({ "ids": many })).await;
     assert_eq!(code(&r), "too_many", "{r}");
+    assert_eq!(r["errors"][0]["extensions"]["limit"], 100, "{r}");
+    assert_eq!(r["errors"][0]["extensions"]["current"], 101, "{r}");
     w.db.close().await;
 }

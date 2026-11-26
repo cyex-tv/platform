@@ -49,9 +49,6 @@ use crate::views;
 /// Any constant works; it only has to be the same for every role change.
 const ROLE_LOCK: i64 = 0x6379_6578_726f_6c65; // "cyexrole"
 
-/// The most audit entries one page returns.
-pub const AUDIT_PAGE_MAX: i64 = 100;
-
 pub(crate) fn rule(err: RuleError) -> ApiError {
     let status = match err {
         RuleError::LastManager => StatusCode::CONFLICT,
@@ -563,7 +560,7 @@ pub async fn audit_log(
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     require(&mut conn, caller, permissions::AUDIT_VIEW).await?;
     let before_id = before.map(parse_id).transpose()?;
-    let limit = i64::from(limit.unwrap_or(50)).clamp(1, AUDIT_PAGE_MAX);
+    let limit = i64::from(crate::paging::Paged::Audit.params().size(limit));
     let entries = audit::list(
         &mut conn,
         &audit::Filter {

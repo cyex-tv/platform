@@ -86,6 +86,30 @@ pub fn too_large() -> ApiError {
     too_large_for(&Limits::emote())
 }
 
+/// A file of `size` bytes over `limits.max_bytes`: `too_large` with the cap and the size sent.
+pub fn too_large_over(limits: &Limits, size: usize) -> ApiError {
+    too_large_for(limits).with_details(
+        cyex_tv_shared::limit_errors::n(limits.max_bytes),
+        cyex_tv_shared::limit_errors::n(size),
+    )
+}
+
+/// `media_error` for a file of `size` bytes checked under `limits`: a `too_large` for the byte
+/// cap says the cap and the size (`details`); one for the side or the frames names them in its
+/// message.
+pub fn media_error_sized(err: MediaError, limits: &Limits, size: usize) -> ApiError {
+    let over = size > limits.max_bytes && matches!(err, MediaError::TooLarge(_));
+    let error = media_error(err);
+    if over {
+        error.with_details(
+            cyex_tv_shared::limit_errors::n(limits.max_bytes),
+            cyex_tv_shared::limit_errors::n(size),
+        )
+    } else {
+        error
+    }
+}
+
 /// A file over `limits.max_bytes`.
 pub fn too_large_for(limits: &Limits) -> ApiError {
     media_error(MediaError::TooLarge(cyex_tv_media::too_large_message(
@@ -202,8 +226,7 @@ pub fn too_many_pending(max: u32, for_someone: bool) -> ApiError {
     } else {
         format!("{max} emotes")
     };
-    ApiError::new(
-        StatusCode::CONFLICT,
+    ApiError::limit(
         "too_many_pending",
         if for_someone {
             format!(
@@ -212,6 +235,8 @@ pub fn too_many_pending(max: u32, for_someone: bool) -> ApiError {
         } else {
             format!("You have {waiting} waiting for review. Upload more once some are reviewed.")
         },
+        max,
+        max,
     )
 }
 
@@ -381,10 +406,11 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
     // worker checks the same ones again before it makes files).
     let file = input.file.clone();
     let limits = Limits::emote();
+    let (limits_for_error, size) = (limits, input.file.len());
     let probe: Probe = tokio::task::spawn_blocking(move || cyex_tv_media::probe(&file, &limits))
         .await
         .map_err(|_| ApiError::internal())?
-        .map_err(media_error)?;
+        .map_err(|err| media_error_sized(err, &limits_for_error, size))?;
     let sha256: [u8; 32] = Sha256::digest(&input.file).into();
     let sha_hex = sigv4::hex(&sha256);
     // The first frame's hash is what `files.dhash` keeps (always the first entry).
