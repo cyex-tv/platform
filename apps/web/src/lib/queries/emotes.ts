@@ -46,6 +46,7 @@ export const SEARCH = graphql(`
     $tags: [String!]
     $exact: Boolean
     $window: TrendingWindow
+    $after: String
   ) {
     searchEmotes(
       query: $query
@@ -57,10 +58,12 @@ export const SEARCH = graphql(`
       tags: $tags
       exact: $exact
       window: $window
+      after: $after
     ) {
       total
       page
       perPage
+      next
       items {
         ...EmoteFields
       }
@@ -70,11 +73,12 @@ export const SEARCH = graphql(`
 
 // People by login or display name (the Users tab, the palette, admin). No emote count: the API gives none.
 export const SEARCH_ACCOUNTS = graphql(`
-  query FindPeople($query: String!, $page: Int, $perPage: Int) {
-    searchAccounts(query: $query, page: $page, perPage: $perPage) {
+  query FindPeople($query: String!, $page: Int, $perPage: Int, $after: String) {
+    searchAccounts(query: $query, page: $page, perPage: $perPage, after: $after) {
       total
       page
       perPage
+      next
       items {
         account {
           id

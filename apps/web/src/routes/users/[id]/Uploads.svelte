@@ -14,41 +14,46 @@
   import { SEARCH_BY_OWNER } from '$lib/queries';
 
   type Sort = 'top' | 'new';
-  let { id, name, first, total }: { id: string; name: string; first: CardEmote[]; total: number } = $props();
+  let { id, name, first, total, firstNext = null }: { id: string; name: string; first: CardEmote[]; total: number; firstNext?: string | null } = $props();
   const PER_PAGE = 60;
 
   let sort = $state<Sort>('top');
   let fresh = $state<CardEmote[] | null>(null);
   let extra = $state<CardEmote[]>([]);
-  let nextPage = $state(2);
+  // Where the next page starts (cursor paging, ADR 0030): from the load for Top, from the
+  // first New page after reordering. Null when there is no next page.
+  // svelte-ignore state_referenced_locally
+  let after = $state<string | null>(firstNext);
+  let pages = $state(1);
   let loading = $state(false);
   let failed = $state('');
 
   const items = $derived([...(sort === 'new' ? (fresh ?? []) : first), ...extra]);
-  const fetched = $derived(PER_PAGE * (nextPage - 1));
-  const more = $derived(total > fetched);
+  const fetched = $derived(PER_PAGE * pages);
+  const more = $derived(total > fetched && after !== null);
 
   // The in-page filter looks through what is loaded so far.
   let filter = $state('');
   const needle = $derived(filter.trim().toLowerCase());
   const shown = $derived(needle ? items.filter((e) => e.name.toLowerCase().includes(needle)) : items);
 
-  const ask = (page: number, s: Sort) =>
-    gql(SEARCH_BY_OWNER, { owner: id, page, perPage: PER_PAGE, sort: s === 'new' ? 'NEW' : 'TOP' }).then(
-      (r) => r.searchEmotes.items,
+  const ask = (s: Sort, from: string | null) =>
+    gql(SEARCH_BY_OWNER, { owner: id, perPage: PER_PAGE, sort: s === 'new' ? 'NEW' : 'TOP', after: from }).then(
+      (r) => r.searchEmotes,
     );
   const message = (e: unknown) => (e instanceof ApiError ? e.message : 'That didn’t load. Try again.');
 
   async function loadMore() {
-    if (loading) return;
+    if (loading || !after) return;
     const s = sort;
     loading = true;
     failed = '';
     try {
-      const got = await ask(nextPage, s);
+      const got = await ask(s, after);
       if (s !== sort) return; // the order changed while this loaded
-      extra = appendUnique(extra, got);
-      nextPage += 1;
+      extra = appendUnique(extra, got.items);
+      after = got.next ?? null;
+      pages += 1;
     } catch (e) {
       failed = message(e);
     } finally {
@@ -60,16 +65,24 @@
   async function reorder(s: Sort) {
     sort = s;
     extra = [];
-    nextPage = 2;
+    pages = 1;
     failed = '';
+    // Top's first page came with the load, and so did where its next page starts.
+    after = s === 'top' ? firstNext : null;
     if (s === 'top') return;
     loading = true;
     try {
-      const got = await ask(1, s);
-      if (s === sort) fresh = got;
+      const got = await ask(s, null);
+      if (s === sort) {
+        fresh = got.items;
+        after = got.next ?? null;
+      }
     } catch (e) {
       failed = message(e);
-      if (s === sort) sort = 'top';
+      if (s === sort) {
+        sort = 'top';
+        after = firstNext;
+      }
     } finally {
       loading = false;
     }

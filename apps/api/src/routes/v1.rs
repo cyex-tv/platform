@@ -9,7 +9,9 @@
 use axum::Json;
 use axum::extract::multipart::Field;
 use axum::extract::{DefaultBodyLimit, Multipart, Path, Query, State};
-use axum::http::header::{CACHE_CONTROL, CONTENT_TYPE, ETAG, IF_NONE_MATCH, LOCATION, SET_COOKIE};
+use axum::http::header::{
+    CACHE_CONTROL, CONTENT_TYPE, ETAG, IF_NONE_MATCH, LINK, LOCATION, SET_COOKIE,
+};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use cyex_tv_auth::AuthError;
@@ -19,7 +21,8 @@ use cyex_tv_shared::error::{ApiError, ApiResult, ErrorBody};
 use cyex_tv_shared::model::{
     CallbackQuery, Channel, ConsoleToken, CosmeticCatalog, CosmeticImage, CosmeticKind, Emote,
     EmoteSet, EmoteVisibility, LoginQuery, PersonalLookup, PersonalLookupResult, Platform,
-    PublicLimits, UploadCosmeticImage, UploadEmote, UserCosmeticsQuery, UserCosmeticsResult,
+    PublicLimits, SetEmotePage, SetEmotesQuery, UploadCosmeticImage, UploadEmote,
+    UserCosmeticsQuery, UserCosmeticsResult,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -60,6 +63,7 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(export_token))
         .routes(routes!(get_channel))
         .routes(routes!(get_set))
+        .routes(routes!(get_set_emotes))
         .routes(routes!(get_global_set))
         .routes(routes!(get_limits))
         .routes(routes!(get_emote))
@@ -673,6 +677,73 @@ async fn get_set(
 async fn get_limits(State(state): State<AppState>, headers: HeaderMap) -> ApiResult<Response> {
     let limits = crate::public_limits::load(&state, None).await;
     cached(&headers, &limits, READ_MAX_AGE)
+}
+
+/// A page of a set's emotes, oldest first, for clients that read big sets in parts (cursor
+/// paging, ADR 0030). `next` (and the `Link: <...>; rel="next"` header) is where the following
+/// page starts; it is null, and the header missing, on the last page. Approved emotes only, as
+/// in `GET /v1/sets/{id}`.
+#[utoipa::path(
+    get,
+    path = "/v1/sets/{id}/emotes",
+    tag = "reads",
+    params(
+        ("id" = String, Path, description = "The set's ID: its Snowflake (digits), or its old ULID while clients move over."),
+        SetEmotesQuery
+    ),
+    responses(
+        (status = 200, body = SetEmotePage, headers(("Link" = String, description = "`<...>; rel=\"next\"`: the next page, when there is one."))),
+        (status = 304, description = "Not modified."),
+        (status = 400, description = "`bad_cursor`: `after` isn't a cursor this list gave out.", body = ErrorBody),
+        (status = 404, body = ErrorBody)
+    )
+)]
+async fn get_set_emotes(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Query(query): Query<SetEmotesQuery>,
+    headers: HeaderMap,
+) -> ApiResult<Response> {
+    let asked = id.trim().to_owned();
+    let id = crate::public_ids::canonical(&state, &id).await?;
+    let page = catalog::set_emotes(
+        &state,
+        None,
+        &id,
+        None,
+        None,
+        query.per_page,
+        query.after.as_deref(),
+    )
+    .await?;
+    // An unknown or hidden set reads as an empty page; here it is a 404 like `GET /v1/sets/{id}`.
+    if page.total == 0 && catalog::set(&state, None, &id).await?.is_none() {
+        return Err(catalog::not_found());
+    }
+    // IDs are digits or ULID letters; anything else never names a set (and is no header text).
+    let plain = asked.bytes().all(|b| b.is_ascii_alphanumeric());
+    let link = page.next.as_deref().filter(|_| plain).map(|next| {
+        let per_page = query
+            .per_page
+            .map(|n| format!("per_page={n}&"))
+            .unwrap_or_default();
+        format!(
+            "</v1/sets/{}/emotes?{per_page}after={next}>; rel=\"next\"",
+            asked
+        )
+    });
+    let mut response = cached(
+        &headers,
+        &crate::public_ids::publish(&state, &page).await?,
+        READ_MAX_AGE,
+    )?;
+    if let Some(link) = link {
+        response.headers_mut().insert(
+            LINK,
+            HeaderValue::from_str(&link).map_err(|_| ApiError::internal())?,
+        );
+    }
+    Ok(response)
 }
 
 /// The cyex.tv global set, shown in every channel.

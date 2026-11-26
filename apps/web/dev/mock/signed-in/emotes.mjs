@@ -5,14 +5,15 @@ import { SETS } from '../set-data.mjs';
 import { EMOTE_LOG, EMOTE_NOTES, NSFW_REFUSAL, PENDING, RESOLVED, UNLISTED_REFUSAL, logEmote } from '../review.mjs';
 import { EDITOR_OF } from '../editors.mjs';
 import { anyEmote, emoteGrant, err, findEmote, managed } from '../sets.mjs';
+import { badCursor, pageOf } from '../cursor.mjs';
 
 // The signed-in operations of this area, by operation name: null when the operation is not here.
 export function signedInEmotes(op, body, v, ADMIN) {
   switch (op) {
     case 'MyEmotes': {
-      const per = v.perPage ?? 50;
-      const page = v.page ?? 1;
-      return { data: { myEmotes: { total: MINE.length, items: MINE.slice((page - 1) * per, page * per) } } };
+      const p = pageOf(MINE, v);
+      if (!p) return badCursor();
+      return { data: { myEmotes: { total: MINE.length, items: p.items, next: p.next } } };
     }
     case 'UpdateEmote': {
       // Staff with emotes.edit_any (the mock admin) change anyone's.
@@ -104,9 +105,9 @@ export function signedInEmotes(op, body, v, ADMIN) {
       if (!ADMIN && v.accountId !== ME_ID && !emoteGrant(v.accountId, 'EMOTE_MANAGE'))
         return err('This needs users.view or emotes.review, or the account’s emote manage permission.', 'forbidden');
       const all = [...MINE, ...PENDING, ...ALL].filter((e) => e.owner?.id === v.accountId);
-      const per = v.perPage ?? 50;
-      const from = ((v.page ?? 1) - 1) * per;
-      return { data: { accountEmotes: { total: all.length, items: all.slice(from, from + per) } } };
+      const p = pageOf(all, v);
+      if (!p) return badCursor();
+      return { data: { accountEmotes: { total: all.length, items: p.items, next: p.next } } };
     }
     default:
       return null;

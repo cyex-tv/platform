@@ -230,6 +230,13 @@ pub const ERROR_CODES: &[ErrorCode] = &[
     ),
     e(
         "General",
+        "bad_cursor",
+        "A paging cursor is not one this list gave out.",
+        "`after` was cut, edited or made up, comes from another list, or the list's filters or \
+         order changed since. Start again from the first page.",
+    ),
+    e(
+        "General",
         "bad_batch",
         "The batch size is out of range.",
         "A moderation batch has fewer than 1 or more than 100 items.",

@@ -21,6 +21,7 @@ pub mod files;
 pub mod idempotency;
 pub mod ids;
 pub mod jobs;
+pub mod keyset;
 pub mod notifications;
 pub mod oauth_states;
 pub mod outbox;

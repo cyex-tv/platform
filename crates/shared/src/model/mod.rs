@@ -892,6 +892,10 @@ pub struct SetEmotePage {
     pub items: Vec<SetEmote>,
     /// Members the viewer may see that match `query`, over every page.
     pub total: u64,
+    /// Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+    /// page. Opaque: a list's cursor only works for the same list, filters and order.
+    #[serde(default)]
+    pub next: Option<String>,
 }
 
 /// A set as a card on a profile: its facts and the first few emotes (`accountSets`).
@@ -1054,6 +1058,10 @@ pub struct AccountResults {
     pub total_capped: bool,
     pub page: u32,
     pub per_page: u32,
+    /// Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+    /// page. Opaque: a list's cursor only works for the same list, filters and order.
+    #[serde(default)]
+    pub next: Option<String>,
 }
 
 /// How `searchEmotes` orders its results.
@@ -1132,6 +1140,10 @@ pub struct SearchResults {
     pub total: u64,
     pub page: u32,
     pub per_page: u32,
+    /// Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+    /// page. Opaque: a list's cursor only works for the same list, filters and order.
+    #[serde(default)]
+    pub next: Option<String>,
 }
 
 /// The header search: the best emotes and accounts for one query.
@@ -1153,6 +1165,10 @@ pub struct ReviewQueue {
     /// How many wait in each pending tab, whatever the read asked for.
     #[serde(default)]
     pub counts: ReviewCounts,
+    /// Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+    /// page. Opaque: a list's cursor only works for the same list, filters and order.
+    #[serde(default)]
+    pub next: Option<String>,
 }
 
 /// What a batch review does to every emote in it.
@@ -1282,6 +1298,10 @@ pub struct EmoteNote {
 pub struct EmotePage {
     pub items: Vec<Emote>,
     pub total: u64,
+    /// Pass as `after` to read the page that follows (cursor paging, ADR 0030); null on the last
+    /// page. Opaque: a list's cursor only works for the same list, filters and order.
+    #[serde(default)]
+    pub next: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -1868,6 +1888,17 @@ pub struct Event {
 }
 
 // REST query strings
+
+/// The query of `GET /v1/sets/{id}/emotes`: a page size and where to start (ADR 0030).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, IntoParams)]
+#[into_params(parameter_in = Query)]
+pub struct SetEmotesQuery {
+    /// Emotes per page, 1 to 200 (default 120).
+    pub per_page: Option<u32>,
+    /// The `next` of the page before (also in its `Link: rel="next"` header); none for the first
+    /// page.
+    pub after: Option<String>,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, IntoParams)]
 #[into_params(parameter_in = Query)]

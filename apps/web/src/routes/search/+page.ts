@@ -16,9 +16,11 @@ export const load: PageLoad = async ({ fetch, url }) => {
     const rest = Math.min(view.pages, Math.ceil(first.total / PER_PAGE)) - 1;
     const more = await Promise.all(Array.from({ length: Math.max(0, rest) }, (_, i) => ask(i + 2)));
     const items = [first, ...more].flatMap((r) => r.items);
-    return { view, total: first.total, items, pages: 1 + more.length, error: null };
+    // Load more goes on from the last page read by its cursor (ADR 0030).
+    const next = [first, ...more].at(-1)?.next ?? null;
+    return { view, total: first.total, items, pages: 1 + more.length, next, error: null };
   } catch (e) {
     const error = e instanceof ApiError ? e.message : 'Search isn’t available right now.';
-    return { view, total: 0, items: [], pages: 1, error };
+    return { view, total: 0, items: [], pages: 1, next: null as string | null, error };
   }
 };

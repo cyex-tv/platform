@@ -11,6 +11,7 @@ pub mod codes;
 pub mod console_token;
 pub mod cors;
 pub mod cosmetics;
+pub mod cursor;
 pub mod editors;
 pub mod errors;
 pub mod gql;

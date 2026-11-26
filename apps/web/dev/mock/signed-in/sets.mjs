@@ -5,6 +5,7 @@ import { CHANNELS } from '../account.mjs';
 import { SETS } from '../set-data.mjs';
 import { EDITOR_CHANNELS, EDITOR_OF, SHARED_SETS, editorChannels, editorOfOut, editorSets, flagsOn } from '../editors.mjs';
 import { PUBLIC_ONLY, capRange, err, findEmote, findSet, forbidden, mayView, setOut, setRights } from '../sets.mjs';
+import { badCursor, pageOf } from '../cursor.mjs';
 
 // The signed-in operations of this area, by operation name: null when the operation is not here.
 let newSets = 0;
@@ -39,13 +40,13 @@ export function signedInSets(op, body, v, ADMIN) {
     case 'SetEmotes':
     case 'SetMembers': {
       const s = findSet(v.id);
-      if (!s || !mayView(s, true)) return { data: { setEmotes: { total: 0, items: [] } } };
+      if (!s || !mayView(s, true)) return { data: { setEmotes: { total: 0, items: [], next: null } } };
       const q = (v.query ?? '').trim().toLowerCase();
       const all = [...s.emotes].sort((a, b) => a.addedAt.localeCompare(b.addedAt))
         .filter((m) => !q || m.name.toLowerCase().includes(q) || m.emote.name.toLowerCase().includes(q));
-      const per = Math.min(200, Math.max(1, v.perPage ?? 120));
-      const from = (Math.max(1, v.page ?? 1) - 1) * per;
-      return { data: { setEmotes: { total: all.length, items: all.slice(from, from + per) } } };
+      const p = pageOf(all, v, 120, 200);
+      if (!p) return badCursor();
+      return { data: { setEmotes: { total: all.length, items: p.items, next: p.next } } };
     }
     case 'CreateSet': {
       const ownerId = v.input.ownerId || ME_ID;

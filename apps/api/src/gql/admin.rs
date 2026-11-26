@@ -40,17 +40,27 @@ impl AdminQuery {
     /// An account's emotes in every state, newest first. Needs `users.view`, `emotes.review`,
     /// `emotes.takedown`, `emotes.edit_any`, `emotes.delete_any` or `emotes.flags`, or to be the account or its
     /// editor with `EMOTE_MANAGE` on every set. `perPage` is 1 to 100, default 50.
+    /// Pass a page's `next` as `after` for the page after it (cursor paging, ADR 0030; `page` is
+    /// ignored then, and nothing is shown twice or skipped when rows are added meanwhile).
     async fn account_emotes(
         &self,
         ctx: &Context<'_>,
         account_id: String,
         page: Option<u32>,
         per_page: Option<u32>,
+        after: Option<String>,
     ) -> Result<EmotePage> {
         let caller = caller(ctx)?;
-        moderation::account_emotes(state(ctx), caller, &account_id, page, per_page)
-            .await
-            .map_err(api_error)
+        moderation::account_emotes(
+            state(ctx),
+            caller,
+            &account_id,
+            page,
+            per_page,
+            after.as_deref(),
+        )
+        .await
+        .map_err(api_error)
     }
 
     /// Your notifications, newest first (the latest 100). `kind` is one of `emote.approved`,

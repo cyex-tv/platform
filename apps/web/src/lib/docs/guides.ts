@@ -212,6 +212,19 @@ export const guides: Guide[] = [
     ],
   },
   {
+    id: 'paging',
+    title: 'Paging',
+    search: 'paging pagination cursor after next page perpage link rel next bad_cursor',
+    blocks: [
+      p('Long lists page with a cursor. Every page of `searchEmotes`, `searchAccounts`, `setEmotes`, `myEmotes`, `accountEmotes` and `reviewQueue` carries `next`: pass it back as `after` (with the same filters, order and `perPage`) for the page that follows. `next` is null on the last page. The order stays the one the list documents, and nothing is shown twice or skipped while rows are added or removed between pages, which numbered pages can’t promise.'),
+      { t: 'pre', code: `query {\n  searchEmotes(query: "pog", sort: NEW, perPage: 50, after: "eyJ2Ijox…") {\n    total\n    next\n    items { id name }\n  }\n}` },
+      p('Cursors are opaque: don’t read or build them, and keep one only as long as you page through that list. A cursor that was changed, made up or comes from another list (other text, filters or order) answers `bad_cursor`; start again from the first page. The page size caps hold as before, and `page` is ignored when `after` is given.'),
+      p('`page` and `perPage` still work as they always did. With a cursor there is no deepest page; numbered pages stop at page 1.000.'),
+      p('Over REST, [a set’s emotes, a page at a time](#rest-get_set_emotes) answers `next` too, and a `Link` header with the next page’s address:'),
+      { t: 'pre', code: `curl -s -i '${baseUrl}/v1/sets/${EX.setId}/emotes?per_page=120'\n\nHTTP/2 200\nlink: </v1/sets/${EX.setId}/emotes?per_page=120&after=eyJ2Ijox…>; rel="next"` },
+    ],
+  },
+  {
     id: 'error-codes',
     title: 'Error codes',
     search: 'error codes list table meaning when rate_limited not_found forbidden bad_name',

@@ -16,6 +16,7 @@ use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::catalog::db_error;
+use crate::cursor;
 use crate::errors::{paging, sqlx_error};
 use crate::limits;
 use crate::state::AppState;
@@ -39,6 +40,8 @@ pub struct Params<'a> {
     pub sort: EmoteSort,
     pub page: Option<u32>,
     pub per_page: Option<u32>,
+    /// A cursor (`next` of the page before); `page` is ignored with it.
+    pub after: Option<&'a str>,
 }
 
 pub const ACCOUNTS_PER_PAGE: u32 = 20;
@@ -54,6 +57,7 @@ pub async fn accounts(
     text: &str,
     page: Option<u32>,
     per_page: Option<u32>,
+    after: Option<&str>,
 ) -> ApiResult<AccountResults> {
     let paged = paging(page, per_page, ACCOUNTS_PER_PAGE, ACCOUNTS_PER_PAGE_MAX);
     // A page past the last one comes back empty (with the real total), not as the last page.
@@ -64,23 +68,33 @@ pub async fn accounts(
         total_capped: false,
         page,
         per_page,
+        next: None,
     };
     let text = text.trim().trim_start_matches('@').trim();
+    let scope = format!(
+        "searchAccounts|{}",
+        text.to_lowercase().chars().take(64).collect::<String>()
+    );
+    let after = cursor::decode(after, &scope, &cyex_tv_db::search::account_keys())?;
     if text.chars().count() < ACCOUNT_QUERY_MIN {
         return Ok(empty());
     }
     limits::account_search(state, caller, ip)?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    // Past `MAX_PAGE`, one row is read for the total, and dropped.
-    let (limit, offset) = if paged.past_end() {
+    // A numbered page past `MAX_PAGE` reads one row for the total, and drops it; a cursor has no
+    // such limit.
+    let past_end = after.is_none() && paged.past_end();
+    let (limit, offset) = if past_end {
         (1, 0)
+    } else if after.is_some() {
+        (paged.limit, 0)
     } else {
         (paged.limit, paged.offset)
     };
-    let hits = cyex_tv_db::search::accounts(&mut conn, text, limit, offset)
+    let hits = cyex_tv_db::search::accounts_page(&mut conn, text, limit, offset, after.as_deref())
         .await
         .map_err(db_error)?;
-    let items = if paged.past_end() {
+    let items = if past_end {
         Vec::new()
     } else {
         account_hits(&mut conn, &hits.ids).await?
@@ -91,6 +105,11 @@ pub async fn accounts(
         total_capped: hits.capped,
         page,
         per_page,
+        next: if past_end {
+            None
+        } else {
+            cursor::next(&scope, hits.next.as_ref())
+        },
     })
 }
 
@@ -161,6 +180,25 @@ pub async fn quick(
     Ok(QuickSearch { emotes, users })
 }
 
+/// The list identity a `searchEmotes` cursor is bound to: its order and every filter.
+fn search_scope(p: &Params<'_>) -> String {
+    let text: String = p.text.trim().chars().take(100).collect();
+    let window = if matches!(p.sort, EmoteSort::Trending) {
+        format!("{:?}", p.window)
+    } else {
+        String::new()
+    };
+    format!(
+        "searchEmotes|{:?}|{window}|{text}|{:?}|{}|{:?}|{:?}|{}",
+        p.sort,
+        p.animated,
+        p.owner.map(str::trim).unwrap_or_default(),
+        p.flags,
+        p.tags,
+        p.exact
+    )
+}
+
 pub async fn search(state: &AppState, p: &Params<'_>) -> ApiResult<SearchResults> {
     let paged = paging(p.page, p.per_page, PER_PAGE, PER_PAGE_MAX);
     let (page, per_page) = (paged.page, paged.per_page);
@@ -169,7 +207,14 @@ pub async fn search(state: &AppState, p: &Params<'_>) -> ApiResult<SearchResults
         total: 0,
         page,
         per_page,
+        next: None,
     };
+    let scope = search_scope(p);
+    let text_is_empty = p.text.trim().is_empty();
+    let keys = cyex_tv_db::search::emote_keys(p.sort, text_is_empty);
+    let after = cursor::decode(p.after, &scope, &keys)?;
+    // A numbered page past `MAX_PAGE` reads nothing; a cursor has no such limit.
+    let past_end = after.is_none() && paged.past_end();
     // An owner ID that isn't one matches nothing.
     let owner = match p.owner.map(str::trim).filter(|o| !o.is_empty()) {
         Some(raw) => match ids::from_text(raw) {
@@ -193,12 +238,13 @@ pub async fn search(state: &AppState, p: &Params<'_>) -> ApiResult<SearchResults
             window: p.window,
             sort: p.sort,
             // Past `MAX_PAGE`, one row is read for the total, and dropped.
-            limit: if paged.past_end() { 1 } else { paged.limit },
-            offset: paged.offset,
+            limit: if past_end { 1 } else { i64::from(per_page) },
+            offset: if after.is_some() { 0 } else { paged.offset },
+            after: after.as_deref(),
         })
         .await
         .map_err(db_error)?;
-    if paged.past_end() {
+    if past_end {
         return Ok(SearchResults {
             total: u64::try_from(hits.total).unwrap_or(0),
             ..empty()
@@ -219,6 +265,7 @@ pub async fn search(state: &AppState, p: &Params<'_>) -> ApiResult<SearchResults
         total: u64::try_from(hits.total).unwrap_or(0),
         page,
         per_page,
+        next: cursor::next(&scope, hits.next.as_ref()),
     })
 }
 
