@@ -90,12 +90,10 @@ pub async fn create(
     create_with(conn, owner, name, kind, None).await
 }
 
-/// The visibility a new set of `kind` gets when none is asked for.
-pub fn default_visibility(kind: SetKind) -> SetVisibility {
-    match kind {
-        SetKind::Personal => SetVisibility::Unlisted,
-        SetKind::Channel | SetKind::Global => SetVisibility::Listed,
-    }
+/// The visibility a new set of `kind` gets when none is asked for: listed, for every kind (every
+/// set is public, ADR 0017 amendment 2026/11/22; personal sets were unlisted before).
+pub fn default_visibility(_kind: SetKind) -> SetVisibility {
+    SetVisibility::Listed
 }
 
 /// Whether a set of `kind` may have `visibility`: personal sets are shown in chat to everyone,

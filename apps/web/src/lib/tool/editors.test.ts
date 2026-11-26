@@ -15,7 +15,6 @@ import {
   uploadTargets,
   grantOn,
   grantable,
-  locked,
   ordered,
   ownerSetsHref,
   permissionLabels,
@@ -55,21 +54,23 @@ describe('account editor permissions', () => {
     expect(billing.items.every((p) => p.reserved)).toBe(true);
   });
 
-  it('names permissions in order, folding channels into sets', () => {
+  it('names permissions in order, channel settings on their own', () => {
     expect(ordered(['EDITORS', 'EMOTES', 'EMOTES'])).toEqual(['EMOTES', 'EDITORS']);
-    expect(permissionLabels(['SETS', 'EMOTES', 'CHANNELS'])).toBe('Edit set emotes and manage sets');
+    expect(permissionLabels(['SETS', 'EMOTES'])).toBe('Edit set emotes and manage sets');
+    expect(permissionLabels(['SETS', 'EMOTES', 'CHANNELS'])).toBe('Edit set emotes, manage sets and change channel settings');
     expect(permissionLabels(['CHANNELS'])).toBe('Change channel settings');
     expect(permissionLabels([])).toBe('Nothing');
     expect(permissionLabels(PERMISSIONS.map((p) => p.key))).toBe('Everything');
+    // "Everything" means every listed permission: Sets doesn't stand in for Channel settings.
+    expect(permissionLabels(PERMISSIONS.map((p) => p.key).filter((k) => k !== 'CHANNELS'))).not.toBe('Everything');
   });
 
-  it('brings channel settings along with sets and keeps them while sets is on', () => {
-    expect(toggle([], 'SETS', true)).toEqual(['SETS', 'CHANNELS']);
-    expect(locked(['SETS', 'CHANNELS'], 'CHANNELS')).toBe(true);
-    expect(toggle(['SETS', 'CHANNELS'], 'CHANNELS', false)).toEqual(['SETS', 'CHANNELS']);
+  it('ticks sets without channel settings, and each comes off on its own', () => {
+    expect(toggle([], 'SETS', true)).toEqual(['SETS']);
+    expect(toggle(['SETS', 'CHANNELS'], 'CHANNELS', false)).toEqual(['SETS']);
     expect(toggle(['SETS', 'CHANNELS'], 'SETS', false)).toEqual(['CHANNELS']);
     expect(toggle(['CHANNELS'], 'CHANNELS', false)).toEqual([]);
-    expect(locked(['CHANNELS'], 'CHANNELS')).toBe(false);
+    expect(toggle(['SETS'], 'CHANNELS', true)).toEqual(['SETS', 'CHANNELS']);
   });
 
   it('ticks everything you can grant, and nothing more', () => {
@@ -86,7 +87,7 @@ describe('account editor permissions', () => {
   it('gives the owner everything and an editor their grant', () => {
     const grants = [{ account: { id: 'A' }, permissions: perms('EMOTES', 'SETS') }];
     expect(grantOn(grants, 'ME', 'ME').size).toBe(9);
-    expect([...grantOn(grants, 'A', 'ME')]).toEqual(['EMOTES', 'SETS', 'CHANNELS']);
+    expect([...grantOn(grants, 'A', 'ME')]).toEqual(['EMOTES', 'SETS']);
     expect(grantOn(grants, 'B', 'ME').size).toBe(0);
     expect(grantOn(grants, null, 'ME').size).toBe(0);
   });
@@ -97,6 +98,13 @@ describe('account editor permissions', () => {
     expect(canManage(held, ['EMOTES'])).toBe(true);
     expect(canManage(held, ['EMOTES', 'SETS'])).toBe(false);
     expect(canManage(new Set(perms('EMOTES')), ['EMOTES'])).toBe(false);
+  });
+
+  it('lets a manager with Sets but not Channel settings manage an editor holding only Sets', () => {
+    const held = grantOn([{ account: { id: 'A' }, permissions: perms('SETS', 'EDITORS') }], 'A', 'ME');
+    expect(held.has('CHANNELS')).toBe(false);
+    expect(canManage(held, ['SETS'])).toBe(true);
+    expect(canManage(held, ['SETS', 'CHANNELS'])).toBe(false);
   });
 });
 
@@ -123,7 +131,7 @@ describe('emote permissions on another account', () => {
   it('drops them on a grant limited to some sets', () => {
     expect(effective(grants[1])).toEqual(['EMOTES']);
     expect(effective(grants[0])).toEqual(['EMOTE_UPLOAD', 'EMOTE_MANAGE']);
-    expect(effective(grants[3])).toEqual(['SETS', 'CHANNELS']);
+    expect(effective(grants[3])).toEqual(['SETS']);
     expect(emotePermissionsIdle(grants[1])).toBe(true);
     expect(emotePermissionsIdle(grants[0])).toBe(false);
     expect(emotePermissionsIdle({ permissions: ['EMOTES'], allSets: false })).toBe(false);

@@ -47,7 +47,7 @@
         {#each g.items as l (l.key)}
           {@const what = info(l.key)}
           {@const problem = tried || touched[l.key] ? valueProblem(values[l.key]) : null}
-          {@const unit = per(l.windowSeconds) ?? 'at once'}
+          {@const unit = what.unit ?? per(l.windowSeconds) ?? 'at once'}
           <li class="item" class:hushed={hushed === l.key} class:set={!!values[l.key]?.trim()}
             onfocusin={() => ((shown = l.key), hushed !== l.key && (hushed = null))} onfocusout={() => (shown = hushed = null)}
             onpointerenter={() => ((shown = l.key), hushed !== l.key && (hushed = null))} onpointerleave={() => (shown = hushed = null)}>
@@ -64,7 +64,7 @@
             </div>
             {#if problem}<span class="ui-error" id="{idPrefix}-{l.key}-err">{problem}</span>{/if}
             <span class="tip" role="tooltip" id="{idPrefix}-{l.key}-tip">
-              {what.hint} Default: {amount(l.default, l.windowSeconds)}. Empty keeps it; 1 to {count(LIMIT_MAX)} replaces it.
+              {what.hint} Default: {amount(l.default, l.windowSeconds, what.unit)}. Empty keeps it; 1 to {count(LIMIT_MAX)} replaces it.
             </span>
           </li>
         {/each}

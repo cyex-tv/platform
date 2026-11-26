@@ -4,7 +4,13 @@
   // in the editor and get "New set" (with SETS); everyone else sees the listed ones, which open
   // the public set page (/sets/<id>). Built for hundreds of sets: the first SETS_STEP cards, then
   // "Show more" with how many show of how many, and a name filter once there are more than a few.
+  // Each card has the set menu (SetActions): right-click, Shift+F10 or its ⋯ button; Rename
+  // renames the card's name in place.
   import EmoteThumbs from './EmoteThumbs.svelte';
+  import InlineRename from '$lib/sets/InlineRename.svelte';
+  import SetActions from '$lib/sets/SetActions.svelte';
+  import { isMenuKey } from '$lib/sets/set-menu';
+  import { forgetProfile } from '../data.svelte';
   import Capacity from '$lib/components/Capacity.svelte';
   import Icon from '$lib/components/Icon.svelte';
   import State from '$lib/components/State.svelte';
@@ -44,6 +50,25 @@
   let steps = $state(1);
   let find = $state('');
   const kindLabel = (k: string) => (k === 'PERSONAL' ? 'Personal' : k === 'GLOBAL' ? 'Global' : 'Channel');
+
+  // ---- The set menu, and renaming in place.
+  let acts = $state<SetActions>();
+  let renaming = $state<string | null>(null);
+  const menuSet = (s: Card) => ({ id: s.id, name: s.name, kind: s.kind, ownerId: accountId, capacity: s.capacity });
+  function openMenu(e: MouseEvent, s: Card) {
+    if (renaming === s.id) return;
+    e.preventDefault();
+    acts?.open(menuSet(s), e);
+  }
+  async function refresh() {
+    forgetProfile('library:');
+    await L.reload();
+  }
+  function renamed(id: string, next: string | null) {
+    renaming = null;
+    if (next) void refresh();
+    queueMicrotask(() => document.querySelector<HTMLElement>(`[data-set-card="${CSS.escape(id)}"]`)?.focus());
+  }
 </script>
 
 <LoadGate source={L} label="Loading the sets…">
@@ -82,11 +107,19 @@
         {#each visible as s (s.id)}
           {@const p = fillPercent(s.used, s.capacity)}
           {@const mark = setMark(s.visibility)}
-          <li>
-            <a class="card" href="{managed ? '/me/sets' : '/sets'}/{s.id}">
+          <!-- The card's link and ⋯ button take focus; this only catches their right-click and Shift+F10. -->
+          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+          <li oncontextmenu={(e) => openMenu(e, s)} onkeydown={(e) => {
+            if (renaming !== s.id && isMenuKey(e)) { e.preventDefault(); acts?.open(menuSet(s), e.target as HTMLElement); }
+          }}>
+            <svelte:element this={renaming === s.id ? 'div' : 'a'} class="card" href={renaming === s.id ? undefined : `${managed ? '/me/sets' : '/sets'}/${s.id}`} data-set-card={s.id}>
               <EmoteThumbs emotes={s.thumbs} />
               <span class="row">
-                <strong class="nm"><bdi>{clean(s.name)}</bdi></strong>
+                {#if renaming === s.id}
+                  <span class="nm"><InlineRename id={s.id} name={s.name} ondone={(n) => renamed(s.id, n)} /></span>
+                {:else}
+                  <strong class="nm"><bdi>{clean(s.name)}</bdi></strong>
+                {/if}
                 {#if mark}<span class="vis" title={mark.label}><Icon name={mark.icon} size={14} /><span class="sr-only">{mark.label}</span></span>{/if}
                 {#if s.chat}<span class="on" title={s.chat === 'chat' ? 'Shown in chat' : `Active in ${s.chat} chat`}><Icon name="zap" size={15} /><span class="sr-only">{s.chat === 'chat' ? 'Shown in chat' : `Active in ${s.chat} chat`}</span></span>{/if}
               </span>
@@ -97,7 +130,9 @@
                 </span>
                 <span class="n"><Capacity used={s.used} capacity={s.capacity} /></span>
               </span>
-            </a>
+            </svelte:element>
+            <button class="ui-icon menu-btn" type="button" aria-label="Set actions for {clean(s.name)}" aria-haspopup="menu"
+              onclick={(e) => acts?.open(menuSet(s), e.currentTarget)}><Icon name="more" size={16} /></button>
           </li>
         {/each}
       </ul>
@@ -109,6 +144,7 @@
       {/if}
     {/if}
     <NewSetDialog bind:this={dlg} ownerId={accountId} {mine} hasPersonal={lib.hasPersonal} />
+    <SetActions bind:this={acts} onrename={(id) => (renaming = id)} onchanged={() => void refresh()} />
   {/snippet}
 </LoadGate>
 
@@ -120,6 +156,13 @@
   .more { display: grid; justify-items: center; gap: 10px; padding: 24px 0 8px; }
   /* A contact sheet (redesign round 2): the sets share hairlines, no cards (app.css .contact-sheet). */
   .cards { list-style: none; margin: 0; padding: 0; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); }
+  .cards > li { position: relative; }
+  /* The menu button sits on the card's corner: shown on hover and focus, always on touch. */
+  .menu-btn { position: absolute; top: 8px; right: 8px; color: var(--muted); background: var(--surface); opacity: 0;
+    transition: opacity var(--fast); }
+  .cards > li:hover .menu-btn, .cards > li:focus-within .menu-btn { opacity: 1; }
+  @media (hover: none), (pointer: coarse) { .menu-btn { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .menu-btn { transition: none; } }
   .card { display: grid; gap: 8px; height: 100%; padding: 14px; color: var(--text); text-decoration: none;
     transition: background-color var(--fast); }
   .card:active { opacity: .7; transition: none; }

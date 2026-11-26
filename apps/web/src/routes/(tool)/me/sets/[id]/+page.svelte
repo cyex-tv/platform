@@ -1,32 +1,31 @@
 <script lang="ts">
   // A set's editor, in the Workspace (redesign round 2): your area's rail on the left with this set
   // current (its meter as on the browse rail); in the middle the set's emotes as a contact sheet
-  // under a slim bar (SetEmotes) and Add emotes; on the right the inspector: its name, who can open
-  // it, the channels it can be shown on, its facts (capacity meter, owner, editors), a chat preview
-  // and deleting it (or leaving it, for a set editor). Under 1100px the panel follows the emotes.
-  // Owners, set editors, account editors whose grant covers the set (ADR 0014) and staff.
+  // under a slim bar (SetEmotes) and Add emotes; on the right the inspector: its name, its
+  // capacity (the allowed range from setCapacityRange), the channels it can be shown on, its facts
+  // (capacity meter, owner, editors) and deleting it (or leaving it, for a set editor). Every set
+  // is public, so there is no visibility choice (ADR 0017, amendment 2026/11/22). Under 1100px the
+  // panel follows the emotes. Owners, set editors, account editors whose grant covers the set
+  // (ADR 0014) and staff.
   import Avatar from '$lib/components/Avatar.svelte';
   import PanelBlock from '$lib/components/PanelBlock.svelte';
   import PaintedName from '$lib/cosmetics/PaintedName.svelte';
   import { looks, wantLooks } from '$lib/cosmetics/store.svelte';
   import FactRows from '$lib/components/FactRows.svelte';
   import MeFrame from '$lib/profile/MeFrame.svelte';
-  import SetChat from '../../../../sets/[id]/SetChat.svelte';
   import Capacity from '$lib/components/Capacity.svelte';
   import { goto } from '$app/navigation';
   import { page } from '$app/state';
   import { ApiError, gql } from '$lib/api';
   import { problemTitle } from '$lib/components/problem';
-  import Segmented from '$lib/components/Segmented.svelte';
   import State from '$lib/components/State.svelte';
-  import { latestWinsBy } from '$lib/tool/latest';
-  import { visibilityHint, visibilityOptions } from '$lib/sets/visibility';
   import { clean, count, iso } from '$lib/format';
   import { sectionHref } from '$lib/profile/rows';
   import Name from '$lib/components/Name.svelte';
-  import type { EditSetQuery, EditorPermission, SetVisibility } from '$lib/gql/graphql';
-  import { EDIT_SET, DELETE_SET, REMOVE_SET_EDITOR, SET_EMOTES, SET_MEMBERS, UPDATE_CHANNEL, UPDATE_SET } from '$lib/queries';
-  import type { SetEmotesQuery } from '$lib/gql/graphql';
+  import type { EditSetQuery, EditorPermission } from '$lib/gql/graphql';
+  import { EDIT_SET, DELETE_SET, REMOVE_SET_EDITOR, SET_CAPACITY_RANGE, SET_MEMBERS, UPDATE_CHANNEL, UPDATE_SET } from '$lib/queries';
+  import CapacityForm from '$lib/sets/CapacityForm.svelte';
+  import type { CapacityRange } from '$lib/sets/capacity';
   import Icon from '$lib/components/Icon.svelte';
   import LoadGate from '$lib/tool/LoadGate.svelte';
   import { loader } from '$lib/tool/loader.svelte';
@@ -62,11 +61,11 @@
   const access = $derived(setAccess({ owner, setEditor, staff, held }));
   const canRename = $derived(access.rename);
   const canDelete = $derived(access.manage);
-  const canSee = $derived(access.manage && set?.kind !== 'GLOBAL');
   // Channels (yours or the ones you change) that show this set right now: it can't be deleted then.
   const shownOn = $derived(channels.filter((c) => c.activeSetId === set?.id));
-  // The channels this set can be shown on: the owner's, when you may change their settings.
-  const usable = $derived(set?.kind === 'CHANNEL' && (owner || held.has('CHANNELS')) ? channels.filter((c) => c.account.id === set?.owner?.id) : []);
+  // The channels this set can be shown on: the owner's, when you may pick their active set
+  // (managing sets, or channel settings as before).
+  const usable = $derived(set?.kind === 'CHANNEL' && (owner || held.has('SETS') || held.has('CHANNELS')) ? channels.filter((c) => c.account.id === set?.owner?.id) : []);
   const showing = $derived(usable.filter((c) => c.activeSetId === set?.id));
   const channelKey = (c: { platform: string; platformChannelId: string }) => `${c.platform}:${c.platformChannelId}`;
   const platformName = (p: string) => (p === 'TWITCH' ? 'Twitch' : 'Kick');
@@ -156,20 +155,26 @@
     }
   }
 
-  // The last pick wins: a click while a save is on its way is kept and sent when that one lands.
-  // Each pick is saved on the set it was made for, even if the page has moved to another set.
-  const saveVisibility = latestWinsBy<SetVisibility>(
-    async (id, v) => {
-      const r = await gql(UPDATE_SET, { id, input: { visibility: v } });
-      if (set?.id !== id) return;
-      set.visibility = r.updateSet.visibility;
-      notify(`${visibilityOptions(set.kind).find((o) => o.value === set!.visibility)?.label ?? 'Visibility'} saved.`);
-    },
-    (id, v) => set?.id === id && v === set.visibility,
-  );
-  const setVisibility = (v: SetVisibility) => {
-    if (set) saveVisibility(set.id, v).catch(fail);
-  };
+  // The capacity's allowed range: null while it loads, or when you can't change it.
+  let range = $state<{ id: string; value: CapacityRange | null } | null>(null);
+  $effect(() => {
+    const sid = set?.id;
+    void set?.slotsUsed;
+    if (!sid || !canRename) return;
+    let gone = false;
+    gql(SET_CAPACITY_RANGE, { id: sid })
+      .then((r) => {
+        if (!gone) range = { id: sid, value: r.setCapacityRange ?? null };
+      })
+      .catch(() => {});
+    return () => (gone = true);
+  });
+  const capRange = $derived(range && range.id === set?.id ? range.value : null);
+  function capacitySaved(n: number) {
+    if (!set || n === set.capacity) return;
+    set.capacity = n;
+    notify(`Capacity saved: ${count(n)} slots.`);
+  }
 
   async function remove() {
     if (!set) return;
@@ -223,22 +228,6 @@
     if (editors.length) wantLooks(editors.slice(0, 10).map((e) => e.id));
   });
 
-  // The chat preview in the panel: the set's first emotes with pictures (read again after adds).
-  let sample = $state<{ id: string; items: SetEmotesQuery['setEmotes']['items'] } | null>(null);
-  $effect(() => {
-    const sid = set?.id;
-    void rev;
-    void set?.slotsUsed;
-    if (!sid) return;
-    let gone = false;
-    gql(SET_EMOTES, { id: sid, page: 1, perPage: 24 })
-      .then((r) => {
-        if (!gone) sample = { id: sid, items: r.setEmotes.items };
-      })
-      .catch(() => {});
-    return () => (gone = true);
-  });
-  const chat = $derived(sample && sample.id === set?.id ? sample.items : []);
   const facts = $derived(
     set
       ? [
@@ -267,12 +256,9 @@
         </form>
       </PanelBlock>
     {/if}
-    {#if canSee}
-      <PanelBlock title="Who can open it">
-        <div class="vis">
-          <Segmented label="Who can open it" size="s" options={visibilityOptions(set.kind)} value={set.visibility} onchange={setVisibility} />
-        </div>
-        <p class="pb-hint" aria-live="polite">{visibilityHint(set.visibility)}{#if set.kind === 'PERSONAL'} A personal set can’t be private.{/if}</p>
+    {#if canRename && capRange}
+      <PanelBlock title="Capacity">
+        <CapacityForm setId={set.id} capacity={set.capacity} range={capRange} onsaved={capacitySaved} />
       </PanelBlock>
     {/if}
     {#if usable.length}
@@ -303,11 +289,6 @@
         {/snippet}
       </FactRows>
     </PanelBlock>
-    {#if chat.length}
-      <PanelBlock title="Chat preview">
-        <SetChat members={chat} owner={set.owner ?? null} name={clean(set.name)} inPanel />
-      </PanelBlock>
-    {/if}
     {#if owner && set.kind !== 'GLOBAL'}
       <PanelBlock title="Editors" count={editors.length || undefined} more={{ href: '/me/editors', label: 'Manage' }}>
         {#if editors.length}
@@ -375,7 +356,6 @@
   .wait { padding-top: var(--rail-gap); }
   .row { display: flex; gap: 8px; }
   .row input { min-width: 0; }
-  .vis { margin-left: -12px; }
   .chans { list-style: none; margin: 0; padding: 0; display: grid; }
   .chans > li { display: flex; align-items: center; gap: 10px; min-height: 48px; }
   .chans > li + li { border-top: 1px solid var(--border); }

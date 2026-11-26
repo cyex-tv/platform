@@ -430,11 +430,20 @@ async fn every_site_operation_runs_against_the_real_api() {
         json!({ "id": set1, "input": { "name": "Cov renamed", "visibility": "LISTED" } }),
     )
     .await;
+    let range = c.op(os, "SetCapacityRange", json!({ "id": set1 })).await;
+    assert!(
+        range["setCapacityRange"]["max"]
+            .as_u64()
+            .is_some_and(|m| m >= 1000),
+        "{range}"
+    );
+    let menu = c.op(os, "SetMenu", json!({ "id": set1 })).await;
+    assert!(menu["setCapacityRange"]["min"].as_u64().is_some(), "{menu}");
     let set2 = c
         .id(
             os,
             "CloneSet",
-            json!({ "id": set1, "name": "Cov copy", "visibility": "UNLISTED" }),
+            json!({ "id": set1, "name": "Cov copy", "visibility": "LISTED" }),
             "/cloneSet/set/id",
         )
         .await;

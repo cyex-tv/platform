@@ -11,7 +11,7 @@
   import Box from './ui/Box.svelte';
   import Confirm from '$lib/tool/Confirm.svelte';
   import { fail, notify } from '$lib/tool/notices.svelte';
-  import { PERMISSIONS, permissionLabels, toggle, locked, MAX_EDITORS } from '$lib/tool/editors';
+  import { PERMISSIONS, permissionLabels, toggle, MAX_EDITORS } from '$lib/tool/editors';
 
   type Row = AccountEditorsQuery['accountEditors'][number];
   let { accountId, name }: { accountId: string; name: string } = $props();
@@ -97,7 +97,7 @@
     <legend class="sr-only">Permissions</legend>
     {#each OFFER as p (p.key)}
       <label class="ui-check" title={p.line}>
-        <input type="checkbox" checked={list.includes(p.key)} disabled={locked(list, p.key)} aria-describedby="{idp}-{p.key}"
+        <input type="checkbox" checked={list.includes(p.key)} aria-describedby="{idp}-{p.key}"
           onchange={(e) => set(toggle(list, p.key, e.currentTarget.checked))} />
         <span>{p.label}</span>
         <span class="sr-only" id="{idp}-{p.key}">{p.line}</span>

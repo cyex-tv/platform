@@ -1,6 +1,6 @@
 // The public set page in the Inspector shape (redesign, 2026/11/21): the panel holds the actions,
-// the facts, the set's editors (only for whoever the API answers: here the owner) and the chat
-// preview; the grid is the browse grid, with its Select switch.
+// the facts and the set's editors (only for whoever the API answers: here the owner); no chat preview
+// and no visibility row (every set is public). The grid is the browse grid, with its Select switch.
 import { cleanup, render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -38,7 +38,7 @@ afterEach(() => {
 });
 
 describe('set page', () => {
-  it('shows the actions, facts and chat preview in the panel, and the grid with Select', async () => {
+  it('shows the actions and facts in the panel (no chat preview), the set menu button, and the grid with Select', async () => {
     session.me = null;
     render(Page, { data });
     const panel = screen.getByRole('complementary', { name: 'About Main' });
@@ -46,9 +46,10 @@ describe('set page', () => {
     expect(within(panel).getAllByRole('link', { name: 'Sign in to clone' }).length).toBe(1);
     expect(within(panel).getByRole('heading', { name: 'Facts' })).toBeTruthy();
     expect(within(panel).getByText('Channel set')).toBeTruthy();
-    expect(within(panel).getByText('Listed')).toBeTruthy();
+    expect(within(panel).queryByText('Listed')).toBeNull();
     expect(within(panel).getByRole('meter', { name: 'How full' })).toBeTruthy();
-    expect(within(panel).getByRole('heading', { name: 'Chat preview' })).toBeTruthy();
+    expect(within(panel).queryByRole('heading', { name: 'Chat preview' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Set actions for Main' })).toBeTruthy();
     // Signed out: no editors block, and nobody is asked for them.
     expect(within(panel).queryByRole('heading', { name: /Editors/ })).toBeNull();
     expect(gql.mock.calls.some(([d]) => String(d).includes('query SetEditors'))).toBe(false);

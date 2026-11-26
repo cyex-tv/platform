@@ -2,15 +2,11 @@
   // "Clone to my sets": asks for the new set's name, copies, then opens the copy in the editor.
   // What didn't come along (over the size, not approved, others' private emotes) is said in a
   // notice on the next page. Errors stay in the dialog, in words.
-  // The copy is made LISTED unless the person picks otherwise here: a listed set shows on the
-  // cloner's profile.
+  // Every set is public (ADR 0017, amendment 2026/11/22): the copy shows on the cloner's profile.
   //   <CloneDialog bind:this={dlg} id={set.id} name={set.name} />  dlg.open()
   import { goto } from '$app/navigation';
   import { ApiError, gql } from '$lib/api';
-  import Segmented from '$lib/components/Segmented.svelte';
   import { clean } from '$lib/format';
-  import type { SetVisibility } from '$lib/gql/graphql';
-  import { visibilityHint, visibilityOptions } from '$lib/sets/visibility';
   import { CLONE_SET } from '$lib/queries';
   import { cloneError, cloneOutcome } from '$lib/sets/public';
   import { forgetProfile } from '$lib/profile/data.svelte';
@@ -20,7 +16,7 @@
 
   let dialog: HTMLDialogElement;
   let name = $state('');
-  let visibility = $state<SetVisibility>('LISTED');
+
   let busy = $state(false);
   let tried = $state(false);
   let failure = $state('');
@@ -30,7 +26,7 @@
     name = clean(source).slice(0, 100);
     tried = false;
     failure = '';
-    visibility = 'LISTED';
+
     dialog.showModal();
   }
 
@@ -43,7 +39,7 @@
     if (!trimmed) return;
     busy = true;
     try {
-      const { cloneSet } = await gql(CLONE_SET, { id, name: trimmed, visibility });
+      const { cloneSet } = await gql(CLONE_SET, { id, name: trimmed });
       dialog.close();
       forgetProfile('library:');
       notify(cloneOutcome(cloneSet.copied, cloneSet.skipped));
@@ -69,11 +65,7 @@
           Emotes that aren’t approved yet, and other people’s private emotes, stay out.
         </span>
       </label>
-      <div class="ui-field">
-        <span class="ui-label">Who can open your copy</span>
-        <Segmented label="Who can open your copy" options={visibilityOptions('CHANNEL')} value={visibility} onchange={(v) => (visibility = v)} />
-        <span class="ui-hint">{visibilityHint(visibility)} You can change it later in the set.</span>
-      </div>
+
     </div>
     <footer>
       <button class="btn btn-s" type="button" onclick={() => dialog.close()}>Cancel</button>
