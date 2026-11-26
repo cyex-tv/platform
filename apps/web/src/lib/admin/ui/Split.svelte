@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { media, NO_PANEL } from '$lib/media.svelte';
   // An admin list with an inspector: the list on the left, the picked item's facts and actions in
   // a 360px panel on the right that runs the full height of the window (the profile's ABOUT panel
   // shape: flush with the window's right edge, a hairline beside it, one step up in colour). The
@@ -32,14 +33,8 @@
   let { label, open, onclose, panel, empty, stack = 'sheet', size = 'm', children }: Props = $props();
 
   // Unknown until the first check, so neither layout flashes before the other.
-  let narrow = $state<boolean | null>(null);
-  $effect(() => {
-    const mq = matchMedia('(max-width: 1099.98px)');
-    narrow = mq.matches;
-    const on = () => (narrow = mq.matches);
-    mq.addEventListener('change', on);
-    return () => mq.removeEventListener('change', on);
-  });
+  const query = media(NO_PANEL);
+  const narrow = $derived(query.ready ? query.matches : null);
   let sheet = $state(false);
   $effect(() => {
     sheet = !!narrow && stack === 'sheet' && open;

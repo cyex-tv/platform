@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { media, PHONE_TABS } from '$lib/media.svelte';
   // The emote review queue, a workspace: the queue on the left as a contact sheet of small tiles
   // (picture, name, uploader, flags; 50 a page, the server pages) under one toolbar (tabs by kind:
   // public, unlisted and private, resolved; a search by name or uploader; one uploader (UserFilter:
@@ -491,14 +492,7 @@
   }
 
   // Phones get the short tab names, so the counts still fit.
-  let narrow = $state(false);
-  $effect(() => {
-    const m = matchMedia('(max-width: 520px)');
-    narrow = m.matches;
-    const on = () => (narrow = m.matches);
-    m.addEventListener('change', on);
-    return () => m.removeEventListener('change', on);
-  });
+  const narrow = $derived(media(PHONE_TABS).matches);
   const TABS = $derived([
     { value: 'public' as Tab, label: counts ? `Public ${count(counts.public)}` : 'Public', icon: 'eye' as const },
     { value: 'limited' as Tab, label: `${narrow ? 'Unlisted' : 'Unlisted and private'}${counts ? ` ${count(counts.limited)}` : ''}`, icon: 'eye-off' as const },
