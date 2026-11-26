@@ -161,8 +161,9 @@
   .modes { flex: none; }
   .close { flex: none; margin: -4px -6px 0 0; }
   /* The form and the editor scroll their own columns. */
-  .scroll { min-height: 0; overflow: hidden; }
-  .pane { height: 100%; min-height: 0; }
+  /* clip: focus or scrollIntoView inside can't scroll the whole mode out of place. */
+  .scroll { min-height: 0; overflow: clip; }
+  .pane { height: 100%; min-height: 0; overflow: clip; }
   .pane[hidden] { display: none; }
   .wait { display: grid; place-content: center; justify-items: center; gap: 12px; height: 100%; }
   /* Narrower: the line under the title goes, the mode switch stays beside it. */

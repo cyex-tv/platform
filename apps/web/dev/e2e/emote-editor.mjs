@@ -38,9 +38,10 @@ async function launch(port) {
 }
 
 const b = await launch(Number(process.env.CDP ?? 5452));
-await b.send('Page.handleJavaScriptDialog', { accept: true }).catch(() => {}); // one left open by an earlier run
-await b.send('Runtime.enable');
 await b.send('Page.enable');
+// A leave prompt left open by an earlier run blocks the page until answered.
+await b.send('Page.handleJavaScriptDialog', { accept: true }).catch(() => {});
+await b.send('Runtime.enable');
 await b.send('Network.enable');
 await b.send('Network.setCookie', { name: 'mock_session', value: '1', url: process.env.API ?? 'http://localhost:5450' });
 const ev = async (expr) => {
@@ -234,6 +235,8 @@ for (const [w, h, theme, tag, full] of SET) {
     check(`${tag} ran to the end`, false, e.message);
   }
 }
+// Leave nothing to guard, so the next run's first navigation isn't held by a leave prompt.
+await b.send('Page.navigate', { url: 'about:blank' }).catch(() => {});
 b.close();
 const failed = results.filter((r) => !r.ok).length;
 console.log(`${results.length - failed}/${results.length} passed`);

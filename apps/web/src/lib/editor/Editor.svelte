@@ -261,7 +261,7 @@
 </div>
 
 <style>
-  .ed { position: relative; display: grid; grid-template-rows: auto auto minmax(0, 1fr); height: 100%; min-height: 0; min-width: 0; }
+  .ed { position: relative; display: grid; grid-template-rows: auto auto minmax(0, 1fr); height: 100%; min-height: 0; min-width: 0; overflow: clip; }
   .ed.empty { grid-template-rows: minmax(0, 1fr); }
   .top { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 4px 8px 4px 12px; border-bottom: 1px solid var(--border); }
   .file { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; margin: 0; font-size: var(--t-small); font-weight: 600; color: var(--text); }

@@ -73,7 +73,8 @@ export type Output = {
 };
 
 const px = (n: number) => `${count(n)} px`;
-const mp = (n: number) => `${String(Math.round(n / 100_000) / 10).replace('.', ',')} MP`;
+/** Megapixels: one decimal under 100, whole (1.000) above. */
+const mp = (n: number) => (n >= 100_000_000 ? `${count(Math.round(n / 1_000_000))} MP` : `${String(Math.round(n / 100_000) / 10).replace('.', ',')} MP`);
 const fps = (ms: number) => String(Math.round((1000 / ms) * 10) / 10).replace('.', ',');
 
 /** The checklist for `o` against `l`. */
