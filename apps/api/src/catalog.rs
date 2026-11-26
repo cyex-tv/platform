@@ -36,7 +36,7 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::editors::{has_flag, has_flag_on_all_sets, has_flag_on_set};
-use crate::errors::{bad, conflict, rate_limited, sqlx_error};
+use crate::errors::{bad, conflict, paging, rate_limited, sqlx_error};
 use crate::limits::AccountLimit;
 use crate::moderation::{QUEUE_PAGE, QUEUE_PAGE_MAX};
 use crate::state::AppState;
@@ -583,9 +583,7 @@ pub async fn set_emotes(
     let Some(id) = ids::from_text(id.trim()) else {
         return Ok(empty);
     };
-    let per_page = per_page.unwrap_or(120).clamp(1, 200);
-    let page = page.unwrap_or(1).max(1);
-    let offset = i64::from(page - 1) * i64::from(per_page);
+    let paged = paging(page, per_page, 120, 200);
     let mut conn = conn(state).await?;
     let Some(set) = sets::get(&mut conn, id).await.map_err(db_error)? else {
         return Ok(empty);
@@ -600,8 +598,8 @@ pub async fn set_emotes(
         &viewer,
         &state.cdn_url,
         query,
-        i64::from(per_page),
-        offset,
+        paged.limit,
+        paged.offset,
     )
     .await
     .map_err(db_error)?;
@@ -870,12 +868,10 @@ pub async fn my_emotes(
     page: Option<u32>,
     per_page: Option<u32>,
 ) -> ApiResult<EmotePage> {
-    let per_page = per_page.unwrap_or(QUEUE_PAGE).clamp(1, QUEUE_PAGE_MAX);
-    let page = page.unwrap_or(1).max(1);
-    let offset = i64::from(page - 1) * i64::from(per_page);
+    let paged = paging(page, per_page, QUEUE_PAGE, QUEUE_PAGE_MAX);
     let mut conn = conn(state).await?;
     let (rows, total) =
-        reads::emotes_by_owner(&mut conn, caller.account_id, i64::from(per_page), offset)
+        reads::emotes_by_owner(&mut conn, caller.account_id, paged.limit, paged.offset)
             .await
             .map_err(db_error)?;
     Ok(EmotePage {

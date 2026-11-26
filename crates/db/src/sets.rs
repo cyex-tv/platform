@@ -201,6 +201,20 @@ pub async fn list_for_owner(conn: &mut PgConnection, owner: Uuid) -> DbResult<Ve
     .await?)
 }
 
+/// The sets of every account in `owners`, by owner then ID: [`list_for_owner`] for many owners
+/// in one query.
+pub async fn list_for_owners(conn: &mut PgConnection, owners: &[Uuid]) -> DbResult<Vec<Set>> {
+    if owners.is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(sqlx::query_as(&format!(
+        "SELECT {SET} FROM emote_sets WHERE owner_account_id = ANY($1) ORDER BY owner_account_id, id"
+    ))
+    .bind(owners)
+    .fetch_all(conn)
+    .await?)
+}
+
 /// Which of `ids` are sets `owner` owns (any kind but global).
 pub async fn owned_ids(conn: &mut PgConnection, owner: Uuid, ids: &[Uuid]) -> DbResult<Vec<Uuid>> {
     Ok(sqlx::query_scalar(

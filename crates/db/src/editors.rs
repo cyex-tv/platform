@@ -36,6 +36,18 @@ pub struct Grant {
 const GRANT: &str =
     "account_id, editor_id, permissions, granted_by, granted_at, updated_at, all_sets";
 
+/// Locks `owner`'s account row until the transaction ends, so changes to one account's editors
+/// run one after another: each checks the manager's access and the grants it changes against
+/// what the one before it committed. `FOR NO KEY UPDATE`: it waits for another editor change,
+/// not for writes that only reference the account.
+pub async fn lock_owner(conn: &mut PgConnection, owner: Uuid) -> DbResult<()> {
+    sqlx::query("SELECT 1 FROM accounts WHERE id = $1 FOR NO KEY UPDATE")
+        .bind(owner)
+        .fetch_optional(conn)
+        .await?;
+    Ok(())
+}
+
 /// The flags `editor` holds on `account`, when both accounts are live (not deleted or blocked).
 pub async fn permissions_of(
     conn: &mut PgConnection,

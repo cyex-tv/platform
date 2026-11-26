@@ -31,7 +31,7 @@ use crate::catalog::{
     db_error, forbidden, holds, load_set, member_name, not_found, parse_id, permissions_of,
     publish_member_event,
 };
-use crate::errors::{bad, sqlx_error};
+use crate::errors::{bad, paging, sqlx_error};
 use crate::state::AppState;
 use crate::views;
 
@@ -277,9 +277,7 @@ pub async fn review_queue(
     if !holds(&mut conn, caller, permissions::EMOTES_REVIEW).await? {
         return Err(forbidden("This needs emotes.review."));
     }
-    let per_page = per_page.unwrap_or(QUEUE_PAGE).clamp(1, QUEUE_PAGE_MAX);
-    let page = page.unwrap_or(1).max(1);
-    let offset = i64::from(page - 1) * i64::from(per_page);
+    let paged = paging(page, per_page, QUEUE_PAGE, QUEUE_PAGE_MAX);
     let query = QueueRead::from_filter(filter.cloned().unwrap_or_default())?;
     let (rows, total) = reads::review_queue(
         &mut conn,
@@ -290,8 +288,8 @@ pub async fn review_queue(
             sort: query.sort,
             descending: query.descending,
         },
-        i64::from(per_page),
-        offset,
+        paged.limit,
+        paged.offset,
     )
     .await
     .map_err(db_error)?;
@@ -398,10 +396,8 @@ pub async fn account_emotes(
             "This needs users.view or emotes.review, or the account's emote manage permission.",
         ));
     }
-    let per_page = per_page.unwrap_or(QUEUE_PAGE).clamp(1, QUEUE_PAGE_MAX);
-    let page = page.unwrap_or(1).max(1);
-    let offset = i64::from(page - 1) * i64::from(per_page);
-    let (rows, total) = reads::emotes_by_owner(&mut conn, owner, i64::from(per_page), offset)
+    let paged = paging(page, per_page, QUEUE_PAGE, QUEUE_PAGE_MAX);
+    let (rows, total) = reads::emotes_by_owner(&mut conn, owner, paged.limit, paged.offset)
         .await
         .map_err(db_error)?;
     Ok(EmotePage {

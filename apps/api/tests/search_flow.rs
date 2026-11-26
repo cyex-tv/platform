@@ -282,6 +282,29 @@ fn app_for(db: &TestDb) -> axum::Router {
 }
 
 #[tokio::test]
+async fn a_page_past_the_last_served_one_is_empty_without_reading_that_far() {
+    let Some(db) = TestDb::new().await else {
+        return;
+    };
+    seed(&db).await;
+    let app = app_for(&db);
+    let started = std::time::Instant::now();
+    let r = find(&app, r#"query: "", page: 1000000000"#).await;
+    assert!(names(&r).is_empty(), "{r}");
+    assert_eq!(r["page"], 1_000_000_000);
+    assert_eq!(r["perPage"], 50);
+    // The total is still the real one.
+    assert_eq!(r["total"], 5);
+    let r = find(&app, r#"query: "", sort: TRENDING, page: 1000000000"#).await;
+    assert!(names(&r).is_empty(), "{r}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    // The last page served still reads rows.
+    let r = find(&app, r#"query: "", perPage: 1, page: 5"#).await;
+    assert_eq!(names(&r).len(), 1);
+    db.close().await;
+}
+
+#[tokio::test]
 async fn search_sorts_by_relevance_top_and_new() {
     let Some(db) = TestDb::new().await else {
         return;

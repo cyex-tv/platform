@@ -110,6 +110,23 @@ pub async fn list_for_account(conn: &mut PgConnection, account_id: Uuid) -> DbRe
     .await?)
 }
 
+/// The channels of every account in `accounts`, by account, then platform as
+/// [`list_for_account`] orders them: one query for many accounts.
+pub async fn list_for_accounts(
+    conn: &mut PgConnection,
+    accounts: &[Uuid],
+) -> DbResult<Vec<Channel>> {
+    if accounts.is_empty() {
+        return Ok(Vec::new());
+    }
+    Ok(sqlx::query_as(&format!(
+        "SELECT {CHANNEL} FROM channels WHERE account_id = ANY($1) ORDER BY account_id, platform DESC"
+    ))
+    .bind(accounts)
+    .fetch_all(conn)
+    .await?)
+}
+
 /// Changes the channel's active set, or clears it. Whether the caller may use that set is the
 /// api's check.
 pub async fn set_active_set(

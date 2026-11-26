@@ -35,7 +35,7 @@ use uuid::Uuid;
 
 use crate::catalog::{LOOKUP_LIMIT, db_error, forbidden, holds, not_found, parse_id};
 use crate::editors::has_flag;
-use crate::errors::{bad, conflict, limited_as, sqlx_error};
+use crate::errors::{bad, conflict, limited_as, paging, sqlx_error};
 use crate::limits::AccountLimit;
 use crate::state::AppState;
 use crate::upload::media_error;
@@ -1478,11 +1478,7 @@ pub async fn entitlements(
     };
     let account = filter(account_id)?;
     let cosmetic = filter(cosmetic_id)?;
-    let per_page = per_page
-        .unwrap_or(ENTITLEMENTS_PAGE)
-        .clamp(1, ENTITLEMENTS_PAGE_MAX);
-    let page = page.unwrap_or(1).max(1);
-    let offset = i64::from(page - 1) * i64::from(per_page);
+    let paged = paging(page, per_page, ENTITLEMENTS_PAGE, ENTITLEMENTS_PAGE_MAX);
     let mut conn = acquire(state).await?;
     require(&mut conn, caller, permissions::COSMETICS_GRANT).await?;
     let (rows, total) = db::entitlements(
@@ -1490,8 +1486,8 @@ pub async fn entitlements(
         kind,
         account,
         cosmetic,
-        i64::from(per_page),
-        offset,
+        paged.limit,
+        paged.offset,
     )
     .await
     .map_err(db_error)?;
