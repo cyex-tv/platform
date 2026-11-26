@@ -1,6 +1,6 @@
 //! The shapes of the public API (ADR 0008). They live in this crate so client code (the deck, a
 //! future SDK) can reuse them. The GraphQL derives sit behind the `graphql` feature; REST and the
-//! event WebSocket use the serde form (snake_case). This is the Phase 1 draft.
+//! event WebSocket use the serde form (snake_case).
 //!
 //! IDs are ULIDs as text. Times are RFC 3339 strings in UTC.
 
@@ -1347,7 +1347,7 @@ pub struct AccountProfile {
     pub collection_public: bool,
 }
 
-// Reports and takedowns (Phase 7)
+// Reports and takedowns
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[cfg_attr(feature = "graphql", derive(async_graphql::Enum))]

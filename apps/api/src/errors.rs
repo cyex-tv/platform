@@ -3,9 +3,11 @@
 
 use axum::http::StatusCode;
 use cyex_tv_auth::AuthError;
-use cyex_tv_db::{DbError, ids};
+use cyex_tv_db::{DbError, audit as db_audit, ids};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::ratelimit::Limiter;
+use serde_json::Value;
+use sqlx::PgConnection;
 use uuid::Uuid;
 
 use crate::limits::AccountLimit;
@@ -118,6 +120,65 @@ pub(crate) async fn conn(
     state: &AppState,
 ) -> ApiResult<sqlx::pool::PoolConnection<sqlx::Postgres>> {
     state.db.acquire().await.map_err(sqlx_error)
+}
+
+/// One audit row to write: what was done to what, and how it looked before and after.
+pub struct Audit<'a> {
+    action: &'a str,
+    target_kind: &'a str,
+    target_id: &'a str,
+    before: Option<Value>,
+    after: Option<Value>,
+    subject: Option<Uuid>,
+}
+
+impl<'a> Audit<'a> {
+    pub fn new(action: &'a str, target_kind: &'a str, target_id: &'a str) -> Self {
+        Self {
+            action,
+            target_kind,
+            target_id,
+            before: None,
+            after: None,
+            subject: None,
+        }
+    }
+
+    pub fn change(mut self, before: Option<Value>, after: Option<Value>) -> Self {
+        self.before = before;
+        self.after = after;
+        self
+    }
+
+    /// The account whose public activity feed shows the change, if any.
+    pub fn subject(mut self, subject: Option<Uuid>) -> Self {
+        self.subject = subject;
+        self
+    }
+}
+
+/// Writes `entry` in the caller's transaction. `actor` is the account that acted, or `None` for
+/// the system (a payment webhook).
+pub async fn record_audit(
+    conn: &mut PgConnection,
+    actor: impl Into<Option<Uuid>>,
+    entry: Audit<'_>,
+) -> ApiResult<()> {
+    db_audit::write_for(
+        conn,
+        &db_audit::NewEntry {
+            actor: actor.into(),
+            action: entry.action,
+            target_kind: entry.target_kind,
+            target_id: entry.target_id,
+            before: entry.before,
+            after: entry.after,
+        },
+        entry.subject,
+    )
+    .await
+    .map_err(db_error)?;
+    Ok(())
 }
 
 /// Parses an ID from the API. A malformed one names nothing, so it is `not_found`.

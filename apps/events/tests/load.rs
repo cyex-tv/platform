@@ -1,4 +1,4 @@
-//! The Phase 5 load test (PLAN.md): many open connections, ten topics each, events written to
+//! The load test: many open connections, ten topics each, events written to
 //! the outbox at a steady rate, and the time from each write to each delivery. It runs in CI's
 //! `load` job (`cargo test --release -p cyex-tv-events --test load -- --ignored --nocapture`)
 //! and prints its numbers; PROGRESS.md records them.

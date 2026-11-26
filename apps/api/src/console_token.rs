@@ -17,14 +17,14 @@
 use axum::http::StatusCode;
 use cyex_tv_auth::session::ttl;
 use cyex_tv_auth::{Caller, Via, tokens};
+use cyex_tv_db::ids;
 use cyex_tv_db::sessions::{self, SessionKind};
-use cyex_tv_db::{audit, ids};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::ConsoleToken;
 use serde_json::json;
 use sqlx::Connection;
 
-use crate::errors::{db_error, limited, sqlx_error};
+use crate::errors::{Audit, db_error, limited, record_audit, sqlx_error};
 use crate::state::AppState;
 use crate::views;
 
@@ -66,19 +66,15 @@ pub async fn mint(
     .map_err(db_error)?;
     let session_id = ids::to_text(session.id);
     let expires_at = views::time(session.expires_at);
-    audit::write(
+    record_audit(
         &mut tx,
-        &audit::NewEntry {
-            actor: Some(caller.account_id),
-            action: AUDIT_ACTION,
-            target_kind: "account",
-            target_id: &account,
-            before: replaced.map(|id| json!({ "session_id": ids::to_text(id) })),
-            after: Some(json!({ "session_id": session_id, "expires_at": expires_at })),
-        },
+        caller.account_id,
+        Audit::new(AUDIT_ACTION, "account", &account).change(
+            replaced.map(|id| json!({ "session_id": ids::to_text(id) })),
+            Some(json!({ "session_id": session_id, "expires_at": expires_at })),
+        ),
     )
-    .await
-    .map_err(db_error)?;
+    .await?;
     tx.commit().await.map_err(sqlx_error)?;
 
     Ok(ConsoleToken {

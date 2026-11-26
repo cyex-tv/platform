@@ -24,7 +24,7 @@ use sqlx::PgConnection;
 
 use crate::activity::sql_filter;
 use crate::admin::{AuditQuery, audit_filter_parts};
-use crate::catalog::{db_error, forbidden, parse_id, permissions_of, public_emote};
+use crate::catalog::{db_error, parse_id, public_emote, require_any};
 use crate::errors::{bad, conn};
 use crate::moderation::QueueRead;
 use crate::search::account_hits;
@@ -39,17 +39,6 @@ fn pick(raw: Option<&str>) -> Option<&str> {
 
 fn limit_of(limit: Option<u32>) -> i64 {
     i64::from(limit.unwrap_or(TOP_DEFAULT).clamp(1, TOP_MAX))
-}
-
-async fn require_any(conn: &mut PgConnection, caller: &Caller, any: &[&str]) -> ApiResult<()> {
-    if caller.owner {
-        return Ok(());
-    }
-    let held = permissions_of(conn, caller).await?;
-    if any.iter().any(|p| held.iter().any(|h| h == p)) {
-        return Ok(());
-    }
-    Err(forbidden(&format!("This needs {}.", any.join(" or "))))
 }
 
 /// The counted accounts as people: summary, logins and count, in the order counted.

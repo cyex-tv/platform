@@ -1,4 +1,4 @@
-//! Reports, takedowns and account restrictions (PLAN.md Phase 7). `docs/takedown.md` describes
+//! Reports, takedowns and account restrictions. `docs/takedown.md` describes
 //! the process for people outside cyex.tv.
 //!
 //! - **Report:** signed-in users report an emote they can see, with a reason; at most 10 an hour
@@ -16,12 +16,14 @@
 //!   placed or lifted is kept in `account_restrictions` and audited. The owner can't be
 //!   restricted, and nobody restricts an account whose highest role is at or above their own.
 
+use std::collections::HashMap;
+
 use axum::http::StatusCode;
 use chrono::Utc;
 use cyex_tv_auth::Caller;
 use cyex_tv_db::accounts::Hold;
 use cyex_tv_db::{
-    DbError, accounts, audit, blocklist, emotes, files, ids, jobs, notifications, reads, reports,
+    DbError, accounts, blocklist, emotes, files, ids, jobs, notifications, reads, reports,
     sessions, sets,
 };
 use cyex_tv_shared::error::{ApiError, ApiResult};
@@ -37,9 +39,9 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::admin::{actor, rule};
-use crate::catalog::{
-    db_error, forbidden, holds, load_set, not_found, parse_id, publish_member_event,
-};
+use crate::catalog::require_any;
+use crate::catalog::{db_error, forbidden, load_set, not_found, parse_id, publish_member_event};
+use crate::errors::{Audit, record_audit};
 use crate::errors::{bad, conflict, paging, sqlx_error};
 use crate::state::AppState;
 use crate::views;
@@ -73,16 +75,41 @@ fn state_of(raw: &str) -> ReportState {
 
 /// A moderator: `emotes.review`, `emotes.takedown` or `reports.manage`.
 async fn moderator(conn: &mut PgConnection, caller: &Caller) -> ApiResult<()> {
-    if holds(conn, caller, permissions::EMOTES_TAKEDOWN).await?
-        || holds(conn, caller, permissions::EMOTES_REVIEW).await?
-        || holds(conn, caller, permissions::REPORTS_MANAGE).await?
-    {
-        Ok(())
-    } else {
-        Err(forbidden(
-            "This needs emotes.review, emotes.takedown or reports.manage.",
-        ))
+    require_any(
+        conn,
+        caller,
+        &[
+            permissions::EMOTES_REVIEW,
+            permissions::EMOTES_TAKEDOWN,
+            permissions::REPORTS_MANAGE,
+        ],
+    )
+    .await
+}
+
+/// The emotes reported, by ID, in one query. Taken-down and deleted emotes included: moderators
+/// need to see what was reported.
+async fn emote_views(
+    state: &AppState,
+    conn: &mut PgConnection,
+    ids: &[Uuid],
+) -> ApiResult<HashMap<Uuid, Emote>> {
+    if ids.is_empty() {
+        return Ok(HashMap::new());
     }
+    let rows: Vec<reads::EmoteRow> = sqlx::query_as(
+        "SELECT e.id, e.owner_account_id AS owner, e.name, e.zero_width, e.private,
+                e.unlisted, e.nsfw, e.animated, e.state, e.created_at, f.sha256, f.variants
+         FROM emotes e LEFT JOIN files f ON f.id = e.file_id WHERE e.id = ANY($1)",
+    )
+    .bind(ids)
+    .fetch_all(&mut *conn)
+    .await
+    .map_err(sqlx_error)?;
+    let built = views::emotes(conn, &rows, &state.cdn_url)
+        .await
+        .map_err(db_error)?;
+    Ok(rows.iter().map(|r| r.id).zip(built).collect())
 }
 
 async fn emote_view(
@@ -90,23 +117,29 @@ async fn emote_view(
     conn: &mut PgConnection,
     id: Uuid,
 ) -> ApiResult<Option<Emote>> {
-    // Taken-down and deleted emotes included: moderators need to see what was reported.
-    let row: Option<reads::EmoteRow> = sqlx::query_as(
-        "SELECT e.id, e.owner_account_id AS owner, e.name, e.zero_width, e.private,
-                e.unlisted, e.nsfw, e.animated, e.state, e.created_at, f.sha256, f.variants
-         FROM emotes e LEFT JOIN files f ON f.id = e.file_id WHERE e.id = $1",
-    )
-    .bind(id)
-    .fetch_optional(&mut *conn)
-    .await
-    .map_err(sqlx_error)?;
-    let Some(row) = row else {
-        return Ok(None);
-    };
-    let mut built = views::emotes(conn, std::slice::from_ref(&row), &state.cdn_url)
-        .await
-        .map_err(db_error)?;
-    Ok(built.pop())
+    Ok(emote_views(state, conn, &[id]).await?.remove(&id))
+}
+
+async fn report_views(
+    state: &AppState,
+    conn: &mut PgConnection,
+    rows: &[reports::Report],
+) -> ApiResult<Vec<Report>> {
+    let emote_ids: Vec<Uuid> = rows.iter().map(|r| r.emote_id).collect();
+    let emotes = emote_views(state, conn, &emote_ids).await?;
+    Ok(rows
+        .iter()
+        .map(|r| Report {
+            id: ids::to_text(r.id),
+            emote: emotes.get(&r.emote_id).cloned(),
+            reporter_id: r.reporter_id.map(ids::to_text),
+            reason: r.reason.clone(),
+            state: state_of(&r.state),
+            resolution: r.resolution.clone(),
+            created_at: views::time(r.created_at),
+            resolved_at: r.resolved_at.map(views::time),
+        })
+        .collect())
 }
 
 async fn report_view(
@@ -114,41 +147,8 @@ async fn report_view(
     conn: &mut PgConnection,
     r: &reports::Report,
 ) -> ApiResult<Report> {
-    Ok(Report {
-        id: ids::to_text(r.id),
-        emote: emote_view(state, conn, r.emote_id).await?,
-        reporter_id: r.reporter_id.map(ids::to_text),
-        reason: r.reason.clone(),
-        state: state_of(&r.state),
-        resolution: r.resolution.clone(),
-        created_at: views::time(r.created_at),
-        resolved_at: r.resolved_at.map(views::time),
-    })
-}
-
-async fn write_audit(
-    conn: &mut PgConnection,
-    caller: &Caller,
-    action: &str,
-    target_kind: &str,
-    target_id: &str,
-    before: Option<Value>,
-    after: Option<Value>,
-) -> ApiResult<()> {
-    audit::write(
-        conn,
-        &audit::NewEntry {
-            actor: Some(caller.account_id),
-            action,
-            target_kind,
-            target_id,
-            before,
-            after,
-        },
-    )
-    .await
-    .map_err(db_error)?;
-    Ok(())
+    let mut built = report_views(state, conn, std::slice::from_ref(r)).await?;
+    built.pop().ok_or_else(ApiError::internal)
 }
 
 // Reports
@@ -234,10 +234,7 @@ pub async fn queue(
     let (rows, total) = reports::open(&mut conn, paged.limit, paged.offset)
         .await
         .map_err(db_error)?;
-    let mut items = Vec::with_capacity(rows.len());
-    for r in &rows {
-        items.push(report_view(state, &mut conn, r).await?);
-    }
+    let items = report_views(state, &mut conn, &rows).await?;
     Ok(ReportQueue {
         items,
         total: u64::try_from(total).unwrap_or(0),
@@ -272,14 +269,13 @@ pub async fn resolve(
                     .await
                     .map_err(db_error)?
                     .ok_or_else(|| conflict("not_open", "That report was already resolved."))?;
-            write_audit(
+            record_audit(
                 &mut tx,
-                caller,
-                "report.dismissed",
-                "report",
-                &ids::to_text(id),
-                None,
-                Some(json!({ "emote_id": ids::to_text(found.emote_id), "note": note })),
+                caller.account_id,
+                Audit::new("report.dismissed", "report", &ids::to_text(id)).change(
+                    None,
+                    Some(json!({ "emote_id": ids::to_text(found.emote_id), "note": note })),
+                ),
             )
             .await?;
             tx.commit().await.map_err(sqlx_error)?;
@@ -337,14 +333,15 @@ pub async fn dismiss_many(
                 .push(crate::moderation::batch_failure(&raw, &err));
             continue;
         };
-        write_audit(
+        record_audit(
             &mut tx,
-            caller,
-            "report.dismissed",
-            "report",
-            &ids::to_text(id),
-            None,
-            Some(json!({ "emote_id": ids::to_text(done.emote_id), "note": note, "batch": true })),
+            caller.account_id,
+            Audit::new("report.dismissed", "report", &ids::to_text(id)).change(
+                None,
+                Some(
+                    json!({ "emote_id": ids::to_text(done.emote_id), "note": note, "batch": true }),
+                ),
+            ),
         )
         .await?;
         out.done.push(ids::to_text(id));
@@ -366,9 +363,7 @@ pub async fn takedown(
     let reason = text(reason, "reason")?;
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
     let mut tx = conn.begin().await.map_err(sqlx_error)?;
-    if !holds(&mut tx, caller, permissions::EMOTES_TAKEDOWN).await? {
-        return Err(forbidden("This needs emotes.takedown."));
-    }
+    require_any(&mut tx, caller, &[permissions::EMOTES_TAKEDOWN]).await?;
     let target = emotes::lock(&mut tx, id)
         .await
         .map_err(db_error)?
@@ -465,18 +460,17 @@ pub async fn takedown(
     reports::action_all(&mut tx, &affected_ids, caller.account_id, &reason)
         .await
         .map_err(db_error)?;
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "emote.taken_down",
-        "emote",
-        &ids::to_text(id),
-        Some(json!({ "state": target.state })),
-        Some(json!({
-            "state": EmoteState::TakenDown,
-            "reason": reason,
-            "emotes": affected_ids.iter().map(|e| ids::to_text(*e)).collect::<Vec<_>>(),
-        })),
+        caller.account_id,
+        Audit::new("emote.taken_down", "emote", &ids::to_text(id)).change(
+            Some(json!({ "state": target.state })),
+            Some(json!({
+                "state": EmoteState::TakenDown,
+                "reason": reason,
+                "emotes": affected_ids.iter().map(|e| ids::to_text(*e)).collect::<Vec<_>>(),
+            })),
+        ),
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
@@ -685,15 +679,7 @@ pub async fn restrict(
                 .map_err(db_error)?;
         }
     }
-    write_audit(
-        &mut tx,
-        caller,
-        "account.restricted",
-        "account",
-        &ids::to_text(account_id),
-        Some(json!({ "uploads_blocked": before.restricted_at.is_some(), "blocked": before.blocked_at.is_some() })),
-        Some(json!({ "uploads_blocked": after.restricted_at.is_some(), "blocked": after.blocked_at.is_some() })),
-    )
+    record_audit(&mut tx, caller.account_id, Audit::new("account.restricted", "account", &ids::to_text(account_id)).change(Some(json!({ "uploads_blocked": before.restricted_at.is_some(), "blocked": before.blocked_at.is_some() })), Some(json!({ "uploads_blocked": after.restricted_at.is_some(), "blocked": after.blocked_at.is_some() }))))
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
     Ok(status_of(&after))
@@ -738,14 +724,15 @@ pub async fn place(
     after_snap["reason"] = json!(reason);
     after_snap["until"] = json!(ends.map(views::time));
     after_snap["restriction_id"] = json!(ids::to_text(record.id));
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "account.restriction_placed",
-        "account",
-        &ids::to_text(account_id),
-        Some(snapshot(&before)),
-        Some(after_snap),
+        caller.account_id,
+        Audit::new(
+            "account.restriction_placed",
+            "account",
+            &ids::to_text(account_id),
+        )
+        .change(Some(snapshot(&before)), Some(after_snap)),
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
@@ -782,14 +769,15 @@ pub async fn lift(
     let mut after_snap = snapshot(&after);
     after_snap["kind"] = json!(hold.kind());
     after_snap["reason"] = json!(reason);
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "account.restriction_lifted",
-        "account",
-        &ids::to_text(account_id),
-        Some(snapshot(&before)),
-        Some(after_snap),
+        caller.account_id,
+        Audit::new(
+            "account.restriction_lifted",
+            "account",
+            &ids::to_text(account_id),
+        )
+        .change(Some(snapshot(&before)), Some(after_snap)),
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
@@ -877,17 +865,10 @@ pub async fn account_reports(
     let by = reports::by_reporter(&mut conn, account_id, 50)
         .await
         .map_err(db_error)?;
-    let mut out = AccountReports {
-        about: Vec::with_capacity(about.len()),
-        by: Vec::with_capacity(by.len()),
-    };
-    for r in &about {
-        out.about.push(report_view(state, &mut conn, r).await?);
-    }
-    for r in &by {
-        out.by.push(report_view(state, &mut conn, r).await?);
-    }
-    Ok(out)
+    Ok(AccountReports {
+        about: report_views(state, &mut conn, &about).await?,
+        by: report_views(state, &mut conn, &by).await?,
+    })
 }
 
 /// An account with its identities and restrictions. Needs `users.view` or `users.restrict`.

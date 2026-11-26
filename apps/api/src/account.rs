@@ -19,8 +19,8 @@ use chrono::{DateTime, Utc};
 use cyex_tv_auth::{Caller, Via};
 use cyex_tv_db::sessions::{self, SessionKind};
 use cyex_tv_db::{
-    accounts, audit, channels, editors as editors_db, ids, notifications, privacy, reads, reports,
-    roles, sets,
+    accounts, channels, editors as editors_db, ids, notifications, privacy, reads, reports, roles,
+    sets,
 };
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{AccountSession, PendingDeletion, SessionKindView};
@@ -29,7 +29,7 @@ use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
 use crate::catalog::{db_error, my_sets, not_found};
-use crate::errors::{bad, rate_limited, sqlx_error};
+use crate::errors::{Audit, bad, rate_limited, record_audit, sqlx_error};
 use crate::state::AppState;
 use crate::views;
 
@@ -487,19 +487,12 @@ pub async fn export(state: &AppState, caller: &Caller) -> ApiResult<String> {
     });
 
     let mut conn = state.db.acquire().await.map_err(sqlx_error)?;
-    audit::write(
+    record_audit(
         &mut conn,
-        &audit::NewEntry {
-            actor: Some(account_id),
-            action: "account.exported",
-            target_kind: "account",
-            target_id: &ids::to_text(account_id),
-            before: None,
-            after: None,
-        },
+        account_id,
+        Audit::new("account.exported", "account", &ids::to_text(account_id)).change(None, None),
     )
-    .await
-    .map_err(db_error)?;
+    .await?;
     serde_json::to_string(&doc).map_err(|_| ApiError::internal())
 }
 
@@ -629,19 +622,20 @@ pub async fn delete_account(
     {
         return Err(not_found());
     }
-    audit::write(
+    record_audit(
         &mut tx,
-        &audit::NewEntry {
-            actor: Some(account_id),
-            action: "account.deletion_scheduled",
-            target_kind: "account",
-            target_id: &ids::to_text(account_id),
-            before: None,
-            after: Some(json!({ "erase_after": views::time(erase_after) })),
-        },
+        account_id,
+        Audit::new(
+            "account.deletion_scheduled",
+            "account",
+            &ids::to_text(account_id),
+        )
+        .change(
+            None,
+            Some(json!({ "erase_after": views::time(erase_after) })),
+        ),
     )
-    .await
-    .map_err(db_error)?;
+    .await?;
     tx.commit().await.map_err(sqlx_error)?;
     tracing::info!(account = %ids::to_text(account_id), "account deletion scheduled");
     Ok(erase_after)
@@ -703,19 +697,12 @@ pub async fn restore_account(state: &AppState, pending: &Caller) -> ApiResult<()
             "There's no deleted account to restore here.",
         ));
     }
-    audit::write(
+    record_audit(
         &mut tx,
-        &audit::NewEntry {
-            actor: Some(account_id),
-            action: "account.restored",
-            target_kind: "account",
-            target_id: &ids::to_text(account_id),
-            before: None,
-            after: None,
-        },
+        account_id,
+        Audit::new("account.restored", "account", &ids::to_text(account_id)).change(None, None),
     )
-    .await
-    .map_err(db_error)?;
+    .await?;
     tx.commit().await.map_err(sqlx_error)?;
     tracing::info!(account = %ids::to_text(account_id), "account restored");
     Ok(())

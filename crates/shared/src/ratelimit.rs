@@ -1,6 +1,6 @@
-//! Rate limits (PLAN.md Phase 7): a token bucket per key (an IP or an account), in memory.
+//! Rate limits: a token bucket per key (an IP or an account), in memory.
 //!
-//! In memory means per instance. v1 runs one api and one events instance (Phase 9); with more,
+//! In memory means per instance. v1 runs one api and one events instance; with more,
 //! the limits would apply per instance, and should move to a shared store.
 
 use std::collections::HashMap;
@@ -63,14 +63,6 @@ impl Rate {
             burst,
             per: Duration::from_secs(secs),
         })
-    }
-
-    /// The same window with another count.
-    pub const fn with_burst(self, burst: u32) -> Self {
-        Self {
-            burst,
-            per: self.per,
-        }
     }
 }
 

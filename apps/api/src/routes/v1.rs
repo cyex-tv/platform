@@ -1,7 +1,7 @@
 //! The REST part of v1 (ADR 0008). Everything else is GraphQL at `/v1/gql`. REST covers only:
-//! - sign-in redirects (Phase 2, built);
-//! - the upload (Phase 3, built; transcoding is the worker's);
-//! - the small, cacheable reads chat clients poll (built);
+//! - sign-in redirects;
+//! - the upload (transcoding is the worker's);
+//! - the small, cacheable reads chat clients poll;
 //! - Paddle's webhook for the shop (ADR 0016), which needs the raw body for its signature.
 //!
 //! The others answer `501 not_implemented` until their phase builds them.
@@ -525,7 +525,7 @@ async fn upload_cosmetic_image(
 // Chat-client reads: public, no auth, `ETag` and `Cache-Control`.
 
 /// How long clients and the CDN may keep a read before asking again (`If-None-Match` then gets a
-/// cheap 304). Live updates (Phase 5) push changes sooner.
+/// cheap 304). Live updates (the events socket) push changes sooner.
 const READ_MAX_AGE: u32 = 30;
 
 fn hex(bytes: &[u8]) -> String {

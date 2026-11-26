@@ -17,10 +17,11 @@ use std::collections::HashMap;
 
 use axum::http::StatusCode;
 use cyex_tv_auth::Caller;
-use cyex_tv_db::{accounts, audit, ids, roles, sessions, staff};
+use cyex_tv_db::{accounts, ids, roles, sessions, staff};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{
-    AccountSession, AccountSubscription, EntitlementGrant, GrantKind, GrantSource, StaffNote,
+    AccountSession, AccountSubscription, CosmeticKind, EntitlementGrant, GrantKind, GrantSource,
+    StaffNote,
 };
 use cyex_tv_shared::permissions;
 use cyex_tv_shared::text;
@@ -28,8 +29,10 @@ use serde_json::{Value, json};
 use sqlx::{Connection, PgConnection};
 use uuid::Uuid;
 
-use crate::catalog::{db_error, forbidden, not_found, parse_id, permissions_of};
+use crate::catalog::{db_error, forbidden, not_found, parse_id, require_any};
+use crate::cosmetics::cosmetic_display_name;
 use crate::errors::sqlx_error;
+use crate::errors::{Audit, record_audit};
 use crate::state::AppState;
 use crate::views;
 
@@ -38,47 +41,12 @@ pub const MAX_NOTE_LEN: usize = 2000;
 /// Notes, sessions and grants one read returns at most.
 const LIMIT: i64 = 200;
 
-async fn require_any(conn: &mut PgConnection, caller: &Caller, any: &[&str]) -> ApiResult<()> {
-    if caller.owner {
-        return Ok(());
-    }
-    let held = permissions_of(conn, caller).await?;
-    if any.iter().any(|p| held.iter().any(|h| h == p)) {
-        return Ok(());
-    }
-    Err(forbidden(&format!("This needs {}.", any.join(" or "))))
-}
-
 async fn live_account(conn: &mut PgConnection, id: Uuid) -> ApiResult<accounts::Account> {
     accounts::get(conn, id)
         .await
         .map_err(db_error)?
         .filter(|a| a.deleted_at.is_none())
         .ok_or_else(not_found)
-}
-
-async fn write_audit(
-    conn: &mut PgConnection,
-    caller: &Caller,
-    action: &str,
-    target_id: &str,
-    before: Option<Value>,
-    after: Option<Value>,
-) -> ApiResult<()> {
-    audit::write(
-        conn,
-        &audit::NewEntry {
-            actor: Some(caller.account_id),
-            action,
-            target_kind: "account",
-            target_id,
-            before,
-            after,
-        },
-    )
-    .await
-    .map_err(db_error)?;
-    Ok(())
 }
 
 // Notes
@@ -137,13 +105,13 @@ pub async fn add_note(
     let note = staff::add_note(&mut tx, account_id, caller.account_id, &body)
         .await
         .map_err(db_error)?;
-    write_audit(
+    record_audit(
         &mut tx,
-        caller,
-        "account.note_added",
-        &ids::to_text(account_id),
-        None,
-        Some(json!({ "note_id": ids::to_text(note.id), "body": body })),
+        caller.account_id,
+        Audit::new("account.note_added", "account", &ids::to_text(account_id)).change(
+            None,
+            Some(json!({ "note_id": ids::to_text(note.id), "body": body })),
+        ),
     )
     .await?;
     tx.commit().await.map_err(sqlx_error)?;
@@ -166,13 +134,18 @@ pub async fn delete_note(state: &AppState, caller: &Caller, id: &str) -> ApiResu
         .await
         .map_err(db_error)?;
     if done {
-        write_audit(
+        record_audit(
             &mut tx,
-            caller,
-            "account.note_deleted",
-            &ids::to_text(note.account_id),
-            Some(json!({ "note_id": ids::to_text(note.id), "body": note.body })),
-            None,
+            caller.account_id,
+            Audit::new(
+                "account.note_deleted",
+                "account",
+                &ids::to_text(note.account_id),
+            )
+            .change(
+                Some(json!({ "note_id": ids::to_text(note.id), "body": note.body })),
+                None,
+            ),
         )
         .await?;
     }
@@ -516,7 +489,7 @@ async fn grants(
         if let Some(n) = names.get(&g.item_id) {
             g.item_name = n.clone();
         } else if let Some(id) = ids::from_text(&g.item_id) {
-            g.item_name = cosmetic_name(conn, g.kind, id).await?.unwrap_or_default();
+            g.item_name = item_name(conn, g.kind, id).await?.unwrap_or_default();
         }
     }
     // Held first, then newest first.
@@ -551,21 +524,20 @@ fn implicit(role: &roles::Role, account: Uuid, source: GrantSource) -> Entitleme
     }
 }
 
-async fn cosmetic_name(
+/// What a grant's item is called now, `None` when it is gone.
+async fn item_name(
     conn: &mut PgConnection,
     kind: GrantKind,
     id: Uuid,
 ) -> ApiResult<Option<String>> {
-    let table = match kind {
-        GrantKind::Badge => "badges",
-        GrantKind::Paint => "paints",
-        GrantKind::Role => "roles",
-    };
-    sqlx::query_scalar(&format!("SELECT name FROM {table} WHERE id = $1"))
-        .bind(id)
-        .fetch_optional(conn)
-        .await
-        .map_err(sqlx_error)
+    match kind {
+        GrantKind::Badge => cosmetic_display_name(conn, CosmeticKind::Badge, id).await,
+        GrantKind::Paint => cosmetic_display_name(conn, CosmeticKind::Paint, id).await,
+        GrantKind::Role => Ok(roles::get(conn, id)
+            .await
+            .map_err(db_error)?
+            .map(|r| r.name)),
+    }
 }
 
 /// Everything an account holds or held, and where each came from.

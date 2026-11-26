@@ -1,4 +1,4 @@
-//! Request rate limits (PLAN.md Phase 7), per IP for every route class and per account on
+//! Request rate limits, per IP for every route class and per account on
 //! GraphQL. A request over a limit gets `429 rate_limited` with `Retry-After`.
 //!
 //! The upload's 20 an hour per account lives in `upload`, since it counts what was made, and so

@@ -1,4 +1,4 @@
-//! `POST /v1/emotes`: an upload becomes a pending emote (PLAN.md Phase 3, steps 1 to 3 and 6).
+//! `POST /v1/emotes`: an upload becomes a pending emote (the transcode job finishes it).
 //!
 //! 1. The file is read with a hard cap, so an oversized one stops at 8 MB (`too_large`).
 //! 2. It is decoded in full under the limits (`crates/media`), never trusted by name or type.
@@ -327,8 +327,12 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
     }
     if input.flags.unlisted
         && !input.flags.private
-        && !crate::catalog::holds(&mut conn, caller, permissions::EMOTES_FLAGS).await?
-        && !crate::catalog::holds(&mut conn, caller, permissions::EMOTES_EDIT_ANY).await?
+        && !crate::catalog::holds_any(
+            &mut conn,
+            caller,
+            &[permissions::EMOTES_FLAGS, permissions::EMOTES_EDIT_ANY],
+        )
+        .await?
     {
         return Err(unlisted_staff_only());
     }

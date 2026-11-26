@@ -53,7 +53,7 @@ pub async fn check_frames(
     .await?)
 }
 
-/// Adds an entry. Phase 7 puts the moderator API and its audit row around this.
+/// Adds an entry. The caller (a takedown) writes the audit row around this.
 pub async fn add(
     conn: &mut PgConnection,
     sha256: Option<&[u8; 32]>,
