@@ -52,7 +52,9 @@ export function gqlDocuments(): Plugin {
     name: 'cyex-gql-documents',
     enforce: 'pre',
     transform(code: string, id: string) {
-      const path = id.split('?')[0];
+      // `?raw` and the like load the file as text, not as code.
+      if (id.includes('?')) return null;
+      const path = id;
       if (GENERATED.test(path)) return { code: markPure(code), map: null };
       if (!QUERY_FILE.test(path)) return null;
       if (!docs) docs = generatedDocuments(readFileSync(path.replace(/src[\\/]lib[\\/].*$/, 'src/lib/gql/graphql.ts'), 'utf8'));
