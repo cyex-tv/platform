@@ -328,12 +328,22 @@ mod tests {
         assert!(names.contains(&"1x.webp") && names.contains(&"4x_static.webp"));
         // Small enough to animate at every size.
         assert!(names.contains(&"512.webp") && names.contains(&"512_static.webp"));
-        assert!(
-            encoded
-                .avif
+        // A still AVIF at every size; an animated one only where it beats the animated WebP
+        // (ADR 0012, amended), never for the lossless original.
+        let stills = encoded.avif.iter().filter(|v| v.is_static).count();
+        assert_eq!(stills, 7);
+        for v in encoded.avif.iter().filter(|v| !v.is_static) {
+            assert_ne!(v.name, "original.avif");
+            let webp = encoded
+                .webp
                 .iter()
-                .all(|v| v.name.ends_with("_static.avif"))
-        );
+                .find(|w| w.name == v.name.replace(".avif", ".webp"));
+            assert!(
+                webp.is_some_and(|w| v.bytes.len() <= w.bytes.len()),
+                "{}",
+                v.name
+            );
+        }
     }
 
     #[test]

@@ -346,7 +346,7 @@ export const guides: Guide[] = [
       { t: 'pre', code: `${EX.host}/2x.webp` },
       fmt(
         ['1x.webp … 4x.webp', 'Scales 1 to 4. Pick by line height times the device pixel ratio.'],
-        ['1x.avif … 4x.avif', 'Still emotes also come as AVIF.'],
+        ['1x.avif … 4x.avif', 'Still emotes also come as AVIF. Animated ones too (an animated AVIF, `is_static` false), at each size where it is no larger than the animated WebP; a size without one has only WebP, so read the `files` list rather than assuming.'],
         ['1x_static.webp', 'Animated emotes: the first frame, for reduced motion or a paused chat.'],
       ),
       p('The host is the hash of the picture, so a file never changes once it exists. The CDN sends them with `Cache-Control: public, max-age=31536000, immutable`: cache files for good. The API’s own reads (sets, channels, emote objects) are the opposite: they change, so they carry an `ETag` and a short `max-age`, set per route; see [Caching](#caching).'),
