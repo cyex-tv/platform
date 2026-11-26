@@ -56,7 +56,8 @@ pub async fn claim(
              SELECT id FROM jobs
              WHERE kind = ANY($1)
                AND ((state = 'queued' AND run_after <= now())
-                    OR (state = 'running' AND locked_until < now()))
+                    OR (state = 'running' AND locked_until < now()
+                        AND attempts < max_attempts))
              ORDER BY run_after, id
              LIMIT 1
              FOR UPDATE SKIP LOCKED
@@ -66,6 +67,20 @@ pub async fn claim(
     .bind(kinds)
     .bind(lease)
     .fetch_optional(conn)
+    .await?)
+}
+
+/// Fails the jobs whose lease expired with no attempts left (the worker died during the last
+/// one), the same final state [`fail`] gives. Returns their IDs and kinds.
+pub async fn sweep_exhausted(conn: &mut PgConnection) -> DbResult<Vec<(i64, String)>> {
+    Ok(sqlx::query_as(
+        "UPDATE jobs
+         SET state = 'failed', locked_until = NULL,
+             last_error = 'lease expired after last attempt', updated_at = now()
+         WHERE state = 'running' AND locked_until < now() AND attempts >= max_attempts
+         RETURNING id, kind",
+    )
+    .fetch_all(conn)
     .await?)
 }
 

@@ -6,13 +6,13 @@
 
 use cyex_tv_db::jobs::Job;
 use cyex_tv_db::{blocklist, files};
-use cyex_tv_media::encode::{self, Kind, Variant};
-use cyex_tv_media::{Limits, MediaError};
+use cyex_tv_media::Limits;
+use cyex_tv_media::encode::{self, Kind, Profile, Variant};
 use cyex_tv_shared::model::{EmoteFile, ImageFormat};
 use cyex_tv_storage::{IMMUTABLE, Put, Store, emote_key, sigv4};
 use serde_json::Value;
 
-use crate::{Ctx, JobError};
+use crate::{CancelOnDrop, Ctx, JobError, media_failure};
 
 /// The job kind the upload queues.
 pub const KIND: &str = "emote.transcode";
@@ -110,14 +110,17 @@ pub async fn run(ctx: Ctx, job: Job) -> Result<(), JobError> {
         .ok_or_else(|| JobError::Permanent(format!("{} is missing", file.storage_key)))?;
 
     let bytes = original.bytes.clone();
-    let encoded = tokio::task::spawn_blocking(move || encode::transcode(&bytes, &Limits::emote()))
-        .await
-        .map_err(retry)?
-        .map_err(|err| match err {
-            // The upload passed these checks; failing now means the file can't be made.
-            MediaError::Encode(message) => JobError::Retry(message),
-            other => JobError::Permanent(other.to_string()),
-        })?;
+    // The guard sets the flag if the time limit drops this future, so the thread stops too.
+    let cancel = CancelOnDrop::default();
+    let flag = cancel.flag();
+    let encoded = tokio::task::spawn_blocking(move || {
+        encode::transcode_cancellable(&bytes, &Limits::emote(), &Profile::EMOTE, &flag)
+    })
+    .await
+    .map_err(retry)?
+    // The upload passed these checks; failing now means the file can't be made.
+    .map_err(media_failure)?;
+    drop(cancel);
 
     let sha_hex = sigv4::hex(&file.sha256);
     if is_blocked(&ctx, &file).await? {

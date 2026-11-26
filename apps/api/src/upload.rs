@@ -60,6 +60,8 @@ pub fn media_error(err: MediaError) -> ApiError {
             tracing::error!(%message, "encoder failed during an upload check");
             ApiError::internal()
         }
+        // Only the worker cancels; an upload check never does.
+        MediaError::Cancelled => ApiError::internal(),
         // The decoder's own words stay in the logs: they can name internals.
         MediaError::Invalid(message) => {
             tracing::info!(%message, "upload refused: not a valid image");

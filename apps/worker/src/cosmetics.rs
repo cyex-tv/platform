@@ -9,6 +9,8 @@
 //! keys are content-addressed, and the files recorded are replaced by the new set, so a picture
 //! made before a size existed gets it by running the job again (`remakeCosmeticImage`).
 
+use std::sync::atomic::AtomicBool;
+
 use cyex_tv_db::cosmetics;
 use cyex_tv_db::jobs::Job;
 use cyex_tv_media::encode::{self, Encoded, Kind, Profile, Variant};
@@ -17,7 +19,7 @@ use cyex_tv_shared::model::{CosmeticKind, EmoteFile, ImageFormat};
 use cyex_tv_storage::{IMMUTABLE, Put, Store, cosmetic_key, sigv4};
 use serde_json::Value;
 
-use crate::{Ctx, JobError};
+use crate::{CancelOnDrop, Ctx, JobError, media_failure};
 
 /// The job kind the image upload queues.
 pub const KIND: &str = "cosmetic.transcode";
@@ -44,7 +46,16 @@ pub fn limits(kind: CosmeticKind) -> Limits {
 
 /// Decodes and encodes a picture at its kind's sizes. CPU work: run it off the async threads.
 pub fn make(kind: CosmeticKind, bytes: &[u8]) -> Result<Encoded, MediaError> {
-    encode::transcode_with(bytes, &limits(kind), profile(kind))
+    make_cancellable(kind, bytes, &AtomicBool::new(false))
+}
+
+/// [`make`] that stops with [`MediaError::Cancelled`] once `cancel` is set.
+pub fn make_cancellable(
+    kind: CosmeticKind,
+    bytes: &[u8],
+    cancel: &AtomicBool,
+) -> Result<Encoded, MediaError> {
+    encode::transcode_cancellable(bytes, &limits(kind), profile(kind), cancel)
 }
 
 /// The file entries, in the shape emote files are recorded in.
@@ -117,13 +128,14 @@ pub async fn run(ctx: Ctx, job: Job) -> Result<(), JobError> {
         .ok_or_else(|| JobError::Permanent(format!("{} is missing", image.storage_key)))?;
 
     let bytes = original.bytes.clone();
-    let encoded = tokio::task::spawn_blocking(move || make(kind, &bytes))
+    // The guard sets the flag if the time limit drops this future, so the thread stops too.
+    let cancel = CancelOnDrop::default();
+    let flag = cancel.flag();
+    let encoded = tokio::task::spawn_blocking(move || make_cancellable(kind, &bytes, &flag))
         .await
         .map_err(retry)?
-        .map_err(|err| match err {
-            MediaError::Encode(message) => JobError::Retry(message),
-            other => JobError::Permanent(other.to_string()),
-        })?;
+        .map_err(media_failure)?;
+    drop(cancel);
 
     let sha_hex = sigv4::hex(&image.sha256);
     store_all(&store, kind, &sha_hex, &encoded.webp).await?;

@@ -174,6 +174,50 @@ async fn a_dead_workers_job_runs_again_after_its_lease() {
 }
 
 #[tokio::test]
+async fn an_expired_job_at_max_attempts_is_swept_not_claimed() {
+    let Some(db) = TestDb::new().await else {
+        return;
+    };
+    let id = enqueue(&db, "ok", 1).await;
+    let mut conn = db.conn().await;
+    let kinds = ["ok".to_owned()];
+    jobs::claim(&mut conn, &kinds, chrono::Duration::seconds(60))
+        .await
+        .unwrap()
+        .unwrap();
+    sqlx::query("UPDATE jobs SET locked_until = now() - interval '1 second' WHERE id = $1")
+        .bind(id)
+        .execute(&mut *conn)
+        .await
+        .unwrap();
+    // The worker died on its last attempt: the job is never claimed again.
+    assert!(
+        jobs::claim(&mut conn, &kinds, chrono::Duration::seconds(60))
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(job(&db, id).await.attempts, 1);
+    // A job still leased is left alone.
+    let live = enqueue(&db, "ok", 1).await;
+    jobs::claim(&mut conn, &kinds, chrono::Duration::seconds(60))
+        .await
+        .unwrap()
+        .unwrap();
+    drop(conn);
+    assert_eq!(cyex_tv_worker::sweep_exhausted(&db.pool).await.unwrap(), 1);
+    let j = job(&db, id).await;
+    assert_eq!(j.state, "failed");
+    assert_eq!(
+        j.last_error.as_deref(),
+        Some("lease expired after last attempt")
+    );
+    assert_eq!(job(&db, live).await.state, "running");
+    assert_eq!(cyex_tv_worker::sweep_exhausted(&db.pool).await.unwrap(), 0);
+    db.close().await;
+}
+
+#[tokio::test]
 async fn parallel_workers_never_share_a_job() {
     let Some(db) = TestDb::new().await else {
         return;
