@@ -173,6 +173,8 @@ mod tests {
         let mut overrides: RoleOverrides = BTreeMap::new();
         overrides.insert(AccountLimit::PendingEmotes, 40);
         overrides.insert(AccountLimit::UploadsPerHour, 5);
+        overrides.insert(AccountLimit::BadgeMaxSide, 4096);
+        overrides.insert(AccountLimit::EmoteMaxBytes, 2 * 1024 * 1024);
         let account = AccountLimits::resolve(&rates, &[overrides]);
         let l = build(&MediaConfig::builtin(), &rates, Some(&account));
         assert_eq!(l.account.len(), AccountLimit::ALL.len());
@@ -185,5 +187,16 @@ mod tests {
         assert_eq!(hour.window_seconds, Some(3600));
         let prefs = find("prefs");
         assert_eq!(prefs.default, prefs.effective);
+        // The media numbers show what the caller uploads under, next to the configured ones.
+        let side = find("badge_max_side");
+        assert_eq!((side.default, side.effective), (2048, 4096));
+        assert_eq!(side.window_seconds, None);
+        let bytes = find("emote_max_bytes");
+        assert_eq!(
+            (bytes.default, bytes.effective),
+            (8 * 1024 * 1024, 2 * 1024 * 1024)
+        );
+        let emote_side = find("emote_max_side");
+        assert_eq!((emote_side.default, emote_side.effective), (1000, 1000));
     }
 }

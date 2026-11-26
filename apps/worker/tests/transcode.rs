@@ -56,6 +56,17 @@ fn limits() -> Limits {
 
 /// What the upload does: the file row, the original in storage, the job.
 async fn uploaded(db: &TestDb, store: &Store, bytes: &[u8], mime: &str) -> (uuid::Uuid, String) {
+    uploaded_under(db, store, bytes, mime, json!({})).await
+}
+
+/// An upload whose job carries `extra` (the `limits` the API stored on it) next to the file.
+async fn uploaded_under(
+    db: &TestDb,
+    store: &Store,
+    bytes: &[u8],
+    mime: &str,
+    extra: Value,
+) -> (uuid::Uuid, String) {
     let sha: [u8; 32] = Sha256::digest(bytes).into();
     let hex = sigv4::hex(&sha);
     let key = original_key(&hex);
@@ -88,7 +99,11 @@ async fn uploaded(db: &TestDb, store: &Store, bytes: &[u8], mime: &str) -> (uuid
     jobs::enqueue(
         &mut conn,
         transcode::KIND,
-        &json!({ "file_id": ids::to_text(file.id) }),
+        &{
+            let mut payload = extra;
+            payload["file_id"] = json!(ids::to_text(file.id));
+            payload
+        },
         3,
     )
     .await
@@ -374,5 +389,69 @@ async fn a_swept_transcode_fails_the_file_and_a_finished_one_is_left_alone() {
         .unwrap();
     assert!(!files::mark_failed(&mut conn, done_id).await.unwrap());
     drop(conn);
+    db.close().await;
+}
+
+#[tokio::test]
+async fn the_job_is_checked_under_the_limits_stored_on_it() {
+    let Some(db) = TestDb::new().await else {
+        return;
+    };
+    let store = Store::memory();
+    let ctx = Ctx {
+        db: db.pool.clone(),
+        store: Some(store.clone()),
+        purge: None,
+        paddle: None,
+    };
+    let run = || async {
+        run_one(&ctx, &handlers(), limits())
+            .await
+            .unwrap()
+            .unwrap()
+            .1
+    };
+    // The uploader's roles allowed 64 px a side: a 100 px file is over what the job was checked
+    // under, whatever the configured limits (or a role now) say.
+    uploaded_under(
+        &db,
+        &store,
+        &png(100, 100),
+        "image/png",
+        json!({ "limits": { "max_bytes": 8_388_608, "max_side": 64, "max_frames": 1000 } }),
+    )
+    .await;
+    assert_eq!(run().await, Outcome::Failed);
+    // The same size passes under a job that allowed it.
+    let (file, _) = uploaded_under(
+        &db,
+        &store,
+        &png(101, 101),
+        "image/png",
+        json!({ "limits": { "max_side": 128 } }),
+    )
+    .await;
+    assert_eq!(run().await, Outcome::Done);
+    assert!(!variants(&db, file).await.is_empty());
+    // A job asking for more than an emote may be (1000 px) is cut at the ceiling.
+    uploaded_under(
+        &db,
+        &store,
+        &png(1100, 1100),
+        "image/png",
+        json!({ "limits": { "max_side": 5000 } }),
+    )
+    .await;
+    assert_eq!(run().await, Outcome::Failed);
+    // Frames too: 3 frames under a job that allows 2.
+    uploaded_under(
+        &db,
+        &store,
+        &gif(16, 16, 3),
+        "image/gif",
+        json!({ "limits": { "max_frames": 2 } }),
+    )
+    .await;
+    assert_eq!(run().await, Outcome::Failed);
     db.close().await;
 }

@@ -13,13 +13,14 @@ use std::sync::atomic::AtomicBool;
 
 use cyex_tv_db::cosmetics;
 use cyex_tv_db::jobs::Job;
+use cyex_tv_media::config::MediaKind;
 use cyex_tv_media::encode::{self, Encoded, Kind, Profile, Variant};
 use cyex_tv_media::{Limits, MediaError};
 use cyex_tv_shared::model::{CosmeticKind, EmoteFile, ImageFormat};
 use cyex_tv_storage::{Put, Store, cache_control_for, cosmetic_key, sigv4};
 use serde_json::Value;
 
-use crate::{CancelOnDrop, Ctx, JobError, media_failure};
+use crate::{CancelOnDrop, Ctx, JobError, job_limits, media_failure};
 
 /// The job kind the image upload queues.
 pub const KIND: &str = "cosmetic.transcode";
@@ -55,7 +56,28 @@ pub fn make_cancellable(
     bytes: &[u8],
     cancel: &AtomicBool,
 ) -> Result<Encoded, MediaError> {
-    encode::transcode_cancellable(bytes, &limits(kind), profile(kind), cancel)
+    make_under(kind, &limits(kind), bytes, cancel)
+}
+
+/// [`make_cancellable`] under `limits` (the ones the picture was uploaded under).
+pub fn make_under(
+    kind: CosmeticKind,
+    limits: &Limits,
+    bytes: &[u8],
+    cancel: &AtomicBool,
+) -> Result<Encoded, MediaError> {
+    encode::transcode_cancellable(bytes, limits, profile(kind), cancel)
+}
+
+/// The limits a job decodes a `kind` of picture under: the ones stored on it, else the configured.
+pub fn job_picture_limits(kind: CosmeticKind, payload: &Value) -> Limits {
+    job_limits(
+        match kind {
+            CosmeticKind::Badge => MediaKind::Badge,
+            CosmeticKind::Paint => MediaKind::Paint,
+        },
+        payload,
+    )
 }
 
 /// The file entries, in the shape emote files are recorded in.
@@ -131,10 +153,12 @@ pub async fn run(ctx: Ctx, job: Job) -> Result<(), JobError> {
         .ok_or_else(|| JobError::Permanent(format!("{} is missing", image.storage_key)))?;
 
     let bytes = original.bytes.clone();
+    // The limits the picture was uploaded under, stored on the job.
+    let limits = job_picture_limits(kind, &job.payload);
     // The guard sets the flag if the time limit drops this future, so the thread stops too.
     let cancel = CancelOnDrop::default();
     let flag = cancel.flag();
-    let encoded = tokio::task::spawn_blocking(move || make_cancellable(kind, &bytes, &flag))
+    let encoded = tokio::task::spawn_blocking(move || make_under(kind, &limits, &bytes, &flag))
         .await
         .map_err(retry)?
         .map_err(media_failure)?;

@@ -1152,3 +1152,200 @@ mod config_env {
         assert_eq!(Limits::default(), Limits::builtin_default());
     }
 }
+
+mod role_overrides {
+    use super::{gif, png};
+    use crate::config::{EMOTE_SIDE_CEILING, MediaConfig, MediaKind, Overrides};
+    use crate::{Limits, MediaError, decoder_limits, probe};
+
+    #[test]
+    fn no_override_is_the_configured_limits() {
+        let c = MediaConfig::builtin();
+        for (kind, l) in [
+            (MediaKind::Emote, c.emote),
+            (MediaKind::Badge, c.badge),
+            (MediaKind::Paint, c.paint),
+        ] {
+            assert_eq!(c.effective(kind, Overrides::default()), l);
+        }
+    }
+
+    #[test]
+    fn a_badge_or_paint_may_go_above_the_configured_numbers_up_to_the_ceiling() {
+        let c = MediaConfig::builtin();
+        let big = c.effective(
+            MediaKind::Badge,
+            Overrides {
+                max_bytes: Some(12 * 1024 * 1024),
+                max_side: Some(4096),
+                max_frames: Some(200),
+            },
+        );
+        assert_eq!(big.max_bytes, 12 * 1024 * 1024);
+        assert_eq!((big.max_side, big.max_frames), (4096, 200));
+        // The rest stays as configured.
+        assert_eq!(big.max_total_pixels, c.badge.max_total_pixels);
+        assert_eq!(big.max_duration_ms, c.badge.max_duration_ms);
+        // Past the ceiling is cut to it.
+        let cut = c.effective(
+            MediaKind::Badge,
+            Overrides {
+                max_bytes: Some(usize::MAX),
+                max_side: Some(u32::MAX),
+                max_frames: Some(u32::MAX),
+            },
+        );
+        let ceiling = c.ceiling(MediaKind::Badge);
+        assert_eq!(
+            (cut.max_bytes, cut.max_side, cut.max_frames),
+            (ceiling.max_bytes, ceiling.max_side, ceiling.max_frames)
+        );
+        assert_eq!(ceiling.max_bytes, 16 * 1024 * 1024);
+        assert_eq!(c.ceiling(MediaKind::Paint).max_side, 6144);
+        // Lowering works too, and never to nothing.
+        let low = c.effective(
+            MediaKind::Paint,
+            Overrides {
+                max_bytes: Some(0),
+                max_side: Some(256),
+                ..Overrides::default()
+            },
+        );
+        assert_eq!((low.max_bytes, low.max_side), (1, 256));
+    }
+
+    #[test]
+    fn an_emote_only_goes_down_from_1000_px() {
+        let c = MediaConfig::builtin();
+        let up = c.effective(
+            MediaKind::Emote,
+            Overrides {
+                max_side: Some(5000),
+                max_bytes: Some(12 * 1024 * 1024),
+                max_frames: Some(1500),
+            },
+        );
+        assert_eq!(up.max_side, EMOTE_SIDE_CEILING);
+        assert_eq!(up.max_bytes, 12 * 1024 * 1024);
+        assert_eq!(up.max_frames, 1500);
+        let down = c.effective(
+            MediaKind::Emote,
+            Overrides {
+                max_side: Some(512),
+                ..Overrides::default()
+            },
+        );
+        assert_eq!(down.max_side, 512);
+        // The configuration can't ask for more either.
+        let ask = |side: &'static str| {
+            MediaConfig::from_env(move |n| {
+                (n == "CYEX_TV_LIMIT_ROLE_EMOTE_MAX_SIDE").then(|| side.to_owned())
+            })
+        };
+        assert!(ask("1001").is_err());
+        assert_eq!(ask("800").unwrap().ceiling(MediaKind::Emote).max_side, 1000);
+    }
+
+    #[test]
+    fn the_ceilings_read_their_variables_and_never_sit_below_the_configured_numbers() {
+        let c = MediaConfig::from_env(|n| {
+            match n {
+                "CYEX_TV_LIMIT_ROLE_BADGE_MAX_SIDE" => Some("3000"),
+                "CYEX_TV_LIMIT_ROLE_BADGE_MAX_BYTES" => Some("4194304"),
+                "CYEX_TV_LIMIT_BADGE_MAX_BYTES" => Some("6291456"),
+                "CYEX_TV_LIMIT_ROLE_PAINT_MAX_FRAMES" => Some("300"),
+                _ => None,
+            }
+            .map(str::to_owned)
+        })
+        .unwrap();
+        let b = c.ceiling(MediaKind::Badge);
+        assert_eq!(b.max_side, 3000);
+        // The configured 6 MB is above the 4 MB ceiling asked for: the ceiling follows it.
+        assert_eq!(b.max_bytes, 6 * 1024 * 1024);
+        assert_eq!(c.ceiling(MediaKind::Paint).max_frames, 300);
+        assert!(
+            MediaConfig::from_env(
+                |n| (n == "CYEX_TV_LIMIT_ROLE_BADGE_MAX_SIDE").then(|| "0".into())
+            )
+            .is_err()
+        );
+        // The upload body is cut at the biggest ceiling.
+        assert_eq!(MediaConfig::builtin().max_upload_bytes(), 16 * 1024 * 1024);
+    }
+
+    #[test]
+    fn the_decoder_allocation_grows_with_the_side_and_stays_bounded() {
+        let c = MediaConfig::builtin();
+        let alloc = |l: &Limits| decoder_limits(l).max_alloc.unwrap();
+        // What it was for every kind: 64 MB.
+        assert_eq!(alloc(&c.emote), 64 * 1024 * 1024);
+        assert_eq!(alloc(&c.badge), 64 * 1024 * 1024);
+        let badge = c.effective(
+            MediaKind::Badge,
+            Overrides {
+                max_side: Some(4096),
+                ..Overrides::default()
+            },
+        );
+        assert_eq!(alloc(&badge), 4096 * 4096 * 8);
+        // The biggest anything can be: bounded by the ceilings and the pixel cap.
+        let biggest = [MediaKind::Emote, MediaKind::Badge, MediaKind::Paint]
+            .into_iter()
+            .map(|k| {
+                let l = c.effective(
+                    k,
+                    Overrides {
+                        max_side: Some(u32::MAX),
+                        ..Overrides::default()
+                    },
+                );
+                alloc(&l)
+            })
+            .max()
+            .unwrap();
+        assert!(biggest <= 6144 * 6144 * 8, "{biggest}");
+    }
+
+    #[test]
+    fn a_raised_side_lets_a_bigger_picture_through_and_the_default_still_refuses_it() {
+        let c = MediaConfig::builtin();
+        let file = png(2100, 2100);
+        assert!(matches!(
+            probe(&file, &c.badge),
+            Err(MediaError::TooLarge(_))
+        ));
+        let raised = c.effective(
+            MediaKind::Badge,
+            Overrides {
+                max_side: Some(3000),
+                ..Overrides::default()
+            },
+        );
+        assert_eq!(probe(&file, &raised).unwrap().width, 2100);
+        // And lowered: a small picture is refused where the default takes it.
+        let small = c.effective(
+            MediaKind::Badge,
+            Overrides {
+                max_side: Some(64),
+                ..Overrides::default()
+            },
+        );
+        assert!(probe(&png(96, 96), &c.badge).is_ok());
+        assert!(matches!(
+            probe(&png(96, 96), &small),
+            Err(MediaError::TooLarge(_))
+        ));
+        let few = c.effective(
+            MediaKind::Badge,
+            Overrides {
+                max_frames: Some(2),
+                ..Overrides::default()
+            },
+        );
+        assert!(matches!(
+            probe(&gif(8, 8, 3), &few),
+            Err(MediaError::TooLarge(_))
+        ));
+    }
+}

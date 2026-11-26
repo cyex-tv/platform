@@ -4,10 +4,10 @@ import type { RoleLimitFieldsFragment } from '$lib/gql/graphql';
 import RoleLimits from './RoleLimits.svelte';
 
 const limits: RoleLimitFieldsFragment[] = [
-  { key: 'gql_account', group: 'REQUESTS', default: 600, windowSeconds: 60, value: null },
-  { key: 'uploads_per_hour', group: 'UPLOADS', default: 20, windowSeconds: 3600, value: null },
-  { key: 'pending_emotes', group: 'UPLOADS', default: 20, windowSeconds: null, value: 100 },
-  { key: 'data_export', group: 'ACCOUNT', default: 5, windowSeconds: 3600, value: null },
+  { key: 'gql_account', group: 'REQUESTS', default: 600, max: 1_000_000, windowSeconds: 60, value: null },
+  { key: 'uploads_per_hour', group: 'UPLOADS', default: 20, max: 1_000_000, windowSeconds: 3600, value: null },
+  { key: 'pending_emotes', group: 'UPLOADS', default: 20, max: 1_000_000, windowSeconds: null, value: 100 },
+  { key: 'data_export', group: 'ACCOUNT', default: 5, max: 1_000_000, windowSeconds: 3600, value: null },
 ];
 
 describe('the role editor’s Limits', () => {

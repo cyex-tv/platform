@@ -17,6 +17,7 @@ use axum::response::{IntoResponse, Response};
 use cyex_tv_auth::AuthError;
 use cyex_tv_auth::cookies;
 use cyex_tv_auth::flow::Callback;
+use cyex_tv_media::config::MediaKind;
 use cyex_tv_shared::error::{ApiError, ApiResult, ErrorBody};
 use cyex_tv_shared::model::{
     CallbackQuery, Channel, ConsoleToken, CosmeticCatalog, CosmeticImage, CosmeticKind, Emote,
@@ -334,6 +335,12 @@ async fn upload_emote(
 ) -> ApiResult<(StatusCode, Json<serde_json::Value>)> {
     let caller = caller.ok_or_else(|| ApiError::from(AuthError::SignedOut))?;
     no_app_scope(&caller)?;
+    // The uploader's own cap (their roles may raise or lower it), read while the file streams in.
+    let emote_limits = state
+        .limits
+        .load(&state.db, caller.account_id)
+        .await
+        .media(MediaKind::Emote);
     let bad_form = |message: &str| ApiError::new(StatusCode::BAD_REQUEST, "bad_form", message);
     let mut name = None;
     let mut tags = None;
@@ -352,13 +359,13 @@ async fn upload_emote(
                 let mut bytes = Vec::new();
                 while let Some(chunk) = field.chunk().await.map_err(|err| {
                     if err.status() == StatusCode::PAYLOAD_TOO_LARGE {
-                        upload::too_large()
+                        upload::too_large_for(&emote_limits)
                     } else {
                         bad_form("The file couldn't be read.")
                     }
                 })? {
-                    if bytes.len() + chunk.len() > cyex_tv_media::Limits::emote().max_bytes {
-                        return Err(upload::too_large());
+                    if bytes.len() + chunk.len() > emote_limits.max_bytes {
+                        return Err(upload::too_large_for(&emote_limits));
                     }
                     bytes.extend_from_slice(&chunk);
                 }
@@ -427,17 +434,16 @@ async fn upload_emote(
     ))
 }
 
-/// Reads a multipart file field under the 8 MB limit of badge and paint pictures.
+/// Reads a multipart file field under the bigger of the uploader's badge and paint caps.
 async fn file_field(
     field: &mut axum::extract::multipart::Field<'_>,
     bad_form: impl Fn(&str) -> ApiError,
+    mut limits: cyex_tv_media::Limits,
+    paint: &cyex_tv_media::Limits,
 ) -> ApiResult<Vec<u8>> {
-    // Badges and paints share the 8 MB cap; the kind may come after the file, and the per-kind
-    // cap is checked when the picture is decoded.
-    let mut limits = cyex_tv_media::Limits::badge();
-    limits.max_bytes = limits
-        .max_bytes
-        .max(cyex_tv_media::Limits::paint().max_bytes);
+    // The kind may come after the file, so it is read under the bigger cap and the per-kind cap
+    // is checked when the picture is decoded.
+    limits.max_bytes = limits.max_bytes.max(paint.max_bytes);
     let mut bytes = Vec::new();
     while let Some(chunk) = field.chunk().await.map_err(|err| {
         if err.status() == StatusCode::PAYLOAD_TOO_LARGE {
@@ -495,19 +501,23 @@ async fn upload_cosmetic_image(
 ) -> ApiResult<(StatusCode, Json<CosmeticImage>)> {
     let caller = caller.ok_or_else(|| ApiError::from(AuthError::SignedOut))?;
     no_app_scope(&caller)?;
+    let own = state.limits.load(&state.db, caller.account_id).await;
+    let (badge_limits, paint_limits) = (own.media(MediaKind::Badge), own.media(MediaKind::Paint));
     let bad_form = |message: &str| ApiError::new(StatusCode::BAD_REQUEST, "bad_form", message);
     let mut kind = None;
     let mut file: Option<Vec<u8>> = None;
     while let Some(mut field) = form.next_field().await.map_err(|err| {
         // A body over the upload limit can fail here, before the file field is read.
         if err.status() == StatusCode::PAYLOAD_TOO_LARGE {
-            upload::too_large_for(&cyex_tv_media::Limits::badge())
+            upload::too_large_for(&badge_limits)
         } else {
             bad_form("The form couldn't be read.")
         }
     })? {
         match field.name() {
-            Some("file") if file.is_none() => file = Some(file_field(&mut field, bad_form).await?),
+            Some("file") if file.is_none() => {
+                file = Some(file_field(&mut field, bad_form, badge_limits, &paint_limits).await?);
+            }
             Some("kind") if kind.is_none() => {
                 let text = field
                     .text()

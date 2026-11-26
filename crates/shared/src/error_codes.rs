@@ -851,7 +851,7 @@ pub const ERROR_CODES: &[ErrorCode] = &[
         "Admin",
         "bad_limit",
         "A limit value is not valid.",
-        "Role limits are 1 to 1,000,000 and listed once.",
+        "Role limits are 1 to 1,000,000 (a file limit up to its ceiling: an emote side at most 1000 px) and listed once.",
     ),
     e(
         "Admin",

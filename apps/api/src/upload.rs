@@ -26,6 +26,7 @@ use cyex_tv_auth::Caller;
 use cyex_tv_db::emotes::{self, NewEmote};
 use cyex_tv_db::files::{self, NewFile};
 use cyex_tv_db::{accounts, audit, blocklist, ids, jobs, reads};
+use cyex_tv_media::config::MediaKind;
 use cyex_tv_media::{Limits, MediaError, Probe};
 use cyex_tv_shared::error::{ApiError, ApiResult};
 use cyex_tv_shared::model::{EditorPermission, Emote, UploadQuota};
@@ -264,7 +265,12 @@ pub async fn quota(
     let hour = emotes::count_since(&mut conn, owner, Utc::now() - chrono::Duration::hours(1))
         .await
         .map_err(db_error)?;
-    let emote = Limits::emote();
+    // The caller uploads, so their roles' media limits apply (to the owner's account too).
+    let emote = state
+        .limits
+        .load(&state.db, caller.account_id)
+        .await
+        .media(MediaKind::Emote);
     let int = |n: i64| i32::try_from(n).unwrap_or(i32::MAX);
     let lim = |l: AccountLimit| i32::try_from(limits.get(l)).unwrap_or(i32::MAX);
     Ok(UploadQuota {
@@ -273,8 +279,8 @@ pub async fn quota(
         pending_max: (!caller.owner).then(|| lim(AccountLimit::PendingEmotes)),
         uploads_this_hour: int(hour),
         uploads_per_hour: lim(AccountLimit::UploadsPerHour),
-        // The media limits are the same for every account today (`CYEX_TV_LIMIT_EMOTE_*`); the
-        // per-role overrides are the counts above.
+        // The caller's effective media limits: `CYEX_TV_LIMIT_EMOTE_*` with their roles'
+        // overrides (`emote_max_bytes`, `emote_max_frames`; the side only goes down from 1000).
         max_bytes: int(i64::try_from(emote.max_bytes).unwrap_or(i64::MAX)),
         max_side: int(i64::from(emote.max_side)),
         max_frames: int(i64::from(emote.max_frames)),
@@ -373,13 +379,14 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
     early.rollback().await.map_err(sqlx_error)?;
     drop(conn);
 
-    // Decoding is CPU work; keep it off the request threads.
+    // Decoding is CPU work; keep it off the request threads. The uploader's effective limits
+    // apply, and ride on the transcode job so the worker checks the same numbers.
     let file = input.file.clone();
-    let probe: Probe =
-        tokio::task::spawn_blocking(move || cyex_tv_media::probe(&file, &Limits::emote()))
-            .await
-            .map_err(|_| ApiError::internal())?
-            .map_err(media_error)?;
+    let limits = allowed.mine.media(MediaKind::Emote);
+    let probe: Probe = tokio::task::spawn_blocking(move || cyex_tv_media::probe(&file, &limits))
+        .await
+        .map_err(|_| ApiError::internal())?
+        .map_err(media_error)?;
     let sha256: [u8; 32] = Sha256::digest(&input.file).into();
     let sha_hex = sigv4::hex(&sha256);
     // The first frame's hash is what `files.dhash` keeps (always the first entry).
@@ -476,7 +483,14 @@ pub async fn upload(state: &AppState, caller: &Caller, input: Upload) -> ApiResu
         jobs::enqueue(
             &mut tx,
             TRANSCODE_JOB,
-            &json!({ "file_id": ids::to_text(file.id) }),
+            &json!({
+                "file_id": ids::to_text(file.id),
+                "limits": {
+                    "max_bytes": limits.max_bytes,
+                    "max_side": limits.max_side,
+                    "max_frames": limits.max_frames,
+                },
+            }),
             5,
         )
         .await
