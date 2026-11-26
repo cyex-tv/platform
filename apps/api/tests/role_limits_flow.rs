@@ -614,7 +614,7 @@ async fn changing_limits_follows_the_role_edit_rules() {
         .await;
     assert_eq!(
         r["data"]["limitDefaults"].as_array().unwrap().len(),
-        24,
+        21,
         "{r}"
     );
 
