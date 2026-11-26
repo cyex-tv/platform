@@ -3685,255 +3685,6 @@ export type StudioCosmeticImageQueryVariables = Exact<{
 
 export type StudioCosmeticImageQuery = { __typename?: 'Query', cosmeticImage?: { __typename?: 'CosmeticImage', id: string, host: string, ready: boolean, width: number, height: number, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, isStatic: boolean }> } | null };
 
-export type EmoteFieldsFragment = { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> };
-
-export type SearchQueryVariables = Exact<{
-  query: Scalars['String']['input'];
-  animated?: InputMaybe<Scalars['Boolean']['input']>;
-  page?: InputMaybe<Scalars['Int']['input']>;
-  perPage?: InputMaybe<Scalars['Int']['input']>;
-  sort?: InputMaybe<EmoteSort>;
-  flags?: InputMaybe<Array<EmoteFlag> | EmoteFlag>;
-  tags?: InputMaybe<Array<Scalars['String']['input']> | Scalars['String']['input']>;
-  exact?: InputMaybe<Scalars['Boolean']['input']>;
-  window?: InputMaybe<TrendingWindow>;
-}>;
-
-
-export type SearchQuery = { __typename?: 'Query', searchEmotes: { __typename?: 'SearchResults', total: number, page: number, perPage: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
-
-export type FindPeopleQueryVariables = Exact<{
-  query: Scalars['String']['input'];
-  page?: InputMaybe<Scalars['Int']['input']>;
-  perPage?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type FindPeopleQuery = { __typename?: 'Query', searchAccounts: { __typename?: 'AccountResults', total: number, page: number, perPage: number, items: Array<{ __typename?: 'AccountHit', account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }> }> } };
-
-export type EmoteQueryVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type EmoteQuery = { __typename?: 'Query', emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null };
-
-export type EmoteTrendingQueryVariables = Exact<{
-  id: Scalars['String']['input'];
-  window?: InputMaybe<TrendingWindow>;
-}>;
-
-
-export type EmoteTrendingQuery = { __typename?: 'Query', emoteTrending?: { __typename?: 'EmoteTrending', rank: number, channels: number, window: TrendingWindow } | null };
-
-export type ChannelQueryVariables = Exact<{
-  platform: Platform;
-  login: Scalars['String']['input'];
-}>;
-
-
-export type ChannelQuery = { __typename?: 'Query', channelByLogin?: { __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, allowPersonalEmotes: boolean, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } } | null };
-
-export type PublicSetQueryVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type PublicSetQuery = { __typename?: 'Query', set?: { __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, slotsUsed: number, createdAt: string, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> } | null };
-
-export type SetEditorsQueryVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type SetEditorsQuery = { __typename?: 'Query', setEditors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }> };
-
-export type CloneSetMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-  name?: InputMaybe<Scalars['String']['input']>;
-  visibility?: InputMaybe<SetVisibility>;
-}>;
-
-
-export type CloneSetMutation = { __typename?: 'Mutation', cloneSet: { __typename?: 'ClonedSet', copied: number, skipped: number, set: { __typename?: 'EmoteSet', id: string, name: string } } };
-
-export type MeQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type MeQuery = { __typename?: 'Query', me: { __typename?: 'Me', id: string, createdAt: string, permissions: Array<string>, displayPlatform?: Platform | null, identities: Array<{ __typename?: 'Identity', platform: Platform, platformUserId: string, login: string, displayName: string, avatar?: string | null }> } };
-
-export type MyEmotesQueryVariables = Exact<{
-  page?: InputMaybe<Scalars['Int']['input']>;
-  perPage?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type MyEmotesQuery = { __typename?: 'Query', myEmotes: { __typename?: 'EmotePage', total: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
-
-export type UpdateEmoteMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-  input: UpdateEmoteInput;
-}>;
-
-
-export type UpdateEmoteMutation = { __typename?: 'Mutation', updateEmote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } };
-
-export type DeleteEmoteMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type DeleteEmoteMutation = { __typename?: 'Mutation', deleteEmote: boolean };
-
-export type SetFieldsFragment = { __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> };
-
-export type MySetsQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type MySetsQuery = { __typename?: 'Query', mySets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> }>, editorSets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> }>, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, account: { __typename?: 'AccountSummary', id: string, displayName: string } }> };
-
-export type EditSetQueryVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type EditSetQuery = { __typename?: 'Query', set?: { __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, slotsUsed: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null } | null, setEditors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }>, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, account: { __typename?: 'AccountSummary', id: string } }>, myChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }>, editorChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }> };
-
-export type SetEmotesQueryVariables = Exact<{
-  id: Scalars['String']['input'];
-  query?: InputMaybe<Scalars['String']['input']>;
-  page?: InputMaybe<Scalars['Int']['input']>;
-  perPage?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type SetEmotesQuery = { __typename?: 'Query', setEmotes: { __typename?: 'SetEmotePage', total: number, items: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> } };
-
-export type SetMembersQueryVariables = Exact<{
-  id: Scalars['String']['input'];
-  page?: InputMaybe<Scalars['Int']['input']>;
-  perPage?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type SetMembersQuery = { __typename?: 'Query', setEmotes: { __typename?: 'SetEmotePage', total: number, items: Array<{ __typename?: 'SetEmote', name: string, emote: { __typename?: 'Emote', id: string } }> } };
-
-export type CreateSetMutationVariables = Exact<{
-  input: CreateSetInput;
-}>;
-
-
-export type CreateSetMutation = { __typename?: 'Mutation', createSet: { __typename?: 'EmoteSet', id: string } };
-
-export type UpdateSetMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-  input: UpdateSetInput;
-}>;
-
-
-export type UpdateSetMutation = { __typename?: 'Mutation', updateSet: { __typename?: 'EmoteSet', id: string, name: string, visibility: SetVisibility, capacity: number } };
-
-export type DeleteSetMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type DeleteSetMutation = { __typename?: 'Mutation', deleteSet: boolean };
-
-export type SetCapacityRangeQueryVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type SetCapacityRangeQuery = { __typename?: 'Query', setCapacityRange?: { __typename?: 'SetCapacityRange', min: number, max: number, ownerMax: number, used: number, staff: boolean } | null };
-
-export type SetMenuQueryVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type SetMenuQuery = { __typename?: 'Query', setCapacityRange?: { __typename?: 'SetCapacityRange', min: number, max: number, ownerMax: number, used: number, staff: boolean } | null, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, account: { __typename?: 'AccountSummary', id: string } }>, myChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }>, editorChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }> };
-
-export type AddSetEmoteMutationVariables = Exact<{
-  setId: Scalars['String']['input'];
-  emoteId: Scalars['String']['input'];
-  input?: InputMaybe<AddSetEmoteInput>;
-}>;
-
-
-export type AddSetEmoteMutation = { __typename?: 'Mutation', addSetEmote: { __typename?: 'SetEmote', name: string } };
-
-export type UpdateSetEmoteMutationVariables = Exact<{
-  setId: Scalars['String']['input'];
-  emoteId: Scalars['String']['input'];
-  input: UpdateSetEmoteInput;
-}>;
-
-
-export type UpdateSetEmoteMutation = { __typename?: 'Mutation', updateSetEmote: { __typename?: 'SetEmote', name: string, zeroWidth: boolean } };
-
-export type RemoveSetEmoteMutationVariables = Exact<{
-  setId: Scalars['String']['input'];
-  emoteId: Scalars['String']['input'];
-}>;
-
-
-export type RemoveSetEmoteMutation = { __typename?: 'Mutation', removeSetEmote: boolean };
-
-export type RemoveSetEditorMutationVariables = Exact<{
-  setId: Scalars['String']['input'];
-  accountId: Scalars['String']['input'];
-}>;
-
-
-export type RemoveSetEditorMutation = { __typename?: 'Mutation', removeSetEditor: boolean };
-
-export type MyChannelsQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type MyChannelsQuery = { __typename?: 'Query', myChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, allowPersonalEmotes: boolean, account: { __typename?: 'AccountSummary', id: string, displayName: string } }>, mySets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, owner?: { __typename?: 'AccountSummary', id: string } | null }>, editorChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, allowPersonalEmotes: boolean, account: { __typename?: 'AccountSummary', id: string, displayName: string } }>, editorSets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, owner?: { __typename?: 'AccountSummary', id: string } | null }>, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, account: { __typename?: 'AccountSummary', id: string } }> };
-
-export type UpdateChannelMutationVariables = Exact<{
-  platform: Platform;
-  id: Scalars['String']['input'];
-  input: UpdateChannelSettingsInput;
-}>;
-
-
-export type UpdateChannelMutation = { __typename?: 'Mutation', updateChannelSettings: { __typename?: 'Channel', activeSetId?: string | null, allowPersonalEmotes: boolean } };
-
-export type AccountEditorFieldsFragment = { __typename?: 'AccountEditor', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null };
-
-export type EditorsQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type EditorsQuery = { __typename?: 'Query', accountEditors: Array<{ __typename?: 'AccountEditor', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null }>, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } }>, mySets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, owner?: { __typename?: 'AccountSummary', id: string } | null }> };
-
-export type AddAccountEditorMutationVariables = Exact<{
-  input: AddAccountEditorInput;
-}>;
-
-
-export type AddAccountEditorMutation = { __typename?: 'Mutation', addAccountEditor: { __typename?: 'AccountEditor', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null } };
-
-export type UpdateAccountEditorMutationVariables = Exact<{
-  ownerId?: InputMaybe<Scalars['String']['input']>;
-  accountId: Scalars['String']['input'];
-  permissions: Array<EditorPermission> | EditorPermission;
-  setIds?: InputMaybe<Array<Scalars['String']['input']> | Scalars['String']['input']>;
-}>;
-
-
-export type UpdateAccountEditorMutation = { __typename?: 'Mutation', updateAccountEditor: { __typename?: 'AccountEditor', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null } };
-
-export type RemoveAccountEditorMutationVariables = Exact<{
-  ownerId?: InputMaybe<Scalars['String']['input']>;
-  accountId: Scalars['String']['input'];
-}>;
-
-
-export type RemoveAccountEditorMutation = { __typename?: 'Mutation', removeAccountEditor: boolean };
-
 export type SetDisplayPlatformMutationVariables = Exact<{
   platform: Platform;
 }>;
@@ -4014,144 +3765,30 @@ export type MyRolesQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type MyRolesQuery = { __typename?: 'Query', me: { __typename?: 'Me', id: string, roles: Array<{ __typename?: 'OwnRole', id: string, name: string, public: boolean, invisible: boolean }> } };
 
-export type AdminCountsQueryVariables = Exact<{
-  review: Scalars['Boolean']['input'];
-  reports: Scalars['Boolean']['input'];
+export type MeQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type MeQuery = { __typename?: 'Query', me: { __typename?: 'Me', id: string, createdAt: string, permissions: Array<string>, displayPlatform?: Platform | null, identities: Array<{ __typename?: 'Identity', platform: Platform, platformUserId: string, login: string, displayName: string, avatar?: string | null }> } };
+
+export type AccountActivityQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+  before?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  filter?: InputMaybe<ActivityFilter>;
 }>;
 
 
-export type AdminCountsQuery = { __typename?: 'Query', reviewQueue?: { __typename?: 'ReviewQueue', total: number }, reportQueue?: { __typename?: 'ReportQueue', total: number }, globalSet: { __typename?: 'EmoteSet', id: string } };
+export type AccountActivityQuery = { __typename?: 'Query', accountActivityPage: { __typename?: 'ActivityPage', next?: string | null, entries: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, editor?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> } };
 
-export type ReviewQueueQueryVariables = Exact<{
-  page?: InputMaybe<Scalars['Int']['input']>;
-  perPage?: InputMaybe<Scalars['Int']['input']>;
-  filter?: InputMaybe<ReviewQueueFilter>;
-}>;
-
-
-export type ReviewQueueQuery = { __typename?: 'Query', reviewQueue: { __typename?: 'ReviewQueue', total: number, counts: { __typename?: 'ReviewCounts', public: number, limited: number }, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
-
-export type ApproveMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-  visibility?: InputMaybe<EmoteVisibility>;
-}>;
-
-
-export type ApproveMutation = { __typename?: 'Mutation', approveEmote: { __typename?: 'Emote', id: string, state: EmoteState, visibility: EmoteVisibility } };
-
-export type EmoteHistoryQueryVariables = Exact<{
+export type EmoteActivityQueryVariables = Exact<{
   emoteId: Scalars['String']['input'];
+  before?: InputMaybe<Scalars['String']['input']>;
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  actorId?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
-export type EmoteHistoryQuery = { __typename?: 'Query', emoteHistory: Array<{ __typename?: 'AuditEntry', id: string, actorId?: string | null, action: string, before?: string | null, after?: string | null, createdAt: string }> };
-
-export type EmoteNotesQueryVariables = Exact<{
-  emoteId: Scalars['String']['input'];
-}>;
-
-
-export type EmoteNotesQuery = { __typename?: 'Query', emoteNotes: Array<{ __typename?: 'EmoteNote', id: string, authorId?: string | null, body: string, createdAt: string }> };
-
-export type AddEmoteNoteMutationVariables = Exact<{
-  emoteId: Scalars['String']['input'];
-  body: Scalars['String']['input'];
-}>;
-
-
-export type AddEmoteNoteMutation = { __typename?: 'Mutation', addEmoteNote: { __typename?: 'EmoteNote', id: string, authorId?: string | null, body: string, createdAt: string } };
-
-export type DeleteEmoteNoteMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type DeleteEmoteNoteMutation = { __typename?: 'Mutation', deleteEmoteNote: boolean };
-
-export type RejectMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-  reason: Scalars['String']['input'];
-}>;
-
-
-export type RejectMutation = { __typename?: 'Mutation', rejectEmote: { __typename?: 'Emote', id: string, state: EmoteState } };
-
-export type ReportFieldsFragment = { __typename?: 'Report', id: string, reason: string, reporterId?: string | null, state: ReportState, resolution?: string | null, createdAt: string, resolvedAt?: string | null, emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null };
-
-export type ReportQueueQueryVariables = Exact<{
-  page?: InputMaybe<Scalars['Int']['input']>;
-  perPage?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type ReportQueueQuery = { __typename?: 'Query', reportQueue: { __typename?: 'ReportQueue', total: number, items: Array<{ __typename?: 'Report', id: string, reason: string, reporterId?: string | null, state: ReportState, createdAt: string, emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null }> } };
-
-export type ResolveReportMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-  action: ReportAction;
-  note?: InputMaybe<Scalars['String']['input']>;
-}>;
-
-
-export type ResolveReportMutation = { __typename?: 'Mutation', resolveReport: { __typename?: 'Report', id: string, state: ReportState } };
-
-export type RoleFieldsFragment = { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean };
-
-export type RolesQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type RolesQuery = { __typename?: 'Query', permissions: Array<string>, roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean }> };
-
-export type RoleLimitFieldsFragment = { __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null };
-
-export type LimitDefaultsQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type LimitDefaultsQuery = { __typename?: 'Query', limitDefaults: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null }> };
-
-export type RoleLimitsQueryVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type RoleLimitsQuery = { __typename?: 'Query', roleLimits: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null }> };
-
-export type SetRoleLimitsMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-  limits: Array<RoleLimitInput> | RoleLimitInput;
-}>;
-
-
-export type SetRoleLimitsMutation = { __typename?: 'Mutation', setRoleLimits: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null }> };
-
-export type UploadQuotaQueryVariables = Exact<{
-  ownerId?: InputMaybe<Scalars['String']['input']>;
-}>;
-
-
-export type UploadQuotaQuery = { __typename?: 'Query', uploadQuota: { __typename?: 'UploadQuota', accountId: string, pending: number, pendingMax?: number | null, uploadsThisHour: number, uploadsPerHour: number } };
-
-export type CreateRoleMutationVariables = Exact<{
-  input: CreateRoleInput;
-}>;
-
-
-export type CreateRoleMutation = { __typename?: 'Mutation', createRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean } };
-
-export type UpdateRoleMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-  input: UpdateRoleInput;
-}>;
-
-
-export type UpdateRoleMutation = { __typename?: 'Mutation', updateRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean } };
-
-export type DeleteRoleMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type DeleteRoleMutation = { __typename?: 'Mutation', deleteRole: boolean };
+export type EmoteActivityQuery = { __typename?: 'Query', emoteActivityPage: { __typename?: 'ActivityPage', next?: string | null, entries: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> } };
 
 export type UserQueryVariables = Exact<{
   platform: Platform;
@@ -4236,75 +3873,13 @@ export type AuditQueryVariables = Exact<{
 
 export type AuditQuery = { __typename?: 'Query', auditLog: Array<{ __typename?: 'AuditEntry', id: string, actorId?: string | null, action: string, targetKind: string, targetId: string, before?: string | null, after?: string | null, createdAt: string }> };
 
-export type ReportEmoteMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-  reason: Scalars['String']['input'];
+export type ChannelQueryVariables = Exact<{
+  platform: Platform;
+  login: Scalars['String']['input'];
 }>;
 
 
-export type ReportEmoteMutation = { __typename?: 'Mutation', reportEmote: { __typename?: 'Report', id: string } };
-
-export type MySetNamesQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type MySetNamesQuery = { __typename?: 'Query', mySets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, emotes: Array<{ __typename?: 'SetEmote', emote: { __typename?: 'Emote', id: string } }> }> };
-
-export type SearchByOwnerQueryVariables = Exact<{
-  owner: Scalars['String']['input'];
-  page?: InputMaybe<Scalars['Int']['input']>;
-  perPage?: InputMaybe<Scalars['Int']['input']>;
-  sort?: InputMaybe<EmoteSort>;
-}>;
-
-
-export type SearchByOwnerQuery = { __typename?: 'Query', searchEmotes: { __typename?: 'SearchResults', total: number, page: number, perPage: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
-
-export type AdminAccountQueryVariables = Exact<{
-  accountId: Scalars['String']['input'];
-}>;
-
-
-export type AdminAccountQuery = { __typename?: 'Query', adminAccount: { __typename?: 'AdminAccount', id: string, displayName: string, avatar?: string | null, createdAt: string, uploadsBlocked: boolean, ticketsBlocked: boolean, blocked: boolean, uploadsBlockedUntil?: string | null, ticketsBlockedUntil?: string | null, blockedUntil?: string | null, identities: Array<{ __typename?: 'Identity', platform: Platform, platformUserId: string, login: string, displayName: string, avatar?: string | null }> } };
-
-export type TransferEmoteMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-  toAccountId: Scalars['String']['input'];
-}>;
-
-
-export type TransferEmoteMutation = { __typename?: 'Mutation', transferEmote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } };
-
-export type AccountEmotesQueryVariables = Exact<{
-  accountId: Scalars['String']['input'];
-  page?: InputMaybe<Scalars['Int']['input']>;
-  perPage?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type AccountEmotesQuery = { __typename?: 'Query', accountEmotes: { __typename?: 'EmotePage', total: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
-
-export type AccountReportsQueryVariables = Exact<{
-  accountId: Scalars['String']['input'];
-}>;
-
-
-export type AccountReportsQuery = { __typename?: 'Query', accountReports: { __typename?: 'AccountReports', about: Array<{ __typename?: 'Report', id: string, reason: string, reporterId?: string | null, state: ReportState, resolution?: string | null, createdAt: string, resolvedAt?: string | null, emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null }>, by: Array<{ __typename?: 'Report', id: string, reason: string, reporterId?: string | null, state: ReportState, resolution?: string | null, createdAt: string, resolvedAt?: string | null, emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null }> } };
-
-export type PublicAccountQueryVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type PublicAccountQuery = { __typename?: 'Query', account?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null };
-
-export type EmoteChannelsQueryVariables = Exact<{
-  id: Scalars['String']['input'];
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  offset?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type EmoteChannelsQuery = { __typename?: 'Query', emoteChannels: Array<{ __typename?: 'Channel', platform: Platform, login: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } }> };
+export type ChannelQuery = { __typename?: 'Query', channelByLogin?: { __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, allowPersonalEmotes: boolean, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } } | null };
 
 export type CosmeticImageFieldsFragment = { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> };
 
@@ -4426,6 +4001,247 @@ export type RevokeCosmeticMutationVariables = Exact<{
 
 export type RevokeCosmeticMutation = { __typename?: 'Mutation', revokeCosmetic: boolean };
 
+export type AccountEditorFieldsFragment = { __typename?: 'AccountEditor', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null };
+
+export type EditorsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type EditorsQuery = { __typename?: 'Query', accountEditors: Array<{ __typename?: 'AccountEditor', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null }>, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } }>, mySets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, owner?: { __typename?: 'AccountSummary', id: string } | null }> };
+
+export type AddAccountEditorMutationVariables = Exact<{
+  input: AddAccountEditorInput;
+}>;
+
+
+export type AddAccountEditorMutation = { __typename?: 'Mutation', addAccountEditor: { __typename?: 'AccountEditor', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null } };
+
+export type UpdateAccountEditorMutationVariables = Exact<{
+  ownerId?: InputMaybe<Scalars['String']['input']>;
+  accountId: Scalars['String']['input'];
+  permissions: Array<EditorPermission> | EditorPermission;
+  setIds?: InputMaybe<Array<Scalars['String']['input']> | Scalars['String']['input']>;
+}>;
+
+
+export type UpdateAccountEditorMutation = { __typename?: 'Mutation', updateAccountEditor: { __typename?: 'AccountEditor', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, grantedAt: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, grantedBy?: { __typename?: 'AccountSummary', id: string, displayName: string } | null } };
+
+export type RemoveAccountEditorMutationVariables = Exact<{
+  ownerId?: InputMaybe<Scalars['String']['input']>;
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type RemoveAccountEditorMutation = { __typename?: 'Mutation', removeAccountEditor: boolean };
+
+export type ReportEmoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  reason: Scalars['String']['input'];
+}>;
+
+
+export type ReportEmoteMutation = { __typename?: 'Mutation', reportEmote: { __typename?: 'Report', id: string } };
+
+export type MySetNamesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type MySetNamesQuery = { __typename?: 'Query', mySets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, emotes: Array<{ __typename?: 'SetEmote', emote: { __typename?: 'Emote', id: string } }> }> };
+
+export type SearchByOwnerQueryVariables = Exact<{
+  owner: Scalars['String']['input'];
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+  sort?: InputMaybe<EmoteSort>;
+}>;
+
+
+export type SearchByOwnerQuery = { __typename?: 'Query', searchEmotes: { __typename?: 'SearchResults', total: number, page: number, perPage: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+
+export type AdminAccountQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type AdminAccountQuery = { __typename?: 'Query', adminAccount: { __typename?: 'AdminAccount', id: string, displayName: string, avatar?: string | null, createdAt: string, uploadsBlocked: boolean, ticketsBlocked: boolean, blocked: boolean, uploadsBlockedUntil?: string | null, ticketsBlockedUntil?: string | null, blockedUntil?: string | null, identities: Array<{ __typename?: 'Identity', platform: Platform, platformUserId: string, login: string, displayName: string, avatar?: string | null }> } };
+
+export type TransferEmoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  toAccountId: Scalars['String']['input'];
+}>;
+
+
+export type TransferEmoteMutation = { __typename?: 'Mutation', transferEmote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } };
+
+export type AccountEmotesQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type AccountEmotesQuery = { __typename?: 'Query', accountEmotes: { __typename?: 'EmotePage', total: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+
+export type AccountReportsQueryVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type AccountReportsQuery = { __typename?: 'Query', accountReports: { __typename?: 'AccountReports', about: Array<{ __typename?: 'Report', id: string, reason: string, reporterId?: string | null, state: ReportState, resolution?: string | null, createdAt: string, resolvedAt?: string | null, emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null }>, by: Array<{ __typename?: 'Report', id: string, reason: string, reporterId?: string | null, state: ReportState, resolution?: string | null, createdAt: string, resolvedAt?: string | null, emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null }> } };
+
+export type PublicAccountQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type PublicAccountQuery = { __typename?: 'Query', account?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null };
+
+export type EmoteChannelsQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+  limit?: InputMaybe<Scalars['Int']['input']>;
+  offset?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type EmoteChannelsQuery = { __typename?: 'Query', emoteChannels: Array<{ __typename?: 'Channel', platform: Platform, login: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } }> };
+
+export type EmoteFieldsFragment = { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> };
+
+export type SearchQueryVariables = Exact<{
+  query: Scalars['String']['input'];
+  animated?: InputMaybe<Scalars['Boolean']['input']>;
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+  sort?: InputMaybe<EmoteSort>;
+  flags?: InputMaybe<Array<EmoteFlag> | EmoteFlag>;
+  tags?: InputMaybe<Array<Scalars['String']['input']> | Scalars['String']['input']>;
+  exact?: InputMaybe<Scalars['Boolean']['input']>;
+  window?: InputMaybe<TrendingWindow>;
+}>;
+
+
+export type SearchQuery = { __typename?: 'Query', searchEmotes: { __typename?: 'SearchResults', total: number, page: number, perPage: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+
+export type FindPeopleQueryVariables = Exact<{
+  query: Scalars['String']['input'];
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type FindPeopleQuery = { __typename?: 'Query', searchAccounts: { __typename?: 'AccountResults', total: number, page: number, perPage: number, items: Array<{ __typename?: 'AccountHit', account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }> }> } };
+
+export type EmoteQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type EmoteQuery = { __typename?: 'Query', emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null };
+
+export type EmoteTrendingQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+  window?: InputMaybe<TrendingWindow>;
+}>;
+
+
+export type EmoteTrendingQuery = { __typename?: 'Query', emoteTrending?: { __typename?: 'EmoteTrending', rank: number, channels: number, window: TrendingWindow } | null };
+
+export type MyChannelsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type MyChannelsQuery = { __typename?: 'Query', myChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, allowPersonalEmotes: boolean, account: { __typename?: 'AccountSummary', id: string, displayName: string } }>, mySets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, owner?: { __typename?: 'AccountSummary', id: string } | null }>, editorChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, allowPersonalEmotes: boolean, account: { __typename?: 'AccountSummary', id: string, displayName: string } }>, editorSets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, owner?: { __typename?: 'AccountSummary', id: string } | null }>, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, account: { __typename?: 'AccountSummary', id: string } }> };
+
+export type UpdateChannelMutationVariables = Exact<{
+  platform: Platform;
+  id: Scalars['String']['input'];
+  input: UpdateChannelSettingsInput;
+}>;
+
+
+export type UpdateChannelMutation = { __typename?: 'Mutation', updateChannelSettings: { __typename?: 'Channel', activeSetId?: string | null, allowPersonalEmotes: boolean } };
+
+export type MyEmotesQueryVariables = Exact<{
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type MyEmotesQuery = { __typename?: 'Query', myEmotes: { __typename?: 'EmotePage', total: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+
+export type UpdateEmoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: UpdateEmoteInput;
+}>;
+
+
+export type UpdateEmoteMutation = { __typename?: 'Mutation', updateEmote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } };
+
+export type DeleteEmoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DeleteEmoteMutation = { __typename?: 'Mutation', deleteEmote: boolean };
+
+export type PersonalListsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type PersonalListsQuery = { __typename?: 'Query', favouriteEmoteIds: Array<string>, hiddenEmotes: Array<{ __typename?: 'HiddenEmote', emoteId: string }>, hiddenCreators: Array<{ __typename?: 'HiddenCreator', accountId: string }> };
+
+export type HiddenListsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type HiddenListsQuery = { __typename?: 'Query', hiddenEmotes: Array<{ __typename?: 'HiddenEmote', emoteId: string, hiddenAt: string, emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null }>, hiddenCreators: Array<{ __typename?: 'HiddenCreator', accountId: string, hiddenAt: string, account?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null }> };
+
+export type MyFavouritesQueryVariables = Exact<{
+  query?: InputMaybe<Scalars['String']['input']>;
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type MyFavouritesQuery = { __typename?: 'Query', myFavourites: { __typename?: 'EmotePage', total: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+
+export type HideEmoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type HideEmoteMutation = { __typename?: 'Mutation', hideEmote: boolean };
+
+export type UnhideEmoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type UnhideEmoteMutation = { __typename?: 'Mutation', unhideEmote: boolean };
+
+export type HideCreatorMutationVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type HideCreatorMutation = { __typename?: 'Mutation', hideCreator: boolean };
+
+export type UnhideCreatorMutationVariables = Exact<{
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type UnhideCreatorMutation = { __typename?: 'Mutation', unhideCreator: boolean };
+
+export type FavouriteEmoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type FavouriteEmoteMutation = { __typename?: 'Mutation', favouriteEmote: boolean };
+
+export type UnfavouriteEmoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type UnfavouriteEmoteMutation = { __typename?: 'Mutation', unfavouriteEmote: boolean };
+
 export type AccountRolesQueryVariables = Exact<{
   accountId: Scalars['String']['input'];
 }>;
@@ -4462,25 +4278,348 @@ export type ProfileEditedQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type ProfileEditedQuery = { __typename?: 'Query', editorChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }>, editorSets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> }> };
 
-export type AccountActivityQueryVariables = Exact<{
-  accountId: Scalars['String']['input'];
-  before?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  filter?: InputMaybe<ActivityFilter>;
+export type ReportFieldsFragment = { __typename?: 'Report', id: string, reason: string, reporterId?: string | null, state: ReportState, resolution?: string | null, createdAt: string, resolvedAt?: string | null, emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null };
+
+export type ReportQueueQueryVariables = Exact<{
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
 }>;
 
 
-export type AccountActivityQuery = { __typename?: 'Query', accountActivityPage: { __typename?: 'ActivityPage', next?: string | null, entries: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, editor?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> } };
+export type ReportQueueQuery = { __typename?: 'Query', reportQueue: { __typename?: 'ReportQueue', total: number, items: Array<{ __typename?: 'Report', id: string, reason: string, reporterId?: string | null, state: ReportState, createdAt: string, emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null }> } };
 
-export type EmoteActivityQueryVariables = Exact<{
+export type ResolveReportMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  action: ReportAction;
+  note?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type ResolveReportMutation = { __typename?: 'Mutation', resolveReport: { __typename?: 'Report', id: string, state: ReportState } };
+
+export type ReviewEmotesMutationVariables = Exact<{
+  ids: Array<Scalars['String']['input']> | Scalars['String']['input'];
+  verdict: ReviewVerdict;
+  visibility?: InputMaybe<EmoteVisibility>;
+  reason?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type ReviewEmotesMutation = { __typename?: 'Mutation', reviewEmotes: { __typename?: 'BatchOutcome', done: Array<string>, failed: Array<{ __typename?: 'BatchFailure', id: string, code: string, message: string }> } };
+
+export type RequeueEmotesMutationVariables = Exact<{
+  ids: Array<Scalars['String']['input']> | Scalars['String']['input'];
+}>;
+
+
+export type RequeueEmotesMutation = { __typename?: 'Mutation', requeueEmotes: { __typename?: 'BatchOutcome', done: Array<string>, failed: Array<{ __typename?: 'BatchFailure', id: string, code: string, message: string }> } };
+
+export type SetEmoteFlagsMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: EmoteFlagsInput;
+}>;
+
+
+export type SetEmoteFlagsMutation = { __typename?: 'Mutation', setEmoteFlags: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } };
+
+export type DismissReportsMutationVariables = Exact<{
+  ids: Array<Scalars['String']['input']> | Scalars['String']['input'];
+  note?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type DismissReportsMutation = { __typename?: 'Mutation', dismissReports: { __typename?: 'BatchOutcome', done: Array<string>, failed: Array<{ __typename?: 'BatchFailure', id: string, code: string, message: string }> } };
+
+export type EmoteDuplicatesQueryVariables = Exact<{
   emoteId: Scalars['String']['input'];
-  before?: InputMaybe<Scalars['String']['input']>;
-  limit?: InputMaybe<Scalars['Int']['input']>;
-  actorId?: InputMaybe<Scalars['String']['input']>;
 }>;
 
 
-export type EmoteActivityQuery = { __typename?: 'Query', emoteActivityPage: { __typename?: 'ActivityPage', next?: string | null, entries: Array<{ __typename?: 'ActivityEntry', id: string, kind: ActivityKind, fromName?: string | null, toName?: string | null, createdAt: string, actor: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, set?: { __typename?: 'ActivitySet', id: string, name: string } | null, emote?: { __typename?: 'ActivityEmote', id: string, name: string, host: string, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null, badge?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null, paint?: { __typename?: 'ActivityCosmeticChange', fromId?: string | null, fromName?: string | null, toId?: string | null, toName?: string | null } | null }> } };
+export type EmoteDuplicatesQuery = { __typename?: 'Query', emoteDuplicates: Array<{ __typename?: 'DuplicateCandidate', sameFile: boolean, similarity: number, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> };
+
+export type ReviewReasonsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ReviewReasonsQuery = { __typename?: 'Query', reviewReasons: Array<string> };
+
+export type SetReviewReasonsMutationVariables = Exact<{
+  reasons: Array<Scalars['String']['input']> | Scalars['String']['input'];
+}>;
+
+
+export type SetReviewReasonsMutation = { __typename?: 'Mutation', setReviewReasons: Array<string> };
+
+export type AccountsByLoginQueryVariables = Exact<{
+  logins: Array<Scalars['String']['input']> | Scalars['String']['input'];
+}>;
+
+
+export type AccountsByLoginQuery = { __typename?: 'Query', accountsByLogin: Array<{ __typename?: 'LoginMatch', login: string, problem?: string | null, account?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null }> };
+
+export type EmotesWithSameFileQueryVariables = Exact<{
+  sha256: Scalars['String']['input'];
+}>;
+
+
+export type EmotesWithSameFileQuery = { __typename?: 'Query', emotesWithSameFile: Array<{ __typename?: 'Emote', id: string, name: string, owner?: { __typename?: 'AccountSummary', id: string, displayName: string } | null }> };
+
+export type AdminCountsQueryVariables = Exact<{
+  review: Scalars['Boolean']['input'];
+  reports: Scalars['Boolean']['input'];
+}>;
+
+
+export type AdminCountsQuery = { __typename?: 'Query', reviewQueue?: { __typename?: 'ReviewQueue', total: number }, reportQueue?: { __typename?: 'ReportQueue', total: number }, globalSet: { __typename?: 'EmoteSet', id: string } };
+
+export type ReviewQueueQueryVariables = Exact<{
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+  filter?: InputMaybe<ReviewQueueFilter>;
+}>;
+
+
+export type ReviewQueueQuery = { __typename?: 'Query', reviewQueue: { __typename?: 'ReviewQueue', total: number, counts: { __typename?: 'ReviewCounts', public: number, limited: number }, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
+
+export type ApproveMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  visibility?: InputMaybe<EmoteVisibility>;
+}>;
+
+
+export type ApproveMutation = { __typename?: 'Mutation', approveEmote: { __typename?: 'Emote', id: string, state: EmoteState, visibility: EmoteVisibility } };
+
+export type EmoteHistoryQueryVariables = Exact<{
+  emoteId: Scalars['String']['input'];
+}>;
+
+
+export type EmoteHistoryQuery = { __typename?: 'Query', emoteHistory: Array<{ __typename?: 'AuditEntry', id: string, actorId?: string | null, action: string, before?: string | null, after?: string | null, createdAt: string }> };
+
+export type EmoteNotesQueryVariables = Exact<{
+  emoteId: Scalars['String']['input'];
+}>;
+
+
+export type EmoteNotesQuery = { __typename?: 'Query', emoteNotes: Array<{ __typename?: 'EmoteNote', id: string, authorId?: string | null, body: string, createdAt: string }> };
+
+export type AddEmoteNoteMutationVariables = Exact<{
+  emoteId: Scalars['String']['input'];
+  body: Scalars['String']['input'];
+}>;
+
+
+export type AddEmoteNoteMutation = { __typename?: 'Mutation', addEmoteNote: { __typename?: 'EmoteNote', id: string, authorId?: string | null, body: string, createdAt: string } };
+
+export type DeleteEmoteNoteMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DeleteEmoteNoteMutation = { __typename?: 'Mutation', deleteEmoteNote: boolean };
+
+export type RejectMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  reason: Scalars['String']['input'];
+}>;
+
+
+export type RejectMutation = { __typename?: 'Mutation', rejectEmote: { __typename?: 'Emote', id: string, state: EmoteState } };
+
+export type RoleFieldsFragment = { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean };
+
+export type RolesQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type RolesQuery = { __typename?: 'Query', permissions: Array<string>, roles: Array<{ __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean }> };
+
+export type RoleLimitFieldsFragment = { __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null };
+
+export type LimitDefaultsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type LimitDefaultsQuery = { __typename?: 'Query', limitDefaults: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null }> };
+
+export type RoleLimitsQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type RoleLimitsQuery = { __typename?: 'Query', roleLimits: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null }> };
+
+export type SetRoleLimitsMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  limits: Array<RoleLimitInput> | RoleLimitInput;
+}>;
+
+
+export type SetRoleLimitsMutation = { __typename?: 'Mutation', setRoleLimits: Array<{ __typename?: 'RoleLimit', key: string, group: LimitGroup, default: number, windowSeconds?: number | null, value?: number | null }> };
+
+export type UploadQuotaQueryVariables = Exact<{
+  ownerId?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+
+export type UploadQuotaQuery = { __typename?: 'Query', uploadQuota: { __typename?: 'UploadQuota', accountId: string, pending: number, pendingMax?: number | null, uploadsThisHour: number, uploadsPerHour: number } };
+
+export type CreateRoleMutationVariables = Exact<{
+  input: CreateRoleInput;
+}>;
+
+
+export type CreateRoleMutation = { __typename?: 'Mutation', createRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean } };
+
+export type UpdateRoleMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: UpdateRoleInput;
+}>;
+
+
+export type UpdateRoleMutation = { __typename?: 'Mutation', updateRole: { __typename?: 'Role', id: string, name: string, description?: string | null, position: number, permissions: Array<string>, denies: Array<string>, public: boolean, invisible: boolean, builtIn?: BuiltInRole | null, editable: boolean, assignable: boolean } };
+
+export type DeleteRoleMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DeleteRoleMutation = { __typename?: 'Mutation', deleteRole: boolean };
+
+export type QuickSearchQueryVariables = Exact<{
+  query: Scalars['String']['input'];
+}>;
+
+
+export type QuickSearchQuery = { __typename?: 'Query', quickSearch: { __typename?: 'QuickSearch', emotes: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }>, users: Array<{ __typename?: 'AccountHit', account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }> }> } };
+
+export type EditableChannelsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type EditableChannelsQuery = { __typename?: 'Query', myEditableChannels: Array<{ __typename?: 'EditableChannel', role: ChannelRole, channel: { __typename?: 'Channel', platform: Platform, login: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } } }> };
+
+export type SetFieldsFragment = { __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> };
+
+export type MySetsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type MySetsQuery = { __typename?: 'Query', mySets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> }>, editorSets: Array<{ __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> }>, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, account: { __typename?: 'AccountSummary', id: string, displayName: string } }> };
+
+export type EditSetQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type EditSetQuery = { __typename?: 'Query', set?: { __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, slotsUsed: number, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null } | null, setEditors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }>, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, account: { __typename?: 'AccountSummary', id: string } }>, myChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }>, editorChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }> };
+
+export type SetEmotesQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+  query?: InputMaybe<Scalars['String']['input']>;
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type SetEmotesQuery = { __typename?: 'Query', setEmotes: { __typename?: 'SetEmotePage', total: number, items: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> } };
+
+export type SetMembersQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+  page?: InputMaybe<Scalars['Int']['input']>;
+  perPage?: InputMaybe<Scalars['Int']['input']>;
+}>;
+
+
+export type SetMembersQuery = { __typename?: 'Query', setEmotes: { __typename?: 'SetEmotePage', total: number, items: Array<{ __typename?: 'SetEmote', name: string, emote: { __typename?: 'Emote', id: string } }> } };
+
+export type CreateSetMutationVariables = Exact<{
+  input: CreateSetInput;
+}>;
+
+
+export type CreateSetMutation = { __typename?: 'Mutation', createSet: { __typename?: 'EmoteSet', id: string } };
+
+export type UpdateSetMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: UpdateSetInput;
+}>;
+
+
+export type UpdateSetMutation = { __typename?: 'Mutation', updateSet: { __typename?: 'EmoteSet', id: string, name: string, visibility: SetVisibility, capacity: number } };
+
+export type DeleteSetMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type DeleteSetMutation = { __typename?: 'Mutation', deleteSet: boolean };
+
+export type SetCapacityRangeQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type SetCapacityRangeQuery = { __typename?: 'Query', setCapacityRange?: { __typename?: 'SetCapacityRange', min: number, max: number, ownerMax: number, used: number, staff: boolean } | null };
+
+export type SetMenuQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type SetMenuQuery = { __typename?: 'Query', setCapacityRange?: { __typename?: 'SetCapacityRange', min: number, max: number, ownerMax: number, used: number, staff: boolean } | null, editorOf: Array<{ __typename?: 'EditedAccount', permissions: Array<EditorPermission>, allSets: boolean, setIds: Array<string>, account: { __typename?: 'AccountSummary', id: string } }>, myChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }>, editorChannels: Array<{ __typename?: 'Channel', platform: Platform, platformChannelId: string, login: string, activeSetId?: string | null, account: { __typename?: 'AccountSummary', id: string } }> };
+
+export type AddSetEmoteMutationVariables = Exact<{
+  setId: Scalars['String']['input'];
+  emoteId: Scalars['String']['input'];
+  input?: InputMaybe<AddSetEmoteInput>;
+}>;
+
+
+export type AddSetEmoteMutation = { __typename?: 'Mutation', addSetEmote: { __typename?: 'SetEmote', name: string } };
+
+export type UpdateSetEmoteMutationVariables = Exact<{
+  setId: Scalars['String']['input'];
+  emoteId: Scalars['String']['input'];
+  input: UpdateSetEmoteInput;
+}>;
+
+
+export type UpdateSetEmoteMutation = { __typename?: 'Mutation', updateSetEmote: { __typename?: 'SetEmote', name: string, zeroWidth: boolean } };
+
+export type RemoveSetEmoteMutationVariables = Exact<{
+  setId: Scalars['String']['input'];
+  emoteId: Scalars['String']['input'];
+}>;
+
+
+export type RemoveSetEmoteMutation = { __typename?: 'Mutation', removeSetEmote: boolean };
+
+export type RemoveSetEditorMutationVariables = Exact<{
+  setId: Scalars['String']['input'];
+  accountId: Scalars['String']['input'];
+}>;
+
+
+export type RemoveSetEditorMutation = { __typename?: 'Mutation', removeSetEditor: boolean };
+
+export type PublicSetQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type PublicSetQuery = { __typename?: 'Query', set?: { __typename?: 'EmoteSet', id: string, name: string, kind: SetKind, visibility: SetVisibility, capacity: number, slotsUsed: number, createdAt: string, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, emotes: Array<{ __typename?: 'SetEmote', name: string, zeroWidth: boolean, addedAt: string, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> } | null };
+
+export type SetEditorsQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type SetEditorsQuery = { __typename?: 'Query', setEditors: Array<{ __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }> };
+
+export type CloneSetMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  name?: InputMaybe<Scalars['String']['input']>;
+  visibility?: InputMaybe<SetVisibility>;
+}>;
+
+
+export type CloneSetMutation = { __typename?: 'Mutation', cloneSet: { __typename?: 'ClonedSet', copied: number, skipped: number, set: { __typename?: 'EmoteSet', id: string, name: string } } };
 
 export type ShopItemFieldsFragment = { __typename?: 'ShopItem', id: string, name: string, description: string, priceCents: number, currency: string, paddlePriceId?: string | null, activeFrom?: string | null, activeTo?: string | null, stockLimit?: number | null, stockLeft?: number | null, visible: boolean, sortOrder: number, available: boolean, owned: boolean, deleted: boolean, badges: Array<{ __typename?: 'Badge', id: string, name: string, tooltip: string, image: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } }>, paints: Array<{ __typename?: 'Paint', id: string, name: string, kind: PaintKind, angle: number, repeat: boolean, shape: PaintShape, color?: string | null, stops: Array<{ __typename?: 'PaintStop', at: number, color: string }>, shadows: Array<{ __typename?: 'PaintShadow', x: number, y: number, radius: number, color: string }>, image?: { __typename?: 'CosmeticImage', id: string, kind: CosmeticKind, host: string, animated: boolean, ready: boolean, width: number, height: number, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null }> };
 
@@ -4606,17 +4745,51 @@ export type ShopCountsQueryVariables = Exact<{
 
 export type ShopCountsQuery = { __typename?: 'Query', shopItems?: Array<{ __typename?: 'ShopItem', id: string }>, orders?: { __typename?: 'OrderPage', total: number }, codeBatches?: { __typename?: 'CodeBatchPage', total: number } };
 
-export type QuickSearchQueryVariables = Exact<{
-  query: Scalars['String']['input'];
+export type AnnouncementFieldsFragment = { __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null };
+
+export type ActiveAnnouncementQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ActiveAnnouncementQuery = { __typename?: 'Query', activeAnnouncement?: { __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null } | null };
+
+export type AnnouncementsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type AnnouncementsQuery = { __typename?: 'Query', announcements: Array<{ __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null }> };
+
+export type CreateAnnouncementMutationVariables = Exact<{
+  input: AnnouncementInput;
 }>;
 
 
-export type QuickSearchQuery = { __typename?: 'Query', quickSearch: { __typename?: 'QuickSearch', emotes: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }>, users: Array<{ __typename?: 'AccountHit', account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }> }> } };
+export type CreateAnnouncementMutation = { __typename?: 'Mutation', createAnnouncement: { __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null } };
 
-export type EditableChannelsQueryVariables = Exact<{ [key: string]: never; }>;
+export type UpdateAnnouncementMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: AnnouncementInput;
+}>;
 
 
-export type EditableChannelsQuery = { __typename?: 'Query', myEditableChannels: Array<{ __typename?: 'EditableChannel', role: ChannelRole, channel: { __typename?: 'Channel', platform: Platform, login: string, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } } }> };
+export type UpdateAnnouncementMutation = { __typename?: 'Mutation', updateAnnouncement: { __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null } };
+
+export type EndAnnouncementMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+
+export type EndAnnouncementMutation = { __typename?: 'Mutation', endAnnouncement: { __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null } };
+
+export type NotificationPrefsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type NotificationPrefsQuery = { __typename?: 'Query', myNotificationPrefs: Array<{ __typename?: 'NotificationPref', kind: string, notify: boolean, toast: boolean, required: boolean }> };
+
+export type SetNotificationPrefsMutationVariables = Exact<{
+  prefs: Array<NotificationPrefInput> | NotificationPrefInput;
+}>;
+
+
+export type SetNotificationPrefsMutation = { __typename?: 'Mutation', setNotificationPrefs: Array<{ __typename?: 'NotificationPref', kind: string, notify: boolean, toast: boolean, required: boolean }> };
 
 export type StaffNotesQueryVariables = Exact<{
   accountId: Scalars['String']['input'];
@@ -4670,179 +4843,6 @@ export type EntitlementHoldersQueryVariables = Exact<{
 
 
 export type EntitlementHoldersQuery = { __typename?: 'Query', entitlementHolders: Array<{ __typename?: 'EntitlementGrant', kind: GrantKind, itemId: string, itemName: string, accountId: string, source: GrantSource, reason?: string | null, grantedBy?: string | null, grantedAt?: string | null, orderId?: string | null, orderName?: string | null, orderStatus?: string | null, codeBatchId?: string | null, codeBatchName?: string | null, revokedAt?: string | null, revokedBy?: string | null, revokeReason?: string | null, active: boolean }> };
-
-export type ReviewEmotesMutationVariables = Exact<{
-  ids: Array<Scalars['String']['input']> | Scalars['String']['input'];
-  verdict: ReviewVerdict;
-  visibility?: InputMaybe<EmoteVisibility>;
-  reason?: InputMaybe<Scalars['String']['input']>;
-}>;
-
-
-export type ReviewEmotesMutation = { __typename?: 'Mutation', reviewEmotes: { __typename?: 'BatchOutcome', done: Array<string>, failed: Array<{ __typename?: 'BatchFailure', id: string, code: string, message: string }> } };
-
-export type RequeueEmotesMutationVariables = Exact<{
-  ids: Array<Scalars['String']['input']> | Scalars['String']['input'];
-}>;
-
-
-export type RequeueEmotesMutation = { __typename?: 'Mutation', requeueEmotes: { __typename?: 'BatchOutcome', done: Array<string>, failed: Array<{ __typename?: 'BatchFailure', id: string, code: string, message: string }> } };
-
-export type SetEmoteFlagsMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-  input: EmoteFlagsInput;
-}>;
-
-
-export type SetEmoteFlagsMutation = { __typename?: 'Mutation', setEmoteFlags: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } };
-
-export type DismissReportsMutationVariables = Exact<{
-  ids: Array<Scalars['String']['input']> | Scalars['String']['input'];
-  note?: InputMaybe<Scalars['String']['input']>;
-}>;
-
-
-export type DismissReportsMutation = { __typename?: 'Mutation', dismissReports: { __typename?: 'BatchOutcome', done: Array<string>, failed: Array<{ __typename?: 'BatchFailure', id: string, code: string, message: string }> } };
-
-export type EmoteDuplicatesQueryVariables = Exact<{
-  emoteId: Scalars['String']['input'];
-}>;
-
-
-export type EmoteDuplicatesQuery = { __typename?: 'Query', emoteDuplicates: Array<{ __typename?: 'DuplicateCandidate', sameFile: boolean, similarity: number, emote: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } }> };
-
-export type ReviewReasonsQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type ReviewReasonsQuery = { __typename?: 'Query', reviewReasons: Array<string> };
-
-export type SetReviewReasonsMutationVariables = Exact<{
-  reasons: Array<Scalars['String']['input']> | Scalars['String']['input'];
-}>;
-
-
-export type SetReviewReasonsMutation = { __typename?: 'Mutation', setReviewReasons: Array<string> };
-
-export type AccountsByLoginQueryVariables = Exact<{
-  logins: Array<Scalars['String']['input']> | Scalars['String']['input'];
-}>;
-
-
-export type AccountsByLoginQuery = { __typename?: 'Query', accountsByLogin: Array<{ __typename?: 'LoginMatch', login: string, problem?: string | null, account?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null }> };
-
-export type EmotesWithSameFileQueryVariables = Exact<{
-  sha256: Scalars['String']['input'];
-}>;
-
-
-export type EmotesWithSameFileQuery = { __typename?: 'Query', emotesWithSameFile: Array<{ __typename?: 'Emote', id: string, name: string, owner?: { __typename?: 'AccountSummary', id: string, displayName: string } | null }> };
-
-export type AnnouncementFieldsFragment = { __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null };
-
-export type ActiveAnnouncementQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type ActiveAnnouncementQuery = { __typename?: 'Query', activeAnnouncement?: { __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null } | null };
-
-export type AnnouncementsQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type AnnouncementsQuery = { __typename?: 'Query', announcements: Array<{ __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null }> };
-
-export type CreateAnnouncementMutationVariables = Exact<{
-  input: AnnouncementInput;
-}>;
-
-
-export type CreateAnnouncementMutation = { __typename?: 'Mutation', createAnnouncement: { __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null } };
-
-export type UpdateAnnouncementMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-  input: AnnouncementInput;
-}>;
-
-
-export type UpdateAnnouncementMutation = { __typename?: 'Mutation', updateAnnouncement: { __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null } };
-
-export type EndAnnouncementMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type EndAnnouncementMutation = { __typename?: 'Mutation', endAnnouncement: { __typename?: 'Announcement', id: string, kind: AnnouncementKind, text: string, linkUrl?: string | null, linkLabel?: string | null, badgeId?: string | null, startsAt?: string | null, endsAt?: string | null, endedAt?: string | null, createdAt: string, updatedAt: string, live: boolean, emote?: { __typename?: 'Emote', id: string, name: string, host: string, animated: boolean, files: Array<{ __typename?: 'EmoteFile', name: string, width: number, height: number, isStatic: boolean }> } | null } };
-
-export type NotificationPrefsQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type NotificationPrefsQuery = { __typename?: 'Query', myNotificationPrefs: Array<{ __typename?: 'NotificationPref', kind: string, notify: boolean, toast: boolean, required: boolean }> };
-
-export type SetNotificationPrefsMutationVariables = Exact<{
-  prefs: Array<NotificationPrefInput> | NotificationPrefInput;
-}>;
-
-
-export type SetNotificationPrefsMutation = { __typename?: 'Mutation', setNotificationPrefs: Array<{ __typename?: 'NotificationPref', kind: string, notify: boolean, toast: boolean, required: boolean }> };
-
-export type PersonalListsQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type PersonalListsQuery = { __typename?: 'Query', favouriteEmoteIds: Array<string>, hiddenEmotes: Array<{ __typename?: 'HiddenEmote', emoteId: string }>, hiddenCreators: Array<{ __typename?: 'HiddenCreator', accountId: string }> };
-
-export type HiddenListsQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type HiddenListsQuery = { __typename?: 'Query', hiddenEmotes: Array<{ __typename?: 'HiddenEmote', emoteId: string, hiddenAt: string, emote?: { __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> } | null }>, hiddenCreators: Array<{ __typename?: 'HiddenCreator', accountId: string, hiddenAt: string, account?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null }> };
-
-export type MyFavouritesQueryVariables = Exact<{
-  query?: InputMaybe<Scalars['String']['input']>;
-  page?: InputMaybe<Scalars['Int']['input']>;
-  perPage?: InputMaybe<Scalars['Int']['input']>;
-}>;
-
-
-export type MyFavouritesQuery = { __typename?: 'Query', myFavourites: { __typename?: 'EmotePage', total: number, items: Array<{ __typename?: 'Emote', id: string, name: string, state: EmoteState, animated: boolean, tags: Array<string>, host: string, createdAt: string, channelCount: number, visibility: EmoteVisibility, flags: { __typename?: 'EmoteFlags', zeroWidth: boolean, private: boolean, wide: boolean }, owner?: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null } | null, files: Array<{ __typename?: 'EmoteFile', name: string, format: ImageFormat, scale: number, width: number, height: number, size: number, isStatic: boolean }> }> } };
-
-export type HideEmoteMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type HideEmoteMutation = { __typename?: 'Mutation', hideEmote: boolean };
-
-export type UnhideEmoteMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type UnhideEmoteMutation = { __typename?: 'Mutation', unhideEmote: boolean };
-
-export type HideCreatorMutationVariables = Exact<{
-  accountId: Scalars['String']['input'];
-}>;
-
-
-export type HideCreatorMutation = { __typename?: 'Mutation', hideCreator: boolean };
-
-export type UnhideCreatorMutationVariables = Exact<{
-  accountId: Scalars['String']['input'];
-}>;
-
-
-export type UnhideCreatorMutation = { __typename?: 'Mutation', unhideCreator: boolean };
-
-export type FavouriteEmoteMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type FavouriteEmoteMutation = { __typename?: 'Mutation', favouriteEmote: boolean };
-
-export type UnfavouriteEmoteMutationVariables = Exact<{
-  id: Scalars['String']['input'];
-}>;
-
-
-export type UnfavouriteEmoteMutation = { __typename?: 'Mutation', unfavouriteEmote: boolean };
 
 export type PersonCountFieldsFragment = { __typename?: 'PersonCount', count: number, account: { __typename?: 'AccountSummary', id: string, displayName: string, avatar?: string | null }, identities: Array<{ __typename?: 'PublicIdentity', platform: Platform, login: string, displayName: string }> };
 
@@ -4950,6 +4950,23 @@ export const StudioPaintFieldsFragmentDoc = new TypedDocumentString(`
   updatedAt
 }
     `, {"fragmentName":"StudioPaintFields"}) as unknown as TypedDocumentString<StudioPaintFieldsFragment, unknown>;
+export const AccountEditorFieldsFragmentDoc = new TypedDocumentString(`
+    fragment AccountEditorFields on AccountEditor {
+  account {
+    id
+    displayName
+    avatar
+  }
+  permissions
+  allSets
+  setIds
+  grantedBy {
+    id
+    displayName
+  }
+  grantedAt
+}
+    `, {"fragmentName":"AccountEditorFields"}) as unknown as TypedDocumentString<AccountEditorFieldsFragment, unknown>;
 export const EmoteFieldsFragmentDoc = new TypedDocumentString(`
     fragment EmoteFields on Emote {
   id
@@ -4982,74 +4999,6 @@ export const EmoteFieldsFragmentDoc = new TypedDocumentString(`
   }
 }
     `, {"fragmentName":"EmoteFields"}) as unknown as TypedDocumentString<EmoteFieldsFragment, unknown>;
-export const SetFieldsFragmentDoc = new TypedDocumentString(`
-    fragment SetFields on EmoteSet {
-  id
-  name
-  kind
-  visibility
-  capacity
-  owner {
-    id
-    displayName
-    avatar
-  }
-  emotes {
-    name
-    zeroWidth
-    addedAt
-    emote {
-      ...EmoteFields
-    }
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`, {"fragmentName":"SetFields"}) as unknown as TypedDocumentString<SetFieldsFragment, unknown>;
-export const AccountEditorFieldsFragmentDoc = new TypedDocumentString(`
-    fragment AccountEditorFields on AccountEditor {
-  account {
-    id
-    displayName
-    avatar
-  }
-  permissions
-  allSets
-  setIds
-  grantedBy {
-    id
-    displayName
-  }
-  grantedAt
-}
-    `, {"fragmentName":"AccountEditorFields"}) as unknown as TypedDocumentString<AccountEditorFieldsFragment, unknown>;
 export const ReportFieldsFragmentDoc = new TypedDocumentString(`
     fragment ReportFields on Report {
   id
@@ -5117,6 +5066,57 @@ export const RoleLimitFieldsFragmentDoc = new TypedDocumentString(`
   value
 }
     `, {"fragmentName":"RoleLimitFields"}) as unknown as TypedDocumentString<RoleLimitFieldsFragment, unknown>;
+export const SetFieldsFragmentDoc = new TypedDocumentString(`
+    fragment SetFields on EmoteSet {
+  id
+  name
+  kind
+  visibility
+  capacity
+  owner {
+    id
+    displayName
+    avatar
+  }
+  emotes {
+    name
+    zeroWidth
+    addedAt
+    emote {
+      ...EmoteFields
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`, {"fragmentName":"SetFields"}) as unknown as TypedDocumentString<SetFieldsFragment, unknown>;
 export const CosmeticImageFieldsFragmentDoc = new TypedDocumentString(`
     fragment CosmeticImageFields on CosmeticImage {
   id
@@ -5314,27 +5314,6 @@ export const CodeBatchFieldsFragmentDoc = new TypedDocumentString(`
   createdAt
 }
     `, {"fragmentName":"CodeBatchFields"}) as unknown as TypedDocumentString<CodeBatchFieldsFragment, unknown>;
-export const GrantFieldsFragmentDoc = new TypedDocumentString(`
-    fragment GrantFields on EntitlementGrant {
-  kind
-  itemId
-  itemName
-  accountId
-  source
-  reason
-  grantedBy
-  grantedAt
-  orderId
-  orderName
-  orderStatus
-  codeBatchId
-  codeBatchName
-  revokedAt
-  revokedBy
-  revokeReason
-  active
-}
-    `, {"fragmentName":"GrantFields"}) as unknown as TypedDocumentString<GrantFieldsFragment, unknown>;
 export const AnnouncementFieldsFragmentDoc = new TypedDocumentString(`
     fragment AnnouncementFields on Announcement {
   id
@@ -5363,6 +5342,27 @@ export const AnnouncementFieldsFragmentDoc = new TypedDocumentString(`
   }
 }
     `, {"fragmentName":"AnnouncementFields"}) as unknown as TypedDocumentString<AnnouncementFieldsFragment, unknown>;
+export const GrantFieldsFragmentDoc = new TypedDocumentString(`
+    fragment GrantFields on EntitlementGrant {
+  kind
+  itemId
+  itemName
+  accountId
+  source
+  reason
+  grantedBy
+  grantedAt
+  orderId
+  orderName
+  orderStatus
+  codeBatchId
+  codeBatchName
+  revokedAt
+  revokedBy
+  revokeReason
+  active
+}
+    `, {"fragmentName":"GrantFields"}) as unknown as TypedDocumentString<GrantFieldsFragment, unknown>;
 export const PersonCountFieldsFragmentDoc = new TypedDocumentString(`
     fragment PersonCountFields on PersonCount {
   account {
@@ -5526,726 +5526,6 @@ export const StudioCosmeticImageDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<StudioCosmeticImageQuery, StudioCosmeticImageQueryVariables>;
-export const SearchDocument = new TypedDocumentString(`
-    query Search($query: String!, $animated: Boolean, $page: Int, $perPage: Int, $sort: EmoteSort, $flags: [EmoteFlag!], $tags: [String!], $exact: Boolean, $window: TrendingWindow) {
-  searchEmotes(
-    query: $query
-    animated: $animated
-    page: $page
-    perPage: $perPage
-    sort: $sort
-    flags: $flags
-    tags: $tags
-    exact: $exact
-    window: $window
-  ) {
-    total
-    page
-    perPage
-    items {
-      ...EmoteFields
-    }
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<SearchQuery, SearchQueryVariables>;
-export const FindPeopleDocument = new TypedDocumentString(`
-    query FindPeople($query: String!, $page: Int, $perPage: Int) {
-  searchAccounts(query: $query, page: $page, perPage: $perPage) {
-    total
-    page
-    perPage
-    items {
-      account {
-        id
-        displayName
-        avatar
-      }
-      identities {
-        platform
-        login
-        displayName
-      }
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<FindPeopleQuery, FindPeopleQueryVariables>;
-export const EmoteDocument = new TypedDocumentString(`
-    query Emote($id: String!) {
-  emote(id: $id) {
-    ...EmoteFields
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<EmoteQuery, EmoteQueryVariables>;
-export const EmoteTrendingDocument = new TypedDocumentString(`
-    query EmoteTrending($id: String!, $window: TrendingWindow) {
-  emoteTrending(id: $id, window: $window) {
-    rank
-    channels
-    window
-  }
-}
-    `) as unknown as TypedDocumentString<EmoteTrendingQuery, EmoteTrendingQueryVariables>;
-export const ChannelDocument = new TypedDocumentString(`
-    query Channel($platform: Platform!, $login: String!) {
-  channelByLogin(platform: $platform, login: $login) {
-    platform
-    platformChannelId
-    login
-    activeSetId
-    allowPersonalEmotes
-    account {
-      id
-      displayName
-      avatar
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<ChannelQuery, ChannelQueryVariables>;
-export const PublicSetDocument = new TypedDocumentString(`
-    query PublicSet($id: String!) {
-  set(id: $id) {
-    id
-    name
-    kind
-    visibility
-    capacity
-    slotsUsed
-    createdAt
-    owner {
-      id
-      displayName
-      avatar
-    }
-    emotes {
-      name
-      zeroWidth
-      addedAt
-      emote {
-        ...EmoteFields
-      }
-    }
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<PublicSetQuery, PublicSetQueryVariables>;
-export const SetEditorsDocument = new TypedDocumentString(`
-    query SetEditors($id: String!) {
-  setEditors(setId: $id) {
-    id
-    displayName
-    avatar
-  }
-}
-    `) as unknown as TypedDocumentString<SetEditorsQuery, SetEditorsQueryVariables>;
-export const CloneSetDocument = new TypedDocumentString(`
-    mutation CloneSet($id: String!, $name: String, $visibility: SetVisibility) {
-  cloneSet(id: $id, name: $name, visibility: $visibility) {
-    copied
-    skipped
-    set {
-      id
-      name
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<CloneSetMutation, CloneSetMutationVariables>;
-export const MeDocument = new TypedDocumentString(`
-    query Me {
-  me {
-    id
-    createdAt
-    permissions
-    displayPlatform
-    identities {
-      platform
-      platformUserId
-      login
-      displayName
-      avatar
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<MeQuery, MeQueryVariables>;
-export const MyEmotesDocument = new TypedDocumentString(`
-    query MyEmotes($page: Int, $perPage: Int) {
-  myEmotes(page: $page, perPage: $perPage) {
-    total
-    items {
-      ...EmoteFields
-    }
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<MyEmotesQuery, MyEmotesQueryVariables>;
-export const UpdateEmoteDocument = new TypedDocumentString(`
-    mutation UpdateEmote($id: String!, $input: UpdateEmoteInput!) {
-  updateEmote(id: $id, input: $input) {
-    ...EmoteFields
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<UpdateEmoteMutation, UpdateEmoteMutationVariables>;
-export const DeleteEmoteDocument = new TypedDocumentString(`
-    mutation DeleteEmote($id: String!) {
-  deleteEmote(id: $id)
-}
-    `) as unknown as TypedDocumentString<DeleteEmoteMutation, DeleteEmoteMutationVariables>;
-export const MySetsDocument = new TypedDocumentString(`
-    query MySets {
-  mySets {
-    ...SetFields
-  }
-  editorSets {
-    ...SetFields
-  }
-  editorOf {
-    account {
-      id
-      displayName
-    }
-    permissions
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}
-fragment SetFields on EmoteSet {
-  id
-  name
-  kind
-  visibility
-  capacity
-  owner {
-    id
-    displayName
-    avatar
-  }
-  emotes {
-    name
-    zeroWidth
-    addedAt
-    emote {
-      ...EmoteFields
-    }
-  }
-}`) as unknown as TypedDocumentString<MySetsQuery, MySetsQueryVariables>;
-export const EditSetDocument = new TypedDocumentString(`
-    query EditSet($id: String!) {
-  set(id: $id) {
-    id
-    name
-    kind
-    visibility
-    capacity
-    slotsUsed
-    owner {
-      id
-      displayName
-      avatar
-    }
-  }
-  setEditors(setId: $id) {
-    id
-    displayName
-    avatar
-  }
-  editorOf {
-    account {
-      id
-    }
-    permissions
-    allSets
-    setIds
-  }
-  myChannels {
-    platform
-    platformChannelId
-    login
-    activeSetId
-    account {
-      id
-    }
-  }
-  editorChannels {
-    platform
-    platformChannelId
-    login
-    activeSetId
-    account {
-      id
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<EditSetQuery, EditSetQueryVariables>;
-export const SetEmotesDocument = new TypedDocumentString(`
-    query SetEmotes($id: String!, $query: String, $page: Int, $perPage: Int) {
-  setEmotes(id: $id, query: $query, page: $page, perPage: $perPage) {
-    total
-    items {
-      name
-      zeroWidth
-      addedAt
-      emote {
-        ...EmoteFields
-      }
-    }
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<SetEmotesQuery, SetEmotesQueryVariables>;
-export const SetMembersDocument = new TypedDocumentString(`
-    query SetMembers($id: String!, $page: Int, $perPage: Int) {
-  setEmotes(id: $id, page: $page, perPage: $perPage) {
-    total
-    items {
-      name
-      emote {
-        id
-      }
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<SetMembersQuery, SetMembersQueryVariables>;
-export const CreateSetDocument = new TypedDocumentString(`
-    mutation CreateSet($input: CreateSetInput!) {
-  createSet(input: $input) {
-    id
-  }
-}
-    `) as unknown as TypedDocumentString<CreateSetMutation, CreateSetMutationVariables>;
-export const UpdateSetDocument = new TypedDocumentString(`
-    mutation UpdateSet($id: String!, $input: UpdateSetInput!) {
-  updateSet(id: $id, input: $input) {
-    id
-    name
-    visibility
-    capacity
-  }
-}
-    `) as unknown as TypedDocumentString<UpdateSetMutation, UpdateSetMutationVariables>;
-export const DeleteSetDocument = new TypedDocumentString(`
-    mutation DeleteSet($id: String!) {
-  deleteSet(id: $id)
-}
-    `) as unknown as TypedDocumentString<DeleteSetMutation, DeleteSetMutationVariables>;
-export const SetCapacityRangeDocument = new TypedDocumentString(`
-    query SetCapacityRange($id: String!) {
-  setCapacityRange(id: $id) {
-    min
-    max
-    ownerMax
-    used
-    staff
-  }
-}
-    `) as unknown as TypedDocumentString<SetCapacityRangeQuery, SetCapacityRangeQueryVariables>;
-export const SetMenuDocument = new TypedDocumentString(`
-    query SetMenu($id: String!) {
-  setCapacityRange(id: $id) {
-    min
-    max
-    ownerMax
-    used
-    staff
-  }
-  editorOf {
-    account {
-      id
-    }
-    permissions
-    allSets
-    setIds
-  }
-  myChannels {
-    platform
-    platformChannelId
-    login
-    activeSetId
-    account {
-      id
-    }
-  }
-  editorChannels {
-    platform
-    platformChannelId
-    login
-    activeSetId
-    account {
-      id
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<SetMenuQuery, SetMenuQueryVariables>;
-export const AddSetEmoteDocument = new TypedDocumentString(`
-    mutation AddSetEmote($setId: String!, $emoteId: String!, $input: AddSetEmoteInput) {
-  addSetEmote(setId: $setId, emoteId: $emoteId, input: $input) {
-    name
-  }
-}
-    `) as unknown as TypedDocumentString<AddSetEmoteMutation, AddSetEmoteMutationVariables>;
-export const UpdateSetEmoteDocument = new TypedDocumentString(`
-    mutation UpdateSetEmote($setId: String!, $emoteId: String!, $input: UpdateSetEmoteInput!) {
-  updateSetEmote(setId: $setId, emoteId: $emoteId, input: $input) {
-    name
-    zeroWidth
-  }
-}
-    `) as unknown as TypedDocumentString<UpdateSetEmoteMutation, UpdateSetEmoteMutationVariables>;
-export const RemoveSetEmoteDocument = new TypedDocumentString(`
-    mutation RemoveSetEmote($setId: String!, $emoteId: String!) {
-  removeSetEmote(setId: $setId, emoteId: $emoteId)
-}
-    `) as unknown as TypedDocumentString<RemoveSetEmoteMutation, RemoveSetEmoteMutationVariables>;
-export const RemoveSetEditorDocument = new TypedDocumentString(`
-    mutation RemoveSetEditor($setId: String!, $accountId: String!) {
-  removeSetEditor(setId: $setId, accountId: $accountId)
-}
-    `) as unknown as TypedDocumentString<RemoveSetEditorMutation, RemoveSetEditorMutationVariables>;
-export const MyChannelsDocument = new TypedDocumentString(`
-    query MyChannels {
-  myChannels {
-    platform
-    platformChannelId
-    login
-    activeSetId
-    allowPersonalEmotes
-    account {
-      id
-      displayName
-    }
-  }
-  mySets {
-    id
-    name
-    kind
-    owner {
-      id
-    }
-  }
-  editorChannels {
-    platform
-    platformChannelId
-    login
-    activeSetId
-    allowPersonalEmotes
-    account {
-      id
-      displayName
-    }
-  }
-  editorSets {
-    id
-    name
-    kind
-    owner {
-      id
-    }
-  }
-  editorOf {
-    account {
-      id
-    }
-    permissions
-  }
-}
-    `) as unknown as TypedDocumentString<MyChannelsQuery, MyChannelsQueryVariables>;
-export const UpdateChannelDocument = new TypedDocumentString(`
-    mutation UpdateChannel($platform: Platform!, $id: String!, $input: UpdateChannelSettingsInput!) {
-  updateChannelSettings(platform: $platform, id: $id, input: $input) {
-    activeSetId
-    allowPersonalEmotes
-  }
-}
-    `) as unknown as TypedDocumentString<UpdateChannelMutation, UpdateChannelMutationVariables>;
-export const EditorsDocument = new TypedDocumentString(`
-    query Editors {
-  accountEditors {
-    ...AccountEditorFields
-  }
-  editorOf {
-    account {
-      id
-      displayName
-      avatar
-    }
-    permissions
-    allSets
-    setIds
-    grantedAt
-  }
-  mySets {
-    id
-    name
-    kind
-    owner {
-      id
-    }
-  }
-}
-    fragment AccountEditorFields on AccountEditor {
-  account {
-    id
-    displayName
-    avatar
-  }
-  permissions
-  allSets
-  setIds
-  grantedBy {
-    id
-    displayName
-  }
-  grantedAt
-}`) as unknown as TypedDocumentString<EditorsQuery, EditorsQueryVariables>;
-export const AddAccountEditorDocument = new TypedDocumentString(`
-    mutation AddAccountEditor($input: AddAccountEditorInput!) {
-  addAccountEditor(input: $input) {
-    ...AccountEditorFields
-  }
-}
-    fragment AccountEditorFields on AccountEditor {
-  account {
-    id
-    displayName
-    avatar
-  }
-  permissions
-  allSets
-  setIds
-  grantedBy {
-    id
-    displayName
-  }
-  grantedAt
-}`) as unknown as TypedDocumentString<AddAccountEditorMutation, AddAccountEditorMutationVariables>;
-export const UpdateAccountEditorDocument = new TypedDocumentString(`
-    mutation UpdateAccountEditor($ownerId: String, $accountId: String!, $permissions: [EditorPermission!]!, $setIds: [String!]) {
-  updateAccountEditor(
-    ownerId: $ownerId
-    accountId: $accountId
-    permissions: $permissions
-    setIds: $setIds
-  ) {
-    ...AccountEditorFields
-  }
-}
-    fragment AccountEditorFields on AccountEditor {
-  account {
-    id
-    displayName
-    avatar
-  }
-  permissions
-  allSets
-  setIds
-  grantedBy {
-    id
-    displayName
-  }
-  grantedAt
-}`) as unknown as TypedDocumentString<UpdateAccountEditorMutation, UpdateAccountEditorMutationVariables>;
-export const RemoveAccountEditorDocument = new TypedDocumentString(`
-    mutation RemoveAccountEditor($ownerId: String, $accountId: String!) {
-  removeAccountEditor(ownerId: $ownerId, accountId: $accountId)
-}
-    `) as unknown as TypedDocumentString<RemoveAccountEditorMutation, RemoveAccountEditorMutationVariables>;
 export const SetDisplayPlatformDocument = new TypedDocumentString(`
     mutation SetDisplayPlatform($platform: Platform!) {
   setDisplayPlatform(platform: $platform) {
@@ -6348,283 +5628,130 @@ export const MyRolesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<MyRolesQuery, MyRolesQueryVariables>;
-export const AdminCountsDocument = new TypedDocumentString(`
-    query AdminCounts($review: Boolean!, $reports: Boolean!) {
-  reviewQueue(page: 1, perPage: 1) @include(if: $review) {
-    total
-  }
-  reportQueue(page: 1, perPage: 1) @include(if: $reports) {
-    total
-  }
-  globalSet {
+export const MeDocument = new TypedDocumentString(`
+    query Me {
+  me {
     id
-  }
-}
-    `) as unknown as TypedDocumentString<AdminCountsQuery, AdminCountsQueryVariables>;
-export const ReviewQueueDocument = new TypedDocumentString(`
-    query ReviewQueue($page: Int, $perPage: Int, $filter: ReviewQueueFilter) {
-  reviewQueue(page: $page, perPage: $perPage, filter: $filter) {
-    total
-    counts {
-      public
-      limited
-    }
-    items {
-      ...EmoteFields
+    createdAt
+    permissions
+    displayPlatform
+    identities {
+      platform
+      platformUserId
+      login
+      displayName
+      avatar
     }
   }
 }
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<ReviewQueueQuery, ReviewQueueQueryVariables>;
-export const ApproveDocument = new TypedDocumentString(`
-    mutation Approve($id: String!, $visibility: EmoteVisibility) {
-  approveEmote(id: $id, visibility: $visibility) {
-    id
-    state
-    visibility
-  }
-}
-    `) as unknown as TypedDocumentString<ApproveMutation, ApproveMutationVariables>;
-export const EmoteHistoryDocument = new TypedDocumentString(`
-    query EmoteHistory($emoteId: String!) {
-  emoteHistory(emoteId: $emoteId) {
-    id
-    actorId
-    action
-    before
-    after
-    createdAt
-  }
-}
-    `) as unknown as TypedDocumentString<EmoteHistoryQuery, EmoteHistoryQueryVariables>;
-export const EmoteNotesDocument = new TypedDocumentString(`
-    query EmoteNotes($emoteId: String!) {
-  emoteNotes(emoteId: $emoteId) {
-    id
-    authorId
-    body
-    createdAt
-  }
-}
-    `) as unknown as TypedDocumentString<EmoteNotesQuery, EmoteNotesQueryVariables>;
-export const AddEmoteNoteDocument = new TypedDocumentString(`
-    mutation AddEmoteNote($emoteId: String!, $body: String!) {
-  addEmoteNote(emoteId: $emoteId, body: $body) {
-    id
-    authorId
-    body
-    createdAt
-  }
-}
-    `) as unknown as TypedDocumentString<AddEmoteNoteMutation, AddEmoteNoteMutationVariables>;
-export const DeleteEmoteNoteDocument = new TypedDocumentString(`
-    mutation DeleteEmoteNote($id: String!) {
-  deleteEmoteNote(id: $id)
-}
-    `) as unknown as TypedDocumentString<DeleteEmoteNoteMutation, DeleteEmoteNoteMutationVariables>;
-export const RejectDocument = new TypedDocumentString(`
-    mutation Reject($id: String!, $reason: String!) {
-  rejectEmote(id: $id, reason: $reason) {
-    id
-    state
-  }
-}
-    `) as unknown as TypedDocumentString<RejectMutation, RejectMutationVariables>;
-export const ReportQueueDocument = new TypedDocumentString(`
-    query ReportQueue($page: Int, $perPage: Int) {
-  reportQueue(page: $page, perPage: $perPage) {
-    total
-    items {
+    `) as unknown as TypedDocumentString<MeQuery, MeQueryVariables>;
+export const AccountActivityDocument = new TypedDocumentString(`
+    query AccountActivity($accountId: String!, $before: String, $limit: Int, $filter: ActivityFilter) {
+  accountActivityPage(
+    accountId: $accountId
+    before: $before
+    limit: $limit
+    filter: $filter
+  ) {
+    entries {
       id
-      reason
-      reporterId
-      state
-      createdAt
-      emote {
-        ...EmoteFields
+      kind
+      actor {
+        id
+        displayName
+        avatar
       }
+      editor {
+        id
+        displayName
+        avatar
+      }
+      set {
+        id
+        name
+      }
+      emote {
+        id
+        name
+        host
+        files {
+          name
+          width
+          height
+          isStatic
+        }
+      }
+      fromName
+      toName
+      badge {
+        fromId
+        fromName
+        toId
+        toName
+      }
+      paint {
+        fromId
+        fromName
+        toId
+        toName
+      }
+      createdAt
     }
+    next
   }
 }
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<ReportQueueQuery, ReportQueueQueryVariables>;
-export const ResolveReportDocument = new TypedDocumentString(`
-    mutation ResolveReport($id: String!, $action: ReportAction!, $note: String) {
-  resolveReport(id: $id, action: $action, note: $note) {
-    id
-    state
-  }
-}
-    `) as unknown as TypedDocumentString<ResolveReportMutation, ResolveReportMutationVariables>;
-export const RolesDocument = new TypedDocumentString(`
-    query Roles {
-  roles {
-    ...RoleFields
-  }
-  permissions
-}
-    fragment RoleFields on Role {
-  id
-  name
-  description
-  position
-  permissions
-  denies
-  public
-  invisible
-  builtIn
-  editable
-  assignable
-}`) as unknown as TypedDocumentString<RolesQuery, RolesQueryVariables>;
-export const LimitDefaultsDocument = new TypedDocumentString(`
-    query LimitDefaults {
-  limitDefaults {
-    ...RoleLimitFields
+    `) as unknown as TypedDocumentString<AccountActivityQuery, AccountActivityQueryVariables>;
+export const EmoteActivityDocument = new TypedDocumentString(`
+    query EmoteActivity($emoteId: String!, $before: String, $limit: Int, $actorId: String) {
+  emoteActivityPage(
+    emoteId: $emoteId
+    before: $before
+    limit: $limit
+    actorId: $actorId
+  ) {
+    entries {
+      id
+      kind
+      actor {
+        id
+        displayName
+        avatar
+      }
+      set {
+        id
+        name
+      }
+      emote {
+        id
+        name
+        host
+        files {
+          name
+          width
+          height
+          isStatic
+        }
+      }
+      fromName
+      toName
+      badge {
+        fromId
+        fromName
+        toId
+        toName
+      }
+      paint {
+        fromId
+        fromName
+        toId
+        toName
+      }
+      createdAt
+    }
+    next
   }
 }
-    fragment RoleLimitFields on RoleLimit {
-  key
-  group
-  default
-  windowSeconds
-  value
-}`) as unknown as TypedDocumentString<LimitDefaultsQuery, LimitDefaultsQueryVariables>;
-export const RoleLimitsDocument = new TypedDocumentString(`
-    query RoleLimits($id: String!) {
-  roleLimits(id: $id) {
-    ...RoleLimitFields
-  }
-}
-    fragment RoleLimitFields on RoleLimit {
-  key
-  group
-  default
-  windowSeconds
-  value
-}`) as unknown as TypedDocumentString<RoleLimitsQuery, RoleLimitsQueryVariables>;
-export const SetRoleLimitsDocument = new TypedDocumentString(`
-    mutation SetRoleLimits($id: String!, $limits: [RoleLimitInput!]!) {
-  setRoleLimits(id: $id, limits: $limits) {
-    ...RoleLimitFields
-  }
-}
-    fragment RoleLimitFields on RoleLimit {
-  key
-  group
-  default
-  windowSeconds
-  value
-}`) as unknown as TypedDocumentString<SetRoleLimitsMutation, SetRoleLimitsMutationVariables>;
-export const UploadQuotaDocument = new TypedDocumentString(`
-    query UploadQuota($ownerId: String) {
-  uploadQuota(ownerId: $ownerId) {
-    accountId
-    pending
-    pendingMax
-    uploadsThisHour
-    uploadsPerHour
-  }
-}
-    `) as unknown as TypedDocumentString<UploadQuotaQuery, UploadQuotaQueryVariables>;
-export const CreateRoleDocument = new TypedDocumentString(`
-    mutation CreateRole($input: CreateRoleInput!) {
-  createRole(input: $input) {
-    ...RoleFields
-  }
-}
-    fragment RoleFields on Role {
-  id
-  name
-  description
-  position
-  permissions
-  denies
-  public
-  invisible
-  builtIn
-  editable
-  assignable
-}`) as unknown as TypedDocumentString<CreateRoleMutation, CreateRoleMutationVariables>;
-export const UpdateRoleDocument = new TypedDocumentString(`
-    mutation UpdateRole($id: String!, $input: UpdateRoleInput!) {
-  updateRole(id: $id, input: $input) {
-    ...RoleFields
-  }
-}
-    fragment RoleFields on Role {
-  id
-  name
-  description
-  position
-  permissions
-  denies
-  public
-  invisible
-  builtIn
-  editable
-  assignable
-}`) as unknown as TypedDocumentString<UpdateRoleMutation, UpdateRoleMutationVariables>;
-export const DeleteRoleDocument = new TypedDocumentString(`
-    mutation DeleteRole($id: String!) {
-  deleteRole(id: $id)
-}
-    `) as unknown as TypedDocumentString<DeleteRoleMutation, DeleteRoleMutationVariables>;
+    `) as unknown as TypedDocumentString<EmoteActivityQuery, EmoteActivityQueryVariables>;
 export const UserDocument = new TypedDocumentString(`
     query User($platform: Platform!, $login: String!) {
   channelByLogin(platform: $platform, login: $login) {
@@ -6769,239 +5896,14 @@ export const AuditDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<AuditQuery, AuditQueryVariables>;
-export const ReportEmoteDocument = new TypedDocumentString(`
-    mutation ReportEmote($id: String!, $reason: String!) {
-  reportEmote(id: $id, reason: $reason) {
-    id
-  }
-}
-    `) as unknown as TypedDocumentString<ReportEmoteMutation, ReportEmoteMutationVariables>;
-export const MySetNamesDocument = new TypedDocumentString(`
-    query MySetNames {
-  mySets {
-    id
-    name
-    kind
-    emotes {
-      emote {
-        id
-      }
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<MySetNamesQuery, MySetNamesQueryVariables>;
-export const SearchByOwnerDocument = new TypedDocumentString(`
-    query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {
-  searchEmotes(
-    query: ""
-    owner: $owner
-    page: $page
-    perPage: $perPage
-    sort: $sort
-  ) {
-    total
-    page
-    perPage
-    items {
-      ...EmoteFields
-    }
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<SearchByOwnerQuery, SearchByOwnerQueryVariables>;
-export const AdminAccountDocument = new TypedDocumentString(`
-    query AdminAccount($accountId: String!) {
-  adminAccount(accountId: $accountId) {
-    id
-    displayName
-    avatar
-    createdAt
-    uploadsBlocked
-    ticketsBlocked
-    blocked
-    uploadsBlockedUntil
-    ticketsBlockedUntil
-    blockedUntil
-    identities {
-      platform
-      platformUserId
-      login
-      displayName
-      avatar
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<AdminAccountQuery, AdminAccountQueryVariables>;
-export const TransferEmoteDocument = new TypedDocumentString(`
-    mutation TransferEmote($id: String!, $toAccountId: String!) {
-  transferEmote(id: $id, toAccountId: $toAccountId) {
-    ...EmoteFields
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<TransferEmoteMutation, TransferEmoteMutationVariables>;
-export const AccountEmotesDocument = new TypedDocumentString(`
-    query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {
-  accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {
-    total
-    items {
-      ...EmoteFields
-    }
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<AccountEmotesQuery, AccountEmotesQueryVariables>;
-export const AccountReportsDocument = new TypedDocumentString(`
-    query AccountReports($accountId: String!) {
-  accountReports(accountId: $accountId) {
-    about {
-      ...ReportFields
-    }
-    by {
-      ...ReportFields
-    }
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}
-fragment ReportFields on Report {
-  id
-  reason
-  reporterId
-  state
-  resolution
-  createdAt
-  resolvedAt
-  emote {
-    ...EmoteFields
-  }
-}`) as unknown as TypedDocumentString<AccountReportsQuery, AccountReportsQueryVariables>;
-export const PublicAccountDocument = new TypedDocumentString(`
-    query PublicAccount($id: String!) {
-  account(id: $id) {
-    id
-    displayName
-    avatar
-  }
-}
-    `) as unknown as TypedDocumentString<PublicAccountQuery, PublicAccountQueryVariables>;
-export const EmoteChannelsDocument = new TypedDocumentString(`
-    query EmoteChannels($id: String!, $limit: Int, $offset: Int) {
-  emoteChannels(id: $id, limit: $limit, offset: $offset) {
+export const ChannelDocument = new TypedDocumentString(`
+    query Channel($platform: Platform!, $login: String!) {
+  channelByLogin(platform: $platform, login: $login) {
     platform
+    platformChannelId
     login
+    activeSetId
+    allowPersonalEmotes
     account {
       id
       displayName
@@ -7009,7 +5911,7 @@ export const EmoteChannelsDocument = new TypedDocumentString(`
     }
   }
 }
-    `) as unknown as TypedDocumentString<EmoteChannelsQuery, EmoteChannelsQueryVariables>;
+    `) as unknown as TypedDocumentString<ChannelQuery, ChannelQueryVariables>;
 export const CosmeticsDocument = new TypedDocumentString(`
     query Cosmetics {
   cosmetics {
@@ -7391,6 +6293,721 @@ export const RevokeCosmeticDocument = new TypedDocumentString(`
   )
 }
     `) as unknown as TypedDocumentString<RevokeCosmeticMutation, RevokeCosmeticMutationVariables>;
+export const EditorsDocument = new TypedDocumentString(`
+    query Editors {
+  accountEditors {
+    ...AccountEditorFields
+  }
+  editorOf {
+    account {
+      id
+      displayName
+      avatar
+    }
+    permissions
+    allSets
+    setIds
+    grantedAt
+  }
+  mySets {
+    id
+    name
+    kind
+    owner {
+      id
+    }
+  }
+}
+    fragment AccountEditorFields on AccountEditor {
+  account {
+    id
+    displayName
+    avatar
+  }
+  permissions
+  allSets
+  setIds
+  grantedBy {
+    id
+    displayName
+  }
+  grantedAt
+}`) as unknown as TypedDocumentString<EditorsQuery, EditorsQueryVariables>;
+export const AddAccountEditorDocument = new TypedDocumentString(`
+    mutation AddAccountEditor($input: AddAccountEditorInput!) {
+  addAccountEditor(input: $input) {
+    ...AccountEditorFields
+  }
+}
+    fragment AccountEditorFields on AccountEditor {
+  account {
+    id
+    displayName
+    avatar
+  }
+  permissions
+  allSets
+  setIds
+  grantedBy {
+    id
+    displayName
+  }
+  grantedAt
+}`) as unknown as TypedDocumentString<AddAccountEditorMutation, AddAccountEditorMutationVariables>;
+export const UpdateAccountEditorDocument = new TypedDocumentString(`
+    mutation UpdateAccountEditor($ownerId: String, $accountId: String!, $permissions: [EditorPermission!]!, $setIds: [String!]) {
+  updateAccountEditor(
+    ownerId: $ownerId
+    accountId: $accountId
+    permissions: $permissions
+    setIds: $setIds
+  ) {
+    ...AccountEditorFields
+  }
+}
+    fragment AccountEditorFields on AccountEditor {
+  account {
+    id
+    displayName
+    avatar
+  }
+  permissions
+  allSets
+  setIds
+  grantedBy {
+    id
+    displayName
+  }
+  grantedAt
+}`) as unknown as TypedDocumentString<UpdateAccountEditorMutation, UpdateAccountEditorMutationVariables>;
+export const RemoveAccountEditorDocument = new TypedDocumentString(`
+    mutation RemoveAccountEditor($ownerId: String, $accountId: String!) {
+  removeAccountEditor(ownerId: $ownerId, accountId: $accountId)
+}
+    `) as unknown as TypedDocumentString<RemoveAccountEditorMutation, RemoveAccountEditorMutationVariables>;
+export const ReportEmoteDocument = new TypedDocumentString(`
+    mutation ReportEmote($id: String!, $reason: String!) {
+  reportEmote(id: $id, reason: $reason) {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<ReportEmoteMutation, ReportEmoteMutationVariables>;
+export const MySetNamesDocument = new TypedDocumentString(`
+    query MySetNames {
+  mySets {
+    id
+    name
+    kind
+    emotes {
+      emote {
+        id
+      }
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<MySetNamesQuery, MySetNamesQueryVariables>;
+export const SearchByOwnerDocument = new TypedDocumentString(`
+    query SearchByOwner($owner: String!, $page: Int, $perPage: Int, $sort: EmoteSort) {
+  searchEmotes(
+    query: ""
+    owner: $owner
+    page: $page
+    perPage: $perPage
+    sort: $sort
+  ) {
+    total
+    page
+    perPage
+    items {
+      ...EmoteFields
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<SearchByOwnerQuery, SearchByOwnerQueryVariables>;
+export const AdminAccountDocument = new TypedDocumentString(`
+    query AdminAccount($accountId: String!) {
+  adminAccount(accountId: $accountId) {
+    id
+    displayName
+    avatar
+    createdAt
+    uploadsBlocked
+    ticketsBlocked
+    blocked
+    uploadsBlockedUntil
+    ticketsBlockedUntil
+    blockedUntil
+    identities {
+      platform
+      platformUserId
+      login
+      displayName
+      avatar
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<AdminAccountQuery, AdminAccountQueryVariables>;
+export const TransferEmoteDocument = new TypedDocumentString(`
+    mutation TransferEmote($id: String!, $toAccountId: String!) {
+  transferEmote(id: $id, toAccountId: $toAccountId) {
+    ...EmoteFields
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<TransferEmoteMutation, TransferEmoteMutationVariables>;
+export const AccountEmotesDocument = new TypedDocumentString(`
+    query AccountEmotes($accountId: String!, $page: Int, $perPage: Int) {
+  accountEmotes(accountId: $accountId, page: $page, perPage: $perPage) {
+    total
+    items {
+      ...EmoteFields
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<AccountEmotesQuery, AccountEmotesQueryVariables>;
+export const AccountReportsDocument = new TypedDocumentString(`
+    query AccountReports($accountId: String!) {
+  accountReports(accountId: $accountId) {
+    about {
+      ...ReportFields
+    }
+    by {
+      ...ReportFields
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}
+fragment ReportFields on Report {
+  id
+  reason
+  reporterId
+  state
+  resolution
+  createdAt
+  resolvedAt
+  emote {
+    ...EmoteFields
+  }
+}`) as unknown as TypedDocumentString<AccountReportsQuery, AccountReportsQueryVariables>;
+export const PublicAccountDocument = new TypedDocumentString(`
+    query PublicAccount($id: String!) {
+  account(id: $id) {
+    id
+    displayName
+    avatar
+  }
+}
+    `) as unknown as TypedDocumentString<PublicAccountQuery, PublicAccountQueryVariables>;
+export const EmoteChannelsDocument = new TypedDocumentString(`
+    query EmoteChannels($id: String!, $limit: Int, $offset: Int) {
+  emoteChannels(id: $id, limit: $limit, offset: $offset) {
+    platform
+    login
+    account {
+      id
+      displayName
+      avatar
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<EmoteChannelsQuery, EmoteChannelsQueryVariables>;
+export const SearchDocument = new TypedDocumentString(`
+    query Search($query: String!, $animated: Boolean, $page: Int, $perPage: Int, $sort: EmoteSort, $flags: [EmoteFlag!], $tags: [String!], $exact: Boolean, $window: TrendingWindow) {
+  searchEmotes(
+    query: $query
+    animated: $animated
+    page: $page
+    perPage: $perPage
+    sort: $sort
+    flags: $flags
+    tags: $tags
+    exact: $exact
+    window: $window
+  ) {
+    total
+    page
+    perPage
+    items {
+      ...EmoteFields
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<SearchQuery, SearchQueryVariables>;
+export const FindPeopleDocument = new TypedDocumentString(`
+    query FindPeople($query: String!, $page: Int, $perPage: Int) {
+  searchAccounts(query: $query, page: $page, perPage: $perPage) {
+    total
+    page
+    perPage
+    items {
+      account {
+        id
+        displayName
+        avatar
+      }
+      identities {
+        platform
+        login
+        displayName
+      }
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<FindPeopleQuery, FindPeopleQueryVariables>;
+export const EmoteDocument = new TypedDocumentString(`
+    query Emote($id: String!) {
+  emote(id: $id) {
+    ...EmoteFields
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<EmoteQuery, EmoteQueryVariables>;
+export const EmoteTrendingDocument = new TypedDocumentString(`
+    query EmoteTrending($id: String!, $window: TrendingWindow) {
+  emoteTrending(id: $id, window: $window) {
+    rank
+    channels
+    window
+  }
+}
+    `) as unknown as TypedDocumentString<EmoteTrendingQuery, EmoteTrendingQueryVariables>;
+export const MyChannelsDocument = new TypedDocumentString(`
+    query MyChannels {
+  myChannels {
+    platform
+    platformChannelId
+    login
+    activeSetId
+    allowPersonalEmotes
+    account {
+      id
+      displayName
+    }
+  }
+  mySets {
+    id
+    name
+    kind
+    owner {
+      id
+    }
+  }
+  editorChannels {
+    platform
+    platformChannelId
+    login
+    activeSetId
+    allowPersonalEmotes
+    account {
+      id
+      displayName
+    }
+  }
+  editorSets {
+    id
+    name
+    kind
+    owner {
+      id
+    }
+  }
+  editorOf {
+    account {
+      id
+    }
+    permissions
+  }
+}
+    `) as unknown as TypedDocumentString<MyChannelsQuery, MyChannelsQueryVariables>;
+export const UpdateChannelDocument = new TypedDocumentString(`
+    mutation UpdateChannel($platform: Platform!, $id: String!, $input: UpdateChannelSettingsInput!) {
+  updateChannelSettings(platform: $platform, id: $id, input: $input) {
+    activeSetId
+    allowPersonalEmotes
+  }
+}
+    `) as unknown as TypedDocumentString<UpdateChannelMutation, UpdateChannelMutationVariables>;
+export const MyEmotesDocument = new TypedDocumentString(`
+    query MyEmotes($page: Int, $perPage: Int) {
+  myEmotes(page: $page, perPage: $perPage) {
+    total
+    items {
+      ...EmoteFields
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<MyEmotesQuery, MyEmotesQueryVariables>;
+export const UpdateEmoteDocument = new TypedDocumentString(`
+    mutation UpdateEmote($id: String!, $input: UpdateEmoteInput!) {
+  updateEmote(id: $id, input: $input) {
+    ...EmoteFields
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<UpdateEmoteMutation, UpdateEmoteMutationVariables>;
+export const DeleteEmoteDocument = new TypedDocumentString(`
+    mutation DeleteEmote($id: String!) {
+  deleteEmote(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeleteEmoteMutation, DeleteEmoteMutationVariables>;
+export const PersonalListsDocument = new TypedDocumentString(`
+    query PersonalLists {
+  hiddenEmotes {
+    emoteId
+  }
+  hiddenCreators {
+    accountId
+  }
+  favouriteEmoteIds
+}
+    `) as unknown as TypedDocumentString<PersonalListsQuery, PersonalListsQueryVariables>;
+export const HiddenListsDocument = new TypedDocumentString(`
+    query HiddenLists {
+  hiddenEmotes {
+    emoteId
+    hiddenAt
+    emote {
+      ...EmoteFields
+    }
+  }
+  hiddenCreators {
+    accountId
+    hiddenAt
+    account {
+      id
+      displayName
+      avatar
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<HiddenListsQuery, HiddenListsQueryVariables>;
+export const MyFavouritesDocument = new TypedDocumentString(`
+    query MyFavourites($query: String, $page: Int, $perPage: Int) {
+  myFavourites(query: $query, page: $page, perPage: $perPage) {
+    total
+    items {
+      ...EmoteFields
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<MyFavouritesQuery, MyFavouritesQueryVariables>;
+export const HideEmoteDocument = new TypedDocumentString(`
+    mutation HideEmote($id: String!) {
+  hideEmote(id: $id)
+}
+    `) as unknown as TypedDocumentString<HideEmoteMutation, HideEmoteMutationVariables>;
+export const UnhideEmoteDocument = new TypedDocumentString(`
+    mutation UnhideEmote($id: String!) {
+  unhideEmote(id: $id)
+}
+    `) as unknown as TypedDocumentString<UnhideEmoteMutation, UnhideEmoteMutationVariables>;
+export const HideCreatorDocument = new TypedDocumentString(`
+    mutation HideCreator($accountId: String!) {
+  hideCreator(accountId: $accountId)
+}
+    `) as unknown as TypedDocumentString<HideCreatorMutation, HideCreatorMutationVariables>;
+export const UnhideCreatorDocument = new TypedDocumentString(`
+    mutation UnhideCreator($accountId: String!) {
+  unhideCreator(accountId: $accountId)
+}
+    `) as unknown as TypedDocumentString<UnhideCreatorMutation, UnhideCreatorMutationVariables>;
+export const FavouriteEmoteDocument = new TypedDocumentString(`
+    mutation FavouriteEmote($id: String!) {
+  favouriteEmote(id: $id)
+}
+    `) as unknown as TypedDocumentString<FavouriteEmoteMutation, FavouriteEmoteMutationVariables>;
+export const UnfavouriteEmoteDocument = new TypedDocumentString(`
+    mutation UnfavouriteEmote($id: String!) {
+  unfavouriteEmote(id: $id)
+}
+    `) as unknown as TypedDocumentString<UnfavouriteEmoteMutation, UnfavouriteEmoteMutationVariables>;
 export const AccountRolesDocument = new TypedDocumentString(`
     query AccountRoles($accountId: String!) {
   accountRoles(accountId: $accountId) {
@@ -7598,113 +7215,843 @@ fragment SetFields on EmoteSet {
     }
   }
 }`) as unknown as TypedDocumentString<ProfileEditedQuery, ProfileEditedQueryVariables>;
-export const AccountActivityDocument = new TypedDocumentString(`
-    query AccountActivity($accountId: String!, $before: String, $limit: Int, $filter: ActivityFilter) {
-  accountActivityPage(
-    accountId: $accountId
-    before: $before
-    limit: $limit
-    filter: $filter
-  ) {
-    entries {
+export const ReportQueueDocument = new TypedDocumentString(`
+    query ReportQueue($page: Int, $perPage: Int) {
+  reportQueue(page: $page, perPage: $perPage) {
+    total
+    items {
       id
-      kind
-      actor {
-        id
-        displayName
-        avatar
-      }
-      editor {
-        id
-        displayName
-        avatar
-      }
-      set {
-        id
-        name
-      }
-      emote {
-        id
-        name
-        host
-        files {
-          name
-          width
-          height
-          isStatic
-        }
-      }
-      fromName
-      toName
-      badge {
-        fromId
-        fromName
-        toId
-        toName
-      }
-      paint {
-        fromId
-        fromName
-        toId
-        toName
-      }
+      reason
+      reporterId
+      state
       createdAt
+      emote {
+        ...EmoteFields
+      }
     }
-    next
   }
 }
-    `) as unknown as TypedDocumentString<AccountActivityQuery, AccountActivityQueryVariables>;
-export const EmoteActivityDocument = new TypedDocumentString(`
-    query EmoteActivity($emoteId: String!, $before: String, $limit: Int, $actorId: String) {
-  emoteActivityPage(
-    emoteId: $emoteId
-    before: $before
-    limit: $limit
-    actorId: $actorId
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<ReportQueueQuery, ReportQueueQueryVariables>;
+export const ResolveReportDocument = new TypedDocumentString(`
+    mutation ResolveReport($id: String!, $action: ReportAction!, $note: String) {
+  resolveReport(id: $id, action: $action, note: $note) {
+    id
+    state
+  }
+}
+    `) as unknown as TypedDocumentString<ResolveReportMutation, ResolveReportMutationVariables>;
+export const ReviewEmotesDocument = new TypedDocumentString(`
+    mutation ReviewEmotes($ids: [String!]!, $verdict: ReviewVerdict!, $visibility: EmoteVisibility, $reason: String) {
+  reviewEmotes(
+    ids: $ids
+    verdict: $verdict
+    visibility: $visibility
+    reason: $reason
   ) {
-    entries {
+    done
+    failed {
       id
-      kind
-      actor {
+      code
+      message
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<ReviewEmotesMutation, ReviewEmotesMutationVariables>;
+export const RequeueEmotesDocument = new TypedDocumentString(`
+    mutation RequeueEmotes($ids: [String!]!) {
+  requeueEmotes(ids: $ids) {
+    done
+    failed {
+      id
+      code
+      message
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<RequeueEmotesMutation, RequeueEmotesMutationVariables>;
+export const SetEmoteFlagsDocument = new TypedDocumentString(`
+    mutation SetEmoteFlags($id: String!, $input: EmoteFlagsInput!) {
+  setEmoteFlags(id: $id, input: $input) {
+    ...EmoteFields
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<SetEmoteFlagsMutation, SetEmoteFlagsMutationVariables>;
+export const DismissReportsDocument = new TypedDocumentString(`
+    mutation DismissReports($ids: [String!]!, $note: String) {
+  dismissReports(ids: $ids, note: $note) {
+    done
+    failed {
+      id
+      code
+      message
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<DismissReportsMutation, DismissReportsMutationVariables>;
+export const EmoteDuplicatesDocument = new TypedDocumentString(`
+    query EmoteDuplicates($emoteId: String!) {
+  emoteDuplicates(emoteId: $emoteId) {
+    sameFile
+    similarity
+    emote {
+      ...EmoteFields
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<EmoteDuplicatesQuery, EmoteDuplicatesQueryVariables>;
+export const ReviewReasonsDocument = new TypedDocumentString(`
+    query ReviewReasons {
+  reviewReasons
+}
+    `) as unknown as TypedDocumentString<ReviewReasonsQuery, ReviewReasonsQueryVariables>;
+export const SetReviewReasonsDocument = new TypedDocumentString(`
+    mutation SetReviewReasons($reasons: [String!]!) {
+  setReviewReasons(reasons: $reasons)
+}
+    `) as unknown as TypedDocumentString<SetReviewReasonsMutation, SetReviewReasonsMutationVariables>;
+export const AccountsByLoginDocument = new TypedDocumentString(`
+    query AccountsByLogin($logins: [String!]!) {
+  accountsByLogin(logins: $logins) {
+    login
+    problem
+    account {
+      id
+      displayName
+      avatar
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<AccountsByLoginQuery, AccountsByLoginQueryVariables>;
+export const EmotesWithSameFileDocument = new TypedDocumentString(`
+    query EmotesWithSameFile($sha256: String!) {
+  emotesWithSameFile(sha256: $sha256) {
+    id
+    name
+    owner {
+      id
+      displayName
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<EmotesWithSameFileQuery, EmotesWithSameFileQueryVariables>;
+export const AdminCountsDocument = new TypedDocumentString(`
+    query AdminCounts($review: Boolean!, $reports: Boolean!) {
+  reviewQueue(page: 1, perPage: 1) @include(if: $review) {
+    total
+  }
+  reportQueue(page: 1, perPage: 1) @include(if: $reports) {
+    total
+  }
+  globalSet {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<AdminCountsQuery, AdminCountsQueryVariables>;
+export const ReviewQueueDocument = new TypedDocumentString(`
+    query ReviewQueue($page: Int, $perPage: Int, $filter: ReviewQueueFilter) {
+  reviewQueue(page: $page, perPage: $perPage, filter: $filter) {
+    total
+    counts {
+      public
+      limited
+    }
+    items {
+      ...EmoteFields
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<ReviewQueueQuery, ReviewQueueQueryVariables>;
+export const ApproveDocument = new TypedDocumentString(`
+    mutation Approve($id: String!, $visibility: EmoteVisibility) {
+  approveEmote(id: $id, visibility: $visibility) {
+    id
+    state
+    visibility
+  }
+}
+    `) as unknown as TypedDocumentString<ApproveMutation, ApproveMutationVariables>;
+export const EmoteHistoryDocument = new TypedDocumentString(`
+    query EmoteHistory($emoteId: String!) {
+  emoteHistory(emoteId: $emoteId) {
+    id
+    actorId
+    action
+    before
+    after
+    createdAt
+  }
+}
+    `) as unknown as TypedDocumentString<EmoteHistoryQuery, EmoteHistoryQueryVariables>;
+export const EmoteNotesDocument = new TypedDocumentString(`
+    query EmoteNotes($emoteId: String!) {
+  emoteNotes(emoteId: $emoteId) {
+    id
+    authorId
+    body
+    createdAt
+  }
+}
+    `) as unknown as TypedDocumentString<EmoteNotesQuery, EmoteNotesQueryVariables>;
+export const AddEmoteNoteDocument = new TypedDocumentString(`
+    mutation AddEmoteNote($emoteId: String!, $body: String!) {
+  addEmoteNote(emoteId: $emoteId, body: $body) {
+    id
+    authorId
+    body
+    createdAt
+  }
+}
+    `) as unknown as TypedDocumentString<AddEmoteNoteMutation, AddEmoteNoteMutationVariables>;
+export const DeleteEmoteNoteDocument = new TypedDocumentString(`
+    mutation DeleteEmoteNote($id: String!) {
+  deleteEmoteNote(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeleteEmoteNoteMutation, DeleteEmoteNoteMutationVariables>;
+export const RejectDocument = new TypedDocumentString(`
+    mutation Reject($id: String!, $reason: String!) {
+  rejectEmote(id: $id, reason: $reason) {
+    id
+    state
+  }
+}
+    `) as unknown as TypedDocumentString<RejectMutation, RejectMutationVariables>;
+export const RolesDocument = new TypedDocumentString(`
+    query Roles {
+  roles {
+    ...RoleFields
+  }
+  permissions
+}
+    fragment RoleFields on Role {
+  id
+  name
+  description
+  position
+  permissions
+  denies
+  public
+  invisible
+  builtIn
+  editable
+  assignable
+}`) as unknown as TypedDocumentString<RolesQuery, RolesQueryVariables>;
+export const LimitDefaultsDocument = new TypedDocumentString(`
+    query LimitDefaults {
+  limitDefaults {
+    ...RoleLimitFields
+  }
+}
+    fragment RoleLimitFields on RoleLimit {
+  key
+  group
+  default
+  windowSeconds
+  value
+}`) as unknown as TypedDocumentString<LimitDefaultsQuery, LimitDefaultsQueryVariables>;
+export const RoleLimitsDocument = new TypedDocumentString(`
+    query RoleLimits($id: String!) {
+  roleLimits(id: $id) {
+    ...RoleLimitFields
+  }
+}
+    fragment RoleLimitFields on RoleLimit {
+  key
+  group
+  default
+  windowSeconds
+  value
+}`) as unknown as TypedDocumentString<RoleLimitsQuery, RoleLimitsQueryVariables>;
+export const SetRoleLimitsDocument = new TypedDocumentString(`
+    mutation SetRoleLimits($id: String!, $limits: [RoleLimitInput!]!) {
+  setRoleLimits(id: $id, limits: $limits) {
+    ...RoleLimitFields
+  }
+}
+    fragment RoleLimitFields on RoleLimit {
+  key
+  group
+  default
+  windowSeconds
+  value
+}`) as unknown as TypedDocumentString<SetRoleLimitsMutation, SetRoleLimitsMutationVariables>;
+export const UploadQuotaDocument = new TypedDocumentString(`
+    query UploadQuota($ownerId: String) {
+  uploadQuota(ownerId: $ownerId) {
+    accountId
+    pending
+    pendingMax
+    uploadsThisHour
+    uploadsPerHour
+  }
+}
+    `) as unknown as TypedDocumentString<UploadQuotaQuery, UploadQuotaQueryVariables>;
+export const CreateRoleDocument = new TypedDocumentString(`
+    mutation CreateRole($input: CreateRoleInput!) {
+  createRole(input: $input) {
+    ...RoleFields
+  }
+}
+    fragment RoleFields on Role {
+  id
+  name
+  description
+  position
+  permissions
+  denies
+  public
+  invisible
+  builtIn
+  editable
+  assignable
+}`) as unknown as TypedDocumentString<CreateRoleMutation, CreateRoleMutationVariables>;
+export const UpdateRoleDocument = new TypedDocumentString(`
+    mutation UpdateRole($id: String!, $input: UpdateRoleInput!) {
+  updateRole(id: $id, input: $input) {
+    ...RoleFields
+  }
+}
+    fragment RoleFields on Role {
+  id
+  name
+  description
+  position
+  permissions
+  denies
+  public
+  invisible
+  builtIn
+  editable
+  assignable
+}`) as unknown as TypedDocumentString<UpdateRoleMutation, UpdateRoleMutationVariables>;
+export const DeleteRoleDocument = new TypedDocumentString(`
+    mutation DeleteRole($id: String!) {
+  deleteRole(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeleteRoleMutation, DeleteRoleMutationVariables>;
+export const QuickSearchDocument = new TypedDocumentString(`
+    query QuickSearch($query: String!) {
+  quickSearch(query: $query) {
+    emotes {
+      ...EmoteFields
+    }
+    users {
+      account {
         id
         displayName
         avatar
       }
-      set {
-        id
-        name
+      identities {
+        platform
+        login
+        displayName
       }
-      emote {
-        id
-        name
-        host
-        files {
-          name
-          width
-          height
-          isStatic
-        }
-      }
-      fromName
-      toName
-      badge {
-        fromId
-        fromName
-        toId
-        toName
-      }
-      paint {
-        fromId
-        fromName
-        toId
-        toName
-      }
-      createdAt
     }
-    next
   }
 }
-    `) as unknown as TypedDocumentString<EmoteActivityQuery, EmoteActivityQueryVariables>;
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<QuickSearchQuery, QuickSearchQueryVariables>;
+export const EditableChannelsDocument = new TypedDocumentString(`
+    query EditableChannels {
+  myEditableChannels {
+    role
+    channel {
+      platform
+      login
+      account {
+        id
+        displayName
+        avatar
+      }
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<EditableChannelsQuery, EditableChannelsQueryVariables>;
+export const MySetsDocument = new TypedDocumentString(`
+    query MySets {
+  mySets {
+    ...SetFields
+  }
+  editorSets {
+    ...SetFields
+  }
+  editorOf {
+    account {
+      id
+      displayName
+    }
+    permissions
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}
+fragment SetFields on EmoteSet {
+  id
+  name
+  kind
+  visibility
+  capacity
+  owner {
+    id
+    displayName
+    avatar
+  }
+  emotes {
+    name
+    zeroWidth
+    addedAt
+    emote {
+      ...EmoteFields
+    }
+  }
+}`) as unknown as TypedDocumentString<MySetsQuery, MySetsQueryVariables>;
+export const EditSetDocument = new TypedDocumentString(`
+    query EditSet($id: String!) {
+  set(id: $id) {
+    id
+    name
+    kind
+    visibility
+    capacity
+    slotsUsed
+    owner {
+      id
+      displayName
+      avatar
+    }
+  }
+  setEditors(setId: $id) {
+    id
+    displayName
+    avatar
+  }
+  editorOf {
+    account {
+      id
+    }
+    permissions
+    allSets
+    setIds
+  }
+  myChannels {
+    platform
+    platformChannelId
+    login
+    activeSetId
+    account {
+      id
+    }
+  }
+  editorChannels {
+    platform
+    platformChannelId
+    login
+    activeSetId
+    account {
+      id
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<EditSetQuery, EditSetQueryVariables>;
+export const SetEmotesDocument = new TypedDocumentString(`
+    query SetEmotes($id: String!, $query: String, $page: Int, $perPage: Int) {
+  setEmotes(id: $id, query: $query, page: $page, perPage: $perPage) {
+    total
+    items {
+      name
+      zeroWidth
+      addedAt
+      emote {
+        ...EmoteFields
+      }
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<SetEmotesQuery, SetEmotesQueryVariables>;
+export const SetMembersDocument = new TypedDocumentString(`
+    query SetMembers($id: String!, $page: Int, $perPage: Int) {
+  setEmotes(id: $id, page: $page, perPage: $perPage) {
+    total
+    items {
+      name
+      emote {
+        id
+      }
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<SetMembersQuery, SetMembersQueryVariables>;
+export const CreateSetDocument = new TypedDocumentString(`
+    mutation CreateSet($input: CreateSetInput!) {
+  createSet(input: $input) {
+    id
+  }
+}
+    `) as unknown as TypedDocumentString<CreateSetMutation, CreateSetMutationVariables>;
+export const UpdateSetDocument = new TypedDocumentString(`
+    mutation UpdateSet($id: String!, $input: UpdateSetInput!) {
+  updateSet(id: $id, input: $input) {
+    id
+    name
+    visibility
+    capacity
+  }
+}
+    `) as unknown as TypedDocumentString<UpdateSetMutation, UpdateSetMutationVariables>;
+export const DeleteSetDocument = new TypedDocumentString(`
+    mutation DeleteSet($id: String!) {
+  deleteSet(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeleteSetMutation, DeleteSetMutationVariables>;
+export const SetCapacityRangeDocument = new TypedDocumentString(`
+    query SetCapacityRange($id: String!) {
+  setCapacityRange(id: $id) {
+    min
+    max
+    ownerMax
+    used
+    staff
+  }
+}
+    `) as unknown as TypedDocumentString<SetCapacityRangeQuery, SetCapacityRangeQueryVariables>;
+export const SetMenuDocument = new TypedDocumentString(`
+    query SetMenu($id: String!) {
+  setCapacityRange(id: $id) {
+    min
+    max
+    ownerMax
+    used
+    staff
+  }
+  editorOf {
+    account {
+      id
+    }
+    permissions
+    allSets
+    setIds
+  }
+  myChannels {
+    platform
+    platformChannelId
+    login
+    activeSetId
+    account {
+      id
+    }
+  }
+  editorChannels {
+    platform
+    platformChannelId
+    login
+    activeSetId
+    account {
+      id
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<SetMenuQuery, SetMenuQueryVariables>;
+export const AddSetEmoteDocument = new TypedDocumentString(`
+    mutation AddSetEmote($setId: String!, $emoteId: String!, $input: AddSetEmoteInput) {
+  addSetEmote(setId: $setId, emoteId: $emoteId, input: $input) {
+    name
+  }
+}
+    `) as unknown as TypedDocumentString<AddSetEmoteMutation, AddSetEmoteMutationVariables>;
+export const UpdateSetEmoteDocument = new TypedDocumentString(`
+    mutation UpdateSetEmote($setId: String!, $emoteId: String!, $input: UpdateSetEmoteInput!) {
+  updateSetEmote(setId: $setId, emoteId: $emoteId, input: $input) {
+    name
+    zeroWidth
+  }
+}
+    `) as unknown as TypedDocumentString<UpdateSetEmoteMutation, UpdateSetEmoteMutationVariables>;
+export const RemoveSetEmoteDocument = new TypedDocumentString(`
+    mutation RemoveSetEmote($setId: String!, $emoteId: String!) {
+  removeSetEmote(setId: $setId, emoteId: $emoteId)
+}
+    `) as unknown as TypedDocumentString<RemoveSetEmoteMutation, RemoveSetEmoteMutationVariables>;
+export const RemoveSetEditorDocument = new TypedDocumentString(`
+    mutation RemoveSetEditor($setId: String!, $accountId: String!) {
+  removeSetEditor(setId: $setId, accountId: $accountId)
+}
+    `) as unknown as TypedDocumentString<RemoveSetEditorMutation, RemoveSetEditorMutationVariables>;
+export const PublicSetDocument = new TypedDocumentString(`
+    query PublicSet($id: String!) {
+  set(id: $id) {
+    id
+    name
+    kind
+    visibility
+    capacity
+    slotsUsed
+    createdAt
+    owner {
+      id
+      displayName
+      avatar
+    }
+    emotes {
+      name
+      zeroWidth
+      addedAt
+      emote {
+        ...EmoteFields
+      }
+    }
+  }
+}
+    fragment EmoteFields on Emote {
+  id
+  name
+  state
+  animated
+  tags
+  host
+  createdAt
+  channelCount
+  visibility
+  flags {
+    zeroWidth
+    private
+    wide
+  }
+  owner {
+    id
+    displayName
+    avatar
+  }
+  files {
+    name
+    format
+    scale
+    width
+    height
+    size
+    isStatic
+  }
+}`) as unknown as TypedDocumentString<PublicSetQuery, PublicSetQueryVariables>;
+export const SetEditorsDocument = new TypedDocumentString(`
+    query SetEditors($id: String!) {
+  setEditors(setId: $id) {
+    id
+    displayName
+    avatar
+  }
+}
+    `) as unknown as TypedDocumentString<SetEditorsQuery, SetEditorsQueryVariables>;
+export const CloneSetDocument = new TypedDocumentString(`
+    mutation CloneSet($id: String!, $name: String, $visibility: SetVisibility) {
+  cloneSet(id: $id, name: $name, visibility: $visibility) {
+    copied
+    skipped
+    set {
+      id
+      name
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<CloneSetMutation, CloneSetMutationVariables>;
 export const ShopItemsDocument = new TypedDocumentString(`
     query ShopItems($all: Boolean) {
   shopItems(all: $all) {
@@ -8343,323 +8690,6 @@ export const ShopCountsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ShopCountsQuery, ShopCountsQueryVariables>;
-export const QuickSearchDocument = new TypedDocumentString(`
-    query QuickSearch($query: String!) {
-  quickSearch(query: $query) {
-    emotes {
-      ...EmoteFields
-    }
-    users {
-      account {
-        id
-        displayName
-        avatar
-      }
-      identities {
-        platform
-        login
-        displayName
-      }
-    }
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<QuickSearchQuery, QuickSearchQueryVariables>;
-export const EditableChannelsDocument = new TypedDocumentString(`
-    query EditableChannels {
-  myEditableChannels {
-    role
-    channel {
-      platform
-      login
-      account {
-        id
-        displayName
-        avatar
-      }
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<EditableChannelsQuery, EditableChannelsQueryVariables>;
-export const StaffNotesDocument = new TypedDocumentString(`
-    query StaffNotes($accountId: String!) {
-  staffNotes(accountId: $accountId) {
-    id
-    authorId
-    body
-    createdAt
-  }
-}
-    `) as unknown as TypedDocumentString<StaffNotesQuery, StaffNotesQueryVariables>;
-export const AddStaffNoteDocument = new TypedDocumentString(`
-    mutation AddStaffNote($accountId: String!, $body: String!) {
-  addStaffNote(accountId: $accountId, body: $body) {
-    id
-    authorId
-    body
-    createdAt
-  }
-}
-    `) as unknown as TypedDocumentString<AddStaffNoteMutation, AddStaffNoteMutationVariables>;
-export const DeleteStaffNoteDocument = new TypedDocumentString(`
-    mutation DeleteStaffNote($id: String!) {
-  deleteStaffNote(id: $id)
-}
-    `) as unknown as TypedDocumentString<DeleteStaffNoteMutation, DeleteStaffNoteMutationVariables>;
-export const AccountSessionsDocument = new TypedDocumentString(`
-    query AccountSessions($accountId: String!) {
-  accountSessions(accountId: $accountId) {
-    id
-    kind
-    device
-    createdAt
-    lastSeenAt
-    expiresAt
-  }
-}
-    `) as unknown as TypedDocumentString<AccountSessionsQuery, AccountSessionsQueryVariables>;
-export const AccountSubscriptionsDocument = new TypedDocumentString(`
-    query AccountSubscriptions($accountId: String!) {
-  accountSubscriptions(accountId: $accountId) {
-    id
-    plan
-    state
-    startsAt
-    endsAt
-    source
-  }
-}
-    `) as unknown as TypedDocumentString<AccountSubscriptionsQuery, AccountSubscriptionsQueryVariables>;
-export const EntitlementGraphDocument = new TypedDocumentString(`
-    query EntitlementGraph($accountId: String!) {
-  entitlementGraph(accountId: $accountId) {
-    ...GrantFields
-  }
-}
-    fragment GrantFields on EntitlementGrant {
-  kind
-  itemId
-  itemName
-  accountId
-  source
-  reason
-  grantedBy
-  grantedAt
-  orderId
-  orderName
-  orderStatus
-  codeBatchId
-  codeBatchName
-  revokedAt
-  revokedBy
-  revokeReason
-  active
-}`) as unknown as TypedDocumentString<EntitlementGraphQuery, EntitlementGraphQueryVariables>;
-export const EntitlementHoldersDocument = new TypedDocumentString(`
-    query EntitlementHolders($kind: GrantKind!, $id: String!) {
-  entitlementHolders(kind: $kind, id: $id) {
-    ...GrantFields
-  }
-}
-    fragment GrantFields on EntitlementGrant {
-  kind
-  itemId
-  itemName
-  accountId
-  source
-  reason
-  grantedBy
-  grantedAt
-  orderId
-  orderName
-  orderStatus
-  codeBatchId
-  codeBatchName
-  revokedAt
-  revokedBy
-  revokeReason
-  active
-}`) as unknown as TypedDocumentString<EntitlementHoldersQuery, EntitlementHoldersQueryVariables>;
-export const ReviewEmotesDocument = new TypedDocumentString(`
-    mutation ReviewEmotes($ids: [String!]!, $verdict: ReviewVerdict!, $visibility: EmoteVisibility, $reason: String) {
-  reviewEmotes(
-    ids: $ids
-    verdict: $verdict
-    visibility: $visibility
-    reason: $reason
-  ) {
-    done
-    failed {
-      id
-      code
-      message
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<ReviewEmotesMutation, ReviewEmotesMutationVariables>;
-export const RequeueEmotesDocument = new TypedDocumentString(`
-    mutation RequeueEmotes($ids: [String!]!) {
-  requeueEmotes(ids: $ids) {
-    done
-    failed {
-      id
-      code
-      message
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<RequeueEmotesMutation, RequeueEmotesMutationVariables>;
-export const SetEmoteFlagsDocument = new TypedDocumentString(`
-    mutation SetEmoteFlags($id: String!, $input: EmoteFlagsInput!) {
-  setEmoteFlags(id: $id, input: $input) {
-    ...EmoteFields
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<SetEmoteFlagsMutation, SetEmoteFlagsMutationVariables>;
-export const DismissReportsDocument = new TypedDocumentString(`
-    mutation DismissReports($ids: [String!]!, $note: String) {
-  dismissReports(ids: $ids, note: $note) {
-    done
-    failed {
-      id
-      code
-      message
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<DismissReportsMutation, DismissReportsMutationVariables>;
-export const EmoteDuplicatesDocument = new TypedDocumentString(`
-    query EmoteDuplicates($emoteId: String!) {
-  emoteDuplicates(emoteId: $emoteId) {
-    sameFile
-    similarity
-    emote {
-      ...EmoteFields
-    }
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
-    id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<EmoteDuplicatesQuery, EmoteDuplicatesQueryVariables>;
-export const ReviewReasonsDocument = new TypedDocumentString(`
-    query ReviewReasons {
-  reviewReasons
-}
-    `) as unknown as TypedDocumentString<ReviewReasonsQuery, ReviewReasonsQueryVariables>;
-export const SetReviewReasonsDocument = new TypedDocumentString(`
-    mutation SetReviewReasons($reasons: [String!]!) {
-  setReviewReasons(reasons: $reasons)
-}
-    `) as unknown as TypedDocumentString<SetReviewReasonsMutation, SetReviewReasonsMutationVariables>;
-export const AccountsByLoginDocument = new TypedDocumentString(`
-    query AccountsByLogin($logins: [String!]!) {
-  accountsByLogin(logins: $logins) {
-    login
-    problem
-    account {
-      id
-      displayName
-      avatar
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<AccountsByLoginQuery, AccountsByLoginQueryVariables>;
-export const EmotesWithSameFileDocument = new TypedDocumentString(`
-    query EmotesWithSameFile($sha256: String!) {
-  emotesWithSameFile(sha256: $sha256) {
-    id
-    name
-    owner {
-      id
-      displayName
-    }
-  }
-}
-    `) as unknown as TypedDocumentString<EmotesWithSameFileQuery, EmotesWithSameFileQueryVariables>;
 export const ActiveAnnouncementDocument = new TypedDocumentString(`
     query ActiveAnnouncement {
   activeAnnouncement {
@@ -8840,135 +8870,105 @@ export const SetNotificationPrefsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<SetNotificationPrefsMutation, SetNotificationPrefsMutationVariables>;
-export const PersonalListsDocument = new TypedDocumentString(`
-    query PersonalLists {
-  hiddenEmotes {
-    emoteId
-  }
-  hiddenCreators {
-    accountId
-  }
-  favouriteEmoteIds
-}
-    `) as unknown as TypedDocumentString<PersonalListsQuery, PersonalListsQueryVariables>;
-export const HiddenListsDocument = new TypedDocumentString(`
-    query HiddenLists {
-  hiddenEmotes {
-    emoteId
-    hiddenAt
-    emote {
-      ...EmoteFields
-    }
-  }
-  hiddenCreators {
-    accountId
-    hiddenAt
-    account {
-      id
-      displayName
-      avatar
-    }
-  }
-}
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
+export const StaffNotesDocument = new TypedDocumentString(`
+    query StaffNotes($accountId: String!) {
+  staffNotes(accountId: $accountId) {
     id
-    displayName
-    avatar
-  }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
-  }
-}`) as unknown as TypedDocumentString<HiddenListsQuery, HiddenListsQueryVariables>;
-export const MyFavouritesDocument = new TypedDocumentString(`
-    query MyFavourites($query: String, $page: Int, $perPage: Int) {
-  myFavourites(query: $query, page: $page, perPage: $perPage) {
-    total
-    items {
-      ...EmoteFields
-    }
+    authorId
+    body
+    createdAt
   }
 }
-    fragment EmoteFields on Emote {
-  id
-  name
-  state
-  animated
-  tags
-  host
-  createdAt
-  channelCount
-  visibility
-  flags {
-    zeroWidth
-    private
-    wide
-  }
-  owner {
+    `) as unknown as TypedDocumentString<StaffNotesQuery, StaffNotesQueryVariables>;
+export const AddStaffNoteDocument = new TypedDocumentString(`
+    mutation AddStaffNote($accountId: String!, $body: String!) {
+  addStaffNote(accountId: $accountId, body: $body) {
     id
-    displayName
-    avatar
+    authorId
+    body
+    createdAt
   }
-  files {
-    name
-    format
-    scale
-    width
-    height
-    size
-    isStatic
+}
+    `) as unknown as TypedDocumentString<AddStaffNoteMutation, AddStaffNoteMutationVariables>;
+export const DeleteStaffNoteDocument = new TypedDocumentString(`
+    mutation DeleteStaffNote($id: String!) {
+  deleteStaffNote(id: $id)
+}
+    `) as unknown as TypedDocumentString<DeleteStaffNoteMutation, DeleteStaffNoteMutationVariables>;
+export const AccountSessionsDocument = new TypedDocumentString(`
+    query AccountSessions($accountId: String!) {
+  accountSessions(accountId: $accountId) {
+    id
+    kind
+    device
+    createdAt
+    lastSeenAt
+    expiresAt
   }
-}`) as unknown as TypedDocumentString<MyFavouritesQuery, MyFavouritesQueryVariables>;
-export const HideEmoteDocument = new TypedDocumentString(`
-    mutation HideEmote($id: String!) {
-  hideEmote(id: $id)
 }
-    `) as unknown as TypedDocumentString<HideEmoteMutation, HideEmoteMutationVariables>;
-export const UnhideEmoteDocument = new TypedDocumentString(`
-    mutation UnhideEmote($id: String!) {
-  unhideEmote(id: $id)
+    `) as unknown as TypedDocumentString<AccountSessionsQuery, AccountSessionsQueryVariables>;
+export const AccountSubscriptionsDocument = new TypedDocumentString(`
+    query AccountSubscriptions($accountId: String!) {
+  accountSubscriptions(accountId: $accountId) {
+    id
+    plan
+    state
+    startsAt
+    endsAt
+    source
+  }
 }
-    `) as unknown as TypedDocumentString<UnhideEmoteMutation, UnhideEmoteMutationVariables>;
-export const HideCreatorDocument = new TypedDocumentString(`
-    mutation HideCreator($accountId: String!) {
-  hideCreator(accountId: $accountId)
+    `) as unknown as TypedDocumentString<AccountSubscriptionsQuery, AccountSubscriptionsQueryVariables>;
+export const EntitlementGraphDocument = new TypedDocumentString(`
+    query EntitlementGraph($accountId: String!) {
+  entitlementGraph(accountId: $accountId) {
+    ...GrantFields
+  }
 }
-    `) as unknown as TypedDocumentString<HideCreatorMutation, HideCreatorMutationVariables>;
-export const UnhideCreatorDocument = new TypedDocumentString(`
-    mutation UnhideCreator($accountId: String!) {
-  unhideCreator(accountId: $accountId)
+    fragment GrantFields on EntitlementGrant {
+  kind
+  itemId
+  itemName
+  accountId
+  source
+  reason
+  grantedBy
+  grantedAt
+  orderId
+  orderName
+  orderStatus
+  codeBatchId
+  codeBatchName
+  revokedAt
+  revokedBy
+  revokeReason
+  active
+}`) as unknown as TypedDocumentString<EntitlementGraphQuery, EntitlementGraphQueryVariables>;
+export const EntitlementHoldersDocument = new TypedDocumentString(`
+    query EntitlementHolders($kind: GrantKind!, $id: String!) {
+  entitlementHolders(kind: $kind, id: $id) {
+    ...GrantFields
+  }
 }
-    `) as unknown as TypedDocumentString<UnhideCreatorMutation, UnhideCreatorMutationVariables>;
-export const FavouriteEmoteDocument = new TypedDocumentString(`
-    mutation FavouriteEmote($id: String!) {
-  favouriteEmote(id: $id)
-}
-    `) as unknown as TypedDocumentString<FavouriteEmoteMutation, FavouriteEmoteMutationVariables>;
-export const UnfavouriteEmoteDocument = new TypedDocumentString(`
-    mutation UnfavouriteEmote($id: String!) {
-  unfavouriteEmote(id: $id)
-}
-    `) as unknown as TypedDocumentString<UnfavouriteEmoteMutation, UnfavouriteEmoteMutationVariables>;
+    fragment GrantFields on EntitlementGrant {
+  kind
+  itemId
+  itemName
+  accountId
+  source
+  reason
+  grantedBy
+  grantedAt
+  orderId
+  orderName
+  orderStatus
+  codeBatchId
+  codeBatchName
+  revokedAt
+  revokedBy
+  revokeReason
+  active
+}`) as unknown as TypedDocumentString<EntitlementHoldersQuery, EntitlementHoldersQueryVariables>;
 export const ActivityTopActorsDocument = new TypedDocumentString(`
     query ActivityTopActors($accountId: String, $emoteId: String, $filter: ActivityFilter, $limit: Int) {
   activityTopActors(
