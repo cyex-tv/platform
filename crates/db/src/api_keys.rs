@@ -77,7 +77,8 @@ pub async fn find(conn: &mut PgConnection, hash: &TokenHash) -> DbResult<Option<
     }
     let row: Option<Row> = sqlx::query_as(
         "SELECT k.id, k.account_id, k.name, k.prefix, k.created_at, k.last_used_at,
-                a.deleted_at IS NULL AND (a.blocked_at IS NULL OR a.blocked_until <= now()) AS live
+                coalesce(a.deleted_at IS NULL
+                         AND (a.blocked_at IS NULL OR a.blocked_until <= now()), false) AS live
          FROM api_keys k
          JOIN accounts a ON a.id = k.account_id
          WHERE k.key_hash = $1",
